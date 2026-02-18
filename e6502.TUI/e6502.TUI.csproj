@@ -15,6 +15,12 @@
       <ProjectReference Include="..\e6502\e6502.csproj" />
     </ItemGroup>
 
+    <Target Name="BuildEhBasic" BeforeTargets="Build">
+      <Exec Command="make -C $(ProjectDir)../ehbasic" />
+      <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin"
+            DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+    </Target>
+
     <ItemGroup>
       <Folder Include="Resources\" />
     </ItemGroup>
