@@ -362,9 +362,29 @@ TK_BITCLR         = TK_BITSET+1     ; BITCLR token
 TK_IRQ            = TK_BITCLR+1     ; IRQ token
 TK_NMI            = TK_IRQ+1        ; NMI token
 
+; --- VGC Graphics Commands ---
+TK_CLS            = TK_NMI+1        ; CLS
+TK_COLOR          = TK_CLS+1        ; COLOR
+TK_LOCATE         = TK_COLOR+1      ; LOCATE
+TK_PLOT           = TK_LOCATE+1     ; PLOT
+TK_UNPLOT         = TK_PLOT+1       ; UNPLOT
+TK_LINE           = TK_UNPLOT+1     ; LINE
+TK_CIRCLE         = TK_LINE+1       ; CIRCLE
+TK_RECT           = TK_CIRCLE+1     ; RECT
+TK_FILLRECT       = TK_RECT+1       ; FILL
+TK_GMODE          = TK_FILLRECT+1   ; MODE
+TK_SPRCMD         = TK_GMODE+1      ; SPRITE
+TK_SPRSHAPE       = TK_SPRCMD+1     ; SPRITESHAPE
+TK_SPRCOLOR       = TK_SPRSHAPE+1   ; SPRITECOLOR
+TK_SPRDATA        = TK_SPRCOLOR+1   ; SPRITEDATA
+TK_SOUND          = TK_SPRDATA+1    ; SOUND
+TK_VOLUME         = TK_SOUND+1      ; VOLUME
+TK_ENVELOPE       = TK_VOLUME+1     ; ENVELOPE
+TK_WAVE           = TK_ENVELOPE+1   ; WAVE
+
 ; secondary command tokens, can't start a statement
 
-TK_TAB            = TK_NMI+1        ; TAB token
+TK_TAB            = TK_WAVE+1       ; TAB token
 TK_ELSE           = TK_TAB+1        ; ELSE token
 TK_TO             = TK_ELSE+1       ; TO token
 TK_FN             = TK_TO+1         ; FN token
@@ -429,6 +449,12 @@ TK_VPTR           = TK_TWOPI+1      ; VARPTR token
 TK_LEFTS          = TK_VPTR+1       ; LEFT$ token
 TK_RIGHTS         = TK_LEFTS+1      ; RIGHT$ token
 TK_MIDS           = TK_RIGHTS+1     ; MID$ token
+
+; --- VGC Function Tokens ---
+TK_SPRITEX        = TK_MIDS+1       ; SPRITEX(
+TK_SPRITEY        = TK_SPRITEX+1    ; SPRITEY(
+TK_COLLISION      = TK_SPRITEY+1    ; COLLISION(
+TK_BUMPED         = TK_COLLISION+1   ; BUMPED(
 
 ; offsets from a base of X or Y
 
@@ -7972,6 +7998,36 @@ LAB_2CF4
 LAB_2D05
       RTS
 
+; --- VGC command stubs ---
+LAB_CLS
+LAB_COLOR
+LAB_LOCATE
+LAB_PLOT
+LAB_UNPLOT
+LAB_GLINE
+LAB_CIRCLE
+LAB_RECT
+LAB_FILLRECT
+LAB_GMODE
+LAB_SPRCMD
+LAB_SPRSHAPE
+LAB_SPRCOLOR
+LAB_SPRDATA
+LAB_SOUND
+LAB_VOLUME
+LAB_ENVELOPE
+LAB_WAVE
+      RTS
+
+; --- VGC function stubs ---
+LAB_SPRITEX
+LAB_SPRITEY
+LAB_COLLISION
+LAB_BUMPED
+      LDA   #$00
+      TAY
+      JMP   LAB_AYFC          ; save and convert integer AY to FAC1 and return
+
 ; page zero initialisation table $00-$12 inclusive
 
 StrTab
@@ -8159,6 +8215,24 @@ LAB_CTBL
       .word LAB_BITCLR-1      ; BITCLR          new command
       .word LAB_IRQ-1         ; IRQ             new command
       .word LAB_NMI-1         ; NMI             new command
+      .word LAB_CLS-1         ; CLS             VGC command
+      .word LAB_COLOR-1       ; COLOR           VGC command
+      .word LAB_LOCATE-1      ; LOCATE          VGC command
+      .word LAB_PLOT-1         ; PLOT            VGC command
+      .word LAB_UNPLOT-1      ; UNPLOT          VGC command
+      .word LAB_GLINE-1       ; LINE            VGC command
+      .word LAB_CIRCLE-1      ; CIRCLE          VGC command
+      .word LAB_RECT-1         ; RECT            VGC command
+      .word LAB_FILLRECT-1    ; FILL            VGC command
+      .word LAB_GMODE-1       ; MODE            VGC command
+      .word LAB_SPRCMD-1      ; SPRITE          VGC command
+      .word LAB_SPRSHAPE-1    ; SPRITESHAPE     VGC command
+      .word LAB_SPRCOLOR-1    ; SPRITECOLOR     VGC command
+      .word LAB_SPRDATA-1     ; SPRITEDATA      VGC command
+      .word LAB_SOUND-1       ; SOUND           VGC command
+      .word LAB_VOLUME-1      ; VOLUME          VGC command
+      .word LAB_ENVELOPE-1    ; ENVELOPE        VGC command
+      .word LAB_WAVE-1         ; WAVE            VGC command
 
 ; function pre process routine table
 
@@ -8199,6 +8273,10 @@ LAB_FTPM    = LAB_FTPL+$01
       .word LAB_LRMS-1        ; LEFT$()   process string expression
       .word LAB_LRMS-1        ; RIGHT$()        "
       .word LAB_LRMS-1        ; MID$()          "
+      .word LAB_PPFN-1        ; SPRITEX(n)      VGC function
+      .word LAB_PPFN-1        ; SPRITEY(n)      VGC function
+      .word LAB_PPFN-1        ; COLLISION(n)    VGC function
+      .word LAB_PPFN-1        ; BUMPED(n)       VGC function
 
 ; action addresses for functions
 
@@ -8239,6 +8317,10 @@ LAB_FTBM    = LAB_FTBL+$01
       .word LAB_LEFT-1        ; LEFT$()
       .word LAB_RIGHT-1       ; RIGHT$()
       .word LAB_MIDS-1        ; MID$()
+      .word LAB_SPRITEX-1     ; SPRITEX()       VGC function
+      .word LAB_SPRITEY-1     ; SPRITEY()       VGC function
+      .word LAB_COLLISION-1   ; COLLISION()     VGC function
+      .word LAB_BUMPED-1      ; BUMPED()        VGC function
 
 ; hierarchy and action addresses for operator
 
@@ -8388,14 +8470,25 @@ LBB_BITSET
 LBB_BITTST
       .byte "ITTST(",TK_BITTST
                               ; BITTST(
+LBB_BUMPED
+      .byte "UMPED(",TK_BUMPED ; BUMPED(
       .byte $00
 TAB_ASCC
 LBB_CALL
       .byte "ALL",TK_CALL     ; CALL
 LBB_CHRS
       .byte "HR$(",TK_CHRS    ; CHR$(
+LBB_CIRCLE
+      .byte "IRCLE",TK_CIRCLE ; CIRCLE
 LBB_CLEAR
       .byte "LEAR",TK_CLEAR   ; CLEAR
+LBB_CLS
+      .byte "LS",TK_CLS       ; CLS
+LBB_COLLISION
+      .byte "OLLISION(",TK_COLLISION
+                              ; COLLISION(
+LBB_COLOR
+      .byte "OLOR",TK_COLOR   ; COLOR
 LBB_CONT
       .byte "ONT",TK_CONT     ; CONT
 LBB_COS
@@ -8420,6 +8513,9 @@ LBB_DO
 TAB_ASCE
 LBB_ELSE
       .byte "LSE",TK_ELSE     ; ELSE
+LBB_ENVELOPE
+      .byte "NVELOPE",TK_ENVELOPE
+                              ; ENVELOPE
 LBB_END
       .byte "ND",TK_END       ; END
 LBB_EOR
@@ -8428,6 +8524,8 @@ LBB_EXP
       .byte "XP(",TK_EXP      ; EXP(
       .byte $00
 TAB_ASCF
+LBB_FILL
+      .byte "ILL",TK_FILLRECT ; FILL
 LBB_FN
       .byte "N",TK_FN         ; FN
 LBB_FOR
@@ -8469,10 +8567,14 @@ LBB_LEN
       .byte "EN(",TK_LEN      ; LEN(
 LBB_LET
       .byte "ET",TK_LET       ; LET
+LBB_LINE
+      .byte "INE",TK_LINE     ; LINE
 LBB_LIST
       .byte "IST",TK_LIST     ; LIST
 LBB_LOAD
       .byte "OAD",TK_LOAD     ; LOAD
+LBB_LOCATE
+      .byte "OCATE",TK_LOCATE ; LOCATE
 LBB_LOG
       .byte "OG(",TK_LOG      ; LOG(
 LBB_LOOP
@@ -8485,6 +8587,8 @@ LBB_MIDS
       .byte "ID$(",TK_MIDS    ; MID$(
 LBB_MIN
       .byte "IN(",TK_MIN      ; MIN(
+LBB_MODE
+      .byte "ODE",TK_GMODE    ; MODE
       .byte $00
 TAB_ASCN
 LBB_NEW
@@ -8511,6 +8615,8 @@ LBB_PEEK
       .byte "EEK(",TK_PEEK    ; PEEK(
 LBB_PI
       .byte "I",TK_PI         ; PI
+LBB_PLOT
+      .byte "LOT",TK_PLOT     ; PLOT
 LBB_POKE
       .byte "OKE",TK_POKE     ; POKE
 LBB_POS
@@ -8521,6 +8627,8 @@ LBB_PRINT
 TAB_ASCR
 LBB_READ
       .byte "EAD",TK_READ     ; READ
+LBB_RECT
+      .byte "ECT",TK_RECT     ; RECT
 LBB_REM
       .byte "EM",TK_REM       ; REM
 LBB_RESTORE
@@ -8549,8 +8657,27 @@ LBB_SGN
       .byte "GN(",TK_SGN      ; SGN(
 LBB_SIN
       .byte "IN(",TK_SIN      ; SIN(
+LBB_SOUND
+      .byte "OUND",TK_SOUND   ; SOUND
 LBB_SPC
       .byte "PC(",TK_SPC      ; SPC(
+LBB_SPRITECOLOR
+      .byte "PRITECOLOR",TK_SPRCOLOR
+                              ; SPRITECOLOR
+LBB_SPRITEDATA
+      .byte "PRITEDATA",TK_SPRDATA
+                              ; SPRITEDATA
+LBB_SPRITESHAPE
+      .byte "PRITESHAPE",TK_SPRSHAPE
+                              ; SPRITESHAPE
+LBB_SPRITEX
+      .byte "PRITEX(",TK_SPRITEX
+                              ; SPRITEX(
+LBB_SPRITEY
+      .byte "PRITEY(",TK_SPRITEY
+                              ; SPRITEY(
+LBB_SPRITE
+      .byte "PRITE",TK_SPRCMD ; SPRITE
 LBB_SQR
       .byte "QR(",TK_SQR      ; SQR(
 LBB_STEP
@@ -8578,6 +8705,8 @@ TAB_ASCU
 LBB_UCASES
       .byte "CASE$(",TK_UCASES
                               ; UCASE$(
+LBB_UNPLOT
+      .byte "NPLOT",TK_UNPLOT ; UNPLOT
 LBB_UNTIL
       .byte "NTIL",TK_UNTIL   ; UNTIL
 LBB_USR
@@ -8588,10 +8717,14 @@ LBB_VAL
       .byte "AL(",TK_VAL      ; VAL(
 LBB_VPTR
       .byte "ARPTR(",TK_VPTR  ; VARPTR(
+LBB_VOLUME
+      .byte "OLUME",TK_VOLUME ; VOLUME
       .byte $00
 TAB_ASCW
 LBB_WAIT
       .byte "AIT",TK_WAIT     ; WAIT
+LBB_WAVE
+      .byte "AVE",TK_WAVE     ; WAVE
 LBB_WHILE
       .byte "HILE",TK_WHILE   ; WHILE
 LBB_WIDTH
@@ -8694,6 +8827,42 @@ LAB_KEYT
       .word LBB_IRQ           ; IRQ
       .byte 3,'N'
       .word LBB_NMI           ; NMI
+      .byte 3,'C'
+      .word LBB_CLS           ; CLS
+      .byte 5,'C'
+      .word LBB_COLOR         ; COLOR
+      .byte 6,'L'
+      .word LBB_LOCATE        ; LOCATE
+      .byte 4,'P'
+      .word LBB_PLOT          ; PLOT
+      .byte 6,'U'
+      .word LBB_UNPLOT        ; UNPLOT
+      .byte 4,'L'
+      .word LBB_LINE          ; LINE
+      .byte 6,'C'
+      .word LBB_CIRCLE        ; CIRCLE
+      .byte 4,'R'
+      .word LBB_RECT          ; RECT
+      .byte 4,'F'
+      .word LBB_FILL          ; FILL
+      .byte 4,'M'
+      .word LBB_MODE          ; MODE
+      .byte 6,'S'
+      .word LBB_SPRITE        ; SPRITE
+      .byte 11,'S'
+      .word LBB_SPRITESHAPE   ; SPRITESHAPE
+      .byte 11,'S'
+      .word LBB_SPRITECOLOR   ; SPRITECOLOR
+      .byte 10,'S'
+      .word LBB_SPRITEDATA    ; SPRITEDATA
+      .byte 5,'S'
+      .word LBB_SOUND         ; SOUND
+      .byte 6,'V'
+      .word LBB_VOLUME        ; VOLUME
+      .byte 8,'E'
+      .word LBB_ENVELOPE      ; ENVELOPE
+      .byte 4,'W'
+      .word LBB_WAVE          ; WAVE
 
 ; secondary commands (can't start a statement)
 
@@ -8821,6 +8990,14 @@ LAB_KEYT
       .word LBB_RIGHTS        ; RIGHT$
       .byte 5,'M'             ;
       .word LBB_MIDS          ; MID$
+      .byte 8,'S'             ;
+      .word LBB_SPRITEX       ; SPRITEX(
+      .byte 8,'S'             ;
+      .word LBB_SPRITEY       ; SPRITEY(
+      .byte 10,'C'            ;
+      .word LBB_COLLISION     ; COLLISION(
+      .byte 7,'B'             ;
+      .word LBB_BUMPED        ; BUMPED(
 
 ; BASIC messages, mostly error messages
 

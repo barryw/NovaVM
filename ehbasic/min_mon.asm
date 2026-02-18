@@ -16,8 +16,8 @@ NMI_vec     = IRQ_vec+$0A     ; NMI code vector
 
 IO_AREA     = $F000           ; set I/O area for this monitor
 
-ACIAsimwr   = IO_AREA+$01     ; simulated ACIA write port
-ACIAsimrd   = IO_AREA+$04     ; simulated ACIA read port
+ACIAsimwr   = $A00E           ; VGC CHAROUT
+ACIAsimrd   = $A00F           ; VGC CHARIN
 
 ; now the code. all this does is set up the vectors and interrupt code
 ; and wait for the user to select [C]old or [W]arm start. nothing else
