@@ -1,57 +1,70 @@
-using e6502.TUI;
+using e6502.TUI.Hardware;
+using e6502.TUI.Rendering;
 using KDS.e6502;
 using Terminal.Gui;
 
-Application.Run<E6502Tui>();
-Application.Shutdown();
+Application.Init();
 
-internal class E6502Tui : Window
+var bus     = new CompositeBusDevice();
+var cpu     = new Cpu(bus);
+cpu.Boot();
+
+var display = new DisplayView(bus.Vgc);
+
+var window = new Window
 {
-    private readonly Cpu _cpu;
-    private ConsoleView _display;
-    private readonly Thread _cpuThread;
+    Title  = "Enhanced 6502 BASIC",
+    X      = 0,
+    Y      = 1,
+    Width  = Dim.Fill(),
+    Height = Dim.Fill(),
+};
 
-    public E6502Tui()
-    {
-        SetupDisplay();
+var menu = new MenuBar
+{
+    Menus =
+    [
+        new MenuBarItem("_File",
+        [
+            new MenuItem("_Quit", "", () => Application.RequestStop()),
+        ]),
+    ]
+};
 
-        _cpu = new Cpu(new TuiBasicBusDevice(_display));
-        _cpu.Boot();
+display.X = 0;
+display.Y = 0;
 
-        _cpuThread = new Thread(RunBasic);
-        _cpuThread.Start();
-    }
+window.Add(display);
 
-    private void RunBasic()
-    {
-        do
-        {
-            _cpu.ExecuteNext();
-        } while (_cpuThread.IsAlive);
-    }
+Application.Top!.Add(menu, window);
 
-    private void SetupDisplay()
-    {
-        Title = "Enhanced 6502 BASIC";
-        Width = 80;
-        Height = 25;
+// CPU runs on background thread
+bool running = true;
+var cpuThread = new Thread(() =>
+{
+    while (running)
+        cpu.ExecuteNext();
+})
+{
+    IsBackground = true,
+    Name = "CpuThread",
+};
+cpuThread.Start();
 
-        var menu = new MenuBar
-        {
-            Menus =
-            [
-                new MenuBarItem("_File",
-                [
-                    new MenuItem("_Quit", "", () =>
-                    {
-                        Application.RequestStop();
-                    }),
-                ]),
-            ]
-        };
+// 30 fps refresh
+Application.AddTimeout(TimeSpan.FromMilliseconds(33), () =>
+{
+    display.SetNeedsDraw();
+    return true;
+});
 
-        _display = new ConsoleView(0, 1, 80, 26);
+// 500 ms cursor blink
+Application.AddTimeout(TimeSpan.FromMilliseconds(500), () =>
+{
+    display.ToggleCursor();
+    return true;
+});
 
-        Add(menu, _display);
-    }
-}
+Application.Run();
+running = false;
+Application.Shutdown();
