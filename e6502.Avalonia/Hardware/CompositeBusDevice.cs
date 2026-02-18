@@ -21,6 +21,24 @@ public class CompositeBusDevice : IBusDevice
         string romPath = Path.Combine(AppContext.BaseDirectory, "Resources", "ehbasic.bin");
         byte[] rom = File.ReadAllBytes(romPath);
         rom.CopyTo(_ram, VgcConstants.RomBase);
+
+        InitVectorTable();
+    }
+
+    private void InitVectorTable()
+    {
+        void WriteWord(int addr, int value)
+        {
+            _ram[addr]     = (byte)(value & 0xFF);
+            _ram[addr + 1] = (byte)((value >> 8) & 0xFF);
+        }
+
+        WriteWord(VgcConstants.VectorTableBase + 0x00, VgcConstants.VgcBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x02, VgcConstants.RegCmd);
+        WriteWord(VgcConstants.VectorTableBase + 0x04, VgcConstants.CharRamBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x06, VgcConstants.ColorRamBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x08, VgcConstants.VscBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x0A, VgcConstants.FioBase);
     }
 
     public byte Read(ushort address)

@@ -208,4 +208,31 @@ public class AvaloniaCompositeBusTests
         Assert.AreEqual((byte)'Z', first);
         Assert.AreEqual(0x00, second);
     }
+
+    // -------------------------------------------------------------------------
+    // Vector table initialization
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void VectorTable_Initialized_AtBoot()
+    {
+        var bus = MakeBus();
+        int vgcBase = bus.Read(0x0200) | (bus.Read(0x0201) << 8);
+        Assert.AreEqual(VgcConstants.VgcBase, vgcBase);
+
+        int cmdReg = bus.Read(0x0202) | (bus.Read(0x0203) << 8);
+        Assert.AreEqual(VgcConstants.RegCmd, cmdReg);
+
+        int charRam = bus.Read(0x0204) | (bus.Read(0x0205) << 8);
+        Assert.AreEqual(VgcConstants.CharRamBase, charRam);
+
+        int colorRam = bus.Read(0x0206) | (bus.Read(0x0207) << 8);
+        Assert.AreEqual(VgcConstants.ColorRamBase, colorRam);
+
+        int vscBase = bus.Read(0x0208) | (bus.Read(0x0209) << 8);
+        Assert.AreEqual(VgcConstants.VscBase, vscBase);
+
+        int fioBase = bus.Read(0x020A) | (bus.Read(0x020B) << 8);
+        Assert.AreEqual(VgcConstants.FioBase, fioBase);
+    }
 }
