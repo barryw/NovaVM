@@ -209,10 +209,99 @@ public class VirtualGraphicsController
     }
 
     // -------------------------------------------------------------------------
-    // Stubs (filled in later tasks)
+    // Character output
     // -------------------------------------------------------------------------
 
-    protected virtual void HandleCharOut(byte data) { }
+    protected virtual void HandleCharOut(byte data)
+    {
+        int cx = _regs[VgcConstants.RegCursorX - VgcConstants.VgcBase];
+        int cy = _regs[VgcConstants.RegCursorY - VgcConstants.VgcBase];
+
+        switch (data)
+        {
+            case 0x08: // BS — backspace: move left, erase
+                if (cx > 0)
+                    cx--;
+                _screenRam[cy * VgcConstants.ScreenCols + cx] = 0x20;
+                break;
+
+            case 0x0A: // LF — line feed: advance row
+                cy++;
+                if (cy >= VgcConstants.ScreenRows)
+                {
+                    ScrollUp();
+                    cy = VgcConstants.ScreenRows - 1;
+                }
+                break;
+
+            case 0x0C: // FF — form feed: clear screen, home cursor
+                Array.Fill(_screenRam, (byte)0x20);
+                byte fgCol = _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase];
+                Array.Fill(_colorRam, fgCol);
+                cx = 0;
+                cy = 0;
+                break;
+
+            case 0x0D: // CR — carriage return: col 0, next row
+                cx = 0;
+                cy++;
+                if (cy >= VgcConstants.ScreenRows)
+                {
+                    ScrollUp();
+                    cy = VgcConstants.ScreenRows - 1;
+                }
+                break;
+
+            case 0x13: // HOME — cursor to 0,0
+                cx = 0;
+                cy = 0;
+                break;
+
+            default:
+                if (data >= 0x20) // printable
+                {
+                    int idx = cy * VgcConstants.ScreenCols + cx;
+                    _screenRam[idx] = data;
+                    _colorRam[idx] = _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase];
+                    cx++;
+                    if (cx >= VgcConstants.ScreenCols)
+                    {
+                        cx = 0;
+                        cy++;
+                        if (cy >= VgcConstants.ScreenRows)
+                        {
+                            ScrollUp();
+                            cy = VgcConstants.ScreenRows - 1;
+                        }
+                    }
+                }
+                break;
+        }
+
+        _regs[VgcConstants.RegCursorX - VgcConstants.VgcBase] = (byte)cx;
+        _regs[VgcConstants.RegCursorY - VgcConstants.VgcBase] = (byte)cy;
+    }
+
+    private void ScrollUp()
+    {
+        // Shift screen RAM rows 1-24 up to rows 0-23
+        Array.Copy(_screenRam, VgcConstants.ScreenCols, _screenRam, 0,
+            VgcConstants.ScreenCols * (VgcConstants.ScreenRows - 1));
+
+        // Shift color RAM rows 1-24 up to rows 0-23
+        Array.Copy(_colorRam, VgcConstants.ScreenCols, _colorRam, 0,
+            VgcConstants.ScreenCols * (VgcConstants.ScreenRows - 1));
+
+        // Clear row 24 to spaces; color RAM to current bg color
+        int lastRowStart = (VgcConstants.ScreenRows - 1) * VgcConstants.ScreenCols;
+        Array.Fill(_screenRam, (byte)0x20, lastRowStart, VgcConstants.ScreenCols);
+        byte bgCol = _regs[VgcConstants.RegBgCol - VgcConstants.VgcBase];
+        Array.Fill(_colorRam, bgCol, lastRowStart, VgcConstants.ScreenCols);
+    }
+
+    // -------------------------------------------------------------------------
+    // Stubs (filled in later tasks)
+    // -------------------------------------------------------------------------
 
     protected virtual void ExecuteGfxCommand(byte cmd) { }
 
