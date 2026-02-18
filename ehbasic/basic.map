@@ -1,31 +1,32 @@
 Modules list:
 -------------
 basic.o:
-    CODE              Offs=000000  Size=0029D2  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=002D21  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
     BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
     DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
     ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
     NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
+    MONITOR           Offs=000000  Size=000077  Align=00001  Fill=0000
+    VECTORS           Offs=000000  Size=000006  Align=00001  Fill=0000
 
 
 Segment list:
 -------------
 Name                   Start     End    Size  Align
 ----------------------------------------------------
+BSS                   000000  000000  000000  00001
+DATA                  000000  000000  000000  00001
 NULL                  000000  000000  000000  00001
+RODATA                000000  000000  000000  00001
 ZEROPAGE              000080  000080  000000  00001
-CODE                  001000  0039D1  0029D2  00001
-BSS                   0039D2  0039D2  000000  00001
-DATA                  0039D2  0039D2  000000  00001
-RODATA                0039D2  0039D2  000000  00001
+CODE                  00C000  00ED20  002D21  00001
+MONITOR               00FF80  00FFF6  000077  00001
+VECTORS               00FFFA  00FFFF  000006  00001
 
 
 Exports list by name:
 ---------------------
-__BSS_LOAD__              0039D2  LA    __BSS_RUN__               0039D2  LA    
-__BSS_SIZE__              000000  EA    __STACKSIZE__             000800 REA    
-__STACKSTART__            008000 REA    __ZPSTART__               000080 REA    
 __ZP_FILEOFFS__           000000  EA    __ZP_LAST__               000080  LA    
 __ZP_SIZE__               00001F  EA    __ZP_START__              000080  LA    
 
@@ -33,25 +34,13 @@ __ZP_SIZE__               00001F  EA    __ZP_START__              000080  LA
 
 Exports list by value:
 ----------------------
-__ZP_FILEOFFS__           000000  EA    __BSS_SIZE__              000000  EA    
-__ZP_SIZE__               00001F  EA    __ZP_START__              000080  LA    
-__ZPSTART__               000080 REA    __ZP_LAST__               000080  LA    
-__STACKSIZE__             000800 REA    __BSS_LOAD__              0039D2  LA    
-__BSS_RUN__               0039D2  LA    __STACKSTART__            008000 REA    
+__ZP_FILEOFFS__           000000  EA    __ZP_SIZE__               00001F  EA    
+__ZP_LAST__               000080  LA    __ZP_START__              000080  LA    
 
 
 
 Imports list:
 -------------
-__BSS_LOAD__ ([linker generated]):
-__BSS_RUN__ ([linker generated]):
-__BSS_SIZE__ ([linker generated]):
-__STACKSIZE__ ([linker generated]):
-    [linker generated]        /Users/barry/Git/cc65/bin/../cfg/none.cfg:11
-__STACKSTART__ ([linker generated]):
-    [linker generated]        /Users/barry/Git/cc65/bin/../cfg/none.cfg:11
-__ZPSTART__ ([linker generated]):
-    [linker generated]        /Users/barry/Git/cc65/bin/../cfg/none.cfg:10
 __ZP_FILEOFFS__ ([linker generated]):
 __ZP_LAST__ ([linker generated]):
 __ZP_SIZE__ ([linker generated]):

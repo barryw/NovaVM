@@ -72,23 +72,24 @@ public class VgcCharOutTests
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public void CR_MovesCursorToColZero_NextRow()
+    public void CR_MovesCursorToColZero_SameRow()
     {
         _vgc.Write(VgcConstants.RegCursorX, 40);
         _vgc.Write(VgcConstants.RegCursorY, 10);
         CharOut(0x0D);
         Assert.AreEqual(0, _vgc.GetCursorX());
-        Assert.AreEqual(11, _vgc.GetCursorY());
+        Assert.AreEqual(10, _vgc.GetCursorY(), "CR should not advance row");
     }
 
     [TestMethod]
-    public void CR_AtLastRow_TriggersScroll_CursorStaysOnRow24()
+    public void CRLF_MovesCursorToColZero_NextRow()
     {
-        _vgc.Write(VgcConstants.RegCursorX, 20);
-        _vgc.Write(VgcConstants.RegCursorY, 24);
+        _vgc.Write(VgcConstants.RegCursorX, 40);
+        _vgc.Write(VgcConstants.RegCursorY, 10);
         CharOut(0x0D);
+        CharOut(0x0A);
         Assert.AreEqual(0, _vgc.GetCursorX());
-        Assert.AreEqual(24, _vgc.GetCursorY());
+        Assert.AreEqual(11, _vgc.GetCursorY());
     }
 
     // -------------------------------------------------------------------------
@@ -201,10 +202,10 @@ public class VgcCharOutTests
         for (int col = 0; col < VgcConstants.ScreenCols; col++)
             _vgc.Write((ushort)(VgcConstants.CharRamBase + 1 * VgcConstants.ScreenCols + col), 0x41);
 
-        // Trigger scroll via CR on last row
+        // Trigger scroll via LF on last row
         _vgc.Write(VgcConstants.RegCursorX, 0);
         _vgc.Write(VgcConstants.RegCursorY, 24);
-        CharOut(0x0D);
+        CharOut(0x0A);
 
         // Row 0 should now have 'A'
         for (int col = 0; col < VgcConstants.ScreenCols; col++)
@@ -230,15 +231,15 @@ public class VgcCharOutTests
     }
 
     [TestMethod]
-    public void ScrollUp_LastRowColorSetToBgCol()
+    public void ScrollUp_LastRowColorSetToFgCol()
     {
-        _vgc.Write(VgcConstants.RegBgCol, 3);
+        _vgc.Write(VgcConstants.RegFgCol, 5);
         _vgc.Write(VgcConstants.RegCursorX, 0);
         _vgc.Write(VgcConstants.RegCursorY, 24);
         CharOut(0x0A);
 
         for (int col = 0; col < VgcConstants.ScreenCols; col++)
-            Assert.AreEqual(3, _vgc.GetScreenColor(col, 24),
-                $"Expected bg color at ({col},24) after scroll");
+            Assert.AreEqual(5, _vgc.GetScreenColor(col, 24),
+                $"Expected fg color at ({col},24) after scroll");
     }
 }

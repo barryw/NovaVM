@@ -30,7 +30,38 @@ public static class VgcConstants
     public const int ColorRamBase    = 0xABD0;
     public const int ColorRamEnd     = 0xB39F;   // ABD0 + 2000 - 1
 
-    public const int FreeBase        = 0xB3A0;
+    // -------------------------------------------------------------------------
+    // File I/O coprocessor registers ($B3A0-$B3EF)
+    // -------------------------------------------------------------------------
+
+    public const int FioBase         = 0xB3A0;
+    public const int FioEnd          = 0xB3EF;
+
+    public const int FioCmd          = 0xB3A0;   // write triggers operation
+    public const int FioStatus       = 0xB3A1;   // 0=idle, 2=ok, 3=error
+    public const int FioErrCode      = 0xB3A2;   // 0=none, 1=not found, 2=io error
+    public const int FioNameLen      = 0xB3A3;   // filename length (1-63)
+    public const int FioSrcL         = 0xB3A4;   // source/dest addr low
+    public const int FioSrcH         = 0xB3A5;   // source/dest addr high
+    public const int FioEndL         = 0xB3A6;   // end addr low (SAVE only)
+    public const int FioEndH         = 0xB3A7;   // end addr high (SAVE only)
+    public const int FioSizeL        = 0xB3A8;   // loaded size low (set by host after LOAD)
+    public const int FioSizeH        = 0xB3A9;   // loaded size high
+    public const int FioName         = 0xB3B0;   // filename buffer (64 bytes ASCII)
+    public const int FioNameEnd      = 0xB3EF;
+
+    public const byte FioCmdSave     = 0x01;
+    public const byte FioCmdLoad     = 0x02;
+
+    public const byte FioStatusIdle  = 0x00;
+    public const byte FioStatusOk    = 0x02;
+    public const byte FioStatusError = 0x03;
+
+    public const byte FioErrNone     = 0x00;
+    public const byte FioErrNotFound = 0x01;
+    public const byte FioErrIo       = 0x02;
+
+    public const int FreeBase        = 0xB3F0;
     public const int FreeEnd         = 0xBFFF;
 
     public const int RomBase         = 0xC000;

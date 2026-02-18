@@ -1,19 +1,18 @@
 ﻿namespace KDS.e6502.Utility
 {
-    internal class CPUMath
+    internal static class CpuMath
     {
-        public static byte BCDToHex(int result)
+        public static byte BcdToHex(int result)
         {
-            if (result > 0xff)
-                throw new InvalidOperationException($"Invalid BCD to hex number: {result}");
-
-            if (result <= 9)
-                return (byte)result;
-            else
-                return (byte)(((result / 10) << 4) + (result % 10));
+            return result switch
+            {
+                > 0xff => throw new InvalidOperationException($"Invalid BCD to hex number: {result}"),
+                <= 9 => (byte)result,
+                _ => (byte)(((result / 10) << 4) + (result % 10))
+            };
         }
 
-        public static int HexToBCD(byte oper)
+        public static int HexToBcd(byte oper)
         {
             // validate input is valid packed BCD 
             if (oper > 0x99)
@@ -27,8 +26,7 @@
         {
             if (num < 0x80)
                 return num;
-            else
-                return (0xff << 8 | num) & 0xffff;
+            return (0xff << 8 | num) & 0xffff;
         }
     }
 }

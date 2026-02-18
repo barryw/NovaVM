@@ -61,9 +61,15 @@ public class VgcConstantsTests
     }
 
     [TestMethod]
-    public void FreeArea_StartsImmediatelyAfterColorRam()
+    public void FioArea_StartsImmediatelyAfterColorRam()
     {
-        Assert.AreEqual(VgcConstants.ColorRamEnd + 1, VgcConstants.FreeBase);
+        Assert.AreEqual(VgcConstants.ColorRamEnd + 1, VgcConstants.FioBase);
+    }
+
+    [TestMethod]
+    public void FreeArea_StartsImmediatelyAfterFio()
+    {
+        Assert.AreEqual(VgcConstants.FioEnd + 1, VgcConstants.FreeBase);
     }
 
     // -------------------------------------------------------------------------

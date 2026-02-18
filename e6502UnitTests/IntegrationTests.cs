@@ -235,50 +235,25 @@ public class IntegrationTests
     }
 
     [TestMethod]
-    public void ScreenEditor_HandleTypedChar_WritesToScreenRam()
+    public void ScreenEditor_QueueInput_FeedsCharsToCpu()
     {
         var bus = MakeBus();
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        // Type 'A' at cursor position (0, 0)
-        editor.HandleTypedChar((byte)'A');
+        // Queue "RUN\r" — serial terminal model
+        editor.QueueInput((byte)'R');
+        editor.QueueInput((byte)'U');
+        editor.QueueInput((byte)'N');
+        editor.QueueInput(0x0D);
 
-        Assert.AreEqual((byte)'A', bus.Vgc.GetScreenChar(0, 0),
-            "Typed char 'A' must appear at col 0, row 0.");
-        Assert.AreEqual(1, bus.Vgc.GetCursorX(),
-            "Cursor X must advance to 1 after typing one char.");
-    }
-
-    [TestMethod]
-    public void ScreenEditor_HandleReturn_EnqueuesLineAsInput()
-    {
-        var bus = MakeBus();
-        var editor = new ScreenEditor(bus.Vgc);
-        bus.Vgc.SetScreenEditor(editor);
-
-        // Type "RUN" then press RETURN
-        editor.HandleTypedChar((byte)'R');
-        editor.HandleTypedChar((byte)'U');
-        editor.HandleTypedChar((byte)'N');
-
-        // Move cursor back to row 0 for ReadLineFromScreen
-        bus.Write(VgcConstants.RegCursorX, 0);
-        bus.Write(VgcConstants.RegCursorY, 0);
-
-        editor.HandleReturn();
-
-        Assert.IsTrue(editor.HasQueuedInput, "Input queue must be non-empty after RETURN.");
-        // Dequeue until CR to reconstruct the line
-        var chars = new System.Text.StringBuilder();
-        while (editor.HasQueuedInput)
-        {
-            byte b = editor.DequeueInput();
-            if (b == 0x0D) break;
-            chars.Append((char)b);
-        }
-        Assert.AreEqual("RUN", chars.ToString().TrimEnd(),
-            "Queued input must contain the typed line.");
+        // CPU reads via CHARIN register
+        Assert.AreEqual((byte)'R', bus.Read(VgcConstants.RegCharIn));
+        Assert.AreEqual((byte)'U', bus.Read(VgcConstants.RegCharIn));
+        Assert.AreEqual((byte)'N', bus.Read(VgcConstants.RegCharIn));
+        Assert.AreEqual(0x0D, bus.Read(VgcConstants.RegCharIn));
+        Assert.AreEqual(0, bus.Read(VgcConstants.RegCharIn),
+            "CHARIN must return 0 when queue is empty.");
     }
 
     // -------------------------------------------------------------------------
@@ -362,6 +337,55 @@ public class IntegrationTests
     // -------------------------------------------------------------------------
     // 10. VSC isolation — writes to $A100 don't affect VGC registers or RAM
     // -------------------------------------------------------------------------
+
+    // -------------------------------------------------------------------------
+    // 11. GFX draw color defaults to foreground color when not explicitly set
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void GfxLine_WithoutGcolor_UsesFgColor()
+    {
+        var bus = MakeBus();
+
+        // Set foreground color to 5 (text COLOR command writes here)
+        bus.Write(VgcConstants.RegFgCol, 5);
+
+        // Set MODE 1 (block graphics)
+        bus.Write(VgcConstants.RegMode, 1);
+
+        // Draw a LINE without ever issuing GCOLOR
+        bus.Write(VgcConstants.RegGfxP0, 10);  // x1 low
+        bus.Write(VgcConstants.RegGfxP1, 0);   // x1 high
+        bus.Write(VgcConstants.RegGfxP2, 10);  // y1 low
+        bus.Write(VgcConstants.RegGfxP3, 0);   // y1 high
+        bus.Write(VgcConstants.RegGfxP4, 20);  // x2
+        bus.Write(VgcConstants.RegGfxP5, 10);  // y2
+        bus.Write(VgcConstants.RegGfxCmd, VgcConstants.GfxCmdLine);
+
+        // Pixel at (10, 10) should be color 5 (the foreground color)
+        Assert.IsTrue(bus.Vgc.GetGfxPixel(10, 10),
+            "Line pixel must be set.");
+        Assert.AreEqual(5, bus.Vgc.GetGfxPixelColor(10, 10),
+            "Line must use text foreground color when no GCOLOR set.");
+    }
+
+    [TestMethod]
+    public void GfxPlot_WithoutGcolor_UsesFgColor()
+    {
+        var bus = MakeBus();
+
+        bus.Write(VgcConstants.RegFgCol, 3);
+
+        // PLOT at (50, 25) without GCOLOR
+        bus.Write(VgcConstants.RegGfxP0, 50);  // x low
+        bus.Write(VgcConstants.RegGfxP1, 0);   // x high
+        bus.Write(VgcConstants.RegGfxP2, 25);  // y low
+        bus.Write(VgcConstants.RegGfxP3, 0);   // y high
+        bus.Write(VgcConstants.RegGfxCmd, VgcConstants.GfxCmdPlot);
+
+        Assert.AreEqual(3, bus.Vgc.GetGfxPixelColor(50, 25),
+            "Plot must use text foreground color when no GCOLOR set.");
+    }
 
     [TestMethod]
     public void VscIsolation_WriteToVscBase_DoesNotAffectVgc()

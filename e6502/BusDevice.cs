@@ -3,35 +3,33 @@
     /// <summary>
     /// Example Bus Device for loading a 
     /// </summary>
-    public class BusDevice : IBusDevice
+    public sealed class BusDevice : IBusDevice
     {
-        private readonly byte[] ram = new byte[0x10000];
+        private readonly byte[] _ram = new byte[0x10000];
 
-        public BusDevice(byte[] program, ushort loadingAddress)
+        public BusDevice(byte[] program, ushort loadingAddress = 0)
         {
             Load(program, loadingAddress);
         }
-
-        public BusDevice(byte[] program) : this(program, 0) { }
 
         public void Load(byte[] program)
         {
             Load(program, 0);
         }
 
-        public void Load(byte[] program, int loadingAddress)
+        private void Load(byte[] program, int loadingAddress)
         {
-            program.CopyTo(ram, loadingAddress);
+            program.CopyTo(_ram, loadingAddress);
         }
 
-        public virtual byte Read(ushort address)
+        public byte Read(ushort address)
         {
-            return ram[address];
+            return _ram[address];
         }
 
-        public virtual void Write(ushort address, byte data)
+        public void Write(ushort address, byte data)
         {
-            ram[address] = data;
+            _ram[address] = data;
         }
     }
 }

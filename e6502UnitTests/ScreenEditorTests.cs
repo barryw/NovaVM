@@ -105,18 +105,15 @@ public class ScreenEditorTests
     }
 
     // -------------------------------------------------------------------------
-    // HandleReturn
+    // QueueInput — serial terminal model
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public void HandleReturn_QueuesLinePlusCr()
+    public void QueueInput_QueuesCharForCpu()
     {
-        // Write "HI" at row 0
-        _vgc.Write(VgcConstants.RegCursorY, 0);
-        _vgc.Write(VgcConstants.CharRamBase + 0, (byte)'H');
-        _vgc.Write(VgcConstants.CharRamBase + 1, (byte)'I');
-
-        _editor.HandleReturn();
+        _editor.QueueInput((byte)'H');
+        _editor.QueueInput((byte)'I');
+        _editor.QueueInput(0x0D);
 
         Assert.IsTrue(_editor.HasQueuedInput);
         Assert.AreEqual((byte)'H', _editor.DequeueInput());
@@ -132,17 +129,13 @@ public class ScreenEditorTests
     [TestMethod]
     public void DequeueInput_ReturnsBytesInOrder()
     {
-        _vgc.Write(VgcConstants.RegCursorY, 0);
-        _vgc.Write(VgcConstants.CharRamBase + 0, (byte)'A');
-        _vgc.Write(VgcConstants.CharRamBase + 1, (byte)'B');
-        _vgc.Write(VgcConstants.CharRamBase + 2, (byte)'C');
-
-        _editor.HandleReturn();
+        _editor.QueueInput((byte)'A');
+        _editor.QueueInput((byte)'B');
+        _editor.QueueInput((byte)'C');
 
         Assert.AreEqual((byte)'A', _editor.DequeueInput());
         Assert.AreEqual((byte)'B', _editor.DequeueInput());
         Assert.AreEqual((byte)'C', _editor.DequeueInput());
-        Assert.AreEqual(0x0D, _editor.DequeueInput());
     }
 
     [TestMethod]
@@ -150,26 +143,5 @@ public class ScreenEditorTests
     {
         Assert.IsFalse(_editor.HasQueuedInput);
         Assert.AreEqual(0, _editor.DequeueInput());
-    }
-
-    // -------------------------------------------------------------------------
-    // HandleTypedChar
-    // -------------------------------------------------------------------------
-
-    [TestMethod]
-    public void HandleTypedChar_WritesToScreenRam()
-    {
-        // Cursor at 0,0
-        _editor.HandleTypedChar((byte)'X');
-
-        byte written = _vgc.GetScreenChar(0, 0);
-        Assert.AreEqual((byte)'X', written);
-    }
-
-    [TestMethod]
-    public void HandleTypedChar_AdvancesCursor()
-    {
-        _editor.HandleTypedChar((byte)'A');
-        Assert.AreEqual(1, _vgc.GetCursorX());
     }
 }

@@ -85,8 +85,6 @@ ACIAin
 
 LAB_nobyw
       CLC                     ; flag no byte received
-no_load                       ; empty load vector for EhBASIC
-no_save                       ; empty save vector for EhBASIC
       RTS
 
 ; vector tables
@@ -94,8 +92,8 @@ no_save                       ; empty save vector for EhBASIC
 LAB_vec
       .word ACIAin            ; byte in from simulated ACIA
       .word ACIAout           ; byte out to simulated ACIA
-      .word no_load           ; null load vector for EhBASIC
-      .word no_save           ; null save vector for EhBASIC
+      .word LAB_FLOAD         ; load vector for EhBASIC
+      .word LAB_FSAVE         ; save vector for EhBASIC
 
 ; EhBASIC IRQ support
 

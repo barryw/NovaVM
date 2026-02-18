@@ -3,83 +3,80 @@ using KDS.e6502.Utility;
 
 namespace KDS.e6502
 {
-    public enum e6502Type
+    public enum E6502Type
     {
-        CMOS,
-        NMOS
+        Cmos,
+        Nmos
     };
 
-    public class CPU
+    public sealed class Cpu
     {
         // Main Register
-        public byte A { get; internal set; }
+        private byte A { get; set; }
 
         // Index Registers
-        public byte X { get; internal set; }
-        public byte Y { get; internal set; }
+        private byte X { get; set; }
+        private byte Y { get; set; }
 
         // Program Counter
-        public ushort PC { get; internal set; }
+        public ushort Pc { get; private set; }
 
         // Stack Pointer
         // Memory location is hard coded to 0x01xx
         // Stack is descending (decrement on push, increment on pop)
         // 6502 is an empty stack so SP points to where next value is stored
-        public byte SP { get; internal set; }
+        private byte Sp { get; set; }
 
         // Status Registers (in order bit 7 to 0)
-        public bool NF { get; internal set; }    // negative flag (N)
-        public bool VF { get; internal set; }    // overflow flag (V)
-                                                 // bit 5 is unused
-                                                 // bit 4 is the break flag however it is not a physical flag in the CPU
-        public bool DF { get; internal set; }    // binary coded decimal flag (D)
-        public bool IF { get; internal set; }    // interrupt flag (I)
-        public bool ZF { get; internal set; }    // zero flag (Z)
-        public bool CF { get; internal set; }    // carry flag (C)
+        private bool Nf { get; set; }    // negative flag (N)
+
+        private bool Vf { get; set; }    // overflow flag (V)
+        // bit 5 is unused
+        // bit 4 is the break flag however it is not a physical flag in the CPU
+        private bool Df { get; set; }    // binary coded decimal flag (D)
+        private bool If { get; set; }    // interrupt flag (I)
+        private bool Zf { get; set; }    // zero flag (Z)
+        private bool Cf { get; set; }    // carry flag (C)
 
         // Flag for hardware interrupt (IRQ)
-        public bool IRQWaiting { get; set; }
+        public bool IrqWaiting { get; set; }
         // Flag for non maskable interrupt (NMI)
-        public bool NMIWaiting { get; set; }
-        // RDY flag
-        protected bool RDY { get; set; }
+        public bool NmiWaiting { get; set; }
 
         // List of op codes and their attributes
-        private readonly OpCodeTable opCodeTable;
+        private readonly OpCodeTable _opCodeTable;
 
         // The current opcode
-        private OpCodeRecord currentOp;
+        private OpCodeRecord _currentOp;
 
-        private readonly e6502Type CPUType;
+        private readonly E6502Type _cpuType;
 
-        private bool Prefetched = false;
-        private int PrefetchedOperand = 0;
+        private bool _prefetched;
+        private int _prefetchedOperand;
 
-        public IBusDevice SystemBus { get; private set; }
+        public IBusDevice SystemBus { get; }
 
-        public CPU(IBusDevice bus) : this(bus, e6502Type.NMOS) { }
-
-        public CPU(IBusDevice bus, e6502Type cpuType)
+        public Cpu(IBusDevice bus, E6502Type cpuType = E6502Type.Nmos)
         {
-            opCodeTable = new OpCodeTable();
-            currentOp = new OpCodeRecord();
+            _opCodeTable = new OpCodeTable();
+            _currentOp = new OpCodeRecord();
 
             // Set these on instantiation so they are known values when using this object in testing.
             // Real programs should explicitly load these values before using them.
             A = 0;
             X = 0;
             Y = 0;
-            SP = 0;
-            PC = 0;
-            NF = false;
-            VF = false;
-            DF = false;
-            IF = true;
-            ZF = false;
-            CF = false;
-            NMIWaiting = false;
-            IRQWaiting = false;
-            CPUType = cpuType;
+            Sp = 0;
+            Pc = 0;
+            Nf = false;
+            Vf = false;
+            Df = false;
+            If = true;
+            Zf = false;
+            Cf = false;
+            NmiWaiting = false;
+            IrqWaiting = false;
+            _cpuType = cpuType;
             SystemBus = bus;
         }
 
@@ -93,190 +90,140 @@ namespace KDS.e6502
 
         public void Boot(ushort pc)
         {
-            PC = pc;
-            IF = true;
-            NMIWaiting = false;
-            IRQWaiting = false;
-        }
-
-        public string DasmNextInstruction()
-        {
-            OpCodeRecord oprec = opCodeTable.OpCodes[SystemBus.Read(PC)];
-            if (oprec.Bytes == 3)
-                return oprec.Dasm(GetImmWord());
-            else
-                return oprec.Dasm(GetImmByte());
+            Pc = pc;
+            If = true;
+            NmiWaiting = false;
+            IrqWaiting = false;
         }
 
         /// <summary>
         /// Without executing the instruction determine how many clocks the next instruction will take.
         /// </summary>
         /// <returns>how many clock cycles for the next instruction</returns>
-        public virtual int ClocksForNext()
+        public int ClocksForNext()
         {
-            int clocks = 0;
+            var clocks = 0;
 
             if (ProcessInterrupts())
             {
                 clocks = 6;
             }
 
-            currentOp = opCodeTable.OpCodes[SystemBus.Read(PC)];
-            PrefetchedOperand = GetOperand(currentOp.AddressMode, out bool CrossBoundary);
+            _currentOp = _opCodeTable.OpCodes[SystemBus.Read(Pc)];
+            _prefetchedOperand = GetOperand(_currentOp.AddressMode, out bool crossBoundary);
 
-            clocks += currentOp.Cycles + ClocksForCMOS() + ClocksForBranching();
-            if (CrossBoundary) clocks++;
+            clocks += _currentOp.Cycles + ClocksForCmos() + ClocksForBranching();
+            if (crossBoundary) clocks++;
 
-            Prefetched = true;
+            _prefetched = true;
             return clocks;
         }
 
-        private int ClocksForCMOS()
+        private int ClocksForCmos()
         {
-            int clocks = 0;
-            if (CPUType == e6502Type.CMOS)
+            var clocks = 0;
+            if (_cpuType != E6502Type.Cmos) return clocks;
+            switch (_currentOp.OpCode)
             {
-                switch (currentOp.OpCode)
-                {
-                    // CMOS fixes a bug in this op code which results in an extra clock cycle
-                    case 0x6c:
-                        clocks++;
-                        break;
+                // CMOS fixes a bug in this op code which results in an extra clock cycle
+                case 0x6c:
+                    clocks++;
+                    break;
 
-                    // extra clock cycle on CMOS in decimal mode
-                    case 0x7d:
-                    case 0xfd:
-                        if (DF) clocks++;
-                        break;
+                // extra clock cycle on CMOS in decimal mode
+                case 0x7d:
+                case 0xfd:
+                    if (Df) clocks++;
+                    break;
 
-                    // On 65C02 (abs,X) takes one less clock cycle (but still add back 1 if page boundary crossed)
-                    case 0x1e:
-                    case 0x3e:
-                    case 0x5e:
-                    case 0x7e:
-                        clocks--;
-                        break;
+                // On 65C02 (abs,X) takes one less clock cycle (but still add back 1 if page boundary crossed)
+                case 0x1e:
+                case 0x3e:
+                case 0x5e:
+                case 0x7e:
+                    clocks--;
+                    break;
 
-                }
             }
             return clocks;
         }
         private int ClocksForBranching()
         {
-            int clocks = 0;
             // Account for extra cycles if a branch is taken
-            switch (currentOp.OpCode)
+            var clocks = _currentOp.OpCode switch
             {
                 // BCC - branch on carry clear
-                case 0x90:
-                    clocks = PrefetchBranch(!CF);
-                    break;
+                0x90 => PrefetchBranch(!Cf),
                 // BCS - branch on carry set
-                case 0xb0:
-                    clocks = PrefetchBranch(CF);
-                    break;
+                0xb0 => PrefetchBranch(Cf),
                 // BEQ - branch on zero
-                case 0xf0:
-                    clocks = PrefetchBranch(ZF);
-                    break;
+                0xf0 => PrefetchBranch(Zf),
                 // BMI - branch on negative
-                case 0x30:
-                    clocks = PrefetchBranch(NF);
-                    break;
-
+                0x30 => PrefetchBranch(Nf),
                 // BNE - branch on non zero
-                case 0xd0:
-                    clocks = PrefetchBranch(!ZF);
-                    break;
-
+                0xd0 => PrefetchBranch(!Zf),
                 // BPL - branch on non negative
-                case 0x10:
-                    clocks = PrefetchBranch(!NF);
-                    break;
-
+                0x10 => PrefetchBranch(!Nf),
                 // BRA - unconditional branch to immediate address
                 // NOTE: In OpcodeList.txt the number of clock cycles is one less than the documentation.
                 // This is because CheckBranch() adds one when a branch is taken, which in this case is always.
-                case 0x80:
-                    clocks = PrefetchBranch(true);
-                    break;
-
+                0x80 => PrefetchBranch(true),
                 // BVC - branch on overflow clear
-                case 0x50:
-                    clocks = PrefetchBranch(!VF);
-                    break;
-
+                0x50 => PrefetchBranch(!Vf),
                 // BVS - branch on overflow set
-                case 0x70:
-                    clocks = PrefetchBranch(VF);
-                    break;
-
-            }
+                0x70 => PrefetchBranch(Vf),
+                _ => 0
+            };
             return clocks;
         }
         private int PrefetchBranch(bool flag)
         {
-            if (flag)
-            {
-                // extra cycle if branch destination is a different page than
-                // the next instruction
-                if ((PC & 0xff00) != ((PC + PrefetchedOperand) & 0xff00))
-                {
-                    return 2;
-                }
-                else
-                {
-                    return 1;
-                }
-            }
-            return 0;
+            if (!flag) return 0;
+            // extra cycle if branch destination is a different page than
+            // the next instruction
+            return (Pc & 0xff00) != ((Pc + _prefetchedOperand) & 0xff00) ? 2 : 1;
         }
 
         // returns # of clock cycles needed to execute the instruction
-        public virtual void ExecuteNext()
+        public void ExecuteNext()
         {
-            if (!Prefetched) ProcessInterrupts();
+            if (!_prefetched) ProcessInterrupts();
             ExecuteInstruction();
-            Prefetched = false;
+            _prefetched = false;
         }
 
         private bool ProcessInterrupts()
         {
             // Check for non maskable interrupt (has higher priority over IRQ)
-            if (NMIWaiting)
+            if (NmiWaiting)
             {
-                DoIRQ(0xfffa);
-                NMIWaiting = false;
+                DoIrq(0xfffa);
+                NmiWaiting = false;
                 return true;
             }
             // Check for hardware interrupt, if enabled
-            else if (!IF)
-            {
-                if (IRQWaiting)
-                {
-                    DoIRQ(0xfffe);
-                    IRQWaiting = false;
-                    return true;
-                }
-            }
-            return false;
+            if (If) return false;
+            if (!IrqWaiting) return false;
+            DoIrq(0xfffe);
+            IrqWaiting = false;
+            return true;
         }
 
         private void ExecuteInstruction()
         {
             int result;
             int oper;
-            if (Prefetched)
+            if (_prefetched)
             {
-                oper = PrefetchedOperand;
+                oper = _prefetchedOperand;
             }
             else
             {
-                currentOp = opCodeTable.OpCodes[SystemBus.Read(PC)];
-                oper = GetOperand(currentOp.AddressMode, out _);
+                _currentOp = _opCodeTable.OpCodes[SystemBus.Read(Pc)];
+                oper = GetOperand(_currentOp.AddressMode, out _);
             }
 
-            switch (currentOp.OpCode)
+            switch (_currentOp.OpCode)
             {
                 // ADC - add memory to accumulator with carry
                 // A+M+C -> A,C (NZCV)
@@ -290,31 +237,31 @@ namespace KDS.e6502
                 case 0x79:
                 case 0x7d:
 
-                    if (DF)
+                    if (Df)
                     {
-                        result = CPUMath.HexToBCD(A) + CPUMath.HexToBCD((byte)oper);
-                        if (CF) result++;
+                        result = CpuMath.HexToBcd(A) + CpuMath.HexToBcd((byte)oper);
+                        if (Cf) result++;
 
-                        CF = (result > 99);
+                        Cf = (result > 99);
 
                         if (result > 99)
                         {
                             result -= 100;
                         }
-                        ZF = (result == 0);
+                        Zf = (result == 0);
 
                         // convert decimal result to hex BCD result
-                        A = CPUMath.BCDToHex(result);
+                        A = CpuMath.BcdToHex(result);
 
                         // Unlike ZF and CF, the NF flag represents the MSB after conversion
                         // to BCD.
-                        NF = (A > 0x7f);
+                        Nf = (A > 0x7f);
                     }
                     else
                     {
-                        ADC((byte)oper);
+                        Adc((byte)oper);
                     }
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // AND - and memory with accumulator
@@ -330,11 +277,11 @@ namespace KDS.e6502
                 case 0x3d:
                     result = A & oper;
 
-                    NF = ((result & 0x80) == 0x80);
-                    ZF = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
 
                     A = (byte)result;
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // ASL - shift left one bit (NZC)
@@ -347,16 +294,16 @@ namespace KDS.e6502
                 case 0x1e:
 
                     // shift bit 7 into carry
-                    CF = (oper >= 0x80);
+                    Cf = (oper >= 0x80);
 
                     // shift operand
                     result = oper << 1;
 
-                    NF = ((result & 0x80) == 0x80);
-                    ZF = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
 
-                    SaveOperand(currentOp.AddressMode, result);
-                    PC += currentOp.Bytes;
+                    SaveOperand(_currentOp.AddressMode, result);
+                    Pc += _currentOp.Bytes;
 
                     break;
 
@@ -374,19 +321,19 @@ namespace KDS.e6502
                 case 0x7f:
 
                     // upper nibble specifies the bit to check
-                    byte check_bit = (byte)(currentOp.OpCode >> 4);
-                    byte check_value = 0x01;
-                    for (int ii = 0; ii < check_bit; ii++)
+                    var checkBit = (byte)(_currentOp.OpCode >> 4);
+                    byte checkValue = 0x01;
+                    for (int ii = 0; ii < checkBit; ii++)
                     {
-                        check_value = (byte)(check_value << 1);
+                        checkValue = (byte)(checkValue << 1);
                     }
 
                     // if the specified bit is 0 then branch
-                    byte offset = SystemBus.Read((ushort)(PC + 2));
-                    PC += currentOp.Bytes;
+                    byte offset = SystemBus.Read((ushort)(Pc + 2));
+                    Pc += _currentOp.Bytes;
 
-                    if ((oper & check_value) == 0x00)
-                        PC += offset;
+                    if ((oper & checkValue) == 0x00)
+                        Pc += offset;
 
                     break;
 
@@ -404,38 +351,38 @@ namespace KDS.e6502
                 case 0xff:
 
                     // upper nibble specifies the bit to check (but ignore bit 7)
-                    check_bit = (byte)((currentOp.OpCode & 0x70) >> 4);
-                    check_value = 0x01;
-                    for (int ii = 0; ii < check_bit; ii++)
+                    checkBit = (byte)((_currentOp.OpCode & 0x70) >> 4);
+                    checkValue = 0x01;
+                    for (int ii = 0; ii < checkBit; ii++)
                     {
-                        check_value = (byte)(check_value << 1);
+                        checkValue = (byte)(checkValue << 1);
                     }
 
                     // if the specified bit is 1 then branch
-                    offset = SystemBus.Read((ushort)(PC + 2));
-                    PC += currentOp.Bytes;
+                    offset = SystemBus.Read((ushort)(Pc + 2));
+                    Pc += _currentOp.Bytes;
 
-                    if ((oper & check_value) == check_value)
-                        PC += offset;
+                    if ((oper & checkValue) == checkValue)
+                        Pc += offset;
 
                     break;
 
                 // BCC - branch on carry clear
                 case 0x90:
-                    PC += currentOp.Bytes;
-                    CheckBranch(!CF, oper);
+                    Pc += _currentOp.Bytes;
+                    CheckBranch(!Cf, oper);
                     break;
 
                 // BCS - branch on carry set
                 case 0xb0:
-                    PC += currentOp.Bytes;
-                    CheckBranch(CF, oper);
+                    Pc += _currentOp.Bytes;
+                    CheckBranch(Cf, oper);
                     break;
 
                 // BEQ - branch on zero
                 case 0xf0:
-                    PC += currentOp.Bytes;
-                    CheckBranch(ZF, oper);
+                    Pc += _currentOp.Bytes;
+                    CheckBranch(Zf, oper);
                     break;
 
                 // BIT - test bits in memory with accumulator (NZV)
@@ -451,40 +398,40 @@ namespace KDS.e6502
 
                     // The WDC programming manual for 65C02 indicates NV are unaffected in immediate mode.
                     // The extended op code test program reflects this.
-                    if (currentOp.AddressMode != AddressModes.Immediate)
+                    if (_currentOp.AddressMode != AddressModes.Immediate)
                     {
-                        NF = ((oper & 0x80) == 0x80);
-                        VF = ((oper & 0x40) == 0x40);
+                        Nf = ((oper & 0x80) == 0x80);
+                        Vf = ((oper & 0x40) == 0x40);
                     }
 
-                    ZF = ((result & 0xff) == 0x00);
+                    Zf = ((result & 0xff) == 0x00);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // BMI - branch on negative
                 case 0x30:
-                    PC += currentOp.Bytes;
-                    CheckBranch(NF, oper);
+                    Pc += _currentOp.Bytes;
+                    CheckBranch(Nf, oper);
                     break;
 
                 // BNE - branch on non zero
                 case 0xd0:
-                    PC += currentOp.Bytes;
-                    CheckBranch(!ZF, oper);
+                    Pc += _currentOp.Bytes;
+                    CheckBranch(!Zf, oper);
                     break;
 
                 // BPL - branch on non negative
                 case 0x10:
-                    PC += currentOp.Bytes;
-                    CheckBranch(!NF, oper);
+                    Pc += _currentOp.Bytes;
+                    CheckBranch(!Nf, oper);
                     break;
 
                 // BRA - unconditional branch to immediate address
                 // NOTE: In OpcodeList.txt the number of clock cycles is one less than the documentation.
                 // This is because CheckBranch() adds one when a branch is taken, which in this case is always.
                 case 0x80:
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     CheckBranch(true, oper);
                     break;
 
@@ -494,55 +441,55 @@ namespace KDS.e6502
                     // This is a software interrupt (IRQ).  These events happen in a specific order.
 
                     // Processor adds two to the current PC
-                    PC += 2;
+                    Pc += 2;
 
                     // Call IRQ routine
-                    DoIRQ(0xfffe, true);
+                    DoIrq(0xfffe, true);
 
                     // Whether or not the decimal flag is cleared depends on the type of 6502 CPU.
                     // The CMOS 65C02 clears this flag but the NMOS 6502 does not.
-                    if (CPUType == e6502Type.CMOS)
-                        DF = false;
+                    if (_cpuType == E6502Type.Cmos)
+                        Df = false;
 
                     break;
                 // BVC - branch on overflow clear
                 case 0x50:
-                    PC += currentOp.Bytes;
-                    CheckBranch(!VF, oper);
+                    Pc += _currentOp.Bytes;
+                    CheckBranch(!Vf, oper);
                     break;
 
                 // BVS - branch on overflow set
                 case 0x70:
-                    PC += currentOp.Bytes;
-                    CheckBranch(VF, oper);
+                    Pc += _currentOp.Bytes;
+                    CheckBranch(Vf, oper);
                     break;
 
                 // CLC - clear carry flag
                 case 0x18:
-                    CF = false;
-                    PC += currentOp.Bytes;
+                    Cf = false;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // CLD - clear decimal mode
                 case 0xd8:
-                    DF = false;
-                    PC += currentOp.Bytes;
+                    Df = false;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // CLI - clear interrupt disable bit
                 case 0x58:
-                    IF = false;
-                    PC += currentOp.Bytes;
+                    If = false;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // CLV - clear overflow flag
                 case 0xb8:
-                    VF = false;
-                    PC += currentOp.Bytes;
+                    Vf = false;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // CMP - compare memory with accumulator (NZC)
-                // CMP, CPX and CPY are unsigned comparisions
+                // CMP, CPX and CPY are unsigned comparisons
                 case 0xc5:
                 case 0xc9:
                 case 0xc1:
@@ -555,11 +502,11 @@ namespace KDS.e6502
 
                     byte temp = (byte)(A - oper);
 
-                    CF = A >= (byte)oper;
-                    ZF = A == (byte)oper;
-                    NF = ((temp & 0x80) == 0x80);
+                    Cf = A >= (byte)oper;
+                    Zf = A == (byte)oper;
+                    Nf = ((temp & 0x80) == 0x80);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // CPX - compare memory and X (NZC)
@@ -568,11 +515,11 @@ namespace KDS.e6502
                 case 0xec:
                     temp = (byte)(X - oper);
 
-                    CF = X >= (byte)oper;
-                    ZF = X == (byte)oper;
-                    NF = ((temp & 0x80) == 0x80);
+                    Cf = X >= (byte)oper;
+                    Zf = X == (byte)oper;
+                    Nf = ((temp & 0x80) == 0x80);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // CPY - compare memory and Y (NZC)
@@ -581,11 +528,11 @@ namespace KDS.e6502
                 case 0xcc:
                     temp = (byte)(Y - oper);
 
-                    CF = Y >= (byte)oper;
-                    ZF = Y == (byte)oper;
-                    NF = ((temp & 0x80) == 0x80);
+                    Cf = Y >= (byte)oper;
+                    Zf = Y == (byte)oper;
+                    Nf = ((temp & 0x80) == 0x80);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // DEC - decrement memory by 1 (NZ)
@@ -597,34 +544,34 @@ namespace KDS.e6502
                 case 0x3a:
                     result = oper - 1;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
-                    SaveOperand(currentOp.AddressMode, result);
+                    SaveOperand(_currentOp.AddressMode, result);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // DEX - decrement X by one (NZ)
                 case 0xca:
                     result = X - 1;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
                     X = (byte)result;
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // DEY - decrement Y by one (NZ)
                 case 0x88:
                     result = Y - 1;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
                     Y = (byte)result;
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // EOR - XOR memory with accumulator (NZ)
@@ -639,12 +586,12 @@ namespace KDS.e6502
                 case 0x5d:
                     result = A ^ (byte)oper;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
                     A = (byte)result;
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // INC - increment memory by 1 (NZ)
@@ -656,34 +603,34 @@ namespace KDS.e6502
                 case 0x1a:
                     result = oper + 1;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
-                    SaveOperand(currentOp.AddressMode, result);
+                    SaveOperand(_currentOp.AddressMode, result);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // INX - increment X by one (NZ)
                 case 0xe8:
                     result = X + 1;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
                     X = (byte)result;
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // INY - increment Y by one (NZ)
                 case 0xc8:
                     result = Y + 1;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
                     Y = (byte)result;
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // JMP - jump to new location (two byte immediate)
@@ -692,17 +639,17 @@ namespace KDS.e6502
                 // added for 65C02
                 case 0x7c:
 
-                    if (currentOp.AddressMode == AddressModes.Absolute)
+                    if (_currentOp.AddressMode == AddressModes.Absolute)
                     {
-                        PC = GetImmWord();
+                        Pc = GetImmWord();
                     }
-                    else if (currentOp.AddressMode == AddressModes.Indirect)
+                    else if (_currentOp.AddressMode == AddressModes.Indirect)
                     {
-                        PC = ReadWord(GetImmWord());
+                        Pc = ReadWord(GetImmWord());
                     }
-                    else if (currentOp.AddressMode == AddressModes.AbsoluteX)
+                    else if (_currentOp.AddressMode == AddressModes.AbsoluteX)
                     {
-                        PC = ReadWord((ushort)(GetImmWord() + X));
+                        Pc = ReadWord((ushort)(GetImmWord() + X));
                     }
                     else
                     {
@@ -715,8 +662,8 @@ namespace KDS.e6502
                 case 0x20:
                     // documentation says push PC+2 even though this is a 3 byte instruction
                     // When pulled via RTS 1 is added to the result
-                    Push((ushort)(PC + 2));
-                    PC = GetImmWord();
+                    Push((ushort)(Pc + 2));
+                    Pc = GetImmWord();
                     break;
 
                 // LDA - load accumulator with memory (NZ)
@@ -731,10 +678,10 @@ namespace KDS.e6502
                 case 0xbd:
                     A = (byte)oper;
 
-                    ZF = ((A & 0xff) == 0x00);
-                    NF = ((A & 0x80) == 0x80);
+                    Zf = ((A & 0xff) == 0x00);
+                    Nf = ((A & 0x80) == 0x80);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // LDX - load index X with memory (NZ)
@@ -745,10 +692,10 @@ namespace KDS.e6502
                 case 0xbe:
                     X = (byte)oper;
 
-                    ZF = ((X & 0xff) == 0x00);
-                    NF = ((X & 0x80) == 0x80);
+                    Zf = ((X & 0xff) == 0x00);
+                    Nf = ((X & 0x80) == 0x80);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // LDY - load index Y with memory (NZ)
@@ -759,10 +706,10 @@ namespace KDS.e6502
                 case 0xbc:
                     Y = (byte)oper;
 
-                    ZF = ((Y & 0xff) == 0x00);
-                    NF = ((Y & 0x80) == 0x80);
+                    Zf = ((Y & 0xff) == 0x00);
+                    Nf = ((Y & 0x80) == 0x80);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
 
@@ -775,22 +722,22 @@ namespace KDS.e6502
                 case 0x5e:
 
                     // shift bit 0 into carry
-                    CF = ((oper & 0x01) == 0x01);
+                    Cf = ((oper & 0x01) == 0x01);
 
                     // shift operand
                     result = oper >> 1;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
-                    SaveOperand(currentOp.AddressMode, result);
+                    SaveOperand(_currentOp.AddressMode, result);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // NOP - no operation
                 case 0xea:
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // ORA - OR memory with accumulator (NZ)
@@ -805,84 +752,84 @@ namespace KDS.e6502
                 case 0x1d:
                     result = A | (byte)oper;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
 
                     A = (byte)result;
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // PHA - push accumulator on stack
                 case 0x48:
                     Push(A);
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // PHP - push processor status on stack
                 case 0x08:
                     int sr = 0x00;
 
-                    if (NF) sr |= 0x80;
-                    if (VF) sr |= 0x40;
+                    if (Nf) sr |= 0x80;
+                    if (Vf) sr |= 0x40;
                     sr |= 0x20; // bit 5 is always 1
                     sr |= 0x10; // bit 4 is always 1 for PHP
-                    if (DF) sr |= 0x08;
-                    if (IF) sr |= 0x04;
-                    if (ZF) sr |= 0x02;
-                    if (CF) sr |= 0x01;
+                    if (Df) sr |= 0x08;
+                    if (If) sr |= 0x04;
+                    if (Zf) sr |= 0x02;
+                    if (Cf) sr |= 0x01;
 
                     Push((byte)sr);
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // PHX - push X on stack
                 case 0xda:
                     Push(X);
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // PHY - push Y on stack
                 case 0x5a:
                     Push(Y);
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // PLA - pull accumulator from stack (NZ)
                 case 0x68:
                     A = PopByte();
-                    NF = (A & 0x80) == 0x80;
-                    ZF = (A & 0xff) == 0x00;
-                    PC += currentOp.Bytes;
+                    Nf = (A & 0x80) == 0x80;
+                    Zf = (A & 0xff) == 0x00;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // PLP - pull status from stack
                 case 0x28:
                     sr = PopByte();
 
-                    NF = (sr & 0x80) == 0x80;
-                    VF = (sr & 0x40) == 0x40;
-                    DF = (sr & 0x08) == 0x08;
-                    IF = (sr & 0x04) == 0x04;
-                    ZF = (sr & 0x02) == 0x02;
-                    CF = (sr & 0x01) == 0x01;
-                    PC += currentOp.Bytes;
+                    Nf = (sr & 0x80) == 0x80;
+                    Vf = (sr & 0x40) == 0x40;
+                    Df = (sr & 0x08) == 0x08;
+                    If = (sr & 0x04) == 0x04;
+                    Zf = (sr & 0x02) == 0x02;
+                    Cf = (sr & 0x01) == 0x01;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // PLX - pull X from stack (NZ)
                 case 0xfa:
                     X = PopByte();
-                    NF = (X & 0x80) == 0x80;
-                    ZF = (X & 0xff) == 0x00;
-                    PC += currentOp.Bytes;
+                    Nf = (X & 0x80) == 0x80;
+                    Zf = (X & 0xff) == 0x00;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // PLY - pull Y from stack (NZ)
                 case 0x7a:
                     Y = PopByte();
-                    NF = (Y & 0x80) == 0x80;
-                    ZF = (Y & 0xff) == 0x00;
-                    PC += currentOp.Bytes;
+                    Nf = (Y & 0x80) == 0x80;
+                    Zf = (Y & 0xff) == 0x00;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // RMBx - clear bit in memory (no flags)
@@ -898,15 +845,15 @@ namespace KDS.e6502
                 case 0x77:
 
                     // upper nibble specifies the bit to check
-                    check_bit = (byte)(currentOp.OpCode >> 4);
-                    check_value = 0x01;
-                    for (int ii = 0; ii < check_bit; ii++)
+                    checkBit = (byte)(_currentOp.OpCode >> 4);
+                    checkValue = 0x01;
+                    for (int ii = 0; ii < checkBit; ii++)
                     {
-                        check_value = (byte)(check_value << 1);
+                        checkValue = (byte)(checkValue << 1);
                     }
-                    check_value = (byte)~check_value;
-                    SaveOperand(currentOp.AddressMode, oper & check_value);
-                    PC += currentOp.Bytes;
+                    checkValue = (byte)~checkValue;
+                    SaveOperand(_currentOp.AddressMode, oper & checkValue);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // SMBx - set bit in memory (no flags)
@@ -922,14 +869,14 @@ namespace KDS.e6502
                 case 0xf7:
 
                     // upper nibble specifies the bit to check (but ignore bit 7)
-                    check_bit = (byte)((currentOp.OpCode & 0x70) >> 4);
-                    check_value = 0x01;
-                    for (int ii = 0; ii < check_bit; ii++)
+                    checkBit = (byte)((_currentOp.OpCode & 0x70) >> 4);
+                    checkValue = 0x01;
+                    for (int ii = 0; ii < checkBit; ii++)
                     {
-                        check_value = (byte)(check_value << 1);
+                        checkValue = (byte)(checkValue << 1);
                     }
-                    SaveOperand(currentOp.AddressMode, oper | check_value);
-                    PC += currentOp.Bytes;
+                    SaveOperand(_currentOp.AddressMode, oper | checkValue);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // ROL - rotate left one bit (NZC)
@@ -940,23 +887,23 @@ namespace KDS.e6502
                 case 0x36:
                 case 0x3e:
 
-                    // perserve existing cf value
-                    bool old_cf = CF;
+                    // preserve existing cf value
+                    var oldCf = Cf;
 
                     // shift bit 7 into carry flag
-                    CF = (oper >= 0x80);
+                    Cf = (oper >= 0x80);
 
                     // shift operand
                     result = oper << 1;
 
                     // old carry flag goes to bit zero
-                    if (old_cf) result |= 0x01;
+                    if (oldCf) result |= 0x01;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
-                    SaveOperand(currentOp.AddressMode, result);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
+                    SaveOperand(_currentOp.AddressMode, result);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // ROR - rotate right one bit (NZC)
@@ -967,23 +914,23 @@ namespace KDS.e6502
                 case 0x76:
                 case 0x7e:
 
-                    // perserve existing cf value
-                    old_cf = CF;
+                    // preserve existing cf value
+                    oldCf = Cf;
 
                     // shift bit 0 into carry flag
-                    CF = (oper & 0x01) == 0x01;
+                    Cf = (oper & 0x01) == 0x01;
 
                     // shift operand
                     result = oper >> 1;
 
                     // old carry flag goes to bit 7
-                    if (old_cf) result |= 0x80;
+                    if (oldCf) result |= 0x80;
 
-                    ZF = ((result & 0xff) == 0x00);
-                    NF = ((result & 0x80) == 0x80);
-                    SaveOperand(currentOp.AddressMode, result);
+                    Zf = ((result & 0xff) == 0x00);
+                    Nf = ((result & 0x80) == 0x80);
+                    SaveOperand(_currentOp.AddressMode, result);
 
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // RTI - return from interrupt
@@ -991,21 +938,21 @@ namespace KDS.e6502
                     // pull SR
                     sr = PopByte();
 
-                    NF = (sr & 0x80) == 0x80;
-                    VF = (sr & 0x40) == 0x40;
-                    DF = (sr & 0x08) == 0x08;
-                    IF = (sr & 0x04) == 0x04;
-                    ZF = (sr & 0x02) == 0x02;
-                    CF = (sr & 0x01) == 0x01;
+                    Nf = (sr & 0x80) == 0x80;
+                    Vf = (sr & 0x40) == 0x40;
+                    Df = (sr & 0x08) == 0x08;
+                    If = (sr & 0x04) == 0x04;
+                    Zf = (sr & 0x02) == 0x02;
+                    Cf = (sr & 0x01) == 0x01;
 
                     // pull PC
-                    PC = PopWord();
+                    Pc = PopWord();
 
                     break;
 
                 // RTS - return from subroutine
                 case 0x60:
-                    PC = (ushort)(PopWord() + 1);
+                    Pc = (ushort)(PopWord() + 1);
                     break;
 
                 // SBC - subtract memory from accumulator with borrow (NZCV)
@@ -1020,48 +967,48 @@ namespace KDS.e6502
                 case 0xf9:
                 case 0xfd:
 
-                    if (DF)
+                    if (Df)
                     {
-                        result = CPUMath.HexToBCD(A) - CPUMath.HexToBCD((byte)oper);
-                        if (!CF) result--;
+                        result = CpuMath.HexToBcd(A) - CpuMath.HexToBcd((byte)oper);
+                        if (!Cf) result--;
 
-                        CF = (result >= 0);
+                        Cf = (result >= 0);
 
                         // BCD numbers wrap around when subtraction is negative
                         if (result < 0)
                             result += 100;
-                        ZF = (result == 0);
+                        Zf = (result == 0);
 
-                        A = CPUMath.BCDToHex(result);
+                        A = CpuMath.BcdToHex(result);
 
                         // Unlike ZF and CF, the NF flag represents the MSB after conversion
                         // to BCD.
-                        NF = (A > 0x7f);
+                        Nf = (A > 0x7f);
                     }
                     else
                     {
-                        ADC((byte)~oper);
+                        Adc((byte)~oper);
                     }
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
 
                     break;
 
                 // SEC - set carry flag
                 case 0x38:
-                    CF = true;
-                    PC += currentOp.Bytes;
+                    Cf = true;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // SED - set decimal mode
                 case 0xf8:
-                    DF = true;
-                    PC += currentOp.Bytes;
+                    Df = true;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // SEI - set interrupt disable bit
                 case 0x78:
-                    IF = true;
-                    PC += currentOp.Bytes;
+                    If = true;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // STA - store accumulator in memory
@@ -1073,24 +1020,24 @@ namespace KDS.e6502
                 case 0x95:
                 case 0x99:
                 case 0x9d:
-                    SaveOperand(currentOp.AddressMode, A);
-                    PC += currentOp.Bytes;
+                    SaveOperand(_currentOp.AddressMode, A);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // STX - store X in memory
                 case 0x86:
                 case 0x8e:
                 case 0x96:
-                    SaveOperand(currentOp.AddressMode, X);
-                    PC += currentOp.Bytes;
+                    SaveOperand(_currentOp.AddressMode, X);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // STY - store Y in memory
                 case 0x84:
                 case 0x8c:
                 case 0x94:
-                    SaveOperand(currentOp.AddressMode, Y);
-                    PC += currentOp.Bytes;
+                    SaveOperand(_currentOp.AddressMode, Y);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // STZ - Store zero
@@ -1098,72 +1045,72 @@ namespace KDS.e6502
                 case 0x74:
                 case 0x9c:
                 case 0x9e:
-                    SaveOperand(currentOp.AddressMode, 0);
-                    PC += currentOp.Bytes;
+                    SaveOperand(_currentOp.AddressMode, 0);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // TAX - transfer accumulator to X (NZ)
                 case 0xaa:
                     X = A;
-                    ZF = ((X & 0xff) == 0x00);
-                    NF = ((X & 0x80) == 0x80);
-                    PC += currentOp.Bytes;
+                    Zf = ((X & 0xff) == 0x00);
+                    Nf = ((X & 0x80) == 0x80);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // TAY - transfer accumulator to Y (NZ)
                 case 0xa8:
                     Y = A;
-                    ZF = ((Y & 0xff) == 0x00);
-                    NF = ((Y & 0x80) == 0x80);
-                    PC += currentOp.Bytes;
+                    Zf = ((Y & 0xff) == 0x00);
+                    Nf = ((Y & 0x80) == 0x80);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // TRB - test and reset bits (Z)
                 // Perform bitwise AND between accumulator and contents of memory
                 case 0x14:
                 case 0x1c:
-                    SaveOperand(currentOp.AddressMode, ~A & oper);
-                    ZF = (A & oper) == 0x00;
-                    PC += currentOp.Bytes;
+                    SaveOperand(_currentOp.AddressMode, ~A & oper);
+                    Zf = (A & oper) == 0x00;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // TSB - test and set bits (Z)
                 // Perform bitwise AND between accumulator and contents of memory
                 case 0x04:
                 case 0x0c:
-                    SaveOperand(currentOp.AddressMode, A | oper);
-                    ZF = (A & oper) == 0x00;
-                    PC += currentOp.Bytes;
+                    SaveOperand(_currentOp.AddressMode, A | oper);
+                    Zf = (A & oper) == 0x00;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // TSX - transfer SP to X (NZ)
                 case 0xba:
-                    X = SP;
-                    ZF = ((X & 0xff) == 0x00);
-                    NF = ((X & 0x80) == 0x80);
-                    PC += currentOp.Bytes;
+                    X = Sp;
+                    Zf = ((X & 0xff) == 0x00);
+                    Nf = ((X & 0x80) == 0x80);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // TXA - transfer X to A (NZ)
                 case 0x8a:
                     A = X;
-                    ZF = ((A & 0xff) == 0x00);
-                    NF = ((A & 0x80) == 0x80);
-                    PC += currentOp.Bytes;
+                    Zf = ((A & 0xff) == 0x00);
+                    Nf = ((A & 0x80) == 0x80);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // TXS - transfer X to SP (no flags -- some online docs are incorrect)
                 case 0x9a:
-                    SP = X;
-                    PC += currentOp.Bytes;
+                    Sp = X;
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // TYA - transfer Y to A (NZ)
                 case 0x98:
                     A = Y;
-                    ZF = ((A & 0xff) == 0x00);
-                    NF = ((A & 0x80) == 0x80);
-                    PC += currentOp.Bytes;
+                    Zf = ((A & 0xff) == 0x00);
+                    Nf = ((A & 0x80) == 0x80);
+                    Pc += _currentOp.Bytes;
                     break;
 
                 // The original 6502 has undocumented and erratic behavior if
@@ -1175,15 +1122,15 @@ namespace KDS.e6502
                 // Instructions STP (0xdb) and WAI (0xcb) will reach this case.
                 // For now these are treated as a NOP.
                 default:
-                    PC += currentOp.Bytes;
+                    Pc += _currentOp.Bytes;
                     break;
             }
         }
 
-        private int GetOperand(AddressModes mode, out bool CrossBoundary)
+        private int GetOperand(AddressModes mode, out bool crossBoundary)
         {
             int oper = 0;
-            CrossBoundary = false;
+            crossBoundary = false;
             switch (mode)
             {
                 // Accumulator mode uses the value in the accumulator
@@ -1202,18 +1149,18 @@ namespace KDS.e6502
                     ushort imm = GetImmWord();
                     ushort result = (ushort)(imm + X);
                     oper = SystemBus.Read(result);
-                    if (currentOp.CheckPageBoundary)
+                    if (_currentOp.CheckPageBoundary)
                     {
-                        CrossBoundary = ((imm & 0xff00) != (result & 0xff00));
+                        crossBoundary = ((imm & 0xff00) != (result & 0xff00));
                     }
                     break;
                 case AddressModes.AbsoluteY:
                     imm = GetImmWord();
                     result = (ushort)(imm + Y);
                     oper = SystemBus.Read(result);
-                    if (currentOp.CheckPageBoundary)
+                    if (_currentOp.CheckPageBoundary)
                     {
-                        CrossBoundary = ((imm & 0xff00) != (result & 0xff00));
+                        crossBoundary = ((imm & 0xff00) != (result & 0xff00));
                     }
                     break;
 
@@ -1250,7 +1197,7 @@ namespace KDS.e6502
                     break;
 
                 // The Indirect Indexed works a bit differently than above.
-                // The Y register is added *after* the deferencing instead of before.
+                // The Y register is added *after* the dereferencing instead of before.
                 case AddressModes.IndirectY:
 
                     /*
@@ -1261,9 +1208,9 @@ namespace KDS.e6502
 
                     ushort addr = ReadWord(GetImmByte());
                     oper = SystemBus.Read((ushort)(addr + Y));
-                    if (currentOp.CheckPageBoundary)
+                    if (_currentOp.CheckPageBoundary)
                     {
-                        CrossBoundary = ((oper & 0xff00) != (addr & 0xff00));
+                        crossBoundary = ((oper & 0xff00) != (addr & 0xff00));
                     }
                     break;
 
@@ -1271,7 +1218,7 @@ namespace KDS.e6502
                 // Relative is used for branching, the immediate value is a
                 // signed 8 bit value and used to offset the current PC.
                 case AddressModes.Relative:
-                    oper = CPUMath.SignExtend(GetImmByte());
+                    oper = CpuMath.SignExtend(GetImmByte());
                     break;
 
                 // Zero Page mode is a fast way of accessing the first 256 bytes of memory.
@@ -1296,8 +1243,6 @@ namespace KDS.e6502
                 // for this mode do the same thing as ZeroPage
                 case AddressModes.BranchExt:
                     oper = SystemBus.Read(GetImmByte());
-                    break;
-                default:
                     break;
             }
             return oper;
@@ -1325,18 +1270,18 @@ namespace KDS.e6502
 
                 // Immediate mode uses the next byte in the instruction directly.
                 case AddressModes.Immediate:
-                    throw new InvalidOperationException("Address mode " + mode.ToString() + " is not valid for this operation");
+                    throw new InvalidOperationException("Address mode " + mode + " is not valid for this operation");
 
                 // Implied or Implicit are single byte instructions that do not use
                 // the next bytes for the operand.
                 case AddressModes.Implied:
-                    throw new InvalidOperationException("Address mode " + mode.ToString() + " is not valid for this operation");
+                    throw new InvalidOperationException("Address mode " + mode + " is not valid for this operation");
 
                 // Indirect mode uses the absolute address to get another address.
                 // The immediate word is a memory location from which to retrieve
                 // the 16 bit operand.
                 case AddressModes.Indirect:
-                    throw new InvalidOperationException("Address mode " + mode.ToString() + " is not valid for this operation");
+                    throw new InvalidOperationException("Address mode " + mode + " is not valid for this operation");
 
                 // The indexed indirect modes uses the immediate byte rather than the
                 // immediate word to get the memory location from which to retrieve
@@ -1346,7 +1291,7 @@ namespace KDS.e6502
                     break;
 
                 // The Indirect Indexed works a bit differently than above.
-                // The Y register is added *after* the deferencing instead of before.
+                // The Y register is added *after* the dereferencing instead of before.
                 case AddressModes.IndirectY:
                     SystemBus.Write((ushort)(ReadWord(GetImmByte()) + Y), (byte)data);
                     break;
@@ -1376,20 +1321,17 @@ namespace KDS.e6502
                 case AddressModes.BranchExt:
                     SystemBus.Write(GetImmByte(), (byte)data);
                     break;
-
-                default:
-                    break;
             }
         }
 
         private ushort GetImmWord()
         {
-            return ReadWord((ushort)(PC + 1));
+            return ReadWord((ushort)(Pc + 1));
         }
 
         private byte GetImmByte()
         {
-            return SystemBus.Read((ushort)(PC + 1));
+            return SystemBus.Read((ushort)(Pc + 1));
         }
 
         private ushort ReadWord(ushort address)
@@ -1399,95 +1341,89 @@ namespace KDS.e6502
 
         private void Push(byte data)
         {
-            SystemBus.Write((ushort)(0x0100 | SP), data);
-            SP--;
+            SystemBus.Write((ushort)(0x0100 | Sp), data);
+            Sp--;
         }
 
         private void Push(ushort data)
         {
             // HI byte is in a higher address, LO byte is in the lower address
-            SystemBus.Write((ushort)(0x0100 | SP), (byte)(data >> 8));
-            SystemBus.Write((ushort)(0x0100 | (SP - 1)), (byte)(data & 0xff));
-            SP -= 2;
+            SystemBus.Write((ushort)(0x0100 | Sp), (byte)(data >> 8));
+            SystemBus.Write((ushort)(0x0100 | (Sp - 1)), (byte)(data & 0xff));
+            Sp -= 2;
         }
 
         private byte PopByte()
         {
-            SP++;
-            return SystemBus.Read((ushort)(0x0100 | SP));
+            Sp++;
+            return SystemBus.Read((ushort)(0x0100 | Sp));
         }
 
         private ushort PopWord()
         {
             // HI byte is in a higher address, LO byte is in the lower address
-            SP += 2;
-            ushort idx = (ushort)(0x0100 | SP);
+            Sp += 2;
+            ushort idx = (ushort)(0x0100 | Sp);
             return (ushort)((SystemBus.Read(idx) << 8 | SystemBus.Read((ushort)(idx - 1))) & 0xffff);
         }
 
-        private void ADC(byte oper)
+        private void Adc(byte oper)
         {
-            ushort answer = (ushort)(A + oper);
-            if (CF) answer++;
+            var answer = (ushort)(A + oper);
+            if (Cf) answer++;
 
-            CF = (answer > 0xff);
-            ZF = ((answer & 0xff) == 0x00);
-            NF = (answer & 0x80) == 0x80;
+            Cf = (answer > 0xff);
+            Zf = ((answer & 0xff) == 0x00);
+            Nf = (answer & 0x80) == 0x80;
 
             //ushort temp = (ushort)(~(A ^ oper) & (A ^ answer) & 0x80);
-            VF = (~(A ^ oper) & (A ^ answer) & 0x80) != 0x00;
+            Vf = (~(A ^ oper) & (A ^ answer) & 0x80) != 0x00;
 
             A = (byte)answer;
         }
 
-        private void DoIRQ(ushort vector)
-        {
-            DoIRQ(vector, false);
-        }
-
-        private void DoIRQ(ushort vector, bool isBRK)
+        private void DoIrq(ushort vector, bool isBrk = false)
         {
             // Push the MSB of the PC
-            Push((byte)(PC >> 8));
+            Push((byte)(Pc >> 8));
 
             // Push the LSB of the PC
-            Push((byte)(PC & 0xff));
+            Push((byte)(Pc & 0xff));
 
             // Push the status register
-            int sr = 0x00;
-            if (NF) sr |= 0x80;
-            if (VF) sr |= 0x40;
+            var sr = 0x00;
+            if (Nf) sr |= 0x80;
+            if (Vf) sr |= 0x40;
 
             sr |= 0x20;             // bit 5 is unused and always 1
 
-            if (isBRK)
+            if (isBrk)
                 sr |= 0x10;         // software interrupt (BRK) pushes B flag as 1
                                     // hardware interrupt pushes B flag as 0
-            if (DF) sr |= 0x08;
-            if (IF) sr |= 0x04;
-            if (ZF) sr |= 0x02;
-            if (CF) sr |= 0x01;
+            if (Df) sr |= 0x08;
+            if (If) sr |= 0x04;
+            if (Zf) sr |= 0x02;
+            if (Cf) sr |= 0x01;
 
             Push((byte)sr);
 
             // set interrupt disable flag
-            IF = true;
+            If = true;
 
             // On 65C02, IRQ, NMI, and RESET also clear the D flag (but not on BRK) after pushing the status register.
-            if (CPUType == e6502Type.CMOS && !isBRK)
-                DF = false;
+            if (_cpuType == E6502Type.Cmos && !isBrk)
+                Df = false;
 
             // load program counter with the interrupt vector
-            PC = ReadWord(vector);
+            Pc = ReadWord(vector);
         }
 
         private void CheckBranch(bool flag, int oper)
         {
             if (flag)
             {
-                PC += (ushort)oper;
+                Pc += (ushort)oper;
             }
-
         }
     }
 }

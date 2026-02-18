@@ -10,11 +10,12 @@ public class DisplayView : View
     private readonly ScreenEditor _editor;
     private readonly object _renderLock = new();
     private bool _cursorVisible = true;
+    private bool _quoteMode;
 
-    public DisplayView(VirtualGraphicsController vgc)
+    public DisplayView(VirtualGraphicsController vgc, ScreenEditor editor)
     {
         _vgc = vgc;
-        _editor = new ScreenEditor(vgc);
+        _editor = editor;
         _vgc.SetScreenEditor(_editor);
 
         CanFocus = true;
@@ -54,30 +55,30 @@ public class DisplayView : View
                 return true;
 
             case KeyCode.Enter:
-                _editor.HandleReturn();
+                _quoteMode = false;
+                _editor.QueueInput(0x0D);
                 return true;
 
             case KeyCode.Backspace:
-                _editor.CursorLeft();
-                // Write space to screen RAM at new cursor position
-                {
-                    int cx = _vgc.GetCursorX();
-                    int cy = _vgc.GetCursorY();
-                    ushort addr = (ushort)(VgcConstants.CharRamBase + cy * VgcConstants.ScreenCols + cx);
-                    _vgc.Write(addr, 0x20);
-                }
+                _editor.QueueInput(0x08);
                 return true;
 
             case KeyCode.Esc:
-                // CTRL-C interrupt — feed directly to VGC
-                _vgc.FeedInput(0x03);
+                // CTRL-C interrupt
+                _editor.QueueInput(0x03);
                 return true;
 
             default:
-                // Printable characters
+                // Printable characters — queue for CPU, EhBASIC echoes via CHAROUT
                 if (keyEvent.AsRune.Value >= 0x20 && keyEvent.AsRune.Value <= 0x7E)
                 {
-                    _editor.HandleTypedChar((byte)keyEvent.AsRune.Value);
+                    byte ch = (byte)keyEvent.AsRune.Value;
+                    if (ch == '"')
+                        _quoteMode = !_quoteMode;
+                    // Uppercase outside quotes — EhBASIC keywords are uppercase only
+                    if (!_quoteMode && ch >= 0x61 && ch <= 0x7A)
+                        ch -= 0x20;
+                    _editor.QueueInput(ch);
                     return true;
                 }
                 break;

@@ -1,27 +1,27 @@
-﻿namespace KDS.e6502.OpCodes
+﻿using KDS.e6502.Extensions;
+
+namespace KDS.e6502.OpCodes
 {
     internal class OpCodeRecord
     {
-        public byte OpCode { get; private set; }
-        public string Instruction { get; private set; }
-        public AddressModes AddressMode { get; private set; }
+        public byte OpCode { get; }
+        private string Instruction { get; }
+        public AddressModes AddressMode { get; }
         public ushort Bytes { get; private set; }
         public int Cycles { get; private set; }
         public bool CheckPageBoundary { get; private set; }
-        public bool CheckBranchPage { get; private set; }
-        public bool IsValid { get; private set; }
+        private bool IsValid { get; }
 
         public OpCodeRecord()
         {
             Bytes = 1;
-            CheckBranchPage = false;
             CheckPageBoundary = false;
             IsValid = false;
             Instruction = string.Empty;
         }
 
         public OpCodeRecord(byte opcode, string instruction, AddressModes addressmode, ushort bytes, int cycles,
-                               bool checkPageBoundary, bool checkBranchPage)
+                               bool checkPageBoundary)
         {
             OpCode = opcode;
             Instruction = instruction;
@@ -29,7 +29,6 @@
             Bytes = bytes;
             Cycles = cycles;
             CheckPageBoundary = checkPageBoundary;
-            CheckBranchPage = checkBranchPage;
             IsValid = true;
         }
 
@@ -40,8 +39,9 @@
 
             if (AddressMode == AddressModes.Accumulator)
             {
-                return Instruction + " A";
+                return $"{Instruction} A";
             }
+            
             return "???";
         }
 
@@ -50,7 +50,7 @@
             if (!IsValid)
                 return "???";
 
-            string dasm = Instruction;
+            var dasm = Instruction;
             switch (AddressMode)
             {
                 case AddressModes.Accumulator:
@@ -59,48 +59,48 @@
 
                 // Absolute mode prints the address with no parenthesis
                 case AddressModes.Absolute:
-                    dasm += " $" + oper.ToString("X4");
+                    dasm += " $" + oper.Hex4();
                     break;
                 case AddressModes.AbsoluteX:
-                    dasm += " $" + oper.ToString("X4") + ",X";
+                    dasm += " $" + oper.Hex4() + ", X";
                     break;
                 case AddressModes.AbsoluteY:
-                    dasm += " $" + oper.ToString("X4") + ",Y";
+                    dasm += " $" + oper.Hex4() + ", Y";
                     break;
 
                 // No parenthesis for relative branches
                 case AddressModes.Relative:
-                    dasm += " $" + oper.ToString("X2");
+                    dasm += " $" + oper.Hex2();
                     break;
 
                 // Zero page is also direct addressing so no parenthesis
                 case AddressModes.ZeroPage:
-                    dasm += " $" + oper.ToString("X2");
+                    dasm += " $" + oper.Hex2();
                     break;
                 case AddressModes.ZeroPage0:
-                    dasm += " ($" + oper.ToString("X2") + ")";
+                    dasm += " ($" + oper.Hex2() + ")";
                     break;
                 case AddressModes.ZeroPageX:
-                    dasm += " $" + oper.ToString("X2") + ",X";
+                    dasm += " $" + oper.Hex2() + ",X";
                     break;
                 case AddressModes.ZeroPageY:
-                    dasm += " $" + oper.ToString("X2") + ",Y";
+                    dasm += " $" + oper.Hex2() + ",Y";
                     break;
 
                 // # sign indicates immediate
                 case AddressModes.Immediate:
-                    dasm += " #$" + oper.ToString("X2");
+                    dasm += " #$" + oper.Hex2();
                     break;
 
                 // parenthesis indicate an indirect addressing into memory
                 case AddressModes.Indirect:
-                    dasm += " ($" + oper.ToString("X4") + ")";
+                    dasm += " ($" + oper.Hex4() + ")";
                     break;
                 case AddressModes.XIndirect:
-                    dasm += " ($" + oper.ToString("X2") + ",X)";
+                    dasm += " ($" + oper.Hex2() + ",X)";
                     break;
                 case AddressModes.IndirectY:
-                    dasm += " ($" + oper.ToString("X2") + "),Y";
+                    dasm += " ($" + oper.Hex2() + "),Y";
                     break;
 
                 case AddressModes.Implied: // do nothing
@@ -110,22 +110,19 @@
                     // assumption is that in this mode the oper passed in is a word and not a byte
                     byte zp = (byte)(oper >> 8);
                     byte br = (byte)(oper & 0xff);
-                    dasm += " $" + zp.ToString("X2") + ",$" + br.ToString("X2");
+                    dasm += " $" + zp.ToString("X2") + ", $" + br.ToString("X2");
                     break;
-
                 default:
-                    break;
+                    throw new ArgumentOutOfRangeException();
             }
+            
             return dasm;
         }
 
         // this is so something useful is displayed in the watch window
         public override string ToString()
         {
-            if (!IsValid)
-                return "???";
-            else
-                return string.Format("{0} {1} {2}", OpCode.ToString("X2"), Instruction, AddressMode.ToString());
+            return !IsValid ? "???" : $"{OpCode:X2} {Instruction} {AddressMode.ToString()}";
         }
     }
 }

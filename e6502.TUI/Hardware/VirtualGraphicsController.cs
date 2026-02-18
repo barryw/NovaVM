@@ -3,7 +3,7 @@ namespace e6502.TUI.Hardware;
 public class VirtualGraphicsController
 {
     // Core registers $A000-$A00F (16 bytes)
-    private readonly byte[] _regs = new byte[16];
+    private readonly byte[] _regs = new byte[VgcConstants.VgcEnd - VgcConstants.VgcBase + 1];
 
     // Sprite registers $A010-$A06F (96 bytes: 16 sprites x 6 bytes)
     private readonly byte[] _spriteRegs = new byte[VgcConstants.MaxSprites * VgcConstants.SpriteBytesEach];
@@ -23,11 +23,23 @@ public class VirtualGraphicsController
     // Block graphics bitmap (160x50, NOT 6502-addressable)
     private readonly byte[] _gfxBitmap = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
 
-    // Current graphics draw color (0-15)
+    // Current graphics draw color (0 = use text foreground color)
     private byte _gfxDrawColor;
 
     public VirtualGraphicsController()
     {
+        Reset();
+    }
+
+    public void Reset()
+    {
+        Array.Clear(_regs);
+        Array.Clear(_spriteRegs);
+        Array.Clear(_gfxRegs);
+        Array.Clear(_spriteShapes);
+        Array.Clear(_gfxBitmap);
+        _gfxDrawColor = 0;
+
         // Screen RAM initialized to spaces
         Array.Fill(_screenRam, (byte)0x20);
 
@@ -259,14 +271,8 @@ public class VirtualGraphicsController
                 cy = 0;
                 break;
 
-            case 0x0D: // CR — carriage return: col 0, next row
+            case 0x0D: // CR — carriage return: col 0 (LF handles row advance)
                 cx = 0;
-                cy++;
-                if (cy >= VgcConstants.ScreenRows)
-                {
-                    ScrollUp();
-                    cy = VgcConstants.ScreenRows - 1;
-                }
                 break;
 
             case 0x13: // HOME — cursor to 0,0
@@ -309,16 +315,26 @@ public class VirtualGraphicsController
         Array.Copy(_colorRam, VgcConstants.ScreenCols, _colorRam, 0,
             VgcConstants.ScreenCols * (VgcConstants.ScreenRows - 1));
 
-        // Clear row 24 to spaces; color RAM to current bg color
+        // Clear row 24 to spaces; color RAM to current fg color
+        // (matches FF handler — using fg ensures cursor remains visible)
         int lastRowStart = (VgcConstants.ScreenRows - 1) * VgcConstants.ScreenCols;
         Array.Fill(_screenRam, (byte)0x20, lastRowStart, VgcConstants.ScreenCols);
-        byte bgCol = _regs[VgcConstants.RegBgCol - VgcConstants.VgcBase];
-        Array.Fill(_colorRam, bgCol, lastRowStart, VgcConstants.ScreenCols);
+        byte fgCol = _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase];
+        Array.Fill(_colorRam, fgCol, lastRowStart, VgcConstants.ScreenCols);
     }
 
     // -------------------------------------------------------------------------
     // Stubs (filled in later tasks)
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Returns the effective draw color: if _gfxDrawColor was explicitly set (non-zero),
+    /// use it; otherwise fall back to the text foreground color register.
+    /// </summary>
+    private byte EffectiveDrawColor =>
+        _gfxDrawColor != 0
+            ? _gfxDrawColor
+            : Math.Max((byte)1, _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase]);
 
     protected virtual void ExecuteGfxCommand(byte cmd)
     {
@@ -329,25 +345,27 @@ public class VirtualGraphicsController
         int p2 = _gfxRegs[5];
         int p3 = _gfxRegs[6];
 
+        byte color = EffectiveDrawColor;
+
         switch (cmd)
         {
             case VgcConstants.GfxCmdPlot:
-                e6502.TUI.Rendering.BlockGraphics.Plot(_gfxBitmap, p0, p1, _gfxDrawColor);
+                e6502.TUI.Rendering.BlockGraphics.Plot(_gfxBitmap, p0, p1, color);
                 break;
             case VgcConstants.GfxCmdUnplot:
                 e6502.TUI.Rendering.BlockGraphics.Plot(_gfxBitmap, p0, p1, 0);
                 break;
             case VgcConstants.GfxCmdLine:
-                e6502.TUI.Rendering.BlockGraphics.Line(_gfxBitmap, p0, p1, p2, p3, _gfxDrawColor);
+                e6502.TUI.Rendering.BlockGraphics.Line(_gfxBitmap, p0, p1, p2, p3, color);
                 break;
             case VgcConstants.GfxCmdCircle:
-                e6502.TUI.Rendering.BlockGraphics.Circle(_gfxBitmap, p0, p1, p2, _gfxDrawColor);
+                e6502.TUI.Rendering.BlockGraphics.Circle(_gfxBitmap, p0, p1, p2, color);
                 break;
             case VgcConstants.GfxCmdRect:
-                e6502.TUI.Rendering.BlockGraphics.Rect(_gfxBitmap, p0, p1, p2, p3, _gfxDrawColor);
+                e6502.TUI.Rendering.BlockGraphics.Rect(_gfxBitmap, p0, p1, p2, p3, color);
                 break;
             case VgcConstants.GfxCmdFill:
-                e6502.TUI.Rendering.BlockGraphics.Fill(_gfxBitmap, p0, p1, p2, p3, _gfxDrawColor);
+                e6502.TUI.Rendering.BlockGraphics.Fill(_gfxBitmap, p0, p1, p2, p3, color);
                 break;
             case VgcConstants.GfxCmdGcls:
                 e6502.TUI.Rendering.BlockGraphics.Clear(_gfxBitmap);
@@ -364,6 +382,13 @@ public class VirtualGraphicsController
 
     public void SetStatus(byte value) =>
         _regs[VgcConstants.RegStatus - VgcConstants.VgcBase] = value;
+
+    /// <summary>
+    /// Increments the frame counter at RegStatus. Called by the display refresh timer
+    /// so that VSYNC can poll for changes.
+    /// </summary>
+    public void IncrementFrameCounter() =>
+        _regs[VgcConstants.RegStatus - VgcConstants.VgcBase]++;
 
     // Written by the renderer after collision detection — bypasses the read-clears path.
     public void SetCollisionRegisters(ushort spriteToSprite, ushort spriteToBg)

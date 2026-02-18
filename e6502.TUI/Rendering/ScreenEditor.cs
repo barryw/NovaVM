@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using e6502.TUI.Hardware;
 
 namespace e6502.TUI.Rendering;
@@ -6,7 +6,7 @@ namespace e6502.TUI.Rendering;
 public class ScreenEditor
 {
     private readonly VirtualGraphicsController _vgc;
-    private readonly Queue<byte> _inputQueue = new();
+    private readonly ConcurrentQueue<byte> _inputQueue = new();
 
     public ScreenEditor(VirtualGraphicsController vgc)
     {
@@ -46,62 +46,21 @@ public class ScreenEditor
     }
 
     // -------------------------------------------------------------------------
-    // RETURN — C64-style read-back of current line
+    // Queue a byte for the CPU to read via CHARIN ($A00F).
+    // EhBASIC uses a serial-terminal model: characters go straight to input,
+    // and EhBASIC echoes them back via CHAROUT.
     // -------------------------------------------------------------------------
 
-    public void HandleReturn()
-    {
-        string line = ReadLineFromScreen();
-        foreach (char c in line)
-            _inputQueue.Enqueue((byte)c);
-        _inputQueue.Enqueue(0x0D); // CR terminator
-
-        // Advance cursor to next line via CHAROUT
-        _vgc.Write(VgcConstants.RegCharOut, 0x0D);
-    }
-
-    // -------------------------------------------------------------------------
-    // Typed character — write directly to screen RAM, advance cursor
-    // -------------------------------------------------------------------------
-
-    public void HandleTypedChar(byte ch)
-    {
-        int cx = _vgc.GetCursorX();
-        int cy = _vgc.GetCursorY();
-
-        ushort screenAddr = (ushort)(VgcConstants.CharRamBase + cy * VgcConstants.ScreenCols + cx);
-        ushort colorAddr  = (ushort)(VgcConstants.ColorRamBase + cy * VgcConstants.ScreenCols + cx);
-
-        byte fgcol = _vgc.Read(VgcConstants.RegFgCol);
-
-        _vgc.Write(screenAddr, ch);
-        _vgc.Write(colorAddr, fgcol);
-
-        // Advance cursor — wrap to next line if past col 79
-        cx++;
-        if (cx >= VgcConstants.ScreenCols)
-        {
-            cx = 0;
-            int newCy = cy + 1;
-            if (newCy >= VgcConstants.ScreenRows)
-                newCy = VgcConstants.ScreenRows - 1;
-            _vgc.Write(VgcConstants.RegCursorX, (byte)cx);
-            _vgc.Write(VgcConstants.RegCursorY, (byte)newCy);
-        }
-        else
-        {
-            _vgc.Write(VgcConstants.RegCursorX, (byte)cx);
-        }
-    }
+    public void QueueInput(byte ch) => _inputQueue.Enqueue(ch);
 
     // -------------------------------------------------------------------------
     // Input queue
     // -------------------------------------------------------------------------
 
-    public bool HasQueuedInput => _inputQueue.Count > 0;
+    public bool HasQueuedInput => !_inputQueue.IsEmpty;
 
     public byte DequeueInput() =>
-        _inputQueue.Count > 0 ? _inputQueue.Dequeue() : (byte)0;
+        _inputQueue.TryDequeue(out byte b) ? b : (byte)0;
 
     // -------------------------------------------------------------------------
     // Screen RAM read helper

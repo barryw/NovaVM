@@ -373,7 +373,9 @@ TK_CIRCLE         = TK_LINE+1       ; CIRCLE
 TK_RECT           = TK_CIRCLE+1     ; RECT
 TK_FILLRECT       = TK_RECT+1       ; FILL
 TK_GMODE          = TK_FILLRECT+1   ; MODE
-TK_SPRCMD         = TK_GMODE+1      ; SPRITE
+TK_GCLS           = TK_GMODE+1      ; GCLS
+TK_GCOLOR         = TK_GCLS+1       ; GCOLOR
+TK_SPRCMD         = TK_GCOLOR+1     ; SPRITE
 TK_SPRSHAPE       = TK_SPRCMD+1     ; SPRITESHAPE
 TK_SPRCOLOR       = TK_SPRSHAPE+1   ; SPRITECOLOR
 TK_SPRDATA        = TK_SPRCOLOR+1   ; SPRITEDATA
@@ -381,10 +383,11 @@ TK_SOUND          = TK_SPRDATA+1    ; SOUND
 TK_VOLUME         = TK_SOUND+1      ; VOLUME
 TK_ENVELOPE       = TK_VOLUME+1     ; ENVELOPE
 TK_WAVE           = TK_ENVELOPE+1   ; WAVE
+TK_VSYNC          = TK_WAVE+1       ; VSYNC
 
 ; secondary command tokens, can't start a statement
 
-TK_TAB            = TK_WAVE+1       ; TAB token
+TK_TAB            = TK_VSYNC+1      ; TAB token
 TK_ELSE           = TK_TAB+1        ; ELSE token
 TK_TO             = TK_ELSE+1       ; TO token
 TK_FN             = TK_TO+1         ; FN token
@@ -7963,6 +7966,7 @@ VGC_BGCOL     = $A001
 VGC_FGCOL     = $A002
 VGC_CURSX     = $A003
 VGC_CURSY     = $A004
+VGC_FRAME     = $A008          ; frame counter (read-only, incremented by host)
 VGC_SPREN     = $A009
 VGC_SPRENH    = $A00A
 VGC_COLLST    = $A00B
@@ -7979,6 +7983,23 @@ VGC_P3        = $A076
 VGC_P4        = $A077
 VGC_P5        = $A078
 VGC_SPRDATA   = $A200          ; sprite shape data base
+
+; --- File I/O coprocessor registers ---
+
+FIO_CMD       = $B3A0          ; command: 1=SAVE, 2=LOAD (write triggers)
+FIO_STATUS    = $B3A1          ; status: 0=idle, 2=ok, 3=error
+FIO_ERRCODE   = $B3A2          ; error: 0=none, 1=not found, 2=io error
+FIO_NAMELEN   = $B3A3          ; filename length (1-63)
+FIO_SRCL      = $B3A4          ; source/dest addr low
+FIO_SRCH      = $B3A5          ; source/dest addr high
+FIO_ENDL      = $B3A6          ; end addr low (SAVE only)
+FIO_ENDH      = $B3A7          ; end addr high (SAVE only)
+FIO_SIZEL     = $B3A8          ; loaded size low (set by host after LOAD)
+FIO_SIZEH     = $B3A9          ; loaded size high
+FIO_NAME      = $B3B0          ; filename buffer (64 bytes)
+
+FIO_OK        = $02            ; status: success
+FIO_ERR       = $03            ; status: error
 
 ; --- VGC command handlers ---
 
@@ -8018,6 +8039,24 @@ LAB_LOCATE
 LAB_GMODE
       JSR   LAB_GTBY          ; get mode byte in X
       STX   VGC_MODE          ; store graphics mode
+      RTS
+
+; perform GCLS — clear the graphics bitmap layer
+
+LAB_GCLS
+      LDA   #$07              ; GCLS command
+      STA   VGC_GFXCMD        ; trigger
+      RTS
+
+; perform GCOLOR c — set graphics draw color (0-15)
+
+LAB_GCOLOR
+      JSR   LAB_GTBY          ; get color byte in X
+      STX   VGC_P0L           ; color in param 0 low
+      LDA   #$00
+      STA   VGC_P0H           ; high byte = 0
+      LDA   #$08              ; GCOLOR command
+      STA   VGC_GFXCMD        ; trigger
       RTS
 
 ; perform PLOT x, y
@@ -8388,6 +8427,15 @@ LAB_WAVE
       JSR   LAB_GTBY          ; waveform
       RTS
 
+; perform VSYNC — wait for next frame (vblank sync)
+
+LAB_VSYNC
+      LDA   VGC_FRAME         ; read current frame counter
+@wait
+      CMP   VGC_FRAME         ; has it changed?
+      BEQ   @wait             ; no — spin until next frame
+      RTS
+
 ; --- VGC function handlers ---
 
 ; perform SPRITEX(n) — return X position of sprite n
@@ -8443,6 +8491,109 @@ LAB_BUMPED
       LDA   #$00
       LDY   VGC_COLLBG
       JMP   LAB_AYFC
+
+; --- File I/O command handlers ---
+
+; perform SAVE "filename"
+
+LAB_FSAVE
+      JSR   LAB_EVEX          ; evaluate expression
+      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
+      TAX                     ; save length in X
+      BEQ   @err_io           ; empty string = error
+      CPX   #64               ; max 63 chars
+      BCS   @err_io           ; too long
+      STX   FIO_NAMELEN       ; store filename length
+      ; copy filename from (ut1_pl),Y to FIO_NAME
+      LDY   #$00
+@cp_sv
+      LDA   (ut1_pl),Y        ; get char from string
+      STA   FIO_NAME,Y        ; store to FIO name buffer
+      INY
+      DEX
+      BNE   @cp_sv
+      ; set source address (program start)
+      LDA   Smeml
+      STA   FIO_SRCL
+      LDA   Smemh
+      STA   FIO_SRCH
+      ; set end address (end of program / start of variables)
+      LDA   Svarl
+      STA   FIO_ENDL
+      LDA   Svarh
+      STA   FIO_ENDH
+      ; trigger SAVE
+      LDA   #$01
+      STA   FIO_CMD
+      ; check status
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BEQ   @ok_sv
+@err_io
+      LDA   #<ERR_FIO
+      LDY   #>ERR_FIO
+      JSR   LAB_18C3          ; print error message
+      JMP   LAB_1274          ; warm start
+@ok_sv
+      RTS
+
+; perform LOAD "filename"
+
+LAB_FLOAD
+      JSR   LAB_EVEX          ; evaluate expression
+      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
+      TAX                     ; save length in X
+      BEQ   @err_lio          ; empty string = error
+      CPX   #64               ; max 63 chars
+      BCS   @err_lio          ; too long
+      STX   FIO_NAMELEN       ; store filename length
+      ; copy filename from (ut1_pl),Y to FIO_NAME
+      LDY   #$00
+@cp_ld
+      LDA   (ut1_pl),Y
+      STA   FIO_NAME,Y
+      INY
+      DEX
+      BNE   @cp_ld
+      ; set destination address (program start)
+      LDA   Smeml
+      STA   FIO_SRCL
+      LDA   Smemh
+      STA   FIO_SRCH
+      ; trigger LOAD
+      LDA   #$02
+      STA   FIO_CMD
+      ; check status
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @chk_err
+      ; success — update Svarl/Svarh = Smeml + FIO_SIZE
+      CLC
+      LDA   Smeml
+      ADC   FIO_SIZEL
+      STA   Svarl
+      LDA   Smemh
+      ADC   FIO_SIZEH
+      STA   Svarh
+      ; reset execution, clear vars, print Ready
+      JMP   LAB_1477
+@chk_err
+      LDA   FIO_ERRCODE
+      CMP   #$01              ; not found?
+      BEQ   @err_fnf
+@err_lio
+      LDA   #<ERR_FIO
+      LDY   #>ERR_FIO
+      JSR   LAB_18C3
+      JMP   LAB_1274
+@err_fnf
+      LDA   #<ERR_FNF
+      LDY   #>ERR_FNF
+      JSR   LAB_18C3
+      JMP   LAB_1274
+
+ERR_FIO     .byte $0D,$0A,"I/O Error",$00
+ERR_FNF     .byte $0D,$0A,"File not found",$00
 
 ; character get subroutine for zero page
 
@@ -8684,6 +8835,8 @@ LAB_CTBL
       .word LAB_RECT-1         ; RECT            VGC command
       .word LAB_FILLRECT-1    ; FILL            VGC command
       .word LAB_GMODE-1       ; MODE            VGC command
+      .word LAB_GCLS-1        ; GCLS            VGC command
+      .word LAB_GCOLOR-1      ; GCOLOR          VGC command
       .word LAB_SPRCMD-1      ; SPRITE          VGC command
       .word LAB_SPRSHAPE-1    ; SPRITESHAPE     VGC command
       .word LAB_SPRCOLOR-1    ; SPRITECOLOR     VGC command
@@ -8692,6 +8845,7 @@ LAB_CTBL
       .word LAB_VOLUME-1      ; VOLUME          VGC command
       .word LAB_ENVELOPE-1    ; ENVELOPE        VGC command
       .word LAB_WAVE-1         ; WAVE            VGC command
+      .word LAB_VSYNC-1        ; VSYNC           wait for vblank
 
 ; function pre process routine table
 
@@ -8999,6 +9153,10 @@ LBB_GOSUB
       .byte "OSUB",TK_GOSUB   ; GOSUB
 LBB_GOTO
       .byte "OTO",TK_GOTO     ; GOTO
+LBB_GCLS
+      .byte "CLS",TK_GCLS     ; GCLS
+LBB_GCOLOR
+      .byte "COLOR",TK_GCOLOR ; GCOLOR
       .byte $00
 TAB_ASCH
 LBB_HEXS
@@ -9178,6 +9336,8 @@ LBB_VPTR
       .byte "ARPTR(",TK_VPTR  ; VARPTR(
 LBB_VOLUME
       .byte "OLUME",TK_VOLUME ; VOLUME
+LBB_VSYNC
+      .byte "SYNC",TK_VSYNC   ; VSYNC
       .byte $00
 TAB_ASCW
 LBB_WAIT
@@ -9322,6 +9482,8 @@ LAB_KEYT
       .word LBB_ENVELOPE      ; ENVELOPE
       .byte 4,'W'
       .word LBB_WAVE          ; WAVE
+      .byte 5,'V'
+      .word LBB_VSYNC         ; VSYNC
 
 ; secondary commands (can't start a statement)
 
