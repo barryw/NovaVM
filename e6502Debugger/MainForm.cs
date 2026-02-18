@@ -1,11 +1,11 @@
-﻿using KDS.e6502;
+using KDS.e6502;
 using System.Text;
 
 namespace e6502Debugger
 {
     public partial class MainForm : Form
     {
-        private CPU cpu;
+        private Cpu? cpu;
 
         public MainForm()
         {
@@ -37,49 +37,21 @@ namespace e6502Debugger
         private void LoadFile(string file)
         {
             var bus = new BusDevice(File.ReadAllBytes(file), 0xf000);
-            cpu = new CPU(bus, e6502Type.NMOS);
+            cpu = new Cpu(bus, E6502Type.Nmos);
             UpdateScreen();
         }
 
         private void UpdateScreen()
         {
-            lblA.Text = $"{cpu.A:X2}";
-            lblX.Text = $"{cpu.X:X2}";
-            lblY.Text = $"{cpu.Y:X2}";
-            lblSP.Text = $"{cpu.SP:X2}";
-            lblPC.Text = $"{cpu.PC:X4}";
+            if (cpu == null) return;
 
-            var flags = new StringBuilder();
-
-            if (cpu.NF)
-                flags.Append("N");
-            else
-                flags.Append("-");
-            if (cpu.VF)
-                flags.Append("V");
-            else
-                flags.Append("-");
-            flags.Append("--");
-            if (cpu.DF)
-                flags.Append("D");
-            else
-                flags.Append("-");
-            if (cpu.IF)
-                flags.Append("I");
-            else
-                flags.Append("-");
-            if (cpu.ZF)
-                flags.Append("Z");
-            else
-                flags.Append("-");
-            if (cpu.CF)
-                flags.Append("C");
-            else
-                flags.Append("-");
-
-            lblFlags.Text = flags.ToString();
-
-            lblNextInstruction.Text = $"${cpu.PC:X4}: {cpu.DasmNextInstruction()}";
+            lblA.Text = "";
+            lblX.Text = "";
+            lblY.Text = "";
+            lblSP.Text = "";
+            lblPC.Text = $"{cpu.Pc:X4}";
+            lblFlags.Text = "";
+            lblNextInstruction.Text = $"${cpu.Pc:X4}";
 
             UpdateMemory();
         }
@@ -99,12 +71,15 @@ namespace e6502Debugger
 
         private void ExecuteNextInstruction()
         {
+            if (cpu == null) return;
             cpu.ExecuteNext();
             UpdateScreen();
         }
 
         private void UpdateMemory()
         {
+            if (cpu == null) return;
+
             var low = int.Parse(txtLowRange.Text, System.Globalization.NumberStyles.HexNumber);
             var high = int.Parse(txtHighRange.Text, System.Globalization.NumberStyles.HexNumber);
 
