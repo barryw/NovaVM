@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\e6502\e6502.csproj" />
+    <ProjectReference Include="..\e6502.TUI\e6502.TUI.csproj" />
   </ItemGroup>
 
 
