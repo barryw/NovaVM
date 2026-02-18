@@ -125,6 +125,62 @@ public class DisplayView : View
                     driver.AddRune(new Rune(ch));
                 }
             }
+
+            // Block graphics compositing layer (mode 1 = graphics, 2 = mixed)
+            if (_vgc.GetMode() >= 1)
+            {
+                for (int row = 0; row < VgcConstants.ScreenRows; row++)
+                {
+                    for (int col = 0; col < VgcConstants.ScreenCols; col++)
+                    {
+                        // Each terminal cell maps to two vertical gfx pixels (2-wide each)
+                        // gfx coords: x = col*2, top y = row*2, bottom y = row*2+1
+                        int gx = col * 2;
+                        int gyTop    = row * 2;
+                        int gyBottom = row * 2 + 1;
+
+                        byte topColor    = _vgc.GetGfxPixelColor(gx, gyTop);
+                        byte bottomColor = _vgc.GetGfxPixelColor(gx, gyBottom);
+
+                        bool topSet    = topColor    != 0;
+                        bool bottomSet = bottomColor != 0;
+
+                        if (!topSet && !bottomSet)
+                            continue; // transparent — text layer shows through
+
+                        Rune glyph;
+                        Color cellFg;
+                        Color cellBg;
+
+                        if (topSet && bottomSet)
+                        {
+                            // Both halves set — use upper-half block, fg=top, bg=bottom
+                            glyph   = new Rune('▀');
+                            cellFg  = ColorPalette.Get(topColor);
+                            cellBg  = ColorPalette.Get(bottomColor);
+                        }
+                        else if (topSet)
+                        {
+                            // Top only — upper-half block, fg=top, bg=screen bg
+                            glyph   = new Rune('▀');
+                            cellFg  = ColorPalette.Get(topColor);
+                            cellBg  = bgColor;
+                        }
+                        else
+                        {
+                            // Bottom only — lower-half block, fg=bottom, bg=screen bg
+                            glyph   = new Rune('▄');
+                            cellFg  = ColorPalette.Get(bottomColor);
+                            cellBg  = bgColor;
+                        }
+
+                        var gfxAttr = new Terminal.Gui.Attribute(cellFg, cellBg);
+                        driver.SetAttribute(gfxAttr);
+                        Move(col, row);
+                        driver.AddRune(glyph);
+                    }
+                }
+            }
         }
 
         return true;

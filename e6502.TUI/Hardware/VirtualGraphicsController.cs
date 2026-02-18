@@ -23,6 +23,9 @@ public class VirtualGraphicsController
     // Block graphics bitmap (160x50, NOT 6502-addressable)
     private readonly byte[] _gfxBitmap = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
 
+    // Current graphics draw color (0-15)
+    private byte _gfxDrawColor;
+
     public VirtualGraphicsController()
     {
         // Screen RAM initialized to spaces
@@ -196,6 +199,9 @@ public class VirtualGraphicsController
     public bool GetGfxPixel(int x, int y) =>
         _gfxBitmap[y * VgcConstants.GfxWidth + x] != 0;
 
+    public byte GetGfxPixelColor(int x, int y) =>
+        _gfxBitmap[y * VgcConstants.GfxWidth + x];
+
     public ReadOnlySpan<byte> GetSpriteShape(int index) =>
         _spriteShapes.AsSpan(index * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
 
@@ -314,7 +320,43 @@ public class VirtualGraphicsController
     // Stubs (filled in later tasks)
     // -------------------------------------------------------------------------
 
-    protected virtual void ExecuteGfxCommand(byte cmd) { }
+    protected virtual void ExecuteGfxCommand(byte cmd)
+    {
+        // 16-bit parameters
+        int p0 = _gfxRegs[1] | (_gfxRegs[2] << 8);
+        int p1 = _gfxRegs[3] | (_gfxRegs[4] << 8);
+        // 8-bit parameters
+        int p2 = _gfxRegs[5];
+        int p3 = _gfxRegs[6];
+
+        switch (cmd)
+        {
+            case VgcConstants.GfxCmdPlot:
+                e6502.TUI.Rendering.BlockGraphics.Plot(_gfxBitmap, p0, p1, _gfxDrawColor);
+                break;
+            case VgcConstants.GfxCmdUnplot:
+                e6502.TUI.Rendering.BlockGraphics.Plot(_gfxBitmap, p0, p1, 0);
+                break;
+            case VgcConstants.GfxCmdLine:
+                e6502.TUI.Rendering.BlockGraphics.Line(_gfxBitmap, p0, p1, p2, p3, _gfxDrawColor);
+                break;
+            case VgcConstants.GfxCmdCircle:
+                e6502.TUI.Rendering.BlockGraphics.Circle(_gfxBitmap, p0, p1, p2, _gfxDrawColor);
+                break;
+            case VgcConstants.GfxCmdRect:
+                e6502.TUI.Rendering.BlockGraphics.Rect(_gfxBitmap, p0, p1, p2, p3, _gfxDrawColor);
+                break;
+            case VgcConstants.GfxCmdFill:
+                e6502.TUI.Rendering.BlockGraphics.Fill(_gfxBitmap, p0, p1, p2, p3, _gfxDrawColor);
+                break;
+            case VgcConstants.GfxCmdGcls:
+                e6502.TUI.Rendering.BlockGraphics.Clear(_gfxBitmap);
+                break;
+            case VgcConstants.GfxCmdGcolor:
+                _gfxDrawColor = (byte)(p0 & 0x0F);
+                break;
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Internal status write (for the emulator core to set STATUS)
