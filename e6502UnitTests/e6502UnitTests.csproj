@@ -37,6 +37,10 @@
     <None Update="Resources\6502_interrupt_test.bin">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="..\e6502.TUI\Resources\ehbasic.bin">
+      <Link>Resources\ehbasic.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
