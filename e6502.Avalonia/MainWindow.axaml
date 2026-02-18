@@ -3,5 +3,5 @@
         x:Class="e6502.Avalonia.MainWindow"
         Title="e6502 Emulator"
         Background="Black"
-        Width="800" Height="400">
+        Width="1280" Height="500">
 </Window>
