@@ -23,7 +23,8 @@ ACIAsimrd   = $A00F           ; VGC CHARIN
 ; and wait for the user to select [C]old or [W]arm start. nothing else
 ; fits in less than 128 bytes
 
-.org $FF80
+      .segment "MONITOR"
+      .org    $FF80
 
 ; reset vector points here
 
@@ -126,11 +127,9 @@ LAB_mess
 
 ; system vectors
 
+      .segment "VECTORS"
       .org    $FFFA
 
       .word NMI_vec           ; NMI vector
       .word RES_vec           ; RESET vector
       .word IRQ_vec           ; IRQ vector
-
-      .end RES_vec            ; set start at reset vector
-      

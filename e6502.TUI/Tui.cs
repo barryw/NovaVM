@@ -3,40 +3,29 @@ using e6502.TUI.Rendering;
 using KDS.e6502;
 using Terminal.Gui;
 
-Application.Init();
-
-var bus     = new CompositeBusDevice();
-var cpu     = new Cpu(bus);
+var bus = new CompositeBusDevice();
+var cpu = new Cpu(bus);
 cpu.Boot();
 
-var display = new DisplayView(bus.Vgc);
-
-var window = new Window
+var display = new DisplayView(bus.Vgc)
 {
-    Title  = "Enhanced 6502 BASIC",
-    X      = 0,
-    Y      = 1,
-    Width  = Dim.Fill(),
+    X = 0,
+    Y = 0,
+    Width = Dim.Fill(),
     Height = Dim.Fill(),
 };
 
-var menu = new MenuBar
+var window = new Window
 {
-    Menus =
-    [
-        new MenuBarItem("_File",
-        [
-            new MenuItem("_Quit", "", () => Application.RequestStop()),
-        ]),
-    ]
+    Title = "Enhanced 6502 BASIC",
+    // 80x25 display + 2 for window border
+    Width = VgcConstants.ScreenCols + 2,
+    Height = VgcConstants.ScreenRows + 2,
+    X = Pos.Center(),
+    Y = Pos.Center(),
 };
 
-display.X = 0;
-display.Y = 0;
-
 window.Add(display);
-
-Application.Top!.Add(menu, window);
 
 // CPU runs on background thread
 bool running = true;
@@ -51,20 +40,20 @@ var cpuThread = new Thread(() =>
 };
 cpuThread.Start();
 
-// 30 fps refresh
+Application.Init();
+
 Application.AddTimeout(TimeSpan.FromMilliseconds(33), () =>
 {
     display.SetNeedsDraw();
     return true;
 });
 
-// 500 ms cursor blink
 Application.AddTimeout(TimeSpan.FromMilliseconds(500), () =>
 {
     display.ToggleCursor();
     return true;
 });
 
-Application.Run();
+Application.Run(window);
 running = false;
 Application.Shutdown();

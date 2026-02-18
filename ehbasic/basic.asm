@@ -501,6 +501,7 @@ Stack_floor       = 16        ; bytes left free on stack for background interrup
 
 ; This start can be changed to suit your system
 
+      .segment "CODE"
       .org    $C000
 
 ; BASIC cold start entry point

@@ -6,8 +6,8 @@ CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 
 all: basic.bin
 
-basic.bin: basic.o
-	ld65 -C $(CC65_CFG)/none.cfg -vm -m basic.map -o basic.bin basic.o
+basic.bin: basic.o ehbasic.cfg
+	ld65 -C ehbasic.cfg -vm -m basic.map -o basic.bin basic.o
 
 basic.o: basic.asm min_mon.asm
 	ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm
