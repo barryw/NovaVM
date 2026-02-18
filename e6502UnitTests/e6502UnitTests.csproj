@@ -20,7 +20,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\e6502\e6502.csproj" />
-    <ProjectReference Include="..\e6502.TUI\e6502.TUI.csproj" />
     <ProjectReference Include="..\e6502.Avalonia\e6502.Avalonia.csproj" />
   </ItemGroup>
 
@@ -38,7 +37,7 @@
     <None Update="Resources\6502_interrupt_test.bin">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="..\e6502.TUI\Resources\ehbasic.bin">
+    <None Update="..\e6502.Avalonia\Resources\ehbasic.bin">
       <Link>Resources\ehbasic.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
