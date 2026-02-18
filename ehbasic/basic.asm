@@ -7955,6 +7955,494 @@ PG2_TABS
 ;     .word xxxx              ; save vector           -     monitor to set this
 PG2_TABE
 
+; --- VGC I/O register addresses ---
+
+VGC_MODE      = $A000
+VGC_BGCOL     = $A001
+VGC_FGCOL     = $A002
+VGC_CURSX     = $A003
+VGC_CURSY     = $A004
+VGC_SPREN     = $A009
+VGC_SPRENH    = $A00A
+VGC_COLLST    = $A00B
+VGC_COLLBG    = $A00C
+VGC_CHAROUT   = $A00E
+VGC_SPRBASE   = $A010          ; sprite registers: 16 sprites x 6 bytes
+VGC_GFXCMD    = $A070
+VGC_P0L       = $A071
+VGC_P0H       = $A072
+VGC_P1L       = $A073
+VGC_P1H       = $A074
+VGC_P2        = $A075
+VGC_P3        = $A076
+VGC_P4        = $A077
+VGC_P5        = $A078
+VGC_SPRDATA   = $A200          ; sprite shape data base
+
+; --- VGC command handlers ---
+
+; perform CLS — clear screen, no arguments
+
+LAB_CLS
+      LDA   #$0C              ; form feed character
+      STA   VGC_CHAROUT       ; write to CHAROUT register
+      RTS
+
+; perform COLOR fg [,bg]
+
+LAB_COLOR
+      JSR   LAB_GTBY          ; get fg color byte in X
+      STX   VGC_FGCOL         ; store foreground color
+      JSR   LAB_GBYT          ; peek at current byte
+      CMP   #','              ; comma follows?
+      BNE   @done             ; no, just fg was given
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; get bg color byte in X
+      STX   VGC_BGCOL         ; store background color
+@done
+      RTS
+
+; perform LOCATE x, y
+
+LAB_LOCATE
+      JSR   LAB_GTBY          ; get x in X
+      STX   VGC_CURSX         ; store cursor X
+      JSR   LAB_1C01          ; require comma
+      JSR   LAB_GTBY          ; get y in X
+      STX   VGC_CURSY         ; store cursor Y
+      RTS
+
+; perform MODE n
+
+LAB_GMODE
+      JSR   LAB_GTBY          ; get mode byte in X
+      STX   VGC_MODE          ; store graphics mode
+      RTS
+
+; perform PLOT x, y
+
+LAB_PLOT
+      JSR   LAB_GTBY          ; get x (0-159)
+      STX   VGC_P0L           ; P0 low
+      LDA   #$00
+      STA   VGC_P0H           ; P0 high = 0
+      JSR   LAB_1C01          ; require comma
+      JSR   LAB_GTBY          ; get y (0-49)
+      STX   VGC_P1L           ; P1 low
+      LDA   #$00
+      STA   VGC_P1H           ; P1 high = 0
+      LDA   #$01              ; PLOT command
+      STA   VGC_GFXCMD        ; trigger
+      RTS
+
+; perform UNPLOT x, y
+
+LAB_UNPLOT
+      JSR   LAB_GTBY          ; get x
+      STX   VGC_P0L
+      LDA   #$00
+      STA   VGC_P0H
+      JSR   LAB_1C01          ; require comma
+      JSR   LAB_GTBY          ; get y
+      STX   VGC_P1L
+      LDA   #$00
+      STA   VGC_P1H
+      LDA   #$02              ; UNPLOT command
+      STA   VGC_GFXCMD
+      RTS
+
+; perform LINE x1, y1, x2, y2
+
+LAB_GLINE
+      JSR   LAB_GTBY          ; x1
+      STX   VGC_P0L
+      LDA   #$00
+      STA   VGC_P0H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y1
+      STX   VGC_P1L
+      LDA   #$00
+      STA   VGC_P1H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; x2
+      STX   VGC_P2
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y2
+      STX   VGC_P3
+      LDA   #$03              ; LINE command
+      STA   VGC_GFXCMD
+      RTS
+
+; perform CIRCLE x, y, r
+
+LAB_CIRCLE
+      JSR   LAB_GTBY          ; x
+      STX   VGC_P0L
+      LDA   #$00
+      STA   VGC_P0H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y
+      STX   VGC_P1L
+      LDA   #$00
+      STA   VGC_P1H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; r
+      STX   VGC_P2
+      LDA   #$04              ; CIRCLE command
+      STA   VGC_GFXCMD
+      RTS
+
+; perform RECT x1, y1, x2, y2
+
+LAB_RECT
+      JSR   LAB_GTBY          ; x1
+      STX   VGC_P0L
+      LDA   #$00
+      STA   VGC_P0H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y1
+      STX   VGC_P1L
+      LDA   #$00
+      STA   VGC_P1H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; x2
+      STX   VGC_P2
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y2
+      STX   VGC_P3
+      LDA   #$05              ; RECT command
+      STA   VGC_GFXCMD
+      RTS
+
+; perform FILL x1, y1, x2, y2
+
+LAB_FILLRECT
+      JSR   LAB_GTBY          ; x1
+      STX   VGC_P0L
+      LDA   #$00
+      STA   VGC_P0H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y1
+      STX   VGC_P1L
+      LDA   #$00
+      STA   VGC_P1H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; x2
+      STX   VGC_P2
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y2
+      STX   VGC_P3
+      LDA   #$06              ; FILL command
+      STA   VGC_GFXCMD
+      RTS
+
+; perform SPRITE n, ON/OFF  or  SPRITE n, x, y
+; sprite number 0-15, ON/OFF enables/disables, x,y sets position
+
+LAB_SPRCMD
+      JSR   LAB_GTBY          ; get sprite number (0-15) in X
+      TXA
+      PHA                     ; save sprite number on stack
+      JSR   LAB_1C01          ; require comma
+      JSR   LAB_GBYT          ; peek at next token
+      CMP   #TK_ON            ; is it ON?
+      BEQ   @spr_on
+      CMP   #TK_OFF           ; is it OFF?
+      BEQ   @spr_off
+      ; not ON/OFF — parse x, y position
+      PLA                     ; retrieve sprite number
+      PHA                     ; keep it on stack
+      ; calculate register offset: base + N*6
+      ; A = sprite number
+      TAX                     ; X = N
+      ASL   A                 ; A = N*2
+      STA   Itempl            ; save N*2
+      TXA                     ; A = N
+      ASL   A                 ; A = N*2
+      ASL   A                 ; A = N*4
+      CLC
+      ADC   Itempl            ; A = N*4 + N*2 = N*6
+      STA   Itempl            ; save offset in Itempl
+      JSR   LAB_GTBY          ; get x in X
+      LDY   Itempl            ; get offset
+      TXA                     ; A = x low
+      STA   VGC_SPRBASE,Y     ; store x low at offset+0
+      LDA   #$00
+      STA   VGC_SPRBASE+1,Y   ; store x high at offset+1
+      JSR   LAB_1C01          ; require comma
+      LDA   Itempl            ; save offset before LAB_GTBY
+      PHA                     ; push offset
+      JSR   LAB_GTBY          ; get y in X (clobbers Itempl)
+      PLA                     ; restore offset
+      TAY
+      TXA                     ; A = y
+      STA   VGC_SPRBASE+2,Y   ; store y at offset+2
+      PLA                     ; discard saved sprite number
+      RTS
+
+@spr_on
+      JSR   LAB_IGBY          ; consume the ON token
+      PLA                     ; get sprite number
+      TAX
+      CPX   #$08              ; sprite 0-7 or 8-15?
+      BCS   @on_hi
+      LDA   #$01              ; set bit 0
+@on_shft
+      DEX
+      BMI   @on_set
+      ASL   A                 ; shift bit left by sprite number
+      JMP   @on_shft
+@on_set
+      ORA   VGC_SPREN         ; set bit in enable register
+      STA   VGC_SPREN
+      RTS
+@on_hi
+      TXA
+      SEC
+      SBC   #$08              ; N - 8
+      TAX
+      LDA   #$01
+@on_shfth
+      DEX
+      BMI   @on_seth
+      ASL   A
+      JMP   @on_shfth
+@on_seth
+      ORA   VGC_SPRENH        ; set bit in high enable register
+      STA   VGC_SPRENH
+      RTS
+
+@spr_off
+      JSR   LAB_IGBY          ; consume the OFF token
+      PLA                     ; get sprite number
+      TAX
+      CPX   #$08
+      BCS   @off_hi
+      LDA   #$01
+@off_shft
+      DEX
+      BMI   @off_clr
+      ASL   A
+      JMP   @off_shft
+@off_clr
+      EOR   #$FF              ; invert to make mask
+      AND   VGC_SPREN         ; clear bit
+      STA   VGC_SPREN
+      RTS
+@off_hi
+      TXA
+      SEC
+      SBC   #$08
+      TAX
+      LDA   #$01
+@off_shfth
+      DEX
+      BMI   @off_clrh
+      ASL   A
+      JMP   @off_shfth
+@off_clrh
+      EOR   #$FF
+      AND   VGC_SPRENH
+      STA   VGC_SPRENH
+      RTS
+
+; perform SPRITESHAPE n, shape
+
+LAB_SPRSHAPE
+      JSR   LAB_GTBY          ; get sprite number in X
+      TXA
+      ; calculate offset: base + N*6 + 5 (shape index byte)
+      TAX                     ; X = N
+      ASL   A                 ; A = N*2
+      STA   Itempl            ; save N*2
+      TXA                     ; A = N
+      ASL   A                 ; A = N*2
+      ASL   A                 ; A = N*4
+      CLC
+      ADC   Itempl            ; A = N*6
+      CLC
+      ADC   #$05              ; offset+5 = shape index
+      STA   Itempl            ; save offset
+      JSR   LAB_1C01          ; require comma
+      JSR   LAB_GTBY          ; get shape byte in X
+      LDY   Itempl            ; get offset
+      TXA
+      STA   VGC_SPRBASE,Y     ; store shape
+      RTS
+
+; perform SPRITECOLOR n, c
+
+LAB_SPRCOLOR
+      JSR   LAB_GTBY          ; get sprite number in X
+      TXA
+      ; calculate offset: base + N*6 + 3 (color byte)
+      TAX
+      ASL   A                 ; N*2
+      STA   Itempl
+      TXA
+      ASL   A                 ; N*2
+      ASL   A                 ; N*4
+      CLC
+      ADC   Itempl            ; N*6
+      CLC
+      ADC   #$03              ; offset+3 = color
+      STA   Itempl
+      JSR   LAB_1C01          ; require comma
+      JSR   LAB_GTBY          ; get color byte in X
+      LDY   Itempl
+      TXA
+      STA   VGC_SPRBASE,Y     ; store color
+      RTS
+
+; perform SPRITEDATA shape, row, b1, b2
+; address = $A200 + shape*32 + row*2
+
+LAB_SPRDATA
+      JSR   LAB_GTBY          ; get shape number (0-15) in X
+      TXA
+      ; shape * 32: shift left 5 times
+      ; max 15*32 = 480 = $01E0
+      ASL   A                 ; *2
+      ASL   A                 ; *4
+      ASL   A                 ; *8
+      ASL   A                 ; *16
+      ASL   A                 ; *32 — carry has overflow bit
+      STA   Itempl            ; low byte of shape*32
+      LDA   #$00
+      ROL   A                 ; capture carry into high byte
+      STA   Itemph            ; high byte of shape*32
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; get row (0-15) in X
+      TXA
+      ASL   A                 ; row * 2
+      CLC
+      ADC   Itempl            ; add to shape*32 low
+      STA   Itempl
+      LDA   Itemph
+      ADC   #$00              ; propagate carry
+      ; add base address $A200
+      CLC
+      LDA   Itempl
+      ADC   #<VGC_SPRDATA     ; add low byte of base
+      STA   Itempl
+      LDA   Itemph
+      ADC   #>VGC_SPRDATA     ; add high byte of base
+      STA   Itemph
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; get b1 in X
+      TXA
+      LDY   #$00
+      STA   (Itempl),Y        ; store b1 at address
+      ; save address before LAB_GTBY clobbers Itempl
+      LDA   Itempl
+      PHA
+      LDA   Itemph
+      PHA
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; get b2 in X
+      PLA
+      STA   Itemph            ; restore address high
+      PLA
+      STA   Itempl            ; restore address low
+      TXA
+      LDY   #$01
+      STA   (Itempl),Y        ; store b2 at address+1
+      RTS
+
+; perform SOUND channel, frequency, duration — stub (parse and discard)
+
+LAB_SOUND
+      JSR   LAB_GTBY          ; channel
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_EVNM          ; frequency (evaluate and discard)
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_EVNM          ; duration (evaluate and discard)
+      RTS
+
+; perform VOLUME level — stub (parse and discard)
+
+LAB_VOLUME
+      JSR   LAB_GTBY          ; volume level
+      RTS
+
+; perform ENVELOPE channel, a, d, s, r — stub (parse and discard)
+
+LAB_ENVELOPE
+      JSR   LAB_GTBY          ; channel
+      JSR   LAB_1C01
+      JSR   LAB_GTBY          ; attack
+      JSR   LAB_1C01
+      JSR   LAB_GTBY          ; decay
+      JSR   LAB_1C01
+      JSR   LAB_GTBY          ; sustain
+      JSR   LAB_1C01
+      JSR   LAB_GTBY          ; release
+      RTS
+
+; perform WAVE channel, waveform — stub (parse and discard)
+
+LAB_WAVE
+      JSR   LAB_GTBY          ; channel
+      JSR   LAB_1C01
+      JSR   LAB_GTBY          ; waveform
+      RTS
+
+; --- VGC function handlers ---
+
+; perform SPRITEX(n) — return X position of sprite n
+; FAC1 already contains the argument (evaluated by LAB_PPFN preprocessor)
+
+LAB_SPRITEX
+      JSR   LAB_F2FX          ; convert FAC1 to integer in Itempl/Itemph
+      LDA   Itempl            ; sprite number
+      ; calculate offset: N*6
+      TAX
+      ASL   A                 ; N*2
+      STA   Itemph            ; borrow Itemph as temp
+      TXA
+      ASL   A                 ; N*2
+      ASL   A                 ; N*4
+      CLC
+      ADC   Itemph            ; N*6
+      TAX                     ; X = offset
+      LDA   VGC_SPRBASE+1,X   ; x high byte
+      LDY   VGC_SPRBASE,X     ; x low byte
+      ; A=high, Y=low — return as integer via LAB_AYFC
+      JMP   LAB_AYFC
+
+; perform SPRITEY(n) — return Y position of sprite n
+
+LAB_SPRITEY
+      JSR   LAB_F2FX          ; convert FAC1 to integer in Itempl/Itemph
+      LDA   Itempl            ; sprite number
+      TAX
+      ASL   A                 ; N*2
+      STA   Itemph
+      TXA
+      ASL   A                 ; N*2
+      ASL   A                 ; N*4
+      CLC
+      ADC   Itemph            ; N*6
+      TAX
+      LDY   VGC_SPRBASE+2,X   ; y position byte
+      LDA   #$00              ; Y position is single byte, high = 0
+      JMP   LAB_AYFC
+
+; perform COLLISION(n) — return sprite-sprite collision register
+; argument already consumed by preprocessor
+
+LAB_COLLISION
+      LDA   #$00              ; high byte = 0
+      LDY   VGC_COLLST        ; read collision register
+      JMP   LAB_AYFC
+
+; perform BUMPED(n) — return sprite-background collision register
+
+LAB_BUMPED
+      LDA   #$00
+      LDY   VGC_COLLBG
+      JMP   LAB_AYFC
+
 ; character get subroutine for zero page
 
 ; For a 1.8432MHz 6502 including the JSR and RTS
@@ -7997,36 +8485,6 @@ LAB_2CF4
                               ; clear carry if byte = "0"-"9"
 LAB_2D05
       RTS
-
-; --- VGC command stubs ---
-LAB_CLS
-LAB_COLOR
-LAB_LOCATE
-LAB_PLOT
-LAB_UNPLOT
-LAB_GLINE
-LAB_CIRCLE
-LAB_RECT
-LAB_FILLRECT
-LAB_GMODE
-LAB_SPRCMD
-LAB_SPRSHAPE
-LAB_SPRCOLOR
-LAB_SPRDATA
-LAB_SOUND
-LAB_VOLUME
-LAB_ENVELOPE
-LAB_WAVE
-      RTS
-
-; --- VGC function stubs ---
-LAB_SPRITEX
-LAB_SPRITEY
-LAB_COLLISION
-LAB_BUMPED
-      LDA   #$00
-      TAY
-      JMP   LAB_AYFC          ; save and convert integer AY to FAC1 and return
 
 ; page zero initialisation table $00-$12 inclusive
 
