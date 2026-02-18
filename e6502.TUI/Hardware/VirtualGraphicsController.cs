@@ -82,6 +82,8 @@ public class VirtualGraphicsController
                 }
                 case VgcConstants.RegCharIn:
                 {
+                    if (_screenEditor is not null && _screenEditor.HasQueuedInput)
+                        return _screenEditor.DequeueInput();
                     byte val = _regs[idx];
                     _regs[idx] = 0;
                     return val;
@@ -149,6 +151,15 @@ public class VirtualGraphicsController
             }
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Screen editor integration
+    // -------------------------------------------------------------------------
+
+    private e6502.TUI.Rendering.ScreenEditor? _screenEditor;
+
+    public void SetScreenEditor(e6502.TUI.Rendering.ScreenEditor editor) =>
+        _screenEditor = editor;
 
     // -------------------------------------------------------------------------
     // Input

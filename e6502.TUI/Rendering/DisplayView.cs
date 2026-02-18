@@ -7,12 +7,16 @@ namespace e6502.TUI.Rendering;
 public class DisplayView : View
 {
     private readonly VirtualGraphicsController _vgc;
+    private readonly ScreenEditor _editor;
     private readonly object _renderLock = new();
     private bool _cursorVisible = true;
 
     public DisplayView(VirtualGraphicsController vgc)
     {
         _vgc = vgc;
+        _editor = new ScreenEditor(vgc);
+        _vgc.SetScreenEditor(_editor);
+
         CanFocus = true;
         Width = VgcConstants.ScreenCols;
         Height = VgcConstants.ScreenRows;
@@ -25,6 +29,61 @@ public class DisplayView : View
             _cursorVisible = !_cursorVisible;
         }
         SetNeedsDraw();
+    }
+
+    protected override bool OnKeyDown(Key keyEvent)
+    {
+        var key = keyEvent.KeyCode;
+
+        switch (key)
+        {
+            case KeyCode.CursorLeft:
+                _editor.CursorLeft();
+                return true;
+
+            case KeyCode.CursorRight:
+                _editor.CursorRight();
+                return true;
+
+            case KeyCode.CursorUp:
+                _editor.CursorUp();
+                return true;
+
+            case KeyCode.CursorDown:
+                _editor.CursorDown();
+                return true;
+
+            case KeyCode.Enter:
+                _editor.HandleReturn();
+                return true;
+
+            case KeyCode.Backspace:
+                _editor.CursorLeft();
+                // Write space to screen RAM at new cursor position
+                {
+                    int cx = _vgc.GetCursorX();
+                    int cy = _vgc.GetCursorY();
+                    ushort addr = (ushort)(VgcConstants.CharRamBase + cy * VgcConstants.ScreenCols + cx);
+                    _vgc.Write(addr, 0x20);
+                }
+                return true;
+
+            case KeyCode.Esc:
+                // CTRL-C interrupt — feed directly to VGC
+                _vgc.FeedInput(0x03);
+                return true;
+
+            default:
+                // Printable characters
+                if (keyEvent.AsRune.Value >= 0x20 && keyEvent.AsRune.Value <= 0x7E)
+                {
+                    _editor.HandleTypedChar((byte)keyEvent.AsRune.Value);
+                    return true;
+                }
+                break;
+        }
+
+        return base.OnKeyDown(keyEvent);
     }
 
     protected override bool OnDrawingContent()
