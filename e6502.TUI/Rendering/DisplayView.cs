@@ -181,6 +181,85 @@ public class DisplayView : View
                     }
                 }
             }
+
+            // Sprite compositing layer — overlay sprites onto whatever is already rendered.
+            // Sprites live in the same block-pixel coordinate space as the gfx bitmap (160×50).
+            // Each terminal cell is 2 pixels wide × 2 pixels tall (upper/lower half-block).
+            // We build a per-cell overlay: top-pixel color and bottom-pixel color from sprites.
+            {
+                // sparse overlay: cell key = row * ScreenCols + col
+                var spriteTopColor    = new Dictionary<int, byte>();
+                var spriteBottomColor = new Dictionary<int, byte>();
+
+                for (int si = 0; si < VgcConstants.MaxSprites; si++)
+                {
+                    var pixels = SpriteRenderer.GetSpritePixels(_vgc, si);
+                    foreach (var sp in pixels)
+                    {
+                        // sprite pixel (sp.ScreenX, sp.ScreenY) is in block-pixel space.
+                        // terminal col = sp.ScreenX / 2, terminal row = sp.ScreenY / 2.
+                        // top half = even pixel rows, bottom half = odd pixel rows.
+                        int termCol = sp.ScreenX / 2;
+                        int termRow = sp.ScreenY / 2;
+                        bool isBottom = (sp.ScreenY & 1) == 1;
+
+                        if (termCol < 0 || termCol >= VgcConstants.ScreenCols ||
+                            termRow < 0 || termRow >= VgcConstants.ScreenRows)
+                            continue;
+
+                        int key = termRow * VgcConstants.ScreenCols + termCol;
+                        if (isBottom)
+                            spriteBottomColor[key] = sp.Color;
+                        else
+                            spriteTopColor[key] = sp.Color;
+                    }
+                }
+
+                // Render all cells that have at least one sprite pixel.
+                var allCells = new HashSet<int>(spriteTopColor.Keys);
+                allCells.UnionWith(spriteBottomColor.Keys);
+
+                foreach (int key in allCells)
+                {
+                    int termRow = key / VgcConstants.ScreenCols;
+                    int termCol = key % VgcConstants.ScreenCols;
+
+                    bool hasTop    = spriteTopColor.TryGetValue(key, out byte sTop);
+                    bool hasBottom = spriteBottomColor.TryGetValue(key, out byte sBottom);
+
+                    Rune glyph;
+                    Color cellFg;
+                    Color cellBg;
+
+                    if (hasTop && hasBottom)
+                    {
+                        glyph   = new Rune('▀');
+                        cellFg  = ColorPalette.Get(sTop);
+                        cellBg  = ColorPalette.Get(sBottom);
+                    }
+                    else if (hasTop)
+                    {
+                        glyph   = new Rune('▀');
+                        cellFg  = ColorPalette.Get(sTop);
+                        cellBg  = bgColor;
+                    }
+                    else
+                    {
+                        glyph   = new Rune('▄');
+                        cellFg  = ColorPalette.Get(sBottom);
+                        cellBg  = bgColor;
+                    }
+
+                    var sprAttr = new Terminal.Gui.Attribute(cellFg, cellBg);
+                    driver.SetAttribute(sprAttr);
+                    Move(termCol, termRow);
+                    driver.AddRune(glyph);
+                }
+
+                // Collision detection — write results back to VGC registers.
+                var (ss, sb) = SpriteRenderer.DetectCollisions(_vgc);
+                _vgc.SetCollisionRegisters(ss, sb);
+            }
         }
 
         return true;

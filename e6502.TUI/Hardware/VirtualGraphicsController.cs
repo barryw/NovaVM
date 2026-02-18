@@ -364,4 +364,13 @@ public class VirtualGraphicsController
 
     public void SetStatus(byte value) =>
         _regs[VgcConstants.RegStatus - VgcConstants.VgcBase] = value;
+
+    // Written by the renderer after collision detection — bypasses the read-clears path.
+    public void SetCollisionRegisters(ushort spriteToSprite, ushort spriteToBg)
+    {
+        // RegColSt ($A00B) holds low byte of sprite-sprite collision bits
+        _regs[VgcConstants.RegColSt - VgcConstants.VgcBase] = (byte)(spriteToSprite & 0xFF);
+        // RegColBg ($A00C) holds low byte of sprite-background collision bits
+        _regs[VgcConstants.RegColBg - VgcConstants.VgcBase] = (byte)(spriteToBg & 0xFF);
+    }
 }
