@@ -168,7 +168,7 @@ public static class EmulatorTools
         return FormatGraphics(resp);
     }
 
-    [McpServerTool, Description("Read all enabled sprites: position, color, and 16x16 shape bitmap as ASCII art.")]
+    [McpServerTool, Description("Read all enabled sprites: position, priority, flags, and 16x16 multicolor shape (hex digit per pixel, 0=transparent).")]
     public static async Task<string> ReadSprites(EmulatorClient client)
     {
         var resp = await client.SendAsync(new JsonObject
@@ -176,6 +176,145 @@ public static class EmulatorTools
             ["command"] = "read_sprites"
         });
         return FormatSprites(resp);
+    }
+
+    [McpServerTool, Description("Define one row (8 bytes) of a multicolor sprite shape. Each byte encodes 2 pixels: high nibble=left, low nibble=right. Color 0=transparent.")]
+    public static async Task<string> SpriteDefineRow(
+        EmulatorClient client,
+        [Description("Sprite index (0-15)")] int sprite,
+        [Description("Row index (0-15)")] int row,
+        [Description("8 bytes of pixel data (each byte = 2 pixels: high nibble left, low nibble right)")] int[] data)
+    {
+        var arr = new JsonArray();
+        foreach (var b in data) arr.Add(b);
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_define_row",
+            ["sprite"] = sprite,
+            ["row"] = row,
+            ["data"] = arr
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set a single pixel in a sprite shape. Color 0-15 (0=transparent).")]
+    public static async Task<string> SpriteSetPixel(
+        EmulatorClient client,
+        [Description("Sprite index (0-15)")] int sprite,
+        [Description("X coordinate within sprite (0-15)")] int x,
+        [Description("Y coordinate within sprite (0-15)")] int y,
+        [Description("Color index (0-15, 0=transparent)")] int color)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_set_pixel",
+            ["sprite"] = sprite,
+            ["x"] = x,
+            ["y"] = y,
+            ["color"] = color
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set sprite screen position. X range 0-159, Y range 0-49 (graphics coordinates).")]
+    public static async Task<string> SpritePosition(
+        EmulatorClient client,
+        [Description("Sprite index (0-15)")] int sprite,
+        [Description("X position (0-159)")] int x,
+        [Description("Y position (0-49)")] int y)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_position",
+            ["sprite"] = sprite,
+            ["x"] = x,
+            ["y"] = y
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Enable a sprite (make it visible).")]
+    public static async Task<string> SpriteEnable(
+        EmulatorClient client,
+        [Description("Sprite index (0-15)")] int sprite)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_enable",
+            ["sprite"] = sprite
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Disable a sprite (make it invisible).")]
+    public static async Task<string> SpriteDisable(
+        EmulatorClient client,
+        [Description("Sprite index (0-15)")] int sprite)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_disable",
+            ["sprite"] = sprite
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Clear a sprite's shape data (all pixels to 0/transparent).")]
+    public static async Task<string> SpriteClear(
+        EmulatorClient client,
+        [Description("Sprite index (0-15)")] int sprite)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_clear",
+            ["sprite"] = sprite
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set sprite display priority. 0=behind all, 1=between text and graphics, 2=in front of everything.")]
+    public static async Task<string> SpritePriority(
+        EmulatorClient client,
+        [Description("Sprite index (0-15)")] int sprite,
+        [Description("Priority (0=behind all, 1=between text/gfx, 2=in front)")] int priority)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_priority",
+            ["sprite"] = sprite,
+            ["priority"] = priority
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set sprite flip flags. 0=none, 1=horizontal, 2=vertical, 3=both.")]
+    public static async Task<string> SpriteFlip(
+        EmulatorClient client,
+        [Description("Sprite index (0-15)")] int sprite,
+        [Description("Flip flags (0=none, 1=horizontal, 2=vertical, 3=both)")] int flags)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_flip",
+            ["sprite"] = sprite,
+            ["flags"] = flags
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Copy sprite shape from one sprite to another.")]
+    public static async Task<string> SpriteCopy(
+        EmulatorClient client,
+        [Description("Source sprite index (0-15)")] int src,
+        [Description("Destination sprite index (0-15)")] int dest)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sprite_copy",
+            ["src"] = src,
+            ["dest"] = dest
+        });
+        return result.ToJsonString();
     }
 
     private static string FormatGraphics(JsonNode resp)
@@ -209,8 +348,9 @@ public static class EmulatorTools
             int idx = spr["index"]?.GetValue<int>() ?? 0;
             int x = spr["x"]?.GetValue<int>() ?? 0;
             int y = spr["y"]?.GetValue<int>() ?? 0;
-            int color = spr["color"]?.GetValue<int>() ?? 0;
-            sb.AppendLine($"Sprite {idx}: pos=({x},{y}) color={color}");
+            int flags = spr["flags"]?.GetValue<int>() ?? 0;
+            int pri = spr["priority"]?.GetValue<int>() ?? 2;
+            sb.AppendLine($"Sprite {idx}: pos=({x},{y}) priority={pri} flags={flags}");
             if (spr["shape"] is JsonArray shape)
             {
                 foreach (var row in shape)
