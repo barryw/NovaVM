@@ -8393,19 +8393,6 @@ Current file: min_mon.asm
 00E2E3  2               XMC_ERR_NF    = $03            ; not found
 00E2E3  2               XMC_ERR_EOD   = $06            ; end of directory
 00E2E3  2               
-00E2E3  2               ; --- VSC sound controller registers ---
-00E2E3  2               
-00E2E3  2               VSC_CMD       = $A100          ; command register (write triggers execution)
-00E2E3  2               VSC_P0        = $A101          ; parameter 0
-00E2E3  2               VSC_P1        = $A102          ; parameter 1
-00E2E3  2               VSC_P2        = $A103          ; parameter 2
-00E2E3  2               VSC_P3        = $A104          ; parameter 3
-00E2E3  2               VSC_P4        = $A105          ; parameter 4
-00E2E3  2               
-00E2E3  2               VSCMD_SOUND   = $01            ; P0=ch, P1/P2=freq, P3/P4=duration
-00E2E3  2               VSCMD_VOLUME  = $02            ; P0=master volume 0-15
-00E2E3  2               VSCMD_ENV     = $03            ; P0=ch, P1=atk, P2=dec, P3=sus, P4=rel
-00E2E3  2               VSCMD_WAVE    = $04            ; P0=ch, P1=waveform
 00E2E3  2               
 00E2E3  2               ; --- VGC command handlers ---
 00E2E3  2               

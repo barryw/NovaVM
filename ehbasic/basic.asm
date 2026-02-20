@@ -8355,19 +8355,6 @@ XMC_OK        = $02            ; command success status
 XMC_ERR_NF    = $03            ; not found
 XMC_ERR_EOD   = $06            ; end of directory
 
-; --- VSC sound controller registers ---
-
-VSC_CMD       = $A100          ; command register (write triggers execution)
-VSC_P0        = $A101          ; parameter 0
-VSC_P1        = $A102          ; parameter 1
-VSC_P2        = $A103          ; parameter 2
-VSC_P3        = $A104          ; parameter 3
-VSC_P4        = $A105          ; parameter 4
-
-VSCMD_SOUND   = $01            ; P0=ch, P1/P2=freq, P3/P4=duration
-VSCMD_VOLUME  = $02            ; P0=master volume 0-15
-VSCMD_ENV     = $03            ; P0=ch, P1=atk, P2=dec, P3=sus, P4=rel
-VSCMD_WAVE    = $04            ; P0=ch, P1=waveform
 
 ; --- VGC command handlers ---
 
