@@ -8268,6 +8268,16 @@ FIO_CMD_GSAVE = $06            ; save VGC memory block to *.gfx
 FIO_CMD_GLOAD = $07            ; load *.gfx into VGC memory block
 FIO_CMD_SIDPLAY = $08          ; load .sid and start playback
 FIO_CMD_SIDSTOP = $09          ; stop SID playback
+FIO_CMD_INSTRUMENT = $0A       ; define instrument preset
+FIO_CMD_SOUND  = $0B           ; play SFX (note, duration, instrument)
+FIO_CMD_VOLUME = $0C           ; set master volume
+FIO_CMD_MSEQ   = $0D           ; set voice MML sequence
+FIO_CMD_MPLAY  = $0E           ; start music playback
+FIO_CMD_MSTOP  = $0F           ; stop music playback
+FIO_CMD_MTEMPO = $10           ; set music tempo (BPM)
+FIO_CMD_MLOOP  = $11           ; set music loop on/off
+FIO_CMD_MPRI   = $12           ; set SFX voice steal priority
+MUSIC_STATUS   = $BA50         ; bit 0=SFX playing, bit 1=music playing
 FIO_ERR_EOD   = $03            ; end of directory
 
 ; --- XMC expansion memory controller registers ---
@@ -8692,68 +8702,68 @@ LAB_SPRDATA
       STA   VGC_CMD            ; trigger
       RTS
 
-; perform SOUND channel, frequency, duration
+; perform SOUND note, duration [, instrument]
+; SOUND 60, 10          — MIDI note 60, 10 frames, default instrument 0
+; SOUND 60, 10, 3       — MIDI note 60, 10 frames, instrument 3
 
 LAB_SOUND
-      JSR   LAB_GTBY          ; channel (0-3)
-      STX   VSC_P0
+      JSR   LAB_GTBY          ; midi note → X
+      STX   FIO_SRCL          ; note
       JSR   LAB_1C01          ; comma
-      JSR   LAB_GTWRD         ; frequency as 16-bit
-      LDA   FAC1_3            ; frequency low byte
-      STA   VSC_P1
-      LDA   FAC1_2            ; frequency high byte
-      STA   VSC_P2
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTWRD         ; duration as 16-bit
-      LDA   FAC1_3            ; duration low byte
-      STA   VSC_P3
-      LDA   FAC1_2            ; duration high byte
-      STA   VSC_P4
-      LDA   #VSCMD_SOUND
-      STA   VSC_CMD
+      JSR   LAB_GTBY          ; duration → X
+      STX   FIO_SRCH          ; duration
+      LDA   #$00
+      STA   FIO_ENDL          ; default instrument = 0
+      JSR   LAB_GBYT          ; peek next token
+      CMP   #','
+      BNE   @snd_go
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; instrument id → X
+      STX   FIO_ENDL
+@snd_go
+      LDA   #FIO_CMD_SOUND
+      STA   FIO_CMD
       RTS
 
-; perform VOLUME level
+; perform VOLUME level (0-15)
 
 LAB_VOLUME
-      JSR   LAB_GTBY          ; volume level
-      STX   VSC_P0
-      LDA   #VSCMD_VOLUME
-      STA   VSC_CMD
+      JSR   LAB_GTBY          ; level → X
+      STX   FIO_SRCL
+      LDA   #FIO_CMD_VOLUME
+      STA   FIO_CMD
       RTS
 
-; perform ENVELOPE channel, a, d, s, r
+; perform INSTRUMENT id, waveform, a, d, s, r
+; Waveform: $10=TRI, $20=SAW, $40=PULSE, $80=NOISE
+; INSTRUMENT 1, $40, 0, 9, 0, 0
 
 LAB_ENVELOPE
-      JSR   LAB_GTBY          ; channel
-      STX   VSC_P0
-      JSR   LAB_1C01
-      JSR   LAB_GTBY          ; attack
-      STX   VSC_P1
-      JSR   LAB_1C01
-      JSR   LAB_GTBY          ; decay
-      STX   VSC_P2
-      JSR   LAB_1C01
-      JSR   LAB_GTBY          ; sustain
-      STX   VSC_P3
-      JSR   LAB_1C01
-      JSR   LAB_GTBY          ; release
-      STX   VSC_P4
-      LDA   #VSCMD_ENV
-      STA   VSC_CMD
+      JSR   LAB_GTBY          ; id → X
+      STX   FIO_SRCL
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; waveform → X
+      STX   FIO_SRCH
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; attack → X
+      STX   FIO_ENDL
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; decay → X
+      STX   FIO_ENDH
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; sustain → X
+      STX   FIO_SIZEL
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; release → X
+      STX   FIO_SIZEH
+      LDA   #FIO_CMD_INSTRUMENT
+      STA   FIO_CMD
       RTS
 
-; perform WAVE channel, waveform
+; WAVE is deprecated — use INSTRUMENT instead
 
 LAB_WAVE
-      JSR   LAB_GTBY          ; channel
-      STX   VSC_P0
-      JSR   LAB_1C01
-      JSR   LAB_GTBY          ; waveform
-      STX   VSC_P1
-      LDA   #VSCMD_WAVE
-      STA   VSC_CMD
-      RTS
+      JMP   LAB_15D9          ; syntax error
 
 ; perform VSYNC — wait for next frame (vblank sync)
 
@@ -10103,9 +10113,6 @@ LBB_DO
 TAB_ASCE
 LBB_ELSE
       .byte "LSE",TK_ELSE     ; ELSE
-LBB_ENVELOPE
-      .byte "NVELOPE",TK_ENVELOPE
-                              ; ENVELOPE
 LBB_END
       .byte "ND",TK_END       ; END
 LBB_EOR
@@ -10146,6 +10153,9 @@ LBB_INC
       .byte "NC",TK_INC       ; INC
 LBB_INPUT
       .byte "NPUT",TK_INPUT   ; INPUT
+LBB_INSTRUMENT
+      .byte "NSTRUMENT",TK_ENVELOPE
+                              ; INSTRUMENT
 LBB_INT
       .byte "NT(",TK_INT      ; INT(
 LBB_IRQ
@@ -10463,8 +10473,8 @@ LAB_KEYT
       .word LBB_SOUND         ; SOUND
       .byte 6,'V'
       .word LBB_VOLUME        ; VOLUME
-      .byte 8,'E'
-      .word LBB_ENVELOPE      ; ENVELOPE
+      .byte 10,'I'
+      .word LBB_INSTRUMENT    ; INSTRUMENT
       .byte 4,'W'
       .word LBB_WAVE          ; WAVE
       .byte 5,'V'
