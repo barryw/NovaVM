@@ -481,6 +481,8 @@ XTK_XMAP          = $0E              ; extended token id: XMAP
 XTK_XUNMAP        = $0F              ; extended token id: XUNMAP
 XTK_GSAVE         = $10              ; extended token id: GSAVE
 XTK_GLOAD         = $11              ; extended token id: GLOAD
+XTK_SIDPLAY       = $12              ; extended token id: SIDPLAY
+XTK_SIDSTOP       = $13              ; extended token id: SIDSTOP
 
 ; offsets from a base of X or Y
 
@@ -1811,6 +1813,8 @@ TAB_XTKCMD
       .word LAB_XUNMAP-1      ; XTK_XUNMAP ($0F)
       .word LAB_GSAVE-1       ; XTK_GSAVE ($10)
       .word LAB_GLOAD-1       ; XTK_GLOAD ($11)
+      .word LAB_SIDPLAY-1     ; XTK_SIDPLAY ($12)
+      .word LAB_SIDSTOP-1     ; XTK_SIDSTOP ($13)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -8127,13 +8131,13 @@ LAB_TWOPI
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 17
+XTK_COUNT = 19
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
       .word @s_xpeek, @s_stash, @s_fetch, @s_xfree, @s_xreset
       .word @s_xalloc, @s_xdir, @s_xdel, @s_xmap, @s_xunmap
-      .word @s_gsave, @s_gload
+      .word @s_gsave, @s_gload, @s_sidplay, @s_sidstop
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8152,6 +8156,8 @@ TAB_XTKSTR
 @s_xunmap: .byte "XUNMAP",0
 @s_gsave:  .byte "GSAVE",0
 @s_gload:  .byte "GLOAD",0
+@s_sidplay: .byte "SIDPLAY",0
+@s_sidstop: .byte "SIDSTOP",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8259,6 +8265,8 @@ FIO_CMD_DIRREAD = $04          ; advance to next entry
 FIO_CMD_DELETE = $05           ; delete a single *.bas file by name
 FIO_CMD_GSAVE = $06            ; save VGC memory block to *.gfx
 FIO_CMD_GLOAD = $07            ; load *.gfx into VGC memory block
+FIO_CMD_SIDPLAY = $08          ; load .sid and start playback
+FIO_CMD_SIDSTOP = $09          ; stop SID playback
 FIO_ERR_EOD   = $03            ; end of directory
 
 ; --- XMC expansion memory controller registers ---
@@ -8969,6 +8977,43 @@ LAB_GLOAD
       JMP   LAB_FIO_ERRFNF
 @gl_errio
       JMP   LAB_FIO_ERRIO
+
+; perform SIDPLAY "filename" [, song]
+
+LAB_SIDPLAY
+      JSR   LAB_FIO_GETNAME   ; parse filename → FIO_NAME/FIO_NAMELEN
+      BCC   @sp_have_name
+      JMP   LAB_FIO_ERRIO
+@sp_have_name
+      LDA   #$01              ; default song = 1
+      STA   FIO_SRCL
+      JSR   LAB_GBYT          ; peek next token
+      CMP   #','
+      BNE   @sp_go
+      JSR   LAB_1C01          ; consume comma
+      JSR   LAB_GTBY          ; evaluate song number → X
+      STX   FIO_SRCL
+@sp_go
+      LDA   #FIO_CMD_SIDPLAY
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @sp_chk_err
+      RTS
+@sp_chk_err
+      LDA   FIO_ERRCODE
+      CMP   #$01              ; not found?
+      BNE   @sp_errio
+      JMP   LAB_FIO_ERRFNF
+@sp_errio
+      JMP   LAB_FIO_ERRIO
+
+; perform SIDSTOP
+
+LAB_SIDSTOP
+      LDA   #FIO_CMD_SIDSTOP
+      STA   FIO_CMD
+      RTS
 
 ; perform DEL "filename"
 
