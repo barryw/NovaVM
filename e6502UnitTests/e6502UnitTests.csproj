@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\e6502\e6502.csproj" />
     <ProjectReference Include="..\e6502.Avalonia\e6502.Avalonia.csproj" />
+    <ProjectReference Include="..\e6502.Tools\e6502.Tools.csproj" />
   </ItemGroup>
 
 
