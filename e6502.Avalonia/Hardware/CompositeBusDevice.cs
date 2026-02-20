@@ -9,10 +9,12 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly SidChip _sid;
     private readonly FileIoController _fio;
     private readonly VirtualExpansionMemoryController _xmc;
+    private readonly VirtualTimerController _timer = new();
 
     public VirtualGraphicsController Vgc => _vgc;
     public SidChip Sid => _sid;
     public FileIoController Fio => _fio;
+    public VirtualTimerController Timer => _timer;
 
     public CompositeBusDevice(bool enableSound = false)
     {
@@ -54,10 +56,12 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         WriteWord(VgcConstants.VectorTableBase + 0x08, VgcConstants.SidBase);
         WriteWord(VgcConstants.VectorTableBase + 0x0A, VgcConstants.FioBase);
         WriteWord(VgcConstants.VectorTableBase + 0x0C, VgcConstants.XmcBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x0E, VgcConstants.TimerBase);
     }
 
     public byte Read(ushort address)
     {
+        if (_timer.OwnsAddress(address)) return _timer.Read(address);
         if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
         if (_vgc.OwnsAddress(address)) return _vgc.Read(address);
@@ -66,6 +70,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     public void Write(ushort address, byte data)
     {
+        if (_timer.OwnsAddress(address)) { _timer.Write(address, data); return; }
         if (_xmc.OwnsAddress(address)) { _xmc.Write(address, data); return; }
         if (_fio.OwnsAddress(address)) { _fio.Write(address, data); return; }
         if (_vgc.OwnsAddress(address)) { _vgc.Write(address, data); return; }

@@ -149,7 +149,18 @@ public static class VgcConstants
     public const byte XmcErrName       = 0x05;
     public const byte XmcErrEndOfDir   = 0x06;
 
-    public const int FreeBase          = 0xBA40;
+    // -------------------------------------------------------------------------
+    // Timer controller registers ($BA40-$BA4F)
+    // -------------------------------------------------------------------------
+
+    public const int TimerBase         = 0xBA40;
+    public const int TimerEnd          = 0xBA4F;
+    public const int TimerCtrl         = 0xBA40;  // bit 0 = enable
+    public const int TimerStatus       = 0xBA41;  // bit 0 = IRQ pending (read clears)
+    public const int TimerDivL         = 0xBA42;  // divisor low byte
+    public const int TimerDivH         = 0xBA43;  // divisor high byte
+
+    public const int FreeBase          = 0xBA50;
     public const int FreeEnd           = 0xBFFF;
 
     public const int RomBase           = 0xC000;

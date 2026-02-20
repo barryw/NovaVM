@@ -42,7 +42,20 @@ public partial class MainWindow : Window
         // CPU thread
         var cpuThread = new Thread(() =>
         {
-            while (_running) _cpu.ExecuteNext();
+            int timerAccum = 0;
+            while (_running)
+            {
+                int cycles = _cpu.ClocksForNext();
+                _cpu.ExecuteNext();
+                timerAccum += cycles;
+                if (timerAccum >= 100)
+                {
+                    _bus.Timer.Tick();
+                    if (_bus.Timer.IrqPending)
+                        _cpu.IrqWaiting = true;
+                    timerAccum -= 100;
+                }
+            }
         }) { IsBackground = true, Name = "CpuThread" };
         cpuThread.Start();
 
