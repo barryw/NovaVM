@@ -132,6 +132,16 @@ public sealed class EmulatorTcpServer : IDisposable
                 "sid_play" => CmdSidPlay(req),
                 "sid_stop" => CmdSidStop(),
                 "sid_info" => CmdSidInfo(req),
+                // Music engine commands
+                "instrument" => CmdInstrument(req),
+                "sound" => CmdSound(req),
+                "volume" => CmdVolume(req),
+                "music_seq" => CmdMusicSeq(req),
+                "music_play" => CmdMusicPlay(),
+                "music_stop" => CmdMusicStop(),
+                "music_tempo" => CmdMusicTempo(req),
+                "music_loop" => CmdMusicLoop(req),
+                "music_status" => CmdMusicStatus(),
                 _ => Error($"Unknown command: {cmd}")
             };
         }
@@ -850,6 +860,97 @@ public sealed class EmulatorTcpServer : IDisposable
             ["play_address"] = info.PlayAddress,
             ["version"] = info.Version,
             ["speed"] = info.UsesCiaTiming ? "CIA" : "VBI"
+        };
+        return result.ToJsonString();
+    }
+
+    // ── Music engine commands ─────────────────────────────────────────────
+
+    private string CmdInstrument(JsonNode req)
+    {
+        int? id = req["id"]?.GetValue<int>();
+        int? waveform = req["waveform"]?.GetValue<int>();
+        int? a = req["a"]?.GetValue<int>();
+        int? d = req["d"]?.GetValue<int>();
+        int? s = req["s"]?.GetValue<int>();
+        int? r = req["r"]?.GetValue<int>();
+        if (id is null || waveform is null || a is null || d is null || s is null || r is null)
+            return Error("Need id, waveform, a, d, s, r");
+
+        _bus.Music.DefineInstrument(id.Value, (byte)waveform.Value,
+            (byte)a.Value, (byte)d.Value, (byte)s.Value, (byte)r.Value);
+        return Ok();
+    }
+
+    private string CmdSound(JsonNode req)
+    {
+        int? note = req["note"]?.GetValue<int>();
+        int? duration = req["duration"]?.GetValue<int>();
+        if (note is null || duration is null)
+            return Error("Need note, duration");
+
+        int instrument = req["instrument"]?.GetValue<int>() ?? 0;
+        _bus.Music.PlaySound(note.Value, duration.Value, instrument);
+        return Ok();
+    }
+
+    private string CmdVolume(JsonNode req)
+    {
+        int? level = req["level"]?.GetValue<int>();
+        if (level is null) return Error("Need level");
+
+        _bus.Music.SetVolume(level.Value);
+        return Ok();
+    }
+
+    private string CmdMusicSeq(JsonNode req)
+    {
+        int? voice = req["voice"]?.GetValue<int>();
+        string? mml = req["mml"]?.GetValue<string>();
+        if (voice is null || mml is null)
+            return Error("Need voice (1-3), mml");
+
+        _bus.Music.SetSequence(voice.Value - 1, mml);
+        return Ok();
+    }
+
+    private string CmdMusicPlay()
+    {
+        _bus.Music.MusicPlay();
+        return Ok();
+    }
+
+    private string CmdMusicStop()
+    {
+        _bus.Music.MusicStop();
+        return Ok();
+    }
+
+    private string CmdMusicTempo(JsonNode req)
+    {
+        int? bpm = req["bpm"]?.GetValue<int>();
+        if (bpm is null) return Error("Need bpm");
+
+        _bus.Music.SetTempo(bpm.Value);
+        return Ok();
+    }
+
+    private string CmdMusicLoop(JsonNode req)
+    {
+        bool? on = req["on"]?.GetValue<bool>();
+        if (on is null) return Error("Need on (true/false)");
+
+        _bus.Music.SetLoop(on.Value);
+        return Ok();
+    }
+
+    private string CmdMusicStatus()
+    {
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["sfx_playing"] = _bus.Music.IsPlaying,
+            ["music_playing"] = _bus.Music.IsMusicPlaying
         };
         return result.ToJsonString();
     }

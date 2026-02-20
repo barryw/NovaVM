@@ -437,6 +437,127 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
+    // ── Music engine commands ─────────────────────────────────────────────
+
+    [McpServerTool, Description("Define a SID instrument with waveform and ADSR envelope.")]
+    public static async Task<string> Instrument(
+        EmulatorClient client,
+        [Description("Instrument slot (0-15)")] int id,
+        [Description("Waveform: 1=triangle, 2=sawtooth, 4=pulse, 8=noise")] int waveform,
+        [Description("Attack (0-15)")] int a,
+        [Description("Decay (0-15)")] int d,
+        [Description("Sustain (0-15)")] int s,
+        [Description("Release (0-15)")] int r)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "instrument",
+            ["id"] = id, ["waveform"] = waveform,
+            ["a"] = a, ["d"] = d, ["s"] = s, ["r"] = r
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Play a sound effect on the SID chip. Uses voice stealing with priority.")]
+    public static async Task<string> Sound(
+        EmulatorClient client,
+        [Description("MIDI note number (0-127, 60=middle C)")] int note,
+        [Description("Duration in 60Hz frames")] int duration,
+        [Description("Instrument slot to use (0-15, default 0)")] int instrument = 0)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sound",
+            ["note"] = note, ["duration"] = duration, ["instrument"] = instrument
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set the SID master volume level.")]
+    public static async Task<string> Volume(
+        EmulatorClient client,
+        [Description("Volume level (0-15)")] int level)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "volume",
+            ["level"] = level
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set an MML (Music Macro Language) sequence for a SID voice. Call music_play after setting all voices.")]
+    public static async Task<string> MusicSeq(
+        EmulatorClient client,
+        [Description("Voice number (1-3)")] int voice,
+        [Description("MML string (e.g. 'T120 O4 L4 CDEFG')")] string mml)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "music_seq",
+            ["voice"] = voice, ["mml"] = mml
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Start music playback of loaded MML sequences.")]
+    public static async Task<string> MusicPlay(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "music_play"
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Stop music playback and silence all music voices.")]
+    public static async Task<string> MusicStop(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "music_stop"
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set the music tempo in beats per minute.")]
+    public static async Task<string> MusicTempo(
+        EmulatorClient client,
+        [Description("Tempo in BPM (32-480)")] int bpm)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "music_tempo",
+            ["bpm"] = bpm
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Enable or disable music looping.")]
+    public static async Task<string> MusicLoop(
+        EmulatorClient client,
+        [Description("true to loop, false to play once")] bool on)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "music_loop",
+            ["on"] = on
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Get music engine status: whether SFX and/or music are currently playing.")]
+    public static async Task<string> MusicStatus(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "music_status"
+        });
+        return result.ToJsonString();
+    }
+
+    // ── SID file commands ────────────────────────────────────────────────
+
     [McpServerTool, Description("Load and play a SID music file. Sets up IRQ trampoline and timer. Returns init_address that should be called to initialize playback.")]
     public static async Task<string> SidPlay(
         EmulatorClient client,
