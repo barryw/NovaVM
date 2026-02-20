@@ -9039,13 +9039,13 @@ LAB_MUSIC
       JSR   LAB_GBYT          ; peek next byte (after MUSIC token consumed)
       CMP   #'P'
       BEQ   @m_chk_p
-      CMP   #'S'
-      BEQ   @m_stop
+      CMP   #TK_STOP           ; STOP is tokenized by BASIC
+      BEQ   @m_stop_tok
       CMP   #'T'
       BEQ   @m_tempo
-      CMP   #'L'
-      BEQ   @m_loop
-      ; Not a subcommand letter — must be a number (voice 1-3)
+      CMP   #TK_LOOP           ; LOOP is tokenized by BASIC
+      BEQ   @m_loop_tok
+      ; Not a subcommand — must be a number (voice 1-3)
       JMP   @m_seq
 
 ; --- MUSIC PLAY or PRIORITY ---
@@ -9066,12 +9066,9 @@ LAB_MUSIC
       CLI                     ; enable interrupts for music
       RTS
 
-; --- MUSIC STOP ---
-@m_stop
-      JSR   LAB_IGBY          ; S
-      JSR   LAB_IGBY          ; T
-      JSR   LAB_IGBY          ; O
-      JSR   LAB_IGBY          ; P
+; --- MUSIC STOP (TK_STOP is a single token byte) ---
+@m_stop_tok
+      JSR   LAB_IGBY          ; consume TK_STOP token
       LDA   #FIO_CMD_MSTOP
       STA   FIO_CMD
       RTS
@@ -9092,14 +9089,10 @@ LAB_MUSIC
       STA   FIO_CMD
       RTS
 
-; --- MUSIC LOOP ON|OFF ---
-@m_loop
-      JSR   LAB_IGBY          ; L
-      JSR   LAB_IGBY          ; O
-      JSR   LAB_IGBY          ; O
-      JSR   LAB_IGBY          ; P
-      JSR   LAB_IGBY          ; skip past LOOP, now at ON/OFF
-      ; ON and OFF are tokenized
+; --- MUSIC LOOP ON|OFF (TK_LOOP is a single token byte) ---
+@m_loop_tok
+      JSR   LAB_IGBY          ; consume TK_LOOP token
+      JSR   LAB_GBYT          ; skip spaces, get TK_ON or TK_OFF
       CMP   #TK_ON
       BEQ   @m_loop_on
       CMP   #TK_OFF
