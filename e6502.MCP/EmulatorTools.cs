@@ -437,6 +437,44 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
+    [McpServerTool, Description("Load and play a SID music file. Sets up IRQ trampoline and timer. Returns init_address that should be called to initialize playback.")]
+    public static async Task<string> SidPlay(
+        EmulatorClient client,
+        [Description("Path to the .sid file")] string path,
+        [Description("Song number (1-based, default 1)")] int song = 1)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sid_play",
+            ["path"] = path,
+            ["song"] = song
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Stop SID playback and silence all voices.")]
+    public static async Task<string> SidStop(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sid_stop"
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Read metadata from a SID file without loading it.")]
+    public static async Task<string> SidInfo(
+        EmulatorClient client,
+        [Description("Path to the .sid file")] string path)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "sid_info",
+            ["path"] = path
+        });
+        return result.ToJsonString();
+    }
+
     private static string FormatGraphics(JsonNode resp)
     {
         var sb = new StringBuilder();

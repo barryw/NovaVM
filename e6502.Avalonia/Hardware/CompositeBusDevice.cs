@@ -38,6 +38,9 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         InitVectorTable();
     }
 
+    /// <summary>Write directly to backing RAM, bypassing ROM protection and hardware routing.</summary>
+    public void WriteRam(ushort address, byte data) => _ram[address] = data;
+
     public void Dispose() =>
         _sid.Dispose();
 

@@ -128,6 +128,10 @@ public sealed class EmulatorTcpServer : IDisposable
                 "sprite_priority" => CmdSpritePriority(req),
                 "sprite_flip" => CmdSpriteFlip(req),
                 "sprite_copy" => CmdSpriteCopy(req),
+                // SID commands
+                "sid_play" => CmdSidPlay(req),
+                "sid_stop" => CmdSidStop(),
+                "sid_info" => CmdSidInfo(req),
                 _ => Error($"Unknown command: {cmd}")
             };
         }
@@ -770,6 +774,128 @@ public sealed class EmulatorTcpServer : IDisposable
         _bus.Write(VgcConstants.RegP1, (byte)dest);
         _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdSprCopy);
         return Ok();
+    }
+
+    // ── SID commands ──────────────────────────────────────────────────────
+
+    private string CmdSidPlay(JsonNode req)
+    {
+        string? path = req["path"]?.GetValue<string>();
+        if (path is null) return Error("Missing 'path'");
+        int song = req["song"]?.GetValue<int>() ?? 1;
+
+        if (!File.Exists(path))
+            return Error($"File not found: {path}");
+
+        byte[] data = File.ReadAllBytes(path);
+        var info = SidFileParser.Parse(data);
+        if (!info.IsValid)
+            return Error("Invalid SID file");
+
+        // Validate load address fits in usable RAM
+        if (info.LoadAddress < VgcConstants.BasicBase)
+            return Error($"Load address ${info.LoadAddress:X4} below ${VgcConstants.BasicBase:X4}");
+        if (info.LoadAddress + info.Payload.Length > VgcConstants.BasicEnd + 1)
+            return Error($"Payload extends past ${VgcConstants.BasicEnd:X4}");
+
+        // Copy payload into RAM
+        for (int i = 0; i < info.Payload.Length; i++)
+            _bus.Write((ushort)(info.LoadAddress + i), info.Payload[i]);
+
+        // Inject IRQ trampoline at $03E0
+        // PHA; TXA; PHA; TYA; PHA; JSR play; LDA $BA41; PLA; TAY; PLA; TAX; PLA; RTI
+        byte playLo = (byte)(info.PlayAddress & 0xFF);
+        byte playHi = (byte)(info.PlayAddress >> 8);
+        byte[] trampoline =
+        [
+            0x48,                       // $03E0: PHA
+            0x8A,                       // $03E1: TXA
+            0x48,                       // $03E2: PHA
+            0x98,                       // $03E3: TYA
+            0x48,                       // $03E4: PHA
+            0x20, playLo, playHi,       // $03E5: JSR play
+            0xAD, 0x41, 0xBA,           // $03E8: LDA $BA41 (ack timer IRQ)
+            0x68,                       // $03EB: PLA
+            0xA8,                       // $03EC: TAY
+            0x68,                       // $03ED: PLA
+            0xAA,                       // $03EE: TAX
+            0x68,                       // $03EF: PLA
+            0x40                        // $03F0: RTI
+        ];
+        for (int i = 0; i < trampoline.Length; i++)
+            _bus.Write((ushort)(0x03E0 + i), trampoline[i]);
+
+        // Set IRQ vector at $FFFE/$FFFF to $03E0 (bypass ROM protection)
+        _bus.WriteRam(0xFFFE, 0xE0);
+        _bus.WriteRam(0xFFFF, 0x03);
+
+        // Configure timer: 50Hz for PAL (VBI), 60Hz for CIA timing
+        int divisor = info.UsesCiaTiming ? 167 : 200;
+        _bus.Write((ushort)VgcConstants.TimerDivL, (byte)(divisor & 0xFF));
+        _bus.Write((ushort)VgcConstants.TimerDivH, (byte)(divisor >> 8));
+        _bus.Write((ushort)VgcConstants.TimerCtrl, 0x01);
+
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["title"] = info.Title,
+            ["author"] = info.Author,
+            ["copyright"] = info.Copyright,
+            ["songs"] = info.Songs,
+            ["start_song"] = info.StartSong,
+            ["load_address"] = info.LoadAddress,
+            ["init_address"] = info.InitAddress,
+            ["play_address"] = info.PlayAddress,
+            ["speed"] = info.UsesCiaTiming ? "CIA" : "VBI",
+            ["song"] = song
+        };
+        return result.ToJsonString();
+    }
+
+    private string CmdSidStop()
+    {
+        // Disable timer
+        _bus.Write((ushort)VgcConstants.TimerCtrl, 0x00);
+
+        // Gate off all 3 SID voices (control registers at offsets $04, $0B, $12)
+        _bus.Write((ushort)(VgcConstants.SidBase + 0x04), 0x00);
+        _bus.Write((ushort)(VgcConstants.SidBase + 0x0B), 0x00);
+        _bus.Write((ushort)(VgcConstants.SidBase + 0x12), 0x00);
+
+        // Zero volume
+        _bus.Write((ushort)(VgcConstants.SidBase + 0x18), 0x00);
+
+        return Ok();
+    }
+
+    private string CmdSidInfo(JsonNode req)
+    {
+        string? path = req["path"]?.GetValue<string>();
+        if (path is null) return Error("Missing 'path'");
+
+        if (!File.Exists(path))
+            return Error($"File not found: {path}");
+
+        byte[] data = File.ReadAllBytes(path);
+        var info = SidFileParser.Parse(data);
+        if (!info.IsValid)
+            return Error("Invalid SID file");
+
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["title"] = info.Title,
+            ["author"] = info.Author,
+            ["copyright"] = info.Copyright,
+            ["songs"] = info.Songs,
+            ["start_song"] = info.StartSong,
+            ["load_address"] = info.LoadAddress,
+            ["init_address"] = info.InitAddress,
+            ["play_address"] = info.PlayAddress,
+            ["version"] = info.Version,
+            ["speed"] = info.UsesCiaTiming ? "CIA" : "VBI"
+        };
+        return result.ToJsonString();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
