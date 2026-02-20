@@ -47,6 +47,7 @@ public partial class MainWindow : Window
             {
                 int cycles = _cpu.ClocksForNext();
                 _cpu.ExecuteNext();
+                _bus.Sid.Clock(cycles);
                 timerAccum += cycles;
                 if (timerAccum >= 100)
                 {

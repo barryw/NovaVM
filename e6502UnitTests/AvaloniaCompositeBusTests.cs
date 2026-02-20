@@ -483,5 +483,8 @@ public class AvaloniaCompositeBusTests
 
         int xmcBase = bus.Read(0x020C) | (bus.Read(0x020D) << 8);
         Assert.AreEqual(VgcConstants.XmcBase, xmcBase);
+
+        int timerBase = bus.Read(0x020E) | (bus.Read(0x020F) << 8);
+        Assert.AreEqual(VgcConstants.TimerBase, timerBase);
     }
 }
