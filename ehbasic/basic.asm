@@ -483,6 +483,8 @@ XTK_GSAVE         = $10              ; extended token id: GSAVE
 XTK_GLOAD         = $11              ; extended token id: GLOAD
 XTK_SIDPLAY       = $12              ; extended token id: SIDPLAY
 XTK_SIDSTOP       = $13              ; extended token id: SIDSTOP
+XTK_MUSIC         = $14              ; extended token id: MUSIC
+XTK_PLAYING       = $15              ; extended token id: PLAYING (function)
 
 ; offsets from a base of X or Y
 
@@ -1815,6 +1817,8 @@ TAB_XTKCMD
       .word LAB_GLOAD-1       ; XTK_GLOAD ($11)
       .word LAB_SIDPLAY-1     ; XTK_SIDPLAY ($12)
       .word LAB_SIDSTOP-1     ; XTK_SIDSTOP ($13)
+      .word LAB_MUSIC-1       ; XTK_MUSIC ($14)
+      .word LAB_15D9-1        ; XTK_PLAYING ($15) - function only, syntax error
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -3492,6 +3496,8 @@ LAB_1BEE
       CMP   #TKX_PREFIX       ; extended token prefix (e.g. XPEEK)
       BNE   LAB_1BEE_STD
       JSR   LAB_IGBY          ; consume prefix, get extension id
+      CMP   #XTK_PLAYING
+      BEQ   @xtk_playing
       CMP   #XTK_XPEEK
       BNE   LAB_SNER          ; unknown extension in expression
       JSR   LAB_IGBY          ; consume extension id, now at '('
@@ -3514,6 +3520,14 @@ LAB_1BEE
 @xpeek_ok
       LDY   XMC_DATA
       JMP   LAB_1FD0          ; convert Y byte to FAC1 and return
+
+@xtk_playing
+      JSR   LAB_IGBY          ; consume PLAYING token, advance past it
+      LDA   MUSIC_STATUS      ; read status register
+      AND   #$01              ; isolate playing bit
+      TAY                     ; Y = result (0 or 1)
+      LDA   #$00              ; A = high byte = 0
+      JMP   LAB_AYFC          ; return AY as integer in FAC1
 
 LAB_1BEE_STD
       SEC                     ; plain token base subtraction
@@ -8131,13 +8145,14 @@ LAB_TWOPI
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 19
+XTK_COUNT = 21
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
       .word @s_xpeek, @s_stash, @s_fetch, @s_xfree, @s_xreset
       .word @s_xalloc, @s_xdir, @s_xdel, @s_xmap, @s_xunmap
       .word @s_gsave, @s_gload, @s_sidplay, @s_sidstop
+      .word @s_music, @s_playing
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8158,6 +8173,8 @@ TAB_XTKSTR
 @s_gload:  .byte "GLOAD",0
 @s_sidplay: .byte "SIDPLAY",0
 @s_sidstop: .byte "SIDSTOP",0
+@s_music:  .byte "MUSIC",0
+@s_playing: .byte "PLAYING",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -9026,6 +9043,145 @@ LAB_SIDSTOP
       LDA   #FIO_CMD_SIDSTOP
       STA   FIO_CMD
       RTS
+
+; perform MUSIC subcommand
+; MUSIC voice, "mml"
+; MUSIC PLAY | STOP | TEMPO bpm | LOOP ON|OFF | PRIORITY v1[,v2[,v3]]
+
+LAB_MUSIC
+      JSR   LAB_GBYT          ; peek next byte (after MUSIC token consumed)
+      CMP   #'P'
+      BEQ   @m_chk_p
+      CMP   #'S'
+      BEQ   @m_stop
+      CMP   #'T'
+      BEQ   @m_tempo
+      CMP   #'L'
+      BEQ   @m_loop
+      ; Not a subcommand letter — must be a number (voice 1-3)
+      JMP   @m_seq
+
+; --- MUSIC PLAY or PRIORITY ---
+@m_chk_p
+      ; Peek at second character to distinguish PLAY vs PRIORITY
+      INY                     ; advance basic offset
+      LDA   (Bpntrl),Y       ; peek second character
+      DEY                     ; restore
+      CMP   #'R'              ; PRIORITY starts PR...
+      BEQ   @m_priority
+      ; else PLAY — skip "PLAY" (4 chars)
+      JSR   LAB_IGBY          ; P
+      JSR   LAB_IGBY          ; L
+      JSR   LAB_IGBY          ; A
+      JSR   LAB_IGBY          ; Y
+      LDA   #FIO_CMD_MPLAY
+      STA   FIO_CMD
+      CLI                     ; enable interrupts for music
+      RTS
+
+; --- MUSIC STOP ---
+@m_stop
+      JSR   LAB_IGBY          ; S
+      JSR   LAB_IGBY          ; T
+      JSR   LAB_IGBY          ; O
+      JSR   LAB_IGBY          ; P
+      LDA   #FIO_CMD_MSTOP
+      STA   FIO_CMD
+      RTS
+
+; --- MUSIC TEMPO bpm ---
+@m_tempo
+      JSR   LAB_IGBY          ; T
+      JSR   LAB_IGBY          ; E
+      JSR   LAB_IGBY          ; M
+      JSR   LAB_IGBY          ; P
+      JSR   LAB_IGBY          ; O
+      JSR   LAB_GTWRD         ; bpm as 16-bit → FAC1_3(lo), FAC1_2(hi)
+      LDA   FAC1_3
+      STA   FIO_SRCL
+      LDA   FAC1_2
+      STA   FIO_SRCH
+      LDA   #FIO_CMD_MTEMPO
+      STA   FIO_CMD
+      RTS
+
+; --- MUSIC LOOP ON|OFF ---
+@m_loop
+      JSR   LAB_IGBY          ; L
+      JSR   LAB_IGBY          ; O
+      JSR   LAB_IGBY          ; O
+      JSR   LAB_IGBY          ; P
+      JSR   LAB_IGBY          ; skip past LOOP, now at ON/OFF
+      ; ON and OFF are tokenized
+      CMP   #TK_ON
+      BEQ   @m_loop_on
+      CMP   #TK_OFF
+      BEQ   @m_loop_off
+      JMP   LAB_15D9          ; syntax error
+@m_loop_on
+      JSR   LAB_IGBY          ; consume ON token
+      LDA   #$01
+      STA   FIO_SRCL
+      JMP   @m_loop_go
+@m_loop_off
+      JSR   LAB_IGBY          ; consume OFF token
+      LDA   #$00
+      STA   FIO_SRCL
+@m_loop_go
+      LDA   #FIO_CMD_MLOOP
+      STA   FIO_CMD
+      RTS
+
+; --- MUSIC PRIORITY v1[,v2[,v3]] ---
+@m_priority
+      ; skip "PRIORITY" = 8 chars
+      JSR   LAB_IGBY          ; P
+      JSR   LAB_IGBY          ; R
+      JSR   LAB_IGBY          ; I
+      JSR   LAB_IGBY          ; O
+      JSR   LAB_IGBY          ; R
+      JSR   LAB_IGBY          ; I
+      JSR   LAB_IGBY          ; T
+      JSR   LAB_IGBY          ; Y
+      JSR   LAB_GTBY          ; first voice → X
+      STX   FIO_SRCL
+      LDA   #$00
+      STA   FIO_SRCH
+      STA   FIO_ENDL
+      JSR   LAB_GBYT          ; peek
+      CMP   #','
+      BNE   @m_pri_go
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; second voice → X
+      STX   FIO_SRCH
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @m_pri_go
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; third voice → X
+      STX   FIO_ENDL
+@m_pri_go
+      LDA   #FIO_CMD_MPRI
+      STA   FIO_CMD
+      RTS
+
+; --- MUSIC voice, "mml" ---
+@m_seq
+      JSR   LAB_GTBY          ; voice number (1-3) → X
+      STX   FIO_SRCL          ; store voice
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_FIO_GETNAME   ; parse string → FIO_NAME/FIO_NAMELEN
+      BCC   @m_seq_go
+      JMP   LAB_FIO_ERRIO
+@m_seq_go
+      LDA   #FIO_CMD_MSEQ
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @m_seq_err
+      RTS
+@m_seq_err
+      JMP   LAB_FIO_ERRIO
 
 ; perform DEL "filename"
 
