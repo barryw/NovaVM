@@ -47,7 +47,6 @@ public partial class MainWindow : Window
             {
                 int cycles = _cpu.ClocksForNext();
                 _cpu.ExecuteNext();
-                _bus.Sid.Clock(cycles);
                 timerAccum += cycles;
                 if (timerAccum >= 100)
                 {
@@ -66,6 +65,7 @@ public partial class MainWindow : Window
             _bus.Vgc.IncrementFrameCounter();
             if (_bus.Vgc.IsRasterIrqEnabled)
                 _cpu.IrqWaiting = true;
+            _bus.Music.Tick();
             _canvas.RequestRedraw();
             return true;
         }, TimeSpan.FromMilliseconds(1000.0 / 60.0));

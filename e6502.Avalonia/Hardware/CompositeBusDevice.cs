@@ -11,17 +11,20 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly VirtualExpansionMemoryController _xmc;
     private readonly VirtualTimerController _timer = new();
     private readonly SidPlayer _sidPlayer;
+    private readonly MusicEngine _musicEngine;
 
     public VirtualGraphicsController Vgc => _vgc;
     public SidChip Sid => _sid;
     public FileIoController Fio => _fio;
     public VirtualTimerController Timer => _timer;
     public SidPlayer SidPlayer => _sidPlayer;
+    public MusicEngine Music => _musicEngine;
 
     public CompositeBusDevice(bool enableSound = false)
     {
         _sid = new SidChip(enableSound);
         _sidPlayer = new SidPlayer(this);
+        _musicEngine = new MusicEngine(this);
 
         _fio = new FileIoController(
             addr => _ram[addr],
@@ -30,7 +33,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             vgcRead: (space, offset) => _vgc.TryReadMemorySpace(space, offset, out byte value) ? value : (byte)0,
             vgcWrite: (space, offset, value) => _vgc.TryWriteMemorySpace(space, offset, value),
             vgcSpaceLength: space => _vgc.GetMemorySpaceLength(space),
-            sidPlayer: _sidPlayer);
+            sidPlayer: _sidPlayer,
+            musicEngine: _musicEngine);
         _xmc = new VirtualExpansionMemoryController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data);
@@ -68,6 +72,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     public byte Read(ushort address)
     {
+        if (address == VgcConstants.MusicStatus)
+            return (byte)((_musicEngine.IsPlaying ? 1 : 0) | (_musicEngine.IsMusicPlaying ? 2 : 0));
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
         if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);

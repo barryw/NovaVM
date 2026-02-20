@@ -70,6 +70,18 @@ public static class VgcConstants
     public const byte FioCmdGLoad      = 0x07;     // disk -> VGC memory
     public const byte FioCmdSidPlay    = 0x08;     // .sid file → SID playback
     public const byte FioCmdSidStop    = 0x09;     // stop SID playback
+    public const byte FioCmdInstrument = 0x0A;
+    public const byte FioCmdSound      = 0x0B;
+    public const byte FioCmdVolume     = 0x0C;
+    public const byte FioCmdMusicSeq   = 0x0D;
+    public const byte FioCmdMusicPlay  = 0x0E;
+    public const byte FioCmdMusicStop  = 0x0F;
+    public const byte FioCmdMusicTempo = 0x10;
+    public const byte FioCmdMusicLoop  = 0x11;
+    public const byte FioCmdMusicPri   = 0x12;
+
+    // Music/SFX status register
+    public const int  MusicStatus      = 0xBA50; // bit 0 = SFX playing, bit 1 = music playing
 
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;

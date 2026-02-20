@@ -12,6 +12,7 @@ public sealed partial class FileIoController
     private readonly Action<byte, int, byte>? _vgcWrite;
     private readonly Func<byte, int>? _vgcSpaceLength;
     private readonly SidPlayer? _sidPlayer;
+    private readonly MusicEngine? _musicEngine;
     private readonly string _saveDir;
     private List<FileInfo>? _dirFiles;
     private int _dirIndex;
@@ -23,7 +24,8 @@ public sealed partial class FileIoController
         Func<byte, int, byte>? vgcRead = null,
         Action<byte, int, byte>? vgcWrite = null,
         Func<byte, int>? vgcSpaceLength = null,
-        SidPlayer? sidPlayer = null)
+        SidPlayer? sidPlayer = null,
+        MusicEngine? musicEngine = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
@@ -31,6 +33,7 @@ public sealed partial class FileIoController
         _vgcWrite = vgcWrite;
         _vgcSpaceLength = vgcSpaceLength;
         _sidPlayer = sidPlayer;
+        _musicEngine = musicEngine;
         _saveDir = saveDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "e6502-programs");
@@ -82,6 +85,33 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdSidStop:
                 DoSidStop();
+                break;
+            case VgcConstants.FioCmdInstrument:
+                DoInstrument();
+                break;
+            case VgcConstants.FioCmdSound:
+                DoSound();
+                break;
+            case VgcConstants.FioCmdVolume:
+                DoVolume();
+                break;
+            case VgcConstants.FioCmdMusicSeq:
+                DoMusicSeq();
+                break;
+            case VgcConstants.FioCmdMusicPlay:
+                DoMusicPlay();
+                break;
+            case VgcConstants.FioCmdMusicStop:
+                DoMusicStop();
+                break;
+            case VgcConstants.FioCmdMusicTempo:
+                DoMusicTempo();
+                break;
+            case VgcConstants.FioCmdMusicLoop:
+                DoMusicLoop();
+                break;
+            case VgcConstants.FioCmdMusicPri:
+                DoMusicPri();
                 break;
             default:
                 SetError(VgcConstants.FioErrIo);
@@ -397,6 +427,104 @@ public sealed partial class FileIoController
         if (_sidPlayer is null) { SetError(VgcConstants.FioErrIo); return; }
         _sidPlayer.Stop();
         SetOk();
+    }
+
+    private void DoInstrument()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        int id        = _regs[VgcConstants.FioSrcL   - VgcConstants.FioBase];
+        byte waveform = _regs[VgcConstants.FioSrcH   - VgcConstants.FioBase];
+        byte a        = _regs[VgcConstants.FioEndL   - VgcConstants.FioBase];
+        byte d        = _regs[VgcConstants.FioEndH   - VgcConstants.FioBase];
+        byte s        = _regs[VgcConstants.FioSizeL  - VgcConstants.FioBase];
+        byte r        = _regs[VgcConstants.FioSizeH  - VgcConstants.FioBase];
+        _musicEngine.DefineInstrument(id, waveform, a, d, s, r);
+        SetOk();
+    }
+
+    private void DoSound()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        int note     = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        int duration = _regs[VgcConstants.FioSrcH - VgcConstants.FioBase];
+        int instId   = _regs[VgcConstants.FioEndL - VgcConstants.FioBase];
+        _musicEngine.PlaySound(note, duration, instId);
+        SetOk();
+    }
+
+    private void DoVolume()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        int level = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        _musicEngine.SetVolume(level);
+        SetOk();
+    }
+
+    private void DoMusicSeq()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        int voice = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        string? mml = ReadMmlString();
+        if (mml is null) { SetError(VgcConstants.FioErrIo); return; }
+        // voice from BASIC is 1-3, MusicEngine expects 0-2
+        _musicEngine.SetSequence(voice - 1, mml);
+        SetOk();
+    }
+
+    private void DoMusicPlay()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        _musicEngine.MusicPlay();
+        SetOk();
+    }
+
+    private void DoMusicStop()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        _musicEngine.MusicStop();
+        SetOk();
+    }
+
+    private void DoMusicTempo()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        int bpm = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+                | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
+        _musicEngine.SetTempo(bpm);
+        SetOk();
+    }
+
+    private void DoMusicLoop()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        bool on = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase] != 0;
+        _musicEngine.SetLoop(on);
+        SetOk();
+    }
+
+    private void DoMusicPri()
+    {
+        if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
+        var pri = new List<int>();
+        byte v1 = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        byte v2 = _regs[VgcConstants.FioSrcH - VgcConstants.FioBase];
+        byte v3 = _regs[VgcConstants.FioEndL - VgcConstants.FioBase];
+        if (v1 > 0) pri.Add(v1 - 1); // convert 1-based to 0-based
+        if (v2 > 0) pri.Add(v2 - 1);
+        if (v3 > 0) pri.Add(v3 - 1);
+        _musicEngine.SetPriority(pri.ToArray());
+        SetOk();
+    }
+
+    private string? ReadMmlString()
+    {
+        int len = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
+        if (len < 1 || len > 63) return null;
+        var sb = new StringBuilder(len);
+        int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
+        for (int i = 0; i < len; i++)
+            sb.Append((char)_regs[nameOffset + i]);
+        return sb.ToString();
     }
 
     private void PopulateDirEntry(FileInfo fi)
