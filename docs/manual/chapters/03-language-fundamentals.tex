@@ -1,0 +1,307 @@
+% =============================================================================
+% NovaBASIC v1.0 User Guide — Chapter 3: Language Fundamentals
+% =============================================================================
+\chapter{Language Fundamentals}
+
+\epigraph{%
+  Simplicity is the ultimate sophistication.
+}{%
+  \textit{Leonardo da Vinci}%
+}
+
+NovaBASIC inherits a rich language from EhBASIC~2.22p5 and extends it with
+hardware-specific commands.  This chapter covers the core language features
+you will use in almost every program: variables, arrays, control flow,
+operators, built-in functions, and direct memory access.
+
+% ---------------------------------------------------------------------------
+\section{Variables}
+
+NovaBASIC has two kinds of variable: \textbf{numeric} and \textbf{string}.
+
+\begin{description}
+  \item[Numeric variables] hold floating-point numbers.  Names begin with a
+    letter and may contain letters and digits (e.g.\ \texttt{A},
+    \texttt{SCORE}, \texttt{X1}, \texttt{HITCOUNT}).
+  \item[String variables] hold text.  Names end with a dollar sign
+    (e.g.\ \texttt{N\$}, \texttt{NAME\$}, \texttt{MSG\$}).
+\end{description}
+
+Variable names are \textbf{case-insensitive}: \texttt{SCORE} and
+\texttt{score} refer to the same variable.  Numeric variables default to
+\texttt{0}; string variables default to the empty string.  You do not need to
+declare a variable before using it.
+
+\begin{lstlisting}[style=basiclisting]
+10 SCORE = 0
+20 NAME$ = "PLAYER ONE"
+30 LIVES = 3
+40 PRINT NAME$; " HAS "; LIVES; " LIVES"
+50 SCORE = SCORE + 100
+60 PRINT "SCORE: "; SCORE
+\end{lstlisting}
+
+% ---------------------------------------------------------------------------
+\section{Arrays}
+
+Use \cmd{DIM} to declare an array before using it.  The default lower bound
+is~0, so \cmd{DIM A(10)} creates 11 elements: \texttt{A(0)} through
+\texttt{A(10)}.
+
+\begin{lstlisting}[style=basiclisting]
+10 DIM A(10)
+20 FOR I=0 TO 10
+30   A(I) = I * I
+40 NEXT I
+50 FOR I=0 TO 10
+60   PRINT "A(";I;") = ";A(I)
+70 NEXT I
+\end{lstlisting}
+
+\noindent
+Two-dimensional arrays work the same way:
+
+\begin{lstlisting}[style=basiclisting]
+10 DIM GRID(7,7)
+20 FOR R=0 TO 7
+30   FOR C=0 TO 7
+40     GRID(R,C) = R*8 + C
+50   NEXT C
+60 NEXT R
+\end{lstlisting}
+
+\begin{notebox}
+  String arrays are also supported: \cmd{DIM LABEL\$(9)} creates ten
+  string slots.
+\end{notebox}
+
+% ---------------------------------------------------------------------------
+\section{Control Flow}
+
+\subsection{FOR / NEXT Loops}
+
+The workhorse of NovaBASIC iteration.  The optional \cmd{STEP} clause sets
+the increment; if omitted, it defaults to~1.
+
+\begin{lstlisting}[style=basiclisting]
+10 FOR I = 1 TO 10
+20   PRINT I; " ";
+30 NEXT I
+40 PRINT
+50 REM count down with STEP
+60 FOR N = 10 TO 1 STEP -1
+70   PRINT N; " ";
+80 NEXT N
+\end{lstlisting}
+
+\subsection{IF / THEN / ELSE}
+
+\begin{lstlisting}[style=basiclisting]
+10 INPUT "ENTER A NUMBER: "; N
+20 IF N > 100 THEN PRINT "BIG" ELSE PRINT "SMALL"
+30 IF N = 42 THEN PRINT "THE ANSWER"
+\end{lstlisting}
+
+\noindent
+\cmd{THEN} may be followed by a statement or a line number
+(as a \cmd{GOTO} shorthand).  \cmd{ELSE} is optional.
+
+\subsection{DO / LOOP}
+
+\cmd{DO}/\cmd{LOOP} supports four variants for flexible looping:
+
+\begin{lstlisting}[style=basiclisting]
+10 X = 1
+20 DO
+30   PRINT X
+40   X = X + 1
+50 LOOP WHILE X <= 5
+
+100 Y = 10
+110 DO UNTIL Y = 0
+120   PRINT Y
+130   Y = Y - 1
+140 LOOP
+\end{lstlisting}
+
+\subsection{GOSUB / RETURN}
+
+Use subroutines to avoid repeating code.  \cmd{GOSUB} branches to a line
+number and \cmd{RETURN} comes back:
+
+\begin{lstlisting}[style=basiclisting]
+10 GOSUB 1000
+20 GOSUB 1000
+30 END
+1000 REM draw border subroutine
+1010 PRINT "----------"
+1020 RETURN
+\end{lstlisting}
+
+\subsection{GOTO}
+
+\cmd{GOTO} unconditionally jumps to a line number.  Use it sparingly;
+\cmd{GOSUB}/\cmd{RETURN} and structured loops are usually cleaner.
+
+% ---------------------------------------------------------------------------
+\section{Operators}
+
+\begin{longtable}{>{\ttfamily}p{0.20\textwidth} p{0.22\textwidth} p{0.48\textwidth}}
+\toprule
+\normalfont\textbf{Operator} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
++  & Arithmetic & Addition \\[2pt]
+-  & Arithmetic & Subtraction or unary negation \\[2pt]
+*  & Arithmetic & Multiplication \\[2pt]
+/  & Arithmetic & Division \\[2pt]
+\^{}  & Arithmetic & Exponentiation (\texttt{2\^{}8} = 256) \\[4pt]
+=  & Comparison & Equal to \\[2pt]
+<  & Comparison & Less than \\[2pt]
+>  & Comparison & Greater than \\[2pt]
+<= & Comparison & Less than or equal to \\[2pt]
+>= & Comparison & Greater than or equal to \\[2pt]
+<> & Comparison & Not equal to \\[4pt]
+AND & Logical   & Logical (bitwise) AND \\[2pt]
+OR  & Logical   & Logical (bitwise) OR \\[2pt]
+NOT & Logical   & Logical (bitwise) NOT \\[2pt]
+EOR & Logical   & Exclusive OR \\[4pt]
+<< & Bit        & Left shift (\texttt{LSHIFT}) \\[2pt]
+>> & Bit        & Right shift (\texttt{RSHIFT}) \\[4pt]
+BITSET & Bit    & Set a bit in an integer \\[2pt]
+BITCLR & Bit    & Clear a bit in an integer \\[2pt]
+BITTST(n,b) & Bit & Test bit \textit{b} of integer \textit{n} \\
+\end{longtable}
+
+% ---------------------------------------------------------------------------
+\section{Built-in Functions}
+
+\subsection{Numeric Functions}
+
+\begin{longtable}{>{\ttfamily}p{0.28\textwidth} p{0.64\textwidth}}
+\toprule
+\normalfont\textbf{Function} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+INT(x)   & Truncate to integer (towards zero) \\[2pt]
+ABS(x)   & Absolute value \\[2pt]
+SGN(x)   & Sign: $-1$, $0$, or $1$ \\[2pt]
+SQR(x)   & Square root \\[2pt]
+RND(1)   & Pseudo-random number in $[0, 1)$ \\[2pt]
+LOG(x)   & Natural logarithm \\[2pt]
+EXP(x)   & $e^x$ \\[2pt]
+SIN(x)   & Sine (radians) \\[2pt]
+COS(x)   & Cosine (radians) \\[2pt]
+TAN(x)   & Tangent (radians) \\[2pt]
+ATN(x)   & Arctangent (radians) \\[2pt]
+PI       & The constant $\pi \approx 3.14159$ \\[2pt]
+TWOPI    & The constant $2\pi \approx 6.28318$ \\[2pt]
+MAX(a,b) & Larger of two values \\[2pt]
+MIN(a,b) & Smaller of two values \\[2pt]
+PEEK(addr) & Read a byte from memory address \textit{addr} \\[2pt]
+DEEK(addr) & Read a 16-bit word from address \textit{addr} \\[2pt]
+FRE(0)   & Free BASIC program memory in bytes \\[2pt]
+POS(0)   & Current cursor column position \\
+\end{longtable}
+
+\subsection{String Functions}
+
+\begin{longtable}{>{\ttfamily}p{0.34\textwidth} p{0.58\textwidth}}
+\toprule
+\normalfont\textbf{Function} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+LEN(s\$)          & Number of characters in the string \\[2pt]
+CHR\$(n)          & Character whose ASCII code is \textit{n} \\[2pt]
+ASC(s\$)          & ASCII code of the first character \\[2pt]
+STR\$(n)          & Convert number to string \\[2pt]
+VAL(s\$)          & Convert string to number \\[2pt]
+LEFT\$(s\$,n)     & Left \textit{n} characters \\[2pt]
+RIGHT\$(s\$,n)    & Right \textit{n} characters \\[2pt]
+MID\$(s\$,p,n)    & \textit{n} characters starting at position \textit{p} \\[2pt]
+UCASE\$(s\$)      & Convert to uppercase \\[2pt]
+LCASE\$(s\$)      & Convert to lowercase \\[2pt]
+HEX\$(n)          & Hexadecimal string representation of \textit{n} \\[2pt]
+BIN\$(n)          & Binary string representation of \textit{n} \\
+\end{longtable}
+
+% ---------------------------------------------------------------------------
+\section{Memory Access}
+
+NovaBASIC gives you direct read and write access to the 6502 address space.
+This is useful for reading hardware registers, patching values, and interfacing
+with assembly routines.
+
+\begin{description}
+  \item[\cmd{PEEK(addr)}] Read one byte (0--255) from address \textit{addr}.
+  \item[\cmd{POKE addr, val}] Write one byte to address \textit{addr}.
+  \item[\cmd{DEEK(addr)}] Read a 16-bit little-endian word from
+    \textit{addr} and \textit{addr}+1.
+  \item[\cmd{DOKE addr, val}] Write a 16-bit little-endian word.
+  \item[\cmd{VARPTR(v)}] Return the memory address of variable \textit{v}.
+    Useful when passing variable addresses to assembly routines.
+\end{description}
+
+\begin{lstlisting}[style=basiclisting]
+10 REM read and print two bytes at $0300
+20 PRINT PEEK(768); PEEK(769)
+30 REM write a counter value
+40 POKE 768, 42
+50 PRINT PEEK(768)
+\end{lstlisting}
+
+\begin{warningbox}
+  Writing to the wrong address can crash the virtual machine or corrupt the
+  BASIC interpreter.  Know what you are writing to before you \cmd{POKE}
+  into system areas.  See the memory map in Appendix~B for safe zones.
+\end{warningbox}
+
+% ---------------------------------------------------------------------------
+\section{Style Tips}
+
+\begin{tipbox}
+\begin{itemize}
+  \item \textbf{One idea per line.}  Statements can be chained with colons
+    (\texttt{:}), but a single clear statement per line is easier to read
+    and debug.
+  \item \textbf{Group by function.}  Put constants and configuration near
+    the top (lines~10--90), input routines in the 100s, game logic in the
+    200s--500s, display routines in the 600s, cleanup in the 900s.
+  \item \textbf{Name things meaningfully.}  \texttt{LIVES} is clearer than
+    \texttt{L}; \texttt{SCORE} is clearer than \texttt{S1}.  NovaBASIC
+    accepts long names.
+  \item \textbf{Define constants up front.}
+    \texttt{10 MAXLIVES=5 : STARTSPEED=2} at the top of the program means
+    you tune the game by changing one line, not hunting through hundreds.
+\end{itemize}
+\end{tipbox}
+
+% ---------------------------------------------------------------------------
+\section{Putting It Together}
+
+\begin{tryitbox}
+Enter and run this program.  It builds an array of random values and prints
+them in indexed form.
+\begin{lstlisting}[style=basiclisting]
+10 DIM A(5)
+20 FOR I=1 TO 5
+30   A(I) = INT(RND(1) * 100)
+40 NEXT I
+50 FOR I=1 TO 5
+60   PRINT "A(";I;") = ";A(I)
+70 NEXT I
+\end{lstlisting}
+\textbf{Expected:} Five lines printed, each showing an index and a random
+integer between 0 and~99.  The values differ every time you \cmd{RUN}.
+\end{tryitbox}
+
+\noindent
+Try modifying the program: change \texttt{100} to \texttt{10} to get
+single-digit values, or change \texttt{5} to \texttt{20} to see a longer
+array.  The structure stays the same; only the constants change.

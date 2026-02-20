@@ -1,0 +1,352 @@
+\chapter{Expansion Memory}
+
+\begin{retrobox}
+\textit{``The problem with a 64-kilobyte address space is not that it is small. \\
+It is that everything you want to do next is just barely larger than it.''}
+\end{retrobox}
+
+\bigskip
+
+The 6502 CPU can directly address 64 KB. That is enough for code, stack, screen RAM,
+and a modest program, but it leaves little room for data-heavy work: large sprite
+sheets, level maps, sample tables, or pre-rendered buffers quickly overflow the
+available RAM. The NovaBASIC expansion memory system solves this by providing an
+additional 512 KB of RAM that lives outside the CPU address space, accessible through
+a set of commands and a window-mapping mechanism.
+
+%% ============================================================
+\section{Why Expansion Memory?}
+%% ============================================================
+
+The CPU address bus is 16 bits wide. After subtracting ROM, the VGC, the sound
+controller, the file I/O coprocessor, the XMC registers, and screen RAM, your usable
+BASIC RAM runs from \texttt{\$0280} to \texttt{\$9FFF} --- approximately 39 KB. That
+is enough for programs and variables, but becomes tight the moment you try to cache a
+full screen buffer, store multiple music tracks, or keep several sprite-sheet layers
+in memory simultaneously.
+
+Expansion memory (\textbf{XRAM}) gives you up to 512 KB of additional storage with no
+impact on the CPU address space. You cannot execute code from XRAM directly, but you
+can:
+
+\begin{itemize}
+  \item Store and retrieve arbitrary data blocks by raw offset.
+  \item Name blocks and recall them without tracking raw addresses.
+  \item Map 256-byte XRAM pages directly into CPU address windows for transparent
+        byte-level access via \cmd{PEEK} and \cmd{POKE}.
+  \item Allocate and free regions using a lightweight page-tracking allocator.
+\end{itemize}
+
+The XRAM hardware is controlled by the Expansion Memory Controller (XMC), mapped at
+\texttt{\$BA00}. You normally never touch those registers directly --- the BASIC
+commands handle all of it for you.
+
+%% ============================================================
+\section{Banks and Status}
+%% ============================================================
+
+XRAM is divided into \textbf{banks}, each 64 KB in size. With the default 512 KB
+configuration there are \textbf{8 banks} (numbered 0 through 7). One bank is always
+\emph{active}; raw-offset commands operate within that bank.
+
+\subsection*{Checking memory status: \cmd{XMEM}}
+
+Type \cmd{XMEM} at the prompt to print a status summary:
+
+\begin{retrobox}
+\texttt{XMEM}\\[2pt]
+\texttt{8 BANKS, 512 KB XRAM, BANK 0, USED 0, FREE 2048 PAGES}
+\end{retrobox}
+
+The output shows total bank count, total XRAM capacity, the currently active bank,
+and the number of 256-byte pages that are in use versus free across the entire
+512 KB space. Two thousand and forty-eight free pages means 512 KB is available.
+
+\subsection*{Selecting a bank: \cmd{XBANK n}}
+
+\begin{retrobox}
+\texttt{XBANK 3}
+\end{retrobox}
+
+Selects bank 3 as the active bank. Subsequent \cmd{XPOKE}, \cmd{XPEEK}, and raw
+\cmd{STASH}/\cmd{FETCH} operations use offsets within that bank. Valid range is
+0 to 7 for the default 512 KB configuration.
+
+\begin{notebox}
+Named blocks (\cmd{STASH "name"} / \cmd{FETCH "name"}) are allocated automatically
+across the full XRAM space and are not limited to the active bank. The active bank
+setting only affects raw-offset operations.
+\end{notebox}
+
+%% ============================================================
+\section{Single-Byte Access}
+%% ============================================================
+
+For simple tasks --- writing a flag, reading a configuration byte, probing a value
+--- the single-byte commands are the most direct interface.
+
+\subsection*{\cmd{XPOKE offset,value}}
+
+Writes \emph{value} (0--255) to \emph{offset} within the currently active bank.
+Offsets run from 0 to 65535.
+
+\begin{retrobox}
+\texttt{XBANK 0}\\
+\texttt{XPOKE 0,42}\\
+\texttt{XPOKE 1,255}
+\end{retrobox}
+
+\subsection*{\cmd{XPEEK(offset)}}
+
+Reads a single byte from \emph{offset} in the active bank and returns it as a
+numeric value. You can use it anywhere a number is valid:
+
+\begin{retrobox}
+\texttt{PRINT XPEEK(0)}\\
+\texttt{V = XPEEK(1) + XPEEK(2)}
+\end{retrobox}
+
+\begin{tipbox}
+\cmd{XPOKE} and \cmd{XPEEK} are convenient for a handful of bytes or for
+inspecting specific locations. For moving blocks of data use \cmd{STASH} and
+\cmd{FETCH}, which issue a single hardware transfer rather than looping byte
+by byte.
+\end{tipbox}
+
+%% ============================================================
+\section{Bulk Transfers}
+%% ============================================================
+
+Moving data in and out of XRAM is the core workflow for anything non-trivial. The
+raw bulk-transfer commands operate on explicit offsets within the active bank.
+
+\subsection*{Raw \cmd{STASH} --- CPU RAM to XRAM}
+
+\begin{retrobox}
+\texttt{STASH ramaddr,xramoffset,length}
+\end{retrobox}
+
+Copies \emph{length} bytes starting at CPU address \emph{ramaddr} into XRAM
+starting at \emph{xramoffset} within the active bank.
+
+\subsection*{Raw \cmd{FETCH} --- XRAM to CPU RAM}
+
+\begin{retrobox}
+\texttt{FETCH ramaddr,xramoffset,length}
+\end{retrobox}
+
+Copies \emph{length} bytes from XRAM at \emph{xramoffset} back to CPU RAM starting
+at \emph{ramaddr}. The destination must be within writable RAM
+(\texttt{\$0000}--\texttt{\$BFFF}).
+
+\subsection*{Example: saving and restoring a character screen buffer}
+
+The character screen RAM occupies \texttt{\$AA00}--\texttt{\$B1CF} (2000 bytes).
+You can snapshot it to XRAM bank 0 at offset 0 and restore it later:
+
+\begin{retrobox}
+\texttt{10 REM Save character screen to XRAM}\\
+\texttt{20 XBANK 0}\\
+\texttt{30 STASH 43520,0,2000}\\
+\texttt{40 PRINT "SCREEN STASHED."}\\
+\texttt{50 REM ... do other things ...}\\
+\texttt{60 REM Restore character screen from XRAM}\\
+\texttt{70 FETCH 43520,0,2000}\\
+\texttt{80 PRINT "SCREEN RESTORED."}
+\end{retrobox}
+
+\begin{notebox}
+\texttt{\$AA00} = 43520 decimal. The color RAM at \texttt{\$B1D0} is an additional
+2000 bytes; stash it at offset 2000 in the same bank to capture the full display
+state including colors.
+\end{notebox}
+
+%% ============================================================
+\section{Named Blocks}
+%% ============================================================
+
+Raw offsets require you to track where each block lives. The named-block interface
+lets you store data under a string name and retrieve it without knowing its physical
+XRAM address.
+
+\subsection*{Storing a named block: \cmd{STASH "name",ramaddr,length}}
+
+\begin{retrobox}
+\texttt{STASH "MYDATA",2048,16}
+\end{retrobox}
+
+Allocates a region in XRAM, copies 16 bytes from CPU address 2048 into it, and
+registers the block under the name \texttt{MYDATA}. Names are 1 to 28 characters
+and are case-insensitive. If a block with that name already exists and is large
+enough for the new data, it is overwritten in place. If the existing block is too
+small, it is freed and a new one is allocated automatically.
+
+\subsection*{Loading a named block: \cmd{FETCH "name",ramaddr}}
+
+\begin{retrobox}
+\texttt{FETCH "MYDATA",2048}
+\end{retrobox}
+
+Finds the named block and copies its full contents back to CPU RAM at
+\emph{ramaddr}. No length argument is required; the XMC remembers the exact size.
+
+\subsection*{Listing named blocks: \cmd{XDIR}}
+
+\begin{retrobox}
+\texttt{XDIR}
+\end{retrobox}
+
+Prints all named blocks sorted alphabetically (case-insensitive), showing each
+name and its stored size in bytes.
+
+\subsection*{Deleting a named block: \cmd{XDEL "name"}}
+
+\begin{retrobox}
+\texttt{XDEL "MYDATA"}
+\end{retrobox}
+
+Removes the named block and releases its XRAM pages back to the free pool.
+
+\subsection*{Complete example: named-block round-trip}
+
+\begin{retrobox}
+\texttt{10 FOR I=0 TO 15:POKE 2048+I,I+10:NEXT I}\\
+\texttt{20 STASH "MYDATA",2048,16}\\
+\texttt{30 FOR I=0 TO 15:POKE 2048+I,0:NEXT I}\\
+\texttt{40 FETCH "MYDATA",2048}\\
+\texttt{50 FOR I=0 TO 15:PRINT PEEK(2048+I);:NEXT I}\\
+\texttt{60 XDEL "MYDATA"}
+\end{retrobox}
+
+Line 10 writes values 10 through 25 into RAM at address 2048. Line 20 stashes them
+to XRAM under the name \texttt{MYDATA}. Line 30 zeroes the same RAM region to
+confirm the data is no longer in CPU RAM. Line 40 fetches the block back. Line 50
+prints the restored values --- you should see
+\texttt{10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25}. Line 60 cleans up.
+
+%% ============================================================
+\section{Low-Level Allocation}
+%% ============================================================
+
+For programs that need to manage XRAM regions dynamically without names, two
+lower-level commands are available.
+
+\subsection*{\cmd{XALLOC length}}
+
+Allocates \emph{length} bytes in XRAM and returns a numeric handle (1--255). The
+handle identifies the allocated region. You are responsible for recording it; the
+XMC does not associate a name.
+
+\begin{retrobox}
+\texttt{H = XALLOC(4096)}\\
+\texttt{PRINT "HANDLE: ";H}
+\end{retrobox}
+
+\subsection*{\cmd{XFREE offset,length}}
+
+Releases the XRAM range starting at \emph{offset} with the given \emph{length}.
+Any named or unnamed blocks that overlap that range are removed from the allocation
+table.
+
+\begin{warningbox}
+\textbf{XRESET} clears all allocation tracking in one step --- named blocks,
+unnamed allocations, and page usage records are all discarded and cannot be
+recovered. The raw bytes in XRAM are not erased, but every name and handle is gone.
+Use \cmd{XRESET} only when you want a clean slate, such as at program startup.
+\end{warningbox}
+
+%% ============================================================
+\section{Memory Windows}
+%% ============================================================
+
+For the highest-performance XRAM access --- or for assembly code that needs to use
+ordinary load and store instructions against XRAM --- you can map an XRAM page
+directly into the CPU address space using a \textbf{window}.
+
+There are four windows, each exactly 256 bytes wide, at fixed CPU addresses:
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Window} & \textbf{CPU Address Range} & \textbf{Size} \\
+\hline
+0 & \texttt{\$BC00}--\texttt{\$BCFF} & 256 bytes \\
+1 & \texttt{\$BD00}--\texttt{\$BDFF} & 256 bytes \\
+2 & \texttt{\$BE00}--\texttt{\$BEFF} & 256 bytes \\
+3 & \texttt{\$BF00}--\texttt{\$BFFF} & 256 bytes \\
+\end{tabular}
+\end{center}
+
+When a window is mapped, any \cmd{PEEK} or \cmd{POKE} to its CPU address range reads
+or writes directly into XRAM. No transfer command is needed.
+
+\subsection*{\cmd{XMAP window,offset}}
+
+Maps the 256-byte XRAM page that contains \emph{offset} into the specified window
+(0--3). The offset is rounded down to a 256-byte page boundary automatically.
+
+\begin{retrobox}
+\texttt{10 REM Map XRAM page 0 into window 0 at \$BC00}\\
+\texttt{20 XMAP 0,0}\\
+\texttt{30 FOR I=0 TO 255}\\
+\texttt{40 POKE 48128+I,I}\\
+\texttt{50 NEXT I}\\
+\texttt{60 PRINT PEEK(48128);" ";PEEK(48255)}
+\end{retrobox}
+
+\texttt{\$BC00} = 48128 decimal. After \cmd{XMAP 0,0}, writes to
+\texttt{\$BC00}--\texttt{\$BCFF} go directly into XRAM. The \cmd{PRINT} on
+line 60 should show \texttt{0 255}.
+
+\subsection*{\cmd{XUNMAP window}}
+
+Unmaps the specified window. Reads and writes to that CPU address range no longer
+reach XRAM.
+
+\begin{retrobox}
+\texttt{XUNMAP 0}
+\end{retrobox}
+
+\begin{warningbox}
+Mapped windows are shared address space visible to both BASIC and any running
+assembly code. If two windows are mapped to the same XRAM page, or if BASIC and
+assembly both access the same window, coordinate ownership carefully to avoid
+corruption. Unmap windows you are finished with.
+\end{warningbox}
+
+%% ============================================================
+\section{Error Codes}
+%% ============================================================
+
+When an XRAM command fails, NovaBASIC reports an error derived from the XMC error
+register. The complete set:
+
+\begin{center}
+\begin{tabular}{ll}
+\textbf{Code} & \textbf{Meaning} \\
+\hline
+0 & No error \\
+1 & Address out of range \\
+2 & Bad arguments \\
+3 & Named block not found \\
+4 & No space available \\
+5 & Invalid name \\
+6 & End of directory \\
+\end{tabular}
+\end{center}
+
+%% ============================================================
+\section{Try It Now}
+%% ============================================================
+
+\begin{retrobox}
+\textbf{Named block round-trip}\\[4pt]
+\texttt{10 FOR I=0 TO 15:POKE 2048+I,I+10:NEXT I}\\
+\texttt{20 STASH "MYDATA",2048,16}\\
+\texttt{30 FOR I=0 TO 15:POKE 2048+I,0:NEXT I}\\
+\texttt{40 FETCH "MYDATA",2048}\\
+\texttt{50 FOR I=0 TO 15:PRINT PEEK(2048+I);:NEXT I}\\
+\texttt{60 XDEL "MYDATA"}
+\end{retrobox}
+
+Expected result: line 50 prints \texttt{10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25},
+confirming the data survived the round-trip through XRAM and back.

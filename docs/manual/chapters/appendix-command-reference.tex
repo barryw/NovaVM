@@ -1,0 +1,441 @@
+% =============================================================================
+% Appendix: Command Reference
+% NovaBASIC v1.0 User Guide
+% Source of truth: ehbasic/basic.asm token tables (TK_* / XTK_*)
+%                  e6502.Avalonia/Hardware/ (VGC, VSC, FIO, XMC implementations)
+% =============================================================================
+\chapter{Command Reference}
+
+% -----------------------------------------------------------------------------
+\section{NovaBASIC Command Quick Reference}
+% -----------------------------------------------------------------------------
+
+The tables below list every NovaBASIC statement in syntax order.
+Arguments shown in \texttt{[brackets]} are optional.
+The \cmd{LET} keyword is always optional before an assignment.
+
+% ---- Program Control --------------------------------------------------------
+\subsection*{Program Control}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+RUN                          & Execute program from the lowest line number. \\
+LIST {[}start{[}-end{]}{]}   & Display program lines; omit range to list all. \\
+NEW                          & Clear program and all variables from memory. \\
+CONT                         & Continue execution after \cmd{STOP} or Ctrl-C. \\
+END                          & Terminate program and return to direct mode. \\
+STOP                         & Break execution; \cmd{CONT} resumes at next statement. \\
+CLEAR                        & Clear all variables and arrays; program is retained. \\
+\end{longtable}
+
+% ---- Flow Control -----------------------------------------------------------
+\subsection*{Flow Control}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+GOTO line                           & Jump unconditionally to a line number. \\
+GOSUB line                          & Call subroutine at line; return address is stacked. \\
+RETURN                              & Return from the most recent \cmd{GOSUB}. \\
+FOR var=start TO end {[}STEP n{]}   & Begin a counted loop; step defaults to 1. \\
+NEXT var                            & Advance loop variable and branch back if not done. \\
+IF expr THEN \ldots{} {[}ELSE \ldots{]}  & Conditional execution; \cmd{ELSE} is optional. \\
+ON expr GOTO l1,l2,\ldots{}         & Branch to the \textit{n}th line in the list. \\
+ON expr GOSUB l1,l2,\ldots{}        & Call the \textit{n}th subroutine in the list. \\
+DO                                  & Begin an indefinite loop body. \\
+LOOP {[}WHILE expr{]}               & End loop; re-enter while \textit{expr} is true. \\
+LOOP {[}UNTIL expr{]}               & End loop; re-enter until \textit{expr} becomes true. \\
+\end{longtable}
+
+% ---- Variables and Data -----------------------------------------------------
+\subsection*{Variables and Data}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+LET var=expr                & Assign value to variable (\cmd{LET} is optional). \\
+DIM var(size)               & Declare a single-dimension array. \\
+DATA val,val,\ldots{}       & Embed constant values for \cmd{READ}. \\
+READ var,var,\ldots{}       & Read successive values from \cmd{DATA} statements. \\
+RESTORE {[}line{]}          & Reset the \cmd{DATA} pointer, optionally to a line. \\
+SWAP var1,var2              & Exchange the values of two variables. \\
+INC var                     & Increment a numeric variable by 1. \\
+DEC var                     & Decrement a numeric variable by 1. \\
+\end{longtable}
+
+% ---- Input / Output ---------------------------------------------------------
+\subsection*{Input / Output}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+PRINT expr{[};expr\ldots{}{]}           & Output values to screen; \cmd{;} suppresses newline. \\
+INPUT {[}"prompt";{]}var                & Display optional prompt and read from keyboard. \\
+GET var                                 & Read a single keypress into variable (non-blocking). \\
+WIDTH n                                 & Set the output line width in characters. \\
+\end{longtable}
+
+% ---- Memory -----------------------------------------------------------------
+\subsection*{Memory}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+POKE addr,val   & Write an 8-bit byte to a 6502 address. \\
+DOKE addr,val   & Write a 16-bit word (little-endian) to a 6502 address. \\
+PEEK(addr)      & Read an 8-bit byte from a 6502 address (function). \\
+DEEK(addr)      & Read a 16-bit word (little-endian) from a 6502 address (function). \\
+\end{longtable}
+
+% ---- Bit Operations ---------------------------------------------------------
+\subsection*{Bit Operations}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+BITSET var,bit      & Set bit \textit{n} (0-based) in an integer variable. \\
+BITCLR var,bit      & Clear bit \textit{n} in an integer variable. \\
+BITTST(val,bit)     & Return 1 if bit \textit{n} is set in \textit{val}, else 0. \\
+\end{longtable}
+
+% ---- File Operations --------------------------------------------------------
+\subsection*{File Operations}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+SAVE "name"     & Save the current BASIC program to disk as \texttt{name.bas}. \\
+LOAD "name"     & Load a previously saved program from disk. \\
+DIR             & List all saved \texttt{.bas} programs. \\
+DEL "name"      & Delete a saved program from disk. \\
+\end{longtable}
+
+% ---- Text Display -----------------------------------------------------------
+\subsection*{Text Display}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+CLS             & Clear the text screen and home the cursor. \\
+COLOR fg{[},bg{]}  & Set foreground and optional background color (0--15). \\
+LOCATE x,y      & Move the text cursor to column \textit{x} (0--79), row \textit{y} (0--24). \\
+\end{longtable}
+
+% ---- Graphics ---------------------------------------------------------------
+\subsection*{Graphics}
+
+The graphics layer is 320$\times$200 pixels.
+Colors are indices 0--15; color 0 is transparent on the graphics layer.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+MODE n                  & Display mode: 0=text only, 1=graphics over text, 2=text over graphics. \\
+GCLS                    & Clear the graphics layer to transparent (all pixels 0). \\
+GCOLOR c                & Set the graphics draw color (0--15; only the low nibble is used). \\
+PLOT x,y                & Set pixel at (\textit{x},\textit{y}) to the current draw color. \\
+UNPLOT x,y              & Clear pixel at (\textit{x},\textit{y}) to 0 (transparent). \\
+LINE x0,y0,x1,y1        & Draw a straight line between two points. \\
+RECT x0,y0,x1,y1        & Draw a rectangle outline. \\
+FILL x0,y0,x1,y1        & Draw a filled solid rectangle. \\
+CIRCLE cx,cy,r          & Draw a circle outline centred at (\textit{cx},\textit{cy}). \\
+PAINT x,y               & Flood-fill from seed point (\textit{x},\textit{y}). \\
+VSYNC                   & Wait for the next video frame boundary (60 Hz). \\
+\end{longtable}
+
+% ---- Sprites ----------------------------------------------------------------
+\subsection*{Sprites}
+
+Sprites are 16$\times$16 pixels, 4-bit multicolor.
+Up to 16 sprites are available (indices 0--15).
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+SPRITE n,ON                     & Enable (show) sprite \textit{n}. \\
+SPRITE n,OFF                    & Disable (hide) sprite \textit{n}. \\
+SPRITE n,x,y                    & Set sprite \textit{n} screen position. \\
+SPRITEDATA n,row,b1\ldots{}b8   & Define one row of sprite shape data (8 bytes, 16 pixels). \\
+\end{longtable}
+
+\begin{notebox}
+\cmd{SPRITESHAPE} and \cmd{SPRITECOLOR} are recognized tokens (for source compatibility) but their ROM handlers currently perform no hardware action.
+\end{notebox}
+
+% ---- Sound ------------------------------------------------------------------
+\subsection*{Sound}
+
+The sound controller provides 4 independent channels (0--3).
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+SOUND ch,freq,dur       & Play on channel \textit{ch} (0--3); frequency 16--12000 Hz; duration in 1/60 s ticks. \\
+VOLUME level            & Set master volume (0--15; only the low nibble is used). \\
+ENVELOPE ch,a,d,s,r     & Set ADSR envelope for channel \textit{ch}; sustain uses low nibble (0--15 scale). \\
+WAVE ch,waveform        & Set waveform for channel \textit{ch}: 0=square, 1=sawtooth, 2=triangle, 3=noise, 4=sine. \\
+\end{longtable}
+
+% ---- Expansion Memory -------------------------------------------------------
+\subsection*{Expansion Memory}
+
+XRAM is banked memory outside the 6502 address space, accessed via the XMC coprocessor.
+See Chapter~6 for a full programming guide.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+XMEM                        & Print XRAM bank count and page usage statistics. \\
+XBANK n                     & Select the active 64 KB XRAM bank; \textit{n} must be $<$ total banks. \\
+XPOKE offset,value          & Write one byte to XRAM at the given offset in the active bank. \\
+XPEEK(offset)               & Read one byte from XRAM at the given offset (function). \\
+STASH ram,offset,length     & Copy \textit{length} bytes from CPU RAM to XRAM (raw, no name). \\
+FETCH ram,offset,length     & Copy \textit{length} bytes from XRAM to CPU RAM (raw). \\
+STASH "name",ram,length     & Store a named XRAM block from CPU RAM. \\
+FETCH "name",ram            & Load a named XRAM block back into CPU RAM. \\
+XDIR                        & List all named XRAM blocks and their sizes. \\
+XDEL "name"                 & Delete a named XRAM block. \\
+XALLOC length               & Allocate an unnamed XRAM block; returns offset in \cmd{XPEEK} result. \\
+XFREE offset,length         & Release a raw XRAM range from usage tracking. \\
+XRESET                      & Clear all XRAM allocation and named-block state (destructive). \\
+XMAP window,offset          & Map an XRAM page to CPU window 0--3 (addresses \$BC00--\$BFFF). \\
+XUNMAP window               & Unmap a CPU window (0--3). \\
+\end{longtable}
+
+\begin{warningbox}
+\cmd{XRESET} destroys all named-block metadata and usage-tracking information.
+The raw XRAM contents are not zeroed, but all allocation records are lost.
+\end{warningbox}
+
+% ---- Interrupts and Machine Code --------------------------------------------
+\subsection*{Interrupts and Machine Code}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+CALL addr       & Execute machine code subroutine at 6502 address; \cmd{JSR}/\cmd{RTS} pair. \\
+IRQ line        & Redirect the IRQ vector to a BASIC line number handler. \\
+NMI line        & Redirect the NMI vector to a BASIC line number handler. \\
+RETIRQ          & Return from an IRQ handler (re-enables interrupts). \\
+RETNMI          & Return from an NMI handler. \\
+\end{longtable}
+
+% ---- Miscellaneous ----------------------------------------------------------
+\subsection*{Miscellaneous}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+REM comment             & Program comment; rest of line is ignored by interpreter. \\
+DEF FN name(var)=expr   & Define a single-line user function. \\
+WAIT addr,mask{[},xor{]}   & Busy-wait until \texttt{(PEEK(addr) XOR xor) AND mask} is non-zero. \\
+NULL n                  & Set the number of null (zero) bytes sent after each carriage return. \\
+\end{longtable}
+
+% =============================================================================
+\section{Function Reference}
+% =============================================================================
+
+Functions return a value and may be used within any expression.
+String functions are marked with a \texttt{\$} suffix.
+
+% ---- Numeric Functions ------------------------------------------------------
+\subsection*{Numeric Functions}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.32\textwidth} p{0.58\textwidth}}
+\toprule
+\normalfont\textbf{Function} & \textbf{Returns} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+SGN(n)      & Sign of \textit{n}: $-1$, $0$, or $1$. \\
+INT(n)      & Truncate toward zero to integer. \\
+ABS(n)      & Absolute value. \\
+SQR(n)      & Square root. \\
+RND(n)      & Pseudo-random number in $[0, 1)$; \textit{n} seeds or advances the sequence. \\
+LOG(n)      & Natural logarithm ($\ln n$). \\
+EXP(n)      & $e$ raised to the power \textit{n}. \\
+SIN(n)      & Sine of \textit{n} radians. \\
+COS(n)      & Cosine of \textit{n} radians. \\
+TAN(n)      & Tangent of \textit{n} radians. \\
+ATN(n)      & Arctangent of \textit{n}, result in radians. \\
+PI          & Constant $\pi \approx 3.14159\ldots$ \\
+TWOPI       & Constant $2\pi \approx 6.28318\ldots$ \\
+MAX(a,b)    & The larger of two numeric values. \\
+MIN(a,b)    & The smaller of two numeric values. \\
+FRE(x)      & Free BASIC program memory in bytes (\textit{x} is ignored). \\
+POS(x)      & Current text cursor column position (\textit{x} is ignored). \\
+USR(x)      & Call user machine-code routine; pass \textit{x} in FAC, return value in FAC. \\
+\end{longtable}
+
+% ---- String Functions -------------------------------------------------------
+\subsection*{String Functions}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Function} & \textbf{Returns} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+LEN(s\$)                    & Length of string in characters. \\
+ASC(s\$)                    & ASCII code of the first character. \\
+CHR\$(n)                    & Single-character string for ASCII code \textit{n}. \\
+STR\$(n)                    & Numeric value converted to a string. \\
+VAL(s\$)                    & Numeric value parsed from the leading digits of a string. \\
+LEFT\$(s\$,n)               & First \textit{n} characters of string. \\
+RIGHT\$(s\$,n)              & Last \textit{n} characters of string. \\
+MID\$(s\$,start{[},len{]})  & Substring starting at \textit{start} (1-based), optional length. \\
+UCASE\$(s\$)                & String converted to uppercase. \\
+LCASE\$(s\$)                & String converted to lowercase. \\
+HEX\$(n)                    & Hexadecimal string representation of integer \textit{n}. \\
+BIN\$(n)                    & Binary string representation of integer \textit{n}. \\
+SADD(s\$)                   & Address of the string's data in the string pool. \\
+VARPTR(var)                 & Address of a numeric or string variable in memory. \\
+\end{longtable}
+
+% ---- Sprite and Graphics Functions ------------------------------------------
+\subsection*{Sprite and Graphics Functions}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Function} & \textbf{Returns} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+SPRITEX(n)      & X position of sprite \textit{n} (currently always returns 0). \\
+SPRITEY(n)      & Y position of sprite \textit{n} (currently always returns 0). \\
+COLLISION(n)    & Sprite-to-sprite collision bitmask for sprite \textit{n}. \\
+BUMPED(n)       & Sprite-to-background collision bitmask for sprite \textit{n}. \\
+\end{longtable}
+
+\begin{notebox}
+\cmd{SPRITEX()} and \cmd{SPRITEY()} are present as ROM tokens.
+In v1.0 the ROM handlers return 0; position read-back is not yet implemented.
+\end{notebox}
+
+% =============================================================================
+\section{Token Index}
+% =============================================================================
+
+This index is derived directly from the \texttt{TK\_*} and \texttt{XTK\_*}
+symbol definitions in \texttt{ehbasic/basic.asm}.
+Single-byte tokens begin at \texttt{\$80}.
+Extended two-byte tokens use a \texttt{\$FF} escape prefix followed by the
+\texttt{XTK\_*} byte.
+
+% ---- Primary Statements -----------------------------------------------------
+\subsection*{Primary Statement Tokens (\texttt{TK\_END} through \texttt{TK\_NMI})}
+
+\begin{retrobox}
+\ttfamily\small
+END, FOR, NEXT, DATA, INPUT, DIM, READ, LET, DEC, GOTO, RUN, IF, RESTORE,
+GOSUB, RETIRQ, RETNMI, RETURN, REM, STOP, ON, NULL, INC, WAIT, LOAD, SAVE,
+DEF, POKE, DOKE, CALL, DO, LOOP, PRINT, CONT, LIST, CLEAR, NEW, WIDTH, GET,
+SWAP, BITSET, BITCLR, IRQ, NMI
+\end{retrobox}
+
+% ---- Graphics / Sound Statements --------------------------------------------
+\subsection*{Graphics and Sound Statement Tokens (\texttt{TK\_CLS} through \texttt{TK\_VSYNC})}
+
+\begin{retrobox}
+\ttfamily\small
+CLS, COLOR, LOCATE, PLOT, UNPLOT, LINE, CIRCLE, RECT, FILL, PAINT, MODE,
+GCLS, GCOLOR, SPRITE, SPRITESHAPE, SPRITECOLOR, SPRITEDATA, SOUND, VOLUME,
+ENVELOPE, WAVE, VSYNC
+\end{retrobox}
+
+% ---- Secondary Tokens -------------------------------------------------------
+\subsection*{Secondary Tokens (\texttt{TK\_TAB} through \texttt{TK\_OFF})}
+
+\begin{retrobox}
+\ttfamily\small
+TAB, ELSE, TO, FN, SPC, THEN, NOT, STEP, UNTIL, WHILE, OFF
+\end{retrobox}
+
+% ---- Operators --------------------------------------------------------------
+\subsection*{Operator Tokens}
+
+\begin{retrobox}
+\ttfamily\small
++, -, *, /, \textasciicircum{}, AND, EOR, OR, >>{} (RSHIFT), <<{} (LSHIFT), >, =, <
+\end{retrobox}
+
+% ---- Functions --------------------------------------------------------------
+\subsection*{Function Tokens (\texttt{TK\_SGN} through \texttt{TK\_BUMPED})}
+
+\begin{retrobox}
+\ttfamily\small
+SGN, INT, ABS, USR, FRE, POS, SQR, RND, LOG, EXP, COS, SIN, TAN, ATN, PEEK,
+DEEK, SADD, LEN, STR\$, VAL, ASC, UCASE\$, LCASE\$, CHR\$, HEX\$, BIN\$,
+BITTST, MAX, MIN, PI, TWOPI, VARPTR, LEFT\$, RIGHT\$, MID\$, SPRITEX(),
+SPRITEY(), COLLISION(), BUMPED()
+\end{retrobox}
+
+% ---- Extended 2-Byte Tokens -------------------------------------------------
+\subsection*{Extended Two-Byte Tokens (\texttt{\$FF} prefix, \texttt{XTK\_DIR} through \texttt{XTK\_XUNMAP})}
+
+\begin{retrobox}
+\ttfamily\small
+DIR, DEL, XMEM, XBANK, XPOKE, XPEEK(), STASH, FETCH, XFREE, XRESET, XALLOC,
+XDIR, XDEL, XMAP, XUNMAP
+\end{retrobox}

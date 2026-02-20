@@ -1,0 +1,118 @@
+% =============================================================================
+% NovaBASIC v1.0 User Guide — Chapter 1: Welcome to NovaBASIC
+% =============================================================================
+\chapter{Welcome to NovaBASIC}
+
+\epigraph{%
+  Every great journey starts with a single command.
+}{%
+  \textit{Unknown programmer, circa~1982}%
+}
+
+\section{What NovaBASIC Is}
+
+NovaBASIC v1.0 is a modernized 6502 BASIC interpreter for the e6502 virtual
+computer.  It is derived from Lee Davison's \textit{Enhanced BASIC~2.22p5}
+(EhBASIC), one of the cleanest and most complete open-source 6502 BASIC
+implementations ever written.  NovaBASIC keeps the entire EhBASIC core --- every
+numeric function, every string operation, the full \cmd{DO}/\cmd{LOOP} and
+\cmd{FOR}/\cmd{NEXT} machinery --- and adds a hardware command layer that lets
+you drive the e6502's graphics, sound, file system, and expansion memory
+directly from BASIC.
+
+The programming model is classic line-numbered BASIC.  You type a line with a
+number at the front, press Return, and it is stored in the program.  You type
+\cmd{RUN} and it executes from the lowest line number.  Simple, immediate, and
+still deeply satisfying.
+
+When NovaBASIC boots, the screen clears to a blue background with white text and
+you see:
+
+\begin{retrobox}
+\texttt{NovaBASIC v1.0}\\
+\texttt{Derived from EhBASIC 2.22p5}\\[0.4ex]
+\texttt{xxxxx BASIC bytes free}
+\end{retrobox}
+
+\noindent
+The number shown is the amount of free BASIC program memory.  The cursor waits
+for your first command.
+
+\begin{notebox}
+  Boot sets the screen background to color~6 (blue) and the foreground text
+  color to color~1 (white).  You can change these at any time with
+  \cmd{COLOR~\textit{fg},\textit{bg}}.
+\end{notebox}
+
+% ---------------------------------------------------------------------------
+\section{What You Can Do}
+
+Here is what NovaBASIC puts at your fingertips:
+
+\begin{itemize}
+  \item Write and run classic line-numbered BASIC programs in the tradition
+        of the Commodore~64, Apple~II, and BBC~Micro.
+  \item Draw directly to a \textbf{320$\times$200 pixel bitmap} with
+        \textbf{16 colors} using \cmd{PLOT}, \cmd{LINE}, \cmd{CIRCLE},
+        \cmd{RECT}, \cmd{FILL}, and \cmd{PAINT}.
+  \item Animate up to \textbf{16 hardware sprites}, each 16$\times$16 pixels
+        and multicolor, with per-sprite shape, position, and flip control.
+  \item Play \textbf{4-voice synthesized sound} with ADSR envelopes and five
+        selectable waveforms --- square, sawtooth, triangle, sine, and noise.
+  \item Save and load programs and data files with \cmd{SAVE}, \cmd{LOAD},
+        \cmd{DIR}, and \cmd{DEL}.
+  \item Access \textbf{512\,KB of banked expansion memory} for large data
+        sets, tile maps, sprite sheets, or music sequences.
+  \item Drop into \textbf{6502 assembly language} via \cmd{CALL} and
+        \cmd{POKE}/\cmd{PEEK} for performance-critical inner loops.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{How to Read This Guide}
+
+This manual is organized so each chapter builds on the previous one.  You do
+not need to read it straight through --- jump to whichever section you need ---
+but if you are new to NovaBASIC the order makes sense:
+
+\begin{description}
+  \item[Chapters~1--3] Getting started, the edit-run workflow, and the core
+    language: variables, arrays, control flow, operators, and built-in
+    functions.
+  \item[Chapters~4--5] Graphics and sprites; sound and music.  These two
+    chapters cover everything you need to build a real game or demo.
+  \item[Chapters~6--7] Expansion memory and low-level access.  Read these
+    when your projects outgrow the built-in 64\,KB address space or when
+    you want to call hand-written assembly routines.
+  \item[Appendices] Complete command reference, memory map, hardware
+    register summary, error codes, and system limits.
+\end{description}
+
+Cross-references appear as ``see Section~X.Y'' or ``see Appendix~A.''  Every
+command name is typeset in \cmd{this style} throughout the text.
+
+% ---------------------------------------------------------------------------
+\section{Your First Program}
+
+Let us get something on screen right now.  Type each line exactly as shown,
+pressing~Return after each one, then type \cmd{RUN} and press Return.
+
+\begin{tryitbox}
+\begin{lstlisting}[style=basiclisting,numbers=none]
+10 PRINT "HELLO, NOVABASIC!"
+20 FOR I=1 TO 5
+30   PRINT "COUNT: ";I
+40 NEXT I
+RUN
+\end{lstlisting}
+\textbf{Expected output:}\\[0.4ex]
+\texttt{HELLO, NOVABASIC!}\\
+\texttt{COUNT: 1}\\
+\texttt{COUNT: 2}\\
+\texttt{COUNT: 3}\\
+\texttt{COUNT: 4}\\
+\texttt{COUNT: 5}
+\end{tryitbox}
+
+\noindent
+Six lines of output, then the cursor returns to the \texttt{Ready} prompt.
+Congratulations --- you have just run your first NovaBASIC program.

@@ -372,7 +372,8 @@ TK_LINE           = TK_UNPLOT+1     ; LINE
 TK_CIRCLE         = TK_LINE+1       ; CIRCLE
 TK_RECT           = TK_CIRCLE+1     ; RECT
 TK_FILLRECT       = TK_RECT+1       ; FILL
-TK_GMODE          = TK_FILLRECT+1   ; MODE
+TK_PAINT          = TK_FILLRECT+1   ; PAINT
+TK_GMODE          = TK_PAINT+1      ; MODE
 TK_GCLS           = TK_GMODE+1      ; GCLS
 TK_GCOLOR         = TK_GCLS+1       ; GCOLOR
 TK_SPRCMD         = TK_GCOLOR+1     ; SPRITE
@@ -459,6 +460,28 @@ TK_SPRITEY        = TK_SPRITEX+1    ; SPRITEY(
 TK_COLLISION      = TK_SPRITEY+1    ; COLLISION(
 TK_BUMPED         = TK_COLLISION+1   ; BUMPED(
 
+; --- Extended 2-byte tokens ---
+; First byte is a prefix marker in tokenized BASIC text, second byte is ext id.
+
+TKX_PREFIX        = $01              ; extended token prefix byte
+XTK_DIR           = $01              ; extended token id: DIR
+XTK_DEL           = $02              ; extended token id: DEL
+XTK_XMEM          = $03              ; extended token id: XMEM
+XTK_XBANK         = $04              ; extended token id: XBANK
+XTK_XPOKE         = $05              ; extended token id: XPOKE
+XTK_XPEEK         = $06              ; extended token id: XPEEK(
+XTK_STASH         = $07              ; extended token id: STASH
+XTK_FETCH         = $08              ; extended token id: FETCH
+XTK_XFREE         = $09              ; extended token id: XFREE
+XTK_XRESET        = $0A              ; extended token id: XRESET
+XTK_XALLOC        = $0B              ; extended token id: XALLOC
+XTK_XDIR          = $0C              ; extended token id: XDIR
+XTK_XDEL          = $0D              ; extended token id: XDEL
+XTK_XMAP          = $0E              ; extended token id: XMAP
+XTK_XUNMAP        = $0F              ; extended token id: XUNMAP
+XTK_GSAVE         = $10              ; extended token id: GSAVE
+XTK_GLOAD         = $11              ; extended token id: GLOAD
+
 ; offsets from a base of X or Y
 
 PLUS_0            = $00       ; X or Y plus 0
@@ -498,7 +521,7 @@ Ibuffs            = VEC_SV+$16
 Ibuffe            = Ibuffs+$47; end of input buffer
 
 Ram_base          = $0300     ; start of user RAM (set as needed, should be page aligned)
-Ram_top           = $C000     ; end of user RAM+1 (set as needed, should be page aligned)
+Ram_top           = $A000     ; end of contiguous BASIC RAM+1 (before MMIO window)
 
 Stack_floor       = 16        ; bytes left free on stack for background interrupts
 
@@ -561,19 +584,12 @@ TabLoop
       LDX   #des_sk           ; descriptor stack start
       STX   next_s            ; set descriptor stack pointer
       JSR   LAB_CRLF          ; print CR/LF
-      LDA   #<LAB_MSZM        ; point to memory size message (low addr)
-      LDY   #>LAB_MSZM        ; point to memory size message (high addr)
-      JSR   LAB_18C3          ; print null terminated string from memory
-      JSR   LAB_INLN          ; print "? " and get BASIC input
-      STX   Bpntrl            ; set BASIC execute pointer low byte
-      STY   Bpntrh            ; set BASIC execute pointer high byte
-      JSR   LAB_GBYT          ; get last byte back
-
-      BNE   LAB_2DAA          ; branch if not null (user typed something)
-
-      LDY   #$00              ; else clear Y
-                              ; character was null so get memory size the hard way
-                              ; we get here with Y=0 and Itempl/h = Ram_base
+      LDY   #$00              ; clear Y for indirect indexed writes
+      LDA   #<Ram_base        ; always start from configured RAM base
+      STA   Itempl
+      LDA   #>Ram_base
+      STA   Itemph
+                              ; detect RAM limit by probing for writeable memory
 LAB_2D93
       INC   Itempl            ; increment temporary integer low byte
       BNE   LAB_2D99          ; branch if no overflow
@@ -596,30 +612,11 @@ LAB_2D99
 
       BNE   LAB_2DB6          ; branch if fail
 
-LAB_2DAA
-      JSR   LAB_2887          ; get FAC1 from string
-      LDA   FAC1_e            ; get FAC1 exponent
-      CMP   #$98              ; compare with exponent = 2^24
-      BCS   LAB_GMEM          ; if too large go try again
-
-      JSR   LAB_F2FU          ; save integer part of FAC1 in temporary integer
-                              ; (no range check)
-
 LAB_2DB6
       LDA   Itempl            ; get temporary integer low byte
       LDY   Itemph            ; get temporary integer high byte
-; *** begin patch  2.22p5.0 RAM top sanity check ***
-; *** replace
-;      CPY   #<Ram_base+1      ; compare with start of RAM+$100 high byte
-; +++ with
-      CPY   #>Ram_base+1      ; compare with start of RAM+$100 high byte
-; *** end patch    2.22p5.0 ***
-      BCC   LAB_GMEM          ; if too small go try again
-
-
-; uncomment these lines if you want to check on the high limit of memory. Note if
-; Ram_top is set too low then this will fail. default is ignore it and assume the
-; users know what they're doing!
+; uncomment these lines if you want to check on the high limit of memory.
+; default is to trust the configured probe range.
 
 ;     CPY   #>Ram_top         ; compare with top of RAM high byte
 ;     BCC   MEM_OK            ; branch if < RAM top
@@ -658,8 +655,8 @@ LAB_2DB6
 LAB_2E05
       .ENDIF
 
-      JSR   LAB_CRLF          ; print CR/LF
       JSR   LAB_1463          ; do "NEW" and "CLEAR"
+      JSR   LAB_SPLASH        ; draw centered text startup splash
       LDA   Ememl             ; get end of mem low byte
       SEC                     ; set carry for subtract
       SBC   Smeml             ; subtract start of mem low byte
@@ -1033,11 +1030,12 @@ LAB_INLN
 LAB_134B
       JSR   LAB_PRNA          ; go print the character
       DEX                     ; decrement the buffer counter (delete)
-      .byte $2C               ; make LDX into BIT abs
+      JMP   LAB_1359          ; loop for next input character
 
 ; call for BASIC input (main entry point)
 
 LAB_1357
+      JSR   LAB_CURS_ON       ; show cursor while waiting for input
       LDX   #$00              ; clear BASIC line buffer pointer
 LAB_1359
       JSR   V_INPT            ; call scan input device
@@ -1074,7 +1072,7 @@ LAB_137F
       BNE   LAB_1359          ; always loop for next character
 
 LAB_1384
-      JMP   LAB_1866          ; do CR/LF exit to BASIC
+      JMP   LAB_CURS_OFF_CR   ; cursor off, then CR/LF exit to BASIC
 
 ; announce buffer full
 
@@ -1121,6 +1119,9 @@ LAB_13CC
       BIT   Oquote            ; get open quote/DATA token flag
       BVS   LAB_13EC          ; branch if b6 of Oquote set (was DATA)
                               ; go save byte then continue crunching
+
+      JSR   LAB_XCRNCHD       ; check DIR/DEL extended two-byte tokens
+      BCS   LAB_13AC          ; matched and emitted, continue with next byte
 
       STX   TempB             ; save buffer read index
       STY   csidx             ; copy buffer save index
@@ -1176,7 +1177,9 @@ LAB_13EC
       INY                     ; increment save index (to next output byte)
       STA   Ibuffs,Y          ; save byte to output
       CMP   #$00              ; set the flags, set carry
-      BEQ   LAB_142A          ; do exit if was null [EOL]
+      BNE   @xcr_store_cont
+      JMP   LAB_142A          ; do exit if was null [EOL]
+@xcr_store_cont
 
                               ; A holds token or byte here
       SBC   #':'              ; subtract ":" (carry set by CMP #00)
@@ -1229,6 +1232,63 @@ LAB_141B
       LDA   Ibuffs,X          ; restore byte from input buffer
       BPL   LAB_13EA          ; branch always (all bytes in buffer are $00-$7F)
                               ; go save byte in output and continue crunching
+
+; check and emit extended two-byte command/function tokens
+; in:  A=current input char, X=read index, Y=save index
+; out: carry set if matched and emitted (X/Y advanced), clear otherwise
+;      A restored to current input char on no match
+
+LAB_XCRNCHD
+      STY   csidx             ; save save index
+      STX   TempB             ; save buffer start position
+      LDA   #$00
+      STA   Tindx             ; token index (0-based)
+
+@next_token
+      LDX   TempB             ; restore buffer position
+      LDA   Tindx
+      CMP   #XTK_COUNT
+      BCS   @no_match
+      ASL                     ; *2 for word pointer
+      TAY
+      LDA   TAB_XTKSTR,Y
+      STA   ut2_pl
+      LDA   TAB_XTKSTR+1,Y
+      STA   ut2_ph
+      LDY   #$00
+
+@cmp_loop
+      LDA   (ut2_pl),Y       ; table char
+      BEQ   @matched          ; null terminator = full match
+      CMP   Ibuffs,X
+      BNE   @try_next
+      INY
+      INX
+      BNE   @cmp_loop
+
+@matched
+      LDY   csidx
+      INY
+      LDA   #TKX_PREFIX
+      STA   Ibuffs,Y
+      INY
+      LDA   Tindx
+      CLC
+      ADC   #$01              ; token IDs are 1-based
+      STA   Ibuffs,Y
+      SEC
+      RTS
+
+@try_next
+      INC   Tindx
+      JMP   @next_token
+
+@no_match
+      LDY   csidx
+      LDX   TempB
+      LDA   Ibuffs,X
+      CLC
+      RTS
 
                               ; reached [EOL]
 LAB_142A
@@ -1464,6 +1524,8 @@ LAB_152B
       RTS
 
 LAB_152E
+      CMP   #TKX_PREFIX       ; extended two-byte token prefix?
+      BEQ   LAB_152E_X
       BPL   LAB_150C          ; just go print it if not token byte
 
                               ; else was token byte so uncrunch it (maybe)
@@ -1512,6 +1574,41 @@ LAB_1540
       JSR   LAB_PRNA          ; go print the character
       INY                     ; increment index
       BNE   LAB_1540          ; loop for next character
+
+; decode extended two-byte tokens during LIST output
+
+LAB_152E_X
+      BIT   Oquote            ; test the open quote flag
+      BMI   LAB_150C          ; in quotes, treat as plain character
+      STY   Tidx1             ; save index of extension prefix
+      INY                     ; move to extension id byte
+      LDA   (Baslnl),Y       ; get extension id
+      CMP   #XTK_COUNT+1
+      BCS   @unknown
+      CMP   #$01
+      BCC   @unknown
+      SEC
+      SBC   #$01              ; 0-based index
+      ASL                     ; *2 for word pointer
+      TAX
+      LDA   TAB_XTKSTR,X
+      STA   ut2_pl
+      LDA   TAB_XTKSTR+1,X
+      STA   ut2_ph
+      LDY   #$00
+@print_loop
+      LDA   (ut2_pl),Y
+      BEQ   @done
+      JSR   LAB_PRNA
+      INY
+      BNE   @print_loop
+@done
+      LDY   Tidx1
+      INY                     ; set index to extension id byte
+      JMP   LAB_1519          ; continue at byte after extended token
+@unknown
+      LDY   Tidx1             ; unknown extension id: print prefix as-is
+      JMP   LAB_150C
 
 ; perform FOR
 
@@ -1621,8 +1718,10 @@ LAB_15DC
       LDY   #$02              ; set index
       LDA   (Bpntrl),Y        ; get next line pointer high byte
       CLC                     ; clear carry for no "BREAK" message
-      BEQ   LAB_1651          ; if null go to immediate mode (was immediate or [EOT]
+      BNE   @line_ptr_ok
+      JMP   LAB_1651          ; if null go to immediate mode (was immediate or [EOT]
                               ; marker)
+@line_ptr_ok
 
       INY                     ; increment index
       LDA   (Bpntrl),Y        ; get line # low byte
@@ -1648,7 +1747,11 @@ LAB_15FC
 ; interpret BASIC code from (Bpntrl)
 
 LAB_15FF
-      BEQ   LAB_1628          ; exit if zero [EOL]
+      BNE   @stmt_not_eol
+      JMP   LAB_1628          ; exit if zero [EOL]
+@stmt_not_eol
+      CMP   #TKX_PREFIX       ; extended two-byte token prefix?
+      BEQ   LAB_1602X         ; yes, dispatch from extension table
 
 LAB_1602
       ASL                     ; *2 bytes per vector and normalise token
@@ -1667,6 +1770,47 @@ LAB_1609
       PHA                     ; onto stack
       JMP   LAB_IGBY          ; jump to increment and scan memory
                               ; then "return" to vector
+
+; dispatch extended two-byte command tokens
+; entry with A = TKX_PREFIX at current BASIC execute pointer
+
+LAB_1602X
+      JSR   LAB_IGBY          ; consume prefix, get extension id in A
+      CMP   #XTK_COUNT+1
+      BCS   @syntax_err
+      CMP   #$01
+      BCC   @syntax_err
+      SEC
+      SBC   #$01              ; 0-based index
+      ASL                     ; *2 for word pointer
+      TAX
+      LDA   TAB_XTKCMD+1,X
+      PHA
+      LDA   TAB_XTKCMD,X
+      PHA
+      JMP   LAB_IGBY          ; consume extension id, RTS -> handler
+
+@syntax_err
+      JMP   LAB_15D9          ; syntax error
+
+TAB_XTKCMD
+      .word LAB_DIR-1         ; XTK_DIR   ($01)
+      .word LAB_FDEL-1        ; XTK_DEL   ($02)
+      .word LAB_XMEM-1        ; XTK_XMEM  ($03)
+      .word LAB_XBANK-1       ; XTK_XBANK ($04)
+      .word LAB_XPOKE-1       ; XTK_XPOKE ($05)
+      .word LAB_15D9-1        ; XTK_XPEEK ($06) - function only, syntax error
+      .word LAB_XSTASH-1      ; XTK_STASH ($07)
+      .word LAB_XFETCH-1      ; XTK_FETCH ($08)
+      .word LAB_XFREE-1       ; XTK_XFREE ($09)
+      .word LAB_XRESET-1      ; XTK_XRESET ($0A)
+      .word LAB_XALLOC-1      ; XTK_XALLOC ($0B)
+      .word LAB_XDIR-1        ; XTK_XDIR  ($0C)
+      .word LAB_XDEL-1        ; XTK_XDEL  ($0D)
+      .word LAB_XMAP-1        ; XTK_XMAP  ($0E)
+      .word LAB_XUNMAP-1      ; XTK_XUNMAP ($0F)
+      .word LAB_GSAVE-1       ; XTK_GSAVE ($10)
+      .word LAB_GLOAD-1       ; XTK_GLOAD ($11)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -1785,8 +1929,7 @@ LAB_line_found
 ; perform NULL
 
 LAB_NULL
-      JSR   LAB_GTBY          ; get byte parameter
-      STX   Nullct            ; save new NULL count
+      JSR   LAB_GTBY          ; parse and discard byte parameter
 LAB_167A
       RTS
 
@@ -2643,21 +2786,11 @@ LAB_18F9
       CMP   #$0D              ; compare with [CR]
       BNE   LAB_188A          ; branch if not [CR]
 
-                              ; else print nullct nulls after the [CR]
-      STX   TempB             ; save buffer index
-      LDX   Nullct            ; get null count
-      BEQ   LAB_1886          ; branch if no nulls
-
-      LDA   #$00              ; load [NULL]
-LAB_1880
-      JSR   LAB_PRNA          ; go print the character
-      DEX                     ; decrement count
-      BNE   LAB_1880          ; loop if not all done
-
-      LDA   #$0D              ; restore the character (and set the flags)
-LAB_1886
-      STX   TPos              ; clear terminal position (X always = zero when we get here)
-      LDX   TempB             ; restore buffer index
+                              ; clear terminal position after [CR]
+      PHA
+      LDA   #$00
+      STA   TPos              ; clear terminal position
+      PLA
 LAB_188A
       AND   #$FF              ; set the flags
 LAB_188C
@@ -3266,7 +3399,9 @@ LAB_1BAC
 ; evaluate expression within parentheses
 
       CMP   #'('              ; compare with "("
-      BNE   LAB_1C18          ; if not "(" get (var), return value in FAC1 and $ flag
+      BEQ   @gval_paren
+      JMP   LAB_1C18          ; if not "(" get (var), return value in FAC1 and $ flag
+@gval_paren
 
 LAB_1BF7
       JSR   LAB_EVEZ          ; evaluate expression, no decrement
@@ -3350,6 +3485,34 @@ LAB_1BE7
 
                               ; wasn't +, -, NOT or FN so ..
 LAB_1BEE
+      CMP   #TKX_PREFIX       ; extended token prefix (e.g. XPEEK)
+      BNE   LAB_1BEE_STD
+      JSR   LAB_IGBY          ; consume prefix, get extension id
+      CMP   #XTK_XPEEK
+      BNE   LAB_SNER          ; unknown extension in expression
+      JSR   LAB_IGBY          ; consume extension id, now at '('
+      JSR   LAB_1BFE          ; scan for '(' and advance
+      JSR   LAB_EVNM          ; evaluate expression and check numeric
+      JSR   LAB_EVPI          ; convert FAC1 to unsigned integer
+      JSR   LAB_1BFB          ; scan for ')' and advance
+      LDA   FAC1_3            ; x offset low
+      STA   XMC_XAL
+      LDA   FAC1_2            ; x offset high
+      STA   XMC_XAM
+      LDA   XMC_BANK          ; current bank -> top address byte
+      STA   XMC_XAH
+      LDA   #XMC_CMD_GET
+      STA   XMC_CMD
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BEQ   @xpeek_ok
+      JMP   LAB_FCER
+@xpeek_ok
+      LDY   XMC_DATA
+      JMP   LAB_1FD0          ; convert Y byte to FAC1 and return
+
+LAB_1BEE_STD
+      SEC                     ; plain token base subtraction
       SBC   #TK_SGN           ; subtract with token for SGN
       BCS   LAB_1C27          ; if a function token go do it
 
@@ -5255,6 +5418,22 @@ LAB_23A8
 LAB_SGBY
       JSR   LAB_IGBY          ; increment and scan memory
 
+; get word (16-bit unsigned) parameter
+; Result in FAC1_3 (low) and FAC1_2 (high)
+
+LAB_GTWRD
+      JSR   LAB_EVNM          ; evaluate expression and check is numeric
+      JSR   LAB_EVPI          ; convert to unsigned integer (0-65535)
+      JMP   LAB_GBYT          ; scan memory and return
+
+; get word (16-bit signed) parameter
+; Result in FAC1_3 (low) and FAC1_2 (high)
+
+LAB_GTSW
+      JSR   LAB_EVNM          ; evaluate expression and check is numeric
+      JSR   LAB_EVIR          ; convert to signed integer (-32768..32767)
+      JMP   LAB_GBYT          ; scan memory and return
+
 ; get byte parameter
 
 LAB_GTBY
@@ -5486,6 +5665,19 @@ LAB_CALL
 
 CallExit
       JMP   LAB_GBYT          ; scan memory and return
+
+; cursor helpers — placed after all #<label-1 forward refs to avoid
+; page-boundary issues in the ca65 assembler.
+
+LAB_CURS_ON
+      LDA   #$01
+      STA   $A00A             ; VGC cursor enable register
+      RTS
+
+LAB_CURS_OFF_CR
+      LDA   #$00
+      STA   $A00A             ; VGC cursor enable register
+      JMP   LAB_1866          ; do CR/LF exit to BASIC
 
 ; perform WAIT
 
@@ -6606,15 +6798,15 @@ LAB_2953
       LDY   #>LAB_LMSG        ; point to " in line " message high byte
       JSR   LAB_18C3          ; print null terminated string from memory
 
-                              ; print Basic line #
+; print Basic line #
       LDA   Clineh            ; get current line high byte
       LDX   Clinel            ; get current line low byte
 
-; print XA as unsigned integer
+; print AX as unsigned integer (A=high byte, X=low byte)
 
 LAB_295E
-      STA   FAC1_1            ; save low byte as FAC1 mantissa1
-      STX   FAC1_2            ; save high byte as FAC1 mantissa2
+      STA   FAC1_1            ; save high byte as FAC1 mantissa1
+      STX   FAC1_2            ; save low byte as FAC1 mantissa2
       LDX   #$90              ; set exponent to 16d bits
       SEC                     ; set integer is +ve flag
       JSR   LAB_STFA          ; set exp=X, clearFAC1 mantissa3 and normalise
@@ -7932,6 +8124,35 @@ LAB_TWOPI
       LDY   #>LAB_2C7C        ; set (2*pi) pointer high byte
       JMP   LAB_UFAC          ; unpack memory (AY) into FAC1 and return
 
+; shared keyword string table for extended tokens
+; used by cruncher, LIST decoder; indexed by (token_id - 1)
+
+XTK_COUNT = 17
+
+TAB_XTKSTR
+      .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
+      .word @s_xpeek, @s_stash, @s_fetch, @s_xfree, @s_xreset
+      .word @s_xalloc, @s_xdir, @s_xdel, @s_xmap, @s_xunmap
+      .word @s_gsave, @s_gload
+
+@s_dir:    .byte "DIR",0
+@s_del:    .byte "DEL",0
+@s_xmem:   .byte "XMEM",0
+@s_xbank:  .byte "XBANK",0
+@s_xpoke:  .byte "XPOKE",0
+@s_xpeek:  .byte "XPEEK",0
+@s_stash:  .byte "STASH",0
+@s_fetch:  .byte "FETCH",0
+@s_xfree:  .byte "XFREE",0
+@s_xreset: .byte "XRESET",0
+@s_xalloc: .byte "XALLOC",0
+@s_xdir:   .byte "XDIR",0
+@s_xdel:   .byte "XDEL",0
+@s_xmap:   .byte "XMAP",0
+@s_xunmap: .byte "XUNMAP",0
+@s_gsave:  .byte "GSAVE",0
+@s_gload:  .byte "GLOAD",0
+
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
 
@@ -7967,41 +8188,196 @@ VGC_FGCOL     = $A002
 VGC_CURSX     = $A003
 VGC_CURSY     = $A004
 VGC_FRAME     = $A008          ; frame counter (read-only, incremented by host)
-VGC_SPREN     = $A009
-VGC_SPRENH    = $A00A
-VGC_COLLST    = $A00B
-VGC_COLLBG    = $A00C
+VGC_COLLST    = $A00B          ; sprite-sprite collision (read-only)
+VGC_COLLBG    = $A00C          ; sprite-background collision (read-only)
+VGC_BORDER    = $A00D          ; border color
 VGC_CHAROUT   = $A00E
-VGC_SPRBASE   = $A010          ; sprite registers: 16 sprites x 6 bytes
-VGC_GFXCMD    = $A070
-VGC_P0L       = $A071
-VGC_P0H       = $A072
-VGC_P1L       = $A073
-VGC_P1H       = $A074
-VGC_P2        = $A075
-VGC_P3        = $A076
-VGC_P4        = $A077
-VGC_P5        = $A078
-VGC_SPRDATA   = $A200          ; sprite shape data base
+
+; --- VGC unified command register and parameters ---
+
+VGC_CMD       = $A010          ; command register (write triggers execution)
+VGC_P0        = $A011          ; parameter 0
+VGC_P1        = $A012          ; parameter 1
+VGC_P2        = $A013          ; parameter 2
+VGC_P3        = $A014          ; parameter 3
+VGC_P4        = $A015          ; parameter 4
+VGC_P5        = $A016          ; parameter 5
+VGC_P6        = $A017          ; parameter 6
+VGC_P7        = $A018          ; parameter 7
+VGC_P8        = $A019          ; parameter 8
+VGC_P9        = $A01A          ; parameter 9
+
+; --- VGC graphics command codes ---
+
+VCMD_PLOT     = $01
+VCMD_UNPLOT   = $02
+VCMD_LINE     = $03
+VCMD_CIRCLE   = $04
+VCMD_RECT     = $05
+VCMD_FILL     = $06
+VCMD_GCLS     = $07
+VCMD_GCOLOR   = $08
+VCMD_PAINT    = $09
+
+; --- VGC sprite command codes ---
+
+VCMD_SPRDEF   = $10            ; P0=sprite, P1=x, P2=y, P3=color
+VCMD_SPRROW   = $11            ; P0=sprite, P1=row, P2-P9=8 bytes
+VCMD_SPRCLR   = $12            ; P0=sprite (clears shape data)
+VCMD_SPRCOPY  = $13            ; P0=src, P1=dest
+VCMD_SPRPOS   = $14            ; P0=sprite, P1=x_low, P2=x_high, P3=y_low, P4=y_high
+VCMD_SPRENA   = $15            ; P0=sprite
+VCMD_SPRDIS   = $16            ; P0=sprite
+VCMD_SPRFLIP  = $17            ; P0=sprite, P1=flags
+VCMD_SPRPRI   = $18            ; P0=sprite, P1=priority
 
 ; --- File I/O coprocessor registers ---
 
-FIO_CMD       = $B3A0          ; command: 1=SAVE, 2=LOAD (write triggers)
-FIO_STATUS    = $B3A1          ; status: 0=idle, 2=ok, 3=error
-FIO_ERRCODE   = $B3A2          ; error: 0=none, 1=not found, 2=io error
-FIO_NAMELEN   = $B3A3          ; filename length (1-63)
-FIO_SRCL      = $B3A4          ; source/dest addr low
-FIO_SRCH      = $B3A5          ; source/dest addr high
-FIO_ENDL      = $B3A6          ; end addr low (SAVE only)
-FIO_ENDH      = $B3A7          ; end addr high (SAVE only)
-FIO_SIZEL     = $B3A8          ; loaded size low (set by host after LOAD)
-FIO_SIZEH     = $B3A9          ; loaded size high
-FIO_NAME      = $B3B0          ; filename buffer (64 bytes)
+FIO_CMD       = $B9A0          ; command register (write triggers)
+FIO_STATUS    = $B9A1          ; status: 0=idle, 2=ok, 3=error
+FIO_ERRCODE   = $B9A2          ; error: 0=none, 1=not found, 2=io error
+FIO_NAMELEN   = $B9A3          ; filename length (1-63)
+FIO_SRCL      = $B9A4          ; source/dest addr low
+FIO_SRCH      = $B9A5          ; source/dest addr high
+FIO_ENDL      = $B9A6          ; end addr low (SAVE only)
+FIO_ENDH      = $B9A7          ; end addr high (SAVE only)
+FIO_SIZEL     = $B9A8          ; loaded size low (set by host after LOAD)
+FIO_SIZEH     = $B9A9          ; loaded size high
+FIO_GSPACE    = $B9AA          ; graphics space selector (0=screen,1=color,2=gfx,3=sprite)
+FIO_GADDRL    = $B9AB          ; graphics offset low
+FIO_GADDRH    = $B9AC          ; graphics offset high
+FIO_GLENL     = $B9AD          ; graphics transfer length low
+FIO_GLENH     = $B9AE          ; graphics transfer length high
+FIO_NAME      = $B9B0          ; filename buffer (64 bytes)
 
+FIO_CMD_SAVE  = $01            ; save program
+FIO_CMD_LOAD  = $02            ; load program
 FIO_OK        = $02            ; status: success
 FIO_ERR       = $03            ; status: error
+FIO_CMD_DIROPEN = $03          ; enumerate *.bas files, populate first entry
+FIO_CMD_DIRREAD = $04          ; advance to next entry
+FIO_CMD_DELETE = $05           ; delete a single *.bas file by name
+FIO_CMD_GSAVE = $06            ; save VGC memory block to *.gfx
+FIO_CMD_GLOAD = $07            ; load *.gfx into VGC memory block
+FIO_ERR_EOD   = $03            ; end of directory
+
+; --- XMC expansion memory controller registers ---
+
+XMC_CMD       = $BA00          ; command register (write triggers)
+XMC_STATUS    = $BA01          ; status: 0=idle, 2=ok, 3=error
+XMC_ERRCODE   = $BA02          ; error: 0=none
+XMC_CFG       = $BA03          ; config flags (reserved)
+XMC_XAL       = $BA04          ; expansion addr low
+XMC_XAM       = $BA05          ; expansion addr mid
+XMC_XAH       = $BA06          ; expansion addr high
+XMC_RAML      = $BA07          ; cpu addr low
+XMC_RAMH      = $BA08          ; cpu addr high
+XMC_LENL      = $BA09          ; transfer length low
+XMC_LENH      = $BA0A          ; transfer length high
+XMC_DATA      = $BA0B          ; data port
+XMC_BANK      = $BA0C          ; current 64KB bank
+XMC_BANKS     = $BA0D          ; total banks
+XMC_USEDL     = $BA0E          ; used pages low (future allocator)
+XMC_USEDH     = $BA0F          ; used pages high
+XMC_FREEL     = $BA10          ; free pages low
+XMC_FREEH     = $BA11          ; free pages high
+XMC_NAMELEN   = $BA12          ; name length (0-27)
+XMC_HANDLE    = $BA13          ; block handle
+XMC_DIRCOUNTL = $BA14          ; named block count low
+XMC_DIRCOUNTH = $BA15          ; named block count high
+XMC_WINCTL    = $BA16          ; mapped window enable bits
+XMC_W0AL      = $BA18          ; window 0 xaddr low
+XMC_W0AM      = $BA19          ; window 0 xaddr mid
+XMC_W0AH      = $BA1A          ; window 0 xaddr high
+XMC_W1AL      = $BA1B          ; window 1 xaddr low
+XMC_W1AM      = $BA1C          ; window 1 xaddr mid
+XMC_W1AH      = $BA1D          ; window 1 xaddr high
+XMC_W2AL      = $BA1E          ; window 2 xaddr low
+XMC_W2AM      = $BA1F          ; window 2 xaddr mid
+XMC_W2AH      = $BA20          ; window 2 xaddr high
+XMC_W3AL      = $BA21          ; window 3 xaddr low
+XMC_W3AM      = $BA22          ; window 3 xaddr mid
+XMC_W3AH      = $BA23          ; window 3 xaddr high
+XMC_NAME      = $BA24          ; name buffer start
+XMC_NAME_MAX  = 28             ; bytes in name buffer
+
+XMC_CMD_GET   = $01            ; read byte at XADDR into XMC_DATA
+XMC_CMD_PUT   = $02            ; write XMC_DATA to XADDR
+XMC_CMD_STASH = $03            ; copy RAM -> XRAM
+XMC_CMD_FETCH = $04            ; copy XRAM -> RAM
+XMC_CMD_FILL  = $05            ; fill XRAM with XMC_DATA
+XMC_CMD_STATS = $07            ; refresh stats
+XMC_CMD_RSTUS = $08            ; clear usage tracking metadata
+XMC_CMD_REL   = $09            ; mark range as free in usage tracking
+XMC_CMD_ALLOC = $0A            ; allocate block (len -> xaddr/handle)
+XMC_CMD_NSTSH = $0B            ; named stash RAM->XRAM
+XMC_CMD_NFETC = $0C            ; named fetch XRAM->RAM
+XMC_CMD_NDEL  = $0D            ; named delete
+XMC_CMD_NDIRO = $0E            ; named dir open
+XMC_CMD_NDIRR = $0F            ; named dir read
+XMC_OK        = $02            ; command success status
+XMC_ERR_NF    = $03            ; not found
+XMC_ERR_EOD   = $06            ; end of directory
+
+; --- VSC sound controller registers ---
+
+VSC_CMD       = $A100          ; command register (write triggers execution)
+VSC_P0        = $A101          ; parameter 0
+VSC_P1        = $A102          ; parameter 1
+VSC_P2        = $A103          ; parameter 2
+VSC_P3        = $A104          ; parameter 3
+VSC_P4        = $A105          ; parameter 4
+
+VSCMD_SOUND   = $01            ; P0=ch, P1/P2=freq, P3/P4=duration
+VSCMD_VOLUME  = $02            ; P0=master volume 0-15
+VSCMD_ENV     = $03            ; P0=ch, P1=atk, P2=dec, P3=sus, P4=rel
+VSCMD_WAVE    = $04            ; P0=ch, P1=waveform
 
 ; --- VGC command handlers ---
+
+; draw a text-only cold-start splash screen
+
+LAB_SPLASH
+      LDA   #$06              ; blue background
+      STA   VGC_BGCOL
+      LDA   #$01              ; white text
+      STA   VGC_FGCOL
+      LDA   #$06              ; blue border
+      STA   VGC_BORDER
+      LDA   #$00              ; mode 0: text only
+      STA   VGC_MODE
+
+      LDA   #$0C              ; clear text layer and home cursor
+      JSR   V_OUTP
+      LDA   #$21              ; centered x for "NovaBASIC v1.0"
+      STA   VGC_CURSX
+      STA   TPos
+      LDA   #$00
+      STA   VGC_CURSY
+      LDA   #<LAB_BNR1
+      LDY   #>LAB_BNR1
+      JSR   LAB_18C3
+
+      LDA   #$1A              ; centered x for "Derived from EhBASIC 2.22p5"
+      STA   VGC_CURSX
+      STA   TPos
+      LDA   #$02              ; one empty row between lines
+      STA   VGC_CURSY
+      LDA   #<LAB_BNR2
+      LDY   #>LAB_BNR2
+      JSR   LAB_18C3
+
+      LDA   #$1D              ; centered x for "xxxxx BASIC bytes free"
+      STA   VGC_CURSX
+      STA   TPos
+      LDA   #$04              ; one empty row between lines
+      STA   VGC_CURSY
+      RTS
+
+LAB_BNR1
+      .byte "NovaBASIC v1.0",$00
+LAB_BNR2
+      .byte "Derived from EhBASIC 2.22p5",$00
 
 ; perform CLS — clear screen, no arguments
 
@@ -8044,145 +8420,189 @@ LAB_GMODE
 ; perform GCLS — clear the graphics bitmap layer
 
 LAB_GCLS
-      LDA   #$07              ; GCLS command
-      STA   VGC_GFXCMD        ; trigger
+      LDA   #VCMD_GCLS        ; GCLS command
+      STA   VGC_CMD            ; trigger
       RTS
 
 ; perform GCOLOR c — set graphics draw color (0-15)
 
 LAB_GCOLOR
       JSR   LAB_GTBY          ; get color byte in X
-      STX   VGC_P0L           ; color in param 0 low
+      STX   VGC_P0             ; color in P0
       LDA   #$00
-      STA   VGC_P0H           ; high byte = 0
-      LDA   #$08              ; GCOLOR command
-      STA   VGC_GFXCMD        ; trigger
+      STA   VGC_P1             ; high byte = 0
+      LDA   #VCMD_GCOLOR      ; GCOLOR command
+      STA   VGC_CMD            ; trigger
       RTS
 
 ; perform PLOT x, y
 
 LAB_PLOT
-      JSR   LAB_GTBY          ; get x (0-159)
-      STX   VGC_P0L           ; P0 low
-      LDA   #$00
-      STA   VGC_P0H           ; P0 high = 0
+      JSR   LAB_GTWRD         ; get x (0-319) as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P0             ; x low
+      LDA   FAC1_2
+      STA   VGC_P1             ; x high
       JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get y (0-49)
-      STX   VGC_P1L           ; P1 low
+      JSR   LAB_GTBY          ; get y (0-199)
+      STX   VGC_P2             ; y low
       LDA   #$00
-      STA   VGC_P1H           ; P1 high = 0
-      LDA   #$01              ; PLOT command
-      STA   VGC_GFXCMD        ; trigger
+      STA   VGC_P3             ; y high = 0
+      LDA   #VCMD_PLOT        ; PLOT command
+      STA   VGC_CMD            ; trigger
       RTS
 
 ; perform UNPLOT x, y
 
 LAB_UNPLOT
-      JSR   LAB_GTBY          ; get x
-      STX   VGC_P0L
-      LDA   #$00
-      STA   VGC_P0H
+      JSR   LAB_GTWRD         ; get x as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P0             ; x low
+      LDA   FAC1_2
+      STA   VGC_P1             ; x high
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GTBY          ; get y
-      STX   VGC_P1L
+      STX   VGC_P2             ; y low
       LDA   #$00
-      STA   VGC_P1H
-      LDA   #$02              ; UNPLOT command
-      STA   VGC_GFXCMD
+      STA   VGC_P3             ; y high = 0
+      LDA   #VCMD_UNPLOT      ; UNPLOT command
+      STA   VGC_CMD
       RTS
 
-; perform LINE x1, y1, x2, y2
+; perform LINE x0, y0, x1, y1
 
 LAB_GLINE
-      JSR   LAB_GTBY          ; x1
-      STX   VGC_P0L
+      JSR   LAB_GTWRD         ; x0 as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P0             ; x0 low
+      LDA   FAC1_2
+      STA   VGC_P1             ; x0 high
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y0
+      STX   VGC_P2             ; y0 low
       LDA   #$00
-      STA   VGC_P0H
+      STA   VGC_P3             ; y0 high = 0
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; x1 as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P4             ; x1 low
+      LDA   FAC1_2
+      STA   VGC_P5             ; x1 high
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; y1
-      STX   VGC_P1L
+      STX   VGC_P6             ; y1 low
       LDA   #$00
-      STA   VGC_P1H
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; x2
-      STX   VGC_P2
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y2
-      STX   VGC_P3
-      LDA   #$03              ; LINE command
-      STA   VGC_GFXCMD
+      STA   VGC_P7             ; y1 high = 0
+      LDA   #VCMD_LINE        ; LINE command
+      STA   VGC_CMD
       RTS
 
-; perform CIRCLE x, y, r
+; perform CIRCLE cx, cy, r
 
 LAB_CIRCLE
-      JSR   LAB_GTBY          ; x
-      STX   VGC_P0L
-      LDA   #$00
-      STA   VGC_P0H
+      JSR   LAB_GTWRD         ; cx as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P0             ; cx low
+      LDA   FAC1_2
+      STA   VGC_P1             ; cx high
       JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y
-      STX   VGC_P1L
+      JSR   LAB_GTBY          ; cy
+      STX   VGC_P2             ; cy low
       LDA   #$00
-      STA   VGC_P1H
+      STA   VGC_P3             ; cy high = 0
       JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; r
-      STX   VGC_P2
-      LDA   #$04              ; CIRCLE command
-      STA   VGC_GFXCMD
+      JSR   LAB_GTWRD         ; r as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P4             ; r low
+      LDA   FAC1_2
+      STA   VGC_P5             ; r high
+      LDA   #VCMD_CIRCLE      ; CIRCLE command
+      STA   VGC_CMD
       RTS
 
-; perform RECT x1, y1, x2, y2
+; perform RECT x0, y0, x1, y1
 
 LAB_RECT
-      JSR   LAB_GTBY          ; x1
-      STX   VGC_P0L
+      JSR   LAB_GTWRD         ; x0 as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P0             ; x0 low
+      LDA   FAC1_2
+      STA   VGC_P1             ; x0 high
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y0
+      STX   VGC_P2             ; y0 low
       LDA   #$00
-      STA   VGC_P0H
+      STA   VGC_P3             ; y0 high = 0
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; x1 as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P4             ; x1 low
+      LDA   FAC1_2
+      STA   VGC_P5             ; x1 high
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; y1
-      STX   VGC_P1L
+      STX   VGC_P6             ; y1 low
       LDA   #$00
-      STA   VGC_P1H
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; x2
-      STX   VGC_P2
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y2
-      STX   VGC_P3
-      LDA   #$05              ; RECT command
-      STA   VGC_GFXCMD
+      STA   VGC_P7             ; y1 high = 0
+      LDA   #VCMD_RECT        ; RECT command
+      STA   VGC_CMD
       RTS
 
-; perform FILL x1, y1, x2, y2
+; perform FILL x0, y0, x1, y1
 
 LAB_FILLRECT
-      JSR   LAB_GTBY          ; x1
-      STX   VGC_P0L
+      JSR   LAB_GTWRD         ; x0 as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P0             ; x0 low
+      LDA   FAC1_2
+      STA   VGC_P1             ; x0 high
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y0
+      STX   VGC_P2             ; y0 low
       LDA   #$00
-      STA   VGC_P0H
+      STA   VGC_P3             ; y0 high = 0
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; x1 as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P4             ; x1 low
+      LDA   FAC1_2
+      STA   VGC_P5             ; x1 high
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; y1
-      STX   VGC_P1L
+      STX   VGC_P6             ; y1 low
       LDA   #$00
-      STA   VGC_P1H
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; x2
-      STX   VGC_P2
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y2
-      STX   VGC_P3
-      LDA   #$06              ; FILL command
-      STA   VGC_GFXCMD
+      STA   VGC_P7             ; y1 high = 0
+      LDA   #VCMD_FILL        ; FILL command
+      STA   VGC_CMD
+      RTS
+
+; perform PAINT x, y
+
+LAB_PAINT
+      JSR   LAB_GTWRD         ; get x (0-319) as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P0             ; x low
+      LDA   FAC1_2
+      STA   VGC_P1             ; x high
+      JSR   LAB_1C01          ; require comma
+      JSR   LAB_GTBY          ; get y (0-199)
+      STX   VGC_P2             ; y low
+      LDA   #$00
+      STA   VGC_P3             ; y high = 0
+      LDA   #VCMD_PAINT       ; PAINT command
+      STA   VGC_CMD
       RTS
 
 ; perform SPRITE n, ON/OFF  or  SPRITE n, x, y
 ; sprite number 0-15, ON/OFF enables/disables, x,y sets position
+; Uses command-driven VGC interface:
+;   SPRENA ($15): P0=sprite
+;   SPRDIS ($16): P0=sprite
+;   SPRPOS ($14): P0=sprite, P1=x_low, P2=x_high, P3=y_low, P4=y_high
 
 LAB_SPRCMD
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
-      TXA
-      PHA                     ; save sprite number on stack
+      STX   Itempl            ; save sprite number
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GBYT          ; peek at next token
       CMP   #TK_ON            ; is it ON?
@@ -8190,241 +8610,140 @@ LAB_SPRCMD
       CMP   #TK_OFF           ; is it OFF?
       BEQ   @spr_off
       ; not ON/OFF — parse x, y position
-      PLA                     ; retrieve sprite number
-      PHA                     ; keep it on stack
-      ; calculate register offset: base + N*6
-      ; A = sprite number
-      TAX                     ; X = N
-      ASL   A                 ; A = N*2
-      STA   Itempl            ; save N*2
-      TXA                     ; A = N
-      ASL   A                 ; A = N*2
-      ASL   A                 ; A = N*4
-      CLC
-      ADC   Itempl            ; A = N*4 + N*2 = N*6
-      STA   Itempl            ; save offset in Itempl
-      JSR   LAB_GTBY          ; get x in X
-      LDY   Itempl            ; get offset
-      TXA                     ; A = x low
-      STA   VGC_SPRBASE,Y     ; store x low at offset+0
-      LDA   #$00
-      STA   VGC_SPRBASE+1,Y   ; store x high at offset+1
+      LDA   Itempl            ; get sprite number
+      STA   VGC_P0             ; P0 = sprite index
+      JSR   LAB_GTSW          ; get signed x as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P1             ; P1 = x low
+      LDA   FAC1_2
+      STA   VGC_P2             ; P2 = x high
       JSR   LAB_1C01          ; require comma
-      LDA   Itempl            ; save offset before LAB_GTBY
-      PHA                     ; push offset
-      JSR   LAB_GTBY          ; get y in X (clobbers Itempl)
-      PLA                     ; restore offset
-      TAY
-      TXA                     ; A = y
-      STA   VGC_SPRBASE+2,Y   ; store y at offset+2
-      PLA                     ; discard saved sprite number
+      JSR   LAB_GTSW          ; get signed y as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P3             ; P3 = y low
+      LDA   FAC1_2
+      STA   VGC_P4             ; P4 = y high
+      LDA   #VCMD_SPRPOS      ; SPRPOS command
+      STA   VGC_CMD            ; trigger
       RTS
 
 @spr_on
       JSR   LAB_IGBY          ; consume the ON token
-      PLA                     ; get sprite number
-      TAX
-      CPX   #$08              ; sprite 0-7 or 8-15?
-      BCS   @on_hi
-      LDA   #$01              ; set bit 0
-@on_shft
-      DEX
-      BMI   @on_set
-      ASL   A                 ; shift bit left by sprite number
-      JMP   @on_shft
-@on_set
-      ORA   VGC_SPREN         ; set bit in enable register
-      STA   VGC_SPREN
-      RTS
-@on_hi
-      TXA
-      SEC
-      SBC   #$08              ; N - 8
-      TAX
-      LDA   #$01
-@on_shfth
-      DEX
-      BMI   @on_seth
-      ASL   A
-      JMP   @on_shfth
-@on_seth
-      ORA   VGC_SPRENH        ; set bit in high enable register
-      STA   VGC_SPRENH
+      LDA   Itempl            ; get sprite number
+      STA   VGC_P0             ; P0 = sprite index
+      LDA   #VCMD_SPRENA      ; SPRENA command
+      STA   VGC_CMD            ; trigger
       RTS
 
 @spr_off
       JSR   LAB_IGBY          ; consume the OFF token
-      PLA                     ; get sprite number
-      TAX
-      CPX   #$08
-      BCS   @off_hi
-      LDA   #$01
-@off_shft
-      DEX
-      BMI   @off_clr
-      ASL   A
-      JMP   @off_shft
-@off_clr
-      EOR   #$FF              ; invert to make mask
-      AND   VGC_SPREN         ; clear bit
-      STA   VGC_SPREN
-      RTS
-@off_hi
-      TXA
-      SEC
-      SBC   #$08
-      TAX
-      LDA   #$01
-@off_shfth
-      DEX
-      BMI   @off_clrh
-      ASL   A
-      JMP   @off_shfth
-@off_clrh
-      EOR   #$FF
-      AND   VGC_SPRENH
-      STA   VGC_SPRENH
+      LDA   Itempl            ; get sprite number
+      STA   VGC_P0             ; P0 = sprite index
+      LDA   #VCMD_SPRDIS      ; SPRDIS command
+      STA   VGC_CMD            ; trigger
       RTS
 
 ; perform SPRITESHAPE n, shape
+; NOTE: The new VGC does not use shape indices. Each sprite has its own
+; shape data defined via SPRITEDATA. This command is kept for syntax
+; compatibility but does nothing.
 
 LAB_SPRSHAPE
-      JSR   LAB_GTBY          ; get sprite number in X
-      TXA
-      ; calculate offset: base + N*6 + 5 (shape index byte)
-      TAX                     ; X = N
-      ASL   A                 ; A = N*2
-      STA   Itempl            ; save N*2
-      TXA                     ; A = N
-      ASL   A                 ; A = N*2
-      ASL   A                 ; A = N*4
-      CLC
-      ADC   Itempl            ; A = N*6
-      CLC
-      ADC   #$05              ; offset+5 = shape index
-      STA   Itempl            ; save offset
-      JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get shape byte in X
-      LDY   Itempl            ; get offset
-      TXA
-      STA   VGC_SPRBASE,Y     ; store shape
-      RTS
-
-; perform SPRITECOLOR n, c
-
 LAB_SPRCOLOR
-      JSR   LAB_GTBY          ; get sprite number in X
-      TXA
-      ; calculate offset: base + N*6 + 3 (color byte)
-      TAX
-      ASL   A                 ; N*2
-      STA   Itempl
-      TXA
-      ASL   A                 ; N*2
-      ASL   A                 ; N*4
-      CLC
-      ADC   Itempl            ; N*6
-      CLC
-      ADC   #$03              ; offset+3 = color
-      STA   Itempl
+      JSR   LAB_GTBY          ; get sprite number in X (parse and discard)
       JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get color byte in X
-      LDY   Itempl
-      TXA
-      STA   VGC_SPRBASE,Y     ; store color
+      JSR   LAB_GTBY          ; get shape/color byte in X (parse and discard)
       RTS
 
-; perform SPRITEDATA shape, row, b1, b2
-; address = $A200 + shape*32 + row*2
+; perform SPRITEDATA sprite, row, b1, b2
+; Uses CmdSprRow ($11): P0=sprite, P1=row, P2-P9=8 bytes of row data.
+; b1 and b2 are placed in P2 and P3 (first 4 pixels); P4-P9 are zeroed.
 
 LAB_SPRDATA
-      JSR   LAB_GTBY          ; get shape number (0-15) in X
-      TXA
-      ; shape * 32: shift left 5 times
-      ; max 15*32 = 480 = $01E0
-      ASL   A                 ; *2
-      ASL   A                 ; *4
-      ASL   A                 ; *8
-      ASL   A                 ; *16
-      ASL   A                 ; *32 — carry has overflow bit
-      STA   Itempl            ; low byte of shape*32
-      LDA   #$00
-      ROL   A                 ; capture carry into high byte
-      STA   Itemph            ; high byte of shape*32
+      JSR   LAB_GTBY          ; get sprite number (0-15) in X
+      STX   VGC_P0             ; P0 = sprite index
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; get row (0-15) in X
-      TXA
-      ASL   A                 ; row * 2
-      CLC
-      ADC   Itempl            ; add to shape*32 low
-      STA   Itempl
-      LDA   Itemph
-      ADC   #$00              ; propagate carry
-      ; add base address $A200
-      CLC
-      LDA   Itempl
-      ADC   #<VGC_SPRDATA     ; add low byte of base
-      STA   Itempl
-      LDA   Itemph
-      ADC   #>VGC_SPRDATA     ; add high byte of base
-      STA   Itemph
+      STX   VGC_P1             ; P1 = row
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; get b1 in X
-      TXA
-      LDY   #$00
-      STA   (Itempl),Y        ; store b1 at address
-      ; save address before LAB_GTBY clobbers Itempl
-      LDA   Itempl
-      PHA
-      LDA   Itemph
-      PHA
+      STX   VGC_P2             ; P2 = first data byte
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; get b2 in X
-      PLA
-      STA   Itemph            ; restore address high
-      PLA
-      STA   Itempl            ; restore address low
-      TXA
-      LDY   #$01
-      STA   (Itempl),Y        ; store b2 at address+1
+      STX   VGC_P3             ; P3 = second data byte
+      ; zero remaining bytes P4-P9
+      LDA   #$00
+      STA   VGC_P4
+      STA   VGC_P5
+      STA   VGC_P6
+      STA   VGC_P7
+      STA   VGC_P8
+      STA   VGC_P9
+      LDA   #VCMD_SPRROW      ; CmdSprRow command
+      STA   VGC_CMD            ; trigger
       RTS
 
-; perform SOUND channel, frequency, duration — stub (parse and discard)
+; perform SOUND channel, frequency, duration
 
 LAB_SOUND
-      JSR   LAB_GTBY          ; channel
+      JSR   LAB_GTBY          ; channel (0-3)
+      STX   VSC_P0
       JSR   LAB_1C01          ; comma
-      JSR   LAB_EVNM          ; frequency (evaluate and discard)
+      JSR   LAB_GTWRD         ; frequency as 16-bit
+      LDA   FAC1_3            ; frequency low byte
+      STA   VSC_P1
+      LDA   FAC1_2            ; frequency high byte
+      STA   VSC_P2
       JSR   LAB_1C01          ; comma
-      JSR   LAB_EVNM          ; duration (evaluate and discard)
+      JSR   LAB_GTWRD         ; duration as 16-bit
+      LDA   FAC1_3            ; duration low byte
+      STA   VSC_P3
+      LDA   FAC1_2            ; duration high byte
+      STA   VSC_P4
+      LDA   #VSCMD_SOUND
+      STA   VSC_CMD
       RTS
 
-; perform VOLUME level — stub (parse and discard)
+; perform VOLUME level
 
 LAB_VOLUME
       JSR   LAB_GTBY          ; volume level
+      STX   VSC_P0
+      LDA   #VSCMD_VOLUME
+      STA   VSC_CMD
       RTS
 
-; perform ENVELOPE channel, a, d, s, r — stub (parse and discard)
+; perform ENVELOPE channel, a, d, s, r
 
 LAB_ENVELOPE
       JSR   LAB_GTBY          ; channel
+      STX   VSC_P0
       JSR   LAB_1C01
       JSR   LAB_GTBY          ; attack
+      STX   VSC_P1
       JSR   LAB_1C01
       JSR   LAB_GTBY          ; decay
+      STX   VSC_P2
       JSR   LAB_1C01
       JSR   LAB_GTBY          ; sustain
+      STX   VSC_P3
       JSR   LAB_1C01
       JSR   LAB_GTBY          ; release
+      STX   VSC_P4
+      LDA   #VSCMD_ENV
+      STA   VSC_CMD
       RTS
 
-; perform WAVE channel, waveform — stub (parse and discard)
+; perform WAVE channel, waveform
 
 LAB_WAVE
       JSR   LAB_GTBY          ; channel
+      STX   VSC_P0
       JSR   LAB_1C01
       JSR   LAB_GTBY          ; waveform
+      STX   VSC_P1
+      LDA   #VSCMD_WAVE
+      STA   VSC_CMD
       RTS
 
 ; perform VSYNC — wait for next frame (vblank sync)
@@ -8439,42 +8758,14 @@ LAB_VSYNC
 ; --- VGC function handlers ---
 
 ; perform SPRITEX(n) — return X position of sprite n
-; FAC1 already contains the argument (evaluated by LAB_PPFN preprocessor)
+; NOTE: The new command-driven VGC does not expose sprite positions for
+; reading. This function always returns 0 until a query mechanism is added.
 
 LAB_SPRITEX
-      JSR   LAB_F2FX          ; convert FAC1 to integer in Itempl/Itemph
-      LDA   Itempl            ; sprite number
-      ; calculate offset: N*6
-      TAX
-      ASL   A                 ; N*2
-      STA   Itemph            ; borrow Itemph as temp
-      TXA
-      ASL   A                 ; N*2
-      ASL   A                 ; N*4
-      CLC
-      ADC   Itemph            ; N*6
-      TAX                     ; X = offset
-      LDA   VGC_SPRBASE+1,X   ; x high byte
-      LDY   VGC_SPRBASE,X     ; x low byte
-      ; A=high, Y=low — return as integer via LAB_AYFC
-      JMP   LAB_AYFC
-
-; perform SPRITEY(n) — return Y position of sprite n
-
 LAB_SPRITEY
-      JSR   LAB_F2FX          ; convert FAC1 to integer in Itempl/Itemph
-      LDA   Itempl            ; sprite number
-      TAX
-      ASL   A                 ; N*2
-      STA   Itemph
-      TXA
-      ASL   A                 ; N*2
-      ASL   A                 ; N*4
-      CLC
-      ADC   Itemph            ; N*6
-      TAX
-      LDY   VGC_SPRBASE+2,X   ; y position byte
-      LDA   #$00              ; Y position is single byte, high = 0
+      JSR   LAB_F2FX          ; convert FAC1 to integer (consume argument)
+      LDA   #$00              ; high byte = 0
+      LDY   #$00              ; low byte = 0
       JMP   LAB_AYFC
 
 ; perform COLLISION(n) — return sprite-sprite collision register
@@ -8494,79 +8785,91 @@ LAB_BUMPED
 
 ; --- File I/O command handlers ---
 
-; perform SAVE "filename"
+; perform SAVE "filename"                     (program save)
+; or      SAVE "filename", address, length    (raw block save)
 
 LAB_FSAVE
-      JSR   LAB_EVEX          ; evaluate expression
-      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
-      TAX                     ; save length in X
-      BEQ   @err_io           ; empty string = error
-      CPX   #64               ; max 63 chars
-      BCS   @err_io           ; too long
-      STX   FIO_NAMELEN       ; store filename length
-      ; copy filename from (ut1_pl),Y to FIO_NAME
-      LDY   #$00
-@cp_sv
-      LDA   (ut1_pl),Y        ; get char from string
-      STA   FIO_NAME,Y        ; store to FIO name buffer
-      INY
-      DEX
-      BNE   @cp_sv
-      ; set source address (program start)
+      JSR   LAB_FIO_GETNAME   ; parse filename expression into FIO_NAME
+      BCC   @sv_have_name
+      JMP   LAB_FIO_ERRIO
+@sv_have_name
+      JSR   LAB_GBYT          ; peek at next token
+      CMP   #','
+      BEQ   @sv_raw
+      ; default: save BASIC program area
       LDA   Smeml
       STA   FIO_SRCL
       LDA   Smemh
       STA   FIO_SRCH
-      ; set end address (end of program / start of variables)
       LDA   Svarl
       STA   FIO_ENDL
       LDA   Svarh
       STA   FIO_ENDH
-      ; trigger SAVE
-      LDA   #$01
+      JMP   @sv_go
+@sv_raw
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; source address
+      LDA   FAC1_3
+      STA   FIO_SRCL
+      LDA   FAC1_2
+      STA   FIO_SRCH
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; length
+      CLC
+      LDA   FIO_SRCL
+      ADC   FAC1_3
+      STA   FIO_ENDL
+      LDA   FIO_SRCH
+      ADC   FAC1_2
+      STA   FIO_ENDH
+@sv_go
+      LDA   #FIO_CMD_SAVE
       STA   FIO_CMD
       ; check status
       LDA   FIO_STATUS
       CMP   #FIO_OK
-      BEQ   @ok_sv
-@err_io
-      LDA   #<ERR_FIO
-      LDY   #>ERR_FIO
-      JSR   LAB_18C3          ; print error message
-      JMP   LAB_1274          ; warm start
-@ok_sv
+      BEQ   @sv_ok
+      JMP   LAB_FIO_ERRIO
+@sv_ok
       RTS
 
-; perform LOAD "filename"
+; perform LOAD "filename"             (program load)
+; or      LOAD "filename", address    (raw block load)
 
 LAB_FLOAD
-      JSR   LAB_EVEX          ; evaluate expression
-      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
-      TAX                     ; save length in X
-      BEQ   @err_lio          ; empty string = error
-      CPX   #64               ; max 63 chars
-      BCS   @err_lio          ; too long
-      STX   FIO_NAMELEN       ; store filename length
-      ; copy filename from (ut1_pl),Y to FIO_NAME
-      LDY   #$00
-@cp_ld
-      LDA   (ut1_pl),Y
-      STA   FIO_NAME,Y
-      INY
-      DEX
-      BNE   @cp_ld
-      ; set destination address (program start)
+      JSR   LAB_FIO_GETNAME   ; parse filename expression into FIO_NAME
+      BCC   @ld_have_name
+      JMP   LAB_FIO_ERRIO
+@ld_have_name
+      LDA   #$00              ; load mode: 0=program, 1=raw
+      STA   TempB
+      JSR   LAB_GBYT          ; peek for optional ",address"
+      CMP   #','
+      BEQ   @ld_raw
+      ; default: load BASIC program at start of program memory
       LDA   Smeml
       STA   FIO_SRCL
       LDA   Smemh
       STA   FIO_SRCH
-      ; trigger LOAD
-      LDA   #$02
+      JMP   @ld_go
+@ld_raw
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; destination address
+      LDA   FAC1_3
+      STA   FIO_SRCL
+      LDA   FAC1_2
+      STA   FIO_SRCH
+      LDA   #$01
+      STA   TempB
+@ld_go
+      LDA   #FIO_CMD_LOAD
       STA   FIO_CMD
       ; check status
       LDA   FIO_STATUS
       CMP   #FIO_OK
-      BNE   @chk_err
+      BNE   @ld_chk_err
+      LDA   TempB
+      BNE   @ld_raw_ok
       ; success — update Svarl/Svarh = Smeml + FIO_SIZE
       CLC
       LDA   Smeml
@@ -8575,25 +8878,647 @@ LAB_FLOAD
       LDA   Smemh
       ADC   FIO_SIZEH
       STA   Svarh
-      ; reset execution, clear vars, print Ready
-      JMP   LAB_1477
-@chk_err
+      ; reset array/var pointers so LIST works correctly
+      LDA   Svarl
+      STA   Sarryl
+      STA   Earryl
+      LDA   Svarh
+      STA   Sarryh
+      STA   Earryh
+      JMP   LAB_1274          ; print Ready, return to command loop
+@ld_raw_ok
+      RTS
+@ld_chk_err
       LDA   FIO_ERRCODE
       CMP   #$01              ; not found?
-      BEQ   @err_fnf
-@err_lio
+      BNE   @ld_errio
+      JMP   LAB_FIO_ERRFNF
+@ld_errio
+      JMP   LAB_FIO_ERRIO
+
+; perform GSAVE "filename", space, offset, length
+
+LAB_GSAVE
+      JSR   LAB_FIO_GETNAME
+      BCC   @gs_have_name
+      JMP   LAB_FIO_ERRIO
+@gs_have_name
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; graphics space id
+      STX   FIO_GSPACE
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; graphics offset
+      LDA   FAC1_3
+      STA   FIO_GADDRL
+      LDA   FAC1_2
+      STA   FIO_GADDRH
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; graphics length
+      LDA   FAC1_3
+      STA   FIO_GLENL
+      LDA   FAC1_2
+      STA   FIO_GLENH
+      LDA   #FIO_CMD_GSAVE
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BEQ   @gs_ok
+      JMP   LAB_FIO_ERRIO
+@gs_ok
+      RTS
+
+; perform GLOAD "filename", space, offset [,length]
+
+LAB_GLOAD
+      JSR   LAB_FIO_GETNAME
+      BCC   @gl_have_name
+      JMP   LAB_FIO_ERRIO
+@gl_have_name
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; graphics space id
+      STX   FIO_GSPACE
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; graphics offset
+      LDA   FAC1_3
+      STA   FIO_GADDRL
+      LDA   FAC1_2
+      STA   FIO_GADDRH
+      LDA   #$00              ; default: load full file
+      STA   FIO_GLENL
+      STA   FIO_GLENH
+      JSR   LAB_GBYT          ; optional comma,length
+      CMP   #','
+      BNE   @gl_go
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   FIO_GLENL
+      LDA   FAC1_2
+      STA   FIO_GLENH
+@gl_go
+      LDA   #FIO_CMD_GLOAD
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @gl_chk_err
+      RTS
+@gl_chk_err
+      LDA   FIO_ERRCODE
+      CMP   #$01              ; not found?
+      BNE   @gl_errio
+      JMP   LAB_FIO_ERRFNF
+@gl_errio
+      JMP   LAB_FIO_ERRIO
+
+; perform DEL "filename"
+
+LAB_FDEL
+      JSR   LAB_FIO_GETNAME   ; parse filename expression into FIO_NAME
+      BCC   @del_have_name
+      JMP   LAB_FIO_ERRIO
+@del_have_name
+      ; trigger DELETE
+      LDA   #FIO_CMD_DELETE
+      STA   FIO_CMD
+      ; check status
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @del_chk_err
+      RTS
+@del_chk_err
+      LDA   FIO_ERRCODE
+      CMP   #$01              ; not found?
+      BNE   @del_errio
+      JMP   LAB_FIO_ERRFNF
+@del_errio
+      JMP   LAB_FIO_ERRIO
+
+; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
+; carry clear = success, carry set = invalid/empty/too long
+
+LAB_FIO_GETNAME
+      JSR   LAB_EVEX
+      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
+      TAX                     ; save length in X
+      BEQ   @fio_bad_name
+      CPX   #64               ; max 63 chars
+      BCS   @fio_bad_name
+      STX   FIO_NAMELEN
+      LDY   #$00
+@fio_cp_name
+      LDA   (ut1_pl),Y
+      STA   FIO_NAME,Y
+      INY
+      DEX
+      BNE   @fio_cp_name
+      CLC
+      RTS
+@fio_bad_name
+      SEC
+      RTS
+
+LAB_FIO_ERRIO
       LDA   #<ERR_FIO
       LDY   #>ERR_FIO
-      JSR   LAB_18C3
-      JMP   LAB_1274
-@err_fnf
+      JMP   LAB_FIO_ERRMSG
+
+LAB_FIO_ERRFNF
       LDA   #<ERR_FNF
       LDY   #>ERR_FNF
+LAB_FIO_ERRMSG
       JSR   LAB_18C3
       JMP   LAB_1274
 
 ERR_FIO     .byte $0D,$0A,"I/O Error",$00
 ERR_FNF     .byte $0D,$0A,"File not found",$00
+
+; perform DIR — list saved programs
+
+LAB_DIR
+      ; trigger DirOpen
+      LDA   #FIO_CMD_DIROPEN
+      STA   FIO_CMD
+      ; check status — FIO_OK means first entry ready
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @dir_done         ; no files or error — done
+@dir_loop
+      ; print file size (FIO_SIZEL/SIZEH as 16-bit unsigned)
+      LDA   FIO_SIZEH         ; high byte in A
+      LDX   FIO_SIZEL         ; low byte in X
+      JSR   LAB_295E          ; print AX as unsigned integer
+      ; print "  PRG  "
+      LDA   #<STR_PRG
+      LDY   #>STR_PRG
+      JSR   LAB_18C3          ; print null terminated string
+      ; print filename from FIO_NAME (length in FIO_NAMELEN)
+      LDY   #$00
+@dir_pname
+      CPY   FIO_NAMELEN
+      BCS   @dir_nl           ; done printing name
+      LDA   FIO_NAME,Y
+      JSR   LAB_PRNA          ; print character
+      INY
+      BNE   @dir_pname        ; always branches (Y won't wrap for 63 chars)
+@dir_nl
+      JSR   LAB_CRLF          ; print CR/LF
+      ; advance to next entry
+      LDA   #FIO_CMD_DIRREAD
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BEQ   @dir_loop         ; more entries
+@dir_done
+      RTS
+
+STR_PRG     .byte "  PRG  ",$00
+
+; --- XMC expansion memory handlers ---
+
+LAB_XMC_CHKOK
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BEQ   @xok
+      JMP   LAB_FCER
+@xok
+      RTS
+
+LAB_XMC_SETOFF
+      JSR   LAB_GTWRD         ; parse 16-bit offset
+      LDA   FAC1_3
+      STA   XMC_XAL
+      LDA   FAC1_2
+      STA   XMC_XAM
+      LDA   XMC_BANK
+      STA   XMC_XAH
+      RTS
+
+; parse string expression into XMC name buffer
+; carry clear = success, carry set = invalid name
+
+LAB_XMC_GETNAME
+      JSR   LAB_EVEX
+      JSR   LAB_EVST
+      TAX
+      BEQ   @xname_bad
+      CPX   #XMC_NAME_MAX+1
+      BCS   @xname_bad
+      STX   XMC_NAMELEN
+      LDY   #$00
+@xname_cp
+      LDA   (ut1_pl),Y
+      STA   XMC_NAME,Y
+      INY
+      DEX
+      BNE   @xname_cp
+      CLC
+      RTS
+@xname_bad
+      SEC
+      RTS
+
+; compute mapped window bitmask from X=0..3
+; out: A = bit, carry clear on success, set on invalid
+
+LAB_XMC_GETWINBIT
+      CPX   #$04
+      BCS   @xw_bad
+      LDA   #$01
+@xw_shl
+      DEX
+      BMI   @xw_ok
+      ASL
+      BNE   @xw_shl
+@xw_ok
+      CLC
+      RTS
+@xw_bad
+      SEC
+      RTS
+
+; set mapped window base from FAC1_3/FAC1_2 + current XMC_BANK
+; in: X window index 0..3
+
+LAB_XMC_SETWINADDR
+      CPX   #$00
+      BNE   @xw_set1
+      LDA   FAC1_3
+      STA   XMC_W0AL
+      LDA   FAC1_2
+      STA   XMC_W0AM
+      LDA   XMC_BANK
+      STA   XMC_W0AH
+      RTS
+@xw_set1
+      CPX   #$01
+      BNE   @xw_set2
+      LDA   FAC1_3
+      STA   XMC_W1AL
+      LDA   FAC1_2
+      STA   XMC_W1AM
+      LDA   XMC_BANK
+      STA   XMC_W1AH
+      RTS
+@xw_set2
+      CPX   #$02
+      BNE   @xw_set3
+      LDA   FAC1_3
+      STA   XMC_W2AL
+      LDA   FAC1_2
+      STA   XMC_W2AM
+      LDA   XMC_BANK
+      STA   XMC_W2AH
+      RTS
+@xw_set3
+      LDA   FAC1_3
+      STA   XMC_W3AL
+      LDA   FAC1_2
+      STA   XMC_W3AM
+      LDA   XMC_BANK
+      STA   XMC_W3AH
+      RTS
+
+; perform XMEM
+
+LAB_XMEM
+      LDA   #XMC_CMD_STATS
+      STA   XMC_CMD
+      LDA   #$00              ; print "<banks>"
+      LDX   XMC_BANKS
+      JSR   LAB_295E
+      LDA   #<STR_XBANKS
+      LDY   #>STR_XBANKS
+      JSR   LAB_18C3
+
+      ; print "<banks*64>" as KB
+      LDA   XMC_BANKS
+      STA   Itempl            ; low byte
+      LDA   #$00
+      STA   Itemph            ; high byte
+      LDY   #$06
+@xmem_kb_lp
+      ASL   Itempl
+      ROL   Itemph
+      DEY
+      BNE   @xmem_kb_lp
+      LDA   Itemph            ; high byte in A
+      LDX   Itempl            ; low byte in X
+      JSR   LAB_295E
+      LDA   #<STR_XKB
+      LDY   #>STR_XKB
+      JSR   LAB_18C3
+
+      LDA   #$00              ; print selected bank
+      LDX   XMC_BANK
+      JSR   LAB_295E
+      LDA   #<STR_XUSED
+      LDY   #>STR_XUSED
+      JSR   LAB_18C3
+      LDA   XMC_USEDH
+      LDX   XMC_USEDL
+      JSR   LAB_295E
+      LDA   #<STR_XFREE
+      LDY   #>STR_XFREE
+      JSR   LAB_18C3
+      LDA   XMC_FREEH
+      LDX   XMC_FREEL
+      JSR   LAB_295E
+      LDA   #<STR_XPAGES
+      LDY   #>STR_XPAGES
+      JSR   LAB_18C3
+      LDA   #<STR_XNAMED
+      LDY   #>STR_XNAMED
+      JSR   LAB_18C3
+      LDA   XMC_DIRCOUNTH
+      LDX   XMC_DIRCOUNTL
+      JSR   LAB_295E
+      JSR   LAB_CRLF
+      RTS
+
+; perform XBANK n
+
+LAB_XBANK
+      JSR   LAB_GTBY
+      CPX   XMC_BANKS
+      BCS   @xb_bad
+      STX   XMC_BANK
+      RTS
+@xb_bad
+      JMP   LAB_FCER
+
+; perform XPOKE offset, value   (offset is within current XBANK)
+
+LAB_XPOKE
+      JSR   LAB_XMC_SETOFF
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   XMC_DATA
+      LDA   #XMC_CMD_PUT
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+
+; perform STASH ramAddr, xOffset, len   (uses current XBANK)
+; or      STASH "name", ramAddr, len    (named allocation)
+
+LAB_XSTASH
+      JSR   LAB_GBYT
+      CMP   #$22              ; leading quote means named form
+      BNE   @xstash_raw
+      JSR   LAB_XMC_GETNAME
+      BCC   @xstash_named_ok
+      JMP   LAB_FCER
+@xstash_named_ok
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD         ; RAM source address
+      LDA   FAC1_3
+      STA   XMC_RAML
+      LDA   FAC1_2
+      STA   XMC_RAMH
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD         ; transfer length
+      LDA   FAC1_3
+      STA   XMC_LENL
+      LDA   FAC1_2
+      STA   XMC_LENH
+      LDA   #XMC_CMD_NSTSH
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+@xstash_raw
+      JSR   LAB_GTWRD         ; RAM source address
+      LDA   FAC1_3
+      STA   XMC_RAML
+      LDA   FAC1_2
+      STA   XMC_RAMH
+      JSR   LAB_1C01
+      JSR   LAB_XMC_SETOFF    ; XRAM destination offset + bank
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD         ; transfer length
+      LDA   FAC1_3
+      STA   XMC_LENL
+      LDA   FAC1_2
+      STA   XMC_LENH
+      LDA   #XMC_CMD_STASH
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+
+; perform FETCH ramAddr, xOffset, len   (uses current XBANK)
+; or      FETCH "name", ramAddr         (named fetch)
+
+LAB_XFETCH
+      JSR   LAB_GBYT
+      CMP   #$22              ; leading quote means named form
+      BNE   @xfetch_raw
+      JSR   LAB_XMC_GETNAME
+      BCC   @xfetch_named_ok
+      JMP   LAB_FCER
+@xfetch_named_ok
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD         ; RAM destination address
+      LDA   FAC1_3
+      STA   XMC_RAML
+      LDA   FAC1_2
+      STA   XMC_RAMH
+      LDA   #$00              ; len=0 means full block length
+      STA   XMC_LENL
+      STA   XMC_LENH
+      LDA   #XMC_CMD_NFETC
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+@xfetch_raw
+      JSR   LAB_GTWRD         ; RAM destination address
+      LDA   FAC1_3
+      STA   XMC_RAML
+      LDA   FAC1_2
+      STA   XMC_RAMH
+      JSR   LAB_1C01
+      JSR   LAB_XMC_SETOFF    ; XRAM source offset + bank
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD         ; transfer length
+      LDA   FAC1_3
+      STA   XMC_LENL
+      LDA   FAC1_2
+      STA   XMC_LENH
+      LDA   #XMC_CMD_FETCH
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+
+; perform XFREE xOffset, len   (uses current XBANK)
+
+LAB_XFREE
+      JSR   LAB_XMC_SETOFF
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   XMC_LENL
+      LDA   FAC1_2
+      STA   XMC_LENH
+      LDA   #XMC_CMD_REL
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+
+; perform XRESET   (clear XRAM usage counters)
+
+LAB_XRESET
+      LDA   #XMC_CMD_RSTUS
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+
+; perform XALLOC len
+
+LAB_XALLOC
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   XMC_LENL
+      LDA   FAC1_2
+      STA   XMC_LENH
+      LDA   #XMC_CMD_ALLOC
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+
+; perform XDIR
+
+LAB_XDIR
+      LDA   #XMC_CMD_NDIRO
+      STA   XMC_CMD
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BNE   @xdir_done
+@xdir_loop
+      LDA   XMC_LENH
+      LDX   XMC_LENL
+      JSR   LAB_295E
+      LDA   #<STR_XDIRBY
+      LDY   #>STR_XDIRBY
+      JSR   LAB_18C3
+      LDY   #$00
+@xdir_name
+      CPY   XMC_NAMELEN
+      BCS   @xdir_nl
+      LDA   XMC_NAME,Y
+      JSR   LAB_PRNA
+      INY
+      BNE   @xdir_name
+@xdir_nl
+      JSR   LAB_CRLF
+      LDA   #XMC_CMD_NDIRR
+      STA   XMC_CMD
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BEQ   @xdir_loop
+@xdir_done
+      RTS
+
+; perform XDEL "name"
+
+LAB_XDEL
+      JSR   LAB_XMC_GETNAME
+      BCC   @xdel_named_ok
+      JMP   LAB_FCER
+@xdel_named_ok
+      LDA   #XMC_CMD_NDEL
+      STA   XMC_CMD
+      JMP   LAB_XMC_CHKOK
+
+; perform XMAP window, offset
+
+LAB_XMAP
+      JSR   LAB_GTBY          ; window 0..3
+      STX   TempB
+      JSR   LAB_XMC_GETWINBIT
+      BCC   @xmap_wok
+      JMP   LAB_FCER
+@xmap_wok
+      STA   Temp3             ; save bit mask
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD         ; offset within current bank
+      LDX   TempB
+      JSR   LAB_XMC_SETWINADDR
+      LDA   XMC_WINCTL
+      ORA   Temp3
+      STA   XMC_WINCTL
+      RTS
+
+; perform XUNMAP window
+
+LAB_XUNMAP
+      JSR   LAB_GTBY
+      JSR   LAB_XMC_GETWINBIT
+      BCC   @xunmap_wok
+      JMP   LAB_FCER
+@xunmap_wok
+      EOR   #$FF
+      AND   XMC_WINCTL
+      STA   XMC_WINCTL
+      RTS
+
+; --- XMC assembly helper routines ---
+; Carry clear = success, carry set = error (A = XMC_ERRCODE)
+
+LAB_XM_CMDCHK
+      STA   XMC_CMD
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BEQ   @xm_ok
+      LDA   XMC_ERRCODE
+      SEC
+      RTS
+@xm_ok
+      CLC
+      RTS
+
+; set 24-bit expansion address: A=low, X=mid, Y=high
+LAB_XM_SETADDR
+      STA   XMC_XAL
+      STX   XMC_XAM
+      STY   XMC_XAH
+      RTS
+
+; get status snapshot: A=status, X=errcode
+LAB_XM_STATUS
+      LDA   XMC_STATUS
+      LDX   XMC_ERRCODE
+      RTS
+
+; read byte at XADDR: carry clear and A=value on success
+LAB_XM_GETBYTE
+      LDA   #XMC_CMD_GET
+      JSR   LAB_XM_CMDCHK
+      BCC   @xm_get_ok
+      RTS
+@xm_get_ok
+      LDA   XMC_DATA
+      RTS
+
+; write byte at XADDR: A=value
+LAB_XM_PUTBYTE
+      STA   XMC_DATA
+      LDA   #XMC_CMD_PUT
+      JMP   LAB_XM_CMDCHK
+
+; run bulk commands with preloaded XMC_RAML/H, XMC_XAL/M/H, XMC_LENL/H, XMC_DATA
+LAB_XM_STASH
+      LDA   #XMC_CMD_STASH
+      JMP   LAB_XM_CMDCHK
+
+LAB_XM_FETCH
+      LDA   #XMC_CMD_FETCH
+      JMP   LAB_XM_CMDCHK
+
+LAB_XM_FILL
+      LDA   #XMC_CMD_FILL
+      JMP   LAB_XM_CMDCHK
+
+LAB_XM_ALLOC
+      LDA   #XMC_CMD_ALLOC
+      JMP   LAB_XM_CMDCHK
+
+STR_XBANKS  .byte " BANKS, ",$00
+STR_XKB     .byte " KB XRAM, BANK ",$00
+STR_XUSED   .byte ", USED ",$00
+STR_XFREE   .byte ", FREE ",$00
+STR_XPAGES  .byte " PAGES",$00
+STR_XNAMED  .byte ", NAMED ",$00
+STR_XDIRBY  .byte " BYTES  ",$00
 
 ; character get subroutine for zero page
 
@@ -8658,12 +9583,8 @@ StrTab
       .word Ram_base          ; start of user RAM
 EndTab
 
-LAB_MSZM
-      .byte $0D,$0A,"Memory size ",$00
-
 LAB_SMSG
-      .byte " Bytes free",$0D,$0A,$0A
-      .byte "Enhanced BASIC 2.22p5",$0A,$00
+      .byte " BASIC bytes free",$0D,$0A,$0D,$0A,$00
 
 ; numeric constants and series
 
@@ -8834,6 +9755,7 @@ LAB_CTBL
       .word LAB_CIRCLE-1      ; CIRCLE          VGC command
       .word LAB_RECT-1         ; RECT            VGC command
       .word LAB_FILLRECT-1    ; FILL            VGC command
+      .word LAB_PAINT-1       ; PAINT           VGC command
       .word LAB_GMODE-1       ; MODE            VGC command
       .word LAB_GCLS-1        ; GCLS            VGC command
       .word LAB_GCOLOR-1      ; GCOLOR          VGC command
@@ -9228,6 +10150,8 @@ LBB_OR
       .byte "R",TK_OR         ; OR
       .byte $00
 TAB_ASCP
+LBB_PAINT
+      .byte "AINT",TK_PAINT   ; PAINT
 LBB_PEEK
       .byte "EEK(",TK_PEEK    ; PEEK(
 LBB_PI
@@ -9464,8 +10388,14 @@ LAB_KEYT
       .word LBB_RECT          ; RECT
       .byte 4,'F'
       .word LBB_FILL          ; FILL
+      .byte 5,'P'
+      .word LBB_PAINT         ; PAINT
       .byte 4,'M'
       .word LBB_MODE          ; MODE
+      .byte 4,'G'
+      .word LBB_GCLS          ; GCLS
+      .byte 6,'G'
+      .word LBB_GCOLOR        ; GCOLOR
       .byte 6,'S'
       .word LBB_SPRITE        ; SPRITE
       .byte 11,'S'

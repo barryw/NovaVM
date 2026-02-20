@@ -12,7 +12,7 @@ public class BasicBusDevice : IBusDevice
     
     public BasicBusDevice()
     {
-        // Load Enhanced BASIC into memory @ $c000
+        // Load NovaBASIC ROM into memory @ $c000
         var basic = File.ReadAllBytes($"{ResourcePath}ehbasic.bin");
         basic.CopyTo(_ram, BasicStart);
     }
@@ -32,7 +32,7 @@ public class BasicBusDevice : IBusDevice
     {
         switch (address)
         {
-            // Allow a write to $f001. This is the IO output port for Enhanced BASIC to write to the screen
+            // Allow a write to $f001. This is the IO output port for NovaBASIC to write to the screen
             case WritePort:
                 Console.Write(Convert.ToChar(data));
                 break;

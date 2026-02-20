@@ -1,0 +1,49 @@
+% =============================================================================
+% NovaBASIC v1.0 User Guide — Foreword
+% =============================================================================
+\chapter*{Foreword}
+\addcontentsline{toc}{chapter}{Foreword}
+\markboth{Foreword}{Foreword}
+
+There is something quietly extraordinary about a chip that fits in the palm of
+your hand and changed the world.  The MOS 6502, introduced in 1975, powered the
+Apple~II, the Commodore~64, the Nintendo Entertainment System, the Atari~2600,
+and the BBC Micro.  It put a computer on the desk of a generation that had never
+seen one before.  It was cheap enough for a hobbyist to buy, simple enough to
+understand completely, and fast enough to make things happen on screen that felt
+genuinely alive.  Whole careers began on machines built around that little chip.
+So did countless imaginations.
+
+The years moved on.  Processors grew faster, wider, and vastly more complex.
+But the 6502 never really went away --- it kept shipping in embedded systems,
+and it kept living in the memories of the people who learned on it.  There is a
+reason emulators, homebrew cartridges, and new assembler projects for the 6502
+keep appearing in~2026: programming it is a complete, intimate experience.  You
+can hold the whole machine in your head at once.
+
+The e6502 virtual computer is not a museum exhibit.  It takes the honest
+architecture of the original --- 64\,KB of address space, stack at
+\texttt{\$0100}--\texttt{\$01FF}, clean interrupt model --- and pairs it with
+hardware that no real 8-bit machine ever had: a 320$\times$200 pixel bitmap with
+16 colors, sixteen hardware sprites each 16$\times$16 pixels and multicolor, a
+four-voice synthesizer with ADSR envelopes and five waveforms, 512\,KB of banked
+expansion memory, and file I/O.  It is the machine you always wished you had
+back then.
+
+NovaBASIC is the language that lives on it.  Built on Lee Davison's
+\textit{Enhanced BASIC~2.22p5} --- itself a carefully crafted piece of work ---
+NovaBASIC keeps everything that made classic BASIC approachable: line numbers,
+\cmd{PRINT}, \cmd{FOR}/\cmd{NEXT}, \cmd{GOSUB}, the immediacy of typing a line
+and seeing it run.  Then it adds the commands to drive all that new hardware,
+without hiding the machine from you.
+
+Whether you are learning to program for the first time, building a retro game,
+exploring procedural graphics, or just looking for a creative sandbox that
+rewards curiosity --- this is the right place.  Boot it up.  Type something.
+Watch it run.
+
+\medskip
+\noindent Welcome.
+
+\bigskip
+{\raggedleft\color{retrogray}\itshape February 2026\par}

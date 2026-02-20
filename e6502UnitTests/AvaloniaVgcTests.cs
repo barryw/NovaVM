@@ -154,6 +154,25 @@ public class AvaloniaVgcTests
     }
 
     [TestMethod]
+    public void SprPos_DecodesSignedCoordinates()
+    {
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+
+        // SPOS: sprite 0, x=-16 (0xFFF0), y=-8 (0xFFF8)
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0xF0); // x low
+        _vgc.Write(VgcConstants.RegP2, 0xFF); // x high
+        _vgc.Write(VgcConstants.RegP3, 0xF8); // y low
+        _vgc.Write(VgcConstants.RegP4, 0xFF); // y high
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
+
+        var state = _vgc.GetSpriteState(0);
+        Assert.AreEqual(-16, state.x);
+        Assert.AreEqual(-8, state.y);
+    }
+
+    [TestMethod]
     public void SprEna_EnablesSprite()
     {
         _vgc.Write(VgcConstants.RegP0, 5);
@@ -199,6 +218,72 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPri);
 
         Assert.AreEqual(VgcConstants.SpritePriBehindAll, _vgc.GetSpriteState(0).priority);
+    }
+
+    // -- VGC memory I/O ports -------------------------------------------------
+
+    [TestMethod]
+    public void MemIo_CanWriteAndReadScreenRam()
+    {
+        _vgc.Write(VgcConstants.RegP0, VgcConstants.MemSpaceScreen); // space
+        _vgc.Write(VgcConstants.RegP1, 0x34); // addr low
+        _vgc.Write(VgcConstants.RegP2, 0x00); // addr high
+        _vgc.Write(VgcConstants.RegP3, 0x41); // 'A'
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemWrite);
+
+        Assert.AreEqual(0x41, _vgc.Read(VgcConstants.CharRamBase + 0x34));
+
+        _vgc.Write(VgcConstants.RegP3, 0x00);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemRead);
+        Assert.AreEqual(0x41, _vgc.Read(VgcConstants.RegP3));
+    }
+
+    [TestMethod]
+    public void MemIo_AutoIncrement_WritesSequentialBytes()
+    {
+        _vgc.Write(VgcConstants.RegP0, VgcConstants.MemSpaceScreen); // space
+        _vgc.Write(VgcConstants.RegP1, 0x00); // addr low
+        _vgc.Write(VgcConstants.RegP2, 0x00); // addr high
+        _vgc.Write(VgcConstants.RegP4, 0x01); // flags: auto-inc
+
+        _vgc.Write(VgcConstants.RegP3, 0x31);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemWrite);
+        _vgc.Write(VgcConstants.RegP3, 0x32);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemWrite);
+
+        Assert.AreEqual(0x31, _vgc.Read(VgcConstants.CharRamBase + 0));
+        Assert.AreEqual(0x32, _vgc.Read(VgcConstants.CharRamBase + 1));
+        Assert.AreEqual(0x02, _vgc.Read(VgcConstants.RegP1)); // addr low advanced twice
+        Assert.AreEqual(0x00, _vgc.Read(VgcConstants.RegP2)); // addr high unchanged
+    }
+
+    [TestMethod]
+    public void MemIo_CanWriteGraphicsBitmap()
+    {
+        int x = 10;
+        int y = 5;
+        int linear = y * VgcConstants.GfxWidth + x;
+
+        _vgc.Write(VgcConstants.RegP0, VgcConstants.MemSpaceGfx); // space
+        _vgc.Write(VgcConstants.RegP1, (byte)(linear & 0xFF));
+        _vgc.Write(VgcConstants.RegP2, (byte)((linear >> 8) & 0xFF));
+        _vgc.Write(VgcConstants.RegP3, 0x07);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemWrite);
+
+        Assert.AreEqual(0x07, _vgc.GetGfxPixelColor(x, y));
+    }
+
+    [TestMethod]
+    public void MemIo_CanWriteSpriteShapeRam()
+    {
+        _vgc.Write(VgcConstants.RegP0, VgcConstants.MemSpaceSprite); // space
+        _vgc.Write(VgcConstants.RegP1, 0x00); // addr low
+        _vgc.Write(VgcConstants.RegP2, 0x00); // addr high
+        _vgc.Write(VgcConstants.RegP3, 0xA5);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemWrite);
+
+        var shape = _vgc.GetSpriteShape(0);
+        Assert.AreEqual(0xA5, shape[0]);
     }
 
     [TestMethod]

@@ -20,8 +20,7 @@ ACIAsimwr   = $A00E           ; VGC CHAROUT
 ACIAsimrd   = $A00F           ; VGC CHARIN
 
 ; now the code. all this does is set up the vectors and interrupt code
-; and wait for the user to select [C]old or [W]arm start. nothing else
-; fits in less than 128 bytes
+; then jump directly to BASIC cold start.
 
       .segment "MONITOR"
       .org    $FF80
@@ -42,31 +41,7 @@ LAB_stlp
       DEY                     ; decrement index/count
       BNE   LAB_stlp          ; loop if more to do
 
-; now do the signon message, Y = $00 here
-
-LAB_signon
-      LDA   LAB_mess,Y        ; get byte from sign on message
-      BEQ   LAB_nokey         ; exit loop if done
-
-      JSR   V_OUTP            ; output character
-      INY                     ; increment index
-      BNE   LAB_signon        ; loop, branch always
-
-LAB_nokey
-      JSR   V_INPT            ; call scan input device
-      BCC   LAB_nokey         ; loop if no key
-
-      AND   #$DF              ; mask xx0x xxxx, ensure upper case
-      CMP   #'W'              ; compare with [W]arm start
-      BEQ   LAB_dowarm        ; branch if [W]arm start
-
-      CMP   #'C'              ; compare with [C]old start
-      BNE   RES_vec           ; loop if not [C]old start
-
-      JMP   LAB_COLD          ; do EhBASIC cold start
-
-LAB_dowarm
-      JMP   LAB_WARM          ; do EhBASIC warm start
+      JMP   LAB_COLD          ; always do EhBASIC cold start
 
 ; byte out to simulated ACIA
 
@@ -118,10 +93,6 @@ NMI_CODE
       RTI
 
 END_CODE
-
-LAB_mess
-      .byte $0D,$0A,"6502 EhBASIC [C]old/[W]arm ?",$00
-                              ; sign on string
 
 ; system vectors
 

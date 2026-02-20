@@ -109,6 +109,15 @@ public sealed class EmulatorTcpServer : IDisposable
                 "save_program" => CmdSaveProgram(req),
                 "load_program" => CmdLoadProgram(req),
                 "list_programs" => CmdListPrograms(),
+                // Graphics commands
+                "gfx_plot" => CmdGfxPlot(req),
+                "gfx_line" => CmdGfxLine(req),
+                "gfx_circle" => CmdGfxCircle(req),
+                "gfx_rect" => CmdGfxRect(req),
+                "gfx_fill" => CmdGfxFill(req),
+                "gfx_clear" => CmdGfxClear(),
+                "gfx_color" => CmdGfxColor(req),
+                "gfx_paint" => CmdGfxPaint(req),
                 // Sprite commands
                 "sprite_define_row" => CmdSpriteDefineRow(req),
                 "sprite_set_pixel" => CmdSpriteSetPixel(req),
@@ -328,14 +337,22 @@ public sealed class EmulatorTcpServer : IDisposable
             var sb = new StringBuilder(VgcConstants.ScreenCols);
             for (int col = 0; col < VgcConstants.ScreenCols; col++)
             {
-                int gx = col * 2;
-                int gyTop = row * 2;
-                int gyBottom = row * 2 + 1;
-                byte top = vgc.GetGfxPixelColor(gx, gyTop);
-                byte bot = vgc.GetGfxPixelColor(gx, gyBottom);
-                if (top != 0 && bot != 0) sb.Append('#');
-                else if (top != 0) sb.Append('^');
-                else if (bot != 0) sb.Append('v');
+                // Sample 4x8 block of gfx pixels per ASCII char (320/80=4, 200/25=8)
+                int gxBase = col * 4;
+                int gyBase = row * 8;
+                bool topHalf = false;
+                bool botHalf = false;
+                for (int dy = 0; dy < 4 && !topHalf; dy++)
+                    for (int dx = 0; dx < 4 && !topHalf; dx++)
+                        if (vgc.GetGfxPixelColor(gxBase + dx, gyBase + dy) != 0)
+                            topHalf = true;
+                for (int dy = 4; dy < 8 && !botHalf; dy++)
+                    for (int dx = 0; dx < 4 && !botHalf; dx++)
+                        if (vgc.GetGfxPixelColor(gxBase + dx, gyBase + dy) != 0)
+                            botHalf = true;
+                if (topHalf && botHalf) sb.Append('#');
+                else if (topHalf) sb.Append('^');
+                else if (botHalf) sb.Append('v');
                 else sb.Append('.');
             }
             rows[row] = sb.ToString().TrimEnd('.');
@@ -509,6 +526,131 @@ public sealed class EmulatorTcpServer : IDisposable
         return result.ToJsonString();
     }
 
+    // ── Graphics commands ─────────────────────────────────────────────────
+
+    private void WriteGfxParams(int x0, int y0, int x1 = 0, int y1 = 0, int color = -1)
+    {
+        _bus.Write(VgcConstants.RegP0, (byte)(x0 & 0xFF));
+        _bus.Write(VgcConstants.RegP1, (byte)((x0 >> 8) & 0xFF));
+        _bus.Write(VgcConstants.RegP2, (byte)(y0 & 0xFF));
+        _bus.Write(VgcConstants.RegP3, (byte)((y0 >> 8) & 0xFF));
+        _bus.Write(VgcConstants.RegP4, (byte)(x1 & 0xFF));
+        _bus.Write(VgcConstants.RegP5, (byte)((x1 >> 8) & 0xFF));
+        _bus.Write(VgcConstants.RegP6, (byte)(y1 & 0xFF));
+        _bus.Write(VgcConstants.RegP7, (byte)((y1 >> 8) & 0xFF));
+        if (color >= 0)
+            _bus.Write(VgcConstants.RegP8, (byte)color);
+    }
+
+    private string CmdGfxPlot(JsonNode req)
+    {
+        int? x = req["x"]?.GetValue<int>();
+        int? y = req["y"]?.GetValue<int>();
+        int? color = req["color"]?.GetValue<int>();
+        if (x is null || y is null || color is null)
+            return Error("Need x, y, color");
+
+        // Enable graphics mode if not already
+        _bus.Write(VgcConstants.RegMode, 1);
+
+        WriteGfxParams(x.Value, y.Value, color: color.Value);
+        _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdPlot);
+        return Ok();
+    }
+
+    private string CmdGfxLine(JsonNode req)
+    {
+        int? x0 = req["x0"]?.GetValue<int>();
+        int? y0 = req["y0"]?.GetValue<int>();
+        int? x1 = req["x1"]?.GetValue<int>();
+        int? y1 = req["y1"]?.GetValue<int>();
+        int? color = req["color"]?.GetValue<int>();
+        if (x0 is null || y0 is null || x1 is null || y1 is null || color is null)
+            return Error("Need x0, y0, x1, y1, color");
+
+        _bus.Write(VgcConstants.RegMode, 1);
+        WriteGfxParams(x0.Value, y0.Value, x1.Value, y1.Value, color.Value);
+        _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdLine);
+        return Ok();
+    }
+
+    private string CmdGfxCircle(JsonNode req)
+    {
+        int? cx = req["cx"]?.GetValue<int>();
+        int? cy = req["cy"]?.GetValue<int>();
+        int? r = req["r"]?.GetValue<int>();
+        int? color = req["color"]?.GetValue<int>();
+        if (cx is null || cy is null || r is null || color is null)
+            return Error("Need cx, cy, r, color");
+
+        _bus.Write(VgcConstants.RegMode, 1);
+        WriteGfxParams(cx.Value, cy.Value, r.Value, color: color.Value);
+        _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdCircle);
+        return Ok();
+    }
+
+    private string CmdGfxRect(JsonNode req)
+    {
+        int? x0 = req["x0"]?.GetValue<int>();
+        int? y0 = req["y0"]?.GetValue<int>();
+        int? x1 = req["x1"]?.GetValue<int>();
+        int? y1 = req["y1"]?.GetValue<int>();
+        int? color = req["color"]?.GetValue<int>();
+        if (x0 is null || y0 is null || x1 is null || y1 is null || color is null)
+            return Error("Need x0, y0, x1, y1, color");
+
+        _bus.Write(VgcConstants.RegMode, 1);
+        WriteGfxParams(x0.Value, y0.Value, x1.Value, y1.Value, color.Value);
+        _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdRect);
+        return Ok();
+    }
+
+    private string CmdGfxFill(JsonNode req)
+    {
+        int? x0 = req["x0"]?.GetValue<int>();
+        int? y0 = req["y0"]?.GetValue<int>();
+        int? x1 = req["x1"]?.GetValue<int>();
+        int? y1 = req["y1"]?.GetValue<int>();
+        int? color = req["color"]?.GetValue<int>();
+        if (x0 is null || y0 is null || x1 is null || y1 is null || color is null)
+            return Error("Need x0, y0, x1, y1, color");
+
+        _bus.Write(VgcConstants.RegMode, 1);
+        WriteGfxParams(x0.Value, y0.Value, x1.Value, y1.Value, color.Value);
+        _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdFill);
+        return Ok();
+    }
+
+    private string CmdGfxClear()
+    {
+        _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdGcls);
+        return Ok();
+    }
+
+    private string CmdGfxColor(JsonNode req)
+    {
+        int? color = req["color"]?.GetValue<int>();
+        if (color is null) return Error("Need color");
+
+        _bus.Write(VgcConstants.RegP0, (byte)color);
+        _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdGcolor);
+        return Ok();
+    }
+
+    private string CmdGfxPaint(JsonNode req)
+    {
+        int? x = req["x"]?.GetValue<int>();
+        int? y = req["y"]?.GetValue<int>();
+        int? color = req["color"]?.GetValue<int>();
+        if (x is null || y is null || color is null)
+            return Error("Need x, y, color");
+
+        _bus.Write(VgcConstants.RegMode, 1);
+        WriteGfxParams(x.Value, y.Value, color: color.Value);
+        _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdPaint);
+        return Ok();
+    }
+
     // ── Sprite commands ──────────────────────────────────────────────────
 
     private string CmdSpriteDefineRow(JsonNode req)
@@ -555,7 +697,8 @@ public sealed class EmulatorTcpServer : IDisposable
         _bus.Write(VgcConstants.RegP0, (byte)sprite);
         _bus.Write(VgcConstants.RegP1, (byte)(x & 0xFF));
         _bus.Write(VgcConstants.RegP2, (byte)((x >> 8) & 0xFF));
-        _bus.Write(VgcConstants.RegP3, (byte)y);
+        _bus.Write(VgcConstants.RegP3, (byte)(y & 0xFF));
+        _bus.Write(VgcConstants.RegP4, (byte)((y >> 8) & 0xFF));
         _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
         return Ok();
     }

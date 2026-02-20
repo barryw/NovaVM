@@ -158,7 +158,7 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
-    [McpServerTool, Description("Read the graphics bitmap layer as ASCII art. '#'=both halves set, '^'=top, 'v'=bottom, '.'=empty. 80x25 grid mapping the 160x50 pixel layer.")]
+    [McpServerTool, Description("Read the graphics bitmap layer as ASCII art. '#'=both halves set, '^'=top, 'v'=bottom, '.'=empty. 80x25 grid mapping the 320x200 pixel layer.")]
     public static async Task<string> ReadGraphics(EmulatorClient client)
     {
         var resp = await client.SendAsync(new JsonObject
@@ -176,6 +176,126 @@ public static class EmulatorTools
             ["command"] = "read_sprites"
         });
         return FormatSprites(resp);
+    }
+
+    [McpServerTool, Description("Plot a single pixel on the 320x200 graphics layer.")]
+    public static async Task<string> GfxPlot(
+        EmulatorClient client,
+        [Description("X coordinate (0-319)")] int x,
+        [Description("Y coordinate (0-199)")] int y,
+        [Description("Color index (1-15)")] int color)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "gfx_plot",
+            ["x"] = x, ["y"] = y, ["color"] = color
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Draw a line on the 320x200 graphics layer.")]
+    public static async Task<string> GfxLine(
+        EmulatorClient client,
+        [Description("Start X (0-319)")] int x0,
+        [Description("Start Y (0-199)")] int y0,
+        [Description("End X (0-319)")] int x1,
+        [Description("End Y (0-199)")] int y1,
+        [Description("Color index (1-15)")] int color)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "gfx_line",
+            ["x0"] = x0, ["y0"] = y0, ["x1"] = x1, ["y1"] = y1, ["color"] = color
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Draw a circle on the 320x200 graphics layer.")]
+    public static async Task<string> GfxCircle(
+        EmulatorClient client,
+        [Description("Center X (0-319)")] int cx,
+        [Description("Center Y (0-199)")] int cy,
+        [Description("Radius in pixels")] int r,
+        [Description("Color index (1-15)")] int color)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "gfx_circle",
+            ["cx"] = cx, ["cy"] = cy, ["r"] = r, ["color"] = color
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Draw a rectangle outline on the 320x200 graphics layer.")]
+    public static async Task<string> GfxRect(
+        EmulatorClient client,
+        [Description("Top-left X (0-319)")] int x0,
+        [Description("Top-left Y (0-199)")] int y0,
+        [Description("Bottom-right X (0-319)")] int x1,
+        [Description("Bottom-right Y (0-199)")] int y1,
+        [Description("Color index (1-15)")] int color)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "gfx_rect",
+            ["x0"] = x0, ["y0"] = y0, ["x1"] = x1, ["y1"] = y1, ["color"] = color
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Draw a filled rectangle on the 320x200 graphics layer.")]
+    public static async Task<string> GfxFill(
+        EmulatorClient client,
+        [Description("Top-left X (0-319)")] int x0,
+        [Description("Top-left Y (0-199)")] int y0,
+        [Description("Bottom-right X (0-319)")] int x1,
+        [Description("Bottom-right Y (0-199)")] int y1,
+        [Description("Color index (1-15)")] int color)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "gfx_fill",
+            ["x0"] = x0, ["y0"] = y0, ["x1"] = x1, ["y1"] = y1, ["color"] = color
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Flood fill a region starting from (x,y) with the specified color.")]
+    public static async Task<string> GfxPaint(
+        EmulatorClient client,
+        [Description("Seed X coordinate (0-319)")] int x,
+        [Description("Seed Y coordinate (0-199)")] int y,
+        [Description("Fill color index (1-15)")] int color)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "gfx_paint",
+            ["x"] = x, ["y"] = y, ["color"] = color
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Clear the graphics layer (all pixels to 0).")]
+    public static async Task<string> GfxClear(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "gfx_clear"
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set the current drawing color for graphics commands.")]
+    public static async Task<string> GfxColor(
+        EmulatorClient client,
+        [Description("Color index (0-15)")] int color)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "gfx_color",
+            ["color"] = color
+        });
+        return result.ToJsonString();
     }
 
     [McpServerTool, Description("Define one row (8 bytes) of a multicolor sprite shape. Each byte encodes 2 pixels: high nibble=left, low nibble=right. Color 0=transparent.")]
@@ -216,12 +336,12 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
-    [McpServerTool, Description("Set sprite screen position. X range 0-159, Y range 0-49 (graphics coordinates).")]
+    [McpServerTool, Description("Set sprite screen position. X range 0-319, Y range 0-199 (graphics coordinates).")]
     public static async Task<string> SpritePosition(
         EmulatorClient client,
         [Description("Sprite index (0-15)")] int sprite,
-        [Description("X position (0-159)")] int x,
-        [Description("Y position (0-49)")] int y)
+        [Description("X position (0-319)")] int x,
+        [Description("Y position (0-199)")] int y)
     {
         var result = await client.SendAsync(new JsonObject
         {

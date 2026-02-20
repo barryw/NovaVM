@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using e6502.Avalonia.Hardware;
@@ -20,7 +21,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _bus = new CompositeBusDevice();
+        _bus = new CompositeBusDevice(enableSound: true);
         _cpu = new Cpu(_bus);
         _cpu.Boot();
 
@@ -45,13 +46,13 @@ public partial class MainWindow : Window
         }) { IsBackground = true, Name = "CpuThread" };
         cpuThread.Start();
 
-        // 30fps render timer
+        // 60 Hz render timer (also drives BASIC VSYNC frame counter)
         DispatcherTimer.Run(() =>
         {
             _bus.Vgc.IncrementFrameCounter();
             _canvas.RequestRedraw();
             return true;
-        }, TimeSpan.FromMilliseconds(33));
+        }, TimeSpan.FromMilliseconds(1000.0 / 60.0));
 
         // Cursor blink timer
         DispatcherTimer.Run(() =>
@@ -60,7 +61,36 @@ public partial class MainWindow : Window
             return true;
         }, TimeSpan.FromMilliseconds(500));
 
-        Closing += (_, _) => _running = false;
-        Opened += (_, _) => _canvas.Focus();
+        Closing += (_, _) =>
+        {
+            _running = false;
+            _bus.Dispose();
+        };
+        Opened += (_, _) =>
+        {
+            _canvas.Focus();
+            if (OperatingSystem.IsMacOS())
+                SetMacAspectRatio();
+        };
     }
+
+    private void SetMacAspectRatio()
+    {
+        var handle = TryGetPlatformHandle();
+        if (handle is null) return;
+
+        var nsWindow = handle.Handle;
+        var aspectSel = sel_registerName("setAspectRatio:");
+        objc_msgSend_NSSize(nsWindow, aspectSel,
+            new NSSize { width = EmulatorCanvas.NativeWidth, height = EmulatorCanvas.NativeHeight });
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NSSize { public double width; public double height; }
+
+    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+    private static extern void objc_msgSend_NSSize(IntPtr receiver, IntPtr selector, NSSize size);
+
+    [DllImport("/usr/lib/libobjc.dylib")]
+    private static extern IntPtr sel_registerName(string name);
 }

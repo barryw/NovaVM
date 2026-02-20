@@ -1,0 +1,306 @@
+% =============================================================================
+% Chapter 5 — Sound and Music
+% NovaBASIC v1.0 User Guide
+% =============================================================================
+\chapter{Sound and Music}
+\label{chap:sound}
+
+\epigraph{\itshape ``Music is the arithmetic of sounds as optics is the
+  geometry of light.''}%
+         {--- Claude Debussy}
+
+\noindent
+NovaBASIC includes a four-voice software synthesizer with independently
+configurable waveforms, ADSR volume envelopes, and frequency control per
+channel. Audio renders in real time at 44100~Hz through OpenAL. This chapter
+explains every command and shows practical patterns for playing notes,
+building textures, and composing multi-voice music.
+
+% -----------------------------------------------------------------------------
+\section{The Sound System}
+\label{sec:sound-overview}
+% -----------------------------------------------------------------------------
+
+The synthesizer exposes four identical voices on channels 0 through 3. Each
+channel maintains its own:
+
+\begin{itemize}
+  \item \textbf{Waveform} --- square, sawtooth, triangle, noise, or sine
+        (set with \cmd{WAVE}).
+  \item \textbf{ADSR envelope} --- attack, decay, sustain, release shaping
+        (set with \cmd{ENVELOPE}).
+  \item \textbf{Frequency and duration} --- triggered with \cmd{SOUND}.
+\end{itemize}
+
+A single \cmd{VOLUME} command sets the global master output level for all
+channels. The typical initialization sequence at the top of a program is:
+
+\begin{lstlisting}[style=basiclisting]
+10 VOLUME 12
+20 WAVE 0, 0
+30 ENVELOPE 0, 2, 4, 10, 4
+\end{lstlisting}
+
+Line~10 sets master volume to 12 (out of 15). Line~20 selects a square wave
+on channel~0. Line~30 sets a fast attack, moderate decay, high sustain, and
+moderate release on channel~0. After this setup, \cmd{SOUND} commands on
+channel~0 will play with that voice character until any of these settings
+are changed.
+
+% -----------------------------------------------------------------------------
+\section{Playing Notes}
+\label{sec:playing-notes}
+% -----------------------------------------------------------------------------
+
+\subsection*{SOUND syntax}
+
+\begin{center}
+\cmd{SOUND channel, frequency, duration}
+\end{center}
+
+\begin{itemize}
+  \item \cmd{channel} --- voice index 0--3. The value is masked with
+        \cmd{\& 0x03} so larger values wrap back into range silently.
+  \item \cmd{frequency} --- pitch in Hertz, clamped to 16--12000~Hz.
+  \item \cmd{duration} --- note length in 1/60-second ticks. A value of
+        60 plays for one second; 30 plays for a half second; 8 plays for
+        about 133~milliseconds.
+\end{itemize}
+
+If \cmd{frequency} is zero or negative, or \cmd{duration} is zero or
+negative, the channel is stopped immediately.
+
+\subsection*{Useful note frequencies}
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Note} & \textbf{Frequency (Hz)} & \textbf{Approx. duration for a beat at 120~bpm} \\
+\midrule
+Middle C (C4) & 262 & 30 ticks (half second) \\
+D4            & 294 & 30 ticks \\
+E4            & 330 & 30 ticks \\
+F4            & 349 & 30 ticks \\
+G4            & 392 & 30 ticks \\
+A4            & 440 & 30 ticks \\
+B4            & 494 & 30 ticks \\
+C5            & 524 & 30 ticks \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{A simple melody}
+
+The following program plays a rising C major scale on channel~0 using a
+triangle wave:
+
+\begin{lstlisting}[style=basiclisting]
+10 VOLUME 12 : WAVE 0, 2
+20 ENVELOPE 0, 1, 4, 12, 4
+30 DATA 262, 294, 330, 349, 392, 440, 494, 524
+40 FOR N = 1 TO 8
+50   READ F
+60   SOUND 0, F, 24
+70   FOR I = 1 TO 24 : VSYNC : NEXT I
+80 NEXT N
+\end{lstlisting}
+
+Each note plays for 24 ticks ($\approx 400$~ms) and the \cmd{VSYNC} loop
+holds the program for exactly the same duration before triggering the next
+note, keeping the melody in rhythm.
+
+\begin{notebox}
+The \cmd{duration} parameter in \cmd{SOUND} controls how long the synthesizer
+sustains that note in its internal queue; it does not pause program execution.
+Use a \cmd{VSYNC} loop after each \cmd{SOUND} call to create the gap between
+notes.
+\end{notebox}
+
+% -----------------------------------------------------------------------------
+\section{Waveforms}
+\label{sec:waveforms}
+% -----------------------------------------------------------------------------
+
+\cmd{WAVE channel, waveform} selects the oscillator type for a channel. The
+waveform index is taken modulo~5, so values 5, 10, etc.\ wrap back to~0.
+
+\begin{center}
+\begin{tabular}{clp{0.55\textwidth}}
+\toprule
+\textbf{Index} & \textbf{Name} & \textbf{Character} \\
+\midrule
+0 & Square   & Bold, hollow, retro chiptune feel. Classic 8-bit game sound. \\[2pt]
+1 & Sawtooth & Buzzy and harmonically rich. Good for brass-like lead sounds
+               and bass lines. \\[2pt]
+2 & Triangle & Soft and mellow, closer to a flute or a gentle bell.
+               Lower-intensity background pads. \\[2pt]
+3 & Noise    & Unpitched percussive texture. Use for drum hits, explosions,
+               static, and ambient rumble. \\[2pt]
+4 & Sine     & Pure, smooth, and clean. No overtones; ideal for test tones
+               and ethereal pads. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Waveform changes take effect on the next \cmd{SOUND} trigger; they do not
+interrupt a note that is already playing on that channel.
+
+% -----------------------------------------------------------------------------
+\section{ADSR Envelopes}
+\label{sec:envelopes}
+% -----------------------------------------------------------------------------
+
+A volume envelope shapes how a note's amplitude changes over time. NovaBASIC
+implements a standard four-stage ADSR envelope:
+
+\begin{center}
+\cmd{ENVELOPE channel, attack, decay, sustain, release}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{Attack} --- ramp from silence (0.0) to full amplitude (1.0).
+        Byte value; converted to samples at 44100~Hz / 240 per unit.
+        A value of~0 gives an instantaneous start; larger values give a
+        slower fade-in.
+  \item \textbf{Decay} --- ramp from full amplitude down to the sustain
+        level. Same timing conversion as attack.
+  \item \textbf{Sustain} --- the amplitude held while the note duration
+        runs. Only the low nibble is used (0--15), mapped linearly to
+        0.0--1.0. A value of 15 sustains at full amplitude after the decay
+        phase; a value of~0 gives a purely percussive shape.
+  \item \textbf{Release} --- ramp from the sustain level back to silence
+        after the note duration expires. Same timing conversion as attack
+        and decay.
+\end{itemize}
+
+\begin{notebox}
+Sustain is a \emph{level} (0--15), not a duration. Attack, decay, and release
+are \emph{timing} values (byte duration counts). This is the standard ADSR
+model: sustain holds until the note ends, then release fades from there.
+\end{notebox}
+
+\subsection*{Envelope comparison}
+
+A short percussive hit vs.\ a slow rising pad:
+
+\begin{lstlisting}[style=basiclisting]
+10 VOLUME 12
+20 REM PERCUSSIVE: FAST ATTACK, FAST DECAY, NO SUSTAIN, MEDIUM RELEASE
+30 WAVE 0, 3
+40 ENVELOPE 0, 0, 3, 0, 8
+50 SOUND 0, 200, 10
+60 FOR I = 1 TO 20 : VSYNC : NEXT I
+70 REM SLOW PAD: SLOW ATTACK, MEDIUM DECAY, HIGH SUSTAIN, SLOW RELEASE
+80 WAVE 1, 4
+90 ENVELOPE 1, 20, 8, 12, 20
+100 SOUND 1, 440, 60
+110 FOR I = 1 TO 90 : VSYNC : NEXT I
+\end{lstlisting}
+
+Channel~0 uses noise (\cmd{WAVE 0,3}) with envelope (0, 3, 0, 8) for a tight
+drum-like thud: instant attack, quick decay to zero, short release. Channel~1
+uses sine (\cmd{WAVE 1,4}) with envelope (20, 8, 12, 20) for a slow fade-in,
+a gentle decay to a sustained level of 12/15, and a long fade-out.
+
+% -----------------------------------------------------------------------------
+\section{Multi-Voice Music}
+\label{sec:multi-voice}
+% -----------------------------------------------------------------------------
+
+Because each channel is independent, you can trigger notes on multiple
+channels simultaneously. Issue consecutive \cmd{SOUND} commands on different
+channels before calling \cmd{VSYNC}; both will start rendering within the
+same frame.
+
+The following example plays a melody on channel~0 and a bass accompaniment
+on channel~1:
+
+\begin{lstlisting}[style=basiclisting]
+10 VOLUME 12
+20 REM MELODY: TRIANGLE, FAST ENVELOPE
+30 WAVE 0, 2 : ENVELOPE 0, 1, 4, 10, 4
+40 REM BASS: SAWTOOTH, SLOWER ENVELOPE
+50 WAVE 1, 1 : ENVELOPE 1, 2, 6, 8, 6
+60 REM MELODY FREQUENCIES
+70 DATA 330, 294, 262, 294, 330, 330, 330, 0
+80 REM BASS FREQUENCIES (HALF SPEED - ONE PER TWO MELODY NOTES)
+90 DATA 131, 131, 131, 131
+100 FOR N = 1 TO 8
+110   READ MF
+120   IF (N AND 1) = 1 THEN READ BF : SOUND 1, BF, 48
+130   SOUND 0, MF, 24
+140   FOR I = 1 TO 24 : VSYNC : NEXT I
+150 NEXT N
+\end{lstlisting}
+
+Lines~70--90 define the note sequences as \cmd{DATA}. The melody plays a
+new note every 24 ticks. The bass plays one note every 48 ticks by reading
+a bass frequency only on odd melody steps (line~120 tests bit~0 of \cmd{N}).
+Both channels render concurrently between \cmd{VSYNC} calls.
+
+\begin{tipbox}
+Channels do not block each other. A note triggered on channel~0 and a note
+triggered on channel~1 in the same frame play simultaneously with no
+additional effort.
+\end{tipbox}
+
+% -----------------------------------------------------------------------------
+\section{Composition Tips}
+\label{sec:composition-tips}
+% -----------------------------------------------------------------------------
+
+\begin{tipbox}
+\begin{itemize}
+  \item Set \cmd{VOLUME} and all \cmd{ENVELOPE}/\cmd{WAVE} values once at
+        program startup, not inside the note loop. Changing them mid-note
+        can cause audible clicks.
+  \item Keep melody, harmony, and percussion on separate channels so each
+        voice can have its own waveform and envelope character.
+  \item Use \cmd{VSYNC} loops between note events for tempo control.
+        Each \cmd{VSYNC} is exactly 1/60 second. At 120 beats per minute
+        (2 beats/second), one beat = 30 VSYNC cycles.
+  \item Store music as \cmd{DATA} statements. This separates the note data
+        from the playback engine and makes it easy to edit pitches,
+        durations, and timing without touching the logic.
+  \item Use waveform~3 (noise) on a spare channel for drum and percussion
+        sounds. A short envelope (fast attack, zero sustain) on the noise
+        channel gives convincing hi-hat and snare textures.
+\end{itemize}
+\end{tipbox}
+
+% -----------------------------------------------------------------------------
+\section{Try It Now}
+\label{sec:sound-tryit}
+% -----------------------------------------------------------------------------
+
+\begin{tryitbox}
+Type and run the following program. It uses a sine wave with a smooth
+envelope to play an ascending chromatic phrase of eight notes:
+
+\begin{lstlisting}[style=basiclisting]
+10 VOLUME 12
+20 ENVELOPE 0, 2, 6, 10, 6
+30 WAVE 0, 4
+40 FOR N = 0 TO 7
+50   F = 262 * 2 ^ (N / 12)
+60   SOUND 0, INT(F), 8
+70   FOR I = 1 TO 8 : VSYNC : NEXT I
+80 NEXT N
+\end{lstlisting}
+
+Expected result: eight notes rising by one semitone each, starting at
+middle~C (262~Hz) and ascending chromatically, played with a sine wave and a
+smooth ADSR envelope. Each note lasts approximately 133~milliseconds (8/60~s).
+
+\medskip
+Experiments to try:
+
+\begin{itemize}
+  \item Change \cmd{WAVE 0,4} to \cmd{WAVE 0,0} (square) and re-run to
+        hear the same phrase with a retro chiptune character.
+  \item Change the base frequency from 262 to 440 to start the phrase from
+        concert A instead of middle~C.
+  \item Increase the loop counter from 7 to 11 for a full chromatic
+        octave.
+\end{itemize}
+\end{tryitbox}

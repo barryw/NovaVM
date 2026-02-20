@@ -1,0 +1,422 @@
+% =============================================================================
+% Appendix: Memory Map
+% NovaBASIC v1.0 User Guide
+% Source of truth: e6502.Avalonia/Hardware/VgcConstants.cs
+%                  e6502.Avalonia/Hardware/VirtualGraphicsController.cs
+%                  e6502.Avalonia/Hardware/VirtualSoundController.cs
+%                  e6502.Avalonia/Hardware/FileIoController.cs
+%                  e6502.Avalonia/Hardware/VirtualExpansionMemoryController.cs
+% =============================================================================
+\chapter{Memory Map}
+
+% =============================================================================
+\section{Address Space Overview}
+% =============================================================================
+
+The e6502 virtual computer presents a flat 64 KB address space to the 6502 CPU.
+Coprocessor regions (VGC, VSC, FIO, XMC) respond to reads and writes within
+their assigned windows; all remaining space is RAM except the upper 16 KB
+(\$C000--\$FFFF) which is write-protected ROM.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.22\textwidth} >{\raggedleft\arraybackslash}p{0.14\textwidth} p{0.50\textwidth}}
+\toprule
+\normalfont\textbf{Address Range} & \textbf{Size} & \textbf{Region} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$0000--\$00FF &     256 B & Zero Page \\
+\$0100--\$01FF &     256 B & CPU Stack \\
+\$0200--\$027F &     128 B & System Vectors (IRQ/NMI handlers, BASIC vectors) \\
+\$0280--\$9FFF &  39,680 B & BASIC Program RAM \\
+\$A000--\$A01E &      31 B & Virtual Graphics Controller (VGC) registers and command interface \\
+\$A100--\$A1FF &     256 B & Virtual Sound Controller (VSC) registers \\
+\$AA00--\$B1CF &   2,000 B & Character RAM (80$\times$25 text cells) \\
+\$B1D0--\$B99F &   2,000 B & Color RAM (80$\times$25 text cells) \\
+\$B9A0--\$B9EF &      80 B & File I/O Controller (FIO) registers \\
+\$BA00--\$BA3F &      64 B & Expansion Memory Controller (XMC) registers \\
+\$BC00--\$BFFF &   1,024 B & XMC Memory Windows (4 $\times$ 256-byte mapped pages) \\
+\$C000--\$FFFF &  16,384 B & ROM (NovaBASIC interpreter) \\
+\end{longtable}
+
+\begin{notebox}
+The address range \$A01F--\$A0FF and \$A200--\$A9FF are not claimed by any
+coprocessor and fall through to the underlying flat RAM.
+The range \$BA40--\$BBFF is similarly unallocated RAM.
+\end{notebox}
+
+% =============================================================================
+\section{VGC Register Map}
+% =============================================================================
+
+The Virtual Graphics Controller occupies \$A000--\$A01E.
+Registers \$A000--\$A00F are the core status and display registers.
+Registers \$A010--\$A01E are the command register and its 14 parameter slots;
+writing to \$A010 both stores the command byte and triggers immediate execution.
+
+\subsection*{Core Registers (\$A000--\$A00F)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.20\textwidth} p{0.10\textwidth} p{0.42\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \normalfont\textbf{Name} & \textbf{Access} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$A000 & RegMode        & R/W & Display mode: 0=text only, 1=graphics over text, 2=text over graphics. \\
+\$A001 & RegBgCol       & R/W & Background color index (0--15). \\
+\$A002 & RegFgCol       & R/W & Default foreground color index (0--15); reset value is 1 (white). \\
+\$A003 & RegCursorX     & R/W & Text cursor column (0--79). \\
+\$A004 & RegCursorY     & R/W & Text cursor row (0--24). \\
+\$A005 & RegScrollX     & R/W & Horizontal scroll offset (reserved in v1.0). \\
+\$A006 & RegScrollY     & R/W & Vertical scroll offset (reserved in v1.0). \\
+\$A007 & RegBank        & R/W & Reserved. \\
+\$A008 & RegStatus      & RO  & Frame counter; incremented each video frame. Writes are ignored. \\
+\$A009 & RegSpriteCount & RO  & Count of currently enabled sprites (0--16). Writes are ignored. \\
+\$A00A & ---            & --- & Reserved. \\
+\$A00B & RegColSt       & RO  & Sprite-to-sprite collision bitmask; reading clears the register. \\
+\$A00C & RegColBg       & RO  & Sprite-to-background collision bitmask; reading clears the register. \\
+\$A00D & RegBorder      & R/W & Border color index (0--15). \\
+\$A00E & RegCharOut     & R/W & Character output port; writing outputs a character to the text screen. \\
+\$A00F & RegCharIn      & R/W & Character input port; reading dequeues the next keypress byte. \\
+\end{longtable}
+
+\subsection*{Command Register and Parameters (\$A010--\$A01E)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.20\textwidth} p{0.10\textwidth} p{0.42\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \normalfont\textbf{Name} & \textbf{Access} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$A010 & RegCmd  & R/W & Command byte; writing triggers immediate command execution. \\
+\$A011 & RegP0   & R/W & Parameter 0. \\
+\$A012 & RegP1   & R/W & Parameter 1. \\
+\$A013 & RegP2   & R/W & Parameter 2. \\
+\$A014 & RegP3   & R/W & Parameter 3. \\
+\$A015 & RegP4   & R/W & Parameter 4. \\
+\$A016 & RegP5   & R/W & Parameter 5. \\
+\$A017 & RegP6   & R/W & Parameter 6. \\
+\$A018 & RegP7   & R/W & Parameter 7. \\
+\$A019 & RegP8   & R/W & Parameter 8. \\
+\$A01A & RegP9   & R/W & Parameter 9. \\
+\$A01B & RegP10  & R/W & Parameter 10. \\
+\$A01C & RegP11  & R/W & Parameter 11. \\
+\$A01D & RegP12  & R/W & Parameter 12. \\
+\$A01E & RegP13  & R/W & Parameter 13. \\
+\end{longtable}
+
+Multi-byte parameters (coordinates, sprite positions) are packed
+little-endian across consecutive parameter registers.
+For example, a 16-bit x-coordinate uses P0 (low byte) and P1 (high byte).
+
+% =============================================================================
+\section{VGC Command Codes}
+% =============================================================================
+
+All commands are invoked by writing the command byte to \texttt{RegCmd} (\$A010).
+Parameters must be loaded into \texttt{RegP0}--\texttt{RegP13} before the write.
+
+\subsection*{Graphics Commands (\$01--\$09)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.10\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.18\textwidth} p{0.58\textwidth}}
+\toprule
+\normalfont\textbf{Code} & \normalfont\textbf{Name} & \textbf{Parameters and behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$01 & CmdPlot    & P0/P1 = x (16-bit), P2/P3 = y (16-bit). Set pixel to current draw color. \\
+\$02 & CmdUnplot  & P0/P1 = x (16-bit), P2/P3 = y (16-bit). Clear pixel to 0 (transparent). \\
+\$03 & CmdLine    & P0/P1 = x0, P2/P3 = y0, P4/P5 = x1, P6/P7 = y1. Draw Bresenham line. \\
+\$04 & CmdCircle  & P0/P1 = cx, P2/P3 = cy, P4/P5 = radius. Draw circle outline. \\
+\$05 & CmdRect    & P0/P1 = x0, P2/P3 = y0, P4/P5 = x1, P6/P7 = y1. Draw rectangle outline. \\
+\$06 & CmdFill    & P0/P1 = x0, P2/P3 = y0, P4/P5 = x1, P6/P7 = y1. Draw filled rectangle. \\
+\$07 & CmdGcls    & No parameters. Clear entire graphics bitmap to 0. \\
+\$08 & CmdGcolor  & P0 low nibble = color index (0--15). Set current draw color. \\
+\$09 & CmdPaint   & P0/P1 = x (16-bit), P2/P3 = y (16-bit). Flood-fill from seed point. \\
+\end{longtable}
+
+\subsection*{Sprite Commands (\$10--\$18)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.10\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.18\textwidth} p{0.58\textwidth}}
+\toprule
+\normalfont\textbf{Code} & \normalfont\textbf{Name} & \textbf{Parameters and behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$10 & CmdSprDef  & P0 = sprite (0--15), P1 = x pixel (0--15), P2 = y pixel (0--15), P3 = color nibble. Set one pixel in sprite shape. \\
+\$11 & CmdSprRow  & P0 = sprite (0--15), P1 = row (0--15), P2--P9 = 8 data bytes (two 4-bit pixels per byte). Define one sprite row. \\
+\$12 & CmdSprClr  & P0 = sprite (0--15). Clear all 128 bytes of sprite shape data to 0. \\
+\$13 & CmdSprCopy & P0 = source sprite (0--15), P1 = destination sprite (0--15). Copy shape data. \\
+\$14 & CmdSprPos  & P0 = sprite (0--15), P1/P2 = x (16-bit), P3/P4 = y (16-bit). Set screen position. \\
+\$15 & CmdSprEna  & P0 = sprite (0--15). Enable sprite; increments \texttt{RegSpriteCount}. \\
+\$16 & CmdSprDis  & P0 = sprite (0--15). Disable sprite; decrements \texttt{RegSpriteCount}. \\
+\$17 & CmdSprFlip & P0 = sprite (0--15), P1 = flags (0=none, 1=horizontal, 2=vertical, 3=both). \\
+\$18 & CmdSprPri  & P0 = sprite (0--15), P1 = priority (0=behind all, 1=between text/gfx, 2=in front). \\
+\end{longtable}
+
+\begin{tipbox}
+Sprite shape data is stored host-side and is not 6502-addressable.
+All sprite shape manipulation must go through the command register interface.
+\end{tipbox}
+
+% =============================================================================
+\section{VSC Register Map}
+% =============================================================================
+
+The Virtual Sound Controller occupies \$A100--\$A1FF.
+Writing to \$A100 (\texttt{VscCmd}) both stores the command byte and executes it.
+
+\subsection*{VSC Registers}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.22\textwidth} p{0.10\textwidth} p{0.40\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \normalfont\textbf{Name} & \textbf{Access} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$A100 & VscCmd        & R/W & Command byte; writing triggers execution. \\
+\$A101 & VscP0         & R/W & Parameter 0. \\
+\$A102 & VscP1         & R/W & Parameter 1. \\
+\$A103 & VscP2         & R/W & Parameter 2. \\
+\$A104 & VscP3         & R/W & Parameter 3. \\
+\$A105 & VscP4         & R/W & Parameter 4. \\
+\$A106 & VscP5         & R/W & Parameter 5. \\
+\$A107 & VscP6         & R/W & Parameter 6. \\
+\$A108 & VscP7         & R/W & Parameter 7. \\
+\$A10E & VscActiveMask & RO  & Bitmask of currently playing channels (bits 0--3). \\
+\$A10F & VscMasterVol  & RO  & Current master volume (0--15); set via \texttt{VscCmdVolume}. \\
+\end{longtable}
+
+\subsection*{VSC Command Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.10\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.22\textwidth} p{0.54\textwidth}}
+\toprule
+\normalfont\textbf{Code} & \normalfont\textbf{Name} & \textbf{Parameters} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$01 & VscCmdSound    & P0 = channel (masked to 0--3), P1/P2 = frequency (16-bit Hz), P3/P4 = duration (16-bit, units of 1/60 s). Frequency is clamped to 16--12000 Hz. \cmd{freq<=0} or \cmd{dur<=0} stops the channel. \\
+\$02 & VscCmdVolume   & P0 low nibble = master volume (0--15). \\
+\$03 & VscCmdEnvelope & P0 = channel (masked to 0--3), P1 = attack, P2 = decay, P3 = sustain (low nibble, 0--15 scale), P4 = release. Each time value is scaled to samples internally. \\
+\$04 & VscCmdWave     & P0 = channel (masked to 0--3), P1 = waveform index (\texttt{P1 mod 5}): 0=square, 1=sawtooth, 2=triangle, 3=noise, 4=sine. \\
+\end{longtable}
+
+% =============================================================================
+\section{FIO Register Map}
+% =============================================================================
+
+The File I/O Controller occupies \$B9A0--\$B9EF.
+Writing to \$B9A0 (\texttt{FioCmd}) triggers the operation.
+The caller polls \$B9A1 (\texttt{FioStatus}) for completion.
+
+\subsection*{FIO Registers}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.18\textwidth} p{0.10\textwidth} p{0.44\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \normalfont\textbf{Name} & \textbf{Access} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$B9A0 & FioCmd    & R/W & Command byte; writing triggers the operation. \\
+\$B9A1 & FioStatus & RO  & Result status: 0=idle, 2=ok, 3=error. \\
+\$B9A2 & FioErrCode & RO & Error detail code (see below). \\
+\$B9A3 & FioNameLen & R/W & Filename length in bytes (1--63). \\
+\$B9A4 & FioSrcL   & R/W & Source/destination address, low byte. \\
+\$B9A5 & FioSrcH   & R/W & Source/destination address, high byte. \\
+\$B9A6 & FioEndL   & R/W & End address, low byte (used by \cmd{SAVE} to determine program extent). \\
+\$B9A7 & FioEndH   & R/W & End address, high byte. \\
+\$B9A8 & FioSizeL  & RO  & Loaded data size, low byte (written by host after \cmd{LOAD} or \cmd{DIR} read). \\
+\$B9A9 & FioSizeH  & RO  & Loaded data size, high byte. \\
+\$B9B0--\$B9EF & FioName & R/W & Filename buffer (64 bytes ASCII, not null-terminated). \\
+\end{longtable}
+
+\subsection*{FIO Command Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.10\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.22\textwidth} p{0.54\textwidth}}
+\toprule
+\normalfont\textbf{Code} & \normalfont\textbf{Name} & \textbf{Behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$01 & FioCmdSave    & Save bytes from \texttt{FioSrcL/H} to \texttt{FioEndL/H} (exclusive) to disk; prepends a 2-byte load-address. \\
+\$02 & FioCmdLoad    & Load file into RAM at \texttt{FioSrcL/H}; skips the 2-byte load-address prefix; sets \texttt{FioSizeL/H}. \\
+\$03 & FioCmdDirOpen & Open the program directory; populates \texttt{FioName} and \texttt{FioSizeL/H} with the first entry. \\
+\$04 & FioCmdDirRead & Advance to the next directory entry; populates \texttt{FioName} and \texttt{FioSizeL/H}. \\
+\$05 & FioCmdDelete  & Delete the named program from disk. \\
+\end{longtable}
+
+\subsection*{FIO Status Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.12\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.20\textwidth} p{0.54\textwidth}}
+\toprule
+\normalfont\textbf{Value} & \normalfont\textbf{Name} & \textbf{Meaning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$00 & FioStatusIdle  & No operation in progress. \\
+\$02 & FioStatusOk    & Operation completed successfully. \\
+\$03 & FioStatusError & Operation failed; see \texttt{FioErrCode}. \\
+\end{longtable}
+
+\subsection*{FIO Error Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.12\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.24\textwidth} p{0.50\textwidth}}
+\toprule
+\normalfont\textbf{Value} & \normalfont\textbf{Name} & \textbf{Meaning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$00 & FioErrNone     & No error. \\
+\$01 & FioErrNotFound & File not found on disk. \\
+\$02 & FioErrIo       & Host I/O error (invalid name, end address $\leq$ start, OS exception). \\
+\$03 & FioErrEndOfDir & No more directory entries (returned for \texttt{DirOpen} on empty dir or after last entry). \\
+\end{longtable}
+
+% =============================================================================
+\section{XMC Register Map}
+% =============================================================================
+
+The Expansion Memory Controller occupies \$BA00--\$BA3F.
+Writing to \$BA00 (\texttt{XmcCmd}) triggers the operation.
+Memory windows (\$BC00--\$BFFF) provide direct CPU-bus access to mapped XRAM pages.
+
+\subsection*{XMC Registers}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.22\textwidth} p{0.10\textwidth} p{0.40\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \normalfont\textbf{Name} & \textbf{Access} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$BA00 & XmcCmd        & R/W & Command byte; writing triggers execution. \\
+\$BA01 & XmcStatus     & RO  & Result status: 0=idle, 2=ok, 3=error. \\
+\$BA02 & XmcErrCode    & RO  & Error detail code (see below). \\
+\$BA03 & XmcCfg        & R/W & Reserved. \\
+\$BA04 & XmcAddrL      & R/W & XRAM address, low byte. \\
+\$BA05 & XmcAddrM      & R/W & XRAM address, middle byte. \\
+\$BA06 & XmcAddrH      & R/W & XRAM address, high byte. \\
+\$BA07 & XmcRamL       & R/W & CPU RAM address, low byte. \\
+\$BA08 & XmcRamH       & R/W & CPU RAM address, high byte. \\
+\$BA09 & XmcLenL       & R/W & Transfer length, low byte. \\
+\$BA0A & XmcLenH       & R/W & Transfer length, high byte. \\
+\$BA0B & XmcData       & R/W & Byte data port (used by \texttt{GetByte}/\texttt{PutByte}). \\
+\$BA0C & XmcBank       & R/W & Default 64 KB bank selector. \\
+\$BA0D & XmcBanks      & RO  & Total number of 64 KB banks available (read-only). \\
+\$BA0E & XmcPagesUsedL & RO  & Used 256-byte pages, low byte. \\
+\$BA0F & XmcPagesUsedH & RO  & Used 256-byte pages, high byte. \\
+\$BA10 & XmcPagesFreeL & RO  & Free 256-byte pages, low byte. \\
+\$BA11 & XmcPagesFreeH & RO  & Free 256-byte pages, high byte. \\
+\$BA12 & XmcNameLen    & R/W & Name length for named block operations (1--28). \\
+\$BA13 & XmcHandle     & RO  & Block handle returned by \texttt{Alloc}/\texttt{NStash}/\texttt{DirRead}. \\
+\$BA14 & XmcDirCountL  & RO  & Count of named blocks, low byte. \\
+\$BA15 & XmcDirCountH  & RO  & Count of named blocks, high byte. \\
+\$BA16 & XmcWinCtl     & R/W & Window enable bitmask (bit 0=window 0, bit 1=window 1, etc.). \\
+\$BA18 & XmcWin0AL     & R/W & Window 0 mapped XRAM base address, low byte. \\
+\$BA19 & XmcWin0AM     & R/W & Window 0 mapped XRAM base address, middle byte. \\
+\$BA1A & XmcWin0AH     & R/W & Window 0 mapped XRAM base address, high byte. \\
+\$BA1B & XmcWin1AL     & R/W & Window 1 mapped XRAM base address, low byte. \\
+\$BA1C & XmcWin1AM     & R/W & Window 1 mapped XRAM base address, middle byte. \\
+\$BA1D & XmcWin1AH     & R/W & Window 1 mapped XRAM base address, high byte. \\
+\$BA1E & XmcWin2AL     & R/W & Window 2 mapped XRAM base address, low byte. \\
+\$BA1F & XmcWin2AM     & R/W & Window 2 mapped XRAM base address, middle byte. \\
+\$BA20 & XmcWin2AH     & R/W & Window 2 mapped XRAM base address, high byte. \\
+\$BA21 & XmcWin3AL     & R/W & Window 3 mapped XRAM base address, low byte. \\
+\$BA22 & XmcWin3AM     & R/W & Window 3 mapped XRAM base address, middle byte. \\
+\$BA23 & XmcWin3AH     & R/W & Window 3 mapped XRAM base address, high byte. \\
+\$BA24--\$BA3F & XmcName & R/W & ASCII name buffer (28 bytes, not null-terminated). \\
+\end{longtable}
+
+\subsection*{XMC Command Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.10\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.24\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Code} & \normalfont\textbf{Name} & \textbf{Behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$01 & XmcCmdGetByte    & Read byte at \texttt{XmcAddrL/M/H} into \texttt{XmcData}. \\
+\$02 & XmcCmdPutByte    & Write \texttt{XmcData} to \texttt{XmcAddrL/M/H}; marks page used. \\
+\$03 & XmcCmdStash      & Copy \texttt{XmcLenL/H} bytes from CPU RAM at \texttt{XmcRamL/H} to XRAM at \texttt{XmcAddrL/M/H}. \texttt{len=0} is a no-op success. \\
+\$04 & XmcCmdFetch      & Copy \texttt{XmcLenL/H} bytes from XRAM at \texttt{XmcAddrL/M/H} to CPU RAM at \texttt{XmcRamL/H}. \texttt{len=0} is a no-op success. \\
+\$05 & XmcCmdFill       & Fill \texttt{XmcLenL/H} bytes in XRAM starting at \texttt{XmcAddrL/M/H} with \texttt{XmcData}. \\
+\$07 & XmcCmdStats      & Refresh the \texttt{PagesUsed}/\texttt{PagesFree}/\texttt{DirCount} read-only registers. \\
+\$08 & XmcCmdResetUsage & Clear all usage tracking, block records, and named-block metadata (destructive). \\
+\$09 & XmcCmdRelease    & Mark XRAM range (\texttt{XmcAddrL/M/H}, \texttt{XmcLenL/H}) as free; removes any overlapping block records. \\
+\$0A & XmcCmdAlloc      & Allocate \texttt{XmcLenL/H} bytes; sets \texttt{XmcAddrL/M/H}, \texttt{XmcHandle}, and \texttt{XmcBank}. \\
+\$0B & XmcCmdNStash     & Named stash: create or update named block from CPU RAM; name read from \texttt{XmcName}/\texttt{XmcNameLen}. \\
+\$0C & XmcCmdNFetch     & Named fetch: copy named block to CPU RAM at \texttt{XmcRamL/H}; \texttt{len=0} fetches full block. \\
+\$0D & XmcCmdNDelete    & Delete named block by name. \\
+\$0E & XmcCmdNDirOpen   & Open named-block directory; emits first entry to registers. \\
+\$0F & XmcCmdNDirRead   & Advance to the next named-block directory entry. \\
+\end{longtable}
+
+\subsection*{XMC Status Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.12\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.26\textwidth} p{0.48\textwidth}}
+\toprule
+\normalfont\textbf{Value} & \normalfont\textbf{Name} & \textbf{Meaning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$00 & XmcStatusIdle  & No operation in progress. \\
+\$02 & XmcStatusOk    & Operation completed successfully. \\
+\$03 & XmcStatusError & Operation failed; see \texttt{XmcErrCode}. \\
+\end{longtable}
+
+\subsection*{XMC Error Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.12\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.26\textwidth} p{0.48\textwidth}}
+\toprule
+\normalfont\textbf{Value} & \normalfont\textbf{Name} & \textbf{Meaning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$00 & XmcErrNone     & No error. \\
+\$01 & XmcErrRange    & XRAM address or length out of bounds. \\
+\$02 & XmcErrBadArgs  & Invalid arguments (e.g., \texttt{len<=0} for \texttt{Alloc}, unknown command). \\
+\$03 & XmcErrNotFound & Named block not found. \\
+\$04 & XmcErrNoSpace  & No contiguous free pages of the required size, or handle pool exhausted. \\
+\$05 & XmcErrName     & Name length is 0 or exceeds 28, or name is blank after trimming. \\
+\$06 & XmcErrEndOfDir & No more named-block directory entries. \\
+\end{longtable}
+
+% =============================================================================
+\section{System Vectors}
+% =============================================================================
+
+The address range \$0200--\$027F is the system vector table.
+Each entry is a 16-bit little-endian pointer initialized from ROM at cold start.
+BASIC uses the lower portion; the upper portion is reserved for future use.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} p{0.60\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$0200--\$0201 & IRQ handler vector (2 bytes, little-endian). Set by the \cmd{IRQ} statement. \\
+\$0202--\$0203 & NMI handler vector (2 bytes, little-endian). Set by the \cmd{NMI} statement. \\
+\$0204--\$020D & Reserved BASIC internal vectors (warm-start, error, output, input hooks). \\
+\$020E--\$027F & Reserved for future system use. \\
+\end{longtable}
+
+\begin{notebox}
+The exact layout of \$0204--\$020D is inherited from EhBASIC 2.22p5 and tracks
+the standard warm-start, error, and I/O indirection vectors.
+Refer to \texttt{ehbasic/basic.asm} for the definitive symbol assignments.
+\end{notebox}

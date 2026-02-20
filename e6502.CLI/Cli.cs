@@ -31,7 +31,7 @@ internal class Cli
             }
         } while(inputThread.IsAlive);
         
-        Console.WriteLine(@"Exiting Enhanced BASIC");
+        Console.WriteLine(@"Exiting NovaBASIC v1.0");
     }
 
     private void HandleInput()

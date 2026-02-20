@@ -1,0 +1,148 @@
+% =============================================================================
+% NovaBASIC v1.0 — Cover Page
+% TikZ design inspired by 1980s computer manual aesthetics
+% Emits content directly; \input{cover} in the master document
+% =============================================================================
+\begin{titlepage}
+\begin{tikzpicture}[remember picture, overlay]
+
+  % ------------------------------------------------------------------
+  % Full-page background fill
+  % ------------------------------------------------------------------
+  \fill[retroblue]
+    (current page.south west) rectangle (current page.north east);
+
+  % ------------------------------------------------------------------
+  % Diagonal accent stripe — lighter blue, angled band left side
+  % ------------------------------------------------------------------
+  \fill[retroblue!70!white, opacity=0.35]
+    ([xshift=-60pt, yshift=120pt]current page.south west)
+    -- ([xshift=260pt, yshift=120pt]current page.south west)
+    -- ([xshift=260pt]current page.north west)
+    -- ([xshift=-60pt]current page.north west)
+    -- cycle;
+
+  % Secondary lighter stripe
+  \fill[retroblue!50!white, opacity=0.18]
+    ([xshift=180pt, yshift=120pt]current page.south west)
+    -- ([xshift=340pt, yshift=120pt]current page.south west)
+    -- ([xshift=340pt]current page.north west)
+    -- ([xshift=180pt]current page.north west)
+    -- cycle;
+
+  % ------------------------------------------------------------------
+  % Subtle dot grid — top-right corner, very low opacity
+  % ------------------------------------------------------------------
+  \begin{scope}[opacity=0.06]
+    \foreach \gx in {0,12,...,180}{
+      \foreach \gy in {0,12,...,220}{
+        \fill[white]
+          ([xshift=\gx pt, yshift=-\gy pt]current page.north east)
+          circle (1.2pt);
+      }
+    }
+  \end{scope}
+
+  % ------------------------------------------------------------------
+  % Small accent squares — top-left region below header space
+  % ------------------------------------------------------------------
+  \fill[retrocyan, opacity=0.75]
+    ([xshift=52pt, yshift=-52pt]current page.north west)
+    rectangle ++(18pt, 18pt);
+
+  \fill[retrocyan, opacity=0.50]
+    ([xshift=80pt, yshift=-52pt]current page.north west)
+    rectangle ++(10pt, 18pt);
+
+  \fill[white, opacity=0.30]
+    ([xshift=100pt, yshift=-52pt]current page.north west)
+    rectangle ++(5pt, 18pt);
+
+  % ------------------------------------------------------------------
+  % Decorative BASIC code snippet — top-right, very low opacity
+  % ------------------------------------------------------------------
+  \node[
+    anchor=north east,
+    xshift=-44pt,
+    yshift=-62pt,
+    text=white,
+    opacity=0.12,
+    font=\ttfamily\large,
+    align=left
+  ] at (current page.north east) {%
+    10 PRINT "HELLO"\\
+    20 GOTO 10\\
+    RUN%
+  };
+
+  % ------------------------------------------------------------------
+  % Main title: NOVABASIC
+  % ------------------------------------------------------------------
+  \node[
+    anchor=west,
+    xshift=52pt,
+    yshift=60pt,
+    text=white,
+    font=\fontsize{62}{66}\selectfont\bfseries\sffamily
+  ] at (current page.west) {NOVABASIC};
+
+  % ------------------------------------------------------------------
+  % Subtitle: User Guide v1.0
+  % ------------------------------------------------------------------
+  \node[
+    anchor=west,
+    xshift=52pt,
+    yshift=18pt,
+    text=white,
+    font=\fontsize{24}{28}\selectfont\sffamily
+  ] at (current page.west) {User Guide\enspace v1.0};
+
+  % ------------------------------------------------------------------
+  % Tagline — retrocyan, italic
+  % ------------------------------------------------------------------
+  \node[
+    anchor=west,
+    xshift=52pt,
+    yshift=-16pt,
+    text=retrocyan,
+    font=\fontsize{14}{18}\selectfont\itshape\sffamily
+  ] at (current page.west) {For the e6502 Virtual Computer};
+
+  % ------------------------------------------------------------------
+  % Version / edition info — low opacity
+  % ------------------------------------------------------------------
+  \node[
+    anchor=west,
+    xshift=52pt,
+    yshift=-46pt,
+    text=white,
+    opacity=0.55,
+    font=\fontsize{10}{14}\selectfont\sffamily
+  ] at (current page.west)
+    {Derived from EhBASIC 2.22p5\enspace|\enspace 2026 Edition};
+
+  % ------------------------------------------------------------------
+  % Bottom horizontal rule
+  % ------------------------------------------------------------------
+  \draw[white, opacity=0.45, line width=1.0pt]
+    ([xshift=52pt,  yshift=62pt]current page.south west)
+    -- ([xshift=-52pt, yshift=62pt]current page.south east);
+
+  % ------------------------------------------------------------------
+  % Bottom feature line
+  % ------------------------------------------------------------------
+  \node[
+    anchor=south,
+    yshift=22pt,
+    text=white,
+    opacity=0.80,
+    font=\fontsize{9}{12}\selectfont\sffamily\bfseries
+  ] at (current page.south) {%
+    MOS 6502\enspace|\enspace
+    320{\texttimes}200 Graphics\enspace|\enspace
+    4-Voice Sound\enspace|\enspace
+    512KB Expansion%
+  };
+
+\end{tikzpicture}
+\end{titlepage}

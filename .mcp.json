@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "e6502": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "e6502.MCP/e6502.MCP.csproj"],
+      "env": {
+        "EMULATOR_PORT": "6502"
+      }
+    }
+  }
+}

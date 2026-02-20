@@ -2,13 +2,13 @@ namespace e6502.Avalonia.Rendering;
 
 /// <summary>
 /// Static block graphics drawing algorithms operating on a flat byte array
-/// representing a 160x50 bitmap. Each byte is a color index (0-15, 0 = transparent).
+/// representing a 320x200 bitmap. Each byte is a color index (0-15, 0 = transparent).
 /// Layout: index = y * width + x.
 /// </summary>
 public static class BlockGraphics
 {
-    public const int Width  = 160;
-    public const int Height = 50;
+    public const int Width  = 320;
+    public const int Height = 200;
 
     public static void Plot(byte[] bmp, int x, int y, byte color)
     {
@@ -82,6 +82,60 @@ public static class BlockGraphics
         Line(bmp, x0, y1, x1, y1, color);
         Line(bmp, x0, y0, x0, y1, color);
         Line(bmp, x1, y0, x1, y1, color);
+    }
+
+    public static void FloodFill(byte[] bmp, int x, int y, byte color)
+    {
+        if (x < 0 || x >= Width || y < 0 || y >= Height)
+            return;
+
+        byte target = bmp[y * Width + x];
+        if (target == color)
+            return;
+
+        var queue = new Queue<(int x, int y)>();
+        queue.Enqueue((x, y));
+
+        while (queue.Count > 0)
+        {
+            var (cx, cy) = queue.Dequeue();
+            if (cx < 0 || cx >= Width || cy < 0 || cy >= Height)
+                continue;
+
+            int idx = cy * Width + cx;
+            if (bmp[idx] != target)
+                continue;
+
+            // Scan left
+            int left = cx;
+            while (left > 0 && bmp[cy * Width + left - 1] == target)
+                left--;
+
+            // Scan right
+            int right = cx;
+            while (right < Width - 1 && bmp[cy * Width + right + 1] == target)
+                right++;
+
+            // Fill the scanline
+            for (int i = left; i <= right; i++)
+                bmp[cy * Width + i] = color;
+
+            // Enqueue adjacent rows (only at transitions to avoid duplicates)
+            for (int dy = -1; dy <= 1; dy += 2)
+            {
+                int ny = cy + dy;
+                if (ny < 0 || ny >= Height)
+                    continue;
+                bool prev = false;
+                for (int i = left; i <= right; i++)
+                {
+                    bool curr = bmp[ny * Width + i] == target;
+                    if (curr && !prev)
+                        queue.Enqueue((i, ny));
+                    prev = curr;
+                }
+            }
+        }
     }
 
     public static void Fill(byte[] bmp, int x0, int y0, int x1, int y1, byte color)

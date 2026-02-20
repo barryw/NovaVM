@@ -11,7 +11,7 @@ namespace e6502.Avalonia.Rendering;
 public class EmulatorCanvas : Control
 {
     public const int NativeWidth = 640;
-    public const int NativeHeight = 200;
+    public const int NativeHeight = 400;
 
     private readonly WriteableBitmap _framebuffer;
     private readonly VirtualGraphicsController _vgc;
@@ -44,6 +44,15 @@ public class EmulatorCanvas : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if ((e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)) && e.Key == Key.V
+            || (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.Insert))
+        {
+            _ = PasteClipboardAsync();
+            e.Handled = true;
+            base.OnKeyDown(e);
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Left:
@@ -78,17 +87,53 @@ public class EmulatorCanvas : Control
             default:
                 if (e.KeySymbol is { Length: 1 } s && s[0] >= 0x20 && s[0] <= 0x7E)
                 {
-                    byte ch = (byte)s[0];
-                    if (ch == '"')
-                        _quoteMode = !_quoteMode;
-                    if (!_quoteMode && ch >= 0x61 && ch <= 0x7A)
-                        ch -= 0x20;
-                    _editor.QueueInput(ch);
+                    QueuePrintableChar((byte)s[0]);
                     e.Handled = true;
                 }
                 break;
         }
         base.OnKeyDown(e);
+    }
+
+    private async Task PasteClipboardAsync()
+    {
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is null)
+            return;
+
+        string? text = await global::Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard);
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char ch = text[i];
+
+            // Normalize CR/LF input into a single BASIC Enter key event.
+            if (ch == '\r' || ch == '\n')
+            {
+                if (ch == '\n' && i > 0 && text[i - 1] == '\r')
+                    continue;
+                _quoteMode = false;
+                _editor.QueueInput(0x0D);
+                continue;
+            }
+
+            if (ch == '\t')
+                ch = ' ';
+
+            if (ch >= 0x20 && ch <= 0x7E)
+                QueuePrintableChar((byte)ch);
+        }
+    }
+
+    private void QueuePrintableChar(byte ch)
+    {
+        if (ch == '"')
+            _quoteMode = !_quoteMode;
+        if (!_quoteMode && ch >= 0x61 && ch <= 0x7A)
+            ch -= 0x20;
+        _editor.QueueInput(ch);
     }
 
     public override void Render(DrawingContext context)
@@ -99,13 +144,8 @@ public class EmulatorCanvas : Control
         }
 
         var bounds = Bounds;
-        double scale = Math.Min(bounds.Width / NativeWidth, bounds.Height / NativeHeight);
-        double w = NativeWidth * scale;
-        double h = NativeHeight * scale;
-        double x = (bounds.Width - w) / 2;
-        double y = (bounds.Height - h) / 2;
-
-        var destRect = new Rect(x, y, w, h);
+        const double pad = 4;
+        var destRect = new Rect(pad, pad, bounds.Width - pad * 2, bounds.Height - pad * 2);
         var srcRect = new Rect(0, 0, NativeWidth, NativeHeight);
 
         using (context.PushRenderOptions(new RenderOptions
@@ -129,20 +169,28 @@ public class EmulatorCanvas : Control
         for (int i = 0; i < NativeWidth * NativeHeight; i++)
             ptr[i] = bgColor;
 
+        byte mode = _vgc.GetMode();
+
         // Pass 2: Priority-0 sprites (behind everything)
         RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriBehindAll);
 
-        // Pass 3: Text layer
-        RenderText(ptr, stride, bgColor);
-
-        // Pass 4: Priority-1 sprites (between text and graphics)
-        RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriBetween);
-
-        // Pass 5: Graphics bitmap
-        if (_vgc.GetMode() >= 1)
+        if (mode == 2)
+        {
+            // Mode 2: Text on top of graphics (text bg is transparent)
             RenderGraphics(ptr, stride);
+            RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriBetween);
+            RenderText(ptr, stride, bgColor, transparentBg: true);
+        }
+        else
+        {
+            // Mode 0/1: Graphics on top of text (text only when mode 0)
+            RenderText(ptr, stride, bgColor);
+            RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriBetween);
+            if (mode >= 1)
+                RenderGraphics(ptr, stride);
+        }
 
-        // Pass 6: Priority-2 sprites (in front of everything)
+        // Priority-2 sprites (in front of everything)
         RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriInFront);
 
         // Collision detection
@@ -150,7 +198,7 @@ public class EmulatorCanvas : Control
         _vgc.SetCollisionRegisters(ss, sb);
     }
 
-    private unsafe void RenderText(uint* ptr, int stride, uint bgColor)
+    private unsafe void RenderText(uint* ptr, int stride, uint bgColor, bool transparentBg = false)
     {
         int cx = _vgc.GetCursorX();
         int cy = _vgc.GetCursorY();
@@ -165,21 +213,24 @@ public class EmulatorCanvas : Control
                 uint fg = ColorPalette.GetBgra(colorIdx);
                 uint bg = bgColor;
 
-                bool isCursor = _cursorVisible && col == cx && row == cy;
+                bool isCursor = _cursorVisible && _vgc.IsCursorEnabled && col == cx && row == cy;
                 if (isCursor) (fg, bg) = (bg, fg);
 
                 int cellX = col * BitmapFont.GlyphWidth;
-                int cellY = row * BitmapFont.GlyphHeight;
+                int cellY = row * BitmapFont.GlyphHeight * 2;
 
                 for (int gy = 0; gy < BitmapFont.GlyphHeight; gy++)
                 {
                     byte rowBits = _font.GetRow(ch, gy);
-                    int py = cellY + gy;
+                    int py = cellY + gy * 2;
                     for (int gx = 0; gx < BitmapFont.GlyphWidth; gx++)
                     {
                         int px = cellX + gx;
                         bool set = (rowBits & (0x80 >> gx)) != 0;
-                        ptr[py * stride + px] = set ? fg : bg;
+                        if (transparentBg && !set && !isCursor) continue;
+                        uint c = set ? fg : bg;
+                        ptr[py * stride + px] = c;
+                        ptr[(py + 1) * stride + px] = c;
                     }
                 }
             }
@@ -196,11 +247,11 @@ public class EmulatorCanvas : Control
                 if (color == 0) continue;
 
                 uint pixel = ColorPalette.GetBgra(color);
-                int baseX = gx * 4;
-                int baseY = gy * 4;
+                int baseX = gx * 2;
+                int baseY = gy * 2;
 
-                for (int dy = 0; dy < 4; dy++)
-                    for (int dx = 0; dx < 4; dx++)
+                for (int dy = 0; dy < 2; dy++)
+                    for (int dx = 0; dx < 2; dx++)
                         ptr[(baseY + dy) * stride + (baseX + dx)] = pixel;
             }
         }
@@ -216,15 +267,15 @@ public class EmulatorCanvas : Control
             var pixels = SpriteRenderer.GetSpritePixels(_vgc, i);
             foreach (var sp in pixels)
             {
-                int baseX = sp.ScreenX * 4;
-                int baseY = sp.ScreenY * 4;
+                int baseX = sp.ScreenX * 2;
+                int baseY = sp.ScreenY * 2;
                 uint color = ColorPalette.GetBgra(sp.Color);
 
-                for (int dy = 0; dy < 4; dy++)
+                for (int dy = 0; dy < 2; dy++)
                 {
                     int py = baseY + dy;
                     if (py < 0 || py >= NativeHeight) continue;
-                    for (int dx = 0; dx < 4; dx++)
+                    for (int dx = 0; dx < 2; dx++)
                     {
                         int px = baseX + dx;
                         if (px < 0 || px >= NativeWidth) continue;

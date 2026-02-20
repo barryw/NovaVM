@@ -1,0 +1,291 @@
+\chapter{Assembly and Special Chips}
+
+\begin{retrobox}
+\textit{``To understand what the machine is actually doing, you have to speak \\
+its language --- and that language is always closer to the metal \\
+than any other abstraction on top of it.''}
+\end{retrobox}
+
+\bigskip
+
+NovaBASIC is built on a 6502 core and runs on top of a set of memory-mapped
+coprocessors. Most programs never need to touch hardware registers directly, but
+knowing where everything lives gives you the full picture: why certain address ranges
+are reserved, what BASIC commands actually do at the hardware level, and how to write
+assembly routines that cooperate cleanly with the BASIC runtime.
+
+%% ============================================================
+\section{The Memory Map}
+%% ============================================================
+
+The full 64 KB address space is partitioned as follows:
+
+\begin{center}
+\begin{tabular}{llll}
+\textbf{Range} & \textbf{Size} & \textbf{Purpose} & \textbf{Access} \\
+\hline
+\texttt{\$0000}--\texttt{\$00FF} & 256 B  & Zero Page                       & R/W \\
+\texttt{\$0100}--\texttt{\$01FF} & 256 B  & Stack                           & R/W \\
+\texttt{\$0200}--\texttt{\$027F} & 128 B  & System Vectors                  & R/W \\
+\texttt{\$0280}--\texttt{\$9FFF} & ~39 KB & BASIC RAM                       & R/W \\
+\texttt{\$A000}--\texttt{\$A01E} &  31 B  & VGC Registers                   & R/W \\
+\texttt{\$A100}--\texttt{\$A1FF} & 256 B  & Sound Controller (VSC)          & R/W \\
+\texttt{\$AA00}--\texttt{\$B1CF} & 2000 B & Character RAM (80$\times$25)    & R/W \\
+\texttt{\$B1D0}--\texttt{\$B99F} & 2000 B & Color RAM (80$\times$25)        & R/W \\
+\texttt{\$B9A0}--\texttt{\$B9EF} &  80 B  & File I/O Controller (FIO)       & R/W \\
+\texttt{\$BA00}--\texttt{\$BA3F} &  64 B  & Expansion Memory Controller (XMC) & R/W \\
+\texttt{\$BC00}--\texttt{\$BFFF} & 1024 B & XRAM Windows (when mapped)      & R/W \\
+\texttt{\$C000}--\texttt{\$FFFF} &  16 KB & ROM (NovaBASIC)                 & R only \\
+\end{tabular}
+\end{center}
+
+Everything from \texttt{\$A000} upward through \texttt{\$BFFF} is hardware I/O or
+managed window space. Writing to ROM (\texttt{\$C000}+) has no effect.
+
+\subsection*{System Vectors at \texttt{\$0200}}
+
+At boot, NovaBASIC initializes a vector table at page \texttt{\$02} with the base
+addresses of each hardware controller. Assembly code can read these rather than
+hard-coding addresses, so programs remain compatible if the memory map is adjusted
+in a future ROM version:
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Address} & \textbf{Value} & \textbf{Meaning} \\
+\hline
+\texttt{\$0200}--\texttt{\$0201} & \texttt{\$A000} & VGC base \\
+\texttt{\$0202}--\texttt{\$0203} & \texttt{\$A010} & VGC command register \\
+\texttt{\$0204}--\texttt{\$0205} & \texttt{\$AA00} & Character RAM base \\
+\texttt{\$0206}--\texttt{\$0207} & \texttt{\$B1D0} & Color RAM base \\
+\texttt{\$0208}--\texttt{\$0209} & \texttt{\$A100} & VSC base \\
+\texttt{\$020A}--\texttt{\$020B} & \texttt{\$B9A0} & FIO base \\
+\texttt{\$020C}--\texttt{\$020D} & \texttt{\$BA00} & XMC base \\
+\end{tabular}
+\end{center}
+
+Each entry is a 16-bit little-endian address stored at the indicated pair.
+
+%% ============================================================
+\section{Talking to Hardware from BASIC}
+%% ============================================================
+
+Because the hardware controllers are memory-mapped, you can read and write their
+registers with ordinary \cmd{PEEK} and \cmd{POKE} calls from BASIC. This is the
+simplest way to experiment with hardware state or build lightweight diagnostic tools.
+
+\subsection*{Reading the frame counter}
+
+The VGC increments a frame counter register at \texttt{\$A008} on every display
+frame. Reading it gives you a running frame tick useful for timing and animation:
+
+\begin{retrobox}
+\texttt{PRINT PEEK(40968)}
+\end{retrobox}
+
+\texttt{\$A008} = 40968 decimal. The counter wraps from 255 to 0 (it is an 8-bit
+register).
+
+\subsection*{Checking the active sprite count}
+
+\begin{retrobox}
+\texttt{PRINT "SPRITES: ";PEEK(40969)}
+\end{retrobox}
+
+\texttt{\$A009} = 40969 decimal. This read-only register holds the number of
+currently enabled sprites.
+
+\subsection*{Reading keyboard input}
+
+\begin{retrobox}
+\texttt{K = PEEK(40975)}
+\end{retrobox}
+
+\texttt{\$A00F} = 40975 decimal. This is the VGC character input register. Reading
+it returns the last character received, or 0 if none. BASIC's own \cmd{INKEY\$}
+command uses the same register.
+
+\subsection*{Character output}
+
+Writing a character code to \texttt{\$A00E} (40974 decimal) emits that character to
+the current cursor position, exactly as BASIC's \cmd{PRINT} does internally:
+
+\begin{retrobox}
+\texttt{POKE 40974,65}\\
+\texttt{REM prints the letter A}
+\end{retrobox}
+
+%% ============================================================
+\section{The CALL and USR Interface}
+%% ============================================================
+
+NovaBASIC provides two ways to execute machine code from within a BASIC program.
+
+\subsection*{\cmd{CALL addr}}
+
+Performs a \texttt{JSR} to \emph{addr}. Execution resumes in BASIC after the
+machine-code routine executes an \texttt{RTS}. There is no parameter passing;
+\cmd{CALL} is a simple subroutine jump. You are responsible for preserving
+CPU registers if the routine will return to BASIC in a clean state.
+
+\begin{retrobox}
+\texttt{10 CALL 49152}\\
+\texttt{REM jumps to machine code at \$C000}
+\end{retrobox}
+
+\subsection*{\cmd{USR(x)}}
+
+Calls a user-defined machine-code routine, passing the numeric value \emph{x}
+through the 6502 floating-point accumulator (FAC). The routine can read, modify,
+and return a value through the same register. \cmd{USR(x)} is a numeric function
+and its result can be used in an expression:
+
+\begin{retrobox}
+\texttt{10 V = USR(42)}\\
+\texttt{20 PRINT "RESULT: ";V}
+\end{retrobox}
+
+The address of the USR routine is set by storing a 16-bit pointer in the
+appropriate zero-page location before calling. Consult the EhBASIC 2.22
+documentation for the exact zero-page addresses used by the USR vector.
+
+%% ============================================================
+\section{Interrupts}
+%% ============================================================
+
+The 6502 supports two interrupt lines: the maskable IRQ and the non-maskable NMI.
+NovaBASIC lets you handle both from within a BASIC program, which is useful for
+writing interrupt-driven input handlers, timing routines, and co-operative
+multitasking sketches.
+
+\subsection*{Setting up a handler: \cmd{IRQ linenumber} and \cmd{NMI linenumber}}
+
+\begin{retrobox}
+\texttt{10 IRQ 1000}\\
+\texttt{20 NMI 2000}
+\end{retrobox}
+
+When an IRQ fires, execution branches to line 1000. When an NMI fires, execution
+branches to line 2000. The handlers are ordinary BASIC subroutines.
+
+\subsection*{Returning from a handler: \cmd{RETIRQ} and \cmd{RETNMI}}
+
+The last statement in an IRQ handler must be \cmd{RETIRQ}; the last statement in
+an NMI handler must be \cmd{RETNMI}. These are not interchangeable with
+\cmd{RETURN} --- they restore the correct CPU state and re-enable the interrupt
+flag.
+
+\begin{retrobox}
+\texttt{1000 REM IRQ handler}\\
+\texttt{1010 PRINT "IRQ FIRED"}\\
+\texttt{1020 RETIRQ}\\[4pt]
+\texttt{2000 REM NMI handler}\\
+\texttt{2010 PRINT "NMI FIRED"}\\
+\texttt{2020 RETNMI}
+\end{retrobox}
+
+\begin{warningbox}
+Interrupt handlers run in the context of the BASIC interpreter. Keep them short.
+Avoid file I/O, heavy computation, or anything that re-enters the interpreter in
+an unexpected state. Long handlers can cause instability.
+\end{warningbox}
+
+%% ============================================================
+\section{XMC Assembly Helpers}
+%% ============================================================
+
+The NovaBASIC ROM exports a set of labelled helper routines for accessing the XMC
+from assembly code. Using these helpers instead of writing to XMC registers directly
+keeps your code clean and gives you error detection for free.
+
+All helpers follow the same convention: on return, \textbf{carry clear} means
+success and \textbf{carry set} means an error occurred, with the XMC error code
+in the accumulator.
+
+\begin{center}
+\begin{tabular}{lp{8cm}}
+\textbf{Label} & \textbf{Purpose} \\
+\hline
+\texttt{LAB\_XM\_SETADDR} & Set the 24-bit XRAM address: A = low byte, X = mid byte, Y = high byte. \\
+\texttt{LAB\_XM\_STATUS}  & Read status snapshot: A = status register, X = error code. \\
+\texttt{LAB\_XM\_GETBYTE} & Read byte at current XADDR: A = value on success. \\
+\texttt{LAB\_XM\_PUTBYTE} & Write byte at current XADDR: A = value to write. \\
+\texttt{LAB\_XM\_STASH}   & Bulk copy RAM to XRAM (preload XMC\_RAML/H, XMC\_LENL/H). \\
+\texttt{LAB\_XM\_FETCH}   & Bulk copy XRAM to RAM (preload XMC\_RAML/H, XMC\_LENL/H). \\
+\texttt{LAB\_XM\_FILL}    & Fill XRAM range with a byte value (preload XMC\_DATA, XMC\_LENL/H). \\
+\texttt{LAB\_XM\_ALLOC}   & Allocate a block: preload XMC\_LENL/H; XADDR and handle returned in registers. \\
+\end{tabular}
+\end{center}
+
+\subsection*{Example: reading one byte from XRAM in assembly}
+
+\begin{retrobox}
+\texttt{; Set 24-bit address 0x010000 (bank 1, offset 0)}\\
+\texttt{LDA \#\$00}\\
+\texttt{LDX \#\$00}\\
+\texttt{LDY \#\$01}\\
+\texttt{JSR LAB\_XM\_SETADDR}\\[4pt]
+\texttt{JSR LAB\_XM\_GETBYTE}\\
+\texttt{BCS error}\\
+\texttt{; A now holds the byte value}
+\end{retrobox}
+
+\begin{notebox}
+The ROM helper labels are defined in the NovaBASIC assembly source
+(\texttt{ehbasic/basic.asm}). If you assemble custom ROM extensions or overlays,
+link against the same symbol file to pick up these addresses.
+\end{notebox}
+
+%% ============================================================
+\section{VGC Register-Level Programming}
+%% ============================================================
+
+The VGC command pipeline works by writing parameters to registers
+\texttt{\$A011}--\texttt{\$A01E}, then writing the command byte to \texttt{\$A010}.
+The VGC executes the command synchronously. This is exactly what every graphics
+BASIC command does under the hood.
+
+From assembly you can issue any VGC command directly:
+
+\begin{retrobox}
+\texttt{; Issue GCLS command (clear graphics layer)}\\
+\texttt{LDA \#\$07}\\
+\texttt{STA \$A010}
+\end{retrobox}
+
+Full register-level documentation for every VGC and VSC command --- including
+parameters for drawing, sprites, and sound sequencing --- is planned for a future
+edition of this guide. The current source of truth is
+\texttt{e6502.Avalonia/Hardware/VgcConstants.cs}, which lists every register address
+and command code with inline comments.
+
+%% ============================================================
+\section{Future Directions}
+%% ============================================================
+
+This chapter will grow as the hardware interfaces stabilize. Planned additions:
+
+\begin{itemize}
+  \item Complete VGC register reference: all drawing commands with full parameter
+        tables.
+  \item VSC register reference: sound and envelope control from assembly.
+  \item Stable calling conventions and register preservation rules for BASIC-to-assembly
+        transitions.
+  \item Worked examples: a full-screen raster effect using XRAM windows and a
+        VSC-driven interrupt music player.
+\end{itemize}
+
+%% ============================================================
+\section{Try It Now}
+%% ============================================================
+
+\begin{retrobox}
+\textbf{Read the frame counter via PEEK}\\[4pt]
+\texttt{10 REM Read frame counter via PEEK}\\
+\texttt{20 FOR I=1 TO 60:VSYNC:NEXT I}\\
+\texttt{30 PRINT "FRAMES: ";PEEK(40968)}
+\end{retrobox}
+
+\texttt{\$A008} = 40968 decimal. After 60 \cmd{VSYNC} waits (approximately one
+second at 60 Hz), the frame counter register reflects the elapsed frame ticks.
+The value will be somewhere in the range 0--255 because the counter wraps after
+256 frames. Run the program several times and observe how the value changes.

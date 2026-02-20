@@ -13,7 +13,7 @@ public interface IScreenInput
 
 /// <summary>
 /// Virtual Graphics Controller for the Avalonia renderer.
-/// Manages text display (80x25), block graphics (160x50), and multicolor sprites
+/// Manages text display (80x25), block graphics (320x200), and multicolor sprites
 /// (16 sprites, 16x16 pixels, 4-bit color per pixel).
 ///
 /// Address ownership:
@@ -48,11 +48,12 @@ public class VirtualGraphicsController
     // Color RAM (2000 bytes, 80x25)
     private readonly byte[] _colorRam = new byte[VgcConstants.ScreenSize];
 
-    // Block graphics bitmap (160x50, NOT 6502-addressable)
+    // Block graphics bitmap (320x200, NOT 6502-addressable)
     private readonly byte[] _gfxBitmap = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
 
     // Current graphics draw color (0 = use text foreground color)
     private byte _gfxDrawColor;
+
 
     // Screen input source
     private IScreenInput? _screenEditor;
@@ -85,6 +86,7 @@ public class VirtualGraphicsController
 
         // Default foreground color = 1
         _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] = 1;
+
     }
 
     // -------------------------------------------------------------------------
@@ -265,6 +267,9 @@ public class VirtualGraphicsController
     public byte GetCursorY() =>
         _regs[VgcConstants.RegCursorY - VgcConstants.VgcBase];
 
+    public bool IsCursorEnabled =>
+        _regs[VgcConstants.RegCursorEnable - VgcConstants.VgcBase] != 0;
+
     public bool GetGfxPixel(int x, int y) =>
         _gfxBitmap[y * VgcConstants.GfxWidth + x] != 0;
 
@@ -306,7 +311,9 @@ public class VirtualGraphicsController
     {
         if (cmd >= VgcConstants.CmdSprDef && cmd <= VgcConstants.CmdSprPri)
             ExecuteSpriteCommand(cmd);
-        else if (cmd >= VgcConstants.CmdPlot && cmd <= VgcConstants.CmdGcolor)
+        else if (cmd == VgcConstants.CmdMemRead || cmd == VgcConstants.CmdMemWrite)
+            ExecuteMemoryCommand(cmd);
+        else if (cmd >= VgcConstants.CmdPlot && cmd <= VgcConstants.CmdPaint)
             ExecuteGfxCommand(cmd);
     }
 
@@ -354,6 +361,9 @@ public class VirtualGraphicsController
                 break;
             case VgcConstants.CmdGcolor:
                 _gfxDrawColor = (byte)(_cmdRegs[1] & 0x0F);
+                break;
+            case VgcConstants.CmdPaint:
+                BlockGraphics.FloodFill(_gfxBitmap, p0, p1, color);
                 break;
         }
     }
@@ -410,8 +420,8 @@ public class VirtualGraphicsController
             case VgcConstants.CmdSprPos:
             {
                 if (p0 >= VgcConstants.MaxSprites) return;
-                _spriteX[p0] = _cmdRegs[2] | (_cmdRegs[3] << 8);
-                _spriteY[p0] = _cmdRegs[4];
+                _spriteX[p0] = (short)(_cmdRegs[2] | (_cmdRegs[3] << 8));
+                _spriteY[p0] = (short)(_cmdRegs[4] | (_cmdRegs[5] << 8));
                 break;
             }
             case VgcConstants.CmdSprEna:
@@ -449,6 +459,85 @@ public class VirtualGraphicsController
         for (int i = 0; i < VgcConstants.MaxSprites; i++)
             if (_spriteEnabled[i]) count++;
         _regs[VgcConstants.RegSpriteCount - VgcConstants.VgcBase] = (byte)count;
+    }
+
+    // -------------------------------------------------------------------------
+    // Memory I/O commands
+    // -------------------------------------------------------------------------
+
+    private void ExecuteMemoryCommand(byte cmd)
+    {
+        byte space = _cmdRegs[1]; // P0
+        int addr = _cmdRegs[2] | (_cmdRegs[3] << 8); // P1/P2
+        bool autoInc = (_cmdRegs[5] & 0x01) != 0; // P4 bit0
+
+        if (cmd == VgcConstants.CmdMemRead)
+        {
+            _cmdRegs[4] = TryReadMemorySpace(space, addr, out byte value) ? value : (byte)0; // P3
+        }
+        else
+        {
+            TryWriteMemorySpace(space, addr, _cmdRegs[4]); // P3
+        }
+
+        if (!autoInc) return;
+
+        addr = (addr + 1) & 0xFFFF;
+        _cmdRegs[2] = (byte)(addr & 0xFF);
+        _cmdRegs[3] = (byte)((addr >> 8) & 0xFF);
+    }
+
+    public int GetMemorySpaceLength(byte space) =>
+        space switch
+        {
+            VgcConstants.MemSpaceScreen => _screenRam.Length,
+            VgcConstants.MemSpaceColor => _colorRam.Length,
+            VgcConstants.MemSpaceGfx => _gfxBitmap.Length,
+            VgcConstants.MemSpaceSprite => _spriteShapes.Length,
+            _ => 0
+        };
+
+    public bool TryReadMemorySpace(byte space, int addr, out byte value)
+    {
+        value = 0;
+        switch (space)
+        {
+            case VgcConstants.MemSpaceScreen when (uint)addr < _screenRam.Length:
+                value = _screenRam[addr];
+                return true;
+            case VgcConstants.MemSpaceColor when (uint)addr < _colorRam.Length:
+                value = _colorRam[addr];
+                return true;
+            case VgcConstants.MemSpaceGfx when (uint)addr < _gfxBitmap.Length:
+                value = _gfxBitmap[addr];
+                return true;
+            case VgcConstants.MemSpaceSprite when (uint)addr < _spriteShapes.Length:
+                value = _spriteShapes[addr];
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public bool TryWriteMemorySpace(byte space, int addr, byte value)
+    {
+        switch (space)
+        {
+            case VgcConstants.MemSpaceScreen when (uint)addr < _screenRam.Length:
+                _screenRam[addr] = value;
+                return true;
+            case VgcConstants.MemSpaceColor when (uint)addr < _colorRam.Length:
+                _colorRam[addr] = value;
+                return true;
+            case VgcConstants.MemSpaceGfx when (uint)addr < _gfxBitmap.Length:
+                _gfxBitmap[addr] = value;
+                return true;
+            case VgcConstants.MemSpaceSprite when (uint)addr < _spriteShapes.Length:
+                _spriteShapes[addr] = value;
+                return true;
+            default:
+                return false;
+        }
     }
 
     // -------------------------------------------------------------------------

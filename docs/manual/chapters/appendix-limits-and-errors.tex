@@ -1,0 +1,328 @@
+% =============================================================================
+% Appendix: Limits, Errors, and Edge Cases
+% NovaBASIC v1.0 User Guide
+% Source of truth: ehbasic/basic.asm
+%                  e6502.Avalonia/Hardware/FileIoController.cs
+%                  e6502.Avalonia/Hardware/VirtualGraphicsController.cs
+%                  e6502.Avalonia/Hardware/VirtualSoundController.cs
+%                  e6502.Avalonia/Hardware/VirtualExpansionMemoryController.cs
+% =============================================================================
+\chapter{Limits, Errors, and Edge Cases}
+
+This appendix documents all known numeric limits, argument validation rules,
+and edge-case behaviors derived from a direct audit of the ROM source and the
+Avalonia hardware controller implementations.
+Where ROM behavior and host behavior differ, both are noted.
+
+% =============================================================================
+\section{Numeric Argument Conversion Rules}
+% =============================================================================
+
+Most command arguments are passed through one of two shared ROM helpers
+before reaching the hardware layer.
+Understanding their constraints prevents unexpected function-call errors.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.26\textwidth} p{0.64\textwidth}}
+\toprule
+\normalfont\textbf{Helper} & \textbf{Behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+LAB\_GTBY & Converts the FAC (floating-point accumulator) to an unsigned byte.
+             Accepts values 0--255.
+             Any value outside this range, or any negative value, raises a
+             function-call error before the command reaches the hardware. \\
+LAB\_GTWRD & Converts the FAC to an unsigned 16-bit integer.
+              Accepts values 0--65535.
+              Negative values or values above 65535 raise a function-call error. \\
+\end{longtable}
+
+\begin{warningbox}
+Commands that accept addresses (\cmd{POKE}, \cmd{DOKE}, \cmd{CALL}, \cmd{WAIT}, \cmd{STASH}, \cmd{FETCH}\ldots)
+route through \cmd{LAB\_GTWRD}.
+Passing a value such as \texttt{-1} will raise an error rather than
+wrapping to \texttt{\$FFFF}.
+\end{warningbox}
+
+% =============================================================================
+\section{File Command Limits}
+% =============================================================================
+
+\begin{longtable}{p{0.30\textwidth} p{0.60\textwidth}}
+\toprule
+\textbf{Topic} & \textbf{Behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Filename length &
+  The ROM filename parser accepts 1--63 characters.
+  A length of 0 or greater than 63 causes the FIO controller to return an
+  I/O error (the \cmd{ReadFilename} guard in \texttt{FileIoController.cs}). \\
+Allowed filename characters &
+  The host implementation enforces the pattern \texttt{[A-Za-z0-9\_.\textbackslash-]+}.
+  Any character outside this set causes \cmd{ReadFilename} to return \texttt{null}
+  and the operation to fail with \cmd{FioErrIo}. \\
+\texttt{.bas} extension &
+  If the filename does not already end in \texttt{.bas} (case-insensitive),
+  the host appends it automatically before forming the filesystem path. \\
+Missing file &
+  \cmd{LOAD "name"} and \cmd{DEL "name"} on a non-existent file set
+  \texttt{FioStatus=\$03} and \texttt{FioErrCode=\$01} (\cmd{FioErrNotFound}).
+  The ROM interprets this as ``File not found''. \\
+I/O fault &
+  Any OS-level exception during \cmd{SAVE}/\cmd{LOAD}/\cmd{DEL} sets
+  \texttt{FioStatus=\$03} and \texttt{FioErrCode=\$02} (\cmd{FioErrIo}).
+  The ROM surfaces this as ``I/O Error''. \\
+\cmd{SAVE} end address &
+  If \texttt{FioEndH:FioEndL} $\leq$ \texttt{FioSrcH:FioSrcL}, the save
+  is rejected immediately with \cmd{FioErrIo} before the file is opened. \\
+\cmd{DIR} on empty catalog &
+  \cmd{DirOpen} sets \texttt{FioStatus=\$03}/\texttt{FioErrCode=\$03}
+  (\cmd{FioErrEndOfDir}) when no \texttt{.bas} files exist.
+  The ROM \cmd{DIR} handler treats this as a silent empty listing. \\
+\cmd{DIR} after last entry &
+  Each \cmd{DirRead} beyond the final file sets \cmd{FioErrEndOfDir};
+  the ROM stops iterating. \\
+\end{longtable}
+
+% =============================================================================
+\section{Graphics and Sprite Edge Cases}
+% =============================================================================
+
+\begin{longtable}{p{0.32\textwidth} p{0.58\textwidth}}
+\toprule
+\textbf{Command / Feature} & \textbf{Limit and edge behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\cmd{GCOLOR c} &
+  Only the low nibble of \textit{c} is used (\texttt{c \& 0x0F}).
+  Values 0--15 are valid; values above 15 wrap silently into the 0--15 range. \\
+Color 0 on the graphics layer &
+  Color index 0 means transparent on the graphics bitmap.
+  \cmd{UNPLOT x,y} explicitly sets a pixel to 0 to restore transparency. \\
+\cmd{PLOT}/\cmd{UNPLOT}/\cmd{PAINT} bounds &
+  The ROM dispatches coordinates without host-side pre-clipping.
+  The host \texttt{BlockGraphics} implementation performs pixel-level bounds
+  checks; out-of-range coordinates are silently ignored. \\
+\cmd{LINE}/\cmd{RECT}/\cmd{CIRCLE}/\cmd{FILL} bounds &
+  Drawing operations are clipped by the host renderer (\texttt{BlockGraphics.cs}).
+  Portions of the shape outside the 320$\times$200 pixel area are dropped;
+  no error is raised. \\
+\cmd{FILL} rectangle &
+  Coordinates are clamped to the screen boundary before drawing;
+  the swap of x0/x1 or y0/y1 to ensure a positive rectangle is handled by
+  the host. \\
+\cmd{SPRITE n,\ldots} invalid index &
+  Sprite index \textit{n} must be 0--15.
+  The VGC command handlers check \texttt{n >= MaxSprites} and return immediately
+  without error; no ROM-level error is raised. \\
+\cmd{SPRITEDATA n,row,\ldots} &
+  Row must be 0--15.
+  The \texttt{CmdSprRow} handler checks both sprite index and row; an invalid
+  row causes the command to be silently ignored. \\
+\cmd{SPRITESHAPE}/\cmd{SPRITECOLOR} &
+  These are tokenised and recognised by the ROM parser.
+  However, the ROM handlers for both commands currently perform no hardware
+  action.
+  They exist for source compatibility; no VGC command is issued. \\
+\cmd{SPRITEX(n)}/\cmd{SPRITEY(n)} &
+  The ROM functions return 0 in v1.0.
+  Sprite position read-back from the VGC is not yet implemented. \\
+\cmd{COLLISION(n)}/\cmd{BUMPED(n)} &
+  The VGC updates \texttt{RegColSt} and \texttt{RegColBg} each frame;
+  the ROM reads the appropriate register and clears it on read.
+  A given bit is set if sprite \textit{n} participated in a collision that frame. \\
+Default sprite priority &
+  On reset all sprites default to priority 2 (in front of everything).
+  This matches the \texttt{SpritePriInFront} constant. \\
+\cmd{CmdSprFlip} flags &
+  Only bits 0--1 of the flags byte are used (\texttt{flags \& 0x03}):
+  bit 0 = horizontal flip, bit 1 = vertical flip. \\
+\cmd{CmdSprPri} clamping &
+  Priority values above 2 are clamped to 2 (\texttt{Math.Min(value, 2)}).
+  Values 0, 1, and 2 are the only meaningful levels. \\
+\end{longtable}
+
+% =============================================================================
+\section{Sound Limits and Behavior}
+% =============================================================================
+
+\begin{longtable}{p{0.32\textwidth} p{0.58\textwidth}}
+\toprule
+\textbf{Command / Feature} & \textbf{Limit and edge behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Channel masking &
+  The channel index is masked to the range 0--3 by the host:
+  \texttt{ch = P0 \& (ChannelCount - 1)}.
+  Values above 3 wrap into range; no error is raised. \\
+Frequency clamping &
+  Frequency is clamped to 16--12000 Hz by the host
+  (\texttt{Math.Clamp(freq, 16, 12000)}).
+  The ROM passes the raw 16-bit value; out-of-range values are silently
+  adjusted rather than rejected. \\
+Stopping a channel &
+  If \textit{freq} $\leq$ 0 or \textit{dur} $\leq$ 0, the channel is immediately
+  deactivated (\texttt{Active = false}, \texttt{NotePos} and \texttt{NoteTotalSamples}
+  reset to 0).
+  This is the correct way to stop a playing note before its duration expires. \\
+Duration units &
+  Duration is in units of 1/60 second (video frames).
+  Internally: \texttt{samples = durationTicks * 44100 / 60}. \\
+Master volume &
+  Only the low nibble of the volume byte is used (\texttt{P0 \& 0x0F}).
+  The default master volume on power-on is 12. \\
+Waveform wrapping &
+  The waveform index is wrapped: \texttt{waveform = P1 \% 5}.
+  Values 0--4 select square, sawtooth, triangle, noise, and sine respectively. \\
+Sustain level &
+  In \cmd{ENVELOPE}, the sustain parameter (P3) uses only the low nibble
+  (0--15 scale), converted to a floating-point level by the host:
+  \texttt{SustainLevel = (P3 \& 0x0F) / 15.0}. \\
+Envelope time parameters &
+  Attack (P1), decay (P2), and release (P4) are converted to sample counts:
+  \texttt{samples = max(1, value * 44100 / 240)}.
+  A value of 0 yields 1 sample (instantaneous). \\
+\end{longtable}
+
+% =============================================================================
+\section{XRAM Limits and Failure Modes}
+% =============================================================================
+
+\begin{longtable}{p{0.32\textwidth} p{0.58\textwidth}}
+\toprule
+\textbf{Command / Feature} & \textbf{Limit and edge behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\cmd{XBANK n} &
+  The ROM verifies that \textit{n} is less than the value stored at
+  \texttt{XmcBanks} (\$BA0D).
+  An out-of-range bank number triggers a function-call error in the ROM
+  before any XMC command is issued. \\
+Window number (\cmd{XMAP}/\cmd{XUNMAP}) &
+  Window must be 0--3.
+  The ROM validates this; an invalid window triggers a function-call error. \\
+Window address space &
+  The four CPU-visible windows occupy \$BC00--\$BFFF (4 $\times$ 256 bytes).
+  Window 0 maps to \$BC00, window 1 to \$BD00, window 2 to \$BE00,
+  window 3 to \$BF00. \\
+Unmapped window reads/writes &
+  If a window is not enabled in \texttt{XmcWinCtl}, the XMC does not own that
+  address and the read/write falls through to flat RAM.
+  No error is returned. \\
+Named block name length &
+  The ROM enforces a 1--28 byte name (\texttt{XmcNameLen} is capped at 28 by
+  the name buffer size: \$BA24--\$BA3F = 28 bytes).
+  The host trims whitespace; a blank name after trimming is rejected with
+  \cmd{XmcErrName}. \\
+Named block name case &
+  Name lookup is case-insensitive in the host
+  (\texttt{StringComparer.OrdinalIgnoreCase}).
+  Storing ``\texttt{SPRITE}'' and retrieving ``\texttt{sprite}'' will succeed. \\
+\cmd{XALLOC len} with \texttt{len<=0} &
+  The ROM passes zero through \cmd{LAB\_GTWRD}, which itself rejects negative
+  values.
+  The XMC command handler rejects \texttt{len<=0} with \cmd{XmcErrBadArgs}. \\
+\cmd{XALLOC} with no free space &
+  If no contiguous run of the required pages exists, or the handle pool (1--255)
+  is exhausted, the command fails with \cmd{XmcErrNoSpace}. \\
+\cmd{STASH}/\cmd{FETCH} (raw) with \texttt{len=0} &
+  The XMC host treats a zero-length raw transfer as a no-op and returns
+  \cmd{XmcStatusOk}.
+  No data is moved and no pages are marked. \\
+\cmd{FETCH "name",ram} (named fetch) &
+  The ROM sends \texttt{XmcLenL/H = 0} for the named-fetch command.
+  The host interprets \texttt{requested=0} as ``fetch the entire stored block'':
+  \texttt{len = (requested <= 0) ? block.Length : min(requested, block.Length)}. \\
+\cmd{STASH "name",ram,len} over existing block &
+  If the named block already exists and the new length fits in the allocated
+  pages, only \texttt{block.Length} is updated (no reallocation).
+  If it does not fit, the old block is freed and a new allocation is attempted. \\
+\cmd{XRESET} &
+  Clears the \texttt{\_usedPages} array, resets \texttt{\_usedPageCount} to 0,
+  and removes all block and name records.
+  The raw XRAM byte array is \emph{not} zeroed; data remains but is inaccessible
+  through the allocation system. \\
+\cmd{XFREE off,len} &
+  Frees all usage-tracking pages in the given range and removes any tracked
+  blocks (named or unnamed) whose page range overlaps with the freed region. \\
+\cmd{XPOKE}/\cmd{XPEEK} bank offset &
+  The ROM constructs the XRAM address as
+  \texttt{bank * 65536 + offset}.
+  The host validates the resulting 24-bit address against the total XRAM size;
+  out-of-range addresses return \cmd{XmcErrRange}. \\
+RAM range validation for STASH/FETCH &
+  The host prevents writes to ROM space: any \cmd{FETCH} operation whose
+  destination range would extend into \$C000 or above is rejected with
+  \cmd{XmcErrRange}.
+  Reads (\cmd{STASH}) may source from ROM addresses, allowing code capture. \\
+\end{longtable}
+
+% =============================================================================
+\section{Status and Error Code Quick Reference}
+% =============================================================================
+
+\subsection*{File I/O Controller (FIO) Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.12\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.26\textwidth} p{0.50\textwidth}}
+\toprule
+\normalfont\textbf{Value} & \normalfont\textbf{Symbol} & \textbf{Meaning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\normalfont\textit{Status codes (\$B9A1)}} \\
+\midrule
+\$00 & FioStatusIdle  & No operation has been issued since last reset. \\
+\$02 & FioStatusOk    & Last operation succeeded. \\
+\$03 & FioStatusError & Last operation failed; check error code. \\
+\midrule
+\multicolumn{3}{l}{\normalfont\textit{Error codes (\$B9A2)}} \\
+\midrule
+\$00 & FioErrNone     & No error. \\
+\$01 & FioErrNotFound & File not found on disk. \\
+\$02 & FioErrIo       & Host I/O error (bad name, OS exception, end address $\leq$ start). \\
+\$03 & FioErrEndOfDir & Directory enumeration exhausted. \\
+\end{longtable}
+
+\subsection*{Expansion Memory Controller (XMC) Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.12\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.26\textwidth} p{0.50\textwidth}}
+\toprule
+\normalfont\textbf{Value} & \normalfont\textbf{Symbol} & \textbf{Meaning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\normalfont\textit{Status codes (\$BA01)}} \\
+\midrule
+\$00 & XmcStatusIdle  & No operation in progress. \\
+\$02 & XmcStatusOk    & Last operation succeeded. \\
+\$03 & XmcStatusError & Last operation failed; check error code. \\
+\midrule
+\multicolumn{3}{l}{\normalfont\textit{Error codes (\$BA02)}} \\
+\midrule
+\$00 & XmcErrNone     & No error. \\
+\$01 & XmcErrRange    & XRAM address or transfer endpoint out of XRAM bounds, or FETCH would write into ROM. \\
+\$02 & XmcErrBadArgs  & Invalid argument (\texttt{len<=0} for Alloc, unknown command byte). \\
+\$03 & XmcErrNotFound & Named block not found in directory. \\
+\$04 & XmcErrNoSpace  & No contiguous free pages available, or handle pool (1--255) exhausted. \\
+\$05 & XmcErrName     & Name length 0 or $>$28, or name is blank after trimming. \\
+\$06 & XmcErrEndOfDir & No more named-block directory entries. \\
+\end{longtable}
+
+\begin{tipbox}
+The BASIC runtime maps both FIO and XMC error returns to one of three
+user-visible messages: ``\texttt{File not found}'', ``\texttt{I/O Error}'',
+or a function-call error.
+For low-level programs that \cmd{POKE} the controller registers directly,
+use the tables above to interpret the raw status and error bytes.
+\end{tipbox}

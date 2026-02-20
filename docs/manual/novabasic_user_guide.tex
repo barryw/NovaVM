@@ -1,0 +1,347 @@
+% =============================================================================
+% NovaBASIC v1.0 User Guide — Master Document
+% For the e6502 Virtual Computer
+% =============================================================================
+\documentclass[11pt,a4paper]{book}
+
+% ---------------------------------------------------------------------------
+% Encoding and fonts
+% ---------------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---------------------------------------------------------------------------
+% Page geometry
+% ---------------------------------------------------------------------------
+\usepackage[
+  a4paper,
+  top=2.5cm,
+  bottom=2.5cm,
+  left=3cm,
+  right=2.5cm,
+  headheight=24pt
+]{geometry}
+
+% ---------------------------------------------------------------------------
+% Color definitions — retro but polished palette
+% ---------------------------------------------------------------------------
+\usepackage{xcolor}
+
+\definecolor{retroblue}  {RGB}{28,  63,  168}   % primary heading color
+\definecolor{retroink}   {RGB}{29,  29,  29}    % body text
+\definecolor{retrocream} {RGB}{246, 242, 232}   % page background
+\definecolor{retropale}  {RGB}{233, 238, 249}   % code block background
+\definecolor{retrogray}  {RGB}{107, 114, 128}   % muted text
+\definecolor{retrogreen} {RGB}{34,  139, 34}    % tips
+\definecolor{retroorange}{RGB}{202, 139, 66}    % warnings
+\definecolor{retrocyan}  {RGB}{0,   139, 139}   % notes
+
+% Page-level color
+\pagecolor{retrocream}
+\color{retroink}
+
+% ---------------------------------------------------------------------------
+% TikZ
+% ---------------------------------------------------------------------------
+\usepackage{tikz}
+\usetikzlibrary{calc,shapes,positioning}
+
+% ---------------------------------------------------------------------------
+% Code listings — NovaBASIC language definition
+% ---------------------------------------------------------------------------
+\usepackage{listings}
+
+\lstdefinelanguage{NovaBASIC}{%
+  morekeywords=[1]{%
+    END, FOR, NEXT, DATA, INPUT, DIM, READ, LET, GOTO, RUN, IF, RESTORE,
+    GOSUB, RETURN, REM, STOP, ON, PRINT, CONT, LIST, NEW, THEN, ELSE,
+    TO, STEP, NOT, AND, OR, LOAD, SAVE, DEF, POKE, DOKE, DO, LOOP,
+    CLEAR, GET, SWAP, CLS, COLOR, LOCATE, PLOT, UNPLOT, LINE, CIRCLE,
+    RECT, FILL, PAINT, MODE, GCLS, GCOLOR, SPRITE, SPRITEDATA, SOUND,
+    VOLUME, ENVELOPE, WAVE, VSYNC, DIR, DEL, XMEM, XBANK, XPOKE,
+    STASH, FETCH, XFREE, XRESET, XALLOC, XDIR, XDEL, XMAP, XUNMAP,
+    DEC, INC, CALL, WIDTH, BITSET, BITCLR, IRQ, NMI, UNTIL, WHILE,
+    OFF, SPRITESHAPE, SPRITECOLOR%
+  },
+  morekeywords=[2]{%
+    SGN, INT, ABS, USR, FRE, POS, SQR, RND, LOG, EXP, COS, SIN, TAN,
+    ATN, PEEK, DEEK, SADD, LEN, STR\$, VAL, ASC, UCASE\$, LCASE\$,
+    CHR\$, HEX\$, BIN\$, BITTST, MAX, MIN, PI, TWOPI, VARPTR,
+    LEFT\$, RIGHT\$, MID\$, SPRITEX, SPRITEY, COLLISION, BUMPED,
+    XPEEK, TAB, SPC, FN%
+  },
+  morecomment=[l]{REM},
+  sensitive=false,
+  morestring=[b]"%
+}
+
+\lstdefinestyle{basiclisting}{%
+  language=NovaBASIC,
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{retropale},
+  frame=single,
+  framerule=0pt,
+  framesep=4pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  keywordstyle=[1]\color{retroblue}\bfseries,
+  keywordstyle=[2]\color{retrocyan},
+  commentstyle=\color{retrogray}\itshape,
+  stringstyle=\color{retrogreen},
+  showstringspaces=false,
+  tabsize=2,
+  breaklines=true,
+  numbers=left,
+  numberstyle=\tiny\color{retrogray},
+  numbersep=8pt,
+  captionpos=b%
+}
+
+\lstdefinestyle{shell}{%
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{retropale!40!retrocream},
+  frame=none,
+  showstringspaces=false,
+  breaklines=true,
+  keywordstyle=\color{retrogray}%
+}
+
+\lstset{style=basiclisting}
+
+% ---------------------------------------------------------------------------
+% tcolorbox environments
+% ---------------------------------------------------------------------------
+\usepackage[skins,breakable]{tcolorbox}
+
+% Note box — cyan theme
+\newtcolorbox{notebox}[1][]{%
+  colback=retrocyan!8!retrocream,
+  colframe=retrocyan!70!black,
+  coltitle=retrocyan!70!black,
+  fonttitle=\bfseries\small,
+  title=Note,
+  boxrule=0.8pt,
+  arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  breakable,
+  #1%
+}
+
+% Warning box — orange theme
+\newtcolorbox{warningbox}[1][]{%
+  colback=retroorange!12!retrocream,
+  colframe=retroorange,
+  coltitle=retroorange!80!black,
+  fonttitle=\bfseries\small,
+  title=Warning,
+  boxrule=0.8pt,
+  arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  breakable,
+  #1%
+}
+
+% Tip box — green theme
+\newtcolorbox{tipbox}[1][]{%
+  colback=retrogreen!10!retrocream,
+  colframe=retrogreen!70!black,
+  coltitle=retrogreen!70!black,
+  fonttitle=\bfseries\small,
+  title=Tip,
+  boxrule=0.8pt,
+  arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  breakable,
+  #1%
+}
+
+% Try It Now box — retroblue theme with keyboard icon
+\newtcolorbox{tryitbox}[1][]{%
+  colback=retropale,
+  colframe=retroblue,
+  coltitle=white,
+  fonttitle=\bfseries\small,
+  title={$\triangleright$\ \ Try It Now},
+  boxrule=0.8pt,
+  arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=retroblue, arc=2pt, boxrule=0pt},
+  breakable,
+  #1%
+}
+
+% Retrobox — legacy compatibility, sharp corners
+\newtcolorbox{retrobox}[1][]{%
+  colback=retropale,
+  colframe=retroblue,
+  boxrule=0.8pt,
+  arc=0pt,
+  left=6pt, right=6pt, top=6pt, bottom=6pt,
+  breakable,
+  #1%
+}
+
+% ---------------------------------------------------------------------------
+% Additional packages
+% ---------------------------------------------------------------------------
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{epigraph}
+
+% Epigraph layout
+\setlength{\epigraphwidth}{0.60\textwidth}
+\renewcommand{\epigraphflush}{flushright}
+\renewcommand{\epigraphrule}{0pt}
+
+% ---------------------------------------------------------------------------
+% Chapter and section title formatting
+% ---------------------------------------------------------------------------
+% Chapter heading: display shape with careful font-scoping.
+% The label uses a \normalsize reset before the giant number so the font
+% change is contained; the format argument re-establishes the title font.
+\titleformat{\chapter}[display]
+  {\normalfont\Huge\bfseries\color{retroblue}}
+  {%
+    \normalsize\raggedleft
+    {\large\scshape\color{retrogray}\chaptername\quad}%
+    {\fontsize{56}{56}\selectfont\color{retroblue!20!retrocream}\thechapter}%
+  }
+  {0.3ex}
+  {%
+    {\normalfont\color{retroblue}\rule{\linewidth}{1.2pt}}\\[0.4ex]%
+    \raggedright\Huge\bfseries\color{retroblue}%
+  }
+  [\vspace{0.3ex}{\color{retroblue!35!retrocream}\rule{\linewidth}{0.4pt}}]
+
+\titlespacing*{\chapter}{0pt}{0pt}{24pt}
+
+% Unnumbered chapters (\chapter*)
+\titleformat{name=\chapter,numberless}[display]
+  {\normalfont\Huge\bfseries\color{retroblue}}
+  {}
+  {0pt}
+  {%
+    {\normalfont\color{retroblue}\rule{\linewidth}{1.2pt}}\\[0.4ex]%
+    \raggedright\Huge\bfseries\color{retroblue}%
+  }
+  [\vspace{0.3ex}{\color{retroblue!35!retrocream}\rule{\linewidth}{0.4pt}}]
+
+\titleformat{\section}
+  {\normalfont\large\bfseries\color{retroblue}}
+  {\thesection}
+  {0.7em}
+  {}
+
+\titleformat{\subsection}
+  {\normalfont\normalsize\bfseries\color{retroblue!80!retroink}}
+  {\thesubsection}
+  {0.6em}
+  {}
+
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\itshape\color{retroink}}
+  {\thesubsubsection}
+  {0.5em}
+  {}
+
+% ---------------------------------------------------------------------------
+% Page headers and footers
+% ---------------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE]{\small\color{retrogray}\leftmark}
+\fancyhead[RO]{\small\color{retrogray}\rightmark}
+\fancyfoot[C]{\small\color{retrogray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{%
+  \hbox to\headwidth{\color{retrogray!50}\leaders\hrule height\headrulewidth\hfill}%
+}
+\renewcommand{\footrulewidth}{0pt}
+
+% Plain style for chapter-opening pages
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\small\color{retrogray}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+% ---------------------------------------------------------------------------
+% Hyperref — must be loaded near last
+% ---------------------------------------------------------------------------
+\usepackage[
+  colorlinks=true,
+  linkcolor=retroblue,
+  urlcolor=retroblue,
+  citecolor=retroblue,
+  plainpages=false,
+  pdfpagelabels=true,
+  pdftitle={NovaBASIC v1.0 User Guide},
+  pdfauthor={Barry Walker},
+  pdfsubject={For the e6502 Virtual Computer},
+  pdfkeywords={NovaBASIC, e6502, BASIC, 6502, retro computing}
+]{hyperref}
+
+% ---------------------------------------------------------------------------
+% Inline code macro
+% ---------------------------------------------------------------------------
+\newcommand{\cmd}[1]{%
+  \colorbox{retropale}{\texttt{\color{retroink}#1}}%
+}
+
+% ---------------------------------------------------------------------------
+% Foreword — content lives in chapters/00-foreword.tex
+% ---------------------------------------------------------------------------
+
+% =============================================================================
+% Document body
+% =============================================================================
+\begin{document}
+
+% ---------------------------------------------------------------------------
+% Front matter
+% ---------------------------------------------------------------------------
+\frontmatter
+
+\input{cover}
+\thispagestyle{empty}
+\cleardoublepage
+
+\input{copyright}
+\cleardoublepage
+
+\tableofcontents
+\cleardoublepage
+
+\input{chapters/00-foreword}
+\cleardoublepage
+
+% ---------------------------------------------------------------------------
+% Main matter
+% ---------------------------------------------------------------------------
+\mainmatter
+
+\input{chapters/01-welcome}
+\input{chapters/02-first-session}
+\input{chapters/03-language-fundamentals}
+\input{chapters/04-graphics-and-sprites}
+\input{chapters/05-sound-and-music}
+\input{chapters/06-expanded-memory}
+\input{chapters/07-assembly-and-special-chips}
+
+% ---------------------------------------------------------------------------
+% Appendices
+% ---------------------------------------------------------------------------
+\appendix
+
+\input{chapters/appendix-command-reference}
+\input{chapters/appendix-memory-map}
+\input{chapters/appendix-limits-and-errors}
+
+\end{document}
