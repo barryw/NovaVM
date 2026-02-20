@@ -50,6 +50,8 @@ public partial class MainWindow : Window
         DispatcherTimer.Run(() =>
         {
             _bus.Vgc.IncrementFrameCounter();
+            if (_bus.Vgc.IsRasterIrqEnabled)
+                _cpu.IrqWaiting = true;
             _canvas.RequestRedraw();
             return true;
         }, TimeSpan.FromMilliseconds(1000.0 / 60.0));

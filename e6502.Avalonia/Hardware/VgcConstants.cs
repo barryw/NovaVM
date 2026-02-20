@@ -19,7 +19,7 @@ public static class VgcConstants
     public const int BasicEnd          = 0x9FFF;
 
     public const int VgcBase           = 0xA000;
-    public const int VgcRegsEnd        = 0xA01E;
+    public const int VgcRegsEnd        = 0xA01F;
     public const int VgcEnd            = 0xA0FF;
 
     // -------------------------------------------------------------------------
@@ -217,6 +217,12 @@ public static class VgcConstants
     public const int RegP11            = 0xA01C;
     public const int RegP12            = 0xA01D;
     public const int RegP13            = 0xA01E;
+
+    // -------------------------------------------------------------------------
+    // IRQ control register ($A01F)
+    // -------------------------------------------------------------------------
+
+    public const int RegIrqCtrl        = 0xA01F;   // bit 0 = raster IRQ enable
 
     // -------------------------------------------------------------------------
     // Graphics commands

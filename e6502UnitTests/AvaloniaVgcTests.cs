@@ -340,6 +340,10 @@ public class AvaloniaVgcTests
         Assert.IsFalse(_vgc.OwnsAddress(VgcConstants.FioBase));
 
     [TestMethod]
+    public void OwnsAddress_RegIrqCtrl_True() =>
+        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegIrqCtrl));
+
+    [TestMethod]
     public void OwnsAddress_GapStart_False() =>
         Assert.IsFalse(_vgc.OwnsAddress(0xA020));
 
@@ -424,5 +428,31 @@ public class AvaloniaVgcTests
         byte before = _vgc.Read(VgcConstants.RegStatus);
         _vgc.Write(VgcConstants.RegStatus, 0xFF);
         Assert.AreEqual(before, _vgc.Read(VgcConstants.RegStatus));
+    }
+
+    // -- Raster IRQ enable ----------------------------------------------------
+
+    [TestMethod]
+    public void Vgc_RasterIrqEnable_DefaultOff()
+    {
+        var vgc = new VirtualGraphicsController();
+        Assert.IsFalse(vgc.IsRasterIrqEnabled);
+    }
+
+    [TestMethod]
+    public void Vgc_RasterIrqEnable_WriteToRegister()
+    {
+        var vgc = new VirtualGraphicsController();
+        vgc.Write(VgcConstants.RegIrqCtrl, 0x01);
+        Assert.IsTrue(vgc.IsRasterIrqEnabled);
+    }
+
+    [TestMethod]
+    public void Vgc_RasterIrqEnable_DisableClears()
+    {
+        var vgc = new VirtualGraphicsController();
+        vgc.Write(VgcConstants.RegIrqCtrl, 0x01);
+        vgc.Write(VgcConstants.RegIrqCtrl, 0x00);
+        Assert.IsFalse(vgc.IsRasterIrqEnabled);
     }
 }

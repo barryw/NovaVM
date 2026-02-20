@@ -54,6 +54,9 @@ public class VirtualGraphicsController
     // Current graphics draw color (0 = use text foreground color)
     private byte _gfxDrawColor;
 
+    // IRQ control register ($A01F)
+    private byte _irqCtrl;
+
 
     // Screen input source
     private IScreenInput? _screenEditor;
@@ -74,6 +77,7 @@ public class VirtualGraphicsController
         Array.Clear(_spriteFlags);
         Array.Clear(_gfxBitmap);
         _gfxDrawColor = 0;
+        _irqCtrl = 0;
 
         // Default sprite priority: in front of all
         Array.Fill(_spritePriority, (byte)VgcConstants.SpritePriInFront);
@@ -132,6 +136,10 @@ public class VirtualGraphicsController
         if (address == VgcConstants.RegCmd)
             return _cmdRegs[0];
 
+        // IRQ control register $A01F
+        if (address == VgcConstants.RegIrqCtrl)
+            return _irqCtrl;
+
         // Core registers $A000-$A00F
         if (address >= VgcConstants.VgcBase && address < VgcConstants.VgcBase + 16)
         {
@@ -183,6 +191,13 @@ public class VirtualGraphicsController
         if (address >= VgcConstants.CharRamBase && address <= VgcConstants.CharRamEnd)
         {
             _screenRam[address - VgcConstants.CharRamBase] = data;
+            return;
+        }
+
+        // IRQ control register $A01F
+        if (address == VgcConstants.RegIrqCtrl)
+        {
+            _irqCtrl = data;
             return;
         }
 
@@ -269,6 +284,8 @@ public class VirtualGraphicsController
 
     public bool IsCursorEnabled =>
         _regs[VgcConstants.RegCursorEnable - VgcConstants.VgcBase] != 0;
+
+    public bool IsRasterIrqEnabled => (_irqCtrl & 0x01) != 0;
 
     public bool GetGfxPixel(int x, int y) =>
         _gfxBitmap[y * VgcConstants.GfxWidth + x] != 0;
