@@ -5,6 +5,7 @@ public sealed class VirtualTimerController
     private readonly byte[] _regs = new byte[VgcConstants.TimerEnd - VgcConstants.TimerBase + 1];
     private int _counter;
     public bool IrqPending { get; private set; }
+    public bool IsEnabled => (_regs[0] & 0x01) != 0;
 
     public bool OwnsAddress(ushort address) =>
         address >= VgcConstants.TimerBase && address <= VgcConstants.TimerEnd;

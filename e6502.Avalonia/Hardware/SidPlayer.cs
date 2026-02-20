@@ -9,6 +9,7 @@ public sealed class SidPlayer
     private readonly CompositeBusDevice _bus;
     private byte _savedIrqLo;
     private byte _savedIrqHi;
+    private byte _savedIrqCtrl;
 
     public SidPlayer(CompositeBusDevice bus) => _bus = bus;
 
@@ -18,6 +19,7 @@ public sealed class SidPlayer
 
         _savedIrqLo = _bus.Read(IrqVector);
         _savedIrqHi = _bus.Read((ushort)(IrqVector + 1));
+        _savedIrqCtrl = _bus.Read((ushort)VgcConstants.RegIrqCtrl);
 
         for (int i = 0; i < info.Payload.Length; i++)
             _bus.Write((ushort)(info.LoadAddress + i), info.Payload[i]);
@@ -27,22 +29,23 @@ public sealed class SidPlayer
         _bus.WriteRam(IrqVector, (byte)(CodeBase & 0xFF));
         _bus.WriteRam((ushort)(IrqVector + 1), (byte)(CodeBase >> 8));
 
-        // CIA timing uses ~167 Hz, VBI (raster) uses 200 Hz (50 Hz * 4 lines worth)
-        int divisor = info.UsesCiaTiming ? 167 : 200;
-        _bus.Write((ushort)VgcConstants.TimerDivL, (byte)(divisor & 0xFF));
-        _bus.Write((ushort)VgcConstants.TimerDivH, (byte)(divisor >> 8));
-        _bus.Write((ushort)VgcConstants.TimerCtrl, 0x01);
+        // Enable VGC raster IRQ — fires at 60 Hz synced to display refresh
+        _bus.Write((ushort)VgcConstants.RegIrqCtrl, (byte)(_savedIrqCtrl | 0x01));
     }
 
     public void Stop()
     {
-        _bus.Write((ushort)VgcConstants.TimerCtrl, 0x00);
+        // Disable raster IRQ (restore original state)
+        _bus.Write((ushort)VgcConstants.RegIrqCtrl, _savedIrqCtrl);
 
         // Gate off all three SID voices and silence volume
-        _bus.Write(0xD404, 0x00);  // voice 1 control (gate off)
-        _bus.Write(0xD40B, 0x00);  // voice 2 control (gate off)
-        _bus.Write(0xD412, 0x00);  // voice 3 control (gate off)
-        _bus.Write(0xD418, 0x00);  // filter/volume register
+        _bus.Write(0xD404, 0x00);
+        _bus.Write(0xD40B, 0x00);
+        _bus.Write(0xD412, 0x00);
+        _bus.Write(0xD418, 0x00);
+
+        // Flush any buffered audio so silence is immediate
+        _bus.Sid.Flush();
 
         _bus.WriteRam(IrqVector, _savedIrqLo);
         _bus.WriteRam((ushort)(IrqVector + 1), _savedIrqHi);
@@ -72,14 +75,13 @@ public sealed class SidPlayer
         // 13: 20 lo hi  JSR init
         // 16: A9 00     LDA #$00
         // 18: 8D D0 03  STA $03D0        (clear init flag)
-        // 21: 20 lo hi  JSR play          (offset +21 from $03D2 = $03E7 ✓)
-        // 24: AD 41 BA  LDA $BA41        (ack timer IRQ — read clears pending bit)
-        // 27: 68        PLA
-        // 28: A8        TAY
-        // 29: 68        PLA
-        // 30: AA        TAX
-        // 31: 68        PLA
-        // 32: 40        RTI               (ends at $03F2)
+        // 21: 20 lo hi  JSR play          (offset +21 from $03D2 = $03E7)
+        // 24: 68        PLA
+        // 25: A8        TAY
+        // 26: 68        PLA
+        // 27: AA        TAX
+        // 28: 68        PLA
+        // 29: 40        RTI               (ends at $03EF)
         byte[] code =
         [
             0x48,                   // PHA
@@ -94,7 +96,6 @@ public sealed class SidPlayer
             0xA9, 0x00,             // LDA #$00
             0x8D, 0xD0, 0x03,       // STA $03D0
             0x20, playLo, playHi,   // JSR play    ← BEQ lands here ($03E7)
-            0xAD, 0x41, 0xBA,       // LDA $BA41   (ack timer)
             0x68,                   // PLA
             0xA8,                   // TAY
             0x68,                   // PLA

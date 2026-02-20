@@ -172,6 +172,13 @@ public sealed class SidChip : IDisposable
         return pcm;
     }
 
+    /// <summary>Clear the sample buffer so playback stops immediately.</summary>
+    public void Flush()
+    {
+        lock (_lock)
+            _sampleBuffer.Clear();
+    }
+
     public void Dispose() =>
         _renderer?.Dispose();
 
