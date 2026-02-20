@@ -1,6 +1,7 @@
 using e6502.Avalonia.Hardware;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Linq;
 
 namespace e6502UnitTests;
 
@@ -243,5 +244,267 @@ public class MusicEngineTests
         // SFX should write to voice 2
         byte ctrl2 = bus.Sid.Read(SidBase + 14 + 4);
         Assert.AreEqual(1, ctrl2 & 0x01, "SFX should steal voice 2 (lowest priority)");
+    }
+
+    // -------------------------------------------------------------------------
+    // Arpeggio
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void Arpeggio_CyclesNotes()
+    {
+        // {CEG}1 — arpeggio over C4(60), E4(64), G4(67), whole note duration
+        // ArpStart event: ArpIndex=0, plays ArpNotes[0] immediately via WriteVoice
+        // Each TickArp call increments ArpIndex first, then writes that note's freq
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "{CEG}1");
+        engine.MusicPlay();
+
+        // Tick 1: TickArp increments ArpIndex 0→1, writes E4 freq. Then event fires.
+        // Wait — TickArp runs at the top of TickVoice, before events are processed.
+        // On tick 1: ArpNotes is null (no ArpStart yet), so TickArp does nothing.
+        // Then the while-loop fires (WaitTicks==0): ProcessEvent sets ArpNotes, ArpIndex=0, plays C4.
+        // WaitTicks = 384 (whole note). Consume happens: WaitTicks -= min(TickAccum, WaitTicks).
+        engine.Tick(); // ArpStart fires, C4 playing
+
+        byte lo1 = bus.Sid.Read(SidBase + 0);
+        byte hi1 = bus.Sid.Read(SidBase + 1);
+        int  freq1 = lo1 | (hi1 << 8);
+
+        // C4 = MIDI 60
+        int sidC4 = (int)(261.63 * 16777216.0 / 985248.0); // ~4452
+
+        // Tick 2: TickArp fires first (ArpNotes != null), increments ArpIndex 0→1, writes E4
+        engine.Tick();
+
+        byte lo2 = bus.Sid.Read(SidBase + 0);
+        byte hi2 = bus.Sid.Read(SidBase + 1);
+        int  freq2 = lo2 | (hi2 << 8);
+
+        // E4 = MIDI 64
+        int sidE4 = (int)(329.63 * 16777216.0 / 985248.0); // ~5608
+
+        // freq1 should be near C4, freq2 near E4
+        Assert.IsTrue(Math.Abs(freq1 - sidC4) <= 20, $"Tick1 freq should be ~C4({sidC4}), got {freq1}");
+        Assert.IsTrue(Math.Abs(freq2 - sidE4) <= 20, $"Tick2 freq should be ~E4({sidE4}), got {freq2}");
+        Assert.AreNotEqual(freq1, freq2, "Arpeggio should change frequency each tick");
+    }
+
+    // -------------------------------------------------------------------------
+    // Loop (MML [...] expansion)
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void Loop_RepeatsNote()
+    {
+        // [C16]2 — parser expands to C16 C16 (two NoteOn events, 24 ticks each)
+        // At 240 BPM: TicksPerFrame = 6.4, so 24 ticks ≈ 3.75 frames per note
+        // After 4 frames the first note is done; after ~8 frames both notes done.
+        // We verify the sequence runs to completion (IsMusicPlaying becomes false).
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "[C16]2");
+        engine.SetTempo(240);
+        engine.MusicPlay();
+
+        // Run up to 20 ticks; music should stop well before that
+        bool stoppedEarly = false;
+        for (int i = 0; i < 20; i++)
+        {
+            engine.Tick();
+            if (!engine.IsMusicPlaying)
+            {
+                stoppedEarly = true;
+                break;
+            }
+        }
+
+        Assert.IsTrue(stoppedEarly, "Music should complete after two 16th notes at 240 BPM");
+
+        // Also confirm the gate was set at some point (note played) by checking that
+        // the sequence produced 2 NoteOn events via the parser
+        var events = MmlParser.Parse("[C16]2");
+        int noteOnCount = events.Count(e => e.Type == MmlEventType.NoteOn);
+        Assert.AreEqual(2, noteOnCount, "Parser should expand [C16]2 into exactly 2 NoteOn events");
+    }
+
+    // -------------------------------------------------------------------------
+    // Music loop mode
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void MusicLoop_RestartsWhenDone()
+    {
+        // Short sequence (single 16th note at 240 BPM ≈ 4 frames).
+        // SetLoop(true) should restart all voices when Done.
+        // After restarting, IsMusicPlaying stays true and the note plays again.
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "C16");
+        engine.SetTempo(240); // 6.4 ticks/frame; 24 ticks = ~3.75 frames
+        engine.SetLoop(true);
+        engine.MusicPlay();
+
+        // Tick 10 times — enough for the sequence to complete and loop at least once.
+        // If loop works, IsMusicPlaying should still be true after completion.
+        for (int i = 0; i < 10; i++)
+            engine.Tick();
+
+        Assert.IsTrue(engine.IsMusicPlaying, "Music should still be playing after looping");
+
+        // Verify gate is on (note restarted and re-triggered)
+        byte ctrl = bus.Sid.Read(SidBase + 4);
+        Assert.AreEqual(1, ctrl & 0x01, "Gate should be on after loop restarts the sequence");
+    }
+
+    // -------------------------------------------------------------------------
+    // PWM sweep
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void PwmSweep_IncrementsEachTick()
+    {
+        // "@P2048 @PS+ C1" — set pulse width to 2048, start sweep up (+1 dir = +32/frame)
+        // On the tick where the events fire, SetPulseWidth and PwmSweep are processed.
+        // TickPwm runs at the TOP of each TickVoice, BEFORE events are processed.
+        // So frame 1: TickPwm(dir=0, no-op), events fire setting PW=2048 and dir=+1.
+        // Frame 2: TickPwm(dir=+1) → PW = 2048+32 = 2080.
+        // Frame 3: TickPwm → PW = 2112. Etc.
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "@P2048 @PS+ C1");
+        engine.MusicPlay();
+
+        engine.Tick(); // events processed: PW=2048, PwmDir=+1, C4 gate on
+
+        // Read PW after tick 1 — events just set it to 2048, no sweep yet
+        byte pwLo1 = bus.Sid.Read(SidBase + 2);
+        byte pwHi1 = bus.Sid.Read(SidBase + 3);
+        int  pw1   = pwLo1 | ((pwHi1 & 0x0F) << 8);
+        Assert.AreEqual(2048, pw1, "Pulse width should be 2048 after first tick (sweep not yet applied)");
+
+        engine.Tick(); // TickPwm: PW = 2048 + 32 = 2080
+
+        byte pwLo2 = bus.Sid.Read(SidBase + 2);
+        byte pwHi2 = bus.Sid.Read(SidBase + 3);
+        int  pw2   = pwLo2 | ((pwHi2 & 0x0F) << 8);
+        Assert.AreEqual(2080, pw2, "Pulse width should be 2080 after second tick (one sweep step)");
+
+        engine.Tick(); // TickPwm: PW = 2080 + 32 = 2112
+
+        byte pwLo3 = bus.Sid.Read(SidBase + 2);
+        byte pwHi3 = bus.Sid.Read(SidBase + 3);
+        int  pw3   = pwLo3 | ((pwHi3 & 0x0F) << 8);
+        Assert.AreEqual(2112, pw3, "Pulse width should be 2112 after third tick (two sweep steps)");
+    }
+
+    // -------------------------------------------------------------------------
+    // Tempo
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void SetTempo_ChangesBpm()
+    {
+        // A 16th note = 24 ticks. At 240 BPM: TicksPerFrame=6.4, done in ~4 frames.
+        // At 60 BPM: TicksPerFrame=1.6, done in ~15 frames.
+        // We count how many ticks until IsMusicPlaying becomes false at each tempo.
+        int CountTicksToFinish(int bpm)
+        {
+            var bus    = MakeBus();
+            var engine = new MusicEngine(bus);
+            engine.SetSequence(0, "C16");
+            engine.SetTempo(bpm);
+            engine.MusicPlay();
+            for (int i = 1; i <= 50; i++)
+            {
+                engine.Tick();
+                if (!engine.IsMusicPlaying) return i;
+            }
+            return 50; // didn't finish
+        }
+
+        int fastFrames = CountTicksToFinish(240);
+        int slowFrames = CountTicksToFinish(60);
+
+        Assert.IsTrue(fastFrames < slowFrames,
+            $"240 BPM should finish sooner ({fastFrames} frames) than 60 BPM ({slowFrames} frames)");
+
+        // At 240 BPM (6.4 ticks/frame), 24 ticks should finish within 5 frames
+        // (4 frames to drain WaitTicks, then 1 more for TickMusic to detect done and stop)
+        Assert.IsTrue(fastFrames <= 5, $"At 240 BPM a 16th note should finish within 5 frames, took {fastFrames}");
+
+        // At 60 BPM (1.6 ticks/frame), 24 ticks should take ~15 frames
+        Assert.IsTrue(slowFrames >= 14, $"At 60 BPM a 16th note should take at least 14 frames, took {slowFrames}");
+    }
+
+    // -------------------------------------------------------------------------
+    // SFX voice stealing with music
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void SfxDoesNotDisruptOtherMusicVoices()
+    {
+        // Music on voices 0 and 1 (whole notes), SFX steals voice 2.
+        // After SFX is placed on voice 2, voices 0 and 1 should still have gate on.
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "C1");
+        engine.SetSequence(1, "E1");
+        engine.MusicPlay();
+        engine.Tick(); // voice 0 and 1 get their notes
+
+        byte ctrl0Before = bus.Sid.Read(SidBase + 4);
+        byte ctrl1Before = bus.Sid.Read(SidBase + 7 + 4);
+        Assert.AreEqual(1, ctrl0Before & 0x01, "Voice 0 gate should be on before SFX");
+        Assert.AreEqual(1, ctrl1Before & 0x01, "Voice 1 gate should be on before SFX");
+
+        // SFX: voice 2 has no sequence → AllocateSfxVoice picks voice 2
+        engine.PlaySound(69, 5);
+
+        // Voices 0 and 1 gates should be unaffected
+        byte ctrl0After = bus.Sid.Read(SidBase + 4);
+        byte ctrl1After = bus.Sid.Read(SidBase + 7 + 4);
+        Assert.AreEqual(1, ctrl0After & 0x01, "Voice 0 gate should remain on after SFX steals voice 2");
+        Assert.AreEqual(1, ctrl1After & 0x01, "Voice 1 gate should remain on after SFX steals voice 2");
+
+        // Tick music — voice 2 is skipped (stolen), voices 0+1 continue
+        engine.Tick();
+        byte ctrl0Tick = bus.Sid.Read(SidBase + 4);
+        byte ctrl1Tick = bus.Sid.Read(SidBase + 7 + 4);
+        Assert.AreEqual(1, ctrl0Tick & 0x01, "Voice 0 gate should stay on during SFX playback");
+        Assert.AreEqual(1, ctrl1Tick & 0x01, "Voice 1 gate should stay on during SFX playback");
+    }
+
+    // -------------------------------------------------------------------------
+    // SfxCompleted during music
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void SfxCompleted_StillWorksWhileMusicPlaying()
+    {
+        // Music on voice 0, SFX on voice 2 (free). SfxCompleted should fire normally.
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "C1");
+        engine.MusicPlay();
+        engine.Tick();
+
+        engine.PlaySound(60, 1); // 1 frame SFX on voice 2
+        Assert.IsFalse(engine.SfxCompleted, "SfxCompleted should not be set before expiry");
+
+        engine.Tick(); // SFX expires: _sfxFrames 1→0, gate off, _sfxCompleted = true
+
+        Assert.IsTrue(engine.SfxCompleted, "SfxCompleted should be true after SFX expires during music");
+        Assert.IsFalse(engine.SfxCompleted, "SfxCompleted is one-shot — should clear on read");
+
+        // Music should still be playing
+        Assert.IsTrue(engine.IsMusicPlaying, "Music should still be playing after SFX completes");
     }
 }
