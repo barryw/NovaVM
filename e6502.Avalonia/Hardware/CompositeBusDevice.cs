@@ -2,19 +2,30 @@ namespace e6502.Avalonia.Hardware;
 
 using KDS.e6502;
 
-public class CompositeBusDevice : IBusDevice
+public class CompositeBusDevice : IBusDevice, IDisposable
 {
     private readonly byte[] _ram = new byte[65536];
     private readonly VirtualGraphicsController _vgc = new();
-    private readonly VirtualSoundController _vsc = new();
+    private readonly SidChip _sid;
     private readonly FileIoController _fio;
+    private readonly VirtualExpansionMemoryController _xmc;
 
     public VirtualGraphicsController Vgc => _vgc;
+    public SidChip Sid => _sid;
     public FileIoController Fio => _fio;
 
-    public CompositeBusDevice()
+    public CompositeBusDevice(bool enableSound = false)
     {
+        _sid = new SidChip(enableSound);
+
         _fio = new FileIoController(
+            addr => _ram[addr],
+            (addr, data) => _ram[addr] = data,
+            saveDir: null,
+            vgcRead: (space, offset) => _vgc.TryReadMemorySpace(space, offset, out byte value) ? value : (byte)0,
+            vgcWrite: (space, offset, value) => _vgc.TryWriteMemorySpace(space, offset, value),
+            vgcSpaceLength: space => _vgc.GetMemorySpaceLength(space));
+        _xmc = new VirtualExpansionMemoryController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data);
 
@@ -24,6 +35,9 @@ public class CompositeBusDevice : IBusDevice
 
         InitVectorTable();
     }
+
+    public void Dispose() =>
+        _sid.Dispose();
 
     private void InitVectorTable()
     {
@@ -37,23 +51,25 @@ public class CompositeBusDevice : IBusDevice
         WriteWord(VgcConstants.VectorTableBase + 0x02, VgcConstants.RegCmd);
         WriteWord(VgcConstants.VectorTableBase + 0x04, VgcConstants.CharRamBase);
         WriteWord(VgcConstants.VectorTableBase + 0x06, VgcConstants.ColorRamBase);
-        WriteWord(VgcConstants.VectorTableBase + 0x08, VgcConstants.VscBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x08, VgcConstants.SidBase);
         WriteWord(VgcConstants.VectorTableBase + 0x0A, VgcConstants.FioBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x0C, VgcConstants.XmcBase);
     }
 
     public byte Read(ushort address)
     {
+        if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
-        if (_vsc.OwnsAddress(address)) return _vsc.Read(address);
         if (_vgc.OwnsAddress(address)) return _vgc.Read(address);
         return _ram[address];
     }
 
     public void Write(ushort address, byte data)
     {
+        if (_xmc.OwnsAddress(address)) { _xmc.Write(address, data); return; }
         if (_fio.OwnsAddress(address)) { _fio.Write(address, data); return; }
-        if (_vsc.OwnsAddress(address)) { _vsc.Write(address, data); return; }
         if (_vgc.OwnsAddress(address)) { _vgc.Write(address, data); return; }
+        if (_sid.OwnsAddress(address)) { _sid.Write(address, data); return; }
         if (address >= VgcConstants.RomBase) return;
         _ram[address] = data;
     }

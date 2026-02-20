@@ -1,3 +1,4 @@
+using System;
 using e6502.Avalonia.Hardware;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -89,31 +90,276 @@ public class AvaloniaCompositeBusTests
     }
 
     // -------------------------------------------------------------------------
-    // VSC isolation
+    // SID routing
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public void Vsc_WriteRead_RoundTrips()
+    public void Sid_Write_DoesNotCorruptRom()
     {
         var bus = MakeBus();
-        bus.Write((ushort)VgcConstants.VscBase, 0x42);
-        Assert.AreEqual(0x42, bus.Read((ushort)VgcConstants.VscBase));
+        byte romByte = bus.Read(0xD400);
+        bus.Write(0xD400, 0xFF);
+        Assert.AreEqual(romByte, bus.Read(0xD400));  // reads still return ROM
     }
 
     [TestMethod]
-    public void Vsc_WriteLastRegister_ReadBack()
+    public void Sid_WriteToSidRange_DoesNotThrow()
     {
         var bus = MakeBus();
-        bus.Write((ushort)VgcConstants.VscEnd, 0x7F);
-        Assert.AreEqual(0x7F, bus.Read((ushort)VgcConstants.VscEnd));
+        bus.Write(0xD418, 0x0F);  // SID master volume
+        // No exception = pass
     }
 
     [TestMethod]
-    public void Vsc_DoesNotRouteToVgc()
+    public void Sid_OutsideRange_RomProtected()
     {
         var bus = MakeBus();
-        bus.Write((ushort)VgcConstants.VscBase, 0x99);
-        Assert.AreEqual(0x99, bus.Read((ushort)VgcConstants.VscBase));
+        byte romBefore = bus.Read(0xD41D);
+        bus.Write(0xD41D, 0xAA);
+        Assert.AreEqual(romBefore, bus.Read(0xD41D));
+    }
+
+    // -------------------------------------------------------------------------
+    // XMC expansion memory controller
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void Xmc_RegisterReadWrite_RoundTrips()
+    {
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.XmcData, 0x5A);
+        Assert.AreEqual(0x5A, bus.Read((ushort)VgcConstants.XmcData));
+    }
+
+    [TestMethod]
+    public void Xmc_PutGetByte_RoundTrips()
+    {
+        var bus = MakeBus();
+
+        bus.Write((ushort)VgcConstants.XmcAddrL, 0x34);
+        bus.Write((ushort)VgcConstants.XmcAddrM, 0x12);
+        bus.Write((ushort)VgcConstants.XmcAddrH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcData, 0xA7);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdPutByte);
+
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdGetByte);
+        Assert.AreEqual(0xA7, bus.Read((ushort)VgcConstants.XmcData));
+    }
+
+    [TestMethod]
+    public void Xmc_StashFetch_CopiesData()
+    {
+        var bus = MakeBus();
+        bus.Write(0x0400, 0x11);
+        bus.Write(0x0401, 0x22);
+        bus.Write(0x0402, 0x33);
+
+        bus.Write((ushort)VgcConstants.XmcRamL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcRamH, 0x04);
+        bus.Write((ushort)VgcConstants.XmcAddrL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcAddrM, 0x20);
+        bus.Write((ushort)VgcConstants.XmcAddrH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcLenL, 0x03);
+        bus.Write((ushort)VgcConstants.XmcLenH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdStash);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+
+        bus.Write(0x0400, 0x00);
+        bus.Write(0x0401, 0x00);
+        bus.Write(0x0402, 0x00);
+
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdFetch);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+        Assert.AreEqual(0x11, bus.Read(0x0400));
+        Assert.AreEqual(0x22, bus.Read(0x0401));
+        Assert.AreEqual(0x33, bus.Read(0x0402));
+    }
+
+    [TestMethod]
+    public void Xmc_UsageStats_TrackWrittenPages()
+    {
+        var bus = MakeBus();
+
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdResetUsage);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+
+        bus.Write((ushort)VgcConstants.XmcAddrL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcAddrM, 0x20);
+        bus.Write((ushort)VgcConstants.XmcAddrH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcData, 0x7A);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdPutByte);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+
+        int usedPages = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+            | (bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8);
+        int freePages = bus.Read((ushort)VgcConstants.XmcPagesFreeL)
+            | (bus.Read((ushort)VgcConstants.XmcPagesFreeH) << 8);
+        int totalPages = bus.Read((ushort)VgcConstants.XmcBanks) * 256;
+
+        Assert.AreEqual(1, usedPages);
+        Assert.AreEqual(totalPages - 1, freePages);
+    }
+
+    [TestMethod]
+    public void Xmc_ReleaseCommand_UnmarksUsedPages()
+    {
+        var bus = MakeBus();
+
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdResetUsage);
+
+        bus.Write((ushort)VgcConstants.XmcAddrL, 0xF0);
+        bus.Write((ushort)VgcConstants.XmcAddrM, 0x20);
+        bus.Write((ushort)VgcConstants.XmcAddrH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcLenL, 0x20);
+        bus.Write((ushort)VgcConstants.XmcLenH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcData, 0xCC);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdFill);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+
+        int usedBeforeRelease = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+            | (bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8);
+        Assert.AreEqual(2, usedBeforeRelease);
+
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdRelease);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+
+        int usedAfterRelease = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+            | (bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8);
+        int freeAfterRelease = bus.Read((ushort)VgcConstants.XmcPagesFreeL)
+            | (bus.Read((ushort)VgcConstants.XmcPagesFreeH) << 8);
+        int totalPages = bus.Read((ushort)VgcConstants.XmcBanks) * 256;
+
+        Assert.AreEqual(0, usedAfterRelease);
+        Assert.AreEqual(totalPages, freeAfterRelease);
+    }
+
+    [TestMethod]
+    public void Xmc_AllocCommand_ReturnsHandleAndMarksPages()
+    {
+        var bus = MakeBus();
+
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdResetUsage);
+        bus.Write((ushort)VgcConstants.XmcLenL, 0x2C); // 300 bytes
+        bus.Write((ushort)VgcConstants.XmcLenH, 0x01);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdAlloc);
+
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+        Assert.AreNotEqual(0, bus.Read((ushort)VgcConstants.XmcHandle));
+
+        int usedPages = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+            | (bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8);
+        Assert.AreEqual(2, usedPages);
+    }
+
+    [TestMethod]
+    public void Xmc_NamedStashFetch_RoundTrips()
+    {
+        var bus = MakeBus();
+
+        bus.Write(0x0500, 0xDE);
+        bus.Write(0x0501, 0xAD);
+        bus.Write(0x0502, 0xBE);
+        bus.Write(0x0503, 0xEF);
+
+        WriteXmcName(bus, "MELODY");
+        bus.Write((ushort)VgcConstants.XmcRamL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcRamH, 0x05);
+        bus.Write((ushort)VgcConstants.XmcLenL, 0x04);
+        bus.Write((ushort)VgcConstants.XmcLenH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdNStash);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+
+        bus.Write(0x0500, 0x00);
+        bus.Write(0x0501, 0x00);
+        bus.Write(0x0502, 0x00);
+        bus.Write(0x0503, 0x00);
+
+        WriteXmcName(bus, "MELODY");
+        bus.Write((ushort)VgcConstants.XmcRamL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcRamH, 0x05);
+        bus.Write((ushort)VgcConstants.XmcLenL, 0x00); // 0 = whole named block
+        bus.Write((ushort)VgcConstants.XmcLenH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdNFetch);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+
+        Assert.AreEqual(0xDE, bus.Read(0x0500));
+        Assert.AreEqual(0xAD, bus.Read(0x0501));
+        Assert.AreEqual(0xBE, bus.Read(0x0502));
+        Assert.AreEqual(0xEF, bus.Read(0x0503));
+    }
+
+    [TestMethod]
+    public void Xmc_NamedDir_EnumeratesBlocks()
+    {
+        var bus = MakeBus();
+
+        bus.Write(0x0600, 0x11);
+        bus.Write(0x0601, 0x22);
+
+        WriteXmcName(bus, "BETA");
+        bus.Write((ushort)VgcConstants.XmcRamL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcRamH, 0x06);
+        bus.Write((ushort)VgcConstants.XmcLenL, 0x02);
+        bus.Write((ushort)VgcConstants.XmcLenH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdNStash);
+
+        WriteXmcName(bus, "ALPHA");
+        bus.Write((ushort)VgcConstants.XmcRamL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcRamH, 0x06);
+        bus.Write((ushort)VgcConstants.XmcLenL, 0x02);
+        bus.Write((ushort)VgcConstants.XmcLenH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdNStash);
+
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdNDirOpen);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+        Assert.AreEqual("ALPHA", ReadXmcName(bus));
+
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdNDirRead);
+        Assert.AreEqual(VgcConstants.XmcStatusOk, bus.Read((ushort)VgcConstants.XmcStatus));
+        Assert.AreEqual("BETA", ReadXmcName(bus));
+    }
+
+    [TestMethod]
+    public void Xmc_MappedWindow_ReadWrite_Works()
+    {
+        var bus = MakeBus();
+
+        bus.Write((ushort)VgcConstants.XmcWin0AL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcWin0AM, 0x20);
+        bus.Write((ushort)VgcConstants.XmcWin0AH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcWinCtl, 0x01); // enable window 0
+
+        bus.Write(0xBC42, 0x5C);
+        Assert.AreEqual(0x5C, bus.Read(0xBC42));
+
+        bus.Write((ushort)VgcConstants.XmcAddrL, 0x42);
+        bus.Write((ushort)VgcConstants.XmcAddrM, 0x20);
+        bus.Write((ushort)VgcConstants.XmcAddrH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdGetByte);
+        Assert.AreEqual(0x5C, bus.Read((ushort)VgcConstants.XmcData));
+    }
+
+    private static void WriteXmcName(CompositeBusDevice bus, string name)
+    {
+        int maxLen = VgcConstants.XmcNameEnd - VgcConstants.XmcName + 1;
+        int len = Math.Min(name.Length, maxLen);
+
+        bus.Write((ushort)VgcConstants.XmcNameLen, (byte)len);
+        for (int i = 0; i < maxLen; i++)
+            bus.Write((ushort)(VgcConstants.XmcName + i), 0x00);
+        for (int i = 0; i < len; i++)
+            bus.Write((ushort)(VgcConstants.XmcName + i), (byte)name[i]);
+    }
+
+    private static string ReadXmcName(CompositeBusDevice bus)
+    {
+        int len = bus.Read((ushort)VgcConstants.XmcNameLen);
+        Span<char> chars = stackalloc char[len];
+        for (int i = 0; i < len; i++)
+            chars[i] = (char)bus.Read((ushort)(VgcConstants.XmcName + i));
+        return new string(chars);
     }
 
     // -------------------------------------------------------------------------
@@ -229,10 +475,13 @@ public class AvaloniaCompositeBusTests
         int colorRam = bus.Read(0x0206) | (bus.Read(0x0207) << 8);
         Assert.AreEqual(VgcConstants.ColorRamBase, colorRam);
 
-        int vscBase = bus.Read(0x0208) | (bus.Read(0x0209) << 8);
-        Assert.AreEqual(VgcConstants.VscBase, vscBase);
+        int sidBase = bus.Read(0x0208) | (bus.Read(0x0209) << 8);
+        Assert.AreEqual(VgcConstants.SidBase, sidBase);
 
         int fioBase = bus.Read(0x020A) | (bus.Read(0x020B) << 8);
         Assert.AreEqual(VgcConstants.FioBase, fioBase);
+
+        int xmcBase = bus.Read(0x020C) | (bus.Read(0x020D) << 8);
+        Assert.AreEqual(VgcConstants.XmcBase, xmcBase);
     }
 }

@@ -1,10 +1,29 @@
 namespace e6502.Avalonia.Hardware;
 
+/// <summary>
+/// Legacy sound controller — superseded by SidChip. Retained until Task 4 deletes it.
+/// </summary>
 public sealed class VirtualSoundController : IDisposable
 {
+    // Inline constants formerly in VgcConstants (removed in Task 3)
+    private const int VscBase       = 0xA100;
+    private const int VscEnd        = 0xA1FF;
+    private const int VscCmd        = 0xA100;
+    private const int VscP0         = 0xA101;
+    private const int VscP1         = 0xA102;
+    private const int VscP2         = 0xA103;
+    private const int VscP3         = 0xA104;
+    private const int VscP4         = 0xA105;
+    private const int VscActiveMask = 0xA10E;
+    private const int VscMasterVol  = 0xA10F;
+    private const byte VscCmdSound    = 0x01;
+    private const byte VscCmdVolume   = 0x02;
+    private const byte VscCmdEnvelope = 0x03;
+    private const byte VscCmdWave     = 0x04;
+
     private const int ChannelCount = 4;
     private const int SampleRate = 44100;
-    private readonly byte[] _registers = new byte[VgcConstants.VscEnd - VgcConstants.VscBase + 1];
+    private readonly byte[] _registers = new byte[VscEnd - VscBase + 1];
     private readonly ChannelState[] _channels =
     [
         new(), new(), new(), new()
@@ -15,7 +34,7 @@ public sealed class VirtualSoundController : IDisposable
 
     public VirtualSoundController(bool enableAudio = false)
     {
-        _registers[Reg(VgcConstants.VscMasterVol)] = _masterVolume;
+        _registers[Reg(VscMasterVol)] = _masterVolume;
 
         if (enableAudio)
         {
@@ -31,16 +50,16 @@ public sealed class VirtualSoundController : IDisposable
     }
 
     public bool OwnsAddress(ushort address) =>
-        address >= VgcConstants.VscBase && address <= VgcConstants.VscEnd;
+        address >= VscBase && address <= VscEnd;
 
     public byte Read(ushort address) =>
-        _registers[address - VgcConstants.VscBase];
+        _registers[address - VscBase];
 
     public void Write(ushort address, byte data)
     {
-        _registers[address - VgcConstants.VscBase] = data;
+        _registers[address - VscBase] = data;
 
-        if (address == VgcConstants.VscCmd)
+        if (address == VscCmd)
             ExecuteCommand(data);
     }
 
@@ -48,7 +67,7 @@ public sealed class VirtualSoundController : IDisposable
         _renderer?.Dispose();
 
     private static int Reg(int absoluteAddr) =>
-        absoluteAddr - VgcConstants.VscBase;
+        absoluteAddr - VscBase;
 
     private void ExecuteCommand(byte cmd)
     {
@@ -56,16 +75,16 @@ public sealed class VirtualSoundController : IDisposable
         {
             switch (cmd)
             {
-                case VgcConstants.VscCmdSound:
+                case VscCmdSound:
                     DoSound();
                     break;
-                case VgcConstants.VscCmdVolume:
+                case VscCmdVolume:
                     DoVolume();
                     break;
-                case VgcConstants.VscCmdEnvelope:
+                case VscCmdEnvelope:
                     DoEnvelope();
                     break;
-                case VgcConstants.VscCmdWave:
+                case VscCmdWave:
                     DoWave();
                     break;
             }
@@ -76,9 +95,9 @@ public sealed class VirtualSoundController : IDisposable
 
     private void DoSound()
     {
-        int ch = _registers[Reg(VgcConstants.VscP0)] & (ChannelCount - 1);
-        int freq = _registers[Reg(VgcConstants.VscP1)] | (_registers[Reg(VgcConstants.VscP2)] << 8);
-        int durationTicks = _registers[Reg(VgcConstants.VscP3)] | (_registers[Reg(VgcConstants.VscP4)] << 8);
+        int ch = _registers[Reg(VscP0)] & (ChannelCount - 1);
+        int freq = _registers[Reg(VscP1)] | (_registers[Reg(VscP2)] << 8);
+        int durationTicks = _registers[Reg(VscP3)] | (_registers[Reg(VscP4)] << 8);
 
         var channel = _channels[ch];
         if (freq <= 0 || durationTicks <= 0)
@@ -98,25 +117,25 @@ public sealed class VirtualSoundController : IDisposable
 
     private void DoVolume()
     {
-        _masterVolume = (byte)(_registers[Reg(VgcConstants.VscP0)] & 0x0F);
-        _registers[Reg(VgcConstants.VscMasterVol)] = _masterVolume;
+        _masterVolume = (byte)(_registers[Reg(VscP0)] & 0x0F);
+        _registers[Reg(VscMasterVol)] = _masterVolume;
     }
 
     private void DoEnvelope()
     {
-        int ch = _registers[Reg(VgcConstants.VscP0)] & (ChannelCount - 1);
+        int ch = _registers[Reg(VscP0)] & (ChannelCount - 1);
         var channel = _channels[ch];
 
-        channel.AttackSamples = EnvelopeParamToSamples(_registers[Reg(VgcConstants.VscP1)]);
-        channel.DecaySamples = EnvelopeParamToSamples(_registers[Reg(VgcConstants.VscP2)]);
-        channel.SustainLevel = (_registers[Reg(VgcConstants.VscP3)] & 0x0F) / 15.0;
-        channel.ReleaseSamples = EnvelopeParamToSamples(_registers[Reg(VgcConstants.VscP4)]);
+        channel.AttackSamples = EnvelopeParamToSamples(_registers[Reg(VscP1)]);
+        channel.DecaySamples = EnvelopeParamToSamples(_registers[Reg(VscP2)]);
+        channel.SustainLevel = (_registers[Reg(VscP3)] & 0x0F) / 15.0;
+        channel.ReleaseSamples = EnvelopeParamToSamples(_registers[Reg(VscP4)]);
     }
 
     private void DoWave()
     {
-        int ch = _registers[Reg(VgcConstants.VscP0)] & (ChannelCount - 1);
-        _channels[ch].Waveform = _registers[Reg(VgcConstants.VscP1)] % 5;
+        int ch = _registers[Reg(VscP0)] & (ChannelCount - 1);
+        _channels[ch].Waveform = _registers[Reg(VscP1)] % 5;
     }
 
     private static int EnvelopeParamToSamples(byte value) =>
@@ -216,7 +235,7 @@ public sealed class VirtualSoundController : IDisposable
             if (_channels[i].Active)
                 mask |= (byte)(1 << i);
 
-        _registers[Reg(VgcConstants.VscActiveMask)] = mask;
+        _registers[Reg(VscActiveMask)] = mask;
     }
 
     private sealed class ChannelState

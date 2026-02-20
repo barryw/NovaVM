@@ -22,8 +22,12 @@ public static class VgcConstants
     public const int VgcRegsEnd        = 0xA01E;
     public const int VgcEnd            = 0xA0FF;
 
-    public const int VscBase           = 0xA100;
-    public const int VscEnd            = 0xA1FF;
+    // -------------------------------------------------------------------------
+    // SID chip registers ($D400-$D41C, inside ROM space — write-only via bus)
+    // -------------------------------------------------------------------------
+
+    public const int SidBase           = 0xD400;
+    public const int SidEnd            = 0xD41C;
 
     public const int CharRamBase       = 0xAA00;
     public const int CharRamEnd        = 0xB1CF;   // AA00 + 2000 - 1
@@ -48,11 +52,21 @@ public static class VgcConstants
     public const int FioEndH           = 0xB9A7;   // end addr high (SAVE only)
     public const int FioSizeL          = 0xB9A8;   // loaded size low (set by host after LOAD)
     public const int FioSizeH          = 0xB9A9;   // loaded size high
+    public const int FioGSpace         = 0xB9AA;   // graphics space selector
+    public const int FioGAddrL         = 0xB9AB;   // graphics offset low
+    public const int FioGAddrH         = 0xB9AC;   // graphics offset high
+    public const int FioGLenL          = 0xB9AD;   // graphics length low
+    public const int FioGLenH          = 0xB9AE;   // graphics length high
     public const int FioName           = 0xB9B0;   // filename buffer (64 bytes ASCII)
     public const int FioNameEnd        = 0xB9EF;
 
     public const byte FioCmdSave       = 0x01;
     public const byte FioCmdLoad       = 0x02;
+    public const byte FioCmdDirOpen    = 0x03;
+    public const byte FioCmdDirRead    = 0x04;
+    public const byte FioCmdDelete     = 0x05;
+    public const byte FioCmdGSave      = 0x06;     // VGC memory -> disk
+    public const byte FioCmdGLoad      = 0x07;     // disk -> VGC memory
 
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;
@@ -61,8 +75,81 @@ public static class VgcConstants
     public const byte FioErrNone       = 0x00;
     public const byte FioErrNotFound   = 0x01;
     public const byte FioErrIo         = 0x02;
+    public const byte FioErrEndOfDir   = 0x03;
 
-    public const int FreeBase          = 0xBA00;
+    // -------------------------------------------------------------------------
+    // Expansion Memory Controller (XMC) registers ($BA00-$BA3F)
+    // -------------------------------------------------------------------------
+
+    public const int XmcBase           = 0xBA00;
+    public const int XmcEnd            = 0xBA3F;
+
+    public const int XmcCmd            = 0xBA00;   // write triggers operation
+    public const int XmcStatus         = 0xBA01;   // 0=idle, 2=ok, 3=error
+    public const int XmcErrCode        = 0xBA02;   // 0=none, 1=range, 2=bad args
+    public const int XmcCfg            = 0xBA03;   // reserved
+    public const int XmcAddrL          = 0xBA04;   // expansion addr low
+    public const int XmcAddrM          = 0xBA05;   // expansion addr mid
+    public const int XmcAddrH          = 0xBA06;   // expansion addr high
+    public const int XmcRamL           = 0xBA07;   // CPU RAM addr low
+    public const int XmcRamH           = 0xBA08;   // CPU RAM addr high
+    public const int XmcLenL           = 0xBA09;   // transfer length low
+    public const int XmcLenH           = 0xBA0A;   // transfer length high
+    public const int XmcData           = 0xBA0B;   // byte data port
+    public const int XmcBank           = 0xBA0C;   // default 64KB bank selector
+    public const int XmcBanks          = 0xBA0D;   // total bank count (read-only)
+    public const int XmcPagesUsedL     = 0xBA0E;   // used 256-byte pages low
+    public const int XmcPagesUsedH     = 0xBA0F;   // used pages high
+    public const int XmcPagesFreeL     = 0xBA10;   // free pages low
+    public const int XmcPagesFreeH     = 0xBA11;   // free pages high
+    public const int XmcNameLen        = 0xBA12;   // name length (0-27)
+    public const int XmcHandle         = 0xBA13;   // block handle (output/selector)
+    public const int XmcDirCountL      = 0xBA14;   // number of named blocks low
+    public const int XmcDirCountH      = 0xBA15;   // number of named blocks high
+    public const int XmcWinCtl         = 0xBA16;   // window enable bits (0-3)
+    public const int XmcWin0AL         = 0xBA18;   // window 0 mapped XRAM base low
+    public const int XmcWin0AM         = 0xBA19;   // window 0 mapped XRAM base mid
+    public const int XmcWin0AH         = 0xBA1A;   // window 0 mapped XRAM base high
+    public const int XmcWin1AL         = 0xBA1B;   // window 1 mapped XRAM base low
+    public const int XmcWin1AM         = 0xBA1C;   // window 1 mapped XRAM base mid
+    public const int XmcWin1AH         = 0xBA1D;   // window 1 mapped XRAM base high
+    public const int XmcWin2AL         = 0xBA1E;   // window 2 mapped XRAM base low
+    public const int XmcWin2AM         = 0xBA1F;   // window 2 mapped XRAM base mid
+    public const int XmcWin2AH         = 0xBA20;   // window 2 mapped XRAM base high
+    public const int XmcWin3AL         = 0xBA21;   // window 3 mapped XRAM base low
+    public const int XmcWin3AM         = 0xBA22;   // window 3 mapped XRAM base mid
+    public const int XmcWin3AH         = 0xBA23;   // window 3 mapped XRAM base high
+    public const int XmcName           = 0xBA24;   // ASCII name buffer start (28 bytes)
+    public const int XmcNameEnd        = 0xBA3F;   // ASCII name buffer end
+
+    public const byte XmcCmdGetByte    = 0x01;     // read byte at XADDR into XDATA
+    public const byte XmcCmdPutByte    = 0x02;     // write XDATA to XADDR
+    public const byte XmcCmdStash      = 0x03;     // RAM -> XRAM
+    public const byte XmcCmdFetch      = 0x04;     // XRAM -> RAM
+    public const byte XmcCmdFill       = 0x05;     // fill XRAM range with XDATA
+    public const byte XmcCmdStats      = 0x07;     // refresh stats registers
+    public const byte XmcCmdResetUsage = 0x08;     // clear page usage tracking
+    public const byte XmcCmdRelease    = 0x09;     // mark a range as free in usage tracking
+    public const byte XmcCmdAlloc      = 0x0A;     // allocate len bytes, returns XADDR+handle
+    public const byte XmcCmdNStash     = 0x0B;     // named stash: RAM->named block
+    public const byte XmcCmdNFetch     = 0x0C;     // named fetch: named block->RAM
+    public const byte XmcCmdNDelete    = 0x0D;     // delete named block
+    public const byte XmcCmdNDirOpen   = 0x0E;     // open named block directory
+    public const byte XmcCmdNDirRead   = 0x0F;     // read next named block directory entry
+
+    public const byte XmcStatusIdle    = 0x00;
+    public const byte XmcStatusOk      = 0x02;
+    public const byte XmcStatusError   = 0x03;
+
+    public const byte XmcErrNone       = 0x00;
+    public const byte XmcErrRange      = 0x01;
+    public const byte XmcErrBadArgs    = 0x02;
+    public const byte XmcErrNotFound   = 0x03;
+    public const byte XmcErrNoSpace    = 0x04;
+    public const byte XmcErrName       = 0x05;
+    public const byte XmcErrEndOfDir   = 0x06;
+
+    public const int FreeBase          = 0xBA40;
     public const int FreeEnd           = 0xBFFF;
 
     public const int RomBase           = 0xC000;
@@ -76,8 +163,8 @@ public static class VgcConstants
     public const int ScreenRows        = 25;
     public const int ScreenSize        = ScreenCols * ScreenRows;  // 2000
 
-    public const int GfxWidth          = 160;
-    public const int GfxHeight         = 50;
+    public const int GfxWidth          = 320;
+    public const int GfxHeight         = 200;
 
     public const int MaxSprites        = 16;
     public const int SpritePixelSize   = 16;       // 16x16 pixels
@@ -94,7 +181,7 @@ public static class VgcConstants
     // VGC core registers ($A000-$A00F)
     // -------------------------------------------------------------------------
 
-    public const int RegMode           = 0xA000;   // 0=text, 1=block, 2=mixed
+    public const int RegMode           = 0xA000;   // 0=text only, 1=gfx over text, 2=text over gfx
     public const int RegBgCol          = 0xA001;
     public const int RegFgCol          = 0xA002;
     public const int RegCursorX        = 0xA003;   // 0-79
@@ -104,7 +191,7 @@ public static class VgcConstants
     public const int RegBank           = 0xA007;   // reserved
     public const int RegStatus         = 0xA008;   // read-only
     public const int RegSpriteCount    = 0xA009;   // read-only sprite count
-    public const int RegReservedA      = 0xA00A;   // reserved
+    public const int RegCursorEnable   = 0xA00A;   // cursor visible (non-zero = show)
     public const int RegColSt          = 0xA00B;   // sprite-sprite collision (read clears)
     public const int RegColBg          = 0xA00C;   // sprite-background collision (read clears)
     public const int RegBorder         = 0xA00D;
@@ -143,6 +230,7 @@ public static class VgcConstants
     public const byte CmdFill          = 0x06;
     public const byte CmdGcls          = 0x07;
     public const byte CmdGcolor        = 0x08;
+    public const byte CmdPaint         = 0x09;
 
     // -------------------------------------------------------------------------
     // Sprite commands
@@ -157,4 +245,18 @@ public static class VgcConstants
     public const byte CmdSprDis        = 0x16;
     public const byte CmdSprFlip       = 0x17;
     public const byte CmdSprPri        = 0x18;
+
+    // -------------------------------------------------------------------------
+    // VGC memory I/O commands (via RegP0..RegP4)
+    // -------------------------------------------------------------------------
+
+    // P0=space, P1=addr low, P2=addr high, P3=data, P4=flags (bit0=auto-inc)
+    public const byte CmdMemRead       = 0x19;     // read selected memory into P3
+    public const byte CmdMemWrite      = 0x1A;     // write P3 into selected memory
+
+    // Memory spaces for CmdMemRead/CmdMemWrite
+    public const byte MemSpaceScreen   = 0x00;     // 2000 bytes (text character RAM)
+    public const byte MemSpaceColor    = 0x01;     // 2000 bytes (color RAM)
+    public const byte MemSpaceGfx      = 0x02;     // 320*200 bytes (graphics bitmap)
+    public const byte MemSpaceSprite   = 0x03;     // 16*128 bytes (sprite shape RAM)
 }

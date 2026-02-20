@@ -27,7 +27,7 @@ public sealed class SidChip : IDisposable
     private float _prevLowPass;
 
     // Accumulated samples from Clock() calls, consumed by RenderSamples
-    private readonly List<float> _sampleBuffer = new();
+    private readonly Queue<float> _sampleBuffer = new();
 
     public SidChip(bool enableAudio = false)
     {
@@ -102,7 +102,7 @@ public sealed class SidChip : IDisposable
                 {
                     _cycleAccumulator -= _cyclesPerSample;
                     float sample = MixSample(filterCtrl, filterSelect, cutoff, resonance, masterVol);
-                    _sampleBuffer.Add(sample);
+                    _sampleBuffer.Enqueue(sample);
                 }
 
                 remaining -= cyclesToRun;
@@ -123,12 +123,9 @@ public sealed class SidChip : IDisposable
             int available = Math.Min(count, _sampleBuffer.Count);
             for (int i = 0; i < available; i++)
             {
-                float clamped = Math.Clamp(_sampleBuffer[i], -1f, 1f);
+                float clamped = Math.Clamp(_sampleBuffer.Dequeue(), -1f, 1f);
                 pcm[i] = (short)(clamped * short.MaxValue);
             }
-
-            if (available > 0)
-                _sampleBuffer.RemoveRange(0, available);
             // Remaining samples stay at 0 (silence)
         }
 
