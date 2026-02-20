@@ -57,6 +57,7 @@ public static class VgcConstants
     public const int FioGAddrH         = 0xB9AC;   // graphics offset high
     public const int FioGLenL          = 0xB9AD;   // graphics length low
     public const int FioGLenH          = 0xB9AE;   // graphics length high
+    public const int FioDirType        = 0xB9AF;   // dir entry type: 0=PRG, 1=SID
     public const int FioName           = 0xB9B0;   // filename buffer (64 bytes ASCII)
     public const int FioNameEnd        = 0xB9EF;
 

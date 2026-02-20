@@ -8254,6 +8254,7 @@ FIO_GADDRL    = $B9AB          ; graphics offset low
 FIO_GADDRH    = $B9AC          ; graphics offset high
 FIO_GLENL     = $B9AD          ; graphics transfer length low
 FIO_GLENH     = $B9AE          ; graphics transfer length high
+FIO_DIRTYPE   = $B9AF          ; dir entry type: 0=PRG, 1=SID
 FIO_NAME      = $B9B0          ; filename buffer (64 bytes)
 
 FIO_CMD_SAVE  = $01            ; save program
@@ -9093,9 +9094,16 @@ LAB_DIR
       LDA   FIO_SIZEH         ; high byte in A
       LDX   FIO_SIZEL         ; low byte in X
       JSR   LAB_295E          ; print AX as unsigned integer
-      ; print "  PRG  "
+      ; print type based on FIO_DIRTYPE (0=PRG, 1=SID)
+      LDA   FIO_DIRTYPE
+      BNE   @dir_sid
       LDA   #<STR_PRG
       LDY   #>STR_PRG
+      JMP   @dir_ptype
+@dir_sid
+      LDA   #<STR_SID
+      LDY   #>STR_SID
+@dir_ptype
       JSR   LAB_18C3          ; print null terminated string
       ; print filename from FIO_NAME (length in FIO_NAMELEN)
       LDY   #$00
@@ -9118,6 +9126,7 @@ LAB_DIR
       RTS
 
 STR_PRG     .byte "  PRG  ",$00
+STR_SID     .byte "  SID  ",$00
 
 ; --- XMC expansion memory handlers ---
 

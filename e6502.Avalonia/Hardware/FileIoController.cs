@@ -187,7 +187,9 @@ public sealed partial class FileIoController
         {
             var dir = new DirectoryInfo(_saveDir);
             _dirFiles = dir.Exists
-                ? dir.GetFiles("*.bas").OrderBy(f => f.Name).ToList()
+                ? dir.GetFiles("*.bas")
+                      .Concat(dir.GetFiles("*.sid"))
+                      .OrderBy(f => f.Name).ToList()
                 : [];
             _dirIndex = 0;
 
@@ -399,7 +401,7 @@ public sealed partial class FileIoController
 
     private void PopulateDirEntry(FileInfo fi)
     {
-        // Name without .bas extension
+        // Name without extension
         string name = Path.GetFileNameWithoutExtension(fi.Name);
         int nameLen = Math.Min(name.Length, 63);
         _regs[VgcConstants.FioNameLen - VgcConstants.FioBase] = (byte)nameLen;
@@ -407,8 +409,12 @@ public sealed partial class FileIoController
         for (int i = 0; i < nameLen; i++)
             _regs[nameOffset + i] = (byte)name[i];
 
-        // File size excluding 2-byte load-address prefix
-        long dataSize = Math.Max(0, fi.Length - 2);
+        // File type: 0=PRG (.bas), 1=SID (.sid)
+        bool isSid = fi.Extension.Equals(".sid", StringComparison.OrdinalIgnoreCase);
+        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)(isSid ? 1 : 0);
+
+        // File size excluding 2-byte load-address prefix (PRG only)
+        long dataSize = isSid ? fi.Length : Math.Max(0, fi.Length - 2);
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
     }
