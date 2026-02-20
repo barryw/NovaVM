@@ -9111,14 +9111,15 @@ LAB_MUSIC
 
 ; --- MUSIC PRIORITY v1[,v2[,v3]] ---
 @m_priority
-      ; P already consumed by @m_chk_p; skip remaining "RIORITY" = 7 chars
-      JSR   LAB_IGBY          ; R (already matched, now consume)
-      JSR   LAB_IGBY          ; I
-      JSR   LAB_IGBY          ; O
-      JSR   LAB_IGBY          ; R
-      JSR   LAB_IGBY          ; I
-      JSR   LAB_IGBY          ; T
-      JSR   LAB_IGBY          ; Y
+      ; P already consumed by @m_chk_p.  Skip remaining keyword bytes.
+      ; "RIORITY" is tokenized as R,I,TK_OR,I,T,Y (OR becomes a token),
+      ; so we scan dynamically instead of using a fixed IGBY count.
+@m_pri_skip
+      JSR   LAB_IGBY          ; advance past current byte
+      CMP   #'A'              ; letters ($41-$5A) and tokens ($80+) are >= 'A'
+      BCS   @m_pri_skip       ; keep skipping keyword chars and tokens
+      ; A < 'A': hit a space or digit — keyword is consumed.
+      ; pointer is at the space/digit; LAB_GTBY calls GBYT which skips spaces.
       JSR   LAB_GTBY          ; first voice → X
       STX   FIO_SRCL
       LDA   #$00
