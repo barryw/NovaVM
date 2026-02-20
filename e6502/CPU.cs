@@ -40,6 +40,9 @@ namespace KDS.e6502
 
         // Flag for hardware interrupt (IRQ)
         public bool IrqWaiting { get; set; }
+
+        /// <summary>Clear the interrupt disable flag (equivalent to CLI instruction).</summary>
+        public void EnableInterrupts() => If = false;
         // Flag for non maskable interrupt (NMI)
         public bool NmiWaiting { get; set; }
 

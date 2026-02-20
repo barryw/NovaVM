@@ -8999,6 +8999,7 @@ LAB_SIDPLAY
       LDA   FIO_STATUS
       CMP   #FIO_OK
       BNE   @sp_chk_err
+      CLI                     ; enable interrupts so timer IRQ can fire
       RTS
 @sp_chk_err
       LDA   FIO_ERRCODE

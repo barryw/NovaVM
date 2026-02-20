@@ -799,6 +799,7 @@ public sealed class EmulatorTcpServer : IDisposable
             return Error($"Payload extends past ${VgcConstants.BasicEnd:X4}");
 
         _bus.SidPlayer.Play(info, song);
+        _cpu.EnableInterrupts();
 
         var result = new JsonObject
         {
