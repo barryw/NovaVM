@@ -5,12 +5,12 @@ namespace KDS.e6502.OpCodes
     internal class OpCodeRecord
     {
         public byte OpCode { get; }
-        private string Instruction { get; }
+        internal string Instruction { get; }
         public AddressModes AddressMode { get; }
         public ushort Bytes { get; private set; }
         public int Cycles { get; private set; }
         public bool CheckPageBoundary { get; private set; }
-        private bool IsValid { get; }
+        internal bool IsValid { get; }
 
         public OpCodeRecord()
         {
