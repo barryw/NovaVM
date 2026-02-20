@@ -798,42 +798,7 @@ public sealed class EmulatorTcpServer : IDisposable
         if (info.LoadAddress + info.Payload.Length > VgcConstants.BasicEnd + 1)
             return Error($"Payload extends past ${VgcConstants.BasicEnd:X4}");
 
-        // Copy payload into RAM
-        for (int i = 0; i < info.Payload.Length; i++)
-            _bus.Write((ushort)(info.LoadAddress + i), info.Payload[i]);
-
-        // Inject IRQ trampoline at $03E0
-        // PHA; TXA; PHA; TYA; PHA; JSR play; LDA $BA41; PLA; TAY; PLA; TAX; PLA; RTI
-        byte playLo = (byte)(info.PlayAddress & 0xFF);
-        byte playHi = (byte)(info.PlayAddress >> 8);
-        byte[] trampoline =
-        [
-            0x48,                       // $03E0: PHA
-            0x8A,                       // $03E1: TXA
-            0x48,                       // $03E2: PHA
-            0x98,                       // $03E3: TYA
-            0x48,                       // $03E4: PHA
-            0x20, playLo, playHi,       // $03E5: JSR play
-            0xAD, 0x41, 0xBA,           // $03E8: LDA $BA41 (ack timer IRQ)
-            0x68,                       // $03EB: PLA
-            0xA8,                       // $03EC: TAY
-            0x68,                       // $03ED: PLA
-            0xAA,                       // $03EE: TAX
-            0x68,                       // $03EF: PLA
-            0x40                        // $03F0: RTI
-        ];
-        for (int i = 0; i < trampoline.Length; i++)
-            _bus.Write((ushort)(0x03E0 + i), trampoline[i]);
-
-        // Set IRQ vector at $FFFE/$FFFF to $03E0 (bypass ROM protection)
-        _bus.WriteRam(0xFFFE, 0xE0);
-        _bus.WriteRam(0xFFFF, 0x03);
-
-        // Configure timer: 50Hz for PAL (VBI), 60Hz for CIA timing
-        int divisor = info.UsesCiaTiming ? 167 : 200;
-        _bus.Write((ushort)VgcConstants.TimerDivL, (byte)(divisor & 0xFF));
-        _bus.Write((ushort)VgcConstants.TimerDivH, (byte)(divisor >> 8));
-        _bus.Write((ushort)VgcConstants.TimerCtrl, 0x01);
+        _bus.SidPlayer.Play(info, song);
 
         var result = new JsonObject
         {
@@ -854,17 +819,7 @@ public sealed class EmulatorTcpServer : IDisposable
 
     private string CmdSidStop()
     {
-        // Disable timer
-        _bus.Write((ushort)VgcConstants.TimerCtrl, 0x00);
-
-        // Gate off all 3 SID voices (control registers at offsets $04, $0B, $12)
-        _bus.Write((ushort)(VgcConstants.SidBase + 0x04), 0x00);
-        _bus.Write((ushort)(VgcConstants.SidBase + 0x0B), 0x00);
-        _bus.Write((ushort)(VgcConstants.SidBase + 0x12), 0x00);
-
-        // Zero volume
-        _bus.Write((ushort)(VgcConstants.SidBase + 0x18), 0x00);
-
+        _bus.SidPlayer.Stop();
         return Ok();
     }
 

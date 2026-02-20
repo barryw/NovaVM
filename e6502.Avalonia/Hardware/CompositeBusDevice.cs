@@ -10,15 +10,18 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly FileIoController _fio;
     private readonly VirtualExpansionMemoryController _xmc;
     private readonly VirtualTimerController _timer = new();
+    private readonly SidPlayer _sidPlayer;
 
     public VirtualGraphicsController Vgc => _vgc;
     public SidChip Sid => _sid;
     public FileIoController Fio => _fio;
     public VirtualTimerController Timer => _timer;
+    public SidPlayer SidPlayer => _sidPlayer;
 
     public CompositeBusDevice(bool enableSound = false)
     {
         _sid = new SidChip(enableSound);
+        _sidPlayer = new SidPlayer(this);
 
         _fio = new FileIoController(
             addr => _ram[addr],
