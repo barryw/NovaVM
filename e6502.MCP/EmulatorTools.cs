@@ -443,7 +443,7 @@ public static class EmulatorTools
     public static async Task<string> Instrument(
         EmulatorClient client,
         [Description("Instrument slot (0-15)")] int id,
-        [Description("Waveform: 1=triangle, 2=sawtooth, 4=pulse, 8=noise")] int waveform,
+        [Description("SID waveform: 16=triangle, 32=sawtooth, 64=pulse, 128=noise")] int waveform,
         [Description("Attack (0-15)")] int a,
         [Description("Decay (0-15)")] int d,
         [Description("Sustain (0-15)")] int s,
