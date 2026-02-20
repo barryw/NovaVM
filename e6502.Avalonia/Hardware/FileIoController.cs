@@ -11,6 +11,7 @@ public sealed partial class FileIoController
     private readonly Func<byte, int, byte>? _vgcRead;
     private readonly Action<byte, int, byte>? _vgcWrite;
     private readonly Func<byte, int>? _vgcSpaceLength;
+    private readonly SidPlayer? _sidPlayer;
     private readonly string _saveDir;
     private List<FileInfo>? _dirFiles;
     private int _dirIndex;
@@ -21,13 +22,15 @@ public sealed partial class FileIoController
         string? saveDir = null,
         Func<byte, int, byte>? vgcRead = null,
         Action<byte, int, byte>? vgcWrite = null,
-        Func<byte, int>? vgcSpaceLength = null)
+        Func<byte, int>? vgcSpaceLength = null,
+        SidPlayer? sidPlayer = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
         _vgcRead = vgcRead;
         _vgcWrite = vgcWrite;
         _vgcSpaceLength = vgcSpaceLength;
+        _sidPlayer = sidPlayer;
         _saveDir = saveDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "e6502-programs");
@@ -73,6 +76,12 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdGLoad:
                 DoGLoad();
+                break;
+            case VgcConstants.FioCmdSidPlay:
+                DoSidPlay();
+                break;
+            case VgcConstants.FioCmdSidStop:
+                DoSidStop();
                 break;
             default:
                 SetError(VgcConstants.FioErrIo);
@@ -348,6 +357,44 @@ public sealed partial class FileIoController
         {
             SetError(VgcConstants.FioErrIo);
         }
+    }
+
+    private void DoSidPlay()
+    {
+        if (_sidPlayer is null) { SetError(VgcConstants.FioErrIo); return; }
+
+        try
+        {
+            string? filename = ReadFilename();
+            if (filename is null) { SetError(VgcConstants.FioErrIo); return; }
+
+            string path = GetFullPath(filename, ".sid");
+            if (!File.Exists(path))
+            {
+                SetError(VgcConstants.FioErrNotFound);
+                return;
+            }
+
+            byte[] data = File.ReadAllBytes(path);
+            var info = SidFileParser.Parse(data);
+            if (!info.IsValid) { SetError(VgcConstants.FioErrIo); return; }
+
+            // Song number from FioSrcL register (1-based, default to StartSong)
+            int song = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+            if (song < 1) song = info.StartSong;
+
+            _sidPlayer.Play(info, song);
+            SetOk();
+        }
+        catch (FileNotFoundException) { SetError(VgcConstants.FioErrNotFound); }
+        catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    private void DoSidStop()
+    {
+        if (_sidPlayer is null) { SetError(VgcConstants.FioErrIo); return; }
+        _sidPlayer.Stop();
+        SetOk();
     }
 
     private void PopulateDirEntry(FileInfo fi)

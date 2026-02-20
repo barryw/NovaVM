@@ -67,6 +67,8 @@ public static class VgcConstants
     public const byte FioCmdDelete     = 0x05;
     public const byte FioCmdGSave      = 0x06;     // VGC memory -> disk
     public const byte FioCmdGLoad      = 0x07;     // disk -> VGC memory
+    public const byte FioCmdSidPlay    = 0x08;     // .sid file → SID playback
+    public const byte FioCmdSidStop    = 0x09;     // stop SID playback
 
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;

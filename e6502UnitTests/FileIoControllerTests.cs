@@ -208,6 +208,27 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void FioCmdSidStop_SetsOk()
+    {
+        var bus = new CompositeBusDevice();
+        bus.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSidStop);
+        Assert.AreEqual(VgcConstants.FioStatusOk, bus.Read((ushort)VgcConstants.FioStatus));
+    }
+
+    [TestMethod]
+    public void FioCmdSidPlay_NoFile_SetsNotFoundError()
+    {
+        var bus = new CompositeBusDevice();
+        string name = "nonexistent";
+        bus.Write((ushort)VgcConstants.FioNameLen, (byte)name.Length);
+        for (int i = 0; i < name.Length; i++)
+            bus.Write((ushort)(VgcConstants.FioName + i), (byte)name[i]);
+        bus.Write((ushort)VgcConstants.FioSrcL, 0x01);
+        bus.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSidPlay);
+        Assert.AreEqual(VgcConstants.FioStatusError, bus.Read((ushort)VgcConstants.FioStatus));
+    }
+
+    [TestMethod]
     public void GLoad_ReadsGraphicsDataFromGfxFile()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");

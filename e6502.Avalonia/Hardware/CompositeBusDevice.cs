@@ -29,7 +29,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             saveDir: null,
             vgcRead: (space, offset) => _vgc.TryReadMemorySpace(space, offset, out byte value) ? value : (byte)0,
             vgcWrite: (space, offset, value) => _vgc.TryWriteMemorySpace(space, offset, value),
-            vgcSpaceLength: space => _vgc.GetMemorySpaceLength(space));
+            vgcSpaceLength: space => _vgc.GetMemorySpaceLength(space),
+            sidPlayer: _sidPlayer);
         _xmc = new VirtualExpansionMemoryController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data);
