@@ -9050,14 +9050,11 @@ LAB_MUSIC
 
 ; --- MUSIC PLAY or PRIORITY ---
 @m_chk_p
-      ; Peek at second character to distinguish PLAY vs PRIORITY
-      INY                     ; advance basic offset
-      LDA   (Bpntrl),Y       ; peek second character
-      DEY                     ; restore
-      CMP   #'R'              ; PRIORITY starts PR...
+      ; Consume P, then check next char to distinguish PLAY vs PRIORITY
+      JSR   LAB_IGBY          ; consume P, A = next char
+      CMP   #'R'              ; PRIORITY has R after P
       BEQ   @m_priority
-      ; else PLAY — skip "PLAY" (4 chars)
-      JSR   LAB_IGBY          ; P
+      ; else PLAY — consume remaining "LAY" (3 chars, P already consumed)
       JSR   LAB_IGBY          ; L
       JSR   LAB_IGBY          ; A
       JSR   LAB_IGBY          ; Y
@@ -9114,9 +9111,8 @@ LAB_MUSIC
 
 ; --- MUSIC PRIORITY v1[,v2[,v3]] ---
 @m_priority
-      ; skip "PRIORITY" = 8 chars
-      JSR   LAB_IGBY          ; P
-      JSR   LAB_IGBY          ; R
+      ; P already consumed by @m_chk_p; skip remaining "RIORITY" = 7 chars
+      JSR   LAB_IGBY          ; R (already matched, now consume)
       JSR   LAB_IGBY          ; I
       JSR   LAB_IGBY          ; O
       JSR   LAB_IGBY          ; R
