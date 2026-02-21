@@ -26,6 +26,20 @@ public interface IScreenInput
 /// </summary>
 public class VirtualGraphicsController
 {
+    public readonly struct CopperEvent
+    {
+        public CopperEvent(ushort position, byte registerIndex, byte value)
+        {
+            Position = position;
+            RegisterIndex = registerIndex;
+            Value = value;
+        }
+
+        public ushort Position { get; }
+        public byte RegisterIndex { get; }
+        public byte Value { get; }
+    }
+
     // Core registers $A000-$A00F (16 bytes)
     private readonly byte[] _regs = new byte[16];
 
@@ -57,6 +71,12 @@ public class VirtualGraphicsController
     // IRQ control register ($A01F)
     private byte _irqCtrl;
 
+    // Copper program (host-side, command driven)
+    private readonly List<CopperEvent> _copperEvents = [];
+    private CopperEvent[] _copperProgram = [];
+    private bool _copperDirty;
+    private bool _copperEnabled;
+
 
     // Screen input source
     private IScreenInput? _screenEditor;
@@ -78,6 +98,10 @@ public class VirtualGraphicsController
         Array.Clear(_gfxBitmap);
         _gfxDrawColor = 1;
         _irqCtrl = 0;
+        _copperEvents.Clear();
+        _copperProgram = [];
+        _copperDirty = false;
+        _copperEnabled = false;
 
         // Default sprite priority: in front of all
         Array.Fill(_spritePriority, (byte)VgcConstants.SpritePriInFront);
@@ -273,6 +297,12 @@ public class VirtualGraphicsController
     public byte GetBgColor() =>
         _regs[VgcConstants.RegBgCol - VgcConstants.VgcBase];
 
+    public byte GetScrollX() =>
+        _regs[VgcConstants.RegScrollX - VgcConstants.VgcBase];
+
+    public byte GetScrollY() =>
+        _regs[VgcConstants.RegScrollY - VgcConstants.VgcBase];
+
     public byte GetBorderColor() =>
         _regs[VgcConstants.RegBorder - VgcConstants.VgcBase];
 
@@ -286,6 +316,13 @@ public class VirtualGraphicsController
         _regs[VgcConstants.RegCursorEnable - VgcConstants.VgcBase] != 0;
 
     public bool IsRasterIrqEnabled => (_irqCtrl & 0x01) != 0;
+    public bool IsCopperEnabled => _copperEnabled;
+
+    public ReadOnlySpan<CopperEvent> GetCopperProgram()
+    {
+        RebuildCopperProgramIfDirty();
+        return _copperProgram;
+    }
 
     public bool GetGfxPixel(int x, int y) =>
         _gfxBitmap[y * VgcConstants.GfxWidth + x] != 0;
@@ -330,6 +367,8 @@ public class VirtualGraphicsController
             ExecuteSpriteCommand(cmd);
         else if (cmd == VgcConstants.CmdMemRead || cmd == VgcConstants.CmdMemWrite)
             ExecuteMemoryCommand(cmd);
+        else if (cmd >= VgcConstants.CmdCopperAdd && cmd <= VgcConstants.CmdCopperDisable)
+            ExecuteCopperCommand(cmd);
         else if (cmd >= VgcConstants.CmdPlot && cmd <= VgcConstants.CmdPaint)
             ExecuteGfxCommand(cmd);
     }
@@ -552,6 +591,99 @@ public class VirtualGraphicsController
             default:
                 return false;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Copper (raster) commands
+    // -------------------------------------------------------------------------
+
+    private void ExecuteCopperCommand(byte cmd)
+    {
+        switch (cmd)
+        {
+            case VgcConstants.CmdCopperAdd:
+                AddCopperEventFromRegisters();
+                break;
+            case VgcConstants.CmdCopperClear:
+                _copperEvents.Clear();
+                _copperProgram = [];
+                _copperDirty = false;
+                break;
+            case VgcConstants.CmdCopperEnable:
+                _copperEnabled = true;
+                break;
+            case VgcConstants.CmdCopperDisable:
+                _copperEnabled = false;
+                break;
+        }
+    }
+
+    private void AddCopperEventFromRegisters()
+    {
+        int x = _cmdRegs[1] | (_cmdRegs[2] << 8);   // P0/P1
+        int y = _cmdRegs[3];                        // P2
+        int regSpecifier = _cmdRegs[4] | (_cmdRegs[5] << 8); // P3/P4
+        byte value = _cmdRegs[6];                   // P5
+
+        if ((uint)x >= VgcConstants.GfxWidth || (uint)y >= VgcConstants.GfxHeight)
+            return;
+        if (!TryResolveCopperRegister(regSpecifier, out byte registerIndex))
+            return;
+
+        ushort position = (ushort)(y * VgcConstants.GfxWidth + x);
+
+        for (int i = 0; i < _copperEvents.Count; i++)
+        {
+            var existing = _copperEvents[i];
+            if (existing.Position != position || existing.RegisterIndex != registerIndex)
+                continue;
+            _copperEvents[i] = new CopperEvent(position, registerIndex, value);
+            _copperDirty = true;
+            return;
+        }
+
+        if (_copperEvents.Count >= VgcConstants.MaxCopperEntries)
+            return;
+
+        _copperEvents.Add(new CopperEvent(position, registerIndex, value));
+        _copperDirty = true;
+    }
+
+    private static bool TryResolveCopperRegister(int registerSpecifier, out byte registerIndex)
+    {
+        registerIndex = 0;
+
+        if ((uint)registerSpecifier < 16)
+        {
+            registerIndex = (byte)registerSpecifier;
+            return IsCopperWritableRegister(registerIndex);
+        }
+
+        if (registerSpecifier < VgcConstants.VgcBase || registerSpecifier >= VgcConstants.VgcBase + 16)
+            return false;
+
+        registerIndex = (byte)(registerSpecifier - VgcConstants.VgcBase);
+        return IsCopperWritableRegister(registerIndex);
+    }
+
+    private static bool IsCopperWritableRegister(byte registerIndex) =>
+        registerIndex == VgcConstants.RegMode - VgcConstants.VgcBase ||
+        registerIndex == VgcConstants.RegBgCol - VgcConstants.VgcBase ||
+        registerIndex == VgcConstants.RegScrollX - VgcConstants.VgcBase ||
+        registerIndex == VgcConstants.RegScrollY - VgcConstants.VgcBase;
+
+    private void RebuildCopperProgramIfDirty()
+    {
+        if (!_copperDirty)
+            return;
+
+        _copperProgram = _copperEvents.ToArray();
+        Array.Sort(_copperProgram, static (a, b) =>
+        {
+            int byPos = a.Position.CompareTo(b.Position);
+            return byPos != 0 ? byPos : a.RegisterIndex.CompareTo(b.RegisterIndex);
+        });
+        _copperDirty = false;
     }
 
     // -------------------------------------------------------------------------

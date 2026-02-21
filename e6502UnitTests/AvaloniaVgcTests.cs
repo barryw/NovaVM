@@ -455,4 +455,65 @@ public class AvaloniaVgcTests
         vgc.Write(VgcConstants.RegIrqCtrl, 0x00);
         Assert.IsFalse(vgc.IsRasterIrqEnabled);
     }
+
+    [TestMethod]
+    public void ScrollRegisters_WriteAndRead()
+    {
+        _vgc.Write(VgcConstants.RegScrollX, 12);
+        _vgc.Write(VgcConstants.RegScrollY, 34);
+
+        Assert.AreEqual(12, _vgc.GetScrollX());
+        Assert.AreEqual(34, _vgc.GetScrollY());
+    }
+
+    [TestMethod]
+    public void Copper_AddEnableClear_Disable()
+    {
+        _vgc.Write(VgcConstants.RegP0, 40); // x low
+        _vgc.Write(VgcConstants.RegP1, 0);  // x high
+        _vgc.Write(VgcConstants.RegP2, 10); // y
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegMode & 0xFF)); // reg low
+        _vgc.Write(VgcConstants.RegP4, (byte)((VgcConstants.RegMode >> 8) & 0xFF)); // reg high
+        _vgc.Write(VgcConstants.RegP5, 2); // value
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperEnable);
+        Assert.IsTrue(_vgc.IsCopperEnabled);
+
+        var program = _vgc.GetCopperProgram();
+        Assert.AreEqual(1, program.Length);
+        Assert.AreEqual((ushort)(10 * VgcConstants.GfxWidth + 40), program[0].Position);
+        Assert.AreEqual((byte)(VgcConstants.RegMode - VgcConstants.VgcBase), program[0].RegisterIndex);
+        Assert.AreEqual(2, program[0].Value);
+
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperClear);
+        Assert.AreEqual(0, _vgc.GetCopperProgram().Length);
+
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperDisable);
+        Assert.IsFalse(_vgc.IsCopperEnabled);
+    }
+
+    [TestMethod]
+    public void Copper_Program_IsSortedByRasterPosition()
+    {
+        _vgc.Write(VgcConstants.RegP0, 30); // x low
+        _vgc.Write(VgcConstants.RegP1, 0);  // x high
+        _vgc.Write(VgcConstants.RegP2, 8);  // y
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegBgCol - VgcConstants.VgcBase)); // register index
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 6);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.Write(VgcConstants.RegP0, 5); // x low
+        _vgc.Write(VgcConstants.RegP1, 0); // x high
+        _vgc.Write(VgcConstants.RegP2, 2); // y
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegMode - VgcConstants.VgcBase)); // register index
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        var program = _vgc.GetCopperProgram();
+        Assert.AreEqual(2, program.Length);
+        Assert.IsTrue(program[0].Position < program[1].Position);
+    }
 }

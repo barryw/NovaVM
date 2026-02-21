@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using e6502.Avalonia.Debugging;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
 using e6502.Avalonia.Ipc;
@@ -34,9 +35,12 @@ public partial class MainWindow : Window
         _canvas = new EmulatorCanvas(_bus.Vgc, font, _editor);
         Content = _canvas;
 
+        // Debugger service
+        var debugger = new DebuggerService(_cpu, _bus);
+
         // TCP server for MCP
         int tcpPort = int.TryParse(Environment.GetEnvironmentVariable("EMULATOR_PORT"), out int ep) ? ep : 6502;
-        var tcpServer = new EmulatorTcpServer(_bus, _editor, _cpu, tcpPort);
+        var tcpServer = new EmulatorTcpServer(_bus, _editor, _cpu, debugger, tcpPort);
         tcpServer.Start();
 
         // CPU thread
@@ -45,6 +49,7 @@ public partial class MainWindow : Window
             int timerAccum = 0;
             while (_running)
             {
+                debugger.CheckBreakpointAndWait();
                 int cycles = _cpu.ClocksForNext();
                 _cpu.ExecuteNext();
                 timerAccum += cycles;

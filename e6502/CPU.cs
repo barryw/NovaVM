@@ -3,6 +3,10 @@ using KDS.e6502.Utility;
 
 namespace KDS.e6502
 {
+    public readonly record struct CpuState(
+        byte A, byte X, byte Y, byte Sp, ushort Pc,
+        bool Nf, bool Vf, bool Df, bool If, bool Zf, bool Cf);
+
     public enum E6502Type
     {
         Cmos,
@@ -81,6 +85,27 @@ namespace KDS.e6502
             IrqWaiting = false;
             _cpuType = cpuType;
             SystemBus = bus;
+        }
+
+        public CpuState GetState() => new(A, X, Y, Sp, Pc, Nf, Vf, Df, If, Zf, Cf);
+
+        public (string Text, int Bytes) Disassemble(ushort address)
+        {
+            var op = _opCodeTable.OpCodes[SystemBus.Read(address)];
+            if (!op.IsValid)
+                return ($"??? (${SystemBus.Read(address):X2})", 1);
+
+            int oper = op.Bytes switch
+            {
+                2 => SystemBus.Read((ushort)(address + 1)),
+                3 => SystemBus.Read((ushort)(address + 1)) | (SystemBus.Read((ushort)(address + 2)) << 8),
+                _ => 0
+            };
+
+            if (op.AddressMode == OpCodes.AddressModes.BranchExt)
+                oper = (SystemBus.Read((ushort)(address + 1)) << 8) | SystemBus.Read((ushort)(address + 2));
+
+            return (op.Dasm(oper), op.Bytes);
         }
 
         public void Boot()

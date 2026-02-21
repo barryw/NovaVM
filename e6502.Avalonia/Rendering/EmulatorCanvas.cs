@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
 
@@ -20,6 +21,10 @@ public class EmulatorCanvas : Control
     private readonly object _renderLock = new();
     private bool _cursorVisible = true;
     private bool _quoteMode;
+    private static readonly uint[] Palette = BuildPalette();
+    private readonly byte[] _spriteMapBehind = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+    private readonly byte[] _spriteMapBetween = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+    private readonly byte[] _spriteMapFront = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
 
     public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor)
     {
@@ -72,8 +77,7 @@ public class EmulatorCanvas : Control
                 e.Handled = true;
                 break;
             case Key.Enter:
-                _quoteMode = false;
-                _editor.QueueInput(0x0D);
+                _ = QueueEnterAsync();
                 e.Handled = true;
                 break;
             case Key.Back:
@@ -84,15 +88,43 @@ public class EmulatorCanvas : Control
                 _editor.QueueInput(0x03);
                 e.Handled = true;
                 break;
-            default:
-                if (e.KeySymbol is { Length: 1 } s && s[0] >= 0x20 && s[0] <= 0x7E)
-                {
-                    QueuePrintableChar((byte)s[0]);
-                    e.Handled = true;
-                }
-                break;
         }
         base.OnKeyDown(e);
+    }
+
+    protected override void OnTextInput(TextInputEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.Text))
+        {
+            base.OnTextInput(e);
+            return;
+        }
+
+        bool handled = false;
+        foreach (char ch in e.Text)
+        {
+            if (ch < 0x20 || ch > 0x7E)
+                continue;
+            QueuePrintableChar((byte)ch);
+            handled = true;
+        }
+
+        if (handled)
+            e.Handled = true;
+
+        base.OnTextInput(e);
+    }
+
+    private async Task QueueEnterAsync()
+    {
+        // Ensure pending text-input events are delivered before CR, then
+        // wait briefly for queued bytes to drain so Enter cannot overtake text.
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        await Task.Delay(4);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        await WaitForInputIdleAsync(maxWaitMs: 250);
+        _quoteMode = false;
+        _editor.QueueInput(0x0D);
     }
 
     private async Task PasteClipboardAsync()
@@ -105,6 +137,9 @@ public class EmulatorCanvas : Control
         if (string.IsNullOrEmpty(text))
             return;
 
+        // Start only when BASIC is accepting line input.
+        await WaitForInputIdleAsync(maxWaitMs: 3000);
+
         for (int i = 0; i < text.Length; i++)
         {
             char ch = text[i];
@@ -116,6 +151,7 @@ public class EmulatorCanvas : Control
                     continue;
                 _quoteMode = false;
                 _editor.QueueInput(0x0D);
+                await WaitForInputIdleAsync(maxWaitMs: 8000);
                 continue;
             }
 
@@ -123,7 +159,21 @@ public class EmulatorCanvas : Control
                 ch = ' ';
 
             if (ch >= 0x20 && ch <= 0x7E)
+            {
                 QueuePrintableChar((byte)ch);
+            }
+        }
+    }
+
+    private async Task WaitForInputIdleAsync(int maxWaitMs)
+    {
+        // Fast-safe gate: next line only after BASIC consumed queued bytes
+        // and is back in prompt/input mode.
+        int waited = 0;
+        while ((_editor.HasQueuedInput || !_vgc.IsCursorEnabled) && waited < maxWaitMs)
+        {
+            await Task.Delay(1);
+            waited++;
         }
     }
 
@@ -163,125 +213,223 @@ public class EmulatorCanvas : Control
         var ptr = (uint*)fb.Address;
         int stride = fb.RowBytes / 4;
 
-        uint bgColor = ColorPalette.GetBgra(_vgc.GetBgColor());
+        BuildSpritePriorityMaps();
 
-        // Pass 1: Fill background
-        for (int i = 0; i < NativeWidth * NativeHeight; i++)
-            ptr[i] = bgColor;
+        ReadOnlySpan<VirtualGraphicsController.CopperEvent> copperProgram = _vgc.GetCopperProgram();
+        bool copperEnabled = _vgc.IsCopperEnabled && !copperProgram.IsEmpty;
+        int copperIndex = 0;
 
-        byte mode = _vgc.GetMode();
+        var state = RenderVideoState.FromVgc(_vgc);
+        int cursorX = _vgc.GetCursorX();
+        int cursorY = _vgc.GetCursorY();
+        bool cursorEnabled = _cursorVisible && _vgc.IsCursorEnabled;
 
-        // Pass 2: Priority-0 sprites (behind everything)
-        RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriBehindAll);
-
-        if (mode == 2)
+        for (int y = 0; y < VgcConstants.GfxHeight; y++)
         {
-            // Mode 2: Text on top of graphics (text bg is transparent)
-            RenderGraphics(ptr, stride);
-            RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriBetween);
-            RenderText(ptr, stride, bgColor, transparentBg: true);
-        }
-        else
-        {
-            // Mode 0/1: Graphics on top of text (text only when mode 0)
-            RenderText(ptr, stride, bgColor);
-            RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriBetween);
-            if (mode >= 1)
-                RenderGraphics(ptr, stride);
-        }
+            for (int x = 0; x < VgcConstants.GfxWidth; x++)
+            {
+                if (copperEnabled)
+                {
+                    int position = y * VgcConstants.GfxWidth + x;
+                    while (copperIndex < copperProgram.Length && copperProgram[copperIndex].Position == position)
+                    {
+                        state.Apply(copperProgram[copperIndex].RegisterIndex, copperProgram[copperIndex].Value);
+                        copperIndex++;
+                    }
+                }
 
-        // Priority-2 sprites (in front of everything)
-        RenderSpritesAtPriority(ptr, stride, VgcConstants.SpritePriInFront);
+                int logicalIndex = y * VgcConstants.GfxWidth + x;
+                byte spriteBehind = _spriteMapBehind[logicalIndex];
+                byte spriteBetween = _spriteMapBetween[logicalIndex];
+                byte spriteFront = _spriteMapFront[logicalIndex];
+
+                int sampleGfxX = Wrap320(x + state.ScrollX);
+                int sampleGfxY = Wrap200(y + state.ScrollY);
+                byte gfxColorIndex = _vgc.GetGfxPixelColor(sampleGfxX, sampleGfxY);
+                uint gfxPixel = gfxColorIndex == 0 ? 0u : Palette[gfxColorIndex & 0x0F];
+
+                for (int dy = 0; dy < 2; dy++)
+                {
+                    int py = y * 2 + dy;
+                    int rowBase = py * stride;
+                    for (int dx = 0; dx < 2; dx++)
+                    {
+                        int px = x * 2 + dx;
+                        uint pixel = Palette[state.BgColor & 0x0F];
+
+                        if (spriteBehind != 0)
+                            pixel = Palette[spriteBehind & 0x0F];
+
+                        bool textOpaque = TrySampleTextPixel(px, py, state, cursorX, cursorY, cursorEnabled, out uint textPixel);
+                        if (state.Mode == 2)
+                        {
+                            if (gfxPixel != 0)
+                                pixel = gfxPixel;
+                            if (spriteBetween != 0)
+                                pixel = Palette[spriteBetween & 0x0F];
+                            if (textOpaque)
+                                pixel = textPixel;
+                        }
+                        else
+                        {
+                            if (textOpaque)
+                                pixel = textPixel;
+                            if (spriteBetween != 0)
+                                pixel = Palette[spriteBetween & 0x0F];
+                            if (state.Mode >= 1 && gfxPixel != 0)
+                                pixel = gfxPixel;
+                        }
+
+                        if (spriteFront != 0)
+                            pixel = Palette[spriteFront & 0x0F];
+
+                        ptr[rowBase + px] = pixel;
+                    }
+                }
+            }
+        }
 
         // Collision detection
         var (ss, sb) = SpriteRenderer.DetectCollisions(_vgc);
         _vgc.SetCollisionRegisters(ss, sb);
     }
 
-    private unsafe void RenderText(uint* ptr, int stride, uint bgColor, bool transparentBg = false)
+    private void BuildSpritePriorityMaps()
     {
-        int cx = _vgc.GetCursorX();
-        int cy = _vgc.GetCursorY();
+        Array.Clear(_spriteMapBehind);
+        Array.Clear(_spriteMapBetween);
+        Array.Clear(_spriteMapFront);
 
-        for (int row = 0; row < VgcConstants.ScreenRows; row++)
-        {
-            for (int col = 0; col < VgcConstants.ScreenCols; col++)
-            {
-                byte ch = _vgc.GetScreenChar(col, row);
-                byte colorIdx = _vgc.GetScreenColor(col, row);
-
-                uint fg = ColorPalette.GetBgra(colorIdx);
-                uint bg = bgColor;
-
-                bool isCursor = _cursorVisible && _vgc.IsCursorEnabled && col == cx && row == cy;
-                if (isCursor) (fg, bg) = (bg, fg);
-
-                int cellX = col * BitmapFont.GlyphWidth;
-                int cellY = row * BitmapFont.GlyphHeight * 2;
-
-                for (int gy = 0; gy < BitmapFont.GlyphHeight; gy++)
-                {
-                    byte rowBits = _font.GetRow(ch, gy);
-                    int py = cellY + gy * 2;
-                    for (int gx = 0; gx < BitmapFont.GlyphWidth; gx++)
-                    {
-                        int px = cellX + gx;
-                        bool set = (rowBits & (0x80 >> gx)) != 0;
-                        if (transparentBg && !set && !isCursor) continue;
-                        uint c = set ? fg : bg;
-                        ptr[py * stride + px] = c;
-                        ptr[(py + 1) * stride + px] = c;
-                    }
-                }
-            }
-        }
-    }
-
-    private unsafe void RenderGraphics(uint* ptr, int stride)
-    {
-        for (int gy = 0; gy < VgcConstants.GfxHeight; gy++)
-        {
-            for (int gx = 0; gx < VgcConstants.GfxWidth; gx++)
-            {
-                byte color = _vgc.GetGfxPixelColor(gx, gy);
-                if (color == 0) continue;
-
-                uint pixel = ColorPalette.GetBgra(color);
-                int baseX = gx * 2;
-                int baseY = gy * 2;
-
-                for (int dy = 0; dy < 2; dy++)
-                    for (int dx = 0; dx < 2; dx++)
-                        ptr[(baseY + dy) * stride + (baseX + dx)] = pixel;
-            }
-        }
-    }
-
-    private unsafe void RenderSpritesAtPriority(uint* ptr, int stride, int priority)
-    {
         for (int i = 0; i < VgcConstants.MaxSprites; i++)
         {
-            var state = _vgc.GetSpriteState(i);
-            if (!state.enabled || state.priority != priority) continue;
+            var spriteState = _vgc.GetSpriteState(i);
+            if (!spriteState.enabled)
+                continue;
 
-            var pixels = SpriteRenderer.GetSpritePixels(_vgc, i);
-            foreach (var sp in pixels)
+            byte[] target = spriteState.priority switch
             {
-                int baseX = sp.ScreenX * 2;
-                int baseY = sp.ScreenY * 2;
-                uint color = ColorPalette.GetBgra(sp.Color);
+                VgcConstants.SpritePriBehindAll => _spriteMapBehind,
+                VgcConstants.SpritePriBetween => _spriteMapBetween,
+                _ => _spriteMapFront
+            };
 
-                for (int dy = 0; dy < 2; dy++)
-                {
-                    int py = baseY + dy;
-                    if (py < 0 || py >= NativeHeight) continue;
-                    for (int dx = 0; dx < 2; dx++)
-                    {
-                        int px = baseX + dx;
-                        if (px < 0 || px >= NativeWidth) continue;
-                        ptr[py * stride + px] = color;
-                    }
-                }
+            foreach (var pixel in SpriteRenderer.GetSpritePixels(_vgc, i))
+            {
+                if ((uint)pixel.ScreenX >= VgcConstants.GfxWidth || (uint)pixel.ScreenY >= VgcConstants.GfxHeight)
+                    continue;
+
+                target[pixel.ScreenY * VgcConstants.GfxWidth + pixel.ScreenX] = (byte)(pixel.Color & 0x0F);
+            }
+        }
+    }
+
+    private bool TrySampleTextPixel(
+        int px,
+        int py,
+        RenderVideoState state,
+        int cursorX,
+        int cursorY,
+        bool cursorEnabled,
+        out uint pixel)
+    {
+        int srcPx = Wrap640(px + (state.ScrollX << 1));
+        int srcPy = Wrap400(py + (state.ScrollY << 1));
+
+        int col = srcPx / BitmapFont.GlyphWidth;
+        int row = srcPy / (BitmapFont.GlyphHeight * 2);
+
+        byte ch = _vgc.GetScreenChar(col, row);
+        byte fgColor = _vgc.GetScreenColor(col, row);
+
+        uint fg = Palette[fgColor & 0x0F];
+        uint bg = Palette[state.BgColor & 0x0F];
+
+        bool isCursor = cursorEnabled && col == cursorX && row == cursorY;
+        if (isCursor)
+            (fg, bg) = (bg, fg);
+
+        int glyphX = srcPx % BitmapFont.GlyphWidth;
+        int glyphY = (srcPy % (BitmapFont.GlyphHeight * 2)) / 2;
+        byte rowBits = _font.GetRow(ch, glyphY);
+        bool set = (rowBits & (0x80 >> glyphX)) != 0;
+
+        if (state.Mode == 2 && !set && !isCursor)
+        {
+            pixel = 0;
+            return false;
+        }
+
+        pixel = set ? fg : bg;
+        return true;
+    }
+
+    private static int Wrap320(int value)
+    {
+        if (value >= VgcConstants.GfxWidth) value -= VgcConstants.GfxWidth;
+        if (value >= VgcConstants.GfxWidth) value -= VgcConstants.GfxWidth;
+        return value;
+    }
+
+    private static int Wrap200(int value)
+    {
+        if (value >= VgcConstants.GfxHeight) value -= VgcConstants.GfxHeight;
+        if (value >= VgcConstants.GfxHeight) value -= VgcConstants.GfxHeight;
+        return value;
+    }
+
+    private static int Wrap640(int value)
+    {
+        if (value >= NativeWidth) value -= NativeWidth;
+        return value;
+    }
+
+    private static int Wrap400(int value)
+    {
+        if (value >= NativeHeight) value -= NativeHeight;
+        if (value >= NativeHeight) value -= NativeHeight;
+        return value;
+    }
+
+    private static uint[] BuildPalette()
+    {
+        var palette = new uint[16];
+        for (byte i = 0; i < 16; i++)
+            palette[i] = ColorPalette.GetBgra(i);
+        return palette;
+    }
+
+    private struct RenderVideoState
+    {
+        public byte Mode;
+        public int ScrollX;
+        public int ScrollY;
+        public byte BgColor;
+
+        public static RenderVideoState FromVgc(VirtualGraphicsController vgc) =>
+            new()
+            {
+                Mode = vgc.GetMode(),
+                ScrollX = vgc.GetScrollX(),
+                ScrollY = vgc.GetScrollY(),
+                BgColor = vgc.GetBgColor()
+            };
+
+        public void Apply(byte registerIndex, byte value)
+        {
+            switch (registerIndex)
+            {
+                case VgcConstants.RegMode - VgcConstants.VgcBase:
+                    Mode = value;
+                    break;
+                case VgcConstants.RegBgCol - VgcConstants.VgcBase:
+                    BgColor = (byte)(value & 0x0F);
+                    break;
+                case VgcConstants.RegScrollX - VgcConstants.VgcBase:
+                    ScrollX = value;
+                    break;
+                case VgcConstants.RegScrollY - VgcConstants.VgcBase:
+                    ScrollY = value;
+                    break;
             }
         }
     }

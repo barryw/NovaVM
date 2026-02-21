@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="e6502.Avalonia.MainWindow"
-        Title="e6502 Emulator"
+        Title="Nova VM v1.0"
         Background="Black"
         Width="640" Height="400">
 </Window>

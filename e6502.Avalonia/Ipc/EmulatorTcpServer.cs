@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using e6502.Avalonia.Debugging;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
 using KDS.e6502;
@@ -14,17 +15,19 @@ public sealed class EmulatorTcpServer : IDisposable
     private readonly CompositeBusDevice _bus;
     private readonly ScreenEditor _editor;
     private readonly Cpu _cpu;
+    private readonly DebuggerService _debugger;
     private TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private Task? _acceptTask;
 
     public int Port { get; private set; }
 
-    public EmulatorTcpServer(CompositeBusDevice bus, ScreenEditor editor, Cpu cpu, int port = 6502)
+    public EmulatorTcpServer(CompositeBusDevice bus, ScreenEditor editor, Cpu cpu, DebuggerService debugger, int port = 6502)
     {
         _bus = bus;
         _editor = editor;
         _cpu = cpu;
+        _debugger = debugger;
         Port = port;
         _listener = new TcpListener(IPAddress.Loopback, port);
     }
@@ -142,6 +145,18 @@ public sealed class EmulatorTcpServer : IDisposable
                 "music_tempo" => CmdMusicTempo(req),
                 "music_loop" => CmdMusicLoop(req),
                 "music_status" => CmdMusicStatus(),
+                // Debugger commands
+                "dbg_state" => CmdDbgState(),
+                "dbg_pause" => CmdDbgPause(),
+                "dbg_resume" => CmdDbgResume(),
+                "dbg_step" => CmdDbgStep(),
+                "dbg_break_set" => CmdDbgBreakSet(req),
+                "dbg_break_clear" => CmdDbgBreakClear(req),
+                "dbg_break_clear_all" => CmdDbgBreakClearAll(),
+                "dbg_break_list" => CmdDbgBreakList(),
+                "dbg_read_memory" => CmdDbgReadMemory(req),
+                "dbg_disasm" => CmdDbgDisasm(req),
+                "dbg_stack" => CmdDbgStack(),
                 _ => Error($"Unknown command: {cmd}")
             };
         }
@@ -951,6 +966,164 @@ public sealed class EmulatorTcpServer : IDisposable
             ["ok"] = true,
             ["sfx_playing"] = _bus.Music.IsPlaying,
             ["music_playing"] = _bus.Music.IsMusicPlaying
+        };
+        return result.ToJsonString();
+    }
+
+    // ── Debugger commands ──────────────────────────────────────────────────
+
+    private string StateJson(CpuState s) => new JsonObject
+    {
+        ["ok"] = true,
+        ["a"] = s.A, ["x"] = s.X, ["y"] = s.Y, ["sp"] = s.Sp, ["pc"] = s.Pc,
+        ["nf"] = s.Nf, ["vf"] = s.Vf, ["df"] = s.Df, ["if"] = s.If, ["zf"] = s.Zf, ["cf"] = s.Cf,
+        ["paused"] = _debugger.IsPaused
+    }.ToJsonString();
+
+    private string CmdDbgState() => StateJson(_cpu.GetState());
+
+    private string CmdDbgPause()
+    {
+        _debugger.Pause();
+        Thread.Sleep(5); // let CPU thread settle
+        return StateJson(_cpu.GetState());
+    }
+
+    private string CmdDbgResume()
+    {
+        _debugger.Resume();
+        return Ok();
+    }
+
+    private string CmdDbgStep()
+    {
+        var state = _debugger.Step();
+        var (text, _) = _cpu.Disassemble(state.Pc);
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["a"] = state.A, ["x"] = state.X, ["y"] = state.Y, ["sp"] = state.Sp, ["pc"] = state.Pc,
+            ["nf"] = state.Nf, ["vf"] = state.Vf, ["df"] = state.Df, ["if"] = state.If, ["zf"] = state.Zf, ["cf"] = state.Cf,
+            ["paused"] = true,
+            ["next_instruction"] = text
+        };
+        return result.ToJsonString();
+    }
+
+    private string CmdDbgBreakSet(JsonNode req)
+    {
+        int? address = req["address"]?.GetValue<int>();
+        if (address is null) return Error("Missing 'address'");
+
+        BreakpointCondition? condition = null;
+        string? register = req["register"]?.GetValue<string>();
+        string? op = req["op"]?.GetValue<string>();
+        int? value = req["value"]?.GetValue<int>();
+        if (register is not null && op is not null && value is not null)
+            condition = new BreakpointCondition(register, op, (byte)value.Value);
+
+        _debugger.AddBreakpoint((ushort)address.Value, condition);
+
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["address"] = address.Value,
+            ["conditional"] = condition is not null
+        };
+        return result.ToJsonString();
+    }
+
+    private string CmdDbgBreakClear(JsonNode req)
+    {
+        int? address = req["address"]?.GetValue<int>();
+        if (address is null) return Error("Missing 'address'");
+
+        bool removed = _debugger.RemoveBreakpoint((ushort)address.Value);
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["removed"] = removed
+        };
+        return result.ToJsonString();
+    }
+
+    private string CmdDbgBreakClearAll()
+    {
+        _debugger.ClearAllBreakpoints();
+        return Ok();
+    }
+
+    private string CmdDbgBreakList()
+    {
+        var bps = _debugger.ListBreakpoints();
+        var arr = new JsonArray();
+        foreach (var (addr, conditions) in bps)
+        {
+            var condArr = new JsonArray();
+            foreach (var c in conditions)
+            {
+                if (c is null)
+                    condArr.Add(JsonValue.Create("unconditional"));
+                else
+                    condArr.Add(JsonValue.Create($"{c.Register} {c.Op} {c.Value}"));
+            }
+            arr.Add(new JsonObject
+            {
+                ["address"] = addr,
+                ["conditions"] = condArr
+            });
+        }
+        var result = new JsonObject { ["ok"] = true, ["breakpoints"] = arr };
+        return result.ToJsonString();
+    }
+
+    private string CmdDbgReadMemory(JsonNode req)
+    {
+        int? address = req["address"]?.GetValue<int>();
+        int? length = req["length"]?.GetValue<int>();
+        if (address is null || length is null) return Error("Need address, length");
+
+        byte[] data = _debugger.ReadMemory((ushort)address.Value, length.Value);
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["address"] = address.Value,
+            ["length"] = data.Length,
+            ["hex"] = Convert.ToHexString(data)
+        };
+        return result.ToJsonString();
+    }
+
+    private string CmdDbgDisasm(JsonNode req)
+    {
+        int? address = req["address"]?.GetValue<int>();
+        int count = req["count"]?.GetValue<int>() ?? 10;
+        if (address is null) return Error("Missing 'address'");
+
+        var instructions = _debugger.DisassembleRange((ushort)address.Value, count);
+        var arr = new JsonArray();
+        foreach (var (addr, text, bytes) in instructions)
+        {
+            arr.Add(new JsonObject
+            {
+                ["address"] = addr,
+                ["text"] = text,
+                ["bytes"] = bytes
+            });
+        }
+        var result = new JsonObject { ["ok"] = true, ["instructions"] = arr };
+        return result.ToJsonString();
+    }
+
+    private string CmdDbgStack()
+    {
+        var state = _cpu.GetState();
+        byte[] data = _debugger.ReadStack();
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["sp"] = state.Sp,
+            ["entries"] = Convert.ToHexString(data)
         };
         return result.ToJsonString();
     }

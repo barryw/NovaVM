@@ -289,6 +289,18 @@ public static class VgcConstants
     public const byte CmdMemRead       = 0x19;     // read selected memory into P3
     public const byte CmdMemWrite      = 0x1A;     // write P3 into selected memory
 
+    // -------------------------------------------------------------------------
+    // Copper (raster) commands
+    // -------------------------------------------------------------------------
+
+    // CmdCopperAdd: P0=x low, P1=x high, P2=y, P3=reg low/index, P4=reg high, P5=value
+    public const byte CmdCopperAdd     = 0x1B;
+    public const byte CmdCopperClear   = 0x1C;
+    public const byte CmdCopperEnable  = 0x1D;
+    public const byte CmdCopperDisable = 0x1E;
+
+    public const int MaxCopperEntries  = 1024;
+
     // Memory spaces for CmdMemRead/CmdMemWrite
     public const byte MemSpaceScreen   = 0x00;     // 2000 bytes (text character RAM)
     public const byte MemSpaceColor    = 0x01;     // 2000 bytes (color RAM)

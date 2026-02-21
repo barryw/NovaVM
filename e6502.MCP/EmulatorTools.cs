@@ -596,6 +596,102 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
+    // ── Debugger tools ─────────────────────────────────────────────────
+
+    [McpServerTool, Description("Get CPU state: registers A, X, Y, SP, PC and all flags. Also reports whether the CPU is paused.")]
+    public static async Task<string> DbgState(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_state" });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Pause CPU execution. Returns current CPU state.")]
+    public static async Task<string> DbgPause(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_pause" });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Resume CPU execution after pause or breakpoint.")]
+    public static async Task<string> DbgResume(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_resume" });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Execute one CPU instruction and re-pause. Returns CPU state and the next instruction disassembly.")]
+    public static async Task<string> DbgStep(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_step" });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set a breakpoint at a memory address. Optionally add a condition (e.g., register='A', op='==', value=1).")]
+    public static async Task<string> DbgBreakSet(
+        EmulatorClient client,
+        [Description("Memory address to break at (0-65535)")] int address,
+        [Description("Register to test: A, X, Y, SP (optional)")] string? register = null,
+        [Description("Comparison operator: ==, !=, <, >, <=, >= (optional)")] string? op = null,
+        [Description("Value to compare against (0-255, optional)")] int? value = null)
+    {
+        var req = new JsonObject { ["command"] = "dbg_break_set", ["address"] = address };
+        if (register is not null) req["register"] = register;
+        if (op is not null) req["op"] = op;
+        if (value is not null) req["value"] = value;
+        var result = await client.SendAsync(req);
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Remove a breakpoint at the specified address.")]
+    public static async Task<string> DbgBreakClear(
+        EmulatorClient client,
+        [Description("Memory address of breakpoint to remove")] int address)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_break_clear", ["address"] = address });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Remove all breakpoints.")]
+    public static async Task<string> DbgBreakClearAll(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_break_clear_all" });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("List all set breakpoints and their conditions.")]
+    public static async Task<string> DbgBreakList(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_break_list" });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Read a range of memory bytes as a hex string. Max 4096 bytes.")]
+    public static async Task<string> DbgReadMemory(
+        EmulatorClient client,
+        [Description("Start address (0-65535)")] int address,
+        [Description("Number of bytes to read (1-4096)")] int length)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_read_memory", ["address"] = address, ["length"] = length });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Disassemble instructions starting at an address.")]
+    public static async Task<string> DbgDisasm(
+        EmulatorClient client,
+        [Description("Start address (0-65535)")] int address,
+        [Description("Number of instructions to disassemble (default 10)")] int count = 10)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_disasm", ["address"] = address, ["count"] = count });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Read the current CPU stack contents.")]
+    public static async Task<string> DbgStack(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_stack" });
+        return result.ToJsonString();
+    }
+
     private static string FormatGraphics(JsonNode resp)
     {
         var sb = new StringBuilder();
