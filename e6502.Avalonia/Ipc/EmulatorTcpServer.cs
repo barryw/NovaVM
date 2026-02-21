@@ -320,14 +320,31 @@ public sealed class EmulatorTcpServer : IDisposable
 
     private string CmdColdStart()
     {
+        bool wasPaused = _debugger.IsPaused;
+        if (!wasPaused) _debugger.Pause();
+        Thread.Sleep(5); // let CPU thread reach the pause gate
+
         _bus.Vgc.Reset();
-        _cpu.Boot(0xC000);
+        _bus.Music.MusicStop();
+        _bus.SidPlayer.Stop();
+        _editor.ClearInputQueue();
+        _cpu.Boot();
+
+        if (!wasPaused) _debugger.Resume();
         return Ok();
     }
 
     private string CmdWarmStart()
     {
+        bool wasPaused = _debugger.IsPaused;
+        if (!wasPaused) _debugger.Pause();
+        Thread.Sleep(5); // let CPU thread reach the pause gate
+
+        _bus.Music.MusicStop();
+        _editor.ClearInputQueue();
         _cpu.Boot(0x0000);
+
+        if (!wasPaused) _debugger.Resume();
         return Ok();
     }
 

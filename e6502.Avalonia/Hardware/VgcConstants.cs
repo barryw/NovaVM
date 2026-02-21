@@ -210,7 +210,7 @@ public static class VgcConstants
     // VGC core registers ($A000-$A00F)
     // -------------------------------------------------------------------------
 
-    public const int RegMode           = 0xA000;   // 0=text only, 1=gfx over text, 2=text over gfx
+    public const int RegMode           = 0xA000;   // 0=text only, 1=gfx over text, 2=text over gfx, 3=gfx+sprites no text
     public const int RegBgCol          = 0xA001;
     public const int RegFgCol          = 0xA002;
     public const int RegCursorX        = 0xA003;   // 0-79
@@ -298,8 +298,14 @@ public static class VgcConstants
     public const byte CmdCopperClear   = 0x1C;
     public const byte CmdCopperEnable  = 0x1D;
     public const byte CmdCopperDisable = 0x1E;
+    public const byte CmdSysReset      = 0x1F;
 
-    public const int MaxCopperEntries  = 1024;
+    public const byte CmdCopperList    = 0x20;     // P0 = list index (0-127)
+    public const byte CmdCopperUse     = 0x21;     // P0 = list index (0-127)
+    public const byte CmdCopperListEnd = 0x22;     // reset target to active list
+
+    public const int CopperListCount        = 128;
+    public const int MaxCopperEntriesPerList = 256;
 
     // Memory spaces for CmdMemRead/CmdMemWrite
     public const byte MemSpaceScreen   = 0x00;     // 2000 bytes (text character RAM)

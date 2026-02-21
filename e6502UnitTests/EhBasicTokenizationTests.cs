@@ -268,6 +268,69 @@ public class EhBasicTokenizationTests
     }
 
     [TestMethod]
+    public void AvaloniaRomCopperSubcommandsTokenizeCorrectly()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+
+        EnterLine(editor, "10 COPPER ADD 0,50,BGCOL,3");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "20 COPPER ADD 0,100,MODE,1");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "30 COPPER ON");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "40 COPPER OFF");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "50 COPPER CLEAR");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal), $"LIST produced syntax error.\n{screen}");
+        Assert.IsTrue(screen.Contains("10 COPPER ADD 0,50,BGCOL,3", StringComparison.Ordinal), $"COPPER ADD BGCOL line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("20 COPPER ADD 0,100,MODE,1", StringComparison.Ordinal), $"COPPER ADD MODE line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("30 COPPER ON", StringComparison.Ordinal), $"COPPER ON line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("40 COPPER OFF", StringComparison.Ordinal), $"COPPER OFF line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("50 COPPER CLEAR", StringComparison.Ordinal), $"COPPER CLEAR line corrupted.\n{screen}");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomCopperListAndUseTokenizeCorrectly()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+
+        EnterLine(editor, "10 COPPER LIST 1");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "20 COPPER ADD 0,50,BGCOL,3");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "30 COPPER LIST END");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "40 COPPER USE 0");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal), $"LIST produced syntax error.\n{screen}");
+        Assert.IsTrue(screen.Contains("10 COPPER LIST 1", StringComparison.Ordinal), $"COPPER LIST line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("20 COPPER ADD 0,50,BGCOL,3", StringComparison.Ordinal), $"COPPER ADD line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("30 COPPER LIST END", StringComparison.Ordinal), $"COPPER LIST END line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("40 COPPER USE 0", StringComparison.Ordinal), $"COPPER USE line corrupted.\n{screen}");
+    }
+
+    [TestMethod]
     public void AvaloniaRomMnoteAfterColonTokenizesCorrectly()
     {
         using var bus = new CompositeBusDevice(enableSound: false);

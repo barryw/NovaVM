@@ -260,8 +260,19 @@ public class EmulatorCanvas : Control
                         if (spriteBehind != 0)
                             pixel = Palette[spriteBehind & 0x0F];
 
-                        bool textOpaque = TrySampleTextPixel(px, py, state, cursorX, cursorY, cursorEnabled, out uint textPixel);
-                        if (state.Mode == 2)
+                        bool textOpaque = false;
+                        uint textPixel = 0;
+                        if (state.Mode != 3)
+                            textOpaque = TrySampleTextPixel(px, py, state, cursorX, cursorY, cursorEnabled, out textPixel);
+
+                        if (state.Mode == 3)
+                        {
+                            if (gfxPixel != 0)
+                                pixel = gfxPixel;
+                            if (spriteBetween != 0)
+                                pixel = Palette[spriteBetween & 0x0F];
+                        }
+                        else if (state.Mode == 2)
                         {
                             if (gfxPixel != 0)
                                 pixel = gfxPixel;

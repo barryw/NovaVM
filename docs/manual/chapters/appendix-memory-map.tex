@@ -8,6 +8,7 @@
 %                  e6502.Avalonia/Hardware/VirtualExpansionMemoryController.cs
 % =============================================================================
 \chapter{Memory Map}
+\label{chap:memmap}
 
 % =============================================================================
 \section{Address Space Overview}
@@ -35,14 +36,19 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 \$B1D0--\$B99F &   2,000 B & Color RAM (80$\times$25 text cells) \\
 \$B9A0--\$B9EF &      80 B & File I/O Controller (FIO) registers \\
 \$BA00--\$BA3F &      64 B & Expansion Memory Controller (XMC) registers \\
+\$BA40--\$BA4F &      16 B & Timer Controller registers \\
+\$BA50--\$BA53 &       4 B & Music Status and Voice Note Readback \\
 \$BC00--\$BFFF &   1,024 B & XMC Memory Windows (4 $\times$ 256-byte mapped pages) \\
 \$C000--\$FFFF &  16,384 B & ROM (NovaBASIC interpreter) \\
+\$D400--\$D41C &      29 B & SID chip registers (inside ROM range; writes intercepted) \\
 \end{longtable}
 
 \begin{notebox}
 The address range \$A01F--\$A0FF and \$A200--\$A9FF are not claimed by any
 coprocessor and fall through to the underlying flat RAM.
-The range \$BA40--\$BBFF is similarly unallocated RAM.
+The range \$BA54--\$BBFF is similarly unallocated RAM.
+SID registers at \$D400--\$D41C occupy space within the ROM address range
+but are intercepted on write by the SID chip emulator.
 \end{notebox}
 
 % =============================================================================
@@ -68,12 +74,12 @@ writing to \$A010 both stores the command byte and triggers immediate execution.
 \$A002 & RegFgCol       & R/W & Default foreground color index (0--15); reset value is 1 (white). \\
 \$A003 & RegCursorX     & R/W & Text cursor column (0--79). \\
 \$A004 & RegCursorY     & R/W & Text cursor row (0--24). \\
-\$A005 & RegScrollX     & R/W & Horizontal scroll offset (reserved in v1.0). \\
-\$A006 & RegScrollY     & R/W & Vertical scroll offset (reserved in v1.0). \\
+\$A005 & RegScrollX     & R/W & Horizontal scroll offset (used by copper raster effects). \\
+\$A006 & RegScrollY     & R/W & Vertical scroll offset (used by copper raster effects). \\
 \$A007 & RegBank        & R/W & Reserved. \\
 \$A008 & RegStatus      & RO  & Frame counter; incremented each video frame. Writes are ignored. \\
 \$A009 & RegSpriteCount & RO  & Count of currently enabled sprites (0--16). Writes are ignored. \\
-\$A00A & ---            & --- & Reserved. \\
+\$A00A & RegCursorEna   & R/W & Non-zero enables the cursor blink. \\
 \$A00B & RegColSt       & RO  & Sprite-to-sprite collision bitmask; reading clears the register. \\
 \$A00C & RegColBg       & RO  & Sprite-to-background collision bitmask; reading clears the register. \\
 \$A00D & RegBorder      & R/W & Border color index (0--15). \\
@@ -163,6 +169,123 @@ Sprite shape data is stored host-side and is not 6502-addressable.
 All sprite shape manipulation must go through the command register interface.
 \end{tipbox}
 
+\subsection*{Memory I/O Commands (\$19--\$1A)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.10\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.20\textwidth} p{0.56\textwidth}}
+\toprule
+\normalfont\textbf{Code} & \normalfont\textbf{Name} & \textbf{Parameters and behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$19 & CmdMemRead  & P0 = memory space (0--3), P1/P2 = address (16-bit), P4 bit 0 = auto-increment. Read byte from VGC memory; result in P3. \\
+\$1A & CmdMemWrite & P0 = memory space (0--3), P1/P2 = address (16-bit), P3 = data byte, P4 bit 0 = auto-increment. Write byte to VGC memory. \\
+\end{longtable}
+
+Memory spaces: 0=character RAM (2000~B), 1=color RAM (2000~B),
+2=graphics bitmap (64000~B), 3=sprite shape RAM (2048~B).
+Auto-increment advances the address after each read or write.
+
+\subsection*{Copper Commands (\$1B--\$1E, \$20--\$22)}
+
+The copper triggers register writes at specific raster positions each frame.
+The VGC stores 128 independent copper lists (0--127), each holding up to 256
+events. All copper state changes take effect at vblank.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.10\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.22\textwidth} p{0.54\textwidth}}
+\toprule
+\normalfont\textbf{Code} & \normalfont\textbf{Name} & \textbf{Parameters and behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$1B & CmdCopperAdd     & P0/P1 = X (16-bit), P2 = Y, P3/P4 = register (0--15 or \$A000--\$A00F), P5 = value. Adds to the target list. Replaces existing event at same position/register. Max 256 events per list. \\
+\$1C & CmdCopperClear   & No parameters. Remove all events from the target list. \\
+\$1D & CmdCopperEnable  & No parameters. Start executing the active copper list each frame. \\
+\$1E & CmdCopperDisable & No parameters. Stop executing copper. \\
+\$20 & CmdCopperList    & P0 = list index (0--127). Set target list for ADD/CLEAR. \\
+\$21 & CmdCopperUse     & P0 = list index (0--127). Set pending active list (swaps at next vblank). \\
+\$22 & CmdCopperListEnd & No parameters. Reset target list to the currently active list. \\
+\end{longtable}
+
+Copper-writable registers: RegMode (\$A000), RegBgCol (\$A001),
+RegScrollX (\$A005), RegScrollY (\$A006).
+
+% =============================================================================
+\section{SID Chip Registers}
+% =============================================================================
+
+The SID chip occupies \$D400--\$D41C within the ROM address range. Writes
+to these addresses are intercepted by the SID emulator; reads return the
+underlying ROM byte. The register layout matches the original MOS~6581.
+
+\subsection*{Per-Voice Registers (3 voices, 7 bytes each)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} p{0.72\textwidth}}
+\toprule
+\normalfont\textbf{Offset} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
++0 & Frequency low byte. \\
++1 & Frequency high byte (16-bit SID frequency units). \\
++2 & Pulse width low byte. \\
++3 & Pulse width high byte (12-bit, bits 0--11 only). \\
++4 & Control register: bit 0=gate, bit 4=triangle, bit 5=sawtooth, bit 6=pulse, bit 7=noise. \\
++5 & Attack (bits 7--4) / Decay (bits 3--0). \\
++6 & Sustain (bits 7--4) / Release (bits 3--0). \\
+\end{longtable}
+
+Voice 0: \$D400--\$D406. Voice 1: \$D407--\$D40D. Voice 2: \$D40E--\$D414.
+
+\subsection*{Filter and Volume Registers}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} p{0.72\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$D415 & Filter cutoff low (bits 0--2). \\
+\$D416 & Filter cutoff high (bits 0--7). \\
+\$D417 & Resonance (bits 7--4) / Filter route (bits 3--0, one bit per voice + external). \\
+\$D418 & Volume (bits 3--0) / Filter mode (bit 4=LP, bit 5=BP, bit 6=HP). \\
+\end{longtable}
+
+\begin{notebox}
+The BASIC commands \cmd{INSTRUMENT}, \cmd{SOUND}, and \cmd{MUSIC} manage
+SID registers automatically. Direct writes to \$D400+ are for advanced
+use only and may conflict with the music engine.
+\end{notebox}
+
+% =============================================================================
+\section{Timer Controller and Music Status}
+% =============================================================================
+
+\subsection*{Timer Controller (\$BA40--\$BA4F)}
+
+The timer controller provides periodic interrupt generation for the SID
+player. Configuration is handled automatically by \cmd{SIDPLAY}.
+
+\subsection*{Music Status (\$BA50--\$BA53)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} p{0.10\textwidth} p{0.62\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \textbf{Access} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$BA50 & RO & Status flags: bit 0 = SFX playing, bit 1 = music playing. \\
+\$BA51 & RO & Voice 1 current MIDI note (0 = silent). \\
+\$BA52 & RO & Voice 2 current MIDI note (0 = silent). \\
+\$BA53 & RO & Voice 3 current MIDI note (0 = silent). \\
+\end{longtable}
+
+These registers are read by the \cmd{PLAYING} and \cmd{MNOTE()} functions.
+
 % =============================================================================
 \section{VSC Register Map}
 % =============================================================================
@@ -251,6 +374,18 @@ The caller polls \$B9A1 (\texttt{FioStatus}) for completion.
 \$03 & FioCmdDirOpen & Open the program directory; populates \texttt{FioName} and \texttt{FioSizeL/H} with the first entry. \\
 \$04 & FioCmdDirRead & Advance to the next directory entry; populates \texttt{FioName} and \texttt{FioSizeL/H}. \\
 \$05 & FioCmdDelete  & Delete the named program from disk. \\
+\$06 & FioCmdGSave   & Save VGC memory space to a \texttt{.gfx} file. FioGSpace=space, FioGAddrL/H=offset, FioGLenL/H=length. \\
+\$07 & FioCmdGLoad   & Load \texttt{.gfx} file into VGC memory space. FioGSpace=space, FioGAddrL/H=offset, FioGLenL/H=max length. \\
+\$08 & FioCmdSidPlay & Load and play a \texttt{.sid} file. FioSrcL=song number (1-based). \\
+\$09 & FioCmdSidStop & Stop SID file playback. \\
+\$0A & FioCmdInstrument & Define instrument preset. FioSrcL=id, FioSrcH=waveform, FioEndL=A, FioEndH=D, FioSizeL=S, FioSizeH=R. \\
+\$0B & FioCmdSound   & Play SFX. FioSrcL=MIDI note, FioSrcH=duration (frames), FioEndL=instrument ID. \\
+\$0C & FioCmdVolume  & Set SID master volume. FioSrcL=level (0--15). \\
+\$0D & FioCmdMSeq    & Load MML sequence. FioSrcL=voice (1--3), FioEndL/H=string pointer, FioNameLen=string length. \\
+\$0E & FioCmdMPlay   & Start music playback. \\
+\$0F & FioCmdMStop   & Stop music playback. \\
+\$10 & FioCmdMTempo  & Set tempo. FioSrcL/H=BPM (16-bit). \\
+\$11 & FioCmdMLoop   & Set loop. FioSrcL=0 (off) or 1 (on). \\
 \end{longtable}
 
 \subsection*{FIO Status Codes}

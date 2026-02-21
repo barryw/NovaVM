@@ -31,6 +31,7 @@ bitmap layer. \cmd{MODE} selects how they are composited.
 0 & Text only. The graphics bitmap is not rendered. \\
 1 & Graphics over text. Bitmap is drawn on top of text characters. \\
 2 & Text over graphics. Text characters are drawn on top of the bitmap. \\
+3 & Graphics and sprites only. No text layer is rendered. \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -325,6 +326,169 @@ To test whether sprite~\cmd{n} specifically collided with sprite~2, check bit
 200 C = COLLISION(0)
 210 IF (C AND 4) <> 0 THEN PRINT "HIT SPRITE 2"
 \end{lstlisting}
+
+% -----------------------------------------------------------------------------
+\section{Color Palette}
+\label{sec:color-palette}
+% -----------------------------------------------------------------------------
+
+NovaBASIC uses a fixed 16-color palette inspired by the Commodore~64.
+All graphics, text, sprite, background, and border colors use the same
+indices.
+
+\begin{center}
+\begin{tabular}{clcl}
+\toprule
+\textbf{Index} & \textbf{Color} & \textbf{Index} & \textbf{Color} \\
+\midrule
+ 0 & Black       &  8 & Orange \\
+ 1 & White       &  9 & Brown \\
+ 2 & Red         & 10 & Light Red \\
+ 3 & Cyan        & 11 & Dark Grey \\
+ 4 & Purple      & 12 & Medium Grey \\
+ 5 & Green       & 13 & Light Green \\
+ 6 & Blue        & 14 & Light Blue \\
+ 7 & Yellow      & 15 & Light Grey \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The background color defaults to 0~(black), the text foreground to 1~(white),
+and the border to 6~(blue). Use \cmd{COLOR fg{[},bg{]}} for text colors.
+The border color can be changed via \cmd{POKE 40973, c} where \cmd{c} is
+0--15 (\$A00D is the border color register).
+
+% -----------------------------------------------------------------------------
+\section{The Copper (Raster Effects)}
+\label{sec:copper}
+% -----------------------------------------------------------------------------
+
+The copper is a per-pixel register-write system inspired by the Amiga's
+Copper coprocessor. It lets you change display registers at precise screen
+positions, enabling effects like color gradient backgrounds, split-screen
+modes, and parallax scrolling --- all without any CPU involvement.
+
+\subsection*{How it works}
+
+The VGC stores up to 128 independent copper \emph{lists}. Each list is a
+program of up to 256 events, each specifying:
+
+\begin{itemize}
+  \item A screen position (X~=~0--319, Y~=~0--199).
+  \item A target register.
+  \item A value to write to that register.
+\end{itemize}
+
+When copper is enabled, the renderer checks for copper events at every pixel
+position. When it reaches a pixel that has a scheduled event, the register
+write fires immediately and affects all subsequent pixels on that frame.
+
+\subsection*{Writable registers}
+
+The copper can write to four VGC registers:
+
+\begin{center}
+\begin{tabular}{>{\ttfamily}l>{\ttfamily}ll}
+\toprule
+\textbf{Register} & \textbf{Address} & \textbf{Effect} \\
+\midrule
+RegMode    & \$A000 & Change display mode mid-screen \\
+RegBgCol   & \$A001 & Change background color mid-screen \\
+RegScrollX & \$A005 & Shift horizontal scroll offset \\
+RegScrollY & \$A006 & Shift vertical scroll offset \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{COPPER BASIC keyword}
+
+The \texttt{COPPER} keyword provides direct access to the copper system:
+
+\begin{center}
+\begin{tabular}{>{\ttfamily\raggedright\arraybackslash}p{0.46\textwidth} p{0.44\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+COPPER ADD x, y, BGCOL, value  & Add event: set background color at position. \\
+COPPER ADD x, y, MODE, value   & Add event: set display mode at position. \\
+COPPER ADD x, y, SCROLLX, value & Add event: set horizontal scroll at position. \\
+COPPER ADD x, y, SCROLLY, value & Add event: set vertical scroll at position. \\
+COPPER CLEAR                   & Remove all events from the current target list. \\
+COPPER ON                      & Enable copper execution each frame. \\
+COPPER OFF                     & Disable copper execution. \\
+COPPER LIST n                  & Set target list to \textit{n} (0--127). Subsequent ADD/CLEAR edit this list. \\
+COPPER LIST END                & Reset target list back to the active list. \\
+COPPER USE n                   & Switch the active list to \textit{n} at the next vblank. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+If an event at the same position for the same register already exists, the
+value is replaced. Each list holds up to 256 events.
+
+\textbf{Multiple lists.}\enspace
+The VGC stores 128 copper lists (0--127). By default everything operates on
+list~0. Use \texttt{COPPER LIST n} to direct subsequent \texttt{ADD}/\texttt{CLEAR}
+commands to list~\textit{n}. Use \texttt{COPPER USE n} to tell the renderer to
+switch to list~\textit{n} at the next vertical blank --- this avoids tearing
+because the swap happens atomically between frames. Editing a list and
+swapping the active pointer are independent, so you can build one list while
+the renderer displays another (double buffering).
+
+\subsection*{Low-level copper control via POKE}
+
+You can also control the copper by writing directly to the VGC command
+registers (\$A010--\$A016) and then writing the command byte to \$A010.
+
+\begin{center}
+\begin{tabular}{>{\ttfamily}cp{0.70\textwidth}}
+\toprule
+\textbf{Code} & \textbf{Command} \\
+\midrule
+\$1B & \textbf{Copper Add} --- add an event to the target list. P0/P1~=~X (16-bit), P2~=~Y,
+       P3/P4~=~register (0--15 or \$A000--\$A00F), P5~=~value. \\[4pt]
+\$1C & \textbf{Copper Clear} --- remove all events from the target list. \\[4pt]
+\$1D & \textbf{Copper Enable} --- start executing the active copper list each
+       frame. \\[4pt]
+\$1E & \textbf{Copper Disable} --- stop executing the copper program. \\[4pt]
+\$20 & \textbf{Copper List} --- set target list. P0~=~list index (0--127). \\[4pt]
+\$21 & \textbf{Copper Use} --- set pending active list. P0~=~list index (0--127).
+       Takes effect at next vblank. \\[4pt]
+\$22 & \textbf{Copper List End} --- reset target list back to the active list. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Example: background color gradient}
+
+The following program creates a vertical color gradient by scheduling a
+background color change at the start of each group of rows:
+
+\begin{lstlisting}[style=basiclisting]
+10 COPPER CLEAR
+20 FOR I = 0 TO 12
+30   COPPER ADD 0, I * 15, BGCOL, I + 2
+40 NEXT I
+50 COPPER ON
+\end{lstlisting}
+
+The loop on lines~20--40 adds 13~events, each changing the background color
+at Y positions 0, 15, 30, \ldots{}, 180 to successive color indices. Line~50
+enables the copper. Each frame the background will display as a gradient of
+bands.
+
+\begin{tipbox}
+Copper events fire at per-pixel granularity. Setting X~=~0 for all events
+produces clean horizontal bands. Setting different X values within the same
+row creates vertical split effects.
+\end{tipbox}
+
+\begin{notebox}
+Each copper list holds up to 256 events. Events are sorted by position
+automatically. Multiple events at the same position are applied in
+register-index order. The VGC stores 128 lists; all data is host-side and
+consumes no 6502 address space.
+\end{notebox}
 
 % -----------------------------------------------------------------------------
 \section{Compatibility Notes}

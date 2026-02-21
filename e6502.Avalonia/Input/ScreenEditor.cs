@@ -43,6 +43,8 @@ public class ScreenEditor : IScreenInput
 
     public void QueueInput(byte ch) => _inputQueue.Enqueue(ch);
 
+    public void ClearInputQueue() => _inputQueue.Clear();
+
     public bool HasQueuedInput => !_inputQueue.IsEmpty;
 
     public byte DequeueInput() =>

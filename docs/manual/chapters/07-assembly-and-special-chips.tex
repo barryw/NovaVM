@@ -252,27 +252,57 @@ From assembly you can issue any VGC command directly:
 \texttt{STA \$A010}
 \end{retrobox}
 
-Full register-level documentation for every VGC and VSC command --- including
-parameters for drawing, sprites, and sound sequencing --- is planned for a future
-edition of this guide. The current source of truth is
-\texttt{e6502.Avalonia/Hardware/VgcConstants.cs}, which lists every register address
-and command code with inline comments.
+The full VGC command code reference, including copper commands
+(\$1B--\$1E) and memory I/O commands (\$19--\$1A), is documented in
+Appendix~\ref{chap:memmap}.
 
 %% ============================================================
-\section{Future Directions}
+\section{SID Chip Access}
 %% ============================================================
 
-This chapter will grow as the hardware interfaces stabilize. Planned additions:
+The SID chip registers at \$D400--\$D41C are write-intercepted within the ROM
+address range. Assembly code can write to them directly:
 
-\begin{itemize}
-  \item Complete VGC register reference: all drawing commands with full parameter
-        tables.
-  \item VSC register reference: sound and envelope control from assembly.
-  \item Stable calling conventions and register preservation rules for BASIC-to-assembly
-        transitions.
-  \item Worked examples: a full-screen raster effect using XRAM windows and a
-        VSC-driven interrupt music player.
-\end{itemize}
+\begin{retrobox}
+\texttt{; Set voice 0 to sawtooth waveform, gate on}\\
+\texttt{LDA \#\$21}\\
+\texttt{STA \$D404}
+\end{retrobox}
+
+The SID register layout matches the MOS 6581. Per-voice registers occupy 7
+bytes each (voice~0 at \$D400, voice~1 at \$D407, voice~2 at \$D40E). Filter
+and volume registers are at \$D415--\$D418. See Appendix~\ref{chap:memmap}
+for the full register map.
+
+\begin{warningbox}
+The BASIC \cmd{INSTRUMENT}, \cmd{SOUND}, and \cmd{MUSIC} commands manage
+SID registers automatically. Direct SID register writes from assembly will
+conflict with the music engine unless you stop all music and SFX first.
+\end{warningbox}
+
+%% ============================================================
+\section{Copper Programming from Assembly}
+%% ============================================================
+
+From BASIC, the \texttt{COPPER} keyword provides high-level access
+(see Chapter~\ref{chap:graphics}). From assembly, write parameters to
+\$A011--\$A016 and the command code to \$A010:
+
+\begin{retrobox}
+\texttt{; Add copper event: at Y=50, X=0, set BgCol to color 5}\\
+\texttt{LDA \#\$00 : STA \$A011}\\
+\texttt{LDA \#\$00 : STA \$A012}\\
+\texttt{LDA \#50  : STA \$A013}\\
+\texttt{LDA \#\$01 : STA \$A014}\\
+\texttt{LDA \#\$00 : STA \$A015}\\
+\texttt{LDA \#\$05 : STA \$A016}\\
+\texttt{LDA \#\$1B : STA \$A010}\\[4pt]
+\texttt{; Enable copper}\\
+\texttt{LDA \#\$1D : STA \$A010}
+\end{retrobox}
+
+See the Copper section in Chapter~\ref{chap:graphics} for a full explanation
+of writable registers, the COPPER keyword syntax, and programming patterns.
 
 %% ============================================================
 \section{Try It Now}

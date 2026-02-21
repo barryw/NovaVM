@@ -167,7 +167,7 @@ Colors are indices 0--15; color 0 is transparent on the graphics layer.
 \endhead
 \bottomrule
 \endfoot
-MODE n                  & Display mode: 0=text only, 1=graphics over text, 2=text over graphics. \\
+MODE n                  & Display mode: 0=text only, 1=graphics over text, 2=text over graphics, 3=graphics+sprites only (no text). \\
 GCLS                    & Clear the graphics layer to transparent (all pixels 0). \\
 GCOLOR c                & Set the graphics draw color (0--15; only the low nibble is used). \\
 PLOT x,y                & Set pixel at (\textit{x},\textit{y}) to the current draw color. \\
@@ -178,6 +178,13 @@ FILL x0,y0,x1,y1        & Draw a filled solid rectangle. \\
 CIRCLE cx,cy,r          & Draw a circle outline centred at (\textit{cx},\textit{cy}). \\
 PAINT x,y               & Flood-fill from seed point (\textit{x},\textit{y}). \\
 VSYNC                   & Wait for the next video frame boundary (60 Hz). \\
+COPPER ADD x,y,reg,val  & Add copper event: set \textit{reg} to \textit{val} at position (\textit{x},\textit{y}). Registers: BGCOL, MODE, SCROLLX, SCROLLY. \\
+COPPER CLEAR            & Remove all events from the current target list. \\
+COPPER ON               & Enable copper execution each frame. \\
+COPPER OFF              & Disable copper execution. \\
+COPPER LIST n           & Set target list to \textit{n} (0--127). Subsequent ADD/CLEAR edit this list. \\
+COPPER LIST END         & Reset target list back to the active list. \\
+COPPER USE n            & Switch active copper list to \textit{n} at next vblank (double-buffering). \\
 \end{longtable}
 
 % ---- Sprites ----------------------------------------------------------------
@@ -203,22 +210,50 @@ SPRITEDATA n,row,b1\ldots{}b8   & Define one row of sprite shape data (8 bytes, 
 \cmd{SPRITESHAPE} and \cmd{SPRITECOLOR} are recognized tokens (for source compatibility) but their ROM handlers currently perform no hardware action.
 \end{notebox}
 
-% ---- Sound ------------------------------------------------------------------
-\subsection*{Sound}
+% ---- Sound and Music --------------------------------------------------------
+\subsection*{Sound and Music}
 
-The sound controller provides 4 independent channels (0--3).
+The SID chip provides 3 voices. The music engine adds a three-voice MML
+sequencer with instrument presets, tempo, looping, and per-frame effects.
 
-\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.42\textwidth} p{0.48\textwidth}}
 \toprule
 \normalfont\textbf{Syntax} & \textbf{Purpose} \\
 \midrule
 \endhead
 \bottomrule
 \endfoot
-SOUND ch,freq,dur       & Play on channel \textit{ch} (0--3); frequency 16--12000 Hz; duration in 1/60 s ticks. \\
-VOLUME level            & Set master volume (0--15; only the low nibble is used). \\
-ENVELOPE ch,a,d,s,r     & Set ADSR envelope for channel \textit{ch}; sustain uses low nibble (0--15 scale). \\
-WAVE ch,waveform        & Set waveform for channel \textit{ch}: 0=square, 1=sawtooth, 2=triangle, 3=noise, 4=sine. \\
+SOUND note,dur{[},inst{]}    & Play MIDI \textit{note} (0--127) for \textit{dur} frames (1/60~s). Optional \textit{inst} selects instrument preset (0--15, default~0). \\[3pt]
+VOLUME level                 & Set SID master volume (0--15; low nibble only). \\[3pt]
+INSTRUMENT id,wave,a,d,s,r   & Define instrument preset \textit{id} (0--15). \textit{wave}: \$10=tri, \$20=saw, \$40=pulse, \$80=noise. \textit{a,d,s,r}: ADSR values 0--15. \\[3pt]
+MUSIC voice,"mml"            & Load MML sequence into \textit{voice} (1--3). \\[3pt]
+MUSIC PLAY                   & Start music playback. \\[3pt]
+MUSIC STOP                   & Stop music and silence all music voices. \\[3pt]
+MUSIC TEMPO bpm              & Set playback tempo (default 120). \\[3pt]
+MUSIC LOOP ON                & Enable looping (restart when all voices finish). \\[3pt]
+MUSIC LOOP OFF               & Disable looping (default). \\[3pt]
+MUSIC PRIORITY v1{[},v2{[},v3{]}} & Set voice-stealing priority for SFX. \\[3pt]
+SIDPLAY "name"{[},song{]}   & Play a \texttt{.sid} file; optional \textit{song} number (default~1). \\[3pt]
+SIDSTOP                      & Stop SID file playback. \\
+\end{longtable}
+
+\begin{warningbox}
+\cmd{WAVE} is deprecated and raises a syntax error. Use \cmd{INSTRUMENT} to set waveform and ADSR in a single command.
+\end{warningbox}
+
+% ---- Graphics File I/O ------------------------------------------------------
+\subsection*{Graphics File I/O}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.42\textwidth} p{0.48\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+GSAVE "name",space,offset,len & Save VGC memory to a \texttt{.gfx} file.
+  \textit{space}: 0=screen, 1=color, 2=gfx bitmap, 3=sprite shapes. \\[3pt]
+GLOAD "name",space,offset{[},len{]} & Load a \texttt{.gfx} file into VGC memory. If \textit{len} is omitted, loads the entire file. \\
 \end{longtable}
 
 % ---- Expansion Memory -------------------------------------------------------
@@ -373,6 +408,20 @@ BUMPED(n)       & Sprite-to-background collision bitmask for sprite \textit{n}. 
 In v1.0 the ROM handlers return 0; position read-back is not yet implemented.
 \end{notebox}
 
+% ---- Music Functions --------------------------------------------------------
+\subsection*{Music Functions}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Function} & \textbf{Returns} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+PLAYING         & 1 if music is currently playing, 0 if stopped. \\
+MNOTE(voice)    & Current MIDI note number on \textit{voice} (1--3), or 0 if silent. \\
+\end{longtable}
+
 % =============================================================================
 \section{Token Index}
 % =============================================================================
@@ -401,7 +450,7 @@ SWAP, BITSET, BITCLR, IRQ, NMI
 \ttfamily\small
 CLS, COLOR, LOCATE, PLOT, UNPLOT, LINE, CIRCLE, RECT, FILL, PAINT, MODE,
 GCLS, GCOLOR, SPRITE, SPRITESHAPE, SPRITECOLOR, SPRITEDATA, SOUND, VOLUME,
-ENVELOPE, WAVE, VSYNC
+INSTRUMENT, WAVE (deprecated), VSYNC
 \end{retrobox}
 
 % ---- Secondary Tokens -------------------------------------------------------
@@ -432,10 +481,11 @@ SPRITEY(), COLLISION(), BUMPED()
 \end{retrobox}
 
 % ---- Extended 2-Byte Tokens -------------------------------------------------
-\subsection*{Extended Two-Byte Tokens (\texttt{\$FF} prefix, \texttt{XTK\_DIR} through \texttt{XTK\_XUNMAP})}
+\subsection*{Extended Two-Byte Tokens (\texttt{\$FF} prefix, \texttt{XTK\_DIR} through \texttt{XTK\_MNOTE})}
 
 \begin{retrobox}
 \ttfamily\small
 DIR, DEL, XMEM, XBANK, XPOKE, XPEEK(), STASH, FETCH, XFREE, XRESET, XALLOC,
-XDIR, XDEL, XMAP, XUNMAP
+XDIR, XDEL, XMAP, XUNMAP, GSAVE, GLOAD, SIDPLAY, SIDSTOP, MUSIC, PLAYING,
+MNOTE()
 \end{retrobox}

@@ -71,10 +71,13 @@ public class VirtualGraphicsController
     // IRQ control register ($A01F)
     private byte _irqCtrl;
 
-    // Copper program (host-side, command driven)
-    private readonly List<CopperEvent> _copperEvents = [];
-    private CopperEvent[] _copperProgram = [];
-    private bool _copperDirty;
+    // Copper program (host-side, command driven) — 128 lists, vblank-synchronized
+    private readonly List<CopperEvent>[] _copperEvents = new List<CopperEvent>[VgcConstants.CopperListCount];
+    private readonly CopperEvent[][] _copperPrograms = new CopperEvent[VgcConstants.CopperListCount][];
+    private readonly bool[] _copperListDirty = new bool[VgcConstants.CopperListCount];
+    private int _copperTargetList;      // which list ADD/CLEAR edit (default 0)
+    private int _copperActiveList;      // which compiled program the renderer reads
+    private int _copperPendingList;     // becomes active at next vblank
     private bool _copperEnabled;
 
 
@@ -98,9 +101,18 @@ public class VirtualGraphicsController
         Array.Clear(_gfxBitmap);
         _gfxDrawColor = 1;
         _irqCtrl = 0;
-        _copperEvents.Clear();
-        _copperProgram = [];
-        _copperDirty = false;
+        for (int i = 0; i < VgcConstants.CopperListCount; i++)
+        {
+            if (_copperEvents[i] != null)
+                _copperEvents[i].Clear();
+            else
+                _copperEvents[i] = [];
+            _copperPrograms[i] = [];
+            _copperListDirty[i] = false;
+        }
+        _copperTargetList = 0;
+        _copperActiveList = 0;
+        _copperPendingList = 0;
         _copperEnabled = false;
 
         // Default sprite priority: in front of all
@@ -318,11 +330,7 @@ public class VirtualGraphicsController
     public bool IsRasterIrqEnabled => (_irqCtrl & 0x01) != 0;
     public bool IsCopperEnabled => _copperEnabled;
 
-    public ReadOnlySpan<CopperEvent> GetCopperProgram()
-    {
-        RebuildCopperProgramIfDirty();
-        return _copperProgram;
-    }
+    public ReadOnlySpan<CopperEvent> GetCopperProgram() => _copperPrograms[_copperActiveList];
 
     public bool GetGfxPixel(int x, int y) =>
         _gfxBitmap[y * VgcConstants.GfxWidth + x] != 0;
@@ -354,12 +362,33 @@ public class VirtualGraphicsController
     public void SetStatus(byte value) =>
         _regs[VgcConstants.RegStatus - VgcConstants.VgcBase] = value;
 
-    public void IncrementFrameCounter() =>
+    public void IncrementFrameCounter()
+    {
         _regs[VgcConstants.RegStatus - VgcConstants.VgcBase]++;
+
+        // Vblank: swap active list and rebuild any dirty copper programs
+        _copperActiveList = _copperPendingList;
+        for (int i = 0; i < VgcConstants.CopperListCount; i++)
+        {
+            if (!_copperListDirty[i]) continue;
+            _copperPrograms[i] = _copperEvents[i].ToArray();
+            Array.Sort(_copperPrograms[i], static (a, b) =>
+            {
+                int byPos = a.Position.CompareTo(b.Position);
+                return byPos != 0 ? byPos : a.RegisterIndex.CompareTo(b.RegisterIndex);
+            });
+            _copperListDirty[i] = false;
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Command dispatch
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Set by CmdSysReset; polled and cleared by CompositeBusDevice after Write.
+    /// </summary>
+    public bool SysResetRequested { get; set; }
 
     private void ExecuteCommand(byte cmd)
     {
@@ -369,8 +398,15 @@ public class VirtualGraphicsController
             ExecuteMemoryCommand(cmd);
         else if (cmd >= VgcConstants.CmdCopperAdd && cmd <= VgcConstants.CmdCopperDisable)
             ExecuteCopperCommand(cmd);
+        else if (cmd >= VgcConstants.CmdCopperList && cmd <= VgcConstants.CmdCopperListEnd)
+            ExecuteCopperCommand(cmd);
         else if (cmd >= VgcConstants.CmdPlot && cmd <= VgcConstants.CmdPaint)
             ExecuteGfxCommand(cmd);
+        else if (cmd == VgcConstants.CmdSysReset)
+        {
+            Reset();
+            SysResetRequested = true;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -605,15 +641,29 @@ public class VirtualGraphicsController
                 AddCopperEventFromRegisters();
                 break;
             case VgcConstants.CmdCopperClear:
-                _copperEvents.Clear();
-                _copperProgram = [];
-                _copperDirty = false;
+                _copperEvents[_copperTargetList].Clear();
+                _copperListDirty[_copperTargetList] = true;
                 break;
             case VgcConstants.CmdCopperEnable:
                 _copperEnabled = true;
                 break;
             case VgcConstants.CmdCopperDisable:
                 _copperEnabled = false;
+                break;
+            case VgcConstants.CmdCopperList:
+            {
+                int idx = _cmdRegs[1] & 0x7F; // P0, clamped to 0-127
+                _copperTargetList = idx;
+                break;
+            }
+            case VgcConstants.CmdCopperUse:
+            {
+                int idx = _cmdRegs[1] & 0x7F; // P0, clamped to 0-127
+                _copperPendingList = idx;
+                break;
+            }
+            case VgcConstants.CmdCopperListEnd:
+                _copperTargetList = _copperActiveList;
                 break;
         }
     }
@@ -631,22 +681,23 @@ public class VirtualGraphicsController
             return;
 
         ushort position = (ushort)(y * VgcConstants.GfxWidth + x);
+        var events = _copperEvents[_copperTargetList];
 
-        for (int i = 0; i < _copperEvents.Count; i++)
+        for (int i = 0; i < events.Count; i++)
         {
-            var existing = _copperEvents[i];
+            var existing = events[i];
             if (existing.Position != position || existing.RegisterIndex != registerIndex)
                 continue;
-            _copperEvents[i] = new CopperEvent(position, registerIndex, value);
-            _copperDirty = true;
+            events[i] = new CopperEvent(position, registerIndex, value);
+            _copperListDirty[_copperTargetList] = true;
             return;
         }
 
-        if (_copperEvents.Count >= VgcConstants.MaxCopperEntries)
+        if (events.Count >= VgcConstants.MaxCopperEntriesPerList)
             return;
 
-        _copperEvents.Add(new CopperEvent(position, registerIndex, value));
-        _copperDirty = true;
+        events.Add(new CopperEvent(position, registerIndex, value));
+        _copperListDirty[_copperTargetList] = true;
     }
 
     private static bool TryResolveCopperRegister(int registerSpecifier, out byte registerIndex)
@@ -672,19 +723,6 @@ public class VirtualGraphicsController
         registerIndex == VgcConstants.RegScrollX - VgcConstants.VgcBase ||
         registerIndex == VgcConstants.RegScrollY - VgcConstants.VgcBase;
 
-    private void RebuildCopperProgramIfDirty()
-    {
-        if (!_copperDirty)
-            return;
-
-        _copperProgram = _copperEvents.ToArray();
-        Array.Sort(_copperProgram, static (a, b) =>
-        {
-            int byPos = a.Position.CompareTo(b.Position);
-            return byPos != 0 ? byPos : a.RegisterIndex.CompareTo(b.RegisterIndex);
-        });
-        _copperDirty = false;
-    }
 
     // -------------------------------------------------------------------------
     // Character output

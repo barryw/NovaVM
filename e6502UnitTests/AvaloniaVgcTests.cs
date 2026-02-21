@@ -480,6 +480,7 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperEnable);
         Assert.IsTrue(_vgc.IsCopperEnabled);
 
+        _vgc.IncrementFrameCounter(); // commit copper program
         var program = _vgc.GetCopperProgram();
         Assert.AreEqual(1, program.Length);
         Assert.AreEqual((ushort)(10 * VgcConstants.GfxWidth + 40), program[0].Position);
@@ -487,10 +488,139 @@ public class AvaloniaVgcTests
         Assert.AreEqual(2, program[0].Value);
 
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperClear);
+        _vgc.IncrementFrameCounter(); // commit clear
         Assert.AreEqual(0, _vgc.GetCopperProgram().Length);
 
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperDisable);
         Assert.IsFalse(_vgc.IsCopperEnabled);
+    }
+
+    [TestMethod]
+    public void Copper_ListSwap_ActiveChangesAtVblank()
+    {
+        // Build events on list 1
+        _vgc.Write(VgcConstants.RegP0, 1); // list index
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperList);
+
+        _vgc.Write(VgcConstants.RegP0, 10);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 5);
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegBgCol - VgcConstants.VgcBase));
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 7);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        // USE list 1
+        _vgc.Write(VgcConstants.RegP0, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperUse);
+
+        // Before vblank, active is still list 0 (empty)
+        Assert.AreEqual(0, _vgc.GetCopperProgram().Length);
+
+        // Vblank: active swaps to list 1
+        _vgc.IncrementFrameCounter();
+        var program = _vgc.GetCopperProgram();
+        Assert.AreEqual(1, program.Length);
+        Assert.AreEqual(7, program[0].Value);
+    }
+
+    [TestMethod]
+    public void Copper_AddToMultipleLists_EventsInCorrectLists()
+    {
+        // Add event to list 0 (default target)
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 10);
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegMode - VgcConstants.VgcBase));
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        // Switch target to list 1
+        _vgc.Write(VgcConstants.RegP0, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperList);
+
+        // Add two events to list 1
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 20);
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegBgCol - VgcConstants.VgcBase));
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 3);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 40);
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegBgCol - VgcConstants.VgcBase));
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 5);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.IncrementFrameCounter();
+
+        // Active is still list 0 — should have 1 event
+        var prog0 = _vgc.GetCopperProgram();
+        Assert.AreEqual(1, prog0.Length);
+        Assert.AreEqual(1, prog0[0].Value);
+
+        // Switch to list 1
+        _vgc.Write(VgcConstants.RegP0, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperUse);
+        _vgc.IncrementFrameCounter();
+
+        var prog1 = _vgc.GetCopperProgram();
+        Assert.AreEqual(2, prog1.Length);
+    }
+
+    [TestMethod]
+    public void Copper_DefaultBehavior_BackwardCompatibleOnList0()
+    {
+        // No LIST command — default target is list 0, active is list 0
+        _vgc.Write(VgcConstants.RegP0, 20);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 50);
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegBgCol - VgcConstants.VgcBase));
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 4);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperEnable);
+        _vgc.IncrementFrameCounter();
+
+        Assert.IsTrue(_vgc.IsCopperEnabled);
+        var program = _vgc.GetCopperProgram();
+        Assert.AreEqual(1, program.Length);
+        Assert.AreEqual(4, program[0].Value);
+
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperClear);
+        _vgc.IncrementFrameCounter();
+        Assert.AreEqual(0, _vgc.GetCopperProgram().Length);
+    }
+
+    [TestMethod]
+    public void Copper_ListEnd_ResetsTargetToActiveList()
+    {
+        // Set target to list 5
+        _vgc.Write(VgcConstants.RegP0, 5);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperList);
+
+        // LIST END resets target back to active (0)
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperListEnd);
+
+        // ADD should go to list 0 now
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 10);
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegBgCol - VgcConstants.VgcBase));
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 9);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.IncrementFrameCounter();
+        var program = _vgc.GetCopperProgram();
+        Assert.AreEqual(1, program.Length);
+        Assert.AreEqual(9, program[0].Value);
     }
 
     [TestMethod]
@@ -512,6 +642,7 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegP5, 1);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
 
+        _vgc.IncrementFrameCounter(); // commit copper program
         var program = _vgc.GetCopperProgram();
         Assert.AreEqual(2, program.Length);
         Assert.IsTrue(program[0].Position < program[1].Position);

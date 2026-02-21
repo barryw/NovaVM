@@ -148,7 +148,7 @@ Default sprite priority &
 \end{longtable}
 
 % =============================================================================
-\section{Sound Limits and Behavior}
+\section{Sound and Music Limits}
 % =============================================================================
 
 \begin{longtable}{p{0.32\textwidth} p{0.58\textwidth}}
@@ -158,37 +158,44 @@ Default sprite priority &
 \endhead
 \bottomrule
 \endfoot
-Channel masking &
-  The channel index is masked to the range 0--3 by the host:
-  \texttt{ch = P0 \& (ChannelCount - 1)}.
-  Values above 3 wrap into range; no error is raised. \\
-Frequency clamping &
-  Frequency is clamped to 16--12000 Hz by the host
-  (\texttt{Math.Clamp(freq, 16, 12000)}).
-  The ROM passes the raw 16-bit value; out-of-range values are silently
-  adjusted rather than rejected. \\
-Stopping a channel &
-  If \textit{freq} $\leq$ 0 or \textit{dur} $\leq$ 0, the channel is immediately
-  deactivated (\texttt{Active = false}, \texttt{NotePos} and \texttt{NoteTotalSamples}
-  reset to 0).
-  This is the correct way to stop a playing note before its duration expires. \\
-Duration units &
-  Duration is in units of 1/60 second (video frames).
-  Internally: \texttt{samples = durationTicks * 44100 / 60}. \\
+\cmd{SOUND note,dur{[},inst{]}} &
+  \textit{note} is a MIDI note number (0--127 byte range).
+  \textit{dur} is duration in 1/60-second frames (0--255 byte range).
+  \textit{inst} is instrument slot (0--15, default 0).
+  If \textit{note} or \textit{dur} is 0, the sound is stopped. \\
 Master volume &
-  Only the low nibble of the volume byte is used (\texttt{P0 \& 0x0F}).
+  Only the low nibble of the volume byte is used (\texttt{level \& 0x0F}).
   The default master volume on power-on is 12. \\
-Waveform wrapping &
-  The waveform index is wrapped: \texttt{waveform = P1 \% 5}.
-  Values 0--4 select square, sawtooth, triangle, noise, and sine respectively. \\
-Sustain level &
-  In \cmd{ENVELOPE}, the sustain parameter (P3) uses only the low nibble
-  (0--15 scale), converted to a floating-point level by the host:
-  \texttt{SustainLevel = (P3 \& 0x0F) / 15.0}. \\
-Envelope time parameters &
-  Attack (P1), decay (P2), and release (P4) are converted to sample counts:
-  \texttt{samples = max(1, value * 44100 / 240)}.
-  A value of 0 yields 1 sample (instantaneous). \\
+\cmd{INSTRUMENT} parameters &
+  All six parameters are bytes (0--255). Waveform should be one of
+  \$10, \$20, \$40, \$80. ADSR values 0--15 are meaningful; higher values
+  use the low nibble only for sustain. \\
+\cmd{INSTRUMENT} slots &
+  16 slots (0--15). Slot 0 is pre-initialized at boot. All other slots
+  start as copies of slot 0. \\
+\cmd{MUSIC voice,\ldots} &
+  Voice must be 1--3. The MML string is read from CPU memory via pointer;
+  maximum practical length limited by available RAM. \\
+\cmd{MUSIC TEMPO} &
+  BPM is a 16-bit value (0--65535). Default is 120. \\
+\cmd{MUSIC PRIORITY} &
+  1--3 voice numbers. Controls which voice is stolen first for SFX. \\
+MML pulse width &
+  Range 0--4095. Default 2048. PWM sweep step: $\pm$32 per frame. \\
+MML filter cutoff &
+  Range 0--2047. Resonance 0--15. Filter sweep step: $\pm$8 per frame. \\
+MML vibrato &
+  Depth is any positive integer; 0 = off. Oscillates at $\sim$2.9 Hz. \\
+MML loops &
+  Non-nesting. Maximum practical depth limited by string expansion. \\
+Copper events &
+  Maximum 1024 events per program. Events at duplicate position/register
+  replace existing values. \\
+\cmd{WAVE} &
+  Deprecated. Raises a syntax error. Use \cmd{INSTRUMENT} instead. \\
+\cmd{SIDPLAY} &
+  Loads \texttt{.sid} files from \texttt{\textasciitilde/e6502-programs}.
+  Song number is 1-based (default 1). \\
 \end{longtable}
 
 % =============================================================================

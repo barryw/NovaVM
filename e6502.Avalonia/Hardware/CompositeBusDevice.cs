@@ -88,7 +88,20 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_timer.OwnsAddress(address)) { _timer.Write(address, data); return; }
         if (_xmc.OwnsAddress(address)) { _xmc.Write(address, data); return; }
         if (_fio.OwnsAddress(address)) { _fio.Write(address, data); return; }
-        if (_vgc.OwnsAddress(address)) { _vgc.Write(address, data); return; }
+        if (_vgc.OwnsAddress(address))
+        {
+            _vgc.Write(address, data);
+            if (_vgc.SysResetRequested)
+            {
+                _vgc.SysResetRequested = false;
+                _musicEngine.MusicStop();
+                _sid.Write(0xD404, 0x00); // gate off voice 1
+                _sid.Write(0xD40B, 0x00); // gate off voice 2
+                _sid.Write(0xD412, 0x00); // gate off voice 3
+                _sid.Write(0xD418, 0x00); // silence master volume
+            }
+            return;
+        }
         if (_sid.OwnsAddress(address)) { _sid.Write(address, data); return; }
         if (address >= VgcConstants.RomBase) return;
         _ram[address] = data;

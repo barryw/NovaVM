@@ -486,6 +486,8 @@ XTK_SIDSTOP       = $13              ; extended token id: SIDSTOP
 XTK_MUSIC         = $14              ; extended token id: MUSIC
 XTK_PLAYING       = $15              ; extended token id: PLAYING (function)
 XTK_MNOTE         = $16              ; extended token id: MNOTE( (function)
+XTK_COPPER        = $17              ; extended token id: COPPER
+XTK_RESET         = $18              ; extended token id: RESET
 
 ; offsets from a base of X or Y
 
@@ -1822,6 +1824,8 @@ TAB_XTKCMD
       .word LAB_MUSIC-1       ; XTK_MUSIC ($14)
       .word LAB_15D9-1        ; XTK_PLAYING ($15) - function only, syntax error
       .word LAB_15D9-1        ; XTK_MNOTE ($16)   - function only, syntax error
+      .word LAB_COPPER-1      ; XTK_COPPER ($17)
+      .word LAB_RESET-1       ; XTK_RESET  ($18)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -8178,14 +8182,14 @@ LAB_TWOPI
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 22
+XTK_COUNT = 24
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
       .word @s_xpeek, @s_stash, @s_fetch, @s_xfree, @s_xreset
       .word @s_xalloc, @s_xdir, @s_xdel, @s_xmap, @s_xunmap
       .word @s_gsave, @s_gload, @s_sidplay, @s_sidstop
-      .word @s_music, @s_playing, @s_mnote
+      .word @s_music, @s_playing, @s_mnote, @s_copper, @s_reset
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8209,6 +8213,8 @@ TAB_XTKSTR
 @s_music:  .byte "MUSIC",0
 @s_playing: .byte "PLAYING",0
 @s_mnote:  .byte "MNOTE(",0
+@s_copper: .byte "COPPER",0
+@s_reset:  .byte "RESET",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8287,6 +8293,15 @@ VCMD_SPRENA   = $15            ; P0=sprite
 VCMD_SPRDIS   = $16            ; P0=sprite
 VCMD_SPRFLIP  = $17            ; P0=sprite, P1=flags
 VCMD_SPRPRI   = $18            ; P0=sprite, P1=priority
+
+VCMD_COPPERADD = $1B           ; P0/P1=x, P2=y, P3=reg, P4=0, P5=value
+VCMD_COPPERCLR = $1C           ; no params
+VCMD_COPPERENA = $1D           ; no params
+VCMD_COPPERDIS = $1E           ; no params
+VCMD_SYSRESET  = $1F           ; full system reset (VGC+SID+music)
+VCMD_COPPERLIST = $20          ; P0=list index (0-127)
+VCMD_COPPERUSE = $21           ; P0=list index (0-127)
+VCMD_COPPEREND = $22           ; reset target to active list
 
 ; --- File I/O coprocessor registers ---
 
@@ -9203,6 +9218,157 @@ LAB_MUSIC
       RTS
 @m_seq_err
       JMP   LAB_FIO_ERRIO
+
+; perform COPPER subcommand
+; COPPER ADD x, y, reg, value
+; COPPER CLEAR | ON | OFF
+
+LAB_COPPER
+      JSR   LAB_GBYT          ; peek next byte
+      CMP   #TK_CLEAR
+      BEQ   @c_clear
+      CMP   #TK_ON
+      BEQ   @c_on
+      CMP   #TK_OFF
+      BEQ   @c_off
+      CMP   #'A'
+      BEQ   @c_add
+      CMP   #TK_LIST
+      BEQ   @c_list
+      CMP   #'U'
+      BEQ   @c_use
+      JMP   LAB_15D9          ; syntax error
+
+; --- COPPER CLEAR ---
+@c_clear
+      JSR   LAB_IGBY          ; consume CLEAR token
+      LDA   #VCMD_COPPERCLR
+      STA   VGC_CMD
+      RTS
+
+; --- COPPER ON ---
+@c_on
+      JSR   LAB_IGBY          ; consume ON token
+      LDA   #VCMD_COPPERENA
+      STA   VGC_CMD
+      RTS
+
+; --- COPPER OFF ---
+@c_off
+      JSR   LAB_IGBY          ; consume OFF token
+      LDA   #VCMD_COPPERDIS
+      STA   VGC_CMD
+      RTS
+
+; --- COPPER LIST n / COPPER LIST END ---
+@c_list
+      JSR   LAB_IGBY          ; consume LIST token
+      JSR   LAB_GBYT          ; peek next
+      CMP   #TK_END
+      BEQ   @c_list_end
+      ; LIST n — parse list index
+      JSR   LAB_GTBY          ; 8-bit → X
+      STX   VGC_P0             ; list index
+      LDA   #VCMD_COPPERLIST
+      STA   VGC_CMD
+      RTS
+
+@c_list_end
+      JSR   LAB_IGBY          ; consume END token
+      LDA   #VCMD_COPPEREND
+      STA   VGC_CMD
+      RTS
+
+; --- COPPER USE n ---
+@c_use
+      JSR   LAB_IGBY          ; U
+      JSR   LAB_IGBY          ; S
+      JSR   LAB_IGBY          ; E
+      JSR   LAB_GTBY          ; list index → X
+      STX   VGC_P0
+      LDA   #VCMD_COPPERUSE
+      STA   VGC_CMD
+      RTS
+
+; --- COPPER ADD x, y, reg, value ---
+@c_add
+      JSR   LAB_IGBY          ; A
+      JSR   LAB_IGBY          ; D
+      JSR   LAB_IGBY          ; D
+      JSR   LAB_GTWRD         ; x (16-bit) → FAC1_3(lo), FAC1_2(hi)
+      LDA   FAC1_3
+      STA   VGC_P0             ; x low
+      LDA   FAC1_2
+      STA   VGC_P1             ; x high
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y (8-bit) → X
+      STX   VGC_P2             ; y
+      JSR   LAB_1C01          ; comma
+      ; parse register name: BGCOL, MODE, SCROLLX, SCROLLY
+      JSR   LAB_GBYT          ; peek
+      CMP   #'B'
+      BEQ   @c_bgcol
+      CMP   #TK_GMODE
+      BEQ   @c_mode
+      CMP   #'S'
+      BEQ   @c_scroll
+      JMP   LAB_15D9          ; syntax error
+
+@c_bgcol
+      JSR   LAB_IGBY          ; B
+      JSR   LAB_IGBY          ; G
+      JSR   LAB_IGBY          ; C
+      JSR   LAB_IGBY          ; O
+      JSR   LAB_IGBY          ; L
+      LDA   #$01              ; reg index 1 = BGCOL
+      JMP   @c_store_reg
+
+@c_mode
+      JSR   LAB_IGBY          ; consume MODE token
+      LDA   #$00              ; reg index 0 = MODE
+      JMP   @c_store_reg
+
+@c_scroll
+      JSR   LAB_IGBY          ; S
+      JSR   LAB_IGBY          ; C
+      JSR   LAB_IGBY          ; R
+      JSR   LAB_IGBY          ; O
+      JSR   LAB_IGBY          ; L
+      JSR   LAB_IGBY          ; L
+      JSR   LAB_GBYT          ; peek X or Y
+      CMP   #'X'
+      BEQ   @c_scrollx
+      CMP   #'Y'
+      BEQ   @c_scrolly
+      JMP   LAB_15D9          ; syntax error
+
+@c_scrollx
+      JSR   LAB_IGBY          ; consume X
+      LDA   #$05              ; reg index 5 = SCROLLX
+      JMP   @c_store_reg
+
+@c_scrolly
+      JSR   LAB_IGBY          ; consume Y
+      LDA   #$06              ; reg index 6 = SCROLLY
+      JMP   @c_store_reg
+
+@c_store_reg
+      STA   VGC_P3             ; register index
+      LDA   #$00
+      STA   VGC_P4             ; high byte = 0
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; value (8-bit) → X
+      STX   VGC_P5             ; value
+      LDA   #VCMD_COPPERADD
+      STA   VGC_CMD            ; trigger
+      RTS
+
+; perform RESET — full system reset (VGC, SID, music) + cold start BASIC
+
+LAB_RESET
+      LDA   #VCMD_SYSRESET
+      STA   VGC_CMD            ; trigger hardware reset
+      JMP   ($FFFC)            ; jump through reset vector
 
 ; perform DEL "filename"
 
