@@ -76,7 +76,7 @@ public class VirtualGraphicsController
         Array.Clear(_spriteY);
         Array.Clear(_spriteFlags);
         Array.Clear(_gfxBitmap);
-        _gfxDrawColor = 0;
+        _gfxDrawColor = 1;
         _irqCtrl = 0;
 
         // Default sprite priority: in front of all
@@ -338,10 +338,7 @@ public class VirtualGraphicsController
     // Graphics commands
     // -------------------------------------------------------------------------
 
-    private byte EffectiveDrawColor =>
-        _gfxDrawColor != 0
-            ? _gfxDrawColor
-            : Math.Max((byte)1, _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase]);
+    private byte EffectiveDrawColor => _gfxDrawColor;
 
     private void ExecuteGfxCommand(byte cmd)
     {

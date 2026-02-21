@@ -82,6 +82,9 @@ public static class VgcConstants
 
     // Music/SFX status register
     public const int  MusicStatus      = 0xBA50; // bit 0 = SFX playing, bit 1 = music playing
+    public const int  MusicNote1       = 0xBA51; // voice 1 current MIDI note (0=silent)
+    public const int  MusicNote2       = 0xBA52; // voice 2 current MIDI note
+    public const int  MusicNote3       = 0xBA53; // voice 3 current MIDI note
 
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;
@@ -175,7 +178,7 @@ public static class VgcConstants
     public const int TimerDivL         = 0xBA42;  // divisor low byte
     public const int TimerDivH         = 0xBA43;  // divisor high byte
 
-    public const int FreeBase          = 0xBA50;
+    public const int FreeBase          = 0xBA54;
     public const int FreeEnd           = 0xBFFF;
 
     public const int RomBase           = 0xC000;

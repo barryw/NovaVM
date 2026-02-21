@@ -485,6 +485,7 @@ XTK_SIDPLAY       = $12              ; extended token id: SIDPLAY
 XTK_SIDSTOP       = $13              ; extended token id: SIDSTOP
 XTK_MUSIC         = $14              ; extended token id: MUSIC
 XTK_PLAYING       = $15              ; extended token id: PLAYING (function)
+XTK_MNOTE         = $16              ; extended token id: MNOTE( (function)
 
 ; offsets from a base of X or Y
 
@@ -522,7 +523,7 @@ VEC_SV            = VEC_LD+2  ; save vector
 ;Ibuffs            = IRQ_vec+$14
 Ibuffs            = VEC_SV+$16
                               ; start of input buffer after IRQ/NMI code
-Ibuffe            = Ibuffs+$47; end of input buffer
+Ibuffe            = Ibuffs+$DE; end of input buffer (222 bytes, fills to $02FF)
 
 Ram_base          = $0300     ; start of user RAM (set as needed, should be page aligned)
 Ram_top           = $A000     ; end of contiguous BASIC RAM+1 (before MMIO window)
@@ -1819,6 +1820,7 @@ TAB_XTKCMD
       .word LAB_SIDSTOP-1     ; XTK_SIDSTOP ($13)
       .word LAB_MUSIC-1       ; XTK_MUSIC ($14)
       .word LAB_15D9-1        ; XTK_PLAYING ($15) - function only, syntax error
+      .word LAB_15D9-1        ; XTK_MNOTE ($16)   - function only, syntax error
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -3385,6 +3387,8 @@ LAB_1BA9
 
                               ; wasn't a number so ..
 LAB_1BAC
+      CMP   #TKX_PREFIX       ; extended token prefix? (GBYT sets carry for $01)
+      BEQ   LAB_1BEE          ; go handle extended token functions
       TAX                     ; set the flags
       BMI   LAB_1BD0          ; if -ve go test token values
 
@@ -3455,7 +3459,9 @@ LAB_SNER
 
 LAB_1BD0
       CMP   #TK_MINUS         ; compare with token for -
-      BEQ   LAB_1C11          ; branch if - token (do set-up for functions)
+      BNE   @not_minus
+      JMP   LAB_1C11          ; branch if - token (do set-up for functions)
+@not_minus
 
                               ; wasn't -n so ..
       CMP   #TK_PLUS          ; compare with token for +
@@ -3467,7 +3473,7 @@ LAB_1BD0
                               ; was NOT token
 TK_EQUAL_PLUS     = TK_EQUAL-TK_PLUS
       LDY   #TK_EQUAL_PLUS*3  ; offset to NOT function
-      BNE   LAB_1C13          ; do set-up for function then execute (branch always)
+      JMP   LAB_1C13          ; do set-up for function then execute
 
 ; do = compare
 
@@ -3498,10 +3504,12 @@ LAB_1BEE
       JSR   LAB_IGBY          ; consume prefix, get extension id
       CMP   #XTK_PLAYING
       BEQ   @xtk_playing
+      CMP   #XTK_MNOTE
+      BEQ   @xtk_mnote
       CMP   #XTK_XPEEK
       BNE   LAB_SNER          ; unknown extension in expression
-      JSR   LAB_IGBY          ; consume extension id, now at '('
-      JSR   LAB_1BFE          ; scan for '(' and advance
+      ; '(' was consumed during tokenization as part of keyword
+      JSR   LAB_IGBY          ; consume extension id, advance to argument
       JSR   LAB_EVNM          ; evaluate expression and check numeric
       JSR   LAB_EVPI          ; convert FAC1 to unsigned integer
       JSR   LAB_1BFB          ; scan for ')' and advance
@@ -3524,10 +3532,34 @@ LAB_1BEE
 @xtk_playing
       JSR   LAB_IGBY          ; consume PLAYING token, advance past it
       LDA   MUSIC_STATUS      ; read status register
-      AND   #$01              ; isolate playing bit
-      TAY                     ; Y = result (0 or 1)
+      AND   #$02              ; isolate music playing bit
+      BEQ   @play_off
+      LDY   #$01              ; music is playing
+      .byte $2C               ; BIT abs — skip next 2 bytes
+@play_off
+      LDY   #$00              ; music not playing
       LDA   #$00              ; A = high byte = 0
       JMP   LAB_AYFC          ; return AY as integer in FAC1
+
+@xtk_mnote
+      ; MNOTE(voice) — return current MIDI note for voice 1-3
+      ; '(' was consumed during tokenization as part of keyword
+      JSR   LAB_IGBY          ; consume MNOTE token, advance to argument
+      JSR   LAB_EVNM          ; evaluate voice expression (numeric)
+      JSR   LAB_1BFB          ; scan for ')' and advance
+      JSR   LAB_F2FX          ; convert FAC1 to integer
+      LDY   Itempl            ; voice number (1-3)
+      DEY                     ; make 0-based
+      CPY   #$03
+      BCS   @mnote_bad        ; out of range
+      LDA   MUSIC_NOTE1,Y     ; read note register
+      TAY
+      LDA   #$00
+      JMP   LAB_AYFC          ; return AY as integer in FAC1
+@mnote_bad
+      LDY   #$00              ; return 0 for invalid voice
+      LDA   #$00
+      JMP   LAB_AYFC
 
 LAB_1BEE_STD
       SEC                     ; plain token base subtraction
@@ -8145,21 +8177,21 @@ LAB_TWOPI
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 21
+XTK_COUNT = 22
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
       .word @s_xpeek, @s_stash, @s_fetch, @s_xfree, @s_xreset
       .word @s_xalloc, @s_xdir, @s_xdel, @s_xmap, @s_xunmap
       .word @s_gsave, @s_gload, @s_sidplay, @s_sidstop
-      .word @s_music, @s_playing
+      .word @s_music, @s_playing, @s_mnote
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
 @s_xmem:   .byte "XMEM",0
 @s_xbank:  .byte "XBANK",0
 @s_xpoke:  .byte "XPOKE",0
-@s_xpeek:  .byte "XPEEK",0
+@s_xpeek:  .byte "XPEEK(",0
 @s_stash:  .byte "STASH",0
 @s_fetch:  .byte "FETCH",0
 @s_xfree:  .byte "XFREE",0
@@ -8175,6 +8207,7 @@ TAB_XTKSTR
 @s_sidstop: .byte "SIDSTOP",0
 @s_music:  .byte "MUSIC",0
 @s_playing: .byte "PLAYING",0
+@s_mnote:  .byte "MNOTE(",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8295,6 +8328,9 @@ FIO_CMD_MTEMPO = $10           ; set music tempo (BPM)
 FIO_CMD_MLOOP  = $11           ; set music loop on/off
 FIO_CMD_MPRI   = $12           ; set SFX voice steal priority
 MUSIC_STATUS   = $BA50         ; bit 0=SFX playing, bit 1=music playing
+MUSIC_NOTE1    = $BA51         ; voice 1 current MIDI note (0=silent)
+MUSIC_NOTE2    = $BA52         ; voice 2 current MIDI note
+MUSIC_NOTE3    = $BA53         ; voice 3 current MIDI note
 FIO_ERR_EOD   = $03            ; end of directory
 
 ; --- XMC expansion memory controller registers ---
@@ -9143,14 +9179,21 @@ LAB_MUSIC
       RTS
 
 ; --- MUSIC voice, "mml" ---
+; Pass string via pointer (ut1_pl/ph) so MML strings can exceed 63 bytes.
+; FIO_SRCL = voice, FIO_ENDL/ENDH = string pointer, FIO_NAMELEN = length.
 @m_seq
       JSR   LAB_GTBY          ; voice number (1-3) → X
       STX   FIO_SRCL          ; store voice
       JSR   LAB_1C01          ; comma
-      JSR   LAB_FIO_GETNAME   ; parse string → FIO_NAME/FIO_NAMELEN
-      BCC   @m_seq_go
-      JMP   LAB_FIO_ERRIO
-@m_seq_go
+      JSR   LAB_EVEX          ; evaluate expression
+      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
+      TAX
+      BEQ   @m_seq_err        ; empty string = error
+      STX   FIO_NAMELEN       ; string length (1-255)
+      LDA   ut1_pl
+      STA   FIO_ENDL          ; string pointer low
+      LDA   ut1_ph
+      STA   FIO_ENDH          ; string pointer high
       LDA   #FIO_CMD_MSEQ
       STA   FIO_CMD
       LDA   FIO_STATUS

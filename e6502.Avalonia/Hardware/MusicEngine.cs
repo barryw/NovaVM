@@ -125,6 +125,14 @@ public sealed class MusicEngine
 
     public bool IsMusicPlaying => _musicPlaying;
 
+    /// <summary>Returns the current MIDI note for a voice (0-2), or 0 if silent.</summary>
+    public byte GetVoiceNote(int voiceIndex)
+    {
+        if (voiceIndex < 0 || voiceIndex >= VoiceCount) return 0;
+        int midi = _voices[voiceIndex].CurrentMidi;
+        return (byte)(midi > 0 ? midi : 0);
+    }
+
     // -------------------------------------------------------------------------
     // Instrument API
     // -------------------------------------------------------------------------
@@ -186,8 +194,13 @@ public sealed class MusicEngine
     public void SetSequence(int voiceIndex, string mml)
     {
         if (voiceIndex < 0 || voiceIndex >= VoiceCount) return;
-        _voices[voiceIndex].Events = MmlParser.Parse(mml);
-        _voices[voiceIndex].Reset(_bpm);
+        var newEvents = MmlParser.Parse(mml);
+        var voice = _voices[voiceIndex];
+        if (voice.Events is { Count: > 0 } && !_musicPlaying)
+            voice.Events.AddRange(newEvents);  // append before PLAY
+        else
+            voice.Events = newEvents;          // replace
+        voice.Reset(_bpm);
     }
 
     public void MusicPlay()
@@ -284,6 +297,14 @@ public sealed class MusicEngine
             }
             else
             {
+                // Gate off all voices and stop
+                for (int i = 0; i < VoiceCount; i++)
+                {
+                    if (i == _sfxVoice) continue;
+                    byte current = _sid.Read(Ctrl(i));
+                    _sid.Write(Ctrl(i), (byte)(current & ~0x01));
+                    _voices[i].CurrentMidi = -1;
+                }
                 _musicPlaying = false;
             }
         }

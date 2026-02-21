@@ -26,9 +26,6 @@ public sealed class SidChip : IDisposable
     private float _prevBandPass;
     private float _prevLowPass;
 
-    // Accumulated samples from Clock() calls, consumed by RenderSamples
-    private readonly Queue<float> _sampleBuffer = new();
-
     public SidChip(bool enableAudio = false)
     {
         for (int i = 0; i < 3; i++)
@@ -66,11 +63,18 @@ public sealed class SidChip : IDisposable
         _registers[address - BaseAddress] = data;
 
     /// <summary>
-    /// Advance the SID by the given number of CPU cycles, producing audio samples.
+    /// Legacy method — no longer generates samples. Audio is now rendered on-demand
+    /// by the OpenAL callback thread via RenderSamples().
     /// </summary>
-    public void Clock(int cycles)
+    public void Clock(int cycles) { }
+
+    /// <summary>
+    /// Render samples on-demand for the OpenAL audio callback.
+    /// Clocks channels directly at the correct sample rate, fully decoupled from CPU speed.
+    /// </summary>
+    private short[] RenderSamples(int count)
     {
-        if (cycles <= 0) return;
+        var pcm = new short[count];
 
         lock (_lock)
         {
@@ -83,10 +87,10 @@ public sealed class SidChip : IDisposable
             cutoff = MathF.Pow(cutoff, 1.3f);
             float resonance = (_registers[0x17] > 0x3F) ? 7.0f / (_registers[0x17] >> 4) : 1.75f;
 
-            int remaining = cycles;
-            while (remaining > 0)
+            for (int i = 0; i < count; i++)
             {
-                int cyclesToRun = Math.Min(remaining, (int)MathF.Ceiling(_cyclesPerSample - _cycleAccumulator));
+                int cyclesToRun = (int)MathF.Ceiling(_cyclesPerSample - _cycleAccumulator);
+                if (cyclesToRun < 1) cyclesToRun = 1;
 
                 for (int j = 0; j < 3; j++)
                     _channels[j].Clock(cyclesToRun);
@@ -97,36 +101,13 @@ public sealed class SidChip : IDisposable
                 }
 
                 _cycleAccumulator += cyclesToRun;
-
                 if (_cycleAccumulator >= _cyclesPerSample)
-                {
                     _cycleAccumulator -= _cyclesPerSample;
-                    float sample = MixSample(filterCtrl, filterSelect, cutoff, resonance, masterVol);
-                    _sampleBuffer.Enqueue(sample);
-                }
 
-                remaining -= cyclesToRun;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Render samples for the audio callback (OpenAlRenderer).
-    /// Drains the internal sample buffer, padding with silence if needed.
-    /// </summary>
-    private short[] RenderSamples(int count)
-    {
-        var pcm = new short[count];
-
-        lock (_lock)
-        {
-            int available = Math.Min(count, _sampleBuffer.Count);
-            for (int i = 0; i < available; i++)
-            {
-                float clamped = Math.Clamp(_sampleBuffer.Dequeue(), -1f, 1f);
+                float sample = MixSample(filterCtrl, filterSelect, cutoff, resonance, masterVol);
+                float clamped = Math.Clamp(sample, -1f, 1f);
                 pcm[i] = (short)(clamped * short.MaxValue);
             }
-            // Remaining samples stay at 0 (silence)
         }
 
         return pcm;
@@ -172,11 +153,15 @@ public sealed class SidChip : IDisposable
         return pcm;
     }
 
-    /// <summary>Clear the sample buffer so playback stops immediately.</summary>
+    /// <summary>Reset filter state so silence is immediate after stopping.</summary>
     public void Flush()
     {
         lock (_lock)
-            _sampleBuffer.Clear();
+        {
+            _prevBandPass = 0;
+            _prevLowPass = 0;
+            _cycleAccumulator = 0;
+        }
     }
 
     public void Dispose() =>

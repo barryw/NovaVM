@@ -30,7 +30,7 @@ Generated BASIC includes:
 
 Set `SCALE` lower for faster playback, higher for slower playback.
 
-`--max-line-len` defaults to `68`, which is safe for NovaBASIC line input limits.
+`--max-line-len` defaults to `68`. NovaBASIC input buffer is 222 bytes.
 
 ## LilyPond Input
 ```bash

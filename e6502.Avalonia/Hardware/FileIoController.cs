@@ -464,10 +464,20 @@ public sealed partial class FileIoController
     {
         if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
         int voice = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
-        string? mml = ReadMmlString();
-        if (mml is null) { SetError(VgcConstants.FioErrIo); return; }
+
+        // MML string is passed via pointer in 6502 memory (not the 64-byte FIO_NAME buffer)
+        // so strings up to 255 bytes are supported.
+        int len = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
+        int ptr = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
+                | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+        if (len < 1) { SetError(VgcConstants.FioErrIo); return; }
+
+        var sb = new StringBuilder(len);
+        for (int i = 0; i < len; i++)
+            sb.Append((char)_busRead((ushort)(ptr + i)));
+
         // voice from BASIC is 1-3, MusicEngine expects 0-2
-        _musicEngine.SetSequence(voice - 1, mml);
+        _musicEngine.SetSequence(voice - 1, sb.ToString());
         SetOk();
     }
 
@@ -514,17 +524,6 @@ public sealed partial class FileIoController
         if (v3 > 0) pri.Add(v3 - 1);
         _musicEngine.SetPriority(pri.ToArray());
         SetOk();
-    }
-
-    private string? ReadMmlString()
-    {
-        int len = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
-        if (len < 1 || len > 63) return null;
-        var sb = new StringBuilder(len);
-        int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
-        for (int i = 0; i < len; i++)
-            sb.Append((char)_regs[nameOffset + i]);
-        return sb.ToString();
     }
 
     private void PopulateDirEntry(FileInfo fi)

@@ -74,6 +74,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     {
         if (address == VgcConstants.MusicStatus)
             return (byte)((_musicEngine.IsPlaying ? 1 : 0) | (_musicEngine.IsMusicPlaying ? 2 : 0));
+        if (address >= VgcConstants.MusicNote1 && address <= VgcConstants.MusicNote3)
+            return _musicEngine.GetVoiceNote(address - VgcConstants.MusicNote1);
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
         if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
