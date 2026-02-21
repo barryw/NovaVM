@@ -1531,7 +1531,8 @@ LAB_152B
 LAB_152E
       CMP   #TKX_PREFIX       ; extended two-byte token prefix?
       BEQ   LAB_152E_X
-      BPL   LAB_150C          ; just go print it if not token byte
+      CMP   #$80              ; token byte? (bit 7 set)
+      BCC   LAB_150C          ; < $80 is plain character, go print it
 
                               ; else was token byte so uncrunch it (maybe)
       BIT   Oquote            ; test the open quote flag
