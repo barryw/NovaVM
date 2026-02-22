@@ -1,3 +1,4 @@
+using System;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -164,6 +165,151 @@ public class NicControllerTests
         await Task.Delay(50);
         Assert.AreEqual(0, (byte)(_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected));
 
+        server.Stop();
+    }
+
+    [TestMethod]
+    public async Task Nic_SendRecv_RoundTrip()
+    {
+        using var server = new TcpListener(System.Net.IPAddress.Loopback, 0);
+        server.Start();
+        int port = ((System.Net.IPEndPoint)server.LocalEndpoint).Port;
+
+        // Connect
+        string host = "127.0.0.1";
+        for (int i = 0; i < host.Length; i++)
+            _nic.Write((ushort)(VgcConstants.NicNameBuf + i), (byte)host[i]);
+        _nic.Write((ushort)(VgcConstants.NicNameBuf + host.Length), 0);
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicRemotePortL, (byte)(port & 0xFF));
+        _nic.Write((ushort)VgcConstants.NicRemotePortH, (byte)(port >> 8));
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdConnect);
+
+        using var serverClient = await server.AcceptTcpClientAsync();
+        var serverStream = serverClient.GetStream();
+
+        // Wait for connected
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 2000 &&
+               (_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected) == 0)
+            await Task.Delay(10);
+
+        // Send "HI!" from 6502
+        _ram[0x2000] = 0x48;
+        _ram[0x2001] = 0x49;
+        _ram[0x2002] = 0x21;
+        _nic.Write((ushort)VgcConstants.NicDmaAddrL, 0x00);
+        _nic.Write((ushort)VgcConstants.NicDmaAddrH, 0x20);
+        _nic.Write((ushort)VgcConstants.NicDmaLen, 3);
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdSend);
+
+        // Server reads: 1-byte length + 3-byte payload
+        var recvBuf = new byte[4];
+        int totalRead = 0;
+        while (totalRead < 4)
+            totalRead += await serverStream.ReadAsync(recvBuf.AsMemory(totalRead));
+        Assert.AreEqual(3, recvBuf[0]);
+        Assert.AreEqual(0x48, recvBuf[1]);
+        Assert.AreEqual(0x49, recvBuf[2]);
+        Assert.AreEqual(0x21, recvBuf[3]);
+
+        // Server sends reply: "OK"
+        serverStream.WriteByte(2);
+        serverStream.Write(new byte[] { 0x4F, 0x4B });
+        serverStream.Flush();
+
+        // Wait for data available
+        sw.Restart();
+        while (sw.ElapsedMilliseconds < 2000 &&
+               (_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotDataReady) == 0)
+            await Task.Delay(10);
+
+        // Receive into $2080
+        _nic.Write((ushort)VgcConstants.NicDmaAddrL, 0x80);
+        _nic.Write((ushort)VgcConstants.NicDmaAddrH, 0x20);
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdRecv);
+
+        Assert.AreEqual(2, _nic.Read((ushort)VgcConstants.NicMsgLen));
+        Assert.AreEqual(0x4F, _ram[0x2080]);
+        Assert.AreEqual(0x4B, _ram[0x2081]);
+
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdDisconnect);
+        server.Stop();
+    }
+
+    [TestMethod]
+    public async Task Nic_Listen_Accept_ReceivesConnection()
+    {
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicLocalPortL, 0x00);
+        _nic.Write((ushort)VgcConstants.NicLocalPortH, 0x00); // port 0 = OS assigns
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdListen);
+
+        int assignedPort = _nic.GetListeningPort(0) ?? 0;
+        Assert.AreNotEqual(0, assignedPort);
+
+        using var client = new TcpClient();
+        await client.ConnectAsync("127.0.0.1", assignedPort);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 2000 &&
+               (_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotDataReady) == 0)
+            await Task.Delay(10);
+
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdAccept);
+
+        Assert.AreNotEqual(0, (byte)(_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected));
+
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdDisconnect);
+    }
+
+    [TestMethod]
+    public async Task Nic_Irq_FiredOnMessageArrival()
+    {
+        using var server = new TcpListener(System.Net.IPAddress.Loopback, 0);
+        server.Start();
+        int port = ((System.Net.IPEndPoint)server.LocalEndpoint).Port;
+
+        string host = "127.0.0.1";
+        for (int i = 0; i < host.Length; i++)
+            _nic.Write((ushort)(VgcConstants.NicNameBuf + i), (byte)host[i]);
+        _nic.Write((ushort)(VgcConstants.NicNameBuf + host.Length), 0);
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicRemotePortL, (byte)(port & 0xFF));
+        _nic.Write((ushort)VgcConstants.NicRemotePortH, (byte)(port >> 8));
+
+        _nic.Write((ushort)VgcConstants.NicIrqCtrl, 0x01); // enable IRQ for slot 0
+
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdConnect);
+        using var serverClient = await server.AcceptTcpClientAsync();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 2000 &&
+               (_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected) == 0)
+            await Task.Delay(10);
+
+        Assert.IsFalse(_nic.IrqPending);
+
+        // Server sends a message
+        var stream = serverClient.GetStream();
+        stream.WriteByte(2);
+        stream.Write(new byte[] { 0x41, 0x42 });
+        stream.Flush();
+
+        // Wait for IRQ
+        sw.Restart();
+        while (sw.ElapsedMilliseconds < 2000 && !_nic.IrqPending)
+            await Task.Delay(10);
+
+        Assert.IsTrue(_nic.IrqPending);
+
+        byte irqStatus = _nic.Read((ushort)VgcConstants.NicIrqStatus);
+        Assert.AreEqual(0x01, irqStatus);
+        Assert.IsFalse(_nic.IrqPending);
+
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdDisconnect);
         server.Stop();
     }
 

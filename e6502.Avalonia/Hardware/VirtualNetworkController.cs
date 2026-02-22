@@ -146,8 +146,24 @@ public sealed class VirtualNetworkController : IDisposable
 
         _regs[VgcConstants.NicMsgLen - VgcConstants.NicBase] = (byte)(data.Length == 256 ? 0 : data.Length);
     }
-    private void DoListen(int slot) { }
-    private void DoAccept(int slot) { }
+    private void DoListen(int slot)
+    {
+        var s = _slots[slot];
+        s.Reset();
+        int port = _regs[VgcConstants.NicLocalPortL - VgcConstants.NicBase]
+                 | (_regs[VgcConstants.NicLocalPortH - VgcConstants.NicBase] << 8);
+        s.StartListening(port);
+    }
+
+    private void DoAccept(int slot)
+    {
+        var s = _slots[slot];
+        if (s.AcceptPending())
+            s.StartReading(OnMessageReceived, slot);
+    }
+
+    /// <summary>Get the actual listening port for a slot (for testing with port 0).</summary>
+    public int? GetListeningPort(int slot) => _slots[slot].ListeningPort;
 
     private byte BuildGlobalStatus()
     {
