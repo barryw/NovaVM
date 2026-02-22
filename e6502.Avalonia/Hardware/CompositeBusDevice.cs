@@ -76,6 +76,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         WriteWord(VgcConstants.VectorTableBase + 0x0C, VgcConstants.XmcBase);
         WriteWord(VgcConstants.VectorTableBase + 0x0E, VgcConstants.TimerBase);
         WriteWord(VgcConstants.VectorTableBase + 0x10, VgcConstants.Sid2Base);
+        WriteWord(VgcConstants.VectorTableBase + 0x12, VgcConstants.NicBase);
     }
 
     public byte Read(ushort address)

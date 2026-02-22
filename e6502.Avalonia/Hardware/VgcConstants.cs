@@ -191,6 +191,61 @@ public static class VgcConstants
     public const int FreeBase          = 0xBA57;
     public const int FreeEnd           = 0xBFFF;
 
+    // -------------------------------------------------------------------------
+    // Network Interface Controller (NIC) registers ($A100-$A13F)
+    // -------------------------------------------------------------------------
+
+    public const int NicBase           = 0xA100;
+    public const int NicEnd            = 0xA13F;
+
+    public const int NicCmd            = 0xA100;   // write triggers command
+    public const int NicStatus         = 0xA101;   // global status (read)
+    public const int NicSlot           = 0xA102;   // active slot ID (0-3)
+    public const int NicIrqCtrl        = 0xA103;   // IRQ enable mask (bit per slot)
+    public const int NicIrqStatus      = 0xA104;   // IRQ pending flags (read-clears)
+
+    public const int NicRemotePortL    = 0xA108;   // remote port low byte
+    public const int NicRemotePortH    = 0xA109;   // remote port high byte
+    public const int NicLocalPortL     = 0xA10A;   // local port low byte (listen)
+    public const int NicLocalPortH     = 0xA10B;   // local port high byte
+
+    public const int NicDmaAddrL       = 0xA110;   // DMA RAM address low
+    public const int NicDmaAddrH       = 0xA111;   // DMA RAM address high
+    public const int NicDmaLen         = 0xA112;   // DMA length (1-255, 0=256)
+    public const int NicMsgLen         = 0xA113;   // received message length (read-only)
+
+    public const int NicSlotStatus0    = 0xA118;   // slot 0 status
+    public const int NicSlotStatus1    = 0xA119;   // slot 1 status
+    public const int NicSlotStatus2    = 0xA11A;   // slot 2 status
+    public const int NicSlotStatus3    = 0xA11B;   // slot 3 status
+
+    public const int NicNameBuf        = 0xA120;   // hostname buffer (32 bytes)
+    public const int NicNameEnd        = 0xA13F;   // end of hostname buffer
+
+    // NIC commands
+    public const byte NicCmdConnect    = 0x01;
+    public const byte NicCmdDisconnect = 0x02;
+    public const byte NicCmdSend       = 0x03;
+    public const byte NicCmdRecv       = 0x04;
+    public const byte NicCmdListen     = 0x05;
+    public const byte NicCmdAccept     = 0x06;
+
+    // NIC slot status bits
+    public const byte NicSlotConnected    = 0x01;  // bit 0
+    public const byte NicSlotDataReady    = 0x02;  // bit 1
+    public const byte NicSlotSendReady    = 0x04;  // bit 2
+    public const byte NicSlotError        = 0x08;  // bit 3
+    public const byte NicSlotRemoteClosed = 0x10;  // bit 4
+
+    // NIC global status bits
+    public const byte NicStatusReady      = 0x01;  // bit 0
+    public const byte NicStatusAnyData    = 0x02;  // bit 1
+    public const byte NicStatusAnyError   = 0x80;  // bit 7
+
+    public const int NicMaxSlots          = 4;
+    public const int NicMaxMessageSize    = 256;
+    public const int NicMaxQueueDepth     = 16;
+
     public const int RomBase           = 0xC000;
     public const int RomEnd            = 0xFFFF;
 
