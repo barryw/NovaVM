@@ -10,6 +10,7 @@ public sealed class VirtualNetworkController : IDisposable
     private readonly Func<ushort, byte> _busRead;
     private readonly Action<ushort, byte> _busWrite;
     private readonly ConnectionSlot[] _slots = new ConnectionSlot[VgcConstants.NicMaxSlots];
+    private readonly object _irqLock = new();
 
     public bool IrqPending { get; private set; }
 
@@ -31,10 +32,13 @@ public sealed class VirtualNetworkController : IDisposable
 
         if (address == VgcConstants.NicIrqStatus)
         {
-            byte val = _regs[address - VgcConstants.NicBase];
-            _regs[address - VgcConstants.NicBase] = 0;
-            IrqPending = false;
-            return val;
+            lock (_irqLock)
+            {
+                byte val = _regs[address - VgcConstants.NicBase];
+                _regs[address - VgcConstants.NicBase] = 0;
+                IrqPending = false;
+                return val;
+            }
         }
 
         if (address >= VgcConstants.NicSlotStatus0 && address <= VgcConstants.NicSlotStatus3)
@@ -42,9 +46,6 @@ public sealed class VirtualNetworkController : IDisposable
             int slot = address - VgcConstants.NicSlotStatus0;
             return _slots[slot].GetStatusByte();
         }
-
-        if (address == VgcConstants.NicMsgLen)
-            return _regs[address - VgcConstants.NicBase];
 
         return _regs[address - VgcConstants.NicBase];
     }
@@ -105,8 +106,11 @@ public sealed class VirtualNetworkController : IDisposable
         byte irqCtrl = _regs[VgcConstants.NicIrqCtrl - VgcConstants.NicBase];
         if ((irqCtrl & (1 << slot)) != 0)
         {
-            _regs[VgcConstants.NicIrqStatus - VgcConstants.NicBase] |= (byte)(1 << slot);
-            IrqPending = true;
+            lock (_irqLock)
+            {
+                _regs[VgcConstants.NicIrqStatus - VgcConstants.NicBase] |= (byte)(1 << slot);
+                IrqPending = true;
+            }
         }
     }
 
@@ -144,7 +148,7 @@ public sealed class VirtualNetworkController : IDisposable
         {
             byte status = VgcConstants.NicSlotSendReady; // always set
             if (_connected) status |= VgcConstants.NicSlotConnected;
-            if (!_receiveQueue.IsEmpty) status |= VgcConstants.NicSlotDataReady;
+            if (!_receiveQueue.IsEmpty || _pendingAccept) status |= VgcConstants.NicSlotDataReady;
             if (_error) status |= VgcConstants.NicSlotError;
             if (_remoteClosed) status |= VgcConstants.NicSlotRemoteClosed;
             return status;
