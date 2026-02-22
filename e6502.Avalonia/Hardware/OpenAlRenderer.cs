@@ -12,11 +12,17 @@ internal sealed class OpenAlRenderer : IDisposable
     private const int BufferCount = 8;
     private const int SamplesPerBuffer = 1024;
 
+    // Shared OpenAL device/context — multiple SidChip instances share a single
+    // device and context. Each instance gets its own source + buffers.
+    // alcMakeContextCurrent is process-global; a second context stomps the first.
+    private static readonly object SharedLock = new();
+    private static nint _sharedLibHandle;
+    private static nint _sharedDevice;
+    private static nint _sharedContext;
+    private static int _refCount;
+
     private readonly Func<int, short[]> _sampleProvider;
     private readonly int _sampleRate;
-    private readonly nint _libHandle;
-    private readonly nint _device;
-    private readonly nint _context;
     private readonly uint _source;
     private readonly Queue<uint> _freeBuffers = new();
     private readonly Thread _thread;
@@ -43,30 +49,41 @@ internal sealed class OpenAlRenderer : IDisposable
         _sampleProvider = sampleProvider;
         _sampleRate = sampleRate;
 
-        _libHandle = LoadOpenAlLibrary();
-        _alcOpenDevice = LoadFn<AlcOpenDevice>("alcOpenDevice");
-        _alcCloseDevice = LoadFn<AlcCloseDevice>("alcCloseDevice");
-        _alcCreateContext = LoadFn<AlcCreateContext>("alcCreateContext");
-        _alcDestroyContext = LoadFn<AlcDestroyContext>("alcDestroyContext");
-        _alcMakeContextCurrent = LoadFn<AlcMakeContextCurrent>("alcMakeContextCurrent");
-        _alGenSources = LoadFn<AlGenSources>("alGenSources");
-        _alDeleteSources = LoadFn<AlDeleteSources>("alDeleteSources");
-        _alGenBuffers = LoadFn<AlGenBuffers>("alGenBuffers");
-        _alDeleteBuffers = LoadFn<AlDeleteBuffers>("alDeleteBuffers");
-        _alBufferData = LoadFn<AlBufferData>("alBufferData");
-        _alSourceQueueBuffers = LoadFn<AlSourceQueueBuffers>("alSourceQueueBuffers");
-        _alSourceUnqueueBuffers = LoadFn<AlSourceUnqueueBuffers>("alSourceUnqueueBuffers");
-        _alGetSourcei = LoadFn<AlGetSourcei>("alGetSourcei");
-        _alSourcePlay = LoadFn<AlSourcePlay>("alSourcePlay");
-        _alSourceStop = LoadFn<AlSourceStop>("alSourceStop");
+        lock (SharedLock)
+        {
+            if (_refCount == 0)
+            {
+                _sharedLibHandle = LoadOpenAlLibrary();
+                var openDev = LoadFn<AlcOpenDevice>(_sharedLibHandle, "alcOpenDevice");
+                var createCtx = LoadFn<AlcCreateContext>(_sharedLibHandle, "alcCreateContext");
+                var makeCurrent = LoadFn<AlcMakeContextCurrent>(_sharedLibHandle, "alcMakeContextCurrent");
 
-        _device = _alcOpenDevice(nint.Zero);
-        if (_device == nint.Zero)
-            throw new InvalidOperationException("Unable to open OpenAL device.");
+                _sharedDevice = openDev(nint.Zero);
+                if (_sharedDevice == nint.Zero)
+                    throw new InvalidOperationException("Unable to open OpenAL device.");
 
-        _context = _alcCreateContext(_device, nint.Zero);
-        if (_context == nint.Zero || _alcMakeContextCurrent(_context) == 0)
-            throw new InvalidOperationException("Unable to create OpenAL context.");
+                _sharedContext = createCtx(_sharedDevice, nint.Zero);
+                if (_sharedContext == nint.Zero || makeCurrent(_sharedContext) == 0)
+                    throw new InvalidOperationException("Unable to create OpenAL context.");
+            }
+            _refCount++;
+        }
+
+        _alcOpenDevice = LoadFn<AlcOpenDevice>(_sharedLibHandle, "alcOpenDevice");
+        _alcCloseDevice = LoadFn<AlcCloseDevice>(_sharedLibHandle, "alcCloseDevice");
+        _alcCreateContext = LoadFn<AlcCreateContext>(_sharedLibHandle, "alcCreateContext");
+        _alcDestroyContext = LoadFn<AlcDestroyContext>(_sharedLibHandle, "alcDestroyContext");
+        _alcMakeContextCurrent = LoadFn<AlcMakeContextCurrent>(_sharedLibHandle, "alcMakeContextCurrent");
+        _alGenSources = LoadFn<AlGenSources>(_sharedLibHandle, "alGenSources");
+        _alDeleteSources = LoadFn<AlDeleteSources>(_sharedLibHandle, "alDeleteSources");
+        _alGenBuffers = LoadFn<AlGenBuffers>(_sharedLibHandle, "alGenBuffers");
+        _alDeleteBuffers = LoadFn<AlDeleteBuffers>(_sharedLibHandle, "alDeleteBuffers");
+        _alBufferData = LoadFn<AlBufferData>(_sharedLibHandle, "alBufferData");
+        _alSourceQueueBuffers = LoadFn<AlSourceQueueBuffers>(_sharedLibHandle, "alSourceQueueBuffers");
+        _alSourceUnqueueBuffers = LoadFn<AlSourceUnqueueBuffers>(_sharedLibHandle, "alSourceUnqueueBuffers");
+        _alGetSourcei = LoadFn<AlGetSourcei>(_sharedLibHandle, "alGetSourcei");
+        _alSourcePlay = LoadFn<AlSourcePlay>(_sharedLibHandle, "alSourcePlay");
+        _alSourceStop = LoadFn<AlSourceStop>(_sharedLibHandle, "alSourceStop");
 
         _alGenSources(1, out _source);
         if (_source == 0)
@@ -109,10 +126,21 @@ internal sealed class OpenAlRenderer : IDisposable
 
         uint source = _source;
         _alDeleteSources(1, ref source);
-        _alcMakeContextCurrent(nint.Zero);
-        _alcDestroyContext(_context);
-        _alcCloseDevice(_device);
-        NativeLibrary.Free(_libHandle);
+
+        lock (SharedLock)
+        {
+            _refCount--;
+            if (_refCount == 0)
+            {
+                _alcMakeContextCurrent(nint.Zero);
+                _alcDestroyContext(_sharedContext);
+                _alcCloseDevice(_sharedDevice);
+                NativeLibrary.Free(_sharedLibHandle);
+                _sharedDevice = nint.Zero;
+                _sharedContext = nint.Zero;
+                _sharedLibHandle = nint.Zero;
+            }
+        }
     }
 
     private void AudioLoop()
@@ -175,9 +203,9 @@ internal sealed class OpenAlRenderer : IDisposable
             _alSourcePlay(_source);
     }
 
-    private T LoadFn<T>(string symbol) where T : Delegate
+    private static T LoadFn<T>(nint libHandle, string symbol) where T : Delegate
     {
-        nint ptr = NativeLibrary.GetExport(_libHandle, symbol);
+        nint ptr = NativeLibrary.GetExport(libHandle, symbol);
         return Marshal.GetDelegateForFunctionPointer<T>(ptr);
     }
 

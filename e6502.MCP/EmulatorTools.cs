@@ -489,7 +489,7 @@ public static class EmulatorTools
     [McpServerTool, Description("Set an MML (Music Macro Language) sequence for a SID voice. Call music_play after setting all voices.")]
     public static async Task<string> MusicSeq(
         EmulatorClient client,
-        [Description("Voice number (1-3)")] int voice,
+        [Description("Voice number (1-6)")] int voice,
         [Description("MML string (e.g. 'T120 O4 L4 CDEFG')")] string mml)
     {
         var result = await client.SendAsync(new JsonObject

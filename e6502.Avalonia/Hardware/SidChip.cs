@@ -10,9 +10,9 @@ namespace e6502.Avalonia.Hardware;
 
 public sealed class SidChip : IDisposable
 {
-    public const ushort BaseAddress = 0xD400;
-    public const ushort EndAddress = 0xD41C;
-    private const int RegisterCount = EndAddress - BaseAddress + 1; // 29 bytes
+    public const int RegisterCount = 29; // $00-$1C
+    public readonly ushort BaseAddress;
+    public readonly ushort EndAddress;
     private const int SampleRate = 44100;
     private const double CpuClockRate = 985248.0; // PAL C64
 
@@ -26,8 +26,10 @@ public sealed class SidChip : IDisposable
     private float _prevBandPass;
     private float _prevLowPass;
 
-    public SidChip(bool enableAudio = false)
+    public SidChip(bool enableAudio = false, ushort baseAddress = 0xD400)
     {
+        BaseAddress = baseAddress;
+        EndAddress = (ushort)(baseAddress + RegisterCount - 1);
         for (int i = 0; i < 3; i++)
             _channels[i] = new SidChannel();
 

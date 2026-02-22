@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="e6502.Avalonia" />
     <InternalsVisibleTo Include="e6502.Tools" />
     <InternalsVisibleTo Include="e6502UnitTests" />
   </ItemGroup>

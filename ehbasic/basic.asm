@@ -673,7 +673,36 @@ LAB_2E05
       JSR   LAB_295E          ; print XA as unsigned integer (bytes free)
       LDA   #<LAB_SMSG        ; point to sign-on message (low addr)
       LDY   #>LAB_SMSG        ; point to sign-on message (high addr)
-      JSR   LAB_18C3          ; print null terminated string from memory
+      JSR   LAB_18C3          ; print " BASIC bytes free  "
+
+      ; -- print expansion memory size if XMC present --
+      LDA   XMC_BANKS         ; read bank count register
+      BEQ   @no_xmc           ; skip if no expansion memory
+
+      ; banks * 64 = KB — shift left 6 bits to get A(hi):X(lo)
+      TAX                     ; save bank count in X
+      LSR   A
+      LSR   A                 ; A = banks >> 2 = high byte of KB
+      PHA                     ; save high byte on stack
+      TXA                     ; A = bank count again
+      AND   #$03              ; keep only low 2 bits
+      ASL   A
+      ASL   A
+      ASL   A
+      ASL   A
+      ASL   A
+      ASL   A                 ; (low 2 bits) << 6 = low byte of KB
+      TAX                     ; X = low byte of KB
+      PLA                     ; A = high byte of KB
+      JSR   LAB_295E          ; print KB as unsigned integer
+      LDA   #<LAB_XMSG
+      LDY   #>LAB_XMSG
+      JSR   LAB_18C3          ; print "K expansion memory"
+@no_xmc
+      LDA   #<LAB_NLNL
+      LDY   #>LAB_NLNL
+      JSR   LAB_18C3          ; print CR/LF CR/LF
+
       LDA   #<LAB_1274        ; warm start vector low byte
       LDY   #>LAB_1274        ; warm start vector high byte
       STA   Wrmjpl            ; save warm start vector low byte
@@ -3547,15 +3576,15 @@ LAB_1BEE
       JMP   LAB_AYFC          ; return AY as integer in FAC1
 
 @xtk_mnote
-      ; MNOTE(voice) — return current MIDI note for voice 1-3
+      ; MNOTE(voice) — return current MIDI note for voice 1-6
       ; '(' was consumed during tokenization as part of keyword
       JSR   LAB_IGBY          ; consume MNOTE token, advance to argument
       JSR   LAB_EVNM          ; evaluate voice expression (numeric)
       JSR   LAB_1BFB          ; scan for ')' and advance
       JSR   LAB_F2FX          ; convert FAC1 to integer
-      LDY   Itempl            ; voice number (1-3)
+      LDY   Itempl            ; voice number (1-6)
       DEY                     ; make 0-based
-      CPY   #$03
+      CPY   #$06
       BCS   @mnote_bad        ; out of range
       LDA   MUSIC_NOTE1,Y     ; read note register
       TAY
@@ -8347,6 +8376,9 @@ MUSIC_STATUS   = $BA50         ; bit 0=SFX playing, bit 1=music playing
 MUSIC_NOTE1    = $BA51         ; voice 1 current MIDI note (0=silent)
 MUSIC_NOTE2    = $BA52         ; voice 2 current MIDI note
 MUSIC_NOTE3    = $BA53         ; voice 3 current MIDI note
+MUSIC_NOTE4    = $BA54         ; voice 4 current MIDI note (SID2)
+MUSIC_NOTE5    = $BA55         ; voice 5 current MIDI note (SID2)
+MUSIC_NOTE6    = $BA56         ; voice 6 current MIDI note (SID2)
 FIO_ERR_EOD   = $03            ; end of directory
 
 ; --- XMC expansion memory controller registers ---
@@ -8442,7 +8474,7 @@ LAB_SPLASH
       LDY   #>LAB_BNR2
       JSR   LAB_18C3
 
-      LDA   #$1D              ; centered x for "xxxxx BASIC bytes free"
+      LDA   #$11              ; centered x for "xxxxx BASIC bytes free  xxxK expansion memory"
       STA   VGC_CURSX
       STA   TPos
       LDA   #$04              ; one empty row between lines
@@ -9097,7 +9129,7 @@ LAB_MUSIC
       BEQ   @m_tempo
       CMP   #TK_LOOP           ; LOOP is tokenized by BASIC
       BEQ   @m_loop_tok
-      ; Not a subcommand — must be a number (voice 1-3)
+      ; Not a subcommand — must be a number (voice 1-6)
       JMP   @m_seq
 
 ; --- MUSIC PLAY or PRIORITY ---
@@ -9161,7 +9193,7 @@ LAB_MUSIC
       STA   FIO_CMD
       RTS
 
-; --- MUSIC PRIORITY v1[,v2[,v3]] ---
+; --- MUSIC PRIORITY v1[,v2[,v3[,v4[,v5[,v6]]]]] ---
 @m_priority
       ; P already consumed by @m_chk_p.  Skip remaining keyword bytes.
       ; "RIORITY" is tokenized as R,I,TK_OR,I,T,Y (OR becomes a token),
@@ -9172,11 +9204,16 @@ LAB_MUSIC
       BCS   @m_pri_skip       ; keep skipping keyword chars and tokens
       ; A < 'A': hit a space or digit — keyword is consumed.
       ; pointer is at the space/digit; LAB_GTBY calls GBYT which skips spaces.
-      JSR   LAB_GTBY          ; first voice → X
-      STX   FIO_SRCL
+      ; Clear all 6 voice slots first
       LDA   #$00
+      STA   FIO_SRCL
       STA   FIO_SRCH
       STA   FIO_ENDL
+      STA   FIO_ENDH
+      STA   FIO_SIZEL
+      STA   FIO_SIZEH
+      JSR   LAB_GTBY          ; first voice → X
+      STX   FIO_SRCL
       JSR   LAB_GBYT          ; peek
       CMP   #','
       BNE   @m_pri_go
@@ -9189,6 +9226,24 @@ LAB_MUSIC
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; third voice → X
       STX   FIO_ENDL
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @m_pri_go
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; fourth voice → X
+      STX   FIO_ENDH
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @m_pri_go
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; fifth voice → X
+      STX   FIO_SIZEL
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @m_pri_go
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; sixth voice → X
+      STX   FIO_SIZEH
 @m_pri_go
       LDA   #FIO_CMD_MPRI
       STA   FIO_CMD
@@ -9198,7 +9253,7 @@ LAB_MUSIC
 ; Pass string via pointer (ut1_pl/ph) so MML strings can exceed 63 bytes.
 ; FIO_SRCL = voice, FIO_ENDL/ENDH = string pointer, FIO_NAMELEN = length.
 @m_seq
-      JSR   LAB_GTBY          ; voice number (1-3) → X
+      JSR   LAB_GTBY          ; voice number (1-6) → X
       STX   FIO_SRCL          ; store voice
       JSR   LAB_1C01          ; comma
       JSR   LAB_EVEX          ; evaluate expression
@@ -9442,11 +9497,40 @@ LAB_DIR
       LDA   FIO_STATUS
       CMP   #FIO_OK
       BNE   @dir_done         ; no files or error — done
+      JSR   LAB_CRLF          ; blank line after DIR command
 @dir_loop
-      ; print file size (FIO_SIZEL/SIZEH as 16-bit unsigned)
+      ; --- right-justified file size in 5-column field ---
+      ; Convert AX to string (reuse EhBASIC's FAC1→string)
       LDA   FIO_SIZEH         ; high byte in A
       LDX   FIO_SIZEL         ; low byte in X
-      JSR   LAB_295E          ; print AX as unsigned integer
+      STA   FAC1_1            ; FAC1 mantissa1
+      STX   FAC1_2            ; FAC1 mantissa2
+      LDX   #$90              ; exponent = 16 bits
+      SEC                     ; +ve flag
+      JSR   LAB_STFA          ; normalise into FAC1
+      LDY   #$00
+      TYA
+      JSR   LAB_297B          ; convert FAC1 → null-terminated string at Decssp1
+      ; Count string length at Decssp1 (result string, skips sign byte)
+      LDY   #$00
+@dir_slen
+      LDA   Decssp1,Y
+      BEQ   @dir_pad          ; null terminator found, Y = length
+      INY
+      BNE   @dir_slen
+@dir_pad
+      ; Pad with spaces until Y reaches 5
+      CPY   #$05
+      BCS   @dir_pnum         ; already 5+ chars, no padding
+      LDA   #' '
+      JSR   LAB_PRNA          ; print space
+      INY
+      BNE   @dir_pad          ; always branches
+@dir_pnum
+      ; Print the number string from Decssp1
+      LDA   #<Decssp1
+      LDY   #>Decssp1
+      JSR   LAB_18C3          ; print null terminated string
       ; print type based on FIO_DIRTYPE (0=PRG, 1=SID)
       LDA   FIO_DIRTYPE
       BNE   @dir_sid
@@ -9992,7 +10076,13 @@ StrTab
 EndTab
 
 LAB_SMSG
-      .byte " BASIC bytes free",$0D,$0A,$0D,$0A,$00
+      .byte " BASIC bytes free  ",$00
+
+LAB_XMSG
+      .byte "K expansion memory",$00
+
+LAB_NLNL
+      .byte $0D,$0A,$0D,$0A,$00
 
 ; numeric constants and series
 

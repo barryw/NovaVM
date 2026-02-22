@@ -507,4 +507,129 @@ public class MusicEngineTests
         // Music should still be playing
         Assert.IsTrue(engine.IsMusicPlaying, "Music should still be playing after SFX completes");
     }
+
+    // -------------------------------------------------------------------------
+    // Dual SID: voices 3-5 on SID2
+    // -------------------------------------------------------------------------
+
+    private const ushort Sid2Base = 0xD420;
+
+    [TestMethod]
+    public void Voice4_WritesToSid2()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        // Voice 3 (4th voice, 0-indexed) should write to SID2
+        engine.SetSequence(3, "C4");
+        engine.MusicPlay();
+        engine.Tick();
+
+        // Voice 3 maps to SID2 local voice 0: ctrl = $D420 + 4 = $D424
+        byte ctrl = bus.Sid2.Read(Sid2Base + 4);
+        Assert.AreEqual(1, ctrl & 0x01, "Voice 3 gate should be on SID2 voice 0");
+    }
+
+    [TestMethod]
+    public void Voice5_FrequencyOnSid2()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(4, "C4"); // voice 4 = SID2 local voice 1
+        engine.MusicPlay();
+        engine.Tick();
+
+        // SID2 voice 1 freq: $D507/$D508
+        byte lo = bus.Sid2.Read(Sid2Base + 7);
+        byte hi = bus.Sid2.Read(Sid2Base + 8);
+        int freq = lo | (hi << 8);
+        Assert.IsTrue(freq > 0, $"Voice 4 should have non-zero freq on SID2, got {freq}");
+    }
+
+    [TestMethod]
+    public void Voice6_WritesToSid2Voice2()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(5, "E4"); // voice 5 = SID2 local voice 2
+        engine.MusicPlay();
+        engine.Tick();
+
+        // SID2 voice 2 ctrl: $D420 + 14 + 4 = $D432
+        byte ctrl = bus.Sid2.Read(Sid2Base + 14 + 4);
+        Assert.AreEqual(1, ctrl & 0x01, "Voice 5 gate should be on SID2 voice 2");
+    }
+
+    [TestMethod]
+    public void SixVoicePlayback_AllGatesOn()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "C1");
+        engine.SetSequence(1, "E1");
+        engine.SetSequence(2, "G1");
+        engine.SetSequence(3, "C1");
+        engine.SetSequence(4, "E1");
+        engine.SetSequence(5, "G1");
+        engine.MusicPlay();
+        engine.Tick();
+
+        // SID1 voices 0-2
+        Assert.AreEqual(1, bus.Sid.Read(SidBase + 4) & 0x01, "SID1 voice 0 gate");
+        Assert.AreEqual(1, bus.Sid.Read(SidBase + 11) & 0x01, "SID1 voice 1 gate");
+        Assert.AreEqual(1, bus.Sid.Read(SidBase + 18) & 0x01, "SID1 voice 2 gate");
+        // SID2 voices 0-2
+        Assert.AreEqual(1, bus.Sid2.Read(Sid2Base + 4) & 0x01, "SID2 voice 0 gate");
+        Assert.AreEqual(1, bus.Sid2.Read(Sid2Base + 11) & 0x01, "SID2 voice 1 gate");
+        Assert.AreEqual(1, bus.Sid2.Read(Sid2Base + 18) & 0x01, "SID2 voice 2 gate");
+    }
+
+    [TestMethod]
+    public void MusicStop_GatesOffAllSixVoices()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "C1");
+        engine.SetSequence(3, "C1");
+        engine.MusicPlay();
+        engine.Tick();
+
+        engine.MusicStop();
+
+        Assert.AreEqual(0, bus.Sid.Read(SidBase + 4) & 0x01, "SID1 voice 0 gate off");
+        Assert.AreEqual(0, bus.Sid2.Read(Sid2Base + 4) & 0x01, "SID2 voice 0 gate off");
+    }
+
+    [TestMethod]
+    public void SetVolume_MirrorsToBothChips()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetVolume(12);
+
+        Assert.AreEqual(12, bus.Sid.Read(SidBase + 0x18) & 0x0F, "SID1 volume");
+        Assert.AreEqual(12, bus.Sid2.Read(Sid2Base + 0x18) & 0x0F, "SID2 volume");
+    }
+
+    [TestMethod]
+    public void GetVoiceNote_ReturnsCorrectForAllSixVoices()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        engine.SetSequence(0, "C4");  // MIDI 60
+        engine.SetSequence(3, "E4");  // MIDI 64
+        engine.MusicPlay();
+        engine.Tick();
+
+        Assert.AreEqual(60, engine.GetVoiceNote(0), "Voice 0 note");
+        Assert.AreEqual(64, engine.GetVoiceNote(3), "Voice 3 note");
+        Assert.AreEqual(0,  engine.GetVoiceNote(1), "Voice 1 should be silent");
+        Assert.AreEqual(0,  engine.GetVoiceNote(5), "Voice 5 should be silent");
+    }
 }

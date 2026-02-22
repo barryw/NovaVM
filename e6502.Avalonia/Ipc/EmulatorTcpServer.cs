@@ -940,7 +940,7 @@ public sealed class EmulatorTcpServer : IDisposable
         int? voice = req["voice"]?.GetValue<int>();
         string? mml = req["mml"]?.GetValue<string>();
         if (voice is null || mml is null)
-            return Error("Need voice (1-3), mml");
+            return Error("Need voice (1-6), mml");
 
         _bus.Music.SetSequence(voice.Value - 1, mml);
         return Ok();

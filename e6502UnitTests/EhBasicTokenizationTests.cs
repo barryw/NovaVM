@@ -24,7 +24,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         foreach (char ch in "PRINT 1")
             editor.QueueInput((byte)ch);
@@ -50,7 +50,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 REM ================================");
         EnterLine(editor, "20 REM  BACH - INVENTION No. 8 IN F");
@@ -76,7 +76,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 REM MODE COLOR PRINT GOTO LIST");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -101,7 +101,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         string path = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));
@@ -156,7 +156,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         string path = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));
@@ -190,7 +190,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         string path = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));
@@ -219,7 +219,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 REM A MODE COLOR MUSIC COPPER XFREE PLAYING MNOTE( XPEEK(");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -240,7 +240,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 MUSIC 1,\"CDEFG\"");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -276,7 +276,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 COPPER ADD 0,50,BGCOL,3");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -309,7 +309,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 COPPER LIST 1");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -339,7 +339,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "590 N1=MNOTE(1):N2=MNOTE(2)");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -362,7 +362,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         string path = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));
@@ -455,7 +455,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 PRINT \"HELLO WORLD\"");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -476,7 +476,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         var rng = new Random(6502);
         var lines = new List<string>(300);
@@ -672,7 +672,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         // Each line uses a different core token as a statement keyword.
         EnterLine(editor, "10 PRINT \"HELLO\"");
@@ -732,7 +732,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 FOR I=1 TO 10:PRINT I:NEXT I");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -757,7 +757,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 A$=CHR$(65)");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -806,7 +806,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 END");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -833,7 +833,7 @@ public class EhBasicTokenizationTests
             cpu.Boot();
             var editor = new ScreenEditor(bus.Vgc);
             bus.Vgc.SetScreenEditor(editor);
-            RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+            RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
             string path = Path.GetFullPath(
                 Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));
@@ -860,7 +860,7 @@ public class EhBasicTokenizationTests
             cpu.Boot();
             var editor = new ScreenEditor(bus.Vgc);
             bus.Vgc.SetScreenEditor(editor);
-            RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+            RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
             string path = Path.GetFullPath(
                 Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));
@@ -887,7 +887,7 @@ public class EhBasicTokenizationTests
         }
     }
 
-    private static string GetLine120Tail(CompositeBusDevice bus, int tailBytes)
+    private static string? GetLine120Tail(CompositeBusDevice bus, int tailBytes)
     {
         ushort smem = (ushort)(bus.Read(0x0079) | (bus.Read(0x007A) << 8));
         ushort p = smem;
@@ -944,7 +944,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         EnterLine(editor, "10 PRINT CHR$(12)");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
@@ -982,7 +982,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         // Test several function tokens that use the TOKDEF preprocess/function chain
         EnterLine(editor, "10 A=ASC(\"X\")");
@@ -1022,7 +1022,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         // Enter many lines to build up program, then END at the end
         for (int i = 1; i <= 76; i++)
@@ -1053,7 +1053,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         string path = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));
@@ -1116,7 +1116,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         string path = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));
@@ -1197,7 +1197,7 @@ public class EhBasicTokenizationTests
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        RunUntilScreenContains(cpu, bus, "Ready", 25_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
         string path = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "invention8.bas"));

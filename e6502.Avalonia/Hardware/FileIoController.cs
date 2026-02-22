@@ -476,7 +476,7 @@ public sealed partial class FileIoController
         for (int i = 0; i < len; i++)
             sb.Append((char)_busRead((ushort)(ptr + i)));
 
-        // voice from BASIC is 1-3, MusicEngine expects 0-2
+        // voice from BASIC is 1-6, MusicEngine expects 0-5
         _musicEngine.SetSequence(voice - 1, sb.ToString());
         SetOk();
     }
@@ -519,9 +519,15 @@ public sealed partial class FileIoController
         byte v1 = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
         byte v2 = _regs[VgcConstants.FioSrcH - VgcConstants.FioBase];
         byte v3 = _regs[VgcConstants.FioEndL - VgcConstants.FioBase];
+        byte v4 = _regs[VgcConstants.FioEndH - VgcConstants.FioBase];
+        byte v5 = _regs[VgcConstants.FioSizeL - VgcConstants.FioBase];
+        byte v6 = _regs[VgcConstants.FioSizeH - VgcConstants.FioBase];
         if (v1 > 0) pri.Add(v1 - 1); // convert 1-based to 0-based
         if (v2 > 0) pri.Add(v2 - 1);
         if (v3 > 0) pri.Add(v3 - 1);
+        if (v4 > 0) pri.Add(v4 - 1);
+        if (v5 > 0) pri.Add(v5 - 1);
+        if (v6 > 0) pri.Add(v6 - 1);
         _musicEngine.SetPriority(pri.ToArray());
         SetOk();
     }

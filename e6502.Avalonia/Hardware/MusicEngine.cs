@@ -1,7 +1,8 @@
 namespace e6502.Avalonia.Hardware;
 
 /// <summary>
-/// MusicEngine: manages SID-based SFX playback and a 3-voice MML music sequencer.
+/// MusicEngine: manages SID-based SFX playback and a 6-voice MML music sequencer.
+/// Voices 0-2 route to SID1 ($D400), voices 3-5 route to SID2 ($D420).
 /// Tick() must be called at 60Hz.
 /// </summary>
 public sealed class MusicEngine
@@ -10,30 +11,35 @@ public sealed class MusicEngine
     // Constants
     // -------------------------------------------------------------------------
 
-    private const int VoiceCount = 3;
+    private const int VoiceCount = 6;
     private const int InstrumentSlots = 16;
     private const double CpuClock = 985248.0; // PAL
-    private const ushort SidBase = 0xD400;
 
     // -------------------------------------------------------------------------
-    // SID register helpers
+    // SID register helpers (chip-aware)
     // -------------------------------------------------------------------------
 
-    // Voice base register offset: voice 0 → 0, voice 1 → 7, voice 2 → 14
-    private static int VoiceBase(int v) => v * 7;
+    private SidChip ChipFor(int v) => v < 3 ? _sid : _sid2;
 
-    private static ushort FreqLo(int v) => (ushort)(SidBase + VoiceBase(v) + 0);
-    private static ushort FreqHi(int v) => (ushort)(SidBase + VoiceBase(v) + 1);
-    private static ushort PwLo(int v)   => (ushort)(SidBase + VoiceBase(v) + 2);
-    private static ushort PwHi(int v)   => (ushort)(SidBase + VoiceBase(v) + 3);
-    private static ushort Ctrl(int v)   => (ushort)(SidBase + VoiceBase(v) + 4);
-    private static ushort Ad(int v)     => (ushort)(SidBase + VoiceBase(v) + 5);
-    private static ushort Sr(int v)     => (ushort)(SidBase + VoiceBase(v) + 6);
+    // Local voice index within a chip (0, 1, or 2)
+    private static int LocalVoice(int v) => v % 3;
 
-    private const ushort RegFilterLo  = SidBase + 0x15;
-    private const ushort RegFilterHi  = SidBase + 0x16;
-    private const ushort RegResonRoute = SidBase + 0x17;
-    private const ushort RegVolMode   = SidBase + 0x18;
+    // Voice register offset: local voice 0 → 0, 1 → 7, 2 → 14
+    private static int VoiceBase(int v) => LocalVoice(v) * 7;
+
+    private ushort FreqLo(int v) => (ushort)(ChipFor(v).BaseAddress + VoiceBase(v) + 0);
+    private ushort FreqHi(int v) => (ushort)(ChipFor(v).BaseAddress + VoiceBase(v) + 1);
+    private ushort PwLo(int v)   => (ushort)(ChipFor(v).BaseAddress + VoiceBase(v) + 2);
+    private ushort PwHi(int v)   => (ushort)(ChipFor(v).BaseAddress + VoiceBase(v) + 3);
+    private ushort Ctrl(int v)   => (ushort)(ChipFor(v).BaseAddress + VoiceBase(v) + 4);
+    private ushort Ad(int v)     => (ushort)(ChipFor(v).BaseAddress + VoiceBase(v) + 5);
+    private ushort Sr(int v)     => (ushort)(ChipFor(v).BaseAddress + VoiceBase(v) + 6);
+
+    // Filter/volume register offsets (applied to both chips)
+    private const int FilterLoOfs  = 0x15;
+    private const int FilterHiOfs  = 0x16;
+    private const int ResonRouteOfs = 0x17;
+    private const int VolModeOfs   = 0x18;
 
     // -------------------------------------------------------------------------
     // MIDI → SID frequency
@@ -47,15 +53,17 @@ public sealed class MusicEngine
 
     private void WriteFreq(int voice, int sidFreq)
     {
-        _sid.Write(FreqLo(voice), (byte)(sidFreq & 0xFF));
-        _sid.Write(FreqHi(voice), (byte)((sidFreq >> 8) & 0xFF));
+        var chip = ChipFor(voice);
+        chip.Write(FreqLo(voice), (byte)(sidFreq & 0xFF));
+        chip.Write(FreqHi(voice), (byte)((sidFreq >> 8) & 0xFF));
     }
 
     private void WritePulse(int voice, int pw)
     {
         pw = Math.Clamp(pw, 0, 4095);
-        _sid.Write(PwLo(voice), (byte)(pw & 0xFF));
-        _sid.Write(PwHi(voice), (byte)((pw >> 8) & 0x0F));
+        var chip = ChipFor(voice);
+        chip.Write(PwLo(voice), (byte)(pw & 0xFF));
+        chip.Write(PwHi(voice), (byte)((pw >> 8) & 0x0F));
     }
 
     // -------------------------------------------------------------------------
@@ -63,6 +71,7 @@ public sealed class MusicEngine
     // -------------------------------------------------------------------------
 
     private readonly SidChip _sid;
+    private readonly SidChip _sid2;
 
     // Instrument table
     private readonly SidInstrument[] _instruments = new SidInstrument[InstrumentSlots];
@@ -76,7 +85,7 @@ public sealed class MusicEngine
     private bool _musicPlaying;
     private int _bpm = 120;
     private bool _loop;
-    private int[] _stealPriority = { 2, 1, 0 }; // steal voice[0] last
+    private int[] _stealPriority = { 5, 4, 3, 2, 1, 0 }; // steal voice[0] last
 
     // Per-voice sequencer state
     private readonly VoiceState[] _voices = new VoiceState[VoiceCount];
@@ -88,6 +97,7 @@ public sealed class MusicEngine
     public MusicEngine(CompositeBusDevice bus)
     {
         _sid = bus.Sid;
+        _sid2 = bus.Sid2;
 
         // Default instrument 0: pulse, A=0, D=9, S=0, R=6
         _instruments[0] = new SidInstrument
@@ -125,7 +135,7 @@ public sealed class MusicEngine
 
     public bool IsMusicPlaying => _musicPlaying;
 
-    /// <summary>Returns the current MIDI note for a voice (0-2), or 0 if silent.</summary>
+    /// <summary>Returns the current MIDI note for a voice (0-5), or 0 if silent.</summary>
     public byte GetVoiceNote(int voiceIndex)
     {
         if (voiceIndex < 0 || voiceIndex >= VoiceCount) return 0;
@@ -160,15 +170,24 @@ public sealed class MusicEngine
     }
 
     // -------------------------------------------------------------------------
-    // Volume
+    // Volume (mirrored to both chips)
     // -------------------------------------------------------------------------
 
     public void SetVolume(int level)
     {
         level = Math.Clamp(level, 0, 15);
-        byte current = _sid.Read(RegVolMode);
-        byte next = (byte)((current & 0xF0) | (level & 0x0F));
-        _sid.Write(RegVolMode, next);
+        WriteVolumeToBoth(level);
+    }
+
+    private void WriteVolumeToBoth(int level)
+    {
+        foreach (var chip in new[] { _sid, _sid2 })
+        {
+            ushort reg = (ushort)(chip.BaseAddress + VolModeOfs);
+            byte current = chip.Read(reg);
+            byte next = (byte)((current & 0xF0) | (level & 0x0F));
+            chip.Write(reg, next);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -220,8 +239,9 @@ public sealed class MusicEngine
         for (int i = 0; i < VoiceCount; i++)
         {
             if (i == _sfxVoice) continue;
-            byte current = _sid.Read(Ctrl(i));
-            _sid.Write(Ctrl(i), (byte)(current & ~0x01)); // clear gate
+            var chip = ChipFor(i);
+            byte current = chip.Read(Ctrl(i));
+            chip.Write(Ctrl(i), (byte)(current & ~0x01)); // clear gate
         }
     }
 
@@ -261,8 +281,9 @@ public sealed class MusicEngine
         if (_sfxFrames == 0)
         {
             // Clear gate, keep waveform
-            byte current = _sid.Read(Ctrl(_sfxVoice));
-            _sid.Write(Ctrl(_sfxVoice), (byte)(current & ~0x01));
+            var chip = ChipFor(_sfxVoice);
+            byte current = chip.Read(Ctrl(_sfxVoice));
+            chip.Write(Ctrl(_sfxVoice), (byte)(current & ~0x01));
             _sfxCompleted = true;
             _sfxVoice = -1;
         }
@@ -301,8 +322,9 @@ public sealed class MusicEngine
                 for (int i = 0; i < VoiceCount; i++)
                 {
                     if (i == _sfxVoice) continue;
-                    byte current = _sid.Read(Ctrl(i));
-                    _sid.Write(Ctrl(i), (byte)(current & ~0x01));
+                    var chip = ChipFor(i);
+                    byte current = chip.Read(Ctrl(i));
+                    chip.Write(Ctrl(i), (byte)(current & ~0x01));
                     _voices[i].CurrentMidi = -1;
                 }
                 _musicPlaying = false;
@@ -375,8 +397,9 @@ public sealed class MusicEngine
                 vs.ArpNotes   = null;
                 vs.CurrentMidi = -1;
                 // Gate off
-                byte current = _sid.Read(Ctrl(vi));
-                _sid.Write(Ctrl(vi), (byte)(current & ~0x01));
+                var chip = ChipFor(vi);
+                byte current = chip.Read(Ctrl(vi));
+                chip.Write(Ctrl(vi), (byte)(current & ~0x01));
                 break;
             }
 
@@ -434,11 +457,15 @@ public sealed class MusicEngine
             {
                 int cutoff    = Math.Clamp(ev.Param1, 0, 2047);
                 int resonance = Math.Clamp(ev.Param2, 0, 15);
-                _sid.Write(RegFilterLo,   (byte)(cutoff & 0x07));
-                _sid.Write(RegFilterHi,   (byte)((cutoff >> 3) & 0xFF));
-                byte rr = _sid.Read(RegResonRoute);
-                rr = (byte)((rr & 0x0F) | (resonance << 4));
-                _sid.Write(RegResonRoute, rr);
+                // Mirror filter settings to both chips
+                foreach (var chip in new[] { _sid, _sid2 })
+                {
+                    chip.Write((ushort)(chip.BaseAddress + FilterLoOfs), (byte)(cutoff & 0x07));
+                    chip.Write((ushort)(chip.BaseAddress + FilterHiOfs), (byte)((cutoff >> 3) & 0xFF));
+                    byte rr = chip.Read((ushort)(chip.BaseAddress + ResonRouteOfs));
+                    rr = (byte)((rr & 0x0F) | (resonance << 4));
+                    chip.Write((ushort)(chip.BaseAddress + ResonRouteOfs), rr);
+                }
                 break;
             }
 
@@ -446,10 +473,14 @@ public sealed class MusicEngine
             {
                 // Param1: 0=off,1=LP,2=BP,4=HP
                 int mode = ev.Param1;
-                byte vol = _sid.Read(RegVolMode);
-                // Bits 4-6 of $D418 control filter mode (LP=bit4,BP=bit5,HP=bit6)
-                byte next = (byte)((vol & 0x8F) | ((mode & 0x7) << 4));
-                _sid.Write(RegVolMode, next);
+                // Mirror to both chips
+                foreach (var chip in new[] { _sid, _sid2 })
+                {
+                    ushort reg = (ushort)(chip.BaseAddress + VolModeOfs);
+                    byte vol = chip.Read(reg);
+                    byte next = (byte)((vol & 0x8F) | ((mode & 0x7) << 4));
+                    chip.Write(reg, next);
+                }
                 break;
             }
 
@@ -511,12 +542,16 @@ public sealed class MusicEngine
     private void TickFilterSweep(VoiceState vs)
     {
         if (vs.FilterSweepDir == 0) return;
-        byte lo = _sid.Read(RegFilterLo);
-        byte hi = _sid.Read(RegFilterHi);
-        int cutoff = ((hi << 3) | (lo & 0x07)) + vs.FilterSweepDir * 8;
-        cutoff = Math.Clamp(cutoff, 0, 2047);
-        _sid.Write(RegFilterLo, (byte)(cutoff & 0x07));
-        _sid.Write(RegFilterHi, (byte)((cutoff >> 3) & 0xFF));
+        // Mirror filter sweep to both chips
+        foreach (var chip in new[] { _sid, _sid2 })
+        {
+            byte lo = chip.Read((ushort)(chip.BaseAddress + FilterLoOfs));
+            byte hi = chip.Read((ushort)(chip.BaseAddress + FilterHiOfs));
+            int cutoff = ((hi << 3) | (lo & 0x07)) + vs.FilterSweepDir * 8;
+            cutoff = Math.Clamp(cutoff, 0, 2047);
+            chip.Write((ushort)(chip.BaseAddress + FilterLoOfs), (byte)(cutoff & 0x07));
+            chip.Write((ushort)(chip.BaseAddress + FilterHiOfs), (byte)((cutoff >> 3) & 0xFF));
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -528,11 +563,12 @@ public sealed class MusicEngine
         int sidFreq = MidiToSid(midiNote);
         _voices[voice].CurrentSidFreq = sidFreq;
 
+        var chip = ChipFor(voice);
         WriteFreq(voice, sidFreq);
         WritePulse(voice, inst.PulseWidth);
-        _sid.Write(Ad(voice), inst.Ad);
-        _sid.Write(Sr(voice), inst.Sr);
-        _sid.Write(Ctrl(voice), (byte)(inst.Waveform | 0x01)); // gate on
+        chip.Write(Ad(voice), inst.Ad);
+        chip.Write(Sr(voice), inst.Sr);
+        chip.Write(Ctrl(voice), (byte)(inst.Waveform | 0x01)); // gate on
     }
 
     // -------------------------------------------------------------------------

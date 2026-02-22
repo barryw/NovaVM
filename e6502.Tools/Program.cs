@@ -53,7 +53,7 @@ if (!ushort.TryParse(args[targetIdx + 1].Replace("0x", "").Replace("$", ""),
 
 string outputPath = args.Length > 1 && !args[1].StartsWith("--") ? args[1] : inputPath;
 
-var relocated = SidRelocator.Relocate(info, target);
+var relocated = e6502.Tools.SidRelocator.Relocate(info, target);
 if (!relocated.IsValid)
 {
     Console.Error.WriteLine("Relocation failed");

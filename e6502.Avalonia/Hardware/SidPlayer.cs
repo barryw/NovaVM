@@ -6,6 +6,10 @@ public sealed class SidPlayer
     private const ushort CodeBase  = 0x03D2;
     private const ushort IrqVector = 0xFFFE;
 
+    // SID files that load into ROM space are relocated to this RAM address.
+    // $4000 gives ~32KB of space before hitting screen/color RAM at $AA00.
+    private const ushort RelocBase = 0x4000;
+
     private readonly CompositeBusDevice _bus;
     private byte _savedIrqLo;
     private byte _savedIrqHi;
@@ -16,6 +20,13 @@ public sealed class SidPlayer
     public void Play(SidFileInfo info, int song = 1)
     {
         if (!info.IsValid) return;
+
+        // Relocate if payload overlaps ROM space ($C000+)
+        if (info.LoadAddress >= VgcConstants.RomBase ||
+            info.LoadAddress + info.Payload.Length > VgcConstants.RomBase)
+        {
+            info = SidRelocator.Relocate(info, RelocBase);
+        }
 
         _savedIrqLo = _bus.Read(IrqVector);
         _savedIrqHi = _bus.Read((ushort)(IrqVector + 1));
@@ -38,14 +49,19 @@ public sealed class SidPlayer
         // Disable raster IRQ (restore original state)
         _bus.Write((ushort)VgcConstants.RegIrqCtrl, _savedIrqCtrl);
 
-        // Gate off all three SID voices and silence volume
+        // Gate off all SID voices and silence volume (both chips)
         _bus.Write(0xD404, 0x00);
         _bus.Write(0xD40B, 0x00);
         _bus.Write(0xD412, 0x00);
         _bus.Write(0xD418, 0x00);
+        _bus.Write(0xD424, 0x00);
+        _bus.Write(0xD42B, 0x00);
+        _bus.Write(0xD432, 0x00);
+        _bus.Write(0xD438, 0x00);
 
         // Flush any buffered audio so silence is immediate
         _bus.Sid.Flush();
+        _bus.Sid2.Flush();
 
         _bus.WriteRam(IrqVector, _savedIrqLo);
         _bus.WriteRam((ushort)(IrqVector + 1), _savedIrqHi);
@@ -62,47 +78,60 @@ public sealed class SidPlayer
         _bus.Write(DataBase,                   0x01);           // init_flag = 1
         _bus.Write((ushort)(DataBase + 1), (byte)(song - 1));   // song_num (0-based)
 
-        // Code at $03D2
-        // Byte layout (offsets from $03D2):
-        //  0: 48        PHA
-        //  1: 8A        TXA
-        //  2: 48        PHA
-        //  3: 98        TYA
-        //  4: 48        PHA
-        //  5: AD D0 03  LDA $03D0        (check init flag)
-        //  8: F0 0B     BEQ +11 → $03E7  (skip init block)
-        // 10: AD D1 03  LDA $03D1        (song number)
-        // 13: 20 lo hi  JSR init
-        // 16: A9 00     LDA #$00
-        // 18: 8D D0 03  STA $03D0        (clear init flag)
-        // 21: 20 lo hi  JSR play          (offset +21 from $03D2 = $03E7)
-        // 24: 68        PLA
-        // 25: A8        TAY
-        // 26: 68        PLA
-        // 27: AA        TAX
-        // 28: 68        PLA
-        // 29: 40        RTI               (ends at $03EF)
-        byte[] code =
-        [
-            0x48,                   // PHA
-            0x8A,                   // TXA
-            0x48,                   // PHA
-            0x98,                   // TYA
-            0x48,                   // PHA
-            0xAD, 0xD0, 0x03,       // LDA $03D0
-            0xF0, 0x0B,             // BEQ +11  ($03DA + 2 + 11 = $03E7)
-            0xAD, 0xD1, 0x03,       // LDA $03D1
-            0x20, initLo, initHi,   // JSR init
-            0xA9, 0x00,             // LDA #$00
-            0x8D, 0xD0, 0x03,       // STA $03D0
-            0x20, playLo, playHi,   // JSR play    ← BEQ lands here ($03E7)
-            0x68,                   // PLA
-            0xA8,                   // TAY
-            0x68,                   // PLA
-            0xAA,                   // TAX
-            0x68,                   // PLA
-            0x40                    // RTI
-        ];
+        byte[] code;
+
+        if (info.PlayAddress == 0)
+        {
+            // PlayAddress=0: the init routine installs its own IRQ handler.
+            // We call init once, then our trampoline becomes a no-op RTI.
+            // The song's init will set up $FFFE/$FFFF itself.
+            code =
+            [
+                0x48,                   // PHA
+                0x8A,                   // TXA
+                0x48,                   // PHA
+                0x98,                   // TYA
+                0x48,                   // PHA
+                0xAD, 0xD0, 0x03,       // LDA $03D0       (check init flag)
+                0xF0, 0x0B,             // BEQ +11 → skip to PLA chain
+                0xAD, 0xD1, 0x03,       // LDA $03D1       (song number)
+                0x20, initLo, initHi,   // JSR init
+                0xA9, 0x00,             // LDA #$00
+                0x8D, 0xD0, 0x03,       // STA $03D0       (clear init flag)
+                // BEQ lands here — no JSR play, just restore and RTI
+                0x68,                   // PLA
+                0xA8,                   // TAY
+                0x68,                   // PLA
+                0xAA,                   // TAX
+                0x68,                   // PLA
+                0x40                    // RTI
+            ];
+        }
+        else
+        {
+            // Standard PSID: call init once, then JSR play every IRQ
+            code =
+            [
+                0x48,                   // PHA
+                0x8A,                   // TXA
+                0x48,                   // PHA
+                0x98,                   // TYA
+                0x48,                   // PHA
+                0xAD, 0xD0, 0x03,       // LDA $03D0
+                0xF0, 0x0B,             // BEQ +11
+                0xAD, 0xD1, 0x03,       // LDA $03D1
+                0x20, initLo, initHi,   // JSR init
+                0xA9, 0x00,             // LDA #$00
+                0x8D, 0xD0, 0x03,       // STA $03D0
+                0x20, playLo, playHi,   // JSR play    ← BEQ lands here
+                0x68,                   // PLA
+                0xA8,                   // TAY
+                0x68,                   // PLA
+                0xAA,                   // TAX
+                0x68,                   // PLA
+                0x40                    // RTI
+            ];
+        }
 
         for (int i = 0; i < code.Length; i++)
             _bus.Write((ushort)(CodeBase + i), code[i]);

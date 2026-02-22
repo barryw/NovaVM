@@ -12,6 +12,7 @@
     <PackageReference Include="MSTest.TestAdapter" Version="3.6.4" />
     <PackageReference Include="MSTest.TestFramework" Version="3.6.4" />
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Avalonia.Headless" Version="11.3.12" />
   </ItemGroup>
 
   <ItemGroup>

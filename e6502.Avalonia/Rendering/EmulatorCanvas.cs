@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using e6502.Avalonia;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
 
@@ -188,9 +189,12 @@ public class EmulatorCanvas : Control
 
     public override void Render(DrawingContext context)
     {
-        lock (_renderLock)
+        if (!UiTransitionGate.IsPaused)
         {
-            RenderFramebuffer();
+            lock (_renderLock)
+            {
+                RenderFramebuffer();
+            }
         }
 
         var bounds = Bounds;

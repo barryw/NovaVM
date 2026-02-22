@@ -29,6 +29,13 @@ public static class VgcConstants
     public const int SidBase           = 0xD400;
     public const int SidEnd            = 0xD41C;
 
+    public const int Sid2Base          = 0xD420;
+    public const int Sid2End           = 0xD43C;
+
+    // Legacy mirror — SID files targeting $D500 are transparently routed to SID2
+    public const int Sid2MirrorBase    = 0xD500;
+    public const int Sid2MirrorEnd     = 0xD51C;
+
     public const int CharRamBase       = 0xAA00;
     public const int CharRamEnd        = 0xB1CF;   // AA00 + 2000 - 1
 
@@ -85,6 +92,9 @@ public static class VgcConstants
     public const int  MusicNote1       = 0xBA51; // voice 1 current MIDI note (0=silent)
     public const int  MusicNote2       = 0xBA52; // voice 2 current MIDI note
     public const int  MusicNote3       = 0xBA53; // voice 3 current MIDI note
+    public const int  MusicNote4       = 0xBA54; // voice 4 current MIDI note
+    public const int  MusicNote5       = 0xBA55; // voice 5 current MIDI note
+    public const int  MusicNote6       = 0xBA56; // voice 6 current MIDI note
 
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;
@@ -178,7 +188,7 @@ public static class VgcConstants
     public const int TimerDivL         = 0xBA42;  // divisor low byte
     public const int TimerDivH         = 0xBA43;  // divisor high byte
 
-    public const int FreeBase          = 0xBA54;
+    public const int FreeBase          = 0xBA57;
     public const int FreeEnd           = 0xBFFF;
 
     public const int RomBase           = 0xC000;

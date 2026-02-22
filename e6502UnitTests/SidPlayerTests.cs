@@ -113,6 +113,11 @@ public class SidPlayerTests
         Assert.AreEqual(0x00, bus.Sid.Read(0xD40B), "Voice 2 gated off");
         Assert.AreEqual(0x00, bus.Sid.Read(0xD412), "Voice 3 gated off");
         Assert.AreEqual(0x00, bus.Sid.Read(0xD418), "Volume zeroed");
+        // SID2 voices (at $D420)
+        Assert.AreEqual(0x00, bus.Sid2.Read(0xD424), "SID2 Voice 1 gated off");
+        Assert.AreEqual(0x00, bus.Sid2.Read(0xD42B), "SID2 Voice 2 gated off");
+        Assert.AreEqual(0x00, bus.Sid2.Read(0xD432), "SID2 Voice 3 gated off");
+        Assert.AreEqual(0x00, bus.Sid2.Read(0xD438), "SID2 Volume zeroed");
     }
 
     [TestMethod]

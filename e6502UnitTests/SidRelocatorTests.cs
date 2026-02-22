@@ -1,7 +1,7 @@
 using System;
 using e6502.Avalonia.Hardware;
-using e6502.Tools;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SidRelocator = e6502.Avalonia.Hardware.SidRelocator;
 
 namespace e6502UnitTests;
 
