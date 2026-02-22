@@ -47,12 +47,17 @@ public sealed class VirtualNetworkController : IDisposable
             return _slots[slot].GetStatusByte();
         }
 
-        return _regs[address - VgcConstants.NicBase];
+        int offset = address - VgcConstants.NicBase;
+        if (offset < 0 || offset >= _regs.Length) return 0;
+        return _regs[offset];
     }
 
     public void Write(ushort address, byte data)
     {
-        _regs[address - VgcConstants.NicBase] = data;
+        int offset = address - VgcConstants.NicBase;
+        if (offset < 0 || offset >= _regs.Length) return;
+
+        _regs[offset] = data;
 
         if (address == VgcConstants.NicCmd)
             ExecuteCommand(data);
@@ -73,10 +78,74 @@ public sealed class VirtualNetworkController : IDisposable
         }
     }
 
-    private void DoConnect(int slot) { }
-    private void DoDisconnect(int slot) { }
-    private void DoSend(int slot) { }
-    private void DoRecv(int slot) { }
+    private void DoConnect(int slot)
+    {
+        var s = _slots[slot];
+        s.Reset();
+
+        int nameStart = VgcConstants.NicNameBuf - VgcConstants.NicBase;
+        int nameLen = 0;
+        while (nameLen < 32 && _regs[nameStart + nameLen] != 0)
+            nameLen++;
+        string hostname = System.Text.Encoding.ASCII.GetString(_regs, nameStart, nameLen);
+
+        int port = _regs[VgcConstants.NicRemotePortL - VgcConstants.NicBase]
+                 | (_regs[VgcConstants.NicRemotePortH - VgcConstants.NicBase] << 8);
+
+        _ = ConnectAsync(slot, hostname, port);
+    }
+
+    private async Task ConnectAsync(int slot, string hostname, int port)
+    {
+        var s = _slots[slot];
+        try
+        {
+            var client = new TcpClient();
+            await client.ConnectAsync(hostname, port);
+            s.Connect(client);
+            s.StartReading(OnMessageReceived, slot);
+        }
+        catch
+        {
+            s.SetError();
+        }
+    }
+
+    private void DoDisconnect(int slot)
+    {
+        _slots[slot].Reset();
+    }
+    private void DoSend(int slot)
+    {
+        var s = _slots[slot];
+        ushort addr = (ushort)(_regs[VgcConstants.NicDmaAddrL - VgcConstants.NicBase]
+                             | (_regs[VgcConstants.NicDmaAddrH - VgcConstants.NicBase] << 8));
+        int len = _regs[VgcConstants.NicDmaLen - VgcConstants.NicBase];
+        if (len == 0) len = 256;
+
+        var data = new byte[len];
+        for (int i = 0; i < len; i++)
+            data[i] = _busRead((ushort)(addr + i));
+
+        s.Send(data);
+    }
+
+    private void DoRecv(int slot)
+    {
+        var s = _slots[slot];
+        if (!s.TryDequeue(out var data) || data is null)
+        {
+            _regs[VgcConstants.NicMsgLen - VgcConstants.NicBase] = 0;
+            return;
+        }
+
+        ushort addr = (ushort)(_regs[VgcConstants.NicDmaAddrL - VgcConstants.NicBase]
+                             | (_regs[VgcConstants.NicDmaAddrH - VgcConstants.NicBase] << 8));
+        for (int i = 0; i < data.Length; i++)
+            _busWrite((ushort)(addr + i), data[i]);
+
+        _regs[VgcConstants.NicMsgLen - VgcConstants.NicBase] = (byte)(data.Length == 256 ? 0 : data.Length);
+    }
     private void DoListen(int slot) { }
     private void DoAccept(int slot) { }
 
