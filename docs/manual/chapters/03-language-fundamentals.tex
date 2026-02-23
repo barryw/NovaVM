@@ -178,9 +178,8 @@ polling hardware status registers:
 \end{lstlisting}
 
 \begin{lstlisting}[style=basiclisting]
-10 REM Wait for DMA to finish (status leaves busy=1)
-20 WAIT $BA61, 1, 1
-30 REM Waits until bit 0 is CLEAR (XOR flips it)
+10 REM Wait for a key press (non-zero at $A00F)
+20 WAIT $A00F, $FF
 \end{lstlisting}
 
 \begin{warningbox}

@@ -50,26 +50,27 @@ managed window space. Writing to ROM (\texttt{\$C000}+) has no effect.
 
 \subsection*{System Vectors at \texttt{\$0200}}
 
-At boot, NovaBASIC initializes a vector table at page \texttt{\$02} with the base
-addresses of each hardware controller. Assembly code can read these rather than
-hard-coding addresses, so programs remain compatible if the memory map is adjusted
-in a future ROM version:
+At boot, NovaBASIC's ROM initializes page~\$02 with EhBASIC internal vectors
+and the BASIC IRQ/NMI handler pointers.  The layout is inherited from
+EhBASIC~2.22p5:
 
 \begin{center}
-\begin{tabular}{lll}
-\textbf{Address} & \textbf{Value} & \textbf{Meaning} \\
+\begin{tabular}{ll}
+\textbf{Address} & \textbf{Purpose} \\
 \hline
-\texttt{\$0200}--\texttt{\$0201} & \texttt{\$A000} & VGC base \\
-\texttt{\$0202}--\texttt{\$0203} & \texttt{\$A010} & VGC command register \\
-\texttt{\$0204}--\texttt{\$0205} & \texttt{\$AA00} & Character RAM base \\
-\texttt{\$0206}--\texttt{\$0207} & \texttt{\$B1D0} & Color RAM base \\
-\texttt{\$0208}--\texttt{\$0209} & \texttt{\$A100} & NIC base \\
-\texttt{\$020A}--\texttt{\$020B} & \texttt{\$B9A0} & FIO base \\
-\texttt{\$020C}--\texttt{\$020D} & \texttt{\$BA00} & XMC base \\
+\texttt{\$0200}--\texttt{\$0202} & Ctrl-C flag, byte, and timeout \\
+\texttt{\$0203}--\texttt{\$0204} & VEC\_CC --- Ctrl-C check vector \\
+\texttt{\$0205}--\texttt{\$0206} & VEC\_IN --- input vector \\
+\texttt{\$0207}--\texttt{\$0208} & VEC\_OUT --- output vector \\
+\texttt{\$0209}--\texttt{\$020A} & VEC\_LD --- load vector \\
+\texttt{\$020B}--\texttt{\$020C} & VEC\_SV --- save vector \\
+\texttt{\$020D}--\texttt{\$0216} & IRQ handler code area (set by \cmd{IRQ}) \\
+\texttt{\$0217}--\texttt{\$0220} & NMI handler code area (set by \cmd{NMI}) \\
 \end{tabular}
 \end{center}
 
-Each entry is a 16-bit little-endian address stored at the indicated pair.
+Hardware controller base addresses are fixed constants; use the values from
+Appendix~\ref{chap:memmap} directly in your assembly code.
 
 %% ============================================================
 \section{Talking to Hardware from BASIC}
@@ -107,7 +108,7 @@ currently enabled sprites.
 \end{retrobox}
 
 \texttt{\$A00F} = 40975 decimal. This is the VGC character input register. Reading
-it returns the last character received, or 0 if none. BASIC's own \cmd{INKEY\$}
+it returns the last character received, or 0 if none. BASIC's own \cmd{GET}
 command uses the same register.
 
 \subsection*{Character output}

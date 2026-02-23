@@ -121,7 +121,7 @@ Register \$A01F is the IRQ control register.
 \endhead
 \bottomrule
 \endfoot
-\$A000 & RegMode        & R/W & Display mode: 0=text only, 1=graphics over text, 2=text over graphics. \\
+\$A000 & RegMode        & R/W & Display mode: 0=text only, 1=graphics over text, 2=text over graphics, 3=graphics and sprites only (no text). \\
 \$A001 & RegBgCol       & R/W & Background color index (0--15). \\
 \$A002 & RegFgCol       & R/W & Default foreground color index (0--15); reset value is 1 (white). \\
 \$A003 & RegCursorX     & R/W & Text cursor column (0--79). \\
@@ -131,7 +131,7 @@ Register \$A01F is the IRQ control register.
 \$A007 & RegBank        & R/W & Reserved. \\
 \$A008 & RegStatus      & RO  & Frame counter; incremented each video frame. Writes are ignored. \\
 \$A009 & RegSpriteCount & RO  & Count of currently enabled sprites (0--16). Writes are ignored. \\
-\$A00A & RegCursorEna   & R/W & Non-zero enables the cursor blink. \\
+\$A00A & RegCursorEnable   & R/W & Non-zero enables the cursor blink. \\
 \$A00B & RegColSt       & RO  & Sprite-to-sprite collision bitmask; reading clears the register. \\
 \$A00C & RegColBg       & RO  & Sprite-to-background collision bitmask; reading clears the register. \\
 \$A00D & RegBorder      & R/W & Border color index (0--15). \\
@@ -641,7 +641,7 @@ The caller polls \$B9A1 (\texttt{FioStatus}) for completion.
 \$0A & FioCmdInstrument & Define instrument preset. FioSrcL=id, FioSrcH=waveform, FioEndL=A, FioEndH=D, FioSizeL=S, FioSizeH=R. \\
 \$0B & FioCmdSound   & Play SFX. FioSrcL=MIDI note, FioSrcH=duration (frames), FioEndL=instrument ID. \\
 \$0C & FioCmdVolume  & Set SID master volume. FioSrcL=level (0--15). \\
-\$0D & FioCmdMSeq    & Load MML sequence. FioSrcL=voice (1--3), FioEndL/H=string pointer, FioNameLen=string length. \\
+\$0D & FioCmdMSeq    & Load MML sequence. FioSrcL=voice (1--6), FioEndL/H=string pointer, FioNameLen=string length. \\
 \$0E & FioCmdMPlay   & Start music playback. \\
 \$0F & FioCmdMStop   & Stop music playback. \\
 \$10 & FioCmdMTempo  & Set tempo. FioSrcL/H=BPM (16-bit). \\
@@ -804,14 +804,19 @@ BASIC uses the lower portion; the upper portion is reserved for future use.
 \endhead
 \bottomrule
 \endfoot
-\$0200--\$0201 & IRQ handler vector (2 bytes, little-endian). Set by the \cmd{IRQ} statement. \\
-\$0202--\$0203 & NMI handler vector (2 bytes, little-endian). Set by the \cmd{NMI} statement. \\
-\$0204--\$020D & Reserved BASIC internal vectors (warm-start, error, output, input hooks). \\
-\$020E--\$027F & Reserved for future system use. \\
+\$0200--\$0202 & Ctrl-C flag, byte, and timeout. \\
+\$0203--\$0204 & VEC\_CC --- Ctrl-C check vector. \\
+\$0205--\$0206 & VEC\_IN --- input device vector. \\
+\$0207--\$0208 & VEC\_OUT --- output device vector. \\
+\$0209--\$020A & VEC\_LD --- load program vector. \\
+\$020B--\$020C & VEC\_SV --- save program vector. \\
+\$020D--\$0216 & IRQ handler code area. Set by the \cmd{IRQ} statement. \\
+\$0217--\$0220 & NMI handler code area. Set by the \cmd{NMI} statement. \\
+\$0221--\$027F & Reserved for future system use. \\
 \end{longtable}
 
 \begin{notebox}
-The exact layout of \$0204--\$020D is inherited from EhBASIC 2.22p5 and tracks
-the standard warm-start, error, and I/O indirection vectors.
-Refer to \texttt{ehbasic/basic.asm} for the definitive symbol assignments.
+The vector layout at \$0200--\$020C is inherited from EhBASIC~2.22p5.
+Hardware controller base addresses are fixed constants; see the Address Space
+Overview table at the start of this appendix.
 \end{notebox}
