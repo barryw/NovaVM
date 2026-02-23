@@ -305,6 +305,112 @@ See the Copper section in Chapter~\ref{chap:graphics} for a full explanation
 of writable registers, the COPPER keyword syntax, and programming patterns.
 
 %% ============================================================
+\section{DMA Controller from Assembly}
+\label{sec:asm-dma}
+%% ============================================================
+
+The DMA controller at \$BA60 transfers data between six unified memory
+spaces. The pattern is: load parameters into registers, then write \$01
+to the command register to start.
+
+\begin{lstlisting}[style=basiclisting]
+10 REM -- DMA copy 2000 bytes from CPU $6000 to char RAM --
+20 POKE $BA63, 0   : REM source space = CPU RAM
+30 POKE $BA64, 1   : REM dest space = Char RAM
+40 POKE $BA65, 0   : POKE $BA66, $60 : POKE $BA67, 0
+50 REM source addr = $6000 (low, mid, high)
+60 POKE $BA68, 0   : POKE $BA69, 0  : POKE $BA6A, 0
+70 REM dest addr = 0 (start of char RAM)
+80 POKE $BA6B, $D0 : POKE $BA6C, $07 : POKE $BA6D, 0
+90 REM length = 2000 ($07D0)
+100 POKE $BA6E, 0  : REM mode = copy (not fill)
+110 POKE $BA60, 1  : REM start!
+120 IF PEEK($BA61) = 1 THEN 120 : REM poll until not busy
+130 IF PEEK($BA61) <> 2 THEN PRINT "Error:"; PEEK($BA62)
+\end{lstlisting}
+
+For fill mode, set bit 0 of \texttt{DmaMode} (\$BA6E) and load the fill byte
+into \texttt{DmaFillValue} (\$BA6F).
+
+%% ============================================================
+\section{Blitter from Assembly}
+\label{sec:asm-blitter}
+%% ============================================================
+
+The blitter at \$BA80 performs 2D rectangular copies and fills with row
+stride. Set up source and destination addresses, width, height, and stride,
+then write \$01 to \texttt{BltCmd}.
+
+\begin{lstlisting}[style=basiclisting]
+10 REM -- Scroll color RAM up by 1 row using blitter --
+20 REM Source: row 1 (offset 80), Dest: row 0 (offset 0)
+30 REM Width: 80, Height: 24, Stride: 80
+40 POKE $BA83, 2  : POKE $BA84, 2   : REM src/dst = color RAM
+50 POKE $BA85, 80 : POKE $BA86, 0   : POKE $BA87, 0
+60 REM source offset = 80 (row 1)
+70 POKE $BA88, 0  : POKE $BA89, 0   : POKE $BA8A, 0
+80 REM dest offset = 0 (row 0)
+90 POKE $BA8B, 80 : POKE $BA8C, 0   : REM width = 80
+100 POKE $BA8D, 24 : POKE $BA8E, 0  : REM height = 24
+110 POKE $BA8F, 80 : POKE $BA90, 0  : REM src stride = 80
+120 POKE $BA91, 80 : POKE $BA92, 0  : REM dst stride = 80
+130 POKE $BA93, 0  : REM mode = copy
+140 POKE $BA80, 1  : REM start!
+150 IF PEEK($BA81) = 1 THEN 150
+\end{lstlisting}
+
+Color-key mode: set bit 1 of \texttt{BltMode} (\$BA93) and load the
+transparent color into \texttt{BltColorKey} (\$BA95). Source pixels
+matching the color key are skipped.
+
+%% ============================================================
+\section{Network Controller from Assembly}
+\label{sec:asm-nic}
+%% ============================================================
+
+The NIC at \$A100 provides TCP networking. To connect as a client from
+register-level code:
+
+\begin{lstlisting}[style=basiclisting]
+10 REM -- Connect to 127.0.0.1 port 8080 --
+20 POKE $A102, 0          : REM slot 0
+30 REM Write hostname to name buffer ($A120+)
+40 H$ = "127.0.0.1"
+50 FOR I = 1 TO LEN(H$)
+60   POKE $A11F + I, ASC(MID$(H$, I, 1))
+70 NEXT I
+80 POKE $A11F + LEN(H$) + 1, 0 : REM null terminate
+90 POKE $A108, $90 : POKE $A109, $1F : REM port 8080
+100 POKE $A100, 1  : REM connect command
+110 REM Poll slot status for connected bit
+120 IF (PEEK($A118) AND 1) = 0 THEN 120
+\end{lstlisting}
+
+To send data, copy the message into CPU RAM, then set \texttt{NicDmaAddrL/H}
+and \texttt{NicDmaLen}, and write \$03 to \texttt{NicCmd}. To receive, write
+\$04 and read \texttt{NicMsgLen} for the actual length.
+
+%% ============================================================
+\section{Timer from Assembly}
+\label{sec:asm-timer}
+%% ============================================================
+
+The timer at \$BA40 fires an IRQ every \textit{N} video frames.
+To set up a 1-second timer (60 frames):
+
+\begin{lstlisting}[style=basiclisting]
+10 IRQ 1000
+20 POKE $BA42, 60 : POKE $BA43, 0  : REM divisor = 60
+30 POKE $BA40, 1                    : REM enable timer
+40 GOTO 40
+1000 PRINT "TICK ";
+1010 RETIRQ
+\end{lstlisting}
+
+Reading \texttt{TimerStatus} (\$BA41) clears the pending IRQ flag. The
+timer must be disabled with \cmd{POKE \$BA40, 0} before changing the divisor.
+
+%% ============================================================
 \section{Try It Now}
 %% ============================================================
 
