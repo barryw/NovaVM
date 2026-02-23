@@ -223,11 +223,14 @@ public class EhBasicTokenizationTests
 
         EnterLine(editor, "10 REM A MODE COLOR MUSIC COPPER XFREE PLAYING MNOTE( XPEEK(");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "20 REM NOPEN NCLOSE NLISTEN NACCEPT NSEND NRECV$( NSTATUS( NREADY( NLEN");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
         EnterLine(editor, "LIST");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
 
         string screen = SnapshotScreen(bus.Vgc);
-        Assert.IsTrue(screen.Contains("10 REM A MODE COLOR MUSIC COPPER XFREE PLAYING MNOTE( XPEEK(", StringComparison.Ordinal), $"Expected REM line missing or truncated.\n{screen}");
+        Assert.IsTrue(screen.Contains("10 REM A MODE COLOR MUSIC COPPER XFREE PLAYING MNOTE( XPEEK(", StringComparison.Ordinal), $"Expected REM line 10 missing or truncated.\n{screen}");
+        Assert.IsTrue(screen.Contains("20 REM NOPEN NCLOSE NLISTEN NACCEPT NSEND NRECV$( NSTATUS( NREADY( NLEN", StringComparison.Ordinal), $"Expected REM line 20 missing or truncated.\n{screen}");
         Assert.IsFalse(screen.Contains("BUMPED(", StringComparison.Ordinal), $"LIST misdecoded token as BUMPED.\n{screen}");
     }
 
@@ -1224,9 +1227,129 @@ public class EhBasicTokenizationTests
             $"770 END not visible after full LIST.\n{screen}");
     }
 
+    [TestMethod]
+    public void AvaloniaRomEchoServerRunsWithoutSyntaxError()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // Enter the full echo_server.bas program
+        string path = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "echo_server.bas"));
+        string[] lines = File.ReadAllLines(path)
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .ToArray();
+        foreach (string line in lines)
+        {
+            EnterLine(editor, line.TrimEnd());
+            RunUntilEditorIdle(cpu, bus, editor, 12_000_000);
+        }
+
+        // Dump hex of critical lines
+        string hex70 = DumpLineHex(bus, 70);
+        string hex100 = DumpLineHex(bus, 100);
+        string hex150 = DumpLineHex(bus, 150);
+        string hex160 = DumpLineHex(bus, 160);
+
+        // LIST to verify
+        EnterLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+        string listScreen = SnapshotScreen(bus.Vgc);
+
+        Console.WriteLine($"Line 70: {hex70}");
+        Console.WriteLine($"Line 100: {hex100}");
+        Console.WriteLine($"Line 150: {hex150}");
+        Console.WriteLine($"Line 160: {hex160}");
+        Console.WriteLine("LIST output:");
+        Console.WriteLine(listScreen);
+
+        // RUN with frame ticking to match real emulator
+        const int cyclesPerFrame = 16667;
+        EnterLine(editor, "RUN");
+        int frameAccum = 0;
+        for (int i = 0; i < 20_000_000; i++)
+        {
+            int cycles = cpu.ClocksForNext();
+            cpu.ExecuteNext();
+            frameAccum += cycles;
+            if (frameAccum >= cyclesPerFrame)
+            {
+                bus.Vgc.IncrementFrameCounter();
+                frameAccum -= cyclesPerFrame;
+            }
+        }
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Console.WriteLine("Screen after RUN:");
+        Console.WriteLine(screen);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Syntax error running echo_server.\nLine 70: {hex70}\nLine 100: {hex100}\nLine 150: {hex150}\nLine 160: {hex160}\nLIST:\n{listScreen}\nRUN:\n{screen}");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomListsNicKeywordsWithoutCorruption()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "10 NOPEN 0,\"localhost\",6502");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "20 NCLOSE 0");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "30 NLISTEN 1,8080");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "40 NACCEPT 1");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "50 NSEND 0,\"HELLO\"");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "60 A$=NRECV$(0)");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "70 S=NSTATUS(0)");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "80 R=NREADY(0)");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "90 L=NLEN");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        EnterLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"LIST produced syntax error.\n{screen}");
+        Assert.IsTrue(screen.Contains("10 NOPEN 0,\"localhost\",6502", StringComparison.Ordinal),
+            $"NOPEN line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("20 NCLOSE 0", StringComparison.Ordinal),
+            $"NCLOSE line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("30 NLISTEN 1,8080", StringComparison.Ordinal),
+            $"NLISTEN line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("40 NACCEPT 1", StringComparison.Ordinal),
+            $"NACCEPT line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("50 NSEND 0,\"HELLO\"", StringComparison.Ordinal),
+            $"NSEND line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("60 A$=NRECV$(0)", StringComparison.Ordinal),
+            $"NRECV$ line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("70 S=NSTATUS(0)", StringComparison.Ordinal),
+            $"NSTATUS line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("80 R=NREADY(0)", StringComparison.Ordinal),
+            $"NREADY line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("90 L=NLEN", StringComparison.Ordinal),
+            $"NLEN line corrupted.\n{screen}");
+    }
+
     private static string BuildRandomStressLine(Random rng, int i)
     {
-        string[] kw = ["MODE", "COLOR", "GCLS", "GCOLOR", "LINE", "MUSIC", "PLAYING", "MNOTE(", "COPPER", "XFREE", "XPEEK(", "SIDPLAY", "SIDSTOP", "IF", "THEN", "GOTO", "FOR", "NEXT", "REM", "DATA"];
+        string[] kw = ["MODE", "COLOR", "GCLS", "GCOLOR", "LINE", "MUSIC", "PLAYING", "MNOTE(", "COPPER", "XFREE", "XPEEK(", "SIDPLAY", "SIDSTOP", "IF", "THEN", "GOTO", "FOR", "NEXT", "REM", "DATA", "NOPEN", "NCLOSE", "NLISTEN", "NACCEPT", "NSEND", "NRECV$(", "NSTATUS(", "NREADY(", "NLEN"];
         string[] ident = ["A", "B", "C", "I", "N1", "N2", "T", "X", "Y", "P"];
 
         int kind = i % 6;

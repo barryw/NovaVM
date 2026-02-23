@@ -488,6 +488,17 @@ XTK_PLAYING       = $15              ; extended token id: PLAYING (function)
 XTK_MNOTE         = $16              ; extended token id: MNOTE( (function)
 XTK_COPPER        = $17              ; extended token id: COPPER
 XTK_RESET         = $18              ; extended token id: RESET
+XTK_NOPEN         = $19              ; NOPEN slot,"host",port
+XTK_NCLOSE        = $1A              ; NCLOSE slot
+XTK_NLISTEN       = $1B              ; NLISTEN slot,port
+XTK_NACCEPT       = $1C              ; NACCEPT slot
+XTK_NSEND         = $1D              ; NSEND slot,A$
+XTK_NRECV         = $1E              ; NRECV$(slot) — string function
+XTK_NSTATUS       = $1F              ; NSTATUS(slot) — numeric function
+                                      ; $20 reserved — collides with ASCII space
+                                      ; (LAB_IGBY skips $20 during scan)
+XTK_NREADY        = $21              ; NREADY(slot) — numeric function
+XTK_NLEN          = $22              ; NLEN — numeric function (no args)
 
 ; offsets from a base of X or Y
 
@@ -1855,6 +1866,16 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_MNOTE ($16)   - function only, syntax error
       .word LAB_COPPER-1      ; XTK_COPPER ($17)
       .word LAB_RESET-1       ; XTK_RESET  ($18)
+      .word LAB_NOPEN-1       ; XTK_NOPEN   ($19)
+      .word LAB_NCLOSE-1      ; XTK_NCLOSE  ($1A)
+      .word LAB_NLISTEN-1     ; XTK_NLISTEN ($1B)
+      .word LAB_NACCEPT-1     ; XTK_NACCEPT ($1C)
+      .word LAB_NSEND-1       ; XTK_NSEND   ($1D)
+      .word LAB_15D9-1        ; XTK_NRECV   ($1E) — function only
+      .word LAB_15D9-1        ; XTK_NSTATUS ($1F) — function only
+      .word LAB_15D9-1        ; $20 — reserved (space), syntax error
+      .word LAB_15D9-1        ; XTK_NREADY  ($21) — function only
+      .word LAB_15D9-1        ; XTK_NLEN    ($22) — function only
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -3534,14 +3555,35 @@ LAB_1BE7
                               ; wasn't +, -, NOT or FN so ..
 LAB_1BEE
       CMP   #TKX_PREFIX       ; extended token prefix (e.g. XPEEK)
-      BNE   LAB_1BEE_STD
+      BEQ   @is_xtk
+      JMP   LAB_1BEE_STD
+@is_xtk
       JSR   LAB_IGBY          ; consume prefix, get extension id
       CMP   #XTK_PLAYING
       BEQ   @xtk_playing
       CMP   #XTK_MNOTE
       BEQ   @xtk_mnote
       CMP   #XTK_XPEEK
-      BNE   LAB_SNER          ; unknown extension in expression
+      BEQ   @xtk_xpeek
+      CMP   #XTK_NRECV
+      BEQ   @j_nrecv
+      CMP   #XTK_NSTATUS
+      BEQ   @j_nstatus
+      CMP   #XTK_NREADY
+      BEQ   @j_nready
+      CMP   #XTK_NLEN
+      BEQ   @j_nlen
+      JMP   LAB_SNER          ; unknown extension in expression
+@j_nrecv
+      JMP   @xtk_nrecv
+@j_nstatus
+      JMP   @xtk_nstatus
+@j_nready
+      JMP   @xtk_nready
+@j_nlen
+      JMP   @xtk_nlen
+
+@xtk_xpeek
       ; '(' was consumed during tokenization as part of keyword
       JSR   LAB_IGBY          ; consume extension id, advance to argument
       JSR   LAB_EVNM          ; evaluate expression and check numeric
@@ -3592,6 +3634,68 @@ LAB_1BEE
       JMP   LAB_AYFC          ; return AY as integer in FAC1
 @mnote_bad
       LDY   #$00              ; return 0 for invalid voice
+      LDA   #$00
+      JMP   LAB_AYFC
+
+; NRECV$(slot) — receive message as BASIC string
+@xtk_nrecv
+      JSR   LAB_IGBY          ; consume token, advance to argument
+      JSR   LAB_EVNM          ; evaluate numeric expression (slot)
+      JSR   LAB_1BFB          ; scan for ')'
+      JSR   LAB_EVBY          ; convert to byte → X
+      STX   NIC_SLOT
+      LDA   #$FF              ; 255 bytes max
+      JSR   LAB_MSSP          ; allocate string space, str_pl/ph set
+      ; Point DMA at string buffer
+      LDA   str_pl
+      STA   NIC_DMAL
+      LDA   str_ph
+      STA   NIC_DMAH
+      LDA   #NIC_CMD_RECV
+      STA   NIC_CMD
+      LDA   NIC_MSGLEN
+      STA   str_ln            ; actual received length (0=empty)
+      JMP   LAB_RTST          ; push descriptor, return
+
+; NSTATUS(slot) — return slot status byte
+@xtk_nstatus
+      JSR   LAB_IGBY          ; consume token
+      JSR   LAB_EVNM          ; evaluate numeric expression (slot)
+      JSR   LAB_1BFB          ; scan for ')'
+      JSR   LAB_EVBY          ; convert to byte → X
+      TXA
+      AND   #$03              ; clamp 0-3
+      TAX
+      LDA   NIC_SLOTST0,X    ; read slot status
+      TAY
+      LDA   #$00
+      JMP   LAB_AYFC          ; return AY as integer
+
+; NREADY(slot) — return -1 (true) if data waiting, 0 (false) otherwise
+; Uses BASIC boolean convention: true = $FFFF (-1) so NOT works correctly
+@xtk_nready
+      JSR   LAB_IGBY          ; consume token
+      JSR   LAB_EVNM          ; evaluate numeric expression (slot)
+      JSR   LAB_1BFB          ; scan for ')'
+      JSR   LAB_EVBY          ; convert to byte → X
+      TXA
+      AND   #$03
+      TAX
+      LDA   NIC_SLOTST0,X
+      AND   #NIC_ST_DATAREADY
+      BEQ   @nready_no
+      LDY   #$FF              ; true = $FFFF (-1)
+      LDA   #$FF
+      JMP   LAB_AYFC
+@nready_no
+      LDY   #$00              ; false = $0000 (0)
+      LDA   #$00
+      JMP   LAB_AYFC
+
+; NLEN — return last received message length (no args)
+@xtk_nlen
+      JSR   LAB_IGBY          ; consume token
+      LDY   NIC_MSGLEN
       LDA   #$00
       JMP   LAB_AYFC
 
@@ -8211,7 +8315,7 @@ LAB_TWOPI
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 24
+XTK_COUNT = 34
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8219,6 +8323,8 @@ TAB_XTKSTR
       .word @s_xalloc, @s_xdir, @s_xdel, @s_xmap, @s_xunmap
       .word @s_gsave, @s_gload, @s_sidplay, @s_sidstop
       .word @s_music, @s_playing, @s_mnote, @s_copper, @s_reset
+      .word @s_nopen, @s_nclose, @s_nlisten, @s_naccept, @s_nsend
+      .word @s_nrecv, @s_nstatus, @s_reserved20, @s_nready, @s_nlen
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8244,6 +8350,16 @@ TAB_XTKSTR
 @s_mnote:  .byte "MNOTE(",0
 @s_copper: .byte "COPPER",0
 @s_reset:  .byte "RESET",0
+@s_nopen:   .byte "NOPEN",0
+@s_nclose:  .byte "NCLOSE",0
+@s_nlisten: .byte "NLISTEN",0
+@s_naccept: .byte "NACCEPT",0
+@s_nsend:   .byte "NSEND",0
+@s_nrecv:   .byte "NRECV$(",0
+@s_nstatus: .byte "NSTATUS(",0
+@s_reserved20: .byte $FF,0         ; placeholder — token $20 (space) is unusable
+@s_nready:  .byte "NREADY(",0
+@s_nlen:    .byte "NLEN",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8439,6 +8555,32 @@ XMC_OK        = $02            ; command success status
 XMC_ERR_NF    = $03            ; not found
 XMC_ERR_EOD   = $06            ; end of directory
 
+; --- NIC network interface controller registers ---
+
+NIC_CMD        = $A100          ; command register (write triggers)
+NIC_STATUS     = $A101          ; global status
+NIC_SLOT       = $A102          ; active slot ID (0-3)
+NIC_RPORTL     = $A108          ; remote port low
+NIC_RPORTH     = $A109          ; remote port high
+NIC_LPORTL     = $A10A          ; local port low (for listen)
+NIC_LPORTH     = $A10B          ; local port high
+NIC_DMAL       = $A110          ; DMA RAM address low
+NIC_DMAH       = $A111          ; DMA RAM address high
+NIC_DMALEN     = $A112          ; DMA length
+NIC_MSGLEN     = $A113          ; received message length (read-only)
+NIC_SLOTST0    = $A118          ; slot 0 status
+NIC_NAMEBUF    = $A120          ; hostname buffer (32 bytes, null-terminated)
+
+NIC_CMD_CONNECT    = $01
+NIC_CMD_DISCONNECT = $02
+NIC_CMD_SEND       = $03
+NIC_CMD_RECV       = $04
+NIC_CMD_LISTEN     = $05
+NIC_CMD_ACCEPT     = $06
+
+NIC_ST_CONNECTED   = $01
+NIC_ST_DATAREADY   = $02
+NIC_ST_ERROR       = $08
 
 ; --- VGC command handlers ---
 
@@ -9424,6 +9566,91 @@ LAB_RESET
       LDA   #VCMD_SYSRESET
       STA   VGC_CMD            ; trigger hardware reset
       JMP   ($FFFC)            ; jump through reset vector
+
+; --- NIC BASIC keyword handlers ---
+
+; NOPEN slot,"host",port — connect slot to remote host
+LAB_NOPEN
+      JSR   LAB_GTBY          ; slot → X
+      STX   NIC_SLOT
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_EVEX          ; evaluate string expression
+      JSR   LAB_EVST          ; pop: A=len, ut1_pl/ph=ptr
+      TAX                     ; len → X
+      BEQ   @nopen_err        ; empty hostname = error
+      CPX   #32
+      BCS   @nopen_err        ; too long
+      LDY   #$00
+@nopen_cp
+      LDA   (ut1_pl),Y
+      STA   NIC_NAMEBUF,Y
+      INY
+      DEX
+      BNE   @nopen_cp
+      LDA   #$00
+      STA   NIC_NAMEBUF,Y     ; null-terminate
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; port → FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   NIC_RPORTL
+      LDA   FAC1_2
+      STA   NIC_RPORTH
+      LDA   #NIC_CMD_CONNECT
+      STA   NIC_CMD
+      RTS
+@nopen_err
+      JMP   LAB_FCER          ; function call error
+
+; NCLOSE slot — disconnect slot
+LAB_NCLOSE
+      JSR   LAB_GTBY          ; slot → X
+      STX   NIC_SLOT
+      LDA   #NIC_CMD_DISCONNECT
+      STA   NIC_CMD
+      RTS
+
+; NLISTEN slot,port — listen for incoming connections
+LAB_NLISTEN
+      JSR   LAB_GTBY          ; slot → X
+      STX   NIC_SLOT
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; port → FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   NIC_LPORTL
+      LDA   FAC1_2
+      STA   NIC_LPORTH
+      LDA   #NIC_CMD_LISTEN
+      STA   NIC_CMD
+      RTS
+
+; NACCEPT slot — accept pending connection
+LAB_NACCEPT
+      JSR   LAB_GTBY          ; slot → X
+      STX   NIC_SLOT
+      LDA   #NIC_CMD_ACCEPT
+      STA   NIC_CMD
+      RTS
+
+; NSEND slot,A$ — send string via NIC
+LAB_NSEND
+      JSR   LAB_GTBY          ; slot → X
+      STX   NIC_SLOT
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_EVEX          ; evaluate expression
+      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
+      TAX
+      BEQ   @nsend_err        ; empty string
+      ; Point DMA at string in BASIC memory
+      LDA   ut1_pl
+      STA   NIC_DMAL
+      LDA   ut1_ph
+      STA   NIC_DMAH
+      STX   NIC_DMALEN        ; length
+      LDA   #NIC_CMD_SEND
+      STA   NIC_CMD
+      RTS
+@nsend_err
+      JMP   LAB_FCER
 
 ; perform DEL "filename"
 
