@@ -64,14 +64,18 @@
     STASH, FETCH, XFREE, XRESET, XALLOC, XDIR, XDEL, XMAP, XUNMAP,
     DEC, INC, CALL, WIDTH, BITSET, BITCLR, IRQ, NMI, UNTIL, WHILE,
     OFF, SPRITESHAPE, SPRITECOLOR, MUSIC, PLAY, TEMPO, PRIORITY,
-    SIDPLAY, SIDSTOP, GSAVE, GLOAD, RETIRQ, RETNMI%
+    SIDPLAY, SIDSTOP, GSAVE, GLOAD, RETIRQ, RETNMI,
+    NOPEN, NCLOSE, NLISTEN, NACCEPT, NSEND, DMACOPY, DMAFILL,
+    BLITCOPY, BLITFILL, RESET, CURSOR%
   },
   morekeywords=[2]{%
     SGN, INT, ABS, USR, FRE, POS, SQR, RND, LOG, EXP, COS, SIN, TAN,
     ATN, PEEK, DEEK, SADD, LEN, STR\$, VAL, ASC, UCASE\$, LCASE\$,
     CHR\$, HEX\$, BIN\$, BITTST, MAX, MIN, PI, TWOPI, VARPTR,
     LEFT\$, RIGHT\$, MID\$, SPRITEX, SPRITEY, COLLISION, BUMPED,
-    XPEEK, TAB, SPC, FN, PLAYING, MNOTE%
+    XPEEK, TAB, SPC, FN, PLAYING, MNOTE,
+    NRECV\$, NSTATUS, NREADY, NLEN, DMASTATUS, DMAERR, DMACOUNT,
+    BLITSTATUS, BLITERR, BLITCOUNT%
   },
   morecomment=[l]{REM},
   sensitive=false,
@@ -335,6 +339,8 @@
 \input{chapters/05-sound-and-music}
 \input{chapters/06-expanded-memory}
 \input{chapters/07-assembly-and-special-chips}
+\input{chapters/08-dma-and-blitter}
+\input{chapters/09-networking}
 
 % ---------------------------------------------------------------------------
 % Appendices
