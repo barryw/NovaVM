@@ -68,6 +68,8 @@ public partial class MainWindow : Window
                     _bus.Timer.Tick();
                     if (_bus.Timer.IrqPending)
                         _cpu.IrqWaiting = true;
+                    if (_bus.Nic.IrqPending)
+                        _cpu.IrqWaiting = true;
                     timerAccum -= 100;
                 }
             }

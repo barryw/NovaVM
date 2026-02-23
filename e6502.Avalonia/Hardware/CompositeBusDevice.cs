@@ -11,6 +11,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly FileIoController _fio;
     private readonly VirtualExpansionMemoryController _xmc;
     private readonly VirtualTimerController _timer = new();
+    private readonly VirtualNetworkController _nic;
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
 
@@ -19,6 +20,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public SidChip Sid2 => _sid2;
     public FileIoController Fio => _fio;
     public VirtualTimerController Timer => _timer;
+    public VirtualNetworkController Nic => _nic;
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
 
@@ -42,6 +44,9 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _xmc = new VirtualExpansionMemoryController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data);
+        _nic = new VirtualNetworkController(
+            addr => _ram[addr],
+            (addr, data) => _ram[addr] = data);
 
         string romPath = Path.Combine(AppContext.BaseDirectory, "Resources", "ehbasic.bin");
         byte[] rom = File.ReadAllBytes(romPath);
@@ -55,6 +60,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     public void Dispose()
     {
+        _nic.Dispose();
         _sid.Dispose();
         _sid2.Dispose();
     }
@@ -86,6 +92,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (address >= VgcConstants.MusicNote1 && address <= VgcConstants.MusicNote6)
             return _musicEngine.GetVoiceNote(address - VgcConstants.MusicNote1);
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
+        if (_nic.OwnsAddress(address)) return _nic.Read(address);
         if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
         if (_vgc.OwnsAddress(address)) return _vgc.Read(address);
@@ -95,6 +102,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public void Write(ushort address, byte data)
     {
         if (_timer.OwnsAddress(address)) { _timer.Write(address, data); return; }
+        if (_nic.OwnsAddress(address)) { _nic.Write(address, data); return; }
         if (_xmc.OwnsAddress(address)) { _xmc.Write(address, data); return; }
         if (_fio.OwnsAddress(address)) { _fio.Write(address, data); return; }
         if (_vgc.OwnsAddress(address))

@@ -363,6 +363,19 @@ public class AvaloniaCompositeBusTests
     }
 
     // -------------------------------------------------------------------------
+    // NIC register routing
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void Bus_NicRegisters_Routed()
+    {
+        var bus = new CompositeBusDevice(enableSound: false);
+        bus.Write((ushort)VgcConstants.NicSlot, 2);
+        Assert.AreEqual(2, bus.Read((ushort)VgcConstants.NicSlot));
+        bus.Dispose();
+    }
+
+    // -------------------------------------------------------------------------
     // Command execution through bus
     // -------------------------------------------------------------------------
 
