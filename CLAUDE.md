@@ -75,6 +75,7 @@ $B1D0-$B99F  Color RAM (2000 bytes, 80x25)
 $B9A0-$B9EF  FileIoController registers
 $BA00-$BA3F  Expansion Memory Controller (XMC) registers
 $BA40-$BA4F  Timer Controller registers
+$A100-$A13F  Network Interface Controller (NIC) registers
 $BA50-$BA53  Music status + voice note readback
 $BC00-$BFFF  XMC window (4x256-byte pages into 512KB XRAM)
 $C000-$FFFF  ROM (EhBASIC, write-protected)
@@ -95,6 +96,10 @@ Rendering at 60Hz: background fill → priority-0 sprites → text/gfx layers (o
 
 **SidPlayer** (`Hardware/SidPlayer.cs`): Plays `.sid` files by injecting an IRQ trampoline into CPU RAM that calls init/play routines at 60Hz.
 
+### Network Interface Controller (`Hardware/VirtualNetworkController.cs`)
+
+Message-oriented TCP networking at $A100-$A13F. 4 connection slots, each supporting connect (client) or listen/accept (server). Messages are length-prefixed (1 byte, 0=256) on the wire. DMA transfers between NIC and 6502 RAM via configurable address/length registers. Optional per-slot IRQ on message arrival. TCP server exposes `SendDirect`/`RecvDirect` methods bypassing DMA for external callers.
+
 ### FileIoController (`Hardware/FileIoController.cs`)
 
 6502-accessible file I/O at $B9A0-$B9EF. Commands: Save/Load (CPU RAM ↔ `.bas` files), GSave/GLoad (VGC memory spaces ↔ `.gfx` files), DirOpen/DirRead, Delete, and music/sound forwarding to MusicEngine. Save directory: `~/e6502-programs`.
@@ -113,4 +118,4 @@ ROM (`ehbasic.bin`, 16KB) loaded at $C000. Reset vector at $FFFC points to monit
 
 MSTest framework. CPU correctness validated by running real 6502 test suite binaries (Klaus Dormann's functional/interrupt tests, AllSuiteA, 65C02 extended opcodes) to completion — each loops on itself when done, test asserts final PC value.
 
-Hardware tests cover VGC commands, SID registers, timer interrupts, composite bus routing, sprite rendering/collision, SID file parsing/relocation, MML parsing, and music engine sequencing.
+Hardware tests cover VGC commands, SID registers, timer interrupts, composite bus routing, sprite rendering/collision, SID file parsing/relocation, MML parsing, music engine sequencing, and NIC controller (connect, send/recv, listen/accept, IRQ, DMA, remote-close).

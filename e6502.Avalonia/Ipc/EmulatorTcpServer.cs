@@ -1162,6 +1162,8 @@ public sealed class EmulatorTcpServer : IDisposable
         int? port = req["port"]?.GetValue<int>();
         if (slot is null || host is null || port is null)
             return Error("Need slot, host, port");
+        if (slot.Value < 0 || slot.Value > 3)
+            return Error("Slot must be 0-3");
 
         _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
         for (int i = 0; i < host.Length && i < 31; i++)
@@ -1177,6 +1179,8 @@ public sealed class EmulatorTcpServer : IDisposable
     {
         int? slot = req["slot"]?.GetValue<int>();
         if (slot is null) return Error("Need slot");
+        if (slot.Value < 0 || slot.Value > 3)
+            return Error("Slot must be 0-3");
         _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
         _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdDisconnect);
         return Ok();
@@ -1187,19 +1191,13 @@ public sealed class EmulatorTcpServer : IDisposable
         int? slot = req["slot"]?.GetValue<int>();
         string? data = req["data"]?.GetValue<string>();
         if (slot is null || data is null) return Error("Need slot, data (base64)");
+        if (slot.Value < 0 || slot.Value > 3)
+            return Error("Slot must be 0-3");
 
         byte[] payload = Convert.FromBase64String(data);
         if (payload.Length == 0 || payload.Length > 256) return Error("Data must be 1-256 bytes");
 
-        ushort scratchAddr = 0x0280;
-        for (int i = 0; i < payload.Length; i++)
-            _bus.WriteRam((ushort)(scratchAddr + i), payload[i]);
-
-        _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
-        _bus.Write((ushort)VgcConstants.NicDmaAddrL, (byte)(scratchAddr & 0xFF));
-        _bus.Write((ushort)VgcConstants.NicDmaAddrH, (byte)(scratchAddr >> 8));
-        _bus.Write((ushort)VgcConstants.NicDmaLen, (byte)(payload.Length == 256 ? 0 : payload.Length));
-        _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdSend);
+        _bus.Nic.SendDirect(slot.Value, payload);
         return Ok();
     }
 
@@ -1207,26 +1205,18 @@ public sealed class EmulatorTcpServer : IDisposable
     {
         int? slot = req["slot"]?.GetValue<int>();
         if (slot is null) return Error("Need slot");
+        if (slot.Value < 0 || slot.Value > 3)
+            return Error("Slot must be 0-3");
 
-        ushort scratchAddr = 0x0280;
-        _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
-        _bus.Write((ushort)VgcConstants.NicDmaAddrL, (byte)(scratchAddr & 0xFF));
-        _bus.Write((ushort)VgcConstants.NicDmaAddrH, (byte)(scratchAddr >> 8));
-        _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdRecv);
-
-        int len = _bus.Read((ushort)VgcConstants.NicMsgLen);
-        if (len == 0)
+        byte[]? payload = _bus.Nic.RecvDirect(slot.Value);
+        if (payload is null)
             return new JsonObject { ["ok"] = true, ["data"] = "", ["length"] = 0 }.ToJsonString();
-
-        var payload = new byte[len];
-        for (int i = 0; i < len; i++)
-            payload[i] = _bus.Read((ushort)(scratchAddr + i));
 
         return new JsonObject
         {
             ["ok"] = true,
             ["data"] = Convert.ToBase64String(payload),
-            ["length"] = len
+            ["length"] = payload.Length
         }.ToJsonString();
     }
 
@@ -1235,6 +1225,8 @@ public sealed class EmulatorTcpServer : IDisposable
         int? slot = req["slot"]?.GetValue<int>();
         int? port = req["port"]?.GetValue<int>();
         if (slot is null || port is null) return Error("Need slot, port");
+        if (slot.Value < 0 || slot.Value > 3)
+            return Error("Slot must be 0-3");
 
         _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
         _bus.Write((ushort)VgcConstants.NicLocalPortL, (byte)(port.Value & 0xFF));
@@ -1247,6 +1239,8 @@ public sealed class EmulatorTcpServer : IDisposable
     {
         int? slot = req["slot"]?.GetValue<int>();
         if (slot is null) return Error("Need slot");
+        if (slot.Value < 0 || slot.Value > 3)
+            return Error("Slot must be 0-3");
         _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
         _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdAccept);
         return Ok();
@@ -1256,6 +1250,8 @@ public sealed class EmulatorTcpServer : IDisposable
     {
         int? slot = req["slot"]?.GetValue<int>();
         if (slot is null) return Error("Need slot");
+        if (slot.Value < 0 || slot.Value > 3)
+            return Error("Slot must be 0-3");
 
         int slotAddr = VgcConstants.NicSlotStatus0 + slot.Value;
         byte slotStatus = _bus.Read((ushort)slotAddr);

@@ -314,6 +314,94 @@ public class NicControllerTests
     }
 
     [TestMethod]
+    public void Nic_SendDirect_UnconnectedSlot_SetsError()
+    {
+        _nic.SendDirect(0, new byte[] { 0x48, 0x49 });
+        byte status = _nic.Read((ushort)VgcConstants.NicSlotStatus0);
+        Assert.AreNotEqual(0, (byte)(status & VgcConstants.NicSlotError));
+    }
+
+    [TestMethod]
+    public void Nic_RecvDirect_EmptyQueue_ReturnsNull()
+    {
+        Assert.IsNull(_nic.RecvDirect(0));
+    }
+
+    [TestMethod]
+    public void Nic_RecvDirect_WithMessage_ReturnsData()
+    {
+        _nic.InjectTestMessage(0, new byte[] { 0x41, 0x42, 0x43 });
+        byte[]? data = _nic.RecvDirect(0);
+        Assert.IsNotNull(data);
+        Assert.AreEqual(3, data!.Length);
+        Assert.AreEqual(0x41, data[0]);
+        Assert.AreEqual(0x42, data[1]);
+        Assert.AreEqual(0x43, data[2]);
+    }
+
+    [TestMethod]
+    public void Nic_SendDirect_ClampsSlotTo03()
+    {
+        // Slot 5 should map to slot 1 (5 & 0x03 = 1), not crash
+        _nic.SendDirect(5, new byte[] { 0x48 });
+        byte status = _nic.Read((ushort)VgcConstants.NicSlotStatus1);
+        Assert.AreNotEqual(0, (byte)(status & VgcConstants.NicSlotError));
+    }
+
+    [TestMethod]
+    public void Nic_ResetAll_ClearsIrqAndState()
+    {
+        _nic.Write((ushort)VgcConstants.NicIrqCtrl, 0x01);
+        _nic.InjectTestMessage(0, new byte[] { 0x41 });
+        Assert.IsTrue(_nic.IrqPending);
+
+        _nic.ResetAll();
+
+        Assert.IsFalse(_nic.IrqPending);
+        Assert.AreEqual(0, _nic.Read((ushort)VgcConstants.NicIrqStatus));
+        Assert.IsNull(_nic.RecvDirect(0));
+    }
+
+    [TestMethod]
+    public async Task Nic_RemoteClose_SetsRemoteClosedFlag()
+    {
+        using var server = new TcpListener(System.Net.IPAddress.Loopback, 0);
+        server.Start();
+        int port = ((System.Net.IPEndPoint)server.LocalEndpoint).Port;
+
+        string host = "127.0.0.1";
+        for (int i = 0; i < host.Length; i++)
+            _nic.Write((ushort)(VgcConstants.NicNameBuf + i), (byte)host[i]);
+        _nic.Write((ushort)(VgcConstants.NicNameBuf + host.Length), 0);
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicRemotePortL, (byte)(port & 0xFF));
+        _nic.Write((ushort)VgcConstants.NicRemotePortH, (byte)(port >> 8));
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdConnect);
+
+        using var serverClient = await server.AcceptTcpClientAsync();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 2000 &&
+               (_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected) == 0)
+            await Task.Delay(10);
+
+        // Server closes connection
+        serverClient.Close();
+
+        // Wait for remote-closed flag
+        sw.Restart();
+        while (sw.ElapsedMilliseconds < 2000 &&
+               (_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotRemoteClosed) == 0)
+            await Task.Delay(10);
+
+        byte status = _nic.Read((ushort)VgcConstants.NicSlotStatus0);
+        Assert.AreNotEqual(0, (byte)(status & VgcConstants.NicSlotRemoteClosed));
+        Assert.AreEqual(0, (byte)(status & VgcConstants.NicSlotConnected));
+
+        server.Stop();
+    }
+
+    [TestMethod]
     public void Nic_Connect_BadHost_SetsError()
     {
         string host = "invalid.host.that.does.not.exist.example";

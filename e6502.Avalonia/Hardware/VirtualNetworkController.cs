@@ -101,7 +101,8 @@ public sealed class VirtualNetworkController : IDisposable
         try
         {
             var client = new TcpClient();
-            await client.ConnectAsync(hostname, port);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await client.ConnectAsync(hostname, port, cts.Token);
             s.Connect(client);
             s.StartReading(OnMessageReceived, slot);
         }
@@ -180,6 +181,18 @@ public sealed class VirtualNetworkController : IDisposable
         return status;
     }
 
+    /// <summary>Send data directly on a slot, bypassing DMA registers. Used by TCP server.</summary>
+    public void SendDirect(int slot, byte[] data)
+    {
+        _slots[slot & 0x03].Send(data);
+    }
+
+    /// <summary>Receive next message directly from a slot, bypassing DMA registers. Used by TCP server.</summary>
+    public byte[]? RecvDirect(int slot)
+    {
+        return _slots[slot & 0x03].TryDequeue(out var data) ? data : null;
+    }
+
     public void InjectTestMessage(int slotIndex, byte[] data)
     {
         _slots[slotIndex].Enqueue(data);
@@ -197,6 +210,15 @@ public sealed class VirtualNetworkController : IDisposable
                 IrqPending = true;
             }
         }
+    }
+
+    /// <summary>Disconnect all slots and reset controller state (called on system reset).</summary>
+    public void ResetAll()
+    {
+        for (int i = 0; i < _slots.Length; i++)
+            _slots[i].Reset();
+        Array.Clear(_regs);
+        IrqPending = false;
     }
 
     public void Dispose()
@@ -224,7 +246,7 @@ public sealed class VirtualNetworkController : IDisposable
         private volatile bool _pendingAccept;
 
         public bool IsConnected => _connected;
-        public bool HasData => !_receiveQueue.IsEmpty;
+        public bool HasData => !_receiveQueue.IsEmpty || _pendingAccept;
         public bool HasError => _error;
         public bool HasPendingAccept => _pendingAccept;
         public int? ListeningPort => _listener?.LocalEndpoint is IPEndPoint ep ? ep.Port : null;
@@ -270,12 +292,13 @@ public sealed class VirtualNetworkController : IDisposable
             var token = _cts.Token;
             _readTask = Task.Run(async () =>
             {
+                bool remoteDisconnect = false;
                 try
                 {
                     while (!token.IsCancellationRequested && _stream != null)
                     {
                         int lenByte = await _stream.ReadByteAsync(token);
-                        if (lenByte < 0) break; // stream closed
+                        if (lenByte < 0) { remoteDisconnect = true; break; }
 
                         int payloadLen = lenByte == 0 ? 256 : lenByte;
                         var buf = new byte[payloadLen];
@@ -283,20 +306,23 @@ public sealed class VirtualNetworkController : IDisposable
                         while (read < payloadLen)
                         {
                             int n = await _stream.ReadAsync(buf, read, payloadLen - read, token);
-                            if (n == 0) break;
+                            if (n == 0) { remoteDisconnect = true; break; }
                             read += n;
                         }
-                        if (read < payloadLen) break;
+                        if (read < payloadLen) { remoteDisconnect = true; break; }
 
                         Enqueue(buf);
                         onMessageReceived(slotIndex);
                     }
                 }
-                catch (IOException) { }
-                catch (OperationCanceledException) { }
+                catch (IOException) { remoteDisconnect = true; }
+                catch (OperationCanceledException) { /* local disconnect — not remote */ }
 
-                _remoteClosed = true;
-                _connected = false;
+                if (remoteDisconnect)
+                {
+                    _remoteClosed = true;
+                    _connected = false;
+                }
             }, token);
         }
 
