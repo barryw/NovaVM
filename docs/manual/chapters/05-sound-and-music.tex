@@ -15,10 +15,10 @@
          {--- Claude Debussy}
 
 \noindent
-NovaBASIC includes a SID chip emulator --- a software recreation of the MOS
-6581 Sound Interface Device made famous by the Commodore~64. Three independent
+NovaBASIC includes two SID chip emulators --- software recreations of the MOS
+6581 Sound Interface Device made famous by the Commodore~64. Six independent
 voices with four waveforms, ADSR envelopes, and a programmable filter deliver
-authentic chiptune sound. On top of the SID sits a three-voice MML music
+authentic chiptune sound. On top of the SID sits a six-voice MML music
 sequencer with per-frame effects including vibrato, portamento, arpeggios,
 pulse-width modulation, and filter sweeps.
 
@@ -38,7 +38,7 @@ The sound system has three layers, each building on the one below:
   \item \textbf{INSTRUMENT} --- define a reusable preset that sets the SID
         waveform and ADSR envelope. Up to 16 presets (slots 0--15).
   \item \textbf{MUSIC} --- load MML (Music Macro Language) sequences into up
-        to three voices and play them back with tempo, looping, and
+        to six voices and play them back with tempo, looping, and
         per-frame effects.
 \end{enumerate}
 
@@ -233,8 +233,8 @@ used). The default volume at boot is 12.
 \label{sec:music-engine}
 % -----------------------------------------------------------------------------
 
-The music engine is a three-voice MML sequencer running on top of the SID
-chip. You write melodies and rhythms as text strings using Music Macro
+The music engine is a six-voice MML sequencer running on top of two SID
+chips. You write melodies and rhythms as text strings using Music Macro
 Language, load them into voices, and let the engine handle all the timing,
 instrument switching, and per-frame effects automatically.
 
@@ -245,7 +245,7 @@ instrument switching, and per-frame effects automatically.
 \end{center}
 
 \begin{itemize}
-  \item \cmd{voice} --- voice number 1--3.
+  \item \cmd{voice} --- voice number 1--6.
   \item \cmd{"mml-string"} --- an MML sequence (see Section~\ref{sec:mml}).
 \end{itemize}
 
@@ -261,8 +261,8 @@ MUSIC STOP             & Stop playback and silence all music voices. \\[3pt]
 MUSIC TEMPO bpm        & Set tempo in beats per minute. Default is 120. \\[3pt]
 MUSIC LOOP ON          & Enable looping; voices restart when all finish. \\[3pt]
 MUSIC LOOP OFF         & Disable looping (default). \\[3pt]
-MUSIC PRIORITY v1{[},v2{[},v3{]}} & Set voice-stealing priority for sound
-  effects. Lower-numbered voices are stolen first. Default: 3,~2,~1. \\
+MUSIC PRIORITY v1{[},\ldots,v6{]} & Set voice-stealing priority for sound
+  effects. Lower-numbered voices are stolen first. Default: 6,~5,~4,~3,~2,~1. \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -298,7 +298,7 @@ Two functions let you check what the music engine is doing:
 \midrule
 PLAYING & 1 if music is currently playing, 0 if stopped. \\[3pt]
 MNOTE(voice) & The MIDI note number currently sounding on \cmd{voice}
-  (1--3), or 0 if that voice is silent. \\
+  (1--6), or 0 if that voice is silent. \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -643,16 +643,37 @@ music and avoid common pitfalls.
 
 \subsection*{Voice allocation}
 
-The music engine manages three music voices (mapped to SID voices 0--2) plus
-one shared SFX voice. When \cmd{SOUND} triggers a sound effect, the engine:
+The music engine manages six music voices (voices 1--3 mapped to SID~1
+voices 0--2; voices 4--6 mapped to SID~2 voices 0--2) plus one shared SFX
+voice. When \cmd{SOUND} triggers a sound effect, the engine:
 
 \begin{enumerate}
   \item Looks for a voice with no music sequence loaded.
   \item If all voices have sequences, steals a voice according to the
-        priority order (default: voice~3 first, then~2, then~1).
+        priority order (default: voice~6 first, then~5, then~4, then~3,
+        then~2, then~1).
   \item Plays the SFX on the stolen voice; when done, restores the music
         voice.
 \end{enumerate}
+
+\subsection*{The Second SID Chip}
+
+NovaBASIC includes two SID chips for a total of six voices. The first SID
+(\$D400) handles voices 1--3; the second SID (\$D420) handles voices 4--6.
+A legacy mirror at \$D500 routes transparently to the second SID.
+
+From BASIC, the second SID is fully transparent --- simply use voice
+numbers 4--6 with the \cmd{MUSIC} command:
+
+\begin{lstlisting}[style=basiclisting]
+10 INSTRUMENT 0,64,2,8,12,6
+20 MUSIC 1,"T140 I0 O4 C4 E4 G4 C5 2"
+30 MUSIC 4,"T140 I0 O3 C2 G2"
+40 MUSIC PLAY
+\end{lstlisting}
+
+Voice 4 plays on the second SID chip. All instrument definitions, tempo,
+and loop settings apply equally to both chips.
 
 \subsection*{Timing}
 
@@ -724,7 +745,7 @@ The following commands from earlier versions have been superseded:
 % =============================================================================
 
 \begin{tryitbox}
-Type and run the following program to hear a three-voice arrangement with
+Type and run the following program to hear a six-voice arrangement with
 instrument presets, MML sequences, filter effects, and looping:
 
 \begin{lstlisting}[style=basiclisting]
@@ -740,8 +761,8 @@ instrument presets, MML sequences, filter effects, and looping:
 \end{lstlisting}
 
 Expected result: a three-voice loop with a pulse-wave melody, sawtooth bass,
-and noise percussion. The music repeats until you type \cmd{MUSIC STOP} in
-direct mode.
+and noise percussion on SID~1. The music repeats until you type \cmd{MUSIC STOP} in
+direct mode. Try assigning additional voices (4--6) to use the second SID chip.
 
 \medskip
 Experiments:
