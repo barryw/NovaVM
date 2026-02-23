@@ -102,6 +102,38 @@ public sealed class VirtualExpansionMemoryController
             ExecuteCommand(data);
     }
 
+    /// <summary>Total XRAM capacity in bytes.</summary>
+    public int CapacityBytes => _xram.Length;
+
+    /// <summary>Read one byte from linear XRAM address space (0..CapacityBytes-1).</summary>
+    public bool TryReadLinear(int address, out byte value)
+    {
+        value = 0;
+        if (!RangeOk(address, 1))
+            return false;
+
+        value = _xram[address];
+        return true;
+    }
+
+    /// <summary>
+    /// Write one byte to linear XRAM address space (0..CapacityBytes-1).
+    /// Marks pages as used but does not refresh stats registers; call RefreshStatsRegisters()
+    /// after bulk writes.
+    /// </summary>
+    public bool TryWriteLinear(int address, byte value)
+    {
+        if (!RangeOk(address, 1))
+            return false;
+
+        _xram[address] = value;
+        MarkRangeUsed(address, 1);
+        return true;
+    }
+
+    /// <summary>Refresh exposed XMC stats registers after external/bulk XRAM writes.</summary>
+    public void RefreshStatsRegisters() => RefreshStats();
+
     private void ExecuteCommand(byte cmd)
     {
         switch (cmd)

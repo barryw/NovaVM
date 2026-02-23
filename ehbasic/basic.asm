@@ -499,6 +499,18 @@ XTK_NSTATUS       = $1F              ; NSTATUS(slot) — numeric function
                                       ; (LAB_IGBY skips $20 during scan)
 XTK_NREADY        = $21              ; NREADY(slot) — numeric function
 XTK_NLEN          = $22              ; NLEN — numeric function (no args)
+XTK_DMACOPY       = $23              ; DMACOPY srcSpace,srcAddr,dstSpace,dstAddr,len
+XTK_DMAFILL       = $24              ; DMAFILL dstSpace,dstAddr,len,value
+XTK_DMASTATUS     = $25              ; DMASTATUS — numeric function (no args)
+                                      ; $26 reserved — maps to AND token in scanner
+XTK_DMAERR        = $27              ; DMAERR — numeric function (no args)
+XTK_DMACOUNT      = $28              ; DMACOUNT — numeric function (no args)
+                                      ; $29-$3F reserved
+XTK_BLITCOPY      = $40              ; BLITCOPY srcSpace,srcAddr,srcStride,dstSpace,dstAddr,dstStride,width,height
+XTK_BLITFILL      = $41              ; BLITFILL dstSpace,dstAddr,dstStride,width,height,value
+XTK_BLITSTATUS    = $42              ; BLITSTATUS — numeric function (no args)
+XTK_BLITERR       = $43              ; BLITERR — numeric function (no args)
+XTK_BLITCOUNT     = $44              ; BLITCOUNT — numeric function (no args)
 
 ; offsets from a base of X or Y
 
@@ -1824,6 +1836,8 @@ LAB_1609
 
 LAB_1602X
       JSR   LAB_IGBY          ; consume prefix, get extension id in A
+      LDY   #$00
+      LDA   (Bpntrl),Y        ; read raw extension id (LAB_IGBY may normalize A)
       CMP   #XTK_COUNT+1
       BCS   @syntax_err
       CMP   #$01
@@ -1876,6 +1890,21 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; $20 — reserved (space), syntax error
       .word LAB_15D9-1        ; XTK_NREADY  ($21) — function only
       .word LAB_15D9-1        ; XTK_NLEN    ($22) — function only
+      .word LAB_DMACOPY-1     ; XTK_DMACOPY ($23)
+      .word LAB_DMAFILL-1     ; XTK_DMAFILL ($24)
+      .word LAB_15D9-1        ; XTK_DMASTATUS ($25) — function only
+      .word LAB_15D9-1        ; $26 — reserved, syntax error
+      .word LAB_15D9-1        ; XTK_DMAERR    ($27) — function only
+      .word LAB_15D9-1        ; XTK_DMACOUNT  ($28) — function only
+      ; $29-$3F reserved (23 entries)
+      .repeat $17
+      .word LAB_15D9-1
+      .endrepeat
+      .word LAB_BLITCOPY-1    ; XTK_BLITCOPY   ($40)
+      .word LAB_BLITFILL-1    ; XTK_BLITFILL   ($41)
+      .word LAB_15D9-1        ; XTK_BLITSTATUS ($42) — function only
+      .word LAB_15D9-1        ; XTK_BLITERR    ($43) — function only
+      .word LAB_15D9-1        ; XTK_BLITCOUNT  ($44) — function only
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -3559,10 +3588,12 @@ LAB_1BEE
       JMP   LAB_1BEE_STD
 @is_xtk
       JSR   LAB_IGBY          ; consume prefix, get extension id
+      LDY   #$00
+      LDA   (Bpntrl),Y        ; read raw extension id (LAB_IGBY may normalize A)
       CMP   #XTK_PLAYING
-      BEQ   @xtk_playing
+      BEQ   @j_playing
       CMP   #XTK_MNOTE
-      BEQ   @xtk_mnote
+      BEQ   @j_mnote
       CMP   #XTK_XPEEK
       BEQ   @xtk_xpeek
       CMP   #XTK_NRECV
@@ -3573,6 +3604,18 @@ LAB_1BEE
       BEQ   @j_nready
       CMP   #XTK_NLEN
       BEQ   @j_nlen
+      CMP   #XTK_DMASTATUS
+      BEQ   @j_dmastatus
+      CMP   #XTK_DMAERR
+      BEQ   @j_dmaerr
+      CMP   #XTK_DMACOUNT
+      BEQ   @j_dmacount
+      CMP   #XTK_BLITSTATUS
+      BEQ   @j_blitstatus
+      CMP   #XTK_BLITERR
+      BEQ   @j_bliterr
+      CMP   #XTK_BLITCOUNT
+      BEQ   @j_blitcount
       JMP   LAB_SNER          ; unknown extension in expression
 @j_nrecv
       JMP   @xtk_nrecv
@@ -3582,6 +3625,22 @@ LAB_1BEE
       JMP   @xtk_nready
 @j_nlen
       JMP   @xtk_nlen
+@j_dmastatus
+      JMP   @xtk_dmastatus
+@j_dmaerr
+      JMP   @xtk_dmaerr
+@j_dmacount
+      JMP   @xtk_dmacount
+@j_blitstatus
+      JMP   @xtk_blitstatus
+@j_bliterr
+      JMP   @xtk_bliterr
+@j_blitcount
+      JMP   @xtk_blitcount
+@j_playing
+      JMP   @xtk_playing
+@j_mnote
+      JMP   @xtk_mnote
 
 @xtk_xpeek
       ; '(' was consumed during tokenization as part of keyword
@@ -3697,6 +3756,48 @@ LAB_1BEE
       JSR   LAB_IGBY          ; consume token
       LDY   NIC_MSGLEN
       LDA   #$00
+      JMP   LAB_AYFC
+
+; DMASTATUS — return DMA status register (no args)
+@xtk_dmastatus
+      JSR   LAB_IGBY          ; consume token
+      LDY   DMA_STATUS
+      LDA   #$00
+      JMP   LAB_AYFC
+
+; DMAERR — return DMA error code register (no args)
+@xtk_dmaerr
+      JSR   LAB_IGBY          ; consume token
+      LDY   DMA_ERRCODE
+      LDA   #$00
+      JMP   LAB_AYFC
+
+; DMACOUNT — return last DMA byte count (low 16 bits)
+@xtk_dmacount
+      JSR   LAB_IGBY          ; consume token
+      LDY   DMA_CNTL
+      LDA   DMA_CNTM
+      JMP   LAB_AYFC
+
+; BLITSTATUS — return blitter status register (no args)
+@xtk_blitstatus
+      JSR   LAB_IGBY          ; consume token
+      LDY   BLT_STATUS
+      LDA   #$00
+      JMP   LAB_AYFC
+
+; BLITERR — return blitter error code register (no args)
+@xtk_bliterr
+      JSR   LAB_IGBY          ; consume token
+      LDY   BLT_ERRCODE
+      LDA   #$00
+      JMP   LAB_AYFC
+
+; BLITCOUNT — return last blit written-byte count (low 16 bits)
+@xtk_blitcount
+      JSR   LAB_IGBY          ; consume token
+      LDY   BLT_CNTL
+      LDA   BLT_CNTM
       JMP   LAB_AYFC
 
 LAB_1BEE_STD
@@ -8315,7 +8416,7 @@ LAB_TWOPI
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 34
+XTK_COUNT = 68
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8325,6 +8426,12 @@ TAB_XTKSTR
       .word @s_music, @s_playing, @s_mnote, @s_copper, @s_reset
       .word @s_nopen, @s_nclose, @s_nlisten, @s_naccept, @s_nsend
       .word @s_nrecv, @s_nstatus, @s_reserved20, @s_nready, @s_nlen
+      .word @s_dmacopy, @s_dmafill, @s_dmastatus, @s_reserved26, @s_dmaerr, @s_dmacount
+      ; $29-$3F reserved (23 entries)
+      .repeat $17
+      .word @s_reserved_ext
+      .endrepeat
+      .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8360,6 +8467,18 @@ TAB_XTKSTR
 @s_reserved20: .byte $FF,0         ; placeholder — token $20 (space) is unusable
 @s_nready:  .byte "NREADY(",0
 @s_nlen:    .byte "NLEN",0
+@s_dmacopy: .byte "DMACOPY",0
+@s_dmafill: .byte "DMAFILL",0
+@s_dmastatus: .byte "DMASTATUS",0
+@s_reserved26: .byte $FF,0         ; placeholder — token $26 is unusable
+@s_dmaerr:  .byte "DMAERR",0
+@s_dmacount: .byte "DMACOUNT",0
+@s_reserved_ext: .byte $FF,0       ; placeholder — reserved extension id
+@s_blitcopy: .byte "BLITCOPY",0
+@s_blitfill: .byte "BLITFILL",0
+@s_blitstatus: .byte "BLITSTATUS",0
+@s_bliterr: .byte "BLITERR",0
+@s_blitcount: .byte "BLITCOUNT",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8581,6 +8700,66 @@ NIC_CMD_ACCEPT     = $06
 NIC_ST_CONNECTED   = $01
 NIC_ST_DATAREADY   = $02
 NIC_ST_ERROR       = $08
+
+; --- Unified DMA controller registers ---
+
+DMA_CMD       = $BA60          ; write triggers transfer
+DMA_STATUS    = $BA61          ; 2=ok, 3=error
+DMA_ERRCODE   = $BA62          ; DMA error code
+DMA_SRCSPACE  = $BA63          ; source space id
+DMA_DSTSPACE  = $BA64          ; destination space id
+DMA_SRCL      = $BA65          ; source addr low
+DMA_SRCM      = $BA66          ; source addr mid
+DMA_SRCH      = $BA67          ; source addr high
+DMA_DSTL      = $BA68          ; destination addr low
+DMA_DSTM      = $BA69          ; destination addr mid
+DMA_DSTH      = $BA6A          ; destination addr high
+DMA_LENL      = $BA6B          ; length low
+DMA_LENM      = $BA6C          ; length mid
+DMA_LENH      = $BA6D          ; length high
+DMA_MODE      = $BA6E          ; mode flags
+DMA_FILL      = $BA6F          ; fill byte (when mode bit0 set)
+DMA_CNTL      = $BA70          ; transferred count low
+DMA_CNTM      = $BA71          ; transferred count mid
+DMA_CNTH      = $BA72          ; transferred count high
+
+DMA_CMD_START = $01
+DMA_OK        = $02
+DMA_MODE_FILL = $01
+DMA_SPACE_XRAM = $05
+
+; --- Blitter controller registers ---
+
+BLT_CMD       = $BA80          ; write triggers blit
+BLT_STATUS    = $BA81          ; 2=ok, 3=error
+BLT_ERRCODE   = $BA82          ; blitter error code
+BLT_SRCSPACE  = $BA83          ; source space id
+BLT_DSTSPACE  = $BA84          ; destination space id
+BLT_SRCL      = $BA85          ; source addr low
+BLT_SRCM      = $BA86          ; source addr mid
+BLT_SRCH      = $BA87          ; source addr high
+BLT_DSTL      = $BA88          ; destination addr low
+BLT_DSTM      = $BA89          ; destination addr mid
+BLT_DSTH      = $BA8A          ; destination addr high
+BLT_WIDTHL    = $BA8B          ; width low
+BLT_WIDTHH    = $BA8C          ; width high
+BLT_HEIGHTL   = $BA8D          ; height low
+BLT_HEIGHTH   = $BA8E          ; height high
+BLT_SRCSTRL   = $BA8F          ; source stride low
+BLT_SRCSTRH   = $BA90          ; source stride high
+BLT_DSTSTRL   = $BA91          ; destination stride low
+BLT_DSTSTRH   = $BA92          ; destination stride high
+BLT_MODE      = $BA93          ; mode flags
+BLT_FILL      = $BA94          ; fill byte (when mode bit0 set)
+BLT_CKEY      = $BA95          ; color key (when mode bit1 set)
+BLT_CNTL      = $BA96          ; written count low
+BLT_CNTM      = $BA97          ; written count mid
+BLT_CNTH      = $BA98          ; written count high
+
+BLT_CMD_START = $01
+BLT_OK        = $02
+BLT_MODE_FILL = $01
+BLT_SPACE_XRAM = $05
 
 ; --- VGC command handlers ---
 
@@ -9651,6 +9830,282 @@ LAB_NSEND
       RTS
 @nsend_err
       JMP   LAB_FCER
+
+; DMACOPY srcSpace,srcAddr,dstSpace,dstAddr,len
+; Address arguments are 16-bit offsets. For XRAM space (5), current XBANK
+; is used as the high address byte.
+LAB_DMACOPY
+      ; src space
+      JSR   LAB_GTBY
+      STX   DMA_SRCSPACE
+      STX   Itempl
+      ; src addr
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   DMA_SRCL
+      LDA   FAC1_2
+      STA   DMA_SRCM
+      LDA   #$00
+      STA   DMA_SRCH
+      LDY   Itempl
+      CPY   #DMA_SPACE_XRAM
+      BNE   @dmac_srcok
+      LDA   XMC_BANK
+      STA   DMA_SRCH
+@dmac_srcok
+      ; dst space
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   DMA_DSTSPACE
+      STX   Itempl
+      ; dst addr
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   DMA_DSTL
+      LDA   FAC1_2
+      STA   DMA_DSTM
+      LDA   #$00
+      STA   DMA_DSTH
+      LDY   Itempl
+      CPY   #DMA_SPACE_XRAM
+      BNE   @dmac_dstok
+      LDA   XMC_BANK
+      STA   DMA_DSTH
+@dmac_dstok
+      ; len
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   DMA_LENL
+      LDA   FAC1_2
+      STA   DMA_LENM
+      LDA   #$00
+      STA   DMA_LENH
+      ; mode = copy
+      LDA   #$00
+      STA   DMA_MODE
+      ; start
+      LDA   #DMA_CMD_START
+      STA   DMA_CMD
+      LDA   DMA_STATUS
+      CMP   #DMA_OK
+      BEQ   @dmac_ok
+      JMP   LAB_FCER
+@dmac_ok
+      RTS
+
+; DMAFILL dstSpace,dstAddr,len,value
+; Address argument is a 16-bit offset. For XRAM space (5), current XBANK
+; is used as the high address byte.
+LAB_DMAFILL
+      ; dst space
+      JSR   LAB_GTBY
+      STX   DMA_DSTSPACE
+      STX   Itempl
+      ; dst addr
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   DMA_DSTL
+      LDA   FAC1_2
+      STA   DMA_DSTM
+      LDA   #$00
+      STA   DMA_DSTH
+      LDY   Itempl
+      CPY   #DMA_SPACE_XRAM
+      BNE   @dmaf_dstok
+      LDA   XMC_BANK
+      STA   DMA_DSTH
+@dmaf_dstok
+      ; len
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   DMA_LENL
+      LDA   FAC1_2
+      STA   DMA_LENM
+      LDA   #$00
+      STA   DMA_LENH
+      ; fill value
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   DMA_FILL
+      ; mode = fill
+      LDA   #DMA_MODE_FILL
+      STA   DMA_MODE
+      ; source fields are ignored in fill mode; keep deterministic
+      LDA   #$00
+      STA   DMA_SRCSPACE
+      STA   DMA_SRCL
+      STA   DMA_SRCM
+      STA   DMA_SRCH
+      ; start
+      LDA   #DMA_CMD_START
+      STA   DMA_CMD
+      LDA   DMA_STATUS
+      CMP   #DMA_OK
+      BEQ   @dmaf_ok
+      JMP   LAB_FCER
+@dmaf_ok
+      RTS
+
+; BLITCOPY srcSpace,srcAddr,srcStride,dstSpace,dstAddr,dstStride,width,height
+; Address arguments are 16-bit offsets. For XRAM space (5), current XBANK
+; is used as the high address byte.
+LAB_BLITCOPY
+      ; src space
+      JSR   LAB_GTBY
+      STX   BLT_SRCSPACE
+      STX   Itempl
+      ; src addr
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_SRCL
+      LDA   FAC1_2
+      STA   BLT_SRCM
+      LDA   #$00
+      STA   BLT_SRCH
+      LDY   Itempl
+      CPY   #BLT_SPACE_XRAM
+      BNE   @bltc_srcok
+      LDA   XMC_BANK
+      STA   BLT_SRCH
+@bltc_srcok
+      ; src stride
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_SRCSTRL
+      LDA   FAC1_2
+      STA   BLT_SRCSTRH
+      ; dst space
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   BLT_DSTSPACE
+      STX   Itempl
+      ; dst addr
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_DSTL
+      LDA   FAC1_2
+      STA   BLT_DSTM
+      LDA   #$00
+      STA   BLT_DSTH
+      LDY   Itempl
+      CPY   #BLT_SPACE_XRAM
+      BNE   @bltc_dstok
+      LDA   XMC_BANK
+      STA   BLT_DSTH
+@bltc_dstok
+      ; dst stride
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_DSTSTRL
+      LDA   FAC1_2
+      STA   BLT_DSTSTRH
+      ; width
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_WIDTHL
+      LDA   FAC1_2
+      STA   BLT_WIDTHH
+      ; height
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_HEIGHTL
+      LDA   FAC1_2
+      STA   BLT_HEIGHTH
+      ; mode = copy
+      LDA   #$00
+      STA   BLT_MODE
+      STA   BLT_FILL
+      STA   BLT_CKEY
+      ; start
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD
+      LDA   BLT_STATUS
+      CMP   #BLT_OK
+      BEQ   @bltc_ok
+      JMP   LAB_FCER
+@bltc_ok
+      RTS
+
+; BLITFILL dstSpace,dstAddr,dstStride,width,height,value
+; Address argument is a 16-bit offset. For XRAM space (5), current XBANK
+; is used as the high address byte.
+LAB_BLITFILL
+      ; dst space
+      JSR   LAB_GTBY
+      STX   BLT_DSTSPACE
+      STX   Itempl
+      ; dst addr
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_DSTL
+      LDA   FAC1_2
+      STA   BLT_DSTM
+      LDA   #$00
+      STA   BLT_DSTH
+      LDY   Itempl
+      CPY   #BLT_SPACE_XRAM
+      BNE   @bltf_dstok
+      LDA   XMC_BANK
+      STA   BLT_DSTH
+@bltf_dstok
+      ; dst stride
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_DSTSTRL
+      LDA   FAC1_2
+      STA   BLT_DSTSTRH
+      ; width
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_WIDTHL
+      LDA   FAC1_2
+      STA   BLT_WIDTHH
+      ; height
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   BLT_HEIGHTL
+      LDA   FAC1_2
+      STA   BLT_HEIGHTH
+      ; fill value
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   BLT_FILL
+      ; source fields are ignored in fill mode; keep deterministic
+      LDA   #$00
+      STA   BLT_SRCSPACE
+      STA   BLT_SRCL
+      STA   BLT_SRCM
+      STA   BLT_SRCH
+      STA   BLT_SRCSTRL
+      STA   BLT_SRCSTRH
+      STA   BLT_CKEY
+      ; mode = fill
+      LDA   #BLT_MODE_FILL
+      STA   BLT_MODE
+      ; start
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD
+      LDA   BLT_STATUS
+      CMP   #BLT_OK
+      BEQ   @bltf_ok
+      JMP   LAB_FCER
+@bltf_ok
+      RTS
 
 ; perform DEL "filename"
 

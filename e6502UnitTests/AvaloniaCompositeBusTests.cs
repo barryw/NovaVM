@@ -499,5 +499,17 @@ public class AvaloniaCompositeBusTests
 
         int timerBase = bus.Read(0x020E) | (bus.Read(0x020F) << 8);
         Assert.AreEqual(VgcConstants.TimerBase, timerBase);
+
+        int sid2Base = bus.Read(0x0210) | (bus.Read(0x0211) << 8);
+        Assert.AreEqual(VgcConstants.Sid2Base, sid2Base);
+
+        int nicBase = bus.Read(0x0212) | (bus.Read(0x0213) << 8);
+        Assert.AreEqual(VgcConstants.NicBase, nicBase);
+
+        int dmaBase = bus.Read(0x0214) | (bus.Read(0x0215) << 8);
+        Assert.AreEqual(VgcConstants.DmaBase, dmaBase);
+
+        int bltBase = bus.Read(0x0216) | (bus.Read(0x0217) << 8);
+        Assert.AreEqual(VgcConstants.BltBase, bltBase);
     }
 }

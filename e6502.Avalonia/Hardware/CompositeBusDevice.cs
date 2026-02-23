@@ -12,6 +12,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly VirtualExpansionMemoryController _xmc;
     private readonly VirtualTimerController _timer = new();
     private readonly VirtualNetworkController _nic;
+    private readonly VirtualDmaController _dma;
+    private readonly VirtualBlitterController _blitter;
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
 
@@ -21,6 +23,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public FileIoController Fio => _fio;
     public VirtualTimerController Timer => _timer;
     public VirtualNetworkController Nic => _nic;
+    public VirtualDmaController Dma => _dma;
+    public VirtualBlitterController Blitter => _blitter;
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
 
@@ -47,6 +51,18 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _nic = new VirtualNetworkController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data);
+        _dma = new VirtualDmaController(
+            getSpaceLength: GetDmaSpaceLength,
+            tryReadByte: TryDmaReadByte,
+            tryWriteByte: TryDmaWriteByte,
+            canWriteRange: CanDmaWriteRange,
+            postTransferWrite: PostDmaWrite);
+        _blitter = new VirtualBlitterController(
+            getSpaceLength: GetDmaSpaceLength,
+            tryReadByte: TryDmaReadByte,
+            tryWriteByte: TryDmaWriteByte,
+            canWriteRange: CanDmaWriteRange,
+            postTransferWrite: PostDmaWrite);
 
         string romPath = Path.Combine(AppContext.BaseDirectory, "Resources", "ehbasic.bin");
         byte[] rom = File.ReadAllBytes(romPath);
@@ -83,6 +99,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         WriteWord(VgcConstants.VectorTableBase + 0x0E, VgcConstants.TimerBase);
         WriteWord(VgcConstants.VectorTableBase + 0x10, VgcConstants.Sid2Base);
         WriteWord(VgcConstants.VectorTableBase + 0x12, VgcConstants.NicBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x14, VgcConstants.DmaBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x16, VgcConstants.BltBase);
     }
 
     public byte Read(ushort address)
@@ -93,6 +111,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             return _musicEngine.GetVoiceNote(address - VgcConstants.MusicNote1);
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
         if (_nic.OwnsAddress(address)) return _nic.Read(address);
+        if (_dma.OwnsAddress(address)) return _dma.Read(address);
+        if (_blitter.OwnsAddress(address)) return _blitter.Read(address);
         if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
         if (_vgc.OwnsAddress(address)) return _vgc.Read(address);
@@ -103,6 +123,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     {
         if (_timer.OwnsAddress(address)) { _timer.Write(address, data); return; }
         if (_nic.OwnsAddress(address)) { _nic.Write(address, data); return; }
+        if (_dma.OwnsAddress(address)) { _dma.Write(address, data); return; }
+        if (_blitter.OwnsAddress(address)) { _blitter.Write(address, data); return; }
         if (_xmc.OwnsAddress(address)) { _xmc.Write(address, data); return; }
         if (_fio.OwnsAddress(address)) { _fio.Write(address, data); return; }
         if (_vgc.OwnsAddress(address))
@@ -120,6 +142,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 _sid2.Write(0xD42B, 0x00); // gate off voice 5
                 _sid2.Write(0xD432, 0x00); // gate off voice 6
                 _sid2.Write(0xD438, 0x00); // silence SID2 volume
+                _nic.ResetAll();
             }
             return;
         }
@@ -135,5 +158,119 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         // Hardware vectors $FFFA-$FFFF pass through (RSID players install own IRQ).
         if (address >= VgcConstants.RomBase && address < 0xFFFA) return;
         _ram[address] = data;
+    }
+
+    private int GetDmaSpaceLength(byte space) =>
+        space switch
+        {
+            VgcConstants.DmaSpaceCpuRam => 0x10000,
+            VgcConstants.DmaSpaceVgcChar => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceScreen),
+            VgcConstants.DmaSpaceVgcColor => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceColor),
+            VgcConstants.DmaSpaceVgcGfx => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceGfx),
+            VgcConstants.DmaSpaceVgcSprite => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceSprite),
+            VgcConstants.DmaSpaceXram => _xmc.CapacityBytes,
+            _ => 0
+        };
+
+    private (bool ok, byte value) TryDmaReadByte(byte space, int address)
+    {
+        switch (space)
+        {
+            case VgcConstants.DmaSpaceCpuRam:
+                if ((uint)address >= 0x10000)
+                    return (false, 0);
+                return (true, _ram[address]);
+
+            case VgcConstants.DmaSpaceVgcChar:
+                return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceScreen, address, out byte screen)
+                    ? (true, screen)
+                    : (false, (byte)0);
+
+            case VgcConstants.DmaSpaceVgcColor:
+                return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceColor, address, out byte color)
+                    ? (true, color)
+                    : (false, (byte)0);
+
+            case VgcConstants.DmaSpaceVgcGfx:
+                return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, address, out byte gfx)
+                    ? (true, gfx)
+                    : (false, (byte)0);
+
+            case VgcConstants.DmaSpaceVgcSprite:
+                return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceSprite, address, out byte sprite)
+                    ? (true, sprite)
+                    : (false, (byte)0);
+
+            case VgcConstants.DmaSpaceXram:
+                return _xmc.TryReadLinear(address, out byte xram)
+                    ? (true, xram)
+                    : (false, (byte)0);
+
+            default:
+                return (false, 0);
+        }
+    }
+
+    private bool TryDmaWriteByte(byte space, int address, byte value)
+    {
+        switch (space)
+        {
+            case VgcConstants.DmaSpaceCpuRam:
+                return TryWriteCpuRamByte(address, value);
+
+            case VgcConstants.DmaSpaceVgcChar:
+                return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceScreen, address, value);
+
+            case VgcConstants.DmaSpaceVgcColor:
+                return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceColor, address, value);
+
+            case VgcConstants.DmaSpaceVgcGfx:
+                return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, address, value);
+
+            case VgcConstants.DmaSpaceVgcSprite:
+                return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceSprite, address, value);
+
+            case VgcConstants.DmaSpaceXram:
+                return _xmc.TryWriteLinear(address, value);
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool CanDmaWriteRange(byte space, int address, int length)
+    {
+        if (address < 0 || length < 0)
+            return false;
+
+        long end = (long)address + length;
+        if (space != VgcConstants.DmaSpaceCpuRam)
+            return true;
+
+        // CPU RAM writes are allowed either below ROM or in hardware vectors
+        // ($FFFA-$FFFF). Writes into ROM body are write-protected.
+        if (end <= VgcConstants.RomBase)
+            return true;
+        if (address >= 0xFFFA && end <= 0x10000)
+            return true;
+        return false;
+    }
+
+    private void PostDmaWrite(byte dstSpace)
+    {
+        if (dstSpace == VgcConstants.DmaSpaceXram)
+            _xmc.RefreshStatsRegisters();
+    }
+
+    private bool TryWriteCpuRamByte(int address, byte data)
+    {
+        if ((uint)address >= 0x10000)
+            return false;
+
+        if (address >= VgcConstants.RomBase && address < 0xFFFA)
+            return false;
+
+        _ram[address] = data;
+        return true;
     }
 }

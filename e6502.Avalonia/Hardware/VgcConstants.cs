@@ -188,7 +188,108 @@ public static class VgcConstants
     public const int TimerDivL         = 0xBA42;  // divisor low byte
     public const int TimerDivH         = 0xBA43;  // divisor high byte
 
-    public const int FreeBase          = 0xBA57;
+    // -------------------------------------------------------------------------
+    // DMA controller registers ($BA60-$BA7F)
+    // -------------------------------------------------------------------------
+
+    public const int DmaBase           = 0xBA60;
+    public const int DmaEnd            = 0xBA7F;
+
+    public const int DmaCmd            = 0xBA60;  // write triggers command
+    public const int DmaStatus         = 0xBA61;  // 0=idle, 1=busy, 2=ok, 3=error
+    public const int DmaErrCode        = 0xBA62;  // error code (DmaErr*)
+    public const int DmaSrcSpace       = 0xBA63;  // source space id (DmaSpace*)
+    public const int DmaDstSpace       = 0xBA64;  // destination space id (DmaSpace*)
+    public const int DmaSrcL           = 0xBA65;  // source address low
+    public const int DmaSrcM           = 0xBA66;  // source address mid
+    public const int DmaSrcH           = 0xBA67;  // source address high
+    public const int DmaDstL           = 0xBA68;  // destination address low
+    public const int DmaDstM           = 0xBA69;  // destination address mid
+    public const int DmaDstH           = 0xBA6A;  // destination address high
+    public const int DmaLenL           = 0xBA6B;  // length low
+    public const int DmaLenM           = 0xBA6C;  // length mid
+    public const int DmaLenH           = 0xBA6D;  // length high
+    public const int DmaMode           = 0xBA6E;  // bit0=fill mode
+    public const int DmaFillValue      = 0xBA6F;  // fill byte when mode bit0 set
+    public const int DmaCountL         = 0xBA70;  // bytes moved low
+    public const int DmaCountM         = 0xBA71;  // bytes moved mid
+    public const int DmaCountH         = 0xBA72;  // bytes moved high
+
+    public const byte DmaCmdStart      = 0x01;
+
+    public const byte DmaStatusIdle    = 0x00;
+    public const byte DmaStatusBusy    = 0x01;
+    public const byte DmaStatusOk      = 0x02;
+    public const byte DmaStatusError   = 0x03;
+
+    public const byte DmaErrNone       = 0x00;
+    public const byte DmaErrBadCmd     = 0x01;
+    public const byte DmaErrBadSpace   = 0x02;
+    public const byte DmaErrRange      = 0x03;
+    public const byte DmaErrBadArgs    = 0x04;
+    public const byte DmaErrWriteProt  = 0x05;
+
+    public const byte DmaModeFill      = 0x01;
+
+    // DMA space ids
+    public const byte DmaSpaceCpuRam   = 0x00;
+    public const byte DmaSpaceVgcChar  = 0x01;
+    public const byte DmaSpaceVgcColor = 0x02;
+    public const byte DmaSpaceVgcGfx   = 0x03;
+    public const byte DmaSpaceVgcSprite = 0x04;
+    public const byte DmaSpaceXram     = 0x05;
+
+    // -------------------------------------------------------------------------
+    // Blitter controller registers ($BA80-$BA9F)
+    // -------------------------------------------------------------------------
+
+    public const int BltBase           = 0xBA80;
+    public const int BltEnd            = 0xBA9F;
+
+    public const int BltCmd            = 0xBA80;  // write triggers command
+    public const int BltStatus         = 0xBA81;  // 0=idle, 1=busy, 2=ok, 3=error
+    public const int BltErrCode        = 0xBA82;  // error code (BltErr*)
+    public const int BltSrcSpace       = 0xBA83;  // source space id (DmaSpace*)
+    public const int BltDstSpace       = 0xBA84;  // destination space id (DmaSpace*)
+    public const int BltSrcL           = 0xBA85;  // source base address low
+    public const int BltSrcM           = 0xBA86;  // source base address mid
+    public const int BltSrcH           = 0xBA87;  // source base address high
+    public const int BltDstL           = 0xBA88;  // destination base address low
+    public const int BltDstM           = 0xBA89;  // destination base address mid
+    public const int BltDstH           = 0xBA8A;  // destination base address high
+    public const int BltWidthL         = 0xBA8B;  // width low
+    public const int BltWidthH         = 0xBA8C;  // width high
+    public const int BltHeightL        = 0xBA8D;  // height low
+    public const int BltHeightH        = 0xBA8E;  // height high
+    public const int BltSrcStrideL     = 0xBA8F;  // source stride low
+    public const int BltSrcStrideH     = 0xBA90;  // source stride high
+    public const int BltDstStrideL     = 0xBA91;  // destination stride low
+    public const int BltDstStrideH     = 0xBA92;  // destination stride high
+    public const int BltMode           = 0xBA93;  // bit0=fill, bit1=color-key
+    public const int BltFillValue      = 0xBA94;  // fill byte when mode bit0 set
+    public const int BltColorKey       = 0xBA95;  // transparent source color when bit1 set
+    public const int BltCountL         = 0xBA96;  // bytes written low
+    public const int BltCountM         = 0xBA97;  // bytes written mid
+    public const int BltCountH         = 0xBA98;  // bytes written high
+
+    public const byte BltCmdStart      = 0x01;
+
+    public const byte BltStatusIdle    = 0x00;
+    public const byte BltStatusBusy    = 0x01;
+    public const byte BltStatusOk      = 0x02;
+    public const byte BltStatusError   = 0x03;
+
+    public const byte BltErrNone       = 0x00;
+    public const byte BltErrBadCmd     = 0x01;
+    public const byte BltErrBadSpace   = 0x02;
+    public const byte BltErrRange      = 0x03;
+    public const byte BltErrBadArgs    = 0x04;
+    public const byte BltErrWriteProt  = 0x05;
+
+    public const byte BltModeFill      = 0x01;
+    public const byte BltModeColorKey  = 0x02;
+
+    public const int FreeBase          = 0xBAA0;
     public const int FreeEnd           = 0xBFFF;
 
     // -------------------------------------------------------------------------

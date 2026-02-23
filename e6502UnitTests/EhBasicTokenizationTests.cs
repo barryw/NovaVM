@@ -1347,9 +1347,186 @@ public class EhBasicTokenizationTests
             $"NLEN line corrupted.\n{screen}");
     }
 
+    [TestMethod]
+    public void AvaloniaRomListsDmaKeywordsWithoutCorruption()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "10 DMACOPY 0,1024,1,0,64");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "20 DMAFILL 2,320,16,7");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "30 S=DMASTATUS:E=DMAERR:C=DMACOUNT");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        EnterLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        string line30Hex = DumpLineHex(bus, 30);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"LIST produced syntax error.\n{screen}");
+        Assert.IsTrue(screen.Contains("10 DMACOPY 0,1024,1,0,64", StringComparison.Ordinal),
+            $"DMACOPY line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("20 DMAFILL 2,320,16,7", StringComparison.Ordinal),
+            $"DMAFILL line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("30 S=DMASTATUS:E=DMAERR:C=DMACOUNT", StringComparison.Ordinal),
+            $"DMA status line corrupted.\n{screen}");
+        Assert.IsTrue(line30Hex.Contains("01 25", StringComparison.Ordinal), $"DMASTATUS token missing.\n{line30Hex}");
+        Assert.IsTrue(line30Hex.Contains("01 27", StringComparison.Ordinal), $"DMAERR token missing.\n{line30Hex}");
+        Assert.IsTrue(line30Hex.Contains("01 28", StringComparison.Ordinal), $"DMACOUNT token missing.\n{line30Hex}");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomDmaCommands_MoveDataInDirectMode()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        bus.Write(0x5000, 65);
+        EnterLine(editor, "DMACOPY 0,20480,4,0,1");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        RunCpuSteps(cpu, 500_000);
+
+        byte dmaStatus = bus.Read((ushort)VgcConstants.DmaStatus);
+        byte dmaErr = bus.Read((ushort)VgcConstants.DmaErrCode);
+        string screenAfterCopy = SnapshotScreen(bus.Vgc);
+        Assert.AreEqual(VgcConstants.DmaStatusOk, dmaStatus,
+            $"DMACOPY did not complete successfully. status={dmaStatus:X2} err={dmaErr:X2}\n{screenAfterCopy}");
+
+        Assert.AreEqual(65, bus.Vgc.GetSpriteShape(0)[0],
+            $"DMACOPY did not move byte from CPU RAM to sprite memory. status={dmaStatus:X2} err={dmaErr:X2}\n{screenAfterCopy}");
+
+        EnterLine(editor, "DMAFILL 4,1,3,66");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        RunCpuSteps(cpu, 500_000);
+
+        Assert.AreEqual(66, bus.Vgc.GetSpriteShape(0)[1]);
+        Assert.AreEqual(66, bus.Vgc.GetSpriteShape(0)[2]);
+        Assert.AreEqual(66, bus.Vgc.GetSpriteShape(0)[3]);
+
+        // Seed DMA status/readback registers with known values and validate
+        // BASIC functions return those values through expression evaluation.
+        bus.Write((ushort)VgcConstants.DmaStatus, 0x5A);
+        bus.Write((ushort)VgcConstants.DmaErrCode, 0xA5);
+        bus.Write((ushort)VgcConstants.DmaCountL, 0x33);
+        bus.Write((ushort)VgcConstants.DmaCountM, 0x00);
+        bus.Write((ushort)VgcConstants.DmaCountH, 0x00);
+        Assert.AreEqual(0xA5, bus.Read((ushort)VgcConstants.DmaErrCode), "Seeded DMA errcode did not stick.");
+
+        EnterLine(editor, "POKE 5000,DMASTATUS");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        Assert.AreEqual(0xA5, bus.Read((ushort)VgcConstants.DmaErrCode), "DMA errcode changed before DMAERR read.");
+        EnterLine(editor, "POKE 5001,DMAERR");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "POKE 5002,DMACOUNT");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        Assert.AreEqual(0x5A, bus.Read(5000), "DMASTATUS function did not return expected value.");
+        Assert.AreEqual(0xA5, bus.Read(5001), "DMAERR function did not return expected value.");
+        Assert.AreEqual(0x33, bus.Read(5002), "DMACOUNT function did not return expected value.");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomListsBlitterKeywordsWithoutCorruption()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "10 BLITCOPY 0,24576,4,2,0,80,3,2");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "20 BLITFILL 2,160,80,2,2,9");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "30 S=BLITSTATUS:E=BLITERR:C=BLITCOUNT");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        EnterLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        string line10Hex = DumpLineHex(bus, 10);
+        string line20Hex = DumpLineHex(bus, 20);
+        string line30Hex = DumpLineHex(bus, 30);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"LIST produced syntax error.\n{screen}");
+        Assert.IsTrue(screen.Contains("10 BLITCOPY 0,24576,4,2,0,80,3,2", StringComparison.Ordinal),
+            $"BLITCOPY line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("20 BLITFILL 2,160,80,2,2,9", StringComparison.Ordinal),
+            $"BLITFILL line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("30 S=BLITSTATUS:E=BLITERR:C=BLITCOUNT", StringComparison.Ordinal),
+            $"BLIT status line corrupted.\n{screen}");
+        Assert.IsTrue(line10Hex.Contains("01 40", StringComparison.Ordinal), $"BLITCOPY token missing.\n{line10Hex}");
+        Assert.IsTrue(line20Hex.Contains("01 41", StringComparison.Ordinal), $"BLITFILL token missing.\n{line20Hex}");
+        Assert.IsTrue(line30Hex.Contains("01 42", StringComparison.Ordinal), $"BLITSTATUS token missing.\n{line30Hex}");
+        Assert.IsTrue(line30Hex.Contains("01 43", StringComparison.Ordinal), $"BLITERR token missing.\n{line30Hex}");
+        Assert.IsTrue(line30Hex.Contains("01 44", StringComparison.Ordinal), $"BLITCOUNT token missing.\n{line30Hex}");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomBlitterCommands_MoveDataInDirectMode()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        bus.Write(0x6000, 1);
+        bus.Write(0x6001, 2);
+        bus.Write(0x6002, 3);
+        bus.Write(0x6004, 4);
+        bus.Write(0x6005, 5);
+        bus.Write(0x6006, 6);
+
+        EnterLine(editor, "BLITCOPY 0,24576,4,2,0,80,3,2");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        RunCpuSteps(cpu, 500_000);
+
+        byte bltStatus = bus.Read((ushort)VgcConstants.BltStatus);
+        byte bltErr = bus.Read((ushort)VgcConstants.BltErrCode);
+        string screenAfterCopy = SnapshotScreen(bus.Vgc);
+        Assert.AreEqual(VgcConstants.BltStatusOk, bltStatus,
+            $"BLITCOPY did not complete successfully. status={bltStatus:X2} err={bltErr:X2}\n{screenAfterCopy}");
+
+        Assert.AreEqual(1, bus.Read((ushort)(VgcConstants.ColorRamBase + 0)));
+        Assert.AreEqual(2, bus.Read((ushort)(VgcConstants.ColorRamBase + 1)));
+        Assert.AreEqual(3, bus.Read((ushort)(VgcConstants.ColorRamBase + 2)));
+        Assert.AreEqual(4, bus.Read((ushort)(VgcConstants.ColorRamBase + 80)));
+        Assert.AreEqual(5, bus.Read((ushort)(VgcConstants.ColorRamBase + 81)));
+        Assert.AreEqual(6, bus.Read((ushort)(VgcConstants.ColorRamBase + 82)));
+
+        EnterLine(editor, "BLITFILL 2,160,80,2,2,9");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        RunCpuSteps(cpu, 500_000);
+
+        Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 160)));
+        Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 161)));
+        Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 240)));
+        Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 241)));
+
+    }
+
     private static string BuildRandomStressLine(Random rng, int i)
     {
-        string[] kw = ["MODE", "COLOR", "GCLS", "GCOLOR", "LINE", "MUSIC", "PLAYING", "MNOTE(", "COPPER", "XFREE", "XPEEK(", "SIDPLAY", "SIDSTOP", "IF", "THEN", "GOTO", "FOR", "NEXT", "REM", "DATA", "NOPEN", "NCLOSE", "NLISTEN", "NACCEPT", "NSEND", "NRECV$(", "NSTATUS(", "NREADY(", "NLEN"];
+        string[] kw = ["MODE", "COLOR", "GCLS", "GCOLOR", "LINE", "MUSIC", "PLAYING", "MNOTE(", "COPPER", "XFREE", "XPEEK(", "SIDPLAY", "SIDSTOP", "IF", "THEN", "GOTO", "FOR", "NEXT", "REM", "DATA", "NOPEN", "NCLOSE", "NLISTEN", "NACCEPT", "NSEND", "NRECV$(", "NSTATUS(", "NREADY(", "NLEN", "DMACOPY", "DMAFILL", "DMASTATUS", "DMAERR", "DMACOUNT", "BLITCOPY", "BLITFILL", "BLITSTATUS", "BLITERR", "BLITCOUNT"];
         string[] ident = ["A", "B", "C", "I", "N1", "N2", "T", "X", "Y", "P"];
 
         int kind = i % 6;
