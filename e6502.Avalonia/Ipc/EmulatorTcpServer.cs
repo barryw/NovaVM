@@ -145,6 +145,14 @@ public sealed class EmulatorTcpServer : IDisposable
                 "music_tempo" => CmdMusicTempo(req),
                 "music_loop" => CmdMusicLoop(req),
                 "music_status" => CmdMusicStatus(),
+                // Network commands
+                "nic_connect" => CmdNicConnect(req),
+                "nic_disconnect" => CmdNicDisconnect(req),
+                "nic_send" => CmdNicSend(req),
+                "nic_recv" => CmdNicRecv(req),
+                "nic_listen" => CmdNicListen(req),
+                "nic_accept" => CmdNicAccept(req),
+                "nic_status" => CmdNicStatus(req),
                 // Debugger commands
                 "dbg_state" => CmdDbgState(),
                 "dbg_pause" => CmdDbgPause(),
@@ -1143,6 +1151,127 @@ public sealed class EmulatorTcpServer : IDisposable
             ["entries"] = Convert.ToHexString(data)
         };
         return result.ToJsonString();
+    }
+
+    // ── Network commands ──────────────────────────────────────────────────
+
+    private string CmdNicConnect(JsonNode req)
+    {
+        int? slot = req["slot"]?.GetValue<int>();
+        string? host = req["host"]?.GetValue<string>();
+        int? port = req["port"]?.GetValue<int>();
+        if (slot is null || host is null || port is null)
+            return Error("Need slot, host, port");
+
+        _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
+        for (int i = 0; i < host.Length && i < 31; i++)
+            _bus.Write((ushort)(VgcConstants.NicNameBuf + i), (byte)host[i]);
+        _bus.Write((ushort)(VgcConstants.NicNameBuf + Math.Min(host.Length, 31)), 0);
+        _bus.Write((ushort)VgcConstants.NicRemotePortL, (byte)(port.Value & 0xFF));
+        _bus.Write((ushort)VgcConstants.NicRemotePortH, (byte)(port.Value >> 8));
+        _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdConnect);
+        return Ok();
+    }
+
+    private string CmdNicDisconnect(JsonNode req)
+    {
+        int? slot = req["slot"]?.GetValue<int>();
+        if (slot is null) return Error("Need slot");
+        _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
+        _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdDisconnect);
+        return Ok();
+    }
+
+    private string CmdNicSend(JsonNode req)
+    {
+        int? slot = req["slot"]?.GetValue<int>();
+        string? data = req["data"]?.GetValue<string>();
+        if (slot is null || data is null) return Error("Need slot, data (base64)");
+
+        byte[] payload = Convert.FromBase64String(data);
+        if (payload.Length == 0 || payload.Length > 256) return Error("Data must be 1-256 bytes");
+
+        ushort scratchAddr = 0x0280;
+        for (int i = 0; i < payload.Length; i++)
+            _bus.WriteRam((ushort)(scratchAddr + i), payload[i]);
+
+        _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
+        _bus.Write((ushort)VgcConstants.NicDmaAddrL, (byte)(scratchAddr & 0xFF));
+        _bus.Write((ushort)VgcConstants.NicDmaAddrH, (byte)(scratchAddr >> 8));
+        _bus.Write((ushort)VgcConstants.NicDmaLen, (byte)(payload.Length == 256 ? 0 : payload.Length));
+        _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdSend);
+        return Ok();
+    }
+
+    private string CmdNicRecv(JsonNode req)
+    {
+        int? slot = req["slot"]?.GetValue<int>();
+        if (slot is null) return Error("Need slot");
+
+        ushort scratchAddr = 0x0280;
+        _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
+        _bus.Write((ushort)VgcConstants.NicDmaAddrL, (byte)(scratchAddr & 0xFF));
+        _bus.Write((ushort)VgcConstants.NicDmaAddrH, (byte)(scratchAddr >> 8));
+        _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdRecv);
+
+        int len = _bus.Read((ushort)VgcConstants.NicMsgLen);
+        if (len == 0)
+            return new JsonObject { ["ok"] = true, ["data"] = "", ["length"] = 0 }.ToJsonString();
+
+        var payload = new byte[len];
+        for (int i = 0; i < len; i++)
+            payload[i] = _bus.Read((ushort)(scratchAddr + i));
+
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["data"] = Convert.ToBase64String(payload),
+            ["length"] = len
+        }.ToJsonString();
+    }
+
+    private string CmdNicListen(JsonNode req)
+    {
+        int? slot = req["slot"]?.GetValue<int>();
+        int? port = req["port"]?.GetValue<int>();
+        if (slot is null || port is null) return Error("Need slot, port");
+
+        _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
+        _bus.Write((ushort)VgcConstants.NicLocalPortL, (byte)(port.Value & 0xFF));
+        _bus.Write((ushort)VgcConstants.NicLocalPortH, (byte)(port.Value >> 8));
+        _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdListen);
+        return Ok();
+    }
+
+    private string CmdNicAccept(JsonNode req)
+    {
+        int? slot = req["slot"]?.GetValue<int>();
+        if (slot is null) return Error("Need slot");
+        _bus.Write((ushort)VgcConstants.NicSlot, (byte)slot.Value);
+        _bus.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdAccept);
+        return Ok();
+    }
+
+    private string CmdNicStatus(JsonNode req)
+    {
+        int? slot = req["slot"]?.GetValue<int>();
+        if (slot is null) return Error("Need slot");
+
+        int slotAddr = VgcConstants.NicSlotStatus0 + slot.Value;
+        byte slotStatus = _bus.Read((ushort)slotAddr);
+        byte globalStatus = _bus.Read((ushort)VgcConstants.NicStatus);
+
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["slot"] = slot.Value,
+            ["connected"] = (slotStatus & VgcConstants.NicSlotConnected) != 0,
+            ["data_ready"] = (slotStatus & VgcConstants.NicSlotDataReady) != 0,
+            ["send_ready"] = (slotStatus & VgcConstants.NicSlotSendReady) != 0,
+            ["error"] = (slotStatus & VgcConstants.NicSlotError) != 0,
+            ["remote_closed"] = (slotStatus & VgcConstants.NicSlotRemoteClosed) != 0,
+            ["global_status"] = globalStatus
+        }.ToJsonString();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

@@ -795,6 +795,107 @@ public static class EmulatorTools
         return sb.ToString();
     }
 
+    // ── Network (NIC) ─────────────────────────────────────────────────────
+
+    [McpServerTool, Description("Connect a NIC slot to a remote host. Poll nic_status to check connection.")]
+    public static async Task<string> NicConnect(
+        EmulatorClient client,
+        [Description("Slot ID (0-3)")] int slot,
+        [Description("Remote hostname or IP")] string host,
+        [Description("Remote port")] int port)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "nic_connect",
+            ["slot"] = slot,
+            ["host"] = host,
+            ["port"] = port
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Disconnect a NIC slot.")]
+    public static async Task<string> NicDisconnect(
+        EmulatorClient client,
+        [Description("Slot ID (0-3)")] int slot)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "nic_disconnect",
+            ["slot"] = slot
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Send data on a NIC slot. Data is base64-encoded, max 256 bytes.")]
+    public static async Task<string> NicSend(
+        EmulatorClient client,
+        [Description("Slot ID (0-3)")] int slot,
+        [Description("Base64-encoded data to send (max 256 bytes)")] string data)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "nic_send",
+            ["slot"] = slot,
+            ["data"] = data
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Receive a message from a NIC slot. Returns base64-encoded data.")]
+    public static async Task<string> NicRecv(
+        EmulatorClient client,
+        [Description("Slot ID (0-3)")] int slot)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "nic_recv",
+            ["slot"] = slot
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Listen for incoming connections on a NIC slot.")]
+    public static async Task<string> NicListen(
+        EmulatorClient client,
+        [Description("Slot ID (0-3)")] int slot,
+        [Description("Local port to listen on")] int port)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "nic_listen",
+            ["slot"] = slot,
+            ["port"] = port
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Accept a pending connection on a listening NIC slot.")]
+    public static async Task<string> NicAccept(
+        EmulatorClient client,
+        [Description("Slot ID (0-3)")] int slot)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "nic_accept",
+            ["slot"] = slot
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Get the status of a NIC slot (connected, data ready, errors).")]
+    public static async Task<string> NicStatus(
+        EmulatorClient client,
+        [Description("Slot ID (0-3)")] int slot)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "nic_status",
+            ["slot"] = slot
+        });
+        return result.ToJsonString();
+    }
+
     private static string FormatScreen(JsonNode screen)
     {
         var sb = new StringBuilder();
