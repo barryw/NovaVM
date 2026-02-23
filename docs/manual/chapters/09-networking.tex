@@ -1,0 +1,365 @@
+% =============================================================================
+% Chapter 9 — Networking
+% NovaBASIC v1.0 User Guide
+% Source of truth: e6502.Avalonia/Hardware/VirtualNetworkController.cs
+%                  e6502.Avalonia/Hardware/VgcConstants.cs
+% =============================================================================
+\chapter{Networking}
+\label{chap:networking}
+
+\epigraph{\itshape ``The value of a network grows with the number of machines
+  connected to it.''}%
+         {--- Robert Metcalfe}
+
+\noindent
+NovaBASIC includes a built-in Network Interface Controller (NIC) that gives your
+programs full TCP networking from ordinary BASIC lines. You can open outbound
+connections to remote servers, listen for incoming connections, send and receive
+text messages, and build complete client/server applications --- all without
+touching a single hardware register.
+
+The NIC provides four independent connection \textbf{slots} numbered 0 through 3.
+Each slot can operate as either a client (connecting out to a remote host) or a
+server (listening for incoming connections). Slots are fully independent: you can
+have a client on slot 0 and a server on slot 1 at the same time. Messages are
+automatically framed so that each \cmd{NSEND} call corresponds to exactly one
+\cmd{NRECV\$} call on the other end.
+
+%% ============================================================
+\section{The Network Controller}
+\label{sec:nic-overview}
+%% ============================================================
+
+The NIC implements message-oriented TCP networking. Rather than giving you a raw
+byte stream, it packages each message with a one-byte length prefix on the wire.
+This framing is invisible to BASIC: you call \cmd{NSEND} with a string and the
+receiver calls \cmd{NRECV\$} to get that same string back intact. You never
+manually prefix or parse message lengths.
+
+Key characteristics of the NIC:
+
+\begin{itemize}
+  \item \textbf{Four independent slots} (0--3), each with its own connection state.
+  \item \textbf{Client or server per slot} --- a slot is committed to one role
+        per connection but can switch role after being closed.
+  \item \textbf{Message queuing} --- up to 16 incoming messages may be queued per
+        slot before the sender is blocked at the hardware level.
+  \item \textbf{Maximum message size} of 256 bytes per send/receive.
+  \item \textbf{DMA-backed transfers} between NIC and 6502 RAM; BASIC hides this
+        from you entirely.
+\end{itemize}
+
+The NIC registers occupy \texttt{\$A100}--\texttt{\$A13F}. You will not normally
+write to those addresses directly --- the BASIC networking commands issue all
+necessary register writes on your behalf.
+
+\begin{notebox}
+The NIC handles all TCP details: handshake, buffering, framing, and teardown.
+From BASIC's point of view you simply send strings and receive strings. The
+length-prefix framing on the wire is automatic and transparent.
+\end{notebox}
+
+%% ============================================================
+\section{Connecting as a Client}
+\label{sec:nic-client}
+%% ============================================================
+
+A client connection opens a TCP socket to a remote host. All four NIC commands
+used for client operation --- \cmd{NOPEN}, \cmd{NSEND}, \cmd{NRECV\$}, and
+\cmd{NCLOSE} --- work with the same slot number from open to close.
+
+\subsection*{Opening a connection: \cmd{NOPEN slot, "hostname", port}}
+
+\begin{lstlisting}[style=basiclisting]
+NOPEN 0, "127.0.0.1", 8080
+\end{lstlisting}
+
+Establishes a TCP connection on \emph{slot} (0--3) to \emph{hostname} at
+\emph{port} (1--65535). The hostname must be a quoted string; dotted-decimal
+IPv4 addresses are the most reliable form. The command blocks briefly while the
+TCP handshake completes; once it returns, the slot is ready to send and receive.
+
+\subsection*{Sending data: \cmd{NSEND slot, "message"}}
+
+\begin{lstlisting}[style=basiclisting]
+NSEND 0, "Hello, server!"
+\end{lstlisting}
+
+Transmits \emph{message} through \emph{slot}. The NIC automatically adds the
+one-byte length prefix before sending; the application on the far end sees only
+the payload. Maximum payload length is 256 bytes.
+
+\subsection*{Receiving data: \cmd{NRECV\$(slot)}}
+
+\begin{lstlisting}[style=basiclisting]
+A$ = NRECV$(0)
+\end{lstlisting}
+
+Dequeues and returns the next waiting message on \emph{slot} as a string. If no
+message is queued, \cmd{NRECV\$} returns an empty string immediately --- it does
+not wait. Always poll with \cmd{NREADY} first to confirm a message is available
+before calling \cmd{NRECV\$}.
+
+\subsection*{Checking for messages: \cmd{NREADY(slot)}}
+
+\cmd{NREADY(slot)} returns \texttt{-1} (true) if at least one message is waiting
+in the slot's receive queue, or \texttt{0} (false) if the queue is empty. Use it
+in a tight polling loop:
+
+\begin{lstlisting}[style=basiclisting]
+40 IF NOT NREADY(0) THEN 40
+\end{lstlisting}
+
+\subsection*{Length of last received message: \cmd{NLEN}}
+
+After a successful \cmd{NRECV\$} call, \cmd{NLEN} returns the byte length of the
+message that was just dequeued. This is convenient when you need to know the
+exact payload size without calling \cmd{LEN} on the returned string.
+
+\subsection*{Closing a connection: \cmd{NCLOSE slot}}
+
+\begin{lstlisting}[style=basiclisting]
+NCLOSE 0
+\end{lstlisting}
+
+Closes the TCP connection on \emph{slot} and releases all associated resources.
+Always call \cmd{NCLOSE} when you are finished with a slot, even if the remote
+end has already disconnected. This is required to return the slot to a clean
+state so it can be reused.
+
+\subsection*{Complete client example}
+
+\begin{lstlisting}[style=basiclisting]
+10 REM -- Simple TCP Client --
+20 NOPEN 0, "127.0.0.1", 8080
+30 NSEND 0, "Hello, server!"
+40 IF NOT NREADY(0) THEN 40
+50 A$ = NRECV$(0)
+60 PRINT "Reply: "; A$
+70 NCLOSE 0
+\end{lstlisting}
+
+Line 20 connects to a server running on the same machine at port 8080.
+Line 30 sends a greeting. Line 40 polls until a reply arrives. Line 50 reads
+the reply into \texttt{A\$}. Line 60 prints it. Line 70 closes the slot.
+
+\begin{tipbox}
+\cmd{NREADY} and the polling loop on line 40 are the standard pattern for
+waiting on a response. Because NovaBASIC is single-threaded, the loop will
+spin tightly until data arrives. For interactive programs you can add a
+\cmd{VSYNC} inside the loop to yield to the display system and keep the
+screen responsive while waiting.
+\end{tipbox}
+
+%% ============================================================
+\section{Running a Server}
+\label{sec:nic-server}
+%% ============================================================
+
+A server slot listens for incoming TCP connections on a local port. The workflow
+is slightly different from the client case because you must first bind the port,
+then wait for and accept a connection, before the slot behaves like a normal
+send/receive channel.
+
+\subsection*{Binding a port: \cmd{NLISTEN slot, port}}
+
+\begin{lstlisting}[style=basiclisting]
+NLISTEN 0, 8080
+\end{lstlisting}
+
+Begins listening for incoming connections on \emph{port} (bound to
+\texttt{127.0.0.1}) using \emph{slot}. The command returns immediately; the NIC
+starts accepting the OS-level TCP listen in the background. A client connecting
+to this port will be queued until you call \cmd{NACCEPT}.
+
+\subsection*{Accepting a connection: \cmd{NACCEPT slot}}
+
+\begin{lstlisting}[style=basiclisting]
+NACCEPT 0
+\end{lstlisting}
+
+Promotes a pending incoming connection on \emph{slot} from the listen queue to
+an active connected state. You must poll \cmd{NREADY(slot)} before calling
+\cmd{NACCEPT} --- \cmd{NREADY} returns \texttt{-1} when a client is waiting to
+be accepted. After \cmd{NACCEPT} returns, the slot is fully connected and you
+can use \cmd{NSEND} and \cmd{NRECV\$} normally.
+
+\begin{notebox}
+\cmd{NREADY} serves double duty on a listening slot: before \cmd{NACCEPT} it
+signals a pending connection, and after \cmd{NACCEPT} it signals a pending
+message. The meaning is determined by the slot's current state.
+\end{notebox}
+
+\subsection*{Server loop pattern}
+
+A typical server follows this sequence:
+
+\begin{enumerate}
+  \item \cmd{NLISTEN} to bind the port.
+  \item Poll \cmd{NREADY} waiting for a client to connect.
+  \item \cmd{NACCEPT} to bring the connection live.
+  \item Inner loop: poll \cmd{NREADY}, call \cmd{NRECV\$}, process, \cmd{NSEND}
+        reply. Exit when the connection drops.
+  \item \cmd{NCLOSE} the slot.
+  \item Go back to step 2 to accept the next client.
+\end{enumerate}
+
+\subsection*{Echo server example}
+
+\begin{lstlisting}[style=basiclisting]
+10 REM -- Echo Server --
+20 NLISTEN 0, 8080
+30 PRINT "Listening on port 8080..."
+40 IF NOT NREADY(0) THEN 40
+50 NACCEPT 0
+60 PRINT "Client connected!"
+70 REM Main receive/echo loop
+80 IF (NSTATUS(0) AND 1) = 0 THEN 200
+90 IF NOT NREADY(0) THEN 80
+100 A$ = NRECV$(0)
+110 L = NLEN
+120 PRINT "Received ("; L; " bytes): "; A$
+130 NSEND 0, A$
+140 GOTO 80
+200 PRINT "Client disconnected."
+210 NCLOSE 0
+220 GOTO 30
+\end{lstlisting}
+
+Line 20 binds port 8080. Lines 30--40 wait for a client. Line 50 accepts it.
+The inner loop at lines 80--140 checks that the connection is still alive (bit 0
+of \cmd{NSTATUS}), polls for incoming data, reads each message, prints the
+length and content, and echoes it straight back. When the connection drops,
+execution falls through to line 200, the slot is closed, and the server loops
+back to listen for the next client.
+
+%% ============================================================
+\section{Status and Error Handling}
+\label{sec:nic-status}
+%% ============================================================
+
+\subsection*{\cmd{NSTATUS(slot)} bitmask}
+
+\cmd{NSTATUS(slot)} returns a byte whose bits describe the current state of
+\emph{slot}:
+
+\begin{longtable}{>{\ttfamily}c l p{0.50\textwidth}}
+\toprule
+\textbf{Bit} & \textbf{Name} & \textbf{Meaning} \\
+\midrule
+\endhead
+0 & Connected    & An active TCP connection exists on this slot. \\
+\midrule
+1 & DataReady    & At least one message is waiting in the receive queue. \\
+\midrule
+2 & SendReady    & The slot is ready to accept an outbound message
+                   (normally always set when Connected). \\
+\midrule
+3 & Error        & A connection or I/O error has occurred on this slot. \\
+\midrule
+4 & RemoteClosed & The remote peer has closed its end of the connection. \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Testing individual bits}
+
+Use the \cmd{AND} operator to isolate a specific bit:
+
+\begin{lstlisting}[style=basiclisting]
+REM Test bit 0 (Connected)
+IF (NSTATUS(0) AND 1) = 0 THEN PRINT "Disconnected"
+
+REM Test bit 4 (RemoteClosed)
+IF (NSTATUS(0) AND 16) <> 0 THEN GOSUB 900
+\end{lstlisting}
+
+\subsection*{Detecting disconnection}
+
+There are two ways the remote end can disappear:
+
+\begin{itemize}
+  \item \textbf{Clean close} --- the remote side called a close equivalent. Bit 4
+        (\textit{RemoteClosed}) is set and bit 0 (\textit{Connected}) clears.
+  \item \textbf{Abrupt drop} --- the network connection is lost without a
+        graceful close. Bit 3 (\textit{Error}) may be set; bit 0 clears.
+\end{itemize}
+
+In either case, when bit 0 drops to zero the connection is gone. Check
+\texttt{(NSTATUS(slot) AND 1) = 0} as your primary disconnection test, as shown
+in the echo server example above.
+
+\subsection*{Cleaning up after disconnection}
+
+Regardless of which party initiated the close, always call \cmd{NCLOSE slot}
+once you detect a disconnection. This returns the slot to the idle state and
+allows \cmd{NLISTEN} or \cmd{NOPEN} to be called on it again.
+
+\begin{warningbox}
+Always check \cmd{NSTATUS} before calling \cmd{NSEND}. If bit 0 (\textit{Connected})
+is clear, the connection has dropped and \cmd{NSEND} will fail silently --- your
+message will be discarded without any error being reported to BASIC. Test the
+connection state at the top of every send/receive loop.
+\end{warningbox}
+
+%% ============================================================
+\section{Try It Now}
+\label{sec:nic-tryit}
+%% ============================================================
+
+\begin{tryitbox}
+Type and run the echo server program from Section~\ref{sec:nic-server}:
+
+\begin{lstlisting}[style=basiclisting]
+10 REM -- Echo Server --
+20 NLISTEN 0, 8080
+30 PRINT "Listening on port 8080..."
+40 IF NOT NREADY(0) THEN 40
+50 NACCEPT 0
+60 PRINT "Client connected!"
+70 REM Main receive/echo loop
+80 IF (NSTATUS(0) AND 1) = 0 THEN 200
+90 IF NOT NREADY(0) THEN 80
+100 A$ = NRECV$(0)
+110 L = NLEN
+120 PRINT "Received ("; L; " bytes): "; A$
+130 NSEND 0, A$
+140 GOTO 80
+200 PRINT "Client disconnected."
+210 NCLOSE 0
+220 GOTO 30
+\end{lstlisting}
+
+The server will print \texttt{LISTENING ON PORT 8080...} and wait. To test it,
+open a second emulator instance and enter the client program below, then type
+\cmd{RUN}:
+
+\begin{lstlisting}[style=basiclisting]
+10 REM -- Test Client --
+20 NOPEN 0, "127.0.0.1", 8080
+30 NSEND 0, "Hello from client!"
+40 IF NOT NREADY(0) THEN 40
+50 A$ = NRECV$(0)
+60 PRINT "Echo: "; A$
+70 NCLOSE 0
+\end{lstlisting}
+
+The server window should print the message and its byte length. The client
+window should print \texttt{ECHO: HELLO FROM CLIENT!}. After the client closes
+the connection the server will print \texttt{CLIENT DISCONNECTED.} and return
+to listening --- ready for the next client.
+
+\medskip
+\textbf{Experiments to try:}
+
+\begin{itemize}
+  \item Modify the echo server to prefix every reply with \texttt{"ECHO: "} before
+        sending it back.
+  \item Change the server to count messages received and print the count alongside
+        each one.
+  \item Open slot 1 in the client program with a second \cmd{NOPEN} call and send a
+        different message on each slot simultaneously to observe independent
+        operation.
+  \item Extend the client into a loop that sends ten numbered messages and prints
+        each echo, then closes the connection.
+\end{itemize}
+\end{tryitbox}
