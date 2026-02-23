@@ -213,7 +213,7 @@ SPRITEDATA n,row,b1\ldots{}b8   & Define one row of sprite shape data (8 bytes, 
 % ---- Sound and Music --------------------------------------------------------
 \subsection*{Sound and Music}
 
-The SID chip provides 3 voices. The music engine adds a three-voice MML
+Two SID chips provide 6 voices. The music engine adds a six-voice MML
 sequencer with instrument presets, tempo, looping, and per-frame effects.
 
 \begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.42\textwidth} p{0.48\textwidth}}
@@ -226,13 +226,13 @@ sequencer with instrument presets, tempo, looping, and per-frame effects.
 SOUND note,dur{[},inst{]}    & Play MIDI \textit{note} (0--127) for \textit{dur} frames (1/60~s). Optional \textit{inst} selects instrument preset (0--15, default~0). \\[3pt]
 VOLUME level                 & Set SID master volume (0--15; low nibble only). \\[3pt]
 INSTRUMENT id,wave,a,d,s,r   & Define instrument preset \textit{id} (0--15). \textit{wave}: \$10=tri, \$20=saw, \$40=pulse, \$80=noise. \textit{a,d,s,r}: ADSR values 0--15. \\[3pt]
-MUSIC voice,"mml"            & Load MML sequence into \textit{voice} (1--3). \\[3pt]
+MUSIC voice,"mml"            & Load MML sequence into \textit{voice} (1--6). \\[3pt]
 MUSIC PLAY                   & Start music playback. \\[3pt]
 MUSIC STOP                   & Stop music and silence all music voices. \\[3pt]
 MUSIC TEMPO bpm              & Set playback tempo (default 120). \\[3pt]
 MUSIC LOOP ON                & Enable looping (restart when all voices finish). \\[3pt]
 MUSIC LOOP OFF               & Disable looping (default). \\[3pt]
-MUSIC PRIORITY v1{[},v2{[},v3{]}} & Set voice-stealing priority for SFX. \\[3pt]
+MUSIC PRIORITY v1{[},v2{[},\ldots{}v6{]}{]} & Set voice-stealing priority for SFX. \\[3pt]
 SIDPLAY "name"{[},song{]}   & Play a \texttt{.sid} file; optional \textit{song} number (default~1). \\[3pt]
 SIDSTOP                      & Stop SID file playback. \\
 \end{longtable}
@@ -291,6 +291,62 @@ XUNMAP window               & Unmap a CPU window (0--3). \\
 The raw XRAM contents are not zeroed, but all allocation records are lost.
 \end{warningbox}
 
+% ---- DMA (Direct Memory Access) -----------------------------------------------
+\subsection*{DMA (Direct Memory Access)}
+
+The DMA controller transfers data between six unified memory spaces
+without CPU intervention. Space IDs: 0=CPU RAM, 1=character RAM,
+2=color RAM, 3=graphics bitmap, 4=sprite shapes, 5=expansion RAM.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.46\textwidth} p{0.44\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+DMACOPY ss,sa,ds,da,len         & Copy \textit{len} bytes from space \textit{ss} address \textit{sa} to space \textit{ds} address \textit{da}. \\[3pt]
+DMAFILL ds,da,len,val           & Fill \textit{len} bytes in space \textit{ds} at address \textit{da} with byte \textit{val}. \\
+\end{longtable}
+
+% ---- Blitter (2D Rectangle Operations) ----------------------------------------
+\subsection*{Blitter (2D Rectangle Operations)}
+
+The blitter performs stride-aware rectangular copies and fills across the
+same six memory spaces as DMA. Stride is the byte offset from the start
+of one row to the next.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.55\textwidth} p{0.35\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+BLITCOPY ss,sa,sstr,ds,da,dstr,w,h   & Copy rectangle: \textit{w} bytes wide, \textit{h} rows, with source stride \textit{sstr} and destination stride \textit{dstr}. \\[3pt]
+BLITFILL ds,da,dstr,w,h,val          & Fill rectangle with byte \textit{val}. \\
+\end{longtable}
+
+% ---- Network -------------------------------------------------------------------
+\subsection*{Network}
+
+The NIC provides message-oriented TCP networking over four connection slots
+(0--3). Messages are limited to 256 bytes each.
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.42\textwidth} p{0.48\textwidth}}
+\toprule
+\normalfont\textbf{Syntax} & \textbf{Purpose} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+NOPEN slot,"host",port   & Connect to a remote TCP server. \\[3pt]
+NCLOSE slot              & Close a connection. \\[3pt]
+NLISTEN slot,port        & Start listening for incoming connections. \\[3pt]
+NACCEPT slot             & Accept a pending incoming connection. \\[3pt]
+NSEND slot,"msg"         & Send a message string. \\
+\end{longtable}
+
 % ---- Interrupts and Machine Code --------------------------------------------
 \subsection*{Interrupts and Machine Code}
 
@@ -322,6 +378,7 @@ REM comment             & Program comment; rest of line is ignored by interprete
 DEF FN name(var)=expr   & Define a single-line user function. \\
 WAIT addr,mask{[},xor{]}   & Busy-wait until \texttt{(PEEK(addr) XOR xor) AND mask} is non-zero. \\
 NULL n                  & Set the number of null (zero) bytes sent after each carriage return. \\
+RESET                   & Perform a full hardware and CPU reset. \\
 \end{longtable}
 
 % =============================================================================
@@ -419,7 +476,41 @@ In v1.0 the ROM handlers return 0; position read-back is not yet implemented.
 \bottomrule
 \endfoot
 PLAYING         & 1 if music is currently playing, 0 if stopped. \\
-MNOTE(voice)    & Current MIDI note number on \textit{voice} (1--3), or 0 if silent. \\
+MNOTE(voice)    & Current MIDI note number on \textit{voice} (1--6), or 0 if silent. \\
+\end{longtable}
+
+% ---- DMA and Blitter Functions -------------------------------------------------
+\subsection*{DMA and Blitter Functions}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Function} & \textbf{Returns} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+DMASTATUS       & DMA status: 0=idle, 1=busy, 2=ok, 3=error. \\
+DMAERR          & DMA error code from last operation. \\
+DMACOUNT        & Number of bytes transferred in last DMA operation. \\
+BLITSTATUS      & Blitter status: 0=idle, 1=busy, 2=ok, 3=error. \\
+BLITERR         & Blitter error code from last operation. \\
+BLITCOUNT       & Number of bytes written in last blit operation. \\
+\end{longtable}
+
+% ---- Network Functions ---------------------------------------------------------
+\subsection*{Network Functions}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.38\textwidth} p{0.52\textwidth}}
+\toprule
+\normalfont\textbf{Function} & \textbf{Returns} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+NRECV\$(slot)   & Receive next queued message as a string (max 255 chars). \\
+NSTATUS(slot)   & Slot status bitmask (see Appendix~\ref{chap:memmap}). \\
+NREADY(slot)    & $-1$ if a message is ready, 0 otherwise. \\
+NLEN            & Length of the last received message (bytes). \\
 \end{longtable}
 
 % =============================================================================
@@ -487,5 +578,7 @@ SPRITEY(), COLLISION(), BUMPED()
 \ttfamily\small
 DIR, DEL, XMEM, XBANK, XPOKE, XPEEK(), STASH, FETCH, XFREE, XRESET, XALLOC,
 XDIR, XDEL, XMAP, XUNMAP, GSAVE, GLOAD, SIDPLAY, SIDSTOP, MUSIC, PLAYING,
-MNOTE()
+MNOTE(), COPPER, RESET, NOPEN, NCLOSE, NLISTEN, NACCEPT, NSEND, NRECV\$(),
+NSTATUS(), NREADY(), NLEN, DMACOPY, DMAFILL, DMASTATUS(), DMAERR(),
+DMACOUNT(), BLITCOPY, BLITFILL, BLITSTATUS(), BLITERR(), BLITCOUNT()
 \end{retrobox}
