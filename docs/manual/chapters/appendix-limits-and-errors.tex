@@ -4,7 +4,9 @@
 % Source of truth: ehbasic/basic.asm
 %                  e6502.Avalonia/Hardware/FileIoController.cs
 %                  e6502.Avalonia/Hardware/VirtualGraphicsController.cs
-%                  e6502.Avalonia/Hardware/VirtualSoundController.cs
+%                  e6502.Avalonia/Hardware/VirtualDmaController.cs
+%                  e6502.Avalonia/Hardware/VirtualBlitterController.cs
+%                  e6502.Avalonia/Hardware/VirtualNetworkController.cs
 %                  e6502.Avalonia/Hardware/VirtualExpansionMemoryController.cs
 % =============================================================================
 \chapter{Limits, Errors, and Edge Cases}
@@ -174,7 +176,7 @@ Master volume &
   16 slots (0--15). Slot 0 is pre-initialized at boot. All other slots
   start as copies of slot 0. \\
 \cmd{MUSIC voice,\ldots} &
-  Voice must be 1--3. The MML string is read from CPU memory via pointer;
+  Voice must be 1--6. The MML string is read from CPU memory via pointer;
   maximum practical length limited by available RAM. \\
 \cmd{MUSIC TEMPO} &
   BPM is a 16-bit value (0--65535). Default is 120. \\
@@ -189,7 +191,7 @@ MML vibrato &
 MML loops &
   Non-nesting. Maximum practical depth limited by string expansion. \\
 Copper events &
-  Maximum 1024 events per program. Events at duplicate position/register
+  Maximum 256 events per list; 128 lists available. Events at duplicate position/register
   replace existing values. \\
 \cmd{WAVE} &
   Deprecated. Raises a syntax error. Use \cmd{INSTRUMENT} instead. \\
@@ -274,6 +276,85 @@ RAM range validation for STASH/FETCH &
 \end{longtable}
 
 % =============================================================================
+\section{DMA and Blitter Limits}
+% =============================================================================
+
+\begin{longtable}{p{0.32\textwidth} p{0.58\textwidth}}
+\toprule
+\textbf{Command / Feature} & \textbf{Limit and edge behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Memory space IDs &
+  Valid range: 0--5 (CPU RAM, Char, Color, Gfx, Sprite, XRAM).
+  An invalid space ID sets the error code to \cmd{BadSpace} (\$02). \\
+24-bit addressing &
+  All DMA and blitter addresses are 24-bit (low/mid/high byte).
+  For XRAM (space 5), the current \cmd{XBANK} value is used as the
+  high address byte automatically by the BASIC commands. \\
+\cmd{DMACOPY}/\cmd{DMAFILL} &
+  Length is 24-bit; zero-length transfers are rejected with \cmd{BadArgs} (\$04).
+  Out-of-range addresses set \cmd{Range} (\$03).
+  Writes to ROM space set \cmd{WriteProt} (\$05). \\
+\cmd{BLITCOPY}/\cmd{BLITFILL} &
+  Width and height are 16-bit (1--65535 each).
+  Zero width or height is rejected with \cmd{BadArgs} (\$04).
+  Stride is the byte offset between row starts; it may be larger than width. \\
+Color-key mode (blitter) &
+  When bit 1 of \texttt{BltMode} is set, source bytes matching
+  \texttt{BltColorKey} are skipped.
+  In fill mode, color-key is ignored. \\
+Row buffer &
+  When source and destination overlap in the same space, the blitter uses
+  a temporary row buffer to prevent read-after-write corruption. \\
+\cmd{DMASTATUS}/\cmd{BLITSTATUS} &
+  Returns the raw status register value: 0=idle, 1=busy, 2=ok, 3=error.
+  BASIC commands check status automatically and raise a function-call
+  error if the operation fails. \\
+\end{longtable}
+
+% =============================================================================
+\section{Network Limits}
+% =============================================================================
+
+\begin{longtable}{p{0.32\textwidth} p{0.58\textwidth}}
+\toprule
+\textbf{Feature} & \textbf{Limit and edge behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Connection slots &
+  4 slots (0--3). Each slot is independent and may be a client or server. \\
+Message size &
+  Maximum 256 bytes per message. Messages are length-prefixed on the wire
+  (1 byte: \$00 = 256, \$01--\$FF = 1--255). \\
+Receive queue &
+  Up to 16 messages per slot. If the queue overflows, new messages are
+  dropped and the slot error flag is set. \\
+Hostname length &
+  Maximum 31 characters (32-byte buffer, null-terminated). \\
+Port range &
+  1--65535 (16-bit). \\
+Connect timeout &
+  10 seconds. If the remote host does not respond, the slot error flag
+  is set. \\
+\cmd{NRECV\$(slot)} &
+  Returns a string of up to 255 characters. If no message is queued,
+  returns an empty string. \\
+\cmd{NSTATUS(slot)} &
+  Returns the slot status byte. Bit 4 (RemoteClosed) indicates the remote
+  peer has disconnected; the slot should be closed with \cmd{NCLOSE}. \\
+\cmd{NREADY(slot)} &
+  Returns $-1$ (true) if at least one message is in the receive queue,
+  0 (false) otherwise. \\
+\cmd{NLISTEN} binding &
+  TCP server binds to 127.0.0.1 (localhost). External connections require
+  the remote end to connect to the host machine's loopback address. \\
+\end{longtable}
+
+% =============================================================================
 \section{Status and Error Code Quick Reference}
 % =============================================================================
 
@@ -326,10 +407,62 @@ RAM range validation for STASH/FETCH &
 \$06 & XmcErrEndOfDir & No more named-block directory entries. \\
 \end{longtable}
 
+\subsection*{DMA Controller Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.12\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.26\textwidth} p{0.50\textwidth}}
+\toprule
+\normalfont\textbf{Value} & \normalfont\textbf{Symbol} & \textbf{Meaning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\normalfont\textit{Status codes (\$BA61)}} \\
+\midrule
+\$00 & DmaStatusIdle  & No operation in progress. \\
+\$01 & DmaStatusBusy  & Transfer is executing. \\
+\$02 & DmaStatusOk    & Last transfer succeeded. \\
+\$03 & DmaStatusError & Last transfer failed; check error code. \\
+\midrule
+\multicolumn{3}{l}{\normalfont\textit{Error codes (\$BA62)}} \\
+\midrule
+\$00 & DmaErrNone      & No error. \\
+\$01 & DmaErrBadCmd    & Invalid command byte. \\
+\$02 & DmaErrBadSpace  & Invalid source or destination space ID. \\
+\$03 & DmaErrRange     & Address out of bounds for the given space. \\
+\$04 & DmaErrBadArgs   & Invalid arguments (e.g., length $\leq$ 0). \\
+\$05 & DmaErrWriteProt & Destination is write-protected (ROM). \\
+\end{longtable}
+
+\subsection*{Blitter Controller Codes}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.12\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.26\textwidth} p{0.50\textwidth}}
+\toprule
+\normalfont\textbf{Value} & \normalfont\textbf{Symbol} & \textbf{Meaning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{3}{l}{\normalfont\textit{Status codes (\$BA81)}} \\
+\midrule
+\$00 & BltStatusIdle  & No operation in progress. \\
+\$01 & BltStatusBusy  & Blit is executing. \\
+\$02 & BltStatusOk    & Last blit succeeded. \\
+\$03 & BltStatusError & Last blit failed; check error code. \\
+\midrule
+\multicolumn{3}{l}{\normalfont\textit{Error codes (\$BA82)}} \\
+\midrule
+\$00 & BltErrNone      & No error. \\
+\$01 & BltErrBadCmd    & Invalid command byte. \\
+\$02 & BltErrBadSpace  & Invalid source or destination space ID. \\
+\$03 & BltErrRange     & Rectangular region extends out of bounds. \\
+\$04 & BltErrBadArgs   & Invalid arguments (width $\leq$ 0, height $\leq$ 0). \\
+\$05 & BltErrWriteProt & Destination is write-protected (ROM). \\
+\end{longtable}
+
 \begin{tipbox}
-The BASIC runtime maps both FIO and XMC error returns to one of three
-user-visible messages: ``\texttt{File not found}'', ``\texttt{I/O Error}'',
-or a function-call error.
+The BASIC runtime maps FIO, XMC, DMA, and Blitter error returns to one of
+three user-visible messages: ``\texttt{File not found}'',
+``\texttt{I/O Error}'', or a function-call error.
 For low-level programs that \cmd{POKE} the controller registers directly,
 use the tables above to interpret the raw status and error bytes.
 \end{tipbox}
