@@ -1,0 +1,303 @@
+% =============================================================================
+% Chapter 8 — DMA and Blitter
+% NovaBASIC v1.0 User Guide
+% Source of truth: e6502.Avalonia/Hardware/DmaController.cs
+%                  e6502.Avalonia/Hardware/BlitterController.cs
+%                  e6502.Avalonia/Hardware/CompositeBusDevice.cs
+% =============================================================================
+\chapter{DMA and Blitter}
+\label{chap:dma-blitter}
+
+\epigraph{\itshape ``Speed is not a luxury --- it is the difference between
+  a program that feels alive and one that feels like it is apologising.''}%
+         {--- e6502 Virtual Computer Design Notes}
+
+\noindent
+Every POKE loop that copies a screen buffer byte-by-byte is burning CPU cycles
+that your program could be spending on game logic, animation, or music.
+NovaBASIC includes two hardware accelerators that move data without occupying
+the CPU: the \textbf{DMA controller} for flat bulk transfers and the
+\textbf{blitter} for two-dimensional rectangular copies and fills.
+Both work across six unified memory spaces --- CPU RAM, character RAM, color
+RAM, the graphics bitmap, sprite shape memory, and expansion RAM --- so data
+can be moved between any combination of those regions in a single command.
+This chapter covers both controllers, their BASIC keywords, and the memory
+space model they share.
+
+% -----------------------------------------------------------------------------
+\section{The DMA Controller}
+\label{sec:dma-controller}
+% -----------------------------------------------------------------------------
+
+\textbf{Direct Memory Access (DMA)} is a hardware technique that transfers
+a block of bytes between two memory addresses without executing a load/store
+loop on the CPU. The CPU hands a source address, destination address, and
+length to the controller and the transfer happens autonomously. From the
+perspective of a BASIC program the operation appears instantaneous.
+
+The DMA controller understands six \textbf{unified memory spaces}. Each space
+is identified by a small integer that you pass as a parameter:
+
+\begin{center}
+\begin{tabular}{>{\ttfamily}c l r l}
+\toprule
+\textbf{ID} & \textbf{Space} & \textbf{Size} & \textbf{Notes} \\
+\midrule
+0 & CPU RAM          & 64 KB        & Full 6502 address space \\
+1 & Character RAM    & 2,000 bytes  & 80$\times$25 text cells \\
+2 & Color RAM        & 2,000 bytes  & 80$\times$25 color attributes \\
+3 & Graphics Bitmap  & 64,000 bytes & 320$\times$200 pixels, 4-bit color \\
+4 & Sprite Shapes    & 2,048 bytes  & 16 sprites $\times$ 128 bytes each \\
+5 & Expansion RAM    & up to 512 KB & Uses current XBANK \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\medskip
+For spaces 1 through 4, the address parameter is a zero-based byte offset
+into that hardware memory region --- so address 0 in space~1 is the first
+character cell, address 80 is the start of the second row, and so on.
+
+\subsection*{\cmd{DMACOPY srcSpace, srcAddr, dstSpace, dstAddr, length}}
+
+Copies \emph{length} bytes from offset \emph{srcAddr} in \emph{srcSpace} to
+offset \emph{dstAddr} in \emph{dstSpace}.
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Copy 2000 bytes from CPU RAM at $6000 to character RAM
+20 DMACOPY 0, 24576, 1, 0, 2000
+\end{lstlisting}
+
+Here space~0 is CPU RAM, \texttt{24576} is \$6000 decimal, space~1 is
+character RAM, and the destination offset is 0 (top-left cell). After line~20
+executes, the 2000-byte buffer you prepared in CPU RAM has been written
+directly into the text screen.
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Load graphics data from XRAM bank 0 into the bitmap
+20 XBANK 0
+30 DMACOPY 5, 0, 3, 0, 64000
+\end{lstlisting}
+
+Space~5 is expansion RAM. The current XBANK (set on line~20) determines which
+512 KB bank is addressed. Line~30 copies all 64,000 bytes of the graphics
+bitmap from the start of XRAM bank~0.
+
+\subsection*{\cmd{DMAFILL dstSpace, dstAddr, length, value}}
+
+Fills \emph{length} bytes starting at offset \emph{dstAddr} in
+\emph{dstSpace} with the constant byte \emph{value}.
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Clear character screen with space characters (ASCII 32)
+20 DMAFILL 1, 0, 2000, 32
+\end{lstlisting}
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Fill color RAM with color 7 (white-on-black attribute)
+20 DMAFILL 2, 0, 2000, 7
+\end{lstlisting}
+
+\subsection*{Status functions}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Function} & \textbf{Returns} \\
+\midrule
+\cmd{DMASTATUS} & 0 = idle, 1 = busy, 2 = done, 3 = error \\
+\cmd{DMAERR}    & 0 = no error; non-zero = hardware error code \\
+\cmd{DMACOUNT}  & Number of bytes transferred by the last operation \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+\cmd{DMACOPY} and \cmd{DMAFILL} poll the controller internally and raise a
+BASIC error if the transfer ends in an error state. The status functions are
+provided for advanced use --- for example, if you launch a transfer via direct
+register writes (\cmd{POKE}) and want to monitor completion yourself.
+\end{notebox}
+
+% -----------------------------------------------------------------------------
+\section{The Blitter}
+\label{sec:blitter}
+% -----------------------------------------------------------------------------
+
+The DMA controller treats memory as a flat one-dimensional sequence of bytes.
+The \textbf{blitter} adds a second dimension: it understands that memory is
+arranged as rows of a fixed width and can copy or fill rectangular regions
+without touching the bytes between rows.
+
+The key concept is \textbf{stride}: the number of bytes from the beginning of
+one row to the beginning of the next. For the 80-column text screen, stride is
+80. For the 320-pixel-wide graphics bitmap, stride is 160 (320 pixels at 4
+bits each, packed into 2 nibbles per byte). If source and destination have
+different strides --- for example when copying a narrow tile into a wider
+canvas --- you specify each independently.
+
+\subsection*{\cmd{BLITCOPY srcSpace, srcAddr, srcStride, dstSpace, dstAddr, dstStride, width, height}}
+
+Copies a rectangle \emph{width} bytes wide by \emph{height} rows tall from
+the source region to the destination region.
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Scroll the character screen up by one row.
+20 REM Copy rows 1-24 (offset 80) to rows 0-23 (offset 0),
+30 REM then blank the last row.
+40 BLITCOPY 1, 80, 80, 1, 0, 80, 80, 24
+50 DMAFILL 1, 1920, 80, 32
+\end{lstlisting}
+
+Line~40 copies 24 rows of 80 characters, shifting the entire screen up.
+Line~50 fills the vacated bottom row (offset 1920 = 24$\times$80) with spaces.
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Copy a 10x8 tile from CPU RAM at $3000 into color RAM
+20 REM at column 5, row 3 (offset = 3*80+5 = 245).
+30 BLITCOPY 0, 12288, 10, 2, 245, 80, 10, 8
+\end{lstlisting}
+
+The source stride is 10 because the tile is stored compactly (row-by-row,
+10 bytes per row) in CPU RAM. The destination stride is 80 because color RAM
+is 80 columns wide.
+
+\subsection*{\cmd{BLITFILL dstSpace, dstAddr, dstStride, width, height, value}}
+
+Fills a rectangle \emph{width} bytes wide by \emph{height} rows tall in
+\emph{dstSpace} with the constant byte \emph{value}, respecting row stride.
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Draw a 20x5 colored rectangle starting at column 10, row 2.
+20 REM offset = 2*80+10 = 170. Stride = 80.
+30 BLITFILL 2, 170, 80, 20, 5, 9
+\end{lstlisting}
+
+Without the blitter this would require a nested FOR/NEXT loop: one outer loop
+over five rows and an inner loop over twenty columns, each issuing a POKE.
+\cmd{BLITFILL} replaces all of that with a single hardware call.
+
+\subsection*{Color-key transparency}
+
+At the register level, bit~1 of the blitter mode register (\texttt{\$BA93})
+enables \textbf{color-key} mode: source bytes that equal the color key value
+(stored in \texttt{\$BA95}) are skipped, leaving the destination byte
+unchanged. This is sprite-style transparency for arbitrary memory regions.
+The \cmd{BLITCOPY} keyword does not expose this flag directly; use
+\cmd{POKE \$BA93, 2} before issuing a raw blitter start
+(\cmd{POKE \$BA80, 1}) to enable it.
+
+\subsection*{Status functions}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Function} & \textbf{Returns} \\
+\midrule
+\cmd{BLITSTATUS} & 0 = idle, 1 = busy, 2 = done, 3 = error \\
+\cmd{BLITERR}    & 0 = no error; non-zero = hardware error code \\
+\cmd{BLITCOUNT}  & Number of bytes written by the last operation \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{tipbox}
+Use \cmd{DMACOPY} and \cmd{DMAFILL} for flat, one-dimensional transfers ---
+copying a saved screen buffer, filling a region of expansion RAM, or moving a
+block of arbitrary bytes. Use \cmd{BLITCOPY} and \cmd{BLITFILL} when your data
+is inherently two-dimensional and you need to respect row boundaries, such as
+scrolling text, drawing rectangles, or working with tile graphics. Choosing the
+right tool avoids writing stride arithmetic in BASIC loops.
+\end{tipbox}
+
+% -----------------------------------------------------------------------------
+\section{Memory Spaces Reference}
+\label{sec:dma-memory-spaces}
+% -----------------------------------------------------------------------------
+
+The table below summarises all six space IDs accepted by both the DMA
+controller and the blitter. Address offsets within each space are always
+zero-based.
+
+\begin{longtable}{>{\ttfamily}c l r p{5.8cm}}
+\toprule
+\textbf{ID} & \textbf{Space} & \textbf{Size} & \textbf{Notes} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+0 & CPU RAM         & 64 KB        &
+  Full 6502 address space. Offsets are absolute CPU addresses. Writes to
+  ROM (\$C000--\$FFFF) are silently ignored. \\[4pt]
+1 & Character RAM   & 2,000 bytes  &
+  80$\times$25 text cells, row-major. Offset 0 is top-left; offset 79 is
+  top-right; offset 80 is the start of row~1. \\[4pt]
+2 & Color RAM       & 2,000 bytes  &
+  One color attribute byte per text cell, same layout as character RAM.
+  Low nibble = foreground, high nibble = background. \\[4pt]
+3 & Graphics Bitmap & 64,000 bytes &
+  320$\times$200 pixels, two 4-bit pixels packed per byte (low nibble =
+  left pixel). Row stride is 160 bytes. \\[4pt]
+4 & Sprite Shapes   & 2,048 bytes  &
+  16 sprite slots, 128 bytes each. Each slot holds a 16$\times$16 pixel
+  image, two pixels per byte. \\[4pt]
+5 & Expansion RAM   & up to 512 KB &
+  The current XBANK setting is automatically applied as the high address
+  byte. Set \cmd{XBANK} before any DMA or blitter operation that uses
+  space~5. \\
+\end{longtable}
+
+\begin{notebox}
+When space~5 (XRAM) is the source or destination, the DMA and blitter
+controllers read the current XBANK register at the moment the transfer starts.
+Changing XBANK mid-transfer is not safe; always set the desired bank before
+issuing the command.
+\end{notebox}
+
+% -----------------------------------------------------------------------------
+\section{Try It Now}
+\label{sec:dma-try-it}
+% -----------------------------------------------------------------------------
+
+\begin{tryitbox}
+The program below combines all four commands to produce a continuously
+scrolling rainbow of color bars using only hardware accelerators --- no inner
+loops, no per-byte POKEs.
+
+\begin{lstlisting}[style=basiclisting]
+10  REM -- DMA & Blitter Demo --
+20  REM Clear screen
+30  DMAFILL 1, 0, 2000, 32
+40  DMAFILL 2, 0, 2000, 0
+50  REM Draw 25 horizontal color bars, one per row
+60  FOR I = 0 TO 24
+70    BLITFILL 2, I*80, 80, 80, 1, I MOD 16
+80  NEXT I
+90  REM Scroll colors up continuously
+100 BLITCOPY 2, 80, 80, 2, 0, 80, 80, 24
+110 BLITFILL 2, 24*80, 80, 80, 1, RND(1)*16
+120 VSYNC
+130 GOTO 100
+\end{lstlisting}
+
+Lines~30--40 clear both character and color RAM in two hardware calls.
+Lines~60--80 paint 25 horizontal bars of different colors by calling
+\cmd{BLITFILL} once per row. Lines~100--130 form an animation loop:
+\cmd{BLITCOPY} shifts the entire color layer up by one row, \cmd{BLITFILL}
+inserts a new random-color bar at the bottom, and \cmd{VSYNC} holds the
+frame rate at 60~Hz.
+
+\medskip
+\textbf{Experiments to try:}
+\begin{itemize}
+  \item Change the fill value on line~30 to something other than 32 (ASCII
+        space) to see different characters fill the screen --- try 42
+        (asterisk) or 64 (at-sign).
+  \item Replace space~2 on lines~70, 100, and~110 with space~1 to scroll
+        character codes instead of colors.
+  \item Try \cmd{DMACOPY 1, 0, 2, 0, 2000} to mirror the character RAM
+        layout into color RAM and see the effect on the display.
+  \item Use space~5 (XRAM) as a destination: stash a full color-screen
+        snapshot with \cmd{DMACOPY 2, 0, 5, 0, 2000} and restore it later.
+\end{itemize}
+\end{tryitbox}
