@@ -28,14 +28,20 @@ The full 64 KB address space is partitioned as follows:
 \texttt{\$0100}--\texttt{\$01FF} & 256 B  & Stack                           & R/W \\
 \texttt{\$0200}--\texttt{\$027F} & 128 B  & System Vectors                  & R/W \\
 \texttt{\$0280}--\texttt{\$9FFF} & ~39 KB & BASIC RAM                       & R/W \\
-\texttt{\$A000}--\texttt{\$A01E} &  31 B  & VGC Registers                   & R/W \\
-\texttt{\$A100}--\texttt{\$A1FF} & 256 B  & Sound Controller (VSC)          & R/W \\
+\texttt{\$A000}--\texttt{\$A01F} &  32 B  & VGC Registers                   & R/W \\
+\texttt{\$A100}--\texttt{\$A13F} &  64 B  & Network Interface Controller (NIC) & R/W \\
 \texttt{\$AA00}--\texttt{\$B1CF} & 2000 B & Character RAM (80$\times$25)    & R/W \\
 \texttt{\$B1D0}--\texttt{\$B99F} & 2000 B & Color RAM (80$\times$25)        & R/W \\
 \texttt{\$B9A0}--\texttt{\$B9EF} &  80 B  & File I/O Controller (FIO)       & R/W \\
 \texttt{\$BA00}--\texttt{\$BA3F} &  64 B  & Expansion Memory Controller (XMC) & R/W \\
+\texttt{\$BA40}--\texttt{\$BA4F} &  16 B  & Timer Controller                & R/W \\
+\texttt{\$BA50}--\texttt{\$BA56} &   7 B  & Music Status (6 voices)         & RO \\
+\texttt{\$BA60}--\texttt{\$BA7F} &  32 B  & DMA Controller                  & R/W \\
+\texttt{\$BA80}--\texttt{\$BA9F} &  32 B  & Blitter Controller              & R/W \\
 \texttt{\$BC00}--\texttt{\$BFFF} & 1024 B & XRAM Windows (when mapped)      & R/W \\
 \texttt{\$C000}--\texttt{\$FFFF} &  16 KB & ROM (NovaBASIC)                 & R only \\
+\texttt{\$D400}--\texttt{\$D41C} &  29 B  & SID chip 1 (write-intercepted)  & W only \\
+\texttt{\$D420}--\texttt{\$D43C} &  29 B  & SID chip 2 (write-intercepted)  & W only \\
 \end{tabular}
 \end{center}
 
@@ -57,7 +63,7 @@ in a future ROM version:
 \texttt{\$0202}--\texttt{\$0203} & \texttt{\$A010} & VGC command register \\
 \texttt{\$0204}--\texttt{\$0205} & \texttt{\$AA00} & Character RAM base \\
 \texttt{\$0206}--\texttt{\$0207} & \texttt{\$B1D0} & Color RAM base \\
-\texttt{\$0208}--\texttt{\$0209} & \texttt{\$A100} & VSC base \\
+\texttt{\$0208}--\texttt{\$0209} & \texttt{\$A100} & NIC base \\
 \texttt{\$020A}--\texttt{\$020B} & \texttt{\$B9A0} & FIO base \\
 \texttt{\$020C}--\texttt{\$020D} & \texttt{\$BA00} & XMC base \\
 \end{tabular}
@@ -389,6 +395,55 @@ register-level code:
 To send data, copy the message into CPU RAM, then set \texttt{NicDmaAddrL/H}
 and \texttt{NicDmaLen}, and write \$03 to \texttt{NicCmd}. To receive, write
 \$04 and read \texttt{NicMsgLen} for the actual length.
+
+%% ============================================================
+\section{The Timer Controller}
+\label{sec:timer}
+%% ============================================================
+
+The timer controller at \$BA40 generates periodic IRQ interrupts, firing once
+every \textit{N} video frames (at 60~Hz). It has no dedicated BASIC keyword ---
+you configure it with \cmd{POKE} and handle its interrupts with \cmd{IRQ}.
+
+\subsection*{Registers}
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Address} & \textbf{Name} & \textbf{Purpose} \\
+\hline
+\texttt{\$BA40} & TimerCtrl   & Bit 0 = enable \\
+\texttt{\$BA41} & TimerStatus & Bit 0 = IRQ pending (reading clears) \\
+\texttt{\$BA42} & TimerDivL   & Divisor low byte \\
+\texttt{\$BA43} & TimerDivH   & Divisor high byte \\
+\end{tabular}
+\end{center}
+
+The timer fires an IRQ every \textit{divisor} video frames. A divisor of 60
+fires once per second; a divisor of 1 fires every frame. The pending flag is
+cleared automatically when you read \texttt{TimerStatus}.
+
+\subsection*{Example: one-second heartbeat}
+
+\begin{lstlisting}[style=basiclisting]
+10 T = 0
+20 IRQ 1000
+30 POKE $BA42, 60 : POKE $BA43, 0
+40 REM divisor = 60 frames = 1 second
+50 POKE $BA40, 1 : REM enable
+60 DO : LOOP UNTIL T >= 5
+70 POKE $BA40, 0 : REM disable
+80 PRINT "DONE"
+90 END
+1000 T = T + 1
+1010 PRINT "TICK "; T
+1020 RETIRQ
+\end{lstlisting}
+
+\begin{notebox}
+Disable the timer (\cmd{POKE \$BA40, 0}) before changing the divisor.
+The \cmd{SIDPLAY} command uses the timer internally; starting SID playback
+will reconfigure the timer divisor.
+\end{notebox}
 
 %% ============================================================
 \section{Timer from Assembly}

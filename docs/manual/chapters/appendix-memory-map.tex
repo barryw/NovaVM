@@ -16,6 +16,51 @@
 \section{Address Space Overview}
 % =============================================================================
 
+\begin{center}
+\begin{tikzpicture}[
+  block/.style={draw, minimum width=6cm, minimum height=#1, anchor=south west,
+    font=\ttfamily\small, inner sep=0pt, outer sep=0pt},
+  label left/.style={anchor=east, font=\ttfamily\scriptsize, text=retrogray},
+  label right/.style={anchor=west, font=\scriptsize},
+]
+% Scale: 64KB = 16cm, so 1KB = 0.25cm
+% Total height = 16cm
+
+% RAM regions
+\node[block=0.625cm, fill=retrogreen!15] (zp) at (0,0) {};
+\node[label right] at (6.1,0.0) {\$0000 -- Zero Page + Stack};
+
+\node[block=9.6875cm, fill=retropale!60] (ram) at (0,0.625) {};
+\node[label right] at (6.1,0.625) {\$0200 -- System Vectors};
+\node[label right] at (6.1,1.25) {\$0280 -- BASIC Program RAM ($\sim$40 KB)};
+\node[font=\small, text=retroblue] at (3,5.5) {BASIC RAM};
+
+% I/O region
+\node[block=2.375cm, fill=retroorange!15] (io) at (0,10.3125) {};
+\node[font=\small, text=retroorange!80!black] at (3,11.5) {Hardware I/O};
+\node[label right] at (6.1,10.3125) {\$A000 -- VGC, NIC};
+\node[label right] at (6.1,10.9375) {\$AA00 -- Char/Color RAM};
+\node[label right] at (6.1,11.5625) {\$B9A0 -- FIO, XMC, Timer};
+\node[label right] at (6.1,11.875) {\$BA60 -- DMA, Blitter};
+
+% ROM region
+\node[block=4cm, fill=retroblue!12] (rom) at (0,12.6875) {};
+\node[font=\small, text=retroblue] at (3,14.6875) {ROM (NovaBASIC)};
+\node[label right] at (6.1,12.6875) {\$C000 -- ROM};
+\node[label right] at (6.1,13.3125) {\$D400 -- SID 1 + SID 2 (intercepted)};
+\node[label right] at (6.1,15.6875) {\$FFFA -- Vectors (NMI/RESET/IRQ)};
+
+% Top label
+\node[label right] at (6.1,16.6875) {\$FFFF};
+
+% Outer frame
+\draw[retroblue, thick] (0,0) rectangle (6,16.6875);
+
+\end{tikzpicture}
+\end{center}
+
+\medskip
+
 The e6502 virtual computer presents a flat 64 KB address space to the 6502 CPU.
 Coprocessor regions (VGC, NIC, FIO, XMC, DMA, Blitter) respond to reads and writes within
 their assigned windows; all remaining space is RAM except the upper 16 KB
@@ -32,7 +77,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 \$0100--\$01FF &     256 B & CPU Stack \\
 \$0200--\$027F &     128 B & System Vectors (IRQ/NMI handlers, BASIC vectors) \\
 \$0280--\$9FFF &  39,680 B & BASIC Program RAM \\
-\$A000--\$A01E &      31 B & Virtual Graphics Controller (VGC) registers and command interface \\
+\$A000--\$A01F &      32 B & Virtual Graphics Controller (VGC) registers and command interface \\
 \$A100--\$A13F &      64 B & Network Interface Controller (NIC) registers \\
 \$AA00--\$B1CF &   2,000 B & Character RAM (80$\times$25 text cells) \\
 \$B1D0--\$B99F &   2,000 B & Color RAM (80$\times$25 text cells) \\
@@ -46,10 +91,11 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 \$C000--\$FFFF &  16,384 B & ROM (NovaBASIC interpreter) \\
 \$D400--\$D41C &      29 B & SID chip registers (inside ROM range; writes intercepted) \\
 \$D420--\$D43C &      29 B & SID chip 2 registers (inside ROM range; writes intercepted) \\
+\$D500--\$D51C &      29 B & SID chip 2 mirror (transparently routes to \$D420) \\
 \end{longtable}
 
 \begin{notebox}
-The address range \$A01F--\$A0FF and \$A140--\$A9FF are not claimed by any
+The address range \$A020--\$A0FF and \$A140--\$A9FF are not claimed by any
 coprocessor and fall through to the underlying flat RAM.
 The range \$BAA0--\$BBFF is similarly unallocated RAM.
 SID registers at \$D400--\$D43C occupy space within the ROM address range
@@ -60,10 +106,11 @@ but are intercepted on write by the SID chip emulators.
 \section{VGC Register Map}
 % =============================================================================
 
-The Virtual Graphics Controller occupies \$A000--\$A01E.
+The Virtual Graphics Controller occupies \$A000--\$A01F.
 Registers \$A000--\$A00F are the core status and display registers.
 Registers \$A010--\$A01E are the command register and its 14 parameter slots;
 writing to \$A010 both stores the command byte and triggers immediate execution.
+Register \$A01F is the IRQ control register.
 
 \subsection*{Core Registers (\$A000--\$A00F)}
 
@@ -90,6 +137,18 @@ writing to \$A010 both stores the command byte and triggers immediate execution.
 \$A00D & RegBorder      & R/W & Border color index (0--15). \\
 \$A00E & RegCharOut     & R/W & Character output port; writing outputs a character to the text screen. \\
 \$A00F & RegCharIn      & R/W & Character input port; reading dequeues the next keypress byte. \\
+\end{longtable}
+
+\subsection*{IRQ Control (\$A01F)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.14\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.20\textwidth} p{0.10\textwidth} p{0.42\textwidth}}
+\toprule
+\normalfont\textbf{Address} & \normalfont\textbf{Name} & \textbf{Access} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$A01F & RegIrqCtrl & R/W & Bit 0: raster IRQ enable. When set, the VGC fires an IRQ once per video frame. \\
 \end{longtable}
 
 \subsection*{Command Register and Parameters (\$A010--\$A01E)}
@@ -211,6 +270,18 @@ events. All copper state changes take effect at vblank.
 \$20 & CmdCopperList    & P0 = list index (0--127). Set target list for ADD/CLEAR. \\
 \$21 & CmdCopperUse     & P0 = list index (0--127). Set pending active list (swaps at next vblank). \\
 \$22 & CmdCopperListEnd & No parameters. Reset target list to the currently active list. \\
+\end{longtable}
+
+\subsection*{System Reset Command (\$1F)}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.10\textwidth} >{\ttfamily\raggedright\arraybackslash}p{0.22\textwidth} p{0.54\textwidth}}
+\toprule
+\normalfont\textbf{Code} & \normalfont\textbf{Name} & \textbf{Parameters and behavior} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\$1F & CmdSysReset & No parameters. Resets the VGC, stops both SID chips, stops the music engine, and resets the NIC. This is the command invoked by the BASIC \cmd{RESET} statement. \\
 \end{longtable}
 
 Copper-writable registers: RegMode (\$A000), RegBgCol (\$A001),
@@ -540,6 +611,12 @@ The caller polls \$B9A1 (\texttt{FioStatus}) for completion.
 \$B9A7 & FioEndH   & R/W & End address, high byte. \\
 \$B9A8 & FioSizeL  & RO  & Loaded data size, low byte (written by host after \cmd{LOAD} or \cmd{DIR} read). \\
 \$B9A9 & FioSizeH  & RO  & Loaded data size, high byte. \\
+\$B9AA & FioGSpace & R/W & Graphics memory space for \cmd{GSAVE}/\cmd{GLOAD} (0=screen, 1=color, 2=gfx, 3=sprite). \\
+\$B9AB & FioGAddrL & R/W & Graphics offset, low byte. \\
+\$B9AC & FioGAddrH & R/W & Graphics offset, high byte. \\
+\$B9AD & FioGLenL  & R/W & Graphics transfer length, low byte. \\
+\$B9AE & FioGLenH  & R/W & Graphics transfer length, high byte. \\
+\$B9AF & FioDirType & RO & Directory entry type: 0=PRG, 1=SID. \\
 \$B9B0--\$B9EF & FioName & R/W & Filename buffer (64 bytes ASCII, not null-terminated). \\
 \end{longtable}
 

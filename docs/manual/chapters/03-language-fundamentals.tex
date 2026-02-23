@@ -144,6 +144,64 @@ number and \cmd{RETURN} comes back:
 \cmd{GOSUB}/\cmd{RETURN} and structured loops are usually cleaner.
 
 % ---------------------------------------------------------------------------
+\section{Shorthand Commands}
+
+\subsection{DEC and INC}
+
+\cmd{INC} and \cmd{DEC} increment or decrement a variable by 1 without
+a full assignment statement.  They are faster and more readable than
+\texttt{X = X + 1}.
+
+\begin{lstlisting}[style=basiclisting]
+10 SCORE = 0
+20 INC SCORE : INC SCORE : INC SCORE
+30 PRINT "SCORE: "; SCORE
+40 DEC SCORE
+50 PRINT "AFTER DEC: "; SCORE
+\end{lstlisting}
+
+\subsection{WAIT}
+
+\cmd{WAIT addr, mask [, xor]} busy-waits (polls in a tight loop) until a
+memory location satisfies a bit condition:
+
+\begin{center}
+\texttt{(PEEK(\textit{addr}) XOR \textit{xor}) AND \textit{mask} <> 0}
+\end{center}
+
+The \textit{xor} parameter defaults to 0 if omitted. \cmd{WAIT} is useful for
+polling hardware status registers:
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Wait for timer IRQ pending (bit 0 of $BA41)
+20 WAIT $BA41, 1
+\end{lstlisting}
+
+\begin{lstlisting}[style=basiclisting]
+10 REM Wait for DMA to finish (status leaves busy=1)
+20 WAIT $BA61, 1, 1
+30 REM Waits until bit 0 is CLEAR (XOR flips it)
+\end{lstlisting}
+
+\begin{warningbox}
+\cmd{WAIT} blocks the BASIC interpreter completely until the condition is met.
+If the condition is never satisfied, the program hangs. Use \cmd{STOP} (Ctrl+C)
+to break out.
+\end{warningbox}
+
+\subsection{RESET}
+
+\cmd{RESET} performs a full hardware reset: it stops both SID chips, halts the
+music engine, resets the NIC, clears the VGC, and restarts the BASIC interpreter
+from cold start.  All variables and the current program are lost.
+
+\begin{lstlisting}[style=basiclisting]
+10 PRINT "RESETTING IN 3..."
+20 FOR I=3 TO 1 STEP -1 : PRINT I : NEXT I
+30 RESET
+\end{lstlisting}
+
+% ---------------------------------------------------------------------------
 \section{Operators}
 
 \begin{longtable}{>{\ttfamily}p{0.20\textwidth} p{0.22\textwidth} p{0.48\textwidth}}
@@ -259,8 +317,24 @@ with assembly routines.
 \begin{warningbox}
   Writing to the wrong address can crash the virtual machine or corrupt the
   BASIC interpreter.  Know what you are writing to before you \cmd{POKE}
-  into system areas.  See the memory map in Appendix~B for safe zones.
+  into system areas.  See the memory map in Appendix~\ref{chap:memmap} for safe zones.
 \end{warningbox}
+
+\subsection{Cursor Control}
+
+The text cursor position is set with \cmd{LOCATE x, y} where \textit{x} is
+the column (0--79) and \textit{y} is the row (0--24).
+
+Cursor \textbf{visibility} is controlled via the VGC register at \$A00A:
+
+\begin{lstlisting}[style=basiclisting]
+10 POKE $A00A, 0  : REM hide cursor
+20 LOCATE 10, 5   : PRINT "SCORE: 0"
+30 POKE $A00A, 1  : REM show cursor
+\end{lstlisting}
+
+Any non-zero value enables the blinking cursor; zero hides it. This is
+useful in games where you want a clean display without a flashing block.
 
 % ---------------------------------------------------------------------------
 \section{Style Tips}
