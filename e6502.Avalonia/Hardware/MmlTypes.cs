@@ -6,7 +6,7 @@ public enum MmlEventType
     Rest,           // Param2=duration in ticks
     SetTempo,       // Param1=BPM
     SetInstrument,  // Param1=instrument id
-    SetOctave,      // Param1=octave (1-7)
+    SetOctave,      // Param1=octave (0-7)
     OctaveUp,
     OctaveDown,
     SetDefaultLen,  // Param1=length denominator (4=quarter)

@@ -445,9 +445,9 @@ public class MmlParserTests
     [TestMethod]
     public void Parse_OctaveClampLow()
     {
-        var events = MmlParser.Parse("O1 < C");
+        var events = MmlParser.Parse("O0 < C");
         var note = events.First(e => e.Type == MmlEventType.NoteOn);
-        Assert.AreEqual((1 + 1) * 12, note.Param1); // C1 = MIDI 24
+        Assert.AreEqual((0 + 1) * 12, note.Param1); // C0 = MIDI 12, < from O0 stays at 0
     }
 
     [TestMethod]

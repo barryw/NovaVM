@@ -86,7 +86,7 @@ public static class MmlParser
             {
                 pos++;
                 int o = ReadInt(mml, ref pos, octave);
-                octave = Math.Clamp(o, 1, 7);
+                octave = Math.Clamp(o, 0, 7);
                 events.Add(new MmlEvent(MmlEventType.SetOctave, octave));
                 continue;
             }
@@ -102,7 +102,7 @@ public static class MmlParser
             if (ch == '<')
             {
                 pos++;
-                octave = Math.Max(octave - 1, 1);
+                octave = Math.Max(octave - 1, 0);
                 events.Add(new MmlEvent(MmlEventType.OctaveDown));
                 continue;
             }
