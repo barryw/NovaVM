@@ -19,89 +19,114 @@
 \contentsline {subsection}{\numberline {3.3.3}DO / LOOP}{10}{subsection.3.3.3}%
 \contentsline {subsection}{\numberline {3.3.4}GOSUB / RETURN}{11}{subsection.3.3.4}%
 \contentsline {subsection}{\numberline {3.3.5}GOTO}{11}{subsection.3.3.5}%
-\contentsline {section}{\numberline {3.4}Operators}{11}{section.3.4}%
-\contentsline {section}{\numberline {3.5}Built-in Functions}{11}{section.3.5}%
-\contentsline {subsection}{\numberline {3.5.1}Numeric Functions}{11}{subsection.3.5.1}%
-\contentsline {subsection}{\numberline {3.5.2}String Functions}{12}{subsection.3.5.2}%
-\contentsline {section}{\numberline {3.6}Memory Access}{12}{section.3.6}%
-\contentsline {section}{\numberline {3.7}Style Tips}{13}{section.3.7}%
-\contentsline {section}{\numberline {3.8}Putting It Together}{13}{section.3.8}%
-\contentsline {chapter}{\numberline {4}Graphics and Sprites}{15}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Display Modes}{15}{section.4.1}%
-\contentsline {section}{\numberline {4.2}Drawing Commands}{16}{section.4.2}%
-\contentsline {section}{\numberline {4.3}Animation with VSYNC}{17}{section.4.3}%
-\contentsline {section}{\numberline {4.4}Sprites}{17}{section.4.4}%
-\contentsline {section}{\numberline {4.5}Sprite Collision Detection}{19}{section.4.5}%
-\contentsline {section}{\numberline {4.6}Color Palette}{19}{section.4.6}%
-\contentsline {section}{\numberline {4.7}The Copper (Raster Effects)}{20}{section.4.7}%
-\contentsline {section}{\numberline {4.8}Compatibility Notes}{21}{section.4.8}%
-\contentsline {section}{\numberline {4.9}Try It Now}{22}{section.4.9}%
-\contentsline {chapter}{\numberline {5}Sound and Music}{23}{chapter.5}%
-\contentsline {section}{\numberline {5.1}Quick-Start Overview}{23}{section.5.1}%
-\contentsline {section}{\numberline {5.2}The SOUND Command}{23}{section.5.2}%
-\contentsline {section}{\numberline {5.3}The INSTRUMENT Command}{24}{section.5.3}%
-\contentsline {section}{\numberline {5.4}VOLUME}{26}{section.5.4}%
-\contentsline {section}{\numberline {5.5}The MUSIC Engine}{26}{section.5.5}%
-\contentsline {subsection}{\numberline {5.5.1}Loading and Playing Sequences}{26}{subsection.5.5.1}%
-\contentsline {subsection}{\numberline {5.5.2}A Complete Music Example}{26}{subsection.5.5.2}%
-\contentsline {subsection}{\numberline {5.5.3}Querying Music Status}{27}{subsection.5.5.3}%
-\contentsline {section}{\numberline {5.6}MML Reference}{27}{section.5.6}%
-\contentsline {subsection}{\numberline {5.6.1}Notes and Rests}{27}{subsection.5.6.1}%
-\contentsline {subsection}{\numberline {5.6.2}Duration}{27}{subsection.5.6.2}%
-\contentsline {subsection}{\numberline {5.6.3}Ties}{28}{subsection.5.6.3}%
-\contentsline {subsection}{\numberline {5.6.4}Octave}{28}{subsection.5.6.4}%
-\contentsline {subsection}{\numberline {5.6.5}Default Length}{28}{subsection.5.6.5}%
-\contentsline {subsection}{\numberline {5.6.6}Tempo}{28}{subsection.5.6.6}%
-\contentsline {subsection}{\numberline {5.6.7}Instrument Selection}{28}{subsection.5.6.7}%
-\contentsline {subsection}{\numberline {5.6.8}Loops}{28}{subsection.5.6.8}%
-\contentsline {subsection}{\numberline {5.6.9}Arpeggios}{29}{subsection.5.6.9}%
-\contentsline {subsection}{\numberline {5.6.10}Per-Frame Effects}{29}{subsection.5.6.10}%
-\contentsline {subsection}{\numberline {5.6.11}MML Command Summary}{30}{subsection.5.6.11}%
-\contentsline {section}{\numberline {5.7}SID File Playback}{31}{section.5.7}%
-\contentsline {section}{\numberline {5.8}Graphics File I/O}{31}{section.5.8}%
-\contentsline {section}{\numberline {5.9}Music Engine Architecture}{31}{section.5.9}%
-\contentsline {section}{\numberline {5.10}Composition Tips}{32}{section.5.10}%
-\contentsline {section}{\numberline {5.11}Deprecated Commands}{33}{section.5.11}%
-\contentsline {section}{\numberline {5.12}Try It Now}{33}{section.5.12}%
-\contentsline {chapter}{\numberline {6}Expansion Memory}{35}{chapter.6}%
-\contentsline {section}{\numberline {6.1}Why Expansion Memory?}{35}{section.6.1}%
-\contentsline {section}{\numberline {6.2}Banks and Status}{35}{section.6.2}%
-\contentsline {section}{\numberline {6.3}Single-Byte Access}{36}{section.6.3}%
-\contentsline {section}{\numberline {6.4}Bulk Transfers}{37}{section.6.4}%
-\contentsline {section}{\numberline {6.5}Named Blocks}{37}{section.6.5}%
-\contentsline {section}{\numberline {6.6}Low-Level Allocation}{38}{section.6.6}%
-\contentsline {section}{\numberline {6.7}Memory Windows}{39}{section.6.7}%
-\contentsline {section}{\numberline {6.8}Error Codes}{40}{section.6.8}%
-\contentsline {section}{\numberline {6.9}Try It Now}{40}{section.6.9}%
-\contentsline {chapter}{\numberline {7}Assembly and Special Chips}{41}{chapter.7}%
-\contentsline {section}{\numberline {7.1}The Memory Map}{41}{section.7.1}%
-\contentsline {section}{\numberline {7.2}Talking to Hardware from BASIC}{42}{section.7.2}%
-\contentsline {section}{\numberline {7.3}The CALL and USR Interface}{42}{section.7.3}%
-\contentsline {section}{\numberline {7.4}Interrupts}{43}{section.7.4}%
-\contentsline {section}{\numberline {7.5}XMC Assembly Helpers}{44}{section.7.5}%
-\contentsline {section}{\numberline {7.6}VGC Register-Level Programming}{45}{section.7.6}%
-\contentsline {section}{\numberline {7.7}SID Chip Access}{45}{section.7.7}%
-\contentsline {section}{\numberline {7.8}Copper Programming from Assembly}{45}{section.7.8}%
-\contentsline {section}{\numberline {7.9}Try It Now}{46}{section.7.9}%
-\contentsline {chapter}{\numberline {A}Command Reference}{47}{appendix.A}%
-\contentsline {section}{\numberline {A.1}NovaBASIC Command Quick Reference}{47}{section.A.1}%
-\contentsline {section}{\numberline {A.2}Function Reference}{52}{section.A.2}%
-\contentsline {section}{\numberline {A.3}Token Index}{53}{section.A.3}%
-\contentsline {chapter}{\numberline {B}Memory Map}{55}{appendix.B}%
-\contentsline {section}{\numberline {B.1}Address Space Overview}{55}{section.B.1}%
-\contentsline {section}{\numberline {B.2}VGC Register Map}{56}{section.B.2}%
-\contentsline {section}{\numberline {B.3}VGC Command Codes}{57}{section.B.3}%
-\contentsline {section}{\numberline {B.4}SID Chip Registers}{59}{section.B.4}%
-\contentsline {section}{\numberline {B.5}Timer Controller and Music Status}{59}{section.B.5}%
-\contentsline {section}{\numberline {B.6}VSC Register Map}{60}{section.B.6}%
-\contentsline {section}{\numberline {B.7}FIO Register Map}{61}{section.B.7}%
-\contentsline {section}{\numberline {B.8}XMC Register Map}{62}{section.B.8}%
-\contentsline {section}{\numberline {B.9}System Vectors}{65}{section.B.9}%
-\contentsline {chapter}{\numberline {C}Limits, Errors, and Edge Cases}{67}{appendix.C}%
-\contentsline {section}{\numberline {C.1}Numeric Argument Conversion Rules}{67}{section.C.1}%
-\contentsline {section}{\numberline {C.2}File Command Limits}{67}{section.C.2}%
-\contentsline {section}{\numberline {C.3}Graphics and Sprite Edge Cases}{68}{section.C.3}%
-\contentsline {section}{\numberline {C.4}Sound and Music Limits}{69}{section.C.4}%
-\contentsline {section}{\numberline {C.5}XRAM Limits and Failure Modes}{70}{section.C.5}%
-\contentsline {section}{\numberline {C.6}Status and Error Code Quick Reference}{71}{section.C.6}%
+\contentsline {section}{\numberline {3.4}Shorthand Commands}{11}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}DEC and INC}{11}{subsection.3.4.1}%
+\contentsline {subsection}{\numberline {3.4.2}WAIT}{11}{subsection.3.4.2}%
+\contentsline {subsection}{\numberline {3.4.3}RESET}{12}{subsection.3.4.3}%
+\contentsline {section}{\numberline {3.5}Operators}{12}{section.3.5}%
+\contentsline {section}{\numberline {3.6}Built-in Functions}{12}{section.3.6}%
+\contentsline {subsection}{\numberline {3.6.1}Numeric Functions}{12}{subsection.3.6.1}%
+\contentsline {subsection}{\numberline {3.6.2}String Functions}{13}{subsection.3.6.2}%
+\contentsline {section}{\numberline {3.7}Memory Access}{13}{section.3.7}%
+\contentsline {subsection}{\numberline {3.7.1}Cursor Control}{14}{subsection.3.7.1}%
+\contentsline {section}{\numberline {3.8}Style Tips}{14}{section.3.8}%
+\contentsline {section}{\numberline {3.9}Putting It Together}{14}{section.3.9}%
+\contentsline {chapter}{\numberline {4}Graphics and Sprites}{17}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Display Modes}{17}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Drawing Commands}{18}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Animation with VSYNC}{19}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Sprites}{19}{section.4.4}%
+\contentsline {section}{\numberline {4.5}Sprite Collision Detection}{21}{section.4.5}%
+\contentsline {section}{\numberline {4.6}Color Palette}{21}{section.4.6}%
+\contentsline {section}{\numberline {4.7}The Copper (Raster Effects)}{22}{section.4.7}%
+\contentsline {section}{\numberline {4.8}Compatibility Notes}{24}{section.4.8}%
+\contentsline {section}{\numberline {4.9}Try It Now}{24}{section.4.9}%
+\contentsline {chapter}{\numberline {5}Sound and Music}{25}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Quick-Start Overview}{25}{section.5.1}%
+\contentsline {section}{\numberline {5.2}The SOUND Command}{25}{section.5.2}%
+\contentsline {section}{\numberline {5.3}The INSTRUMENT Command}{26}{section.5.3}%
+\contentsline {section}{\numberline {5.4}VOLUME}{28}{section.5.4}%
+\contentsline {section}{\numberline {5.5}The MUSIC Engine}{28}{section.5.5}%
+\contentsline {subsection}{\numberline {5.5.1}Loading and Playing Sequences}{28}{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {5.5.2}A Complete Music Example}{28}{subsection.5.5.2}%
+\contentsline {subsection}{\numberline {5.5.3}Querying Music Status}{29}{subsection.5.5.3}%
+\contentsline {section}{\numberline {5.6}MML Reference}{29}{section.5.6}%
+\contentsline {subsection}{\numberline {5.6.1}Notes and Rests}{29}{subsection.5.6.1}%
+\contentsline {subsection}{\numberline {5.6.2}Duration}{29}{subsection.5.6.2}%
+\contentsline {subsection}{\numberline {5.6.3}Ties}{30}{subsection.5.6.3}%
+\contentsline {subsection}{\numberline {5.6.4}Octave}{30}{subsection.5.6.4}%
+\contentsline {subsection}{\numberline {5.6.5}Default Length}{30}{subsection.5.6.5}%
+\contentsline {subsection}{\numberline {5.6.6}Tempo}{30}{subsection.5.6.6}%
+\contentsline {subsection}{\numberline {5.6.7}Instrument Selection}{30}{subsection.5.6.7}%
+\contentsline {subsection}{\numberline {5.6.8}Loops}{31}{subsection.5.6.8}%
+\contentsline {subsection}{\numberline {5.6.9}Arpeggios}{31}{subsection.5.6.9}%
+\contentsline {subsection}{\numberline {5.6.10}Per-Frame Effects}{31}{subsection.5.6.10}%
+\contentsline {subsection}{\numberline {5.6.11}MML Command Summary}{32}{subsection.5.6.11}%
+\contentsline {section}{\numberline {5.7}SID File Playback}{33}{section.5.7}%
+\contentsline {section}{\numberline {5.8}Graphics File I/O}{33}{section.5.8}%
+\contentsline {section}{\numberline {5.9}Music Engine Architecture}{34}{section.5.9}%
+\contentsline {section}{\numberline {5.10}Composition Tips}{34}{section.5.10}%
+\contentsline {section}{\numberline {5.11}Deprecated Commands}{35}{section.5.11}%
+\contentsline {section}{\numberline {5.12}Try It Now}{35}{section.5.12}%
+\contentsline {chapter}{\numberline {6}Expansion Memory}{37}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Why Expansion Memory?}{37}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Banks and Status}{37}{section.6.2}%
+\contentsline {section}{\numberline {6.3}Single-Byte Access}{38}{section.6.3}%
+\contentsline {section}{\numberline {6.4}Bulk Transfers}{39}{section.6.4}%
+\contentsline {section}{\numberline {6.5}Named Blocks}{39}{section.6.5}%
+\contentsline {section}{\numberline {6.6}Low-Level Allocation}{40}{section.6.6}%
+\contentsline {section}{\numberline {6.7}Memory Windows}{41}{section.6.7}%
+\contentsline {section}{\numberline {6.8}Error Codes}{42}{section.6.8}%
+\contentsline {section}{\numberline {6.9}Try It Now}{42}{section.6.9}%
+\contentsline {chapter}{\numberline {7}Assembly and Special Chips}{43}{chapter.7}%
+\contentsline {section}{\numberline {7.1}The Memory Map}{43}{section.7.1}%
+\contentsline {section}{\numberline {7.2}Talking to Hardware from BASIC}{44}{section.7.2}%
+\contentsline {section}{\numberline {7.3}The CALL and USR Interface}{45}{section.7.3}%
+\contentsline {section}{\numberline {7.4}Interrupts}{45}{section.7.4}%
+\contentsline {section}{\numberline {7.5}XMC Assembly Helpers}{46}{section.7.5}%
+\contentsline {section}{\numberline {7.6}VGC Register-Level Programming}{47}{section.7.6}%
+\contentsline {section}{\numberline {7.7}SID Chip Access}{47}{section.7.7}%
+\contentsline {section}{\numberline {7.8}Copper Programming from Assembly}{47}{section.7.8}%
+\contentsline {section}{\numberline {7.9}DMA Controller from Assembly}{48}{section.7.9}%
+\contentsline {section}{\numberline {7.10}Blitter from Assembly}{48}{section.7.10}%
+\contentsline {section}{\numberline {7.11}Network Controller from Assembly}{48}{section.7.11}%
+\contentsline {section}{\numberline {7.12}The Timer Controller}{49}{section.7.12}%
+\contentsline {section}{\numberline {7.13}Timer from Assembly}{50}{section.7.13}%
+\contentsline {section}{\numberline {7.14}Try It Now}{50}{section.7.14}%
+\contentsline {chapter}{\numberline {8}DMA and Blitter}{51}{chapter.8}%
+\contentsline {section}{\numberline {8.1}The DMA Controller}{51}{section.8.1}%
+\contentsline {section}{\numberline {8.2}The Blitter}{52}{section.8.2}%
+\contentsline {section}{\numberline {8.3}Memory Spaces Reference}{54}{section.8.3}%
+\contentsline {section}{\numberline {8.4}Try It Now}{54}{section.8.4}%
+\contentsline {chapter}{\numberline {9}Networking}{57}{chapter.9}%
+\contentsline {section}{\numberline {9.1}The Network Controller}{57}{section.9.1}%
+\contentsline {section}{\numberline {9.2}Connecting as a Client}{58}{section.9.2}%
+\contentsline {section}{\numberline {9.3}Running a Server}{59}{section.9.3}%
+\contentsline {section}{\numberline {9.4}Status and Error Handling}{60}{section.9.4}%
+\contentsline {section}{\numberline {9.5}Try It Now}{62}{section.9.5}%
+\contentsline {chapter}{\numberline {A}Command Reference}{63}{appendix.A}%
+\contentsline {section}{\numberline {A.1}NovaBASIC Command Quick Reference}{63}{section.A.1}%
+\contentsline {section}{\numberline {A.2}Function Reference}{69}{section.A.2}%
+\contentsline {section}{\numberline {A.3}Token Index}{71}{section.A.3}%
+\contentsline {chapter}{\numberline {B}Memory Map}{73}{appendix.B}%
+\contentsline {section}{\numberline {B.1}Address Space Overview}{73}{section.B.1}%
+\contentsline {section}{\numberline {B.2}VGC Register Map}{74}{section.B.2}%
+\contentsline {section}{\numberline {B.3}VGC Command Codes}{76}{section.B.3}%
+\contentsline {section}{\numberline {B.4}SID Chip Registers}{78}{section.B.4}%
+\contentsline {section}{\numberline {B.5}Timer Controller and Music Status}{79}{section.B.5}%
+\contentsline {section}{\numberline {B.6}DMA Controller Register Map}{80}{section.B.6}%
+\contentsline {section}{\numberline {B.7}Blitter Controller Register Map}{81}{section.B.7}%
+\contentsline {section}{\numberline {B.8}NIC Register Map}{81}{section.B.8}%
+\contentsline {section}{\numberline {B.9}FIO Register Map}{83}{section.B.9}%
+\contentsline {section}{\numberline {B.10}XMC Register Map}{85}{section.B.10}%
+\contentsline {section}{\numberline {B.11}System Vectors}{87}{section.B.11}%
+\contentsline {chapter}{\numberline {C}Limits, Errors, and Edge Cases}{89}{appendix.C}%
+\contentsline {section}{\numberline {C.1}Numeric Argument Conversion Rules}{89}{section.C.1}%
+\contentsline {section}{\numberline {C.2}File Command Limits}{89}{section.C.2}%
+\contentsline {section}{\numberline {C.3}Graphics and Sprite Edge Cases}{90}{section.C.3}%
+\contentsline {section}{\numberline {C.4}Sound and Music Limits}{91}{section.C.4}%
+\contentsline {section}{\numberline {C.5}XRAM Limits and Failure Modes}{92}{section.C.5}%
+\contentsline {section}{\numberline {C.6}DMA and Blitter Limits}{93}{section.C.6}%
+\contentsline {section}{\numberline {C.7}Network Limits}{94}{section.C.7}%
+\contentsline {section}{\numberline {C.8}Status and Error Code Quick Reference}{94}{section.C.8}%
 \contentsfinish 
