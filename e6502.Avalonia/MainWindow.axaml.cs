@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -32,7 +33,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _bus = new CompositeBusDevice(enableSound: true);
+        int targetCpuHz = RuntimeOptions.GetIntFromEnvironment("NOVA_CPU_HZ", VgcConstants.DefaultCpuHz);
+        bool turboMode = RuntimeOptions.GetFlagFromEnvironment("NOVA_TURBO");
+        bool timingLog = RuntimeOptions.GetFlagFromEnvironment("NOVA_TIMING_LOG");
+
+        _bus = new CompositeBusDevice(
+            enableSound: true,
+            cpuHz: targetCpuHz,
+            frameRateHz: VgcConstants.FrameRateHz);
         _cpu = new Cpu(_bus);
         _cpu.Boot();
 
@@ -56,34 +64,82 @@ public partial class MainWindow : Window
         // CPU thread
         var cpuThread = new Thread(() =>
         {
-            int timerAccum = 0;
+            var scheduler = new RealTimeCycleScheduler(
+                targetCpuHz,
+                maxBacklogCycles: Math.Max(targetCpuHz / 5, Math.Max(1, targetCpuHz / _bus.FrameRateHz) * 2));
+            const int turboChunkCycles = 200_000;
+
+            long telemetryStartTicks = Stopwatch.GetTimestamp();
+            long telemetryCycles = 0;
+            long telemetryFrames = 0;
+            long lastFrameTotal = _bus.TotalFrames;
+            double peakPendingCycles = 0;
+
             while (_running)
             {
                 debugger.CheckBreakpointAndWait();
-                int cycles = _cpu.ClocksForNext();
-                _cpu.ExecuteNext();
-                timerAccum += cycles;
-                if (timerAccum >= 100)
+
+                int cycleBudget = turboMode ? turboChunkCycles : scheduler.TakeCycleBudget();
+                if (cycleBudget <= 0)
                 {
-                    _bus.Timer.Tick();
-                    if (_bus.Timer.IrqPending)
-                        _cpu.IrqWaiting = true;
-                    if (_bus.Nic.IrqPending)
-                        _cpu.IrqWaiting = true;
-                    timerAccum -= 100;
+                    Thread.Yield();
+                    continue;
                 }
+
+                int chunkCyclesExecuted = 0;
+                while (_running && cycleBudget > 0)
+                {
+                    debugger.CheckBreakpointAndWait();
+
+                    int cycles = _cpu.ClocksForNext();
+                    _cpu.ExecuteNext();
+                    _bus.AdvanceCycles(cycles);
+                    chunkCyclesExecuted += cycles;
+
+                    if (_bus.Timer.IrqPending || _bus.Nic.IrqPending || _bus.ConsumeRasterIrqPending())
+                        _cpu.IrqWaiting = true;
+
+                    cycleBudget -= cycles;
+                }
+
+                if (!timingLog)
+                    continue;
+
+                telemetryCycles += chunkCyclesExecuted;
+                long frameNow = _bus.TotalFrames;
+                telemetryFrames += frameNow - lastFrameTotal;
+                lastFrameTotal = frameNow;
+                if (!turboMode && scheduler.PendingCycles > peakPendingCycles)
+                    peakPendingCycles = scheduler.PendingCycles;
+
+                long nowTicks = Stopwatch.GetTimestamp();
+                long elapsedTicks = nowTicks - telemetryStartTicks;
+                if (elapsedTicks < Stopwatch.Frequency)
+                    continue;
+
+                double elapsedSec = (double)elapsedTicks / Stopwatch.Frequency;
+                double effectiveMhz = telemetryCycles / elapsedSec / 1_000_000.0;
+                double effectiveFps = telemetryFrames / elapsedSec;
+                double backlogPct = turboMode || scheduler.MaxBacklogCycles == 0
+                    ? 0
+                    : peakPendingCycles * 100.0 / scheduler.MaxBacklogCycles;
+
+                string line =
+                    $"[VM CLOCK] mode={(turboMode ? "turbo" : "realtime")} targetHz={targetCpuHz} effMHz={effectiveMhz:F2} fps={effectiveFps:F2} backlog={backlogPct:F1}%";
+                Debug.WriteLine(line);
+                Console.WriteLine(line);
+
+                telemetryStartTicks = nowTicks;
+                telemetryCycles = 0;
+                telemetryFrames = 0;
+                peakPendingCycles = 0;
             }
         }) { IsBackground = true, Name = "CpuThread" };
         cpuThread.Start();
 
-        // 60 Hz render timer (also drives BASIC VSYNC frame counter)
+        // 60 Hz render timer (visual refresh only)
         DispatcherTimer.Run(() =>
         {
-            _bus.Vgc.IncrementFrameCounter();
-            if (_bus.Vgc.IsRasterIrqEnabled)
-                _cpu.IrqWaiting = true;
-            _bus.Music.Tick();
-
             // Detect window move/resize — skip expensive redraw during drag
             var pos = Position;
             var size = ClientSize;

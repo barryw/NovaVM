@@ -113,10 +113,9 @@ Fills \emph{length} bytes starting at offset \emph{dstAddr} in
 \end{center}
 
 \begin{notebox}
-\cmd{DMACOPY} and \cmd{DMAFILL} poll the controller internally and raise a
-BASIC error if the transfer ends in an error state. The status functions are
-provided for advanced use --- for example, if you launch a transfer via direct
-register writes (\cmd{POKE}) and want to monitor completion yourself.
+\cmd{DMACOPY} and \cmd{DMAFILL} are asynchronous: they start the transfer and
+return immediately. Poll \cmd{DMASTATUS} until it changes from busy (1) to done
+(2) or error (3) when you need to wait for completion.
 \end{notebox}
 
 % -----------------------------------------------------------------------------
@@ -209,6 +208,12 @@ is inherently two-dimensional and you need to respect row boundaries, such as
 scrolling text, drawing rectangles, or working with tile graphics. Choosing the
 right tool avoids writing stride arithmetic in BASIC loops.
 \end{tipbox}
+
+\begin{notebox}
+\cmd{BLITCOPY} and \cmd{BLITFILL} are also asynchronous. Use
+\cmd{BLITSTATUS}/\cmd{BLITERR}/\cmd{BLITCOUNT} to monitor progress and final
+result.
+\end{notebox}
 
 % -----------------------------------------------------------------------------
 \section{Memory Spaces Reference}

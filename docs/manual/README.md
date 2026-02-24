@@ -37,3 +37,11 @@ The guide is intentionally progressive:
 - 1980s home-computer handbook tone.
 - Cream-paper background with blue accent bars.
 - Clear, practical examples in monospace command blocks.
+
+## Runtime Timing Notes
+
+The user guide now documents VM clock controls:
+
+- `NOVA_CPU_HZ` (default `12000000`)
+- `NOVA_TURBO` (`1|true|yes|on` for unthrottled mode)
+- `NOVA_TIMING_LOG` (timing telemetry)

@@ -12,6 +12,27 @@ public sealed class VirtualBlitterController
     private readonly Func<byte, int, byte, bool> _tryWriteByte;
     private readonly Func<byte, int, int, bool>? _canWriteRange;
     private readonly Action<byte>? _postTransferWrite;
+    private bool _busy;
+    private bool _fillMode;
+    private bool _colorKeyMode;
+    private bool _useRowBuffer;
+    private byte _srcSpace;
+    private byte _dstSpace;
+    private byte _fillValue;
+    private byte _colorKey;
+    private int _srcBase;
+    private int _dstBase;
+    private int _srcStride;
+    private int _dstStride;
+    private int _width;
+    private int _height;
+    private int _row;
+    private int _col;
+    private int _rowBufferReadCol;
+    private bool _rowBufferedReady;
+    private byte[]? _rowBuffer;
+    private int _wroteCount;
+    private long _opCredit;
 
     public VirtualBlitterController(
         Func<byte, int> getSpaceLength,
@@ -44,11 +65,148 @@ public sealed class VirtualBlitterController
             ExecuteCommand(data);
     }
 
+    public void AdvanceCycles(int cycles)
+    {
+        if (!_busy || cycles <= 0)
+            return;
+
+        _opCredit += (long)cycles * VgcConstants.BltOpsPerCycle;
+        if (_opCredit <= 0)
+            return;
+
+        int opsBudget = (int)Math.Min(_opCredit, int.MaxValue);
+        int opsUsed = 0;
+
+        while (opsBudget > 0 && _busy)
+        {
+            if (_row >= _height)
+            {
+                CompleteTransfer();
+                break;
+            }
+
+            if (_fillMode)
+            {
+                int dstAddr = _dstBase + _row * _dstStride + _col;
+                if (!_tryWriteByte(_dstSpace, dstAddr, _fillValue))
+                {
+                    FailTransfer(VgcConstants.BltErrRange);
+                    break;
+                }
+
+                _wroteCount++;
+                AdvanceCursor();
+                opsBudget--;
+                opsUsed++;
+                if (_row >= _height)
+                {
+                    CompleteTransfer();
+                    break;
+                }
+                continue;
+            }
+
+            if (_useRowBuffer)
+            {
+                if (!_rowBufferedReady)
+                {
+                    int srcAddr = _srcBase + _row * _srcStride + _rowBufferReadCol;
+                    var read = _tryReadByte(_srcSpace, srcAddr);
+                    if (!read.ok)
+                    {
+                        FailTransfer(VgcConstants.BltErrRange);
+                        break;
+                    }
+
+                    _rowBuffer![_rowBufferReadCol++] = read.value;
+                    if (_rowBufferReadCol >= _width)
+                    {
+                        _rowBufferedReady = true;
+                        _col = 0;
+                    }
+
+                    opsBudget--;
+                    opsUsed++;
+                    continue;
+                }
+
+                byte value = _rowBuffer![_col];
+                if (!(_colorKeyMode && value == _colorKey))
+                {
+                    int dstAddr = _dstBase + _row * _dstStride + _col;
+                    if (!_tryWriteByte(_dstSpace, dstAddr, value))
+                    {
+                        FailTransfer(VgcConstants.BltErrRange);
+                        break;
+                    }
+
+                    _wroteCount++;
+                }
+
+                _col++;
+                opsBudget--;
+                opsUsed++;
+                if (_col >= _width)
+                {
+                    _row++;
+                    _col = 0;
+                    _rowBufferReadCol = 0;
+                    _rowBufferedReady = false;
+                    if (_row >= _height)
+                    {
+                        CompleteTransfer();
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            int src = _srcBase + _row * _srcStride + _col;
+            var directRead = _tryReadByte(_srcSpace, src);
+            if (!directRead.ok)
+            {
+                FailTransfer(VgcConstants.BltErrRange);
+                break;
+            }
+
+            byte directValue = directRead.value;
+            if (!(_colorKeyMode && directValue == _colorKey))
+            {
+                int dst = _dstBase + _row * _dstStride + _col;
+                if (!_tryWriteByte(_dstSpace, dst, directValue))
+                {
+                    FailTransfer(VgcConstants.BltErrRange);
+                    break;
+                }
+
+                _wroteCount++;
+            }
+
+            AdvanceCursor();
+            opsBudget--;
+            opsUsed++;
+            if (_row >= _height)
+            {
+                CompleteTransfer();
+                break;
+            }
+        }
+
+        _opCredit -= opsUsed;
+        SetCount(_wroteCount);
+    }
+
     private void ExecuteCommand(byte cmd)
     {
         if (cmd != VgcConstants.BltCmdStart)
         {
             SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrBadCmd);
+            return;
+        }
+
+        if (_busy)
+        {
+            FailTransfer(VgcConstants.BltErrBadCmd);
             return;
         }
 
@@ -123,96 +281,54 @@ public sealed class VirtualBlitterController
 
         SetCount(0);
         SetStatus(VgcConstants.BltStatusBusy, VgcConstants.BltErrNone);
+        _busy = true;
+        _fillMode = fillMode;
+        _colorKeyMode = colorKeyMode;
+        _useRowBuffer = !fillMode && srcSpace == dstSpace;
+        _srcSpace = srcSpace;
+        _dstSpace = dstSpace;
+        _srcBase = srcBase;
+        _dstBase = dstBase;
+        _srcStride = srcStride;
+        _dstStride = dstStride;
+        _width = width;
+        _height = height;
+        _row = 0;
+        _col = 0;
+        _fillValue = _regs[RegIndex(VgcConstants.BltFillValue)];
+        _colorKey = colorKey;
+        _wroteCount = 0;
+        _opCredit = 0;
+        _rowBufferReadCol = 0;
+        _rowBufferedReady = !_useRowBuffer;
+        _rowBuffer = _useRowBuffer ? new byte[width] : null;
+    }
 
-        byte fillValue = _regs[RegIndex(VgcConstants.BltFillValue)];
-        int wroteCount = 0;
-        bool useRowBuffer = !fillMode && srcSpace == dstSpace;
-        byte[]? rowBuffer = useRowBuffer ? new byte[width] : null;
-
-        for (int row = 0; row < height; row++)
+    private void AdvanceCursor()
+    {
+        _col++;
+        if (_col >= _width)
         {
-            int srcRowBase = srcBase + row * srcStride;
-            int dstRowBase = dstBase + row * dstStride;
-
-            if (fillMode)
-            {
-                for (int col = 0; col < width; col++)
-                {
-                    if (!_tryWriteByte(dstSpace, dstRowBase + col, fillValue))
-                    {
-                        SetCount(wroteCount);
-                        SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrRange);
-                        return;
-                    }
-
-                    wroteCount++;
-                }
-
-                continue;
-            }
-
-            if (rowBuffer is not null)
-            {
-                for (int col = 0; col < width; col++)
-                {
-                    var read = _tryReadByte(srcSpace, srcRowBase + col);
-                    if (!read.ok)
-                    {
-                        SetCount(wroteCount);
-                        SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrRange);
-                        return;
-                    }
-
-                    rowBuffer[col] = read.value;
-                }
-
-                for (int col = 0; col < width; col++)
-                {
-                    byte value = rowBuffer[col];
-                    if (colorKeyMode && value == colorKey)
-                        continue;
-
-                    if (!_tryWriteByte(dstSpace, dstRowBase + col, value))
-                    {
-                        SetCount(wroteCount);
-                        SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrRange);
-                        return;
-                    }
-
-                    wroteCount++;
-                }
-
-                continue;
-            }
-
-            for (int col = 0; col < width; col++)
-            {
-                var read = _tryReadByte(srcSpace, srcRowBase + col);
-                if (!read.ok)
-                {
-                    SetCount(wroteCount);
-                    SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrRange);
-                    return;
-                }
-
-                byte value = read.value;
-                if (colorKeyMode && value == colorKey)
-                    continue;
-
-                if (!_tryWriteByte(dstSpace, dstRowBase + col, value))
-                {
-                    SetCount(wroteCount);
-                    SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrRange);
-                    return;
-                }
-
-                wroteCount++;
-            }
+            _col = 0;
+            _row++;
         }
+    }
 
-        SetCount(wroteCount);
-        _postTransferWrite?.Invoke(dstSpace);
+    private void CompleteTransfer()
+    {
+        _busy = false;
+        _opCredit = 0;
+        SetCount(_wroteCount);
+        _postTransferWrite?.Invoke(_dstSpace);
         SetStatus(VgcConstants.BltStatusOk, VgcConstants.BltErrNone);
+    }
+
+    private void FailTransfer(byte errCode)
+    {
+        _busy = false;
+        _opCredit = 0;
+        SetCount(_wroteCount);
+        SetStatus(VgcConstants.BltStatusError, errCode);
     }
 
     private bool CanWriteRect(byte space, int baseAddr, int width, int height, int stride)

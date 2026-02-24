@@ -113,6 +113,27 @@ public class AvaloniaDmaTests
     }
 
     [TestMethod]
+    public void Dma_StartTransitionsToBusyUntilCyclesAdvance()
+    {
+        var bus = MakeBus();
+        bus.Write(0x0400, 0xAA);
+        bus.Write(0x0401, 0xBB);
+
+        StartDma(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceVgcChar,
+            srcAddr: 0x000400,
+            dstAddr: 0,
+            length: 2);
+
+        Assert.AreEqual(VgcConstants.DmaStatusBusy, bus.Read((ushort)VgcConstants.DmaStatus));
+        Assert.AreEqual(0, GetDmaCount(bus));
+        RunUntilDmaNotBusy(bus);
+        Assert.AreEqual(VgcConstants.DmaStatusOk, bus.Read((ushort)VgcConstants.DmaStatus));
+    }
+
+    [TestMethod]
     public void Dma_CpuRomDestination_IsWriteProtected()
     {
         var bus = MakeBus();
@@ -155,9 +176,23 @@ public class AvaloniaDmaTests
 
     private static void AssertDmaOk(CompositeBusDevice bus, int expectedCount)
     {
+        RunUntilDmaNotBusy(bus);
         Assert.AreEqual(VgcConstants.DmaStatusOk, bus.Read((ushort)VgcConstants.DmaStatus));
         Assert.AreEqual(VgcConstants.DmaErrNone, bus.Read((ushort)VgcConstants.DmaErrCode));
         Assert.AreEqual(expectedCount, GetDmaCount(bus));
+    }
+
+    private static void RunUntilDmaNotBusy(CompositeBusDevice bus, int maxIterations = 100_000)
+    {
+        for (int i = 0; i < maxIterations; i++)
+        {
+            byte status = bus.Read((ushort)VgcConstants.DmaStatus);
+            if (status != VgcConstants.DmaStatusBusy)
+                return;
+            bus.AdvanceCycles(16);
+        }
+
+        Assert.Fail("DMA did not complete within allotted cycles.");
     }
 
     private static int GetDmaCount(CompositeBusDevice bus) =>

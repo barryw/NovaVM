@@ -44,6 +44,21 @@ for your first command.
   \cmd{COLOR~\textit{fg},\textit{bg}}.
 \end{notebox}
 
+\section{Runtime Clock Model}
+
+Nova VM runs from a single CPU-cycle clock source. By default the target rate is
+12~MHz (12,000,000 cycles/second), and video frame timing is derived from that
+clock at 60~Hz. This keeps \cmd{VSYNC}, raster IRQ behavior, timers, and music
+sequencing synchronized to one timing model.
+
+You can override runtime behavior with environment variables:
+
+\begin{itemize}
+  \item \texttt{NOVA\_CPU\_HZ}: target CPU rate in cycles/second (default 12,000,000).
+  \item \texttt{NOVA\_TURBO}: if set to \texttt{1}, \texttt{true}, \texttt{yes}, or \texttt{on}, run unthrottled.
+  \item \texttt{NOVA\_TIMING\_LOG}: if set, emit periodic timing telemetry for diagnostics.
+\end{itemize}
+
 % ---------------------------------------------------------------------------
 \section{What You Can Do}
 

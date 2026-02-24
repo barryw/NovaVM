@@ -8704,7 +8704,7 @@ NIC_ST_ERROR       = $08
 ; --- Unified DMA controller registers ---
 
 DMA_CMD       = $BA60          ; write triggers transfer
-DMA_STATUS    = $BA61          ; 2=ok, 3=error
+DMA_STATUS    = $BA61          ; 1=busy, 2=ok, 3=error
 DMA_ERRCODE   = $BA62          ; DMA error code
 DMA_SRCSPACE  = $BA63          ; source space id
 DMA_DSTSPACE  = $BA64          ; destination space id
@@ -8724,6 +8724,7 @@ DMA_CNTM      = $BA71          ; transferred count mid
 DMA_CNTH      = $BA72          ; transferred count high
 
 DMA_CMD_START = $01
+DMA_BUSY      = $01
 DMA_OK        = $02
 DMA_MODE_FILL = $01
 DMA_SPACE_XRAM = $05
@@ -8731,7 +8732,7 @@ DMA_SPACE_XRAM = $05
 ; --- Blitter controller registers ---
 
 BLT_CMD       = $BA80          ; write triggers blit
-BLT_STATUS    = $BA81          ; 2=ok, 3=error
+BLT_STATUS    = $BA81          ; 1=busy, 2=ok, 3=error
 BLT_ERRCODE   = $BA82          ; blitter error code
 BLT_SRCSPACE  = $BA83          ; source space id
 BLT_DSTSPACE  = $BA84          ; destination space id
@@ -8757,6 +8758,7 @@ BLT_CNTM      = $BA97          ; written count mid
 BLT_CNTH      = $BA98          ; written count high
 
 BLT_CMD_START = $01
+BLT_BUSY      = $01
 BLT_OK        = $02
 BLT_MODE_FILL = $01
 BLT_SPACE_XRAM = $05
@@ -9890,6 +9892,8 @@ LAB_DMACOPY
       LDA   #DMA_CMD_START
       STA   DMA_CMD
       LDA   DMA_STATUS
+      CMP   #DMA_BUSY
+      BEQ   @dmac_ok
       CMP   #DMA_OK
       BEQ   @dmac_ok
       JMP   LAB_FCER
@@ -9945,6 +9949,8 @@ LAB_DMAFILL
       LDA   #DMA_CMD_START
       STA   DMA_CMD
       LDA   DMA_STATUS
+      CMP   #DMA_BUSY
+      BEQ   @dmaf_ok
       CMP   #DMA_OK
       BEQ   @dmaf_ok
       JMP   LAB_FCER
@@ -10031,6 +10037,8 @@ LAB_BLITCOPY
       LDA   #BLT_CMD_START
       STA   BLT_CMD
       LDA   BLT_STATUS
+      CMP   #BLT_BUSY
+      BEQ   @bltc_ok
       CMP   #BLT_OK
       BEQ   @bltc_ok
       JMP   LAB_FCER
@@ -10101,6 +10109,8 @@ LAB_BLITFILL
       LDA   #BLT_CMD_START
       STA   BLT_CMD
       LDA   BLT_STATUS
+      CMP   #BLT_BUSY
+      BEQ   @bltf_ok
       CMP   #BLT_OK
       BEQ   @bltf_ok
       JMP   LAB_FCER

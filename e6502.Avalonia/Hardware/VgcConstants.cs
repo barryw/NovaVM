@@ -367,6 +367,13 @@ public static class VgcConstants
     public const int SpriteShapeSize   = 128;      // 4-bit color per pixel
     public const int PaletteSize       = 16;
 
+    // VM timing defaults
+    public const int DefaultCpuHz = 12_000_000;
+    public const int FrameRateHz = 60;
+    public const int TimerTickQuantumCycles = 100;
+    public const int DmaBytesPerCycle = 4;
+    public const int BltOpsPerCycle = 2;
+
     // Sprite priority values
     public const int SpritePriBehindAll = 0;
     public const int SpritePriBetween   = 1;

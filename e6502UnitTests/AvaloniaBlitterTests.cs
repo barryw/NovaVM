@@ -119,6 +119,29 @@ public class AvaloniaBlitterTests
     }
 
     [TestMethod]
+    public void Blitter_StartTransitionsToBusyUntilCyclesAdvance()
+    {
+        var bus = MakeBus();
+        bus.Write(0x3000, 0x2A);
+
+        StartBlit(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceCpuRam,
+            srcAddr: 0x3000,
+            dstAddr: 0x3010,
+            width: 1,
+            height: 1,
+            srcStride: 1,
+            dstStride: 1);
+
+        Assert.AreEqual(VgcConstants.BltStatusBusy, bus.Read((ushort)VgcConstants.BltStatus));
+        Assert.AreEqual(0, GetBlitCount(bus));
+        RunUntilBlitNotBusy(bus);
+        Assert.AreEqual(VgcConstants.BltStatusOk, bus.Read((ushort)VgcConstants.BltStatus));
+    }
+
+    [TestMethod]
     public void Blitter_SameSpaceOverlap_CopiesUsingStableSource()
     {
         var bus = MakeBus();
@@ -209,9 +232,23 @@ public class AvaloniaBlitterTests
 
     private static void AssertBlitOk(CompositeBusDevice bus, int expectedCount)
     {
+        RunUntilBlitNotBusy(bus);
         Assert.AreEqual(VgcConstants.BltStatusOk, bus.Read((ushort)VgcConstants.BltStatus));
         Assert.AreEqual(VgcConstants.BltErrNone, bus.Read((ushort)VgcConstants.BltErrCode));
         Assert.AreEqual(expectedCount, GetBlitCount(bus));
+    }
+
+    private static void RunUntilBlitNotBusy(CompositeBusDevice bus, int maxIterations = 100_000)
+    {
+        for (int i = 0; i < maxIterations; i++)
+        {
+            byte status = bus.Read((ushort)VgcConstants.BltStatus);
+            if (status != VgcConstants.BltStatusBusy)
+                return;
+            bus.AdvanceCycles(16);
+        }
+
+        Assert.Fail("Blitter did not complete within allotted cycles.");
     }
 
     private static int GetBlitCount(CompositeBusDevice bus) =>

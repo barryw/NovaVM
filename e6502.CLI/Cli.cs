@@ -1,4 +1,5 @@
-﻿using KDS.e6502;
+﻿using System.Diagnostics;
+using KDS.e6502;
 
 namespace e6502.CLI;
 
@@ -23,12 +24,63 @@ internal class Cli
         var inputThread = new Thread(HandleInput);
         inputThread.Start();
 
+        int targetCpuHz = RuntimeOptions.GetIntFromEnvironment("NOVA_CPU_HZ", 12_000_000);
+        bool turboMode = RuntimeOptions.GetFlagFromEnvironment("NOVA_TURBO");
+        bool timingLog = RuntimeOptions.GetFlagFromEnvironment("NOVA_TIMING_LOG");
+        var scheduler = new RealTimeCycleScheduler(
+            targetCpuHz,
+            maxBacklogCycles: Math.Max(targetCpuHz / 5, 100_000));
+        const int turboChunkCycles = 200_000;
+        long telemetryStartTicks = Stopwatch.GetTimestamp();
+        long telemetryCycles = 0;
+        double peakPendingCycles = 0;
+
         do
         {
-            lock (_lock)
+            int cycleBudget = turboMode ? turboChunkCycles : scheduler.TakeCycleBudget();
+            if (cycleBudget <= 0)
             {
-                _cpu?.ExecuteNext();    
+                Thread.Yield();
+                continue;
             }
+
+            int chunkCyclesExecuted = 0;
+            while (inputThread.IsAlive && cycleBudget > 0)
+            {
+                int cycles;
+                lock (_lock)
+                {
+                    if (_cpu is null) break;
+                    cycles = _cpu.ClocksForNext();
+                    _cpu.ExecuteNext();
+                }
+
+                chunkCyclesExecuted += cycles;
+                cycleBudget -= cycles;
+            }
+
+            if (!timingLog)
+                continue;
+
+            telemetryCycles += chunkCyclesExecuted;
+            if (!turboMode && scheduler.PendingCycles > peakPendingCycles)
+                peakPendingCycles = scheduler.PendingCycles;
+
+            long nowTicks = Stopwatch.GetTimestamp();
+            long elapsedTicks = nowTicks - telemetryStartTicks;
+            if (elapsedTicks < Stopwatch.Frequency)
+                continue;
+
+            double elapsedSec = (double)elapsedTicks / Stopwatch.Frequency;
+            double effectiveMhz = telemetryCycles / elapsedSec / 1_000_000.0;
+            double backlogPct = turboMode || scheduler.MaxBacklogCycles == 0
+                ? 0
+                : peakPendingCycles * 100.0 / scheduler.MaxBacklogCycles;
+            Console.WriteLine($"[VM CLOCK] mode={(turboMode ? "turbo" : "realtime")} targetHz={targetCpuHz} effMHz={effectiveMhz:F2} backlog={backlogPct:F1}%");
+
+            telemetryStartTicks = nowTicks;
+            telemetryCycles = 0;
+            peakPendingCycles = 0;
         } while(inputThread.IsAlive);
         
         Console.WriteLine(@"Exiting NovaBASIC v1.0");

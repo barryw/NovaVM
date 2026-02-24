@@ -58,4 +58,35 @@ public class AvaloniaTimerTests
         timer.Read((ushort)VgcConstants.TimerStatus);
         Assert.IsFalse(timer.IrqPending);
     }
+
+    [TestMethod]
+    public void Timer_AdvanceCycles_FiresUsingQuantum()
+    {
+        var timer = new VirtualTimerController();
+        timer.Write((ushort)VgcConstants.TimerDivL, 0x02); // 2 timer ticks
+        timer.Write((ushort)VgcConstants.TimerDivH, 0x00);
+        timer.Write((ushort)VgcConstants.TimerCtrl, 0x01);
+
+        timer.AdvanceCycles(VgcConstants.TimerTickQuantumCycles);
+        Assert.IsFalse(timer.IrqPending);
+
+        timer.AdvanceCycles(VgcConstants.TimerTickQuantumCycles);
+        Assert.IsTrue(timer.IrqPending);
+    }
+
+    [TestMethod]
+    public void Timer_Disable_ResetsAccumulators()
+    {
+        var timer = new VirtualTimerController();
+        timer.Write((ushort)VgcConstants.TimerDivL, 0x02);
+        timer.Write((ushort)VgcConstants.TimerDivH, 0x00);
+        timer.Write((ushort)VgcConstants.TimerCtrl, 0x01);
+
+        timer.AdvanceCycles(VgcConstants.TimerTickQuantumCycles);
+        timer.Write((ushort)VgcConstants.TimerCtrl, 0x00); // disable clears state
+        timer.Write((ushort)VgcConstants.TimerCtrl, 0x01); // re-enable
+
+        timer.AdvanceCycles(VgcConstants.TimerTickQuantumCycles);
+        Assert.IsFalse(timer.IrqPending);
+    }
 }

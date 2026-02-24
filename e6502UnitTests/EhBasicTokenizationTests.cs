@@ -122,16 +122,18 @@ public class EhBasicTokenizationTests
         ushort p = smem;
         int count = 0;
         int prevLine = -1;
+        var chainLineNos = new List<int>();
         while (true)
         {
             ushort next = (ushort)(bus.Read(p) | (bus.Read((ushort)(p + 1)) << 8));
+            if (next == 0)
+                break;
             int lineNo = bus.Read((ushort)(p + 2)) | (bus.Read((ushort)(p + 3)) << 8);
             if (lineNo <= prevLine)
                 Assert.Fail($"Line numbers not increasing at ${p:X4}: prev={prevLine}, now={lineNo}");
             prevLine = lineNo;
+            chainLineNos.Add(lineNo);
             count++;
-            if (next == 0)
-                break;
             if (next <= p || next >= 0xA000)
                 Assert.Fail($"Invalid next-line pointer ${next:X4} at ${p:X4}");
             p = next;
@@ -139,7 +141,7 @@ public class EhBasicTokenizationTests
                 Assert.Fail("Line chain did not terminate.");
         }
 
-        Assert.AreEqual(entered, count, $"Entered {entered} lines but chain contains {count}.");
+        Assert.AreEqual(entered, count, $"Entered {entered} lines but chain contains {count}. Lines: {string.Join(",", chainLineNos)}");
 
         EnterLine(editor, "LIST");
         RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
@@ -383,22 +385,14 @@ public class EhBasicTokenizationTests
         const ushort LAB_SNER = 0xCE0E;
         debugger.AddBreakpoint(LAB_SNER, null);
 
-        // RUN with simulated 60Hz frame ticks so VSYNC completes
-        const int cyclesPerFrame = 16667;
+        // RUN with cycle-driven device ticking to match runtime scheduling.
         EnterLine(editor, "RUN");
-        int frameAccum = 0;
         bool hitBreakpoint = false;
         for (int i = 0; i < 200_000_000; i++)
         {
             int cycles = cpu.ClocksForNext();
             cpu.ExecuteNext();
-            frameAccum += cycles;
-            if (frameAccum >= cyclesPerFrame)
-            {
-                bus.Vgc.IncrementFrameCounter();
-                bus.Music.Tick();
-                frameAccum -= cyclesPerFrame;
-            }
+            bus.AdvanceCycles(cycles);
             var state = cpu.GetState();
             if (state.Pc == LAB_SNER)
             {
@@ -509,7 +503,9 @@ public class EhBasicTokenizationTests
     {
         for (int i = 0; i < maxSteps; i++)
         {
+            int cycles = cpu.ClocksForNext();
             cpu.ExecuteNext();
+            bus.AdvanceCycles(cycles);
             if ((i & 0x3FF) == 0)
             {
                 string screen = SnapshotScreen(bus.Vgc);
@@ -533,10 +529,23 @@ public class EhBasicTokenizationTests
 
     private static void RunUntilEditorIdle(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, int maxSteps)
     {
+        // Wait for: (1) queue fully drained, then (2) cursor OFF (BASIC
+        // processing CR), then (3) cursor back ON (processing complete).
+        // Sticky flags ensure the OFF→ON transition is detected only AFTER
+        // the queue is empty, preventing false early exits.
+        bool queueDrained = false;
+        bool sawCursorOff = false;
+
         for (int i = 0; i < maxSteps; i++)
         {
+            int cycles = cpu.ClocksForNext();
             cpu.ExecuteNext();
-            if (!editor.HasQueuedInput && bus.Vgc.IsCursorEnabled)
+            bus.AdvanceCycles(cycles);
+            if (!editor.HasQueuedInput)
+                queueDrained = true;
+            if (queueDrained && !bus.Vgc.IsCursorEnabled)
+                sawCursorOff = true;
+            if (queueDrained && sawCursorOff && bus.Vgc.IsCursorEnabled)
                 return;
         }
 
@@ -604,17 +613,19 @@ public class EhBasicTokenizationTests
         ushort p = smem;
         int count = 0;
         int prevLine = -1;
+        var lineNumbers = new List<int>();
 
         while (true)
         {
             ushort next = (ushort)(bus.Read(p) | (bus.Read((ushort)(p + 1)) << 8));
+            if (next == 0)
+                break;
             int lineNo = bus.Read((ushort)(p + 2)) | (bus.Read((ushort)(p + 3)) << 8);
             if (lineNo <= prevLine)
                 Assert.Fail($"Line numbers not increasing at ${p:X4}: prev={prevLine}, now={lineNo}");
             prevLine = lineNo;
+            lineNumbers.Add(lineNo);
             count++;
-            if (next == 0)
-                break;
             if (next <= p || next >= 0xA000)
                 Assert.Fail($"Invalid next-line pointer ${next:X4} at ${p:X4}");
             p = next;
@@ -622,7 +633,7 @@ public class EhBasicTokenizationTests
                 Assert.Fail("Line chain did not terminate.");
         }
 
-        Assert.AreEqual(expectedLineCount, count, $"Expected {expectedLineCount} lines but chain contains {count}.");
+        Assert.AreEqual(expectedLineCount, count, $"Expected {expectedLineCount} lines but chain contains {count}. Line numbers: {string.Join(",", lineNumbers)}");
     }
 
     private static void QueuePastedTextInterleaved(Cpu cpu, ScreenEditor editor, string text)
@@ -1155,9 +1166,10 @@ public class EhBasicTokenizationTests
         for (int iter = 0; iter < 2000; iter++)
         {
             ushort next = (ushort)(bus.Read(p) | (bus.Read((ushort)(p + 1)) << 8));
+            if (next == 0) break;
             int lineNo = bus.Read((ushort)(p + 2)) | (bus.Read((ushort)(p + 3)) << 8);
             result.Add(lineNo);
-            if (next == 0 || next <= p || next >= 0xA000) break;
+            if (next <= p || next >= 0xA000) break;
             p = next;
         }
         return result;
@@ -1171,17 +1183,18 @@ public class EhBasicTokenizationTests
         for (int iter = 0; iter < 2000; iter++)
         {
             ushort next = (ushort)(bus.Read(p) | (bus.Read((ushort)(p + 1)) << 8));
+            if (next == 0) break;
             int lineNo = bus.Read((ushort)(p + 2)) | (bus.Read((ushort)(p + 3)) << 8);
             if (lineNo == targetLineNo)
             {
-                int len = next == 0 ? 16 : Math.Min(next - p, 64);
+                int len = Math.Min(next - p, 64);
                 var sb = new StringBuilder();
                 sb.Append($"Line {targetLineNo} @{p:X4}: ");
                 for (int i = 0; i < len; i++)
                     sb.Append(bus.Read((ushort)(p + i)).ToString("X2") + " ");
                 return sb.ToString();
             }
-            if (next == 0 || next <= p || next >= 0xA000) break;
+            if (next <= p || next >= 0xA000) break;
             p = next;
         }
         return $"Line {targetLineNo} NOT FOUND";
@@ -1268,20 +1281,13 @@ public class EhBasicTokenizationTests
         Console.WriteLine("LIST output:");
         Console.WriteLine(listScreen);
 
-        // RUN with frame ticking to match real emulator
-        const int cyclesPerFrame = 16667;
+        // RUN with cycle-driven device ticking to match runtime scheduling.
         EnterLine(editor, "RUN");
-        int frameAccum = 0;
         for (int i = 0; i < 20_000_000; i++)
         {
             int cycles = cpu.ClocksForNext();
             cpu.ExecuteNext();
-            frameAccum += cycles;
-            if (frameAccum >= cyclesPerFrame)
-            {
-                bus.Vgc.IncrementFrameCounter();
-                frameAccum -= cyclesPerFrame;
-            }
+            bus.AdvanceCycles(cycles);
         }
 
         string screen = SnapshotScreen(bus.Vgc);
@@ -1427,7 +1433,6 @@ public class EhBasicTokenizationTests
 
         EnterLine(editor, "POKE 5000,DMASTATUS");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        Assert.AreEqual(0xA5, bus.Read((ushort)VgcConstants.DmaErrCode), "DMA errcode changed before DMAERR read.");
         EnterLine(editor, "POKE 5001,DMAERR");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
         EnterLine(editor, "POKE 5002,DMACOUNT");

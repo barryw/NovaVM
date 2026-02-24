@@ -12,6 +12,17 @@ public sealed class VirtualDmaController
     private readonly Func<byte, int, byte, bool> _tryWriteByte;
     private readonly Func<byte, int, int, bool>? _canWriteRange;
     private readonly Action<byte>? _postTransferWrite;
+    private bool _busy;
+    private bool _fillMode;
+    private byte _srcSpace;
+    private byte _dstSpace;
+    private byte _fillValue;
+    private int _srcAddr;
+    private int _dstAddr;
+    private int _length;
+    private int _index;
+    private int _moved;
+    private long _byteCredit;
 
     public VirtualDmaController(
         Func<byte, int> getSpaceLength,
@@ -37,11 +48,61 @@ public sealed class VirtualDmaController
 
     public void Write(ushort address, byte data)
     {
-        int idx = RegIndex(address);
-        _regs[idx] = data;
+        _regs[RegIndex(address)] = data;
 
         if (address == VgcConstants.DmaCmd)
             ExecuteCommand(data);
+    }
+
+    public void AdvanceCycles(int cycles)
+    {
+        if (!_busy || cycles <= 0)
+            return;
+
+        _byteCredit += (long)cycles * VgcConstants.DmaBytesPerCycle;
+        int remaining = _length - _index;
+        if (remaining <= 0)
+        {
+            CompleteTransfer();
+            return;
+        }
+
+        int toProcess = (int)Math.Min(_byteCredit, remaining);
+        if (toProcess <= 0)
+            return;
+        _byteCredit -= toProcess;
+
+        for (int i = 0; i < toProcess; i++)
+        {
+            byte value;
+            if (_fillMode)
+            {
+                value = _fillValue;
+            }
+            else
+            {
+                var read = _tryReadByte(_srcSpace, _srcAddr + _index);
+                if (!read.ok)
+                {
+                    FailTransfer(VgcConstants.DmaErrRange);
+                    return;
+                }
+                value = read.value;
+            }
+
+            if (!_tryWriteByte(_dstSpace, _dstAddr + _index, value))
+            {
+                FailTransfer(VgcConstants.DmaErrRange);
+                return;
+            }
+
+            _index++;
+            _moved++;
+        }
+
+        SetCount(_moved);
+        if (_index >= _length)
+            CompleteTransfer();
     }
 
     private void ExecuteCommand(byte cmd)
@@ -49,6 +110,12 @@ public sealed class VirtualDmaController
         if (cmd != VgcConstants.DmaCmdStart)
         {
             SetStatus(VgcConstants.DmaStatusError, VgcConstants.DmaErrBadCmd);
+            return;
+        }
+
+        if (_busy)
+        {
+            FailTransfer(VgcConstants.DmaErrBadCmd);
             return;
         }
 
@@ -98,42 +165,34 @@ public sealed class VirtualDmaController
 
         SetCount(0);
         SetStatus(VgcConstants.DmaStatusBusy, VgcConstants.DmaErrNone);
+        _busy = true;
+        _fillMode = fillMode;
+        _srcSpace = srcSpace;
+        _dstSpace = dstSpace;
+        _srcAddr = srcAddr;
+        _dstAddr = dstAddr;
+        _length = len;
+        _index = 0;
+        _moved = 0;
+        _fillValue = _regs[RegIndex(VgcConstants.DmaFillValue)];
+        _byteCredit = 0;
+    }
 
-        byte fillValue = _regs[RegIndex(VgcConstants.DmaFillValue)];
-        int moved = 0;
-        for (int i = 0; i < len; i++)
-        {
-            byte value;
-            if (fillMode)
-            {
-                value = fillValue;
-            }
-            else
-            {
-                var read = _tryReadByte(srcSpace, srcAddr + i);
-                if (!read.ok)
-                {
-                    SetCount(moved);
-                    SetStatus(VgcConstants.DmaStatusError, VgcConstants.DmaErrRange);
-                    return;
-                }
-
-                value = read.value;
-            }
-
-            if (!_tryWriteByte(dstSpace, dstAddr + i, value))
-            {
-                SetCount(moved);
-                SetStatus(VgcConstants.DmaStatusError, VgcConstants.DmaErrRange);
-                return;
-            }
-
-            moved++;
-        }
-
-        SetCount(moved);
-        _postTransferWrite?.Invoke(dstSpace);
+    private void CompleteTransfer()
+    {
+        _busy = false;
+        _byteCredit = 0;
+        SetCount(_moved);
+        _postTransferWrite?.Invoke(_dstSpace);
         SetStatus(VgcConstants.DmaStatusOk, VgcConstants.DmaErrNone);
+    }
+
+    private void FailTransfer(byte errCode)
+    {
+        _busy = false;
+        _byteCredit = 0;
+        SetCount(_moved);
+        SetStatus(VgcConstants.DmaStatusError, errCode);
     }
 
     private int Get24(int baseAddress)

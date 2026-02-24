@@ -16,6 +16,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly VirtualBlitterController _blitter;
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
+    private readonly int _cpuHz;
+    private readonly int _frameRateHz;
+    private long _frameNumeratorAccumulator;
+    private long _totalFrames;
+    private bool _rasterIrqPending;
 
     public VirtualGraphicsController Vgc => _vgc;
     public SidChip Sid => _sid;
@@ -27,10 +32,19 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public VirtualBlitterController Blitter => _blitter;
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
+    public int CpuHz => _cpuHz;
+    public int FrameRateHz => _frameRateHz;
+    public long TotalFrames => _totalFrames;
 
 
-    public CompositeBusDevice(bool enableSound = false)
+    public CompositeBusDevice(
+        bool enableSound = false,
+        int cpuHz = VgcConstants.DefaultCpuHz,
+        int frameRateHz = VgcConstants.FrameRateHz)
     {
+        _cpuHz = cpuHz > 0 ? cpuHz : VgcConstants.DefaultCpuHz;
+        _frameRateHz = frameRateHz > 0 ? frameRateHz : VgcConstants.FrameRateHz;
+
         _sid = new SidChip(enableSound);
         _sid2 = new SidChip(enableSound, baseAddress: 0xD420);
         _sidPlayer = new SidPlayer(this);
@@ -158,6 +172,33 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         // Hardware vectors $FFFA-$FFFF pass through (RSID players install own IRQ).
         if (address >= VgcConstants.RomBase && address < 0xFFFA) return;
         _ram[address] = data;
+    }
+
+    public void AdvanceCycles(int cycles)
+    {
+        if (cycles <= 0) return;
+
+        _timer.AdvanceCycles(cycles);
+        _dma.AdvanceCycles(cycles);
+        _blitter.AdvanceCycles(cycles);
+
+        _frameNumeratorAccumulator += (long)cycles * _frameRateHz;
+        while (_frameNumeratorAccumulator >= _cpuHz)
+        {
+            _frameNumeratorAccumulator -= _cpuHz;
+            _totalFrames++;
+            _vgc.IncrementFrameCounter();
+            _musicEngine.Tick();
+            if (_vgc.IsRasterIrqEnabled)
+                _rasterIrqPending = true;
+        }
+    }
+
+    public bool ConsumeRasterIrqPending()
+    {
+        if (!_rasterIrqPending) return false;
+        _rasterIrqPending = false;
+        return true;
     }
 
     private int GetDmaSpaceLength(byte space) =>

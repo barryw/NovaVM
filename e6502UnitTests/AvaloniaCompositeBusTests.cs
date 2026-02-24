@@ -68,6 +68,45 @@ public class AvaloniaCompositeBusTests
         Assert.AreEqual(1, bus.Vgc.GetCursorX());
     }
 
+    [TestMethod]
+    public void AdvanceCycles_FrameCounterTicksAtConfiguredFramePeriod()
+    {
+        var bus = MakeBus();
+        byte before = bus.Read((ushort)VgcConstants.RegStatus);
+
+        int cyclesPerFrame = bus.CpuHz / bus.FrameRateHz;
+        bus.AdvanceCycles(cyclesPerFrame - 1);
+        Assert.AreEqual(before, bus.Read((ushort)VgcConstants.RegStatus));
+
+        bus.AdvanceCycles(1);
+        Assert.AreEqual((byte)(before + 1), bus.Read((ushort)VgcConstants.RegStatus));
+    }
+
+    [TestMethod]
+    public void AdvanceCycles_RasterIrq_LatchesOncePerFrame()
+    {
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.RegIrqCtrl, 0x01);
+
+        bus.AdvanceCycles(bus.CpuHz / bus.FrameRateHz);
+
+        Assert.IsTrue(bus.ConsumeRasterIrqPending());
+        Assert.IsFalse(bus.ConsumeRasterIrqPending());
+    }
+
+    [TestMethod]
+    public void AdvanceCycles_UsesRuntimeCpuHzForFrameRate()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, cpuHz: 120, frameRateHz: 7);
+        byte before = bus.Read((ushort)VgcConstants.RegStatus);
+
+        bus.AdvanceCycles(120);
+
+        byte after = bus.Read((ushort)VgcConstants.RegStatus);
+        Assert.AreEqual((byte)(before + 7), after);
+        Assert.AreEqual(7L, bus.TotalFrames);
+    }
+
     // -------------------------------------------------------------------------
     // ROM protection
     // -------------------------------------------------------------------------
