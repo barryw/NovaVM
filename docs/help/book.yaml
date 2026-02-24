@@ -1,0 +1,30 @@
+title: "NovaBASIC User Guide"
+subtitle: "A Modern BASIC for a Classic CPU"
+chapters:
+  - title: Welcome to NovaBASIC
+    sources: [guides/welcome.md]
+  - title: Your First Session
+    sources: [guides/first-session.md]
+  - title: Language Fundamentals
+    sources: [guides/language-fundamentals.md]
+  - title: Graphics and Sprites
+    sources: [guides/graphics-and-display.md, guides/sprites.md]
+  - title: Sound and Music
+    sources: [guides/sound-and-music.md]
+  - title: Expansion Memory
+    sources: [guides/expansion-memory.md]
+  - title: Assembly and Special Chips
+    sources: [guides/assembly.md]
+  - title: DMA and Blitter
+    sources: [guides/dma-and-blitter.md]
+  - title: Networking
+    sources: [guides/networking.md]
+appendices:
+  - title: Command Reference
+    auto_generate: commands
+  - title: Function Reference
+    auto_generate: functions
+  - title: Memory Map
+    sources: [guides/memory-map.md]
+  - title: Limits, Errors, and Edge Cases
+    sources: [guides/limits-and-errors.md]

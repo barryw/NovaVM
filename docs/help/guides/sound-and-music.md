@@ -242,7 +242,7 @@ converted to uppercase before processing.
 | **Syntax** | **Description** |
 | --- | --- |
 | C D E F G A B | Play a note. Pitch is determined by the current octave. |
-| C# \textnormalor C+ | Sharp (raise one semitone). |
+| C# or C+ | Sharp (raise one semitone). |
 | C- | Flat (lower one semitone). |
 | R | Rest (silence for the note duration). |
 

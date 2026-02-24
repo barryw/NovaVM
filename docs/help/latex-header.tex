@@ -1,0 +1,44 @@
+% Minimal tcolorbox environment definitions for NovaBASIC user guide
+% Used when no custom template is present; replaced by latex-template.tex later.
+\usepackage{tcolorbox}
+\usepackage{listings}
+
+% Color palette (matches NovaBASIC theme)
+\definecolor{novaBlue}{HTML}{3B4BA0}
+\definecolor{novaGreen}{HTML}{2E7D32}
+\definecolor{novaOrange}{HTML}{E65100}
+\definecolor{novaPurple}{HTML}{6A1B9A}
+\definecolor{novaGray}{HTML}{F5F5F5}
+
+% Box environments
+\newtcolorbox{notebox}{colback=blue!5,colframe=novaBlue,title=Note}
+\newtcolorbox{warningbox}{colback=orange!5,colframe=novaOrange,title=Warning}
+\newtcolorbox{tipbox}{colback=green!5,colframe=novaGreen,title=Tip}
+\newtcolorbox{tryitbox}{colback=purple!5,colframe=novaPurple,title=Try It}
+
+% Cross-reference stubs (will be replaced by proper hyperref labels in full template)
+\newcommand{\refchap}[1]{}
+\newcommand{\refsec}[1]{}
+
+% NovaBASIC listings language
+\lstdefinelanguage{NovaBASIC}{
+  morekeywords={PRINT,INPUT,IF,THEN,ELSE,FOR,TO,NEXT,STEP,GOTO,GOSUB,RETURN,
+    LET,DIM,REM,DATA,READ,RESTORE,END,STOP,ON,DEF,FN,DO,LOOP,WHILE,UNTIL,
+    RUN,LIST,NEW,CLR,CONT,SAVE,LOAD,
+    PLOT,LINE,CIRCLE,RECT,FILL,PAINT,GCOLOR,GCLS,GMODE,
+    SPRITE,SPRITESHAPE,SPRITEDATA,SPRITEPOS,SPRITEON,SPRITEOFF,
+    SOUND,PLAY,TEMPO,VOICE,INSTRUMENT,
+    PEEK,POKE,SYS,USR,WAIT,
+    AND,OR,NOT,XOR},
+  sensitive=false,
+  morecomment=[l]{REM\ },
+  morestring=[b]",
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{novaBlue}\bfseries,
+  stringstyle=\color{novaGreen},
+  commentstyle=\color{gray}\itshape,
+  numbers=none,
+  frame=single,
+  backgroundcolor=\color{novaGray},
+  breaklines=true
+}

@@ -6,4 +6,4 @@ keywords: [log, math]
 syntax: "LOG(n)"
 ---
 
-Natural logarithm (\ln n).
+Natural logarithm (ln n).
