@@ -23,9 +23,10 @@ public class EmulatorCanvas : Control
     private bool _cursorVisible = true;
     private bool _quoteMode;
     private static readonly uint[] Palette = BuildPalette();
-    private readonly byte[] _spriteMapBehind = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
-    private readonly byte[] _spriteMapBetween = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
-    private readonly byte[] _spriteMapFront = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+    private readonly byte[] _lineBehind = new byte[VgcConstants.GfxWidth];
+    private readonly byte[] _lineBetween = new byte[VgcConstants.GfxWidth];
+    private readonly byte[] _lineFront = new byte[VgcConstants.GfxWidth];
+    private readonly ushort[] _spriteMask = new ushort[VgcConstants.GfxWidth];
 
     public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor)
     {
@@ -217,35 +218,59 @@ public class EmulatorCanvas : Control
         var ptr = (uint*)fb.Address;
         int stride = fb.RowBytes / 4;
 
-        BuildSpritePriorityMaps();
-
         ReadOnlySpan<VirtualGraphicsController.CopperEvent> copperProgram = _vgc.GetCopperProgram();
         bool copperEnabled = _vgc.IsCopperEnabled && !copperProgram.IsEmpty;
         int copperIndex = 0;
 
         var state = RenderVideoState.FromVgc(_vgc);
+        var sprites = SpriteRenderState.FromVgc(_vgc);
+        ReadOnlySpan<byte> shapeRam = _vgc.GetSpriteShapeRam();
         int cursorX = _vgc.GetCursorX();
         int cursorY = _vgc.GetCursorY();
         bool cursorEnabled = _cursorVisible && _vgc.IsCursorEnabled;
 
+        ushort colSS = 0, colSB = 0;
+
         for (int y = 0; y < VgcConstants.GfxHeight; y++)
         {
+            // Pre-fire copper events targeting sprite registers for this scanline
+            if (copperEnabled)
+            {
+                int scanlineEnd = (y + 1) * VgcConstants.GfxWidth;
+                int peekIndex = copperIndex;
+                while (peekIndex < copperProgram.Length && copperProgram[peekIndex].Position < scanlineEnd)
+                {
+                    if (SpriteRenderState.IsSpriteRegister(copperProgram[peekIndex].RegisterIndex))
+                        sprites.Apply(copperProgram[peekIndex].RegisterIndex, copperProgram[peekIndex].Value);
+                    peekIndex++;
+                }
+            }
+
+            // Rasterize sprites for this scanline
+            SpriteRenderer.RasterizeScanline(y, sprites, shapeRam,
+                _lineBehind, _lineBetween, _lineFront, _spriteMask);
+
+            // Accumulate collision data
+            SpriteRenderer.AccumulateCollisions(_spriteMask, _vgc,
+                state.ScrollX, state.ScrollY, y, ref colSS, ref colSB);
+
             for (int x = 0; x < VgcConstants.GfxWidth; x++)
             {
+                // Fire non-sprite copper events at exact pixel position
                 if (copperEnabled)
                 {
                     int position = y * VgcConstants.GfxWidth + x;
                     while (copperIndex < copperProgram.Length && copperProgram[copperIndex].Position == position)
                     {
-                        state.Apply(copperProgram[copperIndex].RegisterIndex, copperProgram[copperIndex].Value);
+                        if (!SpriteRenderState.IsSpriteRegister(copperProgram[copperIndex].RegisterIndex))
+                            state.Apply(copperProgram[copperIndex].RegisterIndex, copperProgram[copperIndex].Value);
                         copperIndex++;
                     }
                 }
 
-                int logicalIndex = y * VgcConstants.GfxWidth + x;
-                byte spriteBehind = _spriteMapBehind[logicalIndex];
-                byte spriteBetween = _spriteMapBetween[logicalIndex];
-                byte spriteFront = _spriteMapFront[logicalIndex];
+                byte spriteBehind = _lineBehind[x];
+                byte spriteBetween = _lineBetween[x];
+                byte spriteFront = _lineFront[x];
 
                 int sampleGfxX = Wrap320(x + state.ScrollX);
                 int sampleGfxY = Wrap200(y + state.ScrollY);
@@ -304,38 +329,7 @@ public class EmulatorCanvas : Control
             }
         }
 
-        // Collision detection
-        var (ss, sb) = SpriteRenderer.DetectCollisions(_vgc);
-        _vgc.SetCollisionRegisters(ss, sb);
-    }
-
-    private void BuildSpritePriorityMaps()
-    {
-        Array.Clear(_spriteMapBehind);
-        Array.Clear(_spriteMapBetween);
-        Array.Clear(_spriteMapFront);
-
-        for (int i = 0; i < VgcConstants.MaxSprites; i++)
-        {
-            var spriteState = _vgc.GetSpriteState(i);
-            if (!spriteState.enabled)
-                continue;
-
-            byte[] target = spriteState.priority switch
-            {
-                VgcConstants.SpritePriBehindAll => _spriteMapBehind,
-                VgcConstants.SpritePriBetween => _spriteMapBetween,
-                _ => _spriteMapFront
-            };
-
-            foreach (var pixel in SpriteRenderer.GetSpritePixels(_vgc, i))
-            {
-                if ((uint)pixel.ScreenX >= VgcConstants.GfxWidth || (uint)pixel.ScreenY >= VgcConstants.GfxHeight)
-                    continue;
-
-                target[pixel.ScreenY * VgcConstants.GfxWidth + pixel.ScreenX] = (byte)(pixel.Color & 0x0F);
-            }
-        }
+        _vgc.SetCollisionRegisters(colSS, colSB);
     }
 
     private bool TrySampleTextPixel(
