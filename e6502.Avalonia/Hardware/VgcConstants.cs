@@ -392,7 +392,7 @@ public static class VgcConstants
     public const int SprRegShape      = 4;
     public const int SprRegFlags      = 5;  // bit0=xFlip, bit1=yFlip, bit7=enable
     public const int SprRegPriority   = 6;
-    public const int SprRegReserved   = 7;
+    public const int SprRegTransColor = 7;
 
     // Sprite flags bitmasks
     public const byte SprFlagXFlip    = 0x01;
@@ -510,4 +510,12 @@ public static class VgcConstants
     public const byte MemSpaceColor    = 0x01;     // 2000 bytes (color RAM)
     public const byte MemSpaceGfx      = 0x02;     // 320*200 bytes (graphics bitmap)
     public const byte MemSpaceSprite   = 0x03;     // 16*128 bytes (sprite shape RAM)
+
+    // -------------------------------------------------------------------------
+    // Help system registers ($A020-$A030)
+    // -------------------------------------------------------------------------
+
+    public const ushort RegHelp           = 0xA020;
+    public const ushort HelpSearchBuffer  = 0xA021;
+    public const int    HelpSearchBufferLen = 16;
 }

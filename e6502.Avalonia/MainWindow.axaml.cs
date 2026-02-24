@@ -1,13 +1,17 @@
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Dock.Avalonia.Controls;
 using e6502.Avalonia.Debugging;
 using e6502.Avalonia.DevTools;
 using e6502.Avalonia.Hardware;
+using e6502.Avalonia.Help;
 using e6502.Avalonia.Input;
 using e6502.Avalonia.Ipc;
 using e6502.Avalonia.Rendering;
@@ -28,6 +32,9 @@ public partial class MainWindow : Window
     private long _lastMoveResizeTick;
     private PixelPoint _lastWindowPos;
     private Size _lastWindowSize;
+    private HelpPanel? _helpPanel;
+    private HelpIndex? _helpIndex;
+    private bool _helpVisible;
 
     public MainWindow()
     {
@@ -46,6 +53,7 @@ public partial class MainWindow : Window
 
         _editor = new ScreenEditor(_bus.Vgc);
         _bus.Vgc.SetScreenEditor(_editor);
+        InitializeHelp();
 
         var fontPath = Path.Combine(AppContext.BaseDirectory, "Resources", "cp437.bin");
         var font = BitmapFont.LoadFromFile(fontPath);
@@ -190,6 +198,20 @@ public partial class MainWindow : Window
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.Key == Key.F1)
+        {
+            ToggleHelpPanel();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && _helpVisible)
+        {
+            HideHelpPanel();
+            e.Handled = true;
+            return;
+        }
+
         var mod = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
         if (e.KeyModifiers.HasFlag(mod))
         {
@@ -267,6 +289,195 @@ public partial class MainWindow : Window
         _canvas.Focus();
         if (OperatingSystem.IsMacOS())
             SetMacAspectRatio();
+    }
+
+    private void InitializeHelp()
+    {
+        var helpDir = FindHelpDirectory();
+        if (helpDir == null) return;
+        var topics = HelpContentLoader.LoadFromDirectory(helpDir);
+        _helpIndex = new HelpIndex(topics);
+    }
+
+    private static string? FindHelpDirectory()
+    {
+        var dir = AppDomain.CurrentDomain.BaseDirectory;
+        for (var i = 0; i < 6; i++)
+        {
+            var candidate = Path.Combine(dir, "help");
+            if (Directory.Exists(candidate)) return candidate;
+            candidate = Path.Combine(dir, "docs", "help");
+            if (Directory.Exists(candidate)) return candidate;
+            var parent = Directory.GetParent(dir)?.FullName;
+            if (parent == null) break;
+            dir = parent;
+        }
+        return null;
+    }
+
+    public void ShowHelpPanel(string? searchTerm = null)
+    {
+        if (_helpIndex == null) return;
+
+        if (_helpPanel == null)
+        {
+            _helpPanel = new HelpPanel(_helpIndex);
+            _helpPanel.CloseRequested += HideHelpPanel;
+            _helpPanel.TryThisRequested += OnTryThisRequested;
+        }
+
+        if (!_helpVisible)
+        {
+            var currentContent = Content as Control;
+            if (currentContent == null) return;
+
+            Content = null;
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition(350, GridUnitType.Pixel) { MinWidth = 280, MaxWidth = 500 });
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+
+            Grid.SetColumn(_helpPanel, 0);
+            grid.Children.Add(_helpPanel);
+
+            var splitter = new GridSplitter
+            {
+                Width = 4,
+                Background = new SolidColorBrush(HelpStyles.CodeBorder)
+            };
+            Grid.SetColumn(splitter, 1);
+            grid.Children.Add(splitter);
+
+            App.DetachFromVisualParent(currentContent);
+            Grid.SetColumn(currentContent, 2);
+            grid.Children.Add(currentContent);
+
+            Content = grid;
+            _helpVisible = true;
+
+            Width += 354;
+        }
+
+        if (searchTerm != null)
+            _helpPanel.NavigateToTopic(searchTerm);
+        else
+            _helpPanel.ShowLastViewedOrBrowse();
+    }
+
+    public void HideHelpPanel()
+    {
+        if (!_helpVisible || Content is not Grid grid) return;
+
+        var emulatorContent = grid.Children
+            .OfType<Control>()
+            .FirstOrDefault(c => Grid.GetColumn(c) == 2);
+
+        if (emulatorContent != null)
+        {
+            grid.Children.Remove(emulatorContent);
+            Content = emulatorContent;
+        }
+
+        _helpVisible = false;
+        Width -= 354;
+    }
+
+    private void ToggleHelpPanel()
+    {
+        if (_helpVisible)
+            HideHelpPanel();
+        else
+            ShowHelpPanel();
+    }
+
+    private async void OnTryThisRequested(string code)
+    {
+        // Check if a BASIC program is in memory by comparing program start/end pointers
+        // These are at zero page addresses $2B/$2C (start) and $2D/$2E (end)
+        var progStart = (ushort)(_bus.Read(0x002B) | (_bus.Read(0x002C) << 8));
+        var progEnd = (ushort)(_bus.Read(0x002D) | (_bus.Read(0x002E) << 8));
+
+        if (progEnd > progStart)
+        {
+            var dialog = new Window
+            {
+                Title = "Replace Program?",
+                Width = 340,
+                Height = 140,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false
+            };
+
+            var result = false;
+            var stack = new StackPanel { Spacing = 12, Margin = new Thickness(20) };
+            stack.Children.Add(new TextBlock
+            {
+                Text = "This will replace your current program. Continue?",
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 13
+            });
+            var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+            var cancelBtn = new Button { Content = "Cancel", Padding = new Thickness(16, 6) };
+            cancelBtn.Click += (_, _) => dialog.Close();
+            var okBtn = new Button { Content = "Replace & Enter", Padding = new Thickness(16, 6) };
+            okBtn.Click += (_, _) => { result = true; dialog.Close(); };
+            btnPanel.Children.Add(cancelBtn);
+            btnPanel.Children.Add(okBtn);
+            stack.Children.Add(btnPanel);
+            dialog.Content = stack;
+
+            await dialog.ShowDialog(this);
+            if (!result) return;
+        }
+
+        EnterCodeIntoBasic(code);
+    }
+
+    private void EnterCodeIntoBasic(string code)
+    {
+        // Type NEW + Enter to clear any existing program
+        QueueString("NEW");
+        QueueByte(0x0D);
+
+        DispatcherTimer.RunOnce(() =>
+        {
+            var lines = code.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var capturedLine = lines[i].TrimEnd();
+                var delay = TimeSpan.FromMilliseconds(50 * (i + 1));
+                DispatcherTimer.RunOnce(() =>
+                {
+                    var upper = ConvertToUpperOutsideQuotes(capturedLine);
+                    QueueString(upper);
+                    QueueByte(0x0D);
+                }, delay);
+            }
+        }, TimeSpan.FromMilliseconds(100));
+    }
+
+    private void QueueString(string text)
+    {
+        foreach (var c in text)
+            QueueByte((byte)c);
+    }
+
+    private void QueueByte(byte b)
+    {
+        _editor.QueueInput(b);
+    }
+
+    private static string ConvertToUpperOutsideQuotes(string text)
+    {
+        var sb = new System.Text.StringBuilder(text.Length);
+        var inQuotes = false;
+        foreach (var c in text)
+        {
+            if (c == '"') inQuotes = !inQuotes;
+            sb.Append(!inQuotes && c >= 'a' && c <= 'z' ? (char)(c - 32) : c);
+        }
+        return sb.ToString();
     }
 
     private void ClearMacAspectRatio()
