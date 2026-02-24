@@ -665,6 +665,76 @@ public class AvaloniaVgcTests
         Assert.AreEqual(0x0C, shape[1] & 0x0F);
     }
 
+    // -- Sprite register writes $A040-$A0BF -----------------------------------
+
+    [TestMethod]
+    public void SpriteReg_WritePosition_UpdatesSpriteState()
+    {
+        // Write X=300 (0x012C), Y=-10 (0xFFF6) to sprite 0 via registers
+        _vgc.Write(VgcConstants.SpriteRegBase + 0, 0x2C);  // XLo
+        _vgc.Write(VgcConstants.SpriteRegBase + 1, 0x01);  // XHi
+        _vgc.Write(VgcConstants.SpriteRegBase + 2, 0xF6);  // YLo
+        _vgc.Write(VgcConstants.SpriteRegBase + 3, 0xFF);  // YHi
+
+        var state = _vgc.GetSpriteState(0);
+        Assert.AreEqual(300, state.x);
+        Assert.AreEqual(-10, state.y);
+    }
+
+    [TestMethod]
+    public void SpriteReg_WriteShapeIndex_UpdatesShapePointer()
+    {
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegShape, 42);
+        Assert.AreEqual(42, _vgc.GetSpriteShapeIndex(0));
+    }
+
+    [TestMethod]
+    public void SpriteReg_WriteFlags_UpdatesEnableAndFlip()
+    {
+        // Enable + xFlip + yFlip
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegFlags,
+                   VgcConstants.SprFlagEnable | VgcConstants.SprFlagXFlip | VgcConstants.SprFlagYFlip);
+
+        var state = _vgc.GetSpriteState(0);
+        Assert.IsTrue(state.enabled);
+        Assert.AreEqual(0x03, state.flags);  // both flip bits
+    }
+
+    [TestMethod]
+    public void SpriteReg_WriteFlagsEnable_UpdatesSpriteCount()
+    {
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegFlags, VgcConstants.SprFlagEnable);
+        Assert.AreEqual(1, _vgc.Read(VgcConstants.RegSpriteCount));
+
+        // Disable via flags
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegFlags, 0x00);
+        Assert.AreEqual(0, _vgc.Read(VgcConstants.RegSpriteCount));
+    }
+
+    [TestMethod]
+    public void SpriteReg_WritePriority_ClampedTo2()
+    {
+        // Default priority is 2 (SpritePriInFront), set to 0 first
+        _vgc.SetSpritePriority(0, 0);
+        Assert.AreEqual((byte)0, _vgc.GetSpriteState(0).priority, "Precondition: priority should be 0");
+
+        // Write 5 via register — should clamp to 2
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegPriority, 5);
+        Assert.AreEqual((byte)2, _vgc.GetSpriteState(0).priority, "Priority 5 should clamp to 2");
+    }
+
+    [TestMethod]
+    public void SpriteReg_Sprite7_CorrectOffset()
+    {
+        int base7 = VgcConstants.SpriteRegBase + 7 * VgcConstants.SpriteRegStride;
+        _vgc.Write(base7 + VgcConstants.SprRegXLo, 0x40);
+        _vgc.Write(base7 + VgcConstants.SprRegFlags, VgcConstants.SprFlagEnable);
+
+        var state = _vgc.GetSpriteState(7);
+        Assert.AreEqual(0x40, state.x);
+        Assert.IsTrue(state.enabled);
+    }
+
     // -- Copper ---------------------------------------------------------------
 
     [TestMethod]

@@ -18,11 +18,12 @@ public interface IScreenInput
 ///
 /// Address ownership:
 ///   $A000-$A01E  VGC registers + command interface
+///   $A040-$A0BF  Sprite registers (16 sprites x 8 bytes each)
 ///   $AA00-$B1CF  Character RAM (2000 bytes)
 ///   $B1D0-$B99F  Color RAM (2000 bytes)
 ///
 /// Sprite shape data is host-side only (not 6502-addressable).
-/// All sprite manipulation goes through the command register at $A010.
+/// Sprite state can be set via registers at $A040-$A0BF or commands at $A010.
 /// </summary>
 public class VirtualGraphicsController
 {
@@ -147,6 +148,10 @@ public class VirtualGraphicsController
         if (address >= VgcConstants.VgcBase && address <= VgcConstants.VgcRegsEnd)
             return true;
 
+        // Sprite registers: $A040-$A0BF
+        if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
+            return true;
+
         // Character RAM: $AA00-$B1CF
         if (address >= VgcConstants.CharRamBase && address <= VgcConstants.CharRamEnd)
             return true;
@@ -235,6 +240,13 @@ public class VirtualGraphicsController
         if (address >= VgcConstants.CharRamBase && address <= VgcConstants.CharRamEnd)
         {
             _screenRam[address - VgcConstants.CharRamBase] = data;
+            return;
+        }
+
+        // Sprite registers $A040-$A0BF
+        if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
+        {
+            WriteSpriteRegister(address, data);
             return;
         }
 
@@ -427,6 +439,42 @@ public class VirtualGraphicsController
                 _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0x0F) | ((color & 0x0F) << 4));
             else
                 _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0xF0) | (color & 0x0F));
+        }
+    }
+
+    private void WriteSpriteRegister(int address, byte data)
+    {
+        int offset = address - VgcConstants.SpriteRegBase;
+        int sprite = offset / VgcConstants.SpriteRegStride;
+        int field = offset % VgcConstants.SpriteRegStride;
+
+        if ((uint)sprite >= VgcConstants.MaxSprites) return;
+
+        switch (field)
+        {
+            case VgcConstants.SprRegXLo:
+                _spriteX[sprite] = (short)((_spriteX[sprite] & ~0xFF) | data);
+                break;
+            case VgcConstants.SprRegXHi:
+                _spriteX[sprite] = (short)((data << 8) | (_spriteX[sprite] & 0xFF));
+                break;
+            case VgcConstants.SprRegYLo:
+                _spriteY[sprite] = (short)((_spriteY[sprite] & ~0xFF) | data);
+                break;
+            case VgcConstants.SprRegYHi:
+                _spriteY[sprite] = (short)((data << 8) | (_spriteY[sprite] & 0xFF));
+                break;
+            case VgcConstants.SprRegShape:
+                _spriteShapeIndex[sprite] = data;
+                break;
+            case VgcConstants.SprRegFlags:
+                _spriteEnabled[sprite] = (data & VgcConstants.SprFlagEnable) != 0;
+                _spriteFlags[sprite] = (byte)(data & VgcConstants.SprFlagFlipMask);
+                UpdateSpriteCount();
+                break;
+            case VgcConstants.SprRegPriority:
+                _spritePriority[sprite] = (byte)Math.Min((int)data, 2);
+                break;
         }
     }
 
