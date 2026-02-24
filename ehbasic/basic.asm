@@ -9074,20 +9074,32 @@ LAB_SPRCMD
       RTS
 
 ; perform SPRITESHAPE n, shape
-; NOTE: The new VGC does not use shape indices. Each sprite has its own
-; shape data defined via SPRITEDATA. This command is kept for syntax
-; compatibility but does nothing.
+; Writes shape index to sprite register $A044 + n*8
 
 LAB_SPRSHAPE
+      JSR   LAB_GTBY          ; get sprite number (0-15) in X
+      TXA
+      ASL                     ; *2
+      ASL                     ; *4
+      ASL                     ; *8
+      TAY                     ; Y = sprite * 8
+      JSR   LAB_1C01          ; require comma
+      JSR   LAB_GTBY          ; get shape index in X
+      TXA
+      STA   $A044,Y           ; write to shape register ($A044 + n*8)
+      RTS
+
+; perform SPRITECOLOR n, color — no-op (kept for syntax compatibility)
+
 LAB_SPRCOLOR
       JSR   LAB_GTBY          ; get sprite number in X (parse and discard)
       JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get shape/color byte in X (parse and discard)
+      JSR   LAB_GTBY          ; get color byte in X (parse and discard)
       RTS
 
-; perform SPRITEDATA sprite, row, b1, b2
+; perform SPRITEDATA sprite, row, b1, b2 [, b3 [, b4 [, b5 [, b6 [, b7 [, b8]]]]]]
 ; Uses CmdSprRow ($11): P0=sprite, P1=row, P2-P9=8 bytes of row data.
-; b1 and b2 are placed in P2 and P3 (first 4 pixels); P4-P9 are zeroed.
+; Unprovided bytes are zeroed.
 
 LAB_SPRDATA
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
@@ -9095,20 +9107,62 @@ LAB_SPRDATA
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; get row (0-15) in X
       STX   VGC_P1             ; P1 = row
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; get b1 in X
-      STX   VGC_P2             ; P2 = first data byte
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; get b2 in X
-      STX   VGC_P3             ; P3 = second data byte
-      ; zero remaining bytes P4-P9
+      ; zero all 8 data bytes first
       LDA   #$00
+      STA   VGC_P2
+      STA   VGC_P3
       STA   VGC_P4
       STA   VGC_P5
       STA   VGC_P6
       STA   VGC_P7
       STA   VGC_P8
       STA   VGC_P9
+      ; parse b1 (required)
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; b1 → X
+      STX   VGC_P2
+      ; parse b2 (required)
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; b2 → X
+      STX   VGC_P3
+      ; parse optional b3-b8
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @sd_done
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; b3 → X
+      STX   VGC_P4
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @sd_done
+      JSR   LAB_IGBY
+      JSR   LAB_GTBY          ; b4 → X
+      STX   VGC_P5
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @sd_done
+      JSR   LAB_IGBY
+      JSR   LAB_GTBY          ; b5 → X
+      STX   VGC_P6
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @sd_done
+      JSR   LAB_IGBY
+      JSR   LAB_GTBY          ; b6 → X
+      STX   VGC_P7
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @sd_done
+      JSR   LAB_IGBY
+      JSR   LAB_GTBY          ; b7 → X
+      STX   VGC_P8
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @sd_done
+      JSR   LAB_IGBY
+      JSR   LAB_GTBY          ; b8 → X
+      STX   VGC_P9
+@sd_done
       LDA   #VCMD_SPRROW      ; CmdSprRow command
       STA   VGC_CMD            ; trigger
       RTS
@@ -9682,14 +9736,15 @@ LAB_COPPER
       JSR   LAB_GTBY          ; y (8-bit) → X
       STX   VGC_P2             ; y
       JSR   LAB_1C01          ; comma
-      ; parse register name: BGCOL, MODE, SCROLLX, SCROLLY
+      ; parse register name: BGCOL, MODE, SCROLLX, SCROLLY,
+      ; SPRX(n), SPRXH(n), SPRY(n), SPRYH(n), SPRSHAPE(n), SPRFLAGS(n), SPRPRI(n)
       JSR   LAB_GBYT          ; peek
       CMP   #'B'
       BEQ   @c_bgcol
       CMP   #TK_GMODE
       BEQ   @c_mode
       CMP   #'S'
-      BEQ   @c_scroll
+      BEQ   @c_s_dispatch
       JMP   LAB_15D9          ; syntax error
 
 @c_bgcol
@@ -9699,15 +9754,23 @@ LAB_COPPER
       JSR   LAB_IGBY          ; O
       JSR   LAB_IGBY          ; L
       LDA   #$01              ; reg index 1 = BGCOL
-      JMP   @c_store_reg
+      JMP   @c_store_idx
 
 @c_mode
       JSR   LAB_IGBY          ; consume MODE token
       LDA   #$00              ; reg index 0 = MODE
-      JMP   @c_store_reg
+      JMP   @c_store_idx
+
+@c_s_dispatch
+      JSR   LAB_IGBY          ; consume S
+      JSR   LAB_GBYT          ; peek next: C=scroll, P=sprite
+      CMP   #'C'
+      BEQ   @c_scroll
+      CMP   #'P'
+      BEQ   @c_spr
+      JMP   LAB_15D9          ; syntax error
 
 @c_scroll
-      JSR   LAB_IGBY          ; S
       JSR   LAB_IGBY          ; C
       JSR   LAB_IGBY          ; R
       JSR   LAB_IGBY          ; O
@@ -9723,17 +9786,115 @@ LAB_COPPER
 @c_scrollx
       JSR   LAB_IGBY          ; consume X
       LDA   #$05              ; reg index 5 = SCROLLX
-      JMP   @c_store_reg
+      JMP   @c_store_idx
 
 @c_scrolly
       JSR   LAB_IGBY          ; consume Y
       LDA   #$06              ; reg index 6 = SCROLLY
-      JMP   @c_store_reg
+      JMP   @c_store_idx
 
-@c_store_reg
-      STA   VGC_P3             ; register index
+@c_store_idx
+      STA   VGC_P3             ; register index (low byte)
       LDA   #$00
       STA   VGC_P4             ; high byte = 0
+      JMP   @c_store_val
+
+      ; --- Sprite register names: SPR + field + (n) ---
+      ; SPRX(n)=$A040+n*8+0, SPRXH(n)=+1, SPRY(n)=+2, SPRYH(n)=+3,
+      ; SPRSHAPE(n)=+4, SPRFLAGS(n)=+5, SPRPRI(n)=+6
+@c_spr
+      JSR   LAB_IGBY          ; consume P
+      JSR   LAB_IGBY          ; consume R
+      JSR   LAB_GBYT          ; peek field start: X, Y, S, F, P
+      CMP   #'X'
+      BEQ   @cs_x
+      CMP   #'Y'
+      BEQ   @cs_y
+      CMP   #'S'
+      BEQ   @cs_shape
+      CMP   #'F'
+      BEQ   @cs_flags
+      CMP   #'P'
+      BEQ   @cs_pri
+      JMP   LAB_15D9          ; syntax error
+
+@cs_x
+      JSR   LAB_IGBY          ; consume X
+      JSR   LAB_GBYT          ; peek: H or (
+      CMP   #'H'
+      BEQ   @cs_xh
+      LDA   #$00              ; field offset 0 = X low
+      JMP   @c_spr_idx
+
+@cs_xh
+      JSR   LAB_IGBY          ; consume H
+      LDA   #$01              ; field offset 1 = X high
+      JMP   @c_spr_idx
+
+@cs_y
+      JSR   LAB_IGBY          ; consume Y
+      JSR   LAB_GBYT          ; peek: H or (
+      CMP   #'H'
+      BEQ   @cs_yh
+      LDA   #$02              ; field offset 2 = Y low
+      JMP   @c_spr_idx
+
+@cs_yh
+      JSR   LAB_IGBY          ; consume H
+      LDA   #$03              ; field offset 3 = Y high
+      JMP   @c_spr_idx
+
+@cs_shape
+      JSR   LAB_IGBY          ; S
+      JSR   LAB_IGBY          ; H
+      JSR   LAB_IGBY          ; A
+      JSR   LAB_IGBY          ; P
+      JSR   LAB_IGBY          ; E
+      LDA   #$04              ; field offset 4 = Shape
+      JMP   @c_spr_idx
+
+@cs_flags
+      JSR   LAB_IGBY          ; F
+      JSR   LAB_IGBY          ; L
+      JSR   LAB_IGBY          ; A
+      JSR   LAB_IGBY          ; G
+      JSR   LAB_IGBY          ; S
+      LDA   #$05              ; field offset 5 = Flags
+      JMP   @c_spr_idx
+
+@cs_pri
+      JSR   LAB_IGBY          ; P
+      JSR   LAB_IGBY          ; R
+      JSR   LAB_IGBY          ; I
+      LDA   #$06              ; field offset 6 = Priority
+      ; fall through to @c_spr_idx
+
+      ; A = field offset, now parse (n) and compute address $A040 + n*8 + A
+@c_spr_idx
+      PHA                     ; save field offset
+      JSR   LAB_IGBY          ; consume '('
+      JSR   LAB_GTBY          ; sprite index (0-15) → X
+      CPX   #$10
+      BCC   @cs_idx_ok
+      JMP   LAB_15D9          ; syntax error if n > 15
+@cs_idx_ok
+      JSR   LAB_IGBY          ; consume ')'
+      ; compute address: $A040 + X*8 + field
+      TXA                     ; A = sprite index
+      ASL                     ; *2
+      ASL                     ; *4
+      ASL                     ; *8
+      STA   VGC_P3             ; temp = n*8
+      PLA                     ; A = field offset
+      CLC
+      ADC   VGC_P3             ; A = n*8 + field
+      ADC   #$40              ; A = n*8 + field + $40 (low byte of $A040)
+      STA   VGC_P3             ; P3 = address low byte
+      LDA   #$A0              ; high byte of $A040
+      ADC   #$00              ; add carry if low byte wrapped
+      STA   VGC_P4             ; P4 = address high byte
+
+@c_store_val
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; value (8-bit) → X
       STX   VGC_P5             ; value
