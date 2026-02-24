@@ -735,6 +735,61 @@ public class AvaloniaVgcTests
         Assert.IsTrue(state.enabled);
     }
 
+    // -- Sprite register reads $A040-$A0BF ------------------------------------
+
+    [TestMethod]
+    public void SpriteReg_ReadPosition_ReturnsCurrentState()
+    {
+        // Set position via command
+        _vgc.Write(VgcConstants.RegP0, 0);  // sprite 0
+        _vgc.Write(VgcConstants.RegP1, 0x2C);  // xLo
+        _vgc.Write(VgcConstants.RegP2, 0x01);  // xHi
+        _vgc.Write(VgcConstants.RegP3, 0x50);  // yLo
+        _vgc.Write(VgcConstants.RegP4, 0x00);  // yHi
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
+
+        Assert.AreEqual(0x2C, _vgc.Read(VgcConstants.SpriteRegBase + VgcConstants.SprRegXLo));
+        Assert.AreEqual(0x01, _vgc.Read(VgcConstants.SpriteRegBase + VgcConstants.SprRegXHi));
+        Assert.AreEqual(0x50, _vgc.Read(VgcConstants.SpriteRegBase + VgcConstants.SprRegYLo));
+        Assert.AreEqual(0x00, _vgc.Read(VgcConstants.SpriteRegBase + VgcConstants.SprRegYHi));
+    }
+
+    [TestMethod]
+    public void SpriteReg_ReadFlags_CompositeOfEnableAndFlip()
+    {
+        // Enable sprite 0 and set xFlip via commands
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0x01);  // xFlip
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprFlip);
+
+        byte flags = _vgc.Read(VgcConstants.SpriteRegBase + VgcConstants.SprRegFlags);
+        Assert.AreEqual(VgcConstants.SprFlagEnable | VgcConstants.SprFlagXFlip, flags);
+    }
+
+    [TestMethod]
+    public void SpriteReg_ReadShapeIndex_ReturnsDefault()
+    {
+        Assert.AreEqual(3, _vgc.Read(VgcConstants.SpriteRegBase + 3 * VgcConstants.SpriteRegStride + VgcConstants.SprRegShape));
+    }
+
+    [TestMethod]
+    public void SpriteReg_ReadWriteRoundTrip()
+    {
+        int addr = VgcConstants.SpriteRegBase + 5 * VgcConstants.SpriteRegStride;
+        _vgc.Write(addr + VgcConstants.SprRegXLo, 0xAB);
+        _vgc.Write(addr + VgcConstants.SprRegXHi, 0x00);
+        _vgc.Write(addr + VgcConstants.SprRegShape, 200);
+        _vgc.Write(addr + VgcConstants.SprRegPriority, 1);
+
+        Assert.AreEqual(0xAB, _vgc.Read(addr + VgcConstants.SprRegXLo));
+        Assert.AreEqual(0x00, _vgc.Read(addr + VgcConstants.SprRegXHi));
+        Assert.AreEqual(200, _vgc.Read(addr + VgcConstants.SprRegShape));
+        Assert.AreEqual(1, _vgc.Read(addr + VgcConstants.SprRegPriority));
+    }
+
     // -- Copper ---------------------------------------------------------------
 
     [TestMethod]

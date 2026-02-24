@@ -177,6 +177,10 @@ public class VirtualGraphicsController
         if (address >= VgcConstants.CharRamBase && address <= VgcConstants.CharRamEnd)
             return _screenRam[address - VgcConstants.CharRamBase];
 
+        // Sprite registers $A040-$A0BF
+        if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
+            return ReadSpriteRegister(address);
+
         // Command parameter registers $A011-$A01E
         if (address >= VgcConstants.RegP0 && address <= VgcConstants.RegP13)
             return _cmdRegs[address - VgcConstants.RegCmd];
@@ -476,6 +480,28 @@ public class VirtualGraphicsController
                 _spritePriority[sprite] = (byte)Math.Min((int)data, 2);
                 break;
         }
+    }
+
+    private byte ReadSpriteRegister(int address)
+    {
+        int offset = address - VgcConstants.SpriteRegBase;
+        int sprite = offset / VgcConstants.SpriteRegStride;
+        int field = offset % VgcConstants.SpriteRegStride;
+
+        if ((uint)sprite >= VgcConstants.MaxSprites) return 0;
+
+        return field switch
+        {
+            VgcConstants.SprRegXLo => (byte)(_spriteX[sprite] & 0xFF),
+            VgcConstants.SprRegXHi => (byte)((_spriteX[sprite] >> 8) & 0xFF),
+            VgcConstants.SprRegYLo => (byte)(_spriteY[sprite] & 0xFF),
+            VgcConstants.SprRegYHi => (byte)((_spriteY[sprite] >> 8) & 0xFF),
+            VgcConstants.SprRegShape => _spriteShapeIndex[sprite],
+            VgcConstants.SprRegFlags => (byte)((_spriteEnabled[sprite] ? VgcConstants.SprFlagEnable : 0)
+                                             | (_spriteFlags[sprite] & VgcConstants.SprFlagFlipMask)),
+            VgcConstants.SprRegPriority => _spritePriority[sprite],
+            _ => 0
+        };
     }
 
     public void CopySpriteSlot(int src, int dest)
