@@ -886,4 +886,50 @@ public class AvaloniaVgcTests
         _vgc.IncrementFrameCounter();
         Assert.AreEqual(0, _vgc.GetCopperProgram().Length);
     }
+
+    // -- SpriteRenderState ----------------------------------------------------
+
+    [TestMethod]
+    public void SpriteRenderState_SnapshotFromVgc_CapturesAllSprites()
+    {
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegFlags, VgcConstants.SprFlagEnable);
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegXLo, 100);
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegShape, 5);
+
+        var state = SpriteRenderState.FromVgc(_vgc);
+        Assert.IsTrue(state.IsEnabled(0));
+        Assert.AreEqual(100, state.GetX(0));
+        Assert.AreEqual(5, state.GetShapeIndex(0));
+    }
+
+    [TestMethod]
+    public void SpriteRenderState_Apply_UpdatesSpriteFields()
+    {
+        var state = SpriteRenderState.FromVgc(_vgc);
+        byte regIndex = (byte)(VgcConstants.SpriteRegBase - VgcConstants.VgcBase + VgcConstants.SprRegShape);
+
+        state.Apply(regIndex, 42);
+        Assert.AreEqual(42, state.GetShapeIndex(0));
+    }
+
+    [TestMethod]
+    public void SpriteRenderState_Apply_EnableViaFlags()
+    {
+        var state = SpriteRenderState.FromVgc(_vgc);
+        byte regIndex = (byte)(VgcConstants.SpriteRegBase - VgcConstants.VgcBase + VgcConstants.SprRegFlags);
+
+        state.Apply(regIndex, VgcConstants.SprFlagEnable | VgcConstants.SprFlagXFlip);
+        Assert.IsTrue(state.IsEnabled(0));
+        Assert.IsTrue(state.IsXFlip(0));
+    }
+
+    [TestMethod]
+    public void SpriteRenderState_IsSpriteRegister_TrueForSpriteRange()
+    {
+        byte sprRegBase = (byte)(VgcConstants.SpriteRegBase - VgcConstants.VgcBase);
+        Assert.IsTrue(SpriteRenderState.IsSpriteRegister(sprRegBase));
+        Assert.IsTrue(SpriteRenderState.IsSpriteRegister((byte)(sprRegBase + 127))); // last sprite reg
+        Assert.IsFalse(SpriteRenderState.IsSpriteRegister(0));  // VGC mode register
+        Assert.IsFalse(SpriteRenderState.IsSpriteRegister(5));  // VGC scroll
+    }
 }

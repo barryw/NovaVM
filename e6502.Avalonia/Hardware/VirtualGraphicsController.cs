@@ -433,6 +433,8 @@ public class VirtualGraphicsController
     public ReadOnlySpan<byte> GetSpriteShapeBySlot(int slotIndex) =>
         _spriteShapes.AsSpan(slotIndex * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
 
+    public ReadOnlySpan<byte> GetSpriteShapeRam() => _spriteShapes;
+
     public void SetSpritePixelInSlot(int slotIndex, int x, int y, byte color)
     {
         if ((uint)slotIndex >= VgcConstants.ShapeSlotCount || (uint)x >= 16 || (uint)y >= 16) return;
