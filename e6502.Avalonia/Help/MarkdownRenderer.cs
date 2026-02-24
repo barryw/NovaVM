@@ -5,6 +5,7 @@ using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -34,6 +35,9 @@ public sealed class MarkdownRenderer
         // See also
         if (topic.SeeAlso.Count > 0)
             stack.Children.Add(CreateSeeAlso(topic.SeeAlso));
+
+        // Bottom spacer so last content isn't clipped at scroll boundary
+        stack.Children.Add(new Border { Height = 40 });
 
         return stack;
     }
@@ -252,13 +256,19 @@ public sealed class MarkdownRenderer
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(HelpStyles.CornerRadius),
             Padding = new Thickness(HelpStyles.CodeBlockPadding),
-            Child = new TextBlock
+            ClipToBounds = true,
+            Child = new ScrollViewer
             {
-                Text = code,
-                FontFamily = new FontFamily(HelpStyles.MonoFontFamily),
-                FontSize = HelpStyles.FontSizeCode,
-                Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
-                TextWrapping = TextWrapping.NoWrap
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = new TextBlock
+                {
+                    Text = code,
+                    FontFamily = new FontFamily(HelpStyles.MonoFontFamily),
+                    FontSize = HelpStyles.FontSizeCode,
+                    Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
+                    TextWrapping = TextWrapping.NoWrap
+                }
             }
         };
     }
@@ -350,13 +360,18 @@ public sealed class MarkdownRenderer
         }
 
         var stack = new StackPanel { Spacing = 8 };
-        stack.Children.Add(new TextBlock
+        stack.Children.Add(new ScrollViewer
         {
-            Text = code,
-            FontFamily = new FontFamily(HelpStyles.MonoFontFamily),
-            FontSize = HelpStyles.FontSizeCode,
-            Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
-            TextWrapping = TextWrapping.NoWrap
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = new TextBlock
+            {
+                Text = code,
+                FontFamily = new FontFamily(HelpStyles.MonoFontFamily),
+                FontSize = HelpStyles.FontSizeCode,
+                Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
+                TextWrapping = TextWrapping.NoWrap
+            }
         });
 
         var button = new Button
@@ -409,7 +424,8 @@ public sealed class MarkdownRenderer
         var colCount = rows.Max(r => r.Length);
 
         for (var c = 0; c < colCount; c++)
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(
+                c < colCount - 1 ? GridLength.Auto : new GridLength(1, GridUnitType.Star)));
 
         for (var r = 0; r < rows.Count; r++)
         {
@@ -467,14 +483,17 @@ public sealed class MarkdownRenderer
             if (!trimmed.StartsWith("- ") && !trimmed.StartsWith("* ")) break;
 
             var text = trimmed[2..].Trim();
-            var item = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            item.Children.Add(new TextBlock
+            var item = new DockPanel();
+            var bullet = new TextBlock
             {
                 Text = "\u2022",
                 FontSize = HelpStyles.FontSizeBody,
                 Foreground = new SolidColorBrush(HelpStyles.TextSecondary),
-                VerticalAlignment = VerticalAlignment.Top
-            });
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+            DockPanel.SetDock(bullet, global::Avalonia.Controls.Dock.Left);
+            item.Children.Add(bullet);
             item.Children.Add(CreateFormattedTextBlock(text));
             stack.Children.Add(item);
             i++;

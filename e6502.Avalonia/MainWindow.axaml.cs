@@ -335,6 +335,9 @@ public partial class MainWindow : Window
             var currentContent = Content as Control;
             if (currentContent == null) return;
 
+            if (OperatingSystem.IsMacOS())
+                ClearMacAspectRatio();
+
             Content = null;
 
             var grid = new Grid();
@@ -385,6 +388,9 @@ public partial class MainWindow : Window
 
         _helpVisible = false;
         Width -= 354;
+
+        if (OperatingSystem.IsMacOS())
+            SetMacAspectRatio();
     }
 
     private void ToggleHelpPanel()

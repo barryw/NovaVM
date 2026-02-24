@@ -35,9 +35,9 @@ public sealed class HelpPanel : UserControl
         _renderer.TryThisClicked += code => TryThisRequested?.Invoke(code);
         _renderer.LinkClicked += NavigateToTopic;
 
-        Width = 350;
         MinWidth = 280;
         MaxWidth = 500;
+        ClipToBounds = true;
         Background = new SolidColorBrush(HelpStyles.Background);
 
         var root = new DockPanel();
@@ -67,12 +67,16 @@ public sealed class HelpPanel : UserControl
         DockPanel.SetDock(filterContainer, global::Avalonia.Controls.Dock.Top);
         root.Children.Add(filterContainer);
 
-        // Content area
-        _contentArea = new StackPanel { Spacing = HelpStyles.SectionSpacing };
+        // Content area — padding on the StackPanel, not the ScrollViewer,
+        // so the vertical scrollbar doesn't eat into content width.
+        _contentArea = new StackPanel
+        {
+            Spacing = HelpStyles.SectionSpacing,
+            Margin = new Thickness(HelpStyles.PanelPadding, HelpStyles.PanelPadding, HelpStyles.PanelPadding + 2, HelpStyles.PanelPadding)
+        };
         _contentScroll = new ScrollViewer
         {
             Content = _contentArea,
-            Padding = new Thickness(HelpStyles.PanelPadding),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
         root.Children.Add(_contentScroll);

@@ -142,7 +142,14 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_blitter.OwnsAddress(address)) { _blitter.Write(address, data); return; }
         if (_xmc.OwnsAddress(address)) { _xmc.Write(address, data); return; }
         if (_fio.OwnsAddress(address)) { _fio.Write(address, data); return; }
-        // Help system register — intercept before VGC since $A020 falls in VGC range
+        // Help system registers — intercept before VGC since $A020-$A030 falls in VGC range.
+        // Buffer writes ($A021-$A030) must land in _ram so the trigger read can find them.
+        if (address >= VgcConstants.HelpSearchBuffer &&
+            address < VgcConstants.HelpSearchBuffer + VgcConstants.HelpSearchBufferLen)
+        {
+            _ram[address] = data;
+            return;
+        }
         if (address == VgcConstants.RegHelp)
         {
             if (data == 0x01)

@@ -295,7 +295,7 @@ IrqBase           = $DF       ; IRQ handler enabled/setup/triggered flags
 
 ; *** removed unused comments for $DE-$E1
 
-;                 = $E2       ; unused
+help_len          = $E2       ; scratch byte for HELP command keyword length
 ;                 = $E3       ; unused
 ;                 = $E4       ; unused
 ;                 = $E5       ; unused
@@ -7732,7 +7732,7 @@ LAB_HELP
       CPY   #$10              ; max 16 chars
       BCC   @raw_loop
 @raw_done
-      STY   @help_len          ; save how many we wrote
+      STY   help_len          ; save how many we wrote
       ; advance BASIC pointer past the chars we consumed
       TYA
       CLC
@@ -7745,7 +7745,9 @@ LAB_HELP
 
       ; --- Primary token: detokenize via LAB_KEYT table ---
 @pri_token
-      JSR   LAB_IGBY          ; consume the token byte, A = token
+      PHA                     ; save token (LAB_GBYT returned it in A)
+      JSR   LAB_IGBY          ; consume the token byte (advances Bpntrl)
+      PLA                     ; restore token to A
       ; use LAB_KEYT lookup (same method as LIST decoder)
       LDX   #>LAB_KEYT        ; table high byte
       ASL                     ; *2 (shifts out bit 7 into carry)
@@ -7762,7 +7764,7 @@ LAB_HELP
       STX   ut2_ph
       LDY   #$00
       LDA   (ut2_pl),Y        ; byte 0 = keyword length
-      STA   @help_len          ; total chars to copy
+      STA   help_len          ; total chars to copy
       INY
       LDA   (ut2_pl),Y        ; byte 1 = first character
       STA   $A021             ; store first char in buffer
@@ -7775,12 +7777,12 @@ LAB_HELP
       PLA
       STA   ut2_pl            ; ut2 now points to remaining chars
 
-      LDX   @help_len          ; total keyword length
+      LDX   help_len          ; total keyword length
       DEX                     ; remaining chars = length - 1
       LDY   #$00              ; index into remaining chars
       LDX   #$01              ; buffer write index (char 0 already written)
 @pk_copy
-      CPX   @help_len
+      CPX   help_len
       BCS   @pk_done           ; copied all chars
       LDA   (ut2_pl),Y        ; get next keyword char
       AND   #$7F              ; clear bit 7 (last char in cruncher table has it set)
@@ -7790,7 +7792,7 @@ LAB_HELP
       CPX   #$10              ; buffer max
       BCC   @pk_copy
 @pk_done
-      STX   @help_len          ; actual chars written
+      STX   help_len          ; actual chars written
       JMP   @zero_and_trigger
 
       ; --- Extended token: look up in TAB_XTKSTR ---
@@ -7824,7 +7826,7 @@ LAB_HELP
       CPY   #$10              ; buffer max
       BCC   @xt_copy
 @xt_done
-      STY   @help_len
+      STY   help_len
       JMP   @zero_and_trigger
 
       ; --- Quoted string: use expression evaluator ---
@@ -7836,7 +7838,7 @@ LAB_HELP
       BCC   @sl_ok
       LDY   #$10              ; clamp to 16
 @sl_ok
-      STY   @help_len
+      STY   help_len
       DEY
 @sl_copy
       BMI   @sl_done
@@ -7849,7 +7851,7 @@ LAB_HELP
 
       ; --- Zero-fill remainder and trigger search ---
 @zero_and_trigger
-      LDY   @help_len
+      LDY   help_len
 @zero_loop
       CPY   #$10
       BCS   @trigger_search
@@ -7867,8 +7869,6 @@ LAB_HELP
       STA   $A020             ; RegHelp
       RTS
 
-@help_len
-      .byte $00
 
 ; perform BITTST(addr, mask) — returns -1 if ALL masked bits set, else 0
 
