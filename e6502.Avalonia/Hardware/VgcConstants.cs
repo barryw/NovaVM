@@ -379,6 +379,31 @@ public static class VgcConstants
     public const int SpritePriBetween   = 1;
     public const int SpritePriInFront   = 2;
 
+    // Sprite register block: $A040-$A0BF (8 bytes per sprite, 16 sprites)
+    public const int SpriteRegBase    = 0xA040;
+    public const int SpriteRegEnd     = 0xA0BF;
+    public const int SpriteRegStride  = 8;
+
+    // Per-sprite register offsets within each 8-byte block
+    public const int SprRegXLo        = 0;
+    public const int SprRegXHi        = 1;
+    public const int SprRegYLo        = 2;
+    public const int SprRegYHi        = 3;
+    public const int SprRegShape      = 4;
+    public const int SprRegFlags      = 5;  // bit0=xFlip, bit1=yFlip, bit7=enable
+    public const int SprRegPriority   = 6;
+    public const int SprRegReserved   = 7;
+
+    // Sprite flags bitmasks
+    public const byte SprFlagXFlip    = 0x01;
+    public const byte SprFlagYFlip    = 0x02;
+    public const byte SprFlagFlipMask = 0x03;
+    public const byte SprFlagEnable   = 0x80;
+
+    // Expanded shape slot storage
+    public const int ShapeSlotCount   = 256;
+    public const int ShapeRamSize     = ShapeSlotCount * SpriteShapeSize;  // 32768
+
     // -------------------------------------------------------------------------
     // VGC core registers ($A000-$A00F)
     // -------------------------------------------------------------------------
