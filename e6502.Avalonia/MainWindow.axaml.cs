@@ -379,7 +379,7 @@ public partial class MainWindow : Window
 
         if (emulatorContent != null)
         {
-            grid.Children.Remove(emulatorContent);
+            grid.Children.Clear();
             Content = emulatorContent;
         }
 
