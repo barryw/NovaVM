@@ -14,16 +14,18 @@ public interface IScreenInput
 /// <summary>
 /// Virtual Graphics Controller for the Avalonia renderer.
 /// Manages text display (80x25), block graphics (320x200), and multicolor sprites
-/// (16 sprites, 16x16 pixels, 4-bit color per pixel).
+/// (16 sprites, 16x16 pixels, 4-bit color per pixel, 256 shape slots).
 ///
 /// Address ownership:
-///   $A000-$A01E  VGC registers + command interface
-///   $A040-$A0BF  Sprite registers (16 sprites x 8 bytes each)
+///   $A000-$A01F  VGC registers + command interface
+///   $A040-$A0BF  Sprite registers (8 bytes × 16 sprites)
 ///   $AA00-$B1CF  Character RAM (2000 bytes)
 ///   $B1D0-$B99F  Color RAM (2000 bytes)
 ///
-/// Sprite shape data is host-side only (not 6502-addressable).
-/// Sprite state can be set via registers at $A040-$A0BF or commands at $A010.
+/// Sprite shape data stored in 256 × 128-byte slots (32KB), accessible via
+/// memory space I/O and DMA. Each sprite has a shape index register pointing
+/// to its active shape slot. The copper can write sprite registers at scanline
+/// granularity for vertical sprite multiplexing.
 /// </summary>
 public class VirtualGraphicsController
 {
