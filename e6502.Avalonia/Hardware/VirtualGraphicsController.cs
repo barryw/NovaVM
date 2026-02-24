@@ -49,7 +49,7 @@ public class VirtualGraphicsController
     // Sprite shape data: 16 sprites x 128 bytes each (4-bit color, 16x16 pixels)
     // Accessed from CPU thread (bus writes/commands) and UI thread (renderer, sprite editor).
     // All mutations must hold _spriteShapeLock.
-    private readonly byte[] _spriteShapes = new byte[VgcConstants.MaxSprites * VgcConstants.SpriteShapeSize];
+    private readonly byte[] _spriteShapes = new byte[VgcConstants.ShapeRamSize];
     private readonly object _spriteShapeLock = new();
 
     // Sprite state arrays (host-side, not bus-mapped)
@@ -58,6 +58,7 @@ public class VirtualGraphicsController
     private readonly int[] _spriteY = new int[VgcConstants.MaxSprites];
     private readonly byte[] _spriteFlags = new byte[VgcConstants.MaxSprites];
     private readonly byte[] _spritePriority = new byte[VgcConstants.MaxSprites];
+    private readonly byte[] _spriteShapeIndex = new byte[VgcConstants.MaxSprites];
 
     // Screen RAM (2000 bytes, 80x25)
     private readonly byte[] _screenRam = new byte[VgcConstants.ScreenSize];
@@ -120,6 +121,10 @@ public class VirtualGraphicsController
 
         // Default sprite priority: in front of all
         Array.Fill(_spritePriority, (byte)VgcConstants.SpritePriInFront);
+
+        // Default shape index: sprite N uses slot N
+        for (int i = 0; i < VgcConstants.MaxSprites; i++)
+            _spriteShapeIndex[i] = (byte)i;
 
         // Screen RAM initialized to spaces
         Array.Fill(_screenRam, (byte)0x20);
@@ -342,7 +347,7 @@ public class VirtualGraphicsController
         _gfxBitmap[y * VgcConstants.GfxWidth + x];
 
     public ReadOnlySpan<byte> GetSpriteShape(int index) =>
-        _spriteShapes.AsSpan(index * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
+        _spriteShapes.AsSpan(_spriteShapeIndex[index] * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
 
     /// <summary>
     /// Copies sprite shape data under lock. Safe for cross-thread reads.
@@ -350,7 +355,7 @@ public class VirtualGraphicsController
     public void CopySpriteShape(int index, Span<byte> destination)
     {
         lock (_spriteShapeLock)
-            _spriteShapes.AsSpan(index * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize)
+            _spriteShapes.AsSpan(_spriteShapeIndex[index] * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize)
                 .CopyTo(destination);
     }
 
@@ -361,7 +366,7 @@ public class VirtualGraphicsController
     public void SetSpritePixel(int spriteIndex, int x, int y, byte color)
     {
         if ((uint)spriteIndex >= VgcConstants.MaxSprites || (uint)x >= 16 || (uint)y >= 16) return;
-        int byteIdx = spriteIndex * VgcConstants.SpriteShapeSize + y * VgcConstants.SpriteBytesPerRow + x / 2;
+        int byteIdx = _spriteShapeIndex[spriteIndex] * VgcConstants.SpriteShapeSize + y * VgcConstants.SpriteBytesPerRow + x / 2;
         lock (_spriteShapeLock)
         {
             if (x % 2 == 0)
@@ -401,13 +406,37 @@ public class VirtualGraphicsController
         _spritePriority[index] = (byte)Math.Min((int)priority, 2);
     }
 
+    public byte GetSpriteShapeIndex(int index) => _spriteShapeIndex[index];
+
+    public void SetSpriteShapeIndex(int index, byte slotIndex)
+    {
+        if ((uint)index >= VgcConstants.MaxSprites) return;
+        _spriteShapeIndex[index] = slotIndex;
+    }
+
+    public ReadOnlySpan<byte> GetSpriteShapeBySlot(int slotIndex) =>
+        _spriteShapes.AsSpan(slotIndex * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
+
+    public void SetSpritePixelInSlot(int slotIndex, int x, int y, byte color)
+    {
+        if ((uint)slotIndex >= VgcConstants.ShapeSlotCount || (uint)x >= 16 || (uint)y >= 16) return;
+        int byteIdx = slotIndex * VgcConstants.SpriteShapeSize + y * VgcConstants.SpriteBytesPerRow + x / 2;
+        lock (_spriteShapeLock)
+        {
+            if (x % 2 == 0)
+                _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0x0F) | ((color & 0x0F) << 4));
+            else
+                _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0xF0) | (color & 0x0F));
+        }
+    }
+
     public void CopySpriteSlot(int src, int dest)
     {
         if ((uint)src >= VgcConstants.MaxSprites || (uint)dest >= VgcConstants.MaxSprites) return;
         lock (_spriteShapeLock)
         {
-            Array.Copy(_spriteShapes, src * VgcConstants.SpriteShapeSize,
-                       _spriteShapes, dest * VgcConstants.SpriteShapeSize,
+            Array.Copy(_spriteShapes, _spriteShapeIndex[src] * VgcConstants.SpriteShapeSize,
+                       _spriteShapes, _spriteShapeIndex[dest] * VgcConstants.SpriteShapeSize,
                        VgcConstants.SpriteShapeSize);
         }
     }
@@ -416,7 +445,7 @@ public class VirtualGraphicsController
     {
         if ((uint)index >= VgcConstants.MaxSprites) return;
         lock (_spriteShapeLock)
-            Array.Clear(_spriteShapes, index * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
+            Array.Clear(_spriteShapes, _spriteShapeIndex[index] * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
     }
 
     // -------------------------------------------------------------------------
@@ -548,7 +577,7 @@ public class VirtualGraphicsController
                 int y = _cmdRegs[3];
                 byte color = _cmdRegs[4];
                 if (sprite >= VgcConstants.MaxSprites || x >= 16 || y >= 16) return;
-                int byteIdx = sprite * VgcConstants.SpriteShapeSize + y * VgcConstants.SpriteBytesPerRow + x / 2;
+                int byteIdx = _spriteShapeIndex[sprite] * VgcConstants.SpriteShapeSize + y * VgcConstants.SpriteBytesPerRow + x / 2;
                 lock (_spriteShapeLock)
                 {
                     if (x % 2 == 0)
@@ -563,7 +592,7 @@ public class VirtualGraphicsController
                 int sprite = p0;
                 int row = _cmdRegs[2];
                 if (sprite >= VgcConstants.MaxSprites || row >= 16) return;
-                int baseIdx = sprite * VgcConstants.SpriteShapeSize + row * VgcConstants.SpriteBytesPerRow;
+                int baseIdx = _spriteShapeIndex[sprite] * VgcConstants.SpriteShapeSize + row * VgcConstants.SpriteBytesPerRow;
                 lock (_spriteShapeLock)
                 {
                     for (int i = 0; i < VgcConstants.SpriteBytesPerRow; i++)
@@ -575,7 +604,7 @@ public class VirtualGraphicsController
             {
                 if (p0 >= VgcConstants.MaxSprites) return;
                 lock (_spriteShapeLock)
-                    Array.Clear(_spriteShapes, p0 * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
+                    Array.Clear(_spriteShapes, _spriteShapeIndex[p0] * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
                 break;
             }
             case VgcConstants.CmdSprCopy:
@@ -584,8 +613,8 @@ public class VirtualGraphicsController
                 if (p0 >= VgcConstants.MaxSprites || dest >= VgcConstants.MaxSprites) return;
                 lock (_spriteShapeLock)
                 {
-                    Array.Copy(_spriteShapes, p0 * VgcConstants.SpriteShapeSize,
-                               _spriteShapes, dest * VgcConstants.SpriteShapeSize,
+                    Array.Copy(_spriteShapes, _spriteShapeIndex[p0] * VgcConstants.SpriteShapeSize,
+                               _spriteShapes, _spriteShapeIndex[dest] * VgcConstants.SpriteShapeSize,
                                VgcConstants.SpriteShapeSize);
                 }
                 break;

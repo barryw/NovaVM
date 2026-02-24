@@ -623,6 +623,50 @@ public class AvaloniaVgcTests
         Assert.AreEqual(9, program[0].Value);
     }
 
+    // -- Shape slot expansion ---------------------------------------------------
+
+    [TestMethod]
+    public void ShapeSlots_DefaultShapeIndexMatchesSpriteIndex()
+    {
+        for (int i = 0; i < VgcConstants.MaxSprites; i++)
+            Assert.AreEqual(i, _vgc.GetSpriteShapeIndex(i),
+                $"Sprite {i} should default to shape slot {i}");
+    }
+
+    [TestMethod]
+    public void ShapeSlots_SetShapeIndex_ChangesShapeUsed()
+    {
+        // Write a pixel to shape slot 5
+        _vgc.SetSpritePixelInSlot(5, 0, 0, 0x0A);
+
+        // Point sprite 0 at slot 5
+        _vgc.SetSpriteShapeIndex(0, 5);
+
+        // GetSpriteShape(0) should now return slot 5's data
+        var shape = _vgc.GetSpriteShape(0);
+        Assert.AreEqual(0xA0, shape[0], "High nibble should be 0xA for color 10");
+    }
+
+    [TestMethod]
+    public void ShapeSlots_CanAccessSlot255()
+    {
+        _vgc.SetSpritePixelInSlot(255, 0, 0, 0x07);
+        _vgc.SetSpriteShapeIndex(0, 255);
+        var shape = _vgc.GetSpriteShape(0);
+        Assert.AreEqual(0x70, shape[0]);
+    }
+
+    [TestMethod]
+    public void ShapeSlots_GetShapeBySlot_ReturnsCorrectData()
+    {
+        _vgc.SetSpritePixelInSlot(42, 3, 0, 0x0C);
+        var shape = _vgc.GetSpriteShapeBySlot(42);
+        // Pixel at x=3 (odd) -> low nibble of byte 1
+        Assert.AreEqual(0x0C, shape[1] & 0x0F);
+    }
+
+    // -- Copper ---------------------------------------------------------------
+
     [TestMethod]
     public void Copper_Program_IsSortedByRasterPosition()
     {
