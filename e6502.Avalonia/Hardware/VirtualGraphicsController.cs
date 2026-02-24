@@ -54,6 +54,7 @@ public class VirtualGraphicsController
     // All mutations must hold _spriteShapeLock.
     private readonly byte[] _spriteShapes = new byte[VgcConstants.ShapeRamSize];
     private readonly object _spriteShapeLock = new();
+    private volatile bool _spriteShapesDirty;
 
     // Sprite state arrays (host-side, not bus-mapped)
     private readonly bool[] _spriteEnabled = new bool[VgcConstants.MaxSprites];
@@ -62,6 +63,7 @@ public class VirtualGraphicsController
     private readonly byte[] _spriteFlags = new byte[VgcConstants.MaxSprites];
     private readonly byte[] _spritePriority = new byte[VgcConstants.MaxSprites];
     private readonly byte[] _spriteShapeIndex = new byte[VgcConstants.MaxSprites];
+    private readonly byte[] _spriteTransColor = new byte[VgcConstants.MaxSprites];
 
     // Screen RAM (2000 bytes, 80x25)
     private readonly byte[] _screenRam = new byte[VgcConstants.ScreenSize];
@@ -101,10 +103,12 @@ public class VirtualGraphicsController
         Array.Clear(_regs);
         Array.Clear(_cmdRegs);
         Array.Clear(_spriteShapes);
+        _spriteShapesDirty = true;
         Array.Clear(_spriteEnabled);
         Array.Clear(_spriteX);
         Array.Clear(_spriteY);
         Array.Clear(_spriteFlags);
+        Array.Clear(_spriteTransColor);
         Array.Clear(_gfxBitmap);
         _gfxDrawColor = 1;
         _irqCtrl = 0;
@@ -391,6 +395,7 @@ public class VirtualGraphicsController
                 _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0x0F) | ((color & 0x0F) << 4));
             else
                 _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0xF0) | (color & 0x0F));
+            _spriteShapesDirty = true;
         }
     }
 
@@ -425,6 +430,13 @@ public class VirtualGraphicsController
     }
 
     public byte GetSpriteShapeIndex(int index) => _spriteShapeIndex[index];
+    public byte GetSpriteTransColor(int index) => _spriteTransColor[index];
+
+    public void SetSpriteTransColor(int index, byte color)
+    {
+        if ((uint)index >= VgcConstants.MaxSprites) return;
+        _spriteTransColor[index] = color;
+    }
 
     public void SetSpriteShapeIndex(int index, byte slotIndex)
     {
@@ -437,6 +449,21 @@ public class VirtualGraphicsController
 
     public ReadOnlySpan<byte> GetSpriteShapeRam() => _spriteShapes;
 
+    /// <summary>
+    /// Copies sprite shape RAM into the caller's buffer under lock if shapes have changed.
+    /// Returns true when a copy was performed; false means the buffer is still current.
+    /// </summary>
+    public bool SnapshotSpriteShapes(byte[] buffer)
+    {
+        if (!_spriteShapesDirty) return false;
+        lock (_spriteShapeLock)
+        {
+            Array.Copy(_spriteShapes, buffer, _spriteShapes.Length);
+            _spriteShapesDirty = false;
+        }
+        return true;
+    }
+
     public void SetSpritePixelInSlot(int slotIndex, int x, int y, byte color)
     {
         if ((uint)slotIndex >= VgcConstants.ShapeSlotCount || (uint)x >= 16 || (uint)y >= 16) return;
@@ -447,6 +474,7 @@ public class VirtualGraphicsController
                 _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0x0F) | ((color & 0x0F) << 4));
             else
                 _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0xF0) | (color & 0x0F));
+            _spriteShapesDirty = true;
         }
     }
 
@@ -483,6 +511,9 @@ public class VirtualGraphicsController
             case VgcConstants.SprRegPriority:
                 _spritePriority[sprite] = (byte)Math.Min((int)data, 2);
                 break;
+            case VgcConstants.SprRegTransColor:
+                _spriteTransColor[sprite] = data;
+                break;
         }
     }
 
@@ -504,6 +535,7 @@ public class VirtualGraphicsController
             VgcConstants.SprRegFlags => (byte)((_spriteEnabled[sprite] ? VgcConstants.SprFlagEnable : 0)
                                              | (_spriteFlags[sprite] & VgcConstants.SprFlagFlipMask)),
             VgcConstants.SprRegPriority => _spritePriority[sprite],
+            VgcConstants.SprRegTransColor => _spriteTransColor[sprite],
             _ => 0
         };
     }
@@ -516,6 +548,7 @@ public class VirtualGraphicsController
             Array.Copy(_spriteShapes, _spriteShapeIndex[src] * VgcConstants.SpriteShapeSize,
                        _spriteShapes, _spriteShapeIndex[dest] * VgcConstants.SpriteShapeSize,
                        VgcConstants.SpriteShapeSize);
+            _spriteShapesDirty = true;
         }
     }
 
@@ -523,7 +556,10 @@ public class VirtualGraphicsController
     {
         if ((uint)index >= VgcConstants.MaxSprites) return;
         lock (_spriteShapeLock)
+        {
             Array.Clear(_spriteShapes, _spriteShapeIndex[index] * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
+            _spriteShapesDirty = true;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -662,6 +698,7 @@ public class VirtualGraphicsController
                         _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0x0F) | ((color & 0x0F) << 4));
                     else
                         _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0xF0) | (color & 0x0F));
+                    _spriteShapesDirty = true;
                 }
                 break;
             }
@@ -675,6 +712,7 @@ public class VirtualGraphicsController
                 {
                     for (int i = 0; i < VgcConstants.SpriteBytesPerRow; i++)
                         _spriteShapes[baseIdx + i] = _cmdRegs[3 + i];
+                    _spriteShapesDirty = true;
                 }
                 break;
             }
@@ -682,7 +720,10 @@ public class VirtualGraphicsController
             {
                 if (p0 >= VgcConstants.MaxSprites) return;
                 lock (_spriteShapeLock)
+                {
                     Array.Clear(_spriteShapes, _spriteShapeIndex[p0] * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
+                    _spriteShapesDirty = true;
+                }
                 break;
             }
             case VgcConstants.CmdSprCopy:
@@ -694,6 +735,7 @@ public class VirtualGraphicsController
                     Array.Copy(_spriteShapes, _spriteShapeIndex[p0] * VgcConstants.SpriteShapeSize,
                                _spriteShapes, _spriteShapeIndex[dest] * VgcConstants.SpriteShapeSize,
                                VgcConstants.SpriteShapeSize);
+                    _spriteShapesDirty = true;
                 }
                 break;
             }
@@ -813,7 +855,7 @@ public class VirtualGraphicsController
                 _gfxBitmap[addr] = value;
                 return true;
             case VgcConstants.MemSpaceSprite when (uint)addr < _spriteShapes.Length:
-                lock (_spriteShapeLock) _spriteShapes[addr] = value;
+                lock (_spriteShapeLock) { _spriteShapes[addr] = value; _spriteShapesDirty = true; }
                 return true;
             default:
                 return false;
@@ -929,10 +971,7 @@ public class VirtualGraphicsController
     private static bool IsCopperSpriteRegister(byte registerIndex)
     {
         int offset = registerIndex - (VgcConstants.SpriteRegBase - VgcConstants.VgcBase);
-        if (offset < 0 || offset >= VgcConstants.MaxSprites * VgcConstants.SpriteRegStride)
-            return false;
-        int field = offset % VgcConstants.SpriteRegStride;
-        return field != VgcConstants.SprRegReserved;  // all fields except reserved
+        return offset >= 0 && offset < VgcConstants.MaxSprites * VgcConstants.SpriteRegStride;
     }
 
 

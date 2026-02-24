@@ -352,4 +352,122 @@ public class AvaloniaSpriteRendererTests
             Assert.AreEqual(15, pixels[i].Color);
         }
     }
+
+    [TestMethod]
+    public void RasterizeScanline_CustomTransColor_BlackPixelsVisible()
+    {
+        // Set sprite 0 trans color = 15 (so color 0 / black is visible)
+        _vgc.SetSpriteTransColor(0, 15);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
+
+        // Row 0: pixels = color 0 (0x01 = high nibble 0, low nibble 1)
+        // Byte 0x01 gives pixel0=0, pixel1=1
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0x01); // pixel0=0(black), pixel1=1
+        for (int i = 3; i <= 9; i++) _vgc.Write((ushort)(VgcConstants.RegP0 + i), 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprRow);
+
+        var sprites = SpriteRenderState.FromVgc(_vgc);
+        var shapeRam = _vgc.GetSpriteShapeRam();
+        var behind = new byte[VgcConstants.GfxWidth];
+        var between = new byte[VgcConstants.GfxWidth];
+        var front = new byte[VgcConstants.GfxWidth];
+        var mask = new ushort[VgcConstants.GfxWidth];
+
+        SpriteRenderer.RasterizeScanline(0, sprites, shapeRam, behind, between, front, mask);
+
+        // Color 0 writes byte 0 to the buffer (indistinguishable from empty),
+        // but the sprite mask tracks participation.
+        Assert.AreNotEqual(0, mask[0], "Sprite mask should include pixel at x=0 (color 0, trans=15)");
+        Assert.AreNotEqual(0, mask[1], "Sprite mask should include pixel at x=1 (color 1, trans=15)");
+    }
+
+    [TestMethod]
+    public void RasterizeScanline_TransColor255_AllColorsOpaque()
+    {
+        // Set sprite 0 trans color = 255 (no transparency at all)
+        _vgc.SetSpriteTransColor(0, 255);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
+
+        // Row 0: all zeros = color 0 for all 16 pixels
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        for (int i = 2; i <= 9; i++) _vgc.Write((ushort)(VgcConstants.RegP0 + i), 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprRow);
+
+        var sprites = SpriteRenderState.FromVgc(_vgc);
+        var shapeRam = _vgc.GetSpriteShapeRam();
+        var behind = new byte[VgcConstants.GfxWidth];
+        var between = new byte[VgcConstants.GfxWidth];
+        var front = new byte[VgcConstants.GfxWidth];
+        var mask = new ushort[VgcConstants.GfxWidth];
+
+        SpriteRenderer.RasterizeScanline(0, sprites, shapeRam, behind, between, front, mask);
+
+        // All 16 pixels should have sprite mask set (even color 0 — no transparency)
+        for (int x = 0; x < 16; x++)
+            Assert.AreNotEqual(0, mask[x], $"Pixel at x={x} should be rendered (trans=255)");
+    }
+
+    [TestMethod]
+    public void GetSpritePixels_CustomTransColor_SkipsConfiguredColor()
+    {
+        // Set sprite 0 trans color = 5 (so color 5 is skipped, color 0 is visible)
+        _vgc.SetSpriteTransColor(0, 5);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
+
+        // Fill all 16 rows with color 5 (transparent) first
+        for (int row = 0; row < 16; row++)
+        {
+            _vgc.Write(VgcConstants.RegP0, 0);
+            _vgc.Write(VgcConstants.RegP1, (byte)row);
+            for (int i = 2; i <= 9; i++) _vgc.Write((ushort)(VgcConstants.RegP0 + i), 0x55);
+            _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprRow);
+        }
+
+        // Row 0: byte 0x05 = pixel0=color0, pixel1=color5(trans)
+        // byte 0x30 = pixel2=color3, pixel3=color0
+        // remaining bytes 0x55 = all color 5 (transparent)
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0x05); // pixel0=0, pixel1=5(trans)
+        _vgc.Write(VgcConstants.RegP3, 0x30); // pixel2=3, pixel3=0
+        for (int i = 4; i <= 9; i++) _vgc.Write((ushort)(VgcConstants.RegP0 + i), 0x55);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprRow);
+
+        var pixels = SpriteRenderer.GetSpritePixels(_vgc, 0);
+
+        // pixel0 (color 0) visible, pixel1 (color 5) skipped,
+        // pixel2 (color 3) visible, pixel3 (color 0) visible,
+        // remaining pixels all color 5 = transparent
+        Assert.AreEqual(3, pixels.Count);
+        Assert.AreEqual(0, pixels[0].Color);  // color 0 visible
+        Assert.AreEqual(0, pixels[0].ScreenX);
+        Assert.AreEqual(3, pixels[1].Color);  // color 3 visible
+        Assert.AreEqual(2, pixels[1].ScreenX);
+        Assert.AreEqual(0, pixels[2].Color);  // color 0 visible
+        Assert.AreEqual(3, pixels[2].ScreenX);
+    }
 }

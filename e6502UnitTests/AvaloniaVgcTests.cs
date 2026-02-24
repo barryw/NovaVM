@@ -861,16 +861,16 @@ public class AvaloniaVgcTests
     }
 
     [TestMethod]
-    public void Copper_RejectsReservedSpriteField()
+    public void Copper_AcceptsTransColorSpriteField()
     {
-        int regAddr = VgcConstants.SpriteRegBase + VgcConstants.SprRegReserved;
+        int regAddr = VgcConstants.SpriteRegBase + VgcConstants.SprRegTransColor;
         _vgc.Write(VgcConstants.RegP3, (byte)(regAddr & 0xFF));
         _vgc.Write(VgcConstants.RegP4, (byte)((regAddr >> 8) & 0xFF));
         _vgc.Write(VgcConstants.RegP5, 1);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
 
         _vgc.IncrementFrameCounter();
-        Assert.AreEqual(0, _vgc.GetCopperProgram().Length);
+        Assert.AreEqual(1, _vgc.GetCopperProgram().Length);
     }
 
     [TestMethod]
@@ -975,5 +975,26 @@ public class AvaloniaVgcTests
         byte v0 = program[0].Value, v1 = program[1].Value;
         Assert.IsTrue((v0 == 1 && v1 == 100) || (v0 == 100 && v1 == 1),
             $"Expected values 1 and 100 in copper program, got {v0} and {v1}");
+    }
+
+    [TestMethod]
+    public void SpriteTransColor_DefaultIsZero()
+    {
+        for (int i = 0; i < VgcConstants.MaxSprites; i++)
+            Assert.AreEqual(0, _vgc.GetSpriteTransColor(i));
+    }
+
+    [TestMethod]
+    public void SpriteTransColor_ReadWriteRegister()
+    {
+        // Write trans color = 5 to sprite 2 via bus register (+7)
+        int addr = VgcConstants.SpriteRegBase + 2 * VgcConstants.SpriteRegStride + VgcConstants.SprRegTransColor;
+        _vgc.Write((ushort)addr, 5);
+
+        Assert.AreEqual(5, _vgc.GetSpriteTransColor(2));
+        Assert.AreEqual(5, _vgc.Read((ushort)addr));
+
+        // Other sprites unchanged
+        Assert.AreEqual(0, _vgc.GetSpriteTransColor(0));
     }
 }

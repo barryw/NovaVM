@@ -27,6 +27,8 @@ public class EmulatorCanvas : Control
     private readonly byte[] _lineBetween = new byte[VgcConstants.GfxWidth];
     private readonly byte[] _lineFront = new byte[VgcConstants.GfxWidth];
     private readonly ushort[] _spriteMask = new ushort[VgcConstants.GfxWidth];
+    private readonly byte[] _shapeRamSnapshot = new byte[VgcConstants.ShapeRamSize];
+    private bool _shapeRamInitialized;
 
     public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor)
     {
@@ -224,7 +226,9 @@ public class EmulatorCanvas : Control
 
         var state = RenderVideoState.FromVgc(_vgc);
         var sprites = SpriteRenderState.FromVgc(_vgc);
-        ReadOnlySpan<byte> shapeRam = _vgc.GetSpriteShapeRam();
+        if (_vgc.SnapshotSpriteShapes(_shapeRamSnapshot) || !_shapeRamInitialized)
+            _shapeRamInitialized = true;
+        ReadOnlySpan<byte> shapeRam = _shapeRamSnapshot;
         int cursorX = _vgc.GetCursorX();
         int cursorY = _vgc.GetCursorY();
         bool cursorEnabled = _cursorVisible && _vgc.IsCursorEnabled;

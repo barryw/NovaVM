@@ -17,6 +17,7 @@ public static class SpriteRenderer
         if (!state.enabled) return [];
 
         ReadOnlySpan<byte> shape = vgc.GetSpriteShape(index);
+        byte transColor = vgc.GetSpriteTransColor(index);
         bool xFlip = (state.flags & 0x01) != 0;
         bool yFlip = (state.flags & 0x02) != 0;
 
@@ -35,7 +36,7 @@ public static class SpriteRenderer
                     ? (byte)((shape[byteIdx] >> 4) & 0x0F)
                     : (byte)(shape[byteIdx] & 0x0F);
 
-                if (color == 0) continue; // transparent
+                if (color == transColor) continue; // transparent
 
                 pixels.Add(new SpritePixel
                 {
@@ -97,7 +98,7 @@ public static class SpriteRenderer
                     ? (byte)((shapeRam[byteIdx] >> 4) & 0x0F)
                     : (byte)(shapeRam[byteIdx] & 0x0F);
 
-                if (color == 0) continue;
+                if (color == sprites.GetTransColor(i)) continue;
 
                 int screenX = sprites.GetX(i) + col;
                 if ((uint)screenX >= VgcConstants.GfxWidth) continue;

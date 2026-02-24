@@ -13,14 +13,16 @@ public struct SpriteRenderState
     private readonly byte[] _shapeIndex;
     private readonly byte[] _flags;     // bit0=xFlip, bit1=yFlip, bit7=enable
     private readonly byte[] _priority;
+    private readonly byte[] _transColor;
 
-    private SpriteRenderState(int[] x, int[] y, byte[] shapeIndex, byte[] flags, byte[] priority)
+    private SpriteRenderState(int[] x, int[] y, byte[] shapeIndex, byte[] flags, byte[] priority, byte[] transColor)
     {
         _x = x;
         _y = y;
         _shapeIndex = shapeIndex;
         _flags = flags;
         _priority = priority;
+        _transColor = transColor;
     }
 
     public static SpriteRenderState FromVgc(VirtualGraphicsController vgc)
@@ -31,6 +33,7 @@ public struct SpriteRenderState
         var shapeIndex = new byte[count];
         var flags = new byte[count];
         var priority = new byte[count];
+        var transColor = new byte[count];
 
         for (int i = 0; i < count; i++)
         {
@@ -41,15 +44,17 @@ public struct SpriteRenderState
             flags[i] = (byte)((s.enabled ? VgcConstants.SprFlagEnable : 0)
                               | (s.flags & VgcConstants.SprFlagFlipMask));
             priority[i] = s.priority;
+            transColor[i] = vgc.GetSpriteTransColor(i);
         }
 
-        return new SpriteRenderState(x, y, shapeIndex, flags, priority);
+        return new SpriteRenderState(x, y, shapeIndex, flags, priority, transColor);
     }
 
     public int GetX(int sprite) => _x[sprite];
     public int GetY(int sprite) => _y[sprite];
     public byte GetShapeIndex(int sprite) => _shapeIndex[sprite];
     public byte GetPriority(int sprite) => _priority[sprite];
+    public byte GetTransColor(int sprite) => _transColor[sprite];
     public bool IsEnabled(int sprite) => (_flags[sprite] & VgcConstants.SprFlagEnable) != 0;
     public bool IsXFlip(int sprite) => (_flags[sprite] & VgcConstants.SprFlagXFlip) != 0;
     public bool IsYFlip(int sprite) => (_flags[sprite] & VgcConstants.SprFlagYFlip) != 0;
@@ -85,6 +90,9 @@ public struct SpriteRenderState
                 break;
             case VgcConstants.SprRegPriority:
                 _priority[sprite] = (byte)Math.Min((int)value, 2);
+                break;
+            case VgcConstants.SprRegTransColor:
+                _transColor[sprite] = value;
                 break;
         }
     }
