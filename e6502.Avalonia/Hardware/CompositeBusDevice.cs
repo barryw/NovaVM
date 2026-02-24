@@ -36,6 +36,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public int FrameRateHz => _frameRateHz;
     public long TotalFrames => _totalFrames;
 
+    public event Action<string?>? HelpRequested;
 
     public CompositeBusDevice(
         bool enableSound = false,
@@ -141,6 +142,26 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_blitter.OwnsAddress(address)) { _blitter.Write(address, data); return; }
         if (_xmc.OwnsAddress(address)) { _xmc.Write(address, data); return; }
         if (_fio.OwnsAddress(address)) { _fio.Write(address, data); return; }
+        // Help system register — intercept before VGC since $A020 falls in VGC range
+        if (address == VgcConstants.RegHelp)
+        {
+            if (data == 0x01)
+            {
+                HelpRequested?.Invoke(null);
+            }
+            else if (data == 0x02)
+            {
+                var sb = new System.Text.StringBuilder();
+                for (var i = 0; i < VgcConstants.HelpSearchBufferLen; i++)
+                {
+                    var ch = _ram[VgcConstants.HelpSearchBuffer + i];
+                    if (ch == 0) break;
+                    sb.Append((char)ch);
+                }
+                HelpRequested?.Invoke(sb.ToString());
+            }
+            return;
+        }
         if (_vgc.OwnsAddress(address))
         {
             _vgc.Write(address, data);

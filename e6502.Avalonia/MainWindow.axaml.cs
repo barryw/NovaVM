@@ -53,6 +53,10 @@ public partial class MainWindow : Window
 
         _editor = new ScreenEditor(_bus.Vgc);
         _bus.Vgc.SetScreenEditor(_editor);
+        _bus.HelpRequested += searchTerm =>
+        {
+            Dispatcher.UIThread.Post(() => ShowHelpPanel(searchTerm));
+        };
         InitializeHelp();
 
         var fontPath = Path.Combine(AppContext.BaseDirectory, "Resources", "cp437.bin");
