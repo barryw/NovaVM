@@ -378,7 +378,7 @@ TK_GCLS           = TK_GMODE+1      ; GCLS
 TK_GCOLOR         = TK_GCLS+1       ; GCOLOR
 TK_SPRCMD         = TK_GCOLOR+1     ; SPRITE
 TK_SPRSHAPE       = TK_SPRCMD+1     ; SPRITESHAPE
-TK_SPRCOLOR       = TK_SPRSHAPE+1   ; SPRITECOLOR
+TK_SPRCOLOR       = TK_SPRSHAPE+1   ; SPRITESET
 TK_SPRDATA        = TK_SPRCOLOR+1   ; SPRITEDATA
 TK_SOUND          = TK_SPRDATA+1    ; SOUND
 TK_VOLUME         = TK_SOUND+1      ; VOLUME
@@ -511,6 +511,8 @@ XTK_BLITFILL      = $41              ; BLITFILL dstSpace,dstAddr,dstStride,width
 XTK_BLITSTATUS    = $42              ; BLITSTATUS — numeric function (no args)
 XTK_BLITERR       = $43              ; BLITERR — numeric function (no args)
 XTK_BLITCOUNT     = $44              ; BLITCOUNT — numeric function (no args)
+XTK_BITTGL        = $45              ; BITTGL addr,mask — toggle bits
+XTK_HELP           = $46              ; HELP [keyword] — open help panel
 
 ; offsets from a base of X or Y
 
@@ -1905,6 +1907,8 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_BLITSTATUS ($42) — function only
       .word LAB_15D9-1        ; XTK_BLITERR    ($43) — function only
       .word LAB_15D9-1        ; XTK_BLITCOUNT  ($44) — function only
+      .word LAB_BITTGL-1      ; XTK_BITTGL     ($45) — toggle bits
+      .word LAB_HELP-1        ; XTK_HELP       ($46)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -7663,54 +7667,94 @@ LAB_2CC2
 
       JMP   LAB_GTHAN         ; else do - FAC1 and return
 
-; perform BITSET
+; perform BITSET addr, mask — set bits: mem[addr] = mem[addr] OR mask
 
 LAB_BITSET
-      JSR   LAB_GADB          ; get two parameters for POKE or WAIT
-      CPX   #$08              ; only 0 to 7 are allowed
-      BCS   FCError           ; branch if > 7
-
-      LDA   #$00              ; clear A
-      SEC                     ; set the carry
-S_Bits
-      ROL                     ; shift bit
-      DEX                     ; decrement bit number
-      BPL   S_Bits            ; loop if still +ve
-
-      INX                     ; make X = $00
-      ORA   (Itempl,X)        ; or with byte via temporary integer (addr)
-      STA   (Itempl,X)        ; save byte via temporary integer (addr)
+      JSR   LAB_GADB          ; addr in Itempl/h, mask in X
+      LDY   #$00
+      TXA                     ; A = mask
+      ORA   (Itempl),Y        ; OR with byte at addr
+      STA   (Itempl),Y        ; store result
 LAB_2D04
       RTS
 
-; perform BITCLR
+; perform BITCLR addr, mask — clear bits: mem[addr] = mem[addr] AND NOT mask
 
 LAB_BITCLR
-      JSR   LAB_GADB          ; get two parameters for POKE or WAIT
-      CPX   #$08              ; only 0 to 7 are allowed
-      BCS   FCError           ; branch if > 7
-
-      LDA   #$FF              ; set A
-S_Bitc
-      ROL                     ; shift bit
-      DEX                     ; decrement bit number
-      BPL   S_Bitc            ; loop if still +ve
-
-      INX                     ; make X = $00
-      AND   (Itempl,X)        ; and with byte via temporary integer (addr)
-      STA   (Itempl,X)        ; save byte via temporary integer (addr)
+      JSR   LAB_GADB          ; addr in Itempl/h, mask in X
+      LDY   #$00
+      TXA                     ; A = mask
+      EOR   #$FF              ; invert mask
+      AND   (Itempl),Y        ; AND with byte at addr
+      STA   (Itempl),Y        ; store result
       RTS
 
-FCError
-      JMP   LAB_FCER          ; do function call error then warm start
+; perform BITTGL addr, mask — toggle bits: mem[addr] = mem[addr] EOR mask
 
-; perform BITTST()
+LAB_BITTGL
+      JSR   LAB_GADB          ; addr in Itempl/h, mask in X
+      LDY   #$00
+      TXA                     ; A = mask
+      EOR   (Itempl),Y        ; EOR with byte at addr
+      STA   (Itempl),Y        ; store result
+      RTS
+
+;; ========================================
+;; HELP [keyword$]
+;; Opens the help panel, optionally searching for a keyword
+;; ========================================
+LAB_HELP
+      JSR   LAB_GBYT          ; peek at next byte (don't consume)
+      BEQ   @no_arg           ; if end of statement, open general help
+
+      ; There's an argument — evaluate as string expression
+      JSR   LAB_EVEX          ; evaluate expression
+      JSR   LAB_EVST          ; pop string: A=length, ut1_pl/ph=pointer
+
+      ; Copy string to help buffer ($A021-$A030), max 16 chars
+      TAY                     ; Y = length
+      CPY   #$10
+      BCC   @len_ok
+      LDY   #$10              ; clamp to 16
+@len_ok
+      STY   @help_len         ; save length
+      DEY
+@copy_loop
+      BMI   @copy_done
+      LDA   (ut1_pl),Y
+      STA   $A021,Y
+      DEY
+      BPL   @copy_loop
+
+@copy_done
+      ; Zero-fill remainder of buffer
+      LDY   @help_len
+@zero_loop
+      CPY   #$10
+      BCS   @trigger_search
+      LDA   #$00
+      STA   $A021,Y
+      INY
+      BNE   @zero_loop
+
+@trigger_search
+      LDA   #$02              ; command: search
+      STA   $A020             ; RegHelp
+      RTS
+
+@no_arg
+      LDA   #$01              ; command: open
+      STA   $A020             ; RegHelp
+      RTS
+
+@help_len
+      .byte $00
+
+; perform BITTST(addr, mask) — returns -1 if ALL masked bits set, else 0
 
 LAB_BTST
       JSR   LAB_IGBY          ; increment BASIC pointer
-      JSR   LAB_GADB          ; get two parameters for POKE or WAIT
-      CPX   #$08              ; only 0 to 7 are allowed
-      BCS   FCError           ; branch if > 7
+      JSR   LAB_GADB          ; addr in Itempl/h, mask in X
 
       JSR   LAB_GBYT          ; get next BASIC byte
       CMP   #')'              ; is next character ")"
@@ -7719,20 +7763,19 @@ LAB_BTST
       JMP   LAB_SNER          ; do syntax error then warm start
 
 TST_OK
-      JSR   LAB_IGBY          ; update BASIC execute pointer (to character past ")")
-      LDA   #$00              ; clear A
-      SEC                     ; set the carry
-T_Bits
-      ROL                     ; shift bit
-      DEX                     ; decrement bit number
-      BPL   T_Bits            ; loop if still +ve
+      JSR   LAB_IGBY          ; update BASIC execute pointer (past ")")
+      LDY   #$00
+      TXA                     ; A = mask
+      AND   (Itempl),Y        ; AND with byte at addr
+      STA   Itempl            ; save result
+      CPX   Itempl            ; compare with original mask (still in X)
+      BNE   LAB_NOTT          ; not all bits set — return 0
 
-      INX                     ; make X = $00
-      AND   (Itempl,X)        ; AND with byte via temporary integer (addr)
-      BEQ   LAB_NOTT          ; branch if zero (already correct)
+      LDA   #$FF              ; all masked bits set — return -1
+      JMP   LAB_27DB          ; go do SGN tail
 
-      LDA   #$FF              ; set for -1 result
 LAB_NOTT
+      LDA   #$00              ; return 0
       JMP   LAB_27DB          ; go do SGN tail
 
 ; perform BIN$()
@@ -8416,7 +8459,7 @@ LAB_TWOPI
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 68
+XTK_COUNT = 70
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8432,6 +8475,8 @@ TAB_XTKSTR
       .word @s_reserved_ext
       .endrepeat
       .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
+      .word @s_bittgl
+      .word @s_help
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8479,6 +8524,8 @@ TAB_XTKSTR
 @s_blitstatus: .byte "BLITSTATUS",0
 @s_bliterr: .byte "BLITERR",0
 @s_blitcount: .byte "BLITCOUNT",0
+@s_bittgl: .byte "BITTGL",0
+@s_help:   .byte "HELP",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -9089,12 +9136,54 @@ LAB_SPRSHAPE
       STA   $A044,Y           ; write to shape register ($A044 + n*8)
       RTS
 
-; perform SPRITECOLOR n, color — no-op (kept for syntax compatibility)
+; perform SPRITESET sprite, field, value — set sprite register with vblank sync
+; Fields 0 (X) and 2 (Y) accept a signed word and write both lo/hi bytes.
+; All other fields accept a byte value.
+; Waits for vblank before writing to avoid visual glitching.
 
 LAB_SPRCOLOR
-      JSR   LAB_GTBY          ; get sprite number in X (parse and discard)
+      JSR   LAB_GTBY          ; get sprite number (0-15) in X
+      TXA
+      ASL                     ; *2
+      ASL                     ; *4
+      ASL                     ; *8
+      STA   Itempl            ; save base offset (sprite * 8)
       JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get color byte in X (parse and discard)
+      JSR   LAB_GTBY          ; get field (0-7) in X
+      STX   Itemph            ; save field number
+      TXA
+      CLC
+      ADC   Itempl            ; base + field = register offset
+      STA   Itempl            ; save register offset
+      JSR   LAB_1C01          ; require comma
+      LDA   Itemph            ; check field number
+      CMP   #$00              ; field 0 = X position?
+      BEQ   @word_val
+      CMP   #$02              ; field 2 = Y position?
+      BEQ   @word_val
+      ; --- byte field: parse byte value ---
+      JSR   LAB_GTBY          ; get value (0-255) in X
+      LDA   VGC_FRAME         ; wait for vblank
+@bwait
+      CMP   VGC_FRAME
+      BEQ   @bwait
+      LDY   Itempl            ; Y = register offset
+      TXA                     ; A = value
+      STA   $A040,Y           ; write to sprite register
+      RTS
+@word_val
+      ; --- word field (X or Y): parse signed word, write lo+hi ---
+      JSR   LAB_GTSW          ; get signed 16-bit value, lo in FAC1_3, hi in FAC1_2
+      LDA   VGC_FRAME         ; wait for vblank
+@wwait
+      CMP   VGC_FRAME
+      BEQ   @wwait
+      LDY   Itempl            ; Y = register offset (points to lo byte)
+      LDA   FAC1_3            ; low byte
+      STA   $A040,Y           ; write lo
+      INY
+      LDA   FAC1_2            ; high byte
+      STA   $A040,Y           ; write hi
       RTS
 
 ; perform SPRITEDATA sprite, row, b1, b2 [, b3 [, b4 [, b5 [, b6 [, b7 [, b8]]]]]]
@@ -9241,16 +9330,31 @@ LAB_VSYNC
 
 ; --- VGC function handlers ---
 
-; perform SPRITEX(n) — return X position of sprite n
-; NOTE: The new command-driven VGC does not expose sprite positions for
-; reading. This function always returns 0 until a query mechanism is added.
+; perform SPRITEX(n) — return X position of sprite n as signed word
 
 LAB_SPRITEX
+      JSR   LAB_F2FX          ; convert FAC1 to integer, low byte in Itempl
+      LDA   Itempl            ; get sprite number
+      ASL                     ; *2
+      ASL                     ; *4
+      ASL                     ; *8
+      TAX                     ; X = sprite * 8
+      LDY   $A040,X           ; Y = X position low byte
+      LDA   $A041,X           ; A = X position high byte
+      JMP   LAB_AYFC          ; return AY as signed integer
+
+; perform SPRITEY(n) — return Y position of sprite n as signed word
+
 LAB_SPRITEY
-      JSR   LAB_F2FX          ; convert FAC1 to integer (consume argument)
-      LDA   #$00              ; high byte = 0
-      LDY   #$00              ; low byte = 0
-      JMP   LAB_AYFC
+      JSR   LAB_F2FX          ; convert FAC1 to integer, low byte in Itempl
+      LDA   Itempl            ; get sprite number
+      ASL                     ; *2
+      ASL                     ; *4
+      ASL                     ; *8
+      TAX                     ; X = sprite * 8
+      LDY   $A042,X           ; Y = Y position low byte
+      LDA   $A043,X           ; A = Y position high byte
+      JMP   LAB_AYFC          ; return AY as signed integer
 
 ; perform COLLISION(n) — return sprite-sprite collision register
 ; argument already consumed by preprocessor
@@ -11112,7 +11216,7 @@ LAB_CTBL
       .word LAB_GCOLOR-1      ; GCOLOR          VGC command
       .word LAB_SPRCMD-1      ; SPRITE          VGC command
       .word LAB_SPRSHAPE-1    ; SPRITESHAPE     VGC command
-      .word LAB_SPRCOLOR-1    ; SPRITECOLOR     VGC command
+      .word LAB_SPRCOLOR-1    ; SPRITESET       VGC command
       .word LAB_SPRDATA-1     ; SPRITEDATA      VGC command
       .word LAB_SOUND-1       ; SOUND           VGC command
       .word LAB_VOLUME-1      ; VOLUME          VGC command
@@ -11553,9 +11657,9 @@ LBB_SOUND
       .byte "OUND",TK_SOUND   ; SOUND
 LBB_SPC
       .byte "PC(",TK_SPC      ; SPC(
-LBB_SPRITECOLOR
-      .byte "PRITECOLOR",TK_SPRCOLOR
-                              ; SPRITECOLOR
+LBB_SPRITESET
+      .byte "PRITESET",TK_SPRCOLOR
+                              ; SPRITESET
 LBB_SPRITEDATA
       .byte "PRITEDATA",TK_SPRDATA
                               ; SPRITEDATA
@@ -11751,8 +11855,8 @@ LAB_KEYT
       .word LBB_SPRITE        ; SPRITE
       .byte 11,'S'
       .word LBB_SPRITESHAPE   ; SPRITESHAPE
-      .byte 11,'S'
-      .word LBB_SPRITECOLOR   ; SPRITECOLOR
+      .byte 9,'S'
+      .word LBB_SPRITESET     ; SPRITESET
       .byte 10,'S'
       .word LBB_SPRITEDATA    ; SPRITEDATA
       .byte 5,'S'
