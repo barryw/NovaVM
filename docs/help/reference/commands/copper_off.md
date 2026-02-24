@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "COPPER_OFF"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [copper_off, graphics]
+syntax: "COPPER OFF"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Disable copper execution.
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

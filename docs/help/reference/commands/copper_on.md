@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "COPPER_ON"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [copper_on, graphics]
+syntax: "COPPER ON"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Enable copper execution each frame.
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

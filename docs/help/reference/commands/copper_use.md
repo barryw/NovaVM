@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "COPPER_USE"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [copper_use, graphics]
+syntax: "COPPER USE n"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Switch active copper list to *n* at next vblank (double-buffering).
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

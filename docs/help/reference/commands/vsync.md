@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "VSYNC"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [vsync, graphics]
+syntax: "VSYNC"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Wait for the next video frame boundary (60 Hz).
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "PLOT"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [plot, graphics]
+syntax: "PLOT x,y"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Set pixel at (*x*,*y*) to the current draw color.
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

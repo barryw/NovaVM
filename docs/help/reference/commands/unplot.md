@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "UNPLOT"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [unplot, graphics]
+syntax: "UNPLOT x,y"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Clear pixel at (*x*,*y*) to 0 (transparent).
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

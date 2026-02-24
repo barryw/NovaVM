@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "CIRCLE"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [circle, graphics]
+syntax: "CIRCLE cx,cy,r"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Draw a circle outline centred at (*cx*,*cy*).
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

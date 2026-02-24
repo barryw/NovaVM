@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "MODE"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [mode, graphics]
+syntax: "MODE n"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Display mode: 0=text only, 1=graphics over text, 2=text over graphics, 3=graphics+sprites only (no text).
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

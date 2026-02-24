@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "COPPER_CLEAR"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [copper_clear, graphics]
+syntax: "COPPER CLEAR"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Remove all events from the current target list.
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

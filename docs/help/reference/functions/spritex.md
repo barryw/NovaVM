@@ -1,12 +1,12 @@
 ---
-title: "COLLISION"
+title: "SPRITEX"
 type: function
 category: Sprites
-keywords: [collision, sprites]
-syntax: "COLLISION(n)"
+keywords: [spritex, sprites]
+syntax: "SPRITEX(n)"
 see_also: [graphics-and-display]
 ---
 
-Sprite-to-sprite collision bitmask for sprite *n*.
+Current X position of sprite *n* as a signed 16-bit value, read directly from the sprite registers.
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

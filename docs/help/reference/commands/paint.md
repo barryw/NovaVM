@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "PAINT"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [paint, graphics]
+syntax: "PAINT x,y"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Flood-fill from seed point (*x*,*y*).
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

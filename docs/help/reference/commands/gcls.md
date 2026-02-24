@@ -1,12 +1,12 @@
 ---
-title: "GCOLOR"
+title: "GCLS"
 type: command
 category: Graphics
-keywords: [gcolor, graphics]
-syntax: "GCOLOR c"
+keywords: [gcls, graphics]
+syntax: "GCLS"
 see_also: [graphics-and-display]
 ---
 
-Set the graphics draw color (0--15; only the low nibble is used).
+Clear the graphics layer to transparent (all pixels 0).
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.
