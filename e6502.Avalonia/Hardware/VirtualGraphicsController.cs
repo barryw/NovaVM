@@ -891,24 +891,45 @@ public class VirtualGraphicsController
     {
         registerIndex = 0;
 
+        // Direct index: 0-15 for VGC core registers
         if ((uint)registerSpecifier < 16)
         {
             registerIndex = (byte)registerSpecifier;
             return IsCopperWritableRegister(registerIndex);
         }
 
-        if (registerSpecifier < VgcConstants.VgcBase || registerSpecifier >= VgcConstants.VgcBase + 16)
-            return false;
+        // Absolute address: VGC core registers $A000-$A00F
+        if (registerSpecifier >= VgcConstants.VgcBase && registerSpecifier < VgcConstants.VgcBase + 16)
+        {
+            registerIndex = (byte)(registerSpecifier - VgcConstants.VgcBase);
+            return IsCopperWritableRegister(registerIndex);
+        }
 
-        registerIndex = (byte)(registerSpecifier - VgcConstants.VgcBase);
-        return IsCopperWritableRegister(registerIndex);
+        // Absolute address: Sprite registers $A040-$A0BF
+        if (registerSpecifier >= VgcConstants.SpriteRegBase && registerSpecifier <= VgcConstants.SpriteRegEnd)
+        {
+            registerIndex = (byte)(registerSpecifier - VgcConstants.VgcBase);
+            return IsCopperWritableRegister(registerIndex);
+        }
+
+        return false;
     }
 
     private static bool IsCopperWritableRegister(byte registerIndex) =>
         registerIndex == VgcConstants.RegMode - VgcConstants.VgcBase ||
         registerIndex == VgcConstants.RegBgCol - VgcConstants.VgcBase ||
         registerIndex == VgcConstants.RegScrollX - VgcConstants.VgcBase ||
-        registerIndex == VgcConstants.RegScrollY - VgcConstants.VgcBase;
+        registerIndex == VgcConstants.RegScrollY - VgcConstants.VgcBase ||
+        IsCopperSpriteRegister(registerIndex);
+
+    private static bool IsCopperSpriteRegister(byte registerIndex)
+    {
+        int offset = registerIndex - (VgcConstants.SpriteRegBase - VgcConstants.VgcBase);
+        if (offset < 0 || offset >= VgcConstants.MaxSprites * VgcConstants.SpriteRegStride)
+            return false;
+        int field = offset % VgcConstants.SpriteRegStride;
+        return field != VgcConstants.SprRegReserved;  // all fields except reserved
+    }
 
 
     // -------------------------------------------------------------------------

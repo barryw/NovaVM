@@ -816,4 +816,74 @@ public class AvaloniaVgcTests
         Assert.AreEqual(2, program.Length);
         Assert.IsTrue(program[0].Position < program[1].Position);
     }
+
+    [TestMethod]
+    public void Copper_CanTargetSpriteRegister()
+    {
+        // Add copper event targeting sprite 0 shape index at $A044
+        _vgc.Write(VgcConstants.RegP0, 0);     // x lo
+        _vgc.Write(VgcConstants.RegP1, 0);     // x hi
+        _vgc.Write(VgcConstants.RegP2, 50);    // y
+        _vgc.Write(VgcConstants.RegP3, (byte)((VgcConstants.SpriteRegBase + VgcConstants.SprRegShape) & 0xFF));  // register lo
+        _vgc.Write(VgcConstants.RegP4, (byte)((VgcConstants.SpriteRegBase + VgcConstants.SprRegShape) >> 8));  // register hi
+        _vgc.Write(VgcConstants.RegP5, 42);    // value
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.IncrementFrameCounter();
+        var program = _vgc.GetCopperProgram();
+
+        Assert.AreEqual(1, program.Length);
+        Assert.AreEqual(42, program[0].Value);
+    }
+
+    [TestMethod]
+    public void Copper_CanTargetAllSpriteRegFields()
+    {
+        // Try each writable field for sprite 0
+        int[] fields = [
+            VgcConstants.SprRegXLo, VgcConstants.SprRegXHi,
+            VgcConstants.SprRegYLo, VgcConstants.SprRegYHi,
+            VgcConstants.SprRegShape, VgcConstants.SprRegFlags,
+            VgcConstants.SprRegPriority
+        ];
+
+        foreach (int field in fields)
+        {
+            int regAddr = VgcConstants.SpriteRegBase + field;
+            _vgc.Write(VgcConstants.RegP3, (byte)(regAddr & 0xFF));
+            _vgc.Write(VgcConstants.RegP4, (byte)((regAddr >> 8) & 0xFF));
+            _vgc.Write(VgcConstants.RegP5, 1);
+            _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+        }
+
+        _vgc.IncrementFrameCounter();
+        Assert.AreEqual(fields.Length, _vgc.GetCopperProgram().Length);
+    }
+
+    [TestMethod]
+    public void Copper_RejectsReservedSpriteField()
+    {
+        int regAddr = VgcConstants.SpriteRegBase + VgcConstants.SprRegReserved;
+        _vgc.Write(VgcConstants.RegP3, (byte)(regAddr & 0xFF));
+        _vgc.Write(VgcConstants.RegP4, (byte)((regAddr >> 8) & 0xFF));
+        _vgc.Write(VgcConstants.RegP5, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.IncrementFrameCounter();
+        Assert.AreEqual(0, _vgc.GetCopperProgram().Length);
+    }
+
+    [TestMethod]
+    public void Copper_RejectsAddressBetweenVgcAndSpriteRegs()
+    {
+        // $A020 is in the gap between VGC regs and sprite regs
+        int regAddr = 0xA020;
+        _vgc.Write(VgcConstants.RegP3, (byte)(regAddr & 0xFF));
+        _vgc.Write(VgcConstants.RegP4, (byte)((regAddr >> 8) & 0xFF));
+        _vgc.Write(VgcConstants.RegP5, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.IncrementFrameCounter();
+        Assert.AreEqual(0, _vgc.GetCopperProgram().Length);
+    }
 }
