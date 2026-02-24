@@ -24,10 +24,28 @@
         <ProjectReference Include="..\e6502\e6502.csproj" />
     </ItemGroup>
 
-    <Target Name="BuildEhBasic" BeforeTargets="Build">
+    <!-- Tool validation: fail early with clear messages if required tools are missing -->
+    <Target Name="ValidateTools" BeforeTargets="AssembleRom">
+        <Exec Command="command -v ca65 > /dev/null 2>&amp;1 || (echo 'ERROR: ca65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)"
+              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="command -v ld65 > /dev/null 2>&amp;1 || (echo 'ERROR: ld65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)"
+              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="command -v pandoc > /dev/null 2>&amp;1 || (echo 'ERROR: pandoc not found. Install: brew install pandoc' &amp;&amp; exit 1)"
+              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="command -v latexmk > /dev/null 2>&amp;1 || (echo 'ERROR: latexmk not found. Install MacTeX or texlive' &amp;&amp; exit 1)"
+              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+    </Target>
+
+    <!-- Assemble the EhBASIC ROM from source -->
+    <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateTools">
         <Exec Command="make -C $(ProjectDir)../ehbasic" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin"
               DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+    </Target>
+
+    <!-- Generate the PDF user guide -->
+    <Target Name="GeneratePdf" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRom">
+        <Exec Command="bash ../docs/help/build-pdf.sh" />
     </Target>
 
     <Target Name="CopyEhBasicToOutput" AfterTargets="Build">
@@ -47,5 +65,18 @@
         <None Update="Resources\cp437.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+    </ItemGroup>
+
+    <!-- Copy help content Markdown files to output for HelpContentLoader -->
+    <ItemGroup>
+        <Content Include="../docs/help/guides/*.md" Link="help/guides/%(Filename)%(Extension)">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="../docs/help/reference/commands/*.md" Link="help/reference/commands/%(Filename)%(Extension)">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="../docs/help/reference/functions/*.md" Link="help/reference/functions/%(Filename)%(Extension)">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 </Project>
