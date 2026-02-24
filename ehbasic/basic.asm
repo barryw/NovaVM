@@ -7705,29 +7705,150 @@ LAB_BITTGL
 ;; ========================================
 LAB_HELP
       JSR   LAB_GBYT          ; peek at next byte (don't consume)
-      BEQ   @no_arg           ; if end of statement, open general help
+      BNE   @has_arg           ; not end of statement, check what it is
+      JMP   @no_arg            ; end of statement -> open general help
 
-      ; There's an argument — evaluate as string expression
+@has_arg
+      CMP   #'"'              ; quoted string?
+      BNE   @not_quote
+      JMP   @string_arg        ; handle with expression evaluator
+
+@not_quote
+      CMP   #TKX_PREFIX       ; extended token prefix?
+      BEQ   @ext_token
+
+      CMP   #$80              ; primary token? (bit 7 set)
+      BCS   @pri_token
+
+      ; --- Raw ASCII text: copy until end of statement ---
+      LDY   #$00              ; buffer index
+@raw_loop
+      LDA   (Bpntrl),Y        ; read from BASIC text (don't consume yet)
+      BEQ   @raw_done          ; end of line
+      CMP   #':'              ; end of statement
+      BEQ   @raw_done
+      STA   $A021,Y           ; store in help buffer
+      INY
+      CPY   #$10              ; max 16 chars
+      BCC   @raw_loop
+@raw_done
+      STY   @help_len          ; save how many we wrote
+      ; advance BASIC pointer past the chars we consumed
+      TYA
+      CLC
+      ADC   Bpntrl
+      STA   Bpntrl
+      BCC   @raw_noinc
+      INC   Bpntrh
+@raw_noinc
+      JMP   @zero_and_trigger
+
+      ; --- Primary token: detokenize via LAB_KEYT table ---
+@pri_token
+      JSR   LAB_IGBY          ; consume the token byte, A = token
+      ; use LAB_KEYT lookup (same method as LIST decoder)
+      LDX   #>LAB_KEYT        ; table high byte
+      ASL                     ; *2 (shifts out bit 7 into carry)
+      ASL                     ; *4
+      BCC   @pk_nc1
+      INX                     ; carry into high byte
+      CLC
+@pk_nc1
+      ADC   #<LAB_KEYT        ; add table base low byte
+      BCC   @pk_nc2
+      INX
+@pk_nc2
+      STA   ut2_pl            ; pointer to 4-byte entry
+      STX   ut2_ph
+      LDY   #$00
+      LDA   (ut2_pl),Y        ; byte 0 = keyword length
+      STA   @help_len          ; total chars to copy
+      INY
+      LDA   (ut2_pl),Y        ; byte 1 = first character
+      STA   $A021             ; store first char in buffer
+      INY
+      LDA   (ut2_pl),Y        ; byte 2 = rest-of-keyword pointer low
+      PHA
+      INY
+      LDA   (ut2_pl),Y        ; byte 3 = rest-of-keyword pointer high
+      STA   ut2_ph
+      PLA
+      STA   ut2_pl            ; ut2 now points to remaining chars
+
+      LDX   @help_len          ; total keyword length
+      DEX                     ; remaining chars = length - 1
+      LDY   #$00              ; index into remaining chars
+      LDX   #$01              ; buffer write index (char 0 already written)
+@pk_copy
+      CPX   @help_len
+      BCS   @pk_done           ; copied all chars
+      LDA   (ut2_pl),Y        ; get next keyword char
+      AND   #$7F              ; clear bit 7 (last char in cruncher table has it set)
+      STA   $A021,X
+      INY
+      INX
+      CPX   #$10              ; buffer max
+      BCC   @pk_copy
+@pk_done
+      STX   @help_len          ; actual chars written
+      JMP   @zero_and_trigger
+
+      ; --- Extended token: look up in TAB_XTKSTR ---
+@ext_token
+      JSR   LAB_IGBY          ; consume prefix byte ($01)
+      LDY   #$00
+      LDA   (Bpntrl),Y        ; read raw extension id
+      PHA                     ; save it
+      JSR   LAB_IGBY          ; consume extension id byte
+      PLA                     ; restore extension id
+      CMP   #$01
+      BCC   @no_arg            ; invalid, treat as no arg
+      CMP   #XTK_COUNT+1
+      BCS   @no_arg            ; out of range
+      SEC
+      SBC   #$01              ; 0-based index
+      ASL                     ; *2 for word pointer
+      TAX
+      LDA   TAB_XTKSTR,X      ; string pointer low
+      STA   ut2_pl
+      LDA   TAB_XTKSTR+1,X    ; string pointer high
+      STA   ut2_ph
+      LDY   #$00
+@xt_copy
+      LDA   (ut2_pl),Y        ; get char from null-terminated string
+      BEQ   @xt_done           ; null terminator
+      CMP   #'('              ; strip trailing '(' from function tokens like XPEEK(
+      BEQ   @xt_done
+      STA   $A021,Y
+      INY
+      CPY   #$10              ; buffer max
+      BCC   @xt_copy
+@xt_done
+      STY   @help_len
+      JMP   @zero_and_trigger
+
+      ; --- Quoted string: use expression evaluator ---
+@string_arg
       JSR   LAB_EVEX          ; evaluate expression
       JSR   LAB_EVST          ; pop string: A=length, ut1_pl/ph=pointer
-
-      ; Copy string to help buffer ($A021-$A030), max 16 chars
       TAY                     ; Y = length
       CPY   #$10
-      BCC   @len_ok
+      BCC   @sl_ok
       LDY   #$10              ; clamp to 16
-@len_ok
-      STY   @help_len         ; save length
+@sl_ok
+      STY   @help_len
       DEY
-@copy_loop
-      BMI   @copy_done
+@sl_copy
+      BMI   @sl_done
       LDA   (ut1_pl),Y
       STA   $A021,Y
       DEY
-      BPL   @copy_loop
+      BPL   @sl_copy
+@sl_done
+      ; fall through to zero_and_trigger
 
-@copy_done
-      ; Zero-fill remainder of buffer
+      ; --- Zero-fill remainder and trigger search ---
+@zero_and_trigger
       LDY   @help_len
 @zero_loop
       CPY   #$10
@@ -7736,7 +7857,6 @@ LAB_HELP
       STA   $A021,Y
       INY
       BNE   @zero_loop
-
 @trigger_search
       LDA   #$02              ; command: search
       STA   $A020             ; RegHelp
