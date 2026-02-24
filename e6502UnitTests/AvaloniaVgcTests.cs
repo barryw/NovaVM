@@ -932,4 +932,48 @@ public class AvaloniaVgcTests
         Assert.IsFalse(SpriteRenderState.IsSpriteRegister(0));  // VGC mode register
         Assert.IsFalse(SpriteRenderState.IsSpriteRegister(5));  // VGC scroll
     }
+
+    // -- Copper sprite multiplexing -------------------------------------------
+
+    [TestMethod]
+    public void Copper_SpriteMultiplex_ChangesShapeAtScanline()
+    {
+        // Set up sprite 0: enabled at (0, 0) using shape slot 0
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegFlags, VgcConstants.SprFlagEnable);
+        _vgc.Write(VgcConstants.SpriteRegBase + VgcConstants.SprRegShape, 0);
+
+        // Put distinct colors in shape slot 0 and slot 1
+        _vgc.SetSpritePixelInSlot(0, 0, 0, 1);   // slot 0: color 1 at (0,0)
+        _vgc.SetSpritePixelInSlot(1, 0, 0, 2);   // slot 1: color 2 at (0,0)
+
+        // Copper event: at Y=100, change sprite 0's shape to slot 1
+        int regAddr = VgcConstants.SpriteRegBase + VgcConstants.SprRegShape;
+        _vgc.Write(VgcConstants.RegP0, 0);     // x=0
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 100);   // y=100
+        _vgc.Write(VgcConstants.RegP3, (byte)(regAddr & 0xFF));
+        _vgc.Write(VgcConstants.RegP4, (byte)(regAddr >> 8));
+        _vgc.Write(VgcConstants.RegP5, 1);     // shape slot 1
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        // Also reposition sprite to Y=100 at that scanline
+        int yLoAddr = VgcConstants.SpriteRegBase + VgcConstants.SprRegYLo;
+        _vgc.Write(VgcConstants.RegP2, 100);
+        _vgc.Write(VgcConstants.RegP3, (byte)(yLoAddr & 0xFF));
+        _vgc.Write(VgcConstants.RegP4, (byte)(yLoAddr >> 8));
+        _vgc.Write(VgcConstants.RegP5, 100);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperEnable);
+        _vgc.IncrementFrameCounter();
+
+        // Verify copper program has 2 events
+        var program = _vgc.GetCopperProgram();
+        Assert.AreEqual(2, program.Length);
+
+        // Both events target the same scanline; verify both values are present
+        byte v0 = program[0].Value, v1 = program[1].Value;
+        Assert.IsTrue((v0 == 1 && v1 == 100) || (v0 == 100 && v1 == 1),
+            $"Expected values 1 and 100 in copper program, got {v0} and {v1}");
+    }
 }

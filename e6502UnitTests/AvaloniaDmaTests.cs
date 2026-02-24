@@ -200,6 +200,37 @@ public class AvaloniaDmaTests
         | (bus.Read((ushort)VgcConstants.DmaCountM) << 8)
         | (bus.Read((ushort)VgcConstants.DmaCountH) << 16);
 
+    [TestMethod]
+    public void Dma_XramToSpriteShape_CanWriteSlot255()
+    {
+        var bus = MakeBus();
+
+        // Write a test byte into XRAM at offset 0 via XMC PutByte
+        bus.Write((ushort)VgcConstants.XmcAddrL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcAddrM, 0x00);
+        bus.Write((ushort)VgcConstants.XmcAddrH, 0x00);
+        bus.Write((ushort)VgcConstants.XmcData, 0xAB);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdPutByte);
+
+        // DMA copy 1 byte from XRAM offset 0 to sprite shape slot 255 offset 0
+        int destAddr = 255 * VgcConstants.SpriteShapeSize;
+        StartDma(bus,
+            VgcConstants.DmaSpaceXram, VgcConstants.DmaSpaceVgcSprite,
+            0, destAddr, 1);
+        AssertDmaOk(bus, 1);
+
+        // Verify the byte landed
+        Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceSprite, destAddr, out byte val));
+        Assert.AreEqual(0xAB, val);
+    }
+
+    [TestMethod]
+    public void MemIo_SpriteShapeRam_ReportsExpandedSize()
+    {
+        var bus = MakeBus();
+        Assert.AreEqual(VgcConstants.ShapeRamSize, bus.Vgc.GetMemorySpaceLength(VgcConstants.MemSpaceSprite));
+    }
+
     private static void Write24(CompositeBusDevice bus, int baseAddress, int value)
     {
         bus.Write((ushort)baseAddress, (byte)(value & 0xFF));
