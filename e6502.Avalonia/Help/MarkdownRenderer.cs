@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -155,14 +156,91 @@ public sealed class MarkdownRenderer
 
     private TextBlock CreateParagraph(string text)
     {
-        return new TextBlock
+        return CreateFormattedTextBlock(text);
+    }
+
+    private TextBlock CreateFormattedTextBlock(string text, double? fontSize = null, FontWeight? fontWeight = null)
+    {
+        var tb = new TextBlock
         {
-            Text = text,
-            FontSize = HelpStyles.FontSizeBody,
+            FontSize = fontSize ?? HelpStyles.FontSizeBody,
             Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
             TextWrapping = TextWrapping.Wrap,
             LineHeight = 20
         };
+
+        var i = 0;
+        var current = new StringBuilder();
+
+        while (i < text.Length)
+        {
+            // Inline code
+            if (text[i] == '`')
+            {
+                FlushRun(tb, current, fontWeight);
+                i++;
+                var code = new StringBuilder();
+                while (i < text.Length && text[i] != '`')
+                    code.Append(text[i++]);
+                if (i < text.Length) i++; // skip closing `
+                tb.Inlines!.Add(new Run(code.ToString())
+                {
+                    FontFamily = new FontFamily(HelpStyles.MonoFontFamily),
+                    Background = new SolidColorBrush(HelpStyles.CodeBackground)
+                });
+                continue;
+            }
+
+            // Bold
+            if (i + 1 < text.Length && text[i] == '*' && text[i + 1] == '*')
+            {
+                FlushRun(tb, current, fontWeight);
+                i += 2;
+                var bold = new StringBuilder();
+                while (i + 1 < text.Length && !(text[i] == '*' && text[i + 1] == '*'))
+                    bold.Append(text[i++]);
+                if (i + 1 < text.Length) i += 2; // skip closing **
+                tb.Inlines!.Add(new Run(bold.ToString())
+                {
+                    FontWeight = FontWeight.Bold
+                });
+                continue;
+            }
+
+            // Italic (single *)
+            if (text[i] == '*' && (i + 1 >= text.Length || text[i + 1] != '*'))
+            {
+                FlushRun(tb, current, fontWeight);
+                i++;
+                var italic = new StringBuilder();
+                while (i < text.Length && text[i] != '*')
+                    italic.Append(text[i++]);
+                if (i < text.Length) i++; // skip closing *
+                tb.Inlines!.Add(new Run(italic.ToString())
+                {
+                    FontStyle = FontStyle.Italic
+                });
+                continue;
+            }
+
+            current.Append(text[i]);
+            i++;
+        }
+
+        FlushRun(tb, current, fontWeight);
+        return tb;
+    }
+
+    private static void FlushRun(TextBlock tb, StringBuilder current, FontWeight? fontWeight = null)
+    {
+        if (current.Length > 0)
+        {
+            var run = new Run(current.ToString());
+            if (fontWeight.HasValue)
+                run.FontWeight = fontWeight.Value;
+            tb.Inlines!.Add(run);
+            current.Clear();
+        }
     }
 
     private Border CreateCodeBlock(string code, string? language)
@@ -242,14 +320,7 @@ public sealed class MarkdownRenderer
             FontWeight = FontWeight.Bold,
             Foreground = new SolidColorBrush(borderColor)
         });
-        stack.Children.Add(new TextBlock
-        {
-            Text = content,
-            FontSize = HelpStyles.FontSizeBody,
-            Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
-            TextWrapping = TextWrapping.Wrap,
-            LineHeight = 20
-        });
+        stack.Children.Add(CreateFormattedTextBlock(content));
 
         return new Border
         {
@@ -347,6 +418,18 @@ public sealed class MarkdownRenderer
             {
                 var isHeader = r == 0;
                 var isAltRow = r > 0 && r % 2 == 0;
+                var cellText = rows[r][c];
+                var cellChild = cellText.Contains('`') || cellText.Contains('*')
+                    ? (Control)CreateFormattedTextBlock(cellText,
+                        fontWeight: isHeader ? FontWeight.SemiBold : null)
+                    : new TextBlock
+                    {
+                        Text = cellText,
+                        FontSize = HelpStyles.FontSizeBody,
+                        FontWeight = isHeader ? FontWeight.SemiBold : FontWeight.Normal,
+                        Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
+                        TextWrapping = TextWrapping.Wrap
+                    };
                 var cell = new Border
                 {
                     Background = new SolidColorBrush(
@@ -355,14 +438,7 @@ public sealed class MarkdownRenderer
                     BorderBrush = new SolidColorBrush(HelpStyles.TableBorder),
                     BorderThickness = new Thickness(0, 0, 0, 1),
                     Padding = new Thickness(HelpStyles.TableCellPadding),
-                    Child = new TextBlock
-                    {
-                        Text = rows[r][c],
-                        FontSize = HelpStyles.FontSizeBody,
-                        FontWeight = isHeader ? FontWeight.SemiBold : FontWeight.Normal,
-                        Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
-                        TextWrapping = TextWrapping.Wrap
-                    }
+                    Child = cellChild
                 };
                 Grid.SetRow(cell, r);
                 Grid.SetColumn(cell, c);
@@ -399,13 +475,7 @@ public sealed class MarkdownRenderer
                 Foreground = new SolidColorBrush(HelpStyles.TextSecondary),
                 VerticalAlignment = VerticalAlignment.Top
             });
-            item.Children.Add(new TextBlock
-            {
-                Text = text,
-                FontSize = HelpStyles.FontSizeBody,
-                Foreground = new SolidColorBrush(HelpStyles.TextPrimary),
-                TextWrapping = TextWrapping.Wrap
-            });
+            item.Children.Add(CreateFormattedTextBlock(text));
             stack.Children.Add(item);
             i++;
         }
