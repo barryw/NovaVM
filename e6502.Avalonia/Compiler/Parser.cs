@@ -551,4 +551,293 @@ public class Parser
         Expect(TokenType.Semicolon);
         return new ExprStmt(expr, expr.Line, expr.Col);
     }
+
+    // ── Declaration parsing ───────────────────────────────────────────────
+
+    /// <summary>Parse an entire NCC program from the token stream.</summary>
+    public NccProgram ParseProgram()
+    {
+        var decls = new List<Decl>();
+        while (!Check(TokenType.Eof))
+            decls.Add(ParseDeclaration());
+        return new NccProgram(decls, 1, 1);
+    }
+
+    /// <summary>Parse a single top-level declaration.</summary>
+    private Decl ParseDeclaration()
+    {
+        var t = Current;
+
+        // Preprocessor directives
+        if (t.Type == TokenType.Include) return ParseInclude();
+        if (t.Type == TokenType.Define) return ParseDefine();
+        if (t.Type == TokenType.Asset) return ParseAsset();
+        if (t.Type == TokenType.Pragma) return ParsePragma();
+
+        // struct / enum
+        if (t.Type == TokenType.Struct) return ParseStruct();
+        if (t.Type == TokenType.Enum) return ParseEnum();
+
+        // const qualifier
+        bool isConst = false;
+        if (t.Type == TokenType.Const)
+        {
+            isConst = true;
+            Advance();
+        }
+
+        // __resident / __interrupt qualifiers
+        bool isResident = false;
+        bool isInterrupt = false;
+        if (Current.Type == TokenType.Resident)
+        {
+            isResident = true;
+            Advance();
+        }
+        else if (Current.Type == TokenType.Interrupt)
+        {
+            isInterrupt = true;
+            Advance();
+        }
+
+        // Type + name, then decide: function, array, or variable
+        var typeRef = ParseTypeRef();
+        var name = Expect(TokenType.Identifier);
+
+        if (Check(TokenType.LParen))
+            return ParseFunction(typeRef, name.Value, isResident, isInterrupt);
+
+        if (Check(TokenType.LBracket))
+            return ParseGlobalArray(typeRef, name.Value, isConst);
+
+        return ParseGlobalVar(typeRef, name.Value, isConst);
+    }
+
+    // ── Function declaration ──────────────────────────────────────────────
+
+    private FuncDecl ParseFunction(TypeRef returnType, string name, bool isResident, bool isInterrupt)
+    {
+        Expect(TokenType.LParen);
+        var parms = new List<ParamDecl>();
+
+        if (!Check(TokenType.RParen))
+        {
+            parms.Add(ParseParamDecl());
+            while (Match(TokenType.Comma))
+                parms.Add(ParseParamDecl());
+        }
+
+        Expect(TokenType.RParen);
+        var body = ParseBlock();
+        return new FuncDecl(returnType, name, parms, body, isResident, isInterrupt,
+            returnType.Line, returnType.Col);
+    }
+
+    private ParamDecl ParseParamDecl()
+    {
+        var typeRef = ParseTypeRef();
+        var name = Expect(TokenType.Identifier);
+        return new ParamDecl(typeRef, name.Value, typeRef.Line, typeRef.Col);
+    }
+
+    // ── Struct declaration ────────────────────────────────────────────────
+
+    private StructDecl ParseStruct()
+    {
+        var kw = Advance(); // skip 'struct'
+        var name = Expect(TokenType.Identifier);
+        Expect(TokenType.LBrace);
+
+        var fields = new List<FieldDecl>();
+        while (!Check(TokenType.RBrace) && !Check(TokenType.Eof))
+        {
+            var fieldType = ParseTypeRef();
+            // Parse one or more field names with same type (e.g. "fixed x, y;")
+            var fieldName = Expect(TokenType.Identifier);
+            Expr? arraySize = null;
+            if (Match(TokenType.LBracket))
+            {
+                arraySize = ParseExpression();
+                Expect(TokenType.RBracket);
+            }
+            fields.Add(new FieldDecl(fieldType, fieldName.Value, arraySize, fieldType.Line, fieldType.Col));
+
+            while (Match(TokenType.Comma))
+            {
+                var extraName = Expect(TokenType.Identifier);
+                Expr? extraArraySize = null;
+                if (Match(TokenType.LBracket))
+                {
+                    extraArraySize = ParseExpression();
+                    Expect(TokenType.RBracket);
+                }
+                fields.Add(new FieldDecl(fieldType, extraName.Value, extraArraySize, fieldType.Line, fieldType.Col));
+            }
+
+            Expect(TokenType.Semicolon);
+        }
+
+        Expect(TokenType.RBrace);
+        Match(TokenType.Semicolon); // optional trailing semicolon
+        return new StructDecl(name.Value, fields, kw.Line, kw.Column);
+    }
+
+    // ── Enum declaration ──────────────────────────────────────────────────
+
+    private EnumDecl ParseEnum()
+    {
+        var kw = Advance(); // skip 'enum'
+        var name = Expect(TokenType.Identifier);
+        Expect(TokenType.LBrace);
+
+        var values = new List<EnumValue>();
+        if (!Check(TokenType.RBrace))
+        {
+            values.Add(ParseEnumValue());
+            while (Match(TokenType.Comma))
+            {
+                if (Check(TokenType.RBrace)) break; // trailing comma
+                values.Add(ParseEnumValue());
+            }
+        }
+
+        Expect(TokenType.RBrace);
+        Match(TokenType.Semicolon); // optional trailing semicolon
+        return new EnumDecl(name.Value, values, kw.Line, kw.Column);
+    }
+
+    private EnumValue ParseEnumValue()
+    {
+        var name = Expect(TokenType.Identifier);
+        Expr? value = null;
+        if (Match(TokenType.Assign))
+            value = ParseExpression();
+        return new EnumValue(name.Value, value, name.Line, name.Column);
+    }
+
+    // ── Global variable ───────────────────────────────────────────────────
+
+    private GlobalVarDecl ParseGlobalVar(TypeRef type, string name, bool isConst)
+    {
+        Expr? init = null;
+        if (Match(TokenType.Assign))
+            init = ParseExpression();
+        Expect(TokenType.Semicolon);
+        return new GlobalVarDecl(type, name, init, isConst, type.Line, type.Col);
+    }
+
+    // ── Global array ──────────────────────────────────────────────────────
+
+    private GlobalArrayDecl ParseGlobalArray(TypeRef elementType, string name, bool isConst)
+    {
+        Expect(TokenType.LBracket);
+
+        // Size can be empty for initialized arrays: byte arr[] = { 1, 2, 3 };
+        Expr size;
+        if (Check(TokenType.RBracket))
+            size = new IntLiteralExpr(0, Current.Line, Current.Column);
+        else
+            size = ParseExpression();
+        Expect(TokenType.RBracket);
+
+        List<Expr>? initializer = null;
+        if (Match(TokenType.Assign))
+        {
+            Expect(TokenType.LBrace);
+            initializer = new List<Expr>();
+            if (!Check(TokenType.RBrace))
+            {
+                initializer.Add(ParseExpression());
+                while (Match(TokenType.Comma))
+                {
+                    if (Check(TokenType.RBrace)) break; // trailing comma
+                    initializer.Add(ParseExpression());
+                }
+            }
+            Expect(TokenType.RBrace);
+        }
+
+        Expect(TokenType.Semicolon);
+        return new GlobalArrayDecl(elementType, name, size, initializer, isConst,
+            elementType.Line, elementType.Col);
+    }
+
+    // ── #include directive ────────────────────────────────────────────────
+
+    private IncludeDirective ParseInclude()
+    {
+        var kw = Advance(); // skip Include token
+
+        // Two forms: "file.c" or <file.h>
+        if (Check(TokenType.StringLiteral))
+        {
+            var path = Advance();
+            return new IncludeDirective(path.Value, kw.Line, kw.Column);
+        }
+
+        // Angle-bracket form: <name.h> — lexer produces Lt, identifiers/dots, Gt
+        if (Check(TokenType.Lt))
+        {
+            Advance(); // skip <
+            var parts = new System.Text.StringBuilder();
+            while (!Check(TokenType.Gt) && !Check(TokenType.Eof))
+            {
+                parts.Append(Current.Value);
+                Advance();
+            }
+            Expect(TokenType.Gt);
+            return new IncludeDirective(parts.ToString(), kw.Line, kw.Column);
+        }
+
+        Error("expected string literal or <path> after #include");
+        return new IncludeDirective("", kw.Line, kw.Column);
+    }
+
+    // ── #define directive ─────────────────────────────────────────────────
+
+    private DefineDirective ParseDefine()
+    {
+        var kw = Advance(); // skip Define token
+        var name = Expect(TokenType.Identifier);
+
+        // Value is the next token (int literal, hex literal, identifier, string, etc.)
+        string value = "";
+        if (!Check(TokenType.Eof) && !Check(TokenType.Include) && !Check(TokenType.Define)
+            && !Check(TokenType.Asset) && !Check(TokenType.Pragma))
+        {
+            value = Current.Value;
+            Advance();
+        }
+
+        return new DefineDirective(name.Value, value, kw.Line, kw.Column);
+    }
+
+    // ── #asset directive ──────────────────────────────────────────────────
+
+    private AssetDirective ParseAsset()
+    {
+        var kw = Advance(); // skip Asset token
+        var assetType = Expect(TokenType.Identifier);
+        var filePath = Expect(TokenType.StringLiteral);
+        return new AssetDirective(assetType.Value, filePath.Value, kw.Line, kw.Column);
+    }
+
+    // ── #pragma directive ─────────────────────────────────────────────────
+
+    private PragmaDirective ParsePragma()
+    {
+        var kw = Advance(); // skip Pragma token
+        var name = Expect(TokenType.Identifier);
+
+        // Value is the next token
+        string value = "";
+        if (!Check(TokenType.Eof) && !Check(TokenType.Include) && !Check(TokenType.Define)
+            && !Check(TokenType.Asset) && !Check(TokenType.Pragma))
+        {
+            value = Current.Value;
+            Advance();
+        }
+
+        return new PragmaDirective(name.Value, value, kw.Line, kw.Column);
+    }
 }
