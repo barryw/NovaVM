@@ -99,22 +99,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _basicRom = new byte[16384];
         Array.Copy(_ram, VgcConstants.RomBase, _basicRom, 0, 16384);
 
-        // Load the NCC ROM (stub for now).
-        string nccPath = Path.Combine(AppContext.BaseDirectory, "Resources", "ncc.bin");
-        if (File.Exists(nccPath))
-        {
-            _nccRom = File.ReadAllBytes(nccPath);
-        }
-        else
-        {
-            // Generate a minimal stub ROM in-memory as fallback.
-            _nccRom = new byte[16384];
-            Array.Fill(_nccRom, (byte)0xEA);
-            _nccRom[0] = 0x4C; _nccRom[1] = 0x00; _nccRom[2] = 0xC0; // JMP $C000
-            _nccRom[0x3FFA] = 0x00; _nccRom[0x3FFB] = 0xC0; // NMI -> $C000
-            _nccRom[0x3FFC] = 0x00; _nccRom[0x3FFD] = 0xC0; // RESET -> $C000
-            _nccRom[0x3FFE] = 0x00; _nccRom[0x3FFF] = 0xC0; // IRQ -> $C000
-        }
+        // Build the NCC ROM using NccRomBuilder.
+        _nccRom = new e6502.Avalonia.Compiler.NccRomBuilder().Build();
 
         InitVectorTable();
     }

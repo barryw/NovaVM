@@ -62,6 +62,9 @@
         <None Update="Resources\ehbasic.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+        <None Update="Resources\ncc.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
         <None Update="Resources\cp437.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
