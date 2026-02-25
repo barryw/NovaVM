@@ -7,6 +7,7 @@ public sealed class CompilerController
     private readonly Action<ushort, byte> _writeCpuRam;
     private readonly List<CompileError> _errors = new();
     private readonly List<CompileError> _warnings = new();
+    private List<CompileError> _activeList;
     private int _errMsgPos;
 
     public CompilerController(Func<int, byte> readXram, Action<ushort, byte> writeCpuRam)
@@ -14,6 +15,7 @@ public sealed class CompilerController
         _regs = new byte[VgcConstants.CmpEnd - VgcConstants.CmpBase + 1];
         _readXram = readXram;
         _writeCpuRam = writeCpuRam;
+        _activeList = _errors;
     }
 
     public bool OwnsAddress(ushort address) =>
@@ -69,6 +71,7 @@ public sealed class CompilerController
 
         // TODO: invoke actual compiler pipeline here (Phase 3-6)
         _errors.Add(new CompileError(0, "compiler not yet implemented"));
+        _warnings.Add(new CompileError(0, "compilation support is experimental"));
         SetResult(VgcConstants.CmpStatusError, _errors.Count, _warnings.Count, 0);
     }
 
@@ -93,14 +96,15 @@ public sealed class CompilerController
             _regs[VgcConstants.CmpErrLineL - VgcConstants.CmpBase] = (byte)(err.Line & 0xFF);
             _regs[VgcConstants.CmpErrLineH - VgcConstants.CmpBase] = (byte)((err.Line >> 8) & 0xFF);
             _errMsgPos = 0;
+            _activeList = list;
         }
     }
 
     private byte ReadNextErrorMsgByte()
     {
         int idx = _regs[VgcConstants.CmpErrIdx - VgcConstants.CmpBase];
-        if (idx >= _errors.Count) return 0;
-        var msg = _errors[idx].Message;
+        if (idx >= _activeList.Count) return 0;
+        var msg = _activeList[idx].Message;
         if (_errMsgPos >= msg.Length) return 0;
         return (byte)msg[_errMsgPos++];
     }

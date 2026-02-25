@@ -133,6 +133,37 @@ public class CompilerControllerTests
     }
 
     [TestMethod]
+    public void ReadWarningMessage_ByteByByte()
+    {
+        // Put some source in XRAM so we hit the "not yet implemented" path
+        var source = System.Text.Encoding.ASCII.GetBytes("int main() { return 0; }");
+        Array.Copy(source, _xram, source.Length);
+
+        var cc = CreateController();
+        cc.Write((ushort)VgcConstants.CmpSrcAddrL, 0);
+        cc.Write((ushort)VgcConstants.CmpSrcAddrM, 0);
+        cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdCompile);
+
+        // Should have at least one warning
+        Assert.IsTrue(cc.Read((ushort)VgcConstants.CmpWarnCount) > 0);
+
+        // Select warning index 0 and issue GetWarn command
+        cc.Write((ushort)VgcConstants.CmpErrIdx, 0);
+        cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdGetWarn);
+
+        // Read warning message byte-by-byte
+        var expected = "compilation support is experimental";
+        for (int i = 0; i < expected.Length; i++)
+        {
+            byte b = cc.Read((ushort)VgcConstants.CmpErrMsg);
+            Assert.AreEqual((byte)expected[i], b, $"Mismatch at position {i}");
+        }
+
+        // After message ends, should return 0
+        Assert.AreEqual(0, cc.Read((ushort)VgcConstants.CmpErrMsg));
+    }
+
+    [TestMethod]
     public void GetError_InvalidIndex_DoesNotCrash()
     {
         var cc = CreateController();
