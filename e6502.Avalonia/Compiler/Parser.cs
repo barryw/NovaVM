@@ -48,6 +48,31 @@ public class Parser
         t is TokenType.Byte or TokenType.Int or TokenType.Uint or TokenType.Bool
             or TokenType.Fixed or TokenType.Ufixed or TokenType.Void or TokenType.Struct;
 
+    /// <summary>
+    /// Returns true if the current token starts a local variable declaration.
+    /// Patterns: type id, type* id, UserType id, UserType* id
+    /// </summary>
+    private bool IsLocalVarDeclLookahead(Token t)
+    {
+        if (IsTypeKeyword(t.Type))
+        {
+            // byte x  or  byte* x  or  byte arr[
+            var p1 = Peek(1);
+            if (p1.Type == TokenType.Identifier) return true;
+            if (p1.Type == TokenType.Star && Peek(2).Type == TokenType.Identifier) return true;
+            return false;
+        }
+        if (t.Type == TokenType.Identifier)
+        {
+            // UserType x  or  UserType* x
+            var p1 = Peek(1);
+            if (p1.Type == TokenType.Identifier) return true;
+            if (p1.Type == TokenType.Star && Peek(2).Type == TokenType.Identifier) return true;
+            return false;
+        }
+        return false;
+    }
+
     private static bool IsAssignmentOp(TokenType t) =>
         t is TokenType.Assign or TokenType.PlusAssign or TokenType.MinusAssign
             or TokenType.StarAssign or TokenType.SlashAssign or TokenType.PercentAssign
@@ -320,7 +345,7 @@ public class Parser
             TokenType.Break => ParseBreak(),
             TokenType.Continue => ParseContinue(),
             TokenType.Asm => ParseAsm(),
-            _ when IsTypeKeyword(t.Type) && Peek().Type == TokenType.Identifier => ParseVarDecl(),
+            _ when IsLocalVarDeclLookahead(t) => ParseVarDecl(),
             _ => ParseExprStmt(),
         };
     }
@@ -391,7 +416,7 @@ public class Parser
         Stmt? init = null;
         if (!Check(TokenType.Semicolon))
         {
-            if (IsTypeKeyword(Current.Type) && Peek().Type == TokenType.Identifier)
+            if (IsLocalVarDeclLookahead(Current))
                 init = ParseVarDecl(); // VarDecl already consumes ';'
             else
             {
