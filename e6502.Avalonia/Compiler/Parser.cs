@@ -1,0 +1,304 @@
+namespace e6502.Avalonia.Compiler;
+
+public class Parser
+{
+    private readonly List<Token> _tokens;
+    private int _pos;
+    private readonly List<string> _errors = new();
+
+    public IReadOnlyList<string> Errors => _errors;
+
+    public Parser(List<Token> tokens)
+    {
+        _tokens = tokens;
+        _pos = 0;
+    }
+
+    /// <summary>Convenience: parse from source string.</summary>
+    public static Parser FromSource(string source) => new(new Lexer(source).Tokenize());
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    private Token Current => _tokens[_pos];
+
+    private Token Peek(int offset = 1) =>
+        _tokens[_pos + offset < _tokens.Count ? _pos + offset : _tokens.Count - 1];
+
+    private Token Advance() => _tokens[_pos++];
+
+    private bool Check(TokenType type) => Current.Type == type;
+
+    private bool Match(TokenType type)
+    {
+        if (!Check(type)) return false;
+        Advance();
+        return true;
+    }
+
+    private Token Expect(TokenType type)
+    {
+        if (Check(type)) return Advance();
+        Error($"expected {type}, got {Current.Type}");
+        return Current;
+    }
+
+    private void Error(string msg) => _errors.Add($"line {Current.Line}: {msg}");
+
+    private static bool IsTypeKeyword(TokenType t) =>
+        t is TokenType.Byte or TokenType.Int or TokenType.Uint or TokenType.Bool
+            or TokenType.Fixed or TokenType.Ufixed or TokenType.Void or TokenType.Struct;
+
+    private static bool IsAssignmentOp(TokenType t) =>
+        t is TokenType.Assign or TokenType.PlusAssign or TokenType.MinusAssign
+            or TokenType.StarAssign or TokenType.SlashAssign or TokenType.PercentAssign
+            or TokenType.AmpAssign or TokenType.PipeAssign or TokenType.CaretAssign
+            or TokenType.LShiftAssign or TokenType.RShiftAssign;
+
+    // ── Precedence table ─────────────────────────────────────────────────
+
+    private static int GetBinaryPrecedence(TokenType t) => t switch
+    {
+        TokenType.PipePipe => 1,                              // logical OR
+        TokenType.AmpAmp => 2,                                // logical AND
+        TokenType.Pipe => 3,                                  // bitwise OR
+        TokenType.Caret => 4,                                 // bitwise XOR
+        TokenType.Amp => 5,                                   // bitwise AND
+        TokenType.Eq or TokenType.NotEq => 6,                 // equality
+        TokenType.Lt or TokenType.Gt
+            or TokenType.LtEq or TokenType.GtEq => 7,        // comparison
+        TokenType.LShift or TokenType.RShift => 8,            // shift
+        TokenType.Plus or TokenType.Minus => 9,               // additive
+        TokenType.Star or TokenType.Slash
+            or TokenType.Percent => 10,                       // multiplicative
+        _ => -1,
+    };
+
+    // ── Public entry point ───────────────────────────────────────────────
+
+    public Expr ParseExpression() => ParseAssignment();
+
+    // ── Assignment (right-associative) ───────────────────────────────────
+
+    public Expr ParseAssignment()
+    {
+        var expr = ParseBinaryExpr(1);
+
+        if (IsAssignmentOp(Current.Type))
+        {
+            var op = Advance();
+            var value = ParseAssignment(); // right-associative
+            return new AssignExpr(expr, op.Type, value, expr.Line, expr.Col);
+        }
+
+        return expr;
+    }
+
+    // ── Binary (precedence climbing) ─────────────────────────────────────
+
+    private Expr ParseBinaryExpr(int minPrecedence)
+    {
+        var left = ParseUnary();
+
+        while (true)
+        {
+            int prec = GetBinaryPrecedence(Current.Type);
+            if (prec < minPrecedence) break;
+
+            var op = Advance();
+            var right = ParseBinaryExpr(prec + 1); // left-associative: prec + 1
+            left = new BinaryExpr(left, op.Type, right, left.Line, left.Col);
+        }
+
+        return left;
+    }
+
+    // ── Unary (prefix) ──────────────────────────────────────────────────
+
+    private Expr ParseUnary()
+    {
+        var t = Current;
+
+        // sizeof
+        if (t.Type == TokenType.Sizeof)
+            return ParseSizeof();
+
+        // cast: (type)expr — only if we see '(' followed by a type keyword
+        if (t.Type == TokenType.LParen && IsTypeKeyword(Peek().Type))
+            return ParseCast();
+
+        // prefix unary: - ! ~ ++ -- &(address-of) *(deref)
+        if (t.Type is TokenType.Minus or TokenType.Bang or TokenType.Tilde
+            or TokenType.PlusPlus or TokenType.MinusMinus
+            or TokenType.Amp or TokenType.Star)
+        {
+            var op = Advance();
+            var operand = ParseUnary();
+            return new UnaryExpr(op.Type, operand, true, op.Line, op.Column);
+        }
+
+        return ParsePostfix(ParsePrimary());
+    }
+
+    // ── Postfix ─────────────────────────────────────────────────────────
+
+    private Expr ParsePostfix(Expr left)
+    {
+        while (true)
+        {
+            switch (Current.Type)
+            {
+                case TokenType.LParen: // function call
+                    Advance(); // skip (
+                    var args = ParseArgList();
+                    Expect(TokenType.RParen);
+                    left = new CallExpr(left, args, left.Line, left.Col);
+                    break;
+
+                case TokenType.LBracket: // array index
+                    Advance(); // skip [
+                    var index = ParseExpression();
+                    Expect(TokenType.RBracket);
+                    left = new IndexExpr(left, index, left.Line, left.Col);
+                    break;
+
+                case TokenType.Dot: // member access
+                    Advance(); // skip .
+                    var dotMember = Expect(TokenType.Identifier);
+                    left = new MemberExpr(left, dotMember.Value, false, left.Line, left.Col);
+                    break;
+
+                case TokenType.Arrow: // pointer member access
+                    Advance(); // skip ->
+                    var arrowMember = Expect(TokenType.Identifier);
+                    left = new MemberExpr(left, arrowMember.Value, true, left.Line, left.Col);
+                    break;
+
+                case TokenType.PlusPlus: // postfix ++
+                    var ppToken = Advance();
+                    left = new UnaryExpr(ppToken.Type, left, false, left.Line, left.Col);
+                    break;
+
+                case TokenType.MinusMinus: // postfix --
+                    var mmToken = Advance();
+                    left = new UnaryExpr(mmToken.Type, left, false, left.Line, left.Col);
+                    break;
+
+                default:
+                    return left;
+            }
+        }
+    }
+
+    // ── Primary ─────────────────────────────────────────────────────────
+
+    private Expr ParsePrimary()
+    {
+        var t = Current;
+
+        switch (t.Type)
+        {
+            case TokenType.IntLiteral:
+                Advance();
+                return new IntLiteralExpr(long.Parse(t.Value), t.Line, t.Column);
+
+            case TokenType.FixedLiteral:
+                Advance();
+                return new FixedLiteralExpr(t.Value, t.Line, t.Column);
+
+            case TokenType.HexLiteral:
+                Advance();
+                return new HexLiteralExpr(t.Value, t.Line, t.Column);
+
+            case TokenType.BinLiteral:
+                Advance();
+                return new BinLiteralExpr(t.Value, t.Line, t.Column);
+
+            case TokenType.BoolLiteral:
+                Advance();
+                return new BoolLiteralExpr(t.Value == "true", t.Line, t.Column);
+
+            case TokenType.StringLiteral:
+                Advance();
+                return new StringLiteralExpr(t.Value, t.Line, t.Column);
+
+            case TokenType.CharLiteral:
+                Advance();
+                return new CharLiteralExpr(t.Value.Length > 0 ? t.Value[0] : '\0', t.Line, t.Column);
+
+            case TokenType.Identifier:
+                Advance();
+                return new IdentifierExpr(t.Value, t.Line, t.Column);
+
+            case TokenType.LParen:
+                Advance(); // skip (
+                var expr = ParseExpression();
+                Expect(TokenType.RParen);
+                return expr;
+
+            default:
+                Error($"unexpected token {t.Type}");
+                Advance(); // skip to avoid infinite loop
+                return new IntLiteralExpr(0, t.Line, t.Column);
+        }
+    }
+
+    // ── Cast: (type)expr ────────────────────────────────────────────────
+
+    private Expr ParseCast()
+    {
+        var lparen = Advance(); // skip (
+        var typeRef = ParseTypeRef();
+        Expect(TokenType.RParen);
+        var operand = ParseUnary();
+        return new CastExpr(typeRef, operand, lparen.Line, lparen.Column);
+    }
+
+    // ── sizeof(type) ────────────────────────────────────────────────────
+
+    private Expr ParseSizeof()
+    {
+        var kw = Advance(); // skip sizeof
+        Expect(TokenType.LParen);
+        var typeRef = ParseTypeRef();
+        Expect(TokenType.RParen);
+        return new SizeofExpr(typeRef, kw.Line, kw.Column);
+    }
+
+    // ── Argument list ───────────────────────────────────────────────────
+
+    private List<Expr> ParseArgList()
+    {
+        var args = new List<Expr>();
+        if (Check(TokenType.RParen)) return args;
+
+        args.Add(ParseAssignment());
+        while (Match(TokenType.Comma))
+            args.Add(ParseAssignment());
+
+        return args;
+    }
+
+    // ── Type reference ──────────────────────────────────────────────────
+
+    public TypeRef ParseTypeRef()
+    {
+        var t = Current;
+        if (IsTypeKeyword(t.Type))
+        {
+            Advance();
+            bool isPointer = Match(TokenType.Star);
+            return new TypeRef(t.Value, isPointer, t.Line, t.Column);
+        }
+
+        // Could be a user-defined type name (identifier)
+        if (t.Type == TokenType.Identifier)
+        {
+            Advance();
+            bool isPointer = Match(TokenType.Star);
+            return new TypeRef(t.Value, isPointer, t.Line, t.Column);
+        }
+
+        Error($"expected type name, got {t.Type}");
+        return new TypeRef("error", false, t.Line, t.Column);
+    }
+}
