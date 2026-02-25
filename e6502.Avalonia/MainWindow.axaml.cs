@@ -50,6 +50,7 @@ public partial class MainWindow : Window
             frameRateHz: VgcConstants.FrameRateHz);
         _cpu = new Cpu(_bus);
         _cpu.Boot();
+        _bus.RomSwapRequested += (_, _) => _cpu.Boot();
 
         _editor = new ScreenEditor(_bus.Vgc);
         _bus.Vgc.SetScreenEditor(_editor);
