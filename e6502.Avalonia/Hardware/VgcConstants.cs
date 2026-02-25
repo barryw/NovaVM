@@ -543,11 +543,10 @@ public static class VgcConstants
     public const int CmpCodeSizeL     = 0xA037;  // compiled code size low
     public const int CmpCodeSizeH     = 0xA038;  // compiled code size high
     public const int CmpErrMsg        = 0xA039;  // read error message byte-by-byte
-    public const int CmpErrFileL      = 0xA03A;  // error file name offset low
-    public const int CmpErrFileH      = 0xA03B;  // error file name offset high
-    public const int CmpErrIdx        = 0xA03C;  // current error index (write to select)
-    public const int CmpSrcAddrL      = 0xA03D;  // source XRAM address low
-    public const int CmpSrcAddrM      = 0xA03E;  // source XRAM address mid
+    public const int CmpErrIdx        = 0xA03A;  // current error index (write to select)
+    public const int CmpSrcAddrL      = 0xA03B;  // source XRAM address low
+    public const int CmpSrcAddrM      = 0xA03C;  // source XRAM address mid
+    public const int CmpSrcAddrH      = 0xA03D;  // source XRAM address high
 
     public const byte CmpCmdCompile   = 0x01;   // compile source from XRAM
     public const byte CmpCmdGetError  = 0x02;   // populate error fields for CmpErrIdx

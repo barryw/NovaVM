@@ -58,7 +58,8 @@ public sealed class CompilerController
         _warnings.Clear();
 
         int srcAddr = _regs[VgcConstants.CmpSrcAddrL - VgcConstants.CmpBase]
-                    | (_regs[VgcConstants.CmpSrcAddrM - VgcConstants.CmpBase] << 8);
+                    | (_regs[VgcConstants.CmpSrcAddrM - VgcConstants.CmpBase] << 8)
+                    | (_regs[VgcConstants.CmpSrcAddrH - VgcConstants.CmpBase] << 16);
 
         var source = ReadSourceFromXram(srcAddr);
 
@@ -78,7 +79,8 @@ public sealed class CompilerController
     private string ReadSourceFromXram(int addr)
     {
         var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < 64 * 1024; i++) // max 64K source
+        int maxLen = 512 * 1024 - addr; // don't read past end of XRAM
+        for (int i = 0; i < maxLen; i++)
         {
             byte b = _readXram(addr + i);
             if (b == 0) break;

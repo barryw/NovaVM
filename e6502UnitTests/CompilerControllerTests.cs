@@ -130,6 +130,33 @@ public class CompilerControllerTests
 
         cc.Write((ushort)VgcConstants.CmpSrcAddrM, 0xAB);
         Assert.AreEqual(0xAB, cc.Read((ushort)VgcConstants.CmpSrcAddrM));
+
+        cc.Write((ushort)VgcConstants.CmpSrcAddrH, 0x07);
+        Assert.AreEqual(0x07, cc.Read((ushort)VgcConstants.CmpSrcAddrH));
+    }
+
+    [TestMethod]
+    public void Compile_24BitXramAddress_ReadsCorrectLocation()
+    {
+        // Place source at XRAM address 0x010000 (64K boundary)
+        int addr = 0x010000;
+        var source = System.Text.Encoding.ASCII.GetBytes("int x;");
+        Array.Copy(source, 0, _xram, addr, source.Length);
+
+        var cc = CreateController();
+        cc.Write((ushort)VgcConstants.CmpSrcAddrL, (byte)(addr & 0xFF));
+        cc.Write((ushort)VgcConstants.CmpSrcAddrM, (byte)((addr >> 8) & 0xFF));
+        cc.Write((ushort)VgcConstants.CmpSrcAddrH, (byte)((addr >> 16) & 0xFF));
+        cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdCompile);
+
+        // Source is non-empty so we should NOT get "empty source" error
+        // (compiler not yet implemented, so we get that error instead)
+        cc.Write((ushort)VgcConstants.CmpErrIdx, 0);
+        cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdGetError);
+
+        // Read first few bytes of the error message - should be "compiler" not "empty"
+        byte first = cc.Read((ushort)VgcConstants.CmpErrMsg);
+        Assert.AreEqual((byte)'c', first, "Expected 'compiler not yet implemented', got 'empty source' - 24-bit address not working");
     }
 
     [TestMethod]
