@@ -301,4 +301,254 @@ public class Parser
         Error($"expected type name, got {t.Type}");
         return new TypeRef("error", false, t.Line, t.Column);
     }
+
+    // ── Statement parsing ────────────────────────────────────────────────
+
+    public Stmt ParseStatement()
+    {
+        var t = Current;
+
+        return t.Type switch
+        {
+            TokenType.LBrace => ParseBlock(),
+            TokenType.If => ParseIf(),
+            TokenType.While => ParseWhile(),
+            TokenType.Do => ParseDoWhile(),
+            TokenType.For => ParseFor(),
+            TokenType.Switch => ParseSwitch(),
+            TokenType.Return => ParseReturn(),
+            TokenType.Break => ParseBreak(),
+            TokenType.Continue => ParseContinue(),
+            TokenType.Asm => ParseAsm(),
+            _ when IsTypeKeyword(t.Type) && Peek().Type == TokenType.Identifier => ParseVarDecl(),
+            _ => ParseExprStmt(),
+        };
+    }
+
+    // ── Block ────────────────────────────────────────────────────────────
+
+    public BlockStmt ParseBlock()
+    {
+        var lbrace = Expect(TokenType.LBrace);
+        var stmts = new List<Stmt>();
+
+        while (!Check(TokenType.RBrace) && !Check(TokenType.Eof))
+            stmts.Add(ParseStatement());
+
+        Expect(TokenType.RBrace);
+        return new BlockStmt(stmts, lbrace.Line, lbrace.Column);
+    }
+
+    // ── If ───────────────────────────────────────────────────────────────
+
+    private Stmt ParseIf()
+    {
+        var kw = Advance(); // skip 'if'
+        Expect(TokenType.LParen);
+        var condition = ParseExpression();
+        Expect(TokenType.RParen);
+        var then = ParseStatement();
+        Stmt? elseStmt = null;
+        if (Match(TokenType.Else))
+            elseStmt = ParseStatement();
+        return new IfStmt(condition, then, elseStmt, kw.Line, kw.Column);
+    }
+
+    // ── While ────────────────────────────────────────────────────────────
+
+    private Stmt ParseWhile()
+    {
+        var kw = Advance(); // skip 'while'
+        Expect(TokenType.LParen);
+        var condition = ParseExpression();
+        Expect(TokenType.RParen);
+        var body = ParseStatement();
+        return new WhileStmt(condition, body, kw.Line, kw.Column);
+    }
+
+    // ── Do-While ─────────────────────────────────────────────────────────
+
+    private Stmt ParseDoWhile()
+    {
+        var kw = Advance(); // skip 'do'
+        var body = ParseStatement();
+        Expect(TokenType.While);
+        Expect(TokenType.LParen);
+        var condition = ParseExpression();
+        Expect(TokenType.RParen);
+        Expect(TokenType.Semicolon);
+        return new DoWhileStmt(body, condition, kw.Line, kw.Column);
+    }
+
+    // ── For ──────────────────────────────────────────────────────────────
+
+    private Stmt ParseFor()
+    {
+        var kw = Advance(); // skip 'for'
+        Expect(TokenType.LParen);
+
+        // init
+        Stmt? init = null;
+        if (!Check(TokenType.Semicolon))
+        {
+            if (IsTypeKeyword(Current.Type) && Peek().Type == TokenType.Identifier)
+                init = ParseVarDecl(); // VarDecl already consumes ';'
+            else
+            {
+                var expr = ParseExpression();
+                Expect(TokenType.Semicolon);
+                init = new ExprStmt(expr, expr.Line, expr.Col);
+            }
+        }
+        else
+        {
+            Advance(); // skip ';'
+        }
+
+        // condition
+        Expr? condition = null;
+        if (!Check(TokenType.Semicolon))
+            condition = ParseExpression();
+        Expect(TokenType.Semicolon);
+
+        // increment
+        Expr? increment = null;
+        if (!Check(TokenType.RParen))
+            increment = ParseExpression();
+        Expect(TokenType.RParen);
+
+        var body = ParseStatement();
+        return new ForStmt(init, condition, increment, body, kw.Line, kw.Column);
+    }
+
+    // ── Switch ───────────────────────────────────────────────────────────
+
+    private Stmt ParseSwitch()
+    {
+        var kw = Advance(); // skip 'switch'
+        Expect(TokenType.LParen);
+        var value = ParseExpression();
+        Expect(TokenType.RParen);
+        Expect(TokenType.LBrace);
+
+        var cases = new List<CaseClause>();
+
+        while (!Check(TokenType.RBrace) && !Check(TokenType.Eof))
+        {
+            Expr? caseValue = null;
+            var caseTok = Current;
+
+            if (Match(TokenType.Case))
+            {
+                caseValue = ParseExpression();
+                Expect(TokenType.Colon);
+            }
+            else if (Match(TokenType.Default))
+            {
+                Expect(TokenType.Colon);
+            }
+            else
+            {
+                Error($"expected 'case' or 'default', got {Current.Type}");
+                Advance();
+                continue;
+            }
+
+            var body = new List<Stmt>();
+            while (!Check(TokenType.Case) && !Check(TokenType.Default)
+                   && !Check(TokenType.RBrace) && !Check(TokenType.Eof))
+            {
+                body.Add(ParseStatement());
+            }
+
+            cases.Add(new CaseClause(caseValue, body, caseTok.Line, caseTok.Column));
+        }
+
+        Expect(TokenType.RBrace);
+        return new SwitchStmt(value, cases, kw.Line, kw.Column);
+    }
+
+    // ── Return ───────────────────────────────────────────────────────────
+
+    private Stmt ParseReturn()
+    {
+        var kw = Advance(); // skip 'return'
+        Expr? value = null;
+        if (!Check(TokenType.Semicolon))
+            value = ParseExpression();
+        Expect(TokenType.Semicolon);
+        return new ReturnStmt(value, kw.Line, kw.Column);
+    }
+
+    // ── Break / Continue ─────────────────────────────────────────────────
+
+    private Stmt ParseBreak()
+    {
+        var kw = Advance(); // skip 'break'
+        Expect(TokenType.Semicolon);
+        return new BreakStmt(kw.Line, kw.Column);
+    }
+
+    private Stmt ParseContinue()
+    {
+        var kw = Advance(); // skip 'continue'
+        Expect(TokenType.Semicolon);
+        return new ContinueStmt(kw.Line, kw.Column);
+    }
+
+    // ── Asm ──────────────────────────────────────────────────────────────
+
+    private Stmt ParseAsm()
+    {
+        var kw = Advance(); // skip 'asm'
+        Expect(TokenType.LBrace);
+
+        // Collect raw tokens between { and } as assembly text
+        var parts = new List<string>();
+        while (!Check(TokenType.RBrace) && !Check(TokenType.Eof))
+        {
+            parts.Add(Current.Value);
+            Advance();
+        }
+
+        Expect(TokenType.RBrace);
+        Expect(TokenType.Semicolon);
+        return new AsmStmt(string.Join(" ", parts), kw.Line, kw.Column);
+    }
+
+    // ── Variable declaration ─────────────────────────────────────────────
+
+    private Stmt ParseVarDecl()
+    {
+        var typeRef = ParseTypeRef();
+        var name = Expect(TokenType.Identifier);
+
+        // Array declaration: type name[size];
+        if (Match(TokenType.LBracket))
+        {
+            var size = ParseExpression();
+            Expect(TokenType.RBracket);
+            Expr? init = null;
+            if (Match(TokenType.Assign))
+                init = ParseExpression();
+            Expect(TokenType.Semicolon);
+            return new ArrayDeclStmt(typeRef, name.Value, size, init, typeRef.Line, typeRef.Col);
+        }
+
+        // Scalar declaration: type name; or type name = expr;
+        Expr? initializer = null;
+        if (Match(TokenType.Assign))
+            initializer = ParseExpression();
+        Expect(TokenType.Semicolon);
+        return new VarDeclStmt(typeRef, name.Value, initializer, typeRef.Line, typeRef.Col);
+    }
+
+    // ── Expression statement ─────────────────────────────────────────────
+
+    private Stmt ParseExprStmt()
+    {
+        var expr = ParseExpression();
+        Expect(TokenType.Semicolon);
+        return new ExprStmt(expr, expr.Line, expr.Col);
+    }
 }
