@@ -4,6 +4,8 @@ using KDS.e6502;
 
 public class CompositeBusDevice : IBusDevice, IDisposable
 {
+    public enum ActiveRom { Basic, Ncc }
+
     private readonly byte[] _ram = new byte[65536];
     private readonly VirtualGraphicsController _vgc = new();
     private readonly SidChip _sid;
@@ -14,6 +16,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly VirtualNetworkController _nic;
     private readonly VirtualDmaController _dma;
     private readonly VirtualBlitterController _blitter;
+    private readonly CompilerController _compiler;
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
     private readonly int _cpuHz;
@@ -21,6 +24,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private long _frameNumeratorAccumulator;
     private long _totalFrames;
     private bool _rasterIrqPending;
+    private readonly byte[] _basicRom;
+    private readonly byte[] _nccRom;
+
+    public ActiveRom CurrentRom { get; private set; } = ActiveRom.Basic;
+    public event EventHandler? RomSwapRequested;
 
     public VirtualGraphicsController Vgc => _vgc;
     public SidChip Sid => _sid;
@@ -30,6 +38,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public VirtualNetworkController Nic => _nic;
     public VirtualDmaController Dma => _dma;
     public VirtualBlitterController Blitter => _blitter;
+    public CompilerController Compiler => _compiler;
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
     public int CpuHz => _cpuHz;
@@ -78,10 +87,34 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             tryWriteByte: TryDmaWriteByte,
             canWriteRange: CanDmaWriteRange,
             postTransferWrite: PostDmaWrite);
+        _compiler = new CompilerController(
+            readXram: addr => _xmc.TryReadLinear(addr, out byte v) ? v : (byte)0,
+            writeCpuRam: (addr, data) => _ram[addr] = data);
 
         string romPath = Path.Combine(AppContext.BaseDirectory, "Resources", "ehbasic.bin");
         byte[] rom = File.ReadAllBytes(romPath);
         rom.CopyTo(_ram, VgcConstants.RomBase);
+
+        // Snapshot the BASIC ROM so we can restore it after a swap.
+        _basicRom = new byte[16384];
+        Array.Copy(_ram, VgcConstants.RomBase, _basicRom, 0, 16384);
+
+        // Load the NCC ROM (stub for now).
+        string nccPath = Path.Combine(AppContext.BaseDirectory, "Resources", "ncc.bin");
+        if (File.Exists(nccPath))
+        {
+            _nccRom = File.ReadAllBytes(nccPath);
+        }
+        else
+        {
+            // Generate a minimal stub ROM in-memory as fallback.
+            _nccRom = new byte[16384];
+            Array.Fill(_nccRom, (byte)0xEA);
+            _nccRom[0] = 0x4C; _nccRom[1] = 0x00; _nccRom[2] = 0xC0; // JMP $C000
+            _nccRom[0x3FFA] = 0x00; _nccRom[0x3FFB] = 0xC0; // NMI -> $C000
+            _nccRom[0x3FFC] = 0x00; _nccRom[0x3FFD] = 0xC0; // RESET -> $C000
+            _nccRom[0x3FFE] = 0x00; _nccRom[0x3FFF] = 0xC0; // IRQ -> $C000
+        }
 
         InitVectorTable();
     }
@@ -130,6 +163,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_blitter.OwnsAddress(address)) return _blitter.Read(address);
         if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
+        if (_compiler.OwnsAddress(address)) return _compiler.Read(address);
         if (_vgc.OwnsAddress(address)) return _vgc.Read(address);
         return _ram[address];
     }
@@ -169,6 +203,24 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             }
             return;
         }
+        // ROM swap register — intercept before VGC and ROM write protection.
+        if (address == VgcConstants.RegRomSwap)
+        {
+            if (data == VgcConstants.RomSwapNcc && CurrentRom != ActiveRom.Ncc)
+            {
+                Array.Copy(_nccRom, 0, _ram, VgcConstants.RomBase, 16384);
+                CurrentRom = ActiveRom.Ncc;
+                RomSwapRequested?.Invoke(this, EventArgs.Empty);
+            }
+            else if (data == VgcConstants.RomSwapBasic && CurrentRom != ActiveRom.Basic)
+            {
+                Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, 16384);
+                CurrentRom = ActiveRom.Basic;
+                RomSwapRequested?.Invoke(this, EventArgs.Empty);
+            }
+            return;
+        }
+        if (_compiler.OwnsAddress(address)) { _compiler.Write(address, data); return; }
         if (_vgc.OwnsAddress(address))
         {
             _vgc.Write(address, data);
