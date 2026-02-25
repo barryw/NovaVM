@@ -518,4 +518,43 @@ public static class VgcConstants
     public const ushort RegHelp           = 0xA020;
     public const ushort HelpSearchBuffer  = 0xA021;
     public const int    HelpSearchBufferLen = 16;
+
+    // -------------------------------------------------------------------------
+    // ROM swap register ($A03F)
+    // -------------------------------------------------------------------------
+
+    public const int RegRomSwap       = 0xA03F;
+    public const byte RomSwapNcc      = 0x01;   // switch to NCC ROM
+    public const byte RomSwapBasic    = 0x02;   // switch to BASIC ROM
+
+    // -------------------------------------------------------------------------
+    // Compiler Controller registers ($A031-$A03E)
+    // -------------------------------------------------------------------------
+
+    public const int CmpBase          = 0xA031;
+    public const int CmpEnd           = 0xA03E;
+
+    public const int CmpCmd           = 0xA031;  // write triggers command
+    public const int CmpStatus        = 0xA032;  // 0=idle, 1=compiling, 2=ok, 3=error
+    public const int CmpErrCount      = 0xA033;  // number of errors
+    public const int CmpWarnCount     = 0xA034;  // number of warnings
+    public const int CmpErrLineL      = 0xA035;  // current error line low
+    public const int CmpErrLineH      = 0xA036;  // current error line high
+    public const int CmpCodeSizeL     = 0xA037;  // compiled code size low
+    public const int CmpCodeSizeH     = 0xA038;  // compiled code size high
+    public const int CmpErrMsg        = 0xA039;  // read error message byte-by-byte
+    public const int CmpErrFileL      = 0xA03A;  // error file name offset low
+    public const int CmpErrFileH      = 0xA03B;  // error file name offset high
+    public const int CmpErrIdx        = 0xA03C;  // current error index (write to select)
+    public const int CmpSrcAddrL      = 0xA03D;  // source XRAM address low
+    public const int CmpSrcAddrM      = 0xA03E;  // source XRAM address mid
+
+    public const byte CmpCmdCompile   = 0x01;   // compile source from XRAM
+    public const byte CmpCmdGetError  = 0x02;   // populate error fields for CmpErrIdx
+    public const byte CmpCmdGetWarn   = 0x03;   // populate warning fields for CmpErrIdx
+
+    public const byte CmpStatusIdle      = 0x00;
+    public const byte CmpStatusCompiling = 0x01;
+    public const byte CmpStatusOk        = 0x02;
+    public const byte CmpStatusError     = 0x03;
 }
