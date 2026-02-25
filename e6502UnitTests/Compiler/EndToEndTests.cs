@@ -258,4 +258,47 @@ void main() { store(77); }";
         var (cpu, bus, result) = CompileAndRun(source);
         Assert.AreEqual(1, bus.Read(result.Symbols["result"].Address));
     }
+
+    // ── Test 18: LineMap_HasEntries ──────────────────────────────────────────
+
+    [TestMethod]
+    public void LineMap_HasEntries()
+    {
+        const string src = @"
+byte x;
+void main() {
+    x = 1;
+    x = x + 1;
+}";
+        var compiler = new NccCompiler { BaseAddress = LoadAddr };
+        var result = compiler.Compile(src);
+        Assert.IsTrue(result.Success, string.Join("\n", result.Errors));
+        Assert.IsNotNull(result.LineMap);
+        Assert.IsTrue(result.LineMap.Count > 0, "LineMap should have entries");
+    }
+
+    // ── Test 19: LineMap_MapsDistinctLines ───────────────────────────────────
+
+    [TestMethod]
+    public void LineMap_MapsDistinctLines()
+    {
+        // Line numbers are 0-based in the map (source line 3 → index 2)
+        const string src = @"byte x;
+byte y;
+void main() {
+    x = 10;
+    y = 20;
+}";
+        var compiler = new NccCompiler { BaseAddress = LoadAddr };
+        var result = compiler.Compile(src);
+        Assert.IsTrue(result.Success, string.Join("\n", result.Errors));
+        Assert.IsNotNull(result.LineMap);
+
+        // Lines "x = 10;" and "y = 20;" should map to different addresses
+        // (0-based line 3 = "x = 10;", line 4 = "y = 20;")
+        Assert.IsTrue(result.LineMap.ContainsKey(3), "Line 3 (x=10) should be in map");
+        Assert.IsTrue(result.LineMap.ContainsKey(4), "Line 4 (y=20) should be in map");
+        Assert.AreNotEqual(result.LineMap[3], result.LineMap[4],
+            "Different source lines should map to different addresses");
+    }
 }

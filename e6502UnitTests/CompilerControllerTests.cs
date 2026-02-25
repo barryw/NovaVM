@@ -65,10 +65,9 @@ public class CompilerControllerTests
     }
 
     [TestMethod]
-    public void Compile_WithSource_SetsErrorStatus_NotYetImplemented()
+    public void Compile_ValidSource_SetsOkStatus()
     {
-        // Put some source in XRAM
-        var source = System.Text.Encoding.ASCII.GetBytes("int main() { return 0; }");
+        var source = System.Text.Encoding.ASCII.GetBytes("void main() { }");
         Array.Copy(source, _xram, source.Length);
 
         var cc = CreateController();
@@ -76,9 +75,12 @@ public class CompilerControllerTests
         cc.Write((ushort)VgcConstants.CmpSrcAddrM, 0);
         cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdCompile);
 
-        // Compiler not yet implemented, so error expected
-        Assert.AreEqual(VgcConstants.CmpStatusError, cc.Read((ushort)VgcConstants.CmpStatus));
-        Assert.AreEqual(1, cc.Read((ushort)VgcConstants.CmpErrCount));
+        Assert.AreEqual(VgcConstants.CmpStatusOk, cc.Read((ushort)VgcConstants.CmpStatus));
+        Assert.AreEqual(0, cc.Read((ushort)VgcConstants.CmpErrCount));
+        // Code size should be non-zero
+        int codeSize = cc.Read((ushort)VgcConstants.CmpCodeSizeL)
+                     | (cc.Read((ushort)VgcConstants.CmpCodeSizeH) << 8);
+        Assert.IsTrue(codeSize > 0, $"Code size should be > 0, was {codeSize}");
     }
 
     [TestMethod]
@@ -138,9 +140,9 @@ public class CompilerControllerTests
     [TestMethod]
     public void Compile_24BitXramAddress_ReadsCorrectLocation()
     {
-        // Place source at XRAM address 0x010000 (64K boundary)
+        // Place valid source at XRAM address 0x010000 (64K boundary)
         int addr = 0x010000;
-        var source = System.Text.Encoding.ASCII.GetBytes("int x;");
+        var source = System.Text.Encoding.ASCII.GetBytes("void main() { }");
         Array.Copy(source, 0, _xram, addr, source.Length);
 
         var cc = CreateController();
@@ -149,21 +151,16 @@ public class CompilerControllerTests
         cc.Write((ushort)VgcConstants.CmpSrcAddrH, (byte)((addr >> 16) & 0xFF));
         cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdCompile);
 
-        // Source is non-empty so we should NOT get "empty source" error
-        // (compiler not yet implemented, so we get that error instead)
-        cc.Write((ushort)VgcConstants.CmpErrIdx, 0);
-        cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdGetError);
-
-        // Read first few bytes of the error message - should be "compiler" not "empty"
-        byte first = cc.Read((ushort)VgcConstants.CmpErrMsg);
-        Assert.AreEqual((byte)'c', first, "Expected 'compiler not yet implemented', got 'empty source' - 24-bit address not working");
+        // Source at 24-bit address should compile successfully (not "empty source")
+        Assert.AreEqual(VgcConstants.CmpStatusOk, cc.Read((ushort)VgcConstants.CmpStatus),
+            "24-bit XRAM address should read source correctly");
     }
 
     [TestMethod]
-    public void ReadWarningMessage_ByteByByte()
+    public void Compile_InvalidSource_SetsErrorWithMessage()
     {
-        // Put some source in XRAM so we hit the "not yet implemented" path
-        var source = System.Text.Encoding.ASCII.GetBytes("int main() { return 0; }");
+        // Invalid source should produce compiler errors
+        var source = System.Text.Encoding.ASCII.GetBytes("this is not valid C;");
         Array.Copy(source, _xram, source.Length);
 
         var cc = CreateController();
@@ -171,23 +168,14 @@ public class CompilerControllerTests
         cc.Write((ushort)VgcConstants.CmpSrcAddrM, 0);
         cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdCompile);
 
-        // Should have at least one warning
-        Assert.IsTrue(cc.Read((ushort)VgcConstants.CmpWarnCount) > 0);
+        Assert.AreEqual(VgcConstants.CmpStatusError, cc.Read((ushort)VgcConstants.CmpStatus));
+        Assert.IsTrue(cc.Read((ushort)VgcConstants.CmpErrCount) > 0);
 
-        // Select warning index 0 and issue GetWarn command
+        // Read error message byte-by-byte — should be non-empty
         cc.Write((ushort)VgcConstants.CmpErrIdx, 0);
-        cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdGetWarn);
-
-        // Read warning message byte-by-byte
-        var expected = "compilation support is experimental";
-        for (int i = 0; i < expected.Length; i++)
-        {
-            byte b = cc.Read((ushort)VgcConstants.CmpErrMsg);
-            Assert.AreEqual((byte)expected[i], b, $"Mismatch at position {i}");
-        }
-
-        // After message ends, should return 0
-        Assert.AreEqual(0, cc.Read((ushort)VgcConstants.CmpErrMsg));
+        cc.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdGetError);
+        byte first = cc.Read((ushort)VgcConstants.CmpErrMsg);
+        Assert.AreNotEqual(0, first, "Error message should not be empty");
     }
 
     [TestMethod]

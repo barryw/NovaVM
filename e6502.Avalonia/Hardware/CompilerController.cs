@@ -1,3 +1,5 @@
+using e6502.Avalonia.Compiler;
+
 namespace e6502.Avalonia.Hardware;
 
 public sealed class CompilerController
@@ -70,10 +72,29 @@ public sealed class CompilerController
             return;
         }
 
-        // TODO: invoke actual compiler pipeline here (Phase 3-6)
-        _errors.Add(new CompileError(0, "compiler not yet implemented"));
-        _warnings.Add(new CompileError(0, "compilation support is experimental"));
-        SetResult(VgcConstants.CmpStatusError, _errors.Count, _warnings.Count, 0);
+        var compiler = new NccCompiler { BaseAddress = (ushort)VgcConstants.BasicBase };
+        var result = compiler.Compile(source);
+
+        if (!result.Success)
+        {
+            foreach (var err in result.Errors)
+            {
+                // Try to extract line number from error message
+                int line = 0;
+                var match = System.Text.RegularExpressions.Regex.Match(err, @"(?:line\s+|[\(])(\d+)");
+                if (match.Success) int.TryParse(match.Groups[1].Value, out line);
+                _errors.Add(new CompileError(line, err));
+            }
+            SetResult(VgcConstants.CmpStatusError, _errors.Count, _warnings.Count, 0);
+            return;
+        }
+
+        // Load compiled code into CPU RAM
+        byte[] code = result.Code;
+        for (int i = 0; i < code.Length; i++)
+            _writeCpuRam((ushort)(VgcConstants.BasicBase + i), code[i]);
+
+        SetResult(VgcConstants.CmpStatusOk, 0, 0, code.Length);
     }
 
     private string ReadSourceFromXram(int addr)

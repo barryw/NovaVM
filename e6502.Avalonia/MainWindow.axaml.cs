@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Dock.Avalonia.Controls;
 using e6502.Avalonia.Debugging;
 using e6502.Avalonia.DevTools;
+using e6502.Avalonia.Editor;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Help;
 using e6502.Avalonia.Input;
@@ -35,6 +36,8 @@ public partial class MainWindow : Window
     private HelpPanel? _helpPanel;
     private HelpIndex? _helpIndex;
     private bool _helpVisible;
+    private DebuggerService _debugger = null!;
+    private NccEditor? _nccEditor;
 
     public MainWindow()
     {
@@ -67,11 +70,15 @@ public partial class MainWindow : Window
         Content = _canvas;
 
         // Debugger service
-        var debugger = new DebuggerService(_cpu, _bus);
+        _debugger = new DebuggerService(_cpu, _bus);
+
+        // NCC editor
+        _nccEditor = new NccEditor(_bus, _debugger, _cpu);
+        _canvas.NccEditor = _nccEditor;
 
         // TCP server for MCP
         int tcpPort = int.TryParse(Environment.GetEnvironmentVariable("EMULATOR_PORT"), out int ep) ? ep : 6502;
-        var tcpServer = new EmulatorTcpServer(_bus, _editor, _cpu, debugger, tcpPort);
+        var tcpServer = new EmulatorTcpServer(_bus, _editor, _cpu, _debugger, tcpPort);
         tcpServer.Start();
 
         // CPU thread
@@ -90,7 +97,7 @@ public partial class MainWindow : Window
 
             while (_running)
             {
-                debugger.CheckBreakpointAndWait();
+                _debugger.CheckBreakpointAndWait();
 
                 int cycleBudget = turboMode ? turboChunkCycles : scheduler.TakeCycleBudget();
                 if (cycleBudget <= 0)
@@ -102,7 +109,7 @@ public partial class MainWindow : Window
                 int chunkCyclesExecuted = 0;
                 while (_running && cycleBudget > 0)
                 {
-                    debugger.CheckBreakpointAndWait();
+                    _debugger.CheckBreakpointAndWait();
 
                     int cycles = _cpu.ClocksForNext();
                     _cpu.ExecuteNext();
@@ -166,6 +173,15 @@ public partial class MainWindow : Window
 
             if (!UiTransitionGate.IsPaused && Environment.TickCount64 - _lastMoveResizeTick > 200)
                 _canvas.RequestRedraw();
+
+            // NCC editor: detect program halt (debugger paused while editor was running)
+            if (_nccEditor is { IsActive: true })
+            {
+                if (_nccEditor.IsRunning && _debugger.IsPaused)
+                    _nccEditor.StopRunning();
+                else if (_nccEditor.Mode == EditorMode.Debug)
+                    _nccEditor.CheckDebugBreak();
+            }
 
             return true;
         }, TimeSpan.FromMilliseconds(1000.0 / 60.0));
@@ -232,6 +248,10 @@ public partial class MainWindow : Window
                     ToggleDevMode();
                     e.Handled = true;
                     return;
+                case Key.N:
+                    ToggleNccEditor();
+                    e.Handled = true;
+                    return;
             }
         }
         if (e.Key == Key.F11)
@@ -244,6 +264,15 @@ public partial class MainWindow : Window
         }
 
         base.OnKeyDown(e);
+    }
+
+    private void ToggleNccEditor()
+    {
+        if (_nccEditor == null) return;
+        if (_nccEditor.IsActive)
+            _nccEditor.Deactivate();
+        else
+            _nccEditor.Activate();
     }
 
     private void ToggleDevMode()

@@ -8,7 +8,8 @@ public record CompileResult(
     bool Success,
     byte[] Code,
     Dictionary<string, SymbolInfo> Symbols,
-    List<string> Errors);
+    List<string> Errors,
+    Dictionary<int, ushort>? LineMap = null);
 
 // ── CodeGen ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,9 @@ public sealed class CodeGen
     // Pending break patches (buffer index of JMP placeholder, keyed by scope depth)
     private readonly Stack<List<int>> _breakPatches    = new();
     private readonly Stack<List<int>> _continuePatches = new();
+
+    // Source line → first emitted address (for debugger line mapping)
+    private readonly Dictionary<int, ushort> _lineMap = new();
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -149,7 +153,7 @@ public sealed class CodeGen
         if (_errors.Count > 0)
             return new CompileResult(false, Array.Empty<byte>(), _symbols, _errors);
 
-        return new CompileResult(true, _emit.ToArray(), _symbols, _errors);
+        return new CompileResult(true, _emit.ToArray(), _symbols, _errors, _lineMap);
     }
 
     // ── Global allocation ────────────────────────────────────────────────────
@@ -402,8 +406,16 @@ public sealed class CodeGen
             EmitStmt(stmt);
     }
 
+    /// <summary>Records the first emitted address for a given source line (1-based).</summary>
+    private void TrackSourceLine(int line)
+    {
+        if (line > 0)
+            _lineMap.TryAdd(line - 1, _emit.CurrentAddress);  // store as 0-based
+    }
+
     private void EmitStmt(Stmt stmt)
     {
+        TrackSourceLine(stmt.Line);
         switch (stmt)
         {
             case BlockStmt bs:

@@ -5,6 +5,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using e6502.Avalonia;
+using e6502.Avalonia.Editor;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
 
@@ -30,6 +31,9 @@ public class EmulatorCanvas : Control
     private readonly byte[] _shapeRamSnapshot = new byte[VgcConstants.ShapeRamSize];
     private bool _shapeRamInitialized;
 
+    /// <summary>When set, keyboard input routes to the NCC editor instead of ScreenEditor.</summary>
+    public NccEditor? NccEditor { get; set; }
+
     public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor)
     {
         _vgc = vgc;
@@ -53,6 +57,15 @@ public class EmulatorCanvas : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // Route to NCC editor when active (but not in Running mode — program gets ScreenEditor input)
+        if (NccEditor is { IsActive: true, Mode: not EditorMode.Running })
+        {
+            NccEditor.HandleKeyDown(e.Key, e.KeyModifiers);
+            e.Handled = true;
+            base.OnKeyDown(e);
+            return;
+        }
+
         if ((e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)) && e.Key == Key.V
             || (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.Insert))
         {
@@ -98,6 +111,18 @@ public class EmulatorCanvas : Control
 
     protected override void OnTextInput(TextInputEventArgs e)
     {
+        // Route to NCC editor when active (no uppercasing — C is case-sensitive)
+        if (NccEditor is { IsActive: true, Mode: not EditorMode.Running })
+        {
+            if (!string.IsNullOrEmpty(e.Text))
+            {
+                NccEditor.HandleTextInput(e.Text);
+                e.Handled = true;
+            }
+            base.OnTextInput(e);
+            return;
+        }
+
         if (string.IsNullOrEmpty(e.Text))
         {
             base.OnTextInput(e);
