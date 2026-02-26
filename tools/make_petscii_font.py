@@ -617,6 +617,18 @@ def remap_charset(rom_half: bytes) -> bytearray:
     for i in range(32):
         put(0xA0 + i, 96 + i)
 
+    # Lowercase ASCII positions (0x61-0x7A) -> show uppercase A-Z
+    # The C64 uppercase set has no lowercase; lowercase input rendered as uppercase.
+    # We duplicate the uppercase glyphs so mixed-case output (like "Ready") is visible.
+    for i in range(1, 27):
+        put(0x60 + i, i)  # same glyphs as SC 1-26 (A-Z)
+
+    # 0x60 (backtick) -> horizontal bar graphic (SC 64)
+    put(0x60, 64)
+    # 0x7B-0x7F -> fill with remaining shifted graphics (SC 91-95)
+    for i in range(5):
+        put(0x7B + i, 91 + i)
+
     return out
 
 
