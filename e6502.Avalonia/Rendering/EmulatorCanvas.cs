@@ -60,8 +60,9 @@ public class EmulatorCanvas : Control
         // Route to NCC editor when active (but not in Running mode — program gets ScreenEditor input)
         if (NccEditor is { IsActive: true, Mode: not EditorMode.Running })
         {
-            NccEditor.HandleKeyDown(e.Key, e.KeyModifiers);
-            e.Handled = true;
+            bool consumed = NccEditor.HandleKeyDown(e.Key, e.KeyModifiers);
+            if (consumed)
+                e.Handled = true;
             base.OnKeyDown(e);
             return;
         }
@@ -388,7 +389,7 @@ public class EmulatorCanvas : Control
 
         int glyphX = srcPx % BitmapFont.GlyphWidth;
         int glyphY = (srcPy % (BitmapFont.GlyphHeight * 2)) / 2;
-        byte rowBits = _font.GetRow(ch, glyphY);
+        byte rowBits = _font.GetRow(state.FontIndex, ch, glyphY);
         bool set = (rowBits & (0x80 >> glyphX)) != 0;
 
         if (state.Mode == 2 && !set && !isCursor)
@@ -442,6 +443,7 @@ public class EmulatorCanvas : Control
         public int ScrollX;
         public int ScrollY;
         public byte BgColor;
+        public int FontIndex;
 
         public static RenderVideoState FromVgc(VirtualGraphicsController vgc) =>
             new()
@@ -449,7 +451,8 @@ public class EmulatorCanvas : Control
                 Mode = vgc.GetMode(),
                 ScrollX = vgc.GetScrollX(),
                 ScrollY = vgc.GetScrollY(),
-                BgColor = vgc.GetBgColor()
+                BgColor = vgc.GetBgColor(),
+                FontIndex = vgc.GetFontIndex()
             };
 
         public void Apply(byte registerIndex, byte value)
@@ -467,6 +470,9 @@ public class EmulatorCanvas : Control
                     break;
                 case VgcConstants.RegScrollY - VgcConstants.VgcBase:
                     ScrollY = value;
+                    break;
+                case VgcConstants.RegFont - VgcConstants.VgcBase:
+                    FontIndex = value & 0x07;
                     break;
             }
         }

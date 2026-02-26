@@ -61,10 +61,29 @@ public partial class MainWindow : Window
         {
             Dispatcher.UIThread.Post(() => ShowHelpPanel(searchTerm));
         };
+        _bus.NccEditorRequested += () =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_nccEditor is { IsActive: false })
+                    _nccEditor.Activate();
+            });
+        };
         InitializeHelp();
 
-        var fontPath = Path.Combine(AppContext.BaseDirectory, "Resources", "cp437.bin");
-        var font = BitmapFont.LoadFromFile(fontPath);
+        var resDir = Path.Combine(AppContext.BaseDirectory, "Resources");
+        var fontSlots = new List<byte[]>();
+        fontSlots.Add(File.ReadAllBytes(Path.Combine(resDir, "cp437.bin")));
+
+        var petUpper = Path.Combine(resDir, "petscii_upper.bin");
+        if (File.Exists(petUpper))
+            fontSlots.Add(File.ReadAllBytes(petUpper));
+
+        var petLower = Path.Combine(resDir, "petscii_lower.bin");
+        if (File.Exists(petLower))
+            fontSlots.Add(File.ReadAllBytes(petLower));
+
+        var font = new BitmapFont(fontSlots.ToArray());
 
         _canvas = new EmulatorCanvas(_bus.Vgc, font, _editor);
         Content = _canvas;
@@ -219,9 +238,20 @@ public partial class MainWindow : Window
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // Handle NCC activation confirmation (Y/N prompt on BASIC screen)
+        if (_awaitingNccConfirm)
+        {
+            HandleNccConfirmKey(e.Key);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.F1)
         {
-            ToggleHelpPanel();
+            if (_nccEditor is { IsActive: true })
+                ShowHelpPanelNcc();
+            else
+                ToggleHelpPanel();
             e.Handled = true;
             return;
         }
@@ -266,13 +296,41 @@ public partial class MainWindow : Window
         base.OnKeyDown(e);
     }
 
+    private bool _awaitingNccConfirm;
+
     private void ToggleNccEditor()
     {
         if (_nccEditor == null) return;
         if (_nccEditor.IsActive)
-            _nccEditor.Deactivate();
+        {
+            // Delegate to NccEditor's Ctrl+Q exit handler (Y/N prompt)
+            _nccEditor.HandleKeyDown(Key.Q, KeyModifiers.Control);
+        }
         else
+        {
+            // Show confirmation on BASIC screen
+            WriteToScreen(0, 24, "THIS WILL CLEAR THE BASIC PROGRAM.  ARE YOU SURE? (Y/N) ", 1);
+            _awaitingNccConfirm = true;
+        }
+    }
+
+    private void HandleNccConfirmKey(Key key)
+    {
+        _awaitingNccConfirm = false;
+        // Clear the prompt line
+        WriteToScreen(0, 24, new string(' ', 80), 1);
+        if (key == Key.Y && _nccEditor is { IsActive: false })
             _nccEditor.Activate();
+    }
+
+    private void WriteToScreen(int col, int row, string text, byte fg)
+    {
+        for (int i = 0; i < text.Length && col + i < VgcConstants.ScreenCols; i++)
+        {
+            int offset = row * VgcConstants.ScreenCols + col + i;
+            _bus.Write((ushort)(VgcConstants.CharRamBase + offset), (byte)text[i]);
+            _bus.Write((ushort)(VgcConstants.ColorRamBase + offset), fg);
+        }
     }
 
     private void ToggleDevMode()
@@ -429,6 +487,12 @@ public partial class MainWindow : Window
             HideHelpPanel();
         else
             ShowHelpPanel();
+    }
+
+    private void ShowHelpPanelNcc()
+    {
+        ShowHelpPanel();
+        _helpPanel?.SetActiveFilter(HelpTopicType.Ncc);
     }
 
     private async void OnTryThisRequested(string code)
