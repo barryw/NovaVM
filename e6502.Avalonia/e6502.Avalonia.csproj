@@ -68,6 +68,12 @@
         <None Update="Resources\cp437.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+        <None Update="Resources\petscii_upper.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\petscii_lower.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 
     <!-- Copy help content Markdown files to output for HelpContentLoader -->

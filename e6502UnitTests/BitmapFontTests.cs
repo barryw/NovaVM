@@ -69,4 +69,31 @@ public class BitmapFontTests
         Assert.IsFalse(font.GetPixel(0, 0x41, 0, 0)); // font 0: not set
         Assert.IsTrue(font.GetPixel(1, 0x41, 0, 0));  // font 1: set
     }
+
+    [TestMethod]
+    public void PetsciiUpperFont_IsCorrectSize()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "petscii_upper.bin");
+        if (!File.Exists(path)) Assert.Inconclusive("PETSCII upper font not yet available");
+        Assert.AreEqual(2048, File.ReadAllBytes(path).Length);
+    }
+
+    [TestMethod]
+    public void PetsciiLowerFont_IsCorrectSize()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "petscii_lower.bin");
+        if (!File.Exists(path)) Assert.Inconclusive("PETSCII lower font not yet available");
+        Assert.AreEqual(2048, File.ReadAllBytes(path).Length);
+    }
+
+    [TestMethod]
+    public void PetsciiUpperFont_SpaceIsBlank()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "petscii_upper.bin");
+        if (!File.Exists(path)) Assert.Inconclusive("PETSCII upper font not yet available");
+        var data = File.ReadAllBytes(path);
+        // Space at position 0x20, 8 bytes should all be 0
+        for (int y = 0; y < 8; y++)
+            Assert.AreEqual(0, data[0x20 * 8 + y], $"Space row {y} should be blank");
+    }
 }
