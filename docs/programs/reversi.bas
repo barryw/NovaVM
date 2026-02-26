@@ -61,8 +61,40 @@
 138 IF NV=0 THEN GOTO 700:REM Both pass — game over
 139 GOSUB 550:REM Display new valid moves
 140 GOSUB 959:REM Update turn display
-141 REM IF PT=2 THEN GOTO 300:REM AI turn (added in Task 6)
+141 IF PT=2 THEN GOTO 300
 130 GOTO 101
+300 REM === AI TURN ===
+301 GOSUB 959:REM Show "AI THINKING.."
+302 REM Brief thinking delay
+303 FOR W=1 TO 30:VSYNC:NEXT W
+304 REM Find best move (most flips)
+305 BM=0:BF=VM(0,2)
+306 FOR I=1 TO NV-1
+307 IF VM(I,2)<=BF THEN GOTO 310
+308 BF=VM(I,2):BM=I
+310 NEXT I
+312 REM Corner bonus: always prefer corners
+313 FOR I=0 TO NV-1
+314 VX=VM(I,0):VY=VM(I,1)
+315 IF (VX=0 OR VX=7) AND (VY=0 OR VY=7) THEN BM=I:GOTO 320
+316 NEXT I
+320 REM Move cursor to chosen cell for visual feedback
+321 CX=VM(BM,0):CY=VM(BM,1)
+322 GOSUB 460:REM Move cursor sprite
+323 FOR W=1 TO 15:VSYNC:NEXT W
+324 REM Execute the move
+325 GOSUB 565:REM Clear move markers
+326 MX=CX:MY=CY:GOSUB 600
+327 GOSUB 910:REM Play AI move sound
+328 GOSUB 950:REM Update score
+329 REM Switch to player
+330 PT=3-PT
+331 GOSUB 530:REM Find player's legal moves
+332 IF NV=0 THEN PT=3-PT:GOSUB 530:REM Player must pass
+333 IF NV=0 THEN GOTO 700:REM Both pass — game over
+334 GOSUB 550:REM Show valid moves
+335 GOSUB 959:REM Show "YOUR TURN"
+340 GOTO 101:REM Back to main loop
 400 REM === DRAW BOARD ===
 401 COLOR 7,0
 402 REM Column labels
@@ -201,6 +233,9 @@
 900 REM === PLACEMENT SOUND ===
 901 SOUND 72,3
 905 RETURN
+910 REM === AI MOVE SOUND ===
+911 SOUND 60,3
+915 RETURN
 950 REM === UPDATE SCORE DISPLAY ===
 951 S1=0:S2=0
 952 FOR YY=0 TO 7:FOR XX=0 TO 7
