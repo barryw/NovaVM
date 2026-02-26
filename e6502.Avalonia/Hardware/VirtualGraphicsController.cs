@@ -345,6 +345,9 @@ public class VirtualGraphicsController
     public byte GetScrollY() =>
         _regs[VgcConstants.RegScrollY - VgcConstants.VgcBase];
 
+    public byte GetFontIndex() =>
+        (byte)(_regs[VgcConstants.RegFont - VgcConstants.VgcBase] & 0x07);
+
     public byte GetBorderColor() =>
         _regs[VgcConstants.RegBorder - VgcConstants.VgcBase];
 

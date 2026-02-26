@@ -997,4 +997,20 @@ public class AvaloniaVgcTests
         // Other sprites unchanged
         Assert.AreEqual(0, _vgc.GetSpriteTransColor(0));
     }
+
+    // -- RegFont register ($A007) ---------------------------------------------
+
+    [TestMethod]
+    public void RegFont_DefaultsToZero()
+    {
+        Assert.AreEqual(0, _vgc.GetFontIndex());
+    }
+
+    [TestMethod]
+    public void RegFont_WriteThenRead_Masked()
+    {
+        // Write 0xFF to the font register — only low 3 bits should be returned
+        _vgc.Write(VgcConstants.RegFont, 0xFF);
+        Assert.AreEqual(7, _vgc.GetFontIndex());
+    }
 }

@@ -415,7 +415,7 @@ public static class VgcConstants
     public const int RegCursorY        = 0xA004;   // 0-24
     public const int RegScrollX        = 0xA005;
     public const int RegScrollY        = 0xA006;
-    public const int RegBank           = 0xA007;   // reserved
+    public const int RegFont           = 0xA007;   // active font slot (0-7)
     public const int RegStatus         = 0xA008;   // read-only
     public const int RegSpriteCount    = 0xA009;   // read-only sprite count
     public const int RegCursorEnable   = 0xA00A;   // cursor visible (non-zero = show)
@@ -526,6 +526,7 @@ public static class VgcConstants
     public const int RegRomSwap       = 0xA03F;
     public const byte RomSwapNcc      = 0x01;   // switch to NCC ROM
     public const byte RomSwapBasic    = 0x02;   // switch to BASIC ROM
+    public const byte RomSwapNccEdit  = 0x03;   // activate NCC editor (from BASIC NCC command)
 
     // -------------------------------------------------------------------------
     // Compiler Controller registers ($A031-$A03E)
