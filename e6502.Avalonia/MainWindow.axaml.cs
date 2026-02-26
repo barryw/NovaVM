@@ -84,6 +84,10 @@ public partial class MainWindow : Window
             fontSlots.Add(File.ReadAllBytes(petLower));
 
         var font = new BitmapFont(fontSlots.ToArray());
+        if (font.SlotCount > 1)
+            font.SetKeymap(1, FontKeymap.PetsciiUpper);
+        if (font.SlotCount > 2)
+            font.SetKeymap(2, FontKeymap.PetsciiLower);
 
         _canvas = new EmulatorCanvas(_bus.Vgc, font, _editor);
         Content = _canvas;

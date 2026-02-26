@@ -1,3 +1,5 @@
+using e6502.Avalonia.Input;
+
 namespace e6502.Avalonia.Rendering;
 
 public class BitmapFont
@@ -9,6 +11,7 @@ public class BitmapFont
     public const int FontDataSize = GlyphCount * GlyphHeight; // 2048
 
     private readonly byte[][] _slots;
+    private readonly FontKeymap[] _keymaps;
 
     /// <summary>Single-font constructor (backward compatible).</summary>
     public BitmapFont(byte[] fontData) : this(new[] { fontData }) { }
@@ -24,9 +27,21 @@ public class BitmapFont
             if (slot.Length != FontDataSize)
                 throw new ArgumentException($"Font data must be {FontDataSize} bytes");
         _slots = fontSlots;
+        _keymaps = new FontKeymap[fontSlots.Length];
+        for (int i = 0; i < _keymaps.Length; i++)
+            _keymaps[i] = FontKeymap.None;
     }
 
     public int SlotCount => _slots.Length;
+
+    public FontKeymap GetKeymap(int slot) =>
+        slot >= 0 && slot < _keymaps.Length ? _keymaps[slot] : FontKeymap.None;
+
+    public void SetKeymap(int slot, FontKeymap keymap)
+    {
+        if (slot >= 0 && slot < _keymaps.Length)
+            _keymaps[slot] = keymap;
+    }
 
     public static BitmapFont LoadFromFile(string path) =>
         new(File.ReadAllBytes(path));

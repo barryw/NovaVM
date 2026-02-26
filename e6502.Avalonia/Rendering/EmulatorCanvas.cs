@@ -76,6 +76,26 @@ public class EmulatorCanvas : Control
             return;
         }
 
+        // Check for font keymap graphic character input
+        if (e.Key >= Key.A && e.Key <= Key.Z)
+        {
+            int fontIndex = _vgc.GetFontIndex();
+            var keymap = _font.GetKeymap(fontIndex);
+            KeyMod mod = KeyMod.None;
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                mod = KeyMod.Shift;
+            else if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta))
+                mod = KeyMod.Ctrl;
+
+            if (mod != KeyMod.None && keymap.TryMap(mod, (char)('A' + (e.Key - Key.A)), out byte ch))
+            {
+                _editor.QueueInput(ch);
+                e.Handled = true;
+                base.OnKeyDown(e);
+                return;
+            }
+        }
+
         switch (e.Key)
         {
             case Key.Left:
