@@ -61,7 +61,7 @@ Register $A01F is the IRQ control register.
 | $A004 | RegCursorY | R/W | Text cursor row (0--24). |
 | $A005 | RegScrollX | R/W | Horizontal scroll offset (used by copper raster effects). |
 | $A006 | RegScrollY | R/W | Vertical scroll offset (used by copper raster effects). |
-| $A007 | RegBank | R/W | Reserved. |
+| $A007 | RegFont | R/W | Active font slot (0--7). 0=CP437, 1=PETSCII Upper, 2=PETSCII Lower. |
 | $A008 | RegStatus | RO | Frame counter; incremented each video frame. Writes are ignored. |
 | $A009 | RegSpriteCount | RO | Count of currently enabled sprites (0--16). Writes are ignored. |
 | $A00A | RegCursorEnable | R/W | Non-zero enables the cursor blink. |
