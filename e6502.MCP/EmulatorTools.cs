@@ -298,6 +298,19 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
+    [McpServerTool, Description("Set the active font slot (0=CP437, 1=PETSCII Upper, 2=PETSCII Lower)")]
+    public static async Task<string> SetFont(
+        EmulatorClient client,
+        [Description("Font slot index (0-7)")] int index)
+    {
+        await client.SendAsync(new JsonObject
+        {
+            ["command"] = "set_font",
+            ["index"] = index
+        });
+        return $"Font set to slot {index}";
+    }
+
     [McpServerTool, Description("Define one row (8 bytes) of a multicolor sprite shape. Each byte encodes 2 pixels: high nibble=left, low nibble=right. Color 0=transparent.")]
     public static async Task<string> SpriteDefineRow(
         EmulatorClient client,

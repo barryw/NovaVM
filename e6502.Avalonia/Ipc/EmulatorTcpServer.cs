@@ -121,6 +121,7 @@ public sealed class EmulatorTcpServer : IDisposable
                 "gfx_clear" => CmdGfxClear(),
                 "gfx_color" => CmdGfxColor(req),
                 "gfx_paint" => CmdGfxPaint(req),
+                "set_font" => CmdSetFont(req),
                 // Sprite commands
                 "sprite_define_row" => CmdSpriteDefineRow(req),
                 "sprite_set_pixel" => CmdSpriteSetPixel(req),
@@ -702,6 +703,13 @@ public sealed class EmulatorTcpServer : IDisposable
         _bus.Write(VgcConstants.RegMode, 1);
         WriteGfxParams(x.Value, y.Value, color: color.Value);
         _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdPaint);
+        return Ok();
+    }
+
+    private string CmdSetFont(JsonNode req)
+    {
+        int index = req["index"]?.GetValue<int>() ?? 0;
+        _bus.Write(VgcConstants.RegFont, (byte)(index & 0x07));
         return Ok();
     }
 
