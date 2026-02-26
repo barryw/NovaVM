@@ -513,6 +513,8 @@ XTK_BLITERR       = $43              ; BLITERR — numeric function (no args)
 XTK_BLITCOUNT     = $44              ; BLITCOUNT — numeric function (no args)
 XTK_BITTGL        = $45              ; BITTGL addr,mask — toggle bits
 XTK_HELP           = $46              ; HELP [keyword] — open help panel
+XTK_NCC            = $47              ; NCC — activate NCC editor
+XTK_FONT           = $48              ; FONT n — select font slot (0-7)
 
 ; offsets from a base of X or Y
 
@@ -1909,6 +1911,8 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_BLITCOUNT  ($44) — function only
       .word LAB_BITTGL-1      ; XTK_BITTGL     ($45) — toggle bits
       .word LAB_HELP-1        ; XTK_HELP       ($46)
+      .word LAB_NCC-1         ; XTK_NCC        ($47)
+      .word LAB_FONT-1        ; XTK_FONT       ($48)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -8576,10 +8580,60 @@ LAB_TWOPI
       LDY   #>LAB_2C7C        ; set (2*pi) pointer high byte
       JMP   LAB_UFAC          ; unpack memory (AY) into FAC1 and return
 
+;; ========================================
+;; NCC — activate the NCC editor
+;; Prints confirmation, waits for Y/N, writes RomSwapNccEdit to $A03F
+;; ========================================
+LAB_NCC
+      ; Print "THIS WILL CLEAR THE BASIC PROGRAM" + CR/LF
+      LDY   #$00
+@msg_loop1
+      LDA   @ncc_msg1,Y
+      BEQ   @msg1_done
+      JSR   V_OUTP
+      INY
+      BNE   @msg_loop1
+@msg1_done
+      JSR   LAB_CRLF
+
+      ; Print "ARE YOU SURE? (Y/N) "
+      LDY   #$00
+@msg_loop2
+      LDA   @ncc_msg2,Y
+      BEQ   @msg2_done
+      JSR   V_OUTP
+      INY
+      BNE   @msg_loop2
+@msg2_done
+
+      ; Wait for keypress
+@wait_key
+      JSR   V_INPT
+      BCC   @wait_key          ; no key yet
+      CMP   #'Y'
+      BEQ   @do_ncc
+      CMP   #'y'
+      BEQ   @do_ncc
+
+      ; Not Y — echo char + CR/LF, return to BASIC
+      JSR   V_OUTP
+      JSR   LAB_CRLF
+      RTS
+
+@do_ncc
+      JSR   V_OUTP             ; echo the Y
+      JSR   LAB_CRLF
+      LDA   #$03               ; RomSwapNccEdit
+      STA   $A03F              ; write to RegRomSwap
+      RTS
+
+@ncc_msg1: .byte "THIS WILL CLEAR THE BASIC PROGRAM",0
+@ncc_msg2: .byte "ARE YOU SURE? (Y/N) ",0
+
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 70
+XTK_COUNT = 72
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8597,6 +8651,8 @@ TAB_XTKSTR
       .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
       .word @s_bittgl
       .word @s_help
+      .word @s_ncc
+      .word @s_font
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8646,6 +8702,8 @@ TAB_XTKSTR
 @s_blitcount: .byte "BLITCOUNT",0
 @s_bittgl: .byte "BITTGL",0
 @s_help:   .byte "HELP",0
+@s_ncc:    .byte "NCC",0
+@s_font:   .byte "FONT",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8681,6 +8739,7 @@ VGC_BGCOL     = $A001
 VGC_FGCOL     = $A002
 VGC_CURSX     = $A003
 VGC_CURSY     = $A004
+VGC_FONT      = $A007          ; font register
 VGC_FRAME     = $A008          ; frame counter (read-only, incremented by host)
 VGC_COLLST    = $A00B          ; sprite-sprite collision (read-only)
 VGC_COLLBG    = $A00C          ; sprite-background collision (read-only)
@@ -9012,6 +9071,13 @@ LAB_LOCATE
 LAB_GMODE
       JSR   LAB_GTBY          ; get mode byte in X
       STX   VGC_MODE          ; store graphics mode
+      RTS
+
+; perform FONT n — select active font slot (0-7)
+
+LAB_FONT
+      JSR   LAB_GTBY          ; get font index byte (0-7) in X
+      STX   VGC_FONT          ; write to $A007
       RTS
 
 ; perform GCLS — clear the graphics bitmap layer
