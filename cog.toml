@@ -1,7 +1,6 @@
-[general]
+from_latest_tag = true
 tag_prefix = "v"
 branch_whitelist = ["main"]
-from_latest_tag = true
 
 # Pre-bump: update version in Directory.Build.props and stage it
 pre_bump_hooks = [
@@ -14,23 +13,18 @@ pre_bump_hooks = [
     "git add Directory.Build.props",
 ]
 
+[commit_types]
+feat = { changelog_title = "Features", bump_minor = true }
+fix = { changelog_title = "Bug Fixes", bump_patch = true }
+perf = { changelog_title = "Performance", bump_patch = true }
+refactor = { changelog_title = "Refactoring", bump_patch = true }
+docs = { changelog_title = "Documentation", bump_patch = true }
+style = { changelog_title = "Style", bump_patch = true }
+test = { changelog_title = "Tests", bump_patch = true }
+ci = { changelog_title = "CI/CD", bump_patch = true }
+chore = { changelog_title = "Miscellaneous", bump_patch = true }
+build = { changelog_title = "Build", bump_patch = true }
+
 [changelog]
 path = "CHANGELOG.md"
-template = "default"
-
-[changelog.remote]
-provider = "github"
-owner = "barryw"
-repository = "NovaVM"
-
-[commit_types]
-feat = { changelog_title = "Features" }
-fix = { changelog_title = "Bug Fixes" }
-perf = { changelog_title = "Performance" }
-refactor = { changelog_title = "Refactoring" }
-docs = { changelog_title = "Documentation" }
-style = { changelog_title = "Style" }
-test = { changelog_title = "Tests" }
-ci = { changelog_title = "CI/CD" }
-chore = { changelog_title = "Miscellaneous" }
-build = { changelog_title = "Build" }
+authors = []
