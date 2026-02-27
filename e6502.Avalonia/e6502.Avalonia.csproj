@@ -5,10 +5,22 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <PublishAot>true</PublishAot>
+        <IsAotCompatible>true</IsAotCompatible>
+        <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     </PropertyGroup>
 
     <ItemGroup>
         <InternalsVisibleTo Include="e6502UnitTests" />
+    </ItemGroup>
+
+    <!-- Preserve Dock types from trimming (no official AOT annotations yet) -->
+    <ItemGroup>
+        <TrimmerRootAssembly Include="Dock.Avalonia" />
+        <TrimmerRootAssembly Include="Dock.Model" />
+        <TrimmerRootAssembly Include="Dock.Model.Mvvm" />
+        <TrimmerRootAssembly Include="Dock.Avalonia.Themes.Fluent" />
     </ItemGroup>
 
     <ItemGroup>
@@ -24,8 +36,9 @@
         <ProjectReference Include="..\e6502\e6502.csproj" />
     </ItemGroup>
 
-    <!-- Tool validation: fail early with clear messages if required tools are missing -->
-    <Target Name="ValidateTools" BeforeTargets="AssembleRom">
+    <!-- POSIX tool validation (macOS / Linux) -->
+    <Target Name="ValidateTools" BeforeTargets="AssembleRom"
+            Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
         <Exec Command="command -v ca65 > /dev/null 2>&amp;1 || (echo 'ERROR: ca65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)"
               StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="command -v ld65 > /dev/null 2>&amp;1 || (echo 'ERROR: ld65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)"
@@ -36,15 +49,44 @@
               StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
     </Target>
 
-    <!-- Assemble the EhBASIC ROM from source -->
-    <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateTools">
+    <!-- Windows tool validation -->
+    <Target Name="ValidateToolsWindows" BeforeTargets="AssembleRomWindows"
+            Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+        <Exec Command="where.exe ca65 >nul 2>&amp;1 || (echo ERROR: ca65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)"
+              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="where.exe ld65 >nul 2>&amp;1 || (echo ERROR: ld65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)"
+              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="where.exe pandoc >nul 2>&amp;1 || (echo ERROR: pandoc not found. Install: choco install pandoc &amp;&amp; exit 1)"
+              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="where.exe pdflatex >nul 2>&amp;1 || (echo ERROR: pdflatex not found. Install MiKTeX: choco install miktex &amp;&amp; exit 1)"
+              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+    </Target>
+
+    <!-- Assemble the EhBASIC ROM from source (POSIX) -->
+    <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateTools"
+            Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
         <Exec Command="make -C $(ProjectDir)../ehbasic" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin"
               DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
     </Target>
 
-    <!-- Generate the PDF user guide -->
-    <Target Name="GeneratePdf" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRom">
+    <!-- Assemble the EhBASIC ROM from source (Windows) -->
+    <Target Name="AssembleRomWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateToolsWindows"
+            Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+        <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm &amp;&amp; ld65 -C ehbasic.cfg -vm -m basic.map -o basic.bin basic.o" />
+        <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin"
+              DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+    </Target>
+
+    <!-- Generate the PDF user guide (POSIX) -->
+    <Target Name="GeneratePdf" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRom"
+            Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+        <Exec Command="bash ../docs/help/build-pdf.sh" />
+    </Target>
+
+    <!-- Generate the PDF user guide (Windows) -->
+    <Target Name="GeneratePdfWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRomWindows"
+            Condition="$([MSBuild]::IsOSPlatform('Windows'))">
         <Exec Command="bash ../docs/help/build-pdf.sh" />
     </Target>
 

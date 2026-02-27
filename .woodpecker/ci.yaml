@@ -1,0 +1,56 @@
+when:
+  - event: push
+    branch: main
+
+labels:
+  platform: linux/amd64
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      depth: 0
+      tags: true
+
+steps:
+  - name: check-commits
+    image: ghcr.io/barryw/novavm-ci:latest
+    commands:
+      - cog check
+
+  - name: build-and-test
+    image: ghcr.io/barryw/novavm-ci:latest
+    commands:
+      - dotnet build -c Release
+      - dotnet test -c Release --verbosity normal
+
+  - name: version-and-release
+    image: ghcr.io/barryw/novavm-ci:latest
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_token
+    commands:
+      - |
+        # Check if a version bump is needed
+        NEW_VERSION=$(cog bump --auto --dry-run 2>/dev/null || true)
+        if [ -z "$NEW_VERSION" ]; then
+          echo "No version bump needed"
+          exit 0
+        fi
+        echo "Bumping to v${NEW_VERSION}"
+
+        # Configure git for tagging
+        git config user.name "Woodpecker CI"
+        git config user.email "ci@barrywalker.io"
+
+        # Create and push the tag
+        cog bump --auto
+        TAG="v$(cog get-version)"
+        git push origin "${TAG}"
+
+        # Create draft release
+        gh release create "${TAG}" \
+          --repo barryw/NovaVM \
+          --draft \
+          --generate-notes \
+          --title "${TAG}"

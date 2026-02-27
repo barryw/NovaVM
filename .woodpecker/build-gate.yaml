@@ -1,0 +1,28 @@
+when:
+  - event: tag
+
+labels:
+  platform: linux/amd64
+
+steps:
+  - name: build-and-test
+    image: ghcr.io/barryw/novavm-ci:latest
+    commands:
+      - dotnet build -c Release
+      - dotnet test -c Release --verbosity normal
+
+  - name: create-release
+    image: ghcr.io/barryw/novavm-ci:latest
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_token
+    commands:
+      - TAG="${CI_COMMIT_TAG}"
+      - |
+        # Create draft release (skip if already exists from ci.yaml)
+        gh release view "${TAG}" --repo barryw/NovaVM >/dev/null 2>&1 || \
+          gh release create "${TAG}" \
+            --repo barryw/NovaVM \
+            --draft \
+            --generate-notes \
+            --title "${TAG}"

@@ -1,0 +1,36 @@
+[general]
+tag_prefix = "v"
+branch_whitelist = ["main"]
+from_latest_tag = true
+
+# Pre-bump: update version in Directory.Build.props and stage it
+pre_bump_hooks = [
+    """sed -i.bak -E \
+      -e 's|<Version>[^<]*</Version>|<Version>{{version}}</Version>|' \
+      -e 's|<AssemblyVersion>[^<]*</AssemblyVersion>|<AssemblyVersion>{{version}}.0</AssemblyVersion>|' \
+      -e 's|<FileVersion>[^<]*</FileVersion>|<FileVersion>{{version}}.0</FileVersion>|' \
+      -e 's|<InformationalVersion>[^<]*</InformationalVersion>|<InformationalVersion>{{version}}</InformationalVersion>|' \
+      Directory.Build.props && rm -f Directory.Build.props.bak""",
+    "git add Directory.Build.props",
+]
+
+[changelog]
+path = "CHANGELOG.md"
+template = "default"
+
+[changelog.remote]
+provider = "github"
+owner = "barryw"
+repository = "NovaVM"
+
+[commit_types]
+feat = { changelog_title = "Features" }
+fix = { changelog_title = "Bug Fixes" }
+perf = { changelog_title = "Performance" }
+refactor = { changelog_title = "Refactoring" }
+docs = { changelog_title = "Documentation" }
+style = { changelog_title = "Style" }
+test = { changelog_title = "Tests" }
+ci = { changelog_title = "CI/CD" }
+chore = { changelog_title = "Miscellaneous" }
+build = { changelog_title = "Build" }

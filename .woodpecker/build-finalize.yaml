@@ -1,0 +1,20 @@
+when:
+  - event: tag
+
+depends_on:
+  - build-linux
+  - build-macos
+  - build-windows
+
+labels:
+  platform: linux/amd64
+
+steps:
+  - name: finalize
+    image: ghcr.io/barryw/novavm-ci:latest
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_token
+    commands:
+      - TAG="${CI_COMMIT_TAG}"
+      - gh release edit "${TAG}" --draft=false --repo barryw/NovaVM
