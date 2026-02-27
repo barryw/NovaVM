@@ -120,6 +120,25 @@ public class HelpTopicTests
     }
 
     [TestMethod]
+    public void Parse_ProgramType()
+    {
+        var md = """
+            ---
+            title: Reversi
+            type: program
+            category: Programs
+            keywords: [reversi, board game]
+            ---
+
+            How to play Reversi.
+            """;
+        var topic = HelpTopic.Parse(md, "programs/reversi.md");
+        Assert.AreEqual(HelpTopicType.Program, topic.Type);
+        Assert.AreEqual("Programs", topic.Category);
+        Assert.AreEqual("Reversi", topic.Title);
+    }
+
+    [TestMethod]
     public void Parse_FunctionType()
     {
         var md = """

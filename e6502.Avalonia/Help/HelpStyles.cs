@@ -31,6 +31,7 @@ public static class HelpStyles
     public static readonly Color BadgeGuide = Color.Parse("#8B5CF6");
     public static readonly Color BadgeCommand = Color.Parse("#3B82F6");
     public static readonly Color BadgeFunction = Color.Parse("#14B8A6");
+    public static readonly Color BadgeProgram = Color.Parse("#F59E0B");
     public static readonly Color SeeAlsoPill = Color.Parse("#E0E7FF");
 
     // Typography

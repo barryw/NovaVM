@@ -105,6 +105,14 @@ public sealed class HelpPanel : UserControl
             ShowBrowseView();
     }
 
+    public void SetActiveFilter(HelpTopicType? type)
+    {
+        _activeFilter = type;
+        _currentTopic = null;
+        UpdateFilterHighlights();
+        RunSearch(_searchBox.Text ?? "");
+    }
+
     private Border CreateHeader()
     {
         var panel = new DockPanel { Margin = new Thickness(HelpStyles.PanelPadding, 12, 8, 0) };
@@ -167,6 +175,7 @@ public sealed class HelpPanel : UserControl
             ("Guides", HelpTopicType.Guide),
             ("Commands", HelpTopicType.Command),
             ("Functions", HelpTopicType.Function),
+            ("NCC", HelpTopicType.Ncc),
         };
 
         foreach (var (label, type) in filters)
@@ -294,6 +303,8 @@ public sealed class HelpPanel : UserControl
             HelpTopicType.Guide => ("Guide", HelpStyles.BadgeGuide),
             HelpTopicType.Command => ("Cmd", HelpStyles.BadgeCommand),
             HelpTopicType.Function => ("Fn", HelpStyles.BadgeFunction),
+            HelpTopicType.Ncc => ("NCC", HelpStyles.AccentBlue),
+            HelpTopicType.Program => ("Prog", HelpStyles.BadgeProgram),
             _ => ("?", HelpStyles.TextSecondary)
         };
 
@@ -339,6 +350,59 @@ public sealed class HelpPanel : UserControl
 
         var rendered = _renderer.Render(topic);
         _contentArea.Children.Add(rendered);
+    }
+
+    public void ShowProgramHelp(HelpTopic topic)
+    {
+        _currentTopic = topic;
+        _lastViewedTopic = topic;
+        _contentArea.Children.Clear();
+        _contentScroll.Offset = new Vector(0, 0);
+
+        // Hide search and filters for focused program help view
+        _searchBox.IsVisible = false;
+        ((Control)_searchBox.Parent!).IsVisible = false;
+        _filterBar.IsVisible = false;
+        ((Control)_filterBar.Parent!).IsVisible = false;
+
+        var rendered = _renderer.Render(topic);
+        _contentArea.Children.Add(rendered);
+    }
+
+    public void ShowNoProgramHelp(string name)
+    {
+        _contentArea.Children.Clear();
+        _contentScroll.Offset = new Vector(0, 0);
+
+        // Hide search and filters
+        _searchBox.IsVisible = false;
+        ((Control)_searchBox.Parent!).IsVisible = false;
+        _filterBar.IsVisible = false;
+        ((Control)_filterBar.Parent!).IsVisible = false;
+
+        _contentArea.Children.Add(new TextBlock
+        {
+            Text = $"No help available for \"{name}\"",
+            FontSize = HelpStyles.FontSizeBody,
+            Foreground = new SolidColorBrush(HelpStyles.TextSecondary),
+            Margin = new Thickness(0, 20),
+            TextWrapping = TextWrapping.Wrap
+        });
+        _contentArea.Children.Add(new TextBlock
+        {
+            Text = "Press Shift+F1 to create a help document for this program.",
+            FontSize = HelpStyles.FontSizeSmall,
+            Foreground = new SolidColorBrush(HelpStyles.TextSecondary),
+            Margin = new Thickness(0, 4)
+        });
+    }
+
+    public void RestoreFullView()
+    {
+        _searchBox.IsVisible = true;
+        ((Control)_searchBox.Parent!).IsVisible = true;
+        _filterBar.IsVisible = true;
+        ((Control)_filterBar.Parent!).IsVisible = true;
     }
 
     private void ShowBrowseView()

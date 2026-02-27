@@ -41,6 +41,12 @@ public sealed partial class FileIoController
 
     public string SaveDirectory => _saveDir;
 
+    /// <summary>Fires after DoLoad succeeds. Argument is the filename (without extension).</summary>
+    public Action<string>? ProgramLoaded;
+
+    /// <summary>Fires after DoSave succeeds. Arguments: filename (without extension), whether .md was newly created.</summary>
+    public Action<string, bool>? ProgramSaved;
+
     public bool OwnsAddress(ushort address) =>
         address >= VgcConstants.FioBase && address <= VgcConstants.FioEnd;
 
@@ -152,7 +158,14 @@ public sealed partial class FileIoController
             string path = GetFullPath(filename, ".bas");
             File.WriteAllBytes(path, data);
 
+            // Create companion .md if it doesn't exist
+            string mdPath = Path.ChangeExtension(path, ".md");
+            bool isNewDoc = !File.Exists(mdPath);
+            if (isNewDoc)
+                File.WriteAllText(mdPath, $"---\ntitle: {filename}\ntype: program\ncategory: Programs\nkeywords: [{filename}]\n---\n\n");
+
             SetOk();
+            ProgramSaved?.Invoke(filename, isNewDoc);
         }
         catch
         {
@@ -200,6 +213,7 @@ public sealed partial class FileIoController
             _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataLength >> 8) & 0xFF);
 
             SetOk();
+            ProgramLoaded?.Invoke(filename);
         }
         catch (FileNotFoundException)
         {
@@ -278,6 +292,12 @@ public sealed partial class FileIoController
             }
 
             File.Delete(path);
+
+            // Also delete companion .md if it exists
+            string mdPath = Path.ChangeExtension(path, ".md");
+            if (File.Exists(mdPath))
+                File.Delete(mdPath);
+
             SetOk();
         }
         catch

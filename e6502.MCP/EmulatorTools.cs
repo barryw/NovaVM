@@ -786,6 +786,19 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
+    [McpServerTool, Description("Load a BASIC program from a .bas text file on disk. Types NEW, then enters each line directly in the emulator. Use this for .bas files outside ~/e6502-programs.")]
+    public static async Task<string> EnterBasicFromFile(
+        EmulatorClient client,
+        [Description("Absolute path to the .bas file (e.g. '/Users/barry/Git/e6502/docs/programs/reversi.bas')")] string filePath)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "enter_file",
+            ["path"] = filePath
+        });
+        return result.ToJsonString();
+    }
+
     [McpServerTool, Description("List all saved BASIC programs on disk.")]
     public static async Task<string> ListPrograms(EmulatorClient client)
     {

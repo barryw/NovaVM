@@ -45,7 +45,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public int FrameRateHz => _frameRateHz;
     public long TotalFrames => _totalFrames;
 
+    public string? CurrentProgramName { get; set; }
+    public Help.HelpTopic? CurrentProgramHelp { get; set; }
+
     public event Action<string?>? HelpRequested;
+    public event Action? NccEditorRequested;
 
     public CompositeBusDevice(
         bool enableSound = false,
@@ -69,6 +73,9 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             vgcSpaceLength: space => _vgc.GetMemorySpaceLength(space),
             sidPlayer: _sidPlayer,
             musicEngine: _musicEngine);
+        _fio.ProgramLoaded += name => LoadProgramHelp(name);
+        _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
+
         _xmc = new VirtualExpansionMemoryController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data);
@@ -203,6 +210,10 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, 16384);
                 CurrentRom = ActiveRom.Basic;
                 RomSwapRequested?.Invoke(this, EventArgs.Empty);
+            }
+            else if (data == VgcConstants.RomSwapNccEdit)
+            {
+                NccEditorRequested?.Invoke();
             }
             return;
         }
@@ -367,6 +378,23 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     {
         if (dstSpace == VgcConstants.DmaSpaceXram)
             _xmc.RefreshStatsRegisters();
+    }
+
+    public void LoadProgramHelp(string name)
+    {
+        CurrentProgramName = name;
+        CurrentProgramHelp = null;
+
+        string mdPath = Path.Combine(_fio.SaveDirectory, name + ".md");
+        if (File.Exists(mdPath))
+        {
+            try
+            {
+                string markdown = File.ReadAllText(mdPath);
+                CurrentProgramHelp = Help.HelpTopic.Parse(markdown, mdPath);
+            }
+            catch { /* ignore parse errors */ }
+        }
     }
 
     private bool TryWriteCpuRamByte(int address, byte data)

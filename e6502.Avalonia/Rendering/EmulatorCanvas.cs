@@ -99,18 +99,22 @@ public class EmulatorCanvas : Control
         switch (e.Key)
         {
             case Key.Left:
+                _editor.QueueInput(28);
                 _editor.CursorLeft();
                 e.Handled = true;
                 break;
             case Key.Right:
+                _editor.QueueInput(29);
                 _editor.CursorRight();
                 e.Handled = true;
                 break;
             case Key.Up:
+                _editor.QueueInput(30);
                 _editor.CursorUp();
                 e.Handled = true;
                 break;
             case Key.Down:
+                _editor.QueueInput(31);
                 _editor.CursorDown();
                 e.Handled = true;
                 break;

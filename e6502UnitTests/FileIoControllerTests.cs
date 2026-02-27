@@ -229,6 +229,140 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void ProgramLoaded_FiresOnLoad()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            // Create a minimal .bas file (2-byte load address + 1 byte data)
+            File.WriteAllBytes(Path.Combine(dir, "hello.bas"), [0x00, 0x04, 0x42]);
+
+            var fio = MakeController(dir);
+            string? loadedName = null;
+            fio.ProgramLoaded += name => loadedName = name;
+
+            SetFilename(fio, "hello");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x00);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x04);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdLoad);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("hello", loadedName);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void ProgramSaved_FiresOnSave()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+
+        try
+        {
+            var memory = new byte[65536];
+            memory[0x0400] = 0x42;
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                dir);
+
+            string? savedName = null;
+            bool? wasNewDoc = null;
+            fio.ProgramSaved += (name, isNew) => { savedName = name; wasNewDoc = isNew; };
+
+            SetFilename(fio, "test-prog");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x00);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x04);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x01);
+            fio.Write((ushort)VgcConstants.FioEndH, 0x04);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSave);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("test-prog", savedName);
+            Assert.IsTrue(wasNewDoc);
+
+            // Companion .md should exist
+            Assert.IsTrue(File.Exists(Path.Combine(dir, "test-prog.md")));
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void Save_DoesNotOverwriteExistingMd()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            // Pre-create .md with custom content
+            string mdPath = Path.Combine(dir, "existing.md");
+            File.WriteAllText(mdPath, "# Custom Help");
+
+            var memory = new byte[65536];
+            memory[0x0400] = 0x42;
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                dir);
+
+            bool? wasNewDoc = null;
+            fio.ProgramSaved += (_, isNew) => wasNewDoc = isNew;
+
+            SetFilename(fio, "existing");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x00);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x04);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x01);
+            fio.Write((ushort)VgcConstants.FioEndH, 0x04);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSave);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.IsFalse(wasNewDoc);
+            Assert.AreEqual("# Custom Help", File.ReadAllText(mdPath));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void Delete_RemovesCompanionMd()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            string basPath = Path.Combine(dir, "game.bas");
+            string mdPath = Path.Combine(dir, "game.md");
+            File.WriteAllBytes(basPath, [0x00, 0x04, 0xAA]);
+            File.WriteAllText(mdPath, "# Game Help");
+
+            var fio = MakeController(dir);
+            SetFilename(fio, "game");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDelete);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.IsFalse(File.Exists(basPath));
+            Assert.IsFalse(File.Exists(mdPath));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
     public void GLoad_ReadsGraphicsDataFromGfxFile()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");

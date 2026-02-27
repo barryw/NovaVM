@@ -36,6 +36,8 @@ public partial class MainWindow : Window
     private HelpPanel? _helpPanel;
     private HelpIndex? _helpIndex;
     private bool _helpVisible;
+    private DocEditorPanel? _docEditor;
+    private bool _docEditorVisible;
     private DebuggerService _debugger = null!;
     private NccEditor? _nccEditor;
 
@@ -60,6 +62,17 @@ public partial class MainWindow : Window
         _bus.HelpRequested += searchTerm =>
         {
             Dispatcher.UIThread.Post(() => ShowHelpPanel(searchTerm));
+        };
+        _bus.Fio.ProgramSaved += (name, isNewDoc) =>
+        {
+            if (isNewDoc)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    string mdPath = Path.Combine(_bus.Fio.SaveDirectory, name + ".md");
+                    ShowDocEditor(mdPath);
+                });
+            }
         };
         _bus.NccEditorRequested += () =>
         {
@@ -250,19 +263,47 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.Key == Key.F1)
+        if (e.Key == Key.F1 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
-            if (_nccEditor is { IsActive: true })
-                ShowHelpPanelNcc();
-            else
-                ToggleHelpPanel();
+            // Shift+F1: open doc editor for current program
+            if (_bus.CurrentProgramName != null)
+            {
+                string mdPath = Path.Combine(_bus.Fio.SaveDirectory, _bus.CurrentProgramName + ".md");
+                if (!File.Exists(mdPath))
+                    File.WriteAllText(mdPath, $"---\ntitle: {_bus.CurrentProgramName}\ntype: program\ncategory: Programs\nkeywords: [{_bus.CurrentProgramName}]\n---\n\n");
+                _bus.LoadProgramHelp(_bus.CurrentProgramName);
+                ShowDocEditor(mdPath);
+            }
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Escape && _helpVisible)
+        if (e.Key == Key.F1)
         {
-            HideHelpPanel();
+            if (_nccEditor is { IsActive: true })
+            {
+                ShowHelpPanelNcc();
+            }
+            else if (_bus.CurrentProgramName != null && IsProgramRunning())
+            {
+                // Program is running — show its help
+                if (_bus.CurrentProgramHelp != null)
+                    ShowProgramHelpPanel(_bus.CurrentProgramHelp);
+                else
+                    ShowNoProgramHelpPanel(_bus.CurrentProgramName);
+            }
+            else
+            {
+                ToggleHelpPanel();
+            }
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && (_helpVisible || _docEditorVisible))
+        {
+            if (_docEditorVisible) HideDocEditor();
+            if (_helpVisible) HideHelpPanel();
             e.Handled = true;
             return;
         }
@@ -468,20 +509,54 @@ public partial class MainWindow : Window
     {
         if (!_helpVisible || Content is not Grid grid) return;
 
-        var emulatorContent = grid.Children
-            .OfType<Control>()
-            .FirstOrDefault(c => Grid.GetColumn(c) == 2);
+        _helpPanel?.RestoreFullView();
 
-        if (emulatorContent != null)
+        if (_docEditorVisible && _docEditor != null)
         {
+            // Rebuild with just canvas + doc editor
             grid.Children.Clear();
-            Content = emulatorContent;
+            Content = null;
+
+            var newGrid = new Grid();
+            newGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            newGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            newGrid.ColumnDefinitions.Add(new ColumnDefinition(350, GridUnitType.Pixel) { MinWidth = 300, MaxWidth = 550 });
+
+            App.DetachFromVisualParent(_canvas);
+            Grid.SetColumn(_canvas, 0);
+            newGrid.Children.Add(_canvas);
+
+            var splitter = new GridSplitter
+            {
+                Width = 4,
+                Background = new SolidColorBrush(HelpStyles.CodeBorder)
+            };
+            Grid.SetColumn(splitter, 1);
+            newGrid.Children.Add(splitter);
+
+            App.DetachFromVisualParent(_docEditor);
+            Grid.SetColumn(_docEditor, 2);
+            newGrid.Children.Add(_docEditor);
+
+            Content = newGrid;
+        }
+        else
+        {
+            var emulatorContent = grid.Children
+                .OfType<Control>()
+                .FirstOrDefault(c => Grid.GetColumn(c) == 2);
+
+            if (emulatorContent != null)
+            {
+                grid.Children.Clear();
+                Content = emulatorContent;
+            }
         }
 
         _helpVisible = false;
         Width -= 354;
 
-        if (OperatingSystem.IsMacOS())
+        if (!_docEditorVisible && OperatingSystem.IsMacOS())
             SetMacAspectRatio();
     }
 
@@ -491,6 +566,188 @@ public partial class MainWindow : Window
             HideHelpPanel();
         else
             ShowHelpPanel();
+    }
+
+    private void ShowProgramHelpPanel(HelpTopic topic)
+    {
+        if (_helpIndex == null) return;
+        ShowHelpPanel();
+        _helpPanel?.ShowProgramHelp(topic);
+    }
+
+    private void ShowNoProgramHelpPanel(string name)
+    {
+        if (_helpIndex == null) return;
+        ShowHelpPanel();
+        _helpPanel?.ShowNoProgramHelp(name);
+    }
+
+    public void ShowDocEditor(string mdPath)
+    {
+        if (_docEditorVisible) HideDocEditor();
+
+        string content = File.Exists(mdPath) ? File.ReadAllText(mdPath) : "";
+        _docEditor = new DocEditorPanel(mdPath, content);
+        _docEditor.CloseRequested += HideDocEditor;
+        _docEditor.Saved += () =>
+        {
+            // Refresh program help after save
+            if (_bus.CurrentProgramName != null)
+                _bus.LoadProgramHelp(_bus.CurrentProgramName);
+        };
+
+        // Get the current content (might be a grid with help panel, or just canvas)
+        var currentContent = Content as Control;
+        if (currentContent == null) return;
+
+        if (OperatingSystem.IsMacOS())
+            ClearMacAspectRatio();
+
+        Content = null;
+
+        var grid = new Grid();
+
+        if (currentContent is Grid existingGrid && _helpVisible)
+        {
+            // Help panel already showing — reuse the existing grid and add doc editor on right
+            foreach (var child in existingGrid.Children.OfType<Control>().ToList())
+                existingGrid.Children.Remove(child);
+
+            // Rebuild: help panel | splitter | canvas | splitter | doc editor
+            grid.ColumnDefinitions.Add(existingGrid.ColumnDefinitions[0]); // help
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto)); // splitter
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star)); // canvas
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto)); // splitter
+            grid.ColumnDefinitions.Add(new ColumnDefinition(350, GridUnitType.Pixel) { MinWidth = 300, MaxWidth = 550 });
+
+            var helpPanel = _helpPanel;
+            if (helpPanel != null)
+            {
+                App.DetachFromVisualParent(helpPanel);
+                Grid.SetColumn(helpPanel, 0);
+                grid.Children.Add(helpPanel);
+            }
+
+            var leftSplitter = new GridSplitter
+            {
+                Width = 4,
+                Background = new SolidColorBrush(HelpStyles.CodeBorder)
+            };
+            Grid.SetColumn(leftSplitter, 1);
+            grid.Children.Add(leftSplitter);
+
+            // Find the canvas (was at column 2 in existing grid)
+            var canvas = existingGrid.Children.Count > 0
+                ? existingGrid.Children.OfType<Control>().FirstOrDefault()
+                : _canvas;
+            // Actually need to find canvas properly
+            foreach (var child in new List<Control> { _helpPanel!, _canvas }.Where(c => c != null))
+                App.DetachFromVisualParent(child);
+
+            Grid.SetColumn(_canvas, 2);
+            grid.Children.Add(_canvas);
+
+            var rightSplitter = new GridSplitter
+            {
+                Width = 4,
+                Background = new SolidColorBrush(HelpStyles.CodeBorder)
+            };
+            Grid.SetColumn(rightSplitter, 3);
+            grid.Children.Add(rightSplitter);
+
+            Grid.SetColumn(_docEditor, 4);
+            grid.Children.Add(_docEditor);
+        }
+        else
+        {
+            // No help panel — just canvas + doc editor on right
+            App.DetachFromVisualParent(currentContent);
+
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(350, GridUnitType.Pixel) { MinWidth = 300, MaxWidth = 550 });
+
+            Grid.SetColumn(currentContent, 0);
+            grid.Children.Add(currentContent);
+
+            var splitter = new GridSplitter
+            {
+                Width = 4,
+                Background = new SolidColorBrush(HelpStyles.CodeBorder)
+            };
+            Grid.SetColumn(splitter, 1);
+            grid.Children.Add(splitter);
+
+            Grid.SetColumn(_docEditor, 2);
+            grid.Children.Add(_docEditor);
+        }
+
+        Content = grid;
+        _docEditorVisible = true;
+        Width += 354;
+    }
+
+    public void HideDocEditor()
+    {
+        if (!_docEditorVisible) return;
+
+        // Save before closing
+        _docEditor?.Save();
+
+        if (Content is Grid grid)
+        {
+            if (_helpVisible && _helpPanel != null)
+            {
+                // Rebuild with just help panel + canvas
+                grid.Children.Clear();
+                Content = null;
+
+                var newGrid = new Grid();
+                newGrid.ColumnDefinitions.Add(new ColumnDefinition(350, GridUnitType.Pixel) { MinWidth = 280, MaxWidth = 500 });
+                newGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+                newGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+
+                App.DetachFromVisualParent(_helpPanel);
+                Grid.SetColumn(_helpPanel, 0);
+                newGrid.Children.Add(_helpPanel);
+
+                var splitter = new GridSplitter
+                {
+                    Width = 4,
+                    Background = new SolidColorBrush(HelpStyles.CodeBorder)
+                };
+                Grid.SetColumn(splitter, 1);
+                newGrid.Children.Add(splitter);
+
+                App.DetachFromVisualParent(_canvas);
+                Grid.SetColumn(_canvas, 2);
+                newGrid.Children.Add(_canvas);
+
+                Content = newGrid;
+            }
+            else
+            {
+                // Just restore canvas
+                grid.Children.Clear();
+                App.DetachFromVisualParent(_canvas);
+                Content = _canvas;
+            }
+        }
+
+        _docEditorVisible = false;
+        _docEditor = null;
+        Width -= 354;
+
+        if (!_helpVisible && OperatingSystem.IsMacOS())
+            SetMacAspectRatio();
+    }
+
+    private bool IsProgramRunning()
+    {
+        // EhBASIC zero page: Clineh ($88) = current line high byte.
+        // In direct/immediate mode, Clineh = $FF.
+        // When running a program, it holds the actual line number high byte.
+        return _bus.Read(0x0088) != 0xFF;
     }
 
     private void ShowHelpPanelNcc()

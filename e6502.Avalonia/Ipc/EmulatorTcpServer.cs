@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using e6502.Avalonia.Debugging;
 using e6502.Avalonia.Hardware;
+using e6502.Avalonia.Help;
 using e6502.Avalonia.Input;
 using KDS.e6502;
 
@@ -111,6 +112,7 @@ public sealed class EmulatorTcpServer : IDisposable
                 "read_sprites" => CmdReadSprites(),
                 "save_program" => CmdSaveProgram(req),
                 "load_program" => CmdLoadProgram(req),
+                "enter_file" => CmdEnterFile(req),
                 "list_programs" => CmdListPrograms(),
                 // Graphics commands
                 "gfx_plot" => CmdGfxPlot(req),
@@ -551,6 +553,81 @@ public sealed class EmulatorTcpServer : IDisposable
         }
 
         return Error("Timeout waiting for load to complete");
+    }
+
+    private string CmdEnterFile(JsonNode req)
+    {
+        string? path = req["path"]?.GetValue<string>();
+        if (path is null) return Error("Missing 'path'");
+        if (!File.Exists(path)) return Error($"File not found: {path}");
+
+        var lines = File.ReadAllLines(path)
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .ToArray();
+        if (lines.Length == 0) return Error("File is empty");
+
+        // Queue everything at once: NEW + all lines, CR-separated
+        _editor.QueueInput((byte)'N');
+        _editor.QueueInput((byte)'E');
+        _editor.QueueInput((byte)'W');
+        _editor.QueueInput(0x0D);
+
+        foreach (var line in lines)
+        {
+            string upper = UpperOutsideQuotes(line);
+            foreach (char c in upper)
+                _editor.QueueInput((byte)c);
+            _editor.QueueInput(0x0D);
+        }
+
+        // Wait for queue to drain and Ready to appear
+        var vgc = _bus.Vgc;
+        var deadline = DateTime.UtcNow.AddMilliseconds(120_000);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!_editor.HasQueuedInput)
+            {
+                // Queue drained — give BASIC a moment to finish the last line
+                Thread.Sleep(200);
+
+                // Track loaded program and parse companion help
+                string programName = Path.GetFileNameWithoutExtension(path);
+                _bus.CurrentProgramName = programName;
+                _bus.CurrentProgramHelp = null;
+                string mdPath = Path.ChangeExtension(path, ".md");
+                if (File.Exists(mdPath))
+                {
+                    try
+                    {
+                        string markdown = File.ReadAllText(mdPath);
+                        _bus.CurrentProgramHelp = Help.HelpTopic.Parse(markdown, mdPath);
+                    }
+                    catch { /* ignore parse errors */ }
+                }
+
+                return new JsonObject
+                {
+                    ["ok"] = true,
+                    ["entered"] = lines.Length,
+                    ["file"] = Path.GetFileName(path)
+                }.ToJsonString();
+            }
+            Thread.Sleep(100);
+        }
+
+        return Error("Timeout entering file");
+    }
+
+    private static string UpperOutsideQuotes(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        bool inQuotes = false;
+        foreach (char c in text)
+        {
+            if (c == '"') inQuotes = !inQuotes;
+            sb.Append(!inQuotes && c >= 'a' && c <= 'z' ? (char)(c - 32) : c);
+        }
+        return sb.ToString();
     }
 
     private string CmdListPrograms()

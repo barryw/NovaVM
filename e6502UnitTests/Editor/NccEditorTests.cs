@@ -208,6 +208,103 @@ public class NccEditorTests
         _editor.PageUp();
         Assert.AreEqual(0, _editor.CursorLine);
     }
+    // ── HandleKeyDown return values ────────────────────────────────────────
+
+    [TestMethod]
+    public void HandleKeyDown_CharacterKey_ReturnsFalse()
+    {
+        _editor.Activate();
+        bool consumed = _editor.HandleKeyDown(Avalonia.Input.Key.A, Avalonia.Input.KeyModifiers.None);
+        Assert.IsFalse(consumed, "Character keys should not be consumed (fall through to TextInput)");
+    }
+
+    [TestMethod]
+    public void HandleKeyDown_Enter_ReturnsTrue()
+    {
+        _editor.Activate();
+        bool consumed = _editor.HandleKeyDown(Avalonia.Input.Key.Enter, Avalonia.Input.KeyModifiers.None);
+        Assert.IsTrue(consumed, "Enter should be consumed by editor");
+    }
+
+    [TestMethod]
+    public void HandleKeyDown_F5_ReturnsTrue()
+    {
+        _editor.Activate();
+        bool consumed = _editor.HandleKeyDown(Avalonia.Input.Key.F5, Avalonia.Input.KeyModifiers.None);
+        Assert.IsTrue(consumed, "F5 should be consumed by editor");
+    }
+
+    [TestMethod]
+    public void HandleKeyDown_NavigationKeys_ReturnTrue()
+    {
+        _editor.Activate();
+        Assert.IsTrue(_editor.HandleKeyDown(Avalonia.Input.Key.Up, Avalonia.Input.KeyModifiers.None));
+        Assert.IsTrue(_editor.HandleKeyDown(Avalonia.Input.Key.Down, Avalonia.Input.KeyModifiers.None));
+        Assert.IsTrue(_editor.HandleKeyDown(Avalonia.Input.Key.Left, Avalonia.Input.KeyModifiers.None));
+        Assert.IsTrue(_editor.HandleKeyDown(Avalonia.Input.Key.Right, Avalonia.Input.KeyModifiers.None));
+        Assert.IsTrue(_editor.HandleKeyDown(Avalonia.Input.Key.Home, Avalonia.Input.KeyModifiers.None));
+        Assert.IsTrue(_editor.HandleKeyDown(Avalonia.Input.Key.End, Avalonia.Input.KeyModifiers.None));
+        Assert.IsTrue(_editor.HandleKeyDown(Avalonia.Input.Key.PageUp, Avalonia.Input.KeyModifiers.None));
+        Assert.IsTrue(_editor.HandleKeyDown(Avalonia.Input.Key.PageDown, Avalonia.Input.KeyModifiers.None));
+    }
+
+    [TestMethod]
+    public void HandleKeyDown_WhenInactive_ReturnsFalse()
+    {
+        // Editor not activated
+        bool consumed = _editor.HandleKeyDown(Avalonia.Input.Key.Enter, Avalonia.Input.KeyModifiers.None);
+        Assert.IsFalse(consumed);
+    }
+
+    // ── Exit confirmation (Ctrl+Q) ──────────────────────────────────────
+
+    [TestMethod]
+    public void CtrlQ_ShowsConfirmPrompt()
+    {
+        _editor.Activate();
+        _editor.HandleKeyDown(Avalonia.Input.Key.Q, Avalonia.Input.KeyModifiers.Control);
+        Assert.IsTrue(_editor.ExitPromptShowing);
+        Assert.IsTrue(_editor.IsActive, "Should still be active until Y is pressed");
+    }
+
+    [TestMethod]
+    public void CtrlQ_ThenY_Deactivates()
+    {
+        _editor.Activate();
+        _editor.HandleKeyDown(Avalonia.Input.Key.Q, Avalonia.Input.KeyModifiers.Control);
+        _editor.HandleKeyDown(Avalonia.Input.Key.Y, Avalonia.Input.KeyModifiers.None);
+        Assert.IsFalse(_editor.IsActive);
+        Assert.IsFalse(_editor.ExitPromptShowing);
+    }
+
+    [TestMethod]
+    public void CtrlQ_ThenN_CancelsPrompt()
+    {
+        _editor.Activate();
+        _editor.HandleKeyDown(Avalonia.Input.Key.Q, Avalonia.Input.KeyModifiers.Control);
+        _editor.HandleKeyDown(Avalonia.Input.Key.N, Avalonia.Input.KeyModifiers.None);
+        Assert.IsTrue(_editor.IsActive);
+        Assert.IsFalse(_editor.ExitPromptShowing);
+    }
+
+    [TestMethod]
+    public void Escape_DoesNotShowExitPrompt()
+    {
+        _editor.Activate();
+        _editor.HandleKeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+        Assert.IsFalse(_editor.ExitPromptShowing, "Escape should not trigger exit prompt");
+        Assert.IsTrue(_editor.IsActive);
+    }
+
+    [TestMethod]
+    public void CtrlQ_Modified_ShowsUnsavedWarning()
+    {
+        _editor.Activate();
+        _editor.InsertChar('x'); // makes it modified
+        _editor.HandleKeyDown(Avalonia.Input.Key.Q, Avalonia.Input.KeyModifiers.Control);
+        Assert.IsTrue(_editor.ExitPromptShowing);
+        Assert.IsTrue(_editor.Modified);
+    }
 }
 
 [TestClass]

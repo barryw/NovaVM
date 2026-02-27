@@ -16,6 +16,8 @@ public sealed class MarkdownRenderer
     public event Action<string>? TryThisClicked;
     public event Action<string>? LinkClicked;
 
+    public List<Control> RenderBody(string markdown) => RenderMarkdownBody(markdown);
+
     public Control Render(HelpTopic topic)
     {
         var stack = new StackPanel { Spacing = HelpStyles.SectionSpacing };
