@@ -8,6 +8,8 @@ RUN apt-get update -qq && \
       texlive-latex-extra \
       texlive-fonts-recommended \
       texlive-latex-recommended \
+      fonts-lmodern \
+      lmodern \
       latexmk \
       python3-yaml \
       git \

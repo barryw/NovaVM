@@ -9,21 +9,21 @@ labels:
 
 steps:
   - name: publish
-    image: ghcr.io/barryw/novavm-ci:latest
+    image: ghcr.io/barryw/novavm-ci:1
     commands:
       - TAG="${CI_COMMIT_TAG}"
       - dotnet publish e6502.Avalonia -c Release -r linux-x64 -o publish/avalonia
       - dotnet publish e6502.MCP -c Release -r linux-x64 -o publish/mcp
 
   - name: package
-    image: ghcr.io/barryw/novavm-ci:latest
+    image: ghcr.io/barryw/novavm-ci:1
     commands:
       - TAG="${CI_COMMIT_TAG}"
       - tar -czf "nova-vm-${TAG}-linux-x64.tar.gz" -C publish/avalonia .
       - tar -czf "nova-mcp-${TAG}-linux-x64.tar.gz" -C publish/mcp .
 
   - name: upload
-    image: ghcr.io/barryw/novavm-ci:latest
+    image: ghcr.io/barryw/novavm-ci:1
     environment:
       GITHUB_TOKEN:
         from_secret: github_token

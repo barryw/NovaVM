@@ -11,7 +11,7 @@ labels:
 
 steps:
   - name: finalize
-    image: ghcr.io/barryw/novavm-ci:latest
+    image: ghcr.io/barryw/novavm-ci:1
     environment:
       GITHUB_TOKEN:
         from_secret: github_token

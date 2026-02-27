@@ -14,18 +14,18 @@ clone:
 
 steps:
   - name: check-commits
-    image: ghcr.io/barryw/novavm-ci:latest
+    image: ghcr.io/barryw/novavm-ci:1
     commands:
       - cog check || echo "cog check failed (may need initial tag) — continuing"
 
   - name: build-and-test
-    image: ghcr.io/barryw/novavm-ci:latest
+    image: ghcr.io/barryw/novavm-ci:1
     commands:
       - dotnet build -c Release
       - dotnet test -c Release --verbosity normal
 
   - name: version-and-release
-    image: ghcr.io/barryw/novavm-ci:latest
+    image: ghcr.io/barryw/novavm-ci:1
     environment:
       GITHUB_TOKEN:
         from_secret: github_token
