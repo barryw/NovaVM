@@ -11,7 +11,7 @@ steps:
   - name: publish
     image: ghcr.io/barryw/novavm-ci:1
     commands:
-      - dotnet publish e6502.Avalonia -c Release -r linux-x64 -o publish/avalonia
+      - dotnet publish e6502.Avalonia -c Release -r linux-x64 -p:SkipRomBuild=true -o publish/avalonia
       - dotnet publish e6502.MCP -c Release -r linux-x64 -o publish/mcp
 
   - name: package

@@ -62,9 +62,9 @@
               StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
     </Target>
 
-    <!-- Assemble the EhBASIC ROM from source (POSIX) -->
+    <!-- Assemble the EhBASIC ROM from source (POSIX) — skip if ROM exists and SkipRomBuild is set -->
     <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateTools"
-            Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+            Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="make -C $(ProjectDir)../ehbasic" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin"
               DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
@@ -72,7 +72,7 @@
 
     <!-- Assemble the EhBASIC ROM from source (Windows) -->
     <Target Name="AssembleRomWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateToolsWindows"
-            Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+            Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm &amp;&amp; ld65 -C ehbasic.cfg -vm -m basic.map -o basic.bin basic.o" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin"
               DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
@@ -80,13 +80,13 @@
 
     <!-- Generate the PDF user guide (POSIX) -->
     <Target Name="GeneratePdf" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRom"
-            Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+            Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="bash ../docs/help/build-pdf.sh" />
     </Target>
 
     <!-- Generate the PDF user guide (Windows) -->
     <Target Name="GeneratePdfWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRomWindows"
-            Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+            Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="bash ../docs/help/build-pdf.sh" />
     </Target>
 
