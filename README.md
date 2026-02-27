@@ -56,7 +56,7 @@ NovaVM isn't emulating a specific vintage computer. It's a **new design** that t
 
 | Component | Spec |
 |---|---|
-| **CPU** | MOS 6502 / 65C02, cycle-accurate, decimal mode, full interrupt handling |
+| **CPU** | MOS 6502 / 65C02 @ 12 MHz, cycle-accurate, decimal mode, full interrupt handling |
 | **RAM** | 64 KB flat + 512 KB expansion memory (banked) |
 | **Display** | 80&times;25 text + 320&times;200 4-bit color graphics, 60 Hz |
 | **Sprites** | 16 hardware sprites, 16&times;16 multicolor, 3 priority layers, collision detection |
@@ -68,6 +68,7 @@ NovaVM isn't emulating a specific vintage computer. It's a **new design** that t
 | **Storage** | File I/O controller &mdash; save/load programs, graphics, sprite data |
 | **ROM** | EhBASIC 2.22 + NCC compiler ROM (hot-swappable) |
 | **DMA** | Bulk transfer between CPU RAM, VRAM, expansion memory |
+| **Copper** | Scanline-triggered register writes &mdash; 128 program lists, vblank-synchronized |
 | **Blitter** | Hardware block copy/fill across all memory spaces |
 
 <p align="center">
@@ -83,6 +84,10 @@ The music engine sits on top: load MML sequences, define instruments with ADSR e
 ### Sprites
 
 Sixteen 16&times;16 multicolor sprites with per-pixel color (4-bit, 16 colors including transparent). Three priority layers let sprites appear behind text, between text and graphics, or in front of everything. Hardware collision detection reports sprite-to-sprite overlaps per frame. Flip horizontally or vertically without redrawing.
+
+### Copper
+
+Inspired by the Amiga's coprocessor, the copper executes a list of register writes synchronized to the raster beam. Each entry fires at a specific screen coordinate, letting you change background colors, scroll offsets, sprite positions, or graphics mode mid-frame &mdash; no CPU involvement. 128 independent program lists with up to 256 entries each, double-buffered at vblank for tear-free transitions. Rainbow gradients, split-screen effects, and vertical sprite multiplexing all run for free.
 
 ## AI Integration
 
@@ -119,7 +124,7 @@ Claude: [enters BASIC lines, defines star sprites, sets up animation loop,
          runs the program, reads the screen to verify it works]
 ```
 
-The AI doesn't just generate code and hope &mdash; it **types it into the machine, runs it, reads the screen, and iterates**. It's pair programming with a 1 MHz computer in the loop.
+The AI doesn't just generate code and hope &mdash; it **types it into the machine, runs it, reads the screen, and iterates**. It's pair programming with a 12 MHz computer in the loop.
 
 ## Nova BASIC
 
@@ -249,5 +254,5 @@ This project is built on [amensch/e6502](https://github.com/amensch/e6502). See 
 ---
 
 <p align="center">
-  <sub>35,000+ lines of C# &bull; 726 tests &bull; 50+ MCP tools &bull; 6 SID voices &bull; 16 sprites &bull; 1 MHz of fun</sub>
+  <sub>35,000+ lines of C# &bull; 726 tests &bull; 50+ MCP tools &bull; 6 SID voices &bull; 16 sprites &bull; 12 MHz of fun</sub>
 </p>
