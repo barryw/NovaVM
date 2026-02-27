@@ -6,6 +6,8 @@ RUN apt-get update -qq && \
       make \
       pandoc \
       texlive-latex-extra \
+      texlive-fonts-recommended \
+      texlive-latex-recommended \
       latexmk \
       python3-yaml \
       git \
