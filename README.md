@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/novavm-hero.png" alt="NovaVM" width="640">
+  <img src="screenshots/invention8-running.png" alt="NovaVM — Bach Invention No.8 with dual piano visualization" width="640">
 </p>
 
 <h1 align="center">N O V A V M</h1>
@@ -24,9 +24,9 @@ NovaVM is a fantasy computer built on a real CPU. It pairs a cycle-accurate **MO
 The result is a machine where you can write BASIC at the `Ready` prompt, hear your code through a **SID sound chip**, watch sprites glide across a 320&times;200 screen, and hand the keyboard to Claude so it can compose music, draw pixel art, and debug your assembly &mdash; all inside the same emulator window.
 
 <p align="center">
-  <img src="docs/screenshots/reversi-gameplay.png" alt="Reversi running in NovaVM" width="480">
+  <img src="screenshots/frame-boot.png" alt="NovaVM boot screen" width="480">
   <br>
-  <sub>Reversi: AI opponent, SID sound effects, sprite cursor &mdash; written entirely in Nova BASIC.</sub>
+  <sub>40 KB of BASIC, 512 KB expansion, SID sound, sprites, and a blinking cursor. Ready.</sub>
 </p>
 
 ## Quickstart
@@ -70,10 +70,6 @@ NovaVM isn't emulating a specific vintage computer. It's a **new design** that t
 | **DMA** | Bulk transfer between CPU RAM, VRAM, expansion memory |
 | **Copper** | Scanline-triggered register writes &mdash; 128 program lists, vblank-synchronized |
 | **Blitter** | Hardware block copy/fill across all memory spaces |
-
-<p align="center">
-  <img src="docs/screenshots/novavm-basic.png" alt="Nova BASIC prompt" width="480">
-</p>
 
 ### SID Sound
 
@@ -147,6 +143,18 @@ Graphics, sound, sprites, music, file I/O, networking, and timer interrupts &mda
 
 Press **F1** while a program is running for context-sensitive help. Press **Shift+F1** to edit the program's companion documentation.
 
+<p align="center">
+  <img src="screenshots/help-browser.png" alt="Help browser with searchable topic index" width="640">
+  <br>
+  <sub>F1 opens the built-in help system &mdash; searchable, filterable by category, with "Try This" code snippets.</sub>
+</p>
+
+<p align="center">
+  <img src="screenshots/doc-editor-invention8.png" alt="Doc editor alongside running program" width="640">
+  <br>
+  <sub>Shift+F1 opens the companion doc editor. Every program can have its own help page.</sub>
+</p>
+
 ## NCC Compiler
 
 For when BASIC isn't fast enough. NCC is a C-like language that compiles to native 6502 machine code:
@@ -160,6 +168,12 @@ while (true) {
 ```
 
 The NCC editor (**Ctrl+N**) provides a full IDE experience: syntax highlighting, build, run, debug with breakpoints, and step-through execution. The compiler supports structs, enums, pointers, arrays, fixed-point arithmetic, and inline assembly.
+
+<p align="center">
+  <img src="screenshots/ncc-editor.png" alt="NCC editor — Nova C Compiler IDE" width="640">
+  <br>
+  <sub>The NCC editor: a full-screen IDE running inside the emulator itself.</sub>
+</p>
 
 ## Architecture
 

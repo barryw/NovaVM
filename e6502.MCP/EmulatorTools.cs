@@ -922,6 +922,21 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
+    [McpServerTool, Description("Take a screenshot of the emulator. Type 'frame' captures the VGC display (640x400), 'window' captures the full window content including panels.")]
+    public static async Task<string> TakeScreenshot(
+        EmulatorClient client,
+        [Description("Path to save the PNG file")] string path,
+        [Description("Screenshot type: 'frame' (VGC display only) or 'window' (full window content)")] string type = "frame")
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "screenshot",
+            ["path"] = path,
+            ["type"] = type
+        });
+        return result.ToJsonString();
+    }
+
     private static string FormatScreen(JsonNode screen)
     {
         var sb = new StringBuilder();

@@ -55,6 +55,34 @@ public class EmulatorCanvas : Control
 
     public void RequestRedraw() => InvalidateVisual();
 
+    public unsafe void SaveScreenshot(string path)
+    {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        using var snapshot = new WriteableBitmap(
+            new PixelSize(NativeWidth, NativeHeight),
+            new Vector(96, 96),
+            global::Avalonia.Platform.PixelFormat.Bgra8888,
+            global::Avalonia.Platform.AlphaFormat.Opaque);
+
+        lock (_renderLock)
+        {
+            RenderFramebuffer();
+            using var src = _framebuffer.Lock();
+            using var dst = snapshot.Lock();
+            Buffer.MemoryCopy(
+                (void*)src.Address,
+                (void*)dst.Address,
+                (long)dst.RowBytes * NativeHeight,
+                (long)src.RowBytes * NativeHeight);
+        }
+
+        using var fs = File.Create(path);
+        snapshot.Save(fs);
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         // Route to NCC editor when active (but not in Running mode — program gets ScreenEditor input)

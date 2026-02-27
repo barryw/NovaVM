@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Dock.Avalonia.Controls;
 using e6502.Avalonia.Debugging;
@@ -114,7 +115,7 @@ public partial class MainWindow : Window
 
         // TCP server for MCP
         int tcpPort = int.TryParse(Environment.GetEnvironmentVariable("EMULATOR_PORT"), out int ep) ? ep : 6502;
-        var tcpServer = new EmulatorTcpServer(_bus, _editor, _cpu, _debugger, tcpPort);
+        var tcpServer = new EmulatorTcpServer(_bus, _editor, _cpu, _debugger, _canvas, this, tcpPort);
         tcpServer.Start();
 
         // CPU thread
@@ -740,6 +741,26 @@ public partial class MainWindow : Window
 
         if (!_helpVisible && OperatingSystem.IsMacOS())
             SetMacAspectRatio();
+    }
+
+    public (int width, int height) SaveWindowScreenshot(string path)
+    {
+        var visual = Content as Visual;
+        if (visual is null) return (0, 0);
+
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        int width = Math.Max(1, (int)visual.Bounds.Width);
+        int height = Math.Max(1, (int)visual.Bounds.Height);
+
+        var rtb = new RenderTargetBitmap(new PixelSize(width, height));
+        rtb.Render(visual);
+        using var fs = File.Create(path);
+        rtb.Save(fs);
+
+        return (width, height);
     }
 
     private bool IsProgramRunning()

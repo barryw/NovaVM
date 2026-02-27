@@ -3,10 +3,12 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Avalonia.Threading;
 using e6502.Avalonia.Debugging;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Help;
 using e6502.Avalonia.Input;
+using e6502.Avalonia.Rendering;
 using KDS.e6502;
 
 namespace e6502.Avalonia.Ipc;
@@ -17,18 +19,23 @@ public sealed class EmulatorTcpServer : IDisposable
     private readonly ScreenEditor _editor;
     private readonly Cpu _cpu;
     private readonly DebuggerService _debugger;
+    private readonly EmulatorCanvas? _canvas;
+    private readonly MainWindow? _mainWindow;
     private TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private Task? _acceptTask;
 
     public int Port { get; private set; }
 
-    public EmulatorTcpServer(CompositeBusDevice bus, ScreenEditor editor, Cpu cpu, DebuggerService debugger, int port = 6502)
+    public EmulatorTcpServer(CompositeBusDevice bus, ScreenEditor editor, Cpu cpu, DebuggerService debugger,
+        EmulatorCanvas? canvas, MainWindow? mainWindow, int port = 6502)
     {
         _bus = bus;
         _editor = editor;
         _cpu = cpu;
         _debugger = debugger;
+        _canvas = canvas;
+        _mainWindow = mainWindow;
         Port = port;
         _listener = new TcpListener(IPAddress.Loopback, port);
     }
@@ -77,13 +84,32 @@ public sealed class EmulatorTcpServer : IDisposable
                     var line = await reader.ReadLineAsync(ct);
                     if (line is null) break;
 
-                    var response = ProcessRequest(line);
+                    var response = await ProcessRequestAsync(line);
                     await writer.WriteLineAsync(response);
                 }
             }
         }
         catch (OperationCanceledException) { }
         catch (IOException) { }
+    }
+
+    private async Task<string> ProcessRequestAsync(string json)
+    {
+        try
+        {
+            var req = JsonNode.Parse(json);
+            if (req is null) return Error("Invalid JSON");
+
+            string? cmd = req["command"]?.GetValue<string>();
+            if (cmd == "screenshot")
+                return await CmdScreenshotAsync(req);
+        }
+        catch (Exception ex)
+        {
+            return Error(ex.Message);
+        }
+
+        return ProcessRequest(json);
     }
 
     private string ProcessRequest(string json)
@@ -168,6 +194,7 @@ public sealed class EmulatorTcpServer : IDisposable
                 "dbg_read_memory" => CmdDbgReadMemory(req),
                 "dbg_disasm" => CmdDbgDisasm(req),
                 "dbg_stack" => CmdDbgStack(),
+                // screenshot handled in ProcessRequestAsync
                 _ => Error($"Unknown command: {cmd}")
             };
         }
@@ -1236,6 +1263,46 @@ public sealed class EmulatorTcpServer : IDisposable
             ["entries"] = Convert.ToHexString(data)
         };
         return result.ToJsonString();
+    }
+
+    // ── Screenshot commands ───────────────────────────────────────────────
+
+    private async Task<string> CmdScreenshotAsync(JsonNode req)
+    {
+        string? path = req["path"]?.GetValue<string>();
+        if (path is null) return Error("Missing 'path'");
+
+        string type = req["type"]?.GetValue<string>() ?? "frame";
+
+        if (type == "frame")
+        {
+            if (_canvas is null) return Error("Canvas not available");
+            // Frame capture is thread-safe via _renderLock — no UI dispatch needed
+            _canvas.SaveScreenshot(path);
+            return new JsonObject
+            {
+                ["ok"] = true,
+                ["path"] = Path.GetFullPath(path),
+                ["width"] = EmulatorCanvas.NativeWidth,
+                ["height"] = EmulatorCanvas.NativeHeight
+            }.ToJsonString();
+        }
+
+        if (type == "window")
+        {
+            if (_mainWindow is null) return Error("Window not available");
+            // Window capture requires UI thread — must await, never block
+            var (w, h) = await Dispatcher.UIThread.InvokeAsync(() => _mainWindow.SaveWindowScreenshot(path));
+            return new JsonObject
+            {
+                ["ok"] = true,
+                ["path"] = Path.GetFullPath(path),
+                ["width"] = w,
+                ["height"] = h
+            }.ToJsonString();
+        }
+
+        return Error($"Unknown screenshot type: {type}");
     }
 
     // ── Network commands ──────────────────────────────────────────────────
