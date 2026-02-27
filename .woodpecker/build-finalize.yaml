@@ -16,5 +16,4 @@ steps:
       GITHUB_TOKEN:
         from_secret: github_token
     commands:
-      - TAG="${CI_COMMIT_TAG}"
-      - gh release edit "${TAG}" --draft=false --repo barryw/NovaVM
+      - gh release edit "${CI_COMMIT_TAG}" --draft=false --repo barryw/NovaVM

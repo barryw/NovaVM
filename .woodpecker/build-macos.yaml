@@ -11,16 +11,16 @@ steps:
   - name: publish
     image: bash
     commands:
-      - TAG="${CI_COMMIT_TAG}"
       - dotnet publish e6502.Avalonia -c Release -r osx-arm64 -o publish/avalonia
       - dotnet publish e6502.MCP -c Release -r osx-arm64 -o publish/mcp
 
   - name: package
     image: bash
     commands:
-      - TAG="${CI_COMMIT_TAG}"
-      - tar -czf "nova-vm-${TAG}-osx-arm64.tar.gz" -C publish/avalonia .
-      - tar -czf "nova-mcp-${TAG}-osx-arm64.tar.gz" -C publish/mcp .
+      - |
+        TAG="${CI_COMMIT_TAG}"
+        tar -czf "nova-vm-${TAG}-osx-arm64.tar.gz" -C publish/avalonia .
+        tar -czf "nova-mcp-${TAG}-osx-arm64.tar.gz" -C publish/mcp .
 
   - name: upload
     image: bash
@@ -28,5 +28,9 @@ steps:
       GITHUB_TOKEN:
         from_secret: github_token
     commands:
-      - TAG="${CI_COMMIT_TAG}"
-      - gh release upload "${TAG}" nova-vm-${TAG}-osx-arm64.tar.gz nova-mcp-${TAG}-osx-arm64.tar.gz --repo barryw/NovaVM
+      - |
+        TAG="${CI_COMMIT_TAG}"
+        gh release upload "${TAG}" \
+          "nova-vm-${TAG}-osx-arm64.tar.gz" \
+          "nova-mcp-${TAG}-osx-arm64.tar.gz" \
+          --repo barryw/NovaVM
