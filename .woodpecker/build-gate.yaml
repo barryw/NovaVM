@@ -18,11 +18,10 @@ steps:
         from_secret: github_token
     commands:
       - |
-        TAG="${CI_COMMIT_TAG}"
         # Create draft release (skip if already exists from ci.yaml)
-        gh release view "${TAG}" --repo barryw/NovaVM >/dev/null 2>&1 || \
-          gh release create "${TAG}" \
+        gh release view "$CI_COMMIT_TAG" --repo barryw/NovaVM >/dev/null 2>&1 || \
+          gh release create "$CI_COMMIT_TAG" \
             --repo barryw/NovaVM \
             --draft \
             --generate-notes \
-            --title "${TAG}"
+            --title "$CI_COMMIT_TAG"
