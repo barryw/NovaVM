@@ -32,12 +32,12 @@ steps:
     commands:
       - |
         # Check if a version bump is needed
-        NEW_VERSION=$(cog bump --auto --dry-run 2>/dev/null || true)
-        if [ -z "$NEW_VERSION" ]; then
+        NEW_VERSION=$$(cog bump --auto --dry-run 2>/dev/null || true)
+        if [ -z "$${NEW_VERSION}" ]; then
           echo "No version bump needed"
           exit 0
         fi
-        echo "Bumping to v${NEW_VERSION}"
+        echo "Bumping to v$${NEW_VERSION}"
 
         # Configure git for tagging
         git config user.name "Woodpecker CI"
@@ -45,12 +45,12 @@ steps:
 
         # Create and push the tag
         cog bump --auto
-        TAG="v$(cog get-version)"
-        git push origin "${TAG}"
+        TAG="v$$(cog get-version)"
+        git push origin "$${TAG}"
 
         # Create draft release
-        gh release create "${TAG}" \
-          --repo barryw/NovaVM \
+        gh release create "$${TAG}" \
+          --repo "$$CI_REPO" \
           --draft \
           --generate-notes \
-          --title "${TAG}"
+          --title "$${TAG}"
