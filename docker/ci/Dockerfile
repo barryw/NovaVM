@@ -13,7 +13,9 @@ RUN apt-get update -qq && \
       latexmk \
       python3-yaml \
       git \
-      curl && \
+      curl \
+      clang \
+      zlib1g-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

@@ -38,7 +38,7 @@
 
     <!-- POSIX tool validation (macOS / Linux) -->
     <Target Name="ValidateTools" BeforeTargets="AssembleRom"
-            Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+            Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="command -v ca65 > /dev/null 2>&amp;1 || (echo 'ERROR: ca65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)"
               StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="command -v ld65 > /dev/null 2>&amp;1 || (echo 'ERROR: ld65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)"
@@ -51,7 +51,7 @@
 
     <!-- Windows tool validation -->
     <Target Name="ValidateToolsWindows" BeforeTargets="AssembleRomWindows"
-            Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+            Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="where.exe ca65 >nul 2>&amp;1 || (echo ERROR: ca65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)"
               StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="where.exe ld65 >nul 2>&amp;1 || (echo ERROR: ld65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)"
