@@ -10,6 +10,8 @@ labels:
 steps:
   - name: publish
     image: bash
+    environment:
+      LIBRARY_PATH: /opt/homebrew/lib:/opt/homebrew/opt/openssl/lib
     commands:
       - dotnet publish e6502.Avalonia -c Release -r osx-arm64 -p:SkipRomBuild=true -o publish/avalonia
       - dotnet publish e6502.MCP -c Release -r osx-arm64 -o publish/mcp
