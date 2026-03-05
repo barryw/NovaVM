@@ -196,4 +196,131 @@ public class MidiEngineTests
         Assert.AreEqual(48, MidiEngine.MidiTicksToMmlTicks(240, 480));
         Assert.AreEqual(192, MidiEngine.MidiTicksToMmlTicks(960, 480));
     }
+
+    // ---------- GenerateMml tests ----------
+
+    /// <summary>
+    /// Build a track chunk with interleaved NoteOn/NoteOff events using delta-time encoding.
+    /// notes = (noteNumber, velocity, deltaOnFromPrev, durationTicks)
+    /// </summary>
+    private static MidiFile BuildTimedMidi(int ppqn,
+        params (int note, int velocity, long deltaOnFromPrev, long durationTicks)[] notes)
+    {
+        var events = new List<MidiEvent>();
+        foreach (var (note, vel, delta, dur) in notes)
+        {
+            events.Add(new NoteOnEvent((SevenBitNumber)(byte)note, (SevenBitNumber)(byte)vel)
+                { Channel = (FourBitNumber)0, DeltaTime = delta });
+            events.Add(new NoteOffEvent((SevenBitNumber)(byte)note, (SevenBitNumber)0)
+                { Channel = (FourBitNumber)0, DeltaTime = dur });
+        }
+        var midi = new MidiFile(new TrackChunk(events.ToArray()))
+        {
+            TimeDivision = new TicksPerQuarterNoteTimeDivision((short)ppqn)
+        };
+        return midi;
+    }
+
+    [TestMethod]
+    public void GenerateMml_SimpleScale()
+    {
+        // C major scale: C4 D E F G A B C5, each a quarter note at PPQN=480
+        // MIDI notes: 60, 62, 64, 65, 67, 69, 71, 72
+        var midi = BuildTimedMidi(480,
+            (60, 80, 0, 480),  // C4
+            (62, 80, 0, 480),  // D4
+            (64, 80, 0, 480),  // E4
+            (65, 80, 0, 480),  // F4
+            (67, 80, 0, 480),  // G4
+            (69, 80, 0, 480),  // A4
+            (71, 80, 0, 480),  // B4
+            (72, 80, 0, 480)); // C5
+
+        string mml = MidiEngine.GenerateMml(midi, channel: 0, ppqn: 480);
+
+        Assert.IsTrue(mml.Contains("C"), $"Expected C in: {mml}");
+        Assert.IsTrue(mml.Contains("D"), $"Expected D in: {mml}");
+        Assert.IsTrue(mml.Contains("E"), $"Expected E in: {mml}");
+        Assert.IsTrue(mml.Contains("G"), $"Expected G in: {mml}");
+        Assert.IsTrue(mml.Contains("A"), $"Expected A in: {mml}");
+        Assert.IsTrue(mml.Contains("B"), $"Expected B in: {mml}");
+        Assert.IsTrue(mml.Contains("O"), $"Expected octave O in: {mml}");
+    }
+
+    [TestMethod]
+    public void GenerateMml_IncludesVelocity()
+    {
+        // Two notes with different velocities: vel=50 and vel=120
+        var midi = BuildTimedMidi(480,
+            (60, 50,  0, 480),  // C4 vel=50
+            (64, 120, 0, 480)); // E4 vel=120
+
+        string mml = MidiEngine.GenerateMml(midi, channel: 0, ppqn: 480);
+
+        Assert.IsTrue(mml.Contains("V"), $"Expected V in: {mml}");
+    }
+
+    [TestMethod]
+    public void GenerateMml_RestsForGaps()
+    {
+        // Note at time 0-480, gap 480-960, note at 960-1440
+        var events = new List<MidiEvent>
+        {
+            new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)80)  { Channel = (FourBitNumber)0, DeltaTime = 0 },
+            new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0)  { Channel = (FourBitNumber)0, DeltaTime = 480 },
+            // gap: NoteOn for second note starts 480 ticks after NoteOff
+            new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)80)  { Channel = (FourBitNumber)0, DeltaTime = 480 },
+            new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0)  { Channel = (FourBitNumber)0, DeltaTime = 480 },
+        };
+        var midi = new MidiFile(new TrackChunk(events.ToArray()))
+        {
+            TimeDivision = new TicksPerQuarterNoteTimeDivision(480)
+        };
+
+        string mml = MidiEngine.GenerateMml(midi, channel: 0, ppqn: 480);
+
+        Assert.IsTrue(mml.Contains("R"), $"Expected R rest in: {mml}");
+    }
+
+    [TestMethod]
+    public void GenerateMml_TopNoteWinsForChords()
+    {
+        // Two simultaneous notes: C4 (60) and E4 (64), both at time 0, both off at 480
+        var events = new List<MidiEvent>
+        {
+            new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)80)  { Channel = (FourBitNumber)0, DeltaTime = 0 },
+            new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)80)  { Channel = (FourBitNumber)0, DeltaTime = 0 },
+            new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0)  { Channel = (FourBitNumber)0, DeltaTime = 480 },
+            new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0)  { Channel = (FourBitNumber)0, DeltaTime = 0 },
+        };
+        var midi = new MidiFile(new TrackChunk(events.ToArray()))
+        {
+            TimeDivision = new TicksPerQuarterNoteTimeDivision(480)
+        };
+
+        string mml = MidiEngine.GenerateMml(midi, channel: 0, ppqn: 480);
+
+        // Top note (E4=64) wins
+        Assert.IsTrue(mml.Contains("E"), $"Expected E (top note) in: {mml}");
+    }
+
+    [TestMethod]
+    public void GenerateMml_IncludesTempoChange()
+    {
+        // SetTempoEvent 500000 µs = 120 BPM
+        var events = new List<MidiEvent>
+        {
+            new SetTempoEvent(500000) { DeltaTime = 0 },
+            new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)80) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+            new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 480 },
+        };
+        var midi = new MidiFile(new TrackChunk(events.ToArray()))
+        {
+            TimeDivision = new TicksPerQuarterNoteTimeDivision(480)
+        };
+
+        string mml = MidiEngine.GenerateMml(midi, channel: 0, ppqn: 480);
+
+        Assert.IsTrue(mml.Contains("T120"), $"Expected T120 in: {mml}");
+    }
 }

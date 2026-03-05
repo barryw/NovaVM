@@ -173,4 +173,153 @@ public static class MidiEngine
             .Select(c => c.Channel)
             .ToArray();
     }
+
+    private static readonly string[] NoteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+    /// <summary>
+    /// Generate an MML string from a single MIDI channel's events.
+    /// Handles notes, rests, velocity (V), octave tracking (O/>/&lt;), tempo (T), and
+    /// top-note-wins polyphony reduction.
+    /// </summary>
+    public static string GenerateMml(MidiFile midi, int channel, int ppqn)
+    {
+        var noteEvents = new List<(long time, int midi, int velocity, bool isOn)>();
+        long initialTempo = 500000; // default 120 BPM
+
+        foreach (var trackChunk in midi.GetTrackChunks())
+        {
+            foreach (var timedEvent in trackChunk.GetTimedEvents())
+            {
+                switch (timedEvent.Event)
+                {
+                    case NoteOnEvent noteOn when noteOn.Channel == channel && noteOn.Velocity > 0:
+                        noteEvents.Add((timedEvent.Time, noteOn.NoteNumber, noteOn.Velocity, true));
+                        break;
+                    case NoteOnEvent noteOn when noteOn.Channel == channel:
+                        noteEvents.Add((timedEvent.Time, noteOn.NoteNumber, 0, false));
+                        break;
+                    case NoteOffEvent noteOff when noteOff.Channel == channel:
+                        noteEvents.Add((timedEvent.Time, noteOff.NoteNumber, 0, false));
+                        break;
+                    case SetTempoEvent tempo:
+                        initialTempo = tempo.MicrosecondsPerQuarterNote;
+                        break;
+                }
+            }
+        }
+
+        noteEvents.Sort((a, b) => a.time.CompareTo(b.time));
+
+        var notes = ReduceToMonophonic(noteEvents, ppqn);
+
+        var sb = new System.Text.StringBuilder();
+        int bpm = (int)Math.Round(60_000_000.0 / initialTempo);
+        sb.Append($"T{bpm}");
+
+        int currentOctave = -1;
+        int currentVelocity = -1;
+
+        foreach (var note in notes)
+        {
+            if (note.IsRest)
+            {
+                sb.Append('R');
+                sb.Append(QuantizeDuration(note.MmlTicks));
+                continue;
+            }
+
+            int vol = VelocityToVolume(note.Velocity);
+            if (vol != currentVelocity)
+            {
+                sb.Append('V');
+                sb.Append(vol);
+                currentVelocity = vol;
+            }
+
+            int noteOctave = (note.Midi / 12) - 1;
+            if (noteOctave != currentOctave)
+            {
+                if (currentOctave >= 0 && noteOctave == currentOctave + 1)
+                    sb.Append('>');
+                else if (currentOctave >= 0 && noteOctave == currentOctave - 1)
+                    sb.Append('<');
+                else
+                {
+                    sb.Append('O');
+                    sb.Append(noteOctave);
+                }
+                currentOctave = noteOctave;
+            }
+
+            int semitone = note.Midi % 12;
+            sb.Append(NoteNames[semitone]);
+            sb.Append(QuantizeDuration(note.MmlTicks));
+        }
+
+        return sb.ToString();
+    }
+
+    private sealed class MonoNote
+    {
+        public bool IsRest;
+        public int Midi;
+        public int Velocity;
+        public int MmlTicks;
+    }
+
+    private static List<MonoNote> ReduceToMonophonic(
+        List<(long time, int midi, int velocity, bool isOn)> events, int ppqn)
+    {
+        var result = new List<MonoNote>();
+        var activeNotes = new SortedDictionary<int, int>(); // midi pitch → velocity
+        long cursor = 0;
+
+        int i = 0;
+        while (i < events.Count)
+        {
+            long eventTime = events[i].time;
+
+            // Emit rest if there is a gap before this event
+            if (eventTime > cursor)
+            {
+                int restTicks = MidiTicksToMmlTicks(eventTime - cursor, ppqn);
+                if (restTicks > 0)
+                    result.Add(new MonoNote { IsRest = true, MmlTicks = restTicks });
+                cursor = eventTime;
+            }
+
+            // Process all events at the same absolute time
+            while (i < events.Count && events[i].time == eventTime)
+            {
+                var e = events[i];
+                if (e.isOn)
+                    activeNotes[e.midi] = e.velocity;
+                else
+                    activeNotes.Remove(e.midi);
+                i++;
+            }
+
+            // Determine next event time to know duration of current state
+            long nextTime = i < events.Count ? events[i].time : eventTime;
+            int mmlTicks = MidiTicksToMmlTicks(nextTime - eventTime, ppqn);
+
+            if (mmlTicks <= 0)
+                continue;
+
+            if (activeNotes.Count > 0)
+            {
+                int topMidi = activeNotes.Keys.Last();
+                int topVel = activeNotes[topMidi];
+                result.Add(new MonoNote { Midi = topMidi, Velocity = topVel, MmlTicks = mmlTicks });
+            }
+            else
+            {
+                result.Add(new MonoNote { IsRest = true, MmlTicks = mmlTicks });
+            }
+
+            cursor = nextTime;
+        }
+
+        return result;
+    }
 }
