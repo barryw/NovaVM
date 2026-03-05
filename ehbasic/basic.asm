@@ -346,8 +346,8 @@ TK_SAVE           = TK_LOAD+1       ; SAVE token
 TK_DEF            = TK_SAVE+1       ; DEF token
 TK_POKE           = TK_DEF+1        ; POKE token
 TK_DOKE           = TK_POKE+1       ; DOKE token
-TK_CALL           = TK_DOKE+1       ; CALL token
-TK_DO             = TK_CALL+1       ; DO token
+TK_SYS            = TK_DOKE+1       ; SYS token
+TK_DO             = TK_SYS+1       ; DO token
 TK_LOOP           = TK_DO+1         ; LOOP token
 TK_PRINT          = TK_LOOP+1       ; PRINT token
 TK_CONT           = TK_PRINT+1      ; CONT token
@@ -5949,22 +5949,22 @@ SwapLp
 SwapErr
       JMP   LAB_1ABC          ; do "Type mismatch" error then warm start
 
-; perform CALL
+; perform SYS
 
-LAB_CALL
+LAB_SYS
       JSR   LAB_EVNM          ; evaluate expression and check is numeric,
                               ; else do type mismatch
       JSR   LAB_F2FX          ; convert floating-to-fixed
-      LDA   #>CallExit        ; set return address high byte
+      LDA   #>SysExit         ; set return address high byte
       PHA                     ; put on stack
-      LDA   #<CallExit-1      ; set return address low byte
+      LDA   #<SysExit-1       ; set return address low byte
       PHA                     ; put on stack
       JMP   (Itempl)          ; do indirect jump to user routine
 
 ; if the called routine exits correctly then it will return to here. this will then get
 ; the next byte for the interpreter and return
 
-CallExit
+SysExit
       JMP   LAB_GBYT          ; scan memory and return
 
 ; cursor helpers — placed after all #<label-1 forward refs to avoid
@@ -11394,7 +11394,7 @@ LAB_CTBL
       .word LAB_DEF-1         ; DEF
       .word LAB_POKE-1        ; POKE
       .word LAB_DOKE-1        ; DOKE            new command
-      .word LAB_CALL-1        ; CALL            new command
+      .word LAB_SYS-1         ; SYS             new command
       .word LAB_DO-1          ; DO              new command
       .word LAB_LOOP-1        ; LOOP            new command
       .word LAB_PRINT-1       ; PRINT
@@ -11672,8 +11672,6 @@ LBB_BUMPED
       .byte "UMPED(",TK_BUMPED ; BUMPED(
       .byte $00
 TAB_ASCC
-LBB_CALL
-      .byte "ALL",TK_CALL     ; CALL
 LBB_CHRS
       .byte "HR$(",TK_CHRS    ; CHR$(
 LBB_CIRCLE
@@ -11892,6 +11890,8 @@ LBB_STRS
       .byte "TR$(",TK_STRS    ; STR$(
 LBB_SWAP
       .byte "WAP",TK_SWAP     ; SWAP
+LBB_SYS
+      .byte "YS",TK_SYS       ; SYS
       .byte $00
 TAB_ASCT
 LBB_TAB
@@ -12003,8 +12003,8 @@ LAB_KEYT
       .word LBB_POKE          ; POKE
       .byte 4,'D'
       .word LBB_DOKE          ; DOKE
-      .byte 4,'C'
-      .word LBB_CALL          ; CALL
+      .byte 3,'S'
+      .word LBB_SYS           ; SYS
       .byte 2,'D'
       .word LBB_DO            ; DO
       .byte 4,'L'
