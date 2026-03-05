@@ -141,4 +141,59 @@ public class MidiEngineTests
         Assert.AreEqual(8, MidiEngine.VelocityToVolume(64));
         Assert.AreEqual(15, MidiEngine.VelocityToVolume(127));
     }
+
+    [TestMethod]
+    public void QuantizeDuration_ExactQuarter()
+    {
+        // 96 MML ticks = quarter note → "4"
+        string result = MidiEngine.QuantizeDuration(96);
+        Assert.AreEqual("4", result);
+    }
+
+    [TestMethod]
+    public void QuantizeDuration_ExactEighth()
+    {
+        string result = MidiEngine.QuantizeDuration(48);
+        Assert.AreEqual("8", result);
+    }
+
+    [TestMethod]
+    public void QuantizeDuration_DottedQuarter()
+    {
+        // 144 MML ticks = dotted quarter → "4."
+        string result = MidiEngine.QuantizeDuration(144);
+        Assert.AreEqual("4.", result);
+    }
+
+    [TestMethod]
+    public void QuantizeDuration_WholeNote()
+    {
+        string result = MidiEngine.QuantizeDuration(384);
+        Assert.AreEqual("1", result);
+    }
+
+    [TestMethod]
+    public void QuantizeDuration_TieRequired()
+    {
+        // 96 + 24 = 120 ticks = quarter + sixteenth → "4&16"
+        string result = MidiEngine.QuantizeDuration(120);
+        Assert.AreEqual("4&16", result);
+    }
+
+    [TestMethod]
+    public void QuantizeDuration_LongTie()
+    {
+        // 384 + 192 = 576 = dotted whole → "1."
+        string result = MidiEngine.QuantizeDuration(576);
+        Assert.AreEqual("1.", result);
+    }
+
+    [TestMethod]
+    public void MidiTicksToMmlTicks_StandardPpqn()
+    {
+        // PPQN 480: 480 MIDI ticks = 1 quarter = 96 MML ticks
+        Assert.AreEqual(96, MidiEngine.MidiTicksToMmlTicks(480, 480));
+        Assert.AreEqual(48, MidiEngine.MidiTicksToMmlTicks(240, 480));
+        Assert.AreEqual(192, MidiEngine.MidiTicksToMmlTicks(960, 480));
+    }
 }

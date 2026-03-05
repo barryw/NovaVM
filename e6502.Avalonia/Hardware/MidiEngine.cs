@@ -94,6 +94,60 @@ public static class MidiEngine
     public static int VelocityToVolume(int velocity) =>
         Math.Clamp((int)Math.Round(velocity * 15.0 / 127), 0, 15);
 
+    private const int MmlTicksPerQuarter = 96;
+
+    // Valid MML durations: (denominator, ticks, dotted ticks)
+    private static readonly (int denom, int ticks, int dottedTicks)[] MmlDurations =
+    {
+        (1, 384, 576),
+        (2, 192, 288),
+        (4, 96, 144),
+        (8, 48, 72),
+        (16, 24, 36),
+        (32, 12, 18),
+    };
+
+    public static int MidiTicksToMmlTicks(long midiTicks, int ppqn) =>
+        (int)Math.Round((double)midiTicks * MmlTicksPerQuarter / ppqn);
+
+    /// <summary>
+    /// Convert MML ticks to a duration string using note values and ties.
+    /// E.g., 96 → "4", 144 → "4.", 120 → "4&16"
+    /// </summary>
+    public static string QuantizeDuration(int mmlTicks)
+    {
+        if (mmlTicks <= 0) return "32";
+
+        var parts = new List<string>();
+        int remaining = mmlTicks;
+
+        while (remaining >= 6) // below 6 ticks = discard
+        {
+            string? best = null;
+            int bestTicks = 0;
+
+            foreach (var (denom, ticks, dottedTicks) in MmlDurations)
+            {
+                if (dottedTicks <= remaining && dottedTicks > bestTicks)
+                {
+                    best = $"{denom}.";
+                    bestTicks = dottedTicks;
+                }
+                if (ticks <= remaining && ticks > bestTicks)
+                {
+                    best = $"{denom}";
+                    bestTicks = ticks;
+                }
+            }
+
+            if (best is null) break;
+            parts.Add(best);
+            remaining -= bestTicks;
+        }
+
+        return parts.Count > 0 ? string.Join("&", parts) : "32";
+    }
+
     /// <summary>
     /// Select up to maxVoices channels, ranked by note count.
     /// If explicitMapping is provided (voice 1-based -> channel 0-based), those are used first.
