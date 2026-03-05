@@ -1,12 +1,17 @@
 """MusicXML to MML converter."""
 from __future__ import annotations
 
+import argparse
+import sys
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from ly2mml import LyNote, LyVoice  # noqa: F401 – LyVoice re-exported for convenience
+from ly2mml import (
+    LyNote, LyVoice, notes_to_mml, emit_basic,
+    INSTRUMENT_MAP, INSTRUMENT_VARIANTS, DEFAULT_INSTRUMENTS,
+)
 
 TYPE_TO_DURATION: dict[str, int] = {
     "whole": 1,
@@ -559,3 +564,176 @@ def gm_to_instrument(program: int) -> str:
         if program in r:
             return name
     return ""
+
+
+# ---------------------------------------------------------------------------
+# CLI helpers
+# ---------------------------------------------------------------------------
+
+
+def parse_parts_flag(raw: str | None) -> dict[str, int] | None:
+    """Parse ``--parts "Violin I:1,Cello:2"`` flag into a dict."""
+    if not raw:
+        return None
+    result: dict[str, int] = {}
+    for part in raw.split(","):
+        name, _, num = part.strip().rpartition(":")
+        if name and num:
+            result[name.strip()] = int(num.strip())
+    return result
+
+
+def _build_ly_voices(
+    parts: list[MxlPart],
+    max_voices: int,
+    no_split: bool,
+    explicit_parts: dict[str, int] | None,
+) -> tuple[list[LyVoice], dict[str, int], dict[int, tuple[int, int, int, int, int, str]]]:
+    """Convert *MxlPart* objects into *LyVoice* objects ready for MML."""
+    all_streams: dict[str, list[LyNote]] = {}
+    stream_instruments: dict[str, str] = {}
+
+    for part in parts:
+        for vi, voice_notes in enumerate(part.voices):
+            if no_split:
+                name = part.name if len(part.voices) == 1 else f"{part.name}-{vi+1}"
+                all_streams[name] = voice_notes
+                instr = gm_to_instrument(part.midi_program)
+                stream_instruments[name] = instr or part.instrument or ""
+            else:
+                sub_voices = split_chords(voice_notes)
+                for si, sv in enumerate(sub_voices):
+                    if len(sub_voices) == 1 and len(part.voices) == 1:
+                        name = part.name
+                    else:
+                        name = (
+                            f"{part.name}-{vi+1}.{si+1}"
+                            if len(part.voices) > 1
+                            else f"{part.name}-{si+1}"
+                        )
+                    all_streams[name] = sv
+                    instr = gm_to_instrument(part.midi_program)
+                    stream_instruments[name] = instr or part.instrument or ""
+
+    if explicit_parts:
+        selected = [(n, all_streams[n]) for n in explicit_parts if n in all_streams]
+    else:
+        selected = select_voices(all_streams, max_voices)
+
+    voices: list[LyVoice] = []
+    voice_map: dict[str, int] = {}
+    instruments: dict[int, tuple[int, int, int, int, int, str]] = {}
+
+    for i, (name, notes) in enumerate(selected):
+        vn = explicit_parts.get(name, i + 1) if explicit_parts else i + 1
+        voice_map[name] = vn
+        instr_name = stream_instruments.get(name, "")
+        voice = LyVoice(name=name, notes=notes, instrument=instr_name or "harpsichord")
+        voices.append(voice)
+
+        if instr_name in INSTRUMENT_VARIANTS:
+            variants = INSTRUMENT_VARIANTS[instr_name]
+            instruments[vn] = variants[min(i, len(variants) - 1)]
+        elif instr_name in INSTRUMENT_MAP:
+            instruments[vn] = INSTRUMENT_MAP[instr_name]
+        elif i < len(DEFAULT_INSTRUMENTS):
+            instruments[vn] = DEFAULT_INSTRUMENTS[i]
+        else:
+            instruments[vn] = DEFAULT_INSTRUMENTS[0]
+
+    return voices, voice_map, instruments
+
+
+# ---------------------------------------------------------------------------
+# Argparse
+# ---------------------------------------------------------------------------
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Build and parse CLI arguments."""
+    p = argparse.ArgumentParser(description="MusicXML to NovaBASIC MML converter")
+    p.add_argument("input", type=Path, help="Input .musicxml / .xml / .mxl file")
+    p.add_argument("-o", "--output", type=Path, default=None, help="Output .bas file")
+    p.add_argument("--title", default="MUSIC", help="Title for the BASIC program")
+    p.add_argument("--subtitle", default="", help="Subtitle for the BASIC program")
+    p.add_argument("--tempo", type=int, default=None, help="Override tempo (BPM)")
+    p.add_argument("--parts", type=str, default=None,
+                   help='Explicit part selection, e.g. "Violin I:1,Cello:2"')
+    p.add_argument("--max-voices", type=int, default=6, help="Maximum number of voices")
+    p.add_argument("--max-line-len", type=int, default=200, help="Max BASIC line length")
+    p.add_argument("--mml-only", action="store_true", help="Print raw MML, no BASIC output")
+    p.add_argument("--no-viz", action="store_true", help="Omit visualization code")
+    p.add_argument("--no-split", action="store_true", help="Do not split chords into voices")
+    return p.parse_args(argv)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Entry point for the MusicXML-to-BASIC pipeline."""
+    args = parse_args(argv)
+
+    # Load and parse MusicXML
+    root = load_musicxml(args.input)
+    parts = parse_musicxml(root)
+    if not parts:
+        print("No parts found in input file.", file=sys.stderr)
+        return 1
+
+    # Detect tempo from MusicXML <sound tempo="..."> if not overridden
+    tempo = args.tempo
+    if tempo is None:
+        for sound_el in root.iter("sound"):
+            t = sound_el.get("tempo")
+            if t is not None:
+                try:
+                    tempo = int(float(t))
+                except ValueError:
+                    pass
+                break
+    if tempo is None:
+        tempo = 120
+
+    # Build LyVoice objects
+    explicit_parts = parse_parts_flag(args.parts)
+    voices, voice_map, instruments = _build_ly_voices(
+        parts, args.max_voices, args.no_split, explicit_parts,
+    )
+
+    if not voices:
+        print("No voices selected.", file=sys.stderr)
+        return 1
+
+    # Expand ornaments
+    for v in voices:
+        v.notes = expand_ornaments(v.notes, key_fifths=0)
+
+    if args.mml_only:
+        for v in voices:
+            vn = voice_map[v.name]
+            instr_tuple = instruments.get(vn, DEFAULT_INSTRUMENTS[0])
+            instr_id = 0  # slot index
+            mml = notes_to_mml(v.notes, tempo, instr_id, vn, vn == 1)
+            print(f"Voice {vn} ({v.name}):")
+            print(mml)
+            print()
+        return 0
+
+    # Generate BASIC output
+    basic_text = emit_basic(
+        voices, voice_map, instruments,
+        args.title, args.subtitle, tempo,
+        args.max_line_len, not args.no_viz,
+    )
+
+    out_path = args.output or args.input.with_suffix(".bas")
+    out_path.write_text(basic_text)
+    print(f"Wrote {out_path} ({len(basic_text)} bytes, {len(voices)} voices, tempo={tempo})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

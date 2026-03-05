@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from xml2mml import load_musicxml, parse_musicxml, MxlPart, split_chords, expand_ornaments, _expand_repeats, _apply_transpose, select_voices, gm_to_instrument
+from xml2mml import main
 
 
 SIMPLE_XML = """\
@@ -651,3 +652,54 @@ class TestGMMapping:
 
     def test_unknown_returns_default(self):
         assert gm_to_instrument(128) == ""
+
+
+class TestEndToEnd:
+    def test_simple_xml_to_bas(self):
+        xml_path = _write_xml(SIMPLE_XML)
+        out_path = xml_path.with_suffix(".bas")
+        try:
+            rc = main(["--title", "TEST", "--no-viz", str(xml_path), "-o", str(out_path)])
+            assert rc == 0
+            assert out_path.exists()
+            content = out_path.read_text()
+            assert "MUSIC" in content
+            assert "INSTRUMENT" in content
+            assert "TEST" in content
+        finally:
+            xml_path.unlink()
+            if out_path.exists():
+                out_path.unlink()
+
+    def test_mml_only_mode(self, capsys):
+        xml_path = _write_xml(SIMPLE_XML)
+        try:
+            rc = main(["--mml-only", str(xml_path)])
+            assert rc == 0
+            captured = capsys.readouterr()
+            assert "Voice" in captured.out
+        finally:
+            xml_path.unlink()
+
+    def test_mxl_to_bas(self):
+        mxl_path = _write_mxl(SIMPLE_XML)
+        out_path = mxl_path.with_suffix(".bas")
+        try:
+            rc = main(["--no-viz", str(mxl_path), "-o", str(out_path)])
+            assert rc == 0
+            assert out_path.exists()
+        finally:
+            mxl_path.unlink()
+            if out_path.exists():
+                out_path.unlink()
+
+    def test_max_voices_flag(self):
+        xml_path = _write_xml(SIMPLE_XML)
+        out_path = xml_path.with_suffix(".bas")
+        try:
+            rc = main(["--max-voices", "2", "--no-viz", str(xml_path), "-o", str(out_path)])
+            assert rc == 0
+        finally:
+            xml_path.unlink()
+            if out_path.exists():
+                out_path.unlink()
