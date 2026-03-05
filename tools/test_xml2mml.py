@@ -10,7 +10,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-from xml2mml import load_musicxml, parse_musicxml, MxlPart, split_chords, expand_ornaments
+from xml2mml import load_musicxml, parse_musicxml, MxlPart, split_chords, expand_ornaments, _expand_repeats, _apply_transpose
 
 
 SIMPLE_XML = """\
@@ -511,3 +511,102 @@ class TestOrnaments:
         # Main note unchanged
         assert expanded[1].duration == 4
         assert expanded[1].letter == "c"
+
+
+class TestRepeats:
+    def test_simple_repeat(self):
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <barline location="left"><repeat direction="forward"/></barline>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+      <barline location="right"><repeat direction="backward"/></barline>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert [n.letter for n in notes] == ["c", "c", "d"]
+
+    def test_first_second_ending(self):
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <barline location="left"><repeat direction="forward"/></barline>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+    </measure>
+    <measure number="2">
+      <barline location="left"><ending number="1" type="start"/></barline>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+      <barline location="right">
+        <ending number="1" type="stop"/>
+        <repeat direction="backward"/>
+      </barline>
+    </measure>
+    <measure number="3">
+      <barline location="left"><ending number="2" type="start"/></barline>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+      <barline location="right"><ending number="2" type="stop"/></barline>
+    </measure>
+  </part>
+</score-partwise>'''
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert [n.letter for n in notes] == ["c", "d", "c", "e"]
+
+
+class TestTransposition:
+    def test_transpose_instrument(self):
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Clarinet</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <transpose>
+          <diatonic>-1</diatonic>
+          <chromatic>-2</chromatic>
+        </transpose>
+      </attributes>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].letter == "c"
+        assert notes[0].octave == 4
+        assert notes[0].accidental == 0

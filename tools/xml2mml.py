@@ -46,6 +46,106 @@ def _parse_duration_type(note_el: ET.Element) -> int:
     return TYPE_TO_DURATION.get(type_text, 4)
 
 
+def _expand_repeats(measures: list[ET.Element]) -> list[ET.Element]:
+    """Expand repeat barlines into a flat list of measures."""
+    result: list[ET.Element] = []
+    repeat_start = 0
+    ending_1_start: int | None = None
+    ending_1_end: int | None = None
+    in_ending_1 = False
+    in_ending_2 = False
+
+    def _scan_barlines(measure: ET.Element) -> tuple[bool, bool, list[tuple[str, str]]]:
+        """Return (has_forward, has_backward, [(ending_number, ending_type), ...])."""
+        has_fwd = False
+        has_bwd = False
+        endings: list[tuple[str, str]] = []
+        for barline in measure.findall("barline"):
+            rep = barline.find("repeat")
+            if rep is not None:
+                d = rep.get("direction", "")
+                if d == "forward":
+                    has_fwd = True
+                elif d == "backward":
+                    has_bwd = True
+            ending = barline.find("ending")
+            if ending is not None:
+                endings.append((ending.get("number", ""), ending.get("type", "")))
+        return has_fwd, has_bwd, endings
+
+    i = 0
+    while i < len(measures):
+        measure = measures[i]
+        has_fwd, has_bwd, endings = _scan_barlines(measure)
+
+        if has_fwd:
+            repeat_start = i
+
+        for end_num, end_type in endings:
+            if end_type == "start" and "1" in end_num:
+                in_ending_1 = True
+                ending_1_start = i
+            elif end_type == "start" and "2" in end_num:
+                in_ending_2 = True
+
+        if has_bwd:
+            if in_ending_1:
+                in_ending_1 = False
+                ending_1_end = i
+                result.append(measure)
+                # Second pass: replay from repeat_start, skip ending 1 measures
+                for j in range(repeat_start, i + 1):
+                    if ending_1_start is not None and ending_1_end is not None:
+                        if ending_1_start <= j <= ending_1_end:
+                            continue
+                    result.append(measures[j])
+                ending_1_start = None
+                ending_1_end = None
+                i += 1
+                continue
+            else:
+                # Simple repeat: append current measure, then replay
+                result.append(measure)
+                for j in range(repeat_start, i + 1):
+                    result.append(measures[j])
+                i += 1
+                continue
+
+        if in_ending_2:
+            result.append(measure)
+            for end_num, end_type in endings:
+                if end_type == "stop" and "2" in end_num:
+                    in_ending_2 = False
+            i += 1
+            continue
+
+        result.append(measure)
+        i += 1
+
+    return result
+
+
+def _apply_transpose(letter: str, octave: int, accidental: int, chromatic: int) -> tuple[str, int, int]:
+    """Transpose a note by a chromatic interval."""
+    if chromatic == 0:
+        return letter, octave, accidental
+    semi = _SEMI.get(letter, 0) + accidental + chromatic
+    octave_adj = semi // 12
+    semi = semi % 12
+    new_octave = octave + octave_adj
+    # Find best letter match
+    best_letter, best_acc = "c", 0
+    for l, s in _SEMI.items():
+        if semi - s == 0:
+            best_letter, best_acc = l, 0
+            break
+        elif semi - s == 1:
+            best_letter, best_acc = l, 1
+        elif semi - s == -1 and best_acc != 0:
+            best_letter, best_acc = l, -1
+    return best_letter, new_octave, best_acc
+
+
 def parse_musicxml(root: ET.Element) -> list[MxlPart]:
     """Parse a MusicXML root element into a list of MxlPart objects."""
     # Build part metadata from <part-list>
@@ -78,7 +178,11 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
         pending_cresc: bool = False
         pending_decresc: bool = False
 
-        for measure_el in part_el.findall("measure"):
+        # Transposition
+        transpose_chromatic: int = 0
+
+        measures = _expand_repeats(part_el.findall("measure"))
+        for measure_el in measures:
             # Track which voices are active in this measure
             measure_voices: set[int] = set()
 
@@ -99,6 +203,13 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                             elif wtype == "stop":
                                 pending_cresc = False
                                 pending_decresc = False
+                    continue
+
+                if el.tag == "attributes":
+                    transpose_el = el.find("transpose")
+                    if transpose_el is not None:
+                        chromatic_text = transpose_el.findtext("chromatic", "0")
+                        transpose_chromatic = int(chromatic_text)
                     continue
 
                 if el.tag != "note":
@@ -170,6 +281,8 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                     )
                 else:
                     letter, accidental, octave = _parse_pitch(note_el)
+                    if transpose_chromatic != 0:
+                        letter, octave, accidental = _apply_transpose(letter, octave, accidental, transpose_chromatic)
                     ln = LyNote(
                         letter=letter, accidental=accidental, octave=octave,
                         duration=duration, dotted=dotted, tied=tied,
