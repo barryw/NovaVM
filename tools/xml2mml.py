@@ -39,7 +39,7 @@ def _parse_pitch(note_el: ET.Element) -> tuple[str, int, int]:
     """Extract (letter, accidental, octave) from a <note> element's <pitch> child."""
     pitch_el = note_el.find("pitch")
     if pitch_el is None:
-        raise ValueError("No <pitch> element found")
+        return ("c", 0, 4)
     step = pitch_el.findtext("step", "C").lower()
     alter = int(pitch_el.findtext("alter", "0"))
     octave = int(pitch_el.findtext("octave", "4"))
@@ -248,6 +248,9 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                     voices_dict[voice_num] = []
 
                 is_rest = note_el.find("rest") is not None
+                # Notes without pitch or rest (e.g., unpitched percussion) → treat as rest
+                if not is_rest and note_el.find("pitch") is None:
+                    is_rest = True
                 dotted = note_el.find("dot") is not None
                 tied = any(
                     t.get("type") == "start"
