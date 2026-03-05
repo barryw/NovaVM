@@ -13,6 +13,7 @@ public sealed partial class FileIoController
     private readonly Func<byte, int>? _vgcSpaceLength;
     private readonly SidPlayer? _sidPlayer;
     private readonly MusicEngine? _musicEngine;
+    private readonly MidiPlayback? _midiPlayback;
     private readonly string _saveDir;
     private List<FileInfo>? _dirFiles;
     private int _dirIndex;
@@ -25,7 +26,8 @@ public sealed partial class FileIoController
         Action<byte, int, byte>? vgcWrite = null,
         Func<byte, int>? vgcSpaceLength = null,
         SidPlayer? sidPlayer = null,
-        MusicEngine? musicEngine = null)
+        MusicEngine? musicEngine = null,
+        MidiPlayback? midiPlayback = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
@@ -34,6 +36,7 @@ public sealed partial class FileIoController
         _vgcSpaceLength = vgcSpaceLength;
         _sidPlayer = sidPlayer;
         _musicEngine = musicEngine;
+        _midiPlayback = midiPlayback;
         _saveDir = saveDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "e6502-programs");
@@ -118,6 +121,12 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdMusicPri:
                 DoMusicPri();
+                break;
+            case VgcConstants.FioCmdMidPlay:
+                DoMidPlay();
+                break;
+            case VgcConstants.FioCmdMidStop:
+                DoMidStop();
                 break;
             default:
                 SetError(VgcConstants.FioErrIo);
@@ -476,7 +485,11 @@ public sealed partial class FileIoController
     {
         if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
         int level = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
-        _musicEngine.SetVolume(level);
+        int voice = _regs[VgcConstants.FioSrcH - VgcConstants.FioBase];
+        if (voice == 0)
+            _musicEngine.SetVolume(level);
+        else
+            _musicEngine.SetVoiceVolume(voice, level);
         SetOk();
     }
 
@@ -549,6 +562,70 @@ public sealed partial class FileIoController
         if (v5 > 0) pri.Add(v5 - 1);
         if (v6 > 0) pri.Add(v6 - 1);
         _musicEngine.SetPriority(pri.ToArray());
+        SetOk();
+    }
+
+    private void DoMidPlay()
+    {
+        if (_midiPlayback is null || _musicEngine is null)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        try
+        {
+            string? filename = ReadFilename();
+            if (filename is null) { SetError(VgcConstants.FioErrIo); return; }
+
+            string path = GetFullPath(filename, ".mid");
+            if (!File.Exists(path))
+            {
+                SetError(VgcConstants.FioErrNotFound);
+                return;
+            }
+
+            var midi = Melanchall.DryWetMidi.Core.MidiFile.Read(path);
+            var analysis = MidiEngine.AnalyzeChannels(midi);
+            var selectedChannels = MidiEngine.SelectChannels(midi);
+
+            var instrumentSlots = new int[selectedChannels.Length];
+            var registeredBuckets = new Dictionary<int, int>();
+            int nextSlot = 1;
+
+            for (int v = 0; v < selectedChannels.Length; v++)
+            {
+                int ch = selectedChannels[v];
+                var bucket = MidiEngine.GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
+                int bucketIdx = Array.IndexOf(MidiEngine.GetAllBuckets(), bucket);
+
+                if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+                {
+                    slot = nextSlot++;
+                    registeredBuckets[bucketIdx] = slot;
+                    _musicEngine.DefineInstrument(slot, bucket.Waveform,
+                        bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release);
+                }
+                instrumentSlots[v] = slot;
+            }
+
+            _musicEngine.SetVolume(15);
+            _midiPlayback.Play(midi, selectedChannels, instrumentSlots);
+            SetOk();
+        }
+        catch (FileNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoMidStop()
+    {
+        _midiPlayback?.Stop();
         SetOk();
     }
 

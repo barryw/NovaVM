@@ -164,6 +164,8 @@ public sealed class EmulatorTcpServer : IDisposable
                 "sid_play" => CmdSidPlay(req),
                 "sid_stop" => CmdSidStop(),
                 "sid_info" => CmdSidInfo(req),
+                "mid_play" => CmdMidPlay(req),
+                "mid_stop" => CmdMidStop(),
                 // Music engine commands
                 "instrument" => CmdInstrument(req),
                 "sound" => CmdSound(req),
@@ -474,10 +476,10 @@ public sealed class EmulatorTcpServer : IDisposable
                         : (byte)(shape[byteIdx] & 0x0F);
                     sb.Append(color.ToString("X1"));
                 }
-                shapeRows.Add(JsonValue.Create(sb.ToString()));
+                shapeRows.Add((JsonNode?)JsonValue.Create(sb.ToString()));
             }
 
-            sprites.Add(new JsonObject
+            sprites.Add((JsonNode)new JsonObject
             {
                 ["index"] = i,
                 ["x"] = state.x,
@@ -1051,7 +1053,11 @@ public sealed class EmulatorTcpServer : IDisposable
         int? level = req["level"]?.GetValue<int>();
         if (level is null) return Error("Need level");
 
-        _bus.Music.SetVolume(level.Value);
+        int? voice = req["voice"]?.GetValue<int>();
+        if (voice is not null && voice.Value >= 1 && voice.Value <= 6)
+            _bus.Music.SetVoiceVolume(voice.Value, level.Value);
+        else
+            _bus.Music.SetVolume(level.Value);
         return Ok();
     }
 
@@ -1105,6 +1111,73 @@ public sealed class EmulatorTcpServer : IDisposable
             ["music_playing"] = _bus.Music.IsMusicPlaying
         };
         return result.ToJsonString();
+    }
+
+    // ── MIDI commands ──────────────────────────────────────────────────────
+
+    private string CmdMidPlay(JsonNode req)
+    {
+        string? path = req["path"]?.GetValue<string>();
+        if (path is null) return Error("Missing 'path'");
+
+        if (!File.Exists(path))
+            return Error($"File not found: {path}");
+
+        Melanchall.DryWetMidi.Core.MidiFile midi;
+        try { midi = Melanchall.DryWetMidi.Core.MidiFile.Read(path); }
+        catch (Exception ex) { return Error($"Failed to read MIDI: {ex.Message}"); }
+
+        var analysis = MidiEngine.AnalyzeChannels(midi);
+
+        Dictionary<int, int>? mapping = null;
+        if (req["voices"] is JsonNode voicesNode)
+        {
+            mapping = new Dictionary<int, int>();
+            foreach (var prop in voicesNode.AsObject())
+            {
+                if (int.TryParse(prop.Key, out int voice))
+                    mapping[voice] = prop.Value!.GetValue<int>();
+            }
+        }
+
+        var selectedChannels = MidiEngine.SelectChannels(midi, explicitMapping: mapping);
+
+        var instrumentSlots = new int[selectedChannels.Length];
+        var registeredBuckets = new Dictionary<int, int>();
+        int nextSlot = 1;
+
+        for (int v = 0; v < selectedChannels.Length; v++)
+        {
+            int ch = selectedChannels[v];
+            var bucket = MidiEngine.GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
+            int bucketIdx = Array.IndexOf(MidiEngine.GetAllBuckets(), bucket);
+
+            if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+            {
+                slot = nextSlot++;
+                registeredBuckets[bucketIdx] = slot;
+                _bus.Music.DefineInstrument(slot, bucket.Waveform,
+                    bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release);
+            }
+            instrumentSlots[v] = slot;
+        }
+
+        _bus.Music.SetVolume(15);
+        _bus.MidiPlayback.Play(midi, selectedChannels, instrumentSlots);
+
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["voices"] = selectedChannels.Length,
+            ["channels"] = new JsonArray(selectedChannels.Select(c => (JsonNode)JsonValue.Create(c)).ToArray())
+        };
+        return result.ToJsonString();
+    }
+
+    private string CmdMidStop()
+    {
+        _bus.MidiPlayback.Stop();
+        return Ok();
     }
 
     // ── Debugger commands ──────────────────────────────────────────────────
@@ -1200,11 +1273,11 @@ public sealed class EmulatorTcpServer : IDisposable
             foreach (var c in conditions)
             {
                 if (c is null)
-                    condArr.Add(JsonValue.Create("unconditional"));
+                    condArr.Add((JsonNode?)JsonValue.Create("unconditional"));
                 else
-                    condArr.Add(JsonValue.Create($"{c.Register} {c.Op} {c.Value}"));
+                    condArr.Add((JsonNode?)JsonValue.Create($"{c.Register} {c.Op} {c.Value}"));
             }
-            arr.Add(new JsonObject
+            arr.Add((JsonNode)new JsonObject
             {
                 ["address"] = addr,
                 ["conditions"] = condArr
@@ -1241,7 +1314,7 @@ public sealed class EmulatorTcpServer : IDisposable
         var arr = new JsonArray();
         foreach (var (addr, text, bytes) in instructions)
         {
-            arr.Add(new JsonObject
+            arr.Add((JsonNode)new JsonObject
             {
                 ["address"] = addr,
                 ["text"] = text,

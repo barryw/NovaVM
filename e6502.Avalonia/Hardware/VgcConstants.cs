@@ -86,6 +86,8 @@ public static class VgcConstants
     public const byte FioCmdMusicTempo = 0x10;
     public const byte FioCmdMusicLoop  = 0x11;
     public const byte FioCmdMusicPri   = 0x12;
+    public const byte FioCmdMidPlay    = 0x13;
+    public const byte FioCmdMidStop    = 0x14;
 
     // Music/SFX status register
     public const int  MusicStatus      = 0xBA50; // bit 0 = SFX playing, bit 1 = music playing

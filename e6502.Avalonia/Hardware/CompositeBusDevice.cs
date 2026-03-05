@@ -19,6 +19,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly CompilerController _compiler;
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
+    private readonly MidiPlayback _midiPlayback;
     private readonly int _cpuHz;
     private readonly int _frameRateHz;
     private long _frameNumeratorAccumulator;
@@ -41,6 +42,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public CompilerController Compiler => _compiler;
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
+    public MidiPlayback MidiPlayback => _midiPlayback;
     public int CpuHz => _cpuHz;
     public int FrameRateHz => _frameRateHz;
     public long TotalFrames => _totalFrames;
@@ -63,6 +65,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _sid2 = new SidChip(enableSound, baseAddress: 0xD420);
         _sidPlayer = new SidPlayer(this);
         _musicEngine = new MusicEngine(this);
+        _midiPlayback = new MidiPlayback(_musicEngine);
 
         _fio = new FileIoController(
             addr => _ram[addr],
@@ -72,7 +75,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             vgcWrite: (space, offset, value) => _vgc.TryWriteMemorySpace(space, offset, value),
             vgcSpaceLength: space => _vgc.GetMemorySpaceLength(space),
             sidPlayer: _sidPlayer,
-            musicEngine: _musicEngine);
+            musicEngine: _musicEngine,
+            midiPlayback: _midiPlayback);
         _fio.ProgramLoaded += name => LoadProgramHelp(name);
         _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
 
@@ -224,7 +228,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             if (_vgc.SysResetRequested)
             {
                 _vgc.SysResetRequested = false;
-                _musicEngine.MusicStop();
+                _musicEngine.MusicReset();
                 _sid.Write(0xD404, 0x00); // gate off voice 1
                 _sid.Write(0xD40B, 0x00); // gate off voice 2
                 _sid.Write(0xD412, 0x00); // gate off voice 3
@@ -266,6 +270,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _totalFrames++;
             _vgc.IncrementFrameCounter();
             _musicEngine.Tick();
+            _midiPlayback.Tick();
             if (_vgc.IsRasterIrqEnabled)
                 _rasterIrqPending = true;
         }
