@@ -515,3 +515,47 @@ def split_chords(notes: list[LyNote], max_sub: int = 4) -> list[list[LyNote]]:
                 sub_voices[i].append(rest)
 
     return sub_voices
+
+
+# ---------------------------------------------------------------------------
+# Voice selection
+# ---------------------------------------------------------------------------
+
+
+def select_voices(
+    voice_map: dict[str, list[LyNote]],
+    max_voices: int = 6,
+) -> list[tuple[str, list[LyNote]]]:
+    """Select top voices by note count (excluding bar markers and rests)."""
+    counted = []
+    for name, notes in voice_map.items():
+        note_count = sum(1 for n in notes if not n.bar_marker and not n.is_rest)
+        counted.append((note_count, name, notes))
+    counted.sort(key=lambda x: (-x[0], x[1]))
+    return [(name, notes) for _, name, notes in counted[:max_voices]]
+
+
+# ---------------------------------------------------------------------------
+# GM instrument mapping
+# ---------------------------------------------------------------------------
+
+_GM_MAP: list[tuple[range, str]] = [
+    (range(1, 7), "piano"),
+    (range(7, 9), "harpsichord"),
+    (range(17, 25), "organ"),
+    (range(25, 33), "piano"),
+    (range(41, 49), "strings"),
+    (range(49, 57), "strings"),
+    (range(57, 61), "trumpet"),
+    (range(61, 65), "trumpet"),
+    (range(65, 73), "oboe"),
+    (range(73, 77), "flute"),
+    (range(77, 81), "recorder"),
+]
+
+
+def gm_to_instrument(program: int) -> str:
+    for r, name in _GM_MAP:
+        if program in r:
+            return name
+    return ""

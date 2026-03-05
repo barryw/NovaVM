@@ -10,7 +10,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-from xml2mml import load_musicxml, parse_musicxml, MxlPart, split_chords, expand_ornaments, _expand_repeats, _apply_transpose
+from xml2mml import load_musicxml, parse_musicxml, MxlPart, split_chords, expand_ornaments, _expand_repeats, _apply_transpose, select_voices, gm_to_instrument
 
 
 SIMPLE_XML = """\
@@ -610,3 +610,44 @@ class TestTransposition:
         assert notes[0].letter == "c"
         assert notes[0].octave == 4
         assert notes[0].accidental == 0
+
+
+from ly2mml import LyNote
+
+
+class TestVoiceSelection:
+    def test_auto_select_by_density(self):
+        voices = {
+            "V1": [LyNote("c", 0, 4, 4, False, False, False)] * 100,
+            "V2": [LyNote("d", 0, 4, 4, False, False, False)] * 50,
+            "V3": [LyNote("e", 0, 4, 4, False, False, False)] * 200,
+        }
+        selected = select_voices(voices, max_voices=2)
+        names = [name for name, _ in selected]
+        assert names[0] == "V3"  # 200 notes
+        assert names[1] == "V1"  # 100 notes
+
+    def test_max_voices_cap(self):
+        voices = {f"V{i}": [LyNote("c", 0, 4, 4, False, False, False)] * 10 for i in range(10)}
+        selected = select_voices(voices, max_voices=6)
+        assert len(selected) == 6
+
+
+class TestGMMapping:
+    def test_piano(self):
+        assert gm_to_instrument(1) == "piano"
+
+    def test_harpsichord(self):
+        assert gm_to_instrument(7) == "harpsichord"
+
+    def test_organ(self):
+        assert gm_to_instrument(20) == "organ"
+
+    def test_strings(self):
+        assert gm_to_instrument(49) == "strings"
+
+    def test_flute(self):
+        assert gm_to_instrument(74) == "flute"
+
+    def test_unknown_returns_default(self):
+        assert gm_to_instrument(128) == ""
