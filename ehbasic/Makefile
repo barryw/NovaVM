@@ -1,18 +1,34 @@
-# EhBASIC 2.22 build using cc65 toolchain
+# EhBASIC 2.22 + NovaVM tools — cc65 toolchain
 # Requires ca65 and ld65 on PATH
 
-# Find cc65 config directory
 CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 
 all: basic.bin
 
-basic.bin: basic.o ehbasic.cfg
-	ld65 -C ehbasic.cfg -vm -m basic.map -o basic.bin basic.o
+# ROM build
+basic.bin basic.sym: basic.o ehbasic.cfg
+	ld65 -C ehbasic.cfg -vm -m basic.map -Ln basic.sym -o basic.bin basic.o
 
 basic.o: basic.asm min_mon.asm
 	ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm
 
-clean:
-	$(RM) *.o *.lst *.map *.bin
+# Auto-generate hardware constants include
+novavm.inc: ../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym ../tools/gen_novavm_inc.py
+	python3 ../tools/gen_novavm_inc.py ../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym -o novavm.inc
 
-.PHONY: all clean
+# Keyboard visualizer
+keyboard: keyboard.bin
+
+keyboard.bin: keyboard.o keyboard.cfg
+	ld65 -C keyboard.cfg -o keyboard.bin keyboard.o
+
+keyboard.o: keyboard.s novavm.inc
+	ca65 --cpu 65c02 keyboard.s -o keyboard.o
+
+install-keyboard: keyboard.bin
+	cp keyboard.bin ~/e6502-programs/keyboard.bin
+
+clean:
+	$(RM) *.o *.lst *.map *.bin *.sym
+
+.PHONY: all keyboard install-keyboard clean
