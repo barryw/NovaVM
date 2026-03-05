@@ -96,4 +96,49 @@ public class MidiEngineTests
 
         Assert.AreEqual(2, selected.Length);
     }
+
+    [TestMethod]
+    public void GetInstrumentBucket_PianoRange()
+    {
+        var bucket = MidiEngine.GetInstrumentBucket(0, isDrums: false);  // Acoustic Grand
+        Assert.AreEqual(0x40, bucket.Waveform); // pulse
+        bucket = MidiEngine.GetInstrumentBucket(7, isDrums: false);  // Clavinet
+        Assert.AreEqual(0x40, bucket.Waveform);
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_StringsRange()
+    {
+        var bucket = MidiEngine.GetInstrumentBucket(48, isDrums: false); // String Ensemble
+        Assert.AreEqual(0x20, bucket.Waveform); // saw
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_FluteRange()
+    {
+        var bucket = MidiEngine.GetInstrumentBucket(73, isDrums: false); // Flute
+        Assert.AreEqual(0x10, bucket.Waveform); // triangle
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_DrumsAlwaysNoise()
+    {
+        var bucket = MidiEngine.GetInstrumentBucket(0, isDrums: true);
+        Assert.AreEqual(0x80, bucket.Waveform); // noise
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_DefaultIsSaw()
+    {
+        var bucket = MidiEngine.GetInstrumentBucket(120, isDrums: false); // Sound Effects GM range
+        Assert.AreEqual(0x20, bucket.Waveform); // saw default
+    }
+
+    [TestMethod]
+    public void VelocityToVolume_MapsRange()
+    {
+        Assert.AreEqual(0, MidiEngine.VelocityToVolume(0));
+        Assert.AreEqual(8, MidiEngine.VelocityToVolume(64));
+        Assert.AreEqual(15, MidiEngine.VelocityToVolume(127));
+    }
 }

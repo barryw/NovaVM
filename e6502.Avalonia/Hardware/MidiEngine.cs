@@ -41,6 +41,59 @@ public static class MidiEngine
         return channels;
     }
 
+    public sealed class InstrumentBucket
+    {
+        public byte Waveform;
+        public byte Attack;
+        public byte Decay;
+        public byte Sustain;
+        public byte Release;
+        public string Name = "";
+    }
+
+    private static readonly InstrumentBucket[] Buckets =
+    {
+        new() { Waveform = 0x40, Attack = 0, Decay = 4, Sustain = 7, Release = 6, Name = "Pulse Piano" },
+        new() { Waveform = 0x40, Attack = 0, Decay = 9, Sustain = 0, Release = 6, Name = "Pulse Lead" },
+        new() { Waveform = 0x20, Attack = 4, Decay = 6, Sustain = 10, Release = 8, Name = "Saw Strings" },
+        new() { Waveform = 0x20, Attack = 0, Decay = 5, Sustain = 8, Release = 4, Name = "Saw Brass" },
+        new() { Waveform = 0x10, Attack = 2, Decay = 6, Sustain = 12, Release = 8, Name = "Tri Flute" },
+        new() { Waveform = 0x10, Attack = 0, Decay = 5, Sustain = 8, Release = 4, Name = "Tri Bass" },
+        new() { Waveform = 0x80, Attack = 0, Decay = 3, Sustain = 0, Release = 2, Name = "Noise Drums" },
+        new() { Waveform = 0x20, Attack = 0, Decay = 5, Sustain = 8, Release = 4, Name = "Saw Default" },
+    };
+
+    private const int BucketPulsePiano = 0;
+    private const int BucketPulseLead = 1;
+    private const int BucketSawStrings = 2;
+    private const int BucketSawBrass = 3;
+    private const int BucketTriFlute = 4;
+    private const int BucketTriBass = 5;
+    private const int BucketNoiseDrums = 6;
+    private const int BucketSawDefault = 7;
+
+    public static InstrumentBucket GetInstrumentBucket(int gmProgram, bool isDrums)
+    {
+        if (isDrums) return Buckets[BucketNoiseDrums];
+
+        return gmProgram switch
+        {
+            >= 0 and <= 7   => Buckets[BucketPulsePiano],   // Piano family
+            >= 8 and <= 15  => Buckets[BucketPulsePiano],   // Chromatic percussion
+            >= 16 and <= 23 => Buckets[BucketPulsePiano],   // Organ
+            >= 24 and <= 31 => Buckets[BucketPulsePiano],   // Guitar (acoustic)
+            >= 32 and <= 39 => Buckets[BucketTriBass],      // Bass
+            >= 40 and <= 55 => Buckets[BucketSawStrings],   // Strings + Ensemble
+            >= 56 and <= 71 => Buckets[BucketSawBrass],     // Brass + Reed
+            >= 72 and <= 79 => Buckets[BucketTriFlute],     // Pipe
+            >= 80 and <= 95 => Buckets[BucketPulseLead],    // Synth lead + pad
+            _               => Buckets[BucketSawDefault],   // Everything else
+        };
+    }
+
+    public static int VelocityToVolume(int velocity) =>
+        Math.Clamp((int)Math.Round(velocity * 15.0 / 127), 0, 15);
+
     /// <summary>
     /// Select up to maxVoices channels, ranked by note count.
     /// If explicitMapping is provided (voice 1-based -> channel 0-based), those are used first.
