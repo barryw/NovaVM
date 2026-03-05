@@ -344,7 +344,7 @@ public sealed class MusicEngine
     public void Tick()
     {
         TickSfx();
-        if (_musicPlaying)
+        if (_musicPlaying && !_midiMode)
             TickMusic();
     }
 

@@ -9750,18 +9750,7 @@ LAB_GLOAD
       STA   FIO_GLENH
 @gl_go
       LDA   #FIO_CMD_GLOAD
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
-      BNE   @gl_chk_err
-      RTS
-@gl_chk_err
-      LDA   FIO_ERRCODE
-      CMP   #$01              ; not found?
-      BNE   @gl_errio
-      JMP   LAB_FIO_ERRFNF
-@gl_errio
-      JMP   LAB_FIO_ERRIO
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
 
 ; perform SIDPLAY "filename" [, song]
 
@@ -9780,19 +9769,9 @@ LAB_SIDPLAY
       STX   FIO_SRCL
 @sp_go
       LDA   #FIO_CMD_SIDPLAY
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
-      BNE   @sp_chk_err
+      JSR   LAB_FIO_EXEC      ; issue command and check status
       CLI                     ; enable interrupts so timer IRQ can fire
       RTS
-@sp_chk_err
-      LDA   FIO_ERRCODE
-      CMP   #$01              ; not found?
-      BNE   @sp_errio
-      JMP   LAB_FIO_ERRFNF
-@sp_errio
-      JMP   LAB_FIO_ERRIO
 
 ; perform SIDSTOP
 
@@ -9806,24 +9785,13 @@ LAB_SIDSTOP
 
 LAB_MIDPLAY
       JSR   LAB_FIO_GETNAME    ; parse filename → FIO_NAME/FIO_NAMELEN
-      BCC   @mid_have_name
+      BCC   @mid_ok
       JMP   LAB_FIO_ERRIO
-@mid_have_name
+@mid_ok
       LDA   #$00
       STA   FIO_SRCL            ; no explicit mapping (auto-select)
       LDA   #FIO_CMD_MIDPLAY
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
-      BNE   @mid_chk_err
-      RTS
-@mid_chk_err
-      LDA   FIO_ERRCODE
-      CMP   #$01              ; not found?
-      BNE   @mid_errio
-      JMP   LAB_FIO_ERRFNF
-@mid_errio
-      JMP   LAB_FIO_ERRIO
+      JMP   LAB_FIO_EXEC       ; issue command, check status, return
 
 ; perform MIDSTOP
 
@@ -9831,6 +9799,22 @@ LAB_MIDSTOP
       LDA   #FIO_CMD_MIDSTOP
       STA   FIO_CMD
       RTS
+
+; common: issue FIO command in A, check status, error on fail
+
+LAB_FIO_EXEC
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @fio_chk_err
+      RTS
+@fio_chk_err
+      LDA   FIO_ERRCODE
+      CMP   #$01              ; not found?
+      BNE   @fio_errio
+      JMP   LAB_FIO_ERRFNF
+@fio_errio
+      JMP   LAB_FIO_ERRIO
 
 ; perform MUSIC subcommand
 ; MUSIC voice, "mml"
@@ -10627,19 +10611,7 @@ LAB_FDEL
 @del_have_name
       ; trigger DELETE
       LDA   #FIO_CMD_DELETE
-      STA   FIO_CMD
-      ; check status
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
-      BNE   @del_chk_err
-      RTS
-@del_chk_err
-      LDA   FIO_ERRCODE
-      CMP   #$01              ; not found?
-      BNE   @del_errio
-      JMP   LAB_FIO_ERRFNF
-@del_errio
-      JMP   LAB_FIO_ERRIO
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
 
 ; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
 ; carry clear = success, carry set = invalid/empty/too long
