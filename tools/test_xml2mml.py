@@ -654,6 +654,79 @@ class TestGMMapping:
         assert gm_to_instrument(128) == ""
 
 
+class TestBackupForward:
+    def test_two_voices_via_backup(self):
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>2</duration><type>half</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>2</duration><type>half</type>
+        <voice>1</voice>
+      </note>
+      <backup><duration>4</duration></backup>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>4</duration><type>whole</type>
+        <voice>2</voice>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+        path = _write_xml(xml)
+        try:
+            root = load_musicxml(path)
+            parts = parse_musicxml(root)
+            assert len(parts) == 1
+            assert len(parts[0].voices) == 2
+            v1 = [n for n in parts[0].voices[0] if not n.bar_marker]
+            v2 = [n for n in parts[0].voices[1] if not n.bar_marker]
+            assert len(v1) == 2  # E5, F5
+            assert len(v2) == 1  # C4
+            assert v1[0].letter == "e"
+            assert v2[0].letter == "c"
+        finally:
+            path.unlink()
+
+
+class TestKeySignature:
+    def test_mordent_in_g_major(self):
+        xml = _make_note_xml(
+            '<notations><ornaments><inverted-mordent/></ornaments></notations>',
+            '<key><fifths>1</fifths></key>',
+        )
+        xml = xml.replace("<step>C</step>", "<step>F</step>")
+        path = _write_xml(xml)
+        try:
+            root = load_musicxml(path)
+            parts = parse_musicxml(root)
+            voice = parts[0].voices[0]
+            notes = [n for n in voice if not n.bar_marker]
+            expanded = expand_ornaments(notes, key_fifths=1)
+            real = [n for n in expanded if not n.bar_marker]
+            assert len(real) == 3
+            assert real[0].letter == "f"
+            assert real[1].letter == "g"
+            assert real[2].letter == "f"
+        finally:
+            path.unlink()
+
+    def test_key_fifths_stored_on_part(self):
+        xml = _make_note_xml("", '<key><fifths>-3</fifths></key>')
+        parts = _parse_simple_xml(xml)
+        assert parts[0].key_fifths == -3
+
+
 class TestEndToEnd:
     def test_simple_xml_to_bas(self):
         xml_path = _write_xml(SIMPLE_XML)
