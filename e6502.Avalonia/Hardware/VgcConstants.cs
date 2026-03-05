@@ -97,6 +97,10 @@ public static class VgcConstants
     public const int  MusicNote4       = 0xBA54; // voice 4 current MIDI note
     public const int  MusicNote5       = 0xBA55; // voice 5 current MIDI note
     public const int  MusicNote6       = 0xBA56; // voice 6 current MIDI note
+    public const int  MusicElapsedL    = 0xBA57; // elapsed frames low byte (60Hz)
+    public const int  MusicElapsedH    = 0xBA58; // elapsed frames high byte
+    public const int  MusicTotalL      = 0xBA59; // total frames low byte
+    public const int  MusicTotalH      = 0xBA5A; // total frames high byte
 
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;

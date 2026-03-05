@@ -155,6 +155,19 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 | (_musicEngine.IsMusicPlaying || _midiPlayback.IsPlaying || _sidPlayer.IsPlaying ? 2 : 0));
         if (address >= VgcConstants.MusicNote1 && address <= VgcConstants.MusicNote6)
             return _musicEngine.GetVoiceNote(address - VgcConstants.MusicNote1);
+        if (address >= VgcConstants.MusicElapsedL && address <= VgcConstants.MusicTotalH)
+        {
+            int elapsed = _musicEngine.ElapsedFrames;
+            int total = _musicEngine.TotalFrames;
+            return address switch
+            {
+                VgcConstants.MusicElapsedL => (byte)(elapsed & 0xFF),
+                VgcConstants.MusicElapsedH => (byte)((elapsed >> 8) & 0xFF),
+                VgcConstants.MusicTotalL   => (byte)(total & 0xFF),
+                VgcConstants.MusicTotalH   => (byte)((total >> 8) & 0xFF),
+                _ => 0
+            };
+        }
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
         if (_nic.OwnsAddress(address)) return _nic.Read(address);
         if (_dma.OwnsAddress(address)) return _dma.Read(address);

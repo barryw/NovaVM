@@ -86,6 +86,8 @@ public sealed class MusicEngine
     private bool _musicPlaying;
     private int _bpm = 120;
     private bool _loop;
+    private int _elapsedFrames;
+    private int _musicTotalFrames;
     private int[] _stealPriority = { 5, 4, 3, 2, 1, 0 }; // steal voice[0] last
 
     // Per-voice sequencer state
@@ -136,6 +138,10 @@ public sealed class MusicEngine
     }
 
     public bool IsMusicPlaying => _musicPlaying;
+
+    public int ElapsedFrames => _elapsedFrames;
+    public int TotalFrames => _musicTotalFrames;
+    public void SetTotalFrames(int frames) => _musicTotalFrames = frames;
 
     /// <summary>Returns the current MIDI note for a voice (0-5), or 0 if silent.</summary>
     public byte GetVoiceNote(int voiceIndex)
@@ -207,6 +213,7 @@ public sealed class MusicEngine
         MusicStop();
         MusicReset();
         _midiMode = true;
+        _elapsedFrames = 0;
     }
 
     /// <summary>Exit MIDI mode, return to normal MML operation.</summary>
@@ -310,11 +317,13 @@ public sealed class MusicEngine
     public void MusicPlay()
     {
         _musicPlaying = true;
+        _elapsedFrames = 0;
         for (int i = 0; i < VoiceCount; i++)
         {
             _voices[i].Reset(_bpm, _frameRateHz);
             _voices[i].CurrentInstrument = GetInstrument(0);
         }
+        _musicTotalFrames = ComputeTotalFrames();
     }
 
     public void MusicStop()
@@ -352,6 +361,29 @@ public sealed class MusicEngine
 
     public void SetPriority(int[] voices) => _stealPriority = voices;
 
+    private int ComputeTotalFrames()
+    {
+        int maxFrames = 0;
+        for (int i = 0; i < VoiceCount; i++)
+        {
+            var events = _voices[i].Events;
+            if (events is null || events.Count == 0) continue;
+            double totalTicks = 0;
+            foreach (var ev in events)
+            {
+                if (ev.Type == MmlEventType.NoteOn || ev.Type == MmlEventType.Rest)
+                    totalTicks += ev.Param2;
+            }
+            double ticksPerFrame = _voices[i].TicksPerFrame;
+            if (ticksPerFrame > 0)
+            {
+                int frames = (int)(totalTicks / ticksPerFrame);
+                if (frames > maxFrames) maxFrames = frames;
+            }
+        }
+        return maxFrames;
+    }
+
     // -------------------------------------------------------------------------
     // Tick — called at 60Hz
     // -------------------------------------------------------------------------
@@ -361,6 +393,8 @@ public sealed class MusicEngine
         TickSfx();
         if (_musicPlaying && !_midiMode)
             TickMusic();
+        if (_musicPlaying || _midiMode)
+            _elapsedFrames++;
     }
 
     // -------------------------------------------------------------------------

@@ -10,6 +10,7 @@ namespace e6502.Avalonia.Hardware;
 public sealed class MidiPlayback
 {
     private readonly MusicEngine _engine;
+    private readonly int _frameRateHz;
 
     private sealed class TimelineEvent
     {
@@ -30,9 +31,10 @@ public sealed class MidiPlayback
 
     public bool IsPlaying => _playing;
 
-    public MidiPlayback(MusicEngine engine)
+    public MidiPlayback(MusicEngine engine, int frameRateHz = VgcConstants.FrameRateHz)
     {
         _engine = engine;
+        _frameRateHz = frameRateHz;
     }
 
     /// <summary>
@@ -50,6 +52,13 @@ public sealed class MidiPlayback
         // Default 120 BPM
         SetTempo(120);
 
+        if (_timeline.Count > 0)
+        {
+            long lastTick = _timeline[^1].MidiTick;
+            int totalFrames = (int)(lastTick / _midiTicksPerFrame);
+            _engine.SetTotalFrames(totalFrames);
+        }
+
         _engine.EnterMidiMode();
         _playing = true;
     }
@@ -61,7 +70,7 @@ public sealed class MidiPlayback
         _engine.ExitMidiMode();
     }
 
-    /// <summary>Called at 60Hz. Advance the timeline and fire events.</summary>
+    /// <summary>Called at the system frame rate. Advance the timeline and fire events.</summary>
     public void Tick()
     {
         if (!_playing || _timeline is null) return;
@@ -96,14 +105,20 @@ public sealed class MidiPlayback
 
     private void SetTempo(int bpm)
     {
-        _midiTicksPerFrame = (double)_ppqn * bpm / (60.0 * 60.0);
+        _midiTicksPerFrame = (double)_ppqn * bpm / (_frameRateHz * 60.0);
     }
 
     private List<TimelineEvent> BuildTimeline(MidiFile midi, int[] voiceToChannel, int[] instrumentSlots)
     {
-        var channelToVoice = new Dictionary<int, int>();
+        // Build channel → list of available voices mapping
+        var channelVoices = new Dictionary<int, List<int>>();
         for (int v = 0; v < voiceToChannel.Length; v++)
-            channelToVoice[voiceToChannel[v]] = v;
+        {
+            int ch = voiceToChannel[v];
+            if (!channelVoices.ContainsKey(ch))
+                channelVoices[ch] = new List<int>();
+            channelVoices[ch].Add(v);
+        }
 
         var events = new List<TimelineEvent>();
 
@@ -120,8 +135,7 @@ public sealed class MidiPlayback
             }
         }
 
-        // Track active notes per voice for top-note-wins
-        var activePerVoice = new Dictionary<int, SortedSet<int>>();
+        // Collect note events for channels we care about
         var channelEvents = new List<(long time, int channel, int midi, int velocity, bool isOn)>();
 
         foreach (var trackChunk in midi.GetTrackChunks())
@@ -140,40 +154,94 @@ public sealed class MidiPlayback
                         ch = noteOff.Channel; midiNote = noteOff.NoteNumber; break;
                 }
 
-                if (ch >= 0 && channelToVoice.ContainsKey(ch))
+                if (ch >= 0 && channelVoices.ContainsKey(ch))
                     channelEvents.Add((timedEvent.Time, ch, midiNote, vel, isOn));
             }
         }
 
         channelEvents.Sort((a, b) => a.time.CompareTo(b.time));
 
+        // Polyphonic voice allocator: per channel, track which voice plays which note
+        // noteToVoice[ch] maps active MIDI note → assigned voice index
+        var noteToVoice = new Dictionary<int, Dictionary<int, int>>();
+        // voiceNote[voice] = currently playing MIDI note (-1 = free)
+        var voiceNote = new int[voiceToChannel.Length];
+        // voiceStartTick[voice] = when the current note started (for steal priority)
+        var voiceStartTick = new long[voiceToChannel.Length];
+        for (int i = 0; i < voiceNote.Length; i++)
+            voiceNote[i] = -1;
+
         foreach (var (time, channel, midiNote, velocity, isOn) in channelEvents)
         {
-            if (!channelToVoice.TryGetValue(channel, out int voice)) continue;
+            if (!channelVoices.TryGetValue(channel, out var voices)) continue;
 
-            if (!activePerVoice.ContainsKey(voice))
-                activePerVoice[voice] = new SortedSet<int>();
+            if (!noteToVoice.ContainsKey(channel))
+                noteToVoice[channel] = new Dictionary<int, int>();
+            var chNoteMap = noteToVoice[channel];
 
-            var active = activePerVoice[voice];
-            int prevTop = active.Count > 0 ? active.Max : -1;
-
-            if (isOn) active.Add(midiNote);
-            else active.Remove(midiNote);
-
-            int newTop = active.Count > 0 ? active.Max : -1;
-
-            if (newTop != prevTop)
+            if (isOn)
             {
-                if (prevTop >= 0)
-                    events.Add(new TimelineEvent { MidiTick = time, Voice = voice, MidiNote = -1 });
-
-                if (newTop >= 0)
+                // If this note is already playing on a voice, do legato slide
+                if (chNoteMap.TryGetValue(midiNote, out int existingVoice))
+                {
+                    // Same note re-triggered — re-gate for articulation
                     events.Add(new TimelineEvent
                     {
-                        MidiTick = time, Voice = voice, MidiNote = newTop,
-                        Velocity = velocity > 0 ? velocity : 100,
-                        InstrumentId = instrumentSlots[voice]
+                        MidiTick = time, Voice = existingVoice, MidiNote = midiNote,
+                        Velocity = velocity, InstrumentId = instrumentSlots[existingVoice]
                     });
+                    voiceStartTick[existingVoice] = time;
+                    continue;
+                }
+
+                // Find a free voice for this channel
+                int assignedVoice = -1;
+                foreach (int v in voices)
+                {
+                    if (voiceNote[v] < 0)
+                    {
+                        assignedVoice = v;
+                        break;
+                    }
+                }
+
+                // No free voice — steal the oldest one on this channel
+                if (assignedVoice < 0)
+                {
+                    long oldestTick = long.MaxValue;
+                    foreach (int v in voices)
+                    {
+                        if (voiceStartTick[v] < oldestTick)
+                        {
+                            oldestTick = voiceStartTick[v];
+                            assignedVoice = v;
+                        }
+                    }
+
+                    // Remove the stolen note from the map
+                    int stolenNote = voiceNote[assignedVoice];
+                    chNoteMap.Remove(stolenNote);
+                }
+
+                chNoteMap[midiNote] = assignedVoice;
+                voiceNote[assignedVoice] = midiNote;
+                voiceStartTick[assignedVoice] = time;
+
+                events.Add(new TimelineEvent
+                {
+                    MidiTick = time, Voice = assignedVoice, MidiNote = midiNote,
+                    Velocity = velocity, InstrumentId = instrumentSlots[assignedVoice]
+                });
+            }
+            else
+            {
+                // Note off — release the voice playing this note
+                if (chNoteMap.TryGetValue(midiNote, out int releasedVoice))
+                {
+                    chNoteMap.Remove(midiNote);
+                    voiceNote[releasedVoice] = -1;
+                    events.Add(new TimelineEvent { MidiTick = time, Voice = releasedVoice, MidiNote = -1 });
+                }
             }
         }
 
