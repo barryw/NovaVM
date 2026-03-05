@@ -196,6 +196,13 @@ public sealed partial class FileIoController
             string path = GetFullPath(filename, ".bas");
             if (!File.Exists(path))
             {
+                string binPath = GetFullPath(filename, ".bin");
+                if (File.Exists(binPath))
+                    path = binPath;
+            }
+
+            if (!File.Exists(path))
+            {
                 SetError(VgcConstants.FioErrNotFound);
                 return;
             }
@@ -242,6 +249,7 @@ public sealed partial class FileIoController
             _dirFiles = dir.Exists
                 ? dir.GetFiles("*.bas")
                       .Concat(dir.GetFiles("*.sid"))
+                      .Concat(dir.GetFiles("*.bin"))
                       .OrderBy(f => f.Name).ToList()
                 : [];
             _dirIndex = 0;
@@ -639,9 +647,10 @@ public sealed partial class FileIoController
         for (int i = 0; i < nameLen; i++)
             _regs[nameOffset + i] = (byte)name[i];
 
-        // File type: 0=PRG (.bas), 1=SID (.sid)
+        // File type: 0=PRG (.bas), 1=SID (.sid), 2=BIN (.bin)
         bool isSid = fi.Extension.Equals(".sid", StringComparison.OrdinalIgnoreCase);
-        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)(isSid ? 1 : 0);
+        bool isBin = fi.Extension.Equals(".bin", StringComparison.OrdinalIgnoreCase);
+        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)(isSid ? 1 : isBin ? 2 : 0);
 
         // File size excluding 2-byte load-address prefix (PRG only)
         long dataSize = isSid ? fi.Length : Math.Max(0, fi.Length - 2);

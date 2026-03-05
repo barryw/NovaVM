@@ -111,6 +111,8 @@ public static class VgcConstants
     public const byte FioErrIo         = 0x02;
     public const byte FioErrEndOfDir   = 0x03;
 
+    public const byte FioDirTypeBin     = 0x02;   // dir entry type: .bin (binary executable)
+
     // -------------------------------------------------------------------------
     // Expansion Memory Controller (XMC) registers ($BA00-$BA3F)
     // -------------------------------------------------------------------------
