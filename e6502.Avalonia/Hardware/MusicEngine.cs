@@ -51,6 +51,15 @@ public sealed class MusicEngine
         return (int)(hz * 16777216.0 / CpuClock);
     }
 
+    public static int SidFreqToMidi(int sidFreq)
+    {
+        if (sidFreq <= 0) return -1;
+        double hz = sidFreq * 985248.0 / 16777216.0;
+        if (hz < 8.0) return -1;
+        int midi = (int)Math.Round(12.0 * Math.Log2(hz / 440.0) + 69.0);
+        return Math.Clamp(midi, 0, 127);
+    }
+
     private void WriteFreq(int voice, int sidFreq)
     {
         var chip = ChipFor(voice);
@@ -269,6 +278,12 @@ public sealed class MusicEngine
         byte ctrl = chip.Read(Ctrl(voiceIndex));
         chip.Write(Ctrl(voiceIndex), (byte)(ctrl & 0xFE)); // gate off
         _voices[voiceIndex].CurrentMidi = -1;
+    }
+
+    public void SetVoiceNoteExternal(int voiceIndex, int midiNote)
+    {
+        if (voiceIndex < 0 || voiceIndex >= VoiceCount) return;
+        _voices[voiceIndex].CurrentMidi = midiNote;
     }
 
     private void WriteVolumeToBoth(int level)

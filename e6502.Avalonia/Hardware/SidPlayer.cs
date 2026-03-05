@@ -15,14 +15,18 @@ public sealed class SidPlayer
     private byte _savedIrqHi;
     private byte _savedIrqCtrl;
     private bool _playing;
+    private int _elapsedFrames;
 
     public bool IsPlaying => _playing;
+    public int ElapsedFrames => _elapsedFrames;
+    public void IncrementElapsed() => _elapsedFrames++;
 
     public SidPlayer(CompositeBusDevice bus) => _bus = bus;
 
     public void Play(SidFileInfo info, int song = 1)
     {
         if (!info.IsValid) return;
+        _elapsedFrames = 0;
 
         // Relocate if payload overlaps ROM space ($C000+)
         if (info.LoadAddress >= VgcConstants.RomBase ||

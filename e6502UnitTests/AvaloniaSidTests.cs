@@ -165,4 +165,26 @@ public class AvaloniaSidTests
         engine.DirectNoteSlide(0, 72);
         Assert.AreEqual(72, engine.GetVoiceNote(0));
     }
+
+    [TestMethod]
+    public void MusicEngine_SidFreqToMidi_A440()
+    {
+        int sidFreq = (int)(440.0 * 16777216.0 / 985248.0);
+        int midi = MusicEngine.SidFreqToMidi(sidFreq);
+        Assert.AreEqual(69, midi); // A4
+    }
+
+    [TestMethod]
+    public void MusicEngine_SidFreqToMidi_MiddleC()
+    {
+        int sidFreq = (int)(261.63 * 16777216.0 / 985248.0);
+        int midi = MusicEngine.SidFreqToMidi(sidFreq);
+        Assert.AreEqual(60, midi); // C4
+    }
+
+    [TestMethod]
+    public void MusicEngine_SidFreqToMidi_Zero_ReturnsNegative()
+    {
+        Assert.AreEqual(-1, MusicEngine.SidFreqToMidi(0));
+    }
 }

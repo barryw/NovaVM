@@ -157,7 +157,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             return _musicEngine.GetVoiceNote(address - VgcConstants.MusicNote1);
         if (address >= VgcConstants.MusicElapsedL && address <= VgcConstants.MusicTotalH)
         {
-            int elapsed = _musicEngine.ElapsedFrames;
+            int elapsed = _sidPlayer.IsPlaying ? _sidPlayer.ElapsedFrames : _musicEngine.ElapsedFrames;
             int total = _musicEngine.TotalFrames;
             return address switch
             {
@@ -285,6 +285,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _vgc.IncrementFrameCounter();
             _musicEngine.Tick();
             _midiPlayback.Tick();
+            if (_sidPlayer.IsPlaying)
+            {
+                SniffSidNotes();
+                _sidPlayer.IncrementElapsed();
+            }
             if (_vgc.IsRasterIrqEnabled)
                 _rasterIrqPending = true;
         }
@@ -295,6 +300,44 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (!_rasterIrqPending) return false;
         _rasterIrqPending = false;
         return true;
+    }
+
+    private void SniffSidNotes()
+    {
+        for (int v = 0; v < 3; v++)
+        {
+            ushort regBase = (ushort)(VgcConstants.SidBase + v * 7);
+            byte ctrl = Sid.Read((ushort)(regBase + 4));
+            if ((ctrl & 0x01) != 0)
+            {
+                int freqLo = Sid.Read(regBase);
+                int freqHi = Sid.Read((ushort)(regBase + 1));
+                int sidFreq = freqLo | (freqHi << 8);
+                int midi = MusicEngine.SidFreqToMidi(sidFreq);
+                _musicEngine.SetVoiceNoteExternal(v, midi);
+            }
+            else
+            {
+                _musicEngine.SetVoiceNoteExternal(v, -1);
+            }
+        }
+        for (int v = 0; v < 3; v++)
+        {
+            ushort regBase = (ushort)(VgcConstants.Sid2Base + v * 7);
+            byte ctrl = Sid2.Read((ushort)(regBase + 4));
+            if ((ctrl & 0x01) != 0)
+            {
+                int freqLo = Sid2.Read(regBase);
+                int freqHi = Sid2.Read((ushort)(regBase + 1));
+                int sidFreq = freqLo | (freqHi << 8);
+                int midi = MusicEngine.SidFreqToMidi(sidFreq);
+                _musicEngine.SetVoiceNoteExternal(v + 3, midi);
+            }
+            else
+            {
+                _musicEngine.SetVoiceNoteExternal(v + 3, -1);
+            }
+        }
     }
 
     private int GetDmaSpaceLength(byte space) =>
