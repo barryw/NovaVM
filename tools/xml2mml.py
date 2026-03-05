@@ -73,11 +73,39 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
         # voices_dict maps voice number -> list of LyNote
         voices_dict: dict[int, list[LyNote]] = {}
 
+        # Pending expression state (applies across measures)
+        pending_dynamic: str = ""
+        pending_cresc: bool = False
+        pending_decresc: bool = False
+
         for measure_el in part_el.findall("measure"):
             # Track which voices are active in this measure
             measure_voices: set[int] = set()
 
-            for note_el in measure_el.findall("note"):
+            for el in measure_el:
+                if el.tag == "direction":
+                    # Check for dynamics
+                    for dt in el.findall("direction-type"):
+                        dyn_el = dt.find("dynamics")
+                        if dyn_el is not None and len(dyn_el) > 0:
+                            pending_dynamic = dyn_el[0].tag
+                        wedge_el = dt.find("wedge")
+                        if wedge_el is not None:
+                            wtype = wedge_el.get("type", "")
+                            if wtype == "crescendo":
+                                pending_cresc = True
+                            elif wtype == "diminuendo":
+                                pending_decresc = True
+                            elif wtype == "stop":
+                                pending_cresc = False
+                                pending_decresc = False
+                    continue
+
+                if el.tag != "note":
+                    continue
+
+                note_el = el
+
                 # Skip chord notes
                 if note_el.find("chord") is not None:
                     continue
@@ -97,6 +125,29 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
 
                 duration = _parse_duration_type(note_el)
 
+                # Parse articulations / expressions from <notations>
+                staccato = False
+                accent = False
+                trill = False
+                slur_start = False
+                slur_end = False
+
+                for notations_el in note_el.findall("notations"):
+                    for art_el in notations_el.findall("articulations"):
+                        if art_el.find("staccato") is not None:
+                            staccato = True
+                        if art_el.find("accent") is not None:
+                            accent = True
+                    for orn_el in notations_el.findall("ornaments"):
+                        if orn_el.find("trill-mark") is not None:
+                            trill = True
+                    for slur_el in notations_el.findall("slur"):
+                        stype = slur_el.get("type", "")
+                        if stype == "start":
+                            slur_start = True
+                        elif stype == "stop":
+                            slur_end = True
+
                 if is_rest:
                     ln = LyNote(
                         letter="r", accidental=0, octave=4,
@@ -109,7 +160,15 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                         letter=letter, accidental=accidental, octave=octave,
                         duration=duration, dotted=dotted, tied=tied,
                         is_rest=False,
+                        staccato=staccato, accent=accent, trill=trill,
+                        slur_start=slur_start, slur_end=slur_end,
+                        dynamic=pending_dynamic,
+                        cresc=pending_cresc, decresc=pending_decresc,
                     )
+
+                # Clear pending dynamic after first note receives it
+                if pending_dynamic:
+                    pending_dynamic = ""
 
                 voices_dict[voice_num].append(ln)
 

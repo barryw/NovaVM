@@ -220,3 +220,126 @@ class TestParseNotes:
             parts = _parse_simple_xml(xml)
             notes = [n for n in parts[0].voices[0] if not n.bar_marker]
             assert all(n.duration == mml_dur for n in notes), f"Failed for {type_name}"
+
+
+def _make_note_xml(note_inner: str, attributes: str = "") -> str:
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        {attributes}
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+        {note_inner}
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+
+
+class TestExpressions:
+    def test_staccato(self):
+        xml = _make_note_xml("<notations><articulations><staccato/></articulations></notations>")
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].staccato is True
+
+    def test_trill(self):
+        xml = _make_note_xml("<notations><ornaments><trill-mark/></ornaments></notations>")
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].trill is True
+
+    def test_slur_start_stop(self):
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+        <notations><slur type="start"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+        <notations><slur type="stop"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].slur_start is True
+        assert notes[0].slur_end is False
+        assert notes[1].slur_start is False
+        assert notes[1].slur_end is True
+
+    def test_dynamics(self):
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <direction>
+        <direction-type><dynamics><ff/></dynamics></direction-type>
+      </direction>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].dynamic == "ff"
+
+    def test_crescendo_wedge(self):
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <direction>
+        <direction-type><wedge type="crescendo"/></direction-type>
+      </direction>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+      <direction>
+        <direction-type><wedge type="stop"/></direction-type>
+      </direction>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].cresc is True
+        assert notes[1].cresc is False
