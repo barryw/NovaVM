@@ -179,6 +179,76 @@ public sealed class MusicEngine
         WriteVolumeToBoth(level);
     }
 
+    /// <summary>
+    /// Set per-voice volume (0-15) on a single voice (1-6).
+    /// NovaBASIC extension — not present on the real MOS 6581.
+    /// </summary>
+    public void SetVoiceVolume(int voice, int level)
+    {
+        if (voice < 1 || voice > VoiceCount) return;
+        int v = voice - 1; // 0-based
+        var chip = ChipFor(v);
+        int localVoice = LocalVoice(v);
+        ushort reg = (ushort)(chip.BaseAddress + 0x1D + localVoice);
+        chip.Write(reg, (byte)Math.Clamp(level, 0, 15));
+    }
+
+    // -------------------------------------------------------------------------
+    // Direct voice control (for MIDI playback, bypasses MML sequencer)
+    // -------------------------------------------------------------------------
+
+    private bool _midiMode;
+
+    /// <summary>Enter MIDI mode: stops MML sequencer, allows direct voice control.</summary>
+    public void EnterMidiMode()
+    {
+        MusicStop();
+        MusicReset();
+        _midiMode = true;
+    }
+
+    /// <summary>Exit MIDI mode, return to normal MML operation.</summary>
+    public void ExitMidiMode()
+    {
+        _midiMode = false;
+        for (int v = 0; v < VoiceCount; v++)
+            DirectNoteOff(v);
+    }
+
+    public void DirectNoteOn(int voiceIndex, int midiNote, int velocity, int instrumentId = 0)
+    {
+        if (voiceIndex < 0 || voiceIndex >= VoiceCount) return;
+        var inst = GetInstrument(instrumentId);
+        var chip = ChipFor(voiceIndex);
+
+        // Set instrument (waveform + ADSR)
+        chip.Write(Ad(voiceIndex), inst.Ad);
+        chip.Write(Sr(voiceIndex), inst.Sr);
+        chip.Write(PwLo(voiceIndex), (byte)(inst.PulseWidth & 0xFF));
+        chip.Write(PwHi(voiceIndex), (byte)(inst.PulseWidth >> 8));
+
+        // Set frequency
+        int sidFreq = MidiToSid(midiNote);
+        chip.Write(FreqLo(voiceIndex), (byte)(sidFreq & 0xFF));
+        chip.Write(FreqHi(voiceIndex), (byte)((sidFreq >> 8) & 0xFF));
+
+        // Per-voice volume (velocity)
+        int vol = Math.Clamp(velocity * 15 / 127, 0, 15);
+        int local = LocalVoice(voiceIndex);
+        chip.Write((ushort)(chip.BaseAddress + 0x1D + local), (byte)vol);
+
+        // Gate on
+        chip.Write(Ctrl(voiceIndex), (byte)(inst.Waveform | 0x01));
+    }
+
+    public void DirectNoteOff(int voiceIndex)
+    {
+        if (voiceIndex < 0 || voiceIndex >= VoiceCount) return;
+        var chip = ChipFor(voiceIndex);
+        byte ctrl = chip.Read(Ctrl(voiceIndex));
+        chip.Write(Ctrl(voiceIndex), (byte)(ctrl & 0xFE)); // gate off
+    }
+
     private void WriteVolumeToBoth(int level)
     {
         foreach (var chip in new[] { _sid, _sid2 })
@@ -242,6 +312,17 @@ public sealed class MusicEngine
             var chip = ChipFor(i);
             byte current = chip.Read(Ctrl(i));
             chip.Write(Ctrl(i), (byte)(current & ~0x01)); // clear gate
+        }
+    }
+
+    /// <summary>Stop playback and clear all voice sequences.</summary>
+    public void MusicReset()
+    {
+        MusicStop();
+        for (int i = 0; i < VoiceCount; i++)
+        {
+            _voices[i].Events = new List<MmlEvent>();
+            _voices[i].Reset(_bpm);
         }
     }
 
@@ -487,6 +568,15 @@ public sealed class MusicEngine
             case MmlEventType.FilterSweep:
                 vs.FilterSweepDir = ev.Param1;
                 break;
+
+            case MmlEventType.SetVoiceVolume:
+            {
+                int vol = Math.Clamp(ev.Param1, 0, 15);
+                var chip = ChipFor(vi);
+                int local = LocalVoice(vi);
+                chip.Write((ushort)(chip.BaseAddress + 0x1D + local), (byte)vol);
+                break;
+            }
 
             case MmlEventType.LoopStart:
             case MmlEventType.LoopEnd:
