@@ -14,6 +14,9 @@ public sealed class SidPlayer
     private byte _savedIrqLo;
     private byte _savedIrqHi;
     private byte _savedIrqCtrl;
+    private bool _playing;
+
+    public bool IsPlaying => _playing;
 
     public SidPlayer(CompositeBusDevice bus) => _bus = bus;
 
@@ -42,10 +45,12 @@ public sealed class SidPlayer
 
         // Enable VGC raster IRQ — fires at 60 Hz synced to display refresh
         _bus.Write((ushort)VgcConstants.RegIrqCtrl, (byte)(_savedIrqCtrl | 0x01));
+        _playing = true;
     }
 
     public void Stop()
     {
+        _playing = false;
         // Disable raster IRQ (restore original state)
         _bus.Write((ushort)VgcConstants.RegIrqCtrl, _savedIrqCtrl);
 

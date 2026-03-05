@@ -65,7 +65,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _sid2 = new SidChip(enableSound, baseAddress: 0xD420);
         _sidPlayer = new SidPlayer(this);
         _musicEngine = new MusicEngine(this);
-        _midiPlayback = new MidiPlayback(_musicEngine);
+        _midiPlayback = new MidiPlayback(_musicEngine, _frameRateHz);
 
         _fio = new FileIoController(
             addr => _ram[addr],
@@ -151,7 +151,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public byte Read(ushort address)
     {
         if (address == VgcConstants.MusicStatus)
-            return (byte)((_musicEngine.IsPlaying ? 1 : 0) | (_musicEngine.IsMusicPlaying ? 2 : 0));
+            return (byte)((_musicEngine.IsPlaying ? 1 : 0)
+                | (_musicEngine.IsMusicPlaying || _midiPlayback.IsPlaying || _sidPlayer.IsPlaying ? 2 : 0));
         if (address >= VgcConstants.MusicNote1 && address <= VgcConstants.MusicNote6)
             return _musicEngine.GetVoiceNote(address - VgcConstants.MusicNote1);
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
