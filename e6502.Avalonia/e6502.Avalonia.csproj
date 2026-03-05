@@ -30,6 +30,7 @@
         <PackageReference Include="Dock.Avalonia" Version="11.3.11.14" />
         <PackageReference Include="Dock.Model.Mvvm" Version="11.3.11.14" />
         <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.14" />
+        <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
     </ItemGroup>
 
     <ItemGroup>
@@ -37,63 +38,46 @@
     </ItemGroup>
 
     <!-- POSIX tool validation (macOS / Linux) -->
-    <Target Name="ValidateTools" BeforeTargets="AssembleRom"
-            Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
-        <Exec Command="command -v ca65 > /dev/null 2>&amp;1 || (echo 'ERROR: ca65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)"
-              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
-        <Exec Command="command -v ld65 > /dev/null 2>&amp;1 || (echo 'ERROR: ld65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)"
-              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
-        <Exec Command="command -v pandoc > /dev/null 2>&amp;1 || (echo 'ERROR: pandoc not found. Install: brew install pandoc' &amp;&amp; exit 1)"
-              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
-        <Exec Command="command -v latexmk > /dev/null 2>&amp;1 || (echo 'ERROR: latexmk not found. Install MacTeX or texlive' &amp;&amp; exit 1)"
-              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+    <Target Name="ValidateTools" BeforeTargets="AssembleRom" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
+        <Exec Command="command -v ca65 &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: ca65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="command -v ld65 &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: ld65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="command -v pandoc &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: pandoc not found. Install: brew install pandoc' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="command -v latexmk &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: latexmk not found. Install MacTeX or texlive' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
     </Target>
 
     <!-- Windows tool validation -->
-    <Target Name="ValidateToolsWindows" BeforeTargets="AssembleRomWindows"
-            Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
-        <Exec Command="where.exe ca65 >nul 2>&amp;1 || (echo ERROR: ca65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)"
-              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
-        <Exec Command="where.exe ld65 >nul 2>&amp;1 || (echo ERROR: ld65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)"
-              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
-        <Exec Command="where.exe pandoc >nul 2>&amp;1 || (echo ERROR: pandoc not found. Install: choco install pandoc &amp;&amp; exit 1)"
-              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
-        <Exec Command="where.exe pdflatex >nul 2>&amp;1 || (echo ERROR: pdflatex not found. Install MiKTeX: choco install miktex &amp;&amp; exit 1)"
-              StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+    <Target Name="ValidateToolsWindows" BeforeTargets="AssembleRomWindows" Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
+        <Exec Command="where.exe ca65 &gt;nul 2&gt;&amp;1 || (echo ERROR: ca65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="where.exe ld65 &gt;nul 2&gt;&amp;1 || (echo ERROR: ld65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="where.exe pandoc &gt;nul 2&gt;&amp;1 || (echo ERROR: pandoc not found. Install: choco install pandoc &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="where.exe pdflatex &gt;nul 2&gt;&amp;1 || (echo ERROR: pdflatex not found. Install MiKTeX: choco install miktex &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
     </Target>
 
     <!-- Assemble the EhBASIC ROM from source (POSIX) — skip if ROM exists and SkipRomBuild is set -->
-    <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateTools"
-            Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
+    <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateTools" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="make -C $(ProjectDir)../ehbasic" />
-        <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin"
-              DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+        <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
     </Target>
 
     <!-- Assemble the EhBASIC ROM from source (Windows) -->
-    <Target Name="AssembleRomWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateToolsWindows"
-            Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
+    <Target Name="AssembleRomWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateToolsWindows" Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm &amp;&amp; ld65 -C ehbasic.cfg -vm -m basic.map -o basic.bin basic.o" />
-        <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin"
-              DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+        <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
     </Target>
 
     <!-- Generate the PDF user guide (POSIX) -->
-    <Target Name="GeneratePdf" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRom"
-            Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
+    <Target Name="GeneratePdf" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRom" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="bash ../docs/help/build-pdf.sh" />
     </Target>
 
     <!-- Generate the PDF user guide (Windows) -->
-    <Target Name="GeneratePdfWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRomWindows"
-            Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
+    <Target Name="GeneratePdfWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRomWindows" Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="bash ../docs/help/build-pdf.sh" />
     </Target>
 
     <Target Name="CopyEhBasicToOutput" AfterTargets="Build">
         <MakeDir Directories="$(OutputPath)Resources" />
-        <Copy SourceFiles="Resources/ehbasic.bin"
-              DestinationFolder="$(OutputPath)Resources" />
+        <Copy SourceFiles="Resources/ehbasic.bin" DestinationFolder="$(OutputPath)Resources" />
     </Target>
 
     <ItemGroup>

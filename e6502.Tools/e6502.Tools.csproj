@@ -13,4 +13,9 @@
     <ProjectReference Include="..\e6502.Avalonia\e6502.Avalonia.csproj" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
+  </ItemGroup>
+
 </Project>
