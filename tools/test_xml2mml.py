@@ -10,7 +10,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-from xml2mml import load_musicxml
+from xml2mml import load_musicxml, parse_musicxml, MxlPart
 
 
 SIMPLE_XML = """\
@@ -112,3 +112,111 @@ class TestLoadMusicXML:
                 load_musicxml(path)
         finally:
             path.unlink()
+
+
+def _parse_simple_xml(xml_str: str = SIMPLE_XML):
+    """Helper to parse an XML string and return the list of MxlPart."""
+    from xml.etree import ElementTree as ET
+    root = ET.fromstring(xml_str)
+    return parse_musicxml(root)
+
+
+def _replace_note(xml_str: str, old: str, new: str) -> str:
+    """Quick helper to swap one <note> block in SIMPLE_XML."""
+    return xml_str.replace(old, new)
+
+
+class TestParseNotes:
+    def test_simple_scale(self):
+        parts = _parse_simple_xml()
+        assert len(parts) == 1
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert len(notes) == 4
+        assert [n.letter for n in notes] == ["c", "d", "e", "f"]
+        assert all(n.duration == 4 for n in notes)
+        assert all(n.octave == 4 for n in notes)
+
+    def test_rest(self):
+        xml = SIMPLE_XML.replace(
+            "<note>\n"
+            "        <pitch><step>C</step><octave>4</octave></pitch>\n"
+            "        <duration>1</duration>\n"
+            "        <type>quarter</type>\n"
+            "      </note>",
+            "<note>\n"
+            "        <rest/>\n"
+            "        <duration>1</duration>\n"
+            "        <type>quarter</type>\n"
+            "      </note>",
+            1,
+        )
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].is_rest is True
+        assert notes[1].is_rest is False
+
+    def test_accidentals(self):
+        xml = SIMPLE_XML.replace(
+            "<pitch><step>C</step><octave>4</octave></pitch>",
+            "<pitch><step>C</step><alter>1</alter><octave>4</octave></pitch>",
+            1,
+        )
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].accidental == 1
+        assert notes[1].accidental == 0
+
+    def test_dotted_note(self):
+        xml = SIMPLE_XML.replace(
+            "<note>\n"
+            "        <pitch><step>C</step><octave>4</octave></pitch>\n"
+            "        <duration>1</duration>\n"
+            "        <type>quarter</type>\n"
+            "      </note>",
+            "<note>\n"
+            "        <pitch><step>C</step><octave>4</octave></pitch>\n"
+            "        <duration>1</duration>\n"
+            "        <type>quarter</type>\n"
+            "        <dot/>\n"
+            "      </note>",
+            1,
+        )
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].dotted is True
+        assert notes[1].dotted is False
+
+    def test_tie(self):
+        xml = SIMPLE_XML.replace(
+            "<note>\n"
+            "        <pitch><step>C</step><octave>4</octave></pitch>\n"
+            "        <duration>1</duration>\n"
+            "        <type>quarter</type>\n"
+            "      </note>",
+            "<note>\n"
+            "        <pitch><step>C</step><octave>4</octave></pitch>\n"
+            "        <duration>1</duration>\n"
+            "        <type>quarter</type>\n"
+            "        <tie type=\"start\"/>\n"
+            "      </note>",
+            1,
+        )
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].tied is True
+        assert notes[1].tied is False
+
+    def test_durations(self):
+        from xml2mml import TYPE_TO_DURATION
+        expected = {"whole": 1, "half": 2, "quarter": 4, "eighth": 8, "16th": 16, "32nd": 32, "64th": 32}
+        assert TYPE_TO_DURATION == expected
+
+        # Also test actual parsing with different duration types
+        for type_name, mml_dur in [("whole", 1), ("half", 2), ("eighth", 8), ("16th", 16), ("32nd", 32)]:
+            xml = SIMPLE_XML.replace(
+                "<type>quarter</type>",
+                f"<type>{type_name}</type>",
+            )
+            parts = _parse_simple_xml(xml)
+            notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+            assert all(n.duration == mml_dur for n in notes), f"Failed for {type_name}"
