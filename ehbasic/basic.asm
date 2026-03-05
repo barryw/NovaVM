@@ -505,7 +505,9 @@ XTK_DMASTATUS     = $25              ; DMASTATUS — numeric function (no args)
                                       ; $26 reserved — maps to AND token in scanner
 XTK_DMAERR        = $27              ; DMAERR — numeric function (no args)
 XTK_DMACOUNT      = $28              ; DMACOUNT — numeric function (no args)
-                                      ; $29-$3F reserved
+XTK_MIDPLAY       = $29              ; MIDPLAY "filename" — play MIDI file
+XTK_MIDSTOP       = $2A              ; MIDSTOP — stop MIDI playback
+                                      ; $2B-$3F reserved
 XTK_BLITCOPY      = $40              ; BLITCOPY srcSpace,srcAddr,srcStride,dstSpace,dstAddr,dstStride,width,height
 XTK_BLITFILL      = $41              ; BLITFILL dstSpace,dstAddr,dstStride,width,height,value
 XTK_BLITSTATUS    = $42              ; BLITSTATUS — numeric function (no args)
@@ -1900,8 +1902,10 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; $26 — reserved, syntax error
       .word LAB_15D9-1        ; XTK_DMAERR    ($27) — function only
       .word LAB_15D9-1        ; XTK_DMACOUNT  ($28) — function only
-      ; $29-$3F reserved (23 entries)
-      .repeat $17
+      ; $29-$2A: MIDI commands, $2B-$3F reserved (21 entries)
+      .word LAB_MIDPLAY-1     ; XTK_MIDPLAY  ($29)
+      .word LAB_MIDSTOP-1     ; XTK_MIDSTOP  ($2A)
+      .repeat $15
       .word LAB_15D9-1
       .endrepeat
       .word LAB_BLITCOPY-1    ; XTK_BLITCOPY   ($40)
@@ -8644,8 +8648,9 @@ TAB_XTKSTR
       .word @s_nopen, @s_nclose, @s_nlisten, @s_naccept, @s_nsend
       .word @s_nrecv, @s_nstatus, @s_reserved20, @s_nready, @s_nlen
       .word @s_dmacopy, @s_dmafill, @s_dmastatus, @s_reserved26, @s_dmaerr, @s_dmacount
-      ; $29-$3F reserved (23 entries)
-      .repeat $17
+      ; $29-$2A: MIDI commands, $2B-$3F reserved (21 entries)
+      .word @s_midplay, @s_midstop
+      .repeat $15
       .word @s_reserved_ext
       .endrepeat
       .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
@@ -8695,6 +8700,8 @@ TAB_XTKSTR
 @s_dmaerr:  .byte "DMAERR",0
 @s_dmacount: .byte "DMACOUNT",0
 @s_reserved_ext: .byte $FF,0       ; placeholder — reserved extension id
+@s_midplay: .byte "MIDPLAY",0
+@s_midstop: .byte "MIDSTOP",0
 @s_blitcopy: .byte "BLITCOPY",0
 @s_blitfill: .byte "BLITFILL",0
 @s_blitstatus: .byte "BLITSTATUS",0
@@ -8833,6 +8840,8 @@ FIO_CMD_MSTOP  = $0F           ; stop music playback
 FIO_CMD_MTEMPO = $10           ; set music tempo (BPM)
 FIO_CMD_MLOOP  = $11           ; set music loop on/off
 FIO_CMD_MPRI   = $12           ; set SFX voice steal priority
+FIO_CMD_MIDPLAY = $13          ; load .mid and start playback
+FIO_CMD_MIDSTOP = $14          ; stop MIDI playback
 MUSIC_STATUS   = $BA50         ; bit 0=SFX playing, bit 1=music playing
 MUSIC_NOTE1    = $BA51         ; voice 1 current MIDI note (0=silent)
 MUSIC_NOTE2    = $BA52         ; voice 2 current MIDI note
@@ -9465,11 +9474,21 @@ LAB_SOUND
       STA   FIO_CMD
       RTS
 
-; perform VOLUME level (0-15)
+; perform VOLUME level (0-15)               — set master volume
+; perform VOLUME level, voice (0-255, 1-6)  — set per-voice volume
 
 LAB_VOLUME
       JSR   LAB_GTBY          ; level → X
       STX   FIO_SRCL
+      LDA   #$00
+      STA   FIO_SRCH          ; default voice = 0 (master)
+      JSR   LAB_GBYT          ; peek next token
+      CMP   #','
+      BNE   @vol_go
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; voice → X
+      STX   FIO_SRCH
+@vol_go
       LDA   #FIO_CMD_VOLUME
       STA   FIO_CMD
       RTS
@@ -9779,6 +9798,37 @@ LAB_SIDPLAY
 
 LAB_SIDSTOP
       LDA   #FIO_CMD_SIDSTOP
+      STA   FIO_CMD
+      RTS
+
+; perform MIDPLAY "filename"
+; MIDPLAY "song"  — auto-select 6 busiest MIDI channels
+
+LAB_MIDPLAY
+      JSR   LAB_FIO_GETNAME    ; parse filename → FIO_NAME/FIO_NAMELEN
+      BCC   @mid_have_name
+      JMP   LAB_FIO_ERRIO
+@mid_have_name
+      LDA   #$00
+      STA   FIO_SRCL            ; no explicit mapping (auto-select)
+      LDA   #FIO_CMD_MIDPLAY
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @mid_chk_err
+      RTS
+@mid_chk_err
+      LDA   FIO_ERRCODE
+      CMP   #$01              ; not found?
+      BNE   @mid_errio
+      JMP   LAB_FIO_ERRFNF
+@mid_errio
+      JMP   LAB_FIO_ERRIO
+
+; perform MIDSTOP
+
+LAB_MIDSTOP
+      LDA   #FIO_CMD_MIDSTOP
       STA   FIO_CMD
       RTS
 
