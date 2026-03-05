@@ -10,7 +10,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-from xml2mml import load_musicxml, parse_musicxml, MxlPart
+from xml2mml import load_musicxml, parse_musicxml, MxlPart, split_chords
 
 
 SIMPLE_XML = """\
@@ -343,3 +343,88 @@ class TestExpressions:
         notes = [n for n in parts[0].voices[0] if not n.bar_marker]
         assert notes[0].cresc is True
         assert notes[1].cresc is False
+
+
+CHORD_2_XML = '''\
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+      <note>
+        <chord/>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+
+
+CHORD_3_XML = '''\
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+      <note>
+        <chord/>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+      <note>
+        <chord/>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+
+
+class TestChordSplitting:
+    def test_no_chords_single_voice(self):
+        parts = _parse_simple_xml()
+        result = split_chords(parts[0].voices[0])
+        assert len(result) == 1
+
+    def test_chord_splits_into_two_voices(self):
+        parts = _parse_simple_xml(CHORD_2_XML)
+        result = split_chords(parts[0].voices[0])
+        assert len(result) == 2
+        # Voice 0 = highest: E4 then D4
+        v0_notes = [n for n in result[0] if not n.bar_marker]
+        assert [n.letter for n in v0_notes] == ["e", "d"]
+        # Voice 1 = lower: C4 then rest (D4 is solo)
+        v1_notes = [n for n in result[1] if not n.bar_marker]
+        assert v1_notes[0].letter == "c"
+        assert v1_notes[1].is_rest is True
+
+    def test_three_note_chord(self):
+        parts = _parse_simple_xml(CHORD_3_XML)
+        result = split_chords(parts[0].voices[0])
+        assert len(result) == 3
+        v0_notes = [n for n in result[0] if not n.bar_marker]
+        v1_notes = [n for n in result[1] if not n.bar_marker]
+        v2_notes = [n for n in result[2] if not n.bar_marker]
+        assert v0_notes[0].letter == "g"
+        assert v1_notes[0].letter == "e"
+        assert v2_notes[0].letter == "c"

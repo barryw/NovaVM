@@ -106,9 +106,7 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
 
                 note_el = el
 
-                # Skip chord notes
-                if note_el.find("chord") is not None:
-                    continue
+                is_chord = note_el.find("chord") is not None
 
                 voice_num = int(note_el.findtext("voice", "1"))
                 measure_voices.add(voice_num)
@@ -165,6 +163,8 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                         dynamic=pending_dynamic,
                         cresc=pending_cresc, decresc=pending_decresc,
                     )
+
+                ln._chord = is_chord  # type: ignore[attr-defined]
 
                 # Clear pending dynamic after first note receives it
                 if pending_dynamic:
@@ -233,3 +233,69 @@ def _load_mxl(path: Path) -> ET.Element:
                 return ET.fromstring(zf.read(name))
 
         raise ValueError("No MusicXML file found in .mxl archive")
+
+
+# ---------------------------------------------------------------------------
+# Chord splitting
+# ---------------------------------------------------------------------------
+
+_SEMI = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
+
+
+def _note_pitch_key(n: LyNote) -> int:
+    """Return a semitone index for sorting; -1 for rests/bar markers."""
+    if n.is_rest or n.bar_marker:
+        return -1
+    return n.octave * 12 + _SEMI.get(n.letter, 0) + n.accidental
+
+
+def split_chords(notes: list[LyNote], max_sub: int = 4) -> list[list[LyNote]]:
+    """Split a note list with chords into monophonic sub-voice lists.
+
+    Returns a list of 1..max_sub note lists.  If there are no chords the
+    input is returned unchanged as a single-element list.
+    """
+    # Build onset groups: each group is a list of notes sounding together.
+    groups: list[list[LyNote]] = []
+    for n in notes:
+        is_chord = getattr(n, "_chord", False)
+        if n.bar_marker:
+            groups.append([n])
+        elif is_chord and groups and not groups[-1][0].bar_marker:
+            groups[-1].append(n)
+        else:
+            groups.append([n])
+
+    # Check whether splitting is needed
+    max_chord = max((len(g) for g in groups), default=1)
+    if max_chord <= 1:
+        return [notes]
+
+    num_voices = min(max_chord, max_sub)
+
+    # Build sub-voice lists
+    sub_voices: list[list[LyNote]] = [[] for _ in range(num_voices)]
+    for g in groups:
+        if g[0].bar_marker:
+            for sv in sub_voices:
+                sv.append(g[0])
+            continue
+
+        # Sort highest pitch first
+        sorted_notes = sorted(g, key=_note_pitch_key, reverse=True)
+
+        # Assign to voices; extras dropped if > num_voices
+        for i in range(num_voices):
+            if i < len(sorted_notes):
+                sub_voices[i].append(sorted_notes[i])
+            else:
+                # Fill with rest of same duration
+                rest = LyNote(
+                    letter="r", accidental=0, octave=4,
+                    duration=sorted_notes[0].duration,
+                    dotted=sorted_notes[0].dotted,
+                    tied=False, is_rest=True,
+                )
+                sub_voices[i].append(rest)
+
+    return sub_voices
