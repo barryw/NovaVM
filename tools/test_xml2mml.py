@@ -207,6 +207,41 @@ class TestParseNotes:
         assert notes[0].tied is True
         assert notes[1].tied is False
 
+    def test_tie_chain(self):
+        """Middle note in a tie chain has both stop and start — tied should be True."""
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+        <tie type="start"/>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+        <tie type="stop"/>
+        <tie type="start"/>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration><type>quarter</type>
+        <tie type="stop"/>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].tied is True   # start
+        assert notes[1].tied is True   # stop+start (middle of chain)
+        assert notes[2].tied is False  # stop only
+
     def test_durations(self):
         from xml2mml import TYPE_TO_DURATION
         expected = {"whole": 1, "half": 2, "quarter": 4, "eighth": 8, "16th": 16, "32nd": 32, "64th": 32}

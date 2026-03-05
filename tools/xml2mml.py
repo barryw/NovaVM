@@ -131,6 +131,9 @@ def _expand_repeats(measures: list[ET.Element]) -> list[ET.Element]:
     return result
 
 
+_SEMI = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
+
+
 def _apply_transpose(letter: str, octave: int, accidental: int, chromatic: int) -> tuple[str, int, int]:
     """Transpose a note by a chromatic interval."""
     if chromatic == 0:
@@ -246,10 +249,10 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
 
                 is_rest = note_el.find("rest") is not None
                 dotted = note_el.find("dot") is not None
-                tied = False
-                tie_el = note_el.find("tie")
-                if tie_el is not None and tie_el.get("type") == "start":
-                    tied = True
+                tied = any(
+                    t.get("type") == "start"
+                    for t in note_el.findall("tie")
+                )
 
                 if is_grace:
                     # Grace notes have no <duration>; use <type> or default to 32
@@ -469,8 +472,6 @@ def expand_ornaments(notes: list[LyNote], key_fifths: int = 0) -> list[LyNote]:
 # ---------------------------------------------------------------------------
 # Chord splitting
 # ---------------------------------------------------------------------------
-
-_SEMI = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
 
 
 def _note_pitch_key(n: LyNote) -> int:
