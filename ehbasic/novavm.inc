@@ -1,0 +1,446 @@
+; novavm.inc -- auto-generated, DO NOT EDIT
+; Sources: VgcConstants.cs, basic.sym
+; Regenerate: python3 tools/gen_novavm_inc.py
+
+
+; --- Memory map ---
+ZeroPageBase            = $00
+ZeroPageEnd             = $FF
+StackBase               = $0100
+StackEnd                = $01FF
+VectorTableBase         = $0200
+VectorTableEnd          = $027F
+BasicBase               = $0280
+BasicEnd                = $9FFF
+VgcBase                 = $A000
+VgcRegsEnd              = $A01F
+VgcEnd                  = $A0FF
+
+; --- SID chip registers ($D400-$D41C, inside ROM space — write-only via bus) ---
+SidBase                 = $D400
+SidEnd                  = $D41C
+Sid2Base                = $D420
+Sid2End                 = $D43C
+Sid2MirrorBase          = $D500
+Sid2MirrorEnd           = $D51C
+CharRamBase             = $AA00
+CharRamEnd              = $B1CF
+ColorRamBase            = $B1D0
+ColorRamEnd             = $B99F
+
+; --- File I/O coprocessor registers ($B9A0-$B9EF) ---
+FioBase                 = $B9A0
+FioEnd                  = $B9EF
+FioCmd                  = $B9A0
+FioStatus               = $B9A1
+FioErrCode              = $B9A2
+FioNameLen              = $B9A3
+FioSrcL                 = $B9A4
+FioSrcH                 = $B9A5
+FioEndL                 = $B9A6
+FioEndH                 = $B9A7
+FioSizeL                = $B9A8
+FioSizeH                = $B9A9
+FioGSpace               = $B9AA
+FioGAddrL               = $B9AB
+FioGAddrH               = $B9AC
+FioGLenL                = $B9AD
+FioGLenH                = $B9AE
+FioDirType              = $B9AF
+FioName                 = $B9B0
+FioNameEnd              = $B9EF
+FioCmdSave              = $01
+FioCmdLoad              = $02
+FioCmdDirOpen           = $03
+FioCmdDirRead           = $04
+FioCmdDelete            = $05
+FioCmdGSave             = $06
+FioCmdGLoad             = $07
+FioCmdSidPlay           = $08
+FioCmdSidStop           = $09
+FioCmdInstrument        = $0A
+FioCmdSound             = $0B
+FioCmdVolume            = $0C
+FioCmdMusicSeq          = $0D
+FioCmdMusicPlay         = $0E
+FioCmdMusicStop         = $0F
+FioCmdMusicTempo        = $10
+FioCmdMusicLoop         = $11
+FioCmdMusicPri          = $12
+FioCmdMidPlay           = $13
+FioCmdMidStop           = $14
+MusicStatus             = $BA50
+MusicNote1              = $BA51
+MusicNote2              = $BA52
+MusicNote3              = $BA53
+MusicNote4              = $BA54
+MusicNote5              = $BA55
+MusicNote6              = $BA56
+MusicElapsedL           = $BA57
+MusicElapsedH           = $BA58
+MusicTotalL             = $BA59
+MusicTotalH             = $BA5A
+FioStatusIdle           = $00
+FioStatusOk             = $02
+FioStatusError          = $03
+FioErrNone              = $00
+FioErrNotFound          = $01
+FioErrIo                = $02
+FioErrEndOfDir          = $03
+FioDirTypeBin           = $02
+
+; --- Expansion Memory Controller (XMC) registers ($BA00-$BA3F) ---
+XmcBase                 = $BA00
+XmcEnd                  = $BA3F
+XmcCmd                  = $BA00
+XmcStatus               = $BA01
+XmcErrCode              = $BA02
+XmcCfg                  = $BA03
+XmcAddrL                = $BA04
+XmcAddrM                = $BA05
+XmcAddrH                = $BA06
+XmcRamL                 = $BA07
+XmcRamH                 = $BA08
+XmcLenL                 = $BA09
+XmcLenH                 = $BA0A
+XmcData                 = $BA0B
+XmcBank                 = $BA0C
+XmcBanks                = $BA0D
+XmcPagesUsedL           = $BA0E
+XmcPagesUsedH           = $BA0F
+XmcPagesFreeL           = $BA10
+XmcPagesFreeH           = $BA11
+XmcNameLen              = $BA12
+XmcHandle               = $BA13
+XmcDirCountL            = $BA14
+XmcDirCountH            = $BA15
+XmcWinCtl               = $BA16
+XmcWin0AL               = $BA18
+XmcWin0AM               = $BA19
+XmcWin0AH               = $BA1A
+XmcWin1AL               = $BA1B
+XmcWin1AM               = $BA1C
+XmcWin1AH               = $BA1D
+XmcWin2AL               = $BA1E
+XmcWin2AM               = $BA1F
+XmcWin2AH               = $BA20
+XmcWin3AL               = $BA21
+XmcWin3AM               = $BA22
+XmcWin3AH               = $BA23
+XmcName                 = $BA24
+XmcNameEnd              = $BA3F
+XmcCmdGetByte           = $01
+XmcCmdPutByte           = $02
+XmcCmdStash             = $03
+XmcCmdFetch             = $04
+XmcCmdFill              = $05
+XmcCmdStats             = $07
+XmcCmdResetUsage        = $08
+XmcCmdRelease           = $09
+XmcCmdAlloc             = $0A
+XmcCmdNStash            = $0B
+XmcCmdNFetch            = $0C
+XmcCmdNDelete           = $0D
+XmcCmdNDirOpen          = $0E
+XmcCmdNDirRead          = $0F
+XmcStatusIdle           = $00
+XmcStatusOk             = $02
+XmcStatusError          = $03
+XmcErrNone              = $00
+XmcErrRange             = $01
+XmcErrBadArgs           = $02
+XmcErrNotFound          = $03
+XmcErrNoSpace           = $04
+XmcErrName              = $05
+XmcErrEndOfDir          = $06
+
+; --- Timer controller registers ($BA40-$BA4F) ---
+TimerBase               = $BA40
+TimerEnd                = $BA4F
+TimerCtrl               = $BA40
+TimerStatus             = $BA41
+TimerDivL               = $BA42
+TimerDivH               = $BA43
+
+; --- DMA controller registers ($BA60-$BA7F) ---
+DmaBase                 = $BA60
+DmaEnd                  = $BA7F
+DmaCmd                  = $BA60
+DmaStatus               = $BA61
+DmaErrCode              = $BA62
+DmaSrcSpace             = $BA63
+DmaDstSpace             = $BA64
+DmaSrcL                 = $BA65
+DmaSrcM                 = $BA66
+DmaSrcH                 = $BA67
+DmaDstL                 = $BA68
+DmaDstM                 = $BA69
+DmaDstH                 = $BA6A
+DmaLenL                 = $BA6B
+DmaLenM                 = $BA6C
+DmaLenH                 = $BA6D
+DmaMode                 = $BA6E
+DmaFillValue            = $BA6F
+DmaCountL               = $BA70
+DmaCountM               = $BA71
+DmaCountH               = $BA72
+DmaCmdStart             = $01
+DmaStatusIdle           = $00
+DmaStatusBusy           = $01
+DmaStatusOk             = $02
+DmaStatusError          = $03
+DmaErrNone              = $00
+DmaErrBadCmd            = $01
+DmaErrBadSpace          = $02
+DmaErrRange             = $03
+DmaErrBadArgs           = $04
+DmaErrWriteProt         = $05
+DmaModeFill             = $01
+DmaSpaceCpuRam          = $00
+DmaSpaceVgcChar         = $01
+DmaSpaceVgcColor        = $02
+DmaSpaceVgcGfx          = $03
+DmaSpaceVgcSprite       = $04
+DmaSpaceXram            = $05
+
+; --- Blitter controller registers ($BA80-$BA9F) ---
+BltBase                 = $BA80
+BltEnd                  = $BA9F
+BltCmd                  = $BA80
+BltStatus               = $BA81
+BltErrCode              = $BA82
+BltSrcSpace             = $BA83
+BltDstSpace             = $BA84
+BltSrcL                 = $BA85
+BltSrcM                 = $BA86
+BltSrcH                 = $BA87
+BltDstL                 = $BA88
+BltDstM                 = $BA89
+BltDstH                 = $BA8A
+BltWidthL               = $BA8B
+BltWidthH               = $BA8C
+BltHeightL              = $BA8D
+BltHeightH              = $BA8E
+BltSrcStrideL           = $BA8F
+BltSrcStrideH           = $BA90
+BltDstStrideL           = $BA91
+BltDstStrideH           = $BA92
+BltMode                 = $BA93
+BltFillValue            = $BA94
+BltColorKey             = $BA95
+BltCountL               = $BA96
+BltCountM               = $BA97
+BltCountH               = $BA98
+BltCmdStart             = $01
+BltStatusIdle           = $00
+BltStatusBusy           = $01
+BltStatusOk             = $02
+BltStatusError          = $03
+BltErrNone              = $00
+BltErrBadCmd            = $01
+BltErrBadSpace          = $02
+BltErrRange             = $03
+BltErrBadArgs           = $04
+BltErrWriteProt         = $05
+BltModeFill             = $01
+BltModeColorKey         = $02
+FreeBase                = $BAA0
+FreeEnd                 = $BFFF
+
+; --- Network Interface Controller (NIC) registers ($A100-$A13F) ---
+NicBase                 = $A100
+NicEnd                  = $A13F
+NicCmd                  = $A100
+NicStatus               = $A101
+NicSlot                 = $A102
+NicIrqCtrl              = $A103
+NicIrqStatus            = $A104
+NicRemotePortL          = $A108
+NicRemotePortH          = $A109
+NicLocalPortL           = $A10A
+NicLocalPortH           = $A10B
+NicDmaAddrL             = $A110
+NicDmaAddrH             = $A111
+NicDmaLen               = $A112
+NicMsgLen               = $A113
+NicSlotStatus0          = $A118
+NicSlotStatus1          = $A119
+NicSlotStatus2          = $A11A
+NicSlotStatus3          = $A11B
+NicNameBuf              = $A120
+NicNameEnd              = $A13F
+NicCmdConnect           = $01
+NicCmdDisconnect        = $02
+NicCmdSend              = $03
+NicCmdRecv              = $04
+NicCmdListen            = $05
+NicCmdAccept            = $06
+NicSlotConnected        = $01
+NicSlotDataReady        = $02
+NicSlotSendReady        = $04
+NicSlotError            = $08
+NicSlotRemoteClosed     = $10
+NicStatusReady          = $01
+NicStatusAnyData        = $02
+NicStatusAnyError       = $80
+NicMaxSlots             = $04
+NicMaxMessageSize       = $0100
+NicMaxQueueDepth        = $10
+RomBase                 = $C000
+RomEnd                  = $FFFF
+
+; --- Screen / graphics dimensions ---
+ScreenCols              = $50
+ScreenRows              = $19
+GfxWidth                = $0140
+GfxHeight               = $C8
+MaxSprites              = $10
+SpritePixelSize         = $10
+SpriteBytesPerRow       = $08
+SpriteShapeSize         = $80
+PaletteSize             = $10
+FrameRateHz             = $3C
+TimerTickQuantumCycles  = $64
+DmaBytesPerCycle        = $04
+BltOpsPerCycle          = $02
+SpritePriBehindAll      = $00
+SpritePriBetween        = $01
+SpritePriInFront        = $02
+SpriteRegBase           = $A040
+SpriteRegEnd            = $A0BF
+SpriteRegStride         = $08
+SprRegXLo               = $00
+SprRegXHi               = $01
+SprRegYLo               = $02
+SprRegYHi               = $03
+SprRegShape             = $04
+SprRegFlags             = $05
+SprRegPriority          = $06
+SprRegTransColor        = $07
+SprFlagXFlip            = $01
+SprFlagYFlip            = $02
+SprFlagFlipMask         = $03
+SprFlagEnable           = $80
+ShapeSlotCount          = $0100
+
+; --- VGC core registers ($A000-$A00F) ---
+RegMode                 = $A000
+RegBgCol                = $A001
+RegFgCol                = $A002
+RegCursorX              = $A003
+RegCursorY              = $A004
+RegScrollX              = $A005
+RegScrollY              = $A006
+RegFont                 = $A007
+RegStatus               = $A008
+RegSpriteCount          = $A009
+RegCursorEnable         = $A00A
+RegColSt                = $A00B
+RegColBg                = $A00C
+RegBorder               = $A00D
+RegCharOut              = $A00E
+RegCharIn               = $A00F
+
+; --- Command register and parameters ($A010-$A01E) ---
+RegCmd                  = $A010
+RegP0                   = $A011
+RegP1                   = $A012
+RegP2                   = $A013
+RegP3                   = $A014
+RegP4                   = $A015
+RegP5                   = $A016
+RegP6                   = $A017
+RegP7                   = $A018
+RegP8                   = $A019
+RegP9                   = $A01A
+RegP10                  = $A01B
+RegP11                  = $A01C
+RegP12                  = $A01D
+RegP13                  = $A01E
+
+; --- IRQ control register ($A01F) ---
+RegIrqCtrl              = $A01F
+
+; --- Graphics commands ---
+CmdPlot                 = $01
+CmdUnplot               = $02
+CmdLine                 = $03
+CmdCircle               = $04
+CmdRect                 = $05
+CmdFill                 = $06
+CmdGcls                 = $07
+CmdGcolor               = $08
+CmdPaint                = $09
+
+; --- Sprite commands ---
+CmdSprDef               = $10
+CmdSprRow               = $11
+CmdSprClr               = $12
+CmdSprCopy              = $13
+CmdSprPos               = $14
+CmdSprEna               = $15
+CmdSprDis               = $16
+CmdSprFlip              = $17
+CmdSprPri               = $18
+
+; --- VGC memory I/O commands (via RegP0..RegP4) ---
+CmdMemRead              = $19
+CmdMemWrite             = $1A
+
+; --- Copper (raster) commands ---
+CmdCopperAdd            = $1B
+CmdCopperClear          = $1C
+CmdCopperEnable         = $1D
+CmdCopperDisable        = $1E
+CmdSysReset             = $1F
+CmdCopperList           = $20
+CmdCopperUse            = $21
+CmdCopperListEnd        = $22
+CopperListCount         = $80
+MaxCopperEntriesPerList = $0100
+MemSpaceScreen          = $00
+MemSpaceColor           = $01
+MemSpaceGfx             = $02
+MemSpaceSprite          = $03
+
+; --- Help system registers ($A020-$A030) ---
+RegHelp                 = $A020
+HelpSearchBuffer        = $A021
+HelpSearchBufferLen     = $10
+
+; --- ROM swap register ($A03F) ---
+RegRomSwap              = $A03F
+RomSwapNcc              = $01
+RomSwapBasic            = $02
+RomSwapNccEdit          = $03
+
+; --- Compiler Controller registers ($A031-$A03E) ---
+CmpBase                 = $A031
+CmpEnd                  = $A03E
+CmpCmd                  = $A031
+CmpStatus               = $A032
+CmpErrCount             = $A033
+CmpWarnCount            = $A034
+CmpErrLineL             = $A035
+CmpErrLineH             = $A036
+CmpCodeSizeL            = $A037
+CmpCodeSizeH            = $A038
+CmpErrMsg               = $A039
+CmpErrIdx               = $A03A
+CmpSrcAddrL             = $A03B
+CmpSrcAddrM             = $A03C
+CmpSrcAddrH             = $A03D
+CmpCmdCompile           = $01
+CmpCmdGetError          = $02
+CmpCmdGetWarn           = $03
+CmpStatusIdle           = $00
+CmpStatusCompiling      = $01
+CmpStatusOk             = $02
+CmpStatusError          = $03
+
+; --- ROM Entry Points (from basic.sym) ---
+LAB_COLD                = $C000
+V_INPT                  = $E741
+V_OUTP                  = $E744
+V_LOAD                  = $E747
+V_SAVE                  = $E74A
