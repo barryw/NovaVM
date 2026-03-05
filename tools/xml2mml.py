@@ -32,6 +32,7 @@ class MxlPart:
     voices: list[list[LyNote]] = field(default_factory=list)
     midi_program: int = 0
     instrument: str = ""
+    key_fifths: int = 0
 
 
 def _parse_pitch(note_el: ET.Element) -> tuple[str, int, int]:
@@ -186,6 +187,9 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
         # Transposition
         transpose_chromatic: int = 0
 
+        # Key signature
+        current_key_fifths: int = 0
+
         measures = _expand_repeats(part_el.findall("measure"))
         for measure_el in measures:
             # Track which voices are active in this measure
@@ -215,6 +219,11 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                     if transpose_el is not None:
                         chromatic_text = transpose_el.findtext("chromatic", "0")
                         transpose_chromatic = int(chromatic_text)
+                    key_el = el.find("key")
+                    if key_el is not None:
+                        fifths_text = key_el.findtext("fifths")
+                        if fifths_text is not None:
+                            current_key_fifths = int(fifths_text)
                     continue
 
                 if el.tag != "note":
@@ -331,6 +340,7 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
             voices=voices_list,
             midi_program=meta["midi_program"],
             instrument=meta["instrument"],
+            key_fifths=current_key_fifths,
         ))
 
     return parts
@@ -588,10 +598,11 @@ def _build_ly_voices(
     max_voices: int,
     no_split: bool,
     explicit_parts: dict[str, int] | None,
-) -> tuple[list[LyVoice], dict[str, int], dict[int, tuple[int, int, int, int, int, str]]]:
+) -> tuple[list[LyVoice], dict[str, int], dict[int, tuple[int, int, int, int, int, str]], dict[str, int]]:
     """Convert *MxlPart* objects into *LyVoice* objects ready for MML."""
     all_streams: dict[str, list[LyNote]] = {}
     stream_instruments: dict[str, str] = {}
+    stream_key_fifths: dict[str, int] = {}
 
     for part in parts:
         for vi, voice_notes in enumerate(part.voices):
@@ -600,6 +611,7 @@ def _build_ly_voices(
                 all_streams[name] = voice_notes
                 instr = gm_to_instrument(part.midi_program)
                 stream_instruments[name] = instr or part.instrument or ""
+                stream_key_fifths[name] = part.key_fifths
             else:
                 sub_voices = split_chords(voice_notes)
                 for si, sv in enumerate(sub_voices):
@@ -614,6 +626,7 @@ def _build_ly_voices(
                     all_streams[name] = sv
                     instr = gm_to_instrument(part.midi_program)
                     stream_instruments[name] = instr or part.instrument or ""
+                    stream_key_fifths[name] = part.key_fifths
 
     if explicit_parts:
         selected = [(n, all_streams[n]) for n in explicit_parts if n in all_streams]
@@ -641,7 +654,12 @@ def _build_ly_voices(
         else:
             instruments[vn] = DEFAULT_INSTRUMENTS[0]
 
-    return voices, voice_map, instruments
+    # Build key_fifths map for selected voices
+    voice_key_fifths: dict[str, int] = {
+        name: stream_key_fifths.get(name, 0) for name, _ in selected
+    }
+
+    return voices, voice_map, instruments, voice_key_fifths
 
 
 # ---------------------------------------------------------------------------
@@ -699,7 +717,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Build LyVoice objects
     explicit_parts = parse_parts_flag(args.parts)
-    voices, voice_map, instruments = _build_ly_voices(
+    voices, voice_map, instruments, voice_key_fifths = _build_ly_voices(
         parts, args.max_voices, args.no_split, explicit_parts,
     )
 
@@ -709,7 +727,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Expand ornaments
     for v in voices:
-        v.notes = expand_ornaments(v.notes, key_fifths=0)
+        v.notes = expand_ornaments(v.notes, key_fifths=voice_key_fifths.get(v.name, 0))
 
     if args.mml_only:
         for v in voices:
