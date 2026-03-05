@@ -167,10 +167,50 @@ behavior.
 
 ## VOLUME
 
-`VOLUME level`
+`VOLUME level [, voice]`
 
-Sets the SID master volume. `level` is 0--15 (only the low nibble is
-used). The default volume at boot is 12.
+Sets the SID volume. When `voice` is omitted, sets the master volume
+(0--15). When `voice` is given (1--6), sets the per-voice volume (0--15)
+for that voice. Both use the same 4-bit range. See the Per-Voice Volume
+section below for details. The default master volume at boot is 12; the
+default per-voice volume is 15 (full).
+
+## Per-Voice Volume
+
+::: note
+**NovaBASIC extension.** The original MOS 6581 SID chip only has a single
+master volume control shared by all three voices. NovaBASIC adds per-voice
+volume that allows individual voice levels to be set independently.
+:::
+
+`VOLUME level, voice`
+
+- `level` -- volume level (0--15). 0 is silent; 15 is full volume.
+- `voice` -- voice number (1--6). If omitted, sets the master volume
+instead.
+
+Both master and per-voice volume use the same 0--15 range, matching the
+4-bit volume resolution of the original MOS 6581 SID chip.
+
+```basic
+10 VOLUME 15
+20 VOLUME 15, 1 : REM VOICE 1 FULL
+30 VOLUME 5, 2  : REM VOICE 2 QUIET
+40 VOLUME 10, 3 : REM VOICE 3 MEDIUM
+```
+
+Per-voice volume is applied after the ADSR envelope but before the filter and
+master volume. This means it acts as a scaling factor on top of the
+envelope -- it does not replace it. The default for all voices is 15
+(full), so programs that never set per-voice volume behave identically to a
+standard SID.
+
+Use cases include MIDI velocity mapping, balancing a loud bass against a
+delicate melody, and per-voice fade-in/fade-out effects.
+
+Under the hood, per-voice volume is stored in SID extension registers
+`$1D`--`$1F` (relative to each chip's base address). These registers do
+not exist on the real MOS 6581/8580.
 
 ## The MUSIC Engine
 
@@ -411,6 +451,7 @@ cutoff 200 with high resonance, sweeping upward through the melody.
 | L | denominator | Default note length |
 | T | bpm | Tempo (default 120) |
 | I | 0--15 | Select instrument slot |
+| V | 0--15 | Per-voice volume (default 15) |
 | & | [note]dur | Tie (extend note duration) |
 | [...]n | repeat count | Loop section n times |
 | \{notes\} | [dur][.] | Arpeggio |
@@ -453,6 +494,35 @@ and play routines at 60 Hz.
 SID playback takes over the SID chip directly. `SOUND` and `MUSIC`
 commands will not produce audible output while a SID file is playing. Call
 `SIDSTOP` before using other sound commands.
+:::
+
+## MIDI File Playback
+
+NovaBASIC can load and play standard MIDI files (`.mid`), automatically
+mapping General MIDI instruments and velocity to the SID sound engine:
+
+| **Command** | **Description** |
+| --- | --- |
+| MIDPLAY "filename" | Load and play a `.mid` file. Auto-selects the 6 busiest channels. |
+| MIDSTOP | Stop MIDI playback. |
+
+```basic
+10 MIDPLAY "entertainer"
+20 FOR I = 1 TO 1800 : VSYNC : NEXT I
+30 MIDSTOP
+```
+
+MIDI files are loaded from the `~/e6502-programs` directory. The `.mid`
+extension is added automatically.
+
+The MIDI engine maps General MIDI program numbers to eight SID instrument
+buckets (pulse piano, saw strings, triangle flute, noise drums, etc.) and
+converts MIDI note velocity to per-voice volume (0--15).
+
+::: warning
+MIDI playback uses the MusicEngine (voices 1--6). `SOUND` and `MUSIC`
+commands will conflict while a MIDI file is playing. Call `MIDSTOP` before
+using other music commands.
 :::
 
 ## Graphics File I/O
@@ -598,5 +668,8 @@ Experiments:
 `"T120 I0 4 L8 O4 ..."`.
 - Add a filter sweep to voice 2:
 `"T120 I1 @FL @F200,10 @FS+ L4 O3 C G C G"`.
+- Balance the mix with per-voice volume: add
+`VOLUME 15, 1 : VOLUME 8, 2 : VOLUME 5, 3` before `MUSIC PLAY`
+to push the melody forward and pull back the bass and drums.
 
 :::

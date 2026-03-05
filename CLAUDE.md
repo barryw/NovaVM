@@ -79,7 +79,8 @@ $A100-$A13F  Network Interface Controller (NIC) registers
 $BA50-$BA53  Music status + voice note readback
 $BC00-$BFFF  XMC window (4x256-byte pages into 512KB XRAM)
 $C000-$FFFF  ROM (EhBASIC, write-protected)
-$D400-$D41C  SID chip registers (inside ROM range, intercepted on Write)
+$D400-$D41F  SID 1 registers (inside ROM range, intercepted on Write)
+$D420-$D43F  SID 2 registers (inside ROM range, intercepted on Write)
 ```
 
 ### Virtual Graphics Controller (`VGC`)
@@ -90,11 +91,13 @@ Rendering at 60Hz: background fill → priority-0 sprites → text/gfx layers (o
 
 ### SID Chip & Music Engine
 
-**SidChip** (`Hardware/SidChip.cs`): Software MOS 6581 emulation with 3 voices, ADSR envelopes, 4 waveforms, ring modulation, sync, and state-variable filter. Audio rendered in a background thread via OpenAL at 44100Hz, fully decoupled from CPU clock.
+**SidChip** (`Hardware/SidChip.cs`): Software MOS 6581 emulation with 3 voices, ADSR envelopes, 4 waveforms, ring modulation, sync, and state-variable filter. Extended with per-voice volume registers at $1D-$1F (0-255, default 255) — not present on the real SID. Audio rendered in a background thread via OpenAL at 44100Hz, fully decoupled from CPU clock.
 
 **MusicEngine** (`Hardware/MusicEngine.cs`): 3-voice MML sequencer on top of SidChip, ticked at 60Hz. Supports 16 instrument slots, one-shot SFX with voice stealing, and per-frame effects (arpeggio, vibrato, portamento, PWM/filter sweep). MML parsed by `MmlParser` into `MmlEvent` lists.
 
 **SidPlayer** (`Hardware/SidPlayer.cs`): Plays `.sid` files by injecting an IRQ trampoline into CPU RAM that calls init/play routines at 60Hz.
+
+**MidiPlayback** (`Hardware/MidiPlayback.cs`): Plays standard `.mid` files through the MusicEngine. Auto-selects the 6 busiest MIDI channels, maps GM program numbers to SID instrument buckets, converts velocity to per-voice volume (0--15), and maps channel 10 drums to the noise waveform.
 
 ### Network Interface Controller (`Hardware/VirtualNetworkController.cs`)
 
@@ -102,11 +105,11 @@ Message-oriented TCP networking at $A100-$A13F. 4 connection slots, each support
 
 ### FileIoController (`Hardware/FileIoController.cs`)
 
-6502-accessible file I/O at $B9A0-$B9EF. Commands: Save/Load (CPU RAM ↔ `.bas` files), GSave/GLoad (VGC memory spaces ↔ `.gfx` files), DirOpen/DirRead, Delete, and music/sound forwarding to MusicEngine. Save directory: `~/e6502-programs`.
+6502-accessible file I/O at $B9A0-$B9EF. Commands: Save/Load (CPU RAM ↔ `.bas` files), GSave/GLoad (VGC memory spaces ↔ `.gfx` files), DirOpen/DirRead, Delete, MidPlay/MidStop (MIDI file playback), and music/sound forwarding to MusicEngine. Save directory: `~/e6502-programs`.
 
 ### TCP Server & MCP
 
-**TCP** (`Ipc/EmulatorTcpServer.cs`): Listens on port 6502 (or `EMULATOR_PORT` env var). Newline-delimited JSON request/response protocol. Exposes the full emulator surface: screen I/O, graphics, sprites, SID playback, music engine, file management.
+**TCP** (`Ipc/EmulatorTcpServer.cs`): Listens on port 6502 (or `EMULATOR_PORT` env var). Newline-delimited JSON request/response protocol. Exposes the full emulator surface: screen I/O, graphics, sprites, SID playback, music engine, MIDI playback (`mid_play`/`mid_stop`), file management.
 
 **MCP** (`e6502.MCP/`): Separate process bridging Model Context Protocol (stdio) to the TCP server. `EmulatorClient` is a singleton TCP client. All `[McpServerTool]` methods in `EmulatorTools` map to TCP commands. Higher-level helpers: `EnterBasicLine` uppercases outside quotes; `RunProgram` types RUN and waits for Ready.
 
