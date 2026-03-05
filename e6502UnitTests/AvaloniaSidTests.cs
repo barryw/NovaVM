@@ -23,9 +23,9 @@ public class AvaloniaSidTests
     {
         var sid = new SidChip(enableAudio: false);
         Assert.IsTrue(sid.OwnsAddress(SidBase));
-        Assert.IsTrue(sid.OwnsAddress(SidBase + 0x1C));
+        Assert.IsTrue(sid.OwnsAddress(SidBase + 0x1F));
         Assert.IsFalse(sid.OwnsAddress(SidBase - 1));
-        Assert.IsFalse(sid.OwnsAddress(SidBase + 0x1D));
+        Assert.IsFalse(sid.OwnsAddress(SidBase + 0x20));
     }
 
     [TestMethod]
@@ -81,11 +81,11 @@ public class AvaloniaSidTests
     {
         var sid2 = new SidChip(enableAudio: false, baseAddress: 0xD420);
         Assert.AreEqual((ushort)0xD420, sid2.BaseAddress);
-        Assert.AreEqual((ushort)0xD43C, sid2.EndAddress);
+        Assert.AreEqual((ushort)0xD43F, sid2.EndAddress);
         Assert.IsTrue(sid2.OwnsAddress(0xD420));
-        Assert.IsTrue(sid2.OwnsAddress(0xD43C));
+        Assert.IsTrue(sid2.OwnsAddress(0xD43F));
         Assert.IsFalse(sid2.OwnsAddress(0xD41F));
-        Assert.IsFalse(sid2.OwnsAddress(0xD43D));
+        Assert.IsFalse(sid2.OwnsAddress(0xD440));
         // Should NOT own SID1 range
         Assert.IsFalse(sid2.OwnsAddress(0xD400));
     }
@@ -132,5 +132,37 @@ public class AvaloniaSidTests
         bus.Write(0xD501, 0xBB);
         Assert.AreEqual(0xAA, bus.Sid2.Read(0xD420));
         Assert.AreEqual(0xBB, bus.Sid2.Read(0xD421));
+    }
+
+    [TestMethod]
+    public void MusicEngine_DirectNoteOn_SetsVoiceNote()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var engine = bus.Music;
+        engine.EnterMidiMode();
+        engine.DirectNoteOn(0, 60, 100, 0);
+        Assert.AreEqual(60, engine.GetVoiceNote(0));
+    }
+
+    [TestMethod]
+    public void MusicEngine_DirectNoteOff_ClearsVoiceNote()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var engine = bus.Music;
+        engine.EnterMidiMode();
+        engine.DirectNoteOn(0, 60, 100, 0);
+        engine.DirectNoteOff(0);
+        Assert.AreEqual(0, engine.GetVoiceNote(0));
+    }
+
+    [TestMethod]
+    public void MusicEngine_DirectNoteSlide_UpdatesVoiceNote()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var engine = bus.Music;
+        engine.EnterMidiMode();
+        engine.DirectNoteOn(0, 60, 100, 0);
+        engine.DirectNoteSlide(0, 72);
+        Assert.AreEqual(72, engine.GetVoiceNote(0));
     }
 }

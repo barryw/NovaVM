@@ -72,6 +72,7 @@ public sealed class MusicEngine
 
     private readonly SidChip _sid;
     private readonly SidChip _sid2;
+    private readonly int _frameRateHz;
 
     // Instrument table
     private readonly SidInstrument[] _instruments = new SidInstrument[InstrumentSlots];
@@ -98,6 +99,7 @@ public sealed class MusicEngine
     {
         _sid = bus.Sid;
         _sid2 = bus.Sid2;
+        _frameRateHz = bus.FrameRateHz;
 
         // Default instrument 0: pulse, A=0, D=9, S=0, R=6
         _instruments[0] = new SidInstrument
@@ -239,6 +241,18 @@ public sealed class MusicEngine
 
         // Gate on
         chip.Write(Ctrl(voiceIndex), (byte)(inst.Waveform | 0x01));
+        _voices[voiceIndex].CurrentMidi = midiNote;
+    }
+
+    /// <summary>Change frequency without re-gating (legato transition).</summary>
+    public void DirectNoteSlide(int voiceIndex, int midiNote)
+    {
+        if (voiceIndex < 0 || voiceIndex >= VoiceCount) return;
+        int sidFreq = MidiToSid(midiNote);
+        var chip = ChipFor(voiceIndex);
+        chip.Write(FreqLo(voiceIndex), (byte)(sidFreq & 0xFF));
+        chip.Write(FreqHi(voiceIndex), (byte)((sidFreq >> 8) & 0xFF));
+        _voices[voiceIndex].CurrentMidi = midiNote;
     }
 
     public void DirectNoteOff(int voiceIndex)
@@ -247,6 +261,7 @@ public sealed class MusicEngine
         var chip = ChipFor(voiceIndex);
         byte ctrl = chip.Read(Ctrl(voiceIndex));
         chip.Write(Ctrl(voiceIndex), (byte)(ctrl & 0xFE)); // gate off
+        _voices[voiceIndex].CurrentMidi = -1;
     }
 
     private void WriteVolumeToBoth(int level)
@@ -289,7 +304,7 @@ public sealed class MusicEngine
             voice.Events.AddRange(newEvents);  // append before PLAY
         else
             voice.Events = newEvents;          // replace
-        voice.Reset(_bpm);
+        voice.Reset(_bpm, _frameRateHz);
     }
 
     public void MusicPlay()
@@ -297,7 +312,7 @@ public sealed class MusicEngine
         _musicPlaying = true;
         for (int i = 0; i < VoiceCount; i++)
         {
-            _voices[i].Reset(_bpm);
+            _voices[i].Reset(_bpm, _frameRateHz);
             _voices[i].CurrentInstrument = GetInstrument(0);
         }
     }
@@ -322,7 +337,7 @@ public sealed class MusicEngine
         for (int i = 0; i < VoiceCount; i++)
         {
             _voices[i].Events = new List<MmlEvent>();
-            _voices[i].Reset(_bpm);
+            _voices[i].Reset(_bpm, _frameRateHz);
         }
     }
 
@@ -330,7 +345,7 @@ public sealed class MusicEngine
     {
         _bpm = bpm;
         for (int i = 0; i < VoiceCount; i++)
-            _voices[i].UpdateTempo(bpm);
+            _voices[i].UpdateTempo(bpm, _frameRateHz);
     }
 
     public void SetLoop(bool loop) => _loop = loop;
@@ -395,7 +410,7 @@ public sealed class MusicEngine
             {
                 // Restart all voices
                 for (int i = 0; i < VoiceCount; i++)
-                    _voices[i].Reset(_bpm);
+                    _voices[i].Reset(_bpm, _frameRateHz);
             }
             else
             {
@@ -500,7 +515,7 @@ public sealed class MusicEngine
             case MmlEventType.SetTempo:
                 _bpm = ev.Param1;
                 for (int i = 0; i < VoiceCount; i++)
-                    _voices[i].UpdateTempo(_bpm);
+                    _voices[i].UpdateTempo(_bpm, _frameRateHz);
                 break;
 
             case MmlEventType.SetInstrument:
@@ -721,7 +736,7 @@ public sealed class MusicEngine
         // Filter sweep
         public int FilterSweepDir;
 
-        public void Reset(int bpm)
+        public void Reset(int bpm, int frameRateHz)
         {
             EventIndex    = 0;
             TickAccum     = 0;
@@ -736,14 +751,13 @@ public sealed class MusicEngine
             PortamentoActive = false;
             PortamentoTarget = -1;
             FilterSweepDir   = 0;
-            UpdateTempo(bpm);
+            UpdateTempo(bpm, frameRateHz);
         }
 
-        public void UpdateTempo(int bpm)
+        public void UpdateTempo(int bpm, int frameRateHz)
         {
             // ticks per frame = ticks-per-beat * bpm / frames-per-minute
-            // ticks-per-beat = 96, frames-per-minute = 60 * 60 = 3600
-            TicksPerFrame = 96.0 * bpm / 3600.0;
+            TicksPerFrame = 96.0 * bpm / (frameRateHz * 60.0);
         }
     }
 }
