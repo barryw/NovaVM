@@ -10,7 +10,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-from xml2mml import load_musicxml, parse_musicxml, MxlPart, split_chords
+from xml2mml import load_musicxml, parse_musicxml, MxlPart, split_chords, expand_ornaments
 
 
 SIMPLE_XML = """\
@@ -428,3 +428,86 @@ class TestChordSplitting:
         assert v0_notes[0].letter == "g"
         assert v1_notes[0].letter == "e"
         assert v2_notes[0].letter == "c"
+
+
+class TestOrnaments:
+    def test_mordent(self):
+        xml = _make_note_xml("<notations><ornaments><mordent/></ornaments></notations>")
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        expanded = expand_ornaments(notes, key_fifths=0)
+        assert len(expanded) == 3
+        assert all(n.duration == 32 for n in expanded)
+        # mordent: main(C) -> lower(B) -> main(C)
+        assert expanded[0].letter == "c"
+        assert expanded[1].letter == "b"
+        assert expanded[2].letter == "c"
+
+    def test_inverted_mordent(self):
+        xml = _make_note_xml("<notations><ornaments><inverted-mordent/></ornaments></notations>")
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        expanded = expand_ornaments(notes, key_fifths=0)
+        assert len(expanded) == 3
+        # inverted-mordent: main(C) -> upper(D) -> main(C)
+        assert expanded[0].letter == "c"
+        assert expanded[1].letter == "d"
+        assert expanded[2].letter == "c"
+
+    def test_turn(self):
+        xml = _make_note_xml("<notations><ornaments><turn/></ornaments></notations>")
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        expanded = expand_ornaments(notes, key_fifths=0)
+        assert len(expanded) == 4
+        # turn: upper(D) -> main(C) -> lower(B) -> main(C)
+        assert expanded[0].letter == "d"
+        assert expanded[1].letter == "c"
+        assert expanded[2].letter == "b"
+        assert expanded[3].letter == "c"
+
+    def test_fermata_doubles_duration(self):
+        xml = _make_note_xml("<notations><fermata/></notations>")
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert notes[0].duration == 4  # quarter
+        expanded = expand_ornaments(notes, key_fifths=0)
+        assert len(expanded) == 1
+        assert expanded[0].duration == 2  # half (doubled length)
+
+    def test_grace_note(self):
+        xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <grace slash="yes"/>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>'''
+        parts = _parse_simple_xml(xml)
+        notes = [n for n in parts[0].voices[0] if not n.bar_marker]
+        assert len(notes) == 2
+        # Grace note should have _grace attribute
+        assert getattr(notes[0], '_grace', False) is True
+        assert getattr(notes[0], '_grace_slash', False) is True
+        expanded = expand_ornaments(notes, key_fifths=0)
+        assert len(expanded) == 2
+        # Grace becomes 32nd
+        assert expanded[0].duration == 32
+        assert expanded[0].letter == "d"
+        # Main note unchanged
+        assert expanded[1].duration == 4
+        assert expanded[1].letter == "c"

@@ -108,6 +108,11 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
 
                 is_chord = note_el.find("chord") is not None
 
+                # Detect grace notes (no <duration> element in MusicXML)
+                grace_el = note_el.find("grace")
+                is_grace = grace_el is not None
+                grace_slash = is_grace and grace_el.get("slash") == "yes"
+
                 voice_num = int(note_el.findtext("voice", "1"))
                 measure_voices.add(voice_num)
 
@@ -121,7 +126,11 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                 if tie_el is not None and tie_el.get("type") == "start":
                     tied = True
 
-                duration = _parse_duration_type(note_el)
+                if is_grace:
+                    # Grace notes have no <duration>; use <type> or default to 32
+                    duration = _parse_duration_type(note_el) if note_el.find("type") is not None else 32
+                else:
+                    duration = _parse_duration_type(note_el)
 
                 # Parse articulations / expressions from <notations>
                 staccato = False
@@ -129,6 +138,8 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                 trill = False
                 slur_start = False
                 slur_end = False
+                ornament_type: str | None = None
+                has_fermata = False
 
                 for notations_el in note_el.findall("notations"):
                     for art_el in notations_el.findall("articulations"):
@@ -139,12 +150,17 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                     for orn_el in notations_el.findall("ornaments"):
                         if orn_el.find("trill-mark") is not None:
                             trill = True
+                        for orn_name in ("mordent", "inverted-mordent", "turn", "inverted-turn"):
+                            if orn_el.find(orn_name) is not None:
+                                ornament_type = orn_name
                     for slur_el in notations_el.findall("slur"):
                         stype = slur_el.get("type", "")
                         if stype == "start":
                             slur_start = True
                         elif stype == "stop":
                             slur_end = True
+                    if notations_el.find("fermata") is not None:
+                        has_fermata = True
 
                 if is_rest:
                     ln = LyNote(
@@ -165,6 +181,13 @@ def parse_musicxml(root: ET.Element) -> list[MxlPart]:
                     )
 
                 ln._chord = is_chord  # type: ignore[attr-defined]
+                if ornament_type:
+                    ln._ornament = ornament_type  # type: ignore[attr-defined]
+                if has_fermata:
+                    ln._fermata = True  # type: ignore[attr-defined]
+                if is_grace:
+                    ln._grace = True  # type: ignore[attr-defined]
+                    ln._grace_slash = grace_slash  # type: ignore[attr-defined]
 
                 # Clear pending dynamic after first note receives it
                 if pending_dynamic:
@@ -233,6 +256,86 @@ def _load_mxl(path: Path) -> ET.Element:
                 return ET.fromstring(zf.read(name))
 
         raise ValueError("No MusicXML file found in .mxl archive")
+
+
+# ---------------------------------------------------------------------------
+# Ornament expansion
+# ---------------------------------------------------------------------------
+
+_SCALE_LETTERS = ["c", "d", "e", "f", "g", "a", "b"]
+
+
+def _key_accidentals(fifths: int) -> dict[str, int]:
+    """Return accidental adjustments for each note letter given key signature fifths."""
+    sharps_order = ["f", "c", "g", "d", "a", "e", "b"]
+    flats_order = ["b", "e", "a", "d", "g", "c", "f"]
+    acc: dict[str, int] = {}
+    if fifths > 0:
+        for i in range(min(fifths, 7)):
+            acc[sharps_order[i]] = 1
+    elif fifths < 0:
+        for i in range(min(-fifths, 7)):
+            acc[flats_order[i]] = -1
+    return acc
+
+
+def _neighbor_note(letter, octave, accidental, direction, key_acc):
+    """Get diatonic neighbor above (direction=1) or below (-1)."""
+    idx = _SCALE_LETTERS.index(letter)
+    new_idx = (idx + direction) % 7
+    new_letter = _SCALE_LETTERS[new_idx]
+    new_octave = octave
+    if direction == 1 and new_idx == 0:
+        new_octave += 1
+    elif direction == -1 and idx == 0:
+        new_octave -= 1
+    new_acc = key_acc.get(new_letter, 0)
+    return new_letter, new_octave, new_acc
+
+
+def _make_ornament_note(letter, octave, accidental, duration=32):
+    return LyNote(letter=letter, accidental=accidental, octave=octave,
+                  duration=duration, dotted=False, tied=False, is_rest=False)
+
+
+def expand_ornaments(notes: list[LyNote], key_fifths: int = 0) -> list[LyNote]:
+    """Expand ornaments, fermatas, grace notes into plain note sequences."""
+    key_acc = _key_accidentals(key_fifths)
+    result = []
+    for n in notes:
+        # Grace note -> emit as 32nd
+        if getattr(n, '_grace', False):
+            result.append(LyNote(letter=n.letter, accidental=n.accidental, octave=n.octave,
+                                 duration=32, dotted=False, tied=False, is_rest=n.is_rest))
+            continue
+
+        # Fermata -> double duration (halve the number)
+        if getattr(n, '_fermata', False):
+            new_dur = max(1, n.duration // 2)
+            result.append(LyNote(letter=n.letter, accidental=n.accidental, octave=n.octave,
+                                 duration=new_dur, dotted=n.dotted, tied=n.tied, is_rest=n.is_rest,
+                                 staccato=n.staccato, accent=n.accent, trill=n.trill,
+                                 slur_start=n.slur_start, slur_end=n.slur_end,
+                                 dynamic=n.dynamic, cresc=n.cresc, decresc=n.decresc))
+            continue
+
+        ornament = getattr(n, '_ornament', None)
+        if ornament and not n.is_rest and not n.bar_marker:
+            upper = _neighbor_note(n.letter, n.octave, n.accidental, 1, key_acc)
+            lower = _neighbor_note(n.letter, n.octave, n.accidental, -1, key_acc)
+            mk = _make_ornament_note
+            if ornament == "mordent":       # main->lower->main
+                result += [mk(n.letter, n.octave, n.accidental), mk(*lower), mk(n.letter, n.octave, n.accidental)]
+            elif ornament == "inverted-mordent":  # main->upper->main
+                result += [mk(n.letter, n.octave, n.accidental), mk(*upper), mk(n.letter, n.octave, n.accidental)]
+            elif ornament == "turn":        # upper->main->lower->main
+                result += [mk(*upper), mk(n.letter, n.octave, n.accidental), mk(*lower), mk(n.letter, n.octave, n.accidental)]
+            elif ornament == "inverted-turn":  # lower->main->upper->main
+                result += [mk(*lower), mk(n.letter, n.octave, n.accidental), mk(*upper), mk(n.letter, n.octave, n.accidental)]
+            continue
+
+        result.append(n)
+    return result
 
 
 # ---------------------------------------------------------------------------
