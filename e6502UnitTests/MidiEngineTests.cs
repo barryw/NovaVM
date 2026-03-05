@@ -323,4 +323,41 @@ public class MidiEngineTests
 
         Assert.IsTrue(mml.Contains("T120"), $"Expected T120 in: {mml}");
     }
+
+    [TestMethod]
+    public void GenerateBasProgram_ProducesValidOutput()
+    {
+        var midi = BuildTestMidi((0, 20, 0), (1, 15, 48));
+        string bas = MidiEngine.GenerateBasProgram(midi,
+            title: "TEST SONG", subtitle: "UNIT TEST",
+            maxLineLen: 200);
+
+        // Should have REM header
+        Assert.IsTrue(bas.Contains("REM"));
+        Assert.IsTrue(bas.Contains("TEST SONG"));
+        // Should have INSTRUMENT definitions
+        Assert.IsTrue(bas.Contains("INSTRUMENT"));
+        // Should have MUSIC statements
+        Assert.IsTrue(bas.Contains("MUSIC 1,"));
+        Assert.IsTrue(bas.Contains("MUSIC 2,"));
+        // Should have VOLUME and MUSIC PLAY
+        Assert.IsTrue(bas.Contains("VOLUME 15"));
+        Assert.IsTrue(bas.Contains("MUSIC PLAY"));
+        // Lines should be numbered
+        Assert.IsTrue(bas.StartsWith("10 REM"));
+    }
+
+    [TestMethod]
+    public void GenerateBasProgram_SplitsLongMml()
+    {
+        // Build a channel with many timed notes to produce MML that exceeds maxLineLen=80.
+        // 40 quarter notes at PPQN=480, each generates ~2 chars of MML → ~80+ chars total.
+        var noteArgs = Enumerable.Repeat((60, 80, 0L, 480L), 40).ToArray();
+        var midi = BuildTimedMidi(480, noteArgs);
+        string bas = MidiEngine.GenerateBasProgram(midi, maxLineLen: 80);
+
+        // Multiple MUSIC 1,"..." lines expected
+        int musicLines = bas.Split('\n').Count(l => l.Contains("MUSIC 1,"));
+        Assert.IsTrue(musicLines > 1, $"Expected multiple MUSIC lines, got {musicLines}");
+    }
 }

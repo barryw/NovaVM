@@ -259,6 +259,102 @@ public static class MidiEngine
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Generate a complete NovaBASIC .bas program from a MIDI file.
+    /// </summary>
+    public static string GenerateBasProgram(MidiFile midi,
+        string title = "", string subtitle = "",
+        int maxLineLen = 200, int maxVoices = 6,
+        Dictionary<int, int>? explicitMapping = null)
+    {
+        int ppqn = ((TicksPerQuarterNoteTimeDivision)midi.TimeDivision).TicksPerQuarterNote;
+        var analysis = AnalyzeChannels(midi);
+        var selectedChannels = SelectChannels(midi, maxVoices, explicitMapping);
+
+        var lines = new List<string>();
+        int lineNum = 10;
+
+        // Header
+        lines.Add($"{lineNum} REM ================================"); lineNum += 10;
+        if (!string.IsNullOrEmpty(title))
+        {
+            lines.Add($"{lineNum} REM  {title}"); lineNum += 10;
+        }
+        if (!string.IsNullOrEmpty(subtitle))
+        {
+            lines.Add($"{lineNum} REM  {subtitle}"); lineNum += 10;
+        }
+        lines.Add($"{lineNum} REM ================================"); lineNum += 10;
+
+        // Instrument definitions
+        var usedBuckets = new Dictionary<int, int>(); // bucket index → instrument slot
+        int nextSlot = 1;
+
+        for (int v = 0; v < selectedChannels.Length; v++)
+        {
+            int ch = selectedChannels[v];
+            var info = analysis[ch];
+            var bucket = GetInstrumentBucket(info.GmProgram, info.IsDrums);
+            int bucketIdx = Array.IndexOf(Buckets, bucket);
+
+            if (!usedBuckets.ContainsKey(bucketIdx))
+            {
+                usedBuckets[bucketIdx] = nextSlot;
+                lines.Add($"{lineNum} INSTRUMENT {nextSlot},{bucket.Waveform},{bucket.Attack},{bucket.Decay},{bucket.Sustain},{bucket.Release}:REM {bucket.Name}");
+                lineNum += 10;
+                nextSlot++;
+            }
+        }
+
+        // MML sequences per voice
+        for (int v = 0; v < selectedChannels.Length; v++)
+        {
+            int ch = selectedChannels[v];
+            var info = analysis[ch];
+            var bucket = GetInstrumentBucket(info.GmProgram, info.IsDrums);
+            int bucketIdx = Array.IndexOf(Buckets, bucket);
+            int instSlot = usedBuckets[bucketIdx];
+
+            string mml = GenerateMml(midi, ch, ppqn);
+            // Prepend instrument selection
+            mml = $"I{instSlot}{mml}";
+
+            int voice = v + 1;
+            var mmlLines = SplitMml(mml, maxLineLen, voice);
+            foreach (var ml in mmlLines)
+            {
+                lines.Add($"{lineNum} {ml}");
+                lineNum += 10;
+            }
+        }
+
+        // Playback
+        lines.Add($"{lineNum} VOLUME 15"); lineNum += 10;
+        lines.Add($"{lineNum} MUSIC PLAY"); lineNum += 10;
+
+        return string.Join("\n", lines) + "\n";
+    }
+
+    /// <summary>Split a long MML string into multiple MUSIC voice,"..." lines.</summary>
+    private static List<string> SplitMml(string mml, int maxLineLen, int voice)
+    {
+        var result = new List<string>();
+        string prefix = $"MUSIC {voice},\"";
+        int maxMml = maxLineLen - prefix.Length - 1; // -1 for closing quote
+
+        int pos = 0;
+        while (pos < mml.Length)
+        {
+            int len = Math.Min(maxMml, mml.Length - pos);
+            result.Add($"{prefix}{mml.Substring(pos, len)}\"");
+            pos += len;
+        }
+
+        return result;
+    }
+
+    public static InstrumentBucket[] GetAllBuckets() => Buckets;
+
     private sealed class MonoNote
     {
         public bool IsRest;
