@@ -3,7 +3,7 @@
 
 CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 
-all: basic.bin keyboard.bin
+all: basic.bin keyboard.bin tokens.json
 
 # ROM build
 basic.bin basic.sym: basic.o ehbasic.cfg
@@ -11,6 +11,10 @@ basic.bin basic.sym: basic.o ehbasic.cfg
 
 basic.o: basic.asm min_mon.asm
 	ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm
+
+# Token table extraction
+tokens.json: basic.asm ../tools/gen_tokens.py
+	python3 ../tools/gen_tokens.py basic.asm -o tokens.json
 
 # Auto-generate hardware constants include
 novavm.inc: ../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym ../tools/gen_novavm_inc.py
