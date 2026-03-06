@@ -517,6 +517,13 @@ XTK_BITTGL        = $45              ; BITTGL addr,mask — toggle bits
 XTK_HELP           = $46              ; HELP [keyword] — open help panel
 XTK_NCC            = $47              ; NCC — activate NCC editor
 XTK_FONT           = $48              ; FONT n — select font slot (0-7)
+XTK_CD             = $49              ; CD "path"
+XTK_MKDIR          = $4A              ; MKDIR "path"
+XTK_RMDIR          = $4B              ; RMDIR "path"
+XTK_FORMAT         = $4C              ; FORMAT "dev:",size
+XTK_MOUNT          = $4D              ; MOUNT "dev:","image"
+XTK_UNMOUNT        = $4E              ; UNMOUNT "dev:"
+XTK_PWD            = $4F              ; PWD
 
 ; offsets from a base of X or Y
 
@@ -1917,6 +1924,13 @@ TAB_XTKCMD
       .word LAB_HELP-1        ; XTK_HELP       ($46)
       .word LAB_NCC-1         ; XTK_NCC        ($47)
       .word LAB_FONT-1        ; XTK_FONT       ($48)
+      .word LAB_CD-1          ; XTK_CD         ($49)
+      .word LAB_MKDIR-1       ; XTK_MKDIR      ($4A)
+      .word LAB_RMDIR-1       ; XTK_RMDIR      ($4B)
+      .word LAB_FORMAT-1      ; XTK_FORMAT     ($4C)
+      .word LAB_MOUNT-1       ; XTK_MOUNT      ($4D)
+      .word LAB_UNMOUNT-1     ; XTK_UNMOUNT    ($4E)
+      .word LAB_PWD-1         ; XTK_PWD        ($4F)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -8636,7 +8650,7 @@ LAB_NCC
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 72
+XTK_COUNT = 79
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8657,6 +8671,13 @@ TAB_XTKSTR
       .word @s_help
       .word @s_ncc
       .word @s_font
+      .word @s_cd
+      .word @s_mkdir
+      .word @s_rmdir
+      .word @s_format
+      .word @s_mount
+      .word @s_unmount
+      .word @s_pwd
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8710,6 +8731,13 @@ TAB_XTKSTR
 @s_help:   .byte "HELP",0
 @s_ncc:    .byte "NCC",0
 @s_font:   .byte "FONT",0
+@s_cd:     .byte "CD",0
+@s_mkdir:  .byte "MKDIR",0
+@s_rmdir:  .byte "RMDIR",0
+@s_format: .byte "FORMAT",0
+@s_mount:  .byte "MOUNT",0
+@s_unmount: .byte "UNMOUNT",0
+@s_pwd:    .byte "PWD",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8841,6 +8869,13 @@ FIO_CMD_MLOOP  = $11           ; set music loop on/off
 FIO_CMD_MPRI   = $12           ; set SFX voice steal priority
 FIO_CMD_MIDPLAY = $13          ; load .mid and start playback
 FIO_CMD_MIDSTOP = $14          ; stop MIDI playback
+FIO_CMD_CD      = $20              ; change directory
+FIO_CMD_MKDIR   = $21              ; make directory
+FIO_CMD_RMDIR   = $22              ; remove directory
+FIO_CMD_FORMAT  = $23              ; format disk image
+FIO_CMD_MOUNT   = $24              ; mount disk image
+FIO_CMD_UNMOUNT = $25              ; unmount device
+FIO_CMD_PWD     = $26              ; print working directory
 MUSIC_STATUS   = $BA50         ; bit 0=SFX playing, bit 1=music playing
 MUSIC_NOTE1    = $BA51         ; voice 1 current MIDI note (0=silent)
 MUSIC_NOTE2    = $BA52         ; voice 2 current MIDI note
@@ -10487,6 +10522,107 @@ LAB_FDEL
       ; trigger DELETE
       LDA   #FIO_CMD_DELETE
       JMP   LAB_FIO_EXEC      ; issue command, check status, return
+
+; perform CD "path"
+
+LAB_CD
+      JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
+      LDA   #FIO_CMD_CD
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+
+; perform MKDIR "path"
+
+LAB_MKDIR
+      JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
+      LDA   #FIO_CMD_MKDIR
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+
+; perform RMDIR "path"
+
+LAB_RMDIR
+      JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
+      LDA   #FIO_CMD_RMDIR
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+
+; perform UNMOUNT "dev:"
+
+LAB_UNMOUNT
+      JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
+      LDA   #FIO_CMD_UNMOUNT
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+
+; perform FORMAT "dev:",size
+
+LAB_FORMAT
+      JSR   LAB_FIO_GETNAME   ; device prefix string into FIO_NAME
+      JSR   LAB_1C01          ; expect comma
+      JSR   LAB_GTWRD         ; get 16-bit word -> FAC1_2:FAC1_3
+      LDA   FAC1_3
+      STA   FIO_SRCL          ; size KB low
+      LDA   FAC1_2
+      STA   FIO_SRCH          ; size KB high
+      LDA   #FIO_CMD_FORMAT
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+
+; perform MOUNT "dev:","image"
+
+LAB_MOUNT
+      JSR   LAB_FIO_GETNAME   ; device prefix → FIO_NAME, FIO_NAMELEN
+      JSR   LAB_1C01          ; expect comma
+      ; FIO_SRCL = offset where second string starts (after first + null)
+      LDA   FIO_NAMELEN
+      CLC
+      ADC   #$01              ; +1 for null separator
+      STA   FIO_SRCL          ; offset of second string
+      ; evaluate second string arg (image name)
+      JSR   LAB_EVEX
+      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
+      TAX                     ; save length in X
+      BEQ   @mnt_bad
+      ; total must fit in 63 bytes
+      CLC
+      TXA
+      ADC   FIO_SRCL
+      CMP   #64
+      BCS   @mnt_bad
+      STA   FIO_NAMELEN       ; total length (both strings + null)
+      ; copy second string: read with Y (indirect), write with absolute,X
+      STX   FIO_SRCH          ; save second string length
+      LDY   #$00              ; source index
+      LDX   FIO_SRCL          ; dest index into FIO_NAME
+@mnt_cp
+      LDA   (ut1_pl),Y
+      STA   FIO_NAME,X
+      INX
+      INY
+      CPY   FIO_SRCH
+      BNE   @mnt_cp
+      LDA   #FIO_CMD_MOUNT
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+@mnt_bad
+      JMP   LAB_FIO_ERRIO
+
+; perform PWD — print working directory
+
+LAB_PWD
+      LDA   #FIO_CMD_PWD
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @pwd_err
+      ; print the string from FIO_NAME
+      LDY   #$00
+@pwd_lp
+      CPY   FIO_NAMELEN
+      BEQ   @pwd_nl
+      LDA   FIO_NAME,Y
+      JSR   V_OUTP
+      INY
+      BNE   @pwd_lp
+@pwd_nl
+      JMP   LAB_CRLF          ; print CR/LF and return
+@pwd_err
+      JMP   LAB_FIO_ERRIO
 
 ; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
 ; on invalid/empty/too-long name, jumps directly to LAB_FIO_ERRIO
