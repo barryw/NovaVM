@@ -1,5 +1,6 @@
 namespace e6502.Avalonia.Hardware;
 
+using e6502.Storage;
 using KDS.e6502;
 
 public class CompositeBusDevice : IBusDevice, IDisposable
@@ -20,6 +21,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
     private readonly MidiPlayback _midiPlayback;
+    private readonly DeviceManager _deviceManager;
     private readonly int _cpuHz;
     private readonly int _frameRateHz;
     private long _frameNumeratorAccumulator;
@@ -43,6 +45,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
     public MidiPlayback MidiPlayback => _midiPlayback;
+    public DeviceManager DeviceManager => _deviceManager;
     public int CpuHz => _cpuHz;
     public int FrameRateHz => _frameRateHz;
     public long TotalFrames => _totalFrames;
@@ -67,6 +70,12 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _musicEngine = new MusicEngine(this);
         _midiPlayback = new MidiPlayback(_musicEngine, _frameRateHz);
 
+        string hd0 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-programs");
+        string hd1 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-data");
+        string disks = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-disks");
+        _deviceManager = new DeviceManager(hd0, hd1, disks);
+        _deviceManager.AutoMount();
+
         _fio = new FileIoController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data,
@@ -76,7 +85,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             vgcSpaceLength: space => _vgc.GetMemorySpaceLength(space),
             sidPlayer: _sidPlayer,
             musicEngine: _musicEngine,
-            midiPlayback: _midiPlayback);
+            midiPlayback: _midiPlayback,
+            deviceManager: _deviceManager);
         _fio.ProgramLoaded += name => LoadProgramHelp(name);
         _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
 
