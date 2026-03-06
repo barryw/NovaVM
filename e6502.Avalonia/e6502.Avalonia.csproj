@@ -35,6 +35,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\e6502\e6502.csproj" />
+        <ProjectReference Include="..\e6502.Storage\e6502.Storage.csproj" />
     </ItemGroup>
 
     <!-- POSIX tool validation (macOS / Linux) -->

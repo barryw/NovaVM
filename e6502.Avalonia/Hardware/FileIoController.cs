@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using e6502.Storage;
 
 namespace e6502.Avalonia.Hardware;
 
@@ -15,7 +16,10 @@ public sealed partial class FileIoController
     private readonly MusicEngine? _musicEngine;
     private readonly MidiPlayback? _midiPlayback;
     private readonly string _saveDir;
+    private readonly DeviceManager? _deviceManager;
     private List<FileInfo>? _dirFiles;
+    private List<StorageDirEntry>? _dirEntries;
+    private IStorageDevice? _dirDevice;
     private int _dirIndex;
 
     public FileIoController(
@@ -27,7 +31,8 @@ public sealed partial class FileIoController
         Func<byte, int>? vgcSpaceLength = null,
         SidPlayer? sidPlayer = null,
         MusicEngine? musicEngine = null,
-        MidiPlayback? midiPlayback = null)
+        MidiPlayback? midiPlayback = null,
+        DeviceManager? deviceManager = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
@@ -37,6 +42,7 @@ public sealed partial class FileIoController
         _sidPlayer = sidPlayer;
         _musicEngine = musicEngine;
         _midiPlayback = midiPlayback;
+        _deviceManager = deviceManager;
         _saveDir = saveDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "e6502-programs");
@@ -128,11 +134,78 @@ public sealed partial class FileIoController
             case VgcConstants.FioCmdMidStop:
                 DoMidStop();
                 break;
+            case VgcConstants.FioCmdCd:
+                DoCd();
+                break;
+            case VgcConstants.FioCmdMkdir:
+                DoMkdir();
+                break;
+            case VgcConstants.FioCmdRmdir:
+                DoRmdir();
+                break;
+            case VgcConstants.FioCmdFormat:
+                DoFormat();
+                break;
+            case VgcConstants.FioCmdMount:
+                DoMount();
+                break;
+            case VgcConstants.FioCmdUnmount:
+                DoUnmount();
+                break;
+            case VgcConstants.FioCmdPwd:
+                DoPwd();
+                break;
             default:
                 SetError(VgcConstants.FioErrIo);
                 break;
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Device resolution helper
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Resolves a raw filename string to a device and local name (no extension).
+    /// Returns null if _deviceManager is null (fall through to direct filesystem).
+    /// Throws IOException / FileNotFoundException on bad prefix or unmounted device.
+    /// </summary>
+    private (IStorageDevice Device, string Name)? ResolveDevice(string filename)
+    {
+        if (_deviceManager is null)
+            return null;
+
+        var (device, path) = _deviceManager.ResolveFilename(filename);
+
+        if (!device.IsMounted)
+            throw new InvalidOperationException("Device not mounted");
+
+        // If path contains '/' the leading segments are a subdirectory to cd into temporarily.
+        // We support simple single-directory navigation: "subdir/name".
+        string name = path;
+        string? savedDir = null;
+        if (path.Contains('/'))
+        {
+            int slash = path.LastIndexOf('/');
+            string subdir = path[..slash];
+            name = path[(slash + 1)..];
+            savedDir = device.CurrentDirectory;
+            device.CurrentDirectory = subdir;
+        }
+
+        return (device, name);
+    }
+
+    /// <summary>Restores device CurrentDirectory if it was temporarily changed.</summary>
+    private static void RestoreDir(IStorageDevice device, string? savedDir)
+    {
+        if (savedDir is not null)
+            device.CurrentDirectory = savedDir;
+    }
+
+    // -------------------------------------------------------------------------
+    // File I/O commands
+    // -------------------------------------------------------------------------
 
     private void DoSave()
     {
@@ -163,18 +236,54 @@ public sealed partial class FileIoController
             for (int i = 0; i < length; i++)
                 data[2 + i] = _busRead((ushort)(srcAddr + i));
 
+            var resolved = ResolveDevice(filename);
+            if (resolved is not null)
+            {
+                var (device, name) = resolved.Value;
+                string? savedDir = null;
+                try
+                {
+                    // Path navigation already done in ResolveDevice; savedDir tracked there.
+                    device.Save(name, data, ".bas");
+
+                    // Companion .md — only on HostDirectoryDevice (skip for NDI floppy)
+                    bool isNewDoc = false;
+                    if (device is HostDirectoryDevice hdd)
+                    {
+                        string mdPath = Path.Combine(
+                            hdd.CurrentDirectory == "/" || string.IsNullOrEmpty(hdd.CurrentDirectory)
+                                ? SaveDirectory
+                                : Path.Combine(SaveDirectory, hdd.CurrentDirectory.Trim('/')),
+                            name + ".md");
+                        // Use the actual filesystem path via FileExists
+                        isNewDoc = !device.FileExists(name, ".md");
+                        if (isNewDoc)
+                            File.WriteAllText(mdPath, $"---\ntitle: {name}\ntype: program\ncategory: Programs\nkeywords: [{name}]\n---\n\n");
+                    }
+
+                    SetOk();
+                    ProgramSaved?.Invoke(name, isNewDoc);
+                }
+                finally
+                {
+                    RestoreDir(device, savedDir);
+                }
+                return;
+            }
+
+            // Direct filesystem fallback (null DeviceManager)
             Directory.CreateDirectory(_saveDir);
             string path = GetFullPath(filename, ".bas");
             File.WriteAllBytes(path, data);
 
             // Create companion .md if it doesn't exist
-            string mdPath = Path.ChangeExtension(path, ".md");
-            bool isNewDoc = !File.Exists(mdPath);
-            if (isNewDoc)
-                File.WriteAllText(mdPath, $"---\ntitle: {filename}\ntype: program\ncategory: Programs\nkeywords: [{filename}]\n---\n\n");
+            string mdPathFallback = Path.ChangeExtension(path, ".md");
+            bool isNewDocFallback = !File.Exists(mdPathFallback);
+            if (isNewDocFallback)
+                File.WriteAllText(mdPathFallback, $"---\ntitle: {filename}\ntype: program\ncategory: Programs\nkeywords: [{filename}]\n---\n\n");
 
             SetOk();
-            ProgramSaved?.Invoke(filename, isNewDoc);
+            ProgramSaved?.Invoke(filename, isNewDocFallback);
         }
         catch
         {
@@ -193,15 +302,79 @@ public sealed partial class FileIoController
                 return;
             }
 
+            var resolved = ResolveDevice(filename);
+            if (resolved is not null)
+            {
+                var (device, name) = resolved.Value;
+                string? savedDir = null;
+                try
+                {
+                    byte[] data;
+                    bool isBin = false;
+
+                    if (device.FileExists(name, ".bas"))
+                    {
+                        data = device.Load(name, ".bas");
+                    }
+                    else if (device.FileExists(name, ".bin"))
+                    {
+                        data = device.Load(name, ".bin");
+                        isBin = true;
+                    }
+                    else
+                    {
+                        SetError(VgcConstants.FioErrNotFound);
+                        return;
+                    }
+
+                    if (data.Length < 2)
+                    {
+                        SetError(VgcConstants.FioErrIo);
+                        return;
+                    }
+
+                    int dataLength = data.Length - 2;
+                    int destAddr;
+
+                    if (isBin)
+                    {
+                        destAddr = data[0] | (data[1] << 8);
+                        _regs[VgcConstants.FioSrcL - VgcConstants.FioBase] = (byte)(destAddr & 0xFF);
+                        _regs[VgcConstants.FioSrcH - VgcConstants.FioBase] = (byte)((destAddr >> 8) & 0xFF);
+                    }
+                    else
+                    {
+                        destAddr = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+                                 | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
+                    }
+
+                    for (int i = 0; i < dataLength; i++)
+                        _busWrite((ushort)(destAddr + i), data[2 + i]);
+
+                    _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataLength & 0xFF);
+                    _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataLength >> 8) & 0xFF);
+                    _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)(isBin ? VgcConstants.FioDirTypeBin : 0);
+
+                    SetOk();
+                    ProgramLoaded?.Invoke(name);
+                }
+                finally
+                {
+                    RestoreDir(device, savedDir);
+                }
+                return;
+            }
+
+            // Direct filesystem fallback
             string path = GetFullPath(filename, ".bas");
-            bool isBin = false;
+            bool isBinFallback = false;
             if (!File.Exists(path))
             {
                 string binPath = GetFullPath(filename, ".bin");
                 if (File.Exists(binPath))
                 {
                     path = binPath;
-                    isBin = true;
+                    isBinFallback = true;
                 }
             }
 
@@ -211,40 +384,35 @@ public sealed partial class FileIoController
                 return;
             }
 
-            byte[] data = File.ReadAllBytes(path);
+            byte[] dataFallback = File.ReadAllBytes(path);
 
-            if (data.Length < 2)
+            if (dataFallback.Length < 2)
             {
                 SetError(VgcConstants.FioErrIo);
                 return;
             }
 
-            // 2-byte load-address prefix
-            int dataLength = data.Length - 2;
-            int destAddr;
+            int dataLengthFallback = dataFallback.Length - 2;
+            int destAddrFallback;
 
-            if (isBin)
+            if (isBinFallback)
             {
-                // .bin files load at their embedded address
-                destAddr = data[0] | (data[1] << 8);
-                // Write the actual load address back so BASIC can read it
-                _regs[VgcConstants.FioSrcL - VgcConstants.FioBase] = (byte)(destAddr & 0xFF);
-                _regs[VgcConstants.FioSrcH - VgcConstants.FioBase] = (byte)((destAddr >> 8) & 0xFF);
+                destAddrFallback = dataFallback[0] | (dataFallback[1] << 8);
+                _regs[VgcConstants.FioSrcL - VgcConstants.FioBase] = (byte)(destAddrFallback & 0xFF);
+                _regs[VgcConstants.FioSrcH - VgcConstants.FioBase] = (byte)((destAddrFallback >> 8) & 0xFF);
             }
             else
             {
-                // .bas files load at the address BASIC provides
-                destAddr = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
-                         | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
+                destAddrFallback = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+                                 | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
             }
 
-            for (int i = 0; i < dataLength; i++)
-                _busWrite((ushort)(destAddr + i), data[2 + i]);
+            for (int i = 0; i < dataLengthFallback; i++)
+                _busWrite((ushort)(destAddrFallback + i), dataFallback[2 + i]);
 
-            // Set loaded size (excluding prefix) and file type
-            _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataLength & 0xFF);
-            _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataLength >> 8) & 0xFF);
-            _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)(isBin ? VgcConstants.FioDirTypeBin : 0);
+            _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataLengthFallback & 0xFF);
+            _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataLengthFallback >> 8) & 0xFF);
+            _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)(isBinFallback ? VgcConstants.FioDirTypeBin : 0);
 
             SetOk();
             ProgramLoaded?.Invoke(filename);
@@ -263,6 +431,36 @@ public sealed partial class FileIoController
     {
         try
         {
+            if (_deviceManager is not null)
+            {
+                // Use current default device's listing
+                var device = _deviceManager.GetDevice(_deviceManager.DefaultDevice);
+                if (!device.IsMounted)
+                {
+                    SetError(VgcConstants.FioErrNotMounted);
+                    return;
+                }
+                var entries = device.ListDirectory(null);
+                _dirEntries = [.. entries];
+                _dirFiles = null;
+                _dirDevice = device;
+                _dirIndex = 0;
+
+                if (_dirIndex < _dirEntries.Count)
+                {
+                    PopulateDirEntryFromStorage(_dirEntries[_dirIndex]);
+                    SetOk();
+                }
+                else
+                {
+                    SetEndOfDir();
+                }
+                return;
+            }
+
+            // Direct filesystem fallback
+            _dirEntries = null;
+            _dirDevice = null;
             var dir = new DirectoryInfo(_saveDir);
             _dirFiles = dir.Exists
                 ? dir.GetFiles("*.bas")
@@ -291,13 +489,28 @@ public sealed partial class FileIoController
 
     private void DoDirRead()
     {
+        _dirIndex++;
+
+        if (_dirEntries is not null)
+        {
+            if (_dirIndex < _dirEntries.Count)
+            {
+                PopulateDirEntryFromStorage(_dirEntries[_dirIndex]);
+                SetOk();
+            }
+            else
+            {
+                SetEndOfDir();
+            }
+            return;
+        }
+
         if (_dirFiles is null)
         {
             SetEndOfDir();
             return;
         }
 
-        _dirIndex++;
         if (_dirIndex < _dirFiles.Count)
         {
             PopulateDirEntry(_dirFiles[_dirIndex]);
@@ -320,6 +533,34 @@ public sealed partial class FileIoController
                 return;
             }
 
+            var resolved = ResolveDevice(filename);
+            if (resolved is not null)
+            {
+                var (device, name) = resolved.Value;
+                string? savedDir = null;
+                try
+                {
+                    if (!device.FileExists(name, ".bas"))
+                    {
+                        SetError(VgcConstants.FioErrNotFound);
+                        return;
+                    }
+                    device.Delete(name, ".bas");
+
+                    // Companion .md cleanup for host devices
+                    if (device.FileExists(name, ".md"))
+                        device.Delete(name, ".md");
+
+                    SetOk();
+                }
+                finally
+                {
+                    RestoreDir(device, savedDir);
+                }
+                return;
+            }
+
+            // Direct filesystem fallback
             string path = GetFullPath(filename, ".bas");
             if (!File.Exists(path))
             {
@@ -329,7 +570,6 @@ public sealed partial class FileIoController
 
             File.Delete(path);
 
-            // Also delete companion .md if it exists
             string mdPath = Path.ChangeExtension(path, ".md");
             if (File.Exists(mdPath))
                 File.Delete(mdPath);
@@ -376,9 +616,26 @@ public sealed partial class FileIoController
             for (int i = 0; i < len; i++)
                 data[i] = _vgcRead(space, addr + i);
 
-            Directory.CreateDirectory(_saveDir);
-            string path = GetFullPath(filename, ".gfx");
-            File.WriteAllBytes(path, data);
+            var resolved = ResolveDevice(filename);
+            if (resolved is not null)
+            {
+                var (device, name) = resolved.Value;
+                string? savedDir = null;
+                try
+                {
+                    device.Save(name, data, ".gfx");
+                }
+                finally
+                {
+                    RestoreDir(device, savedDir);
+                }
+            }
+            else
+            {
+                Directory.CreateDirectory(_saveDir);
+                string path = GetFullPath(filename, ".gfx");
+                File.WriteAllBytes(path, data);
+            }
 
             _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(len & 0xFF);
             _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((len >> 8) & 0xFF);
@@ -407,20 +664,43 @@ public sealed partial class FileIoController
                 return;
             }
 
-            string path = GetFullPath(filename, ".gfx");
-            if (!File.Exists(path))
-            {
-                SetError(VgcConstants.FioErrNotFound);
-                return;
-            }
-
             byte space = _regs[VgcConstants.FioGSpace - VgcConstants.FioBase];
             int addr = _regs[VgcConstants.FioGAddrL - VgcConstants.FioBase]
                      | (_regs[VgcConstants.FioGAddrH - VgcConstants.FioBase] << 8);
             int reqLen = _regs[VgcConstants.FioGLenL - VgcConstants.FioBase]
                        | (_regs[VgcConstants.FioGLenH - VgcConstants.FioBase] << 8);
 
-            byte[] data = File.ReadAllBytes(path);
+            byte[] data;
+            var resolved = ResolveDevice(filename);
+            if (resolved is not null)
+            {
+                var (device, name) = resolved.Value;
+                string? savedDir = null;
+                try
+                {
+                    if (!device.FileExists(name, ".gfx"))
+                    {
+                        SetError(VgcConstants.FioErrNotFound);
+                        return;
+                    }
+                    data = device.Load(name, ".gfx");
+                }
+                finally
+                {
+                    RestoreDir(device, savedDir);
+                }
+            }
+            else
+            {
+                string path = GetFullPath(filename, ".gfx");
+                if (!File.Exists(path))
+                {
+                    SetError(VgcConstants.FioErrNotFound);
+                    return;
+                }
+                data = File.ReadAllBytes(path);
+            }
+
             int len = reqLen > 0 ? Math.Min(reqLen, data.Length) : data.Length;
             int spaceLen = _vgcSpaceLength(space);
 
@@ -456,18 +736,40 @@ public sealed partial class FileIoController
             string? filename = ReadFilename();
             if (filename is null) { SetError(VgcConstants.FioErrIo); return; }
 
-            string path = GetFullPath(filename, ".sid");
-            if (!File.Exists(path))
+            byte[] data;
+            var resolved = ResolveDevice(filename);
+            if (resolved is not null)
             {
-                SetError(VgcConstants.FioErrNotFound);
-                return;
+                var (device, name) = resolved.Value;
+                string? savedDir = null;
+                try
+                {
+                    if (!device.FileExists(name, ".sid"))
+                    {
+                        SetError(VgcConstants.FioErrNotFound);
+                        return;
+                    }
+                    data = device.Load(name, ".sid");
+                }
+                finally
+                {
+                    RestoreDir(device, savedDir);
+                }
+            }
+            else
+            {
+                string path = GetFullPath(filename, ".sid");
+                if (!File.Exists(path))
+                {
+                    SetError(VgcConstants.FioErrNotFound);
+                    return;
+                }
+                data = File.ReadAllBytes(path);
             }
 
-            byte[] data = File.ReadAllBytes(path);
             var info = SidFileParser.Parse(data);
             if (!info.IsValid) { SetError(VgcConstants.FioErrIo); return; }
 
-            // Song number from FioSrcL register (1-based, default to StartSong)
             int song = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
             if (song < 1) song = info.StartSong;
 
@@ -525,8 +827,6 @@ public sealed partial class FileIoController
         if (_musicEngine is null) { SetError(VgcConstants.FioErrIo); return; }
         int voice = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
 
-        // MML string is passed via pointer in 6502 memory (not the 64-byte FIO_NAME buffer)
-        // so strings up to 255 bytes are supported.
         int len = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
         int ptr = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
                 | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
@@ -536,7 +836,6 @@ public sealed partial class FileIoController
         for (int i = 0; i < len; i++)
             sb.Append((char)_busRead((ushort)(ptr + i)));
 
-        // voice from BASIC is 1-6, MusicEngine expects 0-5
         _musicEngine.SetSequence(voice - 1, sb.ToString());
         SetOk();
     }
@@ -582,7 +881,7 @@ public sealed partial class FileIoController
         byte v4 = _regs[VgcConstants.FioEndH - VgcConstants.FioBase];
         byte v5 = _regs[VgcConstants.FioSizeL - VgcConstants.FioBase];
         byte v6 = _regs[VgcConstants.FioSizeH - VgcConstants.FioBase];
-        if (v1 > 0) pri.Add(v1 - 1); // convert 1-based to 0-based
+        if (v1 > 0) pri.Add(v1 - 1);
         if (v2 > 0) pri.Add(v2 - 1);
         if (v3 > 0) pri.Add(v3 - 1);
         if (v4 > 0) pri.Add(v4 - 1);
@@ -605,11 +904,45 @@ public sealed partial class FileIoController
             string? filename = ReadFilename();
             if (filename is null) { SetError(VgcConstants.FioErrIo); return; }
 
-            string path = GetFullPath(filename, ".mid");
-            if (!File.Exists(path))
+            string path;
+            var resolved = ResolveDevice(filename);
+            if (resolved is not null)
             {
-                SetError(VgcConstants.FioErrNotFound);
-                return;
+                var (device, name) = resolved.Value;
+                // MIDI playback requires a file path — extract it for DryWetMidi
+                if (device is HostDirectoryDevice hdd)
+                {
+                    string dir = hdd.CurrentDirectory == "/"
+                        ? _saveDir
+                        : Path.Combine(_saveDir, hdd.CurrentDirectory.Trim('/'));
+                    path = Path.Combine(dir, name + ".mid");
+                    if (!File.Exists(path))
+                    {
+                        SetError(VgcConstants.FioErrNotFound);
+                        return;
+                    }
+                }
+                else
+                {
+                    // NDI floppy: load bytes then write to temp file
+                    if (!device.FileExists(name, ".mid"))
+                    {
+                        SetError(VgcConstants.FioErrNotFound);
+                        return;
+                    }
+                    byte[] midiBytes = device.Load(name, ".mid");
+                    path = Path.Combine(Path.GetTempPath(), $"e6502-{name}.mid");
+                    File.WriteAllBytes(path, midiBytes);
+                }
+            }
+            else
+            {
+                path = GetFullPath(filename, ".mid");
+                if (!File.Exists(path))
+                {
+                    SetError(VgcConstants.FioErrNotFound);
+                    return;
+                }
             }
 
             var midi = Melanchall.DryWetMidi.Core.MidiFile.Read(path);
@@ -654,6 +987,173 @@ public sealed partial class FileIoController
     {
         _midiPlayback?.Stop();
         SetOk();
+    }
+
+    // -------------------------------------------------------------------------
+    // New device management commands ($20-$26)
+    // -------------------------------------------------------------------------
+
+    private void DoCd()
+    {
+        if (_deviceManager is null) { SetError(VgcConstants.FioErrIo); return; }
+        try
+        {
+            string? raw = ReadFilenameRaw();
+            if (raw is null) { SetError(VgcConstants.FioErrIo); return; }
+
+            var (device, path) = _deviceManager.ResolveFilename(raw);
+            if (!device.IsMounted) { SetError(VgcConstants.FioErrNotMounted); return; }
+            device.CurrentDirectory = path;
+            SetOk();
+        }
+        catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    private void DoMkdir()
+    {
+        if (_deviceManager is null) { SetError(VgcConstants.FioErrIo); return; }
+        try
+        {
+            string? raw = ReadFilenameRaw();
+            if (raw is null) { SetError(VgcConstants.FioErrIo); return; }
+
+            var (device, name) = _deviceManager.ResolveFilename(raw);
+            if (!device.IsMounted) { SetError(VgcConstants.FioErrNotMounted); return; }
+            device.MakeDirectory(name);
+            SetOk();
+        }
+        catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    private void DoRmdir()
+    {
+        if (_deviceManager is null) { SetError(VgcConstants.FioErrIo); return; }
+        try
+        {
+            string? raw = ReadFilenameRaw();
+            if (raw is null) { SetError(VgcConstants.FioErrIo); return; }
+
+            var (device, name) = _deviceManager.ResolveFilename(raw);
+            if (!device.IsMounted) { SetError(VgcConstants.FioErrNotMounted); return; }
+            device.RemoveDirectory(name);
+            SetOk();
+        }
+        catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    private void DoFormat()
+    {
+        if (_deviceManager is null) { SetError(VgcConstants.FioErrIo); return; }
+        try
+        {
+            // FIO_NAME holds the device prefix (e.g. "FD0")
+            string? prefix = ReadFilenameRaw();
+            if (prefix is null) { SetError(VgcConstants.FioErrIo); return; }
+
+            int sizeKB = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+                       | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
+            if (sizeKB == 0) sizeKB = 1440; // default: 1.44MB
+
+            _deviceManager.FormatDevice(prefix, prefix, sizeKB);
+            SetOk();
+        }
+        catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    private void DoMount()
+    {
+        if (_deviceManager is null) { SetError(VgcConstants.FioErrIo); return; }
+        try
+        {
+            // FIO_NAME: "PREFIX\0imagename" — two null-separated strings in the buffer
+            int nameLen = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
+            if (nameLen < 2) { SetError(VgcConstants.FioErrIo); return; }
+
+            int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
+            // Find null separator
+            int sep = -1;
+            for (int i = 0; i < nameLen; i++)
+            {
+                if (_regs[nameOffset + i] == 0)
+                {
+                    sep = i;
+                    break;
+                }
+            }
+            if (sep < 1) { SetError(VgcConstants.FioErrIo); return; }
+
+            string prefix = Encoding.ASCII.GetString(_regs, nameOffset, sep);
+            string imageName = Encoding.ASCII.GetString(_regs, nameOffset + sep + 1, nameLen - sep - 1).TrimEnd('\0');
+
+            _deviceManager.MountDevice(prefix, imageName);
+            SetOk();
+        }
+        catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    private void DoUnmount()
+    {
+        if (_deviceManager is null) { SetError(VgcConstants.FioErrIo); return; }
+        try
+        {
+            string? prefix = ReadFilenameRaw();
+            if (prefix is null) { SetError(VgcConstants.FioErrIo); return; }
+            _deviceManager.UnmountDevice(prefix);
+            SetOk();
+        }
+        catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    private void DoPwd()
+    {
+        if (_deviceManager is null) { SetError(VgcConstants.FioErrIo); return; }
+        try
+        {
+            var device = _deviceManager.GetDevice(_deviceManager.DefaultDevice);
+            string pwd = $"{device.Prefix}:{device.CurrentDirectory}";
+            int len = Math.Min(pwd.Length, 63);
+            _regs[VgcConstants.FioNameLen - VgcConstants.FioBase] = (byte)len;
+            int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
+            for (int i = 0; i < len; i++)
+                _regs[nameOffset + i] = (byte)pwd[i];
+            SetOk();
+        }
+        catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    // -------------------------------------------------------------------------
+    // Directory entry population
+    // -------------------------------------------------------------------------
+
+    private void PopulateDirEntryFromStorage(StorageDirEntry entry)
+    {
+        int type;
+        if (entry.IsDirectory)
+        {
+            type = VgcConstants.FioDirTypeDir;
+        }
+        else
+        {
+            type = entry.FileType switch
+            {
+                NdiFileType.Sid => 1,
+                NdiFileType.Bin => 2,
+                NdiFileType.Mid => 3,
+                _ => 0
+            };
+        }
+        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)type;
+
+        string displayName = entry.Filename;
+        int nameLen = Math.Min(displayName.Length, 63);
+        _regs[VgcConstants.FioNameLen - VgcConstants.FioBase] = (byte)nameLen;
+        int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
+        for (int i = 0; i < nameLen; i++)
+            _regs[nameOffset + i] = (byte)displayName[i];
+
+        long dataSize = (type == 1 || type == 3) ? entry.SizeBytes : Math.Max(0, entry.SizeBytes - 2);
+        _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
+        _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
     }
 
     private void PopulateDirEntry(FileInfo fi)
@@ -703,12 +1203,20 @@ public sealed partial class FileIoController
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
     }
 
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
     private void SetEndOfDir()
     {
         _regs[VgcConstants.FioStatus - VgcConstants.FioBase] = VgcConstants.FioStatusError;
         _regs[VgcConstants.FioErrCode - VgcConstants.FioBase] = VgcConstants.FioErrEndOfDir;
     }
 
+    /// <summary>
+    /// Reads the FIO_NAME buffer as a sanitized safe filename (alphanumeric/dash/underscore/dot only).
+    /// Used for Save/Load/Delete where filenames must be clean.
+    /// </summary>
     private string? ReadFilename()
     {
         int len = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
@@ -729,6 +1237,25 @@ public sealed partial class FileIoController
             return null;
 
         return raw;
+    }
+
+    /// <summary>
+    /// Reads the FIO_NAME buffer with relaxed validation — allows ':', '/' for device prefixes and paths.
+    /// Used for CD/Mkdir/Rmdir/Format/Mount/Unmount/Pwd.
+    /// </summary>
+    private string? ReadFilenameRaw()
+    {
+        int len = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
+        if (len < 1 || len > 63)
+            return null;
+
+        var sb = new StringBuilder(len);
+        int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
+        for (int i = 0; i < len; i++)
+            sb.Append((char)_regs[nameOffset + i]);
+
+        string raw = sb.ToString().Trim();
+        return raw.Length == 0 ? null : raw;
     }
 
     private string GetFullPath(string filename, string defaultExtension)

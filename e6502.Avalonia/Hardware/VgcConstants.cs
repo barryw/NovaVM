@@ -89,6 +89,18 @@ public static class VgcConstants
     public const byte FioCmdMidPlay    = 0x13;
     public const byte FioCmdMidStop    = 0x14;
 
+    public const byte FioCmdCd         = 0x20;
+    public const byte FioCmdMkdir      = 0x21;
+    public const byte FioCmdRmdir      = 0x22;
+    public const byte FioCmdFormat     = 0x23;
+    public const byte FioCmdMount      = 0x24;
+    public const byte FioCmdUnmount    = 0x25;
+    public const byte FioCmdPwd        = 0x26;
+
+    public const byte FioDirTypeDir    = 0x05;
+    public const byte FioErrDiskFull   = 0x04;
+    public const byte FioErrNotMounted = 0x05;
+
     // Music/SFX status register
     public const int  MusicStatus      = 0xBA50; // bit 0 = SFX playing, bit 1 = music playing
     public const int  MusicNote1       = 0xBA51; // voice 1 current MIDI note (0=silent)
