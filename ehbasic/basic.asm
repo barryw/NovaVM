@@ -9817,46 +9817,27 @@ LAB_MUSIC
       BCS   @m_pri_skip       ; keep skipping keyword chars and tokens
       ; A < 'A': hit a space or digit — keyword is consumed.
       ; pointer is at the space/digit; LAB_GTBY calls GBYT which skips spaces.
-      ; Clear all 6 voice slots first
+      ; Clear all 6 voice slots
       LDA   #$00
-      STA   FIO_SRCL
-      STA   FIO_SRCH
-      STA   FIO_ENDL
-      STA   FIO_ENDH
-      STA   FIO_SIZEL
-      STA   FIO_SIZEH
-      JSR   LAB_GTBY          ; first voice → X
-      STX   FIO_SRCL
-      JSR   LAB_GBYT          ; peek
+      LDY   #$05
+@m_pri_clr
+      STA   FIO_SRCL,Y
+      DEY
+      BPL   @m_pri_clr
+      ; Parse up to 6 comma-separated voice values
+      LDY   #$00              ; slot index
+@m_pri_nxt
+      JSR   LAB_GTBY          ; get voice number → X
+      TXA
+      STA   FIO_SRCL,Y        ; store to slot
+      INY
+      CPY   #$06
+      BCS   @m_pri_go         ; all 6 parsed
+      JSR   LAB_GBYT          ; peek next char
       CMP   #','
-      BNE   @m_pri_go
+      BNE   @m_pri_go         ; no more commas
       JSR   LAB_IGBY          ; skip comma
-      JSR   LAB_GTBY          ; second voice → X
-      STX   FIO_SRCH
-      JSR   LAB_GBYT
-      CMP   #','
-      BNE   @m_pri_go
-      JSR   LAB_IGBY          ; skip comma
-      JSR   LAB_GTBY          ; third voice → X
-      STX   FIO_ENDL
-      JSR   LAB_GBYT
-      CMP   #','
-      BNE   @m_pri_go
-      JSR   LAB_IGBY          ; skip comma
-      JSR   LAB_GTBY          ; fourth voice → X
-      STX   FIO_ENDH
-      JSR   LAB_GBYT
-      CMP   #','
-      BNE   @m_pri_go
-      JSR   LAB_IGBY          ; skip comma
-      JSR   LAB_GTBY          ; fifth voice → X
-      STX   FIO_SIZEL
-      JSR   LAB_GBYT
-      CMP   #','
-      BNE   @m_pri_go
-      JSR   LAB_IGBY          ; skip comma
-      JSR   LAB_GTBY          ; sixth voice → X
-      STX   FIO_SIZEH
+      JMP   @m_pri_nxt
 @m_pri_go
       LDA   #FIO_CMD_MPRI
       STA   FIO_CMD
