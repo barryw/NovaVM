@@ -9726,6 +9726,13 @@ LAB_FIO_EXEC
 @fio_chk_err
       JMP   LAB_FIO_ERRHND
 
+; Skip X characters from BASIC input
+LAB_SKIPX
+      JSR   LAB_IGBY
+      DEX
+      BNE   LAB_SKIPX
+      RTS
+
 ; perform MUSIC subcommand
 ; MUSIC voice, "mml"
 ; MUSIC PLAY | STOP | TEMPO bpm | LOOP ON|OFF | PRIORITY v1[,v2[,v3]]
@@ -9750,9 +9757,8 @@ LAB_MUSIC
       CMP   #'R'              ; PRIORITY has R after P
       BEQ   @m_priority
       ; else PLAY — consume remaining "LAY" (3 chars, P already consumed)
-      JSR   LAB_IGBY          ; L
-      JSR   LAB_IGBY          ; A
-      JSR   LAB_IGBY          ; Y
+      LDX   #3
+      JSR   LAB_SKIPX          ; LAY
       LDA   #FIO_CMD_MPLAY
       STA   FIO_CMD
       CLI                     ; enable interrupts for music
@@ -9767,11 +9773,8 @@ LAB_MUSIC
 
 ; --- MUSIC TEMPO bpm ---
 @m_tempo
-      JSR   LAB_IGBY          ; T
-      JSR   LAB_IGBY          ; E
-      JSR   LAB_IGBY          ; M
-      JSR   LAB_IGBY          ; P
-      JSR   LAB_IGBY          ; O
+      LDX   #5
+      JSR   LAB_SKIPX          ; TEMPO
       JSR   LAB_GTWRD         ; bpm as 16-bit → FAC1_3(lo), FAC1_2(hi)
       LDA   FAC1_3
       STA   FIO_SRCL
@@ -9947,9 +9950,8 @@ LAB_COPPER
 
 ; --- COPPER USE n ---
 @c_use
-      JSR   LAB_IGBY          ; U
-      JSR   LAB_IGBY          ; S
-      JSR   LAB_IGBY          ; E
+      LDX   #3
+      JSR   LAB_SKIPX          ; USE
       JSR   LAB_GTBY          ; list index → X
       STX   VGC_P0
       LDA   #VCMD_COPPERUSE
@@ -9958,9 +9960,8 @@ LAB_COPPER
 
 ; --- COPPER ADD x, y, reg, value ---
 @c_add
-      JSR   LAB_IGBY          ; A
-      JSR   LAB_IGBY          ; D
-      JSR   LAB_IGBY          ; D
+      LDX   #3
+      JSR   LAB_SKIPX          ; ADD
       JSR   LAB_GTWRD         ; x (16-bit) → FAC1_3(lo), FAC1_2(hi)
       LDA   FAC1_3
       STA   VGC_P0             ; x low
@@ -9982,11 +9983,8 @@ LAB_COPPER
       JMP   LAB_15D9          ; syntax error
 
 @c_bgcol
-      JSR   LAB_IGBY          ; B
-      JSR   LAB_IGBY          ; G
-      JSR   LAB_IGBY          ; C
-      JSR   LAB_IGBY          ; O
-      JSR   LAB_IGBY          ; L
+      LDX   #5
+      JSR   LAB_SKIPX          ; BGCOL
       LDA   #$01              ; reg index 1 = BGCOL
       JMP   @c_store_idx
 
@@ -10005,11 +10003,8 @@ LAB_COPPER
       JMP   LAB_15D9          ; syntax error
 
 @c_scroll
-      JSR   LAB_IGBY          ; C
-      JSR   LAB_IGBY          ; R
-      JSR   LAB_IGBY          ; O
-      JSR   LAB_IGBY          ; L
-      JSR   LAB_IGBY          ; L
+      LDX   #5
+      JSR   LAB_SKIPX          ; CROLL
       JSR   LAB_GBYT          ; peek X or Y
       CMP   #'X'
       BEQ   @c_scrollx
@@ -10079,27 +10074,20 @@ LAB_COPPER
       JMP   @c_spr_idx
 
 @cs_shape
-      JSR   LAB_IGBY          ; S
-      JSR   LAB_IGBY          ; H
-      JSR   LAB_IGBY          ; A
-      JSR   LAB_IGBY          ; P
-      JSR   LAB_IGBY          ; E
+      LDX   #5
+      JSR   LAB_SKIPX          ; SHAPE
       LDA   #$04              ; field offset 4 = Shape
       JMP   @c_spr_idx
 
 @cs_flags
-      JSR   LAB_IGBY          ; F
-      JSR   LAB_IGBY          ; L
-      JSR   LAB_IGBY          ; A
-      JSR   LAB_IGBY          ; G
-      JSR   LAB_IGBY          ; S
+      LDX   #5
+      JSR   LAB_SKIPX          ; FLAGS
       LDA   #$05              ; field offset 5 = Flags
       JMP   @c_spr_idx
 
 @cs_pri
-      JSR   LAB_IGBY          ; P
-      JSR   LAB_IGBY          ; R
-      JSR   LAB_IGBY          ; I
+      LDX   #3
+      JSR   LAB_SKIPX          ; PRI
       LDA   #$06              ; field offset 6 = Priority
       ; fall through to @c_spr_idx
 
