@@ -116,6 +116,10 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         byte[] rom = File.ReadAllBytes(romPath);
         rom.CopyTo(_ram, VgcConstants.RomBase);
 
+        // Autoboot skip: set flag if NOAUTO=1 env var
+        if (Environment.GetEnvironmentVariable("NOAUTO") == "1")
+            _ram[VgcConstants.AutobootSkip] = 0xFF;
+
         // Snapshot the BASIC ROM so we can restore it after a swap.
         _basicRom = new byte[16384];
         Array.Copy(_ram, VgcConstants.RomBase, _basicRom, 0, 16384);

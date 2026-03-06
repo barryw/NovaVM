@@ -743,6 +743,9 @@ LAB_2E05
       LDY   #>LAB_1274        ; warm start vector high byte
       STA   Wrmjpl            ; save warm start vector low byte
       STY   Wrmjph            ; save warm start vector high byte
+
+      JSR   LAB_AUTOBOOT      ; try autoboot before Ready prompt
+
       JMP   (Wrmjpl)          ; go do warm start
 
 ; open up space in memory
@@ -8847,6 +8850,8 @@ FIO_GLENH     = $B9AE          ; graphics transfer length high
 FIO_DIRTYPE   = $B9AF          ; dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID
 FIO_NAME      = $B9B0          ; filename buffer (64 bytes)
 
+AUTOBOOT_SKIP = $B9F0          ; C# sets to $FF to skip autoboot
+
 FIO_CMD_SAVE  = $01            ; save program
 FIO_CMD_LOAD  = $02            ; load program
 FIO_OK        = $02            ; status: success
@@ -11124,6 +11129,73 @@ LAB_XUNMAP
       AND   XMC_WINCTL
       STA   XMC_WINCTL
       RTS
+
+; ---- autoboot ----
+
+LAB_AUTOBOOT
+      LDA   AUTOBOOT_SKIP
+      BNE   @ab_done              ; skip if flag set
+
+      ; Copy "AUTOBOOT" into FIO_NAME
+      LDX   #0
+@ab_copy
+      LDA   @ab_name,X
+      STA   FIO_NAME,X
+      INX
+      CPX   #8
+      BNE   @ab_copy
+
+      LDA   #8
+      STA   FIO_NAMELEN
+
+      ; Set load address to BASIC program start
+      LDA   Smeml
+      STA   FIO_SRCL
+      LDA   Smemh
+      STA   FIO_SRCH
+
+      ; Issue LOAD command
+      LDA   #FIO_CMD_LOAD
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @ab_done              ; no autoboot file found
+
+      ; Check file type
+      LDA   FIO_DIRTYPE
+      CMP   #$02                  ; .bin?
+      BEQ   @ab_bin
+
+      ; .bas — update memory pointers and RUN
+      CLC
+      LDA   Smeml
+      ADC   FIO_SIZEL
+      STA   Svarl
+      LDA   Smemh
+      ADC   FIO_SIZEH
+      STA   Svarh
+      LDA   Svarl
+      STA   Sarryl
+      STA   Earryl
+      LDA   Svarh
+      STA   Sarryh
+      STA   Earryh
+      JMP   LAB_1477              ; reset execution, clear vars, run from start
+
+@ab_bin
+      ; .bin — jump to load address
+      LDA   FIO_SRCL
+      STA   @ab_jmp+1
+      LDA   FIO_SRCH
+      STA   @ab_jmp+2
+@ab_jmp
+      JMP   $0000                 ; self-modified jump target
+
+@ab_done
+      RTS
+
+@ab_name
+      .byte "AUTOBOOT"
 
 STR_XBANKS  .byte " BANKS, ",$00
 STR_XKB     .byte " KB XRAM, BANK ",$00

@@ -367,6 +367,7 @@ public static class VgcConstants
     public const int NicMaxMessageSize    = 256;
     public const int NicMaxQueueDepth     = 16;
 
+    public const int AutobootSkip      = 0xB9F0;
     public const int RomBase           = 0xC000;
     public const int RomEnd            = 0xFFFF;
 
