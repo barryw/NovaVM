@@ -117,6 +117,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         rom.CopyTo(_ram, VgcConstants.RomBase);
 
         // Autoboot skip: set flag if NOAUTO=1 env var
+        // TODO: Add spacebar-held detection during boot to skip autoboot
         if (Environment.GetEnvironmentVariable("NOAUTO") == "1")
             _ram[VgcConstants.AutobootSkip] = 0xFF;
 

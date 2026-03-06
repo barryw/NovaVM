@@ -38,14 +38,24 @@ public sealed class HostDirectoryDevice : IStorageDevice
     private string ResolvePath(string name, string ext)
     {
         string dir = ResolveDir();
-        return Path.Combine(dir, name + ext);
+        string resolved = Path.GetFullPath(Path.Combine(dir, name + ext));
+        string rootFull = Path.GetFullPath(_rootDir);
+        if (!resolved.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !resolved.Equals(rootFull, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException($"Path traversal rejected: '{name}{ext}'");
+        return resolved;
     }
 
     private string ResolveDir()
     {
         if (_currentDir == "/")
             return _rootDir;
-        return Path.Combine(_rootDir, _currentDir);
+        string dir = Path.GetFullPath(Path.Combine(_rootDir, _currentDir));
+        string rootFull = Path.GetFullPath(_rootDir);
+        if (!dir.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !dir.Equals(rootFull, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Path traversal rejected.");
+        return dir;
     }
 
     public byte[] Load(string name, string ext)
@@ -73,15 +83,25 @@ public sealed class HostDirectoryDevice : IStorageDevice
 
     public StorageDirEntry[] ListDirectory(string? path)
     {
-        string targetDir = path is null
-            ? ResolveDir()
-            : Path.Combine(_rootDir, path.Trim('/'));
+        string targetDir;
+        if (path is null)
+        {
+            targetDir = ResolveDir();
+        }
+        else
+        {
+            targetDir = Path.GetFullPath(Path.Combine(_rootDir, path.Trim('/')));
+            string rootFull = Path.GetFullPath(_rootDir);
+            if (!targetDir.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && !targetDir.Equals(rootFull, StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException($"Path traversal rejected: '{path}'");
+        }
 
         if (!Directory.Exists(targetDir))
             return [];
 
         var dirs = Directory.GetDirectories(targetDir)
-            .Select(d => new StorageDirEntry(Path.GetFileName(d), true, NdiFileType.Bas, 0))
+            .Select(d => new StorageDirEntry(Path.GetFileName(d), true, NdiFileType.Dir, 0))
             .OrderBy(e => e.Filename);
 
         var files = SupportedExtensions
@@ -101,13 +121,19 @@ public sealed class HostDirectoryDevice : IStorageDevice
 
     public void MakeDirectory(string name)
     {
-        string path = Path.Combine(ResolveDir(), name);
+        string path = Path.GetFullPath(Path.Combine(ResolveDir(), name));
+        string rootFull = Path.GetFullPath(_rootDir);
+        if (!path.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException($"Path traversal rejected: '{name}'");
         Directory.CreateDirectory(path);
     }
 
     public void RemoveDirectory(string name)
     {
-        string path = Path.Combine(ResolveDir(), name);
+        string path = Path.GetFullPath(Path.Combine(ResolveDir(), name));
+        string rootFull = Path.GetFullPath(_rootDir);
+        if (!path.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException($"Path traversal rejected: '{name}'");
         Directory.Delete(path, recursive: false);
     }
 

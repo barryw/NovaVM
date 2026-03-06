@@ -126,13 +126,14 @@ public class DeviceManagerTests
         string hd0 = MakeTempDir();
         string hd1 = MakeTempDir();
         string disks = MakeTempDir();
+        DeviceManager? dm = null;
         try
         {
             // Create a formatted fd0.ndi in the disks directory
             string ndiPath = Path.Combine(disks, "fd0.ndi");
             NdiImage.CreateFormatted(ndiPath, "TEST", 800);
 
-            var dm = new DeviceManager(hd0, hd1, disks);
+            dm = new DeviceManager(hd0, hd1, disks);
             Assert.IsFalse(dm.GetDevice("FD0").IsMounted, "FD0 should not be mounted before AutoMount");
 
             dm.AutoMount();
@@ -142,19 +143,16 @@ public class DeviceManagerTests
         }
         finally
         {
-            // Unmount to release file handles before deleting
+            // Unmount to release file handles before deleting temp dirs on Windows.
             try
             {
-                string hd0b = MakeTempDir();
-                string hd1b = MakeTempDir();
-                string disksB = Path.Combine(Path.GetTempPath(), "disposable");
+                if (dm?.GetDevice("FD0") is NdiFloppyDevice fd0 && fd0.IsMounted)
+                    fd0.Unmount();
             }
             catch { }
 
             Directory.Delete(hd0, recursive: true);
             Directory.Delete(hd1, recursive: true);
-            // Unmount FD0 before deleting disks dir by recreating the manager
-            // and disposing -- just delete the directory forcefully
             try { Directory.Delete(disks, recursive: true); } catch { }
         }
     }

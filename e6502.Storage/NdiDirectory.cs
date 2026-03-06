@@ -2,7 +2,7 @@ using System.Text;
 
 namespace e6502.Storage;
 
-public enum NdiFileType : byte { Bas = 0, Sid = 1, Bin = 2, Mid = 3, Gfx = 4 }
+public enum NdiFileType : byte { Bas = 0, Sid = 1, Bin = 2, Mid = 3, Gfx = 4, Dir = 5 }
 
 [Flags]
 public enum NdiEntryFlags : byte { Active = 0x01, Directory = 0x02, Locked = 0x80 }
@@ -76,7 +76,7 @@ public sealed class NdiDirectory
         if (slot < 0)
             throw new InvalidOperationException("Directory is full.");
 
-        WriteEntry(slot, NdiEntryFlags.Active | NdiEntryFlags.Directory, NdiFileType.Bas,
+        WriteEntry(slot, NdiEntryFlags.Active | NdiEntryFlags.Directory, NdiFileType.Dir,
                    parentIndex, 0, 0, TruncateName(name), 0);
         return slot;
     }

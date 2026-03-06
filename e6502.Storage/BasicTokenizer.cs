@@ -20,6 +20,9 @@ public sealed class BasicTokenizer
     /// <summary>Byte value of the prefix that introduces an extended token.</summary>
     private readonly byte _prefixByte;
 
+    /// <summary>Token byte for the REM keyword, looked up from the primary table.</summary>
+    private readonly byte _remByte;
+
     /// <summary>Primary token lookup: keyword (upper) -> byte value 128..255.</summary>
     private readonly (string Keyword, byte Value)[] _primarySorted;
 
@@ -44,6 +47,10 @@ public sealed class BasicTokenizer
         _prefixByte = prefixByte;
         _primaryReverse = primary;
         _extendedReverse = extended;
+
+        // Look up REM token byte from the primary reverse map
+        _remByte = primary.FirstOrDefault(kv =>
+            kv.Value.Equals("REM", StringComparison.OrdinalIgnoreCase)).Key;
 
         // Build forward lookup sorted longest-first for greedy matching
         _primarySorted = primary
@@ -141,7 +148,8 @@ public sealed class BasicTokenizer
         int numStart = pos;
         while (pos < line.Length && char.IsDigit(line[pos]))
             pos++;
-        ushort lineNum = ushort.Parse(line[numStart..pos]);
+        if (!ushort.TryParse(line[numStart..pos], out ushort lineNum))
+            throw new FormatException($"Invalid line number in: '{line}'");
 
         // Skip exactly one space after line number (if present)
         if (pos < line.Length && line[pos] == ' ')
@@ -207,7 +215,7 @@ public sealed class BasicTokenizer
                         matched = true;
 
                         // If REM, everything that follows is literal
-                        if (value == 0x91) // REM = 145 = 0x91
+                        if (value == _remByte)
                             afterRem = true;
 
                         break;
@@ -303,7 +311,7 @@ public sealed class BasicTokenizer
                 {
                     sb.Append(primary);
                     pos++;
-                    if (b == 0x91) // REM
+                    if (b == _remByte)
                         afterRem = true;
                     continue;
                 }

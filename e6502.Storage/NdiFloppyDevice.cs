@@ -40,17 +40,22 @@ public sealed class NdiFloppyDevice : IStorageDevice
                 return;
             }
 
-            // Resolve the directory name from root (single-level for now).
-            string name = value.Trim('/');
-            var entries = _image!.ListDirectory(0xFFFF);
-            var dir = Array.Find(entries, e => e.IsDirectory &&
-                string.Equals(e.Filename, name, StringComparison.OrdinalIgnoreCase));
+            string path = value.Trim('/');
+            string[] parts = path.Split('/');
+            ushort parent = 0xFFFF;
 
-            if (dir is null)
-                throw new DirectoryNotFoundException($"Directory '{name}' not found on disk.");
+            foreach (string part in parts)
+            {
+                var entries = _image!.ListDirectory(parent);
+                var dir = Array.Find(entries, e => e.IsDirectory &&
+                    string.Equals(e.Filename, part, StringComparison.OrdinalIgnoreCase));
+                if (dir is null)
+                    throw new DirectoryNotFoundException($"Directory '{part}' not found.");
+                parent = (ushort)dir.Index;
+            }
 
-            _currentDir = name;
-            _parentIndex = (ushort)dir.Index;
+            _currentDir = path;
+            _parentIndex = parent;
         }
     }
 
@@ -90,20 +95,20 @@ public sealed class NdiFloppyDevice : IStorageDevice
     public byte[] Load(string name, string ext)
     {
         ThrowIfNotMounted();
-        return _image!.ReadFile(name, _parentIndex);
+        return _image!.ReadFile(name + ext, _parentIndex);
     }
 
     public void Save(string name, byte[] data, string ext)
     {
         ThrowIfNotMounted();
         var type = ExtToType.TryGetValue(ext, out var t) ? t : NdiFileType.Bin;
-        _image!.WriteFile(name, type, _parentIndex, data);
+        _image!.WriteFile(name + ext, type, _parentIndex, data);
     }
 
     public void Delete(string name, string ext)
     {
         ThrowIfNotMounted();
-        _image!.DeleteFile(name, _parentIndex);
+        _image!.DeleteFile(name + ext, _parentIndex);
     }
 
     public bool FileExists(string name, string ext)
@@ -111,7 +116,7 @@ public sealed class NdiFloppyDevice : IStorageDevice
         ThrowIfNotMounted();
         var entries = _image!.ListDirectory(_parentIndex);
         return Array.Exists(entries, e => !e.IsDirectory &&
-            string.Equals(e.Filename, name, StringComparison.OrdinalIgnoreCase));
+            string.Equals(e.Filename, name + ext, StringComparison.OrdinalIgnoreCase));
     }
 
     // -------------------------------------------------------------------------
@@ -125,25 +130,32 @@ public sealed class NdiFloppyDevice : IStorageDevice
         ushort parent = _parentIndex;
         if (path is not null)
         {
-            // Resolve an explicit path from root.
-            string name = path.Trim('/');
-            if (name.Length > 0)
+            // Resolve an explicit multi-level path from root.
+            string trimmed = path.Trim('/');
+            if (trimmed.Length > 0)
             {
-                var entries = _image!.ListDirectory(0xFFFF);
-                var dir = Array.Find(entries, e => e.IsDirectory &&
-                    string.Equals(e.Filename, name, StringComparison.OrdinalIgnoreCase));
-                if (dir is null)
-                    throw new DirectoryNotFoundException($"Directory '{name}' not found.");
-                parent = (ushort)dir.Index;
+                parent = 0xFFFF;
+                foreach (string part in trimmed.Split('/'))
+                {
+                    var entries = _image!.ListDirectory(parent);
+                    var dir = Array.Find(entries, e => e.IsDirectory &&
+                        string.Equals(e.Filename, part, StringComparison.OrdinalIgnoreCase));
+                    if (dir is null)
+                        throw new DirectoryNotFoundException($"Directory '{part}' not found.");
+                    parent = (ushort)dir.Index;
+                }
             }
         }
 
         var raw = _image!.ListDirectory(parent);
-        return raw.Select(e => new StorageDirEntry(
-            e.Filename,
-            e.IsDirectory,
-            e.FileType,
-            e.IsDirectory ? 0 : e.SizeBytes)).ToArray();
+        return raw.Select(e =>
+        {
+            // Files are stored as "NAME.EXT" — strip the extension for the display name.
+            string displayName = e.IsDirectory
+                ? e.Filename
+                : Path.GetFileNameWithoutExtension(e.Filename);
+            return new StorageDirEntry(displayName, e.IsDirectory, e.FileType, e.IsDirectory ? 0 : e.SizeBytes);
+        }).ToArray();
     }
 
     public void MakeDirectory(string name)

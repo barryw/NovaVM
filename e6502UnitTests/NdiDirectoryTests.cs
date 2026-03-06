@@ -40,7 +40,7 @@ public class NdiDirectoryTests
         Assert.IsTrue(entry.IsActive);
         Assert.IsTrue(entry.IsDirectory);
         Assert.AreEqual("subdir", entry.Filename);
-        Assert.AreEqual(NdiFileType.Bas, entry.FileType); // default type
+        Assert.AreEqual(NdiFileType.Dir, entry.FileType); // directory entries use Dir type
         Assert.AreEqual((ushort)0xFFFF, entry.ParentIndex);
     }
 
