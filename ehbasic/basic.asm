@@ -9107,53 +9107,25 @@ LAB_GCOLOR
       STA   VGC_CMD            ; trigger
       RTS
 
-; perform PLOT x, y
+; shared: load x(word),y(byte) into VGC_P0-P3
 
-LAB_PLOT
-      JSR   LAB_GTWRD         ; get x (0-319) as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P0             ; x low
-      LDA   FAC1_2
-      STA   VGC_P1             ; x high
-      JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get y (0-199)
-      STX   VGC_P2             ; y low
-      LDA   #$00
-      STA   VGC_P3             ; y high = 0
-      LDA   #VCMD_PLOT        ; PLOT command
-      STA   VGC_CMD            ; trigger
-      RTS
-
-; perform UNPLOT x, y
-
-LAB_UNPLOT
+LAB_VGC_XY
       JSR   LAB_GTWRD         ; get x as 16-bit
       LDA   FAC1_3
       STA   VGC_P0             ; x low
       LDA   FAC1_2
       STA   VGC_P1             ; x high
       JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get y
+      JSR   LAB_GTBY          ; get y as byte
       STX   VGC_P2             ; y low
       LDA   #$00
       STA   VGC_P3             ; y high = 0
-      LDA   #VCMD_UNPLOT      ; UNPLOT command
-      STA   VGC_CMD
       RTS
 
-; perform LINE x0, y0, x1, y1
+; shared: load x0,y0,x1,y1 into VGC_P0-P7
 
-LAB_GLINE
-      JSR   LAB_GTWRD         ; x0 as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P0             ; x0 low
-      LDA   FAC1_2
-      STA   VGC_P1             ; x0 high
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y0
-      STX   VGC_P2             ; y0 low
-      LDA   #$00
-      STA   VGC_P3             ; y0 high = 0
+LAB_VGC_XYXY
+      JSR   LAB_VGC_XY        ; x0,y0 → P0-P3
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; x1 as 16-bit
       LDA   FAC1_3
@@ -9165,6 +9137,28 @@ LAB_GLINE
       STX   VGC_P6             ; y1 low
       LDA   #$00
       STA   VGC_P7             ; y1 high = 0
+      RTS
+
+; perform PLOT x, y
+
+LAB_PLOT
+      JSR   LAB_VGC_XY
+      LDA   #VCMD_PLOT        ; PLOT command
+      STA   VGC_CMD            ; trigger
+      RTS
+
+; perform UNPLOT x, y
+
+LAB_UNPLOT
+      JSR   LAB_VGC_XY
+      LDA   #VCMD_UNPLOT      ; UNPLOT command
+      STA   VGC_CMD
+      RTS
+
+; perform LINE x0, y0, x1, y1
+
+LAB_GLINE
+      JSR   LAB_VGC_XYXY
       LDA   #VCMD_LINE        ; LINE command
       STA   VGC_CMD
       RTS
@@ -9172,16 +9166,7 @@ LAB_GLINE
 ; perform CIRCLE cx, cy, r
 
 LAB_CIRCLE
-      JSR   LAB_GTWRD         ; cx as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P0             ; cx low
-      LDA   FAC1_2
-      STA   VGC_P1             ; cx high
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; cy
-      STX   VGC_P2             ; cy low
-      LDA   #$00
-      STA   VGC_P3             ; cy high = 0
+      JSR   LAB_VGC_XY        ; cx,cy → P0-P3
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; r as 16-bit
       LDA   FAC1_3
@@ -9195,27 +9180,7 @@ LAB_CIRCLE
 ; perform RECT x0, y0, x1, y1
 
 LAB_RECT
-      JSR   LAB_GTWRD         ; x0 as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P0             ; x0 low
-      LDA   FAC1_2
-      STA   VGC_P1             ; x0 high
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y0
-      STX   VGC_P2             ; y0 low
-      LDA   #$00
-      STA   VGC_P3             ; y0 high = 0
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTWRD         ; x1 as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P4             ; x1 low
-      LDA   FAC1_2
-      STA   VGC_P5             ; x1 high
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y1
-      STX   VGC_P6             ; y1 low
-      LDA   #$00
-      STA   VGC_P7             ; y1 high = 0
+      JSR   LAB_VGC_XYXY
       LDA   #VCMD_RECT        ; RECT command
       STA   VGC_CMD
       RTS
@@ -9223,27 +9188,7 @@ LAB_RECT
 ; perform FILL x0, y0, x1, y1
 
 LAB_FILLRECT
-      JSR   LAB_GTWRD         ; x0 as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P0             ; x0 low
-      LDA   FAC1_2
-      STA   VGC_P1             ; x0 high
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y0
-      STX   VGC_P2             ; y0 low
-      LDA   #$00
-      STA   VGC_P3             ; y0 high = 0
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTWRD         ; x1 as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P4             ; x1 low
-      LDA   FAC1_2
-      STA   VGC_P5             ; x1 high
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y1
-      STX   VGC_P6             ; y1 low
-      LDA   #$00
-      STA   VGC_P7             ; y1 high = 0
+      JSR   LAB_VGC_XYXY
       LDA   #VCMD_FILL        ; FILL command
       STA   VGC_CMD
       RTS
@@ -9251,16 +9196,7 @@ LAB_FILLRECT
 ; perform PAINT x, y
 
 LAB_PAINT
-      JSR   LAB_GTWRD         ; get x (0-319) as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P0             ; x low
-      LDA   FAC1_2
-      STA   VGC_P1             ; x high
-      JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get y (0-199)
-      STX   VGC_P2             ; y low
-      LDA   #$00
-      STA   VGC_P3             ; y high = 0
+      JSR   LAB_VGC_XY
       LDA   #VCMD_PAINT       ; PAINT command
       STA   VGC_CMD
       RTS
