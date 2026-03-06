@@ -11102,67 +11102,6 @@ LAB_XUNMAP
       STA   XMC_WINCTL
       RTS
 
-; --- XMC assembly helper routines ---
-; Carry clear = success, carry set = error (A = XMC_ERRCODE)
-
-LAB_XM_CMDCHK
-      STA   XMC_CMD
-      LDA   XMC_STATUS
-      CMP   #XMC_OK
-      BEQ   @xm_ok
-      LDA   XMC_ERRCODE
-      SEC
-      RTS
-@xm_ok
-      CLC
-      RTS
-
-; set 24-bit expansion address: A=low, X=mid, Y=high
-LAB_XM_SETADDR
-      STA   XMC_XAL
-      STX   XMC_XAM
-      STY   XMC_XAH
-      RTS
-
-; get status snapshot: A=status, X=errcode
-LAB_XM_STATUS
-      LDA   XMC_STATUS
-      LDX   XMC_ERRCODE
-      RTS
-
-; read byte at XADDR: carry clear and A=value on success
-LAB_XM_GETBYTE
-      LDA   #XMC_CMD_GET
-      JSR   LAB_XM_CMDCHK
-      BCC   @xm_get_ok
-      RTS
-@xm_get_ok
-      LDA   XMC_DATA
-      RTS
-
-; write byte at XADDR: A=value
-LAB_XM_PUTBYTE
-      STA   XMC_DATA
-      LDA   #XMC_CMD_PUT
-      JMP   LAB_XM_CMDCHK
-
-; run bulk commands with preloaded XMC_RAML/H, XMC_XAL/M/H, XMC_LENL/H, XMC_DATA
-LAB_XM_STASH
-      LDA   #XMC_CMD_STASH
-      JMP   LAB_XM_CMDCHK
-
-LAB_XM_FETCH
-      LDA   #XMC_CMD_FETCH
-      JMP   LAB_XM_CMDCHK
-
-LAB_XM_FILL
-      LDA   #XMC_CMD_FILL
-      JMP   LAB_XM_CMDCHK
-
-LAB_XM_ALLOC
-      LDA   #XMC_CMD_ALLOC
-      JMP   LAB_XM_CMDCHK
-
 STR_XBANKS  .byte " BANKS, ",$00
 STR_XKB     .byte " KB XRAM, BANK ",$00
 STR_XUSED   .byte ", USED ",$00
