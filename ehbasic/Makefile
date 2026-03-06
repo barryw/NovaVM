@@ -3,7 +3,7 @@
 
 CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 
-all: basic.bin
+all: basic.bin keyboard.bin
 
 # ROM build
 basic.bin basic.sym: basic.o ehbasic.cfg

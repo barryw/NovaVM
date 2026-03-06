@@ -43,6 +43,7 @@
         <Exec Command="command -v ld65 &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: ld65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="command -v pandoc &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: pandoc not found. Install: brew install pandoc' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="command -v latexmk &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: latexmk not found. Install MacTeX or texlive' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="command -v python3 &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: python3 not found. Install Python 3' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
     </Target>
 
     <!-- Windows tool validation -->
@@ -51,18 +52,23 @@
         <Exec Command="where.exe ld65 &gt;nul 2&gt;&amp;1 || (echo ERROR: ld65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="where.exe pandoc &gt;nul 2&gt;&amp;1 || (echo ERROR: pandoc not found. Install: choco install pandoc &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="where.exe pdflatex &gt;nul 2&gt;&amp;1 || (echo ERROR: pdflatex not found. Install MiKTeX: choco install miktex &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
+        <Exec Command="where.exe python3 &gt;nul 2&gt;&amp;1 || where.exe python &gt;nul 2&gt;&amp;1 || (echo ERROR: python3 not found. Install Python 3 &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
     </Target>
 
-    <!-- Assemble the EhBASIC ROM from source (POSIX) — skip if ROM exists and SkipRomBuild is set -->
+    <!-- Assemble the EhBASIC ROM + keyboard viewer from source (POSIX) -->
     <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateTools" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="make -C $(ProjectDir)../ehbasic" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+        <Copy SourceFiles="$(ProjectDir)../ehbasic/keyboard.bin" DestinationFiles="$(HOME)/e6502-programs/keyboard.bin" />
     </Target>
 
-    <!-- Assemble the EhBASIC ROM from source (Windows) -->
+    <!-- Assemble the EhBASIC ROM + keyboard viewer from source (Windows) -->
     <Target Name="AssembleRomWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateToolsWindows" Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
-        <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm &amp;&amp; ld65 -C ehbasic.cfg -vm -m basic.map -o basic.bin basic.o" />
+        <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm &amp;&amp; ld65 -C ehbasic.cfg -vm -m basic.map -Ln basic.sym -o basic.bin basic.o" />
+        <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; python3 ..\tools\gen_novavm_inc.py ..\e6502.Avalonia\Hardware\VgcConstants.cs basic.sym -o novavm.inc" />
+        <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; ca65 --cpu 65c02 keyboard.s -o keyboard.o &amp;&amp; ld65 -C keyboard.cfg -o keyboard.bin keyboard.o" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+        <Copy SourceFiles="$(ProjectDir)../ehbasic/keyboard.bin" DestinationFiles="$(USERPROFILE)/e6502-programs/keyboard.bin" />
     </Target>
 
     <!-- Generate the PDF user guide (POSIX) -->
