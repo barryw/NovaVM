@@ -29,6 +29,9 @@ public sealed class MidiPlayback
     private int _ppqn;
     private bool _playing;
 
+    // Display hold: when a note is on+off in the same tick, hold it for 1 frame
+    private readonly bool[] _heldForDisplay = new bool[6];
+
     public bool IsPlaying => _playing;
 
     public MidiPlayback(MusicEngine engine, int frameRateHz = VgcConstants.FrameRateHz)
@@ -54,9 +57,7 @@ public sealed class MidiPlayback
 
         if (_timeline.Count > 0)
         {
-            long lastTick = _timeline[^1].MidiTick;
-            int totalFrames = (int)(lastTick / _midiTicksPerFrame);
-            _engine.SetTotalFrames(totalFrames);
+            _engine.SetTotalFrames(ComputeTotalFrames());
         }
 
         _engine.EnterMidiMode();
@@ -75,7 +76,21 @@ public sealed class MidiPlayback
     {
         if (!_playing || _timeline is null) return;
 
+        // Clear any display-held notes from previous tick
+        for (int i = 0; i < _heldForDisplay.Length; i++)
+        {
+            if (_heldForDisplay[i])
+            {
+                _engine.SetVoiceNoteExternal(i, -1);
+                _heldForDisplay[i] = false;
+            }
+        }
+
         _midiTickAccum += _midiTicksPerFrame;
+
+        // Track last note-on per voice this tick
+        int[] lastNoteOn = new int[6];
+        for (int i = 0; i < 6; i++) lastNoteOn[i] = -1;
 
         while (_timelineIndex < _timeline.Count)
         {
@@ -94,7 +109,20 @@ public sealed class MidiPlayback
             if (ev.MidiNote < 0)
                 _engine.DirectNoteOff(ev.Voice);
             else
+            {
                 _engine.DirectNoteOn(ev.Voice, ev.MidiNote, ev.Velocity, ev.InstrumentId);
+                lastNoteOn[ev.Voice] = ev.MidiNote;
+            }
+        }
+
+        // Hold notes for display if they were on+off in the same tick
+        for (int i = 0; i < 6; i++)
+        {
+            if (lastNoteOn[i] > 0 && _engine.GetVoiceNote(i) == 0)
+            {
+                _engine.SetVoiceNoteExternal(i, lastNoteOn[i]);
+                _heldForDisplay[i] = true;
+            }
         }
 
         if (_timelineIndex >= _timeline.Count)
@@ -106,6 +134,31 @@ public sealed class MidiPlayback
     private void SetTempo(int bpm)
     {
         _midiTicksPerFrame = (double)_ppqn * bpm / (_frameRateHz * 60.0);
+    }
+
+    /// <summary>
+    /// Walk the timeline accounting for tempo changes to compute accurate total frames.
+    /// </summary>
+    private int ComputeTotalFrames()
+    {
+        if (_timeline == null || _timeline.Count == 0) return 0;
+
+        double ticksPerFrame = _midiTicksPerFrame; // starts at current (default 120 BPM)
+        long prevTick = 0;
+        double totalFrames = 0;
+
+        foreach (var ev in _timeline)
+        {
+            long deltaTicks = ev.MidiTick - prevTick;
+            if (deltaTicks > 0 && ticksPerFrame > 0)
+                totalFrames += deltaTicks / ticksPerFrame;
+            prevTick = ev.MidiTick;
+
+            if (ev.Voice == -1) // tempo change
+                ticksPerFrame = (double)_ppqn * ev.Bpm / (_frameRateHz * 60.0);
+        }
+
+        return (int)totalFrames;
     }
 
     private List<TimelineEvent> BuildTimeline(MidiFile midi, int[] voiceToChannel, int[] instrumentSlots)

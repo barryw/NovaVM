@@ -194,11 +194,15 @@ public sealed partial class FileIoController
             }
 
             string path = GetFullPath(filename, ".bas");
+            bool isBin = false;
             if (!File.Exists(path))
             {
                 string binPath = GetFullPath(filename, ".bin");
                 if (File.Exists(binPath))
+                {
                     path = binPath;
+                    isBin = true;
+                }
             }
 
             if (!File.Exists(path))
@@ -215,18 +219,32 @@ public sealed partial class FileIoController
                 return;
             }
 
-            // Skip 2-byte load-address prefix
+            // 2-byte load-address prefix
             int dataLength = data.Length - 2;
+            int destAddr;
 
-            int destAddr = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+            if (isBin)
+            {
+                // .bin files load at their embedded address
+                destAddr = data[0] | (data[1] << 8);
+                // Write the actual load address back so BASIC can read it
+                _regs[VgcConstants.FioSrcL - VgcConstants.FioBase] = (byte)(destAddr & 0xFF);
+                _regs[VgcConstants.FioSrcH - VgcConstants.FioBase] = (byte)((destAddr >> 8) & 0xFF);
+            }
+            else
+            {
+                // .bas files load at the address BASIC provides
+                destAddr = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
                          | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
+            }
 
             for (int i = 0; i < dataLength; i++)
                 _busWrite((ushort)(destAddr + i), data[2 + i]);
 
-            // Set loaded size (excluding prefix)
+            // Set loaded size (excluding prefix) and file type
             _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataLength & 0xFF);
             _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataLength >> 8) & 0xFF);
+            _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)(isBin ? VgcConstants.FioDirTypeBin : 0);
 
             SetOk();
             ProgramLoaded?.Invoke(filename);
@@ -250,6 +268,7 @@ public sealed partial class FileIoController
                 ? dir.GetFiles("*.bas")
                       .Concat(dir.GetFiles("*.sid"))
                       .Concat(dir.GetFiles("*.bin"))
+                      .Concat(dir.GetFiles("*.mid"))
                       .OrderBy(f => f.Name).ToList()
                 : [];
             _dirIndex = 0;
@@ -639,21 +658,47 @@ public sealed partial class FileIoController
 
     private void PopulateDirEntry(FileInfo fi)
     {
-        // Name without extension
-        string name = Path.GetFileNameWithoutExtension(fi.Name);
-        int nameLen = Math.Min(name.Length, 63);
+        string baseName = Path.GetFileNameWithoutExtension(fi.Name);
+        string ext = fi.Extension.ToLowerInvariant();
+
+        // File type: 0=BAS, 1=SID, 2=BIN, 3=MID
+        int type = ext switch { ".sid" => 1, ".bin" => 2, ".mid" => 3, _ => 0 };
+        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)type;
+
+        // Build display name with addresses appended
+        string displayName = baseName;
+        try
+        {
+            if (type == 2 && fi.Length >= 2) // BIN: show load address
+            {
+                byte[] hdr = new byte[2];
+                using var fs = fi.OpenRead();
+                if (fs.Read(hdr, 0, 2) == 2)
+                    displayName = $"{baseName} ${hdr[0] | (hdr[1] << 8):X4}";
+            }
+            else if (type == 1 && fi.Length >= 0x16) // SID: show load/init/play
+            {
+                byte[] hdr = new byte[0x16];
+                using var fs = fi.OpenRead();
+                if (fs.Read(hdr, 0, hdr.Length) == hdr.Length)
+                {
+                    int load = (hdr[0x08] << 8) | hdr[0x09]; // big-endian
+                    int init = (hdr[0x0A] << 8) | hdr[0x0B];
+                    int play = (hdr[0x0C] << 8) | hdr[0x0D];
+                    displayName = $"{baseName} ${load:X4} ${init:X4} ${play:X4}";
+                }
+            }
+        }
+        catch { /* ignore — just use bare name */ }
+
+        int nameLen = Math.Min(displayName.Length, 63);
         _regs[VgcConstants.FioNameLen - VgcConstants.FioBase] = (byte)nameLen;
         int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
         for (int i = 0; i < nameLen; i++)
-            _regs[nameOffset + i] = (byte)name[i];
+            _regs[nameOffset + i] = (byte)displayName[i];
 
-        // File type: 0=PRG (.bas), 1=SID (.sid), 2=BIN (.bin)
-        bool isSid = fi.Extension.Equals(".sid", StringComparison.OrdinalIgnoreCase);
-        bool isBin = fi.Extension.Equals(".bin", StringComparison.OrdinalIgnoreCase);
-        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)(isSid ? 1 : isBin ? 2 : 0);
-
-        // File size excluding 2-byte load-address prefix (PRG only)
-        long dataSize = isSid ? fi.Length : Math.Max(0, fi.Length - 2);
+        // File size (SID/MID = full file size, BAS/BIN = minus 2-byte header)
+        long dataSize = (type == 1 || type == 3) ? fi.Length : Math.Max(0, fi.Length - 2);
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
     }

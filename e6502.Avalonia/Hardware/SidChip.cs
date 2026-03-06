@@ -5,12 +5,17 @@
 // Waveform generation and filter implementation based on jsSID
 // jsSID by Hermit (Mihaly Horvath) : a javascript SID emulator and player for the Web Audio API
 // (Year 2016) http://hermit.sidrip.com
+//
+// NovaBASIC extension: registers $1D-$1F add per-voice volume (0-15, 4-bit).
+// The real MOS 6581/8580 has no per-voice volume — only a 4-bit master volume
+// in register $18. These extension registers default to 15 (full) so existing
+// SID code behaves identically. See docs/help/guides/sound-and-music.md.
 
 namespace e6502.Avalonia.Hardware;
 
 public sealed class SidChip : IDisposable
 {
-    public const int RegisterCount = 29; // $00-$1C
+    public const int RegisterCount = 32; // $00-$1F (extended: $1D-$1F = per-voice volume)
     public readonly ushort BaseAddress;
     public readonly ushort EndAddress;
     private const int SampleRate = 44100;
@@ -32,6 +37,11 @@ public sealed class SidChip : IDisposable
         EndAddress = (ushort)(baseAddress + RegisterCount - 1);
         for (int i = 0; i < 3; i++)
             _channels[i] = new SidChannel();
+
+        // Per-voice volume defaults to max (backward compatible)
+        _registers[0x1D] = 0x0F;
+        _registers[0x1E] = 0x0F;
+        _registers[0x1F] = 0x0F;
 
         _channels[0].SyncTarget = _channels[1];
         _channels[1].SyncTarget = _channels[2];
@@ -179,6 +189,7 @@ public sealed class SidChip : IDisposable
             _channels[i].Waveform = _registers[ofs + 4];
             _channels[i].Ad = _registers[ofs + 5];
             _channels[i].Sr = _registers[ofs + 6];
+            _channels[i].VoiceVolume = _registers[0x1D + i];
         }
     }
 
@@ -187,20 +198,14 @@ public sealed class SidChip : IDisposable
         float output = 0f;
         float filterInput = 0f;
 
-        if ((filterCtrl & 1) == 0)
-            output += _channels[0].GetOutput();
-        else
-            filterInput += _channels[0].GetOutput();
-
-        if ((filterCtrl & 2) == 0)
-            output += _channels[1].GetOutput();
-        else
-            filterInput += _channels[1].GetOutput();
-
-        if ((filterCtrl & 4) == 0)
-            output += _channels[2].GetOutput();
-        else
-            filterInput += _channels[2].GetOutput();
+        for (int ch = 0; ch < 3; ch++)
+        {
+            float chOut = _channels[ch].GetOutput() * ((_channels[ch].VoiceVolume & 0xF) / 15f);
+            if ((filterCtrl & (1 << ch)) == 0)
+                output += chOut;
+            else
+                filterInput += chOut;
+        }
 
         // Highpass
         float temp = filterInput + _prevBandPass * resonance + _prevLowPass;
@@ -235,6 +240,7 @@ public sealed class SidChip : IDisposable
         public byte Sr;
         public ushort Pulse;
         public byte Waveform;
+        public byte VoiceVolume = 0x0F;
         public bool DoSync;
 
         private enum AdsrState { Attack, Decay, Release }

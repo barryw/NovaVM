@@ -132,14 +132,17 @@ public partial class MainWindow : Window
             long lastFrameTotal = _bus.TotalFrames;
             double peakPendingCycles = 0;
 
+            int overshoot = 0;
             while (_running)
             {
                 _debugger.CheckBreakpointAndWait();
 
                 int cycleBudget = turboMode ? turboChunkCycles : scheduler.TakeCycleBudget();
+                cycleBudget -= overshoot;
+                overshoot = 0;
                 if (cycleBudget <= 0)
                 {
-                    Thread.Yield();
+                    Thread.Sleep(1);
                     continue;
                 }
 
@@ -158,6 +161,8 @@ public partial class MainWindow : Window
 
                     cycleBudget -= cycles;
                 }
+                if (cycleBudget < 0)
+                    overshoot = -cycleBudget;
 
                 if (!timingLog)
                     continue;

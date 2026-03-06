@@ -10,7 +10,7 @@ Replace `VirtualSoundController` with a new `SidChip` class based on [cadaver's 
 
 ### Register Mapping
 
-SID registers at $D400-$D41C (29 bytes), matching the real C64 layout:
+SID registers at $D400-$D41F (32 bytes). Registers $00-$18 match the real C64 layout; $1D-$1F are NovaBASIC extensions:
 
 | Range | Purpose |
 |-------|---------|
@@ -19,14 +19,25 @@ SID registers at $D400-$D41C (29 bytes), matching the real C64 layout:
 | $D40E-$D414 | Voice 3 |
 | $D415-$D417 | Filter (cutoff lo/hi, res/routing) |
 | $D418 | Mode/volume (filter mode + master volume) |
+| $D419-$D41C | Unused (read as 0, matching real SID) |
+| $D41D-$D41F | **Extension:** Per-voice volume (voice 1/2/3, 0-15, default 15) |
+
+#### Per-Voice Volume (NovaBASIC Extension)
+
+The real MOS 6581/8580 SID chip only has a 4-bit master volume control in register $18. Individual voice output levels cannot be adjusted — all three voices mix at equal amplitude before hitting the master volume and filter.
+
+NovaBASIC extends the SID with three per-voice volume registers at $1D-$1F. Each uses the low nibble (0-15), matching the 4-bit range of the master volume for consistency with the original SID design. The value scales the voice's output after the ADSR envelope but before the filter and master volume stage. The default value of 15 (full) means existing programs that never touch these registers behave identically to a real SID.
+
+This extension enables MIDI velocity mapping, dynamic voice balancing, and fade effects that were impossible on the original hardware.
 
 ### Bus Routing
 
-$D400-$D41C falls inside the ROM region ($C000-$FFFF). In `CompositeBusDevice`:
-- **Writes** to $D400-$D41C route to the SID emulation
-- **Reads** from $D400-$D41C return ROM bytes as normal
+$D400-$D41F falls inside the ROM region ($C000-$FFFF). In `CompositeBusDevice`:
+- **Writes** to $D400-$D41F route to SID 1 emulation
+- **Writes** to $D420-$D43F route to SID 2 emulation
+- **Reads** from these ranges return ROM bytes as normal
 
-This means SID player code from .sid files works unmodified — it writes to the same addresses as on the real C64.
+This means SID player code from .sid files works unmodified — it writes to the same addresses as on the real C64. The extension registers are simply ignored by legacy code.
 
 ### Audio Output
 

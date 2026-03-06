@@ -17,25 +17,54 @@ public static class MidiEngine
         public int Channel;
         public int NoteCount;
         public int GmProgram;
+        public int MaxPolyphony;
         public bool IsDrums => Channel == 9;
     }
 
-    /// <summary>Analyze all 16 MIDI channels, counting notes and extracting GM programs.</summary>
+    /// <summary>Analyze all 16 MIDI channels, counting notes, max polyphony, and extracting GM programs.</summary>
     public static ChannelInfo[] AnalyzeChannels(MidiFile midi)
     {
         var channels = new ChannelInfo[16];
         for (int i = 0; i < 16; i++)
             channels[i] = new ChannelInfo { Channel = i };
 
+        // Track active notes per channel to compute max polyphony
+        var activeNotes = new HashSet<int>[16];
+        for (int i = 0; i < 16; i++)
+            activeNotes[i] = new HashSet<int>();
+
+        // Collect all note events sorted by time
+        var allEvents = new List<(long time, int channel, int note, bool isOn)>();
         foreach (var trackChunk in midi.GetTrackChunks())
         {
             foreach (var timedEvent in trackChunk.GetTimedEvents())
             {
-                if (timedEvent.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
-                    channels[noteOn.Channel]!.NoteCount++;
-                else if (timedEvent.Event is ProgramChangeEvent pc)
-                    channels[pc.Channel]!.GmProgram = pc.ProgramNumber;
+                switch (timedEvent.Event)
+                {
+                    case NoteOnEvent noteOn when noteOn.Velocity > 0:
+                        channels[noteOn.Channel]!.NoteCount++;
+                        allEvents.Add((timedEvent.Time, noteOn.Channel, noteOn.NoteNumber, true));
+                        break;
+                    case NoteOnEvent noteOn:
+                        allEvents.Add((timedEvent.Time, noteOn.Channel, noteOn.NoteNumber, false));
+                        break;
+                    case NoteOffEvent noteOff:
+                        allEvents.Add((timedEvent.Time, noteOff.Channel, noteOff.NoteNumber, false));
+                        break;
+                    case ProgramChangeEvent pc:
+                        channels[pc.Channel]!.GmProgram = pc.ProgramNumber;
+                        break;
+                }
             }
+        }
+
+        allEvents.Sort((a, b) => a.time.CompareTo(b.time));
+        foreach (var (_, ch, note, isOn) in allEvents)
+        {
+            if (isOn) activeNotes[ch].Add(note);
+            else activeNotes[ch].Remove(note);
+            if (activeNotes[ch].Count > channels[ch].MaxPolyphony)
+                channels[ch].MaxPolyphony = activeNotes[ch].Count;
         }
 
         return channels;
@@ -56,11 +85,15 @@ public static class MidiEngine
         new() { Waveform = 0x40, Attack = 0, Decay = 4, Sustain = 7, Release = 6, Name = "Pulse Piano" },
         new() { Waveform = 0x40, Attack = 0, Decay = 9, Sustain = 0, Release = 6, Name = "Pulse Lead" },
         new() { Waveform = 0x20, Attack = 4, Decay = 6, Sustain = 10, Release = 8, Name = "Saw Strings" },
-        new() { Waveform = 0x20, Attack = 0, Decay = 5, Sustain = 8, Release = 4, Name = "Saw Brass" },
+        new() { Waveform = 0x20, Attack = 2, Decay = 4, Sustain = 10, Release = 4, Name = "Saw Brass" },
         new() { Waveform = 0x10, Attack = 2, Decay = 6, Sustain = 12, Release = 8, Name = "Tri Flute" },
-        new() { Waveform = 0x10, Attack = 0, Decay = 5, Sustain = 8, Release = 4, Name = "Tri Bass" },
+        new() { Waveform = 0x10, Attack = 0, Decay = 4, Sustain = 10, Release = 4, Name = "Tri Bass" },
         new() { Waveform = 0x80, Attack = 0, Decay = 3, Sustain = 0, Release = 2, Name = "Noise Drums" },
         new() { Waveform = 0x20, Attack = 0, Decay = 5, Sustain = 8, Release = 4, Name = "Saw Default" },
+        new() { Waveform = 0x20, Attack = 3, Decay = 4, Sustain = 12, Release = 5, Name = "Saw Tuba" },
+        new() { Waveform = 0x40, Attack = 2, Decay = 5, Sustain = 10, Release = 6, Name = "Pulse Reed" },
+        new() { Waveform = 0x40, Attack = 1, Decay = 4, Sustain = 9, Release = 4, Name = "Pulse Sax" },
+        new() { Waveform = 0x10, Attack = 2, Decay = 5, Sustain = 10, Release = 5, Name = "Tri Bassoon" },
     };
 
     private const int BucketPulsePiano = 0;
@@ -71,6 +104,10 @@ public static class MidiEngine
     private const int BucketTriBass = 5;
     private const int BucketNoiseDrums = 6;
     private const int BucketSawDefault = 7;
+    private const int BucketSawTuba = 8;
+    private const int BucketPulseReed = 9;
+    private const int BucketPulseSax = 10;
+    private const int BucketTriBassoon = 11;
 
     public static InstrumentBucket GetInstrumentBucket(int gmProgram, bool isDrums)
     {
@@ -84,7 +121,14 @@ public static class MidiEngine
             >= 24 and <= 31 => Buckets[BucketPulsePiano],   // Guitar (acoustic)
             >= 32 and <= 39 => Buckets[BucketTriBass],      // Bass
             >= 40 and <= 55 => Buckets[BucketSawStrings],   // Strings + Ensemble
-            >= 56 and <= 71 => Buckets[BucketSawBrass],     // Brass + Reed
+            56 or 57 or 59  => Buckets[BucketSawBrass],     // Trumpet, Trombone, Muted Trumpet
+            58              => Buckets[BucketSawTuba],       // Tuba
+            60 or 61        => Buckets[BucketSawBrass],     // French Horn, Brass Section
+            >= 62 and <= 63 => Buckets[BucketSawBrass],     // Synth Brass
+            >= 64 and <= 67 => Buckets[BucketPulseSax],     // Soprano/Alto/Tenor/Baritone Sax
+            68 or 69        => Buckets[BucketPulseReed],    // Oboe, English Horn
+            70              => Buckets[BucketTriBassoon],   // Bassoon
+            71              => Buckets[BucketPulseReed],    // Clarinet
             >= 72 and <= 79 => Buckets[BucketTriFlute],     // Pipe
             >= 80 and <= 95 => Buckets[BucketPulseLead],    // Synth lead + pad
             _               => Buckets[BucketSawDefault],   // Everything else
@@ -152,6 +196,11 @@ public static class MidiEngine
     /// Select up to maxVoices channels, ranked by note count.
     /// If explicitMapping is provided (voice 1-based -> channel 0-based), those are used first.
     /// </summary>
+    /// <summary>
+    /// Select channels and allocate voices. A polyphonic channel gets multiple voices.
+    /// Returns an array where index = voice, value = MIDI channel.
+    /// A channel may appear multiple times (e.g., [0, 0, 0] = 3 voices for channel 0).
+    /// </summary>
     public static int[] SelectChannels(MidiFile midi, int maxVoices = 6,
         Dictionary<int, int>? explicitMapping = null)
     {
@@ -166,12 +215,36 @@ public static class MidiEngine
                 .ToArray();
         }
 
-        return analysis
+        // Rank channels by note count, allocate voices proportional to polyphony
+        var activeChannels = analysis
             .Where(c => c.NoteCount > 0)
             .OrderByDescending(c => c.NoteCount)
-            .Take(maxVoices)
-            .Select(c => c.Channel)
-            .ToArray();
+            .ToList();
+
+        if (activeChannels.Count == 0)
+            return Array.Empty<int>();
+
+        var result = new List<int>();
+
+        // First pass: give each channel at least 1 voice
+        foreach (var ch in activeChannels)
+        {
+            if (result.Count >= maxVoices) break;
+            result.Add(ch.Channel);
+        }
+
+        // Second pass: distribute remaining voices to polyphonic channels
+        int remaining = maxVoices - result.Count;
+        foreach (var ch in activeChannels)
+        {
+            if (remaining <= 0) break;
+            int extraVoices = Math.Min(remaining, Math.Max(0, ch.MaxPolyphony - 1));
+            for (int i = 0; i < extraVoices; i++)
+                result.Add(ch.Channel);
+            remaining -= extraVoices;
+        }
+
+        return result.ToArray();
     }
 
     private static readonly string[] NoteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };

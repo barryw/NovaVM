@@ -8817,7 +8817,7 @@ FIO_GADDRL    = $B9AB          ; graphics offset low
 FIO_GADDRH    = $B9AC          ; graphics offset high
 FIO_GLENL     = $B9AD          ; graphics transfer length low
 FIO_GLENH     = $B9AE          ; graphics transfer length high
-FIO_DIRTYPE   = $B9AF          ; dir entry type: 0=PRG, 1=SID
+FIO_DIRTYPE   = $B9AF          ; dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID
 FIO_NAME      = $B9B0          ; filename buffer (64 bytes)
 
 FIO_CMD_SAVE  = $01            ; save program
@@ -9582,10 +9582,7 @@ LAB_BUMPED
 ; or      SAVE "filename", address, length    (raw block save)
 
 LAB_FSAVE
-      JSR   LAB_FIO_GETNAME   ; parse filename expression into FIO_NAME
-      BCC   @sv_have_name
-      JMP   LAB_FIO_ERRIO
-@sv_have_name
+      JSR   LAB_FIO_GETNAME   ; parse filename into FIO_NAME (errors internally)
       JSR   LAB_GBYT          ; peek at next token
       CMP   #','
       BEQ   @sv_raw
@@ -9626,44 +9623,29 @@ LAB_FSAVE
 @sv_ok
       RTS
 
-; perform LOAD "filename"             (program load)
-; or      LOAD "filename", address    (raw block load)
+; perform LOAD "filename"
+; File type is auto-detected by extension:
+;   .bas — loaded into BASIC program space, pointers updated
+;   .bin — loaded at embedded address (from 2-byte file header)
 
 LAB_FLOAD
-      JSR   LAB_FIO_GETNAME   ; parse filename expression into FIO_NAME
-      BCC   @ld_have_name
-      JMP   LAB_FIO_ERRIO
-@ld_have_name
-      LDA   #$00              ; load mode: 0=program, 1=raw
-      STA   TempB
-      JSR   LAB_GBYT          ; peek for optional ",address"
-      CMP   #','
-      BEQ   @ld_raw
-      ; default: load BASIC program at start of program memory
+      JSR   LAB_FIO_GETNAME   ; parse filename into FIO_NAME (errors internally)
+      ; set default load address to BASIC program start
       LDA   Smeml
       STA   FIO_SRCL
       LDA   Smemh
       STA   FIO_SRCH
-      JMP   @ld_go
-@ld_raw
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTWRD         ; destination address
-      LDA   FAC1_3
-      STA   FIO_SRCL
-      LDA   FAC1_2
-      STA   FIO_SRCH
-      LDA   #$01
-      STA   TempB
-@ld_go
       LDA   #FIO_CMD_LOAD
       STA   FIO_CMD
       ; check status
       LDA   FIO_STATUS
       CMP   #FIO_OK
       BNE   @ld_chk_err
-      LDA   TempB
-      BNE   @ld_raw_ok
-      ; success — update Svarl/Svarh = Smeml + FIO_SIZE
+      ; check file type — host sets FIO_DIRTYPE after load
+      LDA   FIO_DIRTYPE
+      CMP   #$02              ; .bin file?
+      BEQ   @ld_bin_ok
+      ; .bas file — update Svarl/Svarh = Smeml + FIO_SIZE
       CLC
       LDA   Smeml
       ADC   FIO_SIZEL
@@ -9679,23 +9661,29 @@ LAB_FLOAD
       STA   Sarryh
       STA   Earryh
       JMP   LAB_1274          ; print Ready, return to command loop
-@ld_raw_ok
+@ld_bin_ok
+      ; In program mode, silently continue; in immediate mode, print address
+      LDA   Clineh
+      CMP   #$FF
+      BNE   @ld_bin_done      ; running from a program — just return
+      LDA   #<@s_loaded
+      LDY   #>@s_loaded
+      JSR   LAB_18C3          ; print string
+      LDA   FIO_SRCH          ; high byte of load address
+      JSR   LAB_PRHEX
+      LDA   FIO_SRCL          ; low byte
+      JSR   LAB_PRHEX
+      JMP   LAB_1274          ; print Ready, return to command loop
+@ld_bin_done
       RTS
 @ld_chk_err
-      LDA   FIO_ERRCODE
-      CMP   #$01              ; not found?
-      BNE   @ld_errio
-      JMP   LAB_FIO_ERRFNF
-@ld_errio
-      JMP   LAB_FIO_ERRIO
+      JMP   LAB_FIO_ERRHND
+@s_loaded .byte $0D,$0A,"Loaded at $",0
 
 ; perform GSAVE "filename", space, offset, length
 
 LAB_GSAVE
-      JSR   LAB_FIO_GETNAME
-      BCC   @gs_have_name
-      JMP   LAB_FIO_ERRIO
-@gs_have_name
+      JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; graphics space id
       STX   FIO_GSPACE
@@ -9723,10 +9711,7 @@ LAB_GSAVE
 ; perform GLOAD "filename", space, offset [,length]
 
 LAB_GLOAD
-      JSR   LAB_FIO_GETNAME
-      BCC   @gl_have_name
-      JMP   LAB_FIO_ERRIO
-@gl_have_name
+      JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; graphics space id
       STX   FIO_GSPACE
@@ -9755,10 +9740,7 @@ LAB_GLOAD
 ; perform SIDPLAY "filename" [, song]
 
 LAB_SIDPLAY
-      JSR   LAB_FIO_GETNAME   ; parse filename → FIO_NAME/FIO_NAMELEN
-      BCC   @sp_have_name
-      JMP   LAB_FIO_ERRIO
-@sp_have_name
+      JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
       LDA   #$01              ; default song = 1
       STA   FIO_SRCL
       JSR   LAB_GBYT          ; peek next token
@@ -9784,10 +9766,7 @@ LAB_SIDSTOP
 ; MIDPLAY "song"  — auto-select 6 busiest MIDI channels
 
 LAB_MIDPLAY
-      JSR   LAB_FIO_GETNAME    ; parse filename → FIO_NAME/FIO_NAMELEN
-      BCC   @mid_ok
-      JMP   LAB_FIO_ERRIO
-@mid_ok
+      JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
       LDA   #$00
       STA   FIO_SRCL            ; no explicit mapping (auto-select)
       LDA   #FIO_CMD_MIDPLAY
@@ -9809,12 +9788,7 @@ LAB_FIO_EXEC
       BNE   @fio_chk_err
       RTS
 @fio_chk_err
-      LDA   FIO_ERRCODE
-      CMP   #$01              ; not found?
-      BNE   @fio_errio
-      JMP   LAB_FIO_ERRFNF
-@fio_errio
-      JMP   LAB_FIO_ERRIO
+      JMP   LAB_FIO_ERRHND
 
 ; perform MUSIC subcommand
 ; MUSIC voice, "mml"
@@ -10605,16 +10579,13 @@ LAB_BLITFILL
 ; perform DEL "filename"
 
 LAB_FDEL
-      JSR   LAB_FIO_GETNAME   ; parse filename expression into FIO_NAME
-      BCC   @del_have_name
-      JMP   LAB_FIO_ERRIO
-@del_have_name
+      JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
       ; trigger DELETE
       LDA   #FIO_CMD_DELETE
       JMP   LAB_FIO_EXEC      ; issue command, check status, return
 
 ; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
-; carry clear = success, carry set = invalid/empty/too long
+; on invalid/empty/too-long name, jumps directly to LAB_FIO_ERRIO
 
 LAB_FIO_GETNAME
       JSR   LAB_EVEX
@@ -10631,11 +10602,35 @@ LAB_FIO_GETNAME
       INY
       DEX
       BNE   @fio_cp_name
-      CLC
       RTS
 @fio_bad_name
-      SEC
-      RTS
+      JMP   LAB_FIO_ERRIO
+
+; Print byte in A as two hex digits (high nibble first)
+
+LAB_PRHEX
+      PHA
+      LSR                     ; shift high nibble down
+      LSR
+      LSR
+      LSR
+      JSR   @pr_nib           ; print high nibble
+      PLA
+      AND   #$0F              ; mask low nibble
+@pr_nib
+      CMP   #$0A
+      BCC   @pr_dig
+      ADC   #$06              ; adjust for A-F (carry is set)
+@pr_dig
+      ADC   #'0'              ; convert to ASCII
+      JMP   LAB_PRNA
+
+; shared LOAD error dispatch — checks FIO_ERRCODE
+LAB_FIO_ERRHND
+      LDA   FIO_ERRCODE
+      CMP   #$01              ; not found?
+      BEQ   LAB_FIO_ERRFNF
+      ; fall through to I/O error
 
 LAB_FIO_ERRIO
       LDA   #<ERR_FIO
@@ -10696,16 +10691,12 @@ LAB_DIR
       LDA   #<Decssp1
       LDY   #>Decssp1
       JSR   LAB_18C3          ; print null terminated string
-      ; print type based on FIO_DIRTYPE (0=PRG, 1=SID)
+      ; print type from table (0=BAS, 1=SID, 2=BIN, 3=MID)
       LDA   FIO_DIRTYPE
-      BNE   @dir_sid
-      LDA   #<STR_PRG
-      LDY   #>STR_PRG
-      JMP   @dir_ptype
-@dir_sid
-      LDA   #<STR_SID
-      LDY   #>STR_SID
-@dir_ptype
+      ASL
+      TAX
+      LDA   TAB_DTYPE,X
+      LDY   TAB_DTYPE+1,X
       JSR   LAB_18C3          ; print null terminated string
       ; print filename from FIO_NAME (length in FIO_NAMELEN)
       LDY   #$00
@@ -10727,8 +10718,11 @@ LAB_DIR
 @dir_done
       RTS
 
-STR_PRG     .byte "  PRG  ",$00
+TAB_DTYPE   .word STR_BAS, STR_SID, STR_BIN, STR_MID
+STR_BAS     .byte "  BAS  ",$00
 STR_SID     .byte "  SID  ",$00
+STR_BIN     .byte "  BIN  ",$00
+STR_MID     .byte "  MID  ",$00
 
 ; --- XMC expansion memory handlers ---
 

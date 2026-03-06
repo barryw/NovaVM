@@ -23,7 +23,6 @@ KEYS_PER_ROW = 28               ; white keys per row (4 octaves)
 ROW_WIDTH   = KEYS_PER_ROW * KW ; 308 pixels
 MIDI_BASE   = 12                ; C0 = MIDI note 12
 NUM_VOICES  = 6
-TRANS       = $0F               ; transparent color index
 BAR_X       = 6                 ; progress bar X
 BAR_Y       = 145               ; progress bar Y
 BAR_W       = 308               ; progress bar max fill width
@@ -58,13 +57,11 @@ zp_key_x_lo:    .res 1          ; key X lo
 zp_key_x_hi:    .res 1          ; key X hi
 zp_key_y:       .res 1          ; key Y
 zp_is_black:    .res 1          ; 1=black key
-zp_shape:       .res 1          ; sprite shape slot
-zp_spr_row:     .res 1          ; row counter for shape def
-zp_spr_shape:   .res 1          ; shape being defined
-zp_spr_color:   .res 1          ; voice color for shape
+zp_paint_col:   .res 1          ; color for flood fill
 zp_str_ptr:     .res 2          ; string pointer
 zp_prev_bar:    .res 2          ; previous bar fill width
 zp_last_frame:  .res 1          ; last frame counter for vsync
+zp_was_playing: .res 1          ; nonzero once music has been detected
 zp_oct_in_row:  .res 1          ; octave within current row
 ; Division
 zp_div_lo:      .res 1
@@ -137,6 +134,7 @@ main:
 
     stz zp_prev_bar
     stz zp_prev_bar+1
+    stz zp_was_playing
 
     ; Set mode 1 (gfx over text)
     lda #1
@@ -160,30 +158,13 @@ main:
     ; Draw octave labels
     jsr draw_labels
 
-    ; Define sprite shapes
-    jsr define_shapes
-
-    ; Init sprites 0-5: disabled, priority in-front, trans=15
-    ldx #0
-    ldy #0
-@init_spr:
-    cpy #NUM_VOICES
-    bcs @init_spr_done
-    lda #SpritePriInFront
-    sta SpriteRegBase + SprRegPriority,x
-    lda #TRANS
-    sta SpriteRegBase + SprRegTransColor,x
-    stz SpriteRegBase + SprRegFlags,x
-    txa
-    clc
-    adc #SpriteRegStride
-    tax
-    iny
-    bra @init_spr
-@init_spr_done:
-
     ; Draw chrome
     jsr draw_chrome
+
+    ; Drain keyboard buffer so residual keystrokes don't cause exit
+@drain_kb:
+    jsr V_INPT
+    bcs @drain_kb
 
     ; Snapshot frame counter
     lda RegStatus
@@ -202,24 +183,17 @@ main:
     ; Check music playing (bit 1)
     lda MusicStatus
     and #$02
-    bne @main_loop
+    beq @chk_stop
+    ; Music is playing — remember that
+    sta zp_was_playing
+    bra @main_loop
+@chk_stop:
+    ; Music not playing — only exit if it WAS playing before
+    lda zp_was_playing
+    beq @main_loop            ; never started, keep waiting
+    ; Was playing, now stopped — exit
 
 @exit:
-    ; Disable sprites
-    ldx #0
-    ldy #0
-@dis_spr:
-    cpy #NUM_VOICES
-    bcs @dis_done
-    stz SpriteRegBase + SprRegFlags,x
-    txa
-    clc
-    adc #SpriteRegStride
-    tax
-    iny
-    bra @dis_spr
-@dis_done:
-
     ; Clear graphics
     lda #CmdGcls
     sta RegCmd
@@ -532,18 +506,23 @@ mul_by_7:
 ; =====================================================================
 mul_by_kw:
     sta zp_tmp
-    ; val*11 = val*8 + val*2 + val
+    ; val*11 = val*8 + val*2 + val (16-bit result)
     asl                         ; *2
     sta zp_tmp2
     asl                         ; *4
     asl                         ; *8
     clc
-    adc zp_tmp2                 ; *10
-    clc
-    adc zp_tmp                  ; *11
+    adc zp_tmp2                 ; val*10 (may overflow)
     sta zp_mul_r_lo
     lda #0
-    adc #0                      ; carry from addition
+    adc #0                      ; capture carry from val*10
+    sta zp_mul_r_hi
+    lda zp_mul_r_lo
+    clc
+    adc zp_tmp                  ; + val = val*11
+    sta zp_mul_r_lo
+    lda zp_mul_r_hi
+    adc #0                      ; + carry
     sta zp_mul_r_hi
     rts
 
@@ -626,285 +605,6 @@ calc_label_col:
     rts
 
 ; =====================================================================
-; Define sprite shapes (12 total)
-; Shapes 0-5: white key pressed, shapes 6-11: black key pressed
-; =====================================================================
-define_shapes:
-    ldx #0
-@ds_loop:
-    cpx #NUM_VOICES
-    bcs @ds_done
-    stx zp_voice
-    lda voice_colors,x
-    sta zp_spr_color
-
-    ; White shape = voice index
-    txa
-    sta zp_spr_shape
-    jsr def_white_shape
-
-    ; Black shape = voice + 6
-    lda zp_voice
-    clc
-    adc #NUM_VOICES
-    sta zp_spr_shape
-    jsr def_black_shape
-
-    ldx zp_voice
-    inx
-    bra @ds_loop
-@ds_done:
-    rts
-
-; =====================================================================
-; Define white key pressed shape
-; zp_spr_shape = shape slot (0-5), zp_spr_color = color
-; =====================================================================
-def_white_shape:
-    ; Point sprite N at shape slot N (write to sprite register)
-    lda zp_spr_shape
-    asl
-    asl
-    asl
-    tax
-    lda zp_spr_shape
-    sta SpriteRegBase + SprRegShape,x
-
-    ; Build color byte patterns
-    ; Full color: CC (two voice-color pixels)
-    lda zp_spr_color
-    asl
-    asl
-    asl
-    asl
-    ora zp_spr_color
-    sta zp_tmp                  ; CC
-
-    ; Half color: C|transparent
-    lda zp_spr_color
-    asl
-    asl
-    asl
-    asl
-    ora #TRANS
-    sta zp_tmp2                 ; CF
-
-    ; Rows 0-1: accent bar (11 px = 5 full bytes + 1 half)
-    lda #0
-    sta zp_spr_row
-@ws_accent:
-    lda zp_spr_row
-    cmp #2
-    bcs @ws_body
-
-    lda zp_spr_shape
-    sta RegP0
-    lda zp_spr_row
-    sta RegP1
-    lda zp_tmp
-    sta RegP2
-    sta RegP3
-    sta RegP4
-    sta RegP5
-    sta RegP6
-    lda zp_tmp2
-    sta RegP7
-    lda #(TRANS << 4) | TRANS
-    sta RegP8
-    sta RegP9
-    lda #CmdSprRow
-    sta RegCmd
-
-    inc zp_spr_row
-    bra @ws_accent
-
-@ws_body:
-    ; Rows 2-12: white body
-    lda #(COL_WHITE << 4) | COL_WHITE
-    sta zp_tmp
-    lda #(COL_WHITE << 4) | TRANS
-    sta zp_tmp2
-@ws_body_loop:
-    lda zp_spr_row
-    cmp #13
-    bcs @ws_shadow
-
-    lda zp_spr_shape
-    sta RegP0
-    lda zp_spr_row
-    sta RegP1
-    lda zp_tmp
-    sta RegP2
-    sta RegP3
-    sta RegP4
-    sta RegP5
-    sta RegP6
-    lda zp_tmp2
-    sta RegP7
-    lda #(TRANS << 4) | TRANS
-    sta RegP8
-    sta RegP9
-    lda #CmdSprRow
-    sta RegCmd
-
-    inc zp_spr_row
-    bra @ws_body_loop
-
-@ws_shadow:
-    ; Rows 13-15: dark gray shadow
-    lda #(COL_DGRAY << 4) | COL_DGRAY
-    sta zp_tmp
-    lda #(COL_DGRAY << 4) | TRANS
-    sta zp_tmp2
-@ws_shad_loop:
-    lda zp_spr_row
-    cmp #16
-    bcs @ws_done
-
-    lda zp_spr_shape
-    sta RegP0
-    lda zp_spr_row
-    sta RegP1
-    lda zp_tmp
-    sta RegP2
-    sta RegP3
-    sta RegP4
-    sta RegP5
-    sta RegP6
-    lda zp_tmp2
-    sta RegP7
-    lda #(TRANS << 4) | TRANS
-    sta RegP8
-    sta RegP9
-    lda #CmdSprRow
-    sta RegCmd
-
-    inc zp_spr_row
-    bra @ws_shad_loop
-@ws_done:
-    rts
-
-; =====================================================================
-; Define black key pressed shape
-; zp_spr_shape = shape slot (6-11), zp_spr_color = color
-; =====================================================================
-def_black_shape:
-    ; Point sprite at shape slot
-    lda zp_spr_shape
-    asl
-    asl
-    asl
-    tax
-    lda zp_spr_shape
-    sta SpriteRegBase + SprRegShape,x
-
-    ; Color bytes
-    lda zp_spr_color
-    asl
-    asl
-    asl
-    asl
-    ora zp_spr_color
-    sta zp_tmp                  ; CC
-
-    lda zp_spr_color
-    asl
-    asl
-    asl
-    asl
-    ora #TRANS
-    sta zp_tmp2                 ; CF
-
-    ; Rows 0-1: accent (7px = 3.5 bytes)
-    lda #0
-    sta zp_spr_row
-@bs_accent:
-    lda zp_spr_row
-    cmp #2
-    bcs @bs_body
-
-    lda zp_spr_shape
-    sta RegP0
-    lda zp_spr_row
-    sta RegP1
-    lda zp_tmp
-    sta RegP2
-    sta RegP3
-    sta RegP4
-    lda zp_tmp2
-    sta RegP5
-    lda #(TRANS << 4) | TRANS
-    sta RegP6
-    sta RegP7
-    sta RegP8
-    sta RegP9
-    lda #CmdSprRow
-    sta RegCmd
-
-    inc zp_spr_row
-    bra @bs_accent
-
-@bs_body:
-    ; Rows 2-10: dark gray body
-    lda #(COL_DGRAY << 4) | COL_DGRAY
-    sta zp_tmp
-    lda #(COL_DGRAY << 4) | TRANS
-    sta zp_tmp2
-@bs_body_loop:
-    lda zp_spr_row
-    cmp #11
-    bcs @bs_trans
-
-    lda zp_spr_shape
-    sta RegP0
-    lda zp_spr_row
-    sta RegP1
-    lda zp_tmp
-    sta RegP2
-    sta RegP3
-    sta RegP4
-    lda zp_tmp2
-    sta RegP5
-    lda #(TRANS << 4) | TRANS
-    sta RegP6
-    sta RegP7
-    sta RegP8
-    sta RegP9
-    lda #CmdSprRow
-    sta RegCmd
-
-    inc zp_spr_row
-    bra @bs_body_loop
-
-@bs_trans:
-    ; Rows 11-15: transparent
-@bs_trans_loop:
-    lda zp_spr_row
-    cmp #16
-    bcs @bs_done
-
-    lda zp_spr_shape
-    sta RegP0
-    lda zp_spr_row
-    sta RegP1
-    lda #(TRANS << 4) | TRANS
-    sta RegP2
-    sta RegP3
-    sta RegP4
-    sta RegP5
-    sta RegP6
-    sta RegP7
-    sta RegP8
-    sta RegP9
-    lda #CmdSprRow
-    sta RegCmd
-
-    inc zp_spr_row
-    bra @bs_trans_loop
-@bs_done:
-    rts
-
-; =====================================================================
 ; Draw player chrome (progress bar, legend, instructions)
 ; =====================================================================
 draw_chrome:
@@ -957,8 +657,8 @@ draw_chrome:
     lda voice_colors,x
     sta RegFgCol
 
-    ; Solid block character
-    lda #$A0
+    ; Solid block character (CP437 $DB = █)
+    lda #$DB
     sta RegCharOut
 
     lda #COL_WHITE
@@ -1009,7 +709,7 @@ draw_chrome:
     rts
 
 ; =====================================================================
-; Update voice sprites
+; Update voices: flood-fill keys with voice colors
 ; =====================================================================
 update_voices:
     ldx #0
@@ -1023,16 +723,35 @@ update_voices:
     cmp prev_notes,x
     beq @uv_next
 
+    ; Note changed — restore old key first
+    lda prev_notes,x
+    beq @uv_no_restore
+    sta zp_note
+    jsr calc_key_coords
+    bcs @uv_no_restore
+    lda zp_is_black
+    bne @uv_rest_blk
+    lda #COL_WHITE
+    bra @uv_do_rest
+@uv_rest_blk:
+    lda #COL_BLACK
+@uv_do_rest:
+    jsr paint_at_key
+
+@uv_no_restore:
+    ; Store new note
+    ldx zp_voice
+    lda MusicNote1,x
     sta prev_notes,x
-    cmp #0
-    bne @uv_on
+    sta zp_note
+    beq @uv_next
 
-    ; Note off: disable sprite
-    jsr disable_sprite
-    bra @uv_next
-
-@uv_on:
-    jsr position_sprite
+    ; Paint new key with voice color
+    jsr calc_key_coords
+    bcs @uv_next
+    ldx zp_voice
+    lda voice_colors,x
+    jsr paint_at_key
 
 @uv_next:
     ldx zp_voice
@@ -1042,35 +761,24 @@ update_voices:
     rts
 
 ; =====================================================================
-; Disable sprite for zp_voice
+; Calculate seed point for a key from MIDI note
+; Input:  zp_note
+; Output: zp_key_x_lo/hi, zp_key_y, zp_is_black
+; Carry:  clear=valid, set=out of range
 ; =====================================================================
-disable_sprite:
-    lda zp_voice
-    asl
-    asl
-    asl
-    tax
-    lda SpriteRegBase + SprRegFlags,x
-    and #<(~SprFlagEnable)
-    sta SpriteRegBase + SprRegFlags,x
-    rts
-
-; =====================================================================
-; Position and enable sprite for zp_voice / zp_note
-; =====================================================================
-position_sprite:
-    ; Convert MIDI note to keyboard coordinates
+calc_key_coords:
     lda zp_note
     sec
     sbc #MIDI_BASE
-    bcs @ps_in_range1
-    jmp @ps_off                 ; below range
-@ps_in_range1:
+    bcs @ckc_ok1
+    sec
+    rts
+@ckc_ok1:
     cmp #96
-    bcc @ps_in_range2
-    jmp @ps_off                 ; above range (8 octaves = 96 notes)
-@ps_in_range2:
-
+    bcc @ckc_ok2
+    sec
+    rts
+@ckc_ok2:
     ; Divide by 12 -> octave, remainder -> pitch class
     sta zp_div_lo
     stz zp_div_hi
@@ -1087,16 +795,16 @@ position_sprite:
     lda key_type,x
     sta zp_is_black
     lda key_index,x
-    sta zp_tmp                  ; white key index in octave
+    sta zp_tmp2             ; white key index (zp_tmp clobbered by mul_by_7)
 
     ; Row and octave-in-row
     lda zp_octave
     cmp #4
-    bcs @ps_lower
+    bcs @ckc_lower
     stz zp_row
     sta zp_oct_in_row
-    bra @ps_calc_x
-@ps_lower:
+    bra @ckc_calc_x
+@ckc_lower:
     lda #1
     sta zp_row
     lda zp_octave
@@ -1104,90 +812,109 @@ position_sprite:
     sbc #4
     sta zp_oct_in_row
 
-@ps_calc_x:
-    ; global_wk = oct_in_row * 7 + white_key_index
+@ckc_calc_x:
     lda zp_oct_in_row
     jsr mul_by_7
     clc
-    adc zp_tmp                  ; + key index in octave
-    ; A = global white key index (0-27)
+    adc zp_tmp2             ; + key index in octave
+    jsr mul_by_kw           ; zp_mul_r_lo/hi
 
-    ; X pixel = global_wk * KW + KX
-    jsr mul_by_kw               ; -> zp_mul_r_lo/hi
+    lda zp_is_black
+    bne @ckc_black_x
+
+    ; White key seed: x = global_wk*11 + KX + KW/2
     lda zp_mul_r_lo
     clc
-    adc #KX
+    adc #(KX + KW/2)
+    sta zp_key_x_lo
+    lda zp_mul_r_hi
+    adc #0
+    sta zp_key_x_hi
+    bra @ckc_y
+
+@ckc_black_x:
+    ; Black key top-left: x = global_wk*11 + KX + KW - BW/2
+    lda zp_mul_r_lo
+    clc
+    adc #(KX + KW - BW/2)
     sta zp_key_x_lo
     lda zp_mul_r_hi
     adc #0
     sta zp_key_x_hi
 
-    ; Black key offset
-    lda zp_is_black
-    beq @ps_white
-
-    ; x += (KW - BW/2) = 8
-    lda zp_key_x_lo
-    clc
-    adc #(KW - BW/2)
-    sta zp_key_x_lo
-    lda zp_key_x_hi
-    adc #0
-    sta zp_key_x_hi
-
-    ; Shape = voice + 6
-    lda zp_voice
-    clc
-    adc #NUM_VOICES
-    sta zp_shape
-    bra @ps_set_y
-
-@ps_white:
-    ; Shape = voice
-    lda zp_voice
-    sta zp_shape
-
-@ps_set_y:
+@ckc_y:
     lda zp_row
-    beq @ps_y_upper
-    lda #Y2
-    bra @ps_assign
-@ps_y_upper:
+    bne @ckc_y_lower
     lda #Y1
-@ps_assign:
+    bra @ckc_y_set
+@ckc_y_lower:
+    lda #Y2
+@ckc_y_set:
+    ; A = row base Y
+    ldx zp_is_black
+    bne @ckc_y_blk
+    ; White: seed below black keys (y + BH + 4)
+    clc
+    adc #(BH + 4)
+@ckc_y_blk:
+    ; Black: y stays at row base (top-left of black key)
     sta zp_key_y
+    clc
+    rts
 
-    ; Set sprite shape
-    lda zp_voice
-    asl
-    asl
-    asl
-    tax
-    lda zp_shape
-    sta SpriteRegBase + SprRegShape,x
-
-    ; Position via command
-    lda zp_voice
+; =====================================================================
+; Paint a key with given color
+; Input:  A = color, zp_key_x_lo/hi, zp_key_y, zp_is_black
+; White keys: flood fill from seed point
+; Black keys: filled rectangle (can't flood fill -- shares color 0
+;             with background, would escape through top outline)
+; =====================================================================
+paint_at_key:
+    ; Set draw color
     sta RegP0
-    lda zp_key_x_lo
-    sta RegP1
-    lda zp_key_x_hi
-    sta RegP2
-    lda zp_key_y
-    sta RegP3
-    stz RegP4
-    lda #CmdSprPos
+    lda #CmdGcolor
     sta RegCmd
 
-    ; Enable
-    lda zp_voice
+    lda zp_is_black
+    bne @pak_black
+
+    ; White key: flood fill from seed point
+    lda zp_key_x_lo
     sta RegP0
-    lda #CmdSprEna
+    lda zp_key_x_hi
+    sta RegP1
+    lda zp_key_y
+    sta RegP2
+    stz RegP3
+    lda #CmdPaint
     sta RegCmd
     rts
 
-@ps_off:
-    jsr disable_sprite
+@pak_black:
+    ; Black key: filled rectangle
+    lda zp_key_x_lo
+    sta RegP0
+    lda zp_key_x_hi
+    sta RegP1
+    lda zp_key_y
+    sta RegP2
+    stz RegP3
+    ; x2 = x1 + BW - 1
+    lda zp_key_x_lo
+    clc
+    adc #(BW - 1)
+    sta RegP4
+    lda zp_key_x_hi
+    adc #0
+    sta RegP5
+    ; y2 = y1 + BH - 1
+    lda zp_key_y
+    clc
+    adc #(BH - 1)
+    sta RegP6
+    stz RegP7
+    lda #CmdFill
+    sta RegCmd
     rts
 
 ; =====================================================================

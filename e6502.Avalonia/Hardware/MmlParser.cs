@@ -132,6 +132,14 @@ public static class MmlParser
                 continue;
             }
 
+            if (ch == 'V')
+            {
+                pos++;
+                int vol = ReadInt(mml, ref pos, 15);
+                events.Add(new MmlEvent(MmlEventType.SetVoiceVolume, vol));
+                continue;
+            }
+
             if (ch == '~')
             {
                 pos++;

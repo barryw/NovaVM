@@ -37,14 +37,34 @@ VALID_DURATIONS = {1, 2, 4, 8, 16, 32}
 INSTRUMENT_VARIANTS: dict[str, list[tuple[int, int, int, int, int, str]]] = {
     "harpsichord": [
         (64, 0, 6, 5, 4, "PULSE HARPSICHORD"),
-        (64, 1, 8, 6, 4, "PULSE BASS"),
+        (32, 0, 8, 7, 3, "SAW HARPSICHORD"),
+        (16, 0, 6, 6, 4, "TRI HARPSICHORD"),
+        (64, 1, 7, 4, 5, "PULSE HARPSI LOW"),
+        (32, 1, 8, 5, 4, "SAW HARPSI LOW"),
+        (16, 1, 7, 5, 5, "TRI HARPSI LOW"),
+    ],
+    "piano": [
+        (64, 0, 4, 7, 6, "PULSE PIANO"),
+        (16, 1, 6, 8, 7, "TRI PIANO BASS"),
+        (32, 0, 4, 8, 5, "SAW PIANO"),
+        (16, 0, 5, 9, 6, "TRI PIANO"),
+        (32, 1, 5, 7, 6, "SAW PIANO BASS"),
+        (64, 1, 5, 6, 7, "PULSE PIANO BASS"),
+    ],
+    "acoustic grand": [
+        (16, 0, 5, 9, 6, "TRI GRAND"),
+        (32, 0, 4, 8, 5, "SAW GRAND"),
+        (64, 0, 4, 7, 6, "PULSE GRAND"),
+        (16, 1, 6, 8, 7, "TRI GRAND BASS"),
+        (32, 1, 5, 7, 6, "SAW GRAND BASS"),
+        (64, 1, 5, 6, 7, "PULSE GRAND BASS"),
     ],
 }
 
 INSTRUMENT_MAP: dict[str, tuple[int, int, int, int, int, str]] = {
     "harpsichord": (64, 0, 6, 5, 4, "PULSE HARPSICHORD"),
-    "acoustic grand": (64, 0, 4, 8, 4, "PULSE PIANO"),
-    "piano": (64, 0, 4, 8, 4, "PULSE PIANO"),
+    "acoustic grand": (16, 0, 5, 9, 6, "TRI GRAND"),
+    "piano": (16, 0, 5, 9, 6, "TRI PIANO"),
     "church organ": (32, 2, 4, 12, 6, "SAW ORGAN"),
     "organ": (32, 2, 4, 12, 6, "SAW ORGAN"),
     "strings": (32, 4, 6, 10, 8, "SAW STRINGS"),
@@ -57,8 +77,12 @@ INSTRUMENT_MAP: dict[str, tuple[int, int, int, int, int, str]] = {
 
 # Default instruments for voices when none specified
 DEFAULT_INSTRUMENTS: list[tuple[int, int, int, int, int, str]] = [
-    (64, 0, 6, 5, 4, "PULSE HARPSICHORD"),
-    (64, 1, 8, 6, 4, "PULSE BASS"),
+    (64, 0, 6, 5, 4, "PULSE LEAD"),
+    (32, 0, 8, 7, 3, "SAW MELODY"),
+    (16, 0, 6, 6, 4, "TRI BASS"),
+    (64, 1, 7, 4, 5, "PULSE MID"),
+    (32, 1, 8, 5, 4, "SAW LOW"),
+    (16, 1, 7, 5, 5, "TRI LOW"),
 ]
 
 
@@ -77,6 +101,14 @@ class LyNote:
     tied: bool           # followed by ~
     is_rest: bool
     bar_marker: bool = False  # True for bar-check-only entries
+    staccato: bool = False
+    accent: bool = False
+    trill: bool = False
+    slur_start: bool = False
+    slur_end: bool = False
+    dynamic: str = ""    # p, pp, f, ff, mf, mp, sf, fp, etc.
+    cresc: bool = False  # start of crescendo
+    decresc: bool = False  # start of decrescendo
 
 
 @dataclass
@@ -100,6 +132,182 @@ def strip_comments(text: str) -> str:
     # Line comments
     text = re.sub(r"%[^\n]*", "", text)
     return text
+
+
+def _simplify_chords(text: str, take_first: bool = False) -> str:
+    """Replace <note note note> chords with a single note.
+
+    take_first=True: use first note (correct for relative mode — first note
+    carries octave marks and is the reference pitch for subsequent notes).
+    take_first=False: use last note (highest pitch, used for absolute mode).
+    """
+    def _pick_note(m: re.Match) -> str:
+        chord_body = m.group(1)
+        note_pat = re.compile(r"([a-g](?:is(?:is)?|es(?:es)?)?[',]*)")
+        notes = note_pat.findall(chord_body)
+        if not notes:
+            return ""
+        return notes[0] if take_first else notes[-1]
+    return re.sub(r"<([^>]+)>", _pick_note, text)
+
+
+def _flatten_simultaneous(text: str) -> str:
+    """Extract first voice from << { ... } \\\\ { ... } >> blocks."""
+    result = []
+    i = 0
+    while i < len(text):
+        # Look for <<
+        if text[i:i+2] == "<<":
+            # Find the matching >>
+            depth = 1
+            j = i + 2
+            while j < len(text) and depth > 0:
+                if text[j:j+2] == "<<":
+                    depth += 1
+                    j += 2
+                elif text[j:j+2] == ">>":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                    j += 2
+                else:
+                    j += 1
+            block = text[i+2:j]
+            # Split on \\ to get voices, take the first one
+            parts = re.split(r"\\\\", block)
+            first = parts[0].strip()
+            # Strip outer braces if present
+            first = re.sub(r"^\s*\{", "", first)
+            first = re.sub(r"\}\s*$", "", first)
+            result.append(" " + first + " ")
+            i = j + 2
+        else:
+            result.append(text[i])
+            i += 1
+    return "".join(result)
+
+
+def _expand_repeats(text: str) -> str:
+    """Expand \\repeat volta N { body } \\alternative { {a} {b} } into body+a body+b."""
+    pat = re.compile(r"\\repeat\s+volta\s+(\d+)\s*\{")
+    result_parts: list[str] = []
+    pos = 0
+    for m in pat.finditer(text):
+        result_parts.append(text[pos:m.start()])
+        repeat_count = int(m.group(1))
+        brace_start = text.index("{", m.start())
+        body = find_brace_block(text, brace_start)
+        after_body = brace_start + len(body) + 2  # skip past closing }
+
+        # Check for \alternative
+        rest = text[after_body:].lstrip()
+        alternatives: list[str] = []
+        alt_end = after_body
+        alt_m = re.match(r"\\alternative\s*\{", rest)
+        if alt_m:
+            alt_brace = text.index("{", after_body + (alt_m.start()))
+            alt_block = find_brace_block(text, alt_brace)
+            alt_end = alt_brace + len(alt_block) + 2
+            # Parse individual alternatives (each in braces)
+            alt_inner = alt_block.strip()
+            ai = 0
+            while ai < len(alt_inner):
+                if alt_inner[ai] == "{":
+                    alt_body = find_brace_block(alt_inner, ai)
+                    alternatives.append(alt_body)
+                    ai += len(alt_body) + 2
+                else:
+                    ai += 1
+
+        if alternatives:
+            for i, alt in enumerate(alternatives):
+                result_parts.append(body + " " + alt + " ")
+        else:
+            for _ in range(min(repeat_count, 2)):
+                result_parts.append(body + " ")
+        pos = alt_end
+    result_parts.append(text[pos:])
+    return "".join(result_parts)
+
+
+def _strip_grace_notes(text: str) -> str:
+    """Remove grace notes (\\grace, \\acciaccatura, \\appoggiatura) and their arguments."""
+    # Grace with braced group
+    text = re.sub(r"\\(?:grace|acciaccatura|appoggiatura)\s*\{[^}]*\}", "", text)
+    # Grace with single note
+    text = re.sub(
+        r"\\(?:grace|acciaccatura|appoggiatura)\s+[a-g](?:is(?:is)?|es(?:es)?)?[',]*\d*\.?",
+        "", text,
+    )
+    return text
+
+
+def _strip_aftergrace(text: str) -> str:
+    """Remove \\afterGrace and its trailing grace group."""
+    text = re.sub(r"\\afterGrace\b", "", text)
+    return text
+
+
+def _strip_tuplet_wrappers(text: str) -> str:
+    """Remove \\times N/M { } wrappers but keep the notes inside."""
+    # We keep the notes but lose the rhythmic scaling — good enough for MML
+    pat = re.compile(r"\\times\s+\d+/\d+\s*\{")
+    result = []
+    pos = 0
+    for m in pat.finditer(text):
+        result.append(text[pos:m.start()])
+        brace_start = text.index("{", m.start())
+        body = find_brace_block(text, brace_start)
+        result.append(" " + body + " ")
+        pos = brace_start + len(body) + 2
+    result.append(text[pos:])
+    return "".join(result)
+
+
+def _preprocess_absolute_body(body: str) -> str:
+    """Pre-process a Staff body for absolute-pitch tokenization."""
+    body = _expand_repeats(body)
+    body = _strip_grace_notes(body)
+    body = _strip_aftergrace(body)
+    body = _strip_tuplet_wrappers(body)
+    body = _flatten_simultaneous(body)
+    body = _simplify_chords(body)
+    return body
+
+
+def _parse_absolute_staves(text: str) -> list[LyVoice]:
+    """Parse absolute-pitch LilyPond files by extracting Staff blocks."""
+    voices: list[LyVoice] = []
+    # Find \new Staff blocks from the original (brace-balanced) text
+    staff_pat = re.compile(r"\\(?:new|context)\s+Staff\s*(?:=\s*\"([^\"]*)\")?\s*\{")
+    for i, m in enumerate(staff_pat.finditer(text)):
+        name = m.group(1) or f"staff{i+1}"
+        brace_start = text.index("{", m.start())
+        try:
+            body = find_brace_block(text, brace_start)
+        except ValueError:
+            continue
+
+        # Extract instrument before pre-processing
+        instrument = "piano"
+        instr_m = re.search(r'\\set\s+Staff\.midiInstrument\s*=\s*"([^"]+)"', body)
+        if instr_m:
+            instrument = instr_m.group(1).lower()
+
+        # Pre-process body
+        body = _preprocess_absolute_body(body)
+
+        voice = LyVoice(
+            name=name,
+            instrument=instrument,
+            start_letter="c",
+            start_octave=4,
+        )
+        voice.notes = tokenize_voice_absolute(body)
+        if voice.notes:
+            voices.append(voice)
+
+    return voices
 
 
 def extract_relative_pitch(pitch_str: str) -> tuple[str, int]:
@@ -136,6 +344,54 @@ def find_brace_block(text: str, start: int) -> str:
     raise ValueError("Unmatched brace")
 
 
+def _convert_relative_to_absolute(text: str) -> str:
+    """Convert relative-pitch LilyPond to absolute using python-ly."""
+    import ly.document
+    import ly.pitch.rel2abs
+    doc = ly.document.Document(text)
+    cursor = ly.document.Cursor(doc)
+    ly.pitch.rel2abs.rel2abs(cursor, first_pitch_absolute=True)
+    return doc.plaintext()
+
+
+def _parse_named_assignments(text: str) -> list[LyVoice]:
+    """Parse named variable assignments: name = { ... } as voice blocks."""
+    voices: list[LyVoice] = []
+    # Match: name = { or name = \relative ... { (relative already converted)
+    pattern = re.compile(r"(\w+)\s*=\s*\{")
+    for m in pattern.finditer(text):
+        name = m.group(1)
+        # Skip non-music assignments (global, dyn, dynamics, etc.)
+        if name.lower() in ("global", "dyn", "dynamics", "header", "paper",
+                            "layout", "midi", "score"):
+            continue
+        brace_pos = text.index("{", m.start())
+        try:
+            body = find_brace_block(text, brace_pos)
+        except ValueError:
+            continue
+
+        # Extract instrument
+        instrument = "harpsichord"
+        instr_m = re.search(r'\\set\s+Staff\.midiInstrument\s*=\s*"([^"]+)"', body)
+        if instr_m:
+            instrument = instr_m.group(1).lower()
+
+        # Preprocess for absolute-mode tokenization
+        body = _preprocess_absolute_body(body)
+
+        voice = LyVoice(
+            name=name,
+            instrument=instrument,
+            start_letter="c",
+            start_octave=4,
+        )
+        voice.notes = tokenize_voice_absolute(body)
+        if voice.notes:
+            voices.append(voice)
+    return voices
+
+
 def parse_lilypond_file(text: str) -> tuple[list[LyVoice], int]:
     """Parse a LilyPond file, extracting voices and tempo.
 
@@ -155,33 +411,29 @@ def parse_lilypond_file(text: str) -> tuple[list[LyVoice], int]:
         if m:
             tempo = int(m.group(2))
 
-    # Find voice definitions: name = \relative <pitch> { ... }
+    # Extract global instrument from header (mutopiainstrument or instrument)
+    global_instrument = ""
+    im = re.search(r'mutopiainstrument\s*=\s*"([^"]+)"', text)
+    if im:
+        global_instrument = im.group(1).lower()
+
+    # If the file uses \relative, convert to absolute pitches via python-ly
     voices: list[LyVoice] = []
-    pattern = re.compile(
-        r"(\w+)\s*=\s*\\relative\s+([a-g][',]*)\s*\{",
-        re.IGNORECASE,
-    )
+    if "\\relative" in text:
+        text = _convert_relative_to_absolute(text)
 
-    for m in pattern.finditer(text):
-        name = m.group(1)
-        start_letter, start_octave = extract_relative_pitch(m.group(2))
-        brace_pos = text.index("{", m.start())
-        body = find_brace_block(text, brace_pos)
+    # Try named assignment blocks: name = { ... }
+    voices = _parse_named_assignments(text)
 
-        # Extract instrument
-        instrument = "harpsichord"
-        instr_m = re.search(r'\\set\s+Staff\.midiInstrument\s*=\s*"([^"]+)"', body)
-        if instr_m:
-            instrument = instr_m.group(1).lower()
+    # If no named assignments found, try \new Staff blocks
+    if not voices:
+        voices = _parse_absolute_staves(text)
 
-        voice = LyVoice(
-            name=name,
-            instrument=instrument,
-            start_letter=start_letter,
-            start_octave=start_octave,
-        )
-        voice.notes = tokenize_voice(body, start_letter, start_octave)
-        voices.append(voice)
+    # Apply global instrument to voices that still have the default
+    if global_instrument:
+        for v in voices:
+            if v.instrument == "harpsichord":
+                v.instrument = global_instrument
 
     return voices, tempo
 
@@ -232,23 +484,31 @@ def resolve_relative_pitch(
 # Voice tokenizer
 # ---------------------------------------------------------------------------
 
-# Regex for LilyPond tokens
+# Regex for LilyPond tokens — captures notes with trailing expression marks
 _LY_TOKEN = re.compile(
     r"""
-    ([a-g])                     # note letter
-    ((?:is(?:is)?|es(?:es)?)?)  # accidental: is, isis, es, eses
-    ([',]*)                     # octave marks
-    (\d*)                       # duration
-    (\.?)                       # dot
-    (\s*~)?                     # tie
+    ([a-g])                     # 1: note letter
+    ((?:is(?:is)?|es(?:es)?)?)  # 2: accidental: is, isis, es, eses
+    ([',]*)                     # 3: octave marks
+    (\d*)                       # 4: duration
+    (\.?)                       # 5: dot
+    (\s*~)?                     # 6: tie
+    ([^\S\n]*(?:                # 7: trailing expression (optional, same line)
+        \\(?:staccato|accent|tenuto|marcato|trill|fermata
+            |p{1,3}|mp|mf|f{1,3}|fp|sfz?|rfz|cresc|decresc|dim
+            |startTrillSpan|stopTrillSpan
+            |[<>!])
+        |--[.>^_!+]            # shorthand articulations
+        |[()]                   # slur start/end
+    )*)?
     |
-    (r)(\d*)(\.?)               # rest with optional duration/dot
+    (r)(\d*)(\.?)               # 8,9,10: rest with optional duration/dot
     |
-    (\|)                        # bar check
+    (\|)                        # 11: bar check
     |
     \\[a-zA-Z]+                 # commands (skip)
     |
-    [\[\](){}^_\\]              # beaming, slurs, markup (skip)
+    [\[\]{}^_\\]                # beaming, markup (skip) — NOT ()
     |
     \#[^\s]+                    # scheme expressions (skip)
     |
@@ -269,23 +529,87 @@ def parse_accidental(acc_str: str) -> int:
     return 0
 
 
+def _parse_expression(expr: str | None) -> dict:
+    """Parse the trailing expression group from a note token."""
+    result = {
+        "staccato": False, "accent": False, "trill": False,
+        "slur_start": False, "slur_end": False,
+        "dynamic": "", "cresc": False, "decresc": False,
+    }
+    if not expr:
+        return result
+    if "\\staccato" in expr or "--." in expr:
+        result["staccato"] = True
+    if "\\accent" in expr or "-->" in expr:
+        result["accent"] = True
+    if "\\marcato" in expr or "--^" in expr:
+        result["accent"] = True
+    if "\\trill" in expr or "\\startTrillSpan" in expr:
+        result["trill"] = True
+    if "(" in expr:
+        result["slur_start"] = True
+    if ")" in expr:
+        result["slur_end"] = True
+    # Dynamics — match the strongest one
+    for dyn in ("ppp", "pp", "fp", "sfz", "sf", "ff", "f", "mf", "mp", "p"):
+        if f"\\{dyn}" in expr:
+            result["dynamic"] = dyn
+            break
+    if "\\<" in expr or "\\cresc" in expr:
+        result["cresc"] = True
+    if "\\>" in expr or "\\decresc" in expr or "\\dim" in expr:
+        result["decresc"] = True
+    return result
+
+
 def _clean_voice_body(text: str) -> str:
     """Remove non-music LilyPond commands from voice body before tokenizing."""
     # Remove \set ... lines (contain note-letter chars in identifiers)
     text = re.sub(r"\\set\b[^\n]*", "", text)
     # Remove \clef ... argument
     text = re.sub(r'\\clef\s+"?[^"\s]+"?', "", text)
-    # Remove \override, \revert, etc. with their arguments
+    # Remove \override, \revert, etc. with their arguments (to end of line)
     text = re.sub(r"\\(?:override|revert|once|omit)\b[^\n]*", "", text)
-    # Remove ^\fermata and similar articulations
-    text = re.sub(r"[\^_]\\[a-zA-Z]+", "", text)
     # Remove \bar "..." directives
     text = re.sub(r'\\bar\s+"[^"]*"', "", text)
+    # Remove \markup blocks (can contain note-like characters)
+    text = re.sub(r'\\markup\s*\{[^}]*\}', "", text)
+    text = re.sub(r'[\^_]\\markup\s*\{[^}]*\}', "", text)
+    # Remove cross-staff sections: \change Staff = "up" ... \change Staff = "down"
+    # Notes between these are played by the other staff and should not be duplicated
+    text = re.sub(
+        r'\\change\s+Staff\s*=\s*"up".*?\\change\s+Staff\s*=\s*"down"',
+        "", text, flags=re.DOTALL,
+    )
+    # Remove any remaining \change Staff commands
+    text = re.sub(r'\\change\s+Staff\s*=\s*"[^"]*"', "", text)
+    # Remove \mark "..." and \mark \default etc.
+    text = re.sub(r'\\mark\s+"[^"]*"', "", text)
+    text = re.sub(r'\\mark\s+\\[a-zA-Z]+', "", text)
+    # Remove \key, \time, \tempo, \global and their arguments (to end of token group)
+    text = re.sub(r"\\(?:key|time|global)\b[^\n|{]*", "", text)
+    text = re.sub(r'\\tempo\s+"[^"]*"', "", text)
+    text = re.sub(r"\\tempo\s+\d+\s*=\s*\d+", "", text)
+    # Remove commands with identifier arguments that contain note-like letters:
+    # \voiceOne, \voiceTwo, \oneVoice, \stemUp, \stemDown, \stemNeutral,
+    # \ottava, \break, \pageBreak, \noBreak, \hideNotes, \unHideNotes,
+    # \repeatTie, \autoBeamOff, \autoBeamOn, \numericTimeSignature
+    text = re.sub(
+        r"\\(?:voiceOne|voiceTwo|oneVoice|voiceFour|voiceThree"
+        r"|stemUp|stemDown|stemNeutral"
+        r"|ottava\s+#?-?\d+"
+        r"|break|pageBreak|noBreak"
+        r"|hideNotes|unHideNotes"
+        r"|repeatTie|autoBeamOff|autoBeamOn"
+        r"|numericTimeSignature"
+        r")\b",
+        "", text,
+    )
     return text
 
 
 def tokenize_voice(text: str, start_letter: str, start_octave: int) -> list[LyNote]:
-    """Tokenize a LilyPond voice body into resolved LyNote objects."""
+    """Tokenize a LilyPond voice body into resolved LyNote objects (relative mode)."""
     text = _clean_voice_body(text)
     notes: list[LyNote] = []
     prev_letter = start_letter
@@ -301,6 +625,7 @@ def tokenize_voice(text: str, start_letter: str, start_octave: int) -> list[LyNo
             dur_str = m.group(4)
             dot = bool(m.group(5))
             tied = bool(m.group(6))
+            expr = _parse_expression(m.group(7))
 
             accidental = parse_accidental(acc_str)
 
@@ -323,12 +648,20 @@ def tokenize_voice(text: str, start_letter: str, start_octave: int) -> list[LyNo
                 dotted=dot,
                 tied=tied,
                 is_rest=False,
+                staccato=expr["staccato"],
+                accent=expr["accent"],
+                trill=expr["trill"],
+                slur_start=expr["slur_start"],
+                slur_end=expr["slur_end"],
+                dynamic=expr["dynamic"],
+                cresc=expr["cresc"],
+                decresc=expr["decresc"],
             ))
 
         # Rest
-        elif m.group(7):
-            dur_str = m.group(8)
-            dot = bool(m.group(9))
+        elif m.group(8):
+            dur_str = m.group(9)
+            dot = bool(m.group(10))
             if dur_str:
                 cur_duration = int(dur_str)
             notes.append(LyNote(
@@ -342,7 +675,89 @@ def tokenize_voice(text: str, start_letter: str, start_octave: int) -> list[LyNo
             ))
 
         # Bar check
-        elif m.group(10):
+        elif m.group(11):
+            notes.append(LyNote(
+                letter="",
+                accidental=0,
+                octave=0,
+                duration=0,
+                dotted=False,
+                tied=False,
+                is_rest=False,
+                bar_marker=True,
+            ))
+
+    return notes
+
+
+def tokenize_voice_absolute(text: str) -> list[LyNote]:
+    """Tokenize a LilyPond voice body into resolved LyNote objects (absolute mode).
+
+    In absolute mode, octave is determined entirely by ' and , marks:
+      c = C3, c' = C4, c'' = C5, c, = C2, etc.
+    No relative interval calculation.
+    """
+    text = _clean_voice_body(text)
+    notes: list[LyNote] = []
+    cur_duration = 4  # default duration for absolute-pitch files
+
+    for m in _LY_TOKEN.finditer(text):
+        # Note
+        if m.group(1):
+            letter = m.group(1).lower()
+            acc_str = m.group(2)
+            octave_marks = m.group(3)
+            dur_str = m.group(4)
+            dot = bool(m.group(5))
+            tied = bool(m.group(6))
+            expr = _parse_expression(m.group(7))
+
+            accidental = parse_accidental(acc_str)
+
+            # Absolute octave: base 3, modified by ' and ,
+            ups = octave_marks.count("'")
+            downs = octave_marks.count(",")
+            octave = 3 + ups - downs
+
+            if dur_str:
+                cur_duration = int(dur_str)
+
+            notes.append(LyNote(
+                letter=letter,
+                accidental=accidental,
+                octave=octave,
+                duration=cur_duration,
+                dotted=dot,
+                tied=tied,
+                is_rest=False,
+                staccato=expr["staccato"],
+                accent=expr["accent"],
+                trill=expr["trill"],
+                slur_start=expr["slur_start"],
+                slur_end=expr["slur_end"],
+                dynamic=expr["dynamic"],
+                cresc=expr["cresc"],
+                decresc=expr["decresc"],
+            ))
+
+        # Rest
+        elif m.group(8):
+            dur_str = m.group(9)
+            dot = bool(m.group(10))
+            if dur_str:
+                cur_duration = int(dur_str)
+            notes.append(LyNote(
+                letter="r",
+                accidental=0,
+                octave=0,
+                duration=cur_duration,
+                dotted=dot,
+                tied=False,
+                is_rest=True,
+            ))
+
+        # Bar check
+        elif m.group(11):
             notes.append(LyNote(
                 letter="",
                 accidental=0,
@@ -387,9 +802,17 @@ def note_to_mml_letter(letter: str, accidental: int) -> str:
     return mml
 
 
+# Dynamic level → approximate SID filter cutoff (higher = brighter = louder feel)
+_DYN_FILTER: dict[str, int] = {
+    "ppp": 200, "pp": 400, "p": 600, "mp": 800,
+    "mf": 1000, "f": 1400, "ff": 1800, "fff": 2047,
+    "fp": 600, "sf": 1800, "sfz": 2000,
+}
+
+
 def notes_to_mml(notes: list[LyNote], tempo: int, instrument_id: int,
                  voice_num: int, is_first_voice: bool) -> str:
-    """Convert resolved LyNote list to an MML string."""
+    """Convert resolved LyNote list to an MML string with SID effects."""
     if not notes:
         return ""
 
@@ -416,9 +839,15 @@ def notes_to_mml(notes: list[LyNote], tempo: int, instrument_id: int,
     parts.append(f"O{initial_octave}")
     parts.append(f"L{default_dur}")
 
-    cur_octave = initial_octave
+    # Enable low-pass filter + PWM sweep for richer timbre
+    parts.append("@FL@F800,6@PS+")
 
-    for n in notes:
+    cur_octave = initial_octave
+    in_slur = False
+    vibrato_on = False
+    cur_dynamic = ""
+
+    for i, n in enumerate(notes):
         if n.bar_marker:
             parts.append("|")
             continue
@@ -432,8 +861,41 @@ def notes_to_mml(notes: list[LyNote], tempo: int, instrument_id: int,
             parts.append(s)
             continue
 
-        # Octave adjustment
-        target_oct = n.octave
+        # --- Expression effects before the note ---
+
+        # Dynamics → filter cutoff changes (brighter = louder feel)
+        if n.dynamic and n.dynamic != cur_dynamic:
+            cutoff = _DYN_FILTER.get(n.dynamic, 800)
+            parts.append(f"@F{cutoff},6")
+            cur_dynamic = n.dynamic
+
+        # Crescendo/decrescendo → filter sweep
+        if n.cresc:
+            parts.append("@FS+")
+        elif n.decresc:
+            parts.append("@FS-")
+
+        # Slur start → portamento on subsequent notes
+        if n.slur_start:
+            in_slur = True
+        if n.slur_end:
+            in_slur = False
+
+        # Portamento for slurred notes (not the first note of a slur)
+        if in_slur and not n.slur_start:
+            parts.append("/")
+
+        # Vibrato on long notes (half note or longer) when not staccato
+        is_long = n.duration <= 2 and not n.staccato
+        if is_long and not vibrato_on:
+            parts.append("~4")
+            vibrato_on = True
+        elif not is_long and vibrato_on:
+            parts.append("~0")
+            vibrato_on = False
+
+        # Octave adjustment (clamp to valid SID range 0-7)
+        target_oct = max(0, min(7, n.octave))
         if target_oct != cur_octave:
             diff = target_oct - cur_octave
             if diff == 1:
@@ -444,15 +906,42 @@ def notes_to_mml(notes: list[LyNote], tempo: int, instrument_id: int,
                 parts.append(f"O{target_oct}")
             cur_octave = target_oct
 
+        # Trill: emit as rapid alternation (note + note above)
+        if n.trill:
+            mml_note = note_to_mml_letter(n.letter, n.accidental)
+            # Trill with note one step above
+            above_idx = (LETTER_INDEX[n.letter] + 1) % 7
+            above_letter = [k for k, v in LETTER_INDEX.items() if v == above_idx][0]
+            mml_above = above_letter.upper()
+            # Split duration into rapid alternation (32nd notes)
+            parts.append(f"{mml_note}32{mml_above}32{mml_note}32{mml_above}32{mml_note}32{mml_above}32{mml_note}32{mml_above}32")
+            continue
+
+        # Staccato: halve the note duration (double the number = half duration)
+        note_dur = n.duration
+        staccato_rest = False
+        if n.staccato and note_dur <= 16:
+            staccato_rest = True
+            note_dur = note_dur * 2  # half length
+
         # Note
         s = note_to_mml_letter(n.letter, n.accidental)
-        if n.duration != default_dur:
-            s += str(n.duration)
-        if n.dotted:
+        if note_dur != default_dur:
+            s += str(note_dur)
+        if n.dotted and not n.staccato:
             s += "."
         if n.tied:
             s += "&"
         parts.append(s)
+
+        # Staccato: add a rest for the second half
+        if staccato_rest:
+            parts.append(f"R{note_dur}")
+
+    # Clean up: turn off vibrato/filter sweep at end
+    if vibrato_on:
+        parts.append("~0")
+    parts.append("@FS0")
 
     return "".join(parts)
 
@@ -699,7 +1188,7 @@ def _emit_visualization(
     legend_row = row2 + 1
     for i in range(nv):
         vn = voice_nums[i]
-        wc, _bc = VOICE_COLORS[i]
+        wc, _bc = VOICE_COLORS[i % len(VOICE_COLORS)]
         label = voices[i].name.upper()[:8]
         col = 1 + i * 13
         if col + 12 > 40:
@@ -736,7 +1225,8 @@ def _emit_visualization(
 
     # Key highlight subroutine
     # IN: S=MIDI note, KC=highlight color, BC=black highlight,
-    #     YO=y-offset within key for this voice's strip
+    #     YO=y-offset for white key indicator strip,
+    #     BO=y-offset for black key indicator strip (within black key area)
     # Determines which keyboard row (top/bottom) from the semitone value.
     idx_sub = len(viz)
     viz.append("REM == HIGHLIGHT KEY ==")
@@ -750,7 +1240,7 @@ def _emit_visualization(
     viz.append("X=KX+(OC*7+W)*KW:GCOLOR KC:FILL X+1,Y1+YO,X+KW-3,Y1+YO+SH-1")
     viz.append("RETURN")
     idx_black_u = len(viz)
-    viz.append("X=KX+(OC*7+W)*KW+KW-BW/2:GCOLOR BC:FILL X+1,Y1+YO,X+BW-2,Y1+YO+SH-1")
+    viz.append("X=KX+(OC*7+W)*KW+KW-BW/2:GCOLOR BC:FILL X+1,Y1+BO,X+BW-2,Y1+BO+SH-1")
     viz.append("RETURN")
     idx_lower = len(viz)
     viz.append("REM LOWER ROW")
@@ -759,7 +1249,7 @@ def _emit_visualization(
     viz.append("X=KX+(OC*7+W)*KW:GCOLOR KC:FILL X+1,Y2+YO,X+KW-3,Y2+YO+SH-1")
     viz.append("RETURN")
     idx_black_l = len(viz)
-    viz.append("X=KX+(OC*7+W)*KW+KW-BW/2:GCOLOR BC:FILL X+1,Y2+YO,X+BW-2,Y2+YO+SH-1")
+    viz.append("X=KX+(OC*7+W)*KW+KW-BW/2:GCOLOR BC:FILL X+1,Y2+BO,X+BW-2,Y2+BO+SH-1")
     viz.append("RETURN")
 
     # Assign line numbers
@@ -785,13 +1275,14 @@ def _emit_visualization(
 
     for i in range(nv):
         vi = i + 1
-        wc, bc = VOICE_COLORS[i]
-        y_off = bh + 1 + i * strip_h
+        wc, bc = VOICE_COLORS[i % len(VOICE_COLORS)]
+        y_off = bh + 1 + i * strip_h           # white key: indicator below black keys
+        b_off = bh - indicator_zone + i * strip_h  # black key: indicator within black key
         skip_ln = line_nums[idx_skips[i]]
 
         replacements[f"@SKIP{vi}@"] = f"IF N{vi}=P{vi} THEN GOTO {skip_ln}"
-        replacements[f"@CLR{vi}@"] = f"IF P{vi}>0 THEN S=P{vi}:KC=1:BC=0:YO={y_off}:GOSUB {sub_ln}"
-        replacements[f"@SET{vi}@"] = f"IF N{vi}>0 THEN S=N{vi}:KC={wc}:BC={bc}:YO={y_off}:GOSUB {sub_ln}"
+        replacements[f"@CLR{vi}@"] = f"IF P{vi}>0 THEN S=P{vi}:KC=1:BC=0:YO={y_off}:BO={b_off}:GOSUB {sub_ln}"
+        replacements[f"@SET{vi}@"] = f"IF N{vi}>0 THEN S=N{vi}:KC={wc}:BC={bc}:YO={y_off}:BO={b_off}:GOSUB {sub_ln}"
 
     for i in range(len(viz)):
         stmt = viz[i]
@@ -805,6 +1296,57 @@ def _emit_visualization(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
+def _voice_total_ticks(notes: list[LyNote]) -> int:
+    """Calculate total duration in ticks for a voice's note list."""
+    total = 0
+    for n in notes:
+        if n.bar_marker or n.duration <= 0:
+            continue
+        ticks = 96 * 4 // n.duration
+        if n.dotted:
+            ticks = ticks * 3 // 2
+        total += ticks
+    return total
+
+
+def _align_voices(voices: list[LyVoice]) -> None:
+    """Warn about and fix duration mismatches between voices."""
+    if len(voices) < 2:
+        return
+    durations = [(v.name, _voice_total_ticks(v.notes)) for v in voices]
+    max_ticks = max(d[1] for d in durations)
+    for name, ticks in durations:
+        if ticks != max_ticks:
+            diff_quarters = (max_ticks - ticks) / 96
+            print(f"  WARNING: {name} is {diff_quarters:.1f} quarter notes shorter than longest voice")
+    # Pad shorter voices with rests to match
+    for v in voices:
+        ticks = _voice_total_ticks(v.notes)
+        deficit = max_ticks - ticks
+        if deficit > 0:
+            # Add whole-note rests to pad
+            while deficit >= 384:
+                v.notes.append(LyNote(letter="r", accidental=0, octave=0,
+                                      duration=1, dotted=False, tied=False, is_rest=True))
+                deficit -= 384
+            if deficit >= 192:
+                v.notes.append(LyNote(letter="r", accidental=0, octave=0,
+                                      duration=2, dotted=False, tied=False, is_rest=True))
+                deficit -= 192
+            if deficit >= 96:
+                v.notes.append(LyNote(letter="r", accidental=0, octave=0,
+                                      duration=4, dotted=False, tied=False, is_rest=True))
+                deficit -= 96
+            if deficit >= 48:
+                v.notes.append(LyNote(letter="r", accidental=0, octave=0,
+                                      duration=8, dotted=False, tied=False, is_rest=True))
+                deficit -= 48
+            if deficit >= 24:
+                v.notes.append(LyNote(letter="r", accidental=0, octave=0,
+                                      duration=16, dotted=False, tied=False, is_rest=True))
+                deficit -= 24
+
 
 def parse_voice_map(raw: str | None) -> dict[str, int]:
     """Parse --voices 'voiceone:1,voicetwo:2' into a dict."""
@@ -868,6 +1410,12 @@ def main(argv: list[str]) -> int:
     if not voice_map:
         for i, v in enumerate(voices):
             voice_map[v.name] = i + 1
+    else:
+        # Only keep voices that were explicitly mapped
+        voices = [v for v in voices if v.name in voice_map]
+
+    # Validate and align voice durations
+    _align_voices(voices)
 
     # Instrument mapping — use per-voice variants when available
     instruments: dict[int, tuple[int, int, int, int, int, str]] = {}

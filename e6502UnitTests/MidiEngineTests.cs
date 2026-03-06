@@ -128,6 +128,85 @@ public class MidiEngineTests
     }
 
     [TestMethod]
+    public void GetInstrumentBucket_BrassRange()
+    {
+        // Trumpet (56), Trombone (57), French Horn (60), Brass Section (61)
+        foreach (int gm in new[] { 56, 57, 59, 60, 61, 62, 63 })
+        {
+            var bucket = MidiEngine.GetInstrumentBucket(gm, isDrums: false);
+            Assert.AreEqual(0x20, bucket.Waveform, $"GM {gm} should be saw (brass)");
+            Assert.AreEqual("Saw Brass", bucket.Name, $"GM {gm} should be Saw Brass");
+        }
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_Tuba()
+    {
+        var bucket = MidiEngine.GetInstrumentBucket(58, isDrums: false);
+        Assert.AreEqual(0x20, bucket.Waveform); // saw
+        Assert.AreEqual("Saw Tuba", bucket.Name);
+        Assert.IsTrue(bucket.Attack > 0, "Tuba should have slower attack than brass");
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_SaxRange()
+    {
+        // Soprano (64), Alto (65), Tenor (66), Baritone (67) Sax
+        foreach (int gm in new[] { 64, 65, 66, 67 })
+        {
+            var bucket = MidiEngine.GetInstrumentBucket(gm, isDrums: false);
+            Assert.AreEqual(0x40, bucket.Waveform, $"GM {gm} should be pulse (sax)");
+            Assert.AreEqual("Pulse Sax", bucket.Name, $"GM {gm} should be Pulse Sax");
+        }
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_ReedRange()
+    {
+        // Oboe (68), English Horn (69), Clarinet (71)
+        foreach (int gm in new[] { 68, 69, 71 })
+        {
+            var bucket = MidiEngine.GetInstrumentBucket(gm, isDrums: false);
+            Assert.AreEqual(0x40, bucket.Waveform, $"GM {gm} should be pulse (reed)");
+            Assert.AreEqual("Pulse Reed", bucket.Name, $"GM {gm} should be Pulse Reed");
+        }
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_Bassoon()
+    {
+        var bucket = MidiEngine.GetInstrumentBucket(70, isDrums: false);
+        Assert.AreEqual(0x10, bucket.Waveform); // triangle
+        Assert.AreEqual("Tri Bassoon", bucket.Name);
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_AllGmProgramsCovered()
+    {
+        // Every GM program 0-127 should return a non-null bucket
+        for (int gm = 0; gm < 128; gm++)
+        {
+            var bucket = MidiEngine.GetInstrumentBucket(gm, isDrums: false);
+            Assert.IsNotNull(bucket, $"GM {gm} returned null bucket");
+            Assert.IsTrue(bucket.Waveform > 0, $"GM {gm} has zero waveform");
+        }
+    }
+
+    [TestMethod]
+    public void GetInstrumentBucket_DistinctBucketsForBrassReeds()
+    {
+        // Trumpet, Sax, Oboe, Bassoon, and Tuba should all be different buckets
+        var trumpet = MidiEngine.GetInstrumentBucket(56, isDrums: false);
+        var sax = MidiEngine.GetInstrumentBucket(65, isDrums: false);
+        var oboe = MidiEngine.GetInstrumentBucket(68, isDrums: false);
+        var bassoon = MidiEngine.GetInstrumentBucket(70, isDrums: false);
+        var tuba = MidiEngine.GetInstrumentBucket(58, isDrums: false);
+
+        var names = new[] { trumpet.Name, sax.Name, oboe.Name, bassoon.Name, tuba.Name };
+        Assert.AreEqual(5, names.Distinct().Count(), "Expected 5 distinct instrument buckets");
+    }
+
+    [TestMethod]
     public void GetInstrumentBucket_DefaultIsSaw()
     {
         var bucket = MidiEngine.GetInstrumentBucket(120, isDrums: false); // Sound Effects GM range

@@ -18,6 +18,7 @@ public enum MmlEventType
     FilterSweep,    // Param1=direction (-1, 0, +1)
     SetVibrato,     // Param1=depth (0=off)
     Portamento,     // flags next note as portamento target
+    SetVoiceVolume, // Param1=volume (0-15)
     LoopStart,
     LoopEnd,        // Param1=repeat count
 }
