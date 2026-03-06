@@ -8621,8 +8621,7 @@ LAB_NCC
 
       ; Not Y — echo char + CR/LF, return to BASIC
       JSR   V_OUTP
-      JSR   LAB_CRLF
-      RTS
+      JMP   LAB_CRLF
 
 @do_ncc
       JSR   V_OUTP             ; echo the Y
@@ -10807,8 +10806,7 @@ LAB_XMEM
       LDA   XMC_DIRCOUNTH
       LDX   XMC_DIRCOUNTL
       JSR   LAB_295E
-      JSR   LAB_CRLF
-      RTS
+      JMP   LAB_CRLF
 
 ; perform XBANK n
 
