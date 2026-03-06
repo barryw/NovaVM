@@ -10844,6 +10844,26 @@ LAB_XPOKE
       STA   XMC_CMD
       JMP   LAB_XMC_CHKOK
 
+; Parse word from BASIC and store in XMC_RAML/RAMH
+
+LAB_XMC_GETRAM
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   XMC_RAML
+      LDA   FAC1_2
+      STA   XMC_RAMH
+      RTS
+
+; Parse word from BASIC and store in XMC_LENL/LENH
+
+LAB_XMC_GETLEN
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   XMC_LENL
+      LDA   FAC1_2
+      STA   XMC_LENH
+      RTS
+
 ; perform STASH ramAddr, xOffset, len   (uses current XBANK)
 ; or      STASH "name", ramAddr, len    (named allocation)
 
@@ -10856,34 +10876,18 @@ LAB_XSTASH
       JMP   LAB_FCER
 @xstash_named_ok
       JSR   LAB_1C01
-      JSR   LAB_GTWRD         ; RAM source address
-      LDA   FAC1_3
-      STA   XMC_RAML
-      LDA   FAC1_2
-      STA   XMC_RAMH
+      JSR   LAB_XMC_GETRAM    ; RAM source address
       JSR   LAB_1C01
-      JSR   LAB_GTWRD         ; transfer length
-      LDA   FAC1_3
-      STA   XMC_LENL
-      LDA   FAC1_2
-      STA   XMC_LENH
+      JSR   LAB_XMC_GETLEN    ; transfer length
       LDA   #XMC_CMD_NSTSH
       STA   XMC_CMD
       JMP   LAB_XMC_CHKOK
 @xstash_raw
-      JSR   LAB_GTWRD         ; RAM source address
-      LDA   FAC1_3
-      STA   XMC_RAML
-      LDA   FAC1_2
-      STA   XMC_RAMH
+      JSR   LAB_XMC_GETRAM    ; RAM source address
       JSR   LAB_1C01
       JSR   LAB_XMC_SETOFF    ; XRAM destination offset + bank
       JSR   LAB_1C01
-      JSR   LAB_GTWRD         ; transfer length
-      LDA   FAC1_3
-      STA   XMC_LENL
-      LDA   FAC1_2
-      STA   XMC_LENH
+      JSR   LAB_XMC_GETLEN    ; transfer length
       LDA   #XMC_CMD_STASH
       STA   XMC_CMD
       JMP   LAB_XMC_CHKOK
@@ -10900,11 +10904,7 @@ LAB_XFETCH
       JMP   LAB_FCER
 @xfetch_named_ok
       JSR   LAB_1C01
-      JSR   LAB_GTWRD         ; RAM destination address
-      LDA   FAC1_3
-      STA   XMC_RAML
-      LDA   FAC1_2
-      STA   XMC_RAMH
+      JSR   LAB_XMC_GETRAM    ; RAM destination address
       LDA   #$00              ; len=0 means full block length
       STA   XMC_LENL
       STA   XMC_LENH
@@ -10912,19 +10912,11 @@ LAB_XFETCH
       STA   XMC_CMD
       JMP   LAB_XMC_CHKOK
 @xfetch_raw
-      JSR   LAB_GTWRD         ; RAM destination address
-      LDA   FAC1_3
-      STA   XMC_RAML
-      LDA   FAC1_2
-      STA   XMC_RAMH
+      JSR   LAB_XMC_GETRAM    ; RAM destination address
       JSR   LAB_1C01
       JSR   LAB_XMC_SETOFF    ; XRAM source offset + bank
       JSR   LAB_1C01
-      JSR   LAB_GTWRD         ; transfer length
-      LDA   FAC1_3
-      STA   XMC_LENL
-      LDA   FAC1_2
-      STA   XMC_LENH
+      JSR   LAB_XMC_GETLEN    ; transfer length
       LDA   #XMC_CMD_FETCH
       STA   XMC_CMD
       JMP   LAB_XMC_CHKOK
@@ -10934,11 +10926,7 @@ LAB_XFETCH
 LAB_XFREE
       JSR   LAB_XMC_SETOFF
       JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   XMC_LENL
-      LDA   FAC1_2
-      STA   XMC_LENH
+      JSR   LAB_XMC_GETLEN
       LDA   #XMC_CMD_REL
       STA   XMC_CMD
       JMP   LAB_XMC_CHKOK
@@ -10953,11 +10941,7 @@ LAB_XRESET
 ; perform XALLOC len
 
 LAB_XALLOC
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   XMC_LENL
-      LDA   FAC1_2
-      STA   XMC_LENH
+      JSR   LAB_XMC_GETLEN
       LDA   #XMC_CMD_ALLOC
       STA   XMC_CMD
       JMP   LAB_XMC_CHKOK
