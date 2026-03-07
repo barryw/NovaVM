@@ -524,6 +524,12 @@ XTK_FORMAT         = $4C              ; FORMAT "dev:",size
 XTK_MOUNT          = $4D              ; MOUNT "dev:","image"
 XTK_UNMOUNT        = $4E              ; UNMOUNT "dev:"
 XTK_PWD            = $4F              ; PWD
+XTK_DIROPEN        = $2B              ; DIROPEN "pattern"
+XTK_DIRNEXT        = $2C              ; DIRNEXT — numeric function
+XTK_DIRNAM         = $2D              ; DIRNAM$ — string function
+XTK_DIRSIZ         = $2E              ; DIRSIZ — numeric function
+XTK_DIRTYP         = $2F              ; DIRTYP — numeric function
+XTK_META           = $30              ; META$(n) — string function
 
 ; offsets from a base of X or Y
 
@@ -1912,10 +1918,18 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; $26 — reserved, syntax error
       .word LAB_15D9-1        ; XTK_DMAERR    ($27) — function only
       .word LAB_15D9-1        ; XTK_DMACOUNT  ($28) — function only
-      ; $29-$2A: MIDI commands, $2B-$3F reserved (21 entries)
+      ; $29-$2A: MIDI commands
       .word LAB_MIDPLAY-1     ; XTK_MIDPLAY  ($29)
       .word LAB_MIDSTOP-1     ; XTK_MIDSTOP  ($2A)
-      .repeat $15
+      ; $2B-$30: directory/metadata tokens
+      .word LAB_DIROPEN-1     ; XTK_DIROPEN    ($2B)
+      .word LAB_15D9-1        ; XTK_DIRNEXT    ($2C) — function only
+      .word LAB_15D9-1        ; XTK_DIRNAM     ($2D) — function only
+      .word LAB_15D9-1        ; XTK_DIRSIZ     ($2E) — function only
+      .word LAB_15D9-1        ; XTK_DIRTYP     ($2F) — function only
+      .word LAB_15D9-1        ; XTK_META       ($30) — function only
+      ; $31-$3F: reserved (15 entries)
+      .repeat $0F
       .word LAB_15D9-1
       .endrepeat
       .word LAB_BLITCOPY-1    ; XTK_BLITCOPY   ($40)
@@ -3618,58 +3632,37 @@ LAB_1BEE
 @is_xtk
       JSR   LAB_IGBY          ; consume prefix, get extension id
       LDY   #$00
-      LDA   (Bpntrl),Y        ; read raw extension id (LAB_IGBY may normalize A)
-      CMP   #XTK_PLAYING
-      BEQ   @j_playing
-      CMP   #XTK_MNOTE
-      BEQ   @j_mnote
-      CMP   #XTK_XPEEK
-      BEQ   @xtk_xpeek
-      CMP   #XTK_NRECV
-      BEQ   @j_nrecv
-      CMP   #XTK_NSTATUS
-      BEQ   @j_nstatus
-      CMP   #XTK_NREADY
-      BEQ   @j_nready
-      CMP   #XTK_NLEN
-      BEQ   @j_nlen
-      CMP   #XTK_DMASTATUS
-      BEQ   @j_dmastatus
-      CMP   #XTK_DMAERR
-      BEQ   @j_dmaerr
-      CMP   #XTK_DMACOUNT
-      BEQ   @j_dmacount
-      CMP   #XTK_BLITSTATUS
-      BEQ   @j_blitstatus
-      CMP   #XTK_BLITERR
-      BEQ   @j_bliterr
-      CMP   #XTK_BLITCOUNT
-      BEQ   @j_blitcount
+      LDA   (Bpntrl),Y        ; read raw extension id
+      LDX   #@FUNC_TBL_SZ-1
+@func_search
+      CMP   @func_ids,X
+      BEQ   @func_found
+      DEX
+      BPL   @func_search
       JMP   LAB_SNER          ; unknown extension in expression
-@j_nrecv
-      JMP   @xtk_nrecv
-@j_nstatus
-      JMP   @xtk_nstatus
-@j_nready
-      JMP   @xtk_nready
-@j_nlen
-      JMP   @xtk_nlen
-@j_dmastatus
-      JMP   @xtk_dmastatus
-@j_dmaerr
-      JMP   @xtk_dmaerr
-@j_dmacount
-      JMP   @xtk_dmacount
-@j_blitstatus
-      JMP   @xtk_blitstatus
-@j_bliterr
-      JMP   @xtk_bliterr
-@j_blitcount
-      JMP   @xtk_blitcount
-@j_playing
-      JMP   @xtk_playing
-@j_mnote
-      JMP   @xtk_mnote
+@func_found
+      TXA
+      ASL
+      TAX
+      LDA   @func_addrs+1,X
+      PHA
+      LDA   @func_addrs,X
+      PHA
+      RTS                     ; RTS trick — jump to handler
+
+@func_ids
+      .byte XTK_PLAYING, XTK_MNOTE, XTK_XPEEK
+      .byte XTK_NRECV, XTK_NSTATUS, XTK_NREADY, XTK_NLEN
+      .byte XTK_DMASTATUS, XTK_DMAERR, XTK_DMACOUNT
+      .byte XTK_BLITSTATUS, XTK_BLITERR, XTK_BLITCOUNT
+      .byte XTK_DIRNEXT, XTK_DIRSIZ, XTK_DIRTYP, XTK_DIRNAM, XTK_META
+@FUNC_TBL_SZ = * - @func_ids
+@func_addrs
+      .word @xtk_playing-1, @xtk_mnote-1, @xtk_xpeek-1
+      .word @xtk_nrecv-1, @xtk_nstatus-1, @xtk_nready-1, @xtk_nlen-1
+      .word @xtk_dmastatus-1, @xtk_dmaerr-1, @xtk_dmacount-1
+      .word @xtk_blitstatus-1, @xtk_bliterr-1, @xtk_blitcount-1
+      .word @xtk_dirnext-1, @xtk_dirsiz-1, @xtk_dirtyp-1, @xtk_dirnam-1, @xtk_meta-1
 
 @xtk_xpeek
       ; '(' was consumed during tokenization as part of keyword
@@ -3702,8 +3695,7 @@ LAB_1BEE
       .byte $2C               ; BIT abs — skip next 2 bytes
 @play_off
       LDY   #$00              ; music not playing
-      LDA   #$00              ; A = high byte = 0
-      JMP   LAB_AYFC          ; return AY as integer in FAC1
+      JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 @xtk_mnote
       ; MNOTE(voice) — return current MIDI note for voice 1-6
@@ -3718,12 +3710,9 @@ LAB_1BEE
       BCS   @mnote_bad        ; out of range
       LDA   MUSIC_NOTE1,Y     ; read note register
       TAY
-      LDA   #$00
-      JMP   LAB_AYFC          ; return AY as integer in FAC1
+      JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 @mnote_bad
-      LDY   #$00              ; return 0 for invalid voice
-      LDA   #$00
-      JMP   LAB_AYFC
+      JMP   @ret_zero         ; return 0
 
 ; NRECV$(slot) — receive message as BASIC string
 @xtk_nrecv
@@ -3756,8 +3745,7 @@ LAB_1BEE
       TAX
       LDA   NIC_SLOTST0,X    ; read slot status
       TAY
-      LDA   #$00
-      JMP   LAB_AYFC          ; return AY as integer
+      JMP   @ret_0ay          ; return AY as FAC1
 
 ; NREADY(slot) — return -1 (true) if data waiting, 0 (false) otherwise
 ; Uses BASIC boolean convention: true = $FFFF (-1) so NOT works correctly
@@ -3776,30 +3764,25 @@ LAB_1BEE
       LDA   #$FF
       JMP   LAB_AYFC
 @nready_no
-      LDY   #$00              ; false = $0000 (0)
-      LDA   #$00
-      JMP   LAB_AYFC
+      JMP   @ret_zero         ; return 0
 
 ; NLEN — return last received message length (no args)
 @xtk_nlen
       JSR   LAB_IGBY          ; consume token
       LDY   NIC_MSGLEN
-      LDA   #$00
-      JMP   LAB_AYFC
+      JMP   @ret_0ay
 
 ; DMASTATUS — return DMA status register (no args)
 @xtk_dmastatus
       JSR   LAB_IGBY          ; consume token
       LDY   DMA_STATUS
-      LDA   #$00
-      JMP   LAB_AYFC
+      JMP   @ret_0ay
 
 ; DMAERR — return DMA error code register (no args)
 @xtk_dmaerr
       JSR   LAB_IGBY          ; consume token
       LDY   DMA_ERRCODE
-      LDA   #$00
-      JMP   LAB_AYFC
+      JMP   @ret_0ay
 
 ; DMACOUNT — return last DMA byte count (low 16 bits)
 @xtk_dmacount
@@ -3812,15 +3795,13 @@ LAB_1BEE
 @xtk_blitstatus
       JSR   LAB_IGBY          ; consume token
       LDY   BLT_STATUS
-      LDA   #$00
-      JMP   LAB_AYFC
+      JMP   @ret_0ay
 
 ; BLITERR — return blitter error code register (no args)
 @xtk_bliterr
       JSR   LAB_IGBY          ; consume token
       LDY   BLT_ERRCODE
-      LDA   #$00
-      JMP   LAB_AYFC
+      JMP   @ret_0ay
 
 ; BLITCOUNT — return last blit written-byte count (low 16 bits)
 @xtk_blitcount
@@ -3828,6 +3809,81 @@ LAB_1BEE
       LDY   BLT_CNTL
       LDA   BLT_CNTM
       JMP   LAB_AYFC
+
+; DIRNEXT — issue DIRREAD, return -1 (true) if entry ready, 0 (false)
+@xtk_dirnext
+      JSR   LAB_IGBY          ; consume token
+      LDA   #FIO_CMD_DIRREAD
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BNE   @ret_false
+      LDY   #$FF              ; true = $FFFF (-1)
+      .byte $2C               ; BIT abs — skip next 2 bytes
+@ret_false
+      LDY   #$00
+      JMP   @ret_0ay
+
+; DIRSIZ — return current directory entry size as 16-bit unsigned
+@xtk_dirsiz
+      JSR   LAB_IGBY          ; consume token
+      LDY   FIO_SIZEL
+      LDA   FIO_SIZEH
+      JMP   LAB_AYFC
+
+; DIRTYP — return current directory entry type byte
+@xtk_dirtyp
+      JSR   LAB_IGBY          ; consume token
+      LDY   FIO_DIRTYPE
+      JMP   @ret_0ay
+
+; DIRNAM$ — return current directory entry filename as string
+@xtk_dirnam
+      JSR   LAB_IGBY          ; consume token
+      LDA   FIO_NAMELEN
+      BEQ   @ret_empty
+      JSR   LAB_MSSP          ; allocate A bytes of string space
+      LDY   #$00
+@dnam_cp
+      CPY   FIO_NAMELEN
+      BCS   @str_done
+      LDA   FIO_NAME,Y
+      STA   (str_pl),Y
+      INY
+      BNE   @dnam_cp
+@str_done
+      STY   str_ln
+      JMP   LAB_RTST
+@ret_empty
+      LDA   #$00
+      JSR   LAB_MSSP
+      STA   str_ln
+      JMP   LAB_RTST
+
+; META$(n) — return metadata string at offset n
+@xtk_meta
+      JSR   LAB_IGBY          ; consume extension token id
+      JSR   LAB_EVNM          ; evaluate numeric expression (the offset)
+      JSR   LAB_1BFB          ; scan for ')' and advance
+      JSR   LAB_EVBY          ; convert FAC1 to byte in X
+      LDA   #32               ; max 32 chars
+      JSR   LAB_MSSP          ; allocate string space
+      LDY   #$00
+@meta_cp
+      LDA   META_BASE,X
+      BEQ   @str_done
+      STA   (str_pl),Y
+      INX
+      INY
+      CPY   #32
+      BCC   @meta_cp
+
+; shared return helpers for no-arg functions
+@ret_zero
+      LDY   #$00              ; return 0
+@ret_0ay
+      LDA   #$00              ; A=0 (high byte)
+      JMP   LAB_AYFC          ; return AY as FAC1
 
 LAB_1BEE_STD
       SEC                     ; plain token base subtraction
@@ -8664,9 +8720,12 @@ TAB_XTKSTR
       .word @s_nopen, @s_nclose, @s_nlisten, @s_naccept, @s_nsend
       .word @s_nrecv, @s_nstatus, @s_reserved20, @s_nready, @s_nlen
       .word @s_dmacopy, @s_dmafill, @s_dmastatus, @s_reserved26, @s_dmaerr, @s_dmacount
-      ; $29-$2A: MIDI commands, $2B-$3F reserved (21 entries)
+      ; $29-$2A: MIDI commands
       .word @s_midplay, @s_midstop
-      .repeat $15
+      ; $2B-$30: directory/metadata tokens
+      .word @s_diropen, @s_dirnext, @s_dirnam, @s_dirsiz, @s_dirtyp, @s_meta
+      ; $31-$3F: reserved (15 entries)
+      .repeat $0F
       .word @s_reserved_ext
       .endrepeat
       .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
@@ -8713,13 +8772,13 @@ TAB_XTKSTR
 @s_nsend:   .byte "NSEND",0
 @s_nrecv:   .byte "NRECV$(",0
 @s_nstatus: .byte "NSTATUS(",0
-@s_reserved20: .byte $FF,0         ; placeholder — token $20 (space) is unusable
+@s_reserved20 = @s_reserved_ext   ; placeholder — token $20 (space) is unusable
 @s_nready:  .byte "NREADY(",0
 @s_nlen:    .byte "NLEN",0
 @s_dmacopy: .byte "DMACOPY",0
 @s_dmafill: .byte "DMAFILL",0
 @s_dmastatus: .byte "DMASTATUS",0
-@s_reserved26: .byte $FF,0         ; placeholder — token $26 is unusable
+@s_reserved26 = @s_reserved_ext   ; placeholder — token $26 is unusable
 @s_dmaerr:  .byte "DMAERR",0
 @s_dmacount: .byte "DMACOUNT",0
 @s_reserved_ext: .byte $FF,0       ; placeholder — reserved extension id
@@ -8741,6 +8800,12 @@ TAB_XTKSTR
 @s_mount:  .byte "MOUNT",0
 @s_unmount: .byte "UNMOUNT",0
 @s_pwd:    .byte "PWD",0
+@s_diropen: .byte "DIROPEN",0
+@s_dirnext: .byte "DIRNEXT",0
+@s_dirnam:  .byte "DIRNAM$",0
+@s_dirsiz:  .byte "DIRSIZ",0
+@s_dirtyp:  .byte "DIRTYP",0
+@s_meta:    .byte "META$(",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8850,6 +8915,7 @@ FIO_GLENH     = $B9AE          ; graphics transfer length high
 FIO_DIRTYPE   = $B9AF          ; dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID
 FIO_NAME      = $B9B0          ; filename buffer (64 bytes)
 
+META_BASE       = $BAB0          ; metadata string buffer (80 bytes)
 AUTOBOOT_SKIP = $B9F0          ; C# sets to $FF to skip autoboot
 
 FIO_CMD_SAVE  = $01            ; save program
@@ -10696,9 +10762,28 @@ LAB_FIO_ERRMSG
 ERR_FIO     .byte $0D,$0A,"I/O Error",$00
 ERR_FNF     .byte $0D,$0A,"File not found",$00
 
+; perform DIROPEN "pattern" — open directory with filter
+
+LAB_DIROPEN
+      JSR   LAB_FIO_GETNAME   ; parse string, copy to FIO_NAME
+      LDA   #FIO_CMD_DIROPEN
+      STA   FIO_CMD
+      RTS
+
 ; perform DIR — list saved programs
 
 LAB_DIR
+      ; check for optional pattern argument
+      JSR   LAB_GBYT          ; peek at current byte
+      BEQ   @dir_noarg        ; end of line
+      CMP   #':'
+      BEQ   @dir_noarg        ; statement separator
+      JSR   LAB_FIO_GETNAME   ; parse string, copy to FIO_NAME
+      JMP   @dir_start
+@dir_noarg
+      LDA   #$00
+      STA   FIO_NAMELEN
+@dir_start
       ; trigger DirOpen
       LDA   #FIO_CMD_DIROPEN
       STA   FIO_CMD
@@ -10767,11 +10852,13 @@ LAB_DIR
 @dir_done
       RTS
 
-TAB_DTYPE   .word STR_BAS, STR_SID, STR_BIN, STR_MID
+TAB_DTYPE   .word STR_BAS, STR_SID, STR_BIN, STR_MID, STR_GFX, STR_DIR
 STR_BAS     .byte "  BAS  ",$00
 STR_SID     .byte "  SID  ",$00
 STR_BIN     .byte "  BIN  ",$00
 STR_MID     .byte "  MID  ",$00
+STR_GFX     .byte "  GFX  ",$00
+STR_DIR     .byte "  DIR  ",$00
 
 ; --- XMC expansion memory handlers ---
 

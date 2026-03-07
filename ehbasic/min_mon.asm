@@ -23,7 +23,7 @@ ACIAsimrd   = $A00F           ; VGC CHARIN
 ; then jump directly to BASIC cold start.
 
       .segment "MONITOR"
-      .org    $FF80
+      .org    $FFBD
 
 ; reset vector points here
 
