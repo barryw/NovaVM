@@ -166,4 +166,20 @@ public class BasicTokenizerTests
         }
         Assert.IsTrue(found, "Extended token prefix+id (0x01 0x01) not found for DIR");
     }
+
+    [TestMethod]
+    public void Tokenize_NoLineNumber_ThrowsFormatException()
+    {
+        var tok = LoadTokenizer();
+        Assert.ThrowsException<FormatException>(() =>
+            tok.Tokenize(new[] { "PRINT \"HELLO\"" }, 0x0801));
+    }
+
+    [TestMethod]
+    public void Tokenize_EmptyLine_ThrowsFormatException()
+    {
+        var tok = LoadTokenizer();
+        Assert.ThrowsException<FormatException>(() =>
+            tok.Tokenize(new[] { "" }, 0x0801));
+    }
 }

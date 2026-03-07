@@ -196,4 +196,96 @@ public class NdiImageTests
         }
         finally { File.Delete(path); }
     }
+
+    [TestMethod]
+    public void WriteFile_Over64KB_Throws()
+    {
+        string path = TempPath();
+        try
+        {
+            NdiImage.CreateFormatted(path, "BIG", 800);
+            using var img = NdiImage.Open(path);
+            var bigData = new byte[65536]; // exactly ushort.MaxValue + 1
+            Assert.ThrowsException<ArgumentException>(() =>
+                img.WriteFile("HUGE", NdiFileType.Bin, 0xFFFF, bigData));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public void WriteFile_DiskFull_Throws()
+    {
+        string path = TempPath();
+        try
+        {
+            // 170KB disk has ~630 free data sectors
+            NdiImage.CreateFormatted(path, "TINY", 170);
+            using var img = NdiImage.Open(path);
+
+            // Fill the disk with large files (each up to 65535 bytes = 256 sectors)
+            // to avoid exhausting the directory (192 entries) before the BAM
+            int fileNum = 0;
+            while (img.FreeSectors > 0)
+            {
+                int sectorsTaken = Math.Min(img.FreeSectors, 256);
+                int writeBytes = sectorsTaken * 256;
+                if (writeBytes > 65535) writeBytes = 65535;
+                img.WriteFile($"F{fileNum++:D3}", NdiFileType.Bin, 0xFFFF, new byte[writeBytes]);
+            }
+
+            // BAM is exhausted — any write must fail
+            Assert.ThrowsException<InvalidOperationException>(() =>
+                img.WriteFile("EXTRA", NdiFileType.Bas, 0xFFFF, new byte[1]));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public void ReadFile_DirectoryEntry_Throws()
+    {
+        string path = TempPath();
+        try
+        {
+            NdiImage.CreateFormatted(path, "TEST", 800);
+            using var img = NdiImage.Open(path);
+            img.MakeDirectory("MYDIR", 0xFFFF);
+            Assert.ThrowsException<InvalidOperationException>(() =>
+                img.ReadFile("MYDIR", 0xFFFF));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public void ReadFile_NotFound_Throws()
+    {
+        string path = TempPath();
+        try
+        {
+            NdiImage.CreateFormatted(path, "TEST", 800);
+            using var img = NdiImage.Open(path);
+            Assert.ThrowsException<FileNotFoundException>(() =>
+                img.ReadFile("NOPE", 0xFFFF));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public void DeleteFile_ThenRewrite()
+    {
+        string path = TempPath();
+        try
+        {
+            NdiImage.CreateFormatted(path, "TEST", 800);
+            using var img = NdiImage.Open(path);
+            img.WriteFile("TEMP", NdiFileType.Bas, 0xFFFF, new byte[] { 1, 2, 3 });
+            int freeAfterWrite = img.FreeSectors;
+            img.DeleteFile("TEMP", 0xFFFF);
+            int freeAfterDelete = img.FreeSectors;
+            Assert.IsTrue(freeAfterDelete > freeAfterWrite);
+            // Write again — should reuse freed space
+            img.WriteFile("TEMP2", NdiFileType.Bas, 0xFFFF, new byte[] { 4, 5, 6 });
+            Assert.AreEqual(freeAfterWrite, img.FreeSectors);
+        }
+        finally { File.Delete(path); }
+    }
 }

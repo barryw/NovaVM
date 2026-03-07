@@ -89,4 +89,11 @@ public class NdiHeaderTests
         header.FreeSectorCount = 100;
         Assert.AreEqual(100, header.FreeSectorCount);
     }
+
+    [TestMethod]
+    public void FromBytes_TooShort_Throws()
+    {
+        var bytes = new byte[100]; // less than 256
+        Assert.ThrowsException<InvalidDataException>(() => NdiHeader.FromBytes(bytes));
+    }
 }

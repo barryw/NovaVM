@@ -234,4 +234,57 @@ public class HostDirectoryDeviceTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [TestMethod]
+    public void PathTraversal_Load_Throws()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            Directory.CreateDirectory(root);
+            var device = new HostDirectoryDevice(root, "HD0");
+            Assert.ThrowsException<UnauthorizedAccessException>(() =>
+                device.Load("../../etc/passwd", ".bas"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void PathTraversal_MakeDirectory_Throws()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            Directory.CreateDirectory(root);
+            var device = new HostDirectoryDevice(root, "HD0");
+            Assert.ThrowsException<UnauthorizedAccessException>(() =>
+                device.MakeDirectory("../../escape"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void PathTraversal_CurrentDirectory_CaughtOnUse()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            Directory.CreateDirectory(root);
+            var device = new HostDirectoryDevice(root, "HD0");
+            // Setting CurrentDirectory does not validate — traversal is caught when resolving
+            device.CurrentDirectory = "../../escape";
+            Assert.ThrowsException<UnauthorizedAccessException>(() =>
+                device.Load("file", ".bas"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

@@ -298,4 +298,28 @@ public class DeviceManagerTests
             Directory.Delete(disks, recursive: true);
         }
     }
+
+    // -------------------------------------------------------------------------
+    // 11. FindAutoboot with no autoboot files returns null
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void FindAutoboot_NoFiles_ReturnsNull()
+    {
+        string hd0 = MakeTempDir();
+        string hd1 = MakeTempDir();
+        string disks = MakeTempDir();
+        try
+        {
+            var dm = new DeviceManager(hd0, hd1, disks);
+            var result = dm.FindAutoboot();
+            Assert.IsNull(result);
+        }
+        finally
+        {
+            Directory.Delete(hd0, recursive: true);
+            Directory.Delete(hd1, recursive: true);
+            Directory.Delete(disks, recursive: true);
+        }
+    }
 }

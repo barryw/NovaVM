@@ -167,4 +167,96 @@ public class NdiFloppyDeviceTests
         }
         finally { File.Delete(path); }
     }
+
+    // -------------------------------------------------------------------------
+    // 7. Save/Load with extension disambiguates same base name
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void Save_Load_WithExtension_Disambiguates()
+    {
+        string path = TempNdi();
+        try
+        {
+            CreateDisk(path);
+            var dev = new NdiFloppyDevice("F");
+            dev.Mount(path);
+
+            dev.Save("TUNE", new byte[] { 1, 2, 3 }, ".bas");
+            dev.Save("TUNE", new byte[] { 4, 5, 6, 7 }, ".sid");
+
+            var basData = dev.Load("TUNE", ".bas");
+            var sidData = dev.Load("TUNE", ".sid");
+
+            Assert.AreEqual(3, basData.Length);
+            Assert.AreEqual(4, sidData.Length);
+            Assert.AreEqual(1, basData[0]);
+            Assert.AreEqual(4, sidData[0]);
+
+            dev.Unmount();
+        }
+        finally { File.Delete(path); }
+    }
+
+    // -------------------------------------------------------------------------
+    // 8. Multi-level directory navigation
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void CurrentDirectory_MultiLevel()
+    {
+        string path = TempNdi();
+        try
+        {
+            CreateDisk(path);
+            var dev = new NdiFloppyDevice("F");
+            dev.Mount(path);
+
+            // Create nested directories: MUSIC/BACH
+            dev.MakeDirectory("MUSIC");
+            dev.CurrentDirectory = "MUSIC";
+            dev.MakeDirectory("BACH");
+            dev.CurrentDirectory = "/";
+
+            // Navigate to nested directory
+            dev.CurrentDirectory = "MUSIC/BACH";
+            Assert.AreEqual("MUSIC/BACH", dev.CurrentDirectory);
+
+            // Save file in nested dir
+            dev.Save("FUGUE", new byte[] { 10, 20, 30 }, ".bas");
+
+            // Go back to root, verify file is not there
+            dev.CurrentDirectory = "/";
+            Assert.IsFalse(dev.FileExists("FUGUE", ".bas"));
+
+            // Navigate back, verify file IS there
+            dev.CurrentDirectory = "MUSIC/BACH";
+            Assert.IsTrue(dev.FileExists("FUGUE", ".bas"));
+
+            dev.Unmount();
+        }
+        finally { File.Delete(path); }
+    }
+
+    // -------------------------------------------------------------------------
+    // 9. Setting CurrentDirectory to non-existent path throws
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void CurrentDirectory_NonExistent_Throws()
+    {
+        string path = TempNdi();
+        try
+        {
+            CreateDisk(path);
+            var dev = new NdiFloppyDevice("F");
+            dev.Mount(path);
+
+            Assert.ThrowsException<DirectoryNotFoundException>(() =>
+                dev.CurrentDirectory = "NOPE");
+
+            dev.Unmount();
+        }
+        finally { File.Delete(path); }
+    }
 }

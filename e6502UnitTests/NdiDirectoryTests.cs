@@ -1,5 +1,6 @@
 using e6502.Storage;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.Linq;
 
 namespace e6502UnitTests;
@@ -148,5 +149,18 @@ public class NdiDirectoryTests
         var dir = new NdiDirectory(DirSectorCount);
         byte[] bytes = dir.ToBytes();
         Assert.AreEqual(DirSectorCount * 256, bytes.Length);
+    }
+
+    [TestMethod]
+    public void Directory_Full_Throws()
+    {
+        // 1 sector = 4 entries max (EntriesPerSector = 4)
+        var dir = new NdiDirectory(1);
+        dir.AddEntry("A", NdiFileType.Bas, 0xFFFF, 1, 10);
+        dir.AddEntry("B", NdiFileType.Bas, 0xFFFF, 2, 10);
+        dir.AddEntry("C", NdiFileType.Bas, 0xFFFF, 3, 10);
+        dir.AddEntry("D", NdiFileType.Bas, 0xFFFF, 4, 10);
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            dir.AddEntry("E", NdiFileType.Bas, 0xFFFF, 5, 10));
     }
 }

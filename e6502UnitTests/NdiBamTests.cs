@@ -1,5 +1,6 @@
 using e6502.Storage;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 
 namespace e6502UnitTests;
 
@@ -91,5 +92,45 @@ public class NdiBamTests
         Assert.AreEqual(bam.FreeCount, restored.FreeCount);
         for (int i = 0; i < 200; i++)
             Assert.AreEqual(bam.IsAllocated(i), restored.IsAllocated(i), $"Mismatch at sector {i}");
+    }
+
+    [TestMethod]
+    public void IsAllocated_NegativeSector_Throws()
+    {
+        var bam = new NdiBam(100);
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => bam.IsAllocated(-1));
+    }
+
+    [TestMethod]
+    public void IsAllocated_BeyondTotal_Throws()
+    {
+        var bam = new NdiBam(100);
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => bam.IsAllocated(100));
+    }
+
+    [TestMethod]
+    public void Free_OutOfRange_Throws()
+    {
+        var bam = new NdiBam(100);
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => bam.Free(95, 10));
+    }
+
+    [TestMethod]
+    public void Free_NegativeStart_Throws()
+    {
+        var bam = new NdiBam(100);
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => bam.Free(-1, 5));
+    }
+
+    [TestMethod]
+    public void Free_DoubleFree_IdempotentFreeCount()
+    {
+        var bam = new NdiBam(100);
+        int start = bam.AllocateContiguous(5);
+        Assert.AreEqual(95, bam.FreeCount);
+        bam.Free(start, 5);
+        Assert.AreEqual(100, bam.FreeCount);
+        bam.Free(start, 5); // double-free
+        Assert.AreEqual(100, bam.FreeCount); // should NOT be 105
     }
 }
