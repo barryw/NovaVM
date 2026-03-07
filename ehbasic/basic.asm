@@ -10579,6 +10579,10 @@ LAB_MOUNT
       CLC
       ADC   #$01              ; +1 for null separator
       STA   FIO_SRCL          ; offset of second string
+      ; Write null separator between first and second strings
+      LDY   FIO_NAMELEN
+      LDA   #$00
+      STA   FIO_NAME,Y
       ; evaluate second string arg (image name)
       JSR   LAB_EVEX
       JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
@@ -11180,16 +11184,22 @@ LAB_AUTOBOOT
       LDA   Svarh
       STA   Sarryh
       STA   Earryh
-      JMP   LAB_1477              ; reset execution, clear vars, run from start
+      ; Replace return address so LAB_1491 RTS enters the interpreter loop
+      PLA                           ; discard JSR LAB_AUTOBOOT return low
+      PLA                           ; discard JSR LAB_AUTOBOOT return high
+      LDA   #>(LAB_15FC-1)         ; interpreter loop address high
+      PHA
+      LDA   #<(LAB_15FC-1)         ; interpreter loop address low
+      PHA
+      JMP   LAB_1477              ; reset execution, clear vars, flush stack → RTS to interpreter
 
 @ab_bin
-      ; .bin — jump to load address
+      ; .bin — jump to load address via indirect
       LDA   FIO_SRCL
-      STA   @ab_jmp+1
+      STA   ut1_pl
       LDA   FIO_SRCH
-      STA   @ab_jmp+2
-@ab_jmp
-      JMP   $0000                 ; self-modified jump target
+      STA   ut1_ph
+      JMP   (ut1_pl)
 
 @ab_done
       RTS
