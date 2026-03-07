@@ -1,6 +1,9 @@
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using e6502.Storage;
+using Melanchall.DryWetMidi.Core;
+using Melanchall.DryWetMidi.Interaction;
 
 namespace e6502.Avalonia.Hardware;
 
@@ -21,6 +24,7 @@ public sealed partial class FileIoController
     private List<StorageDirEntry>? _dirEntries;
     private IStorageDevice? _dirDevice;
     private int _dirIndex;
+    private bool _dirFiltered;
 
     public FileIoController(
         Func<ushort, byte> busRead,
@@ -428,6 +432,101 @@ public sealed partial class FileIoController
     {
         try
         {
+            int filterLen = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
+
+            if (filterLen > 0)
+            {
+                // Filtered enumeration
+                string? rawPattern = ReadFilenameRaw();
+                if (rawPattern is null)
+                {
+                    SetError(VgcConstants.FioErrIo);
+                    return;
+                }
+
+                var filter = ParseFilterPattern(rawPattern);
+
+                // Resolve device
+                IStorageDevice? device = null;
+                if (_deviceManager is not null)
+                {
+                    string deviceName = filter.DevicePrefix ?? _deviceManager.DefaultDevice;
+                    device = _deviceManager.GetDevice(deviceName);
+                    if (!device.IsMounted)
+                    {
+                        SetError(VgcConstants.FioErrNotMounted);
+                        return;
+                    }
+                }
+
+                if (device is null)
+                {
+                    // No device manager — filtered enumeration not supported on filesystem fallback
+                    SetError(VgcConstants.FioErrIo);
+                    return;
+                }
+
+                // CD into subdirectory if specified
+                string? savedDir = null;
+                if (filter.DirectoryPath is not null)
+                {
+                    savedDir = device.CurrentDirectory;
+                    device.CurrentDirectory = filter.DirectoryPath;
+                }
+
+                List<StorageDirEntry> filtered;
+                try
+                {
+                    var entries = device.ListDirectory(null);
+                    filtered = [];
+                    foreach (var entry in entries)
+                    {
+                        // Skip directories
+                        if (entry.IsDirectory) continue;
+
+                        // Extension filter
+                        if (filter.ExtFilter is not null)
+                        {
+                            string entryExt = NdiTypeToExt(entry.FileType);
+                            if (!string.Equals(entryExt, filter.ExtFilter, StringComparison.OrdinalIgnoreCase))
+                                continue;
+                        }
+
+                        // Name glob filter
+                        if (!GlobMatch(filter.NamePattern, entry.Filename))
+                            continue;
+
+                        filtered.Add(entry);
+                    }
+                }
+                finally
+                {
+                    if (savedDir is not null)
+                        device.CurrentDirectory = savedDir;
+                }
+
+                _dirEntries = filtered;
+                _dirFiles = null;
+                _dirDevice = device;
+                _dirIndex = 0;
+                _dirFiltered = true;
+
+                if (_dirEntries.Count > 0)
+                {
+                    PopulateDirEntryFromStorage(_dirEntries[0]);
+                    PopulateMetadata(_dirEntries[0]);
+                    SetOk();
+                }
+                else
+                {
+                    SetEndOfDir();
+                }
+                return;
+            }
+
+            // Unfiltered enumeration — existing behavior unchanged
+            _dirFiltered = false;
+
             if (_deviceManager is not null)
             {
                 // Use current default device's listing
@@ -493,6 +592,7 @@ public sealed partial class FileIoController
             if (_dirIndex < _dirEntries.Count)
             {
                 PopulateDirEntryFromStorage(_dirEntries[_dirIndex]);
+                if (_dirFiltered) PopulateMetadata(_dirEntries[_dirIndex]);
                 SetOk();
             }
             else
@@ -1119,6 +1219,140 @@ public sealed partial class FileIoController
             SetOk();
         }
         catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    // -------------------------------------------------------------------------
+    // Metadata buffer population
+    // -------------------------------------------------------------------------
+
+    private static NdiFileType ExtToNdiType(string ext) => ext.ToLowerInvariant() switch
+    {
+        ".sid" => NdiFileType.Sid, ".bin" => NdiFileType.Bin,
+        ".mid" => NdiFileType.Mid, ".gfx" => NdiFileType.Gfx, _ => NdiFileType.Bas
+    };
+
+    private static string NdiTypeToExt(NdiFileType type) => type switch
+    {
+        NdiFileType.Sid => ".sid", NdiFileType.Bin => ".bin",
+        NdiFileType.Mid => ".mid", NdiFileType.Gfx => ".gfx", _ => ".bas"
+    };
+
+    private void PopulateMetadata(StorageDirEntry entry)
+    {
+        // Zero the metadata buffer
+        for (int i = VgcConstants.MetaBase; i <= VgcConstants.MetaEnd; i++)
+            _busWrite((ushort)i, 0);
+
+        // Write type
+        int metaType = entry.FileType switch
+        {
+            NdiFileType.Sid => 1,
+            NdiFileType.Bin => 2,
+            NdiFileType.Mid => 3,
+            NdiFileType.Gfx => 4,
+            _ => 0
+        };
+        _busWrite((ushort)VgcConstants.MetaType, (byte)metaType);
+
+        // Write size
+        int sz = entry.SizeBytes;
+        _busWrite((ushort)VgcConstants.MetaSizeL, (byte)(sz & 0xFF));
+        _busWrite((ushort)VgcConstants.MetaSizeH, (byte)((sz >> 8) & 0xFF));
+
+        // Load file bytes and extract type-specific metadata
+        if (_dirDevice is null) return;
+        try
+        {
+            string ext = NdiTypeToExt(entry.FileType);
+            byte[] data = _dirDevice.Load(entry.Filename, ext);
+            switch (entry.FileType)
+            {
+                case NdiFileType.Sid: ExtractSidMetadata(data); break;
+                case NdiFileType.Mid: ExtractMidiMetadata(data); break;
+                case NdiFileType.Bin: ExtractBinMetadata(data); break;
+            }
+        }
+        catch { /* leave at defaults */ }
+    }
+
+    private void ExtractSidMetadata(byte[] data)
+    {
+        if (data.Length < 124) return;
+        WriteMetaString(VgcConstants.MetaTitle, data, 22, VgcConstants.MetaTitleLen);
+        WriteMetaString(VgcConstants.MetaAuthor, data, 54, VgcConstants.MetaAuthorLen);
+        WriteMetaString(VgcConstants.MetaCopyright, data, 86, VgcConstants.MetaCopyrightLen);
+        // SID stores addresses big-endian, convert to LE
+        _busWrite((ushort)VgcConstants.MetaLoadL, data[9]);
+        _busWrite((ushort)VgcConstants.MetaLoadH, data[8]);
+        _busWrite((ushort)VgcConstants.MetaInitL, data[11]);
+        _busWrite((ushort)VgcConstants.MetaInitH, data[10]);
+        _busWrite((ushort)VgcConstants.MetaPlayL, data[13]);
+        _busWrite((ushort)VgcConstants.MetaPlayH, data[12]);
+        int songs = (data[14] << 8) | data[15];
+        _busWrite((ushort)VgcConstants.MetaSongs, (byte)Math.Min(songs, 255));
+    }
+
+    private void ExtractMidiMetadata(byte[] data)
+    {
+        try
+        {
+            using var stream = new MemoryStream(data);
+            var midi = Melanchall.DryWetMidi.Core.MidiFile.Read(stream);
+            int trackCount = midi.GetTrackChunks().Count();
+            _busWrite((ushort)VgcConstants.MetaSongs, (byte)Math.Min(trackCount, 255));
+
+            string? title = null;
+            string? copyright = null;
+            foreach (var track in midi.GetTrackChunks())
+            {
+                foreach (var ev in track.Events)
+                {
+                    if (title is null && ev is Melanchall.DryWetMidi.Core.SequenceTrackNameEvent tn)
+                        title = tn.Text;
+                    if (copyright is null && ev is Melanchall.DryWetMidi.Core.CopyrightNoticeEvent cr)
+                        copyright = cr.Text;
+                    if (title is not null && copyright is not null) break;
+                }
+                if (title is not null && copyright is not null) break;
+            }
+
+            if (title is not null)
+                WriteMetaStringFromManaged(VgcConstants.MetaTitle, title, VgcConstants.MetaTitleLen);
+            if (copyright is not null)
+            {
+                WriteMetaStringFromManaged(VgcConstants.MetaAuthor, copyright, VgcConstants.MetaAuthorLen);
+                WriteMetaStringFromManaged(VgcConstants.MetaCopyright, copyright, VgcConstants.MetaCopyrightLen);
+            }
+
+            var duration = midi.GetDuration<Melanchall.DryWetMidi.Interaction.MetricTimeSpan>();
+            int durationSecs = (int)duration.TotalSeconds;
+            _busWrite((ushort)VgcConstants.MetaDurL, (byte)(durationSecs & 0xFF));
+            _busWrite((ushort)VgcConstants.MetaDurH, (byte)((durationSecs >> 8) & 0xFF));
+        }
+        catch { /* MIDI parsing failed — leave at defaults */ }
+    }
+
+    private void ExtractBinMetadata(byte[] data)
+    {
+        if (data.Length < 2) return;
+        _busWrite((ushort)VgcConstants.MetaLoadL, data[0]);
+        _busWrite((ushort)VgcConstants.MetaLoadH, data[1]);
+    }
+
+    private void WriteMetaString(int destAddr, byte[] source, int srcOffset, int maxLen)
+    {
+        int len = 0;
+        while (len < maxLen && srcOffset + len < source.Length && source[srcOffset + len] != 0)
+            len++;
+        for (int i = 0; i < len; i++)
+            _busWrite((ushort)(destAddr + i), source[srcOffset + i]);
+    }
+
+    private void WriteMetaStringFromManaged(int destAddr, string text, int maxLen)
+    {
+        int len = Math.Min(text.Length, maxLen);
+        for (int i = 0; i < len; i++)
+            _busWrite((ushort)(destAddr + i), (byte)text[i]);
     }
 
     // -------------------------------------------------------------------------

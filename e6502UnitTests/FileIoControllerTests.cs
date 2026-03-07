@@ -3,6 +3,8 @@ using System.IO;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Melanchall.DryWetMidi.Core;
+using Melanchall.DryWetMidi.Common;
 
 namespace e6502UnitTests;
 
@@ -501,5 +503,242 @@ public class FileIoControllerTests
         Assert.AreEqual("music/bach", result.DirectoryPath);
         Assert.AreEqual("*", result.NamePattern);
         Assert.AreEqual(".mid", result.ExtFilter);
+    }
+
+    private static (FileIoController Fio, byte[] Memory, string TempDir) MakeControllerWithDevice()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "fio_test_" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(tempDir);
+        var memory = new byte[65536];
+        var dm = new e6502.Storage.DeviceManager(tempDir, tempDir, tempDir);
+        dm.DefaultDevice = "HD0";
+        var fio = new FileIoController(
+            address => memory[address],
+            (address, data) => memory[address] = data,
+            tempDir,
+            deviceManager: dm);
+        return (fio, memory, tempDir);
+    }
+
+    [TestMethod]
+    public void DirOpen_FilteredByExtension_OnlyReturnsMid()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            File.WriteAllBytes(Path.Combine(tempDir, "song1.mid"), new byte[] { 0x4D, 0x54, 0x68, 0x64 });
+            File.WriteAllBytes(Path.Combine(tempDir, "song2.mid"), new byte[] { 0x4D, 0x54, 0x68, 0x64 });
+            File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
+            File.WriteAllBytes(Path.Combine(tempDir, "tune.sid"), new byte[124]);
+
+            SetFilename(fio, "*.mid");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("song1", ReadFilename(fio));
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("song2", ReadFilename(fio));
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrEndOfDir, fio.Read((ushort)VgcConstants.FioErrCode));
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirOpen_FilteredByNameGlob()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            File.WriteAllBytes(Path.Combine(tempDir, "bach-fugue.mid"), new byte[4]);
+            File.WriteAllBytes(Path.Combine(tempDir, "bach-sonata.mid"), new byte[4]);
+            File.WriteAllBytes(Path.Combine(tempDir, "mozart-sonata.mid"), new byte[4]);
+
+            SetFilename(fio, "bach*.mid");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("bach-fugue", ReadFilename(fio));
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("bach-sonata", ReadFilename(fio));
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirOpen_UnfilteredBackwardCompatible()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
+            File.WriteAllBytes(Path.Combine(tempDir, "tune.sid"), new byte[124]);
+
+            fio.Write((ushort)VgcConstants.FioNameLen, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            var name = ReadFilename(fio);
+            Assert.IsTrue(name.Length > 0);
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirOpen_NoMatches_ReturnsEndOfDir()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
+            SetFilename(fio, "*.mid");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrEndOfDir, fio.Read((ushort)VgcConstants.FioErrCode));
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirOpen_SidMetadata_PopulatesBuffer()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            var sid = new byte[124];
+            sid[0] = 0x50; sid[1] = 0x53; sid[2] = 0x49; sid[3] = 0x44; // PSID
+            sid[4] = 0x00; sid[5] = 0x02; // version 2
+            sid[6] = 0x00; sid[7] = 0x7C; // data offset 124
+            sid[8] = 0x10; sid[9] = 0x00; // load $1000 (BE)
+            sid[10] = 0x10; sid[11] = 0x00; // init $1000
+            sid[12] = 0x10; sid[13] = 0x03; // play $1003
+            sid[14] = 0x00; sid[15] = 0x03; // 3 songs
+            sid[16] = 0x00; sid[17] = 0x01; // start song
+            var title = Encoding.ASCII.GetBytes("Test Song");
+            Array.Copy(title, 0, sid, 22, title.Length);
+            var author = Encoding.ASCII.GetBytes("Test Author");
+            Array.Copy(author, 0, sid, 54, author.Length);
+            File.WriteAllBytes(Path.Combine(tempDir, "mysong.sid"), sid);
+
+            SetFilename(fio, "*.sid");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(1, memory[VgcConstants.MetaType]);
+            var titleBytes = new byte[9];
+            Array.Copy(memory, VgcConstants.MetaTitle, titleBytes, 0, 9);
+            Assert.AreEqual("Test Song", Encoding.ASCII.GetString(titleBytes));
+            Assert.AreEqual(0x00, memory[VgcConstants.MetaLoadL]);
+            Assert.AreEqual(0x10, memory[VgcConstants.MetaLoadH]);
+            Assert.AreEqual(3, memory[VgcConstants.MetaSongs]);
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirOpen_BinMetadata_PopulatesLoadAddress()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            File.WriteAllBytes(Path.Combine(tempDir, "prog.bin"), new byte[] { 0x00, 0x90, 0xEA, 0xEA });
+            SetFilename(fio, "*.bin");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(2, memory[VgcConstants.MetaType]);
+            Assert.AreEqual(0x00, memory[VgcConstants.MetaLoadL]);
+            Assert.AreEqual(0x90, memory[VgcConstants.MetaLoadH]);
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirRead_Filtered_PopulatesMetadataEachEntry()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            var sid1 = new byte[124];
+            sid1[0] = 0x50; sid1[1] = 0x53; sid1[2] = 0x49; sid1[3] = 0x44;
+            sid1[4] = 0x00; sid1[5] = 0x02; sid1[6] = 0x00; sid1[7] = 0x7C;
+            var t1 = Encoding.ASCII.GetBytes("First Song");
+            Array.Copy(t1, 0, sid1, 22, t1.Length);
+            var sid2 = new byte[124];
+            Array.Copy(sid1, sid2, 124);
+            Array.Clear(sid2, 22, 32);
+            var t2 = Encoding.ASCII.GetBytes("Second Song");
+            Array.Copy(t2, 0, sid2, 22, t2.Length);
+            File.WriteAllBytes(Path.Combine(tempDir, "aaa.sid"), sid1);
+            File.WriteAllBytes(Path.Combine(tempDir, "bbb.sid"), sid2);
+
+            SetFilename(fio, "*.sid");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("First Song", Encoding.ASCII.GetString(memory, VgcConstants.MetaTitle, 10));
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("Second Song", Encoding.ASCII.GetString(memory, VgcConstants.MetaTitle, 11));
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirRead_Unfiltered_DoesNotPopulateMetadata()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            var sid = new byte[124];
+            sid[0] = 0x50; sid[1] = 0x53; sid[2] = 0x49; sid[3] = 0x44;
+            sid[4] = 0x00; sid[5] = 0x02; sid[6] = 0x00; sid[7] = 0x7C;
+            var t = Encoding.ASCII.GetBytes("Should Not Appear");
+            Array.Copy(t, 0, sid, 22, t.Length);
+            File.WriteAllBytes(Path.Combine(tempDir, "test.sid"), sid);
+
+            fio.Write((ushort)VgcConstants.FioNameLen, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(0, memory[VgcConstants.MetaType]);
+            Assert.AreEqual(0, memory[VgcConstants.MetaTitle]);
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirOpen_MidiMetadata_PopulatesBuffer()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            var trackChunk = new TrackChunk(
+                new SequenceTrackNameEvent("Test MIDI Song"),
+                new CopyrightNoticeEvent("Test Composer"),
+                new NoteOnEvent(
+                    (SevenBitNumber)60,
+                    (SevenBitNumber)100),
+                new NoteOffEvent(
+                    (SevenBitNumber)60,
+                    (SevenBitNumber)0) { DeltaTime = 480 }
+            );
+            var midi = new MidiFile(trackChunk);
+            midi.Write(Path.Combine(tempDir, "test.mid"));
+
+            SetFilename(fio, "*.mid");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(3, memory[VgcConstants.MetaType]); // MID
+            Assert.AreEqual("Test MIDI Song", Encoding.ASCII.GetString(memory, VgcConstants.MetaTitle, 14));
+            Assert.AreEqual("Test Composer", Encoding.ASCII.GetString(memory, VgcConstants.MetaAuthor, 13));
+            Assert.IsTrue(memory[VgcConstants.MetaSongs] >= 1, $"Expected >= 1 tracks, got {memory[VgcConstants.MetaSongs]}");
+            int dur = memory[VgcConstants.MetaDurL] | (memory[VgcConstants.MetaDurH] << 8);
+            Assert.IsTrue(dur > 0, $"Duration should be > 0, got {dur}");
+        }
+        finally { Directory.Delete(tempDir, true); }
     }
 }
