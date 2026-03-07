@@ -711,6 +711,60 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void FilteredEnumeration_EndToEnd_MixedFileTypes()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            // Create a mix of files
+            var sid = new byte[124];
+            sid[0] = 0x50; sid[1] = 0x53; sid[2] = 0x49; sid[3] = 0x44; // PSID
+            sid[4] = 0x00; sid[5] = 0x02;
+            sid[6] = 0x00; sid[7] = 0x7C;
+            var title = Encoding.ASCII.GetBytes("Cool SID Tune");
+            Array.Copy(title, 0, sid, 22, title.Length);
+            File.WriteAllBytes(Path.Combine(tempDir, "cool.sid"), sid);
+            File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
+            File.WriteAllBytes(Path.Combine(tempDir, "app.bin"), new byte[] { 0x00, 0x80, 0xEA });
+
+            // Filter *.sid — should only get the SID file
+            SetFilename(fio, "*.sid");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("cool", ReadFilename(fio));
+            Assert.AreEqual(1, memory[VgcConstants.MetaType]); // SID
+
+            // Advance — should be end
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioErrEndOfDir, fio.Read((ushort)VgcConstants.FioErrCode));
+
+            // Filter *.bin — should only get the BIN file
+            SetFilename(fio, "*.bin");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("app", ReadFilename(fio));
+            Assert.AreEqual(2, memory[VgcConstants.MetaType]); // BIN
+            Assert.AreEqual(0x00, memory[VgcConstants.MetaLoadL]);
+            Assert.AreEqual(0x80, memory[VgcConstants.MetaLoadH]);
+
+            // Filter * (no extension) — should get all 3 files
+            SetFilename(fio, "*");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            int count = 1;
+            while (true)
+            {
+                fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+                if (fio.Read((ushort)VgcConstants.FioStatus) != VgcConstants.FioStatusOk)
+                    break;
+                count++;
+            }
+            Assert.AreEqual(3, count);
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
     public void DirOpen_MidiMetadata_PopulatesBuffer()
     {
         var (fio, memory, tempDir) = MakeControllerWithDevice();
