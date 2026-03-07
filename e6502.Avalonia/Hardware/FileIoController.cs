@@ -170,7 +170,7 @@ public sealed partial class FileIoController
     /// Returns null if _deviceManager is null (fall through to direct filesystem).
     /// Throws IOException / FileNotFoundException on bad prefix or unmounted device.
     /// </summary>
-    private (IStorageDevice Device, string Name)? ResolveDevice(string filename)
+    private (IStorageDevice Device, string Name, string? SavedDir)? ResolveDevice(string filename)
     {
         if (_deviceManager is null)
             return null;
@@ -193,7 +193,7 @@ public sealed partial class FileIoController
             device.CurrentDirectory = subdir;
         }
 
-        return (device, name);
+        return (device, name, savedDir);
     }
 
     /// <summary>Restores device CurrentDirectory if it was temporarily changed.</summary>
@@ -239,11 +239,9 @@ public sealed partial class FileIoController
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {
-                var (device, name) = resolved.Value;
-                string? savedDir = null;
+                var (device, name, savedDir) = resolved.Value;
                 try
                 {
-                    // Path navigation already done in ResolveDevice; savedDir tracked there.
                     device.Save(name, data, ".bas");
 
                     // Companion .md — only on HostDirectoryDevice (skip for NDI floppy)
@@ -305,8 +303,7 @@ public sealed partial class FileIoController
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {
-                var (device, name) = resolved.Value;
-                string? savedDir = null;
+                var (device, name, savedDir) = resolved.Value;
                 try
                 {
                     byte[] data;
@@ -536,8 +533,7 @@ public sealed partial class FileIoController
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {
-                var (device, name) = resolved.Value;
-                string? savedDir = null;
+                var (device, name, savedDir) = resolved.Value;
                 try
                 {
                     if (!device.FileExists(name, ".bas"))
@@ -619,8 +615,7 @@ public sealed partial class FileIoController
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {
-                var (device, name) = resolved.Value;
-                string? savedDir = null;
+                var (device, name, savedDir) = resolved.Value;
                 try
                 {
                     device.Save(name, data, ".gfx");
@@ -674,8 +669,7 @@ public sealed partial class FileIoController
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {
-                var (device, name) = resolved.Value;
-                string? savedDir = null;
+                var (device, name, savedDir) = resolved.Value;
                 try
                 {
                     if (!device.FileExists(name, ".gfx"))
@@ -740,8 +734,7 @@ public sealed partial class FileIoController
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {
-                var (device, name) = resolved.Value;
-                string? savedDir = null;
+                var (device, name, savedDir) = resolved.Value;
                 try
                 {
                     if (!device.FileExists(name, ".sid"))
@@ -904,35 +897,42 @@ public sealed partial class FileIoController
             string? filename = ReadFilename();
             if (filename is null) { SetError(VgcConstants.FioErrIo); return; }
 
-            string path;
+            string path = string.Empty;
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {
-                var (device, name) = resolved.Value;
-                // MIDI playback requires a file path — extract it for DryWetMidi
-                if (device is HostDirectoryDevice hdd)
+                var (device, name, savedDir) = resolved.Value;
+                try
                 {
-                    string dir = hdd.CurrentDirectory == "/"
-                        ? _saveDir
-                        : Path.Combine(_saveDir, hdd.CurrentDirectory.Trim('/'));
-                    path = Path.Combine(dir, name + ".mid");
-                    if (!File.Exists(path))
+                    // MIDI playback requires a file path — extract it for DryWetMidi
+                    if (device is HostDirectoryDevice hdd)
                     {
-                        SetError(VgcConstants.FioErrNotFound);
-                        return;
+                        string dir = hdd.CurrentDirectory == "/"
+                            ? _saveDir
+                            : Path.Combine(_saveDir, hdd.CurrentDirectory.Trim('/'));
+                        path = Path.Combine(dir, name + ".mid");
+                        if (!File.Exists(path))
+                        {
+                            SetError(VgcConstants.FioErrNotFound);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // NDI floppy: load bytes then write to temp file
+                        if (!device.FileExists(name, ".mid"))
+                        {
+                            SetError(VgcConstants.FioErrNotFound);
+                            return;
+                        }
+                        byte[] midiBytes = device.Load(name, ".mid");
+                        path = Path.Combine(Path.GetTempPath(), $"e6502-{name}.mid");
+                        File.WriteAllBytes(path, midiBytes);
                     }
                 }
-                else
+                finally
                 {
-                    // NDI floppy: load bytes then write to temp file
-                    if (!device.FileExists(name, ".mid"))
-                    {
-                        SetError(VgcConstants.FioErrNotFound);
-                        return;
-                    }
-                    byte[] midiBytes = device.Load(name, ".mid");
-                    path = Path.Combine(Path.GetTempPath(), $"e6502-{name}.mid");
-                    File.WriteAllBytes(path, midiBytes);
+                    RestoreDir(device, savedDir);
                 }
             }
             else

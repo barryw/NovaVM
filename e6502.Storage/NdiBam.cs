@@ -29,8 +29,12 @@ public sealed class NdiBam
                 _freeCount++;
     }
 
-    public bool IsAllocated(int sector) =>
-        (_bits[sector >> 3] & (1 << (sector & 7))) != 0;
+    public bool IsAllocated(int sector)
+    {
+        if (sector < 0 || sector >= _totalSectors)
+            throw new ArgumentOutOfRangeException(nameof(sector));
+        return (_bits[sector >> 3] & (1 << (sector & 7))) != 0;
+    }
 
     /// <summary>
     /// Finds the first contiguous run of <paramref name="count"/> free sectors
@@ -72,6 +76,9 @@ public sealed class NdiBam
     /// </summary>
     public void Free(int start, int count)
     {
+        if (start < 0 || start + count > _totalSectors)
+            throw new ArgumentOutOfRangeException(nameof(start),
+                $"Sector range [{start}..{start + count}) exceeds total {_totalSectors}.");
         for (int i = start; i < start + count; i++)
         {
             if (IsAllocated(i))

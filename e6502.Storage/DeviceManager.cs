@@ -79,7 +79,7 @@ public sealed class DeviceManager
             {
                 _devices[$"FD{i}"].Mount(imagePath);
             }
-            catch
+            catch (Exception)
             {
                 // Silently skip failures
             }
@@ -107,7 +107,7 @@ public sealed class DeviceManager
                     if (dev.FileExists(name, ext))
                         return (dev, name, ext);
                 }
-                catch
+                catch (Exception)
                 {
                     // Device error — skip
                 }

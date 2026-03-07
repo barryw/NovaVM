@@ -107,6 +107,8 @@ public sealed class NdiImage : IDisposable
     public void WriteFile(string name, NdiFileType type, ushort parentIndex, byte[] data)
     {
         ThrowIfDisposed();
+        if (data.Length > ushort.MaxValue)
+            throw new ArgumentException($"File size {data.Length} exceeds maximum of {ushort.MaxValue} bytes.", nameof(data));
         int sectorCount = (data.Length + 255) / 256;
         if (sectorCount == 0) sectorCount = 1;
 
