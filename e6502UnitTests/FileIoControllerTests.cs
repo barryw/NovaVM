@@ -443,4 +443,63 @@ public class FileIoControllerTests
         Assert.IsFalse(FileIoController.GlobMatch("BACH*FUGUE", "BACH-SONATA"));
     }
 
+    [TestMethod]
+    public void ParseFilterPattern_SimpleWildcard()
+    {
+        var result = FileIoController.ParseFilterPattern("*.mid");
+        Assert.IsNull(result.DevicePrefix);
+        Assert.IsNull(result.DirectoryPath);
+        Assert.AreEqual("*", result.NamePattern);
+        Assert.AreEqual(".mid", result.ExtFilter);
+    }
+
+    [TestMethod]
+    public void ParseFilterPattern_WithDevice()
+    {
+        var result = FileIoController.ParseFilterPattern("FD0:*.sid");
+        Assert.AreEqual("FD0", result.DevicePrefix);
+        Assert.IsNull(result.DirectoryPath);
+        Assert.AreEqual("*", result.NamePattern);
+        Assert.AreEqual(".sid", result.ExtFilter);
+    }
+
+    [TestMethod]
+    public void ParseFilterPattern_WithDeviceAndPath()
+    {
+        var result = FileIoController.ParseFilterPattern("FD0:songs/*.sid");
+        Assert.AreEqual("FD0", result.DevicePrefix);
+        Assert.AreEqual("songs", result.DirectoryPath);
+        Assert.AreEqual("*", result.NamePattern);
+        Assert.AreEqual(".sid", result.ExtFilter);
+    }
+
+    [TestMethod]
+    public void ParseFilterPattern_NoExtension()
+    {
+        var result = FileIoController.ParseFilterPattern("BACH*");
+        Assert.IsNull(result.DevicePrefix);
+        Assert.IsNull(result.DirectoryPath);
+        Assert.AreEqual("BACH*", result.NamePattern);
+        Assert.IsNull(result.ExtFilter);
+    }
+
+    [TestMethod]
+    public void ParseFilterPattern_NameAndExt()
+    {
+        var result = FileIoController.ParseFilterPattern("BACH*.mid");
+        Assert.IsNull(result.DevicePrefix);
+        Assert.IsNull(result.DirectoryPath);
+        Assert.AreEqual("BACH*", result.NamePattern);
+        Assert.AreEqual(".mid", result.ExtFilter);
+    }
+
+    [TestMethod]
+    public void ParseFilterPattern_DevicePathAndPattern()
+    {
+        var result = FileIoController.ParseFilterPattern("HD:music/bach/*.mid");
+        Assert.AreEqual("HD", result.DevicePrefix);
+        Assert.AreEqual("music/bach", result.DirectoryPath);
+        Assert.AreEqual("*", result.NamePattern);
+        Assert.AreEqual(".mid", result.ExtFilter);
+    }
 }

@@ -1321,4 +1321,45 @@ public sealed partial class FileIoController
         return p == pattern.Length;
     }
 
+    internal record struct FilterPattern(string? DevicePrefix, string? DirectoryPath, string NamePattern, string? ExtFilter);
+
+    internal static FilterPattern ParseFilterPattern(string pattern)
+    {
+        string? devicePrefix = null;
+        string remainder = pattern;
+
+        int colon = pattern.IndexOf(':');
+        if (colon > 0)
+        {
+            devicePrefix = pattern[..colon];
+            remainder = pattern[(colon + 1)..];
+        }
+
+        string? dirPath = null;
+        int lastSlash = remainder.LastIndexOf('/');
+        if (lastSlash >= 0)
+        {
+            dirPath = lastSlash > 0 ? remainder[..lastSlash] : null;
+            remainder = remainder[(lastSlash + 1)..];
+        }
+
+        string? extFilter = null;
+        string namePattern = remainder;
+        int dot = remainder.LastIndexOf('.');
+        if (dot >= 0)
+        {
+            string ext = remainder[dot..];
+            if (ext.Equals(".bas", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".sid", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".bin", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".mid", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".gfx", StringComparison.OrdinalIgnoreCase))
+            {
+                extFilter = ext.ToLowerInvariant();
+                namePattern = remainder[..dot];
+            }
+        }
+
+        return new FilterPattern(devicePrefix, dirPath, namePattern, extFilter);
+    }
 }
