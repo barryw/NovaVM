@@ -1,7 +1,7 @@
 Modules list:
 -------------
 basic.o:
-    CODE              Offs=000000  Size=003F08  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=003FBA  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
     BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
     DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
@@ -20,8 +20,8 @@ DATA                  000000  000000  000000  00001
 NULL                  000000  000000  000000  00001
 RODATA                000000  000000  000000  00001
 ZEROPAGE              000080  000080  000000  00001
-CODE                  00C000  00FF07  003F08  00001
-MONITOR               00FF80  00FFBA  00003B  00001
+CODE                  00C000  00FFB9  003FBA  00001
+MONITOR               00FFBD  00FFF7  00003B  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 
 

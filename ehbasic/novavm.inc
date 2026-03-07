@@ -257,6 +257,29 @@ BltModeColorKey         = $02
 FreeBase                = $BAA0
 FreeEnd                 = $BFFF
 
+; --- File metadata buffer ($BAB0-$BB1F) — populated during filtered DIRREAD ---
+MetaBase                = $BAB0
+MetaEnd                 = $BB1F
+MetaType                = $BAB0
+MetaSizeL               = $BAB1
+MetaSizeH               = $BAB2
+MetaTitle               = $BAB3
+MetaAuthor              = $BAD3
+MetaCopyright           = $BAF3
+MetaLoadL               = $BB13
+MetaLoadH               = $BB14
+MetaInitL               = $BB15
+MetaInitH               = $BB16
+MetaPlayL               = $BB17
+MetaPlayH               = $BB18
+MetaSongs               = $BB19
+MetaDurL                = $BB1A
+MetaDurH                = $BB1B
+MetaGfxSpace            = $BB1C
+MetaTitleLen            = $20
+MetaAuthorLen           = $20
+MetaCopyrightLen        = $20
+
 ; --- Network Interface Controller (NIC) registers ($A100-$A13F) ---
 NicBase                 = $A100
 NicEnd                  = $A13F
@@ -296,6 +319,7 @@ NicStatusAnyError       = $80
 NicMaxSlots             = $04
 NicMaxMessageSize       = $0100
 NicMaxQueueDepth        = $10
+AutobootSkip            = $B9F0
 RomBase                 = $C000
 RomEnd                  = $FFFF
 
@@ -450,7 +474,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E784
-V_OUTP                  = $E787
-V_LOAD                  = $E78A
-V_SAVE                  = $E78D
+V_INPT                  = $E808
+V_OUTP                  = $E80B
+V_LOAD                  = $E80E
+V_SAVE                  = $E811
