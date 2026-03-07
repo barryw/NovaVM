@@ -1279,4 +1279,46 @@ public sealed partial class FileIoController
 
     [GeneratedRegex(@"^[A-Za-z0-9_.\-]+$")]
     private static partial Regex SafeFilename();
+
+    /// <summary>
+    /// Simple glob matching: * matches zero or more chars, ? matches exactly one char.
+    /// Case-insensitive.
+    /// </summary>
+    internal static bool GlobMatch(string pattern, string text)
+    {
+        int p = 0, t = 0;
+        int starP = -1, starT = -1;
+
+        while (t < text.Length)
+        {
+            if (p < pattern.Length &&
+                (char.ToUpperInvariant(pattern[p]) == char.ToUpperInvariant(text[t]) || pattern[p] == '?'))
+            {
+                p++;
+                t++;
+            }
+            else if (p < pattern.Length && pattern[p] == '*')
+            {
+                starP = p;
+                starT = t;
+                p++;
+            }
+            else if (starP >= 0)
+            {
+                p = starP + 1;
+                starT++;
+                t = starT;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        while (p < pattern.Length && pattern[p] == '*')
+            p++;
+
+        return p == pattern.Length;
+    }
+
 }

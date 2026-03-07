@@ -397,4 +397,50 @@ public class FileIoControllerTests
             Directory.Delete(dir, true);
         }
     }
+
+    [TestMethod]
+    public void GlobMatch_StarMatchesAnything()
+    {
+        Assert.IsTrue(FileIoController.GlobMatch("*", "anything"));
+        Assert.IsTrue(FileIoController.GlobMatch("*", ""));
+        Assert.IsTrue(FileIoController.GlobMatch("*", "BACH-FUGUE"));
+    }
+
+    [TestMethod]
+    public void GlobMatch_StarPrefix()
+    {
+        Assert.IsTrue(FileIoController.GlobMatch("BACH*", "BACH-FUGUE"));
+        Assert.IsTrue(FileIoController.GlobMatch("BACH*", "BACH"));
+        Assert.IsFalse(FileIoController.GlobMatch("BACH*", "MOZART"));
+    }
+
+    [TestMethod]
+    public void GlobMatch_StarSuffix()
+    {
+        Assert.IsTrue(FileIoController.GlobMatch("*FUGUE", "BACH-FUGUE"));
+        Assert.IsFalse(FileIoController.GlobMatch("*FUGUE", "BACH-SONATA"));
+    }
+
+    [TestMethod]
+    public void GlobMatch_QuestionMark()
+    {
+        Assert.IsTrue(FileIoController.GlobMatch("A?C", "ABC"));
+        Assert.IsFalse(FileIoController.GlobMatch("A?C", "ABBC"));
+        Assert.IsFalse(FileIoController.GlobMatch("A?C", "AC"));
+    }
+
+    [TestMethod]
+    public void GlobMatch_CaseInsensitive()
+    {
+        Assert.IsTrue(FileIoController.GlobMatch("bach*", "BACH-FUGUE"));
+        Assert.IsTrue(FileIoController.GlobMatch("BACH*", "bach-fugue"));
+    }
+
+    [TestMethod]
+    public void GlobMatch_MiddleStar()
+    {
+        Assert.IsTrue(FileIoController.GlobMatch("BACH*FUGUE", "BACH-CHROMATIC-FUGUE"));
+        Assert.IsFalse(FileIoController.GlobMatch("BACH*FUGUE", "BACH-SONATA"));
+    }
+
 }
