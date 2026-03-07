@@ -313,6 +313,35 @@ public static class VgcConstants
     public const int FreeEnd           = 0xBFFF;
 
     // -------------------------------------------------------------------------
+    // File metadata buffer ($BAB0-$BB1F) — populated during filtered DIRREAD
+    // -------------------------------------------------------------------------
+
+    public const int MetaBase       = 0xBAB0;
+    public const int MetaEnd        = 0xBB1F;
+    public const int MetaSize       = MetaEnd - MetaBase + 1;  // 112 bytes
+
+    public const int MetaType       = 0xBAB0;   // 1 byte: file type (NdiFileType enum value)
+    public const int MetaSizeL      = 0xBAB1;   // file size low byte
+    public const int MetaSizeH      = 0xBAB2;   // file size high byte
+    public const int MetaTitle      = 0xBAB3;   // 32 bytes, null-padded ASCII
+    public const int MetaAuthor     = 0xBAD3;   // 32 bytes, null-padded ASCII
+    public const int MetaCopyright  = 0xBAF3;   // 32 bytes, null-padded ASCII
+    public const int MetaLoadL      = 0xBB13;   // load address low (BIN/SID)
+    public const int MetaLoadH      = 0xBB14;   // load address high
+    public const int MetaInitL      = 0xBB15;   // init address low (SID)
+    public const int MetaInitH      = 0xBB16;   // init address high
+    public const int MetaPlayL      = 0xBB17;   // play address low (SID)
+    public const int MetaPlayH      = 0xBB18;   // play address high
+    public const int MetaSongs      = 0xBB19;   // song/track count (SID subtunes / MID tracks)
+    public const int MetaDurL       = 0xBB1A;   // duration seconds low (MID only)
+    public const int MetaDurH       = 0xBB1B;   // duration seconds high
+    public const int MetaGfxSpace   = 0xBB1C;   // GFX space type
+
+    public const int MetaTitleLen   = 32;
+    public const int MetaAuthorLen  = 32;
+    public const int MetaCopyrightLen = 32;
+
+    // -------------------------------------------------------------------------
     // Network Interface Controller (NIC) registers ($A100-$A13F)
     // -------------------------------------------------------------------------
 
