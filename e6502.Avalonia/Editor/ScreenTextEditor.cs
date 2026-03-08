@@ -203,7 +203,6 @@ public abstract class ScreenTextEditor
     {
         OnDeactivate();
         IsActive = false;
-        RestoreScreen();
     }
 
     // ── Screen save/restore ───────────────────────────────────────────────────

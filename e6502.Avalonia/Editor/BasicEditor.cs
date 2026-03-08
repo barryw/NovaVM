@@ -107,7 +107,7 @@ public sealed class BasicEditor : ScreenTextEditor
         var tok = GetTokenizer();
         if (tok != null)
             WriteToMemory(tok);
-        // RestoreScreen is called by base.Deactivate() after OnDeactivate
+        RestoreScreen();
     }
 
     protected override bool HandleEditorKey(Key key, KeyModifiers modifiers)

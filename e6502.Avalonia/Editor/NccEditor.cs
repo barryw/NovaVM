@@ -103,10 +103,9 @@ public sealed class NccEditor : ScreenTextEditor
 
     protected override void OnDeactivate()
     {
-        // Restore BASIC environment — RestoreScreen() runs after this hook
         Bus.Write(VgcConstants.RegBgCol, 0);
+        ClearScreen();
         Bus.Write(VgcConstants.RegCursorEnable, 1);
-        // Cold-start BASIC; BASIC will overwrite whatever RestoreScreen restores
         _cpu.Boot();
         _debugger.Resume();
     }
