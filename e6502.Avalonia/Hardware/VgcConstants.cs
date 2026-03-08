@@ -115,10 +115,18 @@ public static class VgcConstants
     public const int  MusicNote4       = 0xBA54; // voice 4 current MIDI note
     public const int  MusicNote5       = 0xBA55; // voice 5 current MIDI note
     public const int  MusicNote6       = 0xBA56; // voice 6 current MIDI note
-    public const int  MusicElapsedL    = 0xBA57; // elapsed frames low byte (60Hz)
-    public const int  MusicElapsedH    = 0xBA58; // elapsed frames high byte
-    public const int  MusicTotalL      = 0xBA59; // total frames low byte
-    public const int  MusicTotalH      = 0xBA5A; // total frames high byte
+    public const int  MusicNote7       = 0xBA57; // voice 7 current MIDI note (WTS 0)
+    public const int  MusicNote8       = 0xBA58; // voice 8 current MIDI note (WTS 1)
+    public const int  MusicNote9       = 0xBA59; // voice 9 current MIDI note (WTS 2)
+    public const int  MusicNote10      = 0xBA5A; // voice 10 current MIDI note (WTS 3)
+    public const int  MusicNote11      = 0xBA5B; // voice 11 current MIDI note (WTS 4)
+    public const int  MusicNote12      = 0xBA5C; // voice 12 current MIDI note (WTS 5)
+    public const int  MusicNote13      = 0xBA5D; // voice 13 current MIDI note (WTS 6)
+    public const int  MusicNote14      = 0xBA5E; // voice 14 current MIDI note (WTS 7)
+    public const int  MusicElapsedL    = 0xBA5F; // elapsed frames low byte (60Hz)
+    public const int  MusicElapsedH    = 0xBA60; // elapsed frames high byte
+    public const int  MusicTotalL      = 0xBA61; // total frames low byte
+    public const int  MusicTotalH      = 0xBA62; // total frames high byte
 
     // -------------------------------------------------------------------------
     // Wavetable Synthesizer registers ($A140-$A1DF)
