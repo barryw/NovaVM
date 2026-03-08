@@ -50,6 +50,14 @@ public sealed class BasicEditor
     private ScreenEditor? _screenEditor;
     private Cpu? _cpu;
 
+    // ── Prompt state ─────────────────────────────────────────────────────────
+    private bool _prompting;
+    private string _promptText = "";
+    private string _promptInput = "";
+    private Action<string>? _promptCallback;
+    private string _message = "";
+    private string _lastSearch = "";
+
     // ── Editor state ─────────────────────────────────────────────────────────
     public EditorMode Mode { get; private set; } = EditorMode.Edit;
     public bool IsActive { get; private set; }
@@ -181,6 +189,9 @@ public sealed class BasicEditor
     {
         if (!IsActive) return false;
 
+        if (_prompting)
+            return HandlePromptKey(key);
+
         bool ctrl = modifiers.HasFlag(KeyModifiers.Control) || modifiers.HasFlag(KeyModifiers.Meta);
 
         if (key == Key.Escape)
@@ -201,6 +212,8 @@ public sealed class BasicEditor
         {
             switch (key)
             {
+                case Key.F: StartFind(); return true;
+                case Key.G: StartGoToLine(); return true;
                 case Key.Y: DeleteCurrentLine(); return true;
                 case Key.D: DuplicateLine(); return true;
                 case Key.Home:
@@ -241,6 +254,16 @@ public sealed class BasicEditor
     public void HandleTextInput(string text)
     {
         if (!IsActive || Mode != EditorMode.Edit) return;
+        if (_prompting)
+        {
+            foreach (char ch in text)
+            {
+                if (ch >= 0x20 && ch <= 0x7E)
+                    _promptInput += ch;
+            }
+            RedrawStatusBar();
+            return;
+        }
         foreach (char ch in text)
         {
             if (ch >= 0x20 && ch <= 0x7E)
@@ -442,6 +465,127 @@ public sealed class BasicEditor
         _modified = true;
         EnsureVisible();
         RedrawCode();
+    }
+
+    // ── Prompt system ────────────────────────────────────────────────────────
+
+    private void StartPrompt(string prompt, Action<string> callback)
+    {
+        _prompting = true;
+        _promptText = prompt;
+        _promptInput = "";
+        _promptCallback = callback;
+        _message = "";
+        RedrawStatusBar();
+    }
+
+    private bool HandlePromptKey(Key key)
+    {
+        switch (key)
+        {
+            case Key.Enter:
+                _prompting = false;
+                string input = _promptInput;
+                var cb = _promptCallback;
+                _promptCallback = null;
+                cb?.Invoke(input);
+                return true;
+            case Key.Escape:
+                _prompting = false;
+                _promptCallback = null;
+                RedrawStatusBar();
+                return true;
+            case Key.Back:
+                if (_promptInput.Length > 0)
+                    _promptInput = _promptInput[..^1];
+                RedrawStatusBar();
+                return true;
+        }
+        return true; // consume all keys while prompting
+    }
+
+    private void ShowMessage(string msg)
+    {
+        _message = msg;
+        RedrawStatusBar();
+    }
+
+    // ── Search and Go To ──────────────────────────────────────────────────────
+
+    private void StartFind()
+    {
+        StartPrompt("Find: ", input =>
+        {
+            if (string.IsNullOrEmpty(input))
+                input = _lastSearch;
+            if (string.IsNullOrEmpty(input))
+            {
+                ShowMessage("No search term");
+                return;
+            }
+            _lastSearch = input;
+            FindNext(input);
+        });
+    }
+
+    private void FindNext(string term)
+    {
+        // Search forward from current position
+        for (int i = _cursorLine; i < _lines.Count; i++)
+        {
+            int startCol = (i == _cursorLine) ? _cursorCol + 1 : 0;
+            int idx = _lines[i].Text.IndexOf(term, startCol, StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                _cursorLine = i;
+                _cursorCol = idx;
+                EnsureVisible();
+                RedrawCode();
+                ShowMessage($"Found at line {_lines[i].LineNumber}");
+                return;
+            }
+        }
+        // Wrap around from beginning
+        for (int i = 0; i <= _cursorLine; i++)
+        {
+            int endCol = (i == _cursorLine) ? _cursorCol : _lines[i].Text.Length;
+            int idx = _lines[i].Text.IndexOf(term, 0, Math.Min(endCol + 1, _lines[i].Text.Length), StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                _cursorLine = i;
+                _cursorCol = idx;
+                EnsureVisible();
+                RedrawCode();
+                ShowMessage($"Found at line {_lines[i].LineNumber} (wrapped)");
+                return;
+            }
+        }
+        ShowMessage("Not found");
+    }
+
+    private void StartGoToLine()
+    {
+        StartPrompt("Go to line: ", input =>
+        {
+            if (!int.TryParse(input, out int lineNum))
+            {
+                ShowMessage("Invalid line number");
+                return;
+            }
+            for (int i = 0; i < _lines.Count; i++)
+            {
+                if (_lines[i].LineNumber == lineNum)
+                {
+                    _cursorLine = i;
+                    _cursorCol = 0;
+                    EnsureVisible();
+                    RedrawCode();
+                    ShowMessage("");
+                    return;
+                }
+            }
+            ShowMessage("Line not found");
+        });
     }
 
     // ── Cursor movement ───────────────────────────────────────────────────────
@@ -679,24 +823,36 @@ public sealed class BasicEditor
 
     internal void RedrawStatusBar()
     {
-        int line = _cursorLine + 1;
-        int col  = _cursorCol + 1;
-        string mode = _insertMode ? "INS" : "OVR";
-
-        // Compute free memory: space from end of program to $9FFF
-        int freeBytes = 0;
-        try
+        string status;
+        if (_prompting)
         {
-            byte endL = _bus.Read(0x002D);
-            byte endH = _bus.Read(0x002E);
-            ushort progEnd = (ushort)(endL | (endH << 8));
-            int available = VgcConstants.BasicEnd - progEnd;
-            if (available < 0) available = 0;
-            freeBytes = available;
+            status = " " + _promptText + _promptInput + "_";
         }
-        catch { }
+        else
+        {
+            int line = _cursorLine + 1;
+            int col  = _cursorCol + 1;
+            string mode = _insertMode ? "INS" : "OVR";
+            string mod = _modified ? " [*]" : "";
 
-        string status = $"Ln {line} Col {col}  {mode}  Free: {freeBytes}";
+            // Compute free memory: space from end of program to $9FFF
+            int freeBytes = 0;
+            try
+            {
+                byte endL = _bus.Read(0x002D);
+                byte endH = _bus.Read(0x002E);
+                ushort progEnd = (ushort)(endL | (endH << 8));
+                int available = VgcConstants.BasicEnd - progEnd;
+                if (available < 0) available = 0;
+                freeBytes = available;
+            }
+            catch { }
+
+            status = $"Ln {line} Col {col}  {mode}  Free: {freeBytes}{mod}";
+            if (!string.IsNullOrEmpty(_message))
+                status += "  " + _message;
+        }
+
         // Pad to screen width
         status = status.PadRight(ScreenCols);
         if (status.Length > ScreenCols) status = status[..ScreenCols];
