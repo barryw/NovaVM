@@ -22,7 +22,7 @@ KEYS_PER_OCT = 7                ; white keys per octave
 KEYS_PER_ROW = 28               ; white keys per row (4 octaves)
 ROW_WIDTH   = KEYS_PER_ROW * KW ; 308 pixels
 MIDI_BASE   = 12                ; C0 = MIDI note 12
-NUM_VOICES  = 6
+NUM_VOICES  = 14
 BAR_X       = 6                 ; progress bar X
 BAR_Y       = 145               ; progress bar Y
 BAR_W       = 308               ; progress bar max fill width
@@ -631,23 +631,22 @@ draw_chrome:
     lda #CmdRect
     sta RegCmd
 
-    ; Voice legend at text row 20
+    ; Voice legend row 20: SID voices 0-5
     lda #20
     sta RegCursorY
     ldx #0
-@legend:
-    cpx #NUM_VOICES
-    bcs @legend_done
+@legend_sid:
+    cpx #6
+    bcs @legend_sid_done
     phx
 
-    ; Column = 2 + voice * 10
+    ; Column = 2 + voice * 5
     txa
-    asl                         ; *2
     sta zp_tmp
+    asl                         ; *2
     asl                         ; *4
-    asl                         ; *8
     clc
-    adc zp_tmp                  ; *10
+    adc zp_tmp                  ; *5
     clc
     adc #2
     sta RegCursorX
@@ -657,7 +656,6 @@ draw_chrome:
     lda voice_colors,x
     sta RegFgCol
 
-    ; Solid block character (CP437 $DB = █)
     lda #$DB
     sta RegCharOut
 
@@ -665,7 +663,7 @@ draw_chrome:
     sta RegFgCol
     lda #' '
     sta RegCharOut
-    lda #'V'
+    lda #'S'
     sta RegCharOut
 
     plx
@@ -677,13 +675,62 @@ draw_chrome:
 
     plx
     inx
-    bra @legend
-@legend_done:
+    bra @legend_sid
+@legend_sid_done:
 
-    ; "PRESS ANY KEY TO EXIT" at row 23
-    lda #23
+    ; Voice legend row 21: WTS voices 6-13
+    lda #21
     sta RegCursorY
-    lda #20
+    ldx #6
+@legend_wts:
+    cpx #14
+    bcs @legend_wts_done
+    phx
+
+    ; Column = 2 + (voice - 6) * 5
+    txa
+    sec
+    sbc #6                      ; index within WTS row (0-7)
+    sta zp_tmp
+    asl                         ; *2
+    asl                         ; *4
+    clc
+    adc zp_tmp                  ; *5
+    clc
+    adc #2
+    sta RegCursorX
+
+    plx
+    phx
+    lda voice_colors,x
+    sta RegFgCol
+
+    lda #$DB
+    sta RegCharOut
+
+    lda #COL_WHITE
+    sta RegFgCol
+    lda #' '
+    sta RegCharOut
+    lda #'W'
+    sta RegCharOut
+
+    plx
+    phx
+    txa
+    sec
+    sbc #5                      ; '1' + (voice - 6) = voice - 5
+    sta RegCharOut
+
+    plx
+    inx
+    bra @legend_wts
+@legend_wts_done:
+
+    ; "PRESS ANY KEY TO EXIT" at row 24, centered (21 chars, col 29)
+    lda #24
+    sta RegCursorY
+    lda #29
     sta RegCursorX
     lda #COL_LGRAY
     sta RegFgCol
@@ -1265,7 +1312,10 @@ print_str:
 ; =====================================================================
 .segment "RODATA"
 
-voice_colors: .byte COL_RED, COL_ORANGE, COL_YELLOW, COL_GREEN, COL_CYAN, COL_BLUE
+; SID voices 0-5, then WTS voices 6-13
+voice_colors:
+    .byte COL_RED, COL_ORANGE, COL_YELLOW, COL_GREEN, COL_CYAN, COL_BLUE
+    .byte 9, 10, 11, 12, 13, 14, 15, 4
 
 ; Pitch class tables (indexed 0-11)
 ;              C  C# D  D# E  F  F# G  G# A  A# B
