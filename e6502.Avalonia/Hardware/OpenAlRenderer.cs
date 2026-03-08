@@ -5,6 +5,7 @@ namespace e6502.Avalonia.Hardware;
 internal sealed class OpenAlRenderer : IDisposable
 {
     private const int AlFormatMono16 = 0x1101;
+    private const int AlFormatStereo16 = 0x1102;
     private const int AlBuffersQueued = 0x1015;
     private const int AlBuffersProcessed = 0x1016;
     private const int AlSourceState = 0x1010;
@@ -23,6 +24,7 @@ internal sealed class OpenAlRenderer : IDisposable
 
     private readonly Func<int, short[]> _sampleProvider;
     private readonly int _sampleRate;
+    private readonly bool _stereo;
     private readonly uint _source;
     private readonly Queue<uint> _freeBuffers = new();
     private readonly Thread _thread;
@@ -44,10 +46,11 @@ internal sealed class OpenAlRenderer : IDisposable
     private readonly AlSourcePlay _alSourcePlay;
     private readonly AlSourceStop _alSourceStop;
 
-    public OpenAlRenderer(Func<int, short[]> sampleProvider, int sampleRate)
+    public OpenAlRenderer(Func<int, short[]> sampleProvider, int sampleRate, bool stereo = false)
     {
         _sampleProvider = sampleProvider;
         _sampleRate = sampleRate;
+        _stereo = stereo;
 
         lock (SharedLock)
         {
@@ -184,7 +187,7 @@ internal sealed class OpenAlRenderer : IDisposable
             var handle = GCHandle.Alloc(samples, GCHandleType.Pinned);
             try
             {
-                _alBufferData(buffer, AlFormatMono16, handle.AddrOfPinnedObject(), byteSize, _sampleRate);
+                _alBufferData(buffer, _stereo ? AlFormatStereo16 : AlFormatMono16, handle.AddrOfPinnedObject(), byteSize, _sampleRate);
             }
             finally
             {

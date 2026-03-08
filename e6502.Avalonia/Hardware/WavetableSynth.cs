@@ -12,6 +12,8 @@ public sealed class WavetableSynth : IDisposable
     private SampleBank? _bank;
     private readonly ReverbEffect _reverb = new(SampleRate);
     private readonly ChorusEffect _chorus = new(SampleRate);
+    private readonly OpenAlRenderer? _renderer;
+    private readonly object _lock = new();
 
     public byte ReverbLevel { get; set; } = 80;
     public byte ChorusLevel { get; set; } = 40;
@@ -21,12 +23,27 @@ public sealed class WavetableSynth : IDisposable
     {
         for (int i = 0; i < VoiceCount; i++)
             _voices[i] = new WtsVoice();
+
+        if (enableAudio)
+        {
+            try
+            {
+                _renderer = new OpenAlRenderer(RenderSamples, SampleRate, stereo: true);
+            }
+            catch
+            {
+                _renderer = null;
+            }
+        }
     }
 
     public void LoadBank(SampleBank bank)
     {
-        AllNotesOff();
-        _bank = bank;
+        lock (_lock)
+        {
+            AllNotesOff();
+            _bank = bank;
+        }
     }
 
     public int InstrumentCount => _bank?.Instruments.Count ?? 0;
@@ -40,77 +57,83 @@ public sealed class WavetableSynth : IDisposable
 
     public void NoteOn(int voice, int note, int velocity, int instrument)
     {
-        if ((uint)voice >= VoiceCount) return;
-        if (_bank == null || instrument < 0 || instrument >= _bank.Instruments.Count) return;
-
-        var inst = _bank.Instruments[instrument];
-        var region = inst.FindRegion(note, velocity);
-        if (region == null) return;
-
-        var v = _voices[voice];
-        v.Phase = 0;
-        v.Note = note;
-        v.Velocity = velocity;
-        v.InstrumentIndex = instrument;
-        v.Region = region;
-        v.Active = true;
-        v.Releasing = false;
-        v.EnvLevel = 0f;
-        v.EnvStage = EnvStage.Attack;
-
-        // Compute ADSR rates
-        if (region.AttackTime < MinTime)
+        lock (_lock)
         {
-            v.EnvLevel = 1f;
-            v.EnvStage = EnvStage.Decay;
-            v.AttackRate = 0;
-        }
-        else
-        {
-            v.AttackRate = 1f / (region.AttackTime * SampleRate);
-        }
+            if ((uint)voice >= VoiceCount) return;
+            if (_bank == null || instrument < 0 || instrument >= _bank.Instruments.Count) return;
 
-        if (region.DecayTime < MinTime)
-        {
-            if (v.EnvStage == EnvStage.Decay)
+            var inst = _bank.Instruments[instrument];
+            var region = inst.FindRegion(note, velocity);
+            if (region == null) return;
+
+            var v = _voices[voice];
+            v.Phase = 0;
+            v.Note = note;
+            v.Velocity = velocity;
+            v.InstrumentIndex = instrument;
+            v.Region = region;
+            v.Active = true;
+            v.Releasing = false;
+            v.EnvLevel = 0f;
+            v.EnvStage = EnvStage.Attack;
+
+            // Compute ADSR rates
+            if (region.AttackTime < MinTime)
             {
-                v.EnvLevel = region.SustainLevel;
-                v.EnvStage = EnvStage.Sustain;
+                v.EnvLevel = 1f;
+                v.EnvStage = EnvStage.Decay;
+                v.AttackRate = 0;
             }
-            v.DecayRate = 0;
-        }
-        else
-        {
-            v.DecayRate = (1f - region.SustainLevel) / (region.DecayTime * SampleRate);
-        }
+            else
+            {
+                v.AttackRate = 1f / (region.AttackTime * SampleRate);
+            }
 
-        v.SustainLevel = region.SustainLevel;
+            if (region.DecayTime < MinTime)
+            {
+                if (v.EnvStage == EnvStage.Decay)
+                {
+                    v.EnvLevel = region.SustainLevel;
+                    v.EnvStage = EnvStage.Sustain;
+                }
+                v.DecayRate = 0;
+            }
+            else
+            {
+                v.DecayRate = (1f - region.SustainLevel) / (region.DecayTime * SampleRate);
+            }
 
-        if (region.ReleaseTime < MinTime)
-            v.ReleaseRate = 100f; // instant
-        else
-            v.ReleaseRate = 0; // computed at NoteOff time
+            v.SustainLevel = region.SustainLevel;
+
+            if (region.ReleaseTime < MinTime)
+                v.ReleaseRate = 100f; // instant
+            else
+                v.ReleaseRate = 0; // computed at NoteOff time
+        }
     }
 
     public void NoteOff(int voice)
     {
-        if ((uint)voice >= VoiceCount) return;
-        var v = _voices[voice];
-        if (!v.Active) return;
-
-        v.Releasing = true;
-        v.EnvStage = EnvStage.Release;
-
-        var region = v.Region;
-        if (region != null && region.ReleaseTime >= MinTime)
-            v.ReleaseRate = v.EnvLevel / (region.ReleaseTime * SampleRate);
-        else
-            v.ReleaseRate = 100f;
-
-        if (v.ReleaseRate <= 0)
+        lock (_lock)
         {
-            v.Active = false;
-            v.EnvStage = EnvStage.Off;
+            if ((uint)voice >= VoiceCount) return;
+            var v = _voices[voice];
+            if (!v.Active) return;
+
+            v.Releasing = true;
+            v.EnvStage = EnvStage.Release;
+
+            var region = v.Region;
+            if (region != null && region.ReleaseTime >= MinTime)
+                v.ReleaseRate = v.EnvLevel / (region.ReleaseTime * SampleRate);
+            else
+                v.ReleaseRate = 100f;
+
+            if (v.ReleaseRate <= 0)
+            {
+                v.Active = false;
+                v.EnvStage = EnvStage.Off;
+            }
         }
     }
 
@@ -145,6 +168,14 @@ public sealed class WavetableSynth : IDisposable
     }
 
     public short[] RenderSamples(int frameCount)
+    {
+        lock (_lock)
+        {
+        return RenderSamplesCore(frameCount);
+        }
+    }
+
+    private short[] RenderSamplesCore(int frameCount)
     {
         var output = new short[frameCount * 2];
         float masterScale = MasterVolume / 255f;
@@ -305,19 +336,23 @@ public sealed class WavetableSynth : IDisposable
 
     public void AllNotesOff()
     {
-        for (int i = 0; i < VoiceCount; i++)
+        lock (_lock)
         {
-            _voices[i].Active = false;
-            _voices[i].EnvStage = EnvStage.Off;
-            _voices[i].EnvLevel = 0f;
-            _voices[i].Releasing = false;
-            _voices[i].Region = null;
+            for (int i = 0; i < VoiceCount; i++)
+            {
+                _voices[i].Active = false;
+                _voices[i].EnvStage = EnvStage.Off;
+                _voices[i].EnvLevel = 0f;
+                _voices[i].Releasing = false;
+                _voices[i].Region = null;
+            }
         }
     }
 
     public void Dispose()
     {
         AllNotesOff();
+        _renderer?.Dispose();
     }
 
     private enum EnvStage { Attack, Decay, Sustain, Release, Off }
