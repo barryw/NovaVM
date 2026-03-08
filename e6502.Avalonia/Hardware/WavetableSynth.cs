@@ -1,0 +1,300 @@
+using System;
+
+namespace e6502.Avalonia.Hardware;
+
+public sealed class WavetableSynth : IDisposable
+{
+    public const int VoiceCount = 8;
+    private const int SampleRate = 44100;
+    private const float MinTime = 0.0001f;
+
+    private readonly WtsVoice[] _voices = new WtsVoice[VoiceCount];
+    private SampleBank? _bank;
+
+    public byte ReverbLevel { get; set; } = 80;
+    public byte ChorusLevel { get; set; } = 40;
+    public byte MasterVolume { get; set; } = 255;
+
+    public WavetableSynth(bool enableAudio = false)
+    {
+        for (int i = 0; i < VoiceCount; i++)
+            _voices[i] = new WtsVoice();
+    }
+
+    public void LoadBank(SampleBank bank)
+    {
+        AllNotesOff();
+        _bank = bank;
+    }
+
+    public int InstrumentCount => _bank?.Instruments.Count ?? 0;
+
+    public string? GetInstrumentName(int index)
+    {
+        if (_bank == null || index < 0 || index >= _bank.Instruments.Count)
+            return null;
+        return _bank.Instruments[index].Name;
+    }
+
+    public void NoteOn(int voice, int note, int velocity, int instrument)
+    {
+        if ((uint)voice >= VoiceCount) return;
+        if (_bank == null || instrument < 0 || instrument >= _bank.Instruments.Count) return;
+
+        var inst = _bank.Instruments[instrument];
+        var region = inst.FindRegion(note, velocity);
+        if (region == null) return;
+
+        var v = _voices[voice];
+        v.Phase = 0;
+        v.Note = note;
+        v.Velocity = velocity;
+        v.InstrumentIndex = instrument;
+        v.Region = region;
+        v.Active = true;
+        v.Releasing = false;
+        v.EnvLevel = 0f;
+        v.EnvStage = EnvStage.Attack;
+
+        // Compute ADSR rates
+        if (region.AttackTime < MinTime)
+        {
+            v.EnvLevel = 1f;
+            v.EnvStage = EnvStage.Decay;
+            v.AttackRate = 0;
+        }
+        else
+        {
+            v.AttackRate = 1f / (region.AttackTime * SampleRate);
+        }
+
+        if (region.DecayTime < MinTime)
+        {
+            if (v.EnvStage == EnvStage.Decay)
+            {
+                v.EnvLevel = region.SustainLevel;
+                v.EnvStage = EnvStage.Sustain;
+            }
+            v.DecayRate = 0;
+        }
+        else
+        {
+            v.DecayRate = (1f - region.SustainLevel) / (region.DecayTime * SampleRate);
+        }
+
+        v.SustainLevel = region.SustainLevel;
+
+        if (region.ReleaseTime < MinTime)
+            v.ReleaseRate = 100f; // instant
+        else
+            v.ReleaseRate = 0; // computed at NoteOff time
+    }
+
+    public void NoteOff(int voice)
+    {
+        if ((uint)voice >= VoiceCount) return;
+        var v = _voices[voice];
+        if (!v.Active) return;
+
+        v.Releasing = true;
+        v.EnvStage = EnvStage.Release;
+
+        var region = v.Region;
+        if (region != null && region.ReleaseTime >= MinTime)
+            v.ReleaseRate = v.EnvLevel / (region.ReleaseTime * SampleRate);
+        else
+            v.ReleaseRate = 100f;
+
+        if (v.ReleaseRate <= 0)
+        {
+            v.Active = false;
+            v.EnvStage = EnvStage.Off;
+        }
+    }
+
+    public void SetVolume(int voice, byte volume)
+    {
+        if ((uint)voice < VoiceCount)
+            _voices[voice].Volume = volume;
+    }
+
+    public void SetPanning(int voice, byte pan)
+    {
+        if ((uint)voice < VoiceCount)
+            _voices[voice].Pan = pan;
+    }
+
+    public void SetPitchBend(int voice, ushort bend)
+    {
+        if ((uint)voice < VoiceCount)
+            _voices[voice].PitchBend = bend;
+    }
+
+    public byte ActiveVoiceMask
+    {
+        get
+        {
+            byte mask = 0;
+            for (int i = 0; i < VoiceCount; i++)
+                if (_voices[i].Active)
+                    mask |= (byte)(1 << i);
+            return mask;
+        }
+    }
+
+    public short[] RenderSamples(int frameCount)
+    {
+        var output = new short[frameCount * 2];
+        float masterScale = MasterVolume / 255f;
+
+        for (int f = 0; f < frameCount; f++)
+        {
+            float sumL = 0, sumR = 0;
+
+            for (int vi = 0; vi < VoiceCount; vi++)
+            {
+                var v = _voices[vi];
+                if (!v.Active || v.Region == null) continue;
+
+                var region = v.Region;
+                var data = region.SampleData;
+                if (data.Length == 0) { v.Active = false; continue; }
+
+                // Interpolate sample
+                int idx0 = (int)v.Phase;
+                int idx1 = idx0 + 1;
+                float frac = (float)(v.Phase - idx0);
+
+                if (idx0 >= data.Length)
+                {
+                    v.Active = false;
+                    v.EnvStage = EnvStage.Off;
+                    continue;
+                }
+                if (idx1 >= data.Length) idx1 = idx0;
+
+                float sample = data[idx0] + (data[idx1] - data[idx0]) * frac;
+
+                // Apply envelope, velocity, volume
+                float amplitude = sample * v.EnvLevel * (v.Velocity / 127f) * (v.Volume / 255f);
+
+                // Panning (equal-power)
+                float panF = v.Pan / 255f;
+                float left = MathF.Cos(panF * MathF.PI / 2f);
+                float right = MathF.Sin(panF * MathF.PI / 2f);
+
+                sumL += amplitude * left;
+                sumR += amplitude * right;
+
+                // Advance phase
+                double bendSemitones = ((v.PitchBend - 0x8000) / 8192.0) * 2.0;
+                double pitchRatio = Math.Pow(2.0, (v.Note - region.RootKey + bendSemitones) / 12.0);
+                double phaseInc = region.SampleRate * pitchRatio / (double)SampleRate;
+                v.Phase += phaseInc;
+
+                // Loop handling
+                if (region.LoopEnabled)
+                {
+                    if (v.Phase >= region.LoopEnd)
+                        v.Phase = region.LoopStart + (v.Phase - region.LoopEnd);
+                }
+                else if (v.Phase >= data.Length)
+                {
+                    v.Active = false;
+                    v.EnvStage = EnvStage.Off;
+                    continue;
+                }
+
+                // Advance envelope
+                AdvanceEnvelope(v);
+            }
+
+            // Master volume and clamp
+            sumL *= masterScale;
+            sumR *= masterScale;
+            sumL = Math.Clamp(sumL, -1f, 1f);
+            sumR = Math.Clamp(sumR, -1f, 1f);
+
+            output[f * 2] = (short)(sumL * 32767f);
+            output[f * 2 + 1] = (short)(sumR * 32767f);
+        }
+
+        return output;
+    }
+
+    private static void AdvanceEnvelope(WtsVoice v)
+    {
+        switch (v.EnvStage)
+        {
+            case EnvStage.Attack:
+                v.EnvLevel += v.AttackRate;
+                if (v.EnvLevel >= 1f)
+                {
+                    v.EnvLevel = 1f;
+                    v.EnvStage = EnvStage.Decay;
+                    if (v.DecayRate <= 0)
+                    {
+                        v.EnvLevel = v.SustainLevel;
+                        v.EnvStage = EnvStage.Sustain;
+                    }
+                }
+                break;
+
+            case EnvStage.Decay:
+                v.EnvLevel -= v.DecayRate;
+                if (v.EnvLevel <= v.SustainLevel)
+                {
+                    v.EnvLevel = v.SustainLevel;
+                    v.EnvStage = EnvStage.Sustain;
+                }
+                break;
+
+            case EnvStage.Sustain:
+                // Hold
+                break;
+
+            case EnvStage.Release:
+                v.EnvLevel -= v.ReleaseRate;
+                if (v.EnvLevel <= 0f)
+                {
+                    v.EnvLevel = 0f;
+                    v.Active = false;
+                    v.EnvStage = EnvStage.Off;
+                }
+                break;
+        }
+    }
+
+    public void AllNotesOff()
+    {
+        for (int i = 0; i < VoiceCount; i++)
+        {
+            _voices[i].Active = false;
+            _voices[i].EnvStage = EnvStage.Off;
+            _voices[i].EnvLevel = 0f;
+            _voices[i].Releasing = false;
+            _voices[i].Region = null;
+        }
+    }
+
+    public void Dispose()
+    {
+        AllNotesOff();
+    }
+
+    private enum EnvStage { Attack, Decay, Sustain, Release, Off }
+
+    private sealed class WtsVoice
+    {
+        public double Phase;
+        public int Note, Velocity, InstrumentIndex;
+        public byte Volume = 255;
+        public byte Pan = 128;
+        public ushort PitchBend = 0x8000;
+        public SampleRegion? Region;
+        public bool Active, Releasing;
+        public float EnvLevel;
+        public EnvStage EnvStage = EnvStage.Off;
+        public float AttackRate, DecayRate, SustainLevel, ReleaseRate;
+    }
+}
