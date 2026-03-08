@@ -98,6 +98,12 @@ public abstract class ScreenTextEditor
     public bool IsActive { get; protected set; }
     public DeviceManager? DeviceManager { get; set; }
 
+    /// <summary>The filename of the currently loaded file (without extension), or empty if unsaved.</summary>
+    protected string CurrentFilename => _currentFilename;
+
+    /// <summary>True when the prompt system is currently active (e.g. showing a Y/N question).</summary>
+    internal bool IsPromptActive => _promptActive;
+
     // ── Constructor ──────────────────────────────────────────────────────────
 
     protected ScreenTextEditor(IBusDevice bus)
@@ -1337,6 +1343,8 @@ public abstract class ScreenTextEditor
 
     public bool HandleKeyDown(Key key, KeyModifiers modifiers)
     {
+        if (!IsActive) return false;
+
         // 1. Prompt mode — delegate all keys to prompt handler
         if (_promptActive)
             return HandlePromptKey(key, null);
@@ -1544,6 +1552,7 @@ public abstract class ScreenTextEditor
 
     public bool HandleTextInput(string text)
     {
+        if (!IsActive) return false;
         if (string.IsNullOrEmpty(text)) return false;
 
         if (_promptActive)

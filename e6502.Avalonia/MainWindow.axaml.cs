@@ -112,6 +112,7 @@ public partial class MainWindow : Window
 
         // NCC editor
         _nccEditor = new NccEditor(_bus, _debugger, _cpu);
+        _nccEditor.DeviceManager = _bus.DeviceManager;
         _canvas.NccEditor = _nccEditor;
 
         // BASIC editor

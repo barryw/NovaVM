@@ -6,6 +6,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace e6502UnitTests.Editor;
 
+// Buffer operations, cursor movement, and viewport scrolling are covered by
+// ScreenTextEditorTests.  NccEditorTests only covers NCC-specific behaviour:
+// compile/debug key bindings, the exit-prompt Y/N flow, and mode transitions.
+
 [TestClass]
 public class NccEditorTests
 {
@@ -24,7 +28,7 @@ public class NccEditorTests
         _editor = new NccEditor(_bus, _debugger, _cpu);
     }
 
-    // ── Buffer operations ───────────────────────────────────────────────────
+    // ── Smoke test: inherited buffer ops work ───────────────────────────────
 
     [TestMethod]
     public void InsertChar_AppendsToLine()
@@ -78,7 +82,7 @@ public class NccEditorTests
         _editor.InsertChar('A');
         _editor.InsertNewline();
         _editor.InsertChar('B');
-        _editor.Home(false);
+        _editor.Home();
         _editor.Backspace();
         Assert.AreEqual(1, _editor.Lines.Count);
         Assert.AreEqual("AB", _editor.Lines[0]);
@@ -94,7 +98,7 @@ public class NccEditorTests
         _editor.InsertChar('B');
         // Go to end of first line
         _editor.MoveCursor(0, -1);
-        _editor.End(false);
+        _editor.End();
         _editor.Delete();
         Assert.AreEqual(1, _editor.Lines.Count);
         Assert.AreEqual("AB", _editor.Lines[0]);
@@ -110,14 +114,13 @@ public class NccEditorTests
         _editor.InsertNewline();
         _editor.InsertChar('C');
 
-        // At line 1, col 1
         Assert.AreEqual(1, _editor.CursorLine);
         Assert.AreEqual(1, _editor.CursorCol);
 
-        _editor.MoveCursor(0, -1);  // up
+        _editor.MoveCursor(0, -1);
         Assert.AreEqual(0, _editor.CursorLine);
 
-        _editor.MoveCursor(0, 1);  // down
+        _editor.MoveCursor(0, 1);
         Assert.AreEqual(1, _editor.CursorLine);
     }
 
@@ -126,7 +129,7 @@ public class NccEditorTests
     {
         _editor.InsertChar('A');
         _editor.InsertChar('B');
-        _editor.Home(false);
+        _editor.Home();
         Assert.AreEqual(0, _editor.CursorCol);
     }
 
@@ -135,8 +138,8 @@ public class NccEditorTests
     {
         _editor.InsertChar('A');
         _editor.InsertChar('B');
-        _editor.Home(false);
-        _editor.End(false);
+        _editor.Home();
+        _editor.End();
         Assert.AreEqual(2, _editor.CursorCol);
     }
 
@@ -148,7 +151,9 @@ public class NccEditorTests
             _editor.InsertChar((char)('A' + i));
             _editor.InsertNewline();
         }
-        _editor.Home(true);
+        // Ctrl+Home via HandleKeyDown
+        _editor.Activate();
+        _editor.HandleKeyDown(Avalonia.Input.Key.Home, Avalonia.Input.KeyModifiers.Control);
         Assert.AreEqual(0, _editor.CursorLine);
         Assert.AreEqual(0, _editor.CursorCol);
     }
@@ -161,8 +166,10 @@ public class NccEditorTests
         _editor.InsertChar('B');
         _editor.InsertNewline();
         _editor.InsertChar('C');
-        _editor.Home(true);
-        _editor.End(true);
+        // Move to top first
+        _editor.Activate();
+        _editor.HandleKeyDown(Avalonia.Input.Key.Home, Avalonia.Input.KeyModifiers.Control);
+        _editor.HandleKeyDown(Avalonia.Input.Key.End, Avalonia.Input.KeyModifiers.Control);
         Assert.AreEqual(2, _editor.CursorLine);
     }
 
@@ -171,13 +178,11 @@ public class NccEditorTests
     [TestMethod]
     public void ScrollY_AdjustsWhenCursorMovesBelowViewport()
     {
-        // Add 30 lines (more than 22 visible)
         for (int i = 0; i < 30; i++)
         {
-            _editor.InsertText($"line {i}");
+            _editor.InsertChar((char)('A' + (i % 26)));
             _editor.InsertNewline();
         }
-        // Cursor should be at line 30, scrollY should have adjusted
         Assert.IsTrue(_editor.ScrollY > 0);
     }
 
@@ -186,10 +191,11 @@ public class NccEditorTests
     {
         for (int i = 0; i < 50; i++)
         {
-            _editor.InsertText($"line {i}");
+            _editor.InsertChar((char)('A' + (i % 26)));
             _editor.InsertNewline();
         }
-        _editor.Home(true);
+        _editor.Activate();
+        _editor.HandleKeyDown(Avalonia.Input.Key.Home, Avalonia.Input.KeyModifiers.Control);
         Assert.AreEqual(0, _editor.CursorLine);
         _editor.PageDown();
         Assert.AreEqual(22, _editor.CursorLine);
@@ -200,14 +206,16 @@ public class NccEditorTests
     {
         for (int i = 0; i < 50; i++)
         {
-            _editor.InsertText($"line {i}");
+            _editor.InsertChar((char)('A' + (i % 26)));
             _editor.InsertNewline();
         }
-        _editor.Home(true);
+        _editor.Activate();
+        _editor.HandleKeyDown(Avalonia.Input.Key.Home, Avalonia.Input.KeyModifiers.Control);
         _editor.PageDown();
         _editor.PageUp();
         Assert.AreEqual(0, _editor.CursorLine);
     }
+
     // ── HandleKeyDown return values ────────────────────────────────────────
 
     [TestMethod]
@@ -251,12 +259,11 @@ public class NccEditorTests
     [TestMethod]
     public void HandleKeyDown_WhenInactive_ReturnsFalse()
     {
-        // Editor not activated
         bool consumed = _editor.HandleKeyDown(Avalonia.Input.Key.Enter, Avalonia.Input.KeyModifiers.None);
         Assert.IsFalse(consumed);
     }
 
-    // ── Exit confirmation (Ctrl+Q) ──────────────────────────────────────
+    // ── Exit confirmation (Ctrl+Q) ──────────────────────────────────────────
 
     [TestMethod]
     public void CtrlQ_ShowsConfirmPrompt()
