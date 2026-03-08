@@ -368,10 +368,12 @@ public sealed class BasicEditor
         RedrawCode();
     }
 
+    private const int MaxLineNumber = 63999;
+
     private int CalculateNewLineNumber(int insertAfter)
     {
         int prev = _lines[insertAfter].LineNumber;
-        int next = (insertAfter + 1 < _lines.Count) ? _lines[insertAfter + 1].LineNumber : prev + 20;
+        int next = (insertAfter + 1 < _lines.Count) ? _lines[insertAfter + 1].LineNumber : Math.Min(prev + 20, MaxLineNumber);
 
         int midpoint = (prev + next) / 2;
         if (midpoint <= prev)
@@ -380,10 +382,10 @@ public sealed class BasicEditor
             RenumberAll();
             // After renumber, recalculate
             prev = _lines[insertAfter].LineNumber;
-            next = (insertAfter + 1 < _lines.Count) ? _lines[insertAfter + 1].LineNumber : prev + 20;
+            next = (insertAfter + 1 < _lines.Count) ? _lines[insertAfter + 1].LineNumber : Math.Min(prev + 20, MaxLineNumber);
             midpoint = (prev + next) / 2;
         }
-        return midpoint;
+        return Math.Min(midpoint, MaxLineNumber);
     }
 
     private void RenumberAll()
