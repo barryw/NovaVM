@@ -113,12 +113,12 @@ public partial class MainWindow : Window
         // NCC editor
         _nccEditor = new NccEditor(_bus, _debugger, _cpu);
         _nccEditor.DeviceManager = _bus.DeviceManager;
-        _canvas.NccEditor = _nccEditor;
+        _canvas.AddEditor(_nccEditor);
 
         // BASIC editor
         _basicEditor = new BasicEditor(_bus);
         _basicEditor.SetRunDependencies(_cpu, _editor);
-        _canvas.BasicEditor = _basicEditor;
+        _canvas.AddEditor(_basicEditor);
 
         // TCP server for MCP
         int tcpPort = int.TryParse(Environment.GetEnvironmentVariable("EMULATOR_PORT"), out int ep) ? ep : 6502;

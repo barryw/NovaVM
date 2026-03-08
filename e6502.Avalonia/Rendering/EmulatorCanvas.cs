@@ -31,11 +31,16 @@ public class EmulatorCanvas : Control
     private readonly byte[] _shapeRamSnapshot = new byte[VgcConstants.ShapeRamSize];
     private bool _shapeRamInitialized;
 
-    /// <summary>When set, keyboard input routes to the NCC editor instead of ScreenEditor.</summary>
-    public NccEditor? NccEditor { get; set; }
+    private readonly List<ScreenTextEditor> _editors = new();
 
-    /// <summary>When set, F5 toggles the BASIC editor and keyboard input routes there when active.</summary>
-    public BasicEditor? BasicEditor { get; set; }
+    /// <summary>Register an editor for keyboard routing. The first active, non-Running editor receives input.</summary>
+    public void AddEditor(ScreenTextEditor editor) => _editors.Add(editor);
+
+    /// <summary>Returns the first registered NccEditor, used for type-specific access (CheckDebugBreak, StopRunning).</summary>
+    public NccEditor? NccEditor => _editors.OfType<NccEditor>().FirstOrDefault();
+
+    /// <summary>Returns the first registered BasicEditor, used for type-specific access (ReturnFromRun, ToggleActivation).</summary>
+    public BasicEditor? BasicEditor => _editors.OfType<BasicEditor>().FirstOrDefault();
 
     public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor)
     {
@@ -88,21 +93,11 @@ public class EmulatorCanvas : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        // Route to NCC editor when active (but not in Running mode — program gets ScreenEditor input)
-        if (NccEditor is { IsActive: true, Mode: not EditorMode.Running })
+        // Route to the first active editor that is not in Running mode
+        var activeEditor = _editors.FirstOrDefault(ed => ed.IsActive && ed.Mode != EditorMode.Running);
+        if (activeEditor != null)
         {
-            bool consumed = NccEditor.HandleKeyDown(e.Key, e.KeyModifiers);
-            if (consumed)
-                e.Handled = true;
-            base.OnKeyDown(e);
-            return;
-        }
-
-        // Route to BASIC editor when active (but not in Running mode — program gets ScreenEditor input)
-        if (BasicEditor is { IsActive: true, Mode: not EditorMode.Running })
-        {
-            bool consumed = BasicEditor.HandleKeyDown(e.Key, e.KeyModifiers);
-            if (consumed)
+            if (activeEditor.HandleKeyDown(e.Key, e.KeyModifiers))
                 e.Handled = true;
             base.OnKeyDown(e);
             return;
@@ -186,24 +181,13 @@ public class EmulatorCanvas : Control
 
     protected override void OnTextInput(TextInputEventArgs e)
     {
-        // Route to NCC editor when active (no uppercasing — C is case-sensitive)
-        if (NccEditor is { IsActive: true, Mode: not EditorMode.Running })
+        // Route to the first active editor that is not in Running mode
+        var activeEditor = _editors.FirstOrDefault(ed => ed.IsActive && ed.Mode != EditorMode.Running);
+        if (activeEditor != null)
         {
             if (!string.IsNullOrEmpty(e.Text))
             {
-                NccEditor.HandleTextInput(e.Text);
-                e.Handled = true;
-            }
-            base.OnTextInput(e);
-            return;
-        }
-
-        // Route to BASIC editor when active
-        if (BasicEditor is { IsActive: true, Mode: not EditorMode.Running })
-        {
-            if (!string.IsNullOrEmpty(e.Text))
-            {
-                BasicEditor.HandleTextInput(e.Text);
+                activeEditor.HandleTextInput(e.Text);
                 e.Handled = true;
             }
             base.OnTextInput(e);
