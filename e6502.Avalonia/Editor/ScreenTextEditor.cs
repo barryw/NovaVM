@@ -1,12 +1,13 @@
 using Avalonia.Input;
+using e6502.Avalonia.Hardware;
 using KDS.e6502;
 
 namespace e6502.Avalonia.Editor;
 
 /// <summary>
 /// Abstract base class for full-screen text editors rendered to VGC character/color RAM.
-/// Owns the text buffer, cursor state, and movement logic. Rendering and keyboard
-/// dispatch are added in later tasks.
+/// Owns the text buffer, cursor state, movement, rendering, screen save/restore,
+/// prompt system, and search.
 /// </summary>
 public abstract class ScreenTextEditor
 {
@@ -33,6 +34,7 @@ public abstract class ScreenTextEditor
     protected const byte CursorFg = 2;
     protected const byte GutterFg = 12;
     protected const byte DefaultFg = 1;
+    protected const byte SelectionFg = 3; // cyan for selection highlight
 
     // ── CP437 box-drawing characters ─────────────────────────────────────────
     protected const byte BoxTL = 0xC9;
@@ -59,6 +61,25 @@ public abstract class ScreenTextEditor
     private bool _selActive;
     private string _clipboard = "";
     private bool _clipboardIsLine;
+
+    // ── Screen save/restore ──────────────────────────────────────────────────
+    private readonly byte[] _savedCharRam = new byte[VgcConstants.ScreenSize];
+    private readonly byte[] _savedColorRam = new byte[VgcConstants.ScreenSize];
+    private byte _savedBgColor;
+    private byte _savedCursorEnable;
+    private byte _savedCursorX;
+    private byte _savedCursorY;
+
+    // ── Prompt state ─────────────────────────────────────────────────────────
+    private bool _promptActive;
+    private string _promptLabel = "";
+    private string _promptInput = "";
+    private Action<string>? _promptCallback;
+    private string? _message;
+    private bool _messageIsError;
+
+    // ── Search state ─────────────────────────────────────────────────────────
+    private string _lastSearchTerm = "";
 
     protected readonly IBusDevice Bus;
 
@@ -91,12 +112,6 @@ public abstract class ScreenTextEditor
     protected virtual void OnDeactivate() { }
     protected virtual void OnAfterRedrawCode() { }
     protected virtual int GetVisibleLineCount() => VisibleLines;
-
-    /// <summary>Placeholder — real rendering added in Task 4.</summary>
-    protected virtual void RedrawCode() { }
-
-    /// <summary>Placeholder — real rendering added in Task 4.</summary>
-    protected virtual void RedrawStatusBar() { }
 
     // ── Public accessors (internal for testing) ──────────────────────────────
 
@@ -139,6 +154,359 @@ public abstract class ScreenTextEditor
         _scrollY = 0;
         _scrollX = 0;
         _modified = false;
+    }
+
+    // ── Activation ───────────────────────────────────────────────────────────
+
+    public void Activate()
+    {
+        IsActive = true;
+        SaveScreen();
+        Bus.Write(VgcConstants.RegBgCol, EditorBg);
+        ClearScreen();
+        OnActivate();
+        Redraw();
+    }
+
+    public void Deactivate()
+    {
+        OnDeactivate();
+        IsActive = false;
+        RestoreScreen();
+    }
+
+    // ── Screen save/restore ───────────────────────────────────────────────────
+
+    protected void SaveScreen()
+    {
+        for (int i = 0; i < VgcConstants.ScreenSize; i++)
+        {
+            _savedCharRam[i] = Bus.Read((ushort)(VgcConstants.CharRamBase + i));
+            _savedColorRam[i] = Bus.Read((ushort)(VgcConstants.ColorRamBase + i));
+        }
+        _savedBgColor = Bus.Read(VgcConstants.RegBgCol);
+        _savedCursorEnable = Bus.Read(VgcConstants.RegCursorEnable);
+        _savedCursorX = Bus.Read(VgcConstants.RegCursorX);
+        _savedCursorY = Bus.Read(VgcConstants.RegCursorY);
+    }
+
+    protected void RestoreScreen()
+    {
+        for (int i = 0; i < VgcConstants.ScreenSize; i++)
+        {
+            Bus.Write((ushort)(VgcConstants.CharRamBase + i), _savedCharRam[i]);
+            Bus.Write((ushort)(VgcConstants.ColorRamBase + i), _savedColorRam[i]);
+        }
+        Bus.Write(VgcConstants.RegBgCol, _savedBgColor);
+        Bus.Write(VgcConstants.RegCursorEnable, _savedCursorEnable);
+        Bus.Write(VgcConstants.RegCursorX, _savedCursorX);
+        Bus.Write(VgcConstants.RegCursorY, _savedCursorY);
+    }
+
+    // ── Low-level VGC helpers ─────────────────────────────────────────────────
+
+    protected void WriteChar(int col, int row, byte ch, byte fg)
+    {
+        if (col < 0 || col >= ScreenCols || row < 0 || row >= ScreenRows) return;
+        int offset = row * ScreenCols + col;
+        Bus.Write((ushort)(VgcConstants.CharRamBase + offset), ch);
+        Bus.Write((ushort)(VgcConstants.ColorRamBase + offset), fg);
+    }
+
+    protected void ClearScreen()
+    {
+        for (int i = 0; i < VgcConstants.ScreenSize; i++)
+        {
+            Bus.Write((ushort)(VgcConstants.CharRamBase + i), (byte)' ');
+            Bus.Write((ushort)(VgcConstants.ColorRamBase + i), DefaultFg);
+        }
+    }
+
+    // ── Box border rendering ──────────────────────────────────────────────────
+
+    protected void DrawBoxTop(int row, string title)
+    {
+        WriteChar(0, row, BoxTL, BorderFg);
+        WriteChar(1, row, BoxH, BorderFg);
+        int titleStart = 2;
+        for (int i = 0; i < title.Length && titleStart + i < ScreenCols - 2; i++)
+            WriteChar(titleStart + i, row, (byte)title[i], TitleFg);
+        for (int i = titleStart + title.Length; i < ScreenCols - 1; i++)
+            WriteChar(i, row, BoxH, BorderFg);
+        WriteChar(ScreenCols - 1, row, BoxTR, BorderFg);
+    }
+
+    protected void DrawBoxBottom(int row, string text, byte fg)
+    {
+        WriteChar(0, row, BoxBL, BorderFg);
+        WriteChar(1, row, BoxH, BorderFg);
+        int textStart = 2;
+        for (int i = 0; i < text.Length && textStart + i < ScreenCols - 2; i++)
+            WriteChar(textStart + i, row, (byte)text[i], fg);
+        for (int i = textStart + text.Length; i < ScreenCols - 1; i++)
+            WriteChar(i, row, BoxH, BorderFg);
+        WriteChar(ScreenCols - 1, row, BoxBR, BorderFg);
+    }
+
+    protected void DrawBoxMiddle(int row, string text)
+    {
+        WriteChar(0, row, BoxML, BorderFg);
+        WriteChar(1, row, BoxH, BorderFg);
+        int textStart = 2;
+        for (int i = 0; i < text.Length && textStart + i < ScreenCols - 2; i++)
+            WriteChar(textStart + i, row, (byte)text[i], StatusFg);
+        for (int i = textStart + text.Length; i < ScreenCols - 1; i++)
+            WriteChar(i, row, BoxH, BorderFg);
+        WriteChar(ScreenCols - 1, row, BoxMR, BorderFg);
+    }
+
+    // ── Main rendering methods ────────────────────────────────────────────────
+
+    public void Redraw()
+    {
+        RedrawTitleBar();
+        RedrawCode();
+        RedrawStatusBar();
+        RedrawMessageRow();
+    }
+
+    protected void RedrawTitleBar()
+    {
+        DrawBoxTop(TitleRow, GetTitle());
+    }
+
+    protected void RedrawCode()
+    {
+        var highlighter = GetHighlighter();
+        int gutterW = GetGutterWidth();
+
+        // Pre-scan lines above scroll position to track block comment state
+        highlighter.Reset();
+        for (int i = 0; i < _scrollY && i < _lines.Count; i++)
+            highlighter.HighlightLine(_lines[i]);
+
+        // Compute selection range (normalized)
+        bool hasSel = _selActive;
+        int selStartLine = 0, selStartCol = 0, selEndLine = 0, selEndCol = 0;
+        if (hasSel)
+            GetSelectionRange(out selStartLine, out selStartCol, out selEndLine, out selEndCol);
+
+        for (int row = CodeStartRow; row <= CodeEndRow; row++)
+        {
+            // Left border
+            WriteChar(0, row, BoxV, BorderFg);
+
+            int lineIdx = _scrollY + (row - CodeStartRow);
+
+            if (lineIdx < _lines.Count)
+            {
+                // Gutter
+                RenderGutterCell(lineIdx, row);
+
+                string line = _lines[lineIdx];
+                byte[] colors = highlighter.HighlightLine(line);
+
+                // Code columns
+                for (int c = 0; c < CodeWidth - gutterW; c++)
+                {
+                    int srcCol = c + _scrollX;
+                    byte ch = srcCol < line.Length ? (byte)line[srcCol] : (byte)' ';
+                    byte fg = srcCol < colors.Length ? colors[srcCol] : DefaultFg;
+
+                    // Selection override
+                    if (hasSel && IsInSelection(lineIdx, srcCol, selStartLine, selStartCol, selEndLine, selEndCol))
+                        fg = SelectionFg;
+
+                    WriteChar(CodeStartCol + gutterW + c, row, ch, fg);
+                }
+            }
+            else
+            {
+                // Empty row below content
+                for (int c = CodeStartCol; c < BorderCol; c++)
+                    WriteChar(c, row, (byte)' ', DefaultFg);
+            }
+
+            // Right border
+            WriteChar(BorderCol, row, BoxV, BorderFg);
+        }
+
+        UpdateCursor();
+        OnAfterRedrawCode();
+    }
+
+    protected void RedrawStatusBar()
+    {
+        string ins = _insertMode ? "INS" : "OVR";
+        string extra = GetStatusExtra();
+        string status = $" Ln {_cursorLine + 1} Col {_cursorCol + 1}  {ins}";
+        if (!string.IsNullOrEmpty(extra))
+            status += $"  {extra}";
+        DrawBoxMiddle(StatusRow, status);
+    }
+
+    protected void RedrawMessageRow()
+    {
+        string text;
+        byte fg;
+
+        if (_promptActive)
+        {
+            text = " " + _promptLabel + _promptInput + "_";
+            fg = MessageFg;
+        }
+        else if (_message != null)
+        {
+            text = " " + _message;
+            fg = _messageIsError ? ErrorFg : MessageFg;
+        }
+        else
+        {
+            text = " " + GetHelpText();
+            fg = MessageFg;
+        }
+
+        DrawBoxBottom(MessageRow, text, fg);
+    }
+
+    // ── Cursor rendering ──────────────────────────────────────────────────────
+
+    protected void UpdateCursor()
+    {
+        int gutterW = GetGutterWidth();
+        int screenCol = CodeStartCol + gutterW + (_cursorCol - _scrollX);
+        int screenRow = CodeStartRow + (_cursorLine - _scrollY);
+
+        if (screenRow >= CodeStartRow && screenRow <= CodeEndRow &&
+            screenCol >= CodeStartCol + gutterW && screenCol < BorderCol)
+        {
+            Bus.Write(VgcConstants.RegCursorX, (byte)screenCol);
+            Bus.Write(VgcConstants.RegCursorY, (byte)screenRow);
+            Bus.Write(VgcConstants.RegCursorEnable, 1);
+
+            // Color the cursor cell
+            int offset = screenRow * ScreenCols + screenCol;
+            Bus.Write((ushort)(VgcConstants.ColorRamBase + offset), CursorFg);
+        }
+        else
+        {
+            Bus.Write(VgcConstants.RegCursorEnable, 0);
+        }
+    }
+
+    // ── Prompt system ─────────────────────────────────────────────────────────
+
+    protected void StartPrompt(string label, Action<string> callback)
+    {
+        _promptActive = true;
+        _promptLabel = label;
+        _promptInput = "";
+        _promptCallback = callback;
+        RedrawMessageRow();
+    }
+
+    protected bool HandlePromptKey(Key key, string? text)
+    {
+        if (!_promptActive) return false;
+
+        if (key == Key.Escape)
+        {
+            _promptActive = false;
+            RedrawMessageRow();
+            return true;
+        }
+        if (key == Key.Enter)
+        {
+            _promptActive = false;
+            var cb = _promptCallback;
+            var input = _promptInput;
+            _promptCallback = null;
+            RedrawMessageRow();
+            cb?.Invoke(input);
+            return true;
+        }
+        if (key == Key.Back && _promptInput.Length > 0)
+        {
+            _promptInput = _promptInput[..^1];
+            RedrawMessageRow();
+            return true;
+        }
+        if (text != null && text.Length > 0 && !char.IsControl(text[0]))
+        {
+            _promptInput += text;
+            RedrawMessageRow();
+            return true;
+        }
+        return true;
+    }
+
+    protected void ShowMessage(string msg, bool isError = false)
+    {
+        _message = msg;
+        _messageIsError = isError;
+        RedrawMessageRow();
+    }
+
+    protected void ClearMessage()
+    {
+        _message = null;
+        RedrawMessageRow();
+    }
+
+    // ── Search ────────────────────────────────────────────────────────────────
+
+    internal void StartFind()
+    {
+        StartPrompt("Find: ", term =>
+        {
+            if (!string.IsNullOrEmpty(term))
+            {
+                _lastSearchTerm = term;
+                FindNext(term);
+            }
+        });
+    }
+
+    internal void FindNext(string term)
+    {
+        int startLine = _cursorLine;
+        int startCol = _cursorCol + 1;
+
+        for (int i = 0; i < _lines.Count; i++)
+        {
+            int lineIdx = (startLine + i) % _lines.Count;
+            string line = _lines[lineIdx];
+            int searchFrom = (i == 0) ? Math.Min(startCol, line.Length) : 0;
+            int found = line.IndexOf(term, searchFrom, StringComparison.OrdinalIgnoreCase);
+            if (found >= 0)
+            {
+                _selAnchorLine = lineIdx;
+                _selAnchorCol = found;
+                _selActive = true;
+                _cursorLine = lineIdx;
+                _cursorCol = found + term.Length;
+                EnsureVisible();
+                RedrawCode();
+                RedrawStatusBar();
+                return;
+            }
+        }
+        ShowMessage("Not found: " + term, true);
+    }
+
+    internal void StartGoToLine()
+    {
+        StartPrompt("Go to line: ", input =>
+        {
+            if (int.TryParse(input, out int lineNum))
+            {
+                lineNum = Math.Clamp(lineNum, 1, _lines.Count);
+                SetCursor(lineNum - 1, 0);
+                EnsureVisible();
+                RedrawCode();
+                RedrawStatusBar();
+            }
+        });
     }
 
     // ── Text buffer operations ───────────────────────────────────────────────
@@ -352,6 +720,18 @@ public abstract class ScreenTextEditor
             endLine = _selAnchorLine;
             endCol = _selAnchorCol;
         }
+    }
+
+    private static bool IsInSelection(int lineIdx, int col, int selStartLine, int selStartCol, int selEndLine, int selEndCol)
+    {
+        if (lineIdx < selStartLine || lineIdx > selEndLine) return false;
+        if (lineIdx == selStartLine && lineIdx == selEndLine)
+            return col >= selStartCol && col < selEndCol;
+        if (lineIdx == selStartLine)
+            return col >= selStartCol;
+        if (lineIdx == selEndLine)
+            return col < selEndCol;
+        return true;
     }
 
     internal void DeleteSelection()
