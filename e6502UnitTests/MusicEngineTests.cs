@@ -616,6 +616,53 @@ public class MusicEngineTests
         Assert.AreEqual(12, bus.Sid2.Read(Sid2Base + 0x18) & 0x0F, "SID2 volume");
     }
 
+    // -------------------------------------------------------------------------
+    // Voice-type guards (SID vs WTS)
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void SetInstrument_IgnoredOnWtsVoice()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        // Voice 6 is WTS — SID instrument command should be silently ignored
+        engine.SetSequence(6, "I1 C4");
+        engine.MusicPlay();
+        engine.Tick(); // should not crash; SID instrument ignored on WTS voice
+
+        Assert.IsTrue(engine.IsMusicPlaying, "Music should still be playing");
+    }
+
+    [TestMethod]
+    public void SetWtsInstrument_IgnoredOnSidVoice()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        // Voice 0 is SID — WTS instrument command should be silently ignored
+        engine.SetSequence(0, "@I5 C4");
+        engine.MusicPlay();
+        engine.Tick(); // should not crash; WTS instrument ignored on SID voice
+
+        byte ctrl = bus.Sid.Read(SidBase + 4);
+        Assert.AreEqual(1, ctrl & 0x01, "SID voice 0 gate should be on");
+    }
+
+    [TestMethod]
+    public void SidEffects_IgnoredOnWtsVoice()
+    {
+        var bus    = MakeBus();
+        var engine = new MusicEngine(bus);
+
+        // Voice 6 is WTS — SID-specific effects should be silently ignored
+        engine.SetSequence(6, "@P2048 @PS+ @FC1024,8 @FM1 @FS+ C4");
+        engine.MusicPlay();
+        engine.Tick(); // should not crash
+
+        Assert.IsTrue(engine.IsMusicPlaying, "Music should still be playing");
+    }
+
     [TestMethod]
     public void GetVoiceNote_ReturnsCorrectForAllSixVoices()
     {

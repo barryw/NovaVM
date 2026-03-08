@@ -648,7 +648,8 @@ public sealed class MusicEngine
                 break;
 
             case MmlEventType.SetInstrument:
-                vs.CurrentInstrument = GetInstrument(ev.Param1);
+                if (!IsWtsVoice(vi))
+                    vs.CurrentInstrument = GetInstrument(ev.Param1);
                 break;
 
             case MmlEventType.SetOctave:
@@ -664,12 +665,14 @@ public sealed class MusicEngine
                 break;
 
             case MmlEventType.SetPulseWidth:
+                if (IsWtsVoice(vi)) break;
                 vs.PulseWidth = ev.Param1;
                 vs.PwmDir     = 0;
-                if (!IsWtsVoice(vi)) WritePulse(vi, vs.PulseWidth);
+                WritePulse(vi, vs.PulseWidth);
                 break;
 
             case MmlEventType.PwmSweep:
+                if (IsWtsVoice(vi)) break;
                 vs.PwmDir = ev.Param1;
                 break;
 
@@ -680,6 +683,7 @@ public sealed class MusicEngine
 
             case MmlEventType.SetFilterCutoff:
             {
+                if (IsWtsVoice(vi)) break;
                 int cutoff    = Math.Clamp(ev.Param1, 0, 2047);
                 int resonance = Math.Clamp(ev.Param2, 0, 15);
                 // Mirror filter settings to both chips
@@ -696,6 +700,7 @@ public sealed class MusicEngine
 
             case MmlEventType.FilterMode:
             {
+                if (IsWtsVoice(vi)) break;
                 // Param1: 0=off,1=LP,2=BP,4=HP
                 int mode = ev.Param1;
                 // Mirror to both chips
@@ -710,6 +715,7 @@ public sealed class MusicEngine
             }
 
             case MmlEventType.FilterSweep:
+                if (IsWtsVoice(vi)) break;
                 vs.FilterSweepDir = ev.Param1;
                 break;
 
@@ -730,7 +736,8 @@ public sealed class MusicEngine
             }
 
             case MmlEventType.SetWtsInstrument:
-                vs.WtsInstrumentId = ev.Param1;
+                if (IsWtsVoice(vi))
+                    vs.WtsInstrumentId = ev.Param1;
                 break;
 
             case MmlEventType.LoopStart:
