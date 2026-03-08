@@ -1139,6 +1139,10 @@ public sealed class EmulatorTcpServer : IDisposable
 
         var analysis = MidiEngine.AnalyzeChannels(midi);
         var mode = _bus.MidiPlayback.RoutingMode;
+        // Auto-load soundfont if WTS is empty and not in SID-only mode
+        if (mode != MidiRoutingMode.SidOnly && _bus.Wts.InstrumentCount == 0)
+            MidiAutoSoundfont.TryLoad(_bus.Fio, _bus.Wts);
+
         bool sidOnly = mode == MidiRoutingMode.SidOnly || _bus.Wts.InstrumentCount == 0;
 
         Dictionary<int, int>? mapping = null;
@@ -1215,8 +1219,10 @@ public sealed class EmulatorTcpServer : IDisposable
                 bool isWtsVoice = v >= 6;
                 if (isWtsVoice)
                 {
-                    // WTS: use GM program number as instrument ID
-                    instrumentSlots[v] = analysis[ch].GmProgram;
+                    // WTS: encode bank and program for FindByProgram lookup
+                    // Drums (ch 9) use bank 128, melodic uses bank 0
+                    int bank = analysis[ch].IsDrums ? 128 : 0;
+                    instrumentSlots[v] = (bank << 8) | (analysis[ch].GmProgram & 0x7F);
                 }
                 else
                 {
