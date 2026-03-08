@@ -1060,88 +1060,21 @@ public sealed partial class FileIoController
             var midi = Melanchall.DryWetMidi.Core.MidiFile.Read(path);
             var analysis = MidiEngine.AnalyzeChannels(midi);
             var mode = _midiPlayback.RoutingMode;
-            bool sidOnly = mode == MidiRoutingMode.SidOnly;
-            int maxVoices = sidOnly ? 6 : 14;
 
-            // Select channels ranked by note count
+            // Auto-load soundfont if WTS is empty and not in SID-only mode
+            if (mode != MidiRoutingMode.SidOnly && _wts is not null && _wts.InstrumentCount == 0)
+                MidiAutoSoundfont.TryLoad(this, _wts);
+
+            bool sidOnly = mode == MidiRoutingMode.SidOnly || (_wts is null || _wts.InstrumentCount == 0);
+            int maxVoices = sidOnly ? 6 : 14;
             var rawChannels = MidiEngine.SelectChannels(midi, maxVoices);
 
-            // Build voice→channel mapping with routing:
-            // Auto/Manual: channels[0..7] → voices 6-13 (WTS), channels[8..13] → voices 0-5 (SID)
-            // SidOnly:     channels[0..5] → voices 0-5 (SID)
-            int totalVoices = rawChannels.Length;
-            var voiceToChannel = new int[totalVoices];
-            var instrumentSlots = new int[totalVoices];
-
-            if (sidOnly)
-            {
-                // Direct 1:1 mapping to SID voices
-                Array.Copy(rawChannels, voiceToChannel, totalVoices);
-            }
-            else
-            {
-                // First up to 8 go to WTS (voices 6-13), rest to SID (voices 0-5)
-                int wtsCount = Math.Min(totalVoices, 8);
-                int sidCount = totalVoices - wtsCount;
-
-                // WTS voices get indices 6..6+wtsCount-1
-                // SID voices get indices 0..sidCount-1
-                // Remap: output array index = engine voice index
-                // We need voiceToChannel indexed by engine voice index
-                var remapped = new int[totalVoices];
-                var remappedInst = new int[totalVoices];
-
-                // SID overflow voices (channels[8..13]) → engine voices 0..sidCount-1
-                for (int i = 0; i < sidCount; i++)
-                    remapped[i] = rawChannels[wtsCount + i];
-
-                // WTS primary voices (channels[0..7]) → engine voices 6..6+wtsCount-1
-                for (int i = 0; i < wtsCount; i++)
-                    remapped[6 + i] = rawChannels[i];
-
-                // Pad unused SID voices with -1 (they won't match any channel)
-                for (int i = sidCount; i < 6; i++)
-                    remapped[i] = -1;
-
-                voiceToChannel = remapped;
-                totalVoices = 6 + wtsCount; // actual voice count in use
-                voiceToChannel = voiceToChannel[..totalVoices];
-                instrumentSlots = new int[totalVoices];
-            }
-
-            var registeredBuckets = new Dictionary<int, int>();
-            int nextSlot = 1;
-
-            for (int v = 0; v < voiceToChannel.Length; v++)
-            {
-                int ch = voiceToChannel[v];
-                if (ch < 0) continue; // unused voice slot
-
-                bool isWtsVoice = !sidOnly && v >= 6;
-                if (isWtsVoice)
-                {
-                    // WTS voices use GM program number as instrument ID
-                    instrumentSlots[v] = analysis[ch].GmProgram;
-                }
-                else
-                {
-                    // SID voices use instrument bucket mapping
-                    var bucket = MidiEngine.GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
-                    int bucketIdx = Array.IndexOf(MidiEngine.GetAllBuckets(), bucket);
-
-                    if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
-                    {
-                        slot = nextSlot++;
-                        registeredBuckets[bucketIdx] = slot;
-                        _musicEngine.DefineInstrument(slot, bucket.Waveform,
-                            bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release);
-                    }
-                    instrumentSlots[v] = slot;
-                }
-            }
+            var routing = MidiEngine.RouteVoices(analysis, rawChannels, sidOnly,
+                (slot, bucket) => _musicEngine.DefineInstrument(slot, bucket.Waveform,
+                    bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release));
 
             _musicEngine.SetVolume(15);
-            _midiPlayback.Play(midi, voiceToChannel, instrumentSlots);
+            _midiPlayback.Play(midi, routing.VoiceToChannel, routing.InstrumentSlots);
             SetOk();
         }
         catch (FileNotFoundException)

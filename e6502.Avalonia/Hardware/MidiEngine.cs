@@ -428,6 +428,108 @@ public static class MidiEngine
 
     public static InstrumentBucket[] GetAllBuckets() => Buckets;
 
+    /// <summary>
+    /// Result of routing MIDI channels to engine voices.
+    /// </summary>
+    public sealed class RoutingResult
+    {
+        public int[] VoiceToChannel = Array.Empty<int>();
+        public int[] InstrumentSlots = Array.Empty<int>();
+        public bool SidOnly;
+    }
+
+    /// <summary>
+    /// Route MIDI channels to engine voices (SID 0-5, WTS 6-13).
+    /// Single code path used by both FileIoController and EmulatorTcpServer.
+    /// </summary>
+    /// <param name="analysis">Channel analysis from AnalyzeChannels.</param>
+    /// <param name="rawChannels">Selected channels from SelectChannels.</param>
+    /// <param name="sidOnly">True to route only to SID voices 0-5.</param>
+    /// <param name="defineInstrument">Callback to register SID instrument (slot, bucket).</param>
+    public static RoutingResult RouteVoices(
+        ChannelInfo[] analysis, int[] rawChannels, bool sidOnly,
+        Action<int, InstrumentBucket> defineInstrument)
+    {
+        var result = new RoutingResult { SidOnly = sidOnly };
+
+        if (sidOnly)
+        {
+            result.VoiceToChannel = rawChannels;
+            result.InstrumentSlots = new int[rawChannels.Length];
+            var registeredBuckets = new Dictionary<int, int>();
+            int nextSlot = 1;
+
+            for (int v = 0; v < rawChannels.Length; v++)
+            {
+                int ch = rawChannels[v];
+                var bucket = GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
+                int bucketIdx = Array.IndexOf(Buckets, bucket);
+
+                if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+                {
+                    slot = nextSlot++;
+                    registeredBuckets[bucketIdx] = slot;
+                    defineInstrument(slot, bucket);
+                }
+                result.InstrumentSlots[v] = slot;
+            }
+        }
+        else
+        {
+            int wtsCount = Math.Min(rawChannels.Length, 8);
+            int sidCount = rawChannels.Length - wtsCount;
+            int totalVoices = 6 + wtsCount;
+
+            result.VoiceToChannel = new int[totalVoices];
+            result.InstrumentSlots = new int[totalVoices];
+
+            // Pad unused SID voices with -1
+            for (int i = sidCount; i < 6; i++)
+                result.VoiceToChannel[i] = -1;
+
+            // SID overflow (channels[8..]) → voices 0..sidCount-1
+            for (int i = 0; i < sidCount; i++)
+                result.VoiceToChannel[i] = rawChannels[wtsCount + i];
+
+            // WTS primary (channels[0..7]) → voices 6..6+wtsCount-1
+            for (int i = 0; i < wtsCount; i++)
+                result.VoiceToChannel[6 + i] = rawChannels[i];
+
+            var registeredBuckets = new Dictionary<int, int>();
+            int nextSlot = 1;
+
+            for (int v = 0; v < totalVoices; v++)
+            {
+                int ch = result.VoiceToChannel[v];
+                if (ch < 0) continue;
+
+                bool isWtsVoice = v >= 6;
+                if (isWtsVoice)
+                {
+                    // WTS: encode bank and program for FindByProgram lookup
+                    // Drums (ch 9) use bank 128, melodic uses bank 0
+                    int bank = analysis[ch].IsDrums ? 128 : 0;
+                    result.InstrumentSlots[v] = (bank << 8) | (analysis[ch].GmProgram & 0x7F);
+                }
+                else
+                {
+                    // SID: use instrument bucket mapping
+                    var bucket = GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
+                    int bucketIdx = Array.IndexOf(Buckets, bucket);
+                    if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+                    {
+                        slot = nextSlot++;
+                        registeredBuckets[bucketIdx] = slot;
+                        defineInstrument(slot, bucket);
+                    }
+                    result.InstrumentSlots[v] = slot;
+                }
+            }
+        }
+
+        return result;
+    }
+
     private sealed class MonoNote
     {
         public bool IsRest;
