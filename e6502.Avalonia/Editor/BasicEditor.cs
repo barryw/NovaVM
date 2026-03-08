@@ -38,6 +38,7 @@ public sealed class BasicEditor
     private int _cursorLine;    // 0-based index into _lines
     private int _cursorCol;     // 0-based column into line text
     private int _scrollY;       // first visible line index
+    private int _scrollX;       // first visible column (horizontal scroll)
     private bool _modified;
     private bool _insertMode = true;
 
@@ -713,6 +714,12 @@ public sealed class BasicEditor
             _scrollY = _cursorLine;
         else if (_cursorLine >= _scrollY + VisibleLines)
             _scrollY = _cursorLine - VisibleLines + 1;
+
+        // Horizontal scroll
+        if (_cursorCol < _scrollX)
+            _scrollX = _cursorCol;
+        else if (_cursorCol >= _scrollX + CodeWidth)
+            _scrollX = _cursorCol - CodeWidth + 1;
     }
 
     private void EnsureLine()
@@ -725,19 +732,12 @@ public sealed class BasicEditor
 
     /// <summary>
     /// Read the current BASIC program from CPU RAM using the start/end pointers
-    /// stored at $002B/$002C (program start) and $002D/$002E (program end).
+    /// at Smeml ($79/$7A) and Svarl ($7B/$7C).
     /// </summary>
     internal void ReadFromMemory(BasicTokenizer tokenizer)
     {
-        // EhBASIC stores program start pointer at $002B/$002C (LSTROM in ehbasic)
-        // and program end at $002D/$002E (ENDPROG).
-        // The actual RAM start for EhBASIC programs is $0280 (BasicBase).
-        ushort progStart = (ushort)(VgcConstants.BasicBase);
-
-        // Read end pointer from zero-page ($002D/$002E)
-        byte endL = _bus.Read(0x002D);
-        byte endH = _bus.Read(0x002E);
-        ushort progEnd = (ushort)(endL | (endH << 8));
+        ushort progStart = (ushort)(_bus.Read(VgcConstants.ZpSmeml) | (_bus.Read(VgcConstants.ZpSmemh) << 8));
+        ushort progEnd = (ushort)(_bus.Read(VgcConstants.ZpSvarl) | (_bus.Read(VgcConstants.ZpSvarh) << 8));
 
         if (progEnd <= progStart)
         {
@@ -762,21 +762,22 @@ public sealed class BasicEditor
 
     /// <summary>
     /// Write the current buffer to CPU RAM as a tokenized BASIC program.
-    /// Updates the program end pointer at $002D/$002E.
+    /// Updates the end-of-program pointer (Svarl at $7B/$7C).
     /// </summary>
     internal void WriteToMemory(BasicTokenizer tokenizer)
     {
+        ushort baseAddr = (ushort)(_bus.Read(VgcConstants.ZpSmeml) | (_bus.Read(VgcConstants.ZpSmemh) << 8));
         string[] textLines = ToTextLines();
-        ushort baseAddr = (ushort)VgcConstants.BasicBase;
         byte[] data = tokenizer.Tokenize(textLines, baseAddr);
 
         for (int i = 0; i < data.Length; i++)
             _bus.Write((ushort)(baseAddr + i), data[i]);
 
-        // Update program end pointer ($002D/$002E)
+        // Update end-of-program pointer (Svarl = start of variables)
         ushort endAddr = (ushort)(baseAddr + data.Length);
-        _bus.Write(0x002D, (byte)(endAddr & 0xFF));
-        _bus.Write(0x002E, (byte)(endAddr >> 8));
+        _bus.Write(VgcConstants.ZpSvarl, (byte)(endAddr & 0xFF));
+        _bus.Write(VgcConstants.ZpSvarh, (byte)(endAddr >> 8));
+        _modified = false;
     }
 
     /// <summary>Find tokens.json by walking up from current directory.</summary>
@@ -820,7 +821,7 @@ public sealed class BasicEditor
 
     internal void RedrawTitleBar()
     {
-        string left  = "NOVA EDIT";
+        string left  = _modified ? "NOVA EDIT [*]" : "NOVA EDIT";
         string right = "F5:Run  Esc:Exit";
         // Pad to fill 80 cols
         int innerWidth = ScreenCols - left.Length - right.Length;
@@ -837,6 +838,7 @@ public sealed class BasicEditor
 
     internal void RedrawCode()
     {
+        RedrawTitleBar();
         for (int row = CodeStartRow; row <= CodeEndRow; row++)
         {
             int lineIdx = _scrollY + (row - CodeStartRow);
@@ -855,12 +857,13 @@ public sealed class BasicEditor
                     WriteChar(g, row, (byte)lineNumStr[g], GutterFg);
                 WriteChar(5, row, (byte)' ', GutterFg);
 
-                // Draw code with syntax highlighting (clipped to CodeWidth)
+                // Draw code with syntax highlighting (clipped to CodeWidth, offset by _scrollX)
                 byte[] colors = _highlighter.HighlightLine(text);
                 for (int c = 0; c < CodeWidth; c++)
                 {
-                    byte ch = c < text.Length ? (byte)text[c] : (byte)' ';
-                    byte fg = c < colors.Length ? colors[c] : DefaultFg;
+                    int textCol = c + _scrollX;
+                    byte ch = textCol < text.Length ? (byte)text[textCol] : (byte)' ';
+                    byte fg = textCol < colors.Length ? colors[textCol] : DefaultFg;
                     WriteChar(GutterWidth + c, row, ch, fg);
                 }
             }
@@ -883,13 +886,11 @@ public sealed class BasicEditor
             string mode = _insertMode ? "INS" : "OVR";
             string mod = _modified ? " [*]" : "";
 
-            // Compute free memory: space from end of program to $9FFF
+            // Compute free memory: space from end of program to top of BASIC RAM
             int freeBytes = 0;
             try
             {
-                byte endL = _bus.Read(0x002D);
-                byte endH = _bus.Read(0x002E);
-                ushort progEnd = (ushort)(endL | (endH << 8));
+                ushort progEnd = (ushort)(_bus.Read(VgcConstants.ZpSvarl) | (_bus.Read(VgcConstants.ZpSvarh) << 8));
                 int available = VgcConstants.BasicEnd - progEnd;
                 if (available < 0) available = 0;
                 freeBytes = available;
@@ -911,7 +912,7 @@ public sealed class BasicEditor
 
     private void UpdateCursor()
     {
-        int screenCol = GutterWidth + _cursorCol;
+        int screenCol = GutterWidth + (_cursorCol - _scrollX);
         int screenRow = CodeStartRow + (_cursorLine - _scrollY);
 
         if (screenRow >= CodeStartRow && screenRow <= CodeEndRow &&

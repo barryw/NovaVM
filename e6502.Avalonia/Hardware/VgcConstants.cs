@@ -18,6 +18,12 @@ public static class VgcConstants
     public const int BasicBase         = 0x0280;
     public const int BasicEnd          = 0x9FFF;
 
+    // EhBASIC zero-page pointers
+    public const int ZpSmeml           = 0x79;   // start of program memory (low byte)
+    public const int ZpSmemh           = 0x7A;   // start of program memory (high byte)
+    public const int ZpSvarl           = 0x7B;   // start of variables / end of program (low byte)
+    public const int ZpSvarh           = 0x7C;   // start of variables / end of program (high byte)
+
     public const int VgcBase           = 0xA000;
     public const int VgcRegsEnd        = 0xA01F;
     public const int VgcEnd            = 0xA0FF;
