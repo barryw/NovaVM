@@ -21,6 +21,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
     private readonly MidiPlayback _midiPlayback;
+    private readonly WavetableSynth _wts;
     private readonly DeviceManager _deviceManager;
     private readonly int _cpuHz;
     private readonly int _frameRateHz;
@@ -45,6 +46,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
     public MidiPlayback MidiPlayback => _midiPlayback;
+    public WavetableSynth Wts => _wts;
     public DeviceManager DeviceManager => _deviceManager;
     public int CpuHz => _cpuHz;
     public int FrameRateHz => _frameRateHz;
@@ -69,6 +71,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _sidPlayer = new SidPlayer(this);
         _musicEngine = new MusicEngine(this);
         _midiPlayback = new MidiPlayback(_musicEngine, _frameRateHz);
+        _wts = new WavetableSynth(enableSound);
 
         string hd0 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-programs");
         string hd1 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-data");
@@ -139,6 +142,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _nic.Dispose();
         _sid.Dispose();
         _sid2.Dispose();
+        _wts.Dispose();
     }
 
     private void InitVectorTable()
@@ -189,6 +193,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_blitter.OwnsAddress(address)) return _blitter.Read(address);
         if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
+        if (address >= VgcConstants.WtsBase && address <= VgcConstants.WtsEnd)
+            return _wts.ReadRegister(address);
         if (_compiler.OwnsAddress(address)) return _compiler.Read(address);
         if (_vgc.OwnsAddress(address)) return _vgc.Read(address);
         return _ram[address];
@@ -248,6 +254,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             {
                 NccEditorRequested?.Invoke();
             }
+            return;
+        }
+        if (address >= VgcConstants.WtsBase && address <= VgcConstants.WtsEnd)
+        {
+            _wts.WriteRegister(address, data);
             return;
         }
         if (_compiler.OwnsAddress(address)) { _compiler.Write(address, data); return; }

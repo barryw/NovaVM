@@ -15,6 +15,16 @@ public sealed class WavetableSynth : IDisposable
     private readonly OpenAlRenderer? _renderer;
     private readonly object _lock = new();
 
+    // Per-voice latch state for register protocol
+    private readonly byte[] _latchVelocity = new byte[VoiceCount];
+    private readonly byte[] _latchInstrument = new byte[VoiceCount];
+    private readonly byte[] _latchPitchBendLo = new byte[VoiceCount];
+    private readonly byte[] _latchPitchBendHi = new byte[VoiceCount];
+
+    // Instrument enumeration state
+    private byte _enumBank, _enumProgram;
+    private byte[] _enumName = new byte[29];
+
     public byte ReverbLevel { get; set; } = 80;
     public byte ChorusLevel { get; set; } = 40;
     public byte MasterVolume { get; set; } = 255;
@@ -22,7 +32,10 @@ public sealed class WavetableSynth : IDisposable
     public WavetableSynth(bool enableAudio = false)
     {
         for (int i = 0; i < VoiceCount; i++)
+        {
             _voices[i] = new WtsVoice();
+            _latchPitchBendHi[i] = 0x80;
+        }
 
         if (enableAudio)
         {
@@ -345,6 +358,129 @@ public sealed class WavetableSynth : IDisposable
                 _voices[i].EnvLevel = 0f;
                 _voices[i].Releasing = false;
                 _voices[i].Region = null;
+            }
+        }
+    }
+
+    public byte ReadRegister(ushort address)
+    {
+        // Per-voice registers
+        if (address >= VgcConstants.WtsVoiceBase && address <= VgcConstants.WtsVoiceEnd)
+        {
+            int voice = (address - VgcConstants.WtsVoiceBase) / VgcConstants.WtsVoiceStride;
+            int offset = (address - VgcConstants.WtsVoiceBase) % VgcConstants.WtsVoiceStride;
+            if (voice < 0 || voice >= VoiceCount) return 0;
+            return offset switch
+            {
+                VgcConstants.WtsVoiceVolume => _voices[voice].Volume,
+                VgcConstants.WtsVoicePanning => _voices[voice].Pan,
+                VgcConstants.WtsVoiceStatus => (byte)(
+                    (_voices[voice].Active ? 0x01 : 0) |
+                    (_voices[voice].Releasing ? 0x02 : 0)),
+                _ => 0
+            };
+        }
+
+        // Global registers
+        if (address == VgcConstants.WtsReverbLevel) return ReverbLevel;
+        if (address == VgcConstants.WtsChorusLevel) return ChorusLevel;
+        if (address == VgcConstants.WtsMasterVolume) return MasterVolume;
+        if (address == VgcConstants.WtsSoundfontStatus)
+            return (byte)(_bank != null ? 1 : 0);
+        if (address == VgcConstants.WtsInstrumentCount)
+            return (byte)InstrumentCount;
+        if (address == VgcConstants.WtsActiveVoices) return ActiveVoiceMask;
+
+        // Instrument enumeration
+        if (address == VgcConstants.WtsEnumBank) return _enumBank;
+        if (address == VgcConstants.WtsEnumProgram) return _enumProgram;
+        if (address >= VgcConstants.WtsEnumName && address <= VgcConstants.WtsEnumEnd)
+        {
+            int idx = address - VgcConstants.WtsEnumName;
+            return idx < _enumName.Length ? (byte)_enumName[idx] : (byte)0;
+        }
+
+        return 0;
+    }
+
+    public void WriteRegister(ushort address, byte value)
+    {
+        // Per-voice registers
+        if (address >= VgcConstants.WtsVoiceBase && address <= VgcConstants.WtsVoiceEnd)
+        {
+            int voice = (address - VgcConstants.WtsVoiceBase) / VgcConstants.WtsVoiceStride;
+            int offset = (address - VgcConstants.WtsVoiceBase) % VgcConstants.WtsVoiceStride;
+            if (voice < 0 || voice >= VoiceCount) return;
+
+            switch (offset)
+            {
+                case VgcConstants.WtsVoiceNote:
+                    if (value > 0)
+                        NoteOn(voice, value, _latchVelocity[voice], _latchInstrument[voice]);
+                    else
+                        NoteOff(voice);
+                    break;
+                case VgcConstants.WtsVoiceVelocity:
+                    _latchVelocity[voice] = value;
+                    break;
+                case VgcConstants.WtsVoiceInstrument:
+                    _latchInstrument[voice] = value;
+                    break;
+                case VgcConstants.WtsVoiceVolume:
+                    SetVolume(voice, value);
+                    break;
+                case VgcConstants.WtsVoicePanning:
+                    SetPanning(voice, value);
+                    break;
+                case VgcConstants.WtsVoicePitchBendLo:
+                    _latchPitchBendLo[voice] = value;
+                    SetPitchBend(voice, (ushort)(_latchPitchBendLo[voice] | (_latchPitchBendHi[voice] << 8)));
+                    break;
+                case VgcConstants.WtsVoicePitchBendHi:
+                    _latchPitchBendHi[voice] = value;
+                    SetPitchBend(voice, (ushort)(_latchPitchBendLo[voice] | (_latchPitchBendHi[voice] << 8)));
+                    break;
+            }
+            return;
+        }
+
+        // Global registers
+        if (address == VgcConstants.WtsReverbLevel) { ReverbLevel = value; return; }
+        if (address == VgcConstants.WtsChorusLevel) { ChorusLevel = value; return; }
+        if (address == VgcConstants.WtsMasterVolume) { MasterVolume = value; return; }
+        if (address == VgcConstants.WtsCommand)
+        {
+            switch (value)
+            {
+                case VgcConstants.WtsCmdAllNotesOff:
+                    AllNotesOff();
+                    break;
+                case VgcConstants.WtsCmdResetEffects:
+                    ReverbLevel = 80;
+                    ChorusLevel = 40;
+                    MasterVolume = 255;
+                    break;
+            }
+            return;
+        }
+
+        // Instrument enumeration
+        if (address == VgcConstants.WtsEnumIndex)
+        {
+            Array.Clear(_enumName);
+            _enumBank = 0;
+            _enumProgram = 0;
+
+            if (_bank != null && value < _bank.Instruments.Count)
+            {
+                var inst = _bank.Instruments[value];
+                _enumBank = (byte)inst.MidiBank;
+                _enumProgram = (byte)inst.MidiProgram;
+                string name = inst.Name ?? "";
+                int len = Math.Min(name.Length, 28);
+                for (int i = 0; i < len; i++)
+                    _enumName[i] = (byte)name[i];
+                // null terminator already in place from Array.Clear
             }
         }
     }
