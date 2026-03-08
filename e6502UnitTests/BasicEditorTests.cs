@@ -202,7 +202,7 @@ public class BasicEditorTests
     [TestMethod]
     public void PageDown_ScrollsByVisibleLines()
     {
-        // Build a program with more than 23 lines
+        // Build a program with more than 22 lines (base VisibleLines = 22)
         var lines = new List<string>();
         for (int i = 1; i <= 30; i++)
             lines.Add($"{i * 10} PRINT {i}");
@@ -210,8 +210,8 @@ public class BasicEditorTests
         _editor.SetCursor(0, 0);
         _editor.PageDown();
 
-        // Cursor should have moved by VisibleLines (23)
-        Assert.AreEqual(23, _editor.CursorLine);
+        // Cursor should have moved by VisibleLines (22 in ScreenTextEditor base)
+        Assert.AreEqual(22, _editor.CursorLine);
     }
 
     // ── Edge case tests ────────────────────────────────────────────────────────

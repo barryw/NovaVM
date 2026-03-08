@@ -7,197 +7,111 @@ using KDS.e6502;
 namespace e6502.Avalonia.Editor;
 
 /// <summary>
-/// Full-screen BASIC source editor rendered to VGC character/color RAM.
-/// Layout: row 0 = title bar, rows 1-23 = code area (23 visible lines),
-/// row 24 = status bar.  Gutter is 6 chars wide (5-digit line number + space).
-/// Code area is 74 chars wide.
+/// Full-screen BASIC source editor. Inherits all common editor mechanics from
+/// ScreenTextEditor and adds BASIC-specific features: line numbers, memory
+/// round-trip via BasicTokenizer, Run/ReturnFromRun, and gutter rendering.
 /// </summary>
-public sealed class BasicEditor
+public sealed class BasicEditor : ScreenTextEditor
 {
-    // ── Screen layout ────────────────────────────────────────────────────────
-    private const int ScreenCols   = VgcConstants.ScreenCols;  // 80
-    private const int ScreenRows   = VgcConstants.ScreenRows;  // 25
-    private const int TitleRow     = 0;
-    private const int CodeStartRow = 1;
-    private const int CodeEndRow   = 23;   // rows 1-23 = 23 visible lines
-    private const int VisibleLines = CodeEndRow - CodeStartRow + 1;  // 23
-    private const int StatusRow    = 24;
+    // ── BASIC line number constants ───────────────────────────────────────────
+    private const int MaxLineNumber = 63999;
+    private const int DefaultStep   = 10;
 
-    private const int GutterWidth  = 6;    // 5 digits + 1 space
-    private const int CodeWidth    = 74;   // 80 - 6
+    // ── Parallel line-number list (synced with base _lines) ──────────────────
+    private readonly List<int> _lineNumbers = new();
 
-    // ── Colors ───────────────────────────────────────────────────────────────
-    private const byte EditorBg   = 6;   // dark blue
-    private const byte TitleFg    = 1;   // white
-    private const byte StatusFg   = 14;  // light blue
-    private const byte GutterFg   = 12;  // grey
-    private const byte DefaultFg  = 1;   // white (fallback)
-
-    // ── Data model ───────────────────────────────────────────────────────────
-    private readonly List<(int LineNumber, string Text)> _lines = new();
-    private int _cursorLine;    // 0-based index into _lines
-    private int _cursorCol;     // 0-based column into line text
-    private int _scrollY;       // first visible line index
-    private int _scrollX;       // first visible column (horizontal scroll)
-    private bool _modified;
-    private bool _insertMode = true;
-
-    // Lazy-init tokenizer
+    // ── Lazy-init tokenizer ───────────────────────────────────────────────────
     private BasicTokenizer? _tokenizer;
 
-    // ── External references ──────────────────────────────────────────────────
-    private readonly IBusDevice _bus;
-    private readonly BasicSyntaxHighlighter _highlighter = new();
+    // ── External dependencies (set after construction) ────────────────────────
     private ScreenEditor? _screenEditor;
-    private Cpu? _cpu;
 
-    // ── Clipboard ────────────────────────────────────────────────────────────
-    private readonly List<string> _clipboard = new();
+    // ── Syntax highlighter ────────────────────────────────────────────────────
+    private readonly BasicSyntaxHighlighter _highlighter = new();
 
-    // ── Prompt state ─────────────────────────────────────────────────────────
-    private bool _prompting;
-    private string _promptText = "";
-    private string _promptInput = "";
-    private Action<string>? _promptCallback;
-    private string _message = "";
-    private string _lastSearch = "";
+    // ── Constructor ───────────────────────────────────────────────────────────
 
-    // ── Editor state ─────────────────────────────────────────────────────────
-    public EditorMode Mode { get; private set; } = EditorMode.Edit;
-    public bool IsActive { get; private set; }
-
-    // ── Constructor ──────────────────────────────────────────────────────────
-
-    public BasicEditor(IBusDevice bus)
+    public BasicEditor(IBusDevice bus) : base(bus)
     {
-        _bus = bus;
-        // Start with one empty line
-        _lines.Add((10, ""));
+        // Start with one empty line numbered 10
+        _lineNumbers.Add(10);
+        // base class already has one empty string in _lines
     }
 
     /// <summary>Set by MainWindow after construction.</summary>
     public void SetRunDependencies(Cpu cpu, ScreenEditor screenEditor)
     {
-        _cpu = cpu;
         _screenEditor = screenEditor;
     }
 
-    // ── Public accessors for testing ─────────────────────────────────────────
+    // ── ScreenTextEditor abstract overrides ───────────────────────────────────
 
-    internal int LineCount => _lines.Count;
+    protected override string GetTitle()    => Modified ? "NOVA EDIT [*]" : "NOVA EDIT";
+    protected override string GetHelpText() => "F5:Run  Esc:Exit  ^F:Find  ^G:Goto  ^S:Save  F3:Open";
+    protected override ISyntaxHighlighter GetHighlighter() => _highlighter;
+    protected override int GetGutterWidth() => 6;  // 5 digits + 1 space
+    protected override string GetFileExtension() => ".bas";
 
-    internal int GetLineNumber(int index) => _lines[index].LineNumber;
-
-    internal string GetLineText(int index) => _lines[index].Text;
-
-    internal void SetCursor(int line, int col)
+    protected override string GetStatusExtra()
     {
-        _cursorLine = Math.Clamp(line, 0, Math.Max(0, _lines.Count - 1));
-        _cursorCol = Math.Max(0, col);
-    }
-
-    internal int CursorLine => _cursorLine;
-    internal int CursorCol  => _cursorCol;
-    internal bool Modified   => _modified;
-    internal bool InsertMode => _insertMode;
-
-    // ── Activation ───────────────────────────────────────────────────────────
-
-    public void Activate()
-    {
-        if (IsActive) return;
-        IsActive = true;
-        _bus.Write(VgcConstants.RegCursorEnable, 0);
-        _bus.Write(VgcConstants.RegBgCol, EditorBg);
-        ClearScreen();
-
-        // Load current BASIC program from memory
-        var tok = GetTokenizer();
-        if (tok != null)
-            ReadFromMemory(tok);
-
-        Redraw();
-    }
-
-    public void Deactivate()
-    {
-        if (!IsActive) return;
-        IsActive = false;
-
-        // Write program back to memory
-        var tok = GetTokenizer();
-        if (tok != null)
-            WriteToMemory(tok);
-
-        _bus.Write(VgcConstants.RegBgCol, 0);
-        ClearScreen();
-        _bus.Write(VgcConstants.RegCursorEnable, 1);
-    }
-
-    /// <summary>Toggle editor on/off — called by F5 from BASIC.</summary>
-    public void ToggleActivation()
-    {
-        if (IsActive)
-            Deactivate();
-        else
-            Activate();
-    }
-
-    /// <summary>
-    /// Tokenizes the buffer to memory, clears the screen, re-enables VGC cursor,
-    /// and injects "RUN\r" into the ScreenEditor input queue.
-    /// Sets Mode = Running so that keyboard input passes through to BASIC.
-    /// </summary>
-    public void Run()
-    {
-        var tok = GetTokenizer();
-        if (tok != null)
-            WriteToMemory(tok);
-
-        // Restore normal BASIC display
-        _bus.Write(VgcConstants.RegBgCol, 0);
-        ClearScreen();
-        _bus.Write(VgcConstants.RegCursorEnable, 1);
-
-        Mode = EditorMode.Running;
-
-        // Inject RUN command into BASIC input queue
-        if (_screenEditor != null)
+        try
         {
-            foreach (byte b in "RUN\r"u8)
-                _screenEditor.QueueInput(b);
+            ushort progEnd = (ushort)(Bus.Read(VgcConstants.ZpSvarl) | (Bus.Read(VgcConstants.ZpSvarh) << 8));
+            int free = VgcConstants.BasicEnd - progEnd;
+            if (free < 0) free = 0;
+            return $"Free: {free}";
+        }
+        catch
+        {
+            return "";
         }
     }
 
-    /// <summary>
-    /// Called when "Ready" is detected on screen after a program run.
-    /// Re-activates the editor, re-reads the program from memory.
-    /// </summary>
-    public void ReturnFromRun()
+    protected override void RenderGutterCell(int lineIndex, int row)
     {
-        Mode = EditorMode.Edit;
-        _bus.Write(VgcConstants.RegCursorEnable, 0);
-        _bus.Write(VgcConstants.RegBgCol, EditorBg);
-        ClearScreen();
+        if (lineIndex < _lineNumbers.Count)
+        {
+            string numStr = _lineNumbers[lineIndex].ToString().PadLeft(5);
+            for (int g = 0; g < 5; g++)
+                WriteChar(1 + g, row, (byte)numStr[g], GutterFg);
+            WriteChar(6, row, (byte)' ', GutterFg);
+        }
+    }
+
+    protected override byte[] SerializeForSave(string filename)
+    {
+        var tok = GetTokenizer() ?? throw new InvalidOperationException("Tokenizer not available");
+        ushort baseAddr = (ushort)(Bus.Read(VgcConstants.ZpSmeml) | (Bus.Read(VgcConstants.ZpSmemh) << 8));
+        return tok.Tokenize(ToTextLines(), baseAddr);
+    }
+
+    protected override void DeserializeOnLoad(byte[] data, string filename)
+    {
+        var tok = GetTokenizer() ?? throw new InvalidOperationException("Tokenizer not available");
+        string[] textLines = tok.Detokenize(data);
+        LoadText(textLines);
+    }
+
+    protected override void OnActivate()
+    {
+        // Disable hardware cursor (base has already set bg color and cleared screen)
+        Bus.Write(VgcConstants.RegCursorEnable, 0);
 
         var tok = GetTokenizer();
         if (tok != null)
             ReadFromMemory(tok);
-
-        Redraw();
     }
 
-    // ── Keyboard handling ────────────────────────────────────────────────────
-
-    public bool HandleKeyDown(Key key, KeyModifiers modifiers)
+    protected override void OnDeactivate()
     {
-        if (!IsActive) return false;
+        var tok = GetTokenizer();
+        if (tok != null)
+            WriteToMemory(tok);
+        // RestoreScreen is called by base.Deactivate() after OnDeactivate
+    }
 
-        if (_prompting)
-            return HandlePromptKey(key);
-
-        bool ctrl = modifiers.HasFlag(KeyModifiers.Control) || modifiers.HasFlag(KeyModifiers.Meta);
-
+    protected override bool HandleEditorKey(Key key, KeyModifiers modifiers)
+    {
         if (key == Key.Escape)
         {
             Deactivate();
@@ -210,92 +124,75 @@ public sealed class BasicEditor
             return true;
         }
 
-        if (Mode != EditorMode.Edit) return false;
-
-        if (ctrl)
-        {
-            switch (key)
-            {
-                case Key.F: StartFind(); return true;
-                case Key.G: StartGoToLine(); return true;
-                case Key.C: CopyLine(); return true;
-                case Key.X: CutLine(); return true;
-                case Key.V: PasteLines(); return true;
-                case Key.Y: DeleteCurrentLine(); return true;
-                case Key.D: DuplicateLine(); return true;
-                case Key.Home:
-                    _cursorLine = 0;
-                    _cursorCol = 0;
-                    EnsureVisible();
-                    Redraw();
-                    return true;
-                case Key.End:
-                    _cursorLine = Math.Max(0, _lines.Count - 1);
-                    _cursorCol = _lines[_cursorLine].Text.Length;
-                    EnsureVisible();
-                    Redraw();
-                    return true;
-            }
-        }
-
-        switch (key)
-        {
-            case Key.Up:         MoveCursor(0, -1); return true;
-            case Key.Down:       MoveCursor(0, 1); return true;
-            case Key.Left:       MoveCursor(-1, 0); return true;
-            case Key.Right:      MoveCursor(1, 0); return true;
-            case Key.Home:       Home(); return true;
-            case Key.End:        End(); return true;
-            case Key.PageUp:     PageUp(); return true;
-            case Key.PageDown:   PageDown(); return true;
-            case Key.Enter:      InsertNewline(); return true;
-            case Key.Back:       Backspace(); return true;
-            case Key.Delete:     Delete(); return true;
-            case Key.Tab:        InsertChar(' '); InsertChar(' '); return true;
-            case Key.Insert:     _insertMode = !_insertMode; RedrawStatusBar(); return true;
-        }
-
         return false;
     }
 
-    public void HandleTextInput(string text)
+    // ── Line number hooks (called by base class after structural changes) ─────
+
+    protected override void OnLineInserted(int lineIndex)
     {
-        if (!IsActive || Mode != EditorMode.Edit) return;
-        if (_prompting)
-        {
-            foreach (char ch in text)
-            {
-                if (ch >= 0x20 && ch <= 0x7E)
-                    _promptInput += ch;
-            }
-            RedrawStatusBar();
-            return;
-        }
-        foreach (char ch in text)
-        {
-            if (ch >= 0x20 && ch <= 0x7E)
-                InsertChar(ch);
-        }
+        int newNum = CalculateNewLineNumber(lineIndex);
+        _lineNumbers.Insert(lineIndex, newNum);
     }
 
-    // ── Text buffer operations ────────────────────────────────────────────────
+    protected override void OnLineRemoved(int lineIndex)
+    {
+        if (lineIndex < _lineNumbers.Count)
+            _lineNumbers.RemoveAt(lineIndex);
+    }
+
+    protected override void OnLinesReset()
+    {
+        // Called when LoadLines replaces the buffer. If _lineNumbers is already
+        // in sync (set by LoadText before calling LoadLines), do nothing.
+        if (_lineNumbers.Count == LineCount) return;
+
+        // Otherwise (e.g., called from NewFile), generate default numbers.
+        _lineNumbers.Clear();
+        for (int i = 0; i < LineCount; i++)
+            _lineNumbers.Add((i + 1) * DefaultStep);
+    }
+
+    // ── Public accessors for testing ─────────────────────────────────────────
+
+    internal int GetLineNumber(int index) => _lineNumbers[index];
+
+    // ── Text buffer operations (BASIC-specific) ───────────────────────────────
 
     /// <summary>Load text lines of the form "10 PRINT ..." into the buffer.</summary>
     internal void LoadText(string[] lines)
     {
-        _lines.Clear();
+        var texts = new List<string>();
+        var numbers = new List<int>();
+
         foreach (string raw in lines)
         {
             if (ParseLine(raw, out int lineNum, out string text))
-                _lines.Add((lineNum, text));
+            {
+                texts.Add(text);
+                numbers.Add(lineNum);
+            }
         }
-        if (_lines.Count == 0)
-            _lines.Add((10, ""));
 
-        _cursorLine = 0;
-        _cursorCol = 0;
-        _scrollY = 0;
-        _modified = false;
+        if (texts.Count == 0)
+        {
+            texts.Add("");
+            numbers.Add(10);
+        }
+
+        _lineNumbers.Clear();
+        _lineNumbers.AddRange(numbers);
+        // LoadLines syncs base _lines without triggering hooks
+        LoadLines(texts.ToArray());
+    }
+
+    /// <summary>Reassemble "10 PRINT ..." strings from the buffer.</summary>
+    internal string[] ToTextLines()
+    {
+        var result = new string[LineCount];
+        for (int i = 0; i < LineCount; i++)
+            result[i] = $"{_lineNumbers[i]} {GetLineText(i)}";
+        return result;
     }
 
     private static bool ParseLine(string raw, out int lineNum, out string text)
@@ -316,416 +213,42 @@ public sealed class BasicEditor
         return true;
     }
 
-    /// <summary>Reassemble "10 PRINT ..." strings from the buffer.</summary>
-    internal string[] ToTextLines()
-    {
-        var result = new string[_lines.Count];
-        for (int i = 0; i < _lines.Count; i++)
-            result[i] = $"{_lines[i].LineNumber} {_lines[i].Text}";
-        return result;
-    }
+    // ── Line number calculation ───────────────────────────────────────────────
 
-    internal void InsertChar(char ch)
+    private int CalculateNewLineNumber(int insertedAt)
     {
-        EnsureLine();
-        var (lineNum, text) = _lines[_cursorLine];
-        if (_cursorCol > text.Length) _cursorCol = text.Length;
+        // The line at insertedAt was just inserted; we need to find a number
+        // between the previous and next line numbers.
+        int prevNum = insertedAt > 0 && insertedAt - 1 < _lineNumbers.Count
+            ? _lineNumbers[insertedAt - 1]
+            : 0;
 
-        string newText;
-        if (_insertMode || _cursorCol >= text.Length)
+        // Next: look at the entry after insertedAt (if any)
+        int nextNum = insertedAt < _lineNumbers.Count
+            ? _lineNumbers[insertedAt]
+            : Math.Min(prevNum + DefaultStep * 2, MaxLineNumber);
+
+        if (nextNum <= prevNum)
+            nextNum = Math.Min(prevNum + DefaultStep, MaxLineNumber);
+
+        int midpoint = (prevNum + nextNum) / 2;
+        if (midpoint <= prevNum)
         {
-            newText = text.Insert(_cursorCol, ch.ToString());
-            _cursorCol++;
-        }
-        else
-        {
-            // Overwrite
-            newText = text[.._cursorCol] + ch + text[(_cursorCol + 1)..];
-            _cursorCol++;
-        }
-
-        _lines[_cursorLine] = (lineNum, newText);
-        _modified = true;
-        RedrawCode();
-    }
-
-    internal void InsertNewline()
-    {
-        EnsureLine();
-        var (lineNum, text) = _lines[_cursorLine];
-        if (_cursorCol > text.Length) _cursorCol = text.Length;
-
-        string before = text[.._cursorCol];
-        string after  = text[_cursorCol..];
-        _lines[_cursorLine] = (lineNum, before);
-
-        int newLineNum = CalculateNewLineNumber(_cursorLine);
-        _lines.Insert(_cursorLine + 1, (newLineNum, after));
-
-        _cursorLine++;
-        _cursorCol = 0;
-        _modified = true;
-        EnsureVisible();
-        RedrawCode();
-    }
-
-    private const int MaxLineNumber = 63999;
-
-    private int CalculateNewLineNumber(int insertAfter)
-    {
-        int prev = _lines[insertAfter].LineNumber;
-        int next = (insertAfter + 1 < _lines.Count) ? _lines[insertAfter + 1].LineNumber : Math.Min(prev + 20, MaxLineNumber);
-
-        int midpoint = (prev + next) / 2;
-        if (midpoint <= prev)
-        {
-            // No integer gap — renumber entire buffer
+            // No integer gap — renumber entire buffer after inserting placeholder
+            // Insert 0 temporarily, renumber, then the caller will use the result
+            _lineNumbers.Insert(insertedAt, 0);
             RenumberAll();
-            // After renumber, recalculate
-            prev = _lines[insertAfter].LineNumber;
-            next = (insertAfter + 1 < _lines.Count) ? _lines[insertAfter + 1].LineNumber : Math.Min(prev + 20, MaxLineNumber);
-            midpoint = (prev + next) / 2;
+            int result = _lineNumbers[insertedAt];
+            _lineNumbers.RemoveAt(insertedAt);
+            return result;
         }
         return Math.Min(midpoint, MaxLineNumber);
     }
 
     private void RenumberAll()
     {
-        for (int i = 0; i < _lines.Count; i++)
-            _lines[i] = ((i + 1) * 10, _lines[i].Text);
-    }
-
-    internal void Backspace()
-    {
-        EnsureLine();
-        var (lineNum, text) = _lines[_cursorLine];
-        if (_cursorCol > 0)
-        {
-            if (_cursorCol <= text.Length)
-            {
-                _lines[_cursorLine] = (lineNum, text.Remove(_cursorCol - 1, 1));
-                _cursorCol--;
-                _modified = true;
-                RedrawCode();
-            }
-        }
-        else if (_cursorLine > 0)
-        {
-            // Join with previous line (keep previous line's number)
-            var (prevNum, prevText) = _lines[_cursorLine - 1];
-            _lines[_cursorLine - 1] = (prevNum, prevText + text);
-            _lines.RemoveAt(_cursorLine);
-            _cursorLine--;
-            _cursorCol = prevText.Length;
-            _modified = true;
-            EnsureVisible();
-            RedrawCode();
-        }
-    }
-
-    internal void Delete()
-    {
-        EnsureLine();
-        var (lineNum, text) = _lines[_cursorLine];
-        if (_cursorCol < text.Length)
-        {
-            _lines[_cursorLine] = (lineNum, text.Remove(_cursorCol, 1));
-            _modified = true;
-            RedrawCode();
-        }
-        else if (_cursorLine < _lines.Count - 1)
-        {
-            // Join with next line
-            var (_, nextText) = _lines[_cursorLine + 1];
-            _lines[_cursorLine] = (lineNum, text + nextText);
-            _lines.RemoveAt(_cursorLine + 1);
-            _modified = true;
-            RedrawCode();
-        }
-    }
-
-    internal void DeleteCurrentLine()
-    {
-        if (_lines.Count <= 1)
-        {
-            _lines[0] = (_lines[0].LineNumber, "");
-            _cursorCol = 0;
-            _modified = true;
-            RedrawCode();
-            return;
-        }
-
-        _lines.RemoveAt(_cursorLine);
-        if (_cursorLine >= _lines.Count)
-            _cursorLine = _lines.Count - 1;
-        _cursorCol = Math.Min(_cursorCol, _lines[_cursorLine].Text.Length);
-        _modified = true;
-        EnsureVisible();
-        RedrawCode();
-    }
-
-    private void DuplicateLine()
-    {
-        EnsureLine();
-        var (lineNum, text) = _lines[_cursorLine];
-        int newNum = CalculateNewLineNumber(_cursorLine);
-        _lines.Insert(_cursorLine + 1, (newNum, text));
-        _cursorLine++;
-        _modified = true;
-        EnsureVisible();
-        RedrawCode();
-    }
-
-    // ── Clipboard operations ──────────────────────────────────────────────────
-
-    private void CopyLine()
-    {
-        EnsureLine();
-        _clipboard.Clear();
-        _clipboard.Add(_lines[_cursorLine].Text);
-        ShowMessage("Copied");
-    }
-
-    private void CutLine()
-    {
-        EnsureLine();
-        _clipboard.Clear();
-        _clipboard.Add(_lines[_cursorLine].Text);
-        DeleteCurrentLine();
-        ShowMessage("Cut");
-    }
-
-    private void PasteLines()
-    {
-        if (_clipboard.Count == 0)
-        {
-            ShowMessage("Clipboard empty");
-            return;
-        }
-
-        foreach (string text in _clipboard)
-        {
-            int newNum = CalculateNewLineNumber(_cursorLine);
-            _lines.Insert(_cursorLine + 1, (newNum, text));
-            _cursorLine++;
-        }
-
-        _modified = true;
-        EnsureVisible();
-        RedrawCode();
-        ShowMessage($"Pasted {_clipboard.Count} line{(_clipboard.Count > 1 ? "s" : "")}");
-    }
-
-    // ── Prompt system ────────────────────────────────────────────────────────
-
-    private void StartPrompt(string prompt, Action<string> callback)
-    {
-        _prompting = true;
-        _promptText = prompt;
-        _promptInput = "";
-        _promptCallback = callback;
-        _message = "";
-        RedrawStatusBar();
-    }
-
-    private bool HandlePromptKey(Key key)
-    {
-        switch (key)
-        {
-            case Key.Enter:
-                _prompting = false;
-                string input = _promptInput;
-                var cb = _promptCallback;
-                _promptCallback = null;
-                cb?.Invoke(input);
-                return true;
-            case Key.Escape:
-                _prompting = false;
-                _promptCallback = null;
-                RedrawStatusBar();
-                return true;
-            case Key.Back:
-                if (_promptInput.Length > 0)
-                    _promptInput = _promptInput[..^1];
-                RedrawStatusBar();
-                return true;
-        }
-        return true; // consume all keys while prompting
-    }
-
-    private void ShowMessage(string msg)
-    {
-        _message = msg;
-        RedrawStatusBar();
-    }
-
-    // ── Search and Go To ──────────────────────────────────────────────────────
-
-    private void StartFind()
-    {
-        StartPrompt("Find: ", input =>
-        {
-            if (string.IsNullOrEmpty(input))
-                input = _lastSearch;
-            if (string.IsNullOrEmpty(input))
-            {
-                ShowMessage("No search term");
-                return;
-            }
-            _lastSearch = input;
-            FindNext(input);
-        });
-    }
-
-    private void FindNext(string term)
-    {
-        // Search forward from current position
-        for (int i = _cursorLine; i < _lines.Count; i++)
-        {
-            int startCol = (i == _cursorLine) ? _cursorCol + 1 : 0;
-            int idx = _lines[i].Text.IndexOf(term, startCol, StringComparison.OrdinalIgnoreCase);
-            if (idx >= 0)
-            {
-                _cursorLine = i;
-                _cursorCol = idx;
-                EnsureVisible();
-                RedrawCode();
-                ShowMessage($"Found at line {_lines[i].LineNumber}");
-                return;
-            }
-        }
-        // Wrap around from beginning
-        for (int i = 0; i <= _cursorLine; i++)
-        {
-            int endCol = (i == _cursorLine) ? _cursorCol : _lines[i].Text.Length;
-            int idx = _lines[i].Text.IndexOf(term, 0, Math.Min(endCol + 1, _lines[i].Text.Length), StringComparison.OrdinalIgnoreCase);
-            if (idx >= 0)
-            {
-                _cursorLine = i;
-                _cursorCol = idx;
-                EnsureVisible();
-                RedrawCode();
-                ShowMessage($"Found at line {_lines[i].LineNumber} (wrapped)");
-                return;
-            }
-        }
-        ShowMessage("Not found");
-    }
-
-    private void StartGoToLine()
-    {
-        StartPrompt("Go to line: ", input =>
-        {
-            if (!int.TryParse(input, out int lineNum))
-            {
-                ShowMessage("Invalid line number");
-                return;
-            }
-            for (int i = 0; i < _lines.Count; i++)
-            {
-                if (_lines[i].LineNumber == lineNum)
-                {
-                    _cursorLine = i;
-                    _cursorCol = 0;
-                    EnsureVisible();
-                    RedrawCode();
-                    ShowMessage("");
-                    return;
-                }
-            }
-            ShowMessage("Line not found");
-        });
-    }
-
-    // ── Cursor movement ───────────────────────────────────────────────────────
-
-    internal void MoveCursor(int dx, int dy)
-    {
-        if (dy != 0)
-        {
-            _cursorLine = Math.Clamp(_cursorLine + dy, 0, _lines.Count - 1);
-            _cursorCol = Math.Min(_cursorCol, _lines[_cursorLine].Text.Length);
-        }
-
-        if (dx != 0)
-        {
-            _cursorCol += dx;
-            if (_cursorCol < 0)
-            {
-                if (_cursorLine > 0)
-                {
-                    _cursorLine--;
-                    _cursorCol = _lines[_cursorLine].Text.Length;
-                }
-                else
-                {
-                    _cursorCol = 0;
-                }
-            }
-            else if (_cursorCol > _lines[_cursorLine].Text.Length)
-            {
-                if (_cursorLine < _lines.Count - 1)
-                {
-                    _cursorLine++;
-                    _cursorCol = 0;
-                }
-                else
-                {
-                    _cursorCol = _lines[_cursorLine].Text.Length;
-                }
-            }
-        }
-
-        EnsureVisible();
-        UpdateCursor();
-    }
-
-    internal void Home()
-    {
-        _cursorCol = 0;
-        EnsureVisible();
-        UpdateCursor();
-    }
-
-    internal void End()
-    {
-        _cursorCol = _lines[_cursorLine].Text.Length;
-        EnsureVisible();
-        UpdateCursor();
-    }
-
-    internal void PageUp()
-    {
-        _cursorLine = Math.Max(0, _cursorLine - VisibleLines);
-        EnsureVisible();
-        RedrawCode();
-    }
-
-    internal void PageDown()
-    {
-        _cursorLine = Math.Min(_lines.Count - 1, _cursorLine + VisibleLines);
-        EnsureVisible();
-        RedrawCode();
-    }
-
-    private void EnsureVisible()
-    {
-        if (_cursorLine < _scrollY)
-            _scrollY = _cursorLine;
-        else if (_cursorLine >= _scrollY + VisibleLines)
-            _scrollY = _cursorLine - VisibleLines + 1;
-
-        // Horizontal scroll
-        if (_cursorCol < _scrollX)
-            _scrollX = _cursorCol;
-        else if (_cursorCol >= _scrollX + CodeWidth)
-            _scrollX = _cursorCol - CodeWidth + 1;
-    }
-
-    private void EnsureLine()
-    {
-        if (_lines.Count == 0)
-            _lines.Add((10, ""));
+        for (int i = 0; i < _lineNumbers.Count; i++)
+            _lineNumbers[i] = (i + 1) * DefaultStep;
     }
 
     // ── BASIC memory round-trip ───────────────────────────────────────────────
@@ -736,25 +259,19 @@ public sealed class BasicEditor
     /// </summary>
     internal void ReadFromMemory(BasicTokenizer tokenizer)
     {
-        ushort progStart = (ushort)(_bus.Read(VgcConstants.ZpSmeml) | (_bus.Read(VgcConstants.ZpSmemh) << 8));
-        ushort progEnd = (ushort)(_bus.Read(VgcConstants.ZpSvarl) | (_bus.Read(VgcConstants.ZpSvarh) << 8));
+        ushort progStart = (ushort)(Bus.Read(VgcConstants.ZpSmeml) | (Bus.Read(VgcConstants.ZpSmemh) << 8));
+        ushort progEnd   = (ushort)(Bus.Read(VgcConstants.ZpSvarl) | (Bus.Read(VgcConstants.ZpSvarh) << 8));
 
         if (progEnd <= progStart)
         {
-            // No program in memory — start fresh
-            _lines.Clear();
-            _lines.Add((10, ""));
-            _cursorLine = 0;
-            _cursorCol = 0;
-            _scrollY = 0;
-            _modified = false;
+            LoadText([]);
             return;
         }
 
         int length = progEnd - progStart;
         var data = new byte[length];
         for (int i = 0; i < length; i++)
-            data[i] = _bus.Read((ushort)(progStart + i));
+            data[i] = Bus.Read((ushort)(progStart + i));
 
         string[] textLines = tokenizer.Detokenize(data);
         LoadText(textLines);
@@ -766,18 +283,18 @@ public sealed class BasicEditor
     /// </summary>
     internal void WriteToMemory(BasicTokenizer tokenizer)
     {
-        ushort baseAddr = (ushort)(_bus.Read(VgcConstants.ZpSmeml) | (_bus.Read(VgcConstants.ZpSmemh) << 8));
+        ushort baseAddr = (ushort)(Bus.Read(VgcConstants.ZpSmeml) | (Bus.Read(VgcConstants.ZpSmemh) << 8));
         string[] textLines = ToTextLines();
         byte[] data = tokenizer.Tokenize(textLines, baseAddr);
 
         for (int i = 0; i < data.Length; i++)
-            _bus.Write((ushort)(baseAddr + i), data[i]);
+            Bus.Write((ushort)(baseAddr + i), data[i]);
 
         // Update end-of-program pointer (Svarl = start of variables)
         ushort endAddr = (ushort)(baseAddr + data.Length);
-        _bus.Write(VgcConstants.ZpSvarl, (byte)(endAddr & 0xFF));
-        _bus.Write(VgcConstants.ZpSvarh, (byte)(endAddr >> 8));
-        _modified = false;
+        Bus.Write(VgcConstants.ZpSvarl, (byte)(endAddr & 0xFF));
+        Bus.Write(VgcConstants.ZpSvarh, (byte)(endAddr >> 8));
+        ClearModified();
     }
 
     /// <summary>Find tokens.json by walking up from current directory.</summary>
@@ -810,140 +327,55 @@ public sealed class BasicEditor
         }
     }
 
-    // ── Rendering ─────────────────────────────────────────────────────────────
+    // ── Run / ReturnFromRun ───────────────────────────────────────────────────
 
-    internal void Redraw()
+    /// <summary>
+    /// Tokenizes the buffer to memory, clears the screen, re-enables VGC cursor,
+    /// and injects "RUN\r" into the ScreenEditor input queue.
+    /// </summary>
+    public void Run()
     {
-        RedrawTitleBar();
-        RedrawCode();
-        RedrawStatusBar();
-    }
+        var tok = GetTokenizer();
+        if (tok != null)
+            WriteToMemory(tok);
 
-    internal void RedrawTitleBar()
-    {
-        string left  = _modified ? "NOVA EDIT [*]" : "NOVA EDIT";
-        string right = "F5:Run  Esc:Exit";
-        // Pad to fill 80 cols
-        int innerWidth = ScreenCols - left.Length - right.Length;
-        if (innerWidth < 1) innerWidth = 1;
-        string title = left + new string(' ', innerWidth) + right;
+        Bus.Write(VgcConstants.RegBgCol, 0);
+        ClearScreen();
+        Bus.Write(VgcConstants.RegCursorEnable, 1);
 
-        int col = 0;
-        for (int i = 0; i < ScreenCols; i++)
+        Mode = EditorMode.Running;
+
+        if (_screenEditor != null)
         {
-            byte ch = i < title.Length ? (byte)title[i] : (byte)' ';
-            WriteChar(col++, TitleRow, ch, TitleFg);
+            foreach (byte b in "RUN\r"u8)
+                _screenEditor.QueueInput(b);
         }
     }
 
-    internal void RedrawCode()
+    /// <summary>
+    /// Called when "Ready" is detected on screen after a program run.
+    /// Re-activates the editor and re-reads the program from memory.
+    /// </summary>
+    public void ReturnFromRun()
     {
-        RedrawTitleBar();
-        for (int row = CodeStartRow; row <= CodeEndRow; row++)
-        {
-            int lineIdx = _scrollY + (row - CodeStartRow);
+        Mode = EditorMode.Edit;
+        Bus.Write(VgcConstants.RegCursorEnable, 0);
+        Bus.Write(VgcConstants.RegBgCol, EditorBg);
+        ClearScreen();
 
-            // Clear entire row first
-            for (int c = 0; c < ScreenCols; c++)
-                WriteChar(c, row, (byte)' ', DefaultFg);
+        var tok = GetTokenizer();
+        if (tok != null)
+            ReadFromMemory(tok);
 
-            if (lineIdx < _lines.Count)
-            {
-                var (lineNum, text) = _lines[lineIdx];
-
-                // Draw gutter: right-justified line number + space
-                string lineNumStr = lineNum.ToString().PadLeft(5);
-                for (int g = 0; g < 5; g++)
-                    WriteChar(g, row, (byte)lineNumStr[g], GutterFg);
-                WriteChar(5, row, (byte)' ', GutterFg);
-
-                // Draw code with syntax highlighting (clipped to CodeWidth, offset by _scrollX)
-                byte[] colors = _highlighter.HighlightLine(text);
-                for (int c = 0; c < CodeWidth; c++)
-                {
-                    int textCol = c + _scrollX;
-                    byte ch = textCol < text.Length ? (byte)text[textCol] : (byte)' ';
-                    byte fg = textCol < colors.Length ? colors[textCol] : DefaultFg;
-                    WriteChar(GutterWidth + c, row, ch, fg);
-                }
-            }
-        }
-
-        UpdateCursor();
+        Redraw();
     }
 
-    internal void RedrawStatusBar()
+    /// <summary>Toggle editor on/off — called by F5 from BASIC.</summary>
+    public void ToggleActivation()
     {
-        string status;
-        if (_prompting)
-        {
-            status = " " + _promptText + _promptInput + "_";
-        }
+        if (IsActive)
+            Deactivate();
         else
-        {
-            int line = _cursorLine + 1;
-            int col  = _cursorCol + 1;
-            string mode = _insertMode ? "INS" : "OVR";
-            string mod = _modified ? " [*]" : "";
-
-            // Compute free memory: space from end of program to top of BASIC RAM
-            int freeBytes = 0;
-            try
-            {
-                ushort progEnd = (ushort)(_bus.Read(VgcConstants.ZpSvarl) | (_bus.Read(VgcConstants.ZpSvarh) << 8));
-                int available = VgcConstants.BasicEnd - progEnd;
-                if (available < 0) available = 0;
-                freeBytes = available;
-            }
-            catch { }
-
-            status = $"Ln {line} Col {col}  {mode}  Free: {freeBytes}{mod}";
-            if (!string.IsNullOrEmpty(_message))
-                status += "  " + _message;
-        }
-
-        // Pad to screen width
-        status = status.PadRight(ScreenCols);
-        if (status.Length > ScreenCols) status = status[..ScreenCols];
-
-        for (int c = 0; c < ScreenCols; c++)
-            WriteChar(c, StatusRow, (byte)status[c], StatusFg);
-    }
-
-    private void UpdateCursor()
-    {
-        int screenCol = GutterWidth + (_cursorCol - _scrollX);
-        int screenRow = CodeStartRow + (_cursorLine - _scrollY);
-
-        if (screenRow >= CodeStartRow && screenRow <= CodeEndRow &&
-            screenCol >= GutterWidth && screenCol < ScreenCols)
-        {
-            _bus.Write(VgcConstants.RegCursorX, (byte)screenCol);
-            _bus.Write(VgcConstants.RegCursorY, (byte)screenRow);
-            _bus.Write(VgcConstants.RegCursorEnable, 1);
-        }
-        else
-        {
-            _bus.Write(VgcConstants.RegCursorEnable, 0);
-        }
-    }
-
-    // ── Low-level VGC screen writing ──────────────────────────────────────────
-
-    internal void WriteChar(int col, int row, byte ch, byte fg)
-    {
-        if (col < 0 || col >= ScreenCols || row < 0 || row >= ScreenRows) return;
-        int offset = row * ScreenCols + col;
-        _bus.Write((ushort)(VgcConstants.CharRamBase + offset), ch);
-        _bus.Write((ushort)(VgcConstants.ColorRamBase + offset), fg);
-    }
-
-    internal void ClearScreen()
-    {
-        for (int i = 0; i < VgcConstants.ScreenSize; i++)
-        {
-            _bus.Write((ushort)(VgcConstants.CharRamBase + i), (byte)' ');
-            _bus.Write((ushort)(VgcConstants.ColorRamBase + i), DefaultFg);
-        }
+            Activate();
     }
 }

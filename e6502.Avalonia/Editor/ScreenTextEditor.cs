@@ -125,6 +125,18 @@ public abstract class ScreenTextEditor
     protected virtual void OnAfterRedrawCode() { }
     protected virtual int GetVisibleLineCount() => VisibleLines;
 
+    /// <summary>Called after a new line is inserted at <paramref name="lineIndex"/>.</summary>
+    protected virtual void OnLineInserted(int lineIndex) { }
+
+    /// <summary>Called after the line at <paramref name="lineIndex"/> is removed.</summary>
+    protected virtual void OnLineRemoved(int lineIndex) { }
+
+    /// <summary>
+    /// Called after <see cref="LoadLines"/> replaces the entire buffer.
+    /// The line count is already updated when this is called.
+    /// </summary>
+    protected virtual void OnLinesReset() { }
+
     // ── Public accessors (internal for testing) ──────────────────────────────
 
     internal int LineCount => _lines.Count;
@@ -166,6 +178,7 @@ public abstract class ScreenTextEditor
         _scrollY = 0;
         _scrollX = 0;
         _modified = false;
+        OnLinesReset();
     }
 
     // ── Activation ───────────────────────────────────────────────────────────
@@ -558,6 +571,7 @@ public abstract class ScreenTextEditor
         string after = line[_cursorCol..];
         _lines[_cursorLine] = before;
         _lines.Insert(_cursorLine + 1, after);
+        OnLineInserted(_cursorLine + 1);
 
         _cursorLine++;
         _cursorCol = 0;
@@ -591,10 +605,12 @@ public abstract class ScreenTextEditor
         {
             // Join with previous line
             string current = _lines[_cursorLine];
+            int removedLine = _cursorLine;
             _lines.RemoveAt(_cursorLine);
             _cursorLine--;
             _cursorCol = _lines[_cursorLine].Length;
             _lines[_cursorLine] += current;
+            OnLineRemoved(removedLine);
             _modified = true;
             EnsureVisible();
             RedrawCode();
@@ -622,6 +638,7 @@ public abstract class ScreenTextEditor
             // Join with next line
             _lines[_cursorLine] += _lines[_cursorLine + 1];
             _lines.RemoveAt(_cursorLine + 1);
+            OnLineRemoved(_cursorLine + 1);
             _modified = true;
             RedrawCode();
         }
@@ -639,7 +656,9 @@ public abstract class ScreenTextEditor
             return;
         }
 
+        int removedLine = _cursorLine;
         _lines.RemoveAt(_cursorLine);
+        OnLineRemoved(removedLine);
         if (_cursorLine >= _lines.Count)
             _cursorLine = _lines.Count - 1;
         _cursorCol = Math.Min(_cursorCol, _lines[_cursorLine].Length);
@@ -654,6 +673,7 @@ public abstract class ScreenTextEditor
         EnsureLine();
         string text = _lines[_cursorLine];
         _lines.Insert(_cursorLine + 1, text);
+        OnLineInserted(_cursorLine + 1);
         _cursorLine++;
         _modified = true;
         EnsureVisible();
@@ -761,7 +781,10 @@ public abstract class ScreenTextEditor
             string before = _lines[startLine][..startCol];
             string after = _lines[endLine][endCol..];
             _lines[startLine] = before + after;
-            _lines.RemoveRange(startLine + 1, endLine - startLine);
+            int removeCount = endLine - startLine;
+            _lines.RemoveRange(startLine + 1, removeCount);
+            for (int i = 0; i < removeCount; i++)
+                OnLineRemoved(startLine + 1);
         }
 
         _cursorLine = startLine;
@@ -811,6 +834,7 @@ public abstract class ScreenTextEditor
         if (_clipboardIsLine)
         {
             _lines.Insert(_cursorLine + 1, _clipboard);
+            OnLineInserted(_cursorLine + 1);
             _cursorLine++;
             _cursorCol = 0;
             _modified = true;
@@ -835,8 +859,12 @@ public abstract class ScreenTextEditor
 
             _lines[_cursorLine] = before + pasteLines[0];
             for (int i = 1; i < pasteLines.Length - 1; i++)
+            {
                 _lines.Insert(_cursorLine + i, pasteLines[i]);
+                OnLineInserted(_cursorLine + i);
+            }
             _lines.Insert(_cursorLine + pasteLines.Length - 1, pasteLines[^1] + after);
+            OnLineInserted(_cursorLine + pasteLines.Length - 1);
 
             _cursorLine += pasteLines.Length - 1;
             _cursorCol = pasteLines[^1].Length;
