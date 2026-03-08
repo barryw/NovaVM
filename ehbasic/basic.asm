@@ -3698,15 +3698,15 @@ LAB_1BEE
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 @xtk_mnote
-      ; MNOTE(voice) — return current MIDI note for voice 1-6
+      ; MNOTE(voice) — return current MIDI note for voice 1-14
       ; '(' was consumed during tokenization as part of keyword
       JSR   LAB_IGBY          ; consume MNOTE token, advance to argument
       JSR   LAB_EVNM          ; evaluate voice expression (numeric)
       JSR   LAB_1BFB          ; scan for ')' and advance
       JSR   LAB_F2FX          ; convert FAC1 to integer
-      LDY   Itempl            ; voice number (1-6)
+      LDY   Itempl            ; voice number (1-14)
       DEY                     ; make 0-based
-      CPY   #$06
+      CPY   #$0E
       BCS   @mnote_bad        ; out of range
       LDA   MUSIC_NOTE1,Y     ; read note register
       TAY
@@ -9953,7 +9953,7 @@ LAB_MUSIC
 ; Pass string via pointer (ut1_pl/ph) so MML strings can exceed 63 bytes.
 ; FIO_SRCL = voice, FIO_ENDL/ENDH = string pointer, FIO_NAMELEN = length.
 @m_seq
-      JSR   LAB_GTBY          ; voice number (1-6) → X
+      JSR   LAB_GTBY          ; voice number (1-14) → X
       STX   FIO_SRCL          ; store voice
       JSR   LAB_1C01          ; comma
       JSR   LAB_EVEX          ; evaluate expression

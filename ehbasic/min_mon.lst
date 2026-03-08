@@ -3719,15 +3719,15 @@ Current file: min_mon.asm
 00CE32  2  4C 71 CF           JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 00CE35  2               
 00CE35  2               @xtk_mnote
-00CE35  2                     ; MNOTE(voice) — return current MIDI note for voice 1-6
+00CE35  2                     ; MNOTE(voice) — return current MIDI note for voice 1-14
 00CE35  2                     ; '(' was consumed during tokenization as part of keyword
 00CE35  2  20 BC 00           JSR   LAB_IGBY          ; consume MNOTE token, advance to argument
 00CE38  2  20 2A CC           JSR   LAB_EVNM          ; evaluate voice expression (numeric)
 00CE3B  2  20 53 CD           JSR   LAB_1BFB          ; scan for ')' and advance
 00CE3E  2  20 5A D8           JSR   LAB_F2FX          ; convert FAC1 to integer
-00CE41  2  A4 11              LDY   Itempl            ; voice number (1-6)
+00CE41  2  A4 11              LDY   Itempl            ; voice number (1-14)
 00CE43  2  88                 DEY                     ; make 0-based
-00CE44  2  C0 06              CPY   #$06
+00CE44  2  C0 0E              CPY   #$0E
 00CE46  2  B0 07              BCS   @mnote_bad        ; out of range
 00CE48  2  B9 51 BA           LDA   MUSIC_NOTE1,Y     ; read note register
 00CE4B  2  A8                 TAY
@@ -10069,7 +10069,7 @@ Current file: min_mon.asm
 00EDC0  2               ; Pass string via pointer (ut1_pl/ph) so MML strings can exceed 63 bytes.
 00EDC0  2               ; FIO_SRCL = voice, FIO_ENDL/ENDH = string pointer, FIO_NAMELEN = length.
 00EDC0  2               @m_seq
-00EDC0  2  20 FC D7           JSR   LAB_GTBY          ; voice number (1-6) → X
+00EDC0  2  20 FC D7           JSR   LAB_GTBY          ; voice number (1-14) → X
 00EDC3  2  8E A4 B9           STX   FIO_SRCL          ; store voice
 00EDC6  2  20 62 CD           JSR   LAB_1C01          ; comma
 00EDC9  2  20 3E CC           JSR   LAB_EVEX          ; evaluate expression
