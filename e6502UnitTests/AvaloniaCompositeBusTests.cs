@@ -402,6 +402,39 @@ public class AvaloniaCompositeBusTests
     }
 
     // -------------------------------------------------------------------------
+    // Music note registers (14 voices)
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void MusicNoteRegisters_ReadAllFourteenVoices()
+    {
+        var bus = MakeBus();
+
+        // Set notes on all 14 voices via MusicEngine
+        for (int v = 0; v < 14; v++)
+            bus.Music.DirectNoteOn(v, 60 + v, 100, 0);
+
+        // Read back from contiguous registers $BA51-$BA5E
+        for (int v = 0; v < 14; v++)
+        {
+            byte note = bus.Read((ushort)(VgcConstants.MusicNote1 + v));
+            Assert.AreEqual((byte)(60 + v), note, $"Voice {v} note mismatch");
+        }
+    }
+
+    [TestMethod]
+    public void MusicElapsedRegisters_AtNewAddresses()
+    {
+        var bus = MakeBus();
+        // Elapsed/Total registers should be readable at new addresses
+        // Default is 0 when nothing is playing
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.MusicElapsedL));
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.MusicElapsedH));
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.MusicTotalL));
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.MusicTotalH));
+    }
+
+    // -------------------------------------------------------------------------
     // NIC register routing
     // -------------------------------------------------------------------------
 

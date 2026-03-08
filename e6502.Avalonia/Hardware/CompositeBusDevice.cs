@@ -173,7 +173,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (address == VgcConstants.MusicStatus)
             return (byte)((_musicEngine.IsPlaying ? 1 : 0)
                 | (_musicEngine.IsMusicPlaying || _midiPlayback.IsPlaying || _sidPlayer.IsPlaying ? 2 : 0));
-        if (address >= VgcConstants.MusicNote1 && address <= VgcConstants.MusicNote6)
+        if (address >= VgcConstants.MusicNote1 && address <= VgcConstants.MusicNote14)
             return _musicEngine.GetVoiceNote(address - VgcConstants.MusicNote1);
         if (address >= VgcConstants.MusicElapsedL && address <= VgcConstants.MusicTotalH)
         {
