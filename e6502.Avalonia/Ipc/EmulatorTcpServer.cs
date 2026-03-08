@@ -184,6 +184,16 @@ public sealed class EmulatorTcpServer : IDisposable
                 "nic_listen" => CmdNicListen(req),
                 "nic_accept" => CmdNicAccept(req),
                 "nic_status" => CmdNicStatus(req),
+                // WTS commands
+                "wts_load_soundfont" => CmdWtsLoadSoundfont(req),
+                "wts_list_instruments" => CmdWtsListInstruments(),
+                "wts_note_on" => CmdWtsNoteOn(req),
+                "wts_note_off" => CmdWtsNoteOff(req),
+                "wts_set_instrument" => CmdWtsSetInstrument(req),
+                "wts_set_volume" => CmdWtsSetVolume(req),
+                "wts_set_panning" => CmdWtsSetPanning(req),
+                "wts_set_reverb" => CmdWtsSetReverb(req),
+                "wts_set_chorus" => CmdWtsSetChorus(req),
                 // Debugger commands
                 "dbg_state" => CmdDbgState(),
                 "dbg_pause" => CmdDbgPause(),
@@ -1493,6 +1503,131 @@ public sealed class EmulatorTcpServer : IDisposable
             ["remote_closed"] = (slotStatus & VgcConstants.NicSlotRemoteClosed) != 0,
             ["global_status"] = globalStatus
         }.ToJsonString();
+    }
+
+    // ── WTS commands ──────────────────────────────────────────────────────
+
+    private string CmdWtsLoadSoundfont(JsonNode req)
+    {
+        string? filename = req["filename"]?.GetValue<string>();
+        if (filename is null) return Error("Missing 'filename'");
+
+        // Write filename to FIO buffer
+        byte[] nameBytes = Encoding.ASCII.GetBytes(filename);
+        int len = Math.Min(nameBytes.Length, 63);
+        _bus.Write((ushort)VgcConstants.FioNameLen, (byte)len);
+        for (int i = 0; i < len; i++)
+            _bus.Write((ushort)(VgcConstants.FioName + i), nameBytes[i]);
+
+        // Trigger SfLoad command
+        _bus.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSfLoad);
+
+        // Check status
+        byte status = _bus.Read((ushort)VgcConstants.FioStatus);
+        if (status == VgcConstants.FioStatusOk)
+            return Ok();
+
+        byte errCode = _bus.Read((ushort)VgcConstants.FioErrCode);
+        return Error($"SfLoad failed: status={status}, error={errCode}");
+    }
+
+    private string CmdWtsListInstruments()
+    {
+        var wts = _bus.Wts;
+        int count = wts.InstrumentCount;
+        var instruments = new JsonArray();
+
+        for (int i = 0; i < count; i++)
+        {
+            instruments.Add((JsonNode)new JsonObject
+            {
+                ["index"] = i,
+                ["name"] = wts.GetInstrumentName(i),
+                ["bank"] = wts.GetInstrumentBank(i),
+                ["program"] = wts.GetInstrumentProgram(i)
+            });
+        }
+
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["instruments"] = instruments
+        }.ToJsonString();
+    }
+
+    private string CmdWtsNoteOn(JsonNode req)
+    {
+        int? voice = req["voice"]?.GetValue<int>();
+        int? note = req["note"]?.GetValue<int>();
+        int? velocity = req["velocity"]?.GetValue<int>();
+        int? instrument = req["instrument"]?.GetValue<int>();
+        if (voice is null || note is null || velocity is null || instrument is null)
+            return Error("Need voice, note, velocity, instrument");
+
+        _bus.Wts.NoteOn(voice.Value, note.Value, velocity.Value, instrument.Value);
+        return Ok();
+    }
+
+    private string CmdWtsNoteOff(JsonNode req)
+    {
+        int? voice = req["voice"]?.GetValue<int>();
+        if (voice is null) return Error("Need voice");
+
+        _bus.Wts.NoteOff(voice.Value);
+        return Ok();
+    }
+
+    private string CmdWtsSetInstrument(JsonNode req)
+    {
+        int? voice = req["voice"]?.GetValue<int>();
+        int? instrument = req["instrument"]?.GetValue<int>();
+        if (voice is null || instrument is null)
+            return Error("Need voice, instrument");
+
+        // Write instrument via register protocol
+        int voiceBase = VgcConstants.WtsVoiceBase + voice.Value * VgcConstants.WtsVoiceStride;
+        _bus.Write((ushort)(voiceBase + VgcConstants.WtsVoiceInstrument), (byte)instrument.Value);
+        return Ok();
+    }
+
+    private string CmdWtsSetVolume(JsonNode req)
+    {
+        int? voice = req["voice"]?.GetValue<int>();
+        int? volume = req["volume"]?.GetValue<int>();
+        if (voice is null || volume is null)
+            return Error("Need voice, volume");
+
+        _bus.Wts.SetVolume(voice.Value, (byte)volume.Value);
+        return Ok();
+    }
+
+    private string CmdWtsSetPanning(JsonNode req)
+    {
+        int? voice = req["voice"]?.GetValue<int>();
+        int? pan = req["pan"]?.GetValue<int>();
+        if (voice is null || pan is null)
+            return Error("Need voice, pan");
+
+        _bus.Wts.SetPanning(voice.Value, (byte)pan.Value);
+        return Ok();
+    }
+
+    private string CmdWtsSetReverb(JsonNode req)
+    {
+        int? level = req["level"]?.GetValue<int>();
+        if (level is null) return Error("Need level");
+
+        _bus.Wts.ReverbLevel = (byte)level.Value;
+        return Ok();
+    }
+
+    private string CmdWtsSetChorus(JsonNode req)
+    {
+        int? level = req["level"]?.GetValue<int>();
+        if (level is null) return Error("Need level");
+
+        _bus.Wts.ChorusLevel = (byte)level.Value;
+        return Ok();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

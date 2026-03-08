@@ -68,6 +68,20 @@ public sealed class WavetableSynth : IDisposable
         return _bank.Instruments[index].Name;
     }
 
+    public int GetInstrumentBank(int index)
+    {
+        if (_bank == null || index < 0 || index >= _bank.Instruments.Count)
+            return 0;
+        return _bank.Instruments[index].MidiBank;
+    }
+
+    public int GetInstrumentProgram(int index)
+    {
+        if (_bank == null || index < 0 || index >= _bank.Instruments.Count)
+            return 0;
+        return _bank.Instruments[index].MidiProgram;
+    }
+
     public void NoteOn(int voice, int note, int velocity, int instrument)
     {
         lock (_lock)
