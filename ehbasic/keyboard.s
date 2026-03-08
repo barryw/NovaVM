@@ -1317,7 +1317,7 @@ print_str:
 ; SID voices 0-5, then WTS voices 6-13
 voice_colors:
     .byte COL_RED, COL_ORANGE, COL_YELLOW, COL_GREEN, COL_CYAN, COL_BLUE
-    .byte 9, 10, 11, 12, 13, 14, 15, 4
+    .byte 9, 10, 8, 12, 13, 14, 15, 4
 
 ; Pitch class tables (indexed 0-11)
 ;              C  C# D  D# E  F  F# G  G# A  A# B
