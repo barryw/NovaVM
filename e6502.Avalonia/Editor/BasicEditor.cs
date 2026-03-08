@@ -50,6 +50,9 @@ public sealed class BasicEditor
     private ScreenEditor? _screenEditor;
     private Cpu? _cpu;
 
+    // ── Clipboard ────────────────────────────────────────────────────────────
+    private readonly List<string> _clipboard = new();
+
     // ── Prompt state ─────────────────────────────────────────────────────────
     private bool _prompting;
     private string _promptText = "";
@@ -214,6 +217,9 @@ public sealed class BasicEditor
             {
                 case Key.F: StartFind(); return true;
                 case Key.G: StartGoToLine(); return true;
+                case Key.C: CopyLine(); return true;
+                case Key.X: CutLine(); return true;
+                case Key.V: PasteLines(); return true;
                 case Key.Y: DeleteCurrentLine(); return true;
                 case Key.D: DuplicateLine(); return true;
                 case Key.Home:
@@ -465,6 +471,46 @@ public sealed class BasicEditor
         _modified = true;
         EnsureVisible();
         RedrawCode();
+    }
+
+    // ── Clipboard operations ──────────────────────────────────────────────────
+
+    private void CopyLine()
+    {
+        EnsureLine();
+        _clipboard.Clear();
+        _clipboard.Add(_lines[_cursorLine].Text);
+        ShowMessage("Copied");
+    }
+
+    private void CutLine()
+    {
+        EnsureLine();
+        _clipboard.Clear();
+        _clipboard.Add(_lines[_cursorLine].Text);
+        DeleteCurrentLine();
+        ShowMessage("Cut");
+    }
+
+    private void PasteLines()
+    {
+        if (_clipboard.Count == 0)
+        {
+            ShowMessage("Clipboard empty");
+            return;
+        }
+
+        foreach (string text in _clipboard)
+        {
+            int newNum = CalculateNewLineNumber(_cursorLine);
+            _lines.Insert(_cursorLine + 1, (newNum, text));
+            _cursorLine++;
+        }
+
+        _modified = true;
+        EnsureVisible();
+        RedrawCode();
+        ShowMessage($"Pasted {_clipboard.Count} line{(_clipboard.Count > 1 ? "s" : "")}");
     }
 
     // ── Prompt system ────────────────────────────────────────────────────────
