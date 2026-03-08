@@ -18,6 +18,7 @@ public sealed partial class FileIoController
     private readonly SidPlayer? _sidPlayer;
     private readonly MusicEngine? _musicEngine;
     private readonly MidiPlayback? _midiPlayback;
+    private readonly WavetableSynth? _wts;
     private readonly string _saveDir;
     private readonly DeviceManager? _deviceManager;
     private List<FileInfo>? _dirFiles;
@@ -36,7 +37,8 @@ public sealed partial class FileIoController
         SidPlayer? sidPlayer = null,
         MusicEngine? musicEngine = null,
         MidiPlayback? midiPlayback = null,
-        DeviceManager? deviceManager = null)
+        DeviceManager? deviceManager = null,
+        WavetableSynth? wts = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
@@ -46,6 +48,7 @@ public sealed partial class FileIoController
         _sidPlayer = sidPlayer;
         _musicEngine = musicEngine;
         _midiPlayback = midiPlayback;
+        _wts = wts;
         _deviceManager = deviceManager;
         _saveDir = saveDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -158,6 +161,9 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdPwd:
                 DoPwd();
+                break;
+            case VgcConstants.FioCmdSfLoad:
+                DoSfLoad();
                 break;
             default:
                 SetError(VgcConstants.FioErrIo);
@@ -1152,6 +1158,79 @@ public sealed partial class FileIoController
     {
         _midiPlayback?.Stop();
         SetOk();
+    }
+
+    private void DoSfLoad()
+    {
+        if (_wts is null) { SetError(VgcConstants.FioErrIo); return; }
+
+        string? filename = ReadFilename();
+        if (filename is null) { SetError(VgcConstants.FioErrIo); return; }
+
+        try
+        {
+            string path = string.Empty;
+            var resolved = ResolveDevice(filename);
+            if (resolved is not null)
+            {
+                var (device, name, savedDir) = resolved.Value;
+                try
+                {
+                    if (device is e6502.Storage.HostDirectoryDevice hdd)
+                    {
+                        string dir = hdd.CurrentDirectory == "/"
+                            ? _saveDir
+                            : Path.Combine(_saveDir, hdd.CurrentDirectory.Trim('/'));
+                        dir = Path.Combine(dir, "soundfonts");
+                        path = Path.Combine(dir, name + ".sf2");
+                    }
+                    else
+                    {
+                        // NDI floppy: load from soundfonts/ subdir
+                        string savedDevDir = device.CurrentDirectory;
+                        device.CurrentDirectory = "soundfonts";
+                        try
+                        {
+                            if (!device.FileExists(name, ".sf2"))
+                            {
+                                SetError(VgcConstants.FioErrNotFound);
+                                return;
+                            }
+                            byte[] sf2Bytes = device.Load(name, ".sf2");
+                            path = Path.Combine(Path.GetTempPath(), $"e6502-{name}.sf2");
+                            File.WriteAllBytes(path, sf2Bytes);
+                        }
+                        finally
+                        {
+                            device.CurrentDirectory = savedDevDir;
+                        }
+                    }
+                }
+                finally
+                {
+                    RestoreDir(device, savedDir);
+                }
+            }
+            else
+            {
+                path = Path.Combine(_saveDir, "soundfonts", filename + ".sf2");
+            }
+
+            if (!File.Exists(path))
+            {
+                SetError(VgcConstants.FioErrNotFound);
+                return;
+            }
+
+            using var stream = File.OpenRead(path);
+            var bank = Sf2Loader.Load(stream);
+            _wts.LoadBank(bank);
+            SetOk();
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
     }
 
     // -------------------------------------------------------------------------

@@ -89,7 +89,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             sidPlayer: _sidPlayer,
             musicEngine: _musicEngine,
             midiPlayback: _midiPlayback,
-            deviceManager: _deviceManager);
+            deviceManager: _deviceManager,
+            wts: _wts);
         _fio.ProgramLoaded += name => LoadProgramHelp(name);
         _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
 
