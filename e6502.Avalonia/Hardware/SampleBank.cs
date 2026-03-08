@@ -13,7 +13,10 @@ public sealed class SampleRegion
     public int LoopEnd { get; set; }
     public bool LoopEnabled { get; set; }
     public float AttackTime { get; set; } = 0.01f;
+    public float HoldTime { get; set; }
+    public short KeynumToHoldTC { get; set; }
     public float DecayTime { get; set; } = 0.1f;
+    public short KeynumToDecayTC { get; set; }
     public float SustainLevel { get; set; } = 0.7f;
     public float ReleaseTime { get; set; } = 0.3f;
 
@@ -41,4 +44,36 @@ public sealed class SampleInstrument
 public sealed class SampleBank
 {
     public List<SampleInstrument> Instruments { get; } = new();
+
+    // Program lookup cache: key = (bank << 8) | program, value = index into Instruments
+    private Dictionary<int, int>? _programIndex;
+
+    /// <summary>
+    /// Find instrument index by MIDI bank and program number.
+    /// Returns -1 if not found.
+    /// </summary>
+    public int FindByProgram(int bank, int program)
+    {
+        if (_programIndex == null)
+            RebuildProgramIndex();
+        int key = (bank << 8) | (program & 0x7F);
+        return _programIndex!.TryGetValue(key, out int idx) ? idx : -1;
+    }
+
+    /// <summary>
+    /// Find instrument index by GM program number (bank 0).
+    /// Returns -1 if not found.
+    /// </summary>
+    public int FindByProgram(int program) => FindByProgram(0, program);
+
+    public void RebuildProgramIndex()
+    {
+        _programIndex = new Dictionary<int, int>();
+        for (int i = 0; i < Instruments.Count; i++)
+        {
+            var inst = Instruments[i];
+            int key = (inst.MidiBank << 8) | (inst.MidiProgram & 0x7F);
+            _programIndex.TryAdd(key, i); // first match wins
+        }
+    }
 }

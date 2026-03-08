@@ -101,9 +101,9 @@ public class FileIoSfLoadTests
     [TestMethod]
     public void SfLoad_ViaCompositeBus_LoadsSoundfont()
     {
-        var bus = new CompositeBusDevice(enableSound: false);
-        string dir = bus.Fio.SaveDirectory;
-        string sfDir = Path.Combine(dir, "soundfonts");
+        // Use a temp directory to avoid deleting the user's real soundfonts
+        string tempDir = Path.Combine(Path.GetTempPath(), "e6502-test-sfload-bus-" + Guid.NewGuid().ToString("N"));
+        string sfDir = Path.Combine(tempDir, "soundfonts");
         Directory.CreateDirectory(sfDir);
 
         try
@@ -111,21 +111,29 @@ public class FileIoSfLoadTests
             byte[] sf2 = Sf2Builder.Build("TestPiano", 0, 0, 60, 0, 127);
             File.WriteAllBytes(Path.Combine(sfDir, "test.sf2"), sf2);
 
+            // Create a standalone controller with the temp directory instead of using
+            // CompositeBusDevice (which would use the real ~/e6502-programs path)
+            var wts = new WavetableSynth();
+            var memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                tempDir,
+                wts: wts);
+
             string name = "test";
-            bus.Write((ushort)VgcConstants.FioNameLen, (byte)name.Length);
+            fio.Write((ushort)VgcConstants.FioNameLen, (byte)name.Length);
             for (int i = 0; i < name.Length; i++)
-                bus.Write((ushort)(VgcConstants.FioName + i), (byte)name[i]);
+                fio.Write((ushort)(VgcConstants.FioName + i), (byte)name[i]);
 
-            bus.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSfLoad);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSfLoad);
 
-            Assert.AreEqual(VgcConstants.FioStatusOk, bus.Read((ushort)VgcConstants.FioStatus));
-            Assert.AreEqual(1, bus.Read((ushort)VgcConstants.WtsInstrumentCount));
-            Assert.AreEqual(1, bus.Read((ushort)VgcConstants.WtsSoundfontStatus));
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(1, wts.InstrumentCount);
         }
         finally
         {
-            if (Directory.Exists(sfDir))
-                Directory.Delete(sfDir, true);
+            Directory.Delete(tempDir, true);
         }
     }
 }

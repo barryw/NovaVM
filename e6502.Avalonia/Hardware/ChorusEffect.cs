@@ -5,8 +5,6 @@ namespace e6502.Avalonia.Hardware;
 public sealed class ChorusEffect
 {
     private const float LfoRate = 0.5f;
-    private const float Wet = 0.3f;
-    private const float Dry = 0.7f;
 
     private readonly float[] _bufferL, _bufferR;
     private readonly int _bufferLen;
@@ -49,8 +47,9 @@ public sealed class ChorusEffect
             float delayL = _centerDelay + MathF.Sin(_lfoPhaseL) * _modDepth;
             float delayR = _centerDelay + MathF.Sin(_lfoPhaseR) * _modDepth;
 
-            left[i] = Dry * left[i] + Wet * ReadInterpolated(_bufferL, delayL);
-            right[i] = Dry * right[i] + Wet * ReadInterpolated(_bufferR, delayR);
+            // Return wet-only signal; caller handles dry/wet mixing
+            left[i] = ReadInterpolated(_bufferL, delayL);
+            right[i] = ReadInterpolated(_bufferR, delayR);
 
             _lfoPhaseL += _lfoInc;
             _lfoPhaseR += _lfoInc;

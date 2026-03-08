@@ -6,8 +6,6 @@ public sealed class ReverbEffect
 {
     private const float RoomSize = 0.84f;
     private const float Damp = 0.2f;
-    private const float Wet = 0.3f;
-    private const float Dry = 0.7f;
     private const float AllpassFeedback = 0.5f;
     private const int StereoSpread = 23;
 
@@ -55,14 +53,20 @@ public sealed class ReverbEffect
                 outR += _combsR[c].Tick(inputR);
             }
 
+            // Scale down comb sum to prevent runaway amplification
+            const float CombScale = 1f / 8f;
+            outL *= CombScale;
+            outR *= CombScale;
+
             for (int a = 0; a < _allpassL.Length; a++)
             {
                 outL = _allpassL[a].Tick(outL);
                 outR = _allpassR[a].Tick(outR);
             }
 
-            left[i] = Dry * inputL + Wet * outL;
-            right[i] = Dry * inputR + Wet * outR;
+            // Return wet-only signal; caller handles dry/wet mixing
+            left[i] = outL;
+            right[i] = outR;
         }
     }
 

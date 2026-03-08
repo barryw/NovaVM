@@ -87,9 +87,27 @@ public sealed class WavetableSynth : IDisposable
         lock (_lock)
         {
             if ((uint)voice >= VoiceCount) return;
-            if (_bank == null || instrument < 0 || instrument >= _bank.Instruments.Count) return;
+            if (_bank == null) return;
 
-            var inst = _bank.Instruments[instrument];
+            // Resolve instrument: if high bits encode a bank, use bank+program lookup
+            // Format: (bank << 8) | program — bank 0 = melodic, bank 128 = drums
+            int bank = (instrument >> 8) & 0xFF;
+            int program = instrument & 0x7F;
+            int idx = _bank.FindByProgram(bank, program);
+            if (idx < 0)
+            {
+                // Fall back to bank 0 lookup, then direct index
+                idx = _bank.FindByProgram(0, program);
+                if (idx < 0)
+                {
+                    if (instrument >= 0 && instrument < _bank.Instruments.Count)
+                        idx = instrument;
+                    else
+                        return;
+                }
+            }
+
+            var inst = _bank.Instruments[idx];
             var region = inst.FindRegion(note, velocity);
             if (region == null) return;
 
@@ -97,18 +115,32 @@ public sealed class WavetableSynth : IDisposable
             v.Phase = 0;
             v.Note = note;
             v.Velocity = velocity;
-            v.InstrumentIndex = instrument;
+            v.InstrumentIndex = idx;
             v.Region = region;
             v.Active = true;
             v.Releasing = false;
             v.EnvLevel = 0f;
             v.EnvStage = EnvStage.Attack;
 
-            // Compute ADSR rates
+            // Compute AHDSR rates with key-based scaling
+            float holdTime = region.HoldTime;
+            float decayTime = region.DecayTime;
+            if (region.KeynumToHoldTC != 0)
+            {
+                int holdTC = (int)(Math.Log2(holdTime) * 1200) - region.KeynumToHoldTC * (note - 60);
+                holdTime = Math.Clamp((float)Math.Pow(2, holdTC / 1200.0), 0.001f, 100f);
+            }
+            if (region.KeynumToDecayTC != 0)
+            {
+                int decayTC = (int)(Math.Log2(decayTime) * 1200) - region.KeynumToDecayTC * (note - 60);
+                decayTime = Math.Clamp((float)Math.Pow(2, decayTC / 1200.0), 0.001f, 100f);
+            }
+            v.HoldSamples = (int)(holdTime * SampleRate);
+
             if (region.AttackTime < MinTime)
             {
                 v.EnvLevel = 1f;
-                v.EnvStage = EnvStage.Decay;
+                v.EnvStage = v.HoldSamples > 0 ? EnvStage.Hold : EnvStage.Decay;
                 v.AttackRate = 0;
             }
             else
@@ -116,7 +148,7 @@ public sealed class WavetableSynth : IDisposable
                 v.AttackRate = 1f / (region.AttackTime * SampleRate);
             }
 
-            if (region.DecayTime < MinTime)
+            if (decayTime < MinTime)
             {
                 if (v.EnvStage == EnvStage.Decay)
                 {
@@ -127,7 +159,7 @@ public sealed class WavetableSynth : IDisposable
             }
             else
             {
-                v.DecayRate = (1f - region.SustainLevel) / (region.DecayTime * SampleRate);
+                v.DecayRate = (1f - region.SustainLevel) / (decayTime * SampleRate);
             }
 
             v.SustainLevel = region.SustainLevel;
@@ -202,10 +234,13 @@ public sealed class WavetableSynth : IDisposable
         }
     }
 
+
     private short[] RenderSamplesCore(int frameCount)
     {
         var output = new short[frameCount * 2];
         float masterScale = MasterVolume / 255f;
+        // Mix headroom: scale down to prevent clipping with multiple voices
+        const float MixScale = 1f / 2f;
         float[] mixL = new float[frameCount];
         float[] mixR = new float[frameCount];
 
@@ -245,8 +280,8 @@ public sealed class WavetableSynth : IDisposable
                 float left = MathF.Cos(panF * MathF.PI / 2f);
                 float right = MathF.Sin(panF * MathF.PI / 2f);
 
-                sumL += amplitude * left;
-                sumR += amplitude * right;
+                sumL += amplitude * left * MixScale;
+                sumR += amplitude * right * MixScale;
 
                 // Advance phase
                 double bendSemitones = ((v.PitchBend - 0x8000) / 8192.0) * 2.0;
@@ -327,6 +362,24 @@ public sealed class WavetableSynth : IDisposable
                 if (v.EnvLevel >= 1f)
                 {
                     v.EnvLevel = 1f;
+                    if (v.HoldSamples > 0)
+                        v.EnvStage = EnvStage.Hold;
+                    else
+                    {
+                        v.EnvStage = EnvStage.Decay;
+                        if (v.DecayRate <= 0)
+                        {
+                            v.EnvLevel = v.SustainLevel;
+                            v.EnvStage = EnvStage.Sustain;
+                        }
+                    }
+                }
+                break;
+
+            case EnvStage.Hold:
+                v.HoldSamples--;
+                if (v.HoldSamples <= 0)
+                {
                     v.EnvStage = EnvStage.Decay;
                     if (v.DecayRate <= 0)
                     {
@@ -505,7 +558,7 @@ public sealed class WavetableSynth : IDisposable
         _renderer?.Dispose();
     }
 
-    private enum EnvStage { Attack, Decay, Sustain, Release, Off }
+    private enum EnvStage { Attack, Hold, Decay, Sustain, Release, Off }
 
     private sealed class WtsVoice
     {
@@ -519,5 +572,6 @@ public sealed class WavetableSynth : IDisposable
         public float EnvLevel;
         public EnvStage EnvStage = EnvStage.Off;
         public float AttackRate, DecayRate, SustainLevel, ReleaseRate;
+        public int HoldSamples;
     }
 }
