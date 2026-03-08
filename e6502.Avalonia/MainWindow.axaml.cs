@@ -327,8 +327,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Skip window shortcuts when an editor is actively handling keys
+        bool editorActive = _basicEditor is { IsActive: true, Mode: not EditorMode.Running }
+                         || _nccEditor is { IsActive: true, Mode: not EditorMode.Running };
+
         var mod = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
-        if (e.KeyModifiers.HasFlag(mod))
+        if (e.KeyModifiers.HasFlag(mod) && !editorActive)
         {
             switch (e.Key)
             {
@@ -365,6 +369,7 @@ public partial class MainWindow : Window
     private void ToggleNccEditor()
     {
         if (_nccEditor == null) return;
+        if (_basicEditor is { IsActive: true }) return; // mutual exclusion
         if (_nccEditor.IsActive)
         {
             // Delegate to NccEditor's Ctrl+Q exit handler (Y/N prompt)
