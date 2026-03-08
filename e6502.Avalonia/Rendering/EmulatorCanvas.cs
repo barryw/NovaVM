@@ -36,11 +36,6 @@ public class EmulatorCanvas : Control
     /// <summary>Register an editor for keyboard routing. The first active, non-Running editor receives input.</summary>
     public void AddEditor(ScreenTextEditor editor) => _editors.Add(editor);
 
-    /// <summary>Returns the first registered NccEditor, used for type-specific access (CheckDebugBreak, StopRunning).</summary>
-    public NccEditor? NccEditor => _editors.OfType<NccEditor>().FirstOrDefault();
-
-    /// <summary>Returns the first registered BasicEditor, used for type-specific access (ReturnFromRun, ToggleActivation).</summary>
-    public BasicEditor? BasicEditor => _editors.OfType<BasicEditor>().FirstOrDefault();
 
     public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor)
     {
@@ -104,9 +99,11 @@ public class EmulatorCanvas : Control
         }
 
         // F5: activate BASIC editor (only when NCC editor is not active)
-        if (e.Key == Key.F5 && NccEditor is not { IsActive: true })
+        var nccEditor = _editors.OfType<NccEditor>().FirstOrDefault();
+        var basicEditor = _editors.OfType<BasicEditor>().FirstOrDefault();
+        if (e.Key == Key.F5 && nccEditor is not { IsActive: true })
         {
-            BasicEditor?.ToggleActivation();
+            basicEditor?.ToggleActivation();
             e.Handled = true;
             base.OnKeyDown(e);
             return;
