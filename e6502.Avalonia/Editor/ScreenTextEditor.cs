@@ -1304,4 +1304,266 @@ public abstract class ScreenTextEditor
     }
 
     protected static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+    // ── Keyboard dispatcher ───────────────────────────────────────────────────
+
+    public bool HandleKeyDown(Key key, KeyModifiers modifiers)
+    {
+        // 1. Prompt mode — delegate all keys to prompt handler
+        if (_promptActive)
+            return HandlePromptKey(key, null);
+
+        // 2. File browser mode
+        if (Mode == EditorMode.FileBrowser)
+            return HandleFileBrowserKey(key);
+
+        // 3. Let subclass handle first (F-keys, subclass-specific shortcuts)
+        if (HandleEditorKey(key, modifiers))
+            return true;
+
+        bool shift = modifiers.HasFlag(KeyModifiers.Shift);
+        bool ctrl = modifiers.HasFlag(KeyModifiers.Control);
+
+        // 4. Escape — clear selection, clear message, or pass through
+        if (key == Key.Escape)
+        {
+            if (_selActive)
+            {
+                ClearSelection();
+                RedrawCode();
+                return true;
+            }
+            if (_message != null)
+            {
+                ClearMessage();
+                return true;
+            }
+            return false; // let subclass/caller handle
+        }
+
+        // 5. Ctrl combos
+        if (ctrl)
+        {
+            switch (key)
+            {
+                case Key.Q:
+                    RequestExit();
+                    return true;
+                case Key.F:
+                    StartFind();
+                    return true;
+                case Key.G:
+                    StartGoToLine();
+                    return true;
+                case Key.C:
+                    CopySelection();
+                    return true;
+                case Key.X:
+                    CutSelection();
+                    return true;
+                case Key.V:
+                    PasteClipboard();
+                    return true;
+                case Key.Y:
+                    DeleteCurrentLine();
+                    return true;
+                case Key.D:
+                    DuplicateLine();
+                    return true;
+                case Key.S:
+                    SaveFile();
+                    return true;
+                case Key.O:
+                    OpenFileBrowser();
+                    return true;
+                case Key.N:
+                    NewFile();
+                    return true;
+                case Key.Home:
+                    ClearSelection();
+                    SetCursor(0, 0);
+                    EnsureVisible();
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
+                case Key.End:
+                    ClearSelection();
+                    SetCursor(Lines.Count - 1, Lines[Lines.Count - 1].Length);
+                    EnsureVisible();
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
+                case Key.Left:
+                    if (shift) { /* TODO: word select */ }
+                    else { ClearSelection(); MoveWordLeft(); RedrawCode(); RedrawStatusBar(); }
+                    return true;
+                case Key.Right:
+                    if (shift) { /* TODO: word select */ }
+                    else { ClearSelection(); MoveWordRight(); RedrawCode(); RedrawStatusBar(); }
+                    return true;
+            }
+        }
+
+        // 6. Shift+movement — selection
+        if (shift)
+        {
+            switch (key)
+            {
+                case Key.Left:
+                    MoveCursorWithSelection(-1, 0);
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
+                case Key.Right:
+                    MoveCursorWithSelection(1, 0);
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
+                case Key.Up:
+                    MoveCursorWithSelection(0, -1);
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
+                case Key.Down:
+                    MoveCursorWithSelection(0, 1);
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
+                case Key.Home:
+                    SelectToHome();
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
+                case Key.End:
+                    SelectToEnd();
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
+            }
+        }
+
+        // 7. Plain movement
+        switch (key)
+        {
+            case Key.Left:
+                MoveCursor(-1, 0);
+                RedrawCode();
+                RedrawStatusBar();
+                return true;
+            case Key.Right:
+                MoveCursor(1, 0);
+                RedrawCode();
+                RedrawStatusBar();
+                return true;
+            case Key.Up:
+                MoveCursor(0, -1);
+                RedrawCode();
+                RedrawStatusBar();
+                return true;
+            case Key.Down:
+                MoveCursor(0, 1);
+                RedrawCode();
+                RedrawStatusBar();
+                return true;
+            case Key.Home:
+                ClearSelection();
+                Home();
+                RedrawCode();
+                RedrawStatusBar();
+                return true;
+            case Key.End:
+                ClearSelection();
+                End();
+                RedrawCode();
+                RedrawStatusBar();
+                return true;
+            case Key.PageUp:
+                ClearSelection();
+                PageUp();
+                return true;
+            case Key.PageDown:
+                ClearSelection();
+                PageDown();
+                return true;
+
+            // 8. Editing keys
+            case Key.Enter:
+                InsertNewline();
+                return true;
+            case Key.Back:
+                Backspace();
+                return true;
+            case Key.Delete:
+                Delete();
+                return true;
+            case Key.Tab:
+                InsertChar(' ');
+                InsertChar(' ');
+                return true;
+            case Key.Insert:
+                ToggleInsertMode();
+                RedrawStatusBar();
+                return true;
+
+            // 9. F3 — file browser
+            case Key.F3:
+                OpenFileBrowser();
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool HandleTextInput(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+
+        if (_promptActive)
+            return HandlePromptKey(Key.None, text);
+
+        if (Mode != EditorMode.Edit) return false;
+
+        foreach (char ch in text)
+        {
+            if (!char.IsControl(ch))
+                InsertChar(ch);
+        }
+        return true;
+    }
+
+    internal void NewFile()
+    {
+        if (Modified)
+        {
+            StartPrompt("Unsaved changes. Discard? (Y/N): ", answer =>
+            {
+                if (answer.Equals("Y", StringComparison.OrdinalIgnoreCase))
+                    DoNewFile();
+            });
+            return;
+        }
+        DoNewFile();
+    }
+
+    private void DoNewFile()
+    {
+        LoadLines([""]);
+        _currentFilename = "";
+        Redraw();
+        ShowMessage("New file");
+    }
+
+    private void RequestExit()
+    {
+        if (Modified)
+        {
+            StartPrompt("Unsaved changes. Exit? (Y/N): ", answer =>
+            {
+                if (answer.Equals("Y", StringComparison.OrdinalIgnoreCase))
+                    Deactivate();
+            });
+            return;
+        }
+        Deactivate();
+    }
 }
