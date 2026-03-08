@@ -50,6 +50,8 @@ public class WavetableSynthTests
     public void NoteOff_EventuallyProducesSilence()
     {
         var synth = new WavetableSynth(enableAudio: false);
+        synth.ReverbLevel = 0;
+        synth.ChorusLevel = 0;
         synth.LoadBank(MakeSineBank());
         synth.NoteOn(0, 60, 127, 0);
         synth.RenderSamples(512);

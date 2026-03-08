@@ -10,6 +10,8 @@ public sealed class WavetableSynth : IDisposable
 
     private readonly WtsVoice[] _voices = new WtsVoice[VoiceCount];
     private SampleBank? _bank;
+    private readonly ReverbEffect _reverb = new(SampleRate);
+    private readonly ChorusEffect _chorus = new(SampleRate);
 
     public byte ReverbLevel { get; set; } = 80;
     public byte ChorusLevel { get; set; } = 40;
@@ -146,6 +148,8 @@ public sealed class WavetableSynth : IDisposable
     {
         var output = new short[frameCount * 2];
         float masterScale = MasterVolume / 255f;
+        float[] mixL = new float[frameCount];
+        float[] mixR = new float[frameCount];
 
         for (int f = 0; f < frameCount; f++)
         {
@@ -209,14 +213,48 @@ public sealed class WavetableSynth : IDisposable
                 AdvanceEnvelope(v);
             }
 
-            // Master volume and clamp
-            sumL *= masterScale;
-            sumR *= masterScale;
-            sumL = Math.Clamp(sumL, -1f, 1f);
-            sumR = Math.Clamp(sumR, -1f, 1f);
+            mixL[f] = sumL;
+            mixR[f] = sumR;
+        }
 
-            output[f * 2] = (short)(sumL * 32767f);
-            output[f * 2 + 1] = (short)(sumR * 32767f);
+        // Apply effects
+        float[] wetL = new float[frameCount], wetR = new float[frameCount];
+
+        // Chorus
+        float chorusMix = ChorusLevel / 255f;
+        if (chorusMix > 0)
+        {
+            Array.Copy(mixL, wetL, frameCount);
+            Array.Copy(mixR, wetR, frameCount);
+            _chorus.Process(wetL, wetR);
+            for (int i = 0; i < frameCount; i++)
+            {
+                mixL[i] = mixL[i] * (1 - chorusMix) + wetL[i] * chorusMix;
+                mixR[i] = mixR[i] * (1 - chorusMix) + wetR[i] * chorusMix;
+            }
+        }
+
+        // Reverb
+        float reverbMix = ReverbLevel / 255f;
+        if (reverbMix > 0)
+        {
+            Array.Copy(mixL, wetL, frameCount);
+            Array.Copy(mixR, wetR, frameCount);
+            _reverb.Process(wetL, wetR);
+            for (int i = 0; i < frameCount; i++)
+            {
+                mixL[i] = mixL[i] * (1 - reverbMix) + wetL[i] * reverbMix;
+                mixR[i] = mixR[i] * (1 - reverbMix) + wetR[i] * reverbMix;
+            }
+        }
+
+        // Master volume, clamp, and convert to short
+        for (int f = 0; f < frameCount; f++)
+        {
+            float l = Math.Clamp(mixL[f] * masterScale, -1f, 1f);
+            float r = Math.Clamp(mixR[f] * masterScale, -1f, 1f);
+            output[f * 2] = (short)(l * 32767f);
+            output[f * 2 + 1] = (short)(r * 32767f);
         }
 
         return output;
