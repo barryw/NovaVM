@@ -1,0 +1,94 @@
+% =============================================================================
+% Mapping the NovaVM — Cover Page
+% =============================================================================
+\begin{titlepage}
+\begin{tikzpicture}[remember picture, overlay]
+
+  \fill[retroblue]
+    (current page.south west) rectangle (current page.north east);
+
+  \fill[retroblue!70!white, opacity=0.35]
+    ([xshift=-60pt, yshift=120pt]current page.south west)
+    -- ([xshift=260pt, yshift=120pt]current page.south west)
+    -- ([xshift=260pt]current page.north west)
+    -- ([xshift=-60pt]current page.north west)
+    -- cycle;
+
+  \fill[retroblue!50!white, opacity=0.18]
+    ([xshift=180pt, yshift=120pt]current page.south west)
+    -- ([xshift=340pt, yshift=120pt]current page.south west)
+    -- ([xshift=340pt]current page.north west)
+    -- ([xshift=180pt]current page.north west)
+    -- cycle;
+
+  \begin{scope}[opacity=0.06]
+    \foreach \gx in {0,12,...,180}{
+      \foreach \gy in {0,12,...,220}{
+        \fill[white]
+          ([xshift=\gx pt, yshift=-\gy pt]current page.north east)
+          circle (1.2pt);
+      }
+    }
+  \end{scope}
+
+  \fill[retrocyan, opacity=0.75]
+    ([xshift=52pt, yshift=-52pt]current page.north west)
+    rectangle ++(18pt, 18pt);
+  \fill[retrocyan, opacity=0.50]
+    ([xshift=80pt, yshift=-52pt]current page.north west)
+    rectangle ++(10pt, 18pt);
+  \fill[white, opacity=0.30]
+    ([xshift=100pt, yshift=-52pt]current page.north west)
+    rectangle ++(5pt, 18pt);
+
+  \node[
+    anchor=north east, xshift=-44pt, yshift=-62pt,
+    text=white, opacity=0.12, font=\ttfamily\large, align=left
+  ] at (current page.north east) {%
+    \$A000 VGC\\
+    \$D400 SID\\
+    \$BA00 XMC%
+  };
+
+  \node[
+    anchor=west, xshift=52pt, yshift=72pt,
+    text=white,
+    font=\fontsize{42}{46}\selectfont\bfseries\sffamily
+  ] at (current page.west) {MAPPING THE};
+
+  \node[
+    anchor=west, xshift=52pt, yshift=28pt,
+    text=white,
+    font=\fontsize{56}{60}\selectfont\bfseries\sffamily
+  ] at (current page.west) {NOVAVM};
+
+  \node[
+    anchor=west, xshift=52pt, yshift=-16pt,
+    text=retrocyan,
+    font=\fontsize{14}{18}\selectfont\itshape\sffamily
+  ] at (current page.west) {A Complete Address-by-Address Reference};
+
+  \node[
+    anchor=west, xshift=52pt, yshift=-46pt,
+    text=white, opacity=0.55,
+    font=\fontsize{10}{14}\selectfont\sffamily
+  ] at (current page.west)
+    {For the e6502 Virtual Computer\enspace|\enspace 2026 Edition};
+
+  \draw[white, opacity=0.45, line width=1.0pt]
+    ([xshift=52pt,  yshift=62pt]current page.south west)
+    -- ([xshift=-52pt, yshift=62pt]current page.south east);
+
+  \node[
+    anchor=south, yshift=22pt,
+    text=white, opacity=0.80,
+    font=\fontsize{9}{12}\selectfont\sffamily\bfseries
+  ] at (current page.south) {%
+    64KB Address Space\enspace|\enspace
+    12 Hardware Controllers\enspace|\enspace
+    512KB Expansion\enspace|\enspace
+    14-Voice Sound%
+  };
+
+\end{tikzpicture}
+\end{titlepage}
