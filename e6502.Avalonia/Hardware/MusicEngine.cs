@@ -1,8 +1,9 @@
 namespace e6502.Avalonia.Hardware;
 
 /// <summary>
-/// MusicEngine: manages SID-based SFX playback and a 6-voice MML music sequencer.
-/// Voices 0-2 route to SID1 ($D400), voices 3-5 route to SID2 ($D420).
+/// MusicEngine: manages SFX playback and a 14-voice MML music sequencer.
+/// Voices 0-2 route to SID1 ($D400), voices 3-5 route to SID2 ($D420),
+/// voices 6-13 route to the WavetableSynth.
 /// Tick() must be called at 60Hz.
 /// </summary>
 public sealed class MusicEngine
@@ -11,7 +12,8 @@ public sealed class MusicEngine
     // Constants
     // -------------------------------------------------------------------------
 
-    private const int VoiceCount = 6;
+    private const int VoiceCount = 14;
+    private const int SidVoiceCount = 6;
     private const int InstrumentSlots = 16;
     private const double CpuClock = 985248.0; // PAL
 
@@ -19,7 +21,10 @@ public sealed class MusicEngine
     // SID register helpers (chip-aware)
     // -------------------------------------------------------------------------
 
-    private SidChip ChipFor(int v) => v < 3 ? _sid : _sid2;
+    private SidChip ChipFor(int v) => v < 3 ? _sid : _sid2; // SID voices only (0-5)
+
+    private bool IsWtsVoice(int v) => v >= SidVoiceCount;
+    private int WtsLocalVoice(int v) => v - SidVoiceCount;
 
     // Local voice index within a chip (0, 1, or 2)
     private static int LocalVoice(int v) => v % 3;
@@ -81,6 +86,7 @@ public sealed class MusicEngine
 
     private readonly SidChip _sid;
     private readonly SidChip _sid2;
+    private readonly WavetableSynth? _wts;
     private readonly int _frameRateHz;
 
     // Instrument table
@@ -97,7 +103,7 @@ public sealed class MusicEngine
     private bool _loop;
     private int _elapsedFrames;
     private int _musicTotalFrames;
-    private int[] _stealPriority = { 5, 4, 3, 2, 1, 0 }; // steal voice[0] last
+    private int[] _stealPriority = { 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 }; // steal voice[0] last
 
     // Per-voice sequencer state
     private readonly VoiceState[] _voices = new VoiceState[VoiceCount];
@@ -110,6 +116,7 @@ public sealed class MusicEngine
     {
         _sid = bus.Sid;
         _sid2 = bus.Sid2;
+        _wts = bus.Wts;
         _frameRateHz = bus.FrameRateHz;
 
         // Default instrument 0: pulse, A=0, D=9, S=0, R=6
@@ -152,7 +159,13 @@ public sealed class MusicEngine
     public int TotalFrames => _musicTotalFrames;
     public void SetTotalFrames(int frames) => _musicTotalFrames = frames;
 
-    /// <summary>Returns the current MIDI note for a voice (0-5), or 0 if silent.</summary>
+    public int TotalVoiceCount => VoiceCount;
+
+    /// <summary>Returns the current MIDI note for a voice, or -1 if silent/invalid.</summary>
+    public int GetVoiceMidi(int voice) =>
+        voice >= 0 && voice < VoiceCount ? _voices[voice].CurrentMidi : -1;
+
+    /// <summary>Returns the current MIDI note for a voice (0-13), or 0 if silent.</summary>
     public byte GetVoiceNote(int voiceIndex)
     {
         if (voiceIndex < 0 || voiceIndex >= VoiceCount) return 0;
@@ -204,6 +217,12 @@ public sealed class MusicEngine
     {
         if (voice < 1 || voice > VoiceCount) return;
         int v = voice - 1; // 0-based
+        if (IsWtsVoice(v))
+        {
+            // WTS per-voice volume is 0-255; scale from 0-15
+            _wts?.SetVolume(WtsLocalVoice(v), (byte)Math.Clamp(level * 17, 0, 255));
+            return;
+        }
         var chip = ChipFor(v);
         int localVoice = LocalVoice(v);
         ushort reg = (ushort)(chip.BaseAddress + 0x1D + localVoice);
@@ -236,6 +255,14 @@ public sealed class MusicEngine
     public void DirectNoteOn(int voiceIndex, int midiNote, int velocity, int instrumentId = 0)
     {
         if (voiceIndex < 0 || voiceIndex >= VoiceCount) return;
+
+        if (IsWtsVoice(voiceIndex))
+        {
+            _wts?.NoteOn(WtsLocalVoice(voiceIndex), midiNote, velocity, instrumentId);
+            _voices[voiceIndex].CurrentMidi = midiNote;
+            return;
+        }
+
         var inst = GetInstrument(instrumentId);
         var chip = ChipFor(voiceIndex);
 
@@ -264,6 +291,12 @@ public sealed class MusicEngine
     public void DirectNoteSlide(int voiceIndex, int midiNote)
     {
         if (voiceIndex < 0 || voiceIndex >= VoiceCount) return;
+        if (IsWtsVoice(voiceIndex))
+        {
+            // WTS doesn't support slide — just update the tracked note
+            _voices[voiceIndex].CurrentMidi = midiNote;
+            return;
+        }
         int sidFreq = MidiToSid(midiNote);
         var chip = ChipFor(voiceIndex);
         chip.Write(FreqLo(voiceIndex), (byte)(sidFreq & 0xFF));
@@ -274,6 +307,12 @@ public sealed class MusicEngine
     public void DirectNoteOff(int voiceIndex)
     {
         if (voiceIndex < 0 || voiceIndex >= VoiceCount) return;
+        if (IsWtsVoice(voiceIndex))
+        {
+            _wts?.NoteOff(WtsLocalVoice(voiceIndex));
+            _voices[voiceIndex].CurrentMidi = -1;
+            return;
+        }
         var chip = ChipFor(voiceIndex);
         byte ctrl = chip.Read(Ctrl(voiceIndex));
         chip.Write(Ctrl(voiceIndex), (byte)(ctrl & 0xFE)); // gate off
@@ -309,8 +348,15 @@ public sealed class MusicEngine
         _sfxVoice  = voice;
         _sfxFrames = durationFrames;
 
-        SidInstrument inst = GetInstrument(instrumentId);
-        WriteVoice(voice, midiNote, inst);
+        if (IsWtsVoice(voice))
+        {
+            _wts?.NoteOn(WtsLocalVoice(voice), midiNote, 100, instrumentId);
+        }
+        else
+        {
+            SidInstrument inst = GetInstrument(instrumentId);
+            WriteVoice(voice, midiNote, inst);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -348,9 +394,16 @@ public sealed class MusicEngine
         for (int i = 0; i < VoiceCount; i++)
         {
             if (i == _sfxVoice) continue;
-            var chip = ChipFor(i);
-            byte current = chip.Read(Ctrl(i));
-            chip.Write(Ctrl(i), (byte)(current & ~0x01)); // clear gate
+            if (IsWtsVoice(i))
+            {
+                _wts?.NoteOff(WtsLocalVoice(i));
+            }
+            else
+            {
+                var chip = ChipFor(i);
+                byte current = chip.Read(Ctrl(i));
+                chip.Write(Ctrl(i), (byte)(current & ~0x01)); // clear gate
+            }
         }
     }
 
@@ -425,10 +478,17 @@ public sealed class MusicEngine
 
         if (_sfxFrames == 0)
         {
-            // Clear gate, keep waveform
-            var chip = ChipFor(_sfxVoice);
-            byte current = chip.Read(Ctrl(_sfxVoice));
-            chip.Write(Ctrl(_sfxVoice), (byte)(current & ~0x01));
+            if (IsWtsVoice(_sfxVoice))
+            {
+                _wts?.NoteOff(WtsLocalVoice(_sfxVoice));
+            }
+            else
+            {
+                // Clear gate, keep waveform
+                var chip = ChipFor(_sfxVoice);
+                byte current = chip.Read(Ctrl(_sfxVoice));
+                chip.Write(Ctrl(_sfxVoice), (byte)(current & ~0x01));
+            }
             _sfxCompleted = true;
             _sfxVoice = -1;
         }
@@ -467,9 +527,16 @@ public sealed class MusicEngine
                 for (int i = 0; i < VoiceCount; i++)
                 {
                     if (i == _sfxVoice) continue;
-                    var chip = ChipFor(i);
-                    byte current = chip.Read(Ctrl(i));
-                    chip.Write(Ctrl(i), (byte)(current & ~0x01));
+                    if (IsWtsVoice(i))
+                    {
+                        _wts?.NoteOff(WtsLocalVoice(i));
+                    }
+                    else
+                    {
+                        var chip = ChipFor(i);
+                        byte current = chip.Read(Ctrl(i));
+                        chip.Write(Ctrl(i), (byte)(current & ~0x01));
+                    }
                     _voices[i].CurrentMidi = -1;
                 }
                 _musicPlaying = false;
@@ -521,7 +588,11 @@ public sealed class MusicEngine
                 vs.ArpNotes    = null;
                 vs.Portamento  = false;
 
-                if (vs.PortamentoActive)
+                if (IsWtsVoice(vi))
+                {
+                    _wts?.NoteOn(WtsLocalVoice(vi), ev.Param1, 100, 0);
+                }
+                else if (vs.PortamentoActive)
                 {
                     // Slide from current freq toward target
                     vs.PortamentoTarget = MidiToSid(ev.Param1);
@@ -541,10 +612,16 @@ public sealed class MusicEngine
                 vs.WaitTicks  = ev.Param2;
                 vs.ArpNotes   = null;
                 vs.CurrentMidi = -1;
-                // Gate off
-                var chip = ChipFor(vi);
-                byte current = chip.Read(Ctrl(vi));
-                chip.Write(Ctrl(vi), (byte)(current & ~0x01));
+                if (IsWtsVoice(vi))
+                {
+                    _wts?.NoteOff(WtsLocalVoice(vi));
+                }
+                else
+                {
+                    var chip = ChipFor(vi);
+                    byte current = chip.Read(Ctrl(vi));
+                    chip.Write(Ctrl(vi), (byte)(current & ~0x01));
+                }
                 break;
             }
 
@@ -556,7 +633,10 @@ public sealed class MusicEngine
                 if (vs.ArpNotes != null && vs.ArpNotes.Length > 0)
                 {
                     vs.CurrentMidi = vs.ArpNotes[0];
-                    WriteVoice(vi, vs.ArpNotes[0], vs.CurrentInstrument);
+                    if (IsWtsVoice(vi))
+                        _wts?.NoteOn(WtsLocalVoice(vi), vs.ArpNotes[0], 100, 0);
+                    else
+                        WriteVoice(vi, vs.ArpNotes[0], vs.CurrentInstrument);
                 }
                 break;
             }
@@ -586,7 +666,7 @@ public sealed class MusicEngine
             case MmlEventType.SetPulseWidth:
                 vs.PulseWidth = ev.Param1;
                 vs.PwmDir     = 0;
-                WritePulse(vi, vs.PulseWidth);
+                if (!IsWtsVoice(vi)) WritePulse(vi, vs.PulseWidth);
                 break;
 
             case MmlEventType.PwmSweep:
@@ -636,9 +716,16 @@ public sealed class MusicEngine
             case MmlEventType.SetVoiceVolume:
             {
                 int vol = Math.Clamp(ev.Param1, 0, 15);
-                var chip = ChipFor(vi);
-                int local = LocalVoice(vi);
-                chip.Write((ushort)(chip.BaseAddress + 0x1D + local), (byte)vol);
+                if (IsWtsVoice(vi))
+                {
+                    _wts?.SetVolume(WtsLocalVoice(vi), (byte)(vol * 17));
+                }
+                else
+                {
+                    var chip = ChipFor(vi);
+                    int local = LocalVoice(vi);
+                    chip.Write((ushort)(chip.BaseAddress + 0x1D + local), (byte)vol);
+                }
                 break;
             }
 
@@ -658,12 +745,17 @@ public sealed class MusicEngine
         if (vs.ArpNotes == null || vs.ArpNotes.Length == 0) return;
         vs.ArpIndex = (vs.ArpIndex + 1) % vs.ArpNotes.Length;
         int note = vs.ArpNotes[vs.ArpIndex];
+        if (IsWtsVoice(vi))
+        {
+            _wts?.NoteOn(WtsLocalVoice(vi), note, 100, 0);
+            return;
+        }
         WriteFreq(vi, MidiToSid(note));
     }
 
     private void TickPwm(int vi, VoiceState vs)
     {
-        if (vs.PwmDir == 0) return;
+        if (vs.PwmDir == 0 || IsWtsVoice(vi)) return; // PWM is SID-only
         vs.PulseWidth += vs.PwmDir * 32;
         vs.PulseWidth  = Math.Clamp(vs.PulseWidth, 0, 4095);
         WritePulse(vi, vs.PulseWidth);
@@ -671,7 +763,7 @@ public sealed class MusicEngine
 
     private void TickVibrato(int vi, VoiceState vs)
     {
-        if (vs.VibratoDepth == 0 || vs.CurrentMidi < 0) return;
+        if (vs.VibratoDepth == 0 || vs.CurrentMidi < 0 || IsWtsVoice(vi)) return;
         vs.VibratoPhase += 0.15; // ~2.9Hz at 60fps ... close enough
         double offset = Math.Sin(vs.VibratoPhase) * vs.VibratoDepth;
         int modFreq = (int)(vs.CurrentSidFreq + offset * vs.CurrentSidFreq / 100.0);
@@ -680,7 +772,7 @@ public sealed class MusicEngine
 
     private void TickPortamento(int vi, VoiceState vs)
     {
-        if (vs.PortamentoTarget < 0) return;
+        if (vs.PortamentoTarget < 0 || IsWtsVoice(vi)) return;
         int step = Math.Max(1, Math.Abs(vs.PortamentoTarget - vs.CurrentSidFreq) / 8);
         if (vs.CurrentSidFreq < vs.PortamentoTarget)
             vs.CurrentSidFreq = Math.Min(vs.CurrentSidFreq + step, vs.PortamentoTarget);

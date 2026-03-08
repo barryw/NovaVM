@@ -68,10 +68,10 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
         _sid = new SidChip(enableSound);
         _sid2 = new SidChip(enableSound, baseAddress: 0xD420);
+        _wts = new WavetableSynth(enableSound);
         _sidPlayer = new SidPlayer(this);
         _musicEngine = new MusicEngine(this);
         _midiPlayback = new MidiPlayback(_musicEngine, _frameRateHz);
-        _wts = new WavetableSynth(enableSound);
 
         string hd0 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-programs");
         string hd1 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-data");
