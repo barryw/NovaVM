@@ -719,7 +719,9 @@ draw_chrome:
     phx
     txa
     sec
-    sbc #5                      ; '1' + (voice - 6) = voice - 5
+    sbc #6                      ; voice - 6 (0..7)
+    clc
+    adc #'1'                    ; '1'..'8'
     sta RegCharOut
 
     plx
