@@ -4,6 +4,19 @@ using Melanchall.DryWetMidi.Interaction;
 namespace e6502.Avalonia.Hardware;
 
 /// <summary>
+/// Controls how MIDI channels are routed to SID and WTS voices.
+/// </summary>
+public enum MidiRoutingMode
+{
+    /// <summary>Up to 14 voices: first 8 busiest channels to WTS (6-13), overflow to SID (0-5).</summary>
+    Auto,
+    /// <summary>Reserved for future channel routing table. Currently behaves like Auto.</summary>
+    Manual,
+    /// <summary>Original 6-voice SID-only mode.</summary>
+    SidOnly
+}
+
+/// <summary>
 /// Real-time MIDI playback driver. Ticked at 60Hz by the main loop.
 /// Converts MIDI events into direct MusicEngine voice commands.
 /// </summary>
@@ -12,10 +25,15 @@ public sealed class MidiPlayback
     private readonly MusicEngine _engine;
     private readonly int _frameRateHz;
 
+    private const int MaxVoices = 14;
+    private const int SidVoiceCount = 6;
+    private const int WtsVoiceCount = 8;
+    private const int FirstWtsVoice = 6;
+
     private sealed class TimelineEvent
     {
         public long MidiTick;
-        public int Voice;       // 0-5 (-1 for tempo)
+        public int Voice;       // 0-13 (-1 for tempo)
         public int MidiNote;    // -1 for note-off
         public int Velocity;
         public int InstrumentId;
@@ -28,11 +46,14 @@ public sealed class MidiPlayback
     private double _midiTicksPerFrame;
     private int _ppqn;
     private bool _playing;
+    private int _activeVoiceCount;
 
     // Display hold: when a note is on+off in the same tick, hold it for 1 frame
-    private readonly bool[] _heldForDisplay = new bool[6];
+    private readonly bool[] _heldForDisplay = new bool[MaxVoices];
 
     public bool IsPlaying => _playing;
+    public MidiRoutingMode RoutingMode { get; set; } = MidiRoutingMode.Auto;
+    public int AvailableVoiceCount => RoutingMode == MidiRoutingMode.SidOnly ? SidVoiceCount : MaxVoices;
 
     public MidiPlayback(MusicEngine engine, int frameRateHz = VgcConstants.FrameRateHz)
     {
@@ -47,6 +68,7 @@ public sealed class MidiPlayback
     /// </summary>
     public void Play(MidiFile midi, int[] voiceToChannel, int[] instrumentSlots)
     {
+        _activeVoiceCount = voiceToChannel.Length;
         _ppqn = ((TicksPerQuarterNoteTimeDivision)midi.TimeDivision).TicksPerQuarterNote;
         _timeline = BuildTimeline(midi, voiceToChannel, instrumentSlots);
         _timelineIndex = 0;
@@ -77,7 +99,8 @@ public sealed class MidiPlayback
         if (!_playing || _timeline is null) return;
 
         // Clear any display-held notes from previous tick
-        for (int i = 0; i < _heldForDisplay.Length; i++)
+        int vc = _activeVoiceCount;
+        for (int i = 0; i < vc; i++)
         {
             if (_heldForDisplay[i])
             {
@@ -89,8 +112,8 @@ public sealed class MidiPlayback
         _midiTickAccum += _midiTicksPerFrame;
 
         // Track last note-on per voice this tick
-        int[] lastNoteOn = new int[6];
-        for (int i = 0; i < 6; i++) lastNoteOn[i] = -1;
+        int[] lastNoteOn = new int[vc];
+        for (int i = 0; i < vc; i++) lastNoteOn[i] = -1;
 
         while (_timelineIndex < _timeline.Count)
         {
@@ -111,12 +134,12 @@ public sealed class MidiPlayback
             else
             {
                 _engine.DirectNoteOn(ev.Voice, ev.MidiNote, ev.Velocity, ev.InstrumentId);
-                lastNoteOn[ev.Voice] = ev.MidiNote;
+                if (ev.Voice < vc) lastNoteOn[ev.Voice] = ev.MidiNote;
             }
         }
 
         // Hold notes for display if they were on+off in the same tick
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < vc; i++)
         {
             if (lastNoteOn[i] > 0 && _engine.GetVoiceNote(i) == 0)
             {
