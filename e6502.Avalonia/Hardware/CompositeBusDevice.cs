@@ -269,7 +269,9 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             if (_vgc.SysResetRequested)
             {
                 _vgc.SysResetRequested = false;
+                _midiPlayback.Stop();
                 _musicEngine.MusicReset();
+                _wts.AllNotesOff();
                 _sid.Write(0xD404, 0x00); // gate off voice 1
                 _sid.Write(0xD40B, 0x00); // gate off voice 2
                 _sid.Write(0xD412, 0x00); // gate off voice 3
