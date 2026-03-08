@@ -89,6 +89,12 @@ public sealed class MusicEngine
     private readonly WavetableSynth? _wts;
     private readonly int _frameRateHz;
 
+    /// <summary>
+    /// Called when MUSIC PLAY detects WTS voices in use but no soundfont loaded.
+    /// FileIoController wires this up to trigger auto-soundfont loading.
+    /// </summary>
+    public Action? OnWtsSoundfontNeeded { get; set; }
+
     // Instrument table
     private readonly SidInstrument[] _instruments = new SidInstrument[InstrumentSlots];
 
@@ -377,6 +383,19 @@ public sealed class MusicEngine
 
     public void MusicPlay()
     {
+        // Auto-load soundfont if any WTS voice has events queued
+        if (_wts is not null && _wts.InstrumentCount == 0 && OnWtsSoundfontNeeded is not null)
+        {
+            for (int i = SidVoiceCount; i < VoiceCount; i++)
+            {
+                if (_voices[i].Events is { Count: > 0 })
+                {
+                    OnWtsSoundfontNeeded();
+                    break;
+                }
+            }
+        }
+
         _musicPlaying = true;
         _elapsedFrames = 0;
         for (int i = 0; i < VoiceCount; i++)

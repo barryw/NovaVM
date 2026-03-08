@@ -53,6 +53,10 @@ public sealed partial class FileIoController
         _saveDir = saveDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "e6502-programs");
+
+        // Wire up auto-soundfont loading for MML playback with WTS voices
+        if (_musicEngine is not null && _wts is not null)
+            _musicEngine.OnWtsSoundfontNeeded = () => MidiAutoSoundfont.TryLoad(this, _wts);
     }
 
     public string SaveDirectory => _saveDir;
