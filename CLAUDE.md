@@ -76,6 +76,7 @@ $B9A0-$B9EF  FileIoController registers
 $BA00-$BA3F  Expansion Memory Controller (XMC) registers
 $BA40-$BA4F  Timer Controller registers
 $A100-$A13F  Network Interface Controller (NIC) registers
+$A140-$A1DF  Wavetable Synthesizer (WTS) registers
 $BA50-$BA53  Music status + voice note readback
 $BC00-$BFFF  XMC window (4x256-byte pages into 512KB XRAM)
 $C000-$FFFF  ROM (EhBASIC, write-protected)
@@ -93,11 +94,13 @@ Rendering at 60Hz: background fill → priority-0 sprites → text/gfx layers (o
 
 **SidChip** (`Hardware/SidChip.cs`): Software MOS 6581 emulation with 3 voices, ADSR envelopes, 4 waveforms, ring modulation, sync, and state-variable filter. Extended with per-voice volume registers at $1D-$1F (0-255, default 255) — not present on the real SID. Audio rendered in a background thread via OpenAL at 44100Hz, fully decoupled from CPU clock.
 
-**MusicEngine** (`Hardware/MusicEngine.cs`): 3-voice MML sequencer on top of SidChip, ticked at 60Hz. Supports 16 instrument slots, one-shot SFX with voice stealing, and per-frame effects (arpeggio, vibrato, portamento, PWM/filter sweep). MML parsed by `MmlParser` into `MmlEvent` lists.
+**MusicEngine** (`Hardware/MusicEngine.cs`): 14-voice sequencer (6 SID + 8 WTS), ticked at 60Hz. Voices 0–5 route to SID chips, voices 6–13 route to WavetableSynth. Supports 16 SID instrument slots, one-shot SFX with voice stealing, and per-frame effects (arpeggio, vibrato, portamento, PWM/filter sweep). MML parsed by `MmlParser` into `MmlEvent` lists. `@W<n>` MML command selects WTS instrument.
+
+**WavetableSynth** (`Hardware/WavetableSynth.cs`): 8-voice sample-based synthesizer at $A140–$A1DF. Loads SF2 soundfonts from host filesystem (samples stay in host memory). Per-voice: volume, panning, pitch bend. Global: reverb (Freeverb), chorus (modulated delay), master volume. Stereo PCM16 output via OpenAL at 44100Hz. Register interface supports note-on/off, instrument selection, and instrument enumeration.
 
 **SidPlayer** (`Hardware/SidPlayer.cs`): Plays `.sid` files by injecting an IRQ trampoline into CPU RAM that calls init/play routines at 60Hz.
 
-**MidiPlayback** (`Hardware/MidiPlayback.cs`): Plays standard `.mid` files through the MusicEngine. Auto-selects the 6 busiest MIDI channels, maps GM program numbers to SID instrument buckets, converts velocity to per-voice volume (0--15), and maps channel 10 drums to the noise waveform.
+**MidiPlayback** (`Hardware/MidiPlayback.cs`): Plays standard `.mid` files through the MusicEngine with 14 voices. Three routing modes: Auto (WTS preferred, SID overflow), Manual (per-channel table), SidOnly (legacy 6-voice). Auto-maps GM program numbers to WTS instrument indices or SID instrument buckets.
 
 ### Network Interface Controller (`Hardware/VirtualNetworkController.cs`)
 
