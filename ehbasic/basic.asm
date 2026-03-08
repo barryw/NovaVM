@@ -9043,25 +9043,25 @@ NIC_ST_ERROR       = $08
 
 ; --- Unified DMA controller registers ---
 
-DMA_CMD       = $BA60          ; write triggers transfer
-DMA_STATUS    = $BA61          ; 1=busy, 2=ok, 3=error
-DMA_ERRCODE   = $BA62          ; DMA error code
-DMA_SRCSPACE  = $BA63          ; source space id
-DMA_DSTSPACE  = $BA64          ; destination space id
-DMA_SRCL      = $BA65          ; source addr low
-DMA_SRCM      = $BA66          ; source addr mid
-DMA_SRCH      = $BA67          ; source addr high
-DMA_DSTL      = $BA68          ; destination addr low
-DMA_DSTM      = $BA69          ; destination addr mid
-DMA_DSTH      = $BA6A          ; destination addr high
-DMA_LENL      = $BA6B          ; length low
-DMA_LENM      = $BA6C          ; length mid
-DMA_LENH      = $BA6D          ; length high
-DMA_MODE      = $BA6E          ; mode flags
-DMA_FILL      = $BA6F          ; fill byte (when mode bit0 set)
-DMA_CNTL      = $BA70          ; transferred count low
-DMA_CNTM      = $BA71          ; transferred count mid
-DMA_CNTH      = $BA72          ; transferred count high
+DMA_CMD       = $BA63          ; write triggers transfer
+DMA_STATUS    = $BA64          ; 1=busy, 2=ok, 3=error
+DMA_ERRCODE   = $BA65          ; DMA error code
+DMA_SRCSPACE  = $BA66          ; source space id
+DMA_DSTSPACE  = $BA67          ; destination space id
+DMA_SRCL      = $BA68          ; source addr low
+DMA_SRCM      = $BA69          ; source addr mid
+DMA_SRCH      = $BA6A          ; source addr high
+DMA_DSTL      = $BA6B          ; destination addr low
+DMA_DSTM      = $BA6C          ; destination addr mid
+DMA_DSTH      = $BA6D          ; destination addr high
+DMA_LENL      = $BA6E          ; length low
+DMA_LENM      = $BA6F          ; length mid
+DMA_LENH      = $BA70          ; length high
+DMA_MODE      = $BA71          ; mode flags
+DMA_FILL      = $BA72          ; fill byte (when mode bit0 set)
+DMA_CNTL      = $BA73          ; transferred count low
+DMA_CNTM      = $BA74          ; transferred count mid
+DMA_CNTH      = $BA75          ; transferred count high
 
 DMA_CMD_START = $01
 DMA_BUSY      = $01
@@ -9071,31 +9071,31 @@ DMA_SPACE_XRAM = $05
 
 ; --- Blitter controller registers ---
 
-BLT_CMD       = $BA80          ; write triggers blit
-BLT_STATUS    = $BA81          ; 1=busy, 2=ok, 3=error
-BLT_ERRCODE   = $BA82          ; blitter error code
-BLT_SRCSPACE  = $BA83          ; source space id
-BLT_DSTSPACE  = $BA84          ; destination space id
-BLT_SRCL      = $BA85          ; source addr low
-BLT_SRCM      = $BA86          ; source addr mid
-BLT_SRCH      = $BA87          ; source addr high
-BLT_DSTL      = $BA88          ; destination addr low
-BLT_DSTM      = $BA89          ; destination addr mid
-BLT_DSTH      = $BA8A          ; destination addr high
-BLT_WIDTHL    = $BA8B          ; width low
-BLT_WIDTHH    = $BA8C          ; width high
-BLT_HEIGHTL   = $BA8D          ; height low
-BLT_HEIGHTH   = $BA8E          ; height high
-BLT_SRCSTRL   = $BA8F          ; source stride low
-BLT_SRCSTRH   = $BA90          ; source stride high
-BLT_DSTSTRL   = $BA91          ; destination stride low
-BLT_DSTSTRH   = $BA92          ; destination stride high
-BLT_MODE      = $BA93          ; mode flags
-BLT_FILL      = $BA94          ; fill byte (when mode bit0 set)
-BLT_CKEY      = $BA95          ; color key (when mode bit1 set)
-BLT_CNTL      = $BA96          ; written count low
-BLT_CNTM      = $BA97          ; written count mid
-BLT_CNTH      = $BA98          ; written count high
+BLT_CMD       = $BA83          ; write triggers blit
+BLT_STATUS    = $BA84          ; 1=busy, 2=ok, 3=error
+BLT_ERRCODE   = $BA85          ; blitter error code
+BLT_SRCSPACE  = $BA86          ; source space id
+BLT_DSTSPACE  = $BA87          ; destination space id
+BLT_SRCL      = $BA88          ; source addr low
+BLT_SRCM      = $BA89          ; source addr mid
+BLT_SRCH      = $BA8A          ; source addr high
+BLT_DSTL      = $BA8B          ; destination addr low
+BLT_DSTM      = $BA8C          ; destination addr mid
+BLT_DSTH      = $BA8D          ; destination addr high
+BLT_WIDTHL    = $BA8E          ; width low
+BLT_WIDTHH    = $BA8F          ; width high
+BLT_HEIGHTL   = $BA90          ; height low
+BLT_HEIGHTH   = $BA91          ; height high
+BLT_SRCSTRL   = $BA92          ; source stride low
+BLT_SRCSTRH   = $BA93          ; source stride high
+BLT_DSTSTRL   = $BA94          ; destination stride low
+BLT_DSTSTRH   = $BA95          ; destination stride high
+BLT_MODE      = $BA96          ; mode flags
+BLT_FILL      = $BA97          ; fill byte (when mode bit0 set)
+BLT_CKEY      = $BA98          ; color key (when mode bit1 set)
+BLT_CNTL      = $BA99          ; written count low
+BLT_CNTM      = $BA9A          ; written count mid
+BLT_CNTH      = $BA9B          ; written count high
 
 BLT_CMD_START = $01
 BLT_BUSY      = $01

@@ -3796,39 +3796,39 @@ Current file: min_mon.asm
 00CEBE  2               ; DMASTATUS — return DMA status register (no args)
 00CEBE  2               @xtk_dmastatus
 00CEBE  2  20 BC 00           JSR   LAB_IGBY          ; consume token
-00CEC1  2  AC 61 BA           LDY   DMA_STATUS
+00CEC1  2  AC 64 BA           LDY   DMA_STATUS
 00CEC4  2  4C 71 CF           JMP   @ret_0ay
 00CEC7  2               
 00CEC7  2               ; DMAERR — return DMA error code register (no args)
 00CEC7  2               @xtk_dmaerr
 00CEC7  2  20 BC 00           JSR   LAB_IGBY          ; consume token
-00CECA  2  AC 62 BA           LDY   DMA_ERRCODE
+00CECA  2  AC 65 BA           LDY   DMA_ERRCODE
 00CECD  2  4C 71 CF           JMP   @ret_0ay
 00CED0  2               
 00CED0  2               ; DMACOUNT — return last DMA byte count (low 16 bits)
 00CED0  2               @xtk_dmacount
 00CED0  2  20 BC 00           JSR   LAB_IGBY          ; consume token
-00CED3  2  AC 70 BA           LDY   DMA_CNTL
-00CED6  2  AD 71 BA           LDA   DMA_CNTM
+00CED3  2  AC 73 BA           LDY   DMA_CNTL
+00CED6  2  AD 74 BA           LDA   DMA_CNTM
 00CED9  2  4C B1 D3           JMP   LAB_AYFC
 00CEDC  2               
 00CEDC  2               ; BLITSTATUS — return blitter status register (no args)
 00CEDC  2               @xtk_blitstatus
 00CEDC  2  20 BC 00           JSR   LAB_IGBY          ; consume token
-00CEDF  2  AC 81 BA           LDY   BLT_STATUS
+00CEDF  2  AC 84 BA           LDY   BLT_STATUS
 00CEE2  2  4C 71 CF           JMP   @ret_0ay
 00CEE5  2               
 00CEE5  2               ; BLITERR — return blitter error code register (no args)
 00CEE5  2               @xtk_bliterr
 00CEE5  2  20 BC 00           JSR   LAB_IGBY          ; consume token
-00CEE8  2  AC 82 BA           LDY   BLT_ERRCODE
+00CEE8  2  AC 85 BA           LDY   BLT_ERRCODE
 00CEEB  2  4C 71 CF           JMP   @ret_0ay
 00CEEE  2               
 00CEEE  2               ; BLITCOUNT — return last blit written-byte count (low 16 bits)
 00CEEE  2               @xtk_blitcount
 00CEEE  2  20 BC 00           JSR   LAB_IGBY          ; consume token
-00CEF1  2  AC 96 BA           LDY   BLT_CNTL
-00CEF4  2  AD 97 BA           LDA   BLT_CNTM
+00CEF1  2  AC 99 BA           LDY   BLT_CNTL
+00CEF4  2  AD 9A BA           LDA   BLT_CNTM
 00CEF7  2  4C B1 D3           JMP   LAB_AYFC
 00CEFA  2               
 00CEFA  2               ; DIRNEXT — issue DIRREAD, return -1 (true) if entry ready, 0 (false)
@@ -9153,25 +9153,25 @@ Current file: min_mon.asm
 00E819  2               
 00E819  2               ; --- Unified DMA controller registers ---
 00E819  2               
-00E819  2               DMA_CMD       = $BA60          ; write triggers transfer
-00E819  2               DMA_STATUS    = $BA61          ; 1=busy, 2=ok, 3=error
-00E819  2               DMA_ERRCODE   = $BA62          ; DMA error code
-00E819  2               DMA_SRCSPACE  = $BA63          ; source space id
-00E819  2               DMA_DSTSPACE  = $BA64          ; destination space id
-00E819  2               DMA_SRCL      = $BA65          ; source addr low
-00E819  2               DMA_SRCM      = $BA66          ; source addr mid
-00E819  2               DMA_SRCH      = $BA67          ; source addr high
-00E819  2               DMA_DSTL      = $BA68          ; destination addr low
-00E819  2               DMA_DSTM      = $BA69          ; destination addr mid
-00E819  2               DMA_DSTH      = $BA6A          ; destination addr high
-00E819  2               DMA_LENL      = $BA6B          ; length low
-00E819  2               DMA_LENM      = $BA6C          ; length mid
-00E819  2               DMA_LENH      = $BA6D          ; length high
-00E819  2               DMA_MODE      = $BA6E          ; mode flags
-00E819  2               DMA_FILL      = $BA6F          ; fill byte (when mode bit0 set)
-00E819  2               DMA_CNTL      = $BA70          ; transferred count low
-00E819  2               DMA_CNTM      = $BA71          ; transferred count mid
-00E819  2               DMA_CNTH      = $BA72          ; transferred count high
+00E819  2               DMA_CMD       = $BA63          ; write triggers transfer
+00E819  2               DMA_STATUS    = $BA64          ; 1=busy, 2=ok, 3=error
+00E819  2               DMA_ERRCODE   = $BA65          ; DMA error code
+00E819  2               DMA_SRCSPACE  = $BA66          ; source space id
+00E819  2               DMA_DSTSPACE  = $BA67          ; destination space id
+00E819  2               DMA_SRCL      = $BA68          ; source addr low
+00E819  2               DMA_SRCM      = $BA69          ; source addr mid
+00E819  2               DMA_SRCH      = $BA6A          ; source addr high
+00E819  2               DMA_DSTL      = $BA6B          ; destination addr low
+00E819  2               DMA_DSTM      = $BA6C          ; destination addr mid
+00E819  2               DMA_DSTH      = $BA6D          ; destination addr high
+00E819  2               DMA_LENL      = $BA6E          ; length low
+00E819  2               DMA_LENM      = $BA6F          ; length mid
+00E819  2               DMA_LENH      = $BA70          ; length high
+00E819  2               DMA_MODE      = $BA71          ; mode flags
+00E819  2               DMA_FILL      = $BA72          ; fill byte (when mode bit0 set)
+00E819  2               DMA_CNTL      = $BA73          ; transferred count low
+00E819  2               DMA_CNTM      = $BA74          ; transferred count mid
+00E819  2               DMA_CNTH      = $BA75          ; transferred count high
 00E819  2               
 00E819  2               DMA_CMD_START = $01
 00E819  2               DMA_BUSY      = $01
@@ -9181,31 +9181,31 @@ Current file: min_mon.asm
 00E819  2               
 00E819  2               ; --- Blitter controller registers ---
 00E819  2               
-00E819  2               BLT_CMD       = $BA80          ; write triggers blit
-00E819  2               BLT_STATUS    = $BA81          ; 1=busy, 2=ok, 3=error
-00E819  2               BLT_ERRCODE   = $BA82          ; blitter error code
-00E819  2               BLT_SRCSPACE  = $BA83          ; source space id
-00E819  2               BLT_DSTSPACE  = $BA84          ; destination space id
-00E819  2               BLT_SRCL      = $BA85          ; source addr low
-00E819  2               BLT_SRCM      = $BA86          ; source addr mid
-00E819  2               BLT_SRCH      = $BA87          ; source addr high
-00E819  2               BLT_DSTL      = $BA88          ; destination addr low
-00E819  2               BLT_DSTM      = $BA89          ; destination addr mid
-00E819  2               BLT_DSTH      = $BA8A          ; destination addr high
-00E819  2               BLT_WIDTHL    = $BA8B          ; width low
-00E819  2               BLT_WIDTHH    = $BA8C          ; width high
-00E819  2               BLT_HEIGHTL   = $BA8D          ; height low
-00E819  2               BLT_HEIGHTH   = $BA8E          ; height high
-00E819  2               BLT_SRCSTRL   = $BA8F          ; source stride low
-00E819  2               BLT_SRCSTRH   = $BA90          ; source stride high
-00E819  2               BLT_DSTSTRL   = $BA91          ; destination stride low
-00E819  2               BLT_DSTSTRH   = $BA92          ; destination stride high
-00E819  2               BLT_MODE      = $BA93          ; mode flags
-00E819  2               BLT_FILL      = $BA94          ; fill byte (when mode bit0 set)
-00E819  2               BLT_CKEY      = $BA95          ; color key (when mode bit1 set)
-00E819  2               BLT_CNTL      = $BA96          ; written count low
-00E819  2               BLT_CNTM      = $BA97          ; written count mid
-00E819  2               BLT_CNTH      = $BA98          ; written count high
+00E819  2               BLT_CMD       = $BA83          ; write triggers blit
+00E819  2               BLT_STATUS    = $BA84          ; 1=busy, 2=ok, 3=error
+00E819  2               BLT_ERRCODE   = $BA85          ; blitter error code
+00E819  2               BLT_SRCSPACE  = $BA86          ; source space id
+00E819  2               BLT_DSTSPACE  = $BA87          ; destination space id
+00E819  2               BLT_SRCL      = $BA88          ; source addr low
+00E819  2               BLT_SRCM      = $BA89          ; source addr mid
+00E819  2               BLT_SRCH      = $BA8A          ; source addr high
+00E819  2               BLT_DSTL      = $BA8B          ; destination addr low
+00E819  2               BLT_DSTM      = $BA8C          ; destination addr mid
+00E819  2               BLT_DSTH      = $BA8D          ; destination addr high
+00E819  2               BLT_WIDTHL    = $BA8E          ; width low
+00E819  2               BLT_WIDTHH    = $BA8F          ; width high
+00E819  2               BLT_HEIGHTL   = $BA90          ; height low
+00E819  2               BLT_HEIGHTH   = $BA91          ; height high
+00E819  2               BLT_SRCSTRL   = $BA92          ; source stride low
+00E819  2               BLT_SRCSTRH   = $BA93          ; source stride high
+00E819  2               BLT_DSTSTRL   = $BA94          ; destination stride low
+00E819  2               BLT_DSTSTRH   = $BA95          ; destination stride high
+00E819  2               BLT_MODE      = $BA96          ; mode flags
+00E819  2               BLT_FILL      = $BA97          ; fill byte (when mode bit0 set)
+00E819  2               BLT_CKEY      = $BA98          ; color key (when mode bit1 set)
+00E819  2               BLT_CNTL      = $BA99          ; written count low
+00E819  2               BLT_CNTM      = $BA9A          ; written count mid
+00E819  2               BLT_CNTH      = $BA9B          ; written count high
 00E819  2               
 00E819  2               BLT_CMD_START = $01
 00E819  2               BLT_BUSY      = $01
@@ -10424,59 +10424,59 @@ Current file: min_mon.asm
 00F01D  2               LAB_DMACOPY
 00F01D  2                     ; src space
 00F01D  2  20 FC D7           JSR   LAB_GTBY
-00F020  2  8E 63 BA           STX   DMA_SRCSPACE
+00F020  2  8E 66 BA           STX   DMA_SRCSPACE
 00F023  2  86 11              STX   Itempl
 00F025  2                     ; src addr
 00F025  2  20 62 CD           JSR   LAB_1C01
 00F028  2  20 EA D7           JSR   LAB_GTWRD
 00F02B  2  A5 AF              LDA   FAC1_3
-00F02D  2  8D 65 BA           STA   DMA_SRCL
+00F02D  2  8D 68 BA           STA   DMA_SRCL
 00F030  2  A5 AE              LDA   FAC1_2
-00F032  2  8D 66 BA           STA   DMA_SRCM
+00F032  2  8D 69 BA           STA   DMA_SRCM
 00F035  2  A9 00              LDA   #$00
-00F037  2  8D 67 BA           STA   DMA_SRCH
+00F037  2  8D 6A BA           STA   DMA_SRCH
 00F03A  2  A4 11              LDY   Itempl
 00F03C  2  C0 05              CPY   #DMA_SPACE_XRAM
 00F03E  2  D0 06              BNE   @dmac_srcok
 00F040  2  AD 0C BA           LDA   XMC_BANK
-00F043  2  8D 67 BA           STA   DMA_SRCH
+00F043  2  8D 6A BA           STA   DMA_SRCH
 00F046  2               @dmac_srcok
 00F046  2                     ; dst space
 00F046  2  20 62 CD           JSR   LAB_1C01
 00F049  2  20 FC D7           JSR   LAB_GTBY
-00F04C  2  8E 64 BA           STX   DMA_DSTSPACE
+00F04C  2  8E 67 BA           STX   DMA_DSTSPACE
 00F04F  2  86 11              STX   Itempl
 00F051  2                     ; dst addr
 00F051  2  20 62 CD           JSR   LAB_1C01
 00F054  2  20 EA D7           JSR   LAB_GTWRD
 00F057  2  A5 AF              LDA   FAC1_3
-00F059  2  8D 68 BA           STA   DMA_DSTL
+00F059  2  8D 6B BA           STA   DMA_DSTL
 00F05C  2  A5 AE              LDA   FAC1_2
-00F05E  2  8D 69 BA           STA   DMA_DSTM
+00F05E  2  8D 6C BA           STA   DMA_DSTM
 00F061  2  A9 00              LDA   #$00
-00F063  2  8D 6A BA           STA   DMA_DSTH
+00F063  2  8D 6D BA           STA   DMA_DSTH
 00F066  2  A4 11              LDY   Itempl
 00F068  2  C0 05              CPY   #DMA_SPACE_XRAM
 00F06A  2  D0 06              BNE   @dmac_dstok
 00F06C  2  AD 0C BA           LDA   XMC_BANK
-00F06F  2  8D 6A BA           STA   DMA_DSTH
+00F06F  2  8D 6D BA           STA   DMA_DSTH
 00F072  2               @dmac_dstok
 00F072  2                     ; len
 00F072  2  20 62 CD           JSR   LAB_1C01
 00F075  2  20 EA D7           JSR   LAB_GTWRD
 00F078  2  A5 AF              LDA   FAC1_3
-00F07A  2  8D 6B BA           STA   DMA_LENL
+00F07A  2  8D 6E BA           STA   DMA_LENL
 00F07D  2  A5 AE              LDA   FAC1_2
-00F07F  2  8D 6C BA           STA   DMA_LENM
+00F07F  2  8D 6F BA           STA   DMA_LENM
 00F082  2  A9 00              LDA   #$00
-00F084  2  8D 6D BA           STA   DMA_LENH
+00F084  2  8D 70 BA           STA   DMA_LENH
 00F087  2                     ; mode = copy
 00F087  2  A9 00              LDA   #$00
-00F089  2  8D 6E BA           STA   DMA_MODE
+00F089  2  8D 71 BA           STA   DMA_MODE
 00F08C  2                     ; start
 00F08C  2  A9 01              LDA   #DMA_CMD_START
-00F08E  2  8D 60 BA           STA   DMA_CMD
-00F091  2  AD 61 BA           LDA   DMA_STATUS
+00F08E  2  8D 63 BA           STA   DMA_CMD
+00F091  2  AD 64 BA           LDA   DMA_STATUS
 00F094  2  C9 01              CMP   #DMA_BUSY
 00F096  2  F0 07              BEQ   @dmac_ok
 00F098  2  C9 02              CMP   #DMA_OK
@@ -10491,49 +10491,49 @@ Current file: min_mon.asm
 00F0A0  2               LAB_DMAFILL
 00F0A0  2                     ; dst space
 00F0A0  2  20 FC D7           JSR   LAB_GTBY
-00F0A3  2  8E 64 BA           STX   DMA_DSTSPACE
+00F0A3  2  8E 67 BA           STX   DMA_DSTSPACE
 00F0A6  2  86 11              STX   Itempl
 00F0A8  2                     ; dst addr
 00F0A8  2  20 62 CD           JSR   LAB_1C01
 00F0AB  2  20 EA D7           JSR   LAB_GTWRD
 00F0AE  2  A5 AF              LDA   FAC1_3
-00F0B0  2  8D 68 BA           STA   DMA_DSTL
+00F0B0  2  8D 6B BA           STA   DMA_DSTL
 00F0B3  2  A5 AE              LDA   FAC1_2
-00F0B5  2  8D 69 BA           STA   DMA_DSTM
+00F0B5  2  8D 6C BA           STA   DMA_DSTM
 00F0B8  2  A9 00              LDA   #$00
-00F0BA  2  8D 6A BA           STA   DMA_DSTH
+00F0BA  2  8D 6D BA           STA   DMA_DSTH
 00F0BD  2  A4 11              LDY   Itempl
 00F0BF  2  C0 05              CPY   #DMA_SPACE_XRAM
 00F0C1  2  D0 06              BNE   @dmaf_dstok
 00F0C3  2  AD 0C BA           LDA   XMC_BANK
-00F0C6  2  8D 6A BA           STA   DMA_DSTH
+00F0C6  2  8D 6D BA           STA   DMA_DSTH
 00F0C9  2               @dmaf_dstok
 00F0C9  2                     ; len
 00F0C9  2  20 62 CD           JSR   LAB_1C01
 00F0CC  2  20 EA D7           JSR   LAB_GTWRD
 00F0CF  2  A5 AF              LDA   FAC1_3
-00F0D1  2  8D 6B BA           STA   DMA_LENL
+00F0D1  2  8D 6E BA           STA   DMA_LENL
 00F0D4  2  A5 AE              LDA   FAC1_2
-00F0D6  2  8D 6C BA           STA   DMA_LENM
+00F0D6  2  8D 6F BA           STA   DMA_LENM
 00F0D9  2  A9 00              LDA   #$00
-00F0DB  2  8D 6D BA           STA   DMA_LENH
+00F0DB  2  8D 70 BA           STA   DMA_LENH
 00F0DE  2                     ; fill value
 00F0DE  2  20 62 CD           JSR   LAB_1C01
 00F0E1  2  20 FC D7           JSR   LAB_GTBY
-00F0E4  2  8E 6F BA           STX   DMA_FILL
+00F0E4  2  8E 72 BA           STX   DMA_FILL
 00F0E7  2                     ; mode = fill
 00F0E7  2  A9 01              LDA   #DMA_MODE_FILL
-00F0E9  2  8D 6E BA           STA   DMA_MODE
+00F0E9  2  8D 71 BA           STA   DMA_MODE
 00F0EC  2                     ; source fields are ignored in fill mode; keep deterministic
 00F0EC  2  A9 00              LDA   #$00
-00F0EE  2  8D 63 BA           STA   DMA_SRCSPACE
-00F0F1  2  8D 65 BA           STA   DMA_SRCL
-00F0F4  2  8D 66 BA           STA   DMA_SRCM
-00F0F7  2  8D 67 BA           STA   DMA_SRCH
+00F0EE  2  8D 66 BA           STA   DMA_SRCSPACE
+00F0F1  2  8D 68 BA           STA   DMA_SRCL
+00F0F4  2  8D 69 BA           STA   DMA_SRCM
+00F0F7  2  8D 6A BA           STA   DMA_SRCH
 00F0FA  2                     ; start
 00F0FA  2  A9 01              LDA   #DMA_CMD_START
-00F0FC  2  8D 60 BA           STA   DMA_CMD
-00F0FF  2  AD 61 BA           LDA   DMA_STATUS
+00F0FC  2  8D 63 BA           STA   DMA_CMD
+00F0FF  2  AD 64 BA           LDA   DMA_STATUS
 00F102  2  C9 01              CMP   #DMA_BUSY
 00F104  2  F0 07              BEQ   @dmaf_ok
 00F106  2  C9 02              CMP   #DMA_OK
@@ -10548,80 +10548,80 @@ Current file: min_mon.asm
 00F10E  2               LAB_BLITCOPY
 00F10E  2                     ; src space
 00F10E  2  20 FC D7           JSR   LAB_GTBY
-00F111  2  8E 83 BA           STX   BLT_SRCSPACE
+00F111  2  8E 86 BA           STX   BLT_SRCSPACE
 00F114  2  86 11              STX   Itempl
 00F116  2                     ; src addr
 00F116  2  20 62 CD           JSR   LAB_1C01
 00F119  2  20 EA D7           JSR   LAB_GTWRD
 00F11C  2  A5 AF              LDA   FAC1_3
-00F11E  2  8D 85 BA           STA   BLT_SRCL
+00F11E  2  8D 88 BA           STA   BLT_SRCL
 00F121  2  A5 AE              LDA   FAC1_2
-00F123  2  8D 86 BA           STA   BLT_SRCM
+00F123  2  8D 89 BA           STA   BLT_SRCM
 00F126  2  A9 00              LDA   #$00
-00F128  2  8D 87 BA           STA   BLT_SRCH
+00F128  2  8D 8A BA           STA   BLT_SRCH
 00F12B  2  A4 11              LDY   Itempl
 00F12D  2  C0 05              CPY   #BLT_SPACE_XRAM
 00F12F  2  D0 06              BNE   @bltc_srcok
 00F131  2  AD 0C BA           LDA   XMC_BANK
-00F134  2  8D 87 BA           STA   BLT_SRCH
+00F134  2  8D 8A BA           STA   BLT_SRCH
 00F137  2               @bltc_srcok
 00F137  2                     ; src stride
 00F137  2  20 62 CD           JSR   LAB_1C01
 00F13A  2  20 EA D7           JSR   LAB_GTWRD
 00F13D  2  A5 AF              LDA   FAC1_3
-00F13F  2  8D 8F BA           STA   BLT_SRCSTRL
+00F13F  2  8D 92 BA           STA   BLT_SRCSTRL
 00F142  2  A5 AE              LDA   FAC1_2
-00F144  2  8D 90 BA           STA   BLT_SRCSTRH
+00F144  2  8D 93 BA           STA   BLT_SRCSTRH
 00F147  2                     ; dst space
 00F147  2  20 62 CD           JSR   LAB_1C01
 00F14A  2  20 FC D7           JSR   LAB_GTBY
-00F14D  2  8E 84 BA           STX   BLT_DSTSPACE
+00F14D  2  8E 87 BA           STX   BLT_DSTSPACE
 00F150  2  86 11              STX   Itempl
 00F152  2                     ; dst addr
 00F152  2  20 62 CD           JSR   LAB_1C01
 00F155  2  20 EA D7           JSR   LAB_GTWRD
 00F158  2  A5 AF              LDA   FAC1_3
-00F15A  2  8D 88 BA           STA   BLT_DSTL
+00F15A  2  8D 8B BA           STA   BLT_DSTL
 00F15D  2  A5 AE              LDA   FAC1_2
-00F15F  2  8D 89 BA           STA   BLT_DSTM
+00F15F  2  8D 8C BA           STA   BLT_DSTM
 00F162  2  A9 00              LDA   #$00
-00F164  2  8D 8A BA           STA   BLT_DSTH
+00F164  2  8D 8D BA           STA   BLT_DSTH
 00F167  2  A4 11              LDY   Itempl
 00F169  2  C0 05              CPY   #BLT_SPACE_XRAM
 00F16B  2  D0 06              BNE   @bltc_dstok
 00F16D  2  AD 0C BA           LDA   XMC_BANK
-00F170  2  8D 8A BA           STA   BLT_DSTH
+00F170  2  8D 8D BA           STA   BLT_DSTH
 00F173  2               @bltc_dstok
 00F173  2                     ; dst stride
 00F173  2  20 62 CD           JSR   LAB_1C01
 00F176  2  20 EA D7           JSR   LAB_GTWRD
 00F179  2  A5 AF              LDA   FAC1_3
-00F17B  2  8D 91 BA           STA   BLT_DSTSTRL
+00F17B  2  8D 94 BA           STA   BLT_DSTSTRL
 00F17E  2  A5 AE              LDA   FAC1_2
-00F180  2  8D 92 BA           STA   BLT_DSTSTRH
+00F180  2  8D 95 BA           STA   BLT_DSTSTRH
 00F183  2                     ; width
 00F183  2  20 62 CD           JSR   LAB_1C01
 00F186  2  20 EA D7           JSR   LAB_GTWRD
 00F189  2  A5 AF              LDA   FAC1_3
-00F18B  2  8D 8B BA           STA   BLT_WIDTHL
+00F18B  2  8D 8E BA           STA   BLT_WIDTHL
 00F18E  2  A5 AE              LDA   FAC1_2
-00F190  2  8D 8C BA           STA   BLT_WIDTHH
+00F190  2  8D 8F BA           STA   BLT_WIDTHH
 00F193  2                     ; height
 00F193  2  20 62 CD           JSR   LAB_1C01
 00F196  2  20 EA D7           JSR   LAB_GTWRD
 00F199  2  A5 AF              LDA   FAC1_3
-00F19B  2  8D 8D BA           STA   BLT_HEIGHTL
+00F19B  2  8D 90 BA           STA   BLT_HEIGHTL
 00F19E  2  A5 AE              LDA   FAC1_2
-00F1A0  2  8D 8E BA           STA   BLT_HEIGHTH
+00F1A0  2  8D 91 BA           STA   BLT_HEIGHTH
 00F1A3  2                     ; mode = copy
 00F1A3  2  A9 00              LDA   #$00
-00F1A5  2  8D 93 BA           STA   BLT_MODE
-00F1A8  2  8D 94 BA           STA   BLT_FILL
-00F1AB  2  8D 95 BA           STA   BLT_CKEY
+00F1A5  2  8D 96 BA           STA   BLT_MODE
+00F1A8  2  8D 97 BA           STA   BLT_FILL
+00F1AB  2  8D 98 BA           STA   BLT_CKEY
 00F1AE  2                     ; start
 00F1AE  2  A9 01              LDA   #BLT_CMD_START
-00F1B0  2  8D 80 BA           STA   BLT_CMD
-00F1B3  2  AD 81 BA           LDA   BLT_STATUS
+00F1B0  2  8D 83 BA           STA   BLT_CMD
+00F1B3  2  AD 84 BA           LDA   BLT_STATUS
 00F1B6  2  C9 01              CMP   #BLT_BUSY
 00F1B8  2  F0 07              BEQ   @bltc_ok
 00F1BA  2  C9 02              CMP   #BLT_OK
@@ -10636,64 +10636,64 @@ Current file: min_mon.asm
 00F1C2  2               LAB_BLITFILL
 00F1C2  2                     ; dst space
 00F1C2  2  20 FC D7           JSR   LAB_GTBY
-00F1C5  2  8E 84 BA           STX   BLT_DSTSPACE
+00F1C5  2  8E 87 BA           STX   BLT_DSTSPACE
 00F1C8  2  86 11              STX   Itempl
 00F1CA  2                     ; dst addr
 00F1CA  2  20 62 CD           JSR   LAB_1C01
 00F1CD  2  20 EA D7           JSR   LAB_GTWRD
 00F1D0  2  A5 AF              LDA   FAC1_3
-00F1D2  2  8D 88 BA           STA   BLT_DSTL
+00F1D2  2  8D 8B BA           STA   BLT_DSTL
 00F1D5  2  A5 AE              LDA   FAC1_2
-00F1D7  2  8D 89 BA           STA   BLT_DSTM
+00F1D7  2  8D 8C BA           STA   BLT_DSTM
 00F1DA  2  A9 00              LDA   #$00
-00F1DC  2  8D 8A BA           STA   BLT_DSTH
+00F1DC  2  8D 8D BA           STA   BLT_DSTH
 00F1DF  2  A4 11              LDY   Itempl
 00F1E1  2  C0 05              CPY   #BLT_SPACE_XRAM
 00F1E3  2  D0 06              BNE   @bltf_dstok
 00F1E5  2  AD 0C BA           LDA   XMC_BANK
-00F1E8  2  8D 8A BA           STA   BLT_DSTH
+00F1E8  2  8D 8D BA           STA   BLT_DSTH
 00F1EB  2               @bltf_dstok
 00F1EB  2                     ; dst stride
 00F1EB  2  20 62 CD           JSR   LAB_1C01
 00F1EE  2  20 EA D7           JSR   LAB_GTWRD
 00F1F1  2  A5 AF              LDA   FAC1_3
-00F1F3  2  8D 91 BA           STA   BLT_DSTSTRL
+00F1F3  2  8D 94 BA           STA   BLT_DSTSTRL
 00F1F6  2  A5 AE              LDA   FAC1_2
-00F1F8  2  8D 92 BA           STA   BLT_DSTSTRH
+00F1F8  2  8D 95 BA           STA   BLT_DSTSTRH
 00F1FB  2                     ; width
 00F1FB  2  20 62 CD           JSR   LAB_1C01
 00F1FE  2  20 EA D7           JSR   LAB_GTWRD
 00F201  2  A5 AF              LDA   FAC1_3
-00F203  2  8D 8B BA           STA   BLT_WIDTHL
+00F203  2  8D 8E BA           STA   BLT_WIDTHL
 00F206  2  A5 AE              LDA   FAC1_2
-00F208  2  8D 8C BA           STA   BLT_WIDTHH
+00F208  2  8D 8F BA           STA   BLT_WIDTHH
 00F20B  2                     ; height
 00F20B  2  20 62 CD           JSR   LAB_1C01
 00F20E  2  20 EA D7           JSR   LAB_GTWRD
 00F211  2  A5 AF              LDA   FAC1_3
-00F213  2  8D 8D BA           STA   BLT_HEIGHTL
+00F213  2  8D 90 BA           STA   BLT_HEIGHTL
 00F216  2  A5 AE              LDA   FAC1_2
-00F218  2  8D 8E BA           STA   BLT_HEIGHTH
+00F218  2  8D 91 BA           STA   BLT_HEIGHTH
 00F21B  2                     ; fill value
 00F21B  2  20 62 CD           JSR   LAB_1C01
 00F21E  2  20 FC D7           JSR   LAB_GTBY
-00F221  2  8E 94 BA           STX   BLT_FILL
+00F221  2  8E 97 BA           STX   BLT_FILL
 00F224  2                     ; source fields are ignored in fill mode; keep deterministic
 00F224  2  A9 00              LDA   #$00
-00F226  2  8D 83 BA           STA   BLT_SRCSPACE
-00F229  2  8D 85 BA           STA   BLT_SRCL
-00F22C  2  8D 86 BA           STA   BLT_SRCM
-00F22F  2  8D 87 BA           STA   BLT_SRCH
-00F232  2  8D 8F BA           STA   BLT_SRCSTRL
-00F235  2  8D 90 BA           STA   BLT_SRCSTRH
-00F238  2  8D 95 BA           STA   BLT_CKEY
+00F226  2  8D 86 BA           STA   BLT_SRCSPACE
+00F229  2  8D 88 BA           STA   BLT_SRCL
+00F22C  2  8D 89 BA           STA   BLT_SRCM
+00F22F  2  8D 8A BA           STA   BLT_SRCH
+00F232  2  8D 92 BA           STA   BLT_SRCSTRL
+00F235  2  8D 93 BA           STA   BLT_SRCSTRH
+00F238  2  8D 98 BA           STA   BLT_CKEY
 00F23B  2                     ; mode = fill
 00F23B  2  A9 01              LDA   #BLT_MODE_FILL
-00F23D  2  8D 93 BA           STA   BLT_MODE
+00F23D  2  8D 96 BA           STA   BLT_MODE
 00F240  2                     ; start
 00F240  2  A9 01              LDA   #BLT_CMD_START
-00F242  2  8D 80 BA           STA   BLT_CMD
-00F245  2  AD 81 BA           LDA   BLT_STATUS
+00F242  2  8D 83 BA           STA   BLT_CMD
+00F245  2  AD 84 BA           LDA   BLT_STATUS
 00F248  2  C9 01              CMP   #BLT_BUSY
 00F24A  2  F0 07              BEQ   @bltf_ok
 00F24C  2  C9 02              CMP   #BLT_OK
