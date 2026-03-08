@@ -446,13 +446,130 @@ public static class MidiEngine
     /// <param name="rawChannels">Selected channels from SelectChannels.</param>
     /// <param name="sidOnly">True to route only to SID voices 0-5.</param>
     /// <param name="defineInstrument">Callback to register SID instrument (slot, bucket).</param>
+    /// <param name="explicitVoiceMapping">Optional voice→channel mapping. When provided,
+    /// listed voices are assigned first; remaining channels are auto-routed to remaining voices.</param>
     public static RoutingResult RouteVoices(
         ChannelInfo[] analysis, int[] rawChannels, bool sidOnly,
-        Action<int, InstrumentBucket> defineInstrument)
+        Action<int, InstrumentBucket> defineInstrument,
+        Dictionary<int, int>? explicitVoiceMapping = null)
     {
         var result = new RoutingResult { SidOnly = sidOnly };
 
-        if (sidOnly)
+        bool hasExplicit = explicitVoiceMapping != null && explicitVoiceMapping.Count > 0;
+
+        if (hasExplicit && !sidOnly)
+        {
+            // --- Explicit mapping (non-SID) ---
+            int totalVoices = 14;
+            result.VoiceToChannel = new int[totalVoices];
+            result.InstrumentSlots = new int[totalVoices];
+            for (int i = 0; i < totalVoices; i++)
+                result.VoiceToChannel[i] = -1;
+
+            // Step 1: Apply explicit assignments
+            var usedChannels = new HashSet<int>();
+            foreach (var (voice, channel) in explicitVoiceMapping!)
+            {
+                if (voice >= 0 && voice < totalVoices)
+                {
+                    result.VoiceToChannel[voice] = channel;
+                    usedChannels.Add(channel);
+                }
+            }
+
+            // Step 2: Auto-route remaining channels to remaining voices (WTS first, then SID)
+            var remainingChannels = new List<int>();
+            foreach (int ch in rawChannels)
+                if (!usedChannels.Contains(ch))
+                    remainingChannels.Add(ch);
+
+            int autoIdx = 0;
+            // WTS voices 6-13 first
+            for (int v = 6; v < totalVoices && autoIdx < remainingChannels.Count; v++)
+                if (result.VoiceToChannel[v] == -1)
+                    result.VoiceToChannel[v] = remainingChannels[autoIdx++];
+            // SID voices 0-5 next
+            for (int v = 0; v < 6 && autoIdx < remainingChannels.Count; v++)
+                if (result.VoiceToChannel[v] == -1)
+                    result.VoiceToChannel[v] = remainingChannels[autoIdx++];
+
+            // Step 3: Assign instruments
+            var registeredBuckets = new Dictionary<int, int>();
+            int nextSlot = 1;
+            for (int v = 0; v < totalVoices; v++)
+            {
+                int ch = result.VoiceToChannel[v];
+                if (ch < 0) continue;
+
+                if (v >= 6)
+                {
+                    int bank = analysis[ch].IsDrums ? 128 : 0;
+                    result.InstrumentSlots[v] = (bank << 8) | (analysis[ch].GmProgram & 0x7F);
+                }
+                else
+                {
+                    var bucket = GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
+                    int bucketIdx = Array.IndexOf(Buckets, bucket);
+                    if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+                    {
+                        slot = nextSlot++;
+                        registeredBuckets[bucketIdx] = slot;
+                        defineInstrument(slot, bucket);
+                    }
+                    result.InstrumentSlots[v] = slot;
+                }
+            }
+        }
+        else if (hasExplicit && sidOnly)
+        {
+            // --- Explicit mapping (SID only) ---
+            int totalVoices = 6;
+            result.VoiceToChannel = new int[totalVoices];
+            result.InstrumentSlots = new int[totalVoices];
+            for (int i = 0; i < totalVoices; i++)
+                result.VoiceToChannel[i] = -1;
+
+            var usedChannels = new HashSet<int>();
+            foreach (var (voice, channel) in explicitVoiceMapping!)
+            {
+                if (voice >= 0 && voice < totalVoices)
+                {
+                    result.VoiceToChannel[voice] = channel;
+                    usedChannels.Add(channel);
+                }
+            }
+
+            // Auto-route remaining channels
+            var remainingChannels = new List<int>();
+            foreach (int ch in rawChannels)
+                if (!usedChannels.Contains(ch))
+                    remainingChannels.Add(ch);
+
+            int autoIdx = 0;
+            for (int v = 0; v < totalVoices && autoIdx < remainingChannels.Count; v++)
+                if (result.VoiceToChannel[v] == -1)
+                    result.VoiceToChannel[v] = remainingChannels[autoIdx++];
+
+            // SID instrument buckets
+            var registeredBuckets = new Dictionary<int, int>();
+            int nextSlot = 1;
+            for (int v = 0; v < totalVoices; v++)
+            {
+                int ch = result.VoiceToChannel[v];
+                if (ch < 0) continue;
+
+                var bucket = GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
+                int bucketIdx = Array.IndexOf(Buckets, bucket);
+                if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+                {
+                    slot = nextSlot++;
+                    registeredBuckets[bucketIdx] = slot;
+                    defineInstrument(slot, bucket);
+                }
+                result.InstrumentSlots[v] = slot;
+            }
+        }
+        else if (sidOnly)
         {
             result.VoiceToChannel = rawChannels;
             result.InstrumentSlots = new int[rawChannels.Length];
