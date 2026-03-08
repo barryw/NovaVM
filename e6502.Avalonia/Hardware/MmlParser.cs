@@ -247,6 +247,14 @@ public static class MmlParser
                     continue;
                 }
 
+                if (sub == 'W')
+                {
+                    pos++;
+                    int wtsInst = ReadInt(mml, ref pos, 0);
+                    events.Add(new MmlEvent(MmlEventType.SetWtsInstrument, wtsInst, 0));
+                    continue;
+                }
+
                 // Unknown @ command — skip
                 continue;
             }

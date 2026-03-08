@@ -590,7 +590,7 @@ public sealed class MusicEngine
 
                 if (IsWtsVoice(vi))
                 {
-                    _wts?.NoteOn(WtsLocalVoice(vi), ev.Param1, 100, 0);
+                    _wts?.NoteOn(WtsLocalVoice(vi), ev.Param1, 100, vs.WtsInstrumentId);
                 }
                 else if (vs.PortamentoActive)
                 {
@@ -634,7 +634,7 @@ public sealed class MusicEngine
                 {
                     vs.CurrentMidi = vs.ArpNotes[0];
                     if (IsWtsVoice(vi))
-                        _wts?.NoteOn(WtsLocalVoice(vi), vs.ArpNotes[0], 100, 0);
+                        _wts?.NoteOn(WtsLocalVoice(vi), vs.ArpNotes[0], 100, vs.WtsInstrumentId);
                     else
                         WriteVoice(vi, vs.ArpNotes[0], vs.CurrentInstrument);
                 }
@@ -729,6 +729,10 @@ public sealed class MusicEngine
                 break;
             }
 
+            case MmlEventType.SetWtsInstrument:
+                vs.WtsInstrumentId = ev.Param1;
+                break;
+
             case MmlEventType.LoopStart:
             case MmlEventType.LoopEnd:
                 // Loops already expanded by parser; sentinels just mark structure
@@ -747,7 +751,7 @@ public sealed class MusicEngine
         int note = vs.ArpNotes[vs.ArpIndex];
         if (IsWtsVoice(vi))
         {
-            _wts?.NoteOn(WtsLocalVoice(vi), note, 100, 0);
+            _wts?.NoteOn(WtsLocalVoice(vi), note, 100, vs.WtsInstrumentId);
             return;
         }
         WriteFreq(vi, MidiToSid(note));
@@ -876,6 +880,9 @@ public sealed class MusicEngine
 
         // Filter sweep
         public int FilterSweepDir;
+
+        // WTS instrument
+        public int WtsInstrumentId;
 
         public void Reset(int bpm, int frameRateHz)
         {

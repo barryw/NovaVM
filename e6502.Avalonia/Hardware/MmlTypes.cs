@@ -21,6 +21,7 @@ public enum MmlEventType
     SetVoiceVolume, // Param1=volume (0-15)
     LoopStart,
     LoopEnd,        // Param1=repeat count
+    SetWtsInstrument, // Param1 = WTS instrument index
 }
 
 public readonly record struct MmlEvent(MmlEventType Type, int Param1 = 0, int Param2 = 0, int[]? ArpNotes = null);
