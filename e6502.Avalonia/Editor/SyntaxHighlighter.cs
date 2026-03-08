@@ -4,7 +4,7 @@ namespace e6502.Avalonia.Editor;
 /// Lightweight per-line syntax highlighter for NCC C source code.
 /// Tracks block comment state across lines. Returns color indices per character.
 /// </summary>
-public sealed class SyntaxHighlighter
+public sealed class SyntaxHighlighter : ISyntaxHighlighter
 {
     // VGC color indices
     public const byte ColorDefault     = 1;   // white

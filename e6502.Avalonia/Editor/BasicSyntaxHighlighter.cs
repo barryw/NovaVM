@@ -5,7 +5,7 @@ namespace e6502.Avalonia.Editor;
 /// Input is the code portion of a line (without the line number).
 /// Returns a color byte per character for VGC color RAM.
 /// </summary>
-public sealed class BasicSyntaxHighlighter
+public sealed class BasicSyntaxHighlighter : ISyntaxHighlighter
 {
     public const byte ColorDefault = 14;  // light blue — variables, operators
     public const byte ColorKeyword = 1;   // white
@@ -33,6 +33,8 @@ public sealed class BasicSyntaxHighlighter
         "FRE", "POS", "DATA", "CONT", "LIST", "STOP",
         "GET", "PUT", "WAIT", "USR", "DEL", "PWD", "CD",
     ];
+
+    public void Reset() { }
 
     public byte[] HighlightLine(string line)
     {
