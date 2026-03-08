@@ -1,4 +1,5 @@
 using System;
+using Avalonia.Input;
 using e6502.Avalonia.Editor;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -472,6 +473,31 @@ public class ScreenTextEditorTests
         _ed.MoveCursorWithSelection(-1, 0);
         Assert.IsTrue(_ed.HasSelection);
         Assert.AreEqual("el", _ed.GetSelectedText());
+    }
+
+    [TestMethod]
+    public void SaveFile_WithoutDeviceManager_DoesNotCrash()
+    {
+        // DeviceManager is null — should show error message, not throw
+        _ed.SaveFile();
+        // Mode stays Edit
+        Assert.AreEqual(EditorMode.Edit, _ed.Mode);
+    }
+
+    [TestMethod]
+    public void OpenFileBrowser_WithoutDeviceManager_ShowsError()
+    {
+        _ed.OpenFileBrowser();
+        // Should NOT enter FileBrowser mode when DeviceManager is null
+        Assert.AreEqual(EditorMode.Edit, _ed.Mode);
+    }
+
+    [TestMethod]
+    public void HandleFileBrowserKey_WhenNotInBrowserMode_ReturnsFalse()
+    {
+        // Not in FileBrowser mode — should return false
+        bool handled = _ed.HandleFileBrowserKey(Key.Up);
+        Assert.IsFalse(handled);
     }
 
     [TestMethod]

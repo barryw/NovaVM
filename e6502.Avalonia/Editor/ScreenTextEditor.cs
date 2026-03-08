@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using e6502.Avalonia.Hardware;
+using e6502.Storage;
 using KDS.e6502;
 
 namespace e6502.Avalonia.Editor;
@@ -81,10 +82,21 @@ public abstract class ScreenTextEditor
     // ── Search state ─────────────────────────────────────────────────────────
     private string _lastSearchTerm = "";
 
+    // ── File browser state ────────────────────────────────────────────────────
+    private static readonly string[] DeviceSlots = ["HD0", "HD1", "FD0", "FD1", "FD2", "FD3"];
+    private int _browserDeviceIndex;
+    private int _browserSelectedIndex;
+    private int _browserScrollY;
+    private List<BrowserEntry> _browserEntries = new();
+    private string _currentFilename = "";
+
+    private record BrowserEntry(string Name, bool IsDirectory, int Size);
+
     protected readonly IBusDevice Bus;
 
     public EditorMode Mode { get; protected set; } = EditorMode.Edit;
     public bool IsActive { get; protected set; }
+    public DeviceManager? DeviceManager { get; set; }
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -965,6 +977,323 @@ public abstract class ScreenTextEditor
             _scrollX = _cursorCol;
         else if (_cursorCol >= _scrollX + visibleWidth)
             _scrollX = _cursorCol - visibleWidth + 1;
+    }
+
+    // ── File browser ──────────────────────────────────────────────────────────
+
+    internal void OpenFileBrowser()
+    {
+        if (DeviceManager == null)
+        {
+            ShowMessage("No device manager available", true);
+            return;
+        }
+        Mode = EditorMode.FileBrowser;
+        _browserSelectedIndex = 0;
+        _browserScrollY = 0;
+        PopulateBrowserEntries();
+        RedrawFileBrowser();
+    }
+
+    private void PopulateBrowserEntries()
+    {
+        _browserEntries.Clear();
+        var device = GetCurrentBrowserDevice();
+        if (device == null || !device.IsMounted) return;
+
+        // Add parent directory entry (unless at root)
+        if (device.CurrentDirectory != "/")
+            _browserEntries.Add(new BrowserEntry("../", true, 0));
+
+        var entries = device.ListDirectory(null);
+        if (entries == null) return;
+
+        string ext = GetFileExtension();
+
+        foreach (var entry in entries.OrderBy(e => e.Filename))
+        {
+            if (entry.IsDirectory)
+                _browserEntries.Add(new BrowserEntry(entry.Filename + "/", true, 0));
+        }
+        foreach (var entry in entries.OrderBy(e => e.Filename))
+        {
+            // ListDirectory returns files without extensions; match by NdiFileType or extension
+            // HostDirectoryDevice strips extensions — check via ext mapping
+            string entryExt = NdiFileTypeToExt(entry.FileType);
+            if (!entry.IsDirectory && string.Equals(entryExt, ext, StringComparison.OrdinalIgnoreCase))
+                _browserEntries.Add(new BrowserEntry(entry.Filename, false, entry.SizeBytes));
+        }
+    }
+
+    private static string NdiFileTypeToExt(NdiFileType type) => type switch
+    {
+        NdiFileType.Bas => ".bas",
+        NdiFileType.Sid => ".sid",
+        NdiFileType.Bin => ".bin",
+        NdiFileType.Mid => ".mid",
+        NdiFileType.Gfx => ".gfx",
+        _ => ""
+    };
+
+    private IStorageDevice? GetCurrentBrowserDevice()
+    {
+        if (DeviceManager == null) return null;
+        // Find first mounted device starting from _browserDeviceIndex
+        for (int attempt = 0; attempt < DeviceSlots.Length; attempt++)
+        {
+            int idx = (_browserDeviceIndex + attempt) % DeviceSlots.Length;
+            try
+            {
+                var dev = DeviceManager.GetDevice(DeviceSlots[idx]);
+                if (dev.IsMounted)
+                {
+                    _browserDeviceIndex = idx;
+                    return dev;
+                }
+            }
+            catch (IOException) { }
+        }
+        return null;
+    }
+
+    internal bool HandleFileBrowserKey(Key key)
+    {
+        if (Mode != EditorMode.FileBrowser) return false;
+
+        switch (key)
+        {
+            case Key.Escape:
+                Mode = EditorMode.Edit;
+                Redraw();
+                return true;
+
+            case Key.Up:
+                if (_browserSelectedIndex > 0)
+                {
+                    _browserSelectedIndex--;
+                    EnsureBrowserVisible();
+                    RedrawFileBrowser();
+                }
+                return true;
+
+            case Key.Down:
+                if (_browserSelectedIndex < _browserEntries.Count - 1)
+                {
+                    _browserSelectedIndex++;
+                    EnsureBrowserVisible();
+                    RedrawFileBrowser();
+                }
+                return true;
+
+            case Key.Enter:
+                if (_browserEntries.Count > 0)
+                {
+                    var entry = _browserEntries[_browserSelectedIndex];
+                    if (entry.IsDirectory)
+                        NavigateToDirectory(entry.Name);
+                    else
+                        LoadSelectedFile(entry.Name);
+                }
+                return true;
+
+            case Key.Tab:
+                CycleBrowserDevice();
+                return true;
+
+            default:
+                return true; // swallow other keys in browser mode
+        }
+    }
+
+    private void NavigateToDirectory(string dirName)
+    {
+        var device = GetCurrentBrowserDevice();
+        if (device == null) return;
+
+        if (dirName == "../")
+        {
+            string cur = device.CurrentDirectory;
+            if (cur == "/" || string.IsNullOrEmpty(cur))
+            {
+                device.CurrentDirectory = "/";
+            }
+            else
+            {
+                // Go up one level
+                string trimmed = cur.TrimEnd('/');
+                int lastSlash = trimmed.LastIndexOf('/');
+                device.CurrentDirectory = lastSlash <= 0 ? "/" : trimmed[..lastSlash];
+            }
+        }
+        else
+        {
+            string subdir = dirName.TrimEnd('/');
+            string cur = device.CurrentDirectory;
+            device.CurrentDirectory = cur == "/" ? subdir : cur + "/" + subdir;
+        }
+
+        _browserSelectedIndex = 0;
+        _browserScrollY = 0;
+        PopulateBrowserEntries();
+        RedrawFileBrowser();
+    }
+
+    private void CycleBrowserDevice()
+    {
+        if (DeviceManager == null) return;
+        // Advance to next mounted device
+        for (int attempt = 1; attempt <= DeviceSlots.Length; attempt++)
+        {
+            int idx = (_browserDeviceIndex + attempt) % DeviceSlots.Length;
+            try
+            {
+                var dev = DeviceManager.GetDevice(DeviceSlots[idx]);
+                if (dev.IsMounted)
+                {
+                    _browserDeviceIndex = idx;
+                    _browserSelectedIndex = 0;
+                    _browserScrollY = 0;
+                    PopulateBrowserEntries();
+                    RedrawFileBrowser();
+                    return;
+                }
+            }
+            catch (IOException) { }
+        }
+    }
+
+    private void LoadSelectedFile(string filename)
+    {
+        var device = GetCurrentBrowserDevice();
+        if (device == null) return;
+
+        try
+        {
+            string ext = GetFileExtension();
+            byte[] data = device.Load(filename, ext);
+            DeserializeOnLoad(data, filename);
+            _currentFilename = filename;
+            _modified = false;
+            Mode = EditorMode.Edit;
+            Redraw();
+            ShowMessage($"Loaded: {filename}{ext}");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Load error: {ex.Message}", true);
+        }
+    }
+
+    internal void SaveFile()
+    {
+        if (DeviceManager == null)
+        {
+            ShowMessage("No device manager", true);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_currentFilename))
+        {
+            StartPrompt("Save as: ", name =>
+            {
+                if (!string.IsNullOrEmpty(name))
+                {
+                    _currentFilename = name;
+                    DoSave();
+                }
+            });
+            return;
+        }
+
+        DoSave();
+    }
+
+    private void DoSave()
+    {
+        var device = GetCurrentBrowserDevice();
+        if (device == null)
+        {
+            ShowMessage("No device available", true);
+            return;
+        }
+
+        try
+        {
+            string ext = GetFileExtension();
+            byte[] data = SerializeForSave(_currentFilename);
+            device.Save(_currentFilename, data, ext);
+            _modified = false;
+            RedrawStatusBar();
+            ShowMessage($"Saved: {_currentFilename}{ext}");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Save error: {ex.Message}", true);
+        }
+    }
+
+    private void RedrawFileBrowser()
+    {
+        var device = GetCurrentBrowserDevice();
+        string deviceLabel = device?.Prefix ?? "???";
+        string dirPath = device?.CurrentDirectory ?? "/";
+
+        DrawBoxTop(TitleRow, $" Open File - [{deviceLabel}] {dirPath} ");
+
+        // Header separator row
+        int listStartRow = CodeStartRow;
+        int listEndRow = CodeEndRow;
+        int visibleCount = listEndRow - listStartRow + 1;
+
+        for (int i = 0; i < visibleCount; i++)
+        {
+            int row = listStartRow + i;
+            int entryIdx = _browserScrollY + i;
+
+            WriteChar(0, row, BoxV, BorderFg);
+
+            if (entryIdx < _browserEntries.Count)
+            {
+                var entry = _browserEntries[entryIdx];
+                bool selected = entryIdx == _browserSelectedIndex;
+                byte fg = selected ? TitleFg : DefaultFg;
+
+                string prefix = selected ? "> " : "  ";
+                string name = prefix + entry.Name;
+                string size = entry.IsDirectory ? "" : $"{entry.Size,8}";
+
+                int nameWidth = CodeWidth - size.Length;
+                if (name.Length > nameWidth) name = name[..nameWidth];
+                else name = name.PadRight(nameWidth);
+                string line = name + size;
+
+                for (int c = 0; c < CodeWidth && c < line.Length; c++)
+                    WriteChar(CodeStartCol + c, row, (byte)line[c], fg);
+                if (line.Length < CodeWidth)
+                    for (int c = line.Length; c < CodeWidth; c++)
+                        WriteChar(CodeStartCol + c, row, (byte)' ', DefaultFg);
+            }
+            else
+            {
+                for (int c = CodeStartCol; c < BorderCol; c++)
+                    WriteChar(c, row, (byte)' ', DefaultFg);
+            }
+
+            WriteChar(BorderCol, row, BoxV, BorderFg);
+        }
+
+        DrawBoxMiddle(StatusRow, $" {_browserEntries.Count} entries  [Tab]:Device");
+        DrawBoxBottom(MessageRow, " \x18\x19:Navigate  Enter:Open  Tab:Device  Esc:Cancel", MessageFg);
+    }
+
+    private void EnsureBrowserVisible()
+    {
+        int visibleCount = CodeEndRow - CodeStartRow + 1;
+
+        if (_browserSelectedIndex < _browserScrollY)
+            _browserScrollY = _browserSelectedIndex;
+        else if (_browserSelectedIndex >= _browserScrollY + visibleCount)
+            _browserScrollY = _browserSelectedIndex - visibleCount + 1;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
