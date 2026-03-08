@@ -307,4 +307,194 @@ public class ScreenTextEditorTests
         Assert.IsTrue(_ed.ScrollX > 0, "ScrollX should be > 0 when cursor is past CodeWidth");
         Assert.IsTrue(_ed.ScrollX <= 90, "ScrollX should be <= cursor position");
     }
+
+    // ── Selection tests ──────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void ShiftRight_StartsSelection()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        Assert.IsTrue(_ed.HasSelection);
+        Assert.AreEqual("H", _ed.GetSelectedText());
+    }
+
+    [TestMethod]
+    public void ShiftRight_ExtendsSelection()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        Assert.AreEqual("He", _ed.GetSelectedText());
+    }
+
+    [TestMethod]
+    public void NonShiftMove_ClearsSelection()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        Assert.IsTrue(_ed.HasSelection);
+        _ed.MoveCursor(1, 0);
+        Assert.IsFalse(_ed.HasSelection);
+    }
+
+    [TestMethod]
+    public void ShiftDown_SelectsAcrossLines()
+    {
+        _ed.LoadLines(["Hello", "World"]);
+        _ed.SetCursor(0, 3);
+        _ed.MoveCursorWithSelection(0, 1);
+        string selected = _ed.GetSelectedText();
+        Assert.AreEqual("lo\nWor", selected);
+    }
+
+    [TestMethod]
+    public void ShiftHome_SelectsToStartOfLine()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 3);
+        _ed.SelectToHome();
+        Assert.AreEqual("Hel", _ed.GetSelectedText());
+    }
+
+    [TestMethod]
+    public void ShiftEnd_SelectsToEndOfLine()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 1);
+        _ed.SelectToEnd();
+        Assert.AreEqual("ello", _ed.GetSelectedText());
+    }
+
+    [TestMethod]
+    public void InsertChar_WithSelection_ReplacesSelection()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 1);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.InsertChar('X');
+        Assert.AreEqual("HXlo", _ed.GetLineText(0));
+    }
+
+    [TestMethod]
+    public void Backspace_WithSelection_DeletesSelection()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 1);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.Backspace();
+        Assert.AreEqual("Hlo", _ed.GetLineText(0));
+        Assert.AreEqual(1, _ed.CursorCol);
+    }
+
+    [TestMethod]
+    public void Delete_WithSelection_DeletesSelection()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 1);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.Delete();
+        Assert.AreEqual("Hlo", _ed.GetLineText(0));
+    }
+
+    [TestMethod]
+    public void MultiLineSelection_Delete()
+    {
+        _ed.LoadLines(["Hello", "World", "Test"]);
+        _ed.SetCursor(0, 3);
+        _ed.MoveCursorWithSelection(0, 1);
+        _ed.MoveCursorWithSelection(0, 1);
+        _ed.Delete();
+        Assert.AreEqual(1, _ed.LineCount);
+        Assert.AreEqual("Helt", _ed.GetLineText(0));
+    }
+
+    [TestMethod]
+    public void CopyLine_NoSelection_CopiesWholeLine()
+    {
+        _ed.LoadLines(["Hello", "World"]);
+        _ed.SetCursor(0, 0);
+        _ed.CopySelection();
+        _ed.SetCursor(1, 5);
+        _ed.PasteClipboard();
+        Assert.AreEqual(3, _ed.LineCount);
+        Assert.AreEqual("Hello", _ed.GetLineText(0));
+        Assert.AreEqual("World", _ed.GetLineText(1));
+        Assert.AreEqual("Hello", _ed.GetLineText(2));
+    }
+
+    [TestMethod]
+    public void CopySelection_PastesSelectedText()
+    {
+        _ed.LoadLines(["Hello World"]);
+        _ed.SetCursor(0, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.CopySelection();
+        _ed.ClearSelection();
+        _ed.SetCursor(0, 11);
+        _ed.PasteClipboard();
+        Assert.AreEqual("Hello WorldHello", _ed.GetLineText(0));
+    }
+
+    [TestMethod]
+    public void CutSelection_RemovesAndCopies()
+    {
+        _ed.LoadLines(["Hello World"]);
+        _ed.SetCursor(0, 5);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.CutSelection();
+        Assert.AreEqual("Hello", _ed.GetLineText(0));
+        _ed.PasteClipboard();
+        Assert.AreEqual("Hello World", _ed.GetLineText(0));
+    }
+
+    [TestMethod]
+    public void ReverseSelection_GetSelectedText()
+    {
+        _ed.LoadLines(["Hello"]);
+        _ed.SetCursor(0, 3);
+        _ed.MoveCursorWithSelection(-1, 0);
+        _ed.MoveCursorWithSelection(-1, 0);
+        Assert.IsTrue(_ed.HasSelection);
+        Assert.AreEqual("el", _ed.GetSelectedText());
+    }
+
+    [TestMethod]
+    public void PasteOverSelection_ReplacesSelected()
+    {
+        _ed.LoadLines(["Hello World"]);
+        _ed.SetCursor(0, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        // Selected "Hello"
+        _ed.CopySelection();
+        _ed.ClearSelection();
+        // Select "World"
+        _ed.SetCursor(0, 6);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.MoveCursorWithSelection(1, 0);
+        _ed.PasteClipboard();
+        Assert.AreEqual("Hello Hello", _ed.GetLineText(0));
+    }
 }

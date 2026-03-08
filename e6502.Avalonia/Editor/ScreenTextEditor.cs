@@ -53,6 +53,13 @@ public abstract class ScreenTextEditor
     private bool _modified;
     private bool _insertMode = true;
 
+    // ── Selection state ──────────────────────────────────────────────────────
+    private int _selAnchorLine;
+    private int _selAnchorCol;
+    private bool _selActive;
+    private string _clipboard = "";
+    private bool _clipboardIsLine;
+
     protected readonly IBusDevice Bus;
 
     public EditorMode Mode { get; protected set; } = EditorMode.Edit;
@@ -103,6 +110,10 @@ public abstract class ScreenTextEditor
     internal int ScrollX => _scrollX;
     internal int ScrollY => _scrollY;
 
+    internal bool HasSelection => _selActive;
+
+    internal void ClearSelection() => _selActive = false;
+
     internal void SetCursor(int line, int col)
     {
         _cursorLine = Math.Clamp(line, 0, _lines.Count - 1);
@@ -134,6 +145,7 @@ public abstract class ScreenTextEditor
 
     internal void InsertChar(char ch)
     {
+        if (_selActive) DeleteSelection();
         EnsureLine();
         string line = _lines[_cursorLine];
         if (_cursorCol > line.Length) _cursorCol = line.Length;
@@ -176,6 +188,13 @@ public abstract class ScreenTextEditor
 
     internal void Backspace()
     {
+        if (_selActive)
+        {
+            DeleteSelection();
+            RedrawCode();
+            RedrawStatusBar();
+            return;
+        }
         if (_cursorCol > 0)
         {
             string line = _lines[_cursorLine];
@@ -203,6 +222,13 @@ public abstract class ScreenTextEditor
 
     internal void Delete()
     {
+        if (_selActive)
+        {
+            DeleteSelection();
+            RedrawCode();
+            RedrawStatusBar();
+            return;
+        }
         string line = _lines[_cursorLine];
         if (_cursorCol < line.Length)
         {
@@ -256,8 +282,182 @@ public abstract class ScreenTextEditor
 
     // ── Cursor movement ──────────────────────────────────────────────────────
 
+    internal void MoveCursorWithSelection(int dx, int dy)
+    {
+        if (!_selActive)
+        {
+            _selAnchorLine = _cursorLine;
+            _selAnchorCol = _cursorCol;
+            _selActive = true;
+        }
+        MoveCursor(dx, dy);
+        // Re-activate because MoveCursor clears it
+        _selActive = true;
+    }
+
+    internal void SelectToHome()
+    {
+        if (!_selActive)
+        {
+            _selAnchorLine = _cursorLine;
+            _selAnchorCol = _cursorCol;
+        }
+        Home();
+        _selActive = true;
+    }
+
+    internal void SelectToEnd()
+    {
+        if (!_selActive)
+        {
+            _selAnchorLine = _cursorLine;
+            _selAnchorCol = _cursorCol;
+        }
+        End();
+        _selActive = true;
+    }
+
+    internal string GetSelectedText()
+    {
+        if (!_selActive) return "";
+        GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol);
+        if (startLine == endLine)
+            return _lines[startLine][startCol..endCol];
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(_lines[startLine][startCol..]);
+        for (int i = startLine + 1; i < endLine; i++)
+        {
+            sb.Append('\n');
+            sb.Append(_lines[i]);
+        }
+        sb.Append('\n');
+        sb.Append(_lines[endLine][..endCol]);
+        return sb.ToString();
+    }
+
+    private void GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol)
+    {
+        if (_selAnchorLine < _cursorLine || (_selAnchorLine == _cursorLine && _selAnchorCol <= _cursorCol))
+        {
+            startLine = _selAnchorLine;
+            startCol = _selAnchorCol;
+            endLine = _cursorLine;
+            endCol = _cursorCol;
+        }
+        else
+        {
+            startLine = _cursorLine;
+            startCol = _cursorCol;
+            endLine = _selAnchorLine;
+            endCol = _selAnchorCol;
+        }
+    }
+
+    internal void DeleteSelection()
+    {
+        if (!_selActive) return;
+        GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol);
+
+        if (startLine == endLine)
+        {
+            _lines[startLine] = _lines[startLine][..startCol] + _lines[startLine][endCol..];
+        }
+        else
+        {
+            string before = _lines[startLine][..startCol];
+            string after = _lines[endLine][endCol..];
+            _lines[startLine] = before + after;
+            _lines.RemoveRange(startLine + 1, endLine - startLine);
+        }
+
+        _cursorLine = startLine;
+        _cursorCol = startCol;
+        _selActive = false;
+        _modified = true;
+    }
+
+    internal void CopySelection()
+    {
+        if (_selActive)
+        {
+            _clipboard = GetSelectedText();
+            _clipboardIsLine = false;
+        }
+        else
+        {
+            _clipboard = _lines[_cursorLine];
+            _clipboardIsLine = true;
+        }
+    }
+
+    internal void CutSelection()
+    {
+        if (_selActive)
+        {
+            _clipboard = GetSelectedText();
+            _clipboardIsLine = false;
+            DeleteSelection();
+            RedrawCode();
+            RedrawStatusBar();
+        }
+        else
+        {
+            _clipboard = _lines[_cursorLine];
+            _clipboardIsLine = true;
+            DeleteCurrentLine();
+        }
+    }
+
+    internal void PasteClipboard()
+    {
+        if (string.IsNullOrEmpty(_clipboard)) return;
+
+        if (_selActive) DeleteSelection();
+
+        if (_clipboardIsLine)
+        {
+            _lines.Insert(_cursorLine + 1, _clipboard);
+            _cursorLine++;
+            _cursorCol = 0;
+            _modified = true;
+            EnsureVisible();
+            RedrawCode();
+            RedrawStatusBar();
+            return;
+        }
+
+        string[] pasteLines = _clipboard.Split('\n');
+        if (pasteLines.Length == 1)
+        {
+            string line = _lines[_cursorLine];
+            _lines[_cursorLine] = line[.._cursorCol] + pasteLines[0] + line[_cursorCol..];
+            _cursorCol += pasteLines[0].Length;
+        }
+        else
+        {
+            string currentLine = _lines[_cursorLine];
+            string before = currentLine[.._cursorCol];
+            string after = currentLine[_cursorCol..];
+
+            _lines[_cursorLine] = before + pasteLines[0];
+            for (int i = 1; i < pasteLines.Length - 1; i++)
+                _lines.Insert(_cursorLine + i, pasteLines[i]);
+            _lines.Insert(_cursorLine + pasteLines.Length - 1, pasteLines[^1] + after);
+
+            _cursorLine += pasteLines.Length - 1;
+            _cursorCol = pasteLines[^1].Length;
+        }
+
+        _modified = true;
+        EnsureVisible();
+        RedrawCode();
+        RedrawStatusBar();
+    }
+
     internal void MoveCursor(int dx, int dy)
     {
+        _selActive = false;
         if (dy != 0)
         {
             _cursorLine = Math.Clamp(_cursorLine + dy, 0, _lines.Count - 1);
