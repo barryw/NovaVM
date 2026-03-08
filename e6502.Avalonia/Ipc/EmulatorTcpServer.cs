@@ -1138,6 +1138,8 @@ public sealed class EmulatorTcpServer : IDisposable
         catch (Exception ex) { return Error($"Failed to read MIDI: {ex.Message}"); }
 
         var analysis = MidiEngine.AnalyzeChannels(midi);
+        var mode = _bus.MidiPlayback.RoutingMode;
+        bool sidOnly = mode == MidiRoutingMode.SidOnly || _bus.Wts.InstrumentCount == 0;
 
         Dictionary<int, int>? mapping = null;
         if (req["voices"] is JsonNode voicesNode)
@@ -1150,36 +1152,98 @@ public sealed class EmulatorTcpServer : IDisposable
             }
         }
 
-        var selectedChannels = MidiEngine.SelectChannels(midi, explicitMapping: mapping);
+        int maxVoices = sidOnly ? 6 : 14;
+        var rawChannels = MidiEngine.SelectChannels(midi, maxVoices, explicitMapping: mapping);
 
-        var instrumentSlots = new int[selectedChannels.Length];
-        var registeredBuckets = new Dictionary<int, int>();
-        int nextSlot = 1;
+        int[] voiceToChannel;
+        int[] instrumentSlots;
 
-        for (int v = 0; v < selectedChannels.Length; v++)
+        if (sidOnly)
         {
-            int ch = selectedChannels[v];
-            var bucket = MidiEngine.GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
-            int bucketIdx = Array.IndexOf(MidiEngine.GetAllBuckets(), bucket);
+            // Original 6-voice SID-only path
+            voiceToChannel = rawChannels;
+            instrumentSlots = new int[rawChannels.Length];
+            var registeredBuckets = new Dictionary<int, int>();
+            int nextSlot = 1;
 
-            if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+            for (int v = 0; v < rawChannels.Length; v++)
             {
-                slot = nextSlot++;
-                registeredBuckets[bucketIdx] = slot;
-                _bus.Music.DefineInstrument(slot, bucket.Waveform,
-                    bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release);
+                int ch = rawChannels[v];
+                var bucket = MidiEngine.GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
+                int bucketIdx = Array.IndexOf(MidiEngine.GetAllBuckets(), bucket);
+
+                if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+                {
+                    slot = nextSlot++;
+                    registeredBuckets[bucketIdx] = slot;
+                    _bus.Music.DefineInstrument(slot, bucket.Waveform,
+                        bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release);
+                }
+                instrumentSlots[v] = slot;
             }
-            instrumentSlots[v] = slot;
+        }
+        else
+        {
+            // Auto mode: first 8 channels → WTS (voices 6-13), overflow → SID (voices 0-5)
+            int wtsCount = Math.Min(rawChannels.Length, 8);
+            int sidCount = rawChannels.Length - wtsCount;
+            int totalVoices = 6 + wtsCount;
+
+            voiceToChannel = new int[totalVoices];
+            instrumentSlots = new int[totalVoices];
+
+            // Pad unused SID voices with -1
+            for (int i = sidCount; i < 6; i++)
+                voiceToChannel[i] = -1;
+
+            // SID overflow (channels[8..]) → voices 0..sidCount-1
+            for (int i = 0; i < sidCount; i++)
+                voiceToChannel[i] = rawChannels[wtsCount + i];
+
+            // WTS primary (channels[0..7]) → voices 6..6+wtsCount-1
+            for (int i = 0; i < wtsCount; i++)
+                voiceToChannel[6 + i] = rawChannels[i];
+
+            var registeredBuckets = new Dictionary<int, int>();
+            int nextSlot = 1;
+
+            for (int v = 0; v < totalVoices; v++)
+            {
+                int ch = voiceToChannel[v];
+                if (ch < 0) continue;
+
+                bool isWtsVoice = v >= 6;
+                if (isWtsVoice)
+                {
+                    // WTS: use GM program number as instrument ID
+                    instrumentSlots[v] = analysis[ch].GmProgram;
+                }
+                else
+                {
+                    // SID: use instrument bucket mapping
+                    var bucket = MidiEngine.GetInstrumentBucket(analysis[ch].GmProgram, analysis[ch].IsDrums);
+                    int bucketIdx = Array.IndexOf(MidiEngine.GetAllBuckets(), bucket);
+                    if (!registeredBuckets.TryGetValue(bucketIdx, out int slot))
+                    {
+                        slot = nextSlot++;
+                        registeredBuckets[bucketIdx] = slot;
+                        _bus.Music.DefineInstrument(slot, bucket.Waveform,
+                            bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release);
+                    }
+                    instrumentSlots[v] = slot;
+                }
+            }
         }
 
         _bus.Music.SetVolume(15);
-        _bus.MidiPlayback.Play(midi, selectedChannels, instrumentSlots);
+        _bus.MidiPlayback.Play(midi, voiceToChannel, instrumentSlots);
 
         var result = new JsonObject
         {
             ["ok"] = true,
-            ["voices"] = selectedChannels.Length,
-            ["channels"] = new JsonArray(selectedChannels.Select(c => (JsonNode)JsonValue.Create(c)).ToArray())
+            ["voices"] = voiceToChannel.Length,
+            ["routing"] = sidOnly ? "sid" : "auto",
+            ["channels"] = new JsonArray(voiceToChannel.Where(c => c >= 0).Select(c => (JsonNode)JsonValue.Create(c)).ToArray())
         };
         return result.ToJsonString();
     }
