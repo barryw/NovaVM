@@ -247,11 +247,19 @@ public static class MmlParser
                     continue;
                 }
 
-                if (sub == 'W')
+                if (sub == 'I')
                 {
                     pos++;
-                    int wtsInst = ReadInt(mml, ref pos, 0);
-                    events.Add(new MmlEvent(MmlEventType.SetWtsInstrument, wtsInst, 0));
+                    int program = ReadInt(mml, ref pos, 0);
+                    events.Add(new MmlEvent(MmlEventType.SetWtsInstrument, program & 0x7F));
+                    continue;
+                }
+
+                if (sub == 'D')
+                {
+                    pos++;
+                    int program = ReadInt(mml, ref pos, 0);
+                    events.Add(new MmlEvent(MmlEventType.SetWtsInstrument, (128 << 8) | (program & 0x7F)));
                     continue;
                 }
 
