@@ -937,6 +937,89 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
+    // ── Wavetable synth (WTS) commands ──────────────────────────────────
+
+    [McpServerTool, Description("Load an SF2 soundfont file for wavetable playback")]
+    public static async Task<string> WtsLoadSoundfont(
+        EmulatorClient client,
+        [Description("SF2 filename in soundfonts/ directory")] string filename)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "wts_load_soundfont",
+            ["filename"] = filename
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("List instruments in the loaded soundfont")]
+    public static async Task<string> WtsListInstruments(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "wts_list_instruments"
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Play a note on a wavetable voice")]
+    public static async Task<string> WtsNoteOn(
+        EmulatorClient client,
+        [Description("Voice index (0-7)")] int voice,
+        [Description("MIDI note number (0-127)")] int note,
+        [Description("Velocity (0-127)")] int velocity = 100,
+        [Description("Instrument index")] int instrument = 0)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "wts_note_on",
+            ["voice"] = voice,
+            ["note"] = note,
+            ["velocity"] = velocity,
+            ["instrument"] = instrument
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Stop a note on a wavetable voice")]
+    public static async Task<string> WtsNoteOff(
+        EmulatorClient client,
+        [Description("Voice index (0-7)")] int voice)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "wts_note_off",
+            ["voice"] = voice
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set reverb level for wavetable synth")]
+    public static async Task<string> WtsSetReverb(
+        EmulatorClient client,
+        [Description("Reverb level (0-255)")] int level)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "wts_set_reverb",
+            ["level"] = level
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set chorus level for wavetable synth")]
+    public static async Task<string> WtsSetChorus(
+        EmulatorClient client,
+        [Description("Chorus level (0-255)")] int level)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "wts_set_chorus",
+            ["level"] = level
+        });
+        return result.ToJsonString();
+    }
+
     private static string FormatScreen(JsonNode screen)
     {
         var sb = new StringBuilder();
