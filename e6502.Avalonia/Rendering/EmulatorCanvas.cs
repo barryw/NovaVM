@@ -34,6 +34,9 @@ public class EmulatorCanvas : Control
     /// <summary>When set, keyboard input routes to the NCC editor instead of ScreenEditor.</summary>
     public NccEditor? NccEditor { get; set; }
 
+    /// <summary>When set, F5 toggles the BASIC editor and keyboard input routes there when active.</summary>
+    public BasicEditor? BasicEditor { get; set; }
+
     public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor)
     {
         _vgc = vgc;
@@ -91,6 +94,25 @@ public class EmulatorCanvas : Control
             bool consumed = NccEditor.HandleKeyDown(e.Key, e.KeyModifiers);
             if (consumed)
                 e.Handled = true;
+            base.OnKeyDown(e);
+            return;
+        }
+
+        // Route to BASIC editor when active (but not in Running mode — program gets ScreenEditor input)
+        if (BasicEditor is { IsActive: true, Mode: not EditorMode.Running })
+        {
+            bool consumed = BasicEditor.HandleKeyDown(e.Key, e.KeyModifiers);
+            if (consumed)
+                e.Handled = true;
+            base.OnKeyDown(e);
+            return;
+        }
+
+        // F5: activate BASIC editor (only when NCC editor is not active)
+        if (e.Key == Key.F5 && NccEditor is not { IsActive: true })
+        {
+            BasicEditor?.ToggleActivation();
+            e.Handled = true;
             base.OnKeyDown(e);
             return;
         }
@@ -170,6 +192,18 @@ public class EmulatorCanvas : Control
             if (!string.IsNullOrEmpty(e.Text))
             {
                 NccEditor.HandleTextInput(e.Text);
+                e.Handled = true;
+            }
+            base.OnTextInput(e);
+            return;
+        }
+
+        // Route to BASIC editor when active
+        if (BasicEditor is { IsActive: true, Mode: not EditorMode.Running })
+        {
+            if (!string.IsNullOrEmpty(e.Text))
+            {
+                BasicEditor.HandleTextInput(e.Text);
                 e.Handled = true;
             }
             base.OnTextInput(e);

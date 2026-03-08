@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using e6502.Avalonia.Hardware;
+using e6502.Avalonia.Input;
 using e6502.Storage;
 using KDS.e6502;
 
@@ -46,13 +47,12 @@ public sealed class BasicEditor
     // ── External references ──────────────────────────────────────────────────
     private readonly IBusDevice _bus;
     private readonly BasicSyntaxHighlighter _highlighter = new();
+    private ScreenEditor? _screenEditor;
+    private Cpu? _cpu;
 
     // ── Editor state ─────────────────────────────────────────────────────────
     public EditorMode Mode { get; private set; } = EditorMode.Edit;
     public bool IsActive { get; private set; }
-
-    // Set when F5 is pressed — caller polls this
-    public bool RunRequested { get; private set; }
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -61,6 +61,13 @@ public sealed class BasicEditor
         _bus = bus;
         // Start with one empty line
         _lines.Add((10, ""));
+    }
+
+    /// <summary>Set by MainWindow after construction.</summary>
+    public void SetRunDependencies(Cpu cpu, ScreenEditor screenEditor)
+    {
+        _cpu = cpu;
+        _screenEditor = screenEditor;
     }
 
     // ── Public accessors for testing ─────────────────────────────────────────
@@ -88,7 +95,6 @@ public sealed class BasicEditor
     {
         if (IsActive) return;
         IsActive = true;
-        RunRequested = false;
         _bus.Write(VgcConstants.RegCursorEnable, 0);
         _bus.Write(VgcConstants.RegBgCol, EditorBg);
         ClearScreen();
@@ -116,6 +122,59 @@ public sealed class BasicEditor
         _bus.Write(VgcConstants.RegCursorEnable, 1);
     }
 
+    /// <summary>Toggle editor on/off — called by F5 from BASIC.</summary>
+    public void ToggleActivation()
+    {
+        if (IsActive)
+            Deactivate();
+        else
+            Activate();
+    }
+
+    /// <summary>
+    /// Tokenizes the buffer to memory, clears the screen, re-enables VGC cursor,
+    /// and injects "RUN\r" into the ScreenEditor input queue.
+    /// Sets Mode = Running so that keyboard input passes through to BASIC.
+    /// </summary>
+    public void Run()
+    {
+        var tok = GetTokenizer();
+        if (tok != null)
+            WriteToMemory(tok);
+
+        // Restore normal BASIC display
+        _bus.Write(VgcConstants.RegBgCol, 0);
+        ClearScreen();
+        _bus.Write(VgcConstants.RegCursorEnable, 1);
+
+        Mode = EditorMode.Running;
+
+        // Inject RUN command into BASIC input queue
+        if (_screenEditor != null)
+        {
+            foreach (byte b in "RUN\r"u8)
+                _screenEditor.QueueInput(b);
+        }
+    }
+
+    /// <summary>
+    /// Called when "Ready" is detected on screen after a program run.
+    /// Re-activates the editor, re-reads the program from memory.
+    /// </summary>
+    public void ReturnFromRun()
+    {
+        Mode = EditorMode.Edit;
+        _bus.Write(VgcConstants.RegCursorEnable, 0);
+        _bus.Write(VgcConstants.RegBgCol, EditorBg);
+        ClearScreen();
+
+        var tok = GetTokenizer();
+        if (tok != null)
+            ReadFromMemory(tok);
+
+        Redraw();
+    }
+
     // ── Keyboard handling ────────────────────────────────────────────────────
 
     public bool HandleKeyDown(Key key, KeyModifiers modifiers)
@@ -132,7 +191,7 @@ public sealed class BasicEditor
 
         if (key == Key.F5)
         {
-            RunRequested = true;
+            Run();
             return true;
         }
 

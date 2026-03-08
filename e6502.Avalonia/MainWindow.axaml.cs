@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private bool _docEditorVisible;
     private DebuggerService _debugger = null!;
     private NccEditor? _nccEditor;
+    private BasicEditor? _basicEditor;
 
     public MainWindow()
     {
@@ -112,6 +113,11 @@ public partial class MainWindow : Window
         // NCC editor
         _nccEditor = new NccEditor(_bus, _debugger, _cpu);
         _canvas.NccEditor = _nccEditor;
+
+        // BASIC editor
+        _basicEditor = new BasicEditor(_bus);
+        _basicEditor.SetRunDependencies(_cpu, _editor);
+        _canvas.BasicEditor = _basicEditor;
 
         // TCP server for MCP
         int tcpPort = int.TryParse(Environment.GetEnvironmentVariable("EMULATOR_PORT"), out int ep) ? ep : 6502;
@@ -223,6 +229,13 @@ public partial class MainWindow : Window
                     _nccEditor.StopRunning();
                 else if (_nccEditor.Mode == EditorMode.Debug)
                     _nccEditor.CheckDebugBreak();
+            }
+
+            // BASIC editor: detect program end (Ready prompt on screen)
+            if (_basicEditor is { IsActive: true, Mode: EditorMode.Running })
+            {
+                if (DetectReadyPrompt())
+                    _basicEditor.ReturnFromRun();
             }
 
             return true;
@@ -774,6 +787,24 @@ public partial class MainWindow : Window
         // In direct/immediate mode, Clineh = $FF.
         // When running a program, it holds the actual line number high byte.
         return _bus.Read(0x0088) != 0xFF;
+    }
+
+    private bool DetectReadyPrompt()
+    {
+        var vgc = _bus.Vgc;
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+        {
+            for (int col = 0; col <= VgcConstants.ScreenCols - 5; col++)
+            {
+                if (vgc.GetScreenChar(col, row) == 'R' &&
+                    vgc.GetScreenChar(col + 1, row) == 'e' &&
+                    vgc.GetScreenChar(col + 2, row) == 'a' &&
+                    vgc.GetScreenChar(col + 3, row) == 'd' &&
+                    vgc.GetScreenChar(col + 4, row) == 'y')
+                    return true;
+            }
+        }
+        return false;
     }
 
     private void ShowHelpPanelNcc()
