@@ -322,7 +322,8 @@ public abstract class ScreenTextEditor
             }
             else
             {
-                // Empty row below content
+                // Empty row below content — include left border
+                WriteChar(0, row, BoxV, BorderFg);
                 for (int c = CodeStartCol; c < BorderCol; c++)
                     WriteChar(c, row, (byte)' ', DefaultFg);
             }
@@ -959,10 +960,11 @@ public abstract class ScreenTextEditor
         else if (_cursorLine >= _scrollY + vis)
             _scrollY = _cursorLine - vis + 1;
 
+        int visibleWidth = CodeWidth - GetGutterWidth();
         if (_cursorCol < _scrollX)
             _scrollX = _cursorCol;
-        else if (_cursorCol >= _scrollX + CodeWidth)
-            _scrollX = _cursorCol - CodeWidth + 1;
+        else if (_cursorCol >= _scrollX + visibleWidth)
+            _scrollX = _cursorCol - visibleWidth + 1;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
