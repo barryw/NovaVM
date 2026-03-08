@@ -120,6 +120,55 @@ public static class VgcConstants
     public const int  MusicTotalL      = 0xBA59; // total frames low byte
     public const int  MusicTotalH      = 0xBA5A; // total frames high byte
 
+    // -------------------------------------------------------------------------
+    // Wavetable Synthesizer registers ($A140-$A1DF)
+    // -------------------------------------------------------------------------
+
+    public const int WtsBase             = 0xA140;
+
+    // Per-voice registers: 8 voices × 8 bytes ($A140-$A17F)
+    public const int WtsVoiceBase        = 0xA140;
+    public const int WtsVoiceStride      = 8;
+    public const int WtsVoiceEnd         = 0xA17F;
+
+    // Voice register offsets (add to WtsVoiceBase + voice * WtsVoiceStride)
+    public const int WtsVoiceNote        = 0;  // W: MIDI note (1-127), write 0 = note off
+    public const int WtsVoiceVelocity    = 1;  // W: velocity (0-127)
+    public const int WtsVoiceInstrument  = 2;  // W: instrument index (0-255)
+    public const int WtsVoiceVolume      = 3;  // R/W: volume (0-255, default 255)
+    public const int WtsVoicePanning     = 4;  // R/W: pan (0=left, 128=center, 255=right)
+    public const int WtsVoicePitchBendLo = 5;  // W: pitch bend low byte
+    public const int WtsVoicePitchBendHi = 6;  // W: pitch bend high byte ($80=center)
+    public const int WtsVoiceStatus      = 7;  // R: bit 0=active, bit 1=releasing
+
+    // Global registers ($A180-$A19F)
+    public const int WtsGlobalBase       = 0xA180;
+    public const int WtsReverbLevel      = 0xA180; // R/W: 0-255 (default 80)
+    public const int WtsChorusLevel      = 0xA181; // R/W: 0-255 (default 40)
+    public const int WtsMasterVolume     = 0xA182; // R/W: 0-255 (default 255)
+    public const int WtsSoundfontStatus  = 0xA183; // R: 0=none, 1=ready, 2=loading, $FF=error
+    public const int WtsInstrumentCount  = 0xA184; // R: instrument count in loaded soundfont
+    public const int WtsCommand          = 0xA185; // W: command byte
+    public const int WtsCommandArg       = 0xA186; // W: command argument
+    public const int WtsActiveVoices     = 0xA187; // R: bitmask of active voices
+
+    // Instrument enumeration ($A1A0-$A1DF)
+    public const int WtsEnumBase         = 0xA1A0;
+    public const int WtsEnumIndex        = 0xA1A0; // W: write index to populate buffer
+    public const int WtsEnumBank         = 0xA1A1; // R: MIDI bank
+    public const int WtsEnumProgram      = 0xA1A2; // R: MIDI program
+    public const int WtsEnumName         = 0xA1A3; // R: null-terminated name (28 chars)
+    public const int WtsEnumEnd          = 0xA1DF;
+
+    public const int WtsEnd              = 0xA1DF;
+
+    // WTS commands (write to WtsCommand)
+    public const byte WtsCmdAllNotesOff  = 0x01;
+    public const byte WtsCmdResetEffects = 0x02;
+
+    // FileIO command for soundfont loading
+    public const byte FioCmdSfLoad       = 0x15;
+
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;
     public const byte FioStatusError   = 0x03;
