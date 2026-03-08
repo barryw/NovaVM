@@ -1009,6 +1009,11 @@ public sealed partial class FileIoController
             string? filename = ReadFilename();
             if (filename is null) { SetError(VgcConstants.FioErrIo); return; }
 
+            // Parse optional voice mapping from filename string
+            var parsed = MidPlayParser.Parse(filename);
+            filename = parsed.Filename;
+            var mapping = parsed.Mapping;
+
             string path = string.Empty;
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
@@ -1071,7 +1076,8 @@ public sealed partial class FileIoController
 
             var routing = MidiEngine.RouteVoices(analysis, rawChannels, sidOnly,
                 (slot, bucket) => _musicEngine.DefineInstrument(slot, bucket.Waveform,
-                    bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release));
+                    bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release),
+                mapping);
 
             _musicEngine.SetVolume(15);
             _midiPlayback.Play(midi, routing.VoiceToChannel, routing.InstrumentSlots);

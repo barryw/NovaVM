@@ -1146,23 +1146,26 @@ public sealed class EmulatorTcpServer : IDisposable
 
         bool sidOnly = mode == MidiRoutingMode.SidOnly || _bus.Wts.InstrumentCount == 0;
 
-        Dictionary<int, int>? mapping = null;
+        Dictionary<int, int>? voiceMapping = null;
         if (req["voices"] is JsonNode voicesNode)
         {
-            mapping = new Dictionary<int, int>();
+            voiceMapping = new Dictionary<int, int>();
             foreach (var prop in voicesNode.AsObject())
             {
-                if (int.TryParse(prop.Key, out int voice))
-                    mapping[voice] = prop.Value!.GetValue<int>();
+                // Keys are 1-based voice numbers, values are MIDI channels
+                if (int.TryParse(prop.Key, out int voice) && voice >= 1 && voice <= 14)
+                    voiceMapping[voice - 1] = prop.Value!.GetValue<int>();
             }
+            if (voiceMapping.Count == 0) voiceMapping = null;
         }
 
         int maxVoices = sidOnly ? 6 : 14;
-        var rawChannels = MidiEngine.SelectChannels(midi, maxVoices, explicitMapping: mapping);
+        var rawChannels = MidiEngine.SelectChannels(midi, maxVoices);
 
         var routing = MidiEngine.RouteVoices(analysis, rawChannels, sidOnly,
             (slot, bucket) => _bus.Music.DefineInstrument(slot, bucket.Waveform,
-                bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release));
+                bucket.Attack, bucket.Decay, bucket.Sustain, bucket.Release),
+            voiceMapping);
 
         _bus.Music.SetVolume(15);
         _bus.MidiPlayback.Play(midi, routing.VoiceToChannel, routing.InstrumentSlots);
