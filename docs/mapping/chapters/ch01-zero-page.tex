@@ -1,0 +1,981 @@
+% =============================================================================
+% Chapter 1 — Zero Page ($0000–$00FF)
+% =============================================================================
+\chapter{Zero Page}
+
+\epigraph{``The zero page is prime real estate on the 6502. If your code isn't
+living there, it's commuting.''}{\textit{--- Unattributed, ca.\ 1983}}
+
+\section*{Introduction}
+
+On the MOS 6502, the 256 bytes from \$0000 to \$00FF enjoy a privileged
+status.  Instructions that reference zero-page addresses are one byte shorter
+and one cycle faster than their absolute-address equivalents.  The CPU's
+limited register set makes these locations indispensable --- they serve as
+extra registers, scratch space, and indirect-address pointers for nearly every
+significant operation.
+
+In the NovaVM, the zero page is owned almost entirely by EhBASIC.  The
+interpreter packs its warm-start vector, terminal state, memory-management
+pointers, floating-point accumulators, and even a small machine-language
+subroutine into this single page.  Understanding these locations is the key to
+understanding how BASIC works under the hood --- and to writing programs that
+can peek behind the curtain.
+
+The map below is arranged in address order.  Where a location serves double
+duty under different aliases (a common EhBASIC technique), all names are
+listed.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Boot and Warm Start (\$00--\$02)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+When EhBASIC starts up, it writes a three-byte \texttt{JMP} instruction at the
+very bottom of the zero page.  Thereafter, a warm start (the BASIC command
+\texttt{RUN} completing, or the user pressing the reset key) simply jumps to
+address \$0000, which executes the \texttt{JMP} and re-enters the interpreter's
+main loop without losing the stored program.
+
+\mementry{0000}{LAB\_WARM}{R/W}{\$4C}
+
+The first byte of the warm-start trampoline.  Always contains \texttt{\$4C},
+the 6502 opcode for \texttt{JMP abs}.  Do not alter this byte unless you are
+deliberately redirecting the warm-start path.
+
+\mementry{0001}{Wrmjpl}{R/W}{---}
+
+Low byte of the warm-start jump target address.
+
+\mementry{0002}{Wrmjph}{R/W}{---}
+
+High byte of the warm-start jump target address.  Together with \addr{0001},
+this forms the destination of the \texttt{JMP} at \addr{0000}.
+
+\begin{notebox}
+You can redirect the warm start by POKEing a new address into \$01--\$02.
+For example, to jump to your own machine-language routine at \$8000:
+\begin{lstlisting}
+DOKE $01,$8000
+\end{lstlisting}
+Be very sure you know what you are doing --- a bad vector here means a
+hard reset is the only way back.
+\end{notebox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Unallocated (\$03--\$09)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Addresses \$03 through \$09 are not assigned by EhBASIC.  They sit in the gap
+between the warm-start trampoline and the USR() vector.  These seven bytes are
+safe for your own machine-language routines or short data tables, provided you
+do not call any BASIC routine that might overwrite them during
+initialisation.  In practice, they remain untouched after boot.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{USR() Function Vector (\$0A--\$0C)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The \texttt{USR()} function in EhBASIC calls a user-supplied machine-language
+routine.  Like the warm-start vector, the mechanism is a three-byte
+\texttt{JMP} instruction planted in the zero page.
+
+\mementry{000A}{Usrjmp}{R/W}{\$4C}
+
+The \texttt{JMP} opcode byte for the USR() dispatch.  Always \$4C.
+
+\mementry{000B}{Usrjpl}{R/W}{---}
+
+Low byte of the USR() target address.
+
+\mementry{000C}{Usrjph}{R/W}{---}
+
+High byte of the USR() target address.  To point USR() at a routine at
+\$4000:
+
+\begin{lstlisting}
+DOKE $0B,$4000
+X = USR(42)
+\end{lstlisting}
+
+The argument (42 in this case) is passed in FAC1 (see \addr{00AC}), and the
+routine should leave its return value there.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Terminal Settings (\$0D--\$10)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+These four bytes control how EhBASIC interacts with the terminal --- line
+width, cursor column tracking, and null padding.
+
+\mementry{000D}{Nullct}{R/W}{\$00}
+
+Null count: the number of \$00 bytes transmitted after each carriage return.
+On real serial terminals this gave the print head time to return to the left
+margin.  On the NovaVM this is unused and should be left at zero.
+
+\mementry{000E}{TPos}{R/W}{\$00}
+
+Terminal position: the current column of the cursor, maintained by EhBASIC's
+output routines.  Starts at zero for the left margin and increments with each
+printed character.  The interpreter checks this against \addr{000F} to decide
+when to wrap.  Reading this byte tells you the cursor's horizontal position:
+
+\begin{lstlisting}
+PRINT "Hello";
+PRINT PEEK($0E)
+\end{lstlisting}
+
+This prints \texttt{5}, the column after the five characters of ``Hello''.
+
+\mementry{000F}{TWidth}{R/W}{\$50}
+
+Terminal width.  Set to 80 (\$50) by the NovaVM at boot.  EhBASIC wraps
+output and inserts a carriage return when \addr{000E} reaches this value.
+
+\begin{lstlisting}
+POKE $0F,40 : REM narrow screen
+\end{lstlisting}
+
+\begin{warningbox}
+Changing TWidth does not resize the physical display.  It only affects
+EhBASIC's line-wrap logic.  Setting it wider than 80 will cause output to
+overrun the visible screen.
+\end{warningbox}
+
+\mementry{0010}{Iclim}{R/W}{\$50}
+
+Input column limit: the maximum number of characters EhBASIC will accept on a
+single \texttt{INPUT} line.  Normally matches TWidth.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Temporary Integer (\$11--\$12)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\mementry{0011}{Itempl}{R/W}{---}
+
+Low byte of a temporary 16-bit integer used internally during line-number
+parsing, number-base conversion, and various arithmetic operations.  Also
+known as \texttt{nums\_1} when used for binary/hex string conversion.
+
+\mementry{0012}{Itemph}{R/W}{---}
+
+High byte of the temporary integer.  Also \texttt{nums\_2}.  A third alias
+byte \texttt{nums\_3} occupies \$13 for 24-bit conversions.
+
+These locations are transient workspace.  Their contents are unpredictable
+between BASIC statements and should not be relied upon for storage.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Unallocated (\$13--\$5A)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Addresses \$13 through \$5A --- a full 72 bytes --- are not assigned by
+EhBASIC.  This is the largest contiguous free region on the zero page and an
+excellent place to store variables, counters, or short machine-language
+routines that benefit from fast zero-page addressing.
+
+\begin{tipbox}
+If you are writing a machine-language game loop or interrupt handler, the
+\$13--\$5A block gives you plenty of room for sprite coordinates, frame
+counters, velocity tables, and other frequently-accessed state --- all at
+zero-page speed.
+\end{tipbox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Interpreter Flags (\$5B--\$64)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+This cluster of bytes controls the interpreter's parsing and evaluation state.
+Most are written and read only by internal BASIC routines; they are documented
+here for completeness and for advanced users writing machine-language
+extensions.
+
+\mementry{005B}{Srchc / Temp3}{R/W}{---}
+
+Search character used by the tokeniser and line-editing routines.  Also serves
+as \texttt{Temp3}, a scratch byte during number-to-string conversion.  Double
+duty as the low byte of \texttt{XOAw} (the EOR/OR/AND working word).
+
+\mementry{005C}{Scnquo / Asrch}{R/W}{---}
+
+Scan-between-quotes flag.  When set, the tokeniser treats everything up to the
+next quotation mark as literal text rather than keywords.  Also used as
+\texttt{Asrch} (alternate search character) and as the high byte of
+\texttt{XOAw}.
+
+\mementry{005D}{Ibptr / Dimcnt / Tindx}{R/W}{---}
+
+A three-way alias:
+\begin{itemize}
+  \item \textbf{Ibptr} --- pointer (offset) into the input buffer during line entry.
+  \item \textbf{Dimcnt} --- dimension count while processing \texttt{DIM} statements.
+  \item \textbf{Tindx} --- token index during tokenisation.
+\end{itemize}
+Only one use is active at a time; the interpreter knows which context applies.
+
+\mementry{005E}{Defdim}{R/W}{\$00}
+
+Default DIM flag.  When non-zero, an array reference that has not been
+explicitly dimensioned will be auto-dimensioned (to a default upper bound of
+10).  Set internally by the array-access routines.
+
+\mementry{005F}{Dtypef}{R/W}{\$00}
+
+Data type flag.  \$FF means the current value is a string; \$00 means numeric.
+The interpreter sets this after every expression evaluation so that subsequent
+operations (assignment, PRINT, comparison) know which type they are handling.
+
+\mementry{0060}{Oquote / Gclctd}{R/W}{\$00}
+
+Open-quote flag during DATA scanning and LIST output.  Bit 7 signals that the
+scanner is inside a quoted string.  The same byte doubles as \texttt{Gclctd},
+the garbage-collected flag --- set after the string heap has been compacted to
+prevent redundant re-collection.
+
+\mementry{0061}{Sufnxf}{R/W}{\$00}
+
+Subscript/FN flag.  Bit 7 set indicates a \texttt{FN} call is in progress;
+the lower bits track subscript depth.  This prevents the interpreter from
+confusing array subscripts with function arguments.
+
+\mementry{0062}{Imode}{R/W}{\$00}
+
+Input mode flag.  \$00 during an \texttt{INPUT} statement, \$80 during
+\texttt{READ}.  This tells the shared input-parsing code whether to prompt the
+user or consume the next \texttt{DATA} element.
+
+\mementry{0063}{Cflag}{R/W}{\$00}
+
+Comparison evaluation flag.  Accumulates the result of relational operators
+during expression parsing:
+\begin{itemize}
+  \item Bit 0 --- less than (\texttt{<})
+  \item Bit 1 --- equal (\texttt{=})
+  \item Bit 2 --- greater than (\texttt{>})
+\end{itemize}
+Combinations like \texttt{<=} set bits 0 and 1 simultaneously.
+
+\mementry{0064}{TabSiz}{R/W}{\$0A}
+
+TAB step size.  Controls the column spacing of comma-separated items in
+\texttt{PRINT} statements.  Default is 10.
+
+\begin{lstlisting}
+POKE $64,20 : REM wider tab stops
+PRINT 1,2,3
+\end{lstlisting}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{String Descriptor Stack (\$65--\$70)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+EhBASIC maintains a small stack of string descriptors in the zero page.  Each
+descriptor is three bytes: one byte for the string length and two bytes for
+the pointer to the string data.  The stack holds up to three temporary strings
+at once.
+
+\mementry{0065}{next\_s}{R/W}{---}
+
+Pointer to the next available slot on the descriptor stack.  Starts at
+\$68 (the base of \texttt{des\_sk}) and advances by three for each temporary
+string pushed.
+
+\mementry{0066}{last\_sl}{R/W}{---}
+
+Low byte of the address of the most recently pushed descriptor.
+
+\mementry{0067}{last\_sh}{R/W}{\$00}
+
+High byte of the last descriptor address.  Since the descriptor stack lives
+entirely within the zero page, this byte is always \$00.
+
+\memrange{0068}{0070}{des\_sk (Descriptor Stack)}{R/W}{---}
+
+Nine bytes holding up to three string descriptors.  These are working storage
+for intermediate string results --- for example, the expression
+\texttt{A\$+B\$+C\$} will push descriptors onto this stack as it concatenates.
+If more than three temporaries are needed, EhBASIC raises a
+\texttt{?FORMULA TOO COMPLEX} error.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Utility Pointers and FAC Temporaries (\$71--\$78)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\mementry{0071}{ut1\_pl}{R/W}{---}
+
+Utility pointer 1, low byte.  A general-purpose 16-bit pointer used by block
+move operations, array manipulation, and string handling.  Also known as
+\texttt{Temp\_2} during block moves.
+
+\mementry{0072}{ut1\_ph}{R/W}{---}
+
+Utility pointer 1, high byte.
+
+\mementry{0073}{ut2\_pl}{R/W}{---}
+
+Utility pointer 2, low byte.  A second general-purpose pointer, often used as
+the destination address when \texttt{ut1} is the source.
+
+\mementry{0074}{ut2\_ph}{R/W}{---}
+
+Utility pointer 2, high byte.
+
+\mementry{0075}{FACt\_1}{R/W}{---}
+
+FAC temporary mantissa byte 1.  Used as scratch space during floating-point
+operations and multiply/divide routines.
+
+\mementry{0076}{FACt\_2 / dims\_l}{R/W}{---}
+
+FAC temporary mantissa byte 2.  Also serves as \texttt{dims\_l}, the low byte
+of the array dimension size during \texttt{DIM} processing.
+
+\mementry{0077}{FACt\_3 / dims\_h}{R/W}{---}
+
+FAC temporary mantissa byte 3, and the high byte of the array dimension size.
+
+\mementry{0078}{TempB}{R/W}{---}
+
+A single scratch byte used by various interpreter routines.  Entirely
+transient.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Memory Management Pointers (\$79--\$86)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+These seven pointer pairs are the backbone of EhBASIC's memory management.
+They define the boundaries of every major region in RAM: program text,
+variables, arrays, and string storage.  Understanding them is essential for
+anyone who wants to know how much memory is free, where a program lives, or
+how to relocate data.
+
+The pointers are arranged so that, in a healthy system:
+
+\begin{center}
+\texttt{Smem} $\leq$ \texttt{Svar} $\leq$ \texttt{Sarry} $\leq$
+\texttt{Earry} $\leq$ \texttt{Sstor} $\leq$ \texttt{Emem}
+\end{center}
+
+Program text grows upward from Smem; string storage grows \emph{downward} from
+Emem.  The gap between Earry and Sstor is free memory.
+
+\mementry{0079}{Smeml}{R/W}{---}
+
+Start of BASIC program text, low byte.
+
+\mementry{007A}{Smemh}{R/W}{---}
+
+Start of BASIC program text, high byte.  This is the base address of the
+tokenised program.  On the NovaVM, this is typically \$0280 (the first byte
+above the vector table).
+
+\begin{lstlisting}
+PRINT DEEK($79)
+\end{lstlisting}
+
+This prints the start-of-program address in decimal.
+
+\mementry{007B}{Svarl}{R/W}{---}
+
+Start of variables, low byte.
+
+\mementry{007C}{Svarh}{R/W}{---}
+
+Start of variables, high byte.  This pointer also marks the end of program
+text.  The difference \texttt{DEEK(\$7B) - DEEK(\$79)} is the size of your
+program in bytes.
+
+\begin{lstlisting}
+PRINT DEEK($7B)-DEEK($79);"BYTES PROGRAM"
+\end{lstlisting}
+
+\mementry{007D}{Sarryl}{R/W}{---}
+
+Start of arrays, low byte.
+
+\mementry{007E}{Sarryh}{R/W}{---}
+
+Start of arrays, high byte.  Simple variables (scalars) occupy the region
+from Svar to Sarry.
+
+\mementry{007F}{Earryl}{R/W}{---}
+
+End of arrays, low byte.
+
+\mementry{0080}{Earryh}{R/W}{---}
+
+End of arrays, high byte.  All dimensioned arrays live between Sarry and
+Earry.
+
+\mementry{0081}{Sstorl}{R/W}{---}
+
+Bottom of string storage, low byte.
+
+\mementry{0082}{Sstorh}{R/W}{---}
+
+Bottom of string storage, high byte.  String data is allocated from the top of
+memory downward.  Sstor marks the lowest string address currently in use.  As
+more strings are created, this pointer moves down toward Earry.  When the two
+meet, you get an \texttt{?OUT OF MEMORY} error.
+
+\mementry{0083}{Sutill}{R/W}{---}
+
+String utility pointer, low byte.
+
+\mementry{0084}{Sutilh}{R/W}{---}
+
+String utility pointer, high byte.  A working pointer used during string
+allocation and garbage collection.
+
+\mementry{0085}{Ememl}{R/W}{---}
+
+End of memory, low byte.
+
+\mementry{0086}{Ememh}{R/W}{---}
+
+End of memory, high byte.  This is the top of available RAM --- the highest
+address BASIC is allowed to use.  String storage begins just below this point
+and grows downward.
+
+\begin{lstlisting}
+REM -- Free memory calculation --
+FM = DEEK($81)-DEEK($7F)
+PRINT FM;"BYTES FREE"
+\end{lstlisting}
+
+\begin{notebox}
+The FRE() function in EhBASIC returns the same value but also triggers a
+garbage collection pass, which can cause a brief pause.  Reading the pointers
+directly with DEEK is instantaneous but does not account for reclaimable
+string space.
+\end{notebox}
+
+\begin{tipbox}
+A quick memory map dump:
+\begin{lstlisting}
+PRINT "PROGRAM  ";DEEK($79);" TO ";DEEK($7B)-1
+PRINT "VARIABLES";DEEK($7B);" TO ";DEEK($7D)-1
+PRINT "ARRAYS   ";DEEK($7D);" TO ";DEEK($7F)-1
+PRINT "FREE     ";DEEK($7F);" TO ";DEEK($81)-1
+PRINT "STRINGS  ";DEEK($81);" TO ";DEEK($85)-1
+\end{lstlisting}
+\end{tipbox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Line and Data Pointers (\$87--\$9F)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+These pointers track the interpreter's current position in the program, the
+DATA read cursor, and the state of the most recent variable reference.
+
+\mementry{0087}{Clinel}{R/W}{---}
+
+Current BASIC line number, low byte.
+
+\mementry{0088}{Clineh}{R/W}{---}
+
+Current BASIC line number, high byte.  While a program is running, this pair
+holds the line number currently being executed.  In immediate mode, it
+contains \$FFFF.
+
+\begin{lstlisting}
+10 PRINT "LINE ";DEEK($87)
+20 PRINT "LINE ";DEEK($87)
+RUN
+\end{lstlisting}
+
+This prints \texttt{LINE 10} then \texttt{LINE 20}.
+
+\mementry{0089}{Blinel}{R/W}{---}
+
+Break line number, low byte.
+
+\mementry{008A}{Blineh}{R/W}{---}
+
+Break line number, high byte.  When a program is stopped (by the \texttt{STOP}
+statement, Ctrl+C, or an error), EhBASIC saves the line number here.  The
+\texttt{CONT} command uses this to resume execution.
+
+\mementry{008B}{Cpntrl}{R/W}{---}
+
+Continue pointer, low byte.
+
+\mementry{008C}{Cpntrh}{R/W}{---}
+
+Continue pointer, high byte.  The address within program text where execution
+should resume after \texttt{CONT}.  If you edit any line, this pointer is
+invalidated and \texttt{CONT} will refuse to proceed.
+
+\mementry{008D}{Dlinel}{R/W}{---}
+
+Current DATA line number, low byte.
+
+\mementry{008E}{Dlineh}{R/W}{---}
+
+Current DATA line number, high byte.  Tracks which line the DATA cursor is on,
+so that an \texttt{?OUT OF DATA} error can report the correct line number.
+
+\mementry{008F}{Dptrl}{R/W}{---}
+
+DATA pointer, low byte.
+
+\mementry{0090}{Dptrh}{R/W}{---}
+
+DATA pointer, high byte.  Points to the next byte to be consumed by a
+\texttt{READ} statement.  \texttt{RESTORE} resets this to the start of program
+text.
+
+\mementry{0091}{Rdptrl}{R/W}{---}
+
+Read pointer, low byte.
+
+\mementry{0092}{Rdptrh}{R/W}{---}
+
+Read pointer, high byte.  Used during INPUT/READ to track the current position
+in the data being parsed.
+
+\mementry{0093}{Varnm1}{R/W}{---}
+
+Current variable name, first byte.  When the interpreter encounters a variable
+reference (e.g.\ \texttt{A\$}), the first character of the name is stored here.
+
+\mementry{0094}{Varnm2}{R/W}{---}
+
+Current variable name, second byte.  For single-letter variables this is zero.
+For two-letter names, it holds the second character.  Bit 7 of either byte may
+be set to indicate a string (\$) or integer (\%) type suffix.
+
+\mementry{0095}{Cvaral}{R/W}{---}
+
+Current variable address, low byte.
+
+\mementry{0096}{Cvarah}{R/W}{---}
+
+Current variable address, high byte.  After a variable lookup, this pair
+points to the variable's storage in the variable table (between Svar and
+Sarry).
+
+\mementry{0097}{Frnxtl}{R/W}{---}
+
+FOR/NEXT variable pointer, low byte.  Also aliased as \texttt{Tidx1} (temp
+line index) and \texttt{Lvarpl} (LET variable pointer).
+
+\mementry{0098}{Frnxth}{R/W}{---}
+
+FOR/NEXT variable pointer, high byte.  Also \texttt{Lvarph}.  During FOR/NEXT
+execution, this pair points to the loop control variable so that NEXT can
+find the matching FOR frame on the stack.
+
+\mementry{0099}{prstk}{R/W}{\$00}
+
+Precedence-stacked flag.  Set non-zero when the expression evaluator has
+pushed an operator onto the precedence stack.  Cleared when the stack is
+unwound.
+
+\mementry{009B}{comp\_f}{R/W}{\$00}
+
+Compare function flag.  Uses bits 0, 1, and 2 to encode the comparison
+being evaluated:
+
+\bitfield{---}{---}{---}{---}{---}{\textgreater}{=}{\textless}
+
+This is the internal companion to \addr{0063} (Cflag), used during the
+parsing phase of a comparison expression.
+
+\mementry{009C}{func\_l / garb\_l}{R/W}{---}
+
+Function pointer low byte.  During function evaluation, points to the body of
+a \texttt{DEF FN} definition.  Also serves as \texttt{garb\_l}, the garbage
+collection working pointer low byte.
+
+\mementry{009D}{func\_h / garb\_h}{R/W}{---}
+
+Function pointer high byte / garbage collection working pointer high byte.
+
+\mementry{009E}{des\_2l}{R/W}{---}
+
+String descriptor 2 pointer, low byte.
+
+\mementry{009F}{des\_2h}{R/W}{---}
+
+String descriptor 2 pointer, high byte.  Used during string operations that
+need to reference two descriptors simultaneously (e.g.\ concatenation or
+comparison).
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Garbage Collection and Array Workspace (\$A0--\$AB)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\mementry{00A0}{g\_step}{R/W}{---}
+
+Garbage collection step size.  Controls the search increment during string
+heap compaction.
+
+\mementry{00A1}{Fnxjmp}{R/W}{\$4C}
+
+Jump vector for function dispatch --- another three-byte \texttt{JMP}
+instruction, like the warm-start and USR() vectors.  Byte \$A1 holds the
+\texttt{JMP} opcode.
+
+\mementry{00A2}{Fnxjpl / g\_indx}{R/W}{---}
+
+Low byte of the function jump target.  Also aliased as \texttt{g\_indx}, a
+temporary index used during garbage collection.
+
+\mementry{00A3}{FAC2\_r}{R/W}{---}
+
+FAC2 rounding byte.  The extra precision byte for the second floating-point
+accumulator, used during multi-step arithmetic to reduce rounding errors.
+
+\mementry{00A4}{Adatal / Nbendl}{R/W}{---}
+
+Array data pointer, low byte.  Also serves as \texttt{Nbendl} --- the new
+block end pointer during memory block moves (INSERT, DELETE).
+
+\mementry{00A5}{Adatah / Nbendh}{R/W}{---}
+
+Array data pointer, high byte / new block end pointer high byte.
+
+\mementry{00A6}{Obendl}{R/W}{---}
+
+Old block end pointer, low byte.  Used alongside \texttt{Nbend} during block
+move operations.
+
+\mementry{00A7}{Obendh}{R/W}{---}
+
+Old block end pointer, high byte.
+
+\mementry{00A8}{numexp / numbit}{R/W}{---}
+
+Number exponent count during string-to-float conversion.  Also \texttt{numbit},
+a bit counter during array element address calculations.
+
+\mementry{00A9}{expcnt}{R/W}{---}
+
+Exponent count for string-to-float conversion --- tracks the decimal exponent
+independently from the mantissa being assembled.
+
+\mementry{00AA}{numdpf / Astrtl}{R/W}{---}
+
+Decimal point flag during number conversion.  This byte is heavily aliased:
+also \texttt{Astrtl} (array start pointer low), \texttt{Histrl} (highest
+string low), \texttt{Baslnl} (BASIC search line pointer low),
+\texttt{Fvar\_l} (find variable pointer low), \texttt{Ostrtl} (old block
+start pointer low), and \texttt{Vrschl} (variable search pointer low).
+
+Only one use is active at any given time --- the interpreter context determines
+the meaning.
+
+\mementry{00AB}{expneg / Astrth}{R/W}{---}
+
+Exponent negate flag during number conversion.  Similarly aliased:
+\texttt{Astrth}, \texttt{Histrh}, \texttt{Baslnh}, \texttt{Fvar\_h},
+\texttt{Ostrth}, \texttt{Vrschh}.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Floating-Point Accumulator 1 (\$AC--\$B2)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+FAC1 is the primary floating-point accumulator.  All arithmetic operations
+ultimately produce their result here.  EhBASIC uses a five-byte format: one
+byte for the exponent and four bytes for the mantissa (with an implicit
+leading 1 bit) plus a separate sign byte.
+
+\mementry{00AC}{FAC1\_e}{R/W}{---}
+
+FAC1 exponent.  Uses excess-128 notation: the stored value minus 128 gives the
+true binary exponent.  A stored zero means the entire FAC is zero.  Also
+aliased as \texttt{str\_ln} (string length) during string operations.
+
+\mementry{00AD}{FAC1\_1}{R/W}{---}
+
+FAC1 mantissa byte 1 (most significant).  Also \texttt{str\_pl} (string
+pointer low) in string context.
+
+\mementry{00AE}{FAC1\_2}{R/W}{---}
+
+FAC1 mantissa byte 2.  Also \texttt{str\_ph} (string pointer high) and
+\texttt{des\_pl} (descriptor pointer low).
+
+\mementry{00AF}{FAC1\_3}{R/W}{---}
+
+FAC1 mantissa byte 3 (least significant in the four-byte mantissa).  Also
+\texttt{des\_ph} (descriptor pointer high) and \texttt{mids\_l} (MID\$
+temporary length).
+
+\mementry{00B0}{FAC1\_s}{R/W}{---}
+
+FAC1 sign.  Bit 7 indicates negative.  The remaining bits are unused.
+
+\mementry{00B1}{negnum / numcon}{R/W}{---}
+
+String-to-float negate flag: set when parsing a negative numeric literal.
+Also \texttt{numcon}, the constant counter during polynomial series evaluation
+(used by SIN, COS, EXP, LOG, ATN).
+
+\mementry{00B2}{FAC1\_o}{R/W}{---}
+
+FAC1 overflow byte.  Holds the extra precision bit that falls off the bottom
+of the mantissa during normalisation.  Used for rounding the final result.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Floating-Point Accumulator 2 (\$B3--\$B9)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+FAC2 is the secondary accumulator.  Binary operations (add, subtract, multiply,
+divide) load one operand into FAC2 and the other into FAC1; the result lands
+in FAC1.
+
+\mementry{00B3}{FAC2\_e}{R/W}{---}
+
+FAC2 exponent.  Same excess-128 encoding as FAC1.
+
+\mementry{00B4}{FAC2\_1}{R/W}{---}
+
+FAC2 mantissa byte 1 (most significant).
+
+\mementry{00B5}{FAC2\_2}{R/W}{---}
+
+FAC2 mantissa byte 2.
+
+\mementry{00B6}{FAC2\_3}{R/W}{---}
+
+FAC2 mantissa byte 3 (least significant).
+
+\mementry{00B7}{FAC2\_s}{R/W}{---}
+
+FAC2 sign byte.  Bit 7 indicates negative.
+
+\mementry{00B8}{FAC\_sc}{R/W}{---}
+
+FAC sign comparison result.  After comparing FAC1 and FAC2, this byte records
+whether the signs agree or differ.  Also aliased as \texttt{ssptr\_l} (string
+start pointer low) and \texttt{sdescr} (string descriptor pointer).
+
+\mementry{00B9}{FAC1\_r}{R/W}{---}
+
+FAC1 rounding byte.  The ninth bit of precision, used during final rounding of
+arithmetic results.  Also \texttt{ssptr\_h} (string start pointer high).
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{BASIC Byte Fetch Subroutines (\$BA--\$D7)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+This region contains one of EhBASIC's most distinctive features: executable
+machine code planted directly in the zero page.  Two small subroutines live
+here, giving the interpreter fast, one-byte \texttt{JSR} calls for its two
+most frequent operations --- fetching the next byte from program text and
+re-fetching the current byte.
+
+\mementry{00BA}{csidx / Asptl}{R/W}{---}
+
+Line crunch save index.  Used during tokenisation to remember the current
+position.  Also aliased as \texttt{Asptl} (array size pointer low),
+\texttt{Btmpl}, \texttt{Cptrl}, and \texttt{Sendl} --- all temporary pointer
+low bytes used in different contexts.
+
+\mementry{00BB}{Aspth}{R/W}{---}
+
+Array size pointer high byte.  Also \texttt{Btmph}, \texttt{Cptrh}, and
+\texttt{Sendh}.
+
+\memrange{00BC}{00C1}{LAB\_IGBY (Increment and Get BYte)}{R/W}{---}
+
+Six bytes of machine code implementing the ``get next BASIC byte'' subroutine.
+When the interpreter calls \texttt{JSR \$BC}, this routine increments the
+BASIC execute pointer (\addr{00C3}--\addr{00C4}) and falls through into
+\texttt{LAB\_GBYT} to fetch the byte at the new address.
+
+This subroutine is placed in the zero page purely for speed.  The 6502's
+\texttt{JSR zp} is not actually faster (there is no zero-page JSR), but
+having the code here keeps the execute pointer in the zero page where
+\texttt{LDA (zp),Y} can reach it in just five cycles.
+
+\memrange{00C2}{00C4}{LAB\_GBYT (Get BYTe)}{R/W}{---}
+
+Three bytes of machine code that load the byte at the current BASIC execute
+pointer and set the processor flags accordingly.  The interpreter calls
+\texttt{JSR \$C2} whenever it needs to re-examine the current token without
+advancing.
+
+\mementry{00C3}{Bpntrl}{R/W}{---}
+
+BASIC execute pointer, low byte.  This is the interpreter's program counter
+--- it points to the byte in program text that will be (or has just been)
+processed.
+
+\mementry{00C4}{Bpntrh}{R/W}{---}
+
+BASIC execute pointer, high byte.  Together with \addr{00C3}, this is the
+single most important pointer in the entire interpreter.
+
+\begin{notebox}
+The region \$C5--\$D7 continues the LAB\_GBYT subroutine code.  These 19
+bytes are part of the bulk-initialised machine code block and should never be
+modified.  They do not correspond to individually meaningful variables.
+\end{notebox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Pseudo-Random Number Generator (\$D8--\$DB)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+EhBASIC's \texttt{RND()} function uses a simple four-byte linear feedback
+shift register stored in the zero page.
+
+\mementry{00D8}{Rbyte4}{R/W}{---}
+
+PRNG byte 4 (most significant).  The ``extra'' byte added by EhBASIC's
+extended PRNG algorithm.
+
+\mementry{00D9}{Rbyte1}{R/W}{---}
+
+PRNG byte 1.
+
+\mementry{00DA}{Rbyte2}{R/W}{---}
+
+PRNG byte 2.
+
+\mementry{00DB}{Rbyte3}{R/W}{---}
+
+PRNG byte 3 (least significant).  Each call to \texttt{RND(1)} shifts and
+XORs all four bytes to produce a new pseudo-random value.
+
+\begin{lstlisting}
+REM Seed the PRNG
+X = RND(-42)
+REM Now RND(1) gives a repeatable sequence
+FOR I=1 TO 5 : PRINT RND(1) : NEXT
+\end{lstlisting}
+
+Calling \texttt{RND()} with a negative argument seeds the generator.
+\texttt{RND(0)} returns the most recent value.  \texttt{RND(1)} advances
+to the next.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Interrupt Handler Vectors (\$DC--\$E1)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The NovaVM extends EhBASIC with support for NMI and IRQ interrupts that can
+be handled from BASIC.  Each handler has a control byte and a two-byte
+address vector.
+
+\mementry{00DC}{NmiBase}{R/W}{\$00}
+
+NMI (Non-Maskable Interrupt) control register.
+
+\bitfield{Enable}{Setup}{Fired}{---}{---}{---}{---}{---}
+
+\begin{itemize}
+  \item \textbf{Bit 7} --- Interrupt enabled.  When set, the NMI handler is armed.
+  \item \textbf{Bit 6} --- Setup complete.  Set by the \texttt{NMI} BASIC command
+        after installing a handler.
+  \item \textbf{Bit 5} --- Interrupt occurred.  Set by the hardware when an NMI
+        fires; cleared after the handler runs.
+\end{itemize}
+
+\mementry{00DD}{NMI Address Low}{R/W}{---}
+
+Low byte of the NMI handler routine address.
+
+\mementry{00DE}{NMI Address High}{R/W}{---}
+
+High byte of the NMI handler address.  Together with \addr{00DD}, this points
+to the BASIC line (or machine-language routine) that should execute when an
+NMI arrives.
+
+\mementry{00DF}{IrqBase}{R/W}{\$00}
+
+IRQ (Interrupt Request) control register.  Same bit layout as \addr{00DC}.
+
+\bitfield{Enable}{Setup}{Fired}{---}{---}{---}{---}{---}
+
+\mementry{00E0}{IRQ Address Low}{R/W}{---}
+
+Low byte of the IRQ handler routine address.
+
+\mementry{00E1}{IRQ Address High}{R/W}{---}
+
+High byte of the IRQ handler address.
+
+\begin{lstlisting}
+10 IRQ 1000
+20 REM main loop here
+30 GOTO 20
+1000 REM interrupt handler
+1010 PRINT "TICK"
+1020 RETIRQ
+\end{lstlisting}
+
+The \texttt{IRQ} command sets up \addr{00DF}--\addr{00E1} automatically.  You
+only need to POKE these directly if you are installing a machine-language
+handler.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{HELP Scratch (\$E2)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\mementry{00E2}{help\_len}{R/W}{\$00}
+
+Scratch byte used by the \texttt{HELP} command to track the length of the
+keyword being searched.  No user-visible purpose outside of that command.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Unused (\$E3--\$EE)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Addresses \$E3 through \$EE --- twelve bytes --- are completely unassigned.
+They are safe for user programs, machine-language scratch space, or small
+lookup tables.  Combined with the seven bytes at \$03--\$09 and the large
+block at \$13--\$5A, this gives a total of 91 free zero-page bytes available
+for your own use.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Decimal Conversion Buffer (\$EF--\$FF)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{00EF}{00FF}{Decss (Decimal String Buffer)}{R/W}{---}
+
+Seventeen bytes reserved for number-to-decimal-string conversion.  When BASIC
+needs to print a number or convert it with \texttt{STR\$()}, the result is
+assembled here, character by character, starting from the least significant
+digit and working left.  The buffer is large enough for the longest possible
+numeric string: a sign, up to ten digits, a decimal point, an ``E'', an
+exponent sign, and two exponent digits.
+
+This buffer is transient --- its contents are only valid during and
+immediately after a conversion.  Do not store persistent data here.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section*{Summary}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The zero page is a tightly-packed workspace shared between EhBASIC and the
+6502 hardware.  The table below summarises the allocation at a glance:
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Range} & \textbf{Usage} & \textbf{Owner} \\
+\midrule
+\$00--\$02     & Warm-start JMP               & EhBASIC \\
+\$03--\$09     & \textit{Free}                & User \\
+\$0A--\$0C     & USR() JMP vector             & EhBASIC \\
+\$0D--\$12     & Terminal settings \& temp int & EhBASIC \\
+\$13--\$5A     & \textit{Free (72 bytes)}     & User \\
+\$5B--\$64     & Interpreter flags            & EhBASIC \\
+\$65--\$70     & String descriptor stack       & EhBASIC \\
+\$71--\$78     & Utility pointers \& FAC temp  & EhBASIC \\
+\$79--\$86     & Memory management pointers   & EhBASIC \\
+\$87--\$9F     & Line, data, \& var pointers  & EhBASIC \\
+\$A0--\$AB     & GC, array, \& number work    & EhBASIC \\
+\$AC--\$B9     & FAC1 \& FAC2 accumulators    & EhBASIC \\
+\$BA--\$D7     & Byte-fetch subroutines       & EhBASIC \\
+\$D8--\$DB     & PRNG state                   & EhBASIC \\
+\$DC--\$E1     & NMI/IRQ handlers             & EhBASIC \\
+\$E2           & HELP scratch                 & EhBASIC \\
+\$E3--\$EE     & \textit{Free (12 bytes)}     & User \\
+\$EF--\$FF     & Decimal conversion buffer    & EhBASIC \\
+\bottomrule
+\end{tabular}
+\end{center}
