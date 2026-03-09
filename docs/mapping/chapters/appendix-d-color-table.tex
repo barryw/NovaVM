@@ -1,0 +1,102 @@
+% =============================================================================
+% Appendix D — Color Table
+% =============================================================================
+\chapter{Color Table}
+
+\epigraph{``Sixteen colours ought to be enough for anybody.''}%
+{\textit{--- Every 8-bit computer designer, 1977--1985}}
+
+\section*{Introduction}
+
+The NovaVM uses a fixed 16-colour palette inspired by the Commodore~64.  Every
+colour index in the system --- text foreground and background, graphics pixels,
+and sprite pixels --- references this palette via a 4-bit value (0--15).
+
+% ── Define all 16 colours ─────────────────────────────────────────────────────
+\definecolor{nova0}{RGB}{0,0,0}
+\definecolor{nova1}{RGB}{255,255,255}
+\definecolor{nova2}{RGB}{136,0,0}
+\definecolor{nova3}{RGB}{170,255,238}
+\definecolor{nova4}{RGB}{204,68,204}
+\definecolor{nova5}{RGB}{0,204,85}
+\definecolor{nova6}{RGB}{0,0,170}
+\definecolor{nova7}{RGB}{238,238,119}
+\definecolor{nova8}{RGB}{221,136,85}
+\definecolor{nova9}{RGB}{102,68,0}
+\definecolor{nova10}{RGB}{255,119,119}
+\definecolor{nova11}{RGB}{51,51,51}
+\definecolor{nova12}{RGB}{119,119,119}
+\definecolor{nova13}{RGB}{170,255,102}
+\definecolor{nova14}{RGB}{0,136,255}
+\definecolor{nova15}{RGB}{187,187,187}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Palette Reference}
+\label{sec:color-palette}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\begin{center}
+\small
+\begin{tabular}{@{}c c l r r r l@{}}
+\toprule
+\textbf{Index} & \textbf{Swatch} & \textbf{Name} &
+\textbf{R} & \textbf{G} & \textbf{B} & \textbf{Hex} \\
+\midrule
+ 0 & \tikz\draw[fill=nova0,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Black       &   0 &   0 &   0 & \texttt{\#000000} \\
+ 1 & \tikz\draw[fill=nova1,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & White       & 255 & 255 & 255 & \texttt{\#FFFFFF} \\
+ 2 & \tikz\draw[fill=nova2,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Red         & 136 &   0 &   0 & \texttt{\#880000} \\
+ 3 & \tikz\draw[fill=nova3,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Cyan        & 170 & 255 & 238 & \texttt{\#AAFFEE} \\
+ 4 & \tikz\draw[fill=nova4,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Purple      & 204 &  68 & 204 & \texttt{\#CC44CC} \\
+ 5 & \tikz\draw[fill=nova5,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Green       &   0 & 204 &  85 & \texttt{\#00CC55} \\
+ 6 & \tikz\draw[fill=nova6,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Blue        &   0 &   0 & 170 & \texttt{\#0000AA} \\
+ 7 & \tikz\draw[fill=nova7,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Yellow      & 238 & 238 & 119 & \texttt{\#EEEE77} \\
+ 8 & \tikz\draw[fill=nova8,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Orange      & 221 & 136 &  85 & \texttt{\#DD8855} \\
+ 9 & \tikz\draw[fill=nova9,  draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Brown       & 102 &  68 &   0 & \texttt{\#664400} \\
+10 & \tikz\draw[fill=nova10, draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Light Red   & 255 & 119 & 119 & \texttt{\#FF7777} \\
+11 & \tikz\draw[fill=nova11, draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Dark Grey   &  51 &  51 &  51 & \texttt{\#333333} \\
+12 & \tikz\draw[fill=nova12, draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Medium Grey & 119 & 119 & 119 & \texttt{\#777777} \\
+13 & \tikz\draw[fill=nova13, draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Light Green & 170 & 255 & 102 & \texttt{\#AAFF66} \\
+14 & \tikz\draw[fill=nova14, draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Light Blue  &   0 & 136 & 255 & \texttt{\#0088FF} \\
+15 & \tikz\draw[fill=nova15, draw=retrogray] (0,0) rectangle (1.2em,1.2em); & Light Grey  & 187 & 187 & 187 & \texttt{\#BBBBBB} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Usage Notes}
+\label{sec:color-usage}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\begin{itemize}
+  \item \textbf{Transparency:} Colour index~0 (black) serves as the transparent
+        colour for sprites.  Sprite pixels with value~0 allow the background to
+        show through.
+  \item \textbf{Default colours:} At power-on, the text foreground is~1 (white)
+        and the background is~0 (black).
+  \item \textbf{Boot screen:} The EhBASIC cold-start routine sets the
+        background to~6 (blue) and the foreground to~1 (white), mimicking the
+        classic Commodore~64 appearance.
+  \item \textbf{Colour RAM:} In text mode, each character cell has an associated
+        byte in colour RAM.  The low nibble sets the foreground colour and the
+        high nibble sets the background colour for that cell.
+  \item \textbf{Graphics bitmap:} Each pixel byte uses only the low nibble
+        (bits 3--0) for the colour index.  The upper nibble is ignored.
+\end{itemize}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{BASIC Example}
+\label{sec:color-example}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\begin{lstlisting}
+10 REM cycle through all 16 colors
+20 FOR C=0 TO 15
+30   COLOR 1, C : CLS
+40   PRINT "COLOR"; C
+50   FOR D=1 TO 2000 : NEXT D
+60 NEXT C
+70 COLOR 1, 6 : CLS
+\end{lstlisting}

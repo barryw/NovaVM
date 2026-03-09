@@ -1,0 +1,153 @@
+% =============================================================================
+% Appendix C — WTS Sample Memory
+% =============================================================================
+\chapter{WTS Sample Memory}
+
+\epigraph{``A good sample library is worth a thousand oscillators.''}%
+{\textit{--- Studio wisdom}}
+
+\section*{Introduction}
+
+The Wavetable Synthesizer's sample data lives entirely in host memory, outside
+both the 6502's 64\,KB address space and the 512\,KB XRAM.  Samples are loaded
+from industry-standard SF2 (SoundFont~2) files on the host filesystem and
+decoded into PCM audio buffers that the WTS voices reference during playback.
+
+This appendix describes how sample memory is organized, loaded, and used.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Loading Soundfonts}
+\label{sec:wts-loading}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Soundfont loading is initiated through the FileIO controller using command \$15
+(\texttt{SfLoad}).  The process is:
+
+\begin{enumerate}
+  \item Write the soundfont filename (without path) into the FioName buffer at
+        \addr{B9B0}.
+  \item Write command \$15 to the FileIO command register at \addr{B9A0}.
+  \item Poll \texttt{WtsSoundfontStatus} at \addr{A183} until loading completes.
+\end{enumerate}
+
+The file must be located in the \texttt{{\raise.17ex\hbox{$\scriptstyle\sim$}}/e6502-programs}
+directory (the same directory used for BASIC program files).
+
+\begin{lstlisting}
+10 REM load a General MIDI soundfont
+20 F$ = "GeneralUser_GS.sf2"
+30 FOR I = 1 TO LEN(F$)
+40   POKE $B9B0+I-1, ASC(MID$(F$,I,1))
+50 NEXT I
+60 POKE $B9B0+LEN(F$), 0 : REM null terminator
+70 POKE $B9A0, $15 : REM SfLoad command
+80 REM wait for load to complete
+90 IF PEEK($A183) <> 0 THEN 90
+\end{lstlisting}
+
+\begin{notebox}
+The MML parser can also trigger automatic soundfont loading when a
+\texttt{@W\textless n\textgreater} voice command is encountered and no soundfont
+is currently loaded.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{SF2 Format Overview}
+\label{sec:sf2-format}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+SF2 (SoundFont~2) is an industry-standard format originally developed by
+Creative Labs.  Each file contains:
+
+\begin{itemize}
+  \item \textbf{PCM audio samples} --- raw waveform data, typically 16-bit mono
+        or stereo at 44\,100\,Hz.
+  \item \textbf{Instrument definitions (presets)} --- each preset maps key ranges
+        and velocity layers to one or more sample zones.
+  \item \textbf{Articulation data} --- volume envelopes, filter settings, loop
+        points, and tuning parameters for each zone.
+\end{itemize}
+
+The NovaVM's WTS engine reads and interprets all of these at load time, building
+internal data structures for real-time playback.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Instrument Mapping}
+\label{sec:wts-instruments}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Each preset in the loaded soundfont becomes a WTS instrument, numbered
+sequentially starting from~0.  For General MIDI--compatible soundfonts, the
+instrument numbers follow the GM program mapping:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{\qquad}cl@{}}
+\toprule
+\textbf{Index} & \textbf{GM Instrument} &
+\textbf{Index} & \textbf{GM Instrument} \\
+\midrule
+0   & Acoustic Grand Piano & 24  & Acoustic Guitar (nylon) \\
+4   & Electric Piano 1     & 32  & Acoustic Bass \\
+8   & Celesta              & 40  & Violin \\
+11  & Vibraphone           & 48  & String Ensemble 1 \\
+16  & Drawbar Organ        & 56  & Trumpet \\
+19  & Church Organ         & 73  & Flute \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The total number of available instruments can be queried through the WTS
+instrument enumeration interface at \addr{A1A0}.
+
+WTS voices select an instrument by writing the instrument index to the voice's
+instrument register (offset~+2 from the voice base address).
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Memory Usage}
+\label{sec:wts-memory}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Sample data is decoded from the SF2 file at load time and stored as uncompressed
+PCM buffers in host memory.  Typical memory usage:
+
+\begin{center}
+\small
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Soundfont Type} & \textbf{Approximate Host RAM} \\
+\midrule
+Small (single instrument)  & 1--5\,MB \\
+Medium (partial GM set)    & 10--30\,MB \\
+Full GM soundfont          & 30--100\,MB \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warningbox}
+Sample memory resides entirely in the host process and does not affect the
+6502's 64\,KB address space or the 512\,KB XRAM.  However, very large soundfonts
+may consume significant host RAM.
+\end{warningbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Limitations}
+\label{sec:wts-limits}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\begin{itemize}
+  \item Only one soundfont can be loaded at a time.  Loading a new soundfont
+        replaces the previous one entirely, including all instrument definitions
+        and sample data.
+  \item Soundfont files must be in SF2 format; compressed variants (SF3/SF4) are
+        not supported.
+  \item Sample data is read-only from the 6502's perspective --- there is no
+        mechanism to upload custom PCM data from CPU RAM or XRAM.
+  \item The maximum number of simultaneous WTS voices is~8, regardless of how
+        many instruments are defined in the soundfont.
+\end{itemize}

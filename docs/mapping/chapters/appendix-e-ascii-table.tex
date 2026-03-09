@@ -1,1 +1,160 @@
+% =============================================================================
+% Appendix E — ASCII & Screen Code Table
+% =============================================================================
 \chapter{ASCII \& Screen Code Table}
+
+\epigraph{``In the beginning there was ASCII, and it was 7 bits, and it was
+good enough.''}{\textit{--- The Book of Standards, 1:1}}
+
+\section*{Introduction}
+
+The NovaVM uses standard ASCII character encoding (0--127), unlike the
+Commodore~64 which uses its own PETSCII encoding.  This means ordinary ASCII
+text files and string constants work as expected, with no translation required.
+
+Characters 128--255 map to the active font's extended character set.  Font~0
+(the default) includes box-drawing characters and additional symbols in this
+range.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{ASCII Table (0--127)}
+\label{sec:ascii-table}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The table below shows all 128 standard ASCII characters in a compact four-column
+layout.  Control characters (0--31 and 127) are shown with their standard
+abbreviations.
+
+\begin{center}
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}rrl@{\qquad}rrl@{\qquad}rrl@{\qquad}rrl@{}}
+\toprule
+\textbf{Dec} & \textbf{Hex} & \textbf{Char} &
+\textbf{Dec} & \textbf{Hex} & \textbf{Char} &
+\textbf{Dec} & \textbf{Hex} & \textbf{Char} &
+\textbf{Dec} & \textbf{Hex} & \textbf{Char} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Dec} & \textbf{Hex} & \textbf{Char} &
+\textbf{Dec} & \textbf{Hex} & \textbf{Char} &
+\textbf{Dec} & \textbf{Hex} & \textbf{Char} &
+\textbf{Dec} & \textbf{Hex} & \textbf{Char} \\
+\midrule
+\endhead
+ 0 & \texttt{00} & NUL &  32 & \texttt{20} & \textvisiblespace &  64 & \texttt{40} & \texttt{@} &  96 & \texttt{60} & \texttt{`} \\
+ 1 & \texttt{01} & SOH &  33 & \texttt{21} & \texttt{!} &  65 & \texttt{41} & \texttt{A} &  97 & \texttt{61} & \texttt{a} \\
+ 2 & \texttt{02} & STX &  34 & \texttt{22} & \texttt{"} &  66 & \texttt{42} & \texttt{B} &  98 & \texttt{62} & \texttt{b} \\
+ 3 & \texttt{03} & ETX &  35 & \texttt{23} & \texttt{\#} &  67 & \texttt{43} & \texttt{C} &  99 & \texttt{63} & \texttt{c} \\
+ 4 & \texttt{04} & EOT &  36 & \texttt{24} & \texttt{\$} &  68 & \texttt{44} & \texttt{D} & 100 & \texttt{64} & \texttt{d} \\
+ 5 & \texttt{05} & ENQ &  37 & \texttt{25} & \texttt{\%} &  69 & \texttt{45} & \texttt{E} & 101 & \texttt{65} & \texttt{e} \\
+ 6 & \texttt{06} & ACK &  38 & \texttt{26} & \texttt{\&} &  70 & \texttt{46} & \texttt{F} & 102 & \texttt{66} & \texttt{f} \\
+ 7 & \texttt{07} & BEL &  39 & \texttt{27} & \texttt{'} &  71 & \texttt{47} & \texttt{G} & 103 & \texttt{67} & \texttt{g} \\
+ 8 & \texttt{08} & BS  &  40 & \texttt{28} & \texttt{(} &  72 & \texttt{48} & \texttt{H} & 104 & \texttt{68} & \texttt{h} \\
+ 9 & \texttt{09} & HT  &  41 & \texttt{29} & \texttt{)} &  73 & \texttt{49} & \texttt{I} & 105 & \texttt{69} & \texttt{i} \\
+10 & \texttt{0A} & LF  &  42 & \texttt{2A} & \texttt{*} &  74 & \texttt{4A} & \texttt{J} & 106 & \texttt{6A} & \texttt{j} \\
+11 & \texttt{0B} & VT  &  43 & \texttt{2B} & \texttt{+} &  75 & \texttt{4B} & \texttt{K} & 107 & \texttt{6B} & \texttt{k} \\
+12 & \texttt{0C} & FF  &  44 & \texttt{2C} & \texttt{,} &  76 & \texttt{4C} & \texttt{L} & 108 & \texttt{6C} & \texttt{l} \\
+13 & \texttt{0D} & CR  &  45 & \texttt{2D} & \texttt{-} &  77 & \texttt{4D} & \texttt{M} & 109 & \texttt{6D} & \texttt{m} \\
+14 & \texttt{0E} & SO  &  46 & \texttt{2E} & \texttt{.} &  78 & \texttt{4E} & \texttt{N} & 110 & \texttt{6E} & \texttt{n} \\
+15 & \texttt{0F} & SI  &  47 & \texttt{2F} & \texttt{/} &  79 & \texttt{4F} & \texttt{O} & 111 & \texttt{6F} & \texttt{o} \\
+16 & \texttt{10} & DLE &  48 & \texttt{30} & \texttt{0} &  80 & \texttt{50} & \texttt{P} & 112 & \texttt{70} & \texttt{p} \\
+17 & \texttt{11} & DC1 &  49 & \texttt{31} & \texttt{1} &  81 & \texttt{51} & \texttt{Q} & 113 & \texttt{71} & \texttt{q} \\
+18 & \texttt{12} & DC2 &  50 & \texttt{32} & \texttt{2} &  82 & \texttt{52} & \texttt{R} & 114 & \texttt{72} & \texttt{r} \\
+19 & \texttt{13} & DC3 &  51 & \texttt{33} & \texttt{3} &  83 & \texttt{53} & \texttt{S} & 115 & \texttt{73} & \texttt{s} \\
+20 & \texttt{14} & DC4 &  52 & \texttt{34} & \texttt{4} &  84 & \texttt{54} & \texttt{T} & 116 & \texttt{74} & \texttt{t} \\
+21 & \texttt{15} & NAK &  53 & \texttt{35} & \texttt{5} &  85 & \texttt{55} & \texttt{U} & 117 & \texttt{75} & \texttt{u} \\
+22 & \texttt{16} & SYN &  54 & \texttt{36} & \texttt{6} &  86 & \texttt{56} & \texttt{V} & 118 & \texttt{76} & \texttt{v} \\
+23 & \texttt{17} & ETB &  55 & \texttt{37} & \texttt{7} &  87 & \texttt{57} & \texttt{W} & 119 & \texttt{77} & \texttt{w} \\
+24 & \texttt{18} & CAN &  56 & \texttt{38} & \texttt{8} &  88 & \texttt{58} & \texttt{X} & 120 & \texttt{78} & \texttt{x} \\
+25 & \texttt{19} & EM  &  57 & \texttt{39} & \texttt{9} &  89 & \texttt{59} & \texttt{Y} & 121 & \texttt{79} & \texttt{y} \\
+26 & \texttt{1A} & SUB &  58 & \texttt{3A} & \texttt{:} &  90 & \texttt{5A} & \texttt{Z} & 122 & \texttt{7A} & \texttt{z} \\
+27 & \texttt{1B} & ESC &  59 & \texttt{3B} & \texttt{;} &  91 & \texttt{5B} & \texttt{[} & 123 & \texttt{7B} & \texttt{\{} \\
+28 & \texttt{1C} & FS  &  60 & \texttt{3C} & \texttt{<} &  92 & \texttt{5C} & \texttt{\textbackslash} & 124 & \texttt{7C} & \texttt{|} \\
+29 & \texttt{1D} & GS  &  61 & \texttt{3D} & \texttt{=} &  93 & \texttt{5D} & \texttt{]} & 125 & \texttt{7D} & \texttt{\}} \\
+30 & \texttt{1E} & RS  &  62 & \texttt{3E} & \texttt{>} &  94 & \texttt{5E} & \texttt{\^{}} & 126 & \texttt{7E} & \texttt{\~{}} \\
+31 & \texttt{1F} & US  &  63 & \texttt{3F} & \texttt{?} &  95 & \texttt{5F} & \texttt{\_} & 127 & \texttt{7F} & DEL \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Control Characters Used by the Screen Editor}
+\label{sec:control-chars}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The NovaVM's screen editor recognises the following control characters:
+
+\begin{center}
+\small
+\begin{tabular}{@{}ccll@{}}
+\toprule
+\textbf{Dec} & \textbf{Hex} & \textbf{Name} & \textbf{Action} \\
+\midrule
+ 8 & \texttt{\$08} & BS (Backspace) & Move cursor left one position and erase the character \\
+10 & \texttt{\$0A} & LF (Line Feed) & Move cursor down one row \\
+13 & \texttt{\$0D} & CR (Carriage Return) & Move cursor to the start of the next line \\
+27 & \texttt{\$1B} & ESC (Escape) & Escape (context-dependent) \\
+127 & \texttt{\$7F} & DEL (Delete) & Delete the character at the cursor position \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Extended Characters (128--255)}
+\label{sec:extended-chars}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Character codes 128--255 map to the active font's extended character set.  The
+default font (font~0) includes box-drawing characters, commonly used for
+creating borders and UI elements in text mode:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cll@{}}
+\toprule
+\textbf{Range} & \textbf{Contents (Font 0)} & \textbf{Notes} \\
+\midrule
+128--159 & Box-drawing corners and junctions & Single and double lines \\
+160--191 & Horizontal and vertical lines     & Single and double weight \\
+192--223 & Block elements and shading        & Quarter, half, full blocks \\
+224--255 & Miscellaneous symbols             & Arrows, bullets, etc. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+The extended character set is font-dependent.  If a different font is loaded,
+characters 128--255 may display differently.  Characters 0--127 always follow
+standard ASCII regardless of the active font.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{BASIC String Functions}
+\label{sec:string-functions}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Two BASIC functions convert between characters and their ASCII codes:
+
+\begin{itemize}
+  \item \texttt{ASC(\textit{string\$})} --- returns the ASCII code of the first
+        character in the string.  For example, \texttt{ASC("A")} returns~65.
+  \item \texttt{CHR\$(\textit{code})} --- returns a one-character string with the
+        given ASCII code.  For example, \texttt{CHR\$(65)} returns~\texttt{"A"}.
+\end{itemize}
+
+\begin{lstlisting}
+10 REM print the full printable ASCII set
+20 FOR I = 32 TO 126
+30   PRINT CHR$(I);
+40 NEXT I
+50 PRINT
+60 REM
+70 REM show the code for a character
+80 PRINT "CODE FOR 'A':"; ASC("A")
+\end{lstlisting}

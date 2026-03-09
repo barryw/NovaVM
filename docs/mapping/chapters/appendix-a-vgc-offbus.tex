@@ -1,0 +1,196 @@
+% =============================================================================
+% Appendix A — VGC Bitmap & Sprite Shape RAM
+% =============================================================================
+\chapter{VGC Bitmap \& Sprite Shape RAM}
+
+\epigraph{``The screen is a window into the machine's imagination.''}%
+{\textit{--- Anonymous demo coder, 1989}}
+
+\section*{Introduction}
+
+The VGC manages two large memory spaces that live entirely outside the 6502's
+64\,KB address space.  The graphics bitmap holds 64,000 bytes of pixel data for
+the 320$\times$200 display, and the sprite shape RAM holds up to 256 shape
+definitions of 256 bytes each (64\,KB total).  Neither space can be addressed
+directly by the CPU; instead, the VGC provides two access mechanisms:
+
+\begin{itemize}
+  \item \textbf{MemRead/MemWrite commands} --- write a space selector and offset
+        to the VGC command registers, then issue command \$19 (MemRead) or \$1A
+        (MemWrite) at \addr{A010}.
+  \item \textbf{DMA transfers} --- the DMA controller can copy blocks to and
+        from VGC memory using space identifiers 3 (graphics bitmap) and 4
+        (sprite shapes).
+\end{itemize}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Graphics Bitmap}
+\label{sec:gfx-bitmap}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The graphics bitmap is a linear framebuffer of 320$\times$200 pixels stored in
+row-major order.  Each pixel occupies one byte, with the colour index in the low
+nibble (bits 3--0).  The upper nibble is ignored on write and reads as zero.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Property}         & \textbf{Value} \\
+\midrule
+Resolution                 & 320$\times$200 pixels \\
+Bits per pixel             & 4 (stored in low nibble of each byte) \\
+Total size                 & 64,000 bytes \\
+VGC MemRead/MemWrite space & \$02 (\texttt{MemSpaceGfx}) \\
+DMA space                  & 3 (\texttt{DmaSpaceVgcGfx}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Address Calculation}
+
+The offset of any pixel within the bitmap is:
+
+\[
+  \textit{offset} = y \times 320 + x
+\]
+
+where $x \in [0, 319]$ and $y \in [0, 199]$.
+
+\subsection{Row Start Offsets}
+
+The following table shows the starting offset (in decimal and hex) for every
+10th row:
+
+\begin{center}
+\small
+\begin{tabular}{@{}rrr@{\qquad}rrr@{}}
+\toprule
+\textbf{Row} & \textbf{Offset (dec)} & \textbf{Offset (hex)} &
+\textbf{Row} & \textbf{Offset (dec)} & \textbf{Offset (hex)} \\
+\midrule
+  0 &     0 & \$0000 &  100 & 32000 & \$7D00 \\
+ 10 &  3200 & \$0C80 &  110 & 35200 & \$8980 \\
+ 20 &  6400 & \$1900 &  120 & 38400 & \$9600 \\
+ 30 &  9600 & \$2580 &  130 & 41600 & \$A280 \\
+ 40 & 12800 & \$3200 &  140 & 44800 & \$AF00 \\
+ 50 & 16000 & \$3E80 &  150 & 48000 & \$BB80 \\
+ 60 & 19200 & \$4B00 &  160 & 51200 & \$C800 \\
+ 70 & 22400 & \$5780 &  170 & 54400 & \$D480 \\
+ 80 & 25600 & \$6400 &  180 & 57600 & \$E100 \\
+ 90 & 28800 & \$7080 &  190 & 60800 & \$ED80 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Drawing Commands vs.\ Direct Access}
+
+Most programs use the VGC's built-in drawing commands (PLOT, LINE, CIRCLE, RECT,
+FILL, PAINT) which operate on the bitmap internally.  The GCLS command clears
+the entire bitmap to colour~0.  Direct MemRead/MemWrite access is useful for
+reading individual pixel values or implementing custom rendering algorithms.
+
+\subsection{BASIC Example: Read/Write Pixels via MemRead/MemWrite}
+
+\begin{lstlisting}
+10 REM read pixel at (100, 50)
+20 POKE $A011, 0  : POKE $A012, 2  : REM space=gfx
+30 OFFSET = 50*320+100
+40 POKE $A013, OFFSET AND 255
+50 POKE $A014, INT(OFFSET/256)
+60 POKE $A010, $19 : REM MemRead
+70 PRINT "COLOR:"; PEEK($A015)
+80 REM
+90 REM write pixel at (100, 50) to color 1 (white)
+100 POKE $A015, 1
+110 POKE $A010, $1A : REM MemWrite
+\end{lstlisting}
+
+\begin{notebox}
+The VGC command registers at \addr{A011}--\addr{A014} retain their values after
+a command executes.  When reading or writing consecutive pixels, you only need to
+update the offset registers between commands.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Sprite Shape RAM}
+\label{sec:sprite-shapes}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Sprite shape RAM holds up to 256 shape definitions.  Each shape is a
+16$\times$16 pixel image stored as 256 bytes (one byte per pixel, colour index
+in the low nibble).  A pixel value of 0 is transparent by default.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Property}         & \textbf{Value} \\
+\midrule
+Shape slots                & 256 (numbered 0--255) \\
+Shape dimensions           & 16$\times$16 pixels \\
+Bytes per shape            & 256 \\
+Bits per pixel             & 4 (stored in low nibble of each byte) \\
+Total size                 & 65,536 bytes (64\,KB) \\
+VGC MemRead/MemWrite space & \$03 (\texttt{MemSpaceSprite}) \\
+DMA space                  & 4 (\texttt{DmaSpaceVgcSprite}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Address Calculation}
+
+The offset of any pixel within sprite shape RAM is:
+
+\[
+  \textit{offset} = \textit{slot} \times 256 + \textit{row} \times 16 + \textit{column}
+\]
+
+where \textit{slot}~$\in [0, 255]$, \textit{row}~$\in [0, 15]$, and
+\textit{column}~$\in [0, 15]$.
+
+\subsection{Shape Slot Assignments}
+
+\begin{notebox}
+Shape slots 0--15 correspond to the default shapes for sprites 0--15 at
+power-on, but any sprite can reference any shape slot by writing to the
+\texttt{SprRegShape} register at offset~+4 within the sprite's register block
+(base \addr{A040}).  This means multiple sprites can share a single shape
+definition, and a sprite's appearance can be changed at any time by pointing it
+to a different slot.
+\end{notebox}
+
+\subsection{BASIC Example: Define a Shape via MemWrite}
+
+\begin{lstlisting}
+10 REM define a simple arrow shape in slot 0
+20 POKE $A011, 0 : POKE $A012, 3 : REM space=sprite
+30 FOR ROW = 0 TO 15
+40   FOR COL = 0 TO 15
+50     OFFSET = 0*256 + ROW*16 + COL
+60     POKE $A013, OFFSET AND 255
+70     POKE $A014, INT(OFFSET/256)
+80     C = 0 : REM transparent
+90     IF COL = 7 AND ROW < 12 THEN C = 1
+100    IF ROW = 0 AND COL >= 5 AND COL <= 9 THEN C = 1
+110    POKE $A015, C
+120    POKE $A010, $1A : REM MemWrite
+130  NEXT COL
+140 NEXT ROW
+\end{lstlisting}
+
+\subsection{Using DMA for Bulk Shape Loading}
+
+For loading many shapes at once (e.g., from XRAM or CPU RAM), the DMA controller
+is far more efficient than individual MemWrite commands.  Set the DMA source
+space to CPU RAM (space~0) or XRAM (space~5), the destination space to
+\texttt{DmaSpaceVgcSprite} (space~4), and issue a DMA copy command.  See
+Chapter~\ref{sec:xmc-registers} for DMA register details.
+
+\begin{lstlisting}
+10 REM DMA copy 2560 bytes (10 shapes) from CPU RAM
+20 REM at $2000 into sprite shape slot 0
+30 DMACOPY $2000, 0, 2560, 0, 4
+\end{lstlisting}

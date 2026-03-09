@@ -1,0 +1,216 @@
+% =============================================================================
+% Appendix B — Expansion RAM (XRAM)
+% =============================================================================
+\chapter{Expansion RAM (XRAM)}
+
+\epigraph{``More memory is always the answer.  The question is
+irrelevant.''}{\textit{--- Every programmer, eventually}}
+
+\section*{Introduction}
+
+The NovaVM provides 512\,KB of expansion RAM (XRAM) --- eight times the 6502's
+native 64\,KB address space.  XRAM is not directly addressable by the CPU;
+instead, it is accessed through the Expansion Memory Controller (XMC) registers
+at \$BA00--\$BA3F, four memory-mapped windows at \$BC00--\$BFFF, or via DMA
+transfers (space~5).
+
+This appendix provides a consolidated reference for XRAM's organization, access
+methods, and named-block allocation system.  For the XMC register-by-register
+documentation, see Chapter~10.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Bank Structure}
+\label{sec:xram-banks}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+XRAM uses 24-bit addressing: an 8-bit bank number (high byte) combined with a
+16-bit offset within the bank.
+
+\begin{center}
+\small
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{Bank} & \textbf{Start Address} & \textbf{End Address} & \textbf{Size} \\
+\midrule
+0 & \$000000 & \$00FFFF & 64\,KB \\
+1 & \$010000 & \$01FFFF & 64\,KB \\
+2 & \$020000 & \$02FFFF & 64\,KB \\
+3 & \$030000 & \$03FFFF & 64\,KB \\
+4 & \$040000 & \$04FFFF & 64\,KB \\
+5 & \$050000 & \$05FFFF & 64\,KB \\
+6 & \$060000 & \$06FFFF & 64\,KB \\
+7 & \$070000 & \$07FFFF & 64\,KB \\
+\midrule
+  & \multicolumn{2}{l}{\textbf{Total}} & \textbf{512\,KB} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The active bank is selected by writing to \texttt{XmcBank} at \addr{BA0C}.
+The total number of available banks can be read from \texttt{XmcBanks} at
+\addr{BA0D}.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Access Methods}
+\label{sec:xram-access}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+There are four ways to read and write XRAM, each suited to different use cases.
+
+\subsection{Byte Commands (GetByte / PutByte)}
+
+The simplest access method: set the bank, address, and data registers, then
+issue a GetByte or PutByte command.  Good for reading or writing individual
+values, but too slow for large transfers.
+
+\begin{lstlisting}
+10 REM write byte $42 to XRAM bank 0, offset $1000
+20 XBANK 0
+30 XPOKE $1000, $42
+40 PRINT "READ BACK:"; XPEEK($1000)
+\end{lstlisting}
+
+\subsection{Bulk Commands (Stash / Fetch)}
+
+Copy a block of bytes between CPU RAM and XRAM in a single operation.  The XMC
+handles the transfer internally at full speed.
+
+\begin{lstlisting}
+10 REM copy 256 bytes from CPU RAM at $2000
+20 REM into XRAM bank 0 at offset $0000
+30 STASH $2000, 256, 0, 0
+40 REM
+50 REM copy them back to CPU RAM at $3000
+60 FETCH $3000, 256, 0, 0
+\end{lstlisting}
+
+\subsection{XMC Windows (\$BC00--\$BFFF)}
+
+Four 256-byte windows are mapped directly into the 6502 address space.  Each
+window can be independently pointed at any 256-byte page in XRAM using the
+XMAP command.  Once mapped, ordinary PEEK/POKE operations read and write XRAM
+through the window.
+
+\begin{center}
+\small
+\begin{tabular}{@{}cll@{}}
+\toprule
+\textbf{Window} & \textbf{CPU Address Range} & \textbf{Size} \\
+\midrule
+0 & \$BC00--\$BCFF & 256 bytes \\
+1 & \$BD00--\$BDFF & 256 bytes \\
+2 & \$BE00--\$BEFF & 256 bytes \\
+3 & \$BF00--\$BFFF & 256 bytes \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM map window 0 to XRAM bank 0, page 16 ($1000)
+20 XMAP 0, 0, 16
+30 REM now PEEK/POKE at $BC00-$BCFF accesses XRAM
+40 POKE $BC00, $42
+50 PRINT PEEK($BC00)
+60 XUNMAP 0 : REM release window
+\end{lstlisting}
+
+\begin{tipbox}
+XMC windows are ideal for random access to small data structures stored in XRAM,
+such as lookup tables or tile maps.  For sequential bulk transfers, Stash/Fetch
+or DMA are faster.
+\end{tipbox}
+
+\subsection{DMA Transfers (Space 5)}
+
+The DMA controller treats XRAM as space~5.  It can copy data between XRAM and
+any other DMA space (CPU RAM, VGC character/color/graphics/sprite memory, or
+even another region of XRAM).  This is the fastest method for large transfers.
+
+\begin{lstlisting}
+10 REM DMA copy 1000 bytes from XRAM offset $0000
+20 REM to CPU RAM at $2000
+30 DMACOPY 0, $2000, 1000, 5, 0
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Named Block Allocation}
+\label{sec:xram-named}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The XMC provides a simple named-block filesystem within XRAM.  Each block has a
+name (up to 27 characters) and can be stored and retrieved without needing to
+track offsets manually.
+
+\begin{center}
+\small
+\begin{tabular}{@{}lp{24em}@{}}
+\toprule
+\textbf{Command} & \textbf{Description} \\
+\midrule
+NStash  & Store a block of CPU RAM into XRAM under a given name. \\
+NFetch  & Retrieve a named block from XRAM into CPU RAM. \\
+NDelete & Delete a named block and free its XRAM pages. \\
+NDirOpen / NDirRead & Enumerate all named blocks. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM store level data under the name "LEVEL1"
+20 XMEM "LEVEL1", $2000, 4096, 1
+30 REM
+40 REM retrieve it later
+50 XMEM "LEVEL1", $2000, 0, 0
+60 REM
+70 REM list all named blocks
+80 XDIR
+90 REM
+100 REM delete a named block
+110 XDEL "LEVEL1"
+\end{lstlisting}
+
+\begin{notebox}
+Named blocks are allocated from the XRAM page pool.  The NStash command
+automatically allocates the required number of 256-byte pages.  Use XFREE to
+check how many pages remain available.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Page Usage Tracking}
+\label{sec:xram-pages}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+XRAM is divided into 256-byte pages.  With 512\,KB of XRAM, there are 2,048
+pages in total.  The XMC tracks which pages are in use and which are free.
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Register} & \textbf{Address} & \textbf{Description} \\
+\midrule
+XmcPagesUsed & \addr{BA0E} (16-bit) & Number of pages currently allocated \\
+XmcPagesFree & \addr{BA10} (16-bit) & Number of pages available \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The XALLOC command reserves a contiguous block of pages and returns the starting
+offset.  XRESET releases all allocations and clears XRAM.
+
+\begin{lstlisting}
+10 PRINT "PAGES FREE:"; XFREE
+20 XALLOC 16 : REM allocate 16 pages (4KB)
+30 PRINT "PAGES FREE:"; XFREE
+40 XRESET : REM free everything
+50 PRINT "PAGES FREE:"; XFREE
+\end{lstlisting}
+
+\begin{warningbox}
+XRESET clears all XRAM contents and allocations, including named blocks.  There
+is no undo.  Use it only when you want to start fresh.
+\end{warningbox}
