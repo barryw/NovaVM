@@ -19,7 +19,7 @@ static int RunMidToBas(string[] args)
 {
     if (args.Length < 1)
     {
-        Console.Error.WriteLine("Usage: mid2bas <input.mid> [-o output.bas] [--mml-only] [--title TITLE] [--subtitle SUB] [--voices 1=3,2=5] [--max-line-len 200]");
+        Console.Error.WriteLine("Usage: mid2bas <input.mid> [-o output.bas] [--mml-only] [--wts] [--title TITLE] [--subtitle SUB] [--voices 1=3,2=5] [--max-line-len 200] [--max-voices N]");
         return 1;
     }
 
@@ -34,7 +34,10 @@ static int RunMidToBas(string[] args)
     string title = "";
     string subtitle = "";
     bool mmlOnly = false;
+    bool useWts = false;
+    bool compact = false;
     int maxLineLen = 200;
+    int maxVoices = 6;
     Dictionary<int, int>? mapping = null;
 
     for (int i = 1; i < args.Length; i++)
@@ -53,8 +56,17 @@ static int RunMidToBas(string[] args)
             case "--mml-only":
                 mmlOnly = true;
                 break;
+            case "--wts":
+                useWts = true;
+                break;
+            case "--compact":
+                compact = true;
+                break;
             case "--max-line-len" when i + 1 < args.Length:
                 maxLineLen = int.Parse(args[++i]);
+                break;
+            case "--max-voices" when i + 1 < args.Length:
+                maxVoices = int.Parse(args[++i]);
                 break;
             case "--voices" when i + 1 < args.Length:
                 mapping = ParseVoiceMapping(args[++i]);
@@ -73,7 +85,8 @@ static int RunMidToBas(string[] args)
     if (mmlOnly)
     {
         int ppqn = ((TicksPerQuarterNoteTimeDivision)midi.TimeDivision).TicksPerQuarterNote;
-        var channels = MidiEngine.SelectChannels(midi, explicitMapping: mapping);
+        var effectiveMaxVoices = useWts ? Math.Max(maxVoices, 14) : maxVoices;
+        var channels = MidiEngine.SelectChannels(midi, effectiveMaxVoices, mapping);
         for (int v = 0; v < channels.Length; v++)
         {
             string mml = MidiEngine.GenerateMml(midi, channels[v], ppqn);
@@ -83,7 +96,7 @@ static int RunMidToBas(string[] args)
     }
 
     string bas = MidiEngine.GenerateBasProgram(midi, title, subtitle, maxLineLen,
-        explicitMapping: mapping);
+        maxVoices, mapping, useWts, compact);
 
     if (outputPath is null)
         outputPath = Path.ChangeExtension(inputPath, ".bas");
@@ -145,7 +158,7 @@ static void WriteString(byte[] buf, int offset, string s, int maxLen)
 static void PrintUsage()
 {
     Console.Error.WriteLine("e6502 Tools");
-    Console.Error.WriteLine("  mid2bas <input.mid> [-o output.bas] [--mml-only] [--title T] [--subtitle S] [--voices 1=3,2=5]");
+    Console.Error.WriteLine("  mid2bas <input.mid> [-o output.bas] [--mml-only] [--wts] [--title T] [--subtitle S] [--voices 1=3,2=5] [--max-voices N]");
     Console.Error.WriteLine("  <input.sid> [output.sid] --target 0x1000   (SID relocator)");
     Console.Error.WriteLine("  <input.sid> --info                         (SID info)");
 }

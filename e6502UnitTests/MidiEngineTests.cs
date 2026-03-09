@@ -439,4 +439,83 @@ public class MidiEngineTests
         int musicLines = bas.Split('\n').Count(l => l.Contains("MUSIC 1,"));
         Assert.IsTrue(musicLines > 1, $"Expected multiple MUSIC lines, got {musicLines}");
     }
+
+    // ---------- WTS mode tests ----------
+
+    [TestMethod]
+    public void GenerateBasProgram_WtsRoutesMelodicToAtI()
+    {
+        // Two melodic channels: GM 56 (trumpet) and GM 48 (strings)
+        var midi = BuildTestMidi((0, 20, 56), (1, 15, 48));
+        string bas = MidiEngine.GenerateBasProgram(midi, wts: true);
+
+        // WTS voices should use @I with GM program number
+        Assert.IsTrue(bas.Contains("MUSIC 7,\"@I56"), $"Expected @I56 for trumpet on voice 7: {bas}");
+        Assert.IsTrue(bas.Contains("MUSIC 8,\"@I48"), $"Expected @I48 for strings on voice 8: {bas}");
+        // No SID INSTRUMENT definitions when all voices are WTS
+        Assert.IsFalse(bas.Contains("INSTRUMENT"), $"Should not have INSTRUMENT defs for WTS-only: {bas}");
+    }
+
+    [TestMethod]
+    public void GenerateBasProgram_WtsRoutesDrumsToAtD()
+    {
+        // Channel 9 = drums, channel 0 = piano
+        var midi = BuildTestMidi((9, 30, 0), (0, 20, 0));
+        string bas = MidiEngine.GenerateBasProgram(midi, wts: true);
+
+        // Drums should get @D prefix
+        Assert.IsTrue(bas.Contains("@D0"), $"Expected @D0 for drums: {bas}");
+        // Piano should get @I prefix
+        Assert.IsTrue(bas.Contains("@I0"), $"Expected @I0 for piano: {bas}");
+    }
+
+    [TestMethod]
+    public void GenerateBasProgram_WtsOverflowToSid()
+    {
+        // 10 channels: first 8 should go to WTS (7-14), last 2 to SID (1-2)
+        var midi = BuildTestMidi(
+            (0, 100, 56), (1, 90, 57), (2, 80, 58), (3, 70, 60),
+            (4, 60, 61), (5, 50, 62), (6, 40, 63), (7, 30, 64),
+            (8, 20, 65), (10, 10, 66));
+        string bas = MidiEngine.GenerateBasProgram(midi, wts: true);
+
+        // WTS voices 7-14 should have @I prefixes
+        for (int v = 7; v <= 14; v++)
+            Assert.IsTrue(bas.Contains($"MUSIC {v},\"@I"), $"Expected @I on voice {v}: {bas}");
+
+        // SID voices 1-2 should have I prefix with INSTRUMENT definitions
+        Assert.IsTrue(bas.Contains("MUSIC 1,\"I"), $"Expected I on voice 1: {bas}");
+        Assert.IsTrue(bas.Contains("MUSIC 2,\"I"), $"Expected I on voice 2: {bas}");
+        Assert.IsTrue(bas.Contains("INSTRUMENT"), $"Expected INSTRUMENT defs for SID overflow: {bas}");
+    }
+
+    [TestMethod]
+    public void GenerateBasProgram_WtsUpgradesMaxVoicesFrom6()
+    {
+        // 8 channels — with wts=true, maxVoices should auto-upgrade from 6 to 14
+        var midi = BuildTestMidi(
+            (0, 50, 0), (1, 40, 0), (2, 30, 0), (3, 20, 0),
+            (4, 15, 0), (5, 10, 0), (6, 8, 0), (7, 5, 0));
+        string bas = MidiEngine.GenerateBasProgram(midi, wts: true);
+
+        // All 8 channels should be routed (not truncated to 6)
+        int voiceCount = 0;
+        for (int v = 7; v <= 14; v++)
+            if (bas.Contains($"MUSIC {v},"))
+                voiceCount++;
+        Assert.AreEqual(8, voiceCount, $"Expected 8 WTS voices, got {voiceCount}");
+    }
+
+    [TestMethod]
+    public void GenerateBasProgram_SidOnlyBackwardCompatible()
+    {
+        // Ensure wts=false (default) still works as before
+        var midi = BuildTestMidi((0, 20, 0), (1, 15, 48));
+        string bas = MidiEngine.GenerateBasProgram(midi);
+
+        Assert.IsTrue(bas.Contains("MUSIC 1,\"I"), "SID mode should use I prefix");
+        Assert.IsTrue(bas.Contains("MUSIC 2,\"I"), "SID mode should use I prefix");
+        Assert.IsFalse(bas.Contains("@I"), "SID mode should not use @I");
+        Assert.IsTrue(bas.Contains("INSTRUMENT"), "SID mode should have INSTRUMENT defs");
+    }
 }

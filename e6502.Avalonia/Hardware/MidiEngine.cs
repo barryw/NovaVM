@@ -254,7 +254,13 @@ public static class MidiEngine
     /// Handles notes, rests, velocity (V), octave tracking (O/>/&lt;), tempo (T), and
     /// top-note-wins polyphony reduction.
     /// </summary>
-    public static string GenerateMml(MidiFile midi, int channel, int ppqn)
+    /// <summary>
+    /// Generate an MML string from a single MIDI channel's events.
+    /// When <paramref name="compact"/> is true, uses L (default length) to avoid
+    /// repeating durations, and strips per-note velocity changes for smaller output.
+    /// </summary>
+    public static string GenerateMml(MidiFile midi, int channel, int ppqn,
+        bool compact = false)
     {
         var noteEvents = new List<(long time, int midi, int velocity, bool isOn)>();
         long initialTempo = 500000; // default 120 BPM
@@ -291,22 +297,50 @@ public static class MidiEngine
 
         int currentOctave = -1;
         int currentVelocity = -1;
+        string currentDefaultLen = ""; // tracks the L (default length) in compact mode
+
+        // In compact mode, find the most common duration to use as initial default
+        if (compact && notes.Count > 0)
+        {
+            var durCounts = new Dictionary<string, int>();
+            foreach (var n in notes)
+            {
+                string d = QuantizeDuration(n.MmlTicks);
+                if (!d.Contains('&')) // only simple durations can be defaults
+                {
+                    durCounts.TryGetValue(d, out int c);
+                    durCounts[d] = c + 1;
+                }
+            }
+            if (durCounts.Count > 0)
+            {
+                currentDefaultLen = durCounts.OrderByDescending(kv => kv.Value).First().Key;
+                sb.Append('L');
+                sb.Append(currentDefaultLen);
+            }
+        }
 
         foreach (var note in notes)
         {
+            string dur = QuantizeDuration(note.MmlTicks);
+
             if (note.IsRest)
             {
                 sb.Append('R');
-                sb.Append(QuantizeDuration(note.MmlTicks));
+                if (!compact || dur != currentDefaultLen)
+                    sb.Append(dur);
                 continue;
             }
 
-            int vol = VelocityToVolume(note.Velocity);
-            if (vol != currentVelocity)
+            if (!compact)
             {
-                sb.Append('V');
-                sb.Append(vol);
-                currentVelocity = vol;
+                int vol = VelocityToVolume(note.Velocity);
+                if (vol != currentVelocity)
+                {
+                    sb.Append('V');
+                    sb.Append(vol);
+                    currentVelocity = vol;
+                }
             }
 
             int noteOctave = (note.Midi / 12) - 1;
@@ -326,7 +360,29 @@ public static class MidiEngine
 
             int semitone = note.Midi % 12;
             sb.Append(NoteNames[semitone]);
-            sb.Append(QuantizeDuration(note.MmlTicks));
+
+            if (compact)
+            {
+                // Only emit duration if it differs from current default
+                if (dur != currentDefaultLen)
+                {
+                    // If this duration is simple (no tie) and will repeat, switch default
+                    if (!dur.Contains('&'))
+                    {
+                        // Look ahead: count how many upcoming notes share this duration
+                        // (lightweight: just emit the duration explicitly for tied notes)
+                        sb.Append(dur);
+                    }
+                    else
+                    {
+                        sb.Append(dur);
+                    }
+                }
+            }
+            else
+            {
+                sb.Append(dur);
+            }
         }
 
         return sb.ToString();
@@ -334,15 +390,43 @@ public static class MidiEngine
 
     /// <summary>
     /// Generate a complete NovaBASIC .bas program from a MIDI file.
+    /// When <paramref name="wts"/> is true, routes up to 8 channels to WTS voices (7-14)
+    /// with GM instrument selection (@I/@D), and overflow channels to SID voices (1-6).
     /// </summary>
     public static string GenerateBasProgram(MidiFile midi,
         string title = "", string subtitle = "",
         int maxLineLen = 200, int maxVoices = 6,
-        Dictionary<int, int>? explicitMapping = null)
+        Dictionary<int, int>? explicitMapping = null,
+        bool wts = false, bool compact = false)
     {
         int ppqn = ((TicksPerQuarterNoteTimeDivision)midi.TimeDivision).TicksPerQuarterNote;
         var analysis = AnalyzeChannels(midi);
+
+        if (wts && maxVoices <= 6)
+            maxVoices = 14;
+
         var selectedChannels = SelectChannels(midi, maxVoices, explicitMapping);
+
+        // Build voice assignment: map each selected channel to a BASIC voice number (1-14).
+        // WTS mode: first min(8, count) → voices 7-14 (WTS), remainder → voices 1-6 (SID).
+        // SID-only mode: voices 1-6 sequentially.
+        int[] voiceNumbers;
+        if (wts)
+        {
+            int wtsCount = Math.Min(selectedChannels.Length, 8);
+            int sidCount = selectedChannels.Length - wtsCount;
+            voiceNumbers = new int[selectedChannels.Length];
+            for (int i = 0; i < wtsCount; i++)
+                voiceNumbers[i] = 7 + i; // WTS voices 7-14
+            for (int i = 0; i < sidCount; i++)
+                voiceNumbers[wtsCount + i] = 1 + i; // SID voices 1-6
+        }
+        else
+        {
+            voiceNumbers = new int[selectedChannels.Length];
+            for (int i = 0; i < selectedChannels.Length; i++)
+                voiceNumbers[i] = i + 1;
+        }
 
         var lines = new List<string>();
         int lineNum = 10;
@@ -359,12 +443,14 @@ public static class MidiEngine
         }
         lines.Add($"{lineNum} REM ================================"); lineNum += 10;
 
-        // Instrument definitions
+        // SID instrument definitions (only for SID voices 1-6)
         var usedBuckets = new Dictionary<int, int>(); // bucket index → instrument slot
         int nextSlot = 1;
 
         for (int v = 0; v < selectedChannels.Length; v++)
         {
+            if (voiceNumbers[v] > 6) continue; // WTS voice — no INSTRUMENT needed
+
             int ch = selectedChannels[v];
             var info = analysis[ch];
             var bucket = GetInstrumentBucket(info.GmProgram, info.IsDrums);
@@ -384,15 +470,27 @@ public static class MidiEngine
         {
             int ch = selectedChannels[v];
             var info = analysis[ch];
-            var bucket = GetInstrumentBucket(info.GmProgram, info.IsDrums);
-            int bucketIdx = Array.IndexOf(Buckets, bucket);
-            int instSlot = usedBuckets[bucketIdx];
+            int voice = voiceNumbers[v];
 
-            string mml = GenerateMml(midi, ch, ppqn);
-            // Prepend instrument selection
-            mml = $"I{instSlot}{mml}";
+            string mml = GenerateMml(midi, ch, ppqn, compact);
 
-            int voice = v + 1;
+            if (voice <= 6)
+            {
+                // SID voice: prepend I{slot}
+                var bucket = GetInstrumentBucket(info.GmProgram, info.IsDrums);
+                int bucketIdx = Array.IndexOf(Buckets, bucket);
+                int instSlot = usedBuckets[bucketIdx];
+                mml = $"I{instSlot}{mml}";
+            }
+            else
+            {
+                // WTS voice: prepend @I{gmProgram} or @D{gmProgram}
+                if (info.IsDrums)
+                    mml = $"@D{info.GmProgram}{mml}";
+                else
+                    mml = $"@I{info.GmProgram}{mml}";
+            }
+
             var mmlLines = SplitMml(mml, maxLineLen, voice);
             foreach (var ml in mmlLines)
             {
