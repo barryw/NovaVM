@@ -3,7 +3,7 @@
 
 CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 
-all: basic.bin keyboard.bin tokens.json
+all: basic.bin keyboard.bin demo.bin tokens.json
 
 # ROM build
 basic.bin basic.sym: basic.o ehbasic.cfg
@@ -32,7 +32,19 @@ keyboard.o: keyboard.s novavm.inc
 install-keyboard: keyboard.bin
 	cp keyboard.bin ~/e6502-programs/keyboard.bin
 
+# Demo disk player
+demo: demo.bin
+
+demo.bin: demo.o demo.cfg
+	ld65 -C demo.cfg -o demo.bin demo.o
+
+demo.o: demo.s novavm.inc
+	ca65 --cpu 65c02 demo.s -o demo.o
+
+install-demo: demo.bin
+	cp demo.bin ~/e6502-programs/demo.bin
+
 clean:
 	$(RM) *.o *.lst *.map *.bin *.sym
 
-.PHONY: all keyboard install-keyboard clean
+.PHONY: all keyboard install-keyboard demo install-demo clean
