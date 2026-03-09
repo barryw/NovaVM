@@ -1,0 +1,240 @@
+% =============================================================================
+% Chapter 8 — Screen Memory ($AA00–$B99F)
+% =============================================================================
+\chapter{Screen Memory}
+
+\epigraph{``The screen is a window into the machine's mind.  What you write
+there, the world will see.''}{\textit{--- An anonymous systems programmer}}
+
+\section*{Introduction}
+
+The NovaVM's 80$\times$25 text display is backed by two contiguous 2000-byte
+RAM blocks: \textbf{Character RAM} holds the ASCII code for each cell, and
+\textbf{Color RAM} holds the foreground colour.  Together they occupy
+\$AA00--\$B99F --- 4000 bytes that map one-to-one to the 2000 visible character
+positions on screen.
+
+These addresses are ordinary read/write memory.  Any store to Character or
+Color RAM takes effect immediately; there is no need to wait for VSYNC or issue
+a VGC command.  This makes direct screen writes the fastest way to update small
+regions of the display, ideal for scoreboards, status bars, and text
+animations.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Character RAM (\$AA00--\$B1CF)}
+\label{sec:charram}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{AA00}{B1CF}{Character RAM}{R/W}{\$20}
+
+2000 bytes arranged as 25 rows of 80 columns.  Each byte is a standard ASCII
+character code; the VGC renders it using the built-in 8$\times$16 font.  The
+default fill value is \$20 (space), giving a blank screen after reset or
+\texttt{CLS}.
+
+The address of any cell is calculated as:
+
+\begin{center}
+\texttt{addr = \$AA00 + row * 80 + column}
+\end{center}
+
+\noindent where \texttt{row} ranges from 0 (top) to 24 (bottom) and
+\texttt{column} from 0 (left) to 79 (right).
+
+Writing a byte to any address in this range instantly updates the
+corresponding character on screen.  Reading returns the character code
+currently displayed at that position.
+
+\begin{lstlisting}
+10 REM place an asterisk at column 40, row 12 (centre of screen)
+20 POKE $AA00 + 12*80 + 40, ASC("*")
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Color RAM (\$B1D0--\$B99F)}
+\label{sec:colorram}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{B1D0}{B99F}{Color RAM}{R/W}{1}
+
+2000 bytes, one-to-one with Character RAM.  Each byte holds the foreground
+colour (0--15) for the corresponding character cell.  The default value is~1
+(white on the standard palette).
+
+The address formula mirrors Character RAM:
+
+\begin{center}
+\texttt{addr = \$B1D0 + row * 80 + column}
+\end{center}
+
+Writing a colour value here changes the foreground colour of the
+corresponding character immediately.  The background colour for all cells is
+set globally via the VGC's \addr{A001} register (RegBgCol).
+
+\begin{lstlisting}
+10 REM set the character at (0,0) to red (colour 2)
+20 POKE $B1D0, 2
+\end{lstlisting}
+
+\begin{notebox}
+The VGC's 16-colour palette is documented in Appendix~D.  Colour index~0 is
+black and index~1 is white by default, but the palette can be customised via
+the VGC's colour registers.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Screen Coordinate Math}
+\label{sec:screen-math}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Each row occupies exactly 80 bytes (\$50 in hex).  The following table lists
+the starting address of every row in both Character and Color RAM.
+
+\begin{center}
+\small
+\begin{longtable}{@{}rll@{}}
+\toprule
+\textbf{Row} & \textbf{Char Addr} & \textbf{Color Addr} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Row} & \textbf{Char Addr} & \textbf{Color Addr} \\
+\midrule
+\endhead
+ 0 & \texttt{\$AA00} & \texttt{\$B1D0} \\
+ 1 & \texttt{\$AA50} & \texttt{\$B220} \\
+ 2 & \texttt{\$AAA0} & \texttt{\$B270} \\
+ 3 & \texttt{\$AAF0} & \texttt{\$B2C0} \\
+ 4 & \texttt{\$AB40} & \texttt{\$B310} \\
+ 5 & \texttt{\$AB90} & \texttt{\$B360} \\
+ 6 & \texttt{\$ABE0} & \texttt{\$B3B0} \\
+ 7 & \texttt{\$AC30} & \texttt{\$B400} \\
+ 8 & \texttt{\$AC80} & \texttt{\$B450} \\
+ 9 & \texttt{\$ACD0} & \texttt{\$B4A0} \\
+10 & \texttt{\$AD20} & \texttt{\$B4F0} \\
+11 & \texttt{\$AD70} & \texttt{\$B540} \\
+12 & \texttt{\$ADC0} & \texttt{\$B590} \\
+13 & \texttt{\$AE10} & \texttt{\$B5E0} \\
+14 & \texttt{\$AE60} & \texttt{\$B630} \\
+15 & \texttt{\$AEB0} & \texttt{\$B680} \\
+16 & \texttt{\$AF00} & \texttt{\$B6D0} \\
+17 & \texttt{\$AF50} & \texttt{\$B720} \\
+18 & \texttt{\$AFA0} & \texttt{\$B770} \\
+19 & \texttt{\$AFF0} & \texttt{\$B7C0} \\
+20 & \texttt{\$B040} & \texttt{\$B810} \\
+21 & \texttt{\$B090} & \texttt{\$B860} \\
+22 & \texttt{\$B0E0} & \texttt{\$B8B0} \\
+23 & \texttt{\$B130} & \texttt{\$B900} \\
+24 & \texttt{\$B180} & \texttt{\$B950} \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Worked Example}
+
+To place the letter \texttt{A} (ASCII \$41) in colour 14 (light blue) at
+column~35, row~10:
+
+\begin{enumerate}
+  \item Character address: \$AA00 + 10 $\times$ 80 + 35 = \$AA00 + 835 =
+        \$AA00 + \$0343 = \texttt{\$AD43}
+  \item Color address: \$B1D0 + 10 $\times$ 80 + 35 = \$B1D0 + \$0343 =
+        \texttt{\$B513}
+\end{enumerate}
+
+\begin{lstlisting}
+POKE $AD43, $41 : POKE $B513, 14
+\end{lstlisting}
+
+\begin{tipbox}
+For speed-critical routines, pre-compute row base addresses in an array rather
+than multiplying by~80 on every access.  See the ``Fast Text Rendering''
+example below.
+\end{tipbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{BASIC Examples}
+\label{sec:screen-examples}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Direct Screen Write}
+
+Write a string with a chosen colour without using \texttt{PRINT}:
+
+\begin{lstlisting}
+10 REM write "HELLO" at row 0, col 0 in red
+20 H$ = "HELLO"
+30 FOR I=0 TO LEN(H$)-1
+40   POKE $AA00+I, ASC(MID$(H$,I+1,1))
+50   POKE $B1D0+I, 2 : REM colour 2 = red
+60 NEXT I
+\end{lstlisting}
+
+\subsection{Screen Dump}
+
+Read the current contents of the screen and print them to a string:
+
+\begin{lstlisting}
+10 REM read row 0 of the screen
+20 R$ = ""
+30 FOR I=0 TO 79
+40   C = PEEK($AA00+I)
+50   IF C<32 THEN C=32
+60   R$ = R$ + CHR$(C)
+70 NEXT I
+80 PRINT R$
+\end{lstlisting}
+
+\subsection{Fast Text Rendering}
+
+For games and animations, direct POKEs outperform \texttt{PRINT} because they
+avoid cursor movement, scrolling, and control-character interpretation.  This
+example pre-computes row addresses for speed:
+
+\begin{lstlisting}
+100 REM pre-compute row base addresses
+110 DIM CA(24), CO(24)
+120 FOR R=0 TO 24
+130   CA(R) = $AA00 + R*80
+140   CO(R) = $B1D0 + R*80
+150 NEXT R
+200 REM draw a status bar on row 24
+210 S$ = " SCORE: 00000   LIVES: 3   LEVEL: 01 "
+220 FOR I=0 TO LEN(S$)-1
+230   POKE CA(24)+I, ASC(MID$(S$,I+1,1))
+240   POKE CO(24)+I, 14 : REM light blue
+250 NEXT I
+\end{lstlisting}
+
+\subsection{Colour Cycling Effect}
+
+Cycle all characters on screen through the 16 colours:
+
+\begin{lstlisting}
+10 REM colour cycling effect
+20 C = 0
+30 FOR I=0 TO 1999
+40   POKE $B1D0+I, C
+50 NEXT I
+60 C = (C+1) AND 15
+70 GOTO 30
+\end{lstlisting}
+
+\begin{notebox}
+The VGC also provides indirect access to screen and color RAM via the
+MemRead (\$19) and MemWrite (\$1A) commands (see \addr{A010}).  Direct
+\texttt{POKE} is faster for small updates; DMA transfers are faster for bulk
+operations.
+\end{notebox}
+
+\begin{warningbox}
+Writing outside the 2000-byte range of each block will corrupt adjacent
+hardware registers.  Character RAM ends at \$B1CF --- bytes written to
+\$B1D0 and above will overwrite Color RAM.  Color RAM ends at \$B99F ---
+bytes written to \$B9A0 and above will hit the File I/O Controller registers.
+Always bounds-check your row and column values.
+\end{warningbox}

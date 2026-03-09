@@ -1,0 +1,838 @@
+% =============================================================================
+% Chapter 9 — The File I/O Controller ($B9A0–$B9EF)
+% =============================================================================
+\chapter{The File I/O Controller}
+
+\epigraph{``A computer without persistent storage is just a very expensive
+calculator.''}{\textit{--- Unknown, circa 1975}}
+
+\section*{Introduction}
+
+The File I/O Controller --- FIO --- is a coprocessor that bridges the 6502's
+address space to the host filesystem.  It handles file save/load, directory
+enumeration, SID file playback, music sequencing via MML, MIDI file playback,
+soundfont loading, and virtual disk operations.
+
+Commands are issued by writing to the command register at \$B9A0.  Parameters
+are set in surrounding registers \emph{before} the command write.  After
+execution, the status register at \$B9A1 reports success or failure, and the
+error code register at \$B9A2 provides detail.
+
+Files are stored in the save directory (\texttt{\textasciitilde/e6502-programs}
+by default).  The FIO automatically appends the appropriate file extension
+(\texttt{.bas}, \texttt{.sid}, \texttt{.gfx}, etc.) based on the command.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Register Map}
+\label{sec:fio-registers}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\begin{center}
+\small
+\begin{tabular}{@{}llcll@{}}
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{R/W} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\$B9A0 & FioCmd      & W   & ---  & Command register (write triggers execution) \\
+\$B9A1 & FioStatus   & R   & \$00 & Status code \\
+\$B9A2 & FioErrCode  & R   & \$00 & Error code \\
+\$B9A3 & FioNameLen  & R/W & 0    & Filename length (1--63) \\
+\$B9A4 & FioSrcL     & R/W & 0    & Source/destination RAM address (low byte) \\
+\$B9A5 & FioSrcH     & R/W & 0    & Source/destination RAM address (high byte) \\
+\$B9A6 & FioEndL     & R/W & 0    & End address for SAVE (low byte) \\
+\$B9A7 & FioEndH     & R/W & 0    & End address for SAVE (high byte) \\
+\$B9A8 & FioSizeL    & R   & 0    & Loaded data size (low byte) \\
+\$B9A9 & FioSizeH    & R   & 0    & Loaded data size (high byte) \\
+\$B9AA & FioGSpace   & R/W & 0    & Graphics space selector \\
+\$B9AB & FioGAddrL   & R/W & 0    & Graphics offset (low byte) \\
+\$B9AC & FioGAddrH   & R/W & 0    & Graphics offset (high byte) \\
+\$B9AD & FioGLenL    & R/W & 0    & Graphics length (low byte) \\
+\$B9AE & FioGLenH    & R/W & 0    & Graphics length (high byte) \\
+\$B9AF & FioDirType  & R   & 0    & Directory entry file type \\
+\$B9B0--\$B9EF & FioName & R/W & 0 & Filename buffer (64 bytes ASCII) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Core Registers}
+\label{sec:fio-core}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $B9A0 FioCmd ----------------------------------------------------------
+
+\mementry{B9A0}{FioCmd}{W}{---}
+
+Command register.  Writing a command byte here immediately executes the
+corresponding operation.  All parameters (filename, addresses, lengths) must be
+set in the other registers \emph{before} writing to FioCmd.
+
+% --- $B9A1 FioStatus -------------------------------------------------------
+
+\mementry{B9A1}{FioStatus}{R}{\$00}
+
+Status of the last command:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+\$00 & Idle --- no command has been issued \\
+\$02 & OK --- last command completed successfully \\
+\$03 & Error --- last command failed (see FioErrCode) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $B9A2 FioErrCode ------------------------------------------------------
+
+\mementry{B9A2}{FioErrCode}{R}{\$00}
+
+Detailed error code when FioStatus is \$03:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+0 & No error \\
+1 & File not found \\
+2 & I/O error \\
+3 & End of directory \\
+4 & Disk full \\
+5 & Device not mounted \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $B9A3 FioNameLen -------------------------------------------------------
+
+\mementry{B9A3}{FioNameLen}{R/W}{0}
+
+Length of the filename stored in the FioName buffer.  Valid range: 1--63.
+Some commands use this value; others read the buffer directly until they
+encounter a null byte or reach 64 characters.
+
+% --- $B9A4-$B9A5 FioSrc ---------------------------------------------------
+
+\mementry{B9A4}{FioSrcL}{R/W}{0}
+
+Low byte of the 16-bit source or destination address in CPU RAM.  For
+\textbf{Save}, this is the start of the region to save.  For \textbf{Load},
+this is where loaded data will be written.  For music commands, the low byte
+may carry a parameter value (e.g., instrument index, volume level).
+
+\mementry{B9A5}{FioSrcH}{R/W}{0}
+
+High byte of the source/destination address.
+
+% --- $B9A6-$B9A7 FioEnd ---------------------------------------------------
+
+\mementry{B9A6}{FioEndL}{R/W}{0}
+
+Low byte of the end address.  For \textbf{Save}, the region
+FioSrc--FioEnd (inclusive) is written to disk.  For \textbf{MusicSeq}, FioEnd
+minus FioSrc gives the length of the MML string in RAM.
+
+\mementry{B9A7}{FioEndH}{R/W}{0}
+
+High byte of the end address.
+
+% --- $B9A8-$B9A9 FioSize --------------------------------------------------
+
+\mementry{B9A8}{FioSizeL}{R}{0}
+
+Low byte of the loaded data size.  Set by the host after a successful
+\textbf{Load} command.
+
+\mementry{B9A9}{FioSizeH}{R}{0}
+
+High byte of the loaded data size.
+
+% --- $B9AA FioGSpace -------------------------------------------------------
+
+\mementry{B9AA}{FioGSpace}{R/W}{0}
+
+Graphics space selector for \textbf{GSave}/\textbf{GLoad} commands:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Space} \\
+\midrule
+0 & Screen (Character RAM) \\
+1 & Color (Color RAM) \\
+2 & Graphics (bitmap pixel data) \\
+3 & Sprite (sprite definition data) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $B9AB-$B9AC FioGAddr --------------------------------------------------
+
+\mementry{B9AB}{FioGAddrL}{R/W}{0}
+
+Low byte of the offset within the selected graphics space.
+
+\mementry{B9AC}{FioGAddrH}{R/W}{0}
+
+High byte of the graphics offset.
+
+% --- $B9AD-$B9AE FioGLen --------------------------------------------------
+
+\mementry{B9AD}{FioGLenL}{R/W}{0}
+
+Low byte of the graphics data length.
+
+\mementry{B9AE}{FioGLenH}{R/W}{0}
+
+High byte of the graphics data length.
+
+% --- $B9AF FioDirType ------------------------------------------------------
+
+\mementry{B9AF}{FioDirType}{R}{0}
+
+File type of the current directory entry, populated by \textbf{DirRead}:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Type} \\
+\midrule
+0 & \texttt{.bas} --- BASIC program \\
+1 & \texttt{.sid} --- SID music file \\
+2 & \texttt{.bin} --- Binary executable \\
+3 & \texttt{.mid} --- MIDI file \\
+5 & Directory \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $B9B0-$B9EF FioName --------------------------------------------------
+
+\memrange{B9B0}{B9EF}{FioName}{R/W}{0}
+
+64-byte filename buffer.  Store the filename as ASCII characters starting at
+\$B9B0 before issuing commands that require a filename.  Null-terminate the
+string or set FioNameLen to the correct length.
+
+\begin{lstlisting}
+10 REM store filename "MYFILE" into FioName buffer
+20 F$ = "MYFILE" + CHR$(0)
+30 FOR I=1 TO LEN(F$)
+40   POKE $B9AF+I, ASC(MID$(F$,I,1))
+50 NEXT I
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Command Reference}
+\label{sec:fio-commands}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Commands are executed by writing the command byte to \addr{B9A0}.  Set all
+required parameters \emph{before} writing the command byte.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{File Operations}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\cmdentry{01}{Save}{Save BASIC program to disk}
+
+Saves the region of CPU RAM from FioSrc to FioEnd (inclusive) as a
+\texttt{.bas} file.  The filename is read from the FioName buffer.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrc (\$B9A4--\$B9A5): start address of data in RAM
+  \item FioEnd (\$B9A6--\$B9A7): end address of data in RAM
+  \item FioName (\$B9B0+): filename (without extension)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 on success, \$03 on error.
+
+\medskip
+
+\cmdentry{02}{Load}{Load BASIC program from disk}
+
+Loads a \texttt{.bas} file into CPU RAM starting at FioSrc.  After a
+successful load, FioSize (\$B9A8--\$B9A9) contains the number of bytes
+loaded.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrc (\$B9A4--\$B9A5): destination address in RAM
+  \item FioName (\$B9B0+): filename (without extension)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02, FioSize updated; or \$03 with
+ErrCode $=$ 1 (not found) or 2 (I/O error).
+
+\medskip
+
+\cmdentry{03}{DirOpen}{Open directory for enumeration}
+
+Opens the current save directory for sequential reading with DirRead.
+Resets the internal directory index to the first entry.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{04}{DirRead}{Read next directory entry}
+
+Reads the next file in the directory.  The filename is placed in the FioName
+buffer and the file type in FioDirType (\$B9AF).  When all entries have been
+read, FioStatus is set to \$03 with ErrCode $=$ 3 (end of directory).
+
+\textbf{Parameters:} None (directory must be opened with DirOpen first).
+
+\textbf{Result:} FioName and FioDirType populated, or ErrCode $=$ 3 at end.
+
+\medskip
+
+\cmdentry{05}{Delete}{Delete a file}
+
+Deletes the file named in the FioName buffer.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioName (\$B9B0+): filename (without extension)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 on success, \$03 with ErrCode $=$ 1 if
+not found.
+
+\medskip
+
+\cmdentry{06}{GSave}{Save VGC memory to disk}
+
+Saves a region of VGC memory to a \texttt{.gfx} file.  The space selector
+determines which VGC buffer is read.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioGSpace (\$B9AA): graphics space (0--3)
+  \item FioGAddr (\$B9AB--\$B9AC): offset within the space
+  \item FioGLen (\$B9AD--\$B9AE): number of bytes to save
+  \item FioName (\$B9B0+): filename
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 on success.
+
+\medskip
+
+\cmdentry{07}{GLoad}{Load VGC memory from disk}
+
+Loads a \texttt{.gfx} file into the selected VGC memory space.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioGSpace (\$B9AA): target graphics space (0--3)
+  \item FioGAddr (\$B9AB--\$B9AC): offset within the space
+  \item FioGLen (\$B9AD--\$B9AE): number of bytes to load
+  \item FioName (\$B9B0+): filename
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 on success.
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{SID Playback}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\cmdentry{08}{SidPlay}{Play a .sid file}
+
+Loads and plays a \texttt{.sid} file through the SID chip emulation.  The
+SID player injects an IRQ trampoline into CPU RAM that calls the file's
+init and play routines at 60\,Hz.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioName (\$B9B0+): filename (without \texttt{.sid} extension)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 if playback started.
+
+\medskip
+
+\cmdentry{09}{SidStop}{Stop SID playback}
+
+Stops the currently playing SID file and removes the IRQ trampoline.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Music Engine}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The Music Engine provides a 14-voice sequencer (6 SID + 8 WTS) driven by
+MML (Music Macro Language) strings.  These commands control instrument
+selection, sound effects, volume, and MML sequence playback.
+
+\cmdentry{0A}{Instrument}{Select SID instrument}
+
+Selects a SID instrument preset for subsequent sound and music commands.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrcL (\$B9A4): instrument index (0--15)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{0B}{Sound}{Trigger a sound effect}
+
+Triggers a one-shot sound effect on the SID, using the currently selected
+instrument.  The effect uses voice stealing if all voices are busy.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrcL (\$B9A4): MIDI note number (0--127)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{0C}{Volume}{Set music volume}
+
+Sets the master volume for the music engine.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrcL (\$B9A4): volume level (0--255)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{0D}{MusicSeq}{Load MML music sequence}
+
+Loads an MML string from CPU RAM into the music engine for playback.  The
+MML string is read from the address range FioSrc to FioEnd.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrc (\$B9A4--\$B9A5): start address of MML string in RAM
+  \item FioEnd (\$B9A6--\$B9A7): end address of MML string in RAM
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 if the MML was parsed successfully.
+
+\begin{notebox}
+In practice, the BASIC \texttt{MUSIC} statement is the easiest way to load
+and play MML sequences.  Direct FIO access is useful when MML data is
+generated programmatically or stored in expansion memory.
+\end{notebox}
+
+\medskip
+
+\cmdentry{0E}{MusicPlay}{Start music playback}
+
+Begins playing the MML sequence loaded by MusicSeq.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{0F}{MusicStop}{Stop music playback}
+
+Stops the currently playing music sequence and silences all music voices.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{10}{MusicTempo}{Set music tempo}
+
+Sets the tempo in beats per minute.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrc (\$B9A4--\$B9A5): tempo in BPM (16-bit value)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{11}{MusicLoop}{Set loop mode}
+
+Controls whether the music sequence loops or plays once.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrcL (\$B9A4): 0 $=$ play once, 1 $=$ loop
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{12}{MusicPri}{Set music priority}
+
+Sets the priority level for the music engine, affecting voice-stealing
+behaviour when sound effects compete with background music.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioSrcL (\$B9A4): priority level
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{MIDI Playback}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\cmdentry{13}{MidPlay}{Play a MIDI file}
+
+Loads and plays a standard \texttt{.mid} file through the Music Engine's
+14-voice system.  Three routing modes are available: Auto (WTS preferred
+with SID overflow), Manual (per-channel table), and SID-only (legacy
+6-voice).  GM program numbers are automatically mapped to WTS instrument
+indices or SID instrument buckets.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioName (\$B9B0+): filename (without \texttt{.mid} extension)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 if playback started.
+
+\medskip
+
+\cmdentry{14}{MidStop}{Stop MIDI playback}
+
+Stops the currently playing MIDI file and releases all voices.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} FioStatus $=$ \$02.
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Soundfont}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\cmdentry{15}{SfLoad}{Load SF2 soundfont for WTS}
+
+Loads an SF2 soundfont file from the host filesystem into the Wavetable
+Synthesizer.  Sample data is kept in host memory.  The WTS status register
+at \addr{A183} can be polled to detect when loading is complete.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioName (\$B9B0+): soundfont filename (with \texttt{.sf2} extension)
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 if loading was initiated.  Poll
+\texttt{PEEK(\$A183)} for ready status.
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Disk Operations}
+% ─────────────────────────────────────────────────────────────────────────────
+
+These commands operate on the virtual storage device system.  They require a
+mounted storage device; issuing them without one produces ErrCode $=$ 5
+(not mounted).
+
+\cmdentry{20}{Cd}{Change directory}
+
+Changes the current working directory on the active storage device.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioName (\$B9B0+): directory name or path
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 on success.
+
+\medskip
+
+\cmdentry{21}{Mkdir}{Create directory}
+
+Creates a new directory.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioName (\$B9B0+): directory name
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 on success.
+
+\medskip
+
+\cmdentry{22}{Rmdir}{Remove directory}
+
+Removes an empty directory.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioName (\$B9B0+): directory name
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 on success.
+
+\medskip
+
+\cmdentry{23}{Format}{Format disk}
+
+Formats the active storage device, erasing all data.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} FioStatus $=$ \$02 on success.
+
+\begin{warningbox}
+Format erases all data on the device.  There is no confirmation prompt
+and no undo.
+\end{warningbox}
+
+\medskip
+
+\cmdentry{24}{Mount}{Mount disk}
+
+Mounts a storage device, making it available for file operations.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item FioName (\$B9B0+): device identifier
+\end{itemize}
+
+\textbf{Result:} FioStatus $=$ \$02 on success.
+
+\medskip
+
+\cmdentry{25}{Unmount}{Unmount disk}
+
+Unmounts the active storage device.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} FioStatus $=$ \$02 on success.
+
+\medskip
+
+\cmdentry{26}{Pwd}{Print working directory}
+
+Writes the current working directory path into the FioName buffer.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} FioName populated with the current path.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{File Metadata Buffer (\$BAB0--\$BB1F)}
+\label{sec:fio-metadata}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The 112-byte metadata buffer at \$BAB0--\$BB1F is populated by filtered
+directory reads.  It provides rich metadata for SID files, MIDI files, and
+binary executables --- information that is not available from the filename
+alone.
+
+\memrange{BAB0}{BB1F}{File Metadata Buffer}{R}{0}
+
+\begin{center}
+\small
+\begin{longtable}{@{}lllp{7.5cm}@{}}
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{Size} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{Size} & \textbf{Description} \\
+\midrule
+\endhead
+\$BAB0 & MetaType      & 1  & File type (same encoding as FioDirType) \\
+\$BAB1--\$BAB2 & MetaSize & 2 & File size in bytes (16-bit LE) \\
+\$BAB3--\$BAD2 & MetaTitle & 32 & Title (null-padded ASCII) \\
+\$BAD3--\$BAF2 & MetaAuthor & 32 & Author name (null-padded ASCII) \\
+\$BAF3--\$BB12 & MetaCopyright & 32 & Copyright notice (null-padded ASCII) \\
+\$BB13--\$BB14 & MetaLoadAddr & 2 & Load address (BIN/SID, 16-bit LE) \\
+\$BB15--\$BB16 & MetaInitAddr & 2 & Init address (SID only, 16-bit LE) \\
+\$BB17--\$BB18 & MetaPlayAddr & 2 & Play address (SID only, 16-bit LE) \\
+\$BB19 & MetaSongs     & 1  & Song count (SID subtunes / MIDI tracks) \\
+\$BB1A--\$BB1B & MetaDuration & 2 & Duration in seconds (MIDI only, 16-bit LE) \\
+\$BB1C & MetaGfxSpace  & 1  & GFX space type \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\begin{tipbox}
+Read the metadata buffer immediately after a DirRead command.  The buffer
+contents are overwritten by each subsequent DirRead.
+\end{tipbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Status and Error Code Summary}
+\label{sec:fio-status}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Status Codes (FioStatus, \$B9A1)}
+
+\begin{center}
+\small
+\begin{tabular}{@{}clp{8cm}@{}}
+\toprule
+\textbf{Value} & \textbf{Name} & \textbf{Description} \\
+\midrule
+\$00 & Idle  & No command has been issued, or the controller has been reset \\
+\$02 & OK    & The last command completed successfully \\
+\$03 & Error & The last command failed; check FioErrCode for the reason \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Error Codes (FioErrCode, \$B9A2)}
+
+\begin{center}
+\small
+\begin{tabular}{@{}clp{8cm}@{}}
+\toprule
+\textbf{Value} & \textbf{Name} & \textbf{Description} \\
+\midrule
+0 & None       & No error \\
+1 & Not Found  & The specified file or directory does not exist \\
+2 & I/O Error  & A read or write operation failed at the host level \\
+3 & End of Dir & All directory entries have been enumerated \\
+4 & Disk Full  & Insufficient space on the storage device \\
+5 & Not Mounted & The target storage device is not mounted \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{BASIC Examples}
+\label{sec:fio-examples}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Saving and Loading a Program}
+
+\begin{lstlisting}
+10 REM === SAVE a BASIC program ===
+20 REM set filename "MYPROG"
+30 F$ = "MYPROG" + CHR$(0)
+40 FOR I=1 TO LEN(F$)
+50   POKE $B9AF+I, ASC(MID$(F$,I,1))
+60 NEXT I
+70 REM set source range ($0300-$2000)
+80 DOKE $B9A4, $0300 : REM FioSrc
+90 DOKE $B9A6, $2000 : REM FioEnd
+100 POKE $B9A0, $01  : REM execute Save
+110 IF PEEK($B9A1)=$02 THEN PRINT "SAVED OK"
+120 IF PEEK($B9A1)=$03 THEN PRINT "ERROR:"; PEEK($B9A2)
+\end{lstlisting}
+
+\begin{lstlisting}
+10 REM === LOAD a BASIC program ===
+20 F$ = "MYPROG" + CHR$(0)
+30 FOR I=1 TO LEN(F$)
+40   POKE $B9AF+I, ASC(MID$(F$,I,1))
+50 NEXT I
+60 DOKE $B9A4, $0300 : REM FioSrc (load destination)
+70 POKE $B9A0, $02   : REM execute Load
+80 IF PEEK($B9A1)=$02 THEN PRINT "LOADED"; DEEK($B9A8); "BYTES"
+90 IF PEEK($B9A1)=$03 THEN PRINT "ERROR:"; PEEK($B9A2)
+\end{lstlisting}
+
+\subsection{Directory Listing}
+
+\begin{lstlisting}
+10 REM list all files in the save directory
+20 POKE $B9A0, $03 : REM DirOpen
+30 REM loop through entries
+40 POKE $B9A0, $04 : REM DirRead
+50 IF PEEK($B9A1)=$03 THEN PRINT "---END---" : END
+60 REM read filename from buffer
+70 N$ = ""
+80 FOR I=0 TO 63
+90   C = PEEK($B9B0+I)
+100  IF C=0 THEN I=63 : GOTO 120
+110  N$ = N$ + CHR$(C)
+120 NEXT I
+130 T = PEEK($B9AF) : REM file type
+140 T$ = "???"
+150 IF T=0 THEN T$ = "BAS"
+160 IF T=1 THEN T$ = "SID"
+170 IF T=2 THEN T$ = "BIN"
+180 IF T=3 THEN T$ = "MID"
+190 IF T=5 THEN T$ = "DIR"
+200 PRINT T$; " "; N$
+210 GOTO 40
+\end{lstlisting}
+
+\subsection{Playing a SID File}
+
+\begin{lstlisting}
+10 REM play a SID file named "COMMANDO"
+20 F$ = "COMMANDO" + CHR$(0)
+30 FOR I=1 TO LEN(F$)
+40   POKE $B9AF+I, ASC(MID$(F$,I,1))
+50 NEXT I
+60 POKE $B9A0, $08 : REM SidPlay
+70 IF PEEK($B9A1)=$02 THEN PRINT "PLAYING..."
+80 REM press any key to stop
+90 GET K$ : IF K$="" THEN 90
+100 POKE $B9A0, $09 : REM SidStop
+110 PRINT "STOPPED"
+\end{lstlisting}
+
+\subsection{Loading and Playing a MIDI File}
+
+\begin{lstlisting}
+10 REM load soundfont first
+20 F$ = "GeneralUser.sf2" + CHR$(0)
+30 FOR I=1 TO LEN(F$)
+40   POKE $B9AF+I, ASC(MID$(F$,I,1))
+50 NEXT I
+60 POKE $B9A0, $15   : REM SfLoad
+70 WAIT $A183, 1     : REM wait for WTS ready
+80 PRINT PEEK($A184); " INSTRUMENTS LOADED"
+90 REM now play a MIDI file
+100 F$ = "BACH_FUGUE" + CHR$(0)
+110 FOR I=1 TO LEN(F$)
+120   POKE $B9AF+I, ASC(MID$(F$,I,1))
+130 NEXT I
+140 POKE $B9A0, $13  : REM MidPlay
+150 IF PEEK($B9A1)=$02 THEN PRINT "MIDI PLAYING"
+160 REM press any key to stop
+170 GET K$ : IF K$="" THEN 170
+180 POKE $B9A0, $14  : REM MidStop
+190 PRINT "STOPPED"
+\end{lstlisting}
+
+\begin{notebox}
+The BASIC interpreter provides higher-level commands for many of these
+operations: \texttt{SAVE}, \texttt{LOAD}, \texttt{DIR}, \texttt{DEL},
+\texttt{SIDPLAY}, \texttt{SIDSTOP}, \texttt{MUSIC}, and others.  Direct FIO
+register access is most useful for operations not exposed by BASIC, for
+programs that need fine-grained error handling, or for accessing the metadata
+buffer.
+\end{notebox}
