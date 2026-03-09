@@ -1,0 +1,622 @@
+% =============================================================================
+% Chapter 4 — BASIC Program Space ($0280–$9FFF)
+% =============================================================================
+\chapter{BASIC Program Space}
+
+\epigraph{``Forty kilobytes ought to be enough for anybody's BASIC
+program.''}{\textit{--- Apocryphal, ca.\ 1982}}
+
+\section*{Introduction}
+
+The roughly 40\,KB region from \$0280 to \$9FFF is where BASIC does all of its
+living.  Every line you type, every variable you assign, every array you
+dimension, and every string you concatenate ends up somewhere in this space.
+Understanding how the interpreter organises its data here is essential for
+writing programs that are memory-efficient, for debugging mysterious
+\texttt{?OUT OF MEMORY} errors, and for writing machine-language routines that
+can inspect or manipulate BASIC's internal state.
+
+The region is not one flat pool.  It is divided into four distinct areas ---
+program text, simple variables, array storage, and the string heap --- whose
+boundaries shift dynamically as your program runs.  Six zero-page pointer
+pairs (documented in Chapter~1) track where each area begins and ends.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Memory Layout Overview}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{0280}{9FFF}{BASIC Program Space}{R/W}{0}
+
+The entire region is ordinary read/write RAM.  At boot, EhBASIC sets the
+program-start pointer (\addr{0079}/\addr{007A}) to \$0280 and the
+end-of-memory pointer (\addr{0085}/\addr{0086}) to \$A000.  Everything in
+between is available for your program and its data.
+
+The layout from low addresses to high is:
+
+\begin{center}
+\begin{tikzpicture}[
+  block/.style={draw, minimum width=18em, minimum height=2.2em,
+                font=\ttfamily\small, anchor=north},
+  lbl/.style={font=\ttfamily\scriptsize, text=retrogray, anchor=east},
+  ptr/.style={font=\ttfamily\scriptsize\bfseries, text=retroblue, anchor=west}
+]
+  % Blocks (top to bottom)
+  \node[block, fill=retropale] (prog) at (0,0)
+    {Tokenised Program};
+  \node[block, fill=retrocyan!12!retrocream, below=0pt of prog] (vars)
+    {Simple Variables};
+  \node[block, fill=retrogreen!12!retrocream, below=0pt of vars] (arrs)
+    {Array Storage};
+  \node[block, fill=white, below=0pt of arrs, minimum height=4em] (free)
+    {Free Memory};
+  \node[block, fill=retroorange!15!retrocream, below=0pt of free] (str)
+    {String Heap (grows \(\downarrow\))};
+
+  % Left-side address labels
+  \node[lbl] at ([xshift=-1em]prog.north west) {\$0280};
+  \node[lbl] at ([xshift=-1em]str.south west)  {\$9FFF};
+
+  % Right-side pointer labels
+  \node[ptr] at ([xshift=1em]prog.north east)
+    {\(\leftarrow\) Smeml/h (\$79/\$7A)};
+  \node[ptr] at ([xshift=1em]vars.north east)
+    {\(\leftarrow\) Svarl/h (\$7B/\$7C)};
+  \node[ptr] at ([xshift=1em]arrs.north east)
+    {\(\leftarrow\) Sarryl/h (\$7D/\$7E)};
+  \node[ptr] at ([xshift=1em]free.north east)
+    {\(\leftarrow\) Earryl/h (\$7F/\$80)};
+  \node[ptr] at ([xshift=1em]str.north east)
+    {\(\leftarrow\) Sstorl/h (\$81/\$82)};
+  \node[ptr] at ([xshift=1em]str.south east)
+    {\(\leftarrow\) Ememl/h (\$85/\$86)};
+\end{tikzpicture}
+\end{center}
+
+The invariant is always:
+\begin{center}
+\texttt{Smem} $\leq$ \texttt{Svar} $\leq$ \texttt{Sarry} $\leq$
+\texttt{Earry} $\leq$ \texttt{Sstor} $\leq$ \texttt{Emem}
+\end{center}
+
+Program text, variables, and arrays grow \emph{upward} from \$0280.  The
+string heap grows \emph{downward} from \$9FFF.  When \texttt{Earry} meets
+\texttt{Sstor}, memory is exhausted and EhBASIC raises
+\texttt{?OUT OF MEMORY}.
+
+\begin{tipbox}
+You can watch these pointers in real time:
+\begin{lstlisting}
+10 PRINT "PROG  :$";HEX$(DEEK($79))
+20 PRINT "VARS  :$";HEX$(DEEK($7B))
+30 PRINT "ARRAYS:$";HEX$(DEEK($7D))
+40 PRINT "EARRY :$";HEX$(DEEK($7F))
+50 PRINT "SSTOR :$";HEX$(DEEK($81))
+60 PRINT "EMEM  :$";HEX$(DEEK($85))
+\end{lstlisting}
+\end{tipbox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Tokenised Line Format}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+BASIC programs are not stored as ASCII text.  When you enter a line, EhBASIC
+\emph{tokenises} it --- replacing keywords with single-byte (or two-byte)
+tokens, while leaving literal text, numbers, and punctuation untouched.  This
+saves memory and speeds up the interpreter, which can dispatch on a single
+byte rather than parsing multi-character keywords.
+
+Each line in memory has the following structure:
+
+\begin{center}
+\begin{tabular}{clp{24em}}
+\toprule
+\textbf{Offset} & \textbf{Size} & \textbf{Description} \\
+\midrule
++0 & 2 bytes & Pointer to next line (little-endian).
+               \$0000 marks end of program. \\
++2 & 2 bytes & Line number (little-endian, 0--65535). \\
++4 & $n$ bytes & Tokenised content. \\
++4+$n$ & 1 byte & \$00 terminator. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Lines form a singly linked list.  The interpreter walks the list by reading
+the next-line pointer; when it finds \$0000, the program is over.  Line
+numbers need not be contiguous --- \texttt{10}, \texttt{20}, \texttt{100} is
+perfectly valid.
+
+\subsection{Worked Example: \texttt{10 PRINT "HELLO"}}
+
+Suppose this one-line program is stored beginning at \$0280.  Here is the
+byte-by-byte hex dump:
+
+\begin{center}
+\begin{tabular}{ccl}
+\toprule
+\textbf{Address} & \textbf{Hex} & \textbf{Meaning} \\
+\midrule
+\$0280 & \texttt{8D 02} & Next-line pointer = \$028D \\
+\$0282 & \texttt{0A 00} & Line number = \$000A (10) \\
+\$0284 & \texttt{9F}    & PRINT token \\
+\$0285 & \texttt{20}    & Space (literal) \\
+\$0286 & \texttt{22}    & \texttt{"} (open quote) \\
+\$0287 & \texttt{48}    & \texttt{H} \\
+\$0288 & \texttt{45}    & \texttt{E} \\
+\$0289 & \texttt{4C}    & \texttt{L} \\
+\$028A & \texttt{4C}    & \texttt{L} \\
+\$028B & \texttt{4F}    & \texttt{O} \\
+\$028C & \texttt{00}    & End-of-line terminator \\
+\midrule
+\$028D & \texttt{00 00} & Next-line pointer = \$0000 (end of program) \\
+\$028F & \texttt{00 00} & (padding / end marker) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+The closing quote character (\texttt{\$22}) is not stored --- EhBASIC strips
+trailing quotes at the end of \texttt{PRINT} arguments.  The string literal
+ends at the \$00 line terminator.
+\end{notebox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Token Table}
+\label{sec:token-table}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+NovaBASIC uses two token spaces.  \textbf{Primary tokens} occupy the range
+\$80--\$FF (one byte each).  \textbf{Extended tokens} are two bytes: a prefix
+byte \$01 followed by a sub-token byte.
+
+\subsection{Primary Tokens (\$80--\$FF)}
+
+\subsubsection*{Command Tokens}
+
+\begin{center}
+\begin{longtable}{cl|cl|cl}
+\toprule
+\textbf{Hex} & \textbf{Keyword} &
+\textbf{Hex} & \textbf{Keyword} &
+\textbf{Hex} & \textbf{Keyword} \\
+\midrule
+\endhead
+\$80 & END      & \$90 & RETURN   & \$A0 & CONT     \\
+\$81 & FOR      & \$91 & REM      & \$A1 & LIST     \\
+\$82 & NEXT     & \$92 & STOP     & \$A2 & CLEAR    \\
+\$83 & DATA     & \$93 & ON       & \$A3 & NEW      \\
+\$84 & INPUT    & \$94 & NULL     & \$A4 & WIDTH    \\
+\$85 & DIM      & \$95 & INC      & \$A5 & GET      \\
+\$86 & READ     & \$96 & WAIT     & \$A6 & SWAP     \\
+\$87 & LET      & \$97 & LOAD     & \$A7 & BITSET   \\
+\$88 & DEC      & \$98 & SAVE     & \$A8 & BITCLR   \\
+\$89 & GOTO     & \$99 & DEF      & \$A9 & IRQ      \\
+\$8A & RUN      & \$9A & POKE     & \$AA & NMI      \\
+\$8B & IF       & \$9B & DOKE     & \$AB & CLS      \\
+\$8C & RESTORE  & \$9C & SYS      & \$AC & COLOR    \\
+\$8D & GOSUB    & \$9D & DO       & \$AD & LOCATE   \\
+\$8E & RETIRQ   & \$9E & LOOP     & \$AE & PLOT     \\
+\$8F & RETNMI   & \$9F & PRINT    & \$AF & UNPLOT   \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\begin{center}
+\begin{longtable}{cl|cl|cl}
+\toprule
+\textbf{Hex} & \textbf{Keyword} &
+\textbf{Hex} & \textbf{Keyword} &
+\textbf{Hex} & \textbf{Keyword} \\
+\midrule
+\endhead
+\$B0 & LINE        & \$B8 & SPRITE      & \$C0 & VSYNC    \\
+\$B1 & CIRCLE      & \$B9 & SPRITESHAPE & \$C1 & TAB(     \\
+\$B2 & RECT        & \$BA & SPRITESET   & \$C2 & ELSE     \\
+\$B3 & FILL        & \$BB & SPRITEDATA  & \$C3 & TO       \\
+\$B4 & PAINT       & \$BC & SOUND       & \$C4 & FN       \\
+\$B5 & MODE        & \$BD & VOLUME      & \$C5 & SPC(     \\
+\$B6 & GCLS        & \$BE & INSTRUMENT  & \$C6 & THEN     \\
+\$B7 & GCOLOR      & \$BF & WAVE        & \$C7 & NOT      \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsubsection*{Operator and Structure Tokens}
+
+\begin{center}
+\begin{tabular}{cl|cl|cl}
+\toprule
+\textbf{Hex} & \textbf{Token} &
+\textbf{Hex} & \textbf{Token} &
+\textbf{Hex} & \textbf{Token} \\
+\midrule
+\$C8 & STEP     & \$CC & +     & \$D0 & \^{}     \\
+\$C9 & UNTIL    & \$CD & -     & \$D1 & AND      \\
+\$CA & WHILE    & \$CE & *     & \$D2 & EOR      \\
+\$CB & OFF      & \$CF & /     & \$D3 & OR       \\
+     &          & \$D4 & >>    & \$D6 & >        \\
+     &          & \$D5 & <<    & \$D7 & =        \\
+     &          &      &       & \$D8 & <        \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Function Tokens}
+
+\begin{center}
+\begin{longtable}{cl|cl|cl}
+\toprule
+\textbf{Hex} & \textbf{Function} &
+\textbf{Hex} & \textbf{Function} &
+\textbf{Hex} & \textbf{Function} \\
+\midrule
+\endhead
+\$D9 & SGN(       & \$E3 & BITTST(    & \$ED & SPRITEX(     \\
+\$DA & INT(       & \$E4 & MAX(       & \$EE & SPRITEY(     \\
+\$DB & ABS(       & \$E5 & MIN(       & \$EF & COLLISION(   \\
+\$DC & USR(       & \$E6 & PI         & \$F0 & BUMPED(      \\
+\$DD & FRE(       & \$E7 & TWOPI      &      &              \\
+\$DE & POS(       & \$E8 & VARPTR(    &      &              \\
+\$DF & SQR(       & \$E9 & LEFT\$(    &      &              \\
+\$E0 & RND(       & \$EA & RIGHT\$(   &      &              \\
+\$E1 & LOG(       & \$EB & MID\$(     &      &              \\
+\$E2 & EXP(       & \$EC & --- (reserved) & &              \\
+\midrule
+\multicolumn{6}{l}{\small Continued:} \\
+\midrule
+\$E3 & COS(       & \$E7 & PEEK(      & \$EB & STR\$(     \\
+\$E4 & SIN(       & \$E8 & DEEK(      & \$EC & VAL(       \\
+\$E5 & TAN(       & \$E9 & SADD(      & \$ED & ASC(       \\
+\$E6 & ATN(       & \$EA & LEN(       & \$EE & UCASE\$(   \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\begin{warningbox}
+The function token table above is presented in the order matching the
+\texttt{tokens.json} source file.  Here is the complete mapping from
+\$D9 to \$FF:
+\end{warningbox}
+
+\begin{center}
+\begin{longtable}{cl|cl}
+\toprule
+\textbf{Hex} & \textbf{Function} &
+\textbf{Hex} & \textbf{Function} \\
+\midrule
+\endhead
+\$D9 & SGN(       & \$E9 & SADD(      \\
+\$DA & INT(       & \$EA & LEN(       \\
+\$DB & ABS(       & \$EB & STR\$(     \\
+\$DC & USR(       & \$EC & VAL(       \\
+\$DD & FRE(       & \$ED & ASC(       \\
+\$DE & POS(       & \$EE & UCASE\$(   \\
+\$DF & SQR(       & \$EF & LCASE\$(   \\
+\$E0 & RND(       & \$F0 & CHR\$(     \\
+\$E1 & LOG(       & \$F1 & HEX\$(     \\
+\$E2 & EXP(       & \$F2 & BIN\$(     \\
+\$E3 & COS(       & \$F3 & BITTST(    \\
+\$E4 & SIN(       & \$F4 & MAX(       \\
+\$E5 & TAN(       & \$F5 & MIN(       \\
+\$E6 & ATN(       & \$F6 & PI         \\
+\$E7 & PEEK(      & \$F7 & TWOPI      \\
+\$E8 & DEEK(      & \$F8 & VARPTR(    \\
+     &            & \$F9 & LEFT\$(    \\
+     &            & \$FA & RIGHT\$(   \\
+     &            & \$FB & MID\$(     \\
+     &            & \$FC & SPRITEX(   \\
+     &            & \$FD & SPRITEY(   \\
+     &            & \$FE & COLLISION( \\
+     &            & \$FF & BUMPED(    \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Extended Tokens (\$01 + sub-token)}
+
+When the tokeniser encounters a keyword that does not fit in the primary
+table, it emits the prefix byte \$01 followed by a sub-token.  These are the
+NovaVM extensions --- commands and functions not present in the original
+EhBASIC.
+
+\begin{center}
+\begin{longtable}{ccl|ccl}
+\toprule
+\textbf{Prefix} & \textbf{Sub} & \textbf{Keyword} &
+\textbf{Prefix} & \textbf{Sub} & \textbf{Keyword} \\
+\midrule
+\endhead
+\$01 & \$01 & DIR         & \$01 & \$19 & NOPEN       \\
+\$01 & \$02 & DEL         & \$01 & \$1A & NCLOSE      \\
+\$01 & \$03 & XMEM        & \$01 & \$1B & NLISTEN     \\
+\$01 & \$04 & XBANK       & \$01 & \$1C & NACCEPT     \\
+\$01 & \$05 & XPOKE       & \$01 & \$1D & NSEND       \\
+\$01 & \$06 & XPEEK(      & \$01 & \$1E & NRECV\$(    \\
+\$01 & \$07 & STASH       & \$01 & \$1F & NSTATUS(    \\
+\$01 & \$08 & FETCH       & \$01 & \$21 & NREADY(     \\
+\$01 & \$09 & XFREE       & \$01 & \$22 & NLEN        \\
+\$01 & \$0A & XRESET      & \$01 & \$23 & DMACOPY     \\
+\$01 & \$0B & XALLOC      & \$01 & \$24 & DMAFILL     \\
+\$01 & \$0C & XDIR        & \$01 & \$25 & DMASTATUS   \\
+\$01 & \$0D & XDEL        & \$01 & \$27 & DMAERR      \\
+\$01 & \$0E & XMAP        & \$01 & \$28 & DMACOUNT    \\
+\$01 & \$0F & XUNMAP      & \$01 & \$29 & MIDPLAY     \\
+\$01 & \$10 & GSAVE       & \$01 & \$2A & MIDSTOP     \\
+\$01 & \$11 & GLOAD       & \$01 & \$2B & DIROPEN     \\
+\$01 & \$12 & SIDPLAY     & \$01 & \$2C & DIRNEXT     \\
+\$01 & \$13 & SIDSTOP     & \$01 & \$2D & DIRNAM\$(   \\
+\$01 & \$14 & MUSIC       & \$01 & \$2E & DIRSIZ      \\
+\$01 & \$15 & PLAYING     & \$01 & \$2F & DIRTYP      \\
+\$01 & \$16 & MNOTE(      & \$01 & \$30 & META\$(     \\
+\$01 & \$17 & COPPER      & & & \\
+\$01 & \$18 & RESET       & & & \\
+\midrule
+\$01 & \$40 & BLITCOPY    & \$01 & \$46 & HELP        \\
+\$01 & \$41 & BLITFILL    & \$01 & \$47 & NCC         \\
+\$01 & \$42 & BLITSTATUS  & \$01 & \$48 & FONT        \\
+\$01 & \$43 & BLITERR     & \$01 & \$49 & CD          \\
+\$01 & \$44 & BLITCOUNT   & \$01 & \$4A & MKDIR       \\
+\$01 & \$45 & BITTGL      & \$01 & \$4B & RMDIR       \\
+     &      &             & \$01 & \$4C & FORMAT      \\
+     &      &             & \$01 & \$4D & MOUNT       \\
+     &      &             & \$01 & \$4E & UNMOUNT     \\
+     &      &             & \$01 & \$4F & PWD         \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\begin{notebox}
+Inside quoted strings, no tokenisation occurs.  The bytes between double
+quotes are stored as literal ASCII.  This is why you can safely embed keyword
+substrings in strings: \texttt{"FORGET"} does not become \texttt{"}\,\$81\,%
+\texttt{GET"}.
+\end{notebox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Simple Variable Storage}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Immediately after the last program line (at the address in
+\addr{007B}/\addr{007C}), EhBASIC stores simple (non-array) variables.  Each
+variable occupies either six or seven bytes, depending on its type.
+
+\subsection{Variable Name Encoding}
+
+The first two bytes of each variable entry encode the name:
+
+\begin{center}
+\begin{tabular}{cp{28em}}
+\toprule
+\textbf{Byte} & \textbf{Contents} \\
+\midrule
+Byte 1 & First significant character of the name (A--Z).
+         Bit~7 set indicates a string variable (\texttt{\$} suffix). \\
+Byte 2 & Second significant character, or \$00 if the name is a single
+         letter.  Bit~7 set indicates an integer function variable. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+EhBASIC only distinguishes variables by their first two characters.
+\texttt{SCORE} and \texttt{SCREEN} are the same variable.
+
+\subsection{Numeric Variables}
+
+A numeric variable entry is six bytes:
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\textbf{Offset} & \textbf{Contents} \\
+\midrule
++0 & Name byte 1 (bit 7 clear = numeric) \\
++1 & Name byte 2 \\
++2..+5 & 4-byte floating-point value (EhBASIC internal format) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+EhBASIC uses a non-standard 32-bit floating-point format: 1 byte exponent
+(biased by 128), followed by a 24-bit mantissa with an implied leading 1 bit.
+The sign is stored in the high bit of the first mantissa byte.  This gives
+roughly 6.5 decimal digits of precision.
+\end{notebox}
+
+\subsection{String Variables}
+
+A string variable entry is also six bytes, but the value portion is
+different:
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\textbf{Offset} & \textbf{Contents} \\
+\midrule
++0 & Name byte 1 (bit 7 set = string) \\
++1 & Name byte 2 \\
++2 & String length (0--255) \\
++3 & (unused / padding) \\
++4..+5 & Pointer to string data in the string heap (little-endian) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The string data itself lives in the string heap at the top of memory.  The
+variable entry only holds a descriptor pointing to it.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Array Storage}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Arrays are stored after simple variables, between \addr{007D}/\addr{007E} and
+\addr{007F}/\addr{0080}.  Each array entry consists of a header followed by
+packed element values.
+
+\subsection{Array Header}
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\textbf{Offset} & \textbf{Contents} \\
+\midrule
++0 & Name byte 1 (same encoding as simple variables) \\
++1 & Name byte 2 \\
++2..+3 & Total size of this array entry in bytes (little-endian),
+         including the header \\
++4 & Number of dimensions (1--255) \\
++5..+$n$ & 2 bytes per dimension: element count (little-endian).
+           \texttt{DIM A(9)} stores 10 (0 through 9). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Array Element Data}
+
+After the dimension sizes, elements are stored in row-major order:
+
+\begin{itemize}
+  \item \textbf{Numeric arrays}: 4 bytes per element (same floating-point
+        format as simple variables).
+  \item \textbf{String arrays}: 3 bytes per element (1 byte length + 2 bytes
+        pointer into the string heap).
+\end{itemize}
+
+\begin{warningbox}
+Arrays consume memory rapidly.  \texttt{DIM A(100)} allocates a header plus
+$101 \times 4 = 404$ bytes for numeric data.  A two-dimensional array
+\texttt{DIM B(10,10)} needs $11 \times 11 \times 4 = 484$ bytes.  Check
+\texttt{FRE(0)} before dimensioning large arrays.
+\end{warningbox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{String Heap}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+String data occupies the top of the BASIC program space, growing
+\emph{downward} from \addr{0085}/\addr{0086} (Ememl/h).  The current bottom
+of the heap is tracked by \addr{0081}/\addr{0082} (Sstorl/h).
+
+When you assign \texttt{A\$="HELLO"}, EhBASIC:
+\begin{enumerate}
+  \item Decrements Sstor by the string length (5).
+  \item Copies the five bytes into the new location.
+  \item Updates the variable entry's pointer to the new address.
+\end{enumerate}
+
+\subsection{Garbage Collection}
+
+Over time, reassigning strings leaves orphaned data in the heap.  When free
+memory runs low, EhBASIC performs \emph{garbage collection}: it scans all
+string variables and array elements, compacts the live strings toward the top
+of memory, and reclaims the dead space.
+
+This can cause a noticeable pause --- the dreaded ``BASIC hiccup'' familiar
+to 8-bit programmers.  Programs that do heavy string manipulation may
+experience periodic delays.
+
+\begin{tipbox}
+You can force garbage collection at a convenient time by calling
+\texttt{FRE("")}.  This is useful before a timing-critical section:
+\begin{lstlisting}
+1000 X=FRE("") : REM compact strings now
+1010 REM -- timing-sensitive code follows --
+\end{lstlisting}
+\end{tipbox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Free Memory}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The free memory region is the gap between the end of array storage
+(\addr{007F}/\addr{0080}) and the bottom of the string heap
+(\addr{0081}/\addr{0082}).  The \texttt{FRE(0)} function returns the size of
+this gap in bytes.
+
+\begin{lstlisting}
+10 PRINT "FREE MEMORY:"; FRE(0); "BYTES"
+20 DIM A(100)
+30 PRINT "AFTER DIM:"; FRE(0); "BYTES"
+\end{lstlisting}
+
+On a freshly booted NovaVM with no program loaded, free memory is
+approximately 40,192 bytes (\$9D00 in hex) --- the full span from \$0280 to
+\$9FFF minus the few bytes EhBASIC uses for the end-of-program marker.
+
+\begin{notebox}
+\texttt{FRE(0)} returns a numeric result.  \texttt{FRE("")} also triggers
+garbage collection and then returns the free count.  Always use
+\texttt{FRE("")} if you want an accurate count after heavy string use.
+\end{notebox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Walking the Data Structures}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The linked-list nature of tokenised program lines and the packed variable
+tables can be explored directly from BASIC using \texttt{PEEK} and
+\texttt{DEEK}.
+
+\subsection{Walking the Program Line List}
+
+This program follows the next-line pointers from the start of the program,
+printing each line number it finds:
+
+\begin{lstlisting}
+1000 REM -- Walk program lines --
+1010 P=DEEK($79) : REM start of program
+1020 NP=DEEK(P) : REM next-line pointer
+1030 IF NP=0 THEN PRINT "END OF PROGRAM" : END
+1040 LN=DEEK(P+2) : REM line number
+1050 SZ=NP-P : REM line size in bytes
+1060 PRINT "LINE";LN;"AT $";HEX$(P);"SIZE";SZ
+1070 P=NP : GOTO 1020
+\end{lstlisting}
+
+\subsection{Dumping a Tokenised Line}
+
+This program dumps the raw bytes of a specific line, showing how tokens
+replace keywords:
+
+\begin{lstlisting}
+2000 REM -- Hex dump of a BASIC line --
+2010 INPUT "LINE NUMBER";TL
+2020 P=DEEK($79)
+2030 NP=DEEK(P) : IF NP=0 THEN PRINT "NOT FOUND" : END
+2040 LN=DEEK(P+2) : IF LN=TL THEN 2070
+2050 P=NP : GOTO 2030
+2060 REM -- Found it --
+2070 SZ=NP-P
+2080 PRINT "LINE";TL;"AT $";HEX$(P);"-";
+2090 PRINT "$";HEX$(P+SZ-1);" (";SZ;"BYTES)"
+2100 FOR I=0 TO SZ-1
+2110 PRINT HEX$(PEEK(P+I));" ";
+2120 IF (I AND 15)=15 THEN PRINT
+2130 NEXT I
+2140 PRINT
+\end{lstlisting}
+
+\subsection{Showing the Memory Map}
+
+A quick-reference program that displays all six pointer pairs and the
+computed region sizes:
+
+\begin{lstlisting}
+3000 REM -- BASIC memory map --
+3010 SM=DEEK($79):SV=DEEK($7B)
+3020 SA=DEEK($7D):EA=DEEK($7F)
+3030 SS=DEEK($81):EM=DEEK($85)
+3040 PRINT "PROGRAM  : $";HEX$(SM);" - $";HEX$(SV-1)
+3050 PRINT "          ";SV-SM;"BYTES"
+3060 PRINT "VARIABLES: $";HEX$(SV);" - $";HEX$(SA-1)
+3070 PRINT "          ";SA-SV;"BYTES"
+3080 PRINT "ARRAYS   : $";HEX$(SA);" - $";HEX$(EA-1)
+3090 PRINT "          ";EA-SA;"BYTES"
+3100 PRINT "FREE     : $";HEX$(EA);" - $";HEX$(SS-1)
+3110 PRINT "          ";SS-EA;"BYTES"
+3120 PRINT "STRINGS  : $";HEX$(SS);" - $";HEX$(EM-1)
+3130 PRINT "          ";EM-SS;"BYTES"
+3140 PRINT
+3150 PRINT "FRE(0) = ";FRE(0)
+\end{lstlisting}
