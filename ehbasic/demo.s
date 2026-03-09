@@ -127,12 +127,12 @@ save_border:    .res 1
 ; ---------------------------------------------------------------------------
 .segment "RODATA"
 
-; Category names (null-terminated)
-cat_name_0:     .byte "SID TUNES", 0
-cat_name_1:     .byte "MIDI MUSIC", 0
-cat_name_2:     .byte "CHIPTUNES", 0
-cat_name_3:     .byte "CLASSICAL", 0
-cat_name_4:     .byte "DEMOS", 0
+; Category names (null-terminated) -- must match demo.ndi directory names
+cat_name_0:     .byte "CLASSICAL", 0
+cat_name_1:     .byte "MOVIES", 0
+cat_name_2:     .byte "TV", 0
+cat_name_3:     .byte "GAMES", 0
+cat_name_4:     .byte "SID", 0
 
 ; Category name pointer tables
 cat_names_lo:
@@ -141,11 +141,11 @@ cat_names_hi:
     .byte >cat_name_0, >cat_name_1, >cat_name_2, >cat_name_3, >cat_name_4
 
 ; Directory path strings (null-terminated) -- subdirectories on the NDI disk
-cat_dir_0:      .byte "sid", 0
-cat_dir_1:      .byte "midi", 0
-cat_dir_2:      .byte "chip", 0
-cat_dir_3:      .byte "classical", 0
-cat_dir_4:      .byte "demos", 0
+cat_dir_0:      .byte "classical", 0
+cat_dir_1:      .byte "movies", 0
+cat_dir_2:      .byte "tv", 0
+cat_dir_3:      .byte "games", 0
+cat_dir_4:      .byte "sid", 0
 
 ; Directory path pointer tables
 cat_dirs_lo:
@@ -154,10 +154,10 @@ cat_dirs_hi:
     .byte >cat_dir_0, >cat_dir_1, >cat_dir_2, >cat_dir_3, >cat_dir_4
 
 ; Tab display widths (characters per tab label including padding)
-tab_widths:     .byte 12, 13, 12, 12, 9
+tab_widths:     .byte 11, 8, 4, 7, 5
 
 ; Per-category accent colors
-cat_colors:     .byte COL_CYAN, COL_GREEN, COL_YELLOW, COL_PURPLE, COL_ORANGE
+cat_colors:     .byte COL_CYAN, COL_LRED, COL_YELLOW, COL_LGREEN, COL_LBLUE
 
 ; Scrolling credits text (~300 chars, loops back to start)
 scroll_text:
@@ -165,16 +165,19 @@ scroll_text:
     .byte "MUSIC COLLECTION BY THE NOVAVM CREW  ///  "
     .byte "GREETS TO ALL C64 SCENERS PAST AND PRESENT  ///  "
     .byte "CODE: BARRY  ART: NOVAVM  MUSIC: VARIOUS ARTISTS  ///  "
-    .byte "PRESS F1-F5 TO SWITCH CATEGORIES  ///  "
+    .byte "USE LEFT/RIGHT TO BROWSE CATEGORIES  ///  "
+    .byte "UP/DOWN TO SELECT ... PRESS RETURN TO PLAY  ///  "
+    .byte "ACTIVE KEYBOARD VISUALIZER WITH PROGRESS BAR  ///  "
     .byte "THANKS FOR LISTENING!  ///  "
     .byte "    ", 0
 SCROLL_TEXT_LEN = * - scroll_text - 1  ; length excluding null
 
 ; Navigation help text
-nav_text:       .byte "CRSR:BROWSE  RETURN:PLAY  ESC:STOP  Q:QUIT", 0
+nav_text:       .byte " LEFT/RIGHT:CATEGORY  UP/DOWN:SELECT  RETURN:PLAY  Q:QUIT", 0
 
-; Keyboard visualizer filename
-kbd_filename:   .byte "keyboard.bin", 0
+; Keyboard visualizer filename (no extension — FileIO resolves it)
+kbd_filename:   .byte "KEYBOARD", 0
+KBD_NAME_LEN    = 8
 
 ; Root path for CD
 root_path:      .byte "/", 0
