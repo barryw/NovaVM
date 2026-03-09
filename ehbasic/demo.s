@@ -283,14 +283,14 @@ main:
     bcc @browser_loop           ; no key -> next frame
 
     ; --- Handle keys ---
-    cmp #$1D                    ; cursor RIGHT
+    cmp #$1D                    ; cursor RIGHT (NovaVM code 29)
     beq @key_right
-    cmp #$9D                    ; cursor LEFT
+    cmp #$1C                    ; cursor LEFT (NovaVM code 28)
     beq @key_left
-    cmp #$11                    ; cursor DOWN
+    cmp #$1F                    ; cursor DOWN (NovaVM code 31)
     bne :+
     jmp @key_down
-:   cmp #$91                    ; cursor UP
+:   cmp #$1E                    ; cursor UP (NovaVM code 30)
     bne :+
     jmp @key_up
 :
@@ -623,11 +623,15 @@ load_all_dirs:
     sta FioCmd
 
     ; Read directory entries
+    ; DirOpen auto-populates entry 0, so process it first, then loop DirRead
     stz zp_count                        ; file count for this category
+    bra @lad_check_entry                ; process entry 0 from DirOpen
+
 @lad_read_loop:
     lda #FioCmdDirRead
     sta FioCmd
 
+@lad_check_entry:
     ; Check for end-of-directory
     lda FioStatus
     cmp #FioStatusOk
@@ -642,14 +646,26 @@ load_all_dirs:
     cmp #FioDirTypeDir
     beq @lad_read_loop
 
-    ; Copy 32 bytes of filename from FioName to (zp_dst)
+    ; Copy filename from FioName to (zp_dst), null-terminate within 32 bytes
+    ; FioNameLen tells us the actual length; pad remainder with nulls
     ldy #0
+    ldx FioNameLen                      ; actual name length
 @lad_copy:
+    cpy #32
+    bcs @lad_copy_done
+    cpx #0
+    beq @lad_pad
     lda FioName,y
     sta (zp_dst),y
+    dex
     iny
-    cpy #32
-    bcc @lad_copy
+    bra @lad_copy
+@lad_pad:
+    lda #0
+    sta (zp_dst),y
+    iny
+    bra @lad_copy
+@lad_copy_done:
 
     ; Store file type byte at offset 32
     lda FioDirType
@@ -683,7 +699,9 @@ load_all_dirs:
     ; Next category
     inx
     cpx #NUM_CATEGORIES
-    bcc @lad_cat_loop
+    bcs :+
+    jmp @lad_cat_loop
+:
 
     rts
 
