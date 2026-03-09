@@ -1,0 +1,191 @@
+\contentsline {chapter}{\numberline {1}Zero Page}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Boot and Warm Start (\$00--\$02)}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Unallocated (\$03--\$09)}{2}{section.1.2}%
+\contentsline {section}{\numberline {1.3}USR() Function Vector (\$0A--\$0C)}{2}{section.1.3}%
+\contentsline {section}{\numberline {1.4}Terminal Settings (\$0D--\$10)}{2}{section.1.4}%
+\contentsline {section}{\numberline {1.5}Temporary Integer (\$11--\$12)}{3}{section.1.5}%
+\contentsline {section}{\numberline {1.6}Unallocated (\$13--\$5A)}{3}{section.1.6}%
+\contentsline {section}{\numberline {1.7}Interpreter Flags (\$5B--\$64)}{4}{section.1.7}%
+\contentsline {section}{\numberline {1.8}String Descriptor Stack (\$65--\$70)}{5}{section.1.8}%
+\contentsline {section}{\numberline {1.9}Utility Pointers and FAC Temporaries (\$71--\$78)}{5}{section.1.9}%
+\contentsline {section}{\numberline {1.10}Memory Management Pointers (\$79--\$86)}{6}{section.1.10}%
+\contentsline {section}{\numberline {1.11}Line and Data Pointers (\$87--\$9F)}{8}{section.1.11}%
+\contentsline {section}{\numberline {1.12}Garbage Collection and Array Workspace (\$A0--\$AB)}{10}{section.1.12}%
+\contentsline {section}{\numberline {1.13}Floating-Point Accumulator 1 (\$AC--\$B2)}{11}{section.1.13}%
+\contentsline {section}{\numberline {1.14}Floating-Point Accumulator 2 (\$B3--\$B9)}{12}{section.1.14}%
+\contentsline {section}{\numberline {1.15}BASIC Byte Fetch Subroutines (\$BA--\$D7)}{12}{section.1.15}%
+\contentsline {section}{\numberline {1.16}Pseudo-Random Number Generator (\$D8--\$DB)}{13}{section.1.16}%
+\contentsline {section}{\numberline {1.17}Interrupt Handler Vectors (\$DC--\$E1)}{14}{section.1.17}%
+\contentsline {section}{\numberline {1.18}HELP Scratch (\$E2)}{15}{section.1.18}%
+\contentsline {section}{\numberline {1.19}Unused (\$E3--\$EE)}{15}{section.1.19}%
+\contentsline {section}{\numberline {1.20}Decimal Conversion Buffer (\$EF--\$FF)}{15}{section.1.20}%
+\contentsline {chapter}{\numberline {2}The Stack}{17}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Stack Mechanics}{17}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Stack Frame Formats}{18}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}JSR/RTS --- Subroutine Call (2 bytes)}{18}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}BRK/IRQ/NMI --- Interrupt Frame (3 bytes)}{18}{subsection.2.2.2}%
+\contentsline {subsection}{\numberline {2.2.3}EhBASIC FOR/NEXT Frame (\raisebox {0pt}{\texttildelow }18 bytes)}{18}{subsection.2.2.3}%
+\contentsline {subsection}{\numberline {2.2.4}EhBASIC GOSUB Frame (5 bytes)}{19}{subsection.2.2.4}%
+\contentsline {section}{\numberline {2.3}Stack Pointer Initialisation}{19}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Reading the Stack Pointer}{19}{section.2.4}%
+\contentsline {chapter}{\numberline {3}The Vector Table}{21}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Vector Entries}{21}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Reserved Range (\$0218--\$027F)}{23}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Reading the Complete Vector Table}{24}{section.3.3}%
+\contentsline {chapter}{\numberline {4}BASIC Program Space}{25}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Memory Layout Overview}{25}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Tokenised Line Format}{26}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Worked Example: \texttt {10 PRINT "HELLO"}}{27}{subsection.4.2.1}%
+\contentsline {section}{\numberline {4.3}Token Table}{27}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}Primary Tokens (\$80--\$FF)}{27}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Extended Tokens (\$01 + sub-token)}{29}{subsection.4.3.2}%
+\contentsline {section}{\numberline {4.4}Simple Variable Storage}{30}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1}Variable Name Encoding}{30}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2}Numeric Variables}{31}{subsection.4.4.2}%
+\contentsline {subsection}{\numberline {4.4.3}String Variables}{31}{subsection.4.4.3}%
+\contentsline {section}{\numberline {4.5}Array Storage}{31}{section.4.5}%
+\contentsline {subsection}{\numberline {4.5.1}Array Header}{31}{subsection.4.5.1}%
+\contentsline {subsection}{\numberline {4.5.2}Array Element Data}{31}{subsection.4.5.2}%
+\contentsline {section}{\numberline {4.6}String Heap}{32}{section.4.6}%
+\contentsline {subsection}{\numberline {4.6.1}Garbage Collection}{32}{subsection.4.6.1}%
+\contentsline {section}{\numberline {4.7}Free Memory}{32}{section.4.7}%
+\contentsline {section}{\numberline {4.8}Walking the Data Structures}{33}{section.4.8}%
+\contentsline {subsection}{\numberline {4.8.1}Walking the Program Line List}{33}{subsection.4.8.1}%
+\contentsline {subsection}{\numberline {4.8.2}Dumping a Tokenised Line}{33}{subsection.4.8.2}%
+\contentsline {subsection}{\numberline {4.8.3}Showing the Memory Map}{33}{subsection.4.8.3}%
+\contentsline {chapter}{\numberline {5}The Virtual Graphics Controller}{35}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Display Modes}{35}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Core Registers (\$A000--\$A00F)}{36}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Command Interface (\$A010--\$A01E)}{39}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Graphics Commands}{39}{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.3.2}Sprite Commands}{43}{subsection.5.3.2}%
+\contentsline {subsection}{\numberline {5.3.3}Memory I/O Commands}{45}{subsection.5.3.3}%
+\contentsline {subsection}{\numberline {5.3.4}Copper (Raster) Commands}{46}{subsection.5.3.4}%
+\contentsline {section}{\numberline {5.4}IRQ Control Register (\$A01F)}{48}{section.5.4}%
+\contentsline {section}{\numberline {5.5}Help System Registers (\$A020--\$A030)}{48}{section.5.5}%
+\contentsline {section}{\numberline {5.6}Compiler Controller (\$A031--\$A03E)}{49}{section.5.6}%
+\contentsline {section}{\numberline {5.7}ROM Swap Register (\$A03F)}{50}{section.5.7}%
+\contentsline {section}{\numberline {5.8}Sprite Registers (\$A040--\$A0BF)}{50}{section.5.8}%
+\contentsline {chapter}{\numberline {6}The Network Interface Controller}{53}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Command Register}{53}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Status and Control Registers}{54}{section.6.2}%
+\contentsline {section}{\numberline {6.3}Port Registers}{55}{section.6.3}%
+\contentsline {section}{\numberline {6.4}DMA Registers}{55}{section.6.4}%
+\contentsline {section}{\numberline {6.5}Per-Slot Status Registers}{56}{section.6.5}%
+\contentsline {section}{\numberline {6.6}Hostname Buffer}{56}{section.6.6}%
+\contentsline {section}{\numberline {6.7}Complete Examples}{57}{section.6.7}%
+\contentsline {subsection}{\numberline {6.7.1}Client: Connect, Send, and Receive}{57}{subsection.6.7.1}%
+\contentsline {subsection}{\numberline {6.7.2}Server: Listen, Accept, and Echo}{57}{subsection.6.7.2}%
+\contentsline {chapter}{\numberline {7}The Wavetable Synthesizer}{59}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Voice Registers (\$A140--\$A17F)}{59}{section.7.1}%
+\contentsline {section}{\numberline {7.2}Global Registers (\$A180--\$A187)}{61}{section.7.2}%
+\contentsline {section}{\numberline {7.3}Instrument Enumeration (\$A1A0--\$A1DF)}{62}{section.7.3}%
+\contentsline {section}{\numberline {7.4}Complete Examples}{63}{section.7.4}%
+\contentsline {subsection}{\numberline {7.4.1}Loading a Soundfont}{63}{subsection.7.4.1}%
+\contentsline {subsection}{\numberline {7.4.2}Playing a Note}{63}{subsection.7.4.2}%
+\contentsline {subsection}{\numberline {7.4.3}Three-Note Chord with Panning}{63}{subsection.7.4.3}%
+\contentsline {subsection}{\numberline {7.4.4}Setting Up Reverb and Chorus}{64}{subsection.7.4.4}%
+\contentsline {chapter}{\numberline {8}Screen Memory}{65}{chapter.8}%
+\contentsline {section}{\numberline {8.1}Character RAM (\$AA00--\$B1CF)}{65}{section.8.1}%
+\contentsline {section}{\numberline {8.2}Color RAM (\$B1D0--\$B99F)}{66}{section.8.2}%
+\contentsline {section}{\numberline {8.3}Screen Coordinate Math}{66}{section.8.3}%
+\contentsline {subsection}{\numberline {8.3.1}Worked Example}{67}{subsection.8.3.1}%
+\contentsline {section}{\numberline {8.4}BASIC Examples}{67}{section.8.4}%
+\contentsline {subsection}{\numberline {8.4.1}Direct Screen Write}{67}{subsection.8.4.1}%
+\contentsline {subsection}{\numberline {8.4.2}Screen Dump}{67}{subsection.8.4.2}%
+\contentsline {subsection}{\numberline {8.4.3}Fast Text Rendering}{67}{subsection.8.4.3}%
+\contentsline {subsection}{\numberline {8.4.4}Colour Cycling Effect}{68}{subsection.8.4.4}%
+\contentsline {chapter}{\numberline {9}The File I/O Controller}{69}{chapter.9}%
+\contentsline {section}{\numberline {9.1}Register Map}{69}{section.9.1}%
+\contentsline {section}{\numberline {9.2}Core Registers}{70}{section.9.2}%
+\contentsline {section}{\numberline {9.3}Command Reference}{72}{section.9.3}%
+\contentsline {subsection}{\numberline {9.3.1}File Operations}{72}{subsection.9.3.1}%
+\contentsline {subsection}{\numberline {9.3.2}SID Playback}{73}{subsection.9.3.2}%
+\contentsline {subsection}{\numberline {9.3.3}Music Engine}{73}{subsection.9.3.3}%
+\contentsline {subsection}{\numberline {9.3.4}MIDI Playback}{75}{subsection.9.3.4}%
+\contentsline {subsection}{\numberline {9.3.5}Soundfont}{75}{subsection.9.3.5}%
+\contentsline {subsection}{\numberline {9.3.6}Disk Operations}{76}{subsection.9.3.6}%
+\contentsline {section}{\numberline {9.4}File Metadata Buffer (\$BAB0--\$BB1F)}{77}{section.9.4}%
+\contentsline {section}{\numberline {9.5}Status and Error Code Summary}{77}{section.9.5}%
+\contentsline {subsection}{\numberline {9.5.1}Status Codes (FioStatus, \$B9A1)}{77}{subsection.9.5.1}%
+\contentsline {subsection}{\numberline {9.5.2}Error Codes (FioErrCode, \$B9A2)}{77}{subsection.9.5.2}%
+\contentsline {section}{\numberline {9.6}BASIC Examples}{77}{section.9.6}%
+\contentsline {subsection}{\numberline {9.6.1}Saving and Loading a Program}{77}{subsection.9.6.1}%
+\contentsline {subsection}{\numberline {9.6.2}Directory Listing}{78}{subsection.9.6.2}%
+\contentsline {subsection}{\numberline {9.6.3}Playing a SID File}{78}{subsection.9.6.3}%
+\contentsline {subsection}{\numberline {9.6.4}Loading and Playing a MIDI File}{79}{subsection.9.6.4}%
+\contentsline {chapter}{\numberline {10}The Expansion Memory System}{81}{chapter.10}%
+\contentsline {section}{\numberline {10.1}Expansion Memory Controller (\$BA00--\$BA3F)}{81}{section.10.1}%
+\contentsline {subsection}{\numberline {10.1.1}Register Map}{82}{subsection.10.1.1}%
+\contentsline {subsection}{\numberline {10.1.2}Detailed Register Descriptions}{82}{subsection.10.1.2}%
+\contentsline {subsection}{\numberline {10.1.3}Command Reference}{85}{subsection.10.1.3}%
+\contentsline {subsubsection}{Byte-Level Access}{85}{subsubsection*.2}%
+\contentsline {subsubsection}{Block Transfers}{86}{subsubsection*.3}%
+\contentsline {subsubsection}{Page Management}{86}{subsubsection*.4}%
+\contentsline {subsubsection}{Named Blocks}{87}{subsubsection*.5}%
+\contentsline {section}{\numberline {10.2}Timer Controller (\$BA40--\$BA4F)}{89}{section.10.2}%
+\contentsline {section}{\numberline {10.3}Music Status Registers (\$BA50--\$BA62)}{90}{section.10.3}%
+\contentsline {section}{\numberline {10.4}DMA Controller (\$BA63--\$BA82)}{91}{section.10.4}%
+\contentsline {subsection}{\numberline {10.4.1}Register Map}{91}{subsection.10.4.1}%
+\contentsline {subsection}{\numberline {10.4.2}Detailed Register Descriptions}{92}{subsection.10.4.2}%
+\contentsline {subsection}{\numberline {10.4.3}BASIC Examples}{94}{subsection.10.4.3}%
+\contentsline {subsubsection}{Copy Screen RAM to XRAM}{94}{subsubsection*.6}%
+\contentsline {subsubsection}{Fill Graphics Bitmap with a Color}{94}{subsubsection*.7}%
+\contentsline {section}{\numberline {10.5}Blitter Controller (\$BA83--\$BAA2)}{94}{section.10.5}%
+\contentsline {subsection}{\numberline {10.5.1}Register Map}{94}{subsection.10.5.1}%
+\contentsline {subsection}{\numberline {10.5.2}Detailed Register Descriptions}{95}{subsection.10.5.2}%
+\contentsline {subsection}{\numberline {10.5.3}BASIC Examples}{97}{subsection.10.5.3}%
+\contentsline {subsubsection}{Blit a Rectangular Region with Transparency}{97}{subsubsection*.8}%
+\contentsline {subsubsection}{Fill a Rectangle on Screen}{98}{subsubsection*.9}%
+\contentsline {section}{\numberline {10.6}XMC Windows (\$BC00--\$BFFF)}{98}{section.10.6}%
+\contentsline {chapter}{\numberline {11}The ROM}{101}{chapter.11}%
+\contentsline {section}{\numberline {11.1}ROM Layout Overview}{101}{section.11.1}%
+\contentsline {section}{\numberline {11.2}Key Entry Points}{102}{section.11.2}%
+\contentsline {section}{\numberline {11.3}Monitor Code (\$FF80--\$FFF9)}{102}{section.11.3}%
+\contentsline {section}{\numberline {11.4}SID Register Window}{103}{section.11.4}%
+\contentsline {section}{\numberline {11.5}Hardware Vectors (\$FFFA--\$FFFF)}{103}{section.11.5}%
+\contentsline {chapter}{\numberline {12}The SID Sound Chips}{105}{chapter.12}%
+\contentsline {section}{\numberline {12.1}Voice Registers}{105}{section.12.1}%
+\contentsline {paragraph}{ADSR Timing Table}{107}{paragraph*.10}%
+\contentsline {section}{\numberline {12.2}Filter Registers (\$D415--\$D418)}{108}{section.12.2}%
+\contentsline {section}{\numberline {12.3}Extended Per-Voice Volume (\$D41D--\$D41F)}{109}{section.12.3}%
+\contentsline {section}{\numberline {12.4}SID 2 (\$D420--\$D43F)}{109}{section.12.4}%
+\contentsline {section}{\numberline {12.5}BASIC Examples}{109}{section.12.5}%
+\contentsline {section}{\numberline {12.6}Register Summary}{110}{section.12.6}%
+\contentsline {chapter}{\numberline {A}VGC Bitmap \& Sprite Shape RAM}{113}{appendix.A}%
+\contentsline {section}{\numberline {A.1}Graphics Bitmap}{113}{section.A.1}%
+\contentsline {subsection}{\numberline {A.1.1}Address Calculation}{113}{subsection.A.1.1}%
+\contentsline {subsection}{\numberline {A.1.2}Row Start Offsets}{114}{subsection.A.1.2}%
+\contentsline {subsection}{\numberline {A.1.3}Drawing Commands vs.\ Direct Access}{114}{subsection.A.1.3}%
+\contentsline {subsection}{\numberline {A.1.4}BASIC Example: Read/Write Pixels via MemRead/MemWrite}{114}{subsection.A.1.4}%
+\contentsline {section}{\numberline {A.2}Sprite Shape RAM}{114}{section.A.2}%
+\contentsline {subsection}{\numberline {A.2.1}Address Calculation}{115}{subsection.A.2.1}%
+\contentsline {subsection}{\numberline {A.2.2}Shape Slot Assignments}{115}{subsection.A.2.2}%
+\contentsline {subsection}{\numberline {A.2.3}BASIC Example: Define a Shape via MemWrite}{115}{subsection.A.2.3}%
+\contentsline {subsection}{\numberline {A.2.4}Using DMA for Bulk Shape Loading}{115}{subsection.A.2.4}%
+\contentsline {chapter}{\numberline {B}Expansion RAM (XRAM)}{117}{appendix.B}%
+\contentsline {section}{\numberline {B.1}Bank Structure}{117}{section.B.1}%
+\contentsline {section}{\numberline {B.2}Access Methods}{117}{section.B.2}%
+\contentsline {subsection}{\numberline {B.2.1}Byte Commands (GetByte / PutByte)}{118}{subsection.B.2.1}%
+\contentsline {subsection}{\numberline {B.2.2}Bulk Commands (Stash / Fetch)}{118}{subsection.B.2.2}%
+\contentsline {subsection}{\numberline {B.2.3}XMC Windows (\$BC00--\$BFFF)}{118}{subsection.B.2.3}%
+\contentsline {subsection}{\numberline {B.2.4}DMA Transfers (Space 5)}{118}{subsection.B.2.4}%
+\contentsline {section}{\numberline {B.3}Named Block Allocation}{119}{section.B.3}%
+\contentsline {section}{\numberline {B.4}Page Usage Tracking}{119}{section.B.4}%
+\contentsline {chapter}{\numberline {C}WTS Sample Memory}{121}{appendix.C}%
+\contentsline {section}{\numberline {C.1}Loading Soundfonts}{121}{section.C.1}%
+\contentsline {section}{\numberline {C.2}SF2 Format Overview}{122}{section.C.2}%
+\contentsline {section}{\numberline {C.3}Instrument Mapping}{122}{section.C.3}%
+\contentsline {section}{\numberline {C.4}Memory Usage}{122}{section.C.4}%
+\contentsline {section}{\numberline {C.5}Limitations}{123}{section.C.5}%
+\contentsline {chapter}{\numberline {D}Color Table}{125}{appendix.D}%
+\contentsline {section}{\numberline {D.1}Palette Reference}{125}{section.D.1}%
+\contentsline {section}{\numberline {D.2}Usage Notes}{126}{section.D.2}%
+\contentsline {section}{\numberline {D.3}BASIC Example}{126}{section.D.3}%
+\contentsline {chapter}{\numberline {E}ASCII \& Screen Code Table}{127}{appendix.E}%
+\contentsline {section}{\numberline {E.1}ASCII Table (0--127)}{127}{section.E.1}%
+\contentsline {section}{\numberline {E.2}Control Characters Used by the Screen Editor}{128}{section.E.2}%
+\contentsline {section}{\numberline {E.3}Extended Characters (128--255)}{128}{section.E.3}%
+\contentsline {section}{\numberline {E.4}BASIC String Functions}{128}{section.E.4}%
+\contentsline {chapter}{Address Index}{131}{section*.11}%
+\contentsfinish 

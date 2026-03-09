@@ -1,0 +1,327 @@
+\indexentry{\$0000@{\texttt  {\$0000}} --- LAB\_WARM}{1}
+\indexentry{\$0001@{\texttt  {\$0001}} --- Wrmjpl}{1}
+\indexentry{\$0002@{\texttt  {\$0002}} --- Wrmjph}{1}
+\indexentry{\$000A@{\texttt  {\$000A}} --- Usrjmp}{2}
+\indexentry{\$000B@{\texttt  {\$000B}} --- Usrjpl}{2}
+\indexentry{\$000C@{\texttt  {\$000C}} --- Usrjph}{2}
+\indexentry{\$000D@{\texttt  {\$000D}} --- Nullct}{2}
+\indexentry{\$000E@{\texttt  {\$000E}} --- TPos}{2}
+\indexentry{\$000F@{\texttt  {\$000F}} --- TWidth}{3}
+\indexentry{\$0010@{\texttt  {\$0010}} --- Iclim}{3}
+\indexentry{\$0011@{\texttt  {\$0011}} --- Itempl}{3}
+\indexentry{\$0012@{\texttt  {\$0012}} --- Itemph}{3}
+\indexentry{\$005B@{\texttt  {\$005B}} --- Srchc / Temp3}{4}
+\indexentry{\$005C@{\texttt  {\$005C}} --- Scnquo / Asrch}{4}
+\indexentry{\$005D@{\texttt  {\$005D}} --- Ibptr / Dimcnt / Tindx}{4}
+\indexentry{\$005E@{\texttt  {\$005E}} --- Defdim}{4}
+\indexentry{\$005F@{\texttt  {\$005F}} --- Dtypef}{4}
+\indexentry{\$0060@{\texttt  {\$0060}} --- Oquote / Gclctd}{4}
+\indexentry{\$0061@{\texttt  {\$0061}} --- Sufnxf}{4}
+\indexentry{\$0062@{\texttt  {\$0062}} --- Imode}{4}
+\indexentry{\$0063@{\texttt  {\$0063}} --- Cflag}{5}
+\indexentry{\$0064@{\texttt  {\$0064}} --- TabSiz}{5}
+\indexentry{\$0065@{\texttt  {\$0065}} --- next\_s}{5}
+\indexentry{\$0066@{\texttt  {\$0066}} --- last\_sl}{5}
+\indexentry{\$0067@{\texttt  {\$0067}} --- last\_sh}{5}
+\indexentry{\$0068@{\texttt  {\$0068--\$0070}} --- des\_sk (Descriptor Stack)}{5}
+\indexentry{\$0071@{\texttt  {\$0071}} --- ut1\_pl}{5}
+\indexentry{\$0072@{\texttt  {\$0072}} --- ut1\_ph}{5}
+\indexentry{\$0073@{\texttt  {\$0073}} --- ut2\_pl}{6}
+\indexentry{\$0074@{\texttt  {\$0074}} --- ut2\_ph}{6}
+\indexentry{\$0075@{\texttt  {\$0075}} --- FACt\_1}{6}
+\indexentry{\$0076@{\texttt  {\$0076}} --- FACt\_2 / dims\_l}{6}
+\indexentry{\$0077@{\texttt  {\$0077}} --- FACt\_3 / dims\_h}{6}
+\indexentry{\$0078@{\texttt  {\$0078}} --- TempB}{6}
+\indexentry{\$0079@{\texttt  {\$0079}} --- Smeml}{6}
+\indexentry{\$007A@{\texttt  {\$007A}} --- Smemh}{6}
+\indexentry{\$007B@{\texttt  {\$007B}} --- Svarl}{6}
+\indexentry{\$007C@{\texttt  {\$007C}} --- Svarh}{7}
+\indexentry{\$007D@{\texttt  {\$007D}} --- Sarryl}{7}
+\indexentry{\$007E@{\texttt  {\$007E}} --- Sarryh}{7}
+\indexentry{\$007F@{\texttt  {\$007F}} --- Earryl}{7}
+\indexentry{\$0080@{\texttt  {\$0080}} --- Earryh}{7}
+\indexentry{\$0081@{\texttt  {\$0081}} --- Sstorl}{7}
+\indexentry{\$0082@{\texttt  {\$0082}} --- Sstorh}{7}
+\indexentry{\$0083@{\texttt  {\$0083}} --- Sutill}{7}
+\indexentry{\$0084@{\texttt  {\$0084}} --- Sutilh}{7}
+\indexentry{\$0085@{\texttt  {\$0085}} --- Ememl}{7}
+\indexentry{\$0086@{\texttt  {\$0086}} --- Ememh}{7}
+\indexentry{\$0087@{\texttt  {\$0087}} --- Clinel}{8}
+\indexentry{\$0088@{\texttt  {\$0088}} --- Clineh}{8}
+\indexentry{\$0089@{\texttt  {\$0089}} --- Blinel}{8}
+\indexentry{\$008A@{\texttt  {\$008A}} --- Blineh}{8}
+\indexentry{\$008B@{\texttt  {\$008B}} --- Cpntrl}{8}
+\indexentry{\$008C@{\texttt  {\$008C}} --- Cpntrh}{8}
+\indexentry{\$008D@{\texttt  {\$008D}} --- Dlinel}{8}
+\indexentry{\$008E@{\texttt  {\$008E}} --- Dlineh}{9}
+\indexentry{\$008F@{\texttt  {\$008F}} --- Dptrl}{9}
+\indexentry{\$0090@{\texttt  {\$0090}} --- Dptrh}{9}
+\indexentry{\$0091@{\texttt  {\$0091}} --- Rdptrl}{9}
+\indexentry{\$0092@{\texttt  {\$0092}} --- Rdptrh}{9}
+\indexentry{\$0093@{\texttt  {\$0093}} --- Varnm1}{9}
+\indexentry{\$0094@{\texttt  {\$0094}} --- Varnm2}{9}
+\indexentry{\$0095@{\texttt  {\$0095}} --- Cvaral}{9}
+\indexentry{\$0096@{\texttt  {\$0096}} --- Cvarah}{9}
+\indexentry{\$0097@{\texttt  {\$0097}} --- Frnxtl}{9}
+\indexentry{\$0098@{\texttt  {\$0098}} --- Frnxth}{9}
+\indexentry{\$0099@{\texttt  {\$0099}} --- prstk}{9}
+\indexentry{\$009B@{\texttt  {\$009B}} --- comp\_f}{10}
+\indexentry{\$009C@{\texttt  {\$009C}} --- func\_l / garb\_l}{10}
+\indexentry{\$009D@{\texttt  {\$009D}} --- func\_h / garb\_h}{10}
+\indexentry{\$009E@{\texttt  {\$009E}} --- des\_2l}{10}
+\indexentry{\$009F@{\texttt  {\$009F}} --- des\_2h}{10}
+\indexentry{\$00A0@{\texttt  {\$00A0}} --- g\_step}{10}
+\indexentry{\$00A1@{\texttt  {\$00A1}} --- Fnxjmp}{10}
+\indexentry{\$00A2@{\texttt  {\$00A2}} --- Fnxjpl / g\_indx}{10}
+\indexentry{\$00A3@{\texttt  {\$00A3}} --- FAC2\_r}{10}
+\indexentry{\$00A4@{\texttt  {\$00A4}} --- Adatal / Nbendl}{10}
+\indexentry{\$00A5@{\texttt  {\$00A5}} --- Adatah / Nbendh}{11}
+\indexentry{\$00A6@{\texttt  {\$00A6}} --- Obendl}{11}
+\indexentry{\$00A7@{\texttt  {\$00A7}} --- Obendh}{11}
+\indexentry{\$00A8@{\texttt  {\$00A8}} --- numexp / numbit}{11}
+\indexentry{\$00A9@{\texttt  {\$00A9}} --- expcnt}{11}
+\indexentry{\$00AA@{\texttt  {\$00AA}} --- numdpf / Astrtl}{11}
+\indexentry{\$00AB@{\texttt  {\$00AB}} --- expneg / Astrth}{11}
+\indexentry{\$00AC@{\texttt  {\$00AC}} --- FAC1\_e}{11}
+\indexentry{\$00AD@{\texttt  {\$00AD}} --- FAC1\_1}{11}
+\indexentry{\$00AE@{\texttt  {\$00AE}} --- FAC1\_2}{11}
+\indexentry{\$00AF@{\texttt  {\$00AF}} --- FAC1\_3}{11}
+\indexentry{\$00B0@{\texttt  {\$00B0}} --- FAC1\_s}{12}
+\indexentry{\$00B1@{\texttt  {\$00B1}} --- negnum / numcon}{12}
+\indexentry{\$00B2@{\texttt  {\$00B2}} --- FAC1\_o}{12}
+\indexentry{\$00B3@{\texttt  {\$00B3}} --- FAC2\_e}{12}
+\indexentry{\$00B4@{\texttt  {\$00B4}} --- FAC2\_1}{12}
+\indexentry{\$00B5@{\texttt  {\$00B5}} --- FAC2\_2}{12}
+\indexentry{\$00B6@{\texttt  {\$00B6}} --- FAC2\_3}{12}
+\indexentry{\$00B7@{\texttt  {\$00B7}} --- FAC2\_s}{12}
+\indexentry{\$00B8@{\texttt  {\$00B8}} --- FAC\_sc}{12}
+\indexentry{\$00B9@{\texttt  {\$00B9}} --- FAC1\_r}{12}
+\indexentry{\$00BA@{\texttt  {\$00BA}} --- csidx / Asptl}{13}
+\indexentry{\$00BB@{\texttt  {\$00BB}} --- Aspth}{13}
+\indexentry{\$00BC@{\texttt  {\$00BC--\$00C1}} --- LAB\_IGBY (Increment and Get BYte)}{13}
+\indexentry{\$00C2@{\texttt  {\$00C2--\$00C4}} --- LAB\_GBYT (Get BYTe)}{13}
+\indexentry{\$00C3@{\texttt  {\$00C3}} --- Bpntrl}{13}
+\indexentry{\$00C4@{\texttt  {\$00C4}} --- Bpntrh}{13}
+\indexentry{\$00D8@{\texttt  {\$00D8}} --- Rbyte4}{13}
+\indexentry{\$00D9@{\texttt  {\$00D9}} --- Rbyte1}{13}
+\indexentry{\$00DA@{\texttt  {\$00DA}} --- Rbyte2}{14}
+\indexentry{\$00DB@{\texttt  {\$00DB}} --- Rbyte3}{14}
+\indexentry{\$00DC@{\texttt  {\$00DC}} --- NmiBase}{14}
+\indexentry{\$00DD@{\texttt  {\$00DD}} --- NMI Address Low}{14}
+\indexentry{\$00DE@{\texttt  {\$00DE}} --- NMI Address High}{14}
+\indexentry{\$00DF@{\texttt  {\$00DF}} --- IrqBase}{14}
+\indexentry{\$00E0@{\texttt  {\$00E0}} --- IRQ Address Low}{14}
+\indexentry{\$00E1@{\texttt  {\$00E1}} --- IRQ Address High}{14}
+\indexentry{\$00E2@{\texttt  {\$00E2}} --- help\_len}{15}
+\indexentry{\$00EF@{\texttt  {\$00EF--\$00FF}} --- Decss (Decimal String Buffer)}{15}
+\indexentry{\$0100@{\texttt  {\$0100--\$01FF}} --- Hardware Stack}{17}
+\indexentry{\$0200@{\texttt{\$0200--\$027F}} --- System Vector Table}{21}
+\indexentry{\$0200@{\texttt  {\$0200}} --- VgcBase (low)}{21}
+\indexentry{\$0201@{\texttt  {\$0201}} --- VgcBase (high)}{21}
+\indexentry{\$0202@{\texttt  {\$0202}} --- RegCmdAddr (low)}{22}
+\indexentry{\$0203@{\texttt  {\$0203}} --- RegCmdAddr (high)}{22}
+\indexentry{\$0204@{\texttt  {\$0204}} --- CharRamBase (low)}{22}
+\indexentry{\$0205@{\texttt  {\$0205}} --- CharRamBase (high)}{22}
+\indexentry{\$0206@{\texttt  {\$0206}} --- ColorRamBase (low)}{22}
+\indexentry{\$0207@{\texttt  {\$0207}} --- ColorRamBase (high)}{22}
+\indexentry{\$0208@{\texttt  {\$0208}} --- SidBase (low)}{22}
+\indexentry{\$0209@{\texttt  {\$0209}} --- SidBase (high)}{22}
+\indexentry{\$020A@{\texttt  {\$020A}} --- FileIoBase (low)}{22}
+\indexentry{\$020B@{\texttt  {\$020B}} --- FileIoBase (high)}{22}
+\indexentry{\$020C@{\texttt  {\$020C}} --- XmcBase (low)}{22}
+\indexentry{\$020D@{\texttt  {\$020D}} --- XmcBase (high)}{22}
+\indexentry{\$020E@{\texttt  {\$020E}} --- TimerBase (low)}{23}
+\indexentry{\$020F@{\texttt  {\$020F}} --- TimerBase (high)}{23}
+\indexentry{\$0210@{\texttt  {\$0210}} --- Sid2Base (low)}{23}
+\indexentry{\$0211@{\texttt  {\$0211}} --- Sid2Base (high)}{23}
+\indexentry{\$0212@{\texttt  {\$0212}} --- NicBase (low)}{23}
+\indexentry{\$0213@{\texttt  {\$0213}} --- NicBase (high)}{23}
+\indexentry{\$0214@{\texttt  {\$0214}} --- DmaBase (low)}{23}
+\indexentry{\$0215@{\texttt  {\$0215}} --- DmaBase (high)}{23}
+\indexentry{\$0216@{\texttt  {\$0216}} --- BlitterBase (low)}{23}
+\indexentry{\$0217@{\texttt  {\$0217}} --- BlitterBase (high)}{23}
+\indexentry{\$0280@{\texttt  {\$0280--\$9FFF}} --- BASIC Program Space}{25}
+\indexentry{\$A000@{\texttt  {\$A000}} --- RegMode}{36}
+\indexentry{\$A001@{\texttt  {\$A001}} --- RegBgCol}{36}
+\indexentry{\$A002@{\texttt  {\$A002}} --- RegFgCol}{36}
+\indexentry{\$A003@{\texttt  {\$A003}} --- RegCursorX}{36}
+\indexentry{\$A004@{\texttt  {\$A004}} --- RegCursorY}{37}
+\indexentry{\$A005@{\texttt  {\$A005}} --- RegScrollX}{37}
+\indexentry{\$A006@{\texttt  {\$A006}} --- RegScrollY}{37}
+\indexentry{\$A007@{\texttt  {\$A007}} --- RegFont}{37}
+\indexentry{\$A008@{\texttt  {\$A008}} --- RegStatus}{37}
+\indexentry{\$A009@{\texttt  {\$A009}} --- RegSpriteCount}{37}
+\indexentry{\$A00A@{\texttt  {\$A00A}} --- RegCursorEnable}{38}
+\indexentry{\$A00B@{\texttt  {\$A00B}} --- RegColSt}{38}
+\indexentry{\$A00C@{\texttt  {\$A00C}} --- RegColBg}{38}
+\indexentry{\$A00D@{\texttt  {\$A00D}} --- RegBorder}{38}
+\indexentry{\$A00E@{\texttt  {\$A00E}} --- RegCharOut}{38}
+\indexentry{\$A00F@{\texttt  {\$A00F}} --- RegCharIn}{38}
+\indexentry{\$A010@{\texttt  {\$A010}} --- RegCmd}{39}
+\indexentry{\$A011@{\texttt  {\$A011--\$A01E}} --- RegP0--RegP13 (Parameter Registers)}{39}
+\indexentry{\$A01F@{\texttt  {\$A01F}} --- RegIrqCtrl}{48}
+\indexentry{\$A020@{\texttt  {\$A020}} --- RegHelp}{48}
+\indexentry{\$A021@{\texttt  {\$A021--\$A030}} --- HelpSearchBuffer}{49}
+\indexentry{\$A031@{\texttt  {\$A031}} --- CmpCmd}{49}
+\indexentry{\$A032@{\texttt  {\$A032}} --- CmpStatus}{49}
+\indexentry{\$A033@{\texttt  {\$A033}} --- CmpErrCount}{49}
+\indexentry{\$A034@{\texttt  {\$A034}} --- CmpWarnCount}{49}
+\indexentry{\$A035@{\texttt  {\$A035--\$A036}} --- CmpErrLine}{49}
+\indexentry{\$A037@{\texttt  {\$A037--\$A038}} --- CmpCodeSize}{50}
+\indexentry{\$A039@{\texttt  {\$A039}} --- CmpErrMsg}{50}
+\indexentry{\$A03A@{\texttt  {\$A03A}} --- CmpErrIdx}{50}
+\indexentry{\$A03B@{\texttt  {\$A03B--\$A03D}} --- CmpSrcAddr}{50}
+\indexentry{\$A03F@{\texttt  {\$A03F}} --- RegRomSwap}{50}
+\indexentry{\$A100@{\texttt  {\$A100}} --- NicCmd}{53}
+\indexentry{\$A101@{\texttt  {\$A101}} --- NicStatus}{54}
+\indexentry{\$A102@{\texttt  {\$A102}} --- NicSlot}{54}
+\indexentry{\$A103@{\texttt  {\$A103}} --- NicIrqCtrl}{55}
+\indexentry{\$A104@{\texttt  {\$A104}} --- NicIrqStatus}{55}
+\indexentry{\$A108@{\texttt  {\$A108--\$A109}} --- NicRemotePort}{55}
+\indexentry{\$A10A@{\texttt  {\$A10A--\$A10B}} --- NicLocalPort}{55}
+\indexentry{\$A110@{\texttt  {\$A110--\$A111}} --- NicDmaAddr}{55}
+\indexentry{\$A112@{\texttt  {\$A112}} --- NicDmaLen}{55}
+\indexentry{\$A113@{\texttt  {\$A113}} --- NicMsgLen}{56}
+\indexentry{\$A118@{\texttt  {\$A118--\$A11B}} --- NicSlotStatus0--3}{56}
+\indexentry{\$A120@{\texttt  {\$A120--\$A13F}} --- NicNameBuf}{56}
+\indexentry{\$A140@{\texttt  {\$A140}} --- WtsVoiceNote}{59}
+\indexentry{\$A141@{\texttt  {\$A141}} --- WtsVoiceVelocity}{60}
+\indexentry{\$A142@{\texttt  {\$A142}} --- WtsVoiceInstrument}{60}
+\indexentry{\$A143@{\texttt  {\$A143}} --- WtsVoiceVolume}{60}
+\indexentry{\$A144@{\texttt  {\$A144}} --- WtsVoicePanning}{60}
+\indexentry{\$A145@{\texttt  {\$A145}} --- WtsVoicePitchBendLo}{60}
+\indexentry{\$A146@{\texttt  {\$A146}} --- WtsVoicePitchBendHi}{60}
+\indexentry{\$A147@{\texttt  {\$A147}} --- WtsVoiceStatus}{60}
+\indexentry{\$A180@{\texttt  {\$A180}} --- WtsReverbLevel}{61}
+\indexentry{\$A181@{\texttt  {\$A181}} --- WtsChorusLevel}{61}
+\indexentry{\$A182@{\texttt  {\$A182}} --- WtsMasterVolume}{61}
+\indexentry{\$A183@{\texttt  {\$A183}} --- WtsSoundfontStatus}{61}
+\indexentry{\$A184@{\texttt  {\$A184}} --- WtsInstrumentCount}{61}
+\indexentry{\$A185@{\texttt  {\$A185}} --- WtsCommand}{62}
+\indexentry{\$A186@{\texttt  {\$A186}} --- WtsCommandArg}{62}
+\indexentry{\$A187@{\texttt  {\$A187}} --- WtsActiveVoices}{62}
+\indexentry{\$A1A0@{\texttt  {\$A1A0}} --- WtsEnumIndex}{62}
+\indexentry{\$A1A1@{\texttt  {\$A1A1}} --- WtsEnumBank}{62}
+\indexentry{\$A1A2@{\texttt  {\$A1A2}} --- WtsEnumProgram}{62}
+\indexentry{\$A1A3@{\texttt  {\$A1A3--\$A1DF}} --- WtsEnumName}{62}
+\indexentry{\$AA00@{\texttt  {\$AA00--\$B1CF}} --- Character RAM}{65}
+\indexentry{\$B1D0@{\texttt  {\$B1D0--\$B99F}} --- Color RAM}{66}
+\indexentry{\$B9A0@{\texttt  {\$B9A0}} --- FioCmd}{70}
+\indexentry{\$B9A1@{\texttt  {\$B9A1}} --- FioStatus}{70}
+\indexentry{\$B9A2@{\texttt  {\$B9A2}} --- FioErrCode}{70}
+\indexentry{\$B9A3@{\texttt  {\$B9A3}} --- FioNameLen}{70}
+\indexentry{\$B9A4@{\texttt  {\$B9A4}} --- FioSrcL}{70}
+\indexentry{\$B9A5@{\texttt  {\$B9A5}} --- FioSrcH}{70}
+\indexentry{\$B9A6@{\texttt  {\$B9A6}} --- FioEndL}{70}
+\indexentry{\$B9A7@{\texttt  {\$B9A7}} --- FioEndH}{70}
+\indexentry{\$B9A8@{\texttt  {\$B9A8}} --- FioSizeL}{71}
+\indexentry{\$B9A9@{\texttt  {\$B9A9}} --- FioSizeH}{71}
+\indexentry{\$B9AA@{\texttt  {\$B9AA}} --- FioGSpace}{71}
+\indexentry{\$B9AB@{\texttt  {\$B9AB}} --- FioGAddrL}{71}
+\indexentry{\$B9AC@{\texttt  {\$B9AC}} --- FioGAddrH}{71}
+\indexentry{\$B9AD@{\texttt  {\$B9AD}} --- FioGLenL}{71}
+\indexentry{\$B9AE@{\texttt  {\$B9AE}} --- FioGLenH}{71}
+\indexentry{\$B9AF@{\texttt  {\$B9AF}} --- FioDirType}{71}
+\indexentry{\$B9B0@{\texttt  {\$B9B0--\$B9EF}} --- FioName}{71}
+\indexentry{\$BAB0@{\texttt  {\$BAB0--\$BB1F}} --- File Metadata Buffer}{77}
+\indexentry{\$BA00@{\texttt  {\$BA00}} --- XmcCmd}{82}
+\indexentry{\$BA01@{\texttt  {\$BA01}} --- XmcStatus}{82}
+\indexentry{\$BA02@{\texttt  {\$BA02}} --- XmcErrCode}{82}
+\indexentry{\$BA03@{\texttt  {\$BA03}} --- XmcCfg}{83}
+\indexentry{\$BA04@{\texttt  {\$BA04}} --- XmcAddrL}{83}
+\indexentry{\$BA05@{\texttt  {\$BA05}} --- XmcAddrM}{83}
+\indexentry{\$BA06@{\texttt  {\$BA06}} --- XmcAddrH}{83}
+\indexentry{\$BA07@{\texttt  {\$BA07}} --- XmcRamL}{83}
+\indexentry{\$BA08@{\texttt  {\$BA08}} --- XmcRamH}{83}
+\indexentry{\$BA09@{\texttt  {\$BA09}} --- XmcLenL}{83}
+\indexentry{\$BA0A@{\texttt  {\$BA0A}} --- XmcLenH}{83}
+\indexentry{\$BA0B@{\texttt  {\$BA0B}} --- XmcData}{83}
+\indexentry{\$BA0C@{\texttt  {\$BA0C}} --- XmcBank}{83}
+\indexentry{\$BA0D@{\texttt  {\$BA0D}} --- XmcBanks}{84}
+\indexentry{\$BA0E@{\texttt  {\$BA0E}} --- XmcPagesUsedL}{84}
+\indexentry{\$BA0F@{\texttt  {\$BA0F}} --- XmcPagesUsedH}{84}
+\indexentry{\$BA10@{\texttt  {\$BA10}} --- XmcPagesFreeL}{84}
+\indexentry{\$BA11@{\texttt  {\$BA11}} --- XmcPagesFreeH}{84}
+\indexentry{\$BA12@{\texttt  {\$BA12}} --- XmcNameLen}{84}
+\indexentry{\$BA13@{\texttt  {\$BA13}} --- XmcHandle}{84}
+\indexentry{\$BA14@{\texttt  {\$BA14}} --- XmcDirCountL}{84}
+\indexentry{\$BA15@{\texttt  {\$BA15}} --- XmcDirCountH}{84}
+\indexentry{\$BA16@{\texttt  {\$BA16}} --- XmcWinCtl}{84}
+\indexentry{\$BA18@{\texttt  {\$BA18--\$BA1A}} --- XmcWin0A}{85}
+\indexentry{\$BA1B@{\texttt  {\$BA1B--\$BA1D}} --- XmcWin1A}{85}
+\indexentry{\$BA1E@{\texttt  {\$BA1E--\$BA20}} --- XmcWin2A}{85}
+\indexentry{\$BA21@{\texttt  {\$BA21--\$BA23}} --- XmcWin3A}{85}
+\indexentry{\$BA24@{\texttt  {\$BA24--\$BA3F}} --- XmcName}{85}
+\indexentry{\$BA40@{\texttt  {\$BA40}} --- TimerCtrl}{89}
+\indexentry{\$BA41@{\texttt  {\$BA41}} --- TimerStatus}{89}
+\indexentry{\$BA42@{\texttt  {\$BA42}} --- TimerDivL}{89}
+\indexentry{\$BA43@{\texttt  {\$BA43}} --- TimerDivH}{89}
+\indexentry{\$BA50@{\texttt  {\$BA50}} --- MusicStatus}{90}
+\indexentry{\$BA51@{\texttt  {\$BA51--\$BA5E}} --- MusicNote1--14}{90}
+\indexentry{\$BA5F@{\texttt  {\$BA5F--\$BA60}} --- MusicElapsed}{91}
+\indexentry{\$BA61@{\texttt  {\$BA61--\$BA62}} --- MusicTotal}{91}
+\indexentry{\$BA63@{\texttt  {\$BA63}} --- DmaCmd}{92}
+\indexentry{\$BA64@{\texttt  {\$BA64}} --- DmaStatus}{92}
+\indexentry{\$BA65@{\texttt  {\$BA65}} --- DmaErrCode}{92}
+\indexentry{\$BA66@{\texttt  {\$BA66}} --- DmaSrcSpace}{92}
+\indexentry{\$BA67@{\texttt  {\$BA67}} --- DmaDstSpace}{92}
+\indexentry{\$BA68@{\texttt  {\$BA68}} --- DmaSrcL}{92}
+\indexentry{\$BA69@{\texttt  {\$BA69}} --- DmaSrcM}{93}
+\indexentry{\$BA6A@{\texttt  {\$BA6A}} --- DmaSrcH}{93}
+\indexentry{\$BA6B@{\texttt  {\$BA6B}} --- DmaDstL}{93}
+\indexentry{\$BA6C@{\texttt  {\$BA6C}} --- DmaDstM}{93}
+\indexentry{\$BA6D@{\texttt  {\$BA6D}} --- DmaDstH}{93}
+\indexentry{\$BA6E@{\texttt  {\$BA6E}} --- DmaLenL}{93}
+\indexentry{\$BA6F@{\texttt  {\$BA6F}} --- DmaLenM}{93}
+\indexentry{\$BA70@{\texttt  {\$BA70}} --- DmaLenH}{93}
+\indexentry{\$BA71@{\texttt  {\$BA71}} --- DmaMode}{93}
+\indexentry{\$BA72@{\texttt  {\$BA72}} --- DmaFillValue}{93}
+\indexentry{\$BA73@{\texttt  {\$BA73}} --- DmaCountL}{93}
+\indexentry{\$BA74@{\texttt  {\$BA74}} --- DmaCountM}{93}
+\indexentry{\$BA75@{\texttt  {\$BA75}} --- DmaCountH}{94}
+\indexentry{\$BA83@{\texttt  {\$BA83}} --- BltCmd}{95}
+\indexentry{\$BA84@{\texttt  {\$BA84}} --- BltStatus}{95}
+\indexentry{\$BA85@{\texttt  {\$BA85}} --- BltErrCode}{95}
+\indexentry{\$BA86@{\texttt  {\$BA86}} --- BltSrcSpace}{96}
+\indexentry{\$BA87@{\texttt  {\$BA87}} --- BltDstSpace}{96}
+\indexentry{\$BA88@{\texttt  {\$BA88}} --- BltSrcL}{96}
+\indexentry{\$BA89@{\texttt  {\$BA89}} --- BltSrcM}{96}
+\indexentry{\$BA8A@{\texttt  {\$BA8A}} --- BltSrcH}{96}
+\indexentry{\$BA8B@{\texttt  {\$BA8B}} --- BltDstL}{96}
+\indexentry{\$BA8C@{\texttt  {\$BA8C}} --- BltDstM}{96}
+\indexentry{\$BA8D@{\texttt  {\$BA8D}} --- BltDstH}{96}
+\indexentry{\$BA8E@{\texttt  {\$BA8E}} --- BltWidthL}{96}
+\indexentry{\$BA8F@{\texttt  {\$BA8F}} --- BltWidthH}{96}
+\indexentry{\$BA90@{\texttt  {\$BA90}} --- BltHeightL}{96}
+\indexentry{\$BA91@{\texttt  {\$BA91}} --- BltHeightH}{96}
+\indexentry{\$BA92@{\texttt  {\$BA92}} --- BltSrcStrideL}{96}
+\indexentry{\$BA93@{\texttt  {\$BA93}} --- BltSrcStrideH}{96}
+\indexentry{\$BA94@{\texttt  {\$BA94}} --- BltDstStrideL}{96}
+\indexentry{\$BA95@{\texttt  {\$BA95}} --- BltDstStrideH}{97}
+\indexentry{\$BA96@{\texttt  {\$BA96}} --- BltMode}{97}
+\indexentry{\$BA97@{\texttt  {\$BA97}} --- BltFillValue}{97}
+\indexentry{\$BA98@{\texttt  {\$BA98}} --- BltColorKey}{97}
+\indexentry{\$BA99@{\texttt  {\$BA99}} --- BltCountL}{97}
+\indexentry{\$BA9A@{\texttt  {\$BA9A}} --- BltCountM}{97}
+\indexentry{\$BA9B@{\texttt  {\$BA9B}} --- BltCountH}{97}
+\indexentry{\$BC00@{\texttt  {\$BC00--\$BFFF}} --- XMC Window}{98}
+\indexentry{\$C000@{\texttt  {\$C000--\$FFF9}} --- EhBASIC ROM}{101}
+\indexentry{\$C000@{\texttt{\$C000}} --- LAB\_COLD}{102}
+\indexentry{\$C003@{\texttt{\$C003}} --- LAB\_WARM}{102}
+\indexentry{\$FF80@{\texttt  {\$FF80--\$FFF9}} --- Monitor Code}{102}
+\indexentry{\$FFFA@{\texttt  {\$FFFA--\$FFFF}} --- Hardware Vectors}{103}
+\indexentry{\$D400@{\texttt  {\$D400}} --- FreqLo --- Frequency Low}{106}
+\indexentry{\$D401@{\texttt  {\$D401}} --- FreqHi --- Frequency High}{106}
+\indexentry{\$D402@{\texttt  {\$D402}} --- PwLo --- Pulse Width Low}{106}
+\indexentry{\$D403@{\texttt  {\$D403}} --- PwHi --- Pulse Width High}{106}
+\indexentry{\$D404@{\texttt  {\$D404}} --- WfCtrl --- Waveform Control}{106}
+\indexentry{\$D405@{\texttt  {\$D405}} --- AD --- Attack / Decay}{107}
+\indexentry{\$D406@{\texttt  {\$D406}} --- SR --- Sustain / Release}{107}
+\indexentry{\$D415@{\texttt  {\$D415}} --- FiltLoFreq --- Filter Cutoff Low}{108}
+\indexentry{\$D416@{\texttt  {\$D416}} --- FiltHiFreq --- Filter Cutoff High}{108}
+\indexentry{\$D417@{\texttt  {\$D417}} --- FiltCtrl --- Filter Resonance \& Voice Select}{108}
+\indexentry{\$D418@{\texttt  {\$D418}} --- VolMode --- Filter Mode \& Master Volume}{108}
+\indexentry{\$D41D@{\texttt  {\$D41D}} --- Voice 1 Volume}{109}
+\indexentry{\$D41E@{\texttt  {\$D41E}} --- Voice 2 Volume}{109}
+\indexentry{\$D41F@{\texttt  {\$D41F}} --- Voice 3 Volume}{109}
+\indexentry{\$D420@{\texttt  {\$D420--\$D43F}} --- SID Chip 2}{109}

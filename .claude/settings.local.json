@@ -195,7 +195,8 @@
       "Bash(brew list:*)",
       "Bash(gh api:*)",
       "Bash(brew info:*)",
-      "Bash(/tmp/summary.txt:*)"
+      "Bash(/tmp/summary.txt:*)",
+      "WebFetch(domain:scancode-licensedb.aboutcode.org)"
     ]
   },
   "enableAllProjectMcpServers": true,

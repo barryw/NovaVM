@@ -1,0 +1,344 @@
+\begin{theindex}
+\textbf{\large Symbols}\nopagebreak
+
+  \item {\texttt  {\$0000}} --- LAB\_WARM \dotfill\ 1
+  \item {\texttt  {\$0001}} --- Wrmjpl \dotfill\ 1
+  \item {\texttt  {\$0002}} --- Wrmjph \dotfill\ 1
+  \item {\texttt  {\$000A}} --- Usrjmp \dotfill\ 2
+  \item {\texttt  {\$000B}} --- Usrjpl \dotfill\ 2
+  \item {\texttt  {\$000C}} --- Usrjph \dotfill\ 2
+  \item {\texttt  {\$000D}} --- Nullct \dotfill\ 2
+  \item {\texttt  {\$000E}} --- TPos \dotfill\ 2
+  \item {\texttt  {\$000F}} --- TWidth \dotfill\ 3
+  \item {\texttt  {\$0010}} --- Iclim \dotfill\ 3
+  \item {\texttt  {\$0011}} --- Itempl \dotfill\ 3
+  \item {\texttt  {\$0012}} --- Itemph \dotfill\ 3
+  \item {\texttt  {\$005B}} --- Srchc / Temp3 \dotfill\ 4
+  \item {\texttt  {\$005C}} --- Scnquo / Asrch \dotfill\ 4
+  \item {\texttt  {\$005D}} --- Ibptr / Dimcnt / Tindx \dotfill\ 4
+  \item {\texttt  {\$005E}} --- Defdim \dotfill\ 4
+  \item {\texttt  {\$005F}} --- Dtypef \dotfill\ 4
+  \item {\texttt  {\$0060}} --- Oquote / Gclctd \dotfill\ 4
+  \item {\texttt  {\$0061}} --- Sufnxf \dotfill\ 4
+  \item {\texttt  {\$0062}} --- Imode \dotfill\ 4
+  \item {\texttt  {\$0063}} --- Cflag \dotfill\ 5
+  \item {\texttt  {\$0064}} --- TabSiz \dotfill\ 5
+  \item {\texttt  {\$0065}} --- next\_s \dotfill\ 5
+  \item {\texttt  {\$0066}} --- last\_sl \dotfill\ 5
+  \item {\texttt  {\$0067}} --- last\_sh \dotfill\ 5
+  \item {\texttt  {\$0068--\$0070}} --- des\_sk (Descriptor Stack) \dotfill\ 
+		5
+  \item {\texttt  {\$0071}} --- ut1\_pl \dotfill\ 5
+  \item {\texttt  {\$0072}} --- ut1\_ph \dotfill\ 5
+  \item {\texttt  {\$0073}} --- ut2\_pl \dotfill\ 6
+  \item {\texttt  {\$0074}} --- ut2\_ph \dotfill\ 6
+  \item {\texttt  {\$0075}} --- FACt\_1 \dotfill\ 6
+  \item {\texttt  {\$0076}} --- FACt\_2 / dims\_l \dotfill\ 6
+  \item {\texttt  {\$0077}} --- FACt\_3 / dims\_h \dotfill\ 6
+  \item {\texttt  {\$0078}} --- TempB \dotfill\ 6
+  \item {\texttt  {\$0079}} --- Smeml \dotfill\ 6
+  \item {\texttt  {\$007A}} --- Smemh \dotfill\ 6
+  \item {\texttt  {\$007B}} --- Svarl \dotfill\ 6
+  \item {\texttt  {\$007C}} --- Svarh \dotfill\ 7
+  \item {\texttt  {\$007D}} --- Sarryl \dotfill\ 7
+  \item {\texttt  {\$007E}} --- Sarryh \dotfill\ 7
+  \item {\texttt  {\$007F}} --- Earryl \dotfill\ 7
+  \item {\texttt  {\$0080}} --- Earryh \dotfill\ 7
+  \item {\texttt  {\$0081}} --- Sstorl \dotfill\ 7
+  \item {\texttt  {\$0082}} --- Sstorh \dotfill\ 7
+  \item {\texttt  {\$0083}} --- Sutill \dotfill\ 7
+  \item {\texttt  {\$0084}} --- Sutilh \dotfill\ 7
+  \item {\texttt  {\$0085}} --- Ememl \dotfill\ 7
+  \item {\texttt  {\$0086}} --- Ememh \dotfill\ 7
+  \item {\texttt  {\$0087}} --- Clinel \dotfill\ 8
+  \item {\texttt  {\$0088}} --- Clineh \dotfill\ 8
+  \item {\texttt  {\$0089}} --- Blinel \dotfill\ 8
+  \item {\texttt  {\$008A}} --- Blineh \dotfill\ 8
+  \item {\texttt  {\$008B}} --- Cpntrl \dotfill\ 8
+  \item {\texttt  {\$008C}} --- Cpntrh \dotfill\ 8
+  \item {\texttt  {\$008D}} --- Dlinel \dotfill\ 8
+  \item {\texttt  {\$008E}} --- Dlineh \dotfill\ 9
+  \item {\texttt  {\$008F}} --- Dptrl \dotfill\ 9
+  \item {\texttt  {\$0090}} --- Dptrh \dotfill\ 9
+  \item {\texttt  {\$0091}} --- Rdptrl \dotfill\ 9
+  \item {\texttt  {\$0092}} --- Rdptrh \dotfill\ 9
+  \item {\texttt  {\$0093}} --- Varnm1 \dotfill\ 9
+  \item {\texttt  {\$0094}} --- Varnm2 \dotfill\ 9
+  \item {\texttt  {\$0095}} --- Cvaral \dotfill\ 9
+  \item {\texttt  {\$0096}} --- Cvarah \dotfill\ 9
+  \item {\texttt  {\$0097}} --- Frnxtl \dotfill\ 9
+  \item {\texttt  {\$0098}} --- Frnxth \dotfill\ 9
+  \item {\texttt  {\$0099}} --- prstk \dotfill\ 9
+  \item {\texttt  {\$009B}} --- comp\_f \dotfill\ 10
+  \item {\texttt  {\$009C}} --- func\_l / garb\_l \dotfill\ 10
+  \item {\texttt  {\$009D}} --- func\_h / garb\_h \dotfill\ 10
+  \item {\texttt  {\$009E}} --- des\_2l \dotfill\ 10
+  \item {\texttt  {\$009F}} --- des\_2h \dotfill\ 10
+  \item {\texttt  {\$00A0}} --- g\_step \dotfill\ 10
+  \item {\texttt  {\$00A1}} --- Fnxjmp \dotfill\ 10
+  \item {\texttt  {\$00A2}} --- Fnxjpl / g\_indx \dotfill\ 10
+  \item {\texttt  {\$00A3}} --- FAC2\_r \dotfill\ 10
+  \item {\texttt  {\$00A4}} --- Adatal / Nbendl \dotfill\ 10
+  \item {\texttt  {\$00A5}} --- Adatah / Nbendh \dotfill\ 11
+  \item {\texttt  {\$00A6}} --- Obendl \dotfill\ 11
+  \item {\texttt  {\$00A7}} --- Obendh \dotfill\ 11
+  \item {\texttt  {\$00A8}} --- numexp / numbit \dotfill\ 11
+  \item {\texttt  {\$00A9}} --- expcnt \dotfill\ 11
+  \item {\texttt  {\$00AA}} --- numdpf / Astrtl \dotfill\ 11
+  \item {\texttt  {\$00AB}} --- expneg / Astrth \dotfill\ 11
+  \item {\texttt  {\$00AC}} --- FAC1\_e \dotfill\ 11
+  \item {\texttt  {\$00AD}} --- FAC1\_1 \dotfill\ 11
+  \item {\texttt  {\$00AE}} --- FAC1\_2 \dotfill\ 11
+  \item {\texttt  {\$00AF}} --- FAC1\_3 \dotfill\ 11
+  \item {\texttt  {\$00B0}} --- FAC1\_s \dotfill\ 12
+  \item {\texttt  {\$00B1}} --- negnum / numcon \dotfill\ 12
+  \item {\texttt  {\$00B2}} --- FAC1\_o \dotfill\ 12
+  \item {\texttt  {\$00B3}} --- FAC2\_e \dotfill\ 12
+  \item {\texttt  {\$00B4}} --- FAC2\_1 \dotfill\ 12
+  \item {\texttt  {\$00B5}} --- FAC2\_2 \dotfill\ 12
+  \item {\texttt  {\$00B6}} --- FAC2\_3 \dotfill\ 12
+  \item {\texttt  {\$00B7}} --- FAC2\_s \dotfill\ 12
+  \item {\texttt  {\$00B8}} --- FAC\_sc \dotfill\ 12
+  \item {\texttt  {\$00B9}} --- FAC1\_r \dotfill\ 12
+  \item {\texttt  {\$00BA}} --- csidx / Asptl \dotfill\ 13
+  \item {\texttt  {\$00BB}} --- Aspth \dotfill\ 13
+  \item {\texttt  {\$00BC--\$00C1}} --- LAB\_IGBY (Increment and Get BYte) \dotfill\ 
+		13
+  \item {\texttt  {\$00C2--\$00C4}} --- LAB\_GBYT (Get BYTe) \dotfill\ 
+		13
+  \item {\texttt  {\$00C3}} --- Bpntrl \dotfill\ 13
+  \item {\texttt  {\$00C4}} --- Bpntrh \dotfill\ 13
+  \item {\texttt  {\$00D8}} --- Rbyte4 \dotfill\ 13
+  \item {\texttt  {\$00D9}} --- Rbyte1 \dotfill\ 13
+  \item {\texttt  {\$00DA}} --- Rbyte2 \dotfill\ 14
+  \item {\texttt  {\$00DB}} --- Rbyte3 \dotfill\ 14
+  \item {\texttt  {\$00DC}} --- NmiBase \dotfill\ 14
+  \item {\texttt  {\$00DD}} --- NMI Address Low \dotfill\ 14
+  \item {\texttt  {\$00DE}} --- NMI Address High \dotfill\ 14
+  \item {\texttt  {\$00DF}} --- IrqBase \dotfill\ 14
+  \item {\texttt  {\$00E0}} --- IRQ Address Low \dotfill\ 14
+  \item {\texttt  {\$00E1}} --- IRQ Address High \dotfill\ 14
+  \item {\texttt  {\$00E2}} --- help\_len \dotfill\ 15
+  \item {\texttt  {\$00EF--\$00FF}} --- Decss (Decimal String Buffer) \dotfill\ 
+		15
+  \item {\texttt  {\$0100--\$01FF}} --- Hardware Stack \dotfill\ 17
+  \item {\texttt  {\$0200}} --- VgcBase (low) \dotfill\ 21
+  \item {\texttt{\$0200--\$027F}} --- System Vector Table \dotfill\ 21
+  \item {\texttt  {\$0201}} --- VgcBase (high) \dotfill\ 21
+  \item {\texttt  {\$0202}} --- RegCmdAddr (low) \dotfill\ 22
+  \item {\texttt  {\$0203}} --- RegCmdAddr (high) \dotfill\ 22
+  \item {\texttt  {\$0204}} --- CharRamBase (low) \dotfill\ 22
+  \item {\texttt  {\$0205}} --- CharRamBase (high) \dotfill\ 22
+  \item {\texttt  {\$0206}} --- ColorRamBase (low) \dotfill\ 22
+  \item {\texttt  {\$0207}} --- ColorRamBase (high) \dotfill\ 22
+  \item {\texttt  {\$0208}} --- SidBase (low) \dotfill\ 22
+  \item {\texttt  {\$0209}} --- SidBase (high) \dotfill\ 22
+  \item {\texttt  {\$020A}} --- FileIoBase (low) \dotfill\ 22
+  \item {\texttt  {\$020B}} --- FileIoBase (high) \dotfill\ 22
+  \item {\texttt  {\$020C}} --- XmcBase (low) \dotfill\ 22
+  \item {\texttt  {\$020D}} --- XmcBase (high) \dotfill\ 22
+  \item {\texttt  {\$020E}} --- TimerBase (low) \dotfill\ 23
+  \item {\texttt  {\$020F}} --- TimerBase (high) \dotfill\ 23
+  \item {\texttt  {\$0210}} --- Sid2Base (low) \dotfill\ 23
+  \item {\texttt  {\$0211}} --- Sid2Base (high) \dotfill\ 23
+  \item {\texttt  {\$0212}} --- NicBase (low) \dotfill\ 23
+  \item {\texttt  {\$0213}} --- NicBase (high) \dotfill\ 23
+  \item {\texttt  {\$0214}} --- DmaBase (low) \dotfill\ 23
+  \item {\texttt  {\$0215}} --- DmaBase (high) \dotfill\ 23
+  \item {\texttt  {\$0216}} --- BlitterBase (low) \dotfill\ 23
+  \item {\texttt  {\$0217}} --- BlitterBase (high) \dotfill\ 23
+  \item {\texttt  {\$0280--\$9FFF}} --- BASIC Program Space \dotfill\ 
+		25
+  \item {\texttt  {\$A000}} --- RegMode \dotfill\ 36
+  \item {\texttt  {\$A001}} --- RegBgCol \dotfill\ 36
+  \item {\texttt  {\$A002}} --- RegFgCol \dotfill\ 36
+  \item {\texttt  {\$A003}} --- RegCursorX \dotfill\ 36
+  \item {\texttt  {\$A004}} --- RegCursorY \dotfill\ 37
+  \item {\texttt  {\$A005}} --- RegScrollX \dotfill\ 37
+  \item {\texttt  {\$A006}} --- RegScrollY \dotfill\ 37
+  \item {\texttt  {\$A007}} --- RegFont \dotfill\ 37
+  \item {\texttt  {\$A008}} --- RegStatus \dotfill\ 37
+  \item {\texttt  {\$A009}} --- RegSpriteCount \dotfill\ 37
+  \item {\texttt  {\$A00A}} --- RegCursorEnable \dotfill\ 38
+  \item {\texttt  {\$A00B}} --- RegColSt \dotfill\ 38
+  \item {\texttt  {\$A00C}} --- RegColBg \dotfill\ 38
+  \item {\texttt  {\$A00D}} --- RegBorder \dotfill\ 38
+  \item {\texttt  {\$A00E}} --- RegCharOut \dotfill\ 38
+  \item {\texttt  {\$A00F}} --- RegCharIn \dotfill\ 38
+  \item {\texttt  {\$A010}} --- RegCmd \dotfill\ 39
+  \item {\texttt  {\$A011--\$A01E}} --- RegP0--RegP13 (Parameter Registers) \dotfill\ 
+		39
+  \item {\texttt  {\$A01F}} --- RegIrqCtrl \dotfill\ 48
+  \item {\texttt  {\$A020}} --- RegHelp \dotfill\ 48
+  \item {\texttt  {\$A021--\$A030}} --- HelpSearchBuffer \dotfill\ 49
+  \item {\texttt  {\$A031}} --- CmpCmd \dotfill\ 49
+  \item {\texttt  {\$A032}} --- CmpStatus \dotfill\ 49
+  \item {\texttt  {\$A033}} --- CmpErrCount \dotfill\ 49
+  \item {\texttt  {\$A034}} --- CmpWarnCount \dotfill\ 49
+  \item {\texttt  {\$A035--\$A036}} --- CmpErrLine \dotfill\ 49
+  \item {\texttt  {\$A037--\$A038}} --- CmpCodeSize \dotfill\ 50
+  \item {\texttt  {\$A039}} --- CmpErrMsg \dotfill\ 50
+  \item {\texttt  {\$A03A}} --- CmpErrIdx \dotfill\ 50
+  \item {\texttt  {\$A03B--\$A03D}} --- CmpSrcAddr \dotfill\ 50
+  \item {\texttt  {\$A03F}} --- RegRomSwap \dotfill\ 50
+  \item {\texttt  {\$A100}} --- NicCmd \dotfill\ 53
+  \item {\texttt  {\$A101}} --- NicStatus \dotfill\ 54
+  \item {\texttt  {\$A102}} --- NicSlot \dotfill\ 54
+  \item {\texttt  {\$A103}} --- NicIrqCtrl \dotfill\ 55
+  \item {\texttt  {\$A104}} --- NicIrqStatus \dotfill\ 55
+  \item {\texttt  {\$A108--\$A109}} --- NicRemotePort \dotfill\ 55
+  \item {\texttt  {\$A10A--\$A10B}} --- NicLocalPort \dotfill\ 55
+  \item {\texttt  {\$A110--\$A111}} --- NicDmaAddr \dotfill\ 55
+  \item {\texttt  {\$A112}} --- NicDmaLen \dotfill\ 55
+  \item {\texttt  {\$A113}} --- NicMsgLen \dotfill\ 56
+  \item {\texttt  {\$A118--\$A11B}} --- NicSlotStatus0--3 \dotfill\ 56
+  \item {\texttt  {\$A120--\$A13F}} --- NicNameBuf \dotfill\ 56
+  \item {\texttt  {\$A140}} --- WtsVoiceNote \dotfill\ 59
+  \item {\texttt  {\$A141}} --- WtsVoiceVelocity \dotfill\ 60
+  \item {\texttt  {\$A142}} --- WtsVoiceInstrument \dotfill\ 60
+  \item {\texttt  {\$A143}} --- WtsVoiceVolume \dotfill\ 60
+  \item {\texttt  {\$A144}} --- WtsVoicePanning \dotfill\ 60
+  \item {\texttt  {\$A145}} --- WtsVoicePitchBendLo \dotfill\ 60
+  \item {\texttt  {\$A146}} --- WtsVoicePitchBendHi \dotfill\ 60
+  \item {\texttt  {\$A147}} --- WtsVoiceStatus \dotfill\ 60
+  \item {\texttt  {\$A180}} --- WtsReverbLevel \dotfill\ 61
+  \item {\texttt  {\$A181}} --- WtsChorusLevel \dotfill\ 61
+  \item {\texttt  {\$A182}} --- WtsMasterVolume \dotfill\ 61
+  \item {\texttt  {\$A183}} --- WtsSoundfontStatus \dotfill\ 61
+  \item {\texttt  {\$A184}} --- WtsInstrumentCount \dotfill\ 61
+  \item {\texttt  {\$A185}} --- WtsCommand \dotfill\ 62
+  \item {\texttt  {\$A186}} --- WtsCommandArg \dotfill\ 62
+  \item {\texttt  {\$A187}} --- WtsActiveVoices \dotfill\ 62
+  \item {\texttt  {\$A1A0}} --- WtsEnumIndex \dotfill\ 62
+  \item {\texttt  {\$A1A1}} --- WtsEnumBank \dotfill\ 62
+  \item {\texttt  {\$A1A2}} --- WtsEnumProgram \dotfill\ 62
+  \item {\texttt  {\$A1A3--\$A1DF}} --- WtsEnumName \dotfill\ 62
+  \item {\texttt  {\$AA00--\$B1CF}} --- Character RAM \dotfill\ 65
+  \item {\texttt  {\$B1D0--\$B99F}} --- Color RAM \dotfill\ 66
+  \item {\texttt  {\$B9A0}} --- FioCmd \dotfill\ 70
+  \item {\texttt  {\$B9A1}} --- FioStatus \dotfill\ 70
+  \item {\texttt  {\$B9A2}} --- FioErrCode \dotfill\ 70
+  \item {\texttt  {\$B9A3}} --- FioNameLen \dotfill\ 70
+  \item {\texttt  {\$B9A4}} --- FioSrcL \dotfill\ 70
+  \item {\texttt  {\$B9A5}} --- FioSrcH \dotfill\ 70
+  \item {\texttt  {\$B9A6}} --- FioEndL \dotfill\ 70
+  \item {\texttt  {\$B9A7}} --- FioEndH \dotfill\ 70
+  \item {\texttt  {\$B9A8}} --- FioSizeL \dotfill\ 71
+  \item {\texttt  {\$B9A9}} --- FioSizeH \dotfill\ 71
+  \item {\texttt  {\$B9AA}} --- FioGSpace \dotfill\ 71
+  \item {\texttt  {\$B9AB}} --- FioGAddrL \dotfill\ 71
+  \item {\texttt  {\$B9AC}} --- FioGAddrH \dotfill\ 71
+  \item {\texttt  {\$B9AD}} --- FioGLenL \dotfill\ 71
+  \item {\texttt  {\$B9AE}} --- FioGLenH \dotfill\ 71
+  \item {\texttt  {\$B9AF}} --- FioDirType \dotfill\ 71
+  \item {\texttt  {\$B9B0--\$B9EF}} --- FioName \dotfill\ 71
+  \item {\texttt  {\$BA00}} --- XmcCmd \dotfill\ 82
+  \item {\texttt  {\$BA01}} --- XmcStatus \dotfill\ 82
+  \item {\texttt  {\$BA02}} --- XmcErrCode \dotfill\ 82
+  \item {\texttt  {\$BA03}} --- XmcCfg \dotfill\ 83
+  \item {\texttt  {\$BA04}} --- XmcAddrL \dotfill\ 83
+  \item {\texttt  {\$BA05}} --- XmcAddrM \dotfill\ 83
+  \item {\texttt  {\$BA06}} --- XmcAddrH \dotfill\ 83
+  \item {\texttt  {\$BA07}} --- XmcRamL \dotfill\ 83
+  \item {\texttt  {\$BA08}} --- XmcRamH \dotfill\ 83
+  \item {\texttt  {\$BA09}} --- XmcLenL \dotfill\ 83
+  \item {\texttt  {\$BA0A}} --- XmcLenH \dotfill\ 83
+  \item {\texttt  {\$BA0B}} --- XmcData \dotfill\ 83
+  \item {\texttt  {\$BA0C}} --- XmcBank \dotfill\ 83
+  \item {\texttt  {\$BA0D}} --- XmcBanks \dotfill\ 84
+  \item {\texttt  {\$BA0E}} --- XmcPagesUsedL \dotfill\ 84
+  \item {\texttt  {\$BA0F}} --- XmcPagesUsedH \dotfill\ 84
+  \item {\texttt  {\$BA10}} --- XmcPagesFreeL \dotfill\ 84
+  \item {\texttt  {\$BA11}} --- XmcPagesFreeH \dotfill\ 84
+  \item {\texttt  {\$BA12}} --- XmcNameLen \dotfill\ 84
+  \item {\texttt  {\$BA13}} --- XmcHandle \dotfill\ 84
+  \item {\texttt  {\$BA14}} --- XmcDirCountL \dotfill\ 84
+  \item {\texttt  {\$BA15}} --- XmcDirCountH \dotfill\ 84
+  \item {\texttt  {\$BA16}} --- XmcWinCtl \dotfill\ 84
+  \item {\texttt  {\$BA18--\$BA1A}} --- XmcWin0A \dotfill\ 85
+  \item {\texttt  {\$BA1B--\$BA1D}} --- XmcWin1A \dotfill\ 85
+  \item {\texttt  {\$BA1E--\$BA20}} --- XmcWin2A \dotfill\ 85
+  \item {\texttt  {\$BA21--\$BA23}} --- XmcWin3A \dotfill\ 85
+  \item {\texttt  {\$BA24--\$BA3F}} --- XmcName \dotfill\ 85
+  \item {\texttt  {\$BA40}} --- TimerCtrl \dotfill\ 89
+  \item {\texttt  {\$BA41}} --- TimerStatus \dotfill\ 89
+  \item {\texttt  {\$BA42}} --- TimerDivL \dotfill\ 89
+  \item {\texttt  {\$BA43}} --- TimerDivH \dotfill\ 89
+  \item {\texttt  {\$BA50}} --- MusicStatus \dotfill\ 90
+  \item {\texttt  {\$BA51--\$BA5E}} --- MusicNote1--14 \dotfill\ 90
+  \item {\texttt  {\$BA5F--\$BA60}} --- MusicElapsed \dotfill\ 91
+  \item {\texttt  {\$BA61--\$BA62}} --- MusicTotal \dotfill\ 91
+  \item {\texttt  {\$BA63}} --- DmaCmd \dotfill\ 92
+  \item {\texttt  {\$BA64}} --- DmaStatus \dotfill\ 92
+  \item {\texttt  {\$BA65}} --- DmaErrCode \dotfill\ 92
+  \item {\texttt  {\$BA66}} --- DmaSrcSpace \dotfill\ 92
+  \item {\texttt  {\$BA67}} --- DmaDstSpace \dotfill\ 92
+  \item {\texttt  {\$BA68}} --- DmaSrcL \dotfill\ 92
+  \item {\texttt  {\$BA69}} --- DmaSrcM \dotfill\ 93
+  \item {\texttt  {\$BA6A}} --- DmaSrcH \dotfill\ 93
+  \item {\texttt  {\$BA6B}} --- DmaDstL \dotfill\ 93
+  \item {\texttt  {\$BA6C}} --- DmaDstM \dotfill\ 93
+  \item {\texttt  {\$BA6D}} --- DmaDstH \dotfill\ 93
+  \item {\texttt  {\$BA6E}} --- DmaLenL \dotfill\ 93
+  \item {\texttt  {\$BA6F}} --- DmaLenM \dotfill\ 93
+  \item {\texttt  {\$BA70}} --- DmaLenH \dotfill\ 93
+  \item {\texttt  {\$BA71}} --- DmaMode \dotfill\ 93
+  \item {\texttt  {\$BA72}} --- DmaFillValue \dotfill\ 93
+  \item {\texttt  {\$BA73}} --- DmaCountL \dotfill\ 93
+  \item {\texttt  {\$BA74}} --- DmaCountM \dotfill\ 93
+  \item {\texttt  {\$BA75}} --- DmaCountH \dotfill\ 94
+  \item {\texttt  {\$BA83}} --- BltCmd \dotfill\ 95
+  \item {\texttt  {\$BA84}} --- BltStatus \dotfill\ 95
+  \item {\texttt  {\$BA85}} --- BltErrCode \dotfill\ 95
+  \item {\texttt  {\$BA86}} --- BltSrcSpace \dotfill\ 96
+  \item {\texttt  {\$BA87}} --- BltDstSpace \dotfill\ 96
+  \item {\texttt  {\$BA88}} --- BltSrcL \dotfill\ 96
+  \item {\texttt  {\$BA89}} --- BltSrcM \dotfill\ 96
+  \item {\texttt  {\$BA8A}} --- BltSrcH \dotfill\ 96
+  \item {\texttt  {\$BA8B}} --- BltDstL \dotfill\ 96
+  \item {\texttt  {\$BA8C}} --- BltDstM \dotfill\ 96
+  \item {\texttt  {\$BA8D}} --- BltDstH \dotfill\ 96
+  \item {\texttt  {\$BA8E}} --- BltWidthL \dotfill\ 96
+  \item {\texttt  {\$BA8F}} --- BltWidthH \dotfill\ 96
+  \item {\texttt  {\$BA90}} --- BltHeightL \dotfill\ 96
+  \item {\texttt  {\$BA91}} --- BltHeightH \dotfill\ 96
+  \item {\texttt  {\$BA92}} --- BltSrcStrideL \dotfill\ 96
+  \item {\texttt  {\$BA93}} --- BltSrcStrideH \dotfill\ 96
+  \item {\texttt  {\$BA94}} --- BltDstStrideL \dotfill\ 96
+  \item {\texttt  {\$BA95}} --- BltDstStrideH \dotfill\ 97
+  \item {\texttt  {\$BA96}} --- BltMode \dotfill\ 97
+  \item {\texttt  {\$BA97}} --- BltFillValue \dotfill\ 97
+  \item {\texttt  {\$BA98}} --- BltColorKey \dotfill\ 97
+  \item {\texttt  {\$BA99}} --- BltCountL \dotfill\ 97
+  \item {\texttt  {\$BA9A}} --- BltCountM \dotfill\ 97
+  \item {\texttt  {\$BA9B}} --- BltCountH \dotfill\ 97
+  \item {\texttt  {\$BAB0--\$BB1F}} --- File Metadata Buffer \dotfill\ 
+		77
+  \item {\texttt  {\$BC00--\$BFFF}} --- XMC Window \dotfill\ 98
+  \item {\texttt  {\$C000--\$FFF9}} --- EhBASIC ROM \dotfill\ 101
+  \item {\texttt{\$C000}} --- LAB\_COLD \dotfill\ 102
+  \item {\texttt{\$C003}} --- LAB\_WARM \dotfill\ 102
+  \item {\texttt  {\$D400}} --- FreqLo --- Frequency Low \dotfill\ 106
+  \item {\texttt  {\$D401}} --- FreqHi --- Frequency High \dotfill\ 106
+  \item {\texttt  {\$D402}} --- PwLo --- Pulse Width Low \dotfill\ 106
+  \item {\texttt  {\$D403}} --- PwHi --- Pulse Width High \dotfill\ 106
+  \item {\texttt  {\$D404}} --- WfCtrl --- Waveform Control \dotfill\ 
+		106
+  \item {\texttt  {\$D405}} --- AD --- Attack / Decay \dotfill\ 107
+  \item {\texttt  {\$D406}} --- SR --- Sustain / Release \dotfill\ 107
+  \item {\texttt  {\$D415}} --- FiltLoFreq --- Filter Cutoff Low \dotfill\ 
+		108
+  \item {\texttt  {\$D416}} --- FiltHiFreq --- Filter Cutoff High \dotfill\ 
+		108
+  \item {\texttt  {\$D417}} --- FiltCtrl --- Filter Resonance \& Voice Select \dotfill\ 
+		108
+  \item {\texttt  {\$D418}} --- VolMode --- Filter Mode \& Master Volume \dotfill\ 
+		108
+  \item {\texttt  {\$D41D}} --- Voice 1 Volume \dotfill\ 109
+  \item {\texttt  {\$D41E}} --- Voice 2 Volume \dotfill\ 109
+  \item {\texttt  {\$D41F}} --- Voice 3 Volume \dotfill\ 109
+  \item {\texttt  {\$D420--\$D43F}} --- SID Chip 2 \dotfill\ 109
+  \item {\texttt  {\$FF80--\$FFF9}} --- Monitor Code \dotfill\ 102
+  \item {\texttt  {\$FFFA--\$FFFF}} --- Hardware Vectors \dotfill\ 103
+
+\end{theindex}
