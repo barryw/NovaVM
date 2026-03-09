@@ -1,0 +1,216 @@
+% =============================================================================
+% Chapter 2 — The Stack ($0100–$01FF)
+% =============================================================================
+\chapter{The Stack}
+
+\epigraph{``Push it down, pull it back up.  If only life were so
+orderly.''}{\textit{--- Anonymous assembly programmer, ca.\ 1979}}
+
+\section*{Introduction}
+
+On the MOS 6502, the hardware stack occupies exactly one page of memory: the
+256 bytes from \$0100 to \$01FF.  There is no option to move it, extend it, or
+protect it.  The processor's 8-bit stack pointer (SP) is simply an offset into
+page 1 --- push an item and SP decrements; pull an item and SP increments.
+When SP wraps from \$00 back to \$FF (or vice versa), the CPU does not complain.
+It just keeps going, silently overwriting whatever was there before.
+
+This simplicity is both a strength and a hazard.  The stack is fast and
+predictable, but 256 bytes is not very much, especially when BASIC is using it
+for subroutine calls, loop variables, and expression evaluation all at once.
+
+\memrange{0100}{01FF}{Hardware Stack}{R/W}{---}
+
+The entire 256-byte region is ordinary read/write RAM.  The CPU treats it as
+special only because push and pull instructions always address page 1 using SP
+as the low byte.  Nothing prevents you from reading or writing stack memory
+directly with PEEK and POKE --- just be aware that the interpreter is using it
+too.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Stack Mechanics}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The 6502 stack grows \emph{downward} in memory.  When the system starts, SP is
+initialised to \$FF, meaning the first byte pushed will be written to \$01FF.
+After the push, SP decrements to \$FE.  The next push writes to \$01FE, and so
+on.
+
+Pulling works in reverse: SP increments first, then the byte at the new
+address is read.  This means the ``current'' top of stack is always at
+\texttt{\$0100 + SP + 1} --- the byte just above where SP points.
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Operation} & \textbf{Effect on SP} & \textbf{Address Used} \\
+\midrule
+\texttt{PHA} / \texttt{PHP}     & SP $\leftarrow$ SP $-$ 1 & Write to \$0100 + SP (before decrement) \\
+\texttt{PLA} / \texttt{PLP}     & SP $\leftarrow$ SP $+$ 1 & Read from \$0100 + SP (after increment) \\
+\texttt{JSR}                     & SP $\leftarrow$ SP $-$ 2 & Pushes PCH then PCL \\
+\texttt{RTS}                     & SP $\leftarrow$ SP $+$ 2 & Pulls PCL then PCH \\
+\texttt{BRK} / IRQ / NMI        & SP $\leftarrow$ SP $-$ 3 & Pushes PCH, PCL, then P \\
+\texttt{RTI}                     & SP $\leftarrow$ SP $+$ 3 & Pulls P, then PCL, then PCH \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warningbox}
+The 6502 performs no overflow or underflow detection on the stack pointer.
+If SP wraps from \$00 to \$FF during a push, the CPU will happily write into
+the top of the stack page, overwriting data that was pushed earlier.
+Similarly, pulling past \$FF wraps to \$00.  There is no trap, no error
+message --- just silent data corruption.
+\end{warningbox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Stack Frame Formats}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The stack is used by both the 6502 hardware and EhBASIC for several distinct
+frame types.  Understanding these formats helps when debugging programs that
+crash or behave unexpectedly.
+
+\subsection{JSR/RTS --- Subroutine Call (2 bytes)}
+
+When the CPU executes a \texttt{JSR addr} instruction, it pushes the return
+address \emph{minus one} onto the stack, high byte first, then low byte:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Stack offset} & \textbf{Content} \\
+\midrule
+SP + 2 & PCH (high byte of return address $-$ 1) \\
+SP + 1 & PCL (low byte of return address $-$ 1) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The ``minus one'' quirk is because \texttt{RTS} increments the pulled address
+before jumping to it.  This is a well-known 6502 subtlety and the reason that
+\texttt{JMP} and \texttt{JSR} are not interchangeable in dispatch tables.
+
+\subsection{BRK/IRQ/NMI --- Interrupt Frame (3 bytes)}
+
+Hardware interrupts and the \texttt{BRK} instruction push three bytes: the full
+return address (high byte first, then low byte), followed by the processor
+status register (P):
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Stack offset} & \textbf{Content} \\
+\midrule
+SP + 3 & PCH \\
+SP + 2 & PCL \\
+SP + 1 & P (processor status) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\texttt{RTI} reverses the process: it pulls P, then PCL, then PCH, and resumes
+execution at the restored address.  Unlike \texttt{RTS}, \texttt{RTI} does
+\emph{not} add one to the return address --- the pushed PC already points to
+the correct instruction.
+
+\subsection{EhBASIC FOR/NEXT Frame (\raisebox{0pt}{\texttildelow}18 bytes)}
+
+Each active \texttt{FOR} loop pushes a substantial frame onto the stack so that
+\texttt{NEXT} can find the loop parameters:
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Offset} & \textbf{Size} & \textbf{Content} \\
+\midrule
++0  & 1 byte  & FOR token (\$81) --- identifies this as a FOR frame \\
++1  & 4 bytes & Loop limit (floating-point) \\
++5  & 4 bytes & Step value (floating-point) \\
++9  & 1 byte  & Step sign \\
++10 & 2 bytes & Current line number \\
++12 & 2 bytes & Text pointer (resume position in program text) \\
++14 & 2 bytes & FOR variable pointer (address of loop counter) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+That is approximately 18 bytes per \texttt{FOR} loop.  The stack can hold at
+most about seven nested \texttt{FOR}/\texttt{NEXT} loops before running into
+trouble.
+
+\subsection{EhBASIC GOSUB Frame (5 bytes)}
+
+A \texttt{GOSUB} call pushes a much smaller frame:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Offset} & \textbf{Size} & \textbf{Content} \\
+\midrule
++0 & 1 byte  & GOSUB token (\$89) \\
++1 & 2 bytes & Current line number \\
++3 & 2 bytes & Text pointer (resume position after RETURN) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Five bytes per \texttt{GOSUB} means you can nest about 12 subroutine calls
+before the stack fills up.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Stack Pointer Initialisation}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+When the NovaVM resets, the CPU fetches the reset vector from \$FFFC--\$FFFD and
+jumps to the monitor code at \$FF80.  One of the first things the monitor does
+is initialise the stack pointer:
+
+\begin{lstlisting}
+LDX #$FF
+TXS
+\end{lstlisting}
+
+This sets SP to \$FF, placing the stack at the very top of page 1.  EhBASIC
+then takes over and begins using the stack for its own purposes.  By the time
+you see the \texttt{Ready} prompt, SP is typically somewhere around \$F8 ---
+the interpreter keeps a few bytes on the stack at all times for its main loop.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Reading the Stack Pointer}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The 6502's stack pointer is an internal CPU register and cannot be read
+directly with PEEK.  However, the \texttt{TSX} instruction copies SP into X,
+and a small machine-language routine can make this value available to BASIC:
+
+\begin{lstlisting}
+10 REM read current stack pointer
+20 REM SP is not directly readable from BASIC,
+30 REM but you can watch stack depth via USR()
+40 REM or CALL to a small assembly routine
+\end{lstlisting}
+
+You can also get a rough sense of stack usage by examining memory near \$01FF
+and looking for the boundary between pushed data and uninitialised space.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section*{Practical Limits}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\begin{tipbox}
+In practice, the stack has room for about 12 nested GOSUB calls or 7 nested
+FOR/NEXT loops before overflow.  A mix of both will reduce these limits
+further.  If your program uses deep recursion via GOSUB, consider restructuring
+it with GOTOs or moving the inner logic into machine language.
+\end{tipbox}
+
+\begin{warningbox}
+Stack overflow in EhBASIC manifests as bizarre behaviour: variables change
+unexpectedly, the program jumps to wrong lines, or the interpreter locks up
+entirely.  Unlike modern systems, there is no ``stack overflow'' error message.
+If your program behaves erratically after adding nested loops or subroutines,
+check your nesting depth first.
+\end{warningbox}

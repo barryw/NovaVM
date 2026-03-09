@@ -1,0 +1,241 @@
+% =============================================================================
+% Chapter 3 — The Vector Table ($0200–$027F)
+% =============================================================================
+\chapter{The Vector Table}
+
+\epigraph{``Never hardcode what you can look up.  Addresses change; indirection
+is forever.''}{\textit{--- Pragmatic advice from a systems programmer, ca.\ 1985}}
+
+\section*{Introduction}
+
+When the NovaVM boots, the monitor code at \$FF80 writes a table of 16-bit
+addresses into the bottom of page 2.  Each entry holds the base address of a
+major hardware device --- the graphics controller, the SID chip, the file
+system, the network interface, and so on.  Programs that read these vectors
+instead of hardcoding device addresses will continue to work even if the
+hardware map changes in a future NovaVM version.
+
+The vector table is ordinary RAM.  The system writes it once at boot, and
+programs are free to read it at any time.  Writing to the table is technically
+possible but strongly discouraged --- altering a vector will not move the
+hardware, it will just confuse any code that reads the table afterward.
+
+The 128-byte region from \$0200 to \$027F is reserved for the system vector
+table.  The first 24 bytes (\$0200--\$0217) contain twelve 16-bit vectors,
+stored in standard 6502 little-endian format (low byte at the even address,
+high byte at the odd address).  The remaining 104 bytes (\$0218--\$027F) are
+currently reserved.
+\label{addr:VecTable}%
+\index{\$0200@{\texttt{\$0200--\$027F}} --- System Vector Table}%
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Vector Entries}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Each vector is a two-byte pointer to the base register of a hardware
+controller.  Use \texttt{DEEK} to read a vector as a 16-bit address:
+
+\begin{lstlisting}
+PRINT "$";HEX$(DEEK($0200))
+\end{lstlisting}
+
+This prints \texttt{\$A000} --- the VGC base address.
+
+% ── VgcBase ──────────────────────────────────────────────────────────────────
+\mementry{0200}{VgcBase (low)}{R/W}{\$00}
+
+\mementry{0201}{VgcBase (high)}{R/W}{\$A0}
+
+Points to \$A000, the base of the Virtual Graphics Controller register block.
+The VGC core registers (mode, colours, cursor, scroll, collision) begin here.
+See Chapter~\ref{addr:A000} for full VGC documentation.
+
+\begin{lstlisting}
+VB = DEEK($0200)
+POKE VB+1, 6 : REM set background to blue
+\end{lstlisting}
+
+% ── RegCmdAddr ───────────────────────────────────────────────────────────────
+\mementry{0202}{RegCmdAddr (low)}{R/W}{\$10}
+
+\mementry{0203}{RegCmdAddr (high)}{R/W}{\$A0}
+
+Points to \$A010, the VGC command register.  Writing a command byte here
+triggers immediate execution of graphics primitives (plot, line, circle, fill)
+and sprite operations.  Parameters are loaded into \$A011--\$A01E before the
+command write.  See Chapter~\ref{addr:A000} for the complete command list.
+
+% ── CharRamBase ──────────────────────────────────────────────────────────────
+\mementry{0204}{CharRamBase (low)}{R/W}{\$00}
+
+\mementry{0205}{CharRamBase (high)}{R/W}{\$AA}
+
+Points to \$AA00, the start of the 2000-byte character RAM (80 columns
+$\times$ 25 rows).  Each byte holds an ASCII character code.
+See Chapter~\ref{addr:AA00} for screen memory details.
+
+\begin{lstlisting}
+CB = DEEK($0204)
+POKE CB, ASC("H") : REM put 'H' at top-left
+\end{lstlisting}
+
+% ── ColorRamBase ─────────────────────────────────────────────────────────────
+\mementry{0206}{ColorRamBase (low)}{R/W}{\$D0}
+
+\mementry{0207}{ColorRamBase (high)}{R/W}{\$B1}
+
+Points to \$B1D0, the start of the 2000-byte color RAM.  Each byte holds the
+foreground colour for the corresponding character position.
+See Chapter~\ref{addr:AA00}.
+
+% ── SidBase ──────────────────────────────────────────────────────────────────
+\mementry{0208}{SidBase (low)}{R/W}{\$00}
+
+\mementry{0209}{SidBase (high)}{R/W}{\$D4}
+
+Points to \$D400, the base of SID chip 1.  The SID provides three analogue
+synthesis voices with ADSR envelopes, ring modulation, and programmable
+filters.  See Chapter~\ref{addr:D400} for register details.
+
+% ── FileIoBase ───────────────────────────────────────────────────────────────
+\mementry{020A}{FileIoBase (low)}{R/W}{\$A0}
+
+\mementry{020B}{FileIoBase (high)}{R/W}{\$B9}
+
+Points to \$B9A0, the File I/O controller.  This device handles loading and
+saving BASIC programs, directory listing, graphics save/load, SID file
+playback, and music sequencing.  See Chapter~\ref{addr:B9A0}.
+
+% ── XmcBase ──────────────────────────────────────────────────────────────────
+\mementry{020C}{XmcBase (low)}{R/W}{\$00}
+
+\mementry{020D}{XmcBase (high)}{R/W}{\$BA}
+
+Points to \$BA00, the Expansion Memory Controller.  The XMC provides access
+to 512\,KB of expansion RAM through a register-based command interface and
+four 256-byte memory windows at \$BC00--\$BFFF.
+See Chapter~\ref{addr:BA00}.
+
+% ── TimerBase ────────────────────────────────────────────────────────────────
+\mementry{020E}{TimerBase (low)}{R/W}{\$40}
+
+\mementry{020F}{TimerBase (high)}{R/W}{\$BA}
+
+Points to \$BA40, the Timer controller.  A simple programmable interval timer
+that generates IRQ interrupts at a configurable rate, useful for game loops
+and real-time tasks.
+
+% ── Sid2Base ─────────────────────────────────────────────────────────────────
+\mementry{0210}{Sid2Base (low)}{R/W}{\$20}
+
+\mementry{0211}{Sid2Base (high)}{R/W}{\$D4}
+
+Points to \$D420, the base of SID chip 2.  A second complete SID with three
+additional synthesis voices, giving six SID voices total.
+See Chapter~\ref{addr:D400}.
+
+% ── NicBase ──────────────────────────────────────────────────────────────────
+\mementry{0212}{NicBase (low)}{R/W}{\$00}
+
+\mementry{0213}{NicBase (high)}{R/W}{\$A1}
+
+Points to \$A100, the Network Interface Controller.  The NIC provides four
+TCP connection slots for client and server networking with DMA message
+transfers and optional per-slot IRQ notification.
+See Chapter~\ref{addr:A100}.
+
+% ── DmaBase ──────────────────────────────────────────────────────────────────
+\mementry{0214}{DmaBase (low)}{R/W}{\$63}
+
+\mementry{0215}{DmaBase (high)}{R/W}{\$BA}
+
+Points to \$BA63, the DMA controller.  High-speed block transfers between
+CPU RAM, VGC memory spaces (character, colour, graphics, sprite), and
+expansion RAM --- all without tying up the CPU.
+
+% ── BlitterBase ──────────────────────────────────────────────────────────────
+\mementry{0216}{BlitterBase (low)}{R/W}{\$83}
+
+\mementry{0217}{BlitterBase (high)}{R/W}{\$BA}
+
+Points to \$BA83, the Blitter controller.  A 2D block-transfer engine that
+supports rectangular copy, fill, and colour-key transparency operations
+across all memory spaces.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Reserved Range (\$0218--\$027F)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The 104 bytes from \$0218 to \$027F are currently unused.  They are ordinary
+RAM and could be used by your own programs for variables or small data tables.
+However, future NovaVM versions may add new hardware vectors here, so it is
+best to treat this range as reserved if you want your programs to remain
+forward-compatible.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Reading the Complete Vector Table}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The following program dumps all twelve vectors:
+
+\begin{lstlisting}
+10 REM dump the vector table
+20 FOR I = $0200 TO $0216 STEP 2
+30   PRINT "$"; HEX$(I); " -> $"; HEX$(DEEK(I))
+40 NEXT I
+\end{lstlisting}
+
+On a standard NovaVM, this produces:
+
+\begin{lstlisting}
+$0200 -> $A000
+$0202 -> $A010
+$0204 -> $AA00
+$0206 -> $B1D0
+$0208 -> $D400
+$020A -> $B9A0
+$020C -> $BA00
+$020E -> $BA40
+$0210 -> $D420
+$0212 -> $A100
+$0214 -> $BA63
+$0216 -> $BA83
+\end{lstlisting}
+
+\begin{notebox}
+Programs should read the vector table rather than hardcoding device addresses.
+This ensures forward compatibility if hardware base addresses change in future
+NovaVM versions.  For example, instead of writing directly to \$A001, use:
+\begin{lstlisting}
+VB = DEEK($0200)
+POKE VB+1, 6
+\end{lstlisting}
+\end{notebox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section*{Summary}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\begin{center}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Address} & \textbf{Vector Name} & \textbf{Points To} & \textbf{Device} \\
+\midrule
+\$0200 & VgcBase      & \$A000 & VGC core registers \\
+\$0202 & RegCmdAddr   & \$A010 & VGC command register \\
+\$0204 & CharRamBase  & \$AA00 & Character RAM \\
+\$0206 & ColorRamBase & \$B1D0 & Color RAM \\
+\$0208 & SidBase      & \$D400 & SID chip 1 \\
+\$020A & FileIoBase   & \$B9A0 & File I/O controller \\
+\$020C & XmcBase      & \$BA00 & Expansion memory controller \\
+\$020E & TimerBase    & \$BA40 & Timer controller \\
+\$0210 & Sid2Base     & \$D420 & SID chip 2 \\
+\$0212 & NicBase      & \$A100 & Network interface controller \\
+\$0214 & DmaBase      & \$BA63 & DMA controller \\
+\$0216 & BlitterBase  & \$BA83 & Blitter controller \\
+\midrule
+\$0218--\$027F & \multicolumn{3}{l}{\textit{Reserved for future use}} \\
+\bottomrule
+\end{tabular}
+\end{center}
