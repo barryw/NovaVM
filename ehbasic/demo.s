@@ -116,6 +116,9 @@ save_cursor:    .res 1
 save_font:      .res 1
 save_border:    .res 1
 
+; Current playback file type (for stop_playback)
+play_type:      .res 1
+
 ; ---------------------------------------------------------------------------
 ; Header -- 2-byte load address prefix
 ; ---------------------------------------------------------------------------
@@ -206,9 +209,381 @@ subtitle_str:   .byte "MUSIC BROWSER & PLAYER V1.0", 0
 .segment "CODE"
 
 ; =====================================================================
-; Entry point -- stub for now, full main loop comes in a later task
+; Entry point -- full browser and player
 ; =====================================================================
 main:
+    ; --- Save VGC state ---
+    lda RegMode
+    sta save_mode
+    lda RegBgCol
+    sta save_bgcol
+    lda RegFgCol
+    sta save_fgcol
+    lda RegFont
+    sta save_font
+    lda RegCursorEnable
+    sta save_cursor
+    lda RegBorder
+    sta save_border
+
+    ; --- Set VGC: mode 1, black bg, white fg, PETSCII Upper (slot 1), cursor off ---
+    lda #1
+    sta RegMode
+    lda #COL_BLACK
+    sta RegBgCol
+    lda #COL_WHITE
+    sta RegFgCol
+    lda #1
+    sta RegFont
+    stz RegCursorEnable
+
+    ; --- Zero all state vars ---
+    stz zp_category
+    stz zp_sel_index
+    stz zp_scroll_top
+    stz zp_kbd_loaded
+    stz zp_copper_frame
+
+    ; --- Init screen and data ---
+    jsr clear_text
+    jsr draw_header
+    jsr build_copper
+    jsr load_all_dirs
+    jsr load_keyboard
+
+    ; Set file count for initial category
+    ldx zp_category
+    lda cat_counts,x
+    sta zp_file_count
+
+    jsr draw_tabs
+    jsr draw_file_list
+    jsr draw_nav
+    jsr init_scroll
+
+    ; --- Drain keyboard buffer ---
+@drain:
+    jsr V_INPT
+    bcs @drain
+
+    ; --- Snapshot frame counter ---
+    lda RegStatus
+    sta zp_last_frame
+
+; =====================================================================
+; Browser loop -- one iteration per frame
+; =====================================================================
+@browser_loop:
+    jsr wait_vsync
+    jsr advance_copper
+    jsr advance_scroll
+
+    ; Check for keypress
+    jsr V_INPT
+    bcc @browser_loop           ; no key -> next frame
+
+    ; --- Handle keys ---
+    cmp #$1D                    ; cursor RIGHT
+    beq @key_right
+    cmp #$9D                    ; cursor LEFT
+    beq @key_left
+    cmp #$11                    ; cursor DOWN
+    bne :+
+    jmp @key_down
+:   cmp #$91                    ; cursor UP
+    bne :+
+    jmp @key_up
+:
+    cmp #$0D                    ; RETURN
+    bne :+
+    jmp @key_return
+:   cmp #'q'
+    bne :+
+    jmp @key_quit
+:   cmp #'Q'
+    bne :+
+    jmp @key_quit
+:   jmp @browser_loop
+
+; --- Cursor RIGHT: next category ---
+@key_right:
+    lda zp_category
+    cmp #4
+    bcs @browser_jmp            ; already at max
+    inc zp_category
+    jsr @switch_category
+@browser_jmp:
+    jmp @browser_loop
+
+; --- Cursor LEFT: previous category ---
+@key_left:
+    lda zp_category
+    beq @browser_jmp2           ; already at 0
+    dec zp_category
+    jsr @switch_category
+@browser_jmp2:
+    jmp @browser_loop
+
+; --- Cursor DOWN: next file ---
+@key_down:
+    lda zp_sel_index
+    inc a
+    cmp zp_file_count
+    bcs @browser_jmp3           ; at end of list
+    sta zp_sel_index
+    ; Check if we need to scroll
+    sec
+    sbc zp_scroll_top
+    cmp #VISIBLE_ROWS
+    bcc @down_no_scroll
+    inc zp_scroll_top
+@down_no_scroll:
+    jsr draw_file_list
+@browser_jmp3:
+    jmp @browser_loop
+
+; --- Cursor UP: previous file ---
+@key_up:
+    lda zp_sel_index
+    beq @browser_jmp4           ; already at 0
+    dec zp_sel_index
+    lda zp_sel_index
+    cmp zp_scroll_top
+    bcs @up_no_scroll
+    dec zp_scroll_top
+@up_no_scroll:
+    jsr draw_file_list
+@browser_jmp4:
+    jmp @browser_loop
+
+; --- RETURN: play selected file ---
+@key_return:
+    lda zp_file_count
+    beq @browser_jmp5           ; no files
+    ; Disable copper
+    lda #CmdCopperDisable
+    sta RegCmd
+    jsr start_playback
+    ; If keyboard visualizer loaded, call it
+    lda zp_kbd_loaded
+    beq @no_kbd
+    jsr $9000
+@no_kbd:
+    jsr stop_playback
+    ; Restore VGC for browser
+    lda #1
+    sta RegMode
+    lda #COL_BLACK
+    sta RegBgCol
+    lda #1
+    sta RegFont
+    stz RegCursorEnable
+    ; Redraw everything
+    jsr clear_text
+    jsr draw_header
+    jsr build_copper
+    jsr draw_tabs
+    jsr draw_file_list
+    jsr draw_nav
+    jsr init_scroll
+    ; Drain keyboard buffer
+@drain2:
+    jsr V_INPT
+    bcs @drain2
+    ; Snapshot frame counter
+    lda RegStatus
+    sta zp_last_frame
+@browser_jmp5:
+    jmp @browser_loop
+
+; --- Quit ---
+@key_quit:
+    ; Disable copper
+    lda #CmdCopperDisable
+    sta RegCmd
+    ; Clear graphics
+    lda #CmdGcls
+    sta RegCmd
+    ; Restore saved VGC state
+    lda save_mode
+    sta RegMode
+    lda save_bgcol
+    sta RegBgCol
+    lda save_fgcol
+    sta RegFgCol
+    lda save_font
+    sta RegFont
+    lda save_cursor
+    sta RegCursorEnable
+    lda save_border
+    sta RegBorder
+    jsr clear_text
+    rts
+
+; --- Helper: switch category (reset selection, redraw) ---
+@switch_category:
+    stz zp_sel_index
+    stz zp_scroll_top
+    ldx zp_category
+    lda cat_counts,x
+    sta zp_file_count
+    jsr draw_tabs
+    jsr draw_file_list
+    rts
+
+; =====================================================================
+; load_keyboard -- load keyboard visualizer binary to $9000
+; Skips if already loaded (zp_kbd_loaded != 0).
+; Clobbers: A, X, Y
+; =====================================================================
+load_keyboard:
+    lda zp_kbd_loaded
+    bne @lk_done                    ; already loaded
+
+    jsr cd_root
+
+    ; Copy "KEYBOARD" to FioName
+    lda #<kbd_filename
+    sta zp_src
+    lda #>kbd_filename
+    sta zp_src+1
+    jsr copy_filename
+
+    ; Set load address $9000
+    stz FioSrcL
+    lda #$90
+    sta FioSrcH
+
+    ; Issue load command
+    lda #FioCmdLoad
+    sta FioCmd
+
+    ; Check status
+    lda FioStatus
+    cmp #FioStatusOk
+    bne @lk_done
+
+    lda #$FF
+    sta zp_kbd_loaded
+@lk_done:
+    rts
+
+; =====================================================================
+; start_playback -- build path and start SID/MID playback
+; Builds "dirname/filename" in FioName from current category and
+; selected file entry, then issues the appropriate play command.
+; Clobbers: A, X, Y, zp_src, zp_dst, zp_tmp, zp_tmp2
+; =====================================================================
+start_playback:
+    ; --- Build directory name into FioName ---
+    ldx zp_category
+    lda cat_dirs_lo,x
+    sta zp_src
+    lda cat_dirs_hi,x
+    sta zp_src+1
+
+    ldy #0
+@sp_copy_dir:
+    lda (zp_src),y
+    beq @sp_dir_done
+    sta FioName,y
+    iny
+    bra @sp_copy_dir
+@sp_dir_done:
+    ; Append '/' separator
+    lda #'/'
+    sta FioName,y
+    iny
+    sty zp_tmp                      ; save current offset
+
+    ; --- Find selected entry in dir_buffer ---
+    ; Entry address = cat_ptrs[category] + sel_index * ENTRY_SIZE
+    ldx zp_category
+    lda cat_ptrs_lo,x
+    sta zp_src
+    lda cat_ptrs_hi,x
+    sta zp_src+1
+
+    lda zp_sel_index
+    beq @sp_no_advance
+    tax
+@sp_advance:
+    clc
+    lda zp_src
+    adc #ENTRY_SIZE
+    sta zp_src
+    lda zp_src+1
+    adc #0
+    sta zp_src+1
+    dex
+    bne @sp_advance
+@sp_no_advance:
+
+    ; --- Copy filename (first 32 bytes, null-terminated) ---
+    ; zp_tmp = offset into FioName, zp_tmp2 = offset into entry
+    stz zp_tmp2
+@sp_copy_name:
+    ldy zp_tmp2
+    lda (zp_src),y
+    beq @sp_name_done
+    ldy zp_tmp
+    sta FioName,y
+    inc zp_tmp
+    inc zp_tmp2
+    lda zp_tmp2
+    cmp #32
+    bcc @sp_copy_name
+@sp_name_done:
+    ldy zp_tmp                      ; total length
+    ; Null terminate and set length
+    lda #0
+    sta FioName,y
+    sty FioNameLen
+
+    ; --- Read file type from entry offset 32 ---
+    ldy #32
+    lda (zp_src),y
+    sta play_type
+
+    ; --- Issue play command based on type ---
+    cmp #$01                        ; SID
+    bne @sp_check_mid
+    lda #FioCmdSidPlay
+    sta FioCmd
+    bra @sp_wait
+@sp_check_mid:
+    cmp #$03                        ; MID
+    bne @sp_done
+    lda #FioCmdMidPlay
+    sta FioCmd
+
+@sp_wait:
+    ; Wait ~10 frames for playback to start
+    ldx #10
+@sp_wait_loop:
+    jsr wait_vsync
+    dex
+    bne @sp_wait_loop
+@sp_done:
+    rts
+
+; =====================================================================
+; stop_playback -- stop current SID/MID playback
+; Clobbers: A
+; =====================================================================
+stop_playback:
+    lda play_type
+    cmp #$01
+    bne @stp_check_mid
+    lda #FioCmdSidStop
+    sta FioCmd
+    rts
+@stp_check_mid:
+    cmp #$03
+    bne @stp_done
+    lda #FioCmdMidStop
+    sta FioCmd
+@stp_done:
     rts
 
 ; =====================================================================
