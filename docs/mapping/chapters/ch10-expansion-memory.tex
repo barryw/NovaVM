@@ -1,0 +1,1389 @@
+% =============================================================================
+% Chapter 10 — The Expansion Memory System ($BA00–$BFFF)
+% =============================================================================
+\chapter{The Expansion Memory System}
+
+\epigraph{``640K ought to be enough for anybody --- until you actually try to
+do something with it.''}{\textit{--- Apocryphal, circa 1981}}
+
+\section*{Introduction}
+
+The 96-byte address range from \$BA00 to \$BFFF packs five distinct
+subsystems into a dense block of hardware registers, followed by a 1\,KB
+memory-mapped window into expansion RAM:
+
+\begin{enumerate}
+  \item \textbf{Expansion Memory Controller} (\$BA00--\$BA3F) --- manages
+        512\,KB of banked XRAM with DMA transfers and a named-block filesystem.
+  \item \textbf{Timer Controller} (\$BA40--\$BA4F) --- a programmable interval
+        timer that can generate IRQs at configurable rates.
+  \item \textbf{Music Status Registers} (\$BA50--\$BA62) --- read-only
+        registers exposing the state of the 14-voice music engine.
+  \item \textbf{DMA Controller} (\$BA63--\$BA82) --- a high-speed block
+        transfer engine that moves data between any combination of CPU RAM,
+        VGC memory spaces, and XRAM.
+  \item \textbf{Blitter Controller} (\$BA83--\$BAA2) --- a 2D block transfer
+        engine with stride control, fill mode, and color-key transparency.
+\end{enumerate}
+
+The final 1\,KB at \$BC00--\$BFFF provides four 256-byte windows that
+map directly into XRAM, allowing the 6502 to read and write expansion
+memory as though it were ordinary RAM.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Expansion Memory Controller (\$BA00--\$BA3F)}
+\label{sec:xmc-registers}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The Expansion Memory Controller (XMC) provides access to 512\,KB of
+expansion RAM (XRAM) organized as 8 banks of 64\,KB each.  Data moves
+between CPU RAM and XRAM via Stash/Fetch commands, or byte-at-a-time
+through the data port.  A named-block subsystem provides a simple filesystem
+within XRAM, and page-level allocation tracking prevents accidental
+overwrites.
+
+\subsection{Register Map}
+
+\begin{center}
+\small
+\begin{longtable}{@{}llcll@{}}
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{R/W} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{R/W} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endhead
+\$BA00 & XmcCmd       & W   & ---  & Command register \\
+\$BA01 & XmcStatus    & R   & \$00 & Status code \\
+\$BA02 & XmcErrCode   & R   & 0    & Error code \\
+\$BA03 & XmcCfg       & R/W & 0    & Reserved \\
+\$BA04 & XmcAddrL     & R/W & 0    & XRAM address low byte \\
+\$BA05 & XmcAddrM     & R/W & 0    & XRAM address middle byte \\
+\$BA06 & XmcAddrH     & R/W & 0    & XRAM address high byte \\
+\$BA07 & XmcRamL      & R/W & 0    & CPU RAM address low byte \\
+\$BA08 & XmcRamH      & R/W & 0    & CPU RAM address high byte \\
+\$BA09 & XmcLenL      & R/W & 0    & Transfer length low byte \\
+\$BA0A & XmcLenH      & R/W & 0    & Transfer length high byte \\
+\$BA0B & XmcData      & R/W & 0    & Single-byte data port \\
+\$BA0C & XmcBank      & R/W & 0    & Active 64\,KB bank selector \\
+\$BA0D & XmcBanks     & R   & 8    & Total bank count \\
+\$BA0E & XmcPagesUsedL & R  & 0    & Used 256-byte pages (low) \\
+\$BA0F & XmcPagesUsedH & R  & 0    & Used 256-byte pages (high) \\
+\$BA10 & XmcPagesFreeL & R  & 0    & Free pages (low) \\
+\$BA11 & XmcPagesFreeH & R  & 0    & Free pages (high) \\
+\$BA12 & XmcNameLen   & R/W & 0    & Named block name length (0--27) \\
+\$BA13 & XmcHandle    & R/W & 0    & Named block handle \\
+\$BA14 & XmcDirCountL & R   & 0    & Named block count (low) \\
+\$BA15 & XmcDirCountH & R   & 0    & Named block count (high) \\
+\$BA16 & XmcWinCtl    & R/W & 0    & Window enable bitmask (bits 0--3) \\
+\$BA18--\$BA1A & XmcWin0A & R/W & 0 & Window 0 XRAM base (24-bit LE) \\
+\$BA1B--\$BA1D & XmcWin1A & R/W & 0 & Window 1 XRAM base (24-bit LE) \\
+\$BA1E--\$BA20 & XmcWin2A & R/W & 0 & Window 2 XRAM base (24-bit LE) \\
+\$BA21--\$BA23 & XmcWin3A & R/W & 0 & Window 3 XRAM base (24-bit LE) \\
+\$BA24--\$BA3F & XmcName  & R/W & 0 & ASCII name buffer (28 bytes) \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+
+\subsection{Detailed Register Descriptions}
+
+% --- $BA00 XmcCmd --------------------------------------------------------
+
+\mementry{BA00}{XmcCmd}{W}{---}
+
+Command register.  Writing a command byte here immediately executes the
+corresponding XMC operation.  All parameters (addresses, lengths, names)
+must be set in the surrounding registers \emph{before} writing to XmcCmd.
+See Section~\ref{sec:xmc-commands} for the full command reference.
+
+% --- $BA01 XmcStatus -----------------------------------------------------
+
+\mementry{BA01}{XmcStatus}{R}{\$00}
+
+Status of the last command:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+\$00 & Idle --- no command has been issued \\
+\$02 & OK --- last command completed successfully \\
+\$03 & Error --- last command failed (see XmcErrCode) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA02 XmcErrCode ----------------------------------------------------
+
+\mementry{BA02}{XmcErrCode}{R}{0}
+
+Detailed error code when XmcStatus is \$03:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+0 & No error \\
+1 & Range error --- address or length out of bounds \\
+2 & Bad arguments --- invalid parameter combination \\
+3 & Not found --- named block does not exist \\
+4 & No space --- insufficient free XRAM for allocation \\
+5 & Bad name --- invalid or empty name string \\
+6 & End of directory --- no more named blocks to enumerate \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA03 XmcCfg --------------------------------------------------------
+
+\mementry{BA03}{XmcCfg}{R/W}{0}
+
+Reserved for future use.  Reads return 0; writes are accepted but have no
+effect.
+
+% --- $BA04-$BA06 XmcAddr -------------------------------------------------
+
+\mementry{BA04}{XmcAddrL}{R/W}{0}
+
+Low byte of the 24-bit XRAM address.  Together with XmcAddrM (\addr{BA05})
+and XmcAddrH (\addr{BA06}), this forms the little-endian target address
+within expansion memory.  The full range is \$000000--\$07FFFF (512\,KB).
+
+\mementry{BA05}{XmcAddrM}{R/W}{0}
+
+Middle byte of the 24-bit XRAM address.
+
+\mementry{BA06}{XmcAddrH}{R/W}{0}
+
+High byte of the 24-bit XRAM address.
+
+\begin{tipbox}
+To set the XRAM address to \$012345, write \$45 to \addr{BA04}, \$23 to
+\addr{BA05}, and \$01 to \addr{BA06}.  Little-endian byte order throughout.
+\end{tipbox}
+
+% --- $BA07-$BA08 XmcRam --------------------------------------------------
+
+\mementry{BA07}{XmcRamL}{R/W}{0}
+
+Low byte of the 16-bit CPU RAM address used by Stash and Fetch commands.
+
+\mementry{BA08}{XmcRamH}{R/W}{0}
+
+High byte of the CPU RAM address.
+
+% --- $BA09-$BA0A XmcLen --------------------------------------------------
+
+\mementry{BA09}{XmcLenL}{R/W}{0}
+
+Low byte of the 16-bit transfer length in bytes.
+
+\mementry{BA0A}{XmcLenH}{R/W}{0}
+
+High byte of the transfer length.
+
+% --- $BA0B XmcData -------------------------------------------------------
+
+\mementry{BA0B}{XmcData}{R/W}{0}
+
+Single-byte data port.  Used by the GetByte and PutByte commands to transfer
+one byte at a time between the 6502 and XRAM at the address specified by
+XmcAddr.  Also used by the Fill command as the fill value.
+
+% --- $BA0C XmcBank -------------------------------------------------------
+
+\mementry{BA0C}{XmcBank}{R/W}{0}
+
+Active 64\,KB bank selector.  Valid range: 0--7 (for the standard 512\,KB
+configuration).  This register provides a convenient shorthand for setting
+the high byte of XmcAddr: writing bank $n$ is equivalent to setting
+XmcAddrH to $n$ and clearing XmcAddrM and XmcAddrL.
+
+\begin{notebox}
+The bank selector is a convenience for BASIC programs that think in terms
+of 64\,KB banks.  Assembly programs typically address XRAM directly via the
+24-bit XmcAddr registers.
+\end{notebox}
+
+% --- $BA0D XmcBanks ------------------------------------------------------
+
+\mementry{BA0D}{XmcBanks}{R}{8}
+
+Total number of 64\,KB banks available.  Typically 8, giving 512\,KB of
+expansion memory.  This is a read-only hardware configuration value.
+
+% --- $BA0E-$BA0F XmcPagesUsed -------------------------------------------
+
+\mementry{BA0E}{XmcPagesUsedL}{R}{0}
+
+Low byte of the number of 256-byte pages currently marked as used.
+
+\mementry{BA0F}{XmcPagesUsedH}{R}{0}
+
+High byte of the used page count.  Issue the Stats command (\$07) to
+refresh these values before reading.
+
+% --- $BA10-$BA11 XmcPagesFree -------------------------------------------
+
+\mementry{BA10}{XmcPagesFreeL}{R}{0}
+
+Low byte of the number of 256-byte pages currently free.
+
+\mementry{BA11}{XmcPagesFreeH}{R}{0}
+
+High byte of the free page count.
+
+% --- $BA12 XmcNameLen ---------------------------------------------------
+
+\mementry{BA12}{XmcNameLen}{R/W}{0}
+
+Length of the name string in the XmcName buffer.  Valid range: 0--27.  Set
+this before issuing named-block commands (NStash, NFetch, NDelete,
+NDirOpen, NDirRead).
+
+% --- $BA13 XmcHandle ----------------------------------------------------
+
+\mementry{BA13}{XmcHandle}{R/W}{0}
+
+Handle for the current named block.  After a successful NStash or NFetch,
+this register holds the handle assigned to (or looked up for) the block.
+The handle can be used for subsequent operations without re-specifying the
+name.
+
+% --- $BA14-$BA15 XmcDirCount -------------------------------------------
+
+\mementry{BA14}{XmcDirCountL}{R}{0}
+
+Low byte of the total number of named blocks currently stored in XRAM.
+
+\mementry{BA15}{XmcDirCountH}{R}{0}
+
+High byte of the named block count.
+
+% --- $BA16 XmcWinCtl ---------------------------------------------------
+
+\mementry{BA16}{XmcWinCtl}{R/W}{0}
+
+Window enable bitmask.  Each of the four bits enables one of the 256-byte
+memory-mapped windows at \$BC00--\$BFFF:
+
+\bitfield{---}{---}{---}{---}{Win3}{Win2}{Win1}{Win0}
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Bit} & \textbf{Window} \\
+\midrule
+0 & Window 0 (\$BC00--\$BCFF) \\
+1 & Window 1 (\$BD00--\$BDFF) \\
+2 & Window 2 (\$BE00--\$BEFF) \\
+3 & Window 3 (\$BF00--\$BFFF) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+When a window is disabled, reads return \$00 and writes are ignored.
+
+% --- $BA18-$BA1A XmcWin0A -----------------------------------------------
+
+\memrange{BA18}{BA1A}{XmcWin0A}{R/W}{0}
+
+24-bit little-endian XRAM base address for Window~0.  Reads and writes to
+\$BC00--\$BCFF are redirected to XRAM starting at this address.
+
+% --- $BA1B-$BA1D XmcWin1A -----------------------------------------------
+
+\memrange{BA1B}{BA1D}{XmcWin1A}{R/W}{0}
+
+24-bit XRAM base address for Window~1 (\$BD00--\$BDFF).
+
+% --- $BA1E-$BA20 XmcWin2A -----------------------------------------------
+
+\memrange{BA1E}{BA20}{XmcWin2A}{R/W}{0}
+
+24-bit XRAM base address for Window~2 (\$BE00--\$BEFF).
+
+% --- $BA21-$BA23 XmcWin3A -----------------------------------------------
+
+\memrange{BA21}{BA23}{XmcWin3A}{R/W}{0}
+
+24-bit XRAM base address for Window~3 (\$BF00--\$BFFF).
+
+% --- $BA24-$BA3F XmcName ------------------------------------------------
+
+\memrange{BA24}{BA3F}{XmcName}{R/W}{0}
+
+28-byte ASCII name buffer for named-block operations.  Store the block name
+here before issuing NStash, NFetch, NDelete, or NDirOpen.  After NDirRead,
+this buffer contains the name of the current directory entry.  Names are
+null-padded; set XmcNameLen (\addr{BA12}) to the actual string length.
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Command Reference}
+\label{sec:xmc-commands}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Commands are executed by writing the command byte to \addr{BA00}.  Set all
+required parameters \emph{before} writing the command byte.
+
+\subsubsection{Byte-Level Access}
+
+\cmdentry{01}{GetByte}{Read one byte from XRAM}
+
+Reads the byte at the XRAM address specified by XmcAddr
+(\addr{BA04}--\addr{BA06}) and places it in XmcData (\addr{BA0B}).
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcAddr (\$BA04--\$BA06): 24-bit XRAM source address
+\end{itemize}
+
+\textbf{Result:} XmcData contains the byte read.  XmcStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{02}{PutByte}{Write one byte to XRAM}
+
+Writes the value in XmcData (\addr{BA0B}) to the XRAM address specified
+by XmcAddr (\addr{BA04}--\addr{BA06}).
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcAddr (\$BA04--\$BA06): 24-bit XRAM destination address
+  \item XmcData (\$BA0B): byte to write
+\end{itemize}
+
+\textbf{Result:} XmcStatus $=$ \$02.
+
+\subsubsection{Block Transfers}
+
+\cmdentry{03}{Stash}{Copy CPU RAM to XRAM}
+
+Copies XmcLen bytes from CPU RAM starting at XmcRam to XRAM starting at
+XmcAddr.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcRam (\$BA07--\$BA08): 16-bit source address in CPU RAM
+  \item XmcAddr (\$BA04--\$BA06): 24-bit destination address in XRAM
+  \item XmcLen (\$BA09--\$BA0A): number of bytes to copy
+\end{itemize}
+
+\textbf{Result:} XmcStatus $=$ \$02 on success, \$03 on range error.
+
+\medskip
+
+\cmdentry{04}{Fetch}{Copy XRAM to CPU RAM}
+
+Copies XmcLen bytes from XRAM starting at XmcAddr to CPU RAM starting at
+XmcRam.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcAddr (\$BA04--\$BA06): 24-bit source address in XRAM
+  \item XmcRam (\$BA07--\$BA08): 16-bit destination address in CPU RAM
+  \item XmcLen (\$BA09--\$BA0A): number of bytes to copy
+\end{itemize}
+
+\textbf{Result:} XmcStatus $=$ \$02 on success, \$03 on range error.
+
+\medskip
+
+\cmdentry{05}{Fill}{Fill XRAM with a byte value}
+
+Fills XmcLen bytes of XRAM starting at XmcAddr with the value in XmcData.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcAddr (\$BA04--\$BA06): 24-bit start address in XRAM
+  \item XmcLen (\$BA09--\$BA0A): number of bytes to fill
+  \item XmcData (\$BA0B): fill value
+\end{itemize}
+
+\textbf{Result:} XmcStatus $=$ \$02 on success.
+
+\begin{lstlisting}
+10 REM fill the first 256 bytes of XRAM with $AA
+20 POKE $BA04, 0 : POKE $BA05, 0 : POKE $BA06, 0
+30 DOKE $BA09, 256    : REM length = 256
+40 POKE $BA0B, $AA    : REM fill value
+50 POKE $BA00, $05    : REM execute Fill
+60 IF PEEK($BA01)=$02 THEN PRINT "FILLED OK"
+\end{lstlisting}
+
+\subsubsection{Page Management}
+
+\cmdentry{07}{Stats}{Refresh page usage statistics}
+
+Recalculates the used and free page counts and updates XmcPagesUsed
+(\addr{BA0E}--\addr{BA0F}) and XmcPagesFree (\addr{BA10}--\addr{BA11}).
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} Page counts updated.  XmcStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{08}{ResetUsage}{Clear page tracking}
+
+Clears all page allocation tracking, marking all XRAM pages as free.  Does
+not erase the actual data --- only the bookkeeping is reset.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} XmcStatus $=$ \$02.
+
+\begin{warningbox}
+ResetUsage does not zero out XRAM contents.  Named blocks stored prior to
+the reset will still be physically present, but the allocator will treat
+their pages as free and may overwrite them.
+\end{warningbox}
+
+\medskip
+
+\cmdentry{09}{Release}{Mark XRAM range as free}
+
+Marks the pages covered by the range starting at XmcAddr with length
+XmcLen as free.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcAddr (\$BA04--\$BA06): start of range to release
+  \item XmcLen (\$BA09--\$BA0A): number of bytes to release
+\end{itemize}
+
+\textbf{Result:} XmcStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{0A}{Alloc}{Allocate XRAM pages}
+
+Allocates XmcLen bytes of contiguous XRAM.  On success, the starting
+address of the allocated block is returned in XmcAddr
+(\addr{BA04}--\addr{BA06}).
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcLen (\$BA09--\$BA0A): number of bytes to allocate
+\end{itemize}
+
+\textbf{Result:} XmcAddr updated with the allocated address.  XmcStatus
+$=$ \$02 on success, \$03 with ErrCode $=$ 4 (no space) if allocation fails.
+
+\begin{lstlisting}
+10 REM allocate 1024 bytes of XRAM
+20 DOKE $BA09, 1024   : REM length
+30 POKE $BA00, $0A    : REM Alloc
+40 IF PEEK($BA01)=$03 THEN PRINT "OUT OF MEMORY" : END
+50 A = PEEK($BA04) + PEEK($BA05)*256
+60 PRINT "ALLOCATED AT: $"; HEX$(A)
+\end{lstlisting}
+
+\subsubsection{Named Blocks}
+
+Named blocks provide a simple key-value filesystem within XRAM.  Each block
+is identified by a string name (up to 27 characters) and stores an
+arbitrary-length chunk of data.  This allows programs to save and retrieve
+data structures by name without managing raw XRAM addresses.
+
+\cmdentry{0B}{NStash}{Store CPU RAM as named block}
+
+Copies XmcLen bytes from CPU RAM at XmcRam into XRAM as a named block.
+The name is read from XmcName (\addr{BA24}--\addr{BA3F}) with the length
+in XmcNameLen (\addr{BA12}).  If a block with the same name already exists,
+it is replaced.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcRam (\$BA07--\$BA08): source address in CPU RAM
+  \item XmcLen (\$BA09--\$BA0A): number of bytes to store
+  \item XmcName (\$BA24+): block name (ASCII)
+  \item XmcNameLen (\$BA12): name length
+\end{itemize}
+
+\textbf{Result:} XmcHandle (\addr{BA13}) set.  XmcStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{0C}{NFetch}{Retrieve named block to CPU RAM}
+
+Looks up a named block by name and copies its contents to CPU RAM at
+XmcRam.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcRam (\$BA07--\$BA08): destination address in CPU RAM
+  \item XmcName (\$BA24+): block name (ASCII)
+  \item XmcNameLen (\$BA12): name length
+\end{itemize}
+
+\textbf{Result:} XmcLen updated with the block size.  XmcStatus $=$ \$02
+on success, \$03 with ErrCode $=$ 3 (not found) if the name does not exist.
+
+\medskip
+
+\cmdentry{0D}{NDelete}{Delete named block}
+
+Deletes the named block identified by XmcName and frees its XRAM pages.
+
+\textbf{Parameters:}
+\begin{itemize}
+  \item XmcName (\$BA24+): block name (ASCII)
+  \item XmcNameLen (\$BA12): name length
+\end{itemize}
+
+\textbf{Result:} XmcStatus $=$ \$02 on success, \$03 with ErrCode $=$ 3
+if the name does not exist.
+
+\medskip
+
+\cmdentry{0E}{NDirOpen}{Open named block directory}
+
+Opens the named-block directory for sequential enumeration.  Resets the
+internal directory index to the first entry.
+
+\textbf{Parameters:} None.
+
+\textbf{Result:} XmcDirCount (\addr{BA14}--\addr{BA15}) updated with the
+total number of named blocks.  XmcStatus $=$ \$02.
+
+\medskip
+
+\cmdentry{0F}{NDirRead}{Read next directory entry}
+
+Reads the next named block from the directory.  The block name is placed
+in XmcName, the name length in XmcNameLen, and the block size in XmcLen.
+When all entries have been read, XmcStatus is set to \$03 with ErrCode
+$=$ 6 (end of directory).
+
+\textbf{Parameters:} None (directory must be opened with NDirOpen first).
+
+\textbf{Result:} XmcName, XmcNameLen, and XmcLen populated, or ErrCode
+$=$ 6 at end.
+
+\begin{lstlisting}
+10 REM list all named blocks in XRAM
+20 POKE $BA00, $0E    : REM NDirOpen
+30 N = DEEK($BA14) : PRINT N; " BLOCKS FOUND"
+40 FOR I=1 TO N
+50   POKE $BA00, $0F  : REM NDirRead
+60   IF PEEK($BA01)=$03 THEN I=N : GOTO 120
+70   L = PEEK($BA12) : N$ = ""
+80   FOR J=0 TO L-1
+90     N$ = N$ + CHR$(PEEK($BA24+J))
+100  NEXT J
+110  PRINT N$; " ("; DEEK($BA09); " BYTES)"
+120 NEXT I
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Timer Controller (\$BA40--\$BA4F)}
+\label{sec:timer}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The Timer Controller provides a single programmable interval timer that can
+generate IRQ interrupts at a configurable rate.  The timer is clocked at
+the CPU clock rate divided into 100-cycle quanta.  When the internal counter
+reaches the programmed divisor, it sets the IRQ pending flag and resets.
+
+% --- $BA40 TimerCtrl ----------------------------------------------------
+
+\mementry{BA40}{TimerCtrl}{R/W}{0}
+
+Timer control register:
+
+\bitfield{---}{---}{---}{---}{---}{---}{---}{En}
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Bit} & \textbf{Function} \\
+\midrule
+0 & Enable: 1 $=$ timer running, 0 $=$ timer stopped \\
+1--7 & Reserved (write 0) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA41 TimerStatus --------------------------------------------------
+
+\mementry{BA41}{TimerStatus}{R}{0}
+
+Timer status register:
+
+\bitfield{---}{---}{---}{---}{---}{---}{---}{IRQ}
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Bit} & \textbf{Function} \\
+\midrule
+0 & IRQ pending: 1 $=$ timer has fired.  Reading this register clears
+    the flag. \\
+1--7 & Reserved \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+Reading TimerStatus clears the IRQ pending bit.  In an interrupt handler,
+always read this register to acknowledge the timer interrupt and prevent
+it from firing again immediately.
+\end{notebox}
+
+% --- $BA42-$BA43 TimerDiv -----------------------------------------------
+
+\mementry{BA42}{TimerDivL}{R/W}{0}
+
+Low byte of the 16-bit timer divisor.
+
+\mementry{BA43}{TimerDivH}{R/W}{0}
+
+High byte of the timer divisor.  The timer fires every
+\texttt{divisor $\times$ 100} CPU cycles.  For example, a divisor of 100
+fires every 10,000 cycles.
+
+\begin{lstlisting}
+10 REM set up a timer IRQ at ~60 Hz
+20 REM (assumes 1 MHz clock: 1000000/60 = 16667 cycles)
+30 REM divisor = 16667/100 = 167
+40 DOKE $BA42, 167    : REM set divisor
+50 POKE $BA40, 1      : REM enable timer
+60 REM install IRQ handler
+70 IRQ 1000
+80 PRINT "TIMER RUNNING - PRESS ANY KEY"
+90 GET K$ : IF K$="" THEN 90
+100 POKE $BA40, 0     : REM disable timer
+110 IRQ OFF
+120 END
+1000 REM === IRQ handler ===
+1010 T = PEEK($BA41) : REM read status (clears IRQ)
+1020 PRINT ".";       : REM do something each tick
+1030 RETIRQ
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Music Status Registers (\$BA50--\$BA62)}
+\label{sec:music-status}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The music status registers provide read-only visibility into the state of
+the 14-voice music engine.  These are useful for visualizations, reactive
+graphics, and checking whether a sequence has finished playing.
+
+% --- $BA50 MusicStatus --------------------------------------------------
+
+\mementry{BA50}{MusicStatus}{R}{0}
+
+Playback status flags:
+
+\bitfield{---}{---}{---}{---}{---}{---}{Mus}{SFX}
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Bit} & \textbf{Function} \\
+\midrule
+0 & SFX playing: 1 $=$ a sound effect is currently active \\
+1 & Music/MIDI playing: 1 $=$ a music sequence or MIDI file is playing \\
+2--7 & Reserved \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM wait for music to finish
+20 IF PEEK($BA50) AND 2 THEN 20
+30 PRINT "PLAYBACK COMPLETE"
+\end{lstlisting}
+
+% --- $BA51-$BA5E MusicNote -----------------------------------------------
+
+\memrange{BA51}{BA5E}{MusicNote1--14}{R}{0}
+
+Current MIDI note number for each of the 14 voices.  A value of 0 means
+the voice is silent; values 1--127 correspond to standard MIDI note
+numbers (60 $=$ Middle~C).
+
+\begin{center}
+\small
+\begin{tabular}{@{}cll@{}}
+\toprule
+\textbf{Address} & \textbf{Voice} & \textbf{Engine} \\
+\midrule
+\$BA51 & Voice 0  & SID chip 1, voice 1 \\
+\$BA52 & Voice 1  & SID chip 1, voice 2 \\
+\$BA53 & Voice 2  & SID chip 1, voice 3 \\
+\$BA54 & Voice 3  & SID chip 2, voice 1 \\
+\$BA55 & Voice 4  & SID chip 2, voice 2 \\
+\$BA56 & Voice 5  & SID chip 2, voice 3 \\
+\$BA57 & Voice 6  & WTS voice 0 \\
+\$BA58 & Voice 7  & WTS voice 1 \\
+\$BA59 & Voice 8  & WTS voice 2 \\
+\$BA5A & Voice 9  & WTS voice 3 \\
+\$BA5B & Voice 10 & WTS voice 4 \\
+\$BA5C & Voice 11 & WTS voice 5 \\
+\$BA5D & Voice 12 & WTS voice 6 \\
+\$BA5E & Voice 13 & WTS voice 7 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM display active notes in real-time
+20 FOR V=0 TO 13
+30   N = PEEK($BA51+V)
+40   IF N>0 THEN PRINT "V"; V; "="; N; " ";
+50 NEXT V
+60 PRINT
+70 VSYNC : GOTO 20
+\end{lstlisting}
+
+% --- $BA5F-$BA60 MusicElapsed -------------------------------------------
+
+\memrange{BA5F}{BA60}{MusicElapsed}{R}{0}
+
+Elapsed frames since playback started, as a 16-bit little-endian value.
+At 60\,Hz, divide by 60 to get elapsed seconds.
+
+% --- $BA61-$BA62 MusicTotal ---------------------------------------------
+
+\memrange{BA61}{BA62}{MusicTotal}{R}{0}
+
+Total frames in the current music sequence, as a 16-bit little-endian
+value.  Together with MusicElapsed, this allows programs to display a
+progress indicator.
+
+\begin{lstlisting}
+10 REM display music progress
+20 E = DEEK($BA5F) : T = DEEK($BA61)
+30 IF T=0 THEN PRINT "NO MUSIC LOADED" : END
+40 PCT = INT(E*100/T)
+50 PRINT "PROGRESS:"; PCT; "%  ("; INT(E/60); "/"; INT(T/60); " SEC)"
+60 VSYNC : IF PEEK($BA50) AND 2 THEN 20
+70 PRINT "DONE"
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{DMA Controller (\$BA63--\$BA82)}
+\label{sec:dma}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The DMA Controller provides high-speed block transfers between any
+combination of six memory spaces: CPU RAM, four VGC memory regions
+(character, color, graphics, sprite), and XRAM.  It operates at 4 bytes
+per CPU cycle, making it vastly faster than any software copy loop.
+
+\subsection{Register Map}
+
+\begin{center}
+\small
+\begin{longtable}{@{}llcll@{}}
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{R/W} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{R/W} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endhead
+\$BA63 & DmaCmd       & W   & ---  & Command register \\
+\$BA64 & DmaStatus    & R   & \$00 & Status code \\
+\$BA65 & DmaErrCode   & R   & 0    & Error code \\
+\$BA66 & DmaSrcSpace  & R/W & 0    & Source memory space \\
+\$BA67 & DmaDstSpace  & R/W & 0    & Destination memory space \\
+\$BA68 & DmaSrcL      & R/W & 0    & Source address low byte \\
+\$BA69 & DmaSrcM      & R/W & 0    & Source address middle byte \\
+\$BA6A & DmaSrcH      & R/W & 0    & Source address high byte \\
+\$BA6B & DmaDstL      & R/W & 0    & Destination address low byte \\
+\$BA6C & DmaDstM      & R/W & 0    & Destination address middle byte \\
+\$BA6D & DmaDstH      & R/W & 0    & Destination address high byte \\
+\$BA6E & DmaLenL      & R/W & 0    & Transfer length low byte \\
+\$BA6F & DmaLenM      & R/W & 0    & Transfer length middle byte \\
+\$BA70 & DmaLenH      & R/W & 0    & Transfer length high byte \\
+\$BA71 & DmaMode      & R/W & 0    & Mode flags \\
+\$BA72 & DmaFillValue & R/W & 0    & Fill byte \\
+\$BA73 & DmaCountL    & R   & 0    & Bytes transferred (low) \\
+\$BA74 & DmaCountM    & R   & 0    & Bytes transferred (mid) \\
+\$BA75 & DmaCountH    & R   & 0    & Bytes transferred (high) \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Detailed Register Descriptions}
+
+% --- $BA63 DmaCmd -------------------------------------------------------
+
+\mementry{BA63}{DmaCmd}{W}{---}
+
+Command register.  Writing \$01 starts a DMA transfer using the parameters
+set in the surrounding registers.
+
+\cmdentry{01}{Start Transfer}{Begin DMA operation}
+
+Initiates a block copy (or fill) according to the current register state.
+The transfer completes before the next CPU instruction executes.
+
+\textbf{Result:} DmaStatus $=$ \$02 on success, \$03 on error.
+
+% --- $BA64 DmaStatus ----------------------------------------------------
+
+\mementry{BA64}{DmaStatus}{R}{\$00}
+
+Status of the last DMA operation:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+\$00 & Idle \\
+\$01 & Busy (transfer in progress) \\
+\$02 & OK --- transfer completed \\
+\$03 & Error --- see DmaErrCode \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA65 DmaErrCode ---------------------------------------------------
+
+\mementry{BA65}{DmaErrCode}{R}{0}
+
+Detailed error code when DmaStatus is \$03:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+0 & No error \\
+1 & Bad command --- invalid command byte \\
+2 & Bad space --- invalid source or destination space ID \\
+3 & Range error --- address or length out of bounds \\
+4 & Bad arguments --- invalid parameter combination \\
+5 & Write protected --- destination is read-only \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA66 DmaSrcSpace --------------------------------------------------
+
+\mementry{BA66}{DmaSrcSpace}{R/W}{0}
+
+Source memory space selector:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Space} \\
+\midrule
+0 & CPU RAM (64\,KB) \\
+1 & VGC Character RAM (2000 bytes) \\
+2 & VGC Color RAM (2000 bytes) \\
+3 & VGC Graphics bitmap (32\,KB) \\
+4 & VGC Sprite data \\
+5 & XRAM (512\,KB, 24-bit addressing) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA67 DmaDstSpace --------------------------------------------------
+
+\mementry{BA67}{DmaDstSpace}{R/W}{0}
+
+Destination memory space selector.  Uses the same space IDs as DmaSrcSpace.
+
+% --- $BA68-$BA6A DmaSrc -------------------------------------------------
+
+\mementry{BA68}{DmaSrcL}{R/W}{0}
+
+Low byte of the 24-bit source address.
+
+\mementry{BA69}{DmaSrcM}{R/W}{0}
+
+Middle byte of the source address.
+
+\mementry{BA6A}{DmaSrcH}{R/W}{0}
+
+High byte of the source address.  For CPU RAM (space 0), only the low two
+bytes are significant.  For XRAM (space 5), all three bytes are used.
+
+% --- $BA6B-$BA6D DmaDst -------------------------------------------------
+
+\mementry{BA6B}{DmaDstL}{R/W}{0}
+
+Low byte of the 24-bit destination address.
+
+\mementry{BA6C}{DmaDstM}{R/W}{0}
+
+Middle byte of the destination address.
+
+\mementry{BA6D}{DmaDstH}{R/W}{0}
+
+High byte of the destination address.
+
+% --- $BA6E-$BA70 DmaLen -------------------------------------------------
+
+\mementry{BA6E}{DmaLenL}{R/W}{0}
+
+Low byte of the 24-bit transfer length.
+
+\mementry{BA6F}{DmaLenM}{R/W}{0}
+
+Middle byte of the transfer length.
+
+\mementry{BA70}{DmaLenH}{R/W}{0}
+
+High byte of the transfer length.
+
+% --- $BA71 DmaMode ------------------------------------------------------
+
+\mementry{BA71}{DmaMode}{R/W}{0}
+
+DMA mode flags:
+
+\bitfield{---}{---}{---}{---}{---}{---}{---}{Fill}
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Bit} & \textbf{Function} \\
+\midrule
+0 & Fill mode: when set, the destination is filled with DmaFillValue
+    instead of copying from the source \\
+1--7 & Reserved (write 0) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA72 DmaFillValue -------------------------------------------------
+
+\mementry{BA72}{DmaFillValue}{R/W}{0}
+
+The byte value used to fill the destination when DmaMode bit~0 is set.
+
+% --- $BA73-$BA75 DmaCount -----------------------------------------------
+
+\mementry{BA73}{DmaCountL}{R}{0}
+
+Low byte of the 24-bit count of bytes transferred so far.
+
+\mementry{BA74}{DmaCountM}{R}{0}
+
+Middle byte of the bytes transferred count.
+
+\mementry{BA75}{DmaCountH}{R}{0}
+
+High byte of the bytes transferred count.
+
+\subsection{BASIC Examples}
+
+\subsubsection{Copy Screen RAM to XRAM}
+
+\begin{lstlisting}
+10 REM save a copy of screen RAM to XRAM bank 0
+20 POKE $BA66, 1      : REM source = VGC char RAM
+30 POKE $BA67, 5      : REM destination = XRAM
+40 REM source offset = 0
+50 POKE $BA68, 0 : POKE $BA69, 0 : POKE $BA6A, 0
+60 REM destination = XRAM $000000
+70 POKE $BA6B, 0 : POKE $BA6C, 0 : POKE $BA6D, 0
+80 REM length = 2000 bytes (80x25 screen)
+90 POKE $BA6E, $D0 : POKE $BA6F, $07 : POKE $BA70, 0
+100 POKE $BA71, 0     : REM copy mode (not fill)
+110 POKE $BA63, $01   : REM start transfer
+120 IF PEEK($BA64)=$02 THEN PRINT "SCREEN SAVED TO XRAM"
+130 IF PEEK($BA64)=$03 THEN PRINT "ERROR:"; PEEK($BA65)
+\end{lstlisting}
+
+\subsubsection{Fill Graphics Bitmap with a Color}
+
+\begin{lstlisting}
+10 REM fill the entire graphics bitmap with color $05
+20 POKE $BA67, 3      : REM destination = VGC graphics
+30 REM destination offset = 0
+40 POKE $BA6B, 0 : POKE $BA6C, 0 : POKE $BA6D, 0
+50 REM length = 32000 bytes (320x200 / 2 nybbles)
+60 POKE $BA6E, 0 : POKE $BA6F, $7D : POKE $BA70, 0
+70 POKE $BA71, 1      : REM fill mode
+80 POKE $BA72, $55    : REM fill value ($5 in both nybbles)
+90 POKE $BA63, $01    : REM start transfer
+100 IF PEEK($BA64)=$02 THEN PRINT "GRAPHICS CLEARED"
+\end{lstlisting}
+
+\begin{tipbox}
+The BASIC statements \texttt{DMACOPY} and \texttt{DMAFILL} provide
+convenient wrappers around the DMA controller.  Direct register access
+is useful when you need 24-bit XRAM addressing or fine-grained error
+checking.
+\end{tipbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Blitter Controller (\$BA83--\$BAA2)}
+\label{sec:blitter}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The Blitter Controller performs 2D rectangular block transfers with stride
+control.  Unlike the DMA controller which operates on flat linear regions,
+the blitter understands rows and columns, making it ideal for copying
+rectangular regions of screen or bitmap data.  It supports fill mode and
+color-key transparency for sprite-like compositing.
+
+The blitter operates at 2 operations per CPU cycle.
+
+\subsection{Register Map}
+
+\begin{center}
+\small
+\begin{longtable}{@{}llcll@{}}
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{R/W} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{R/W} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endhead
+\$BA83 & BltCmd       & W   & ---  & Command register \\
+\$BA84 & BltStatus    & R   & \$00 & Status code \\
+\$BA85 & BltErrCode   & R   & 0    & Error code \\
+\$BA86 & BltSrcSpace  & R/W & 0    & Source memory space \\
+\$BA87 & BltDstSpace  & R/W & 0    & Destination memory space \\
+\$BA88 & BltSrcL      & R/W & 0    & Source base address low \\
+\$BA89 & BltSrcM      & R/W & 0    & Source base address middle \\
+\$BA8A & BltSrcH      & R/W & 0    & Source base address high \\
+\$BA8B & BltDstL      & R/W & 0    & Destination base address low \\
+\$BA8C & BltDstM      & R/W & 0    & Destination base address middle \\
+\$BA8D & BltDstH      & R/W & 0    & Destination base address high \\
+\$BA8E & BltWidthL    & R/W & 0    & Rectangle width low \\
+\$BA8F & BltWidthH    & R/W & 0    & Rectangle width high \\
+\$BA90 & BltHeightL   & R/W & 0    & Rectangle height low \\
+\$BA91 & BltHeightH   & R/W & 0    & Rectangle height high \\
+\$BA92 & BltSrcStrideL & R/W & 0   & Source row stride low \\
+\$BA93 & BltSrcStrideH & R/W & 0   & Source row stride high \\
+\$BA94 & BltDstStrideL & R/W & 0   & Destination row stride low \\
+\$BA95 & BltDstStrideH & R/W & 0   & Destination row stride high \\
+\$BA96 & BltMode      & R/W & 0    & Mode flags \\
+\$BA97 & BltFillValue & R/W & 0    & Fill byte \\
+\$BA98 & BltColorKey  & R/W & 0    & Transparent color \\
+\$BA99 & BltCountL    & R   & 0    & Bytes written (low) \\
+\$BA9A & BltCountM    & R   & 0    & Bytes written (middle) \\
+\$BA9B & BltCountH    & R   & 0    & Bytes written (high) \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Detailed Register Descriptions}
+
+% --- $BA83 BltCmd -------------------------------------------------------
+
+\mementry{BA83}{BltCmd}{W}{---}
+
+Command register.  Writing \$01 starts a blit operation.
+
+\cmdentry{01}{Start}{Begin blit operation}
+
+Initiates a 2D block transfer (or fill) using the current register state.
+For each row, the blitter copies (or fills) BltWidth bytes from the source
+to the destination, then advances both pointers by their respective strides.
+This repeats for BltHeight rows.
+
+\textbf{Result:} BltStatus $=$ \$02 on success, \$03 on error.
+
+% --- $BA84 BltStatus ----------------------------------------------------
+
+\mementry{BA84}{BltStatus}{R}{\$00}
+
+Status of the last blit operation.  Uses the same codes as the DMA
+controller:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+\$00 & Idle \\
+\$01 & Busy \\
+\$02 & OK \\
+\$03 & Error \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA85 BltErrCode ---------------------------------------------------
+
+\mementry{BA85}{BltErrCode}{R}{0}
+
+Error code.  Uses the same codes as the DMA controller (see
+Section~\ref{sec:dma}).
+
+% --- $BA86-$BA87 BltSrcSpace/BltDstSpace --------------------------------
+
+\mementry{BA86}{BltSrcSpace}{R/W}{0}
+
+Source memory space selector.  Uses the same space IDs as the DMA controller
+(0 $=$ CPU RAM, 1 $=$ VGC char, 2 $=$ VGC color, 3 $=$ VGC gfx, 4 $=$ VGC
+sprite, 5 $=$ XRAM).
+
+\mementry{BA87}{BltDstSpace}{R/W}{0}
+
+Destination memory space selector.
+
+% --- $BA88-$BA8A BltSrc -------------------------------------------------
+
+\mementry{BA88}{BltSrcL}{R/W}{0}
+
+Low byte of the 24-bit source base address.
+
+\mementry{BA89}{BltSrcM}{R/W}{0}
+
+Middle byte of the source base address.
+
+\mementry{BA8A}{BltSrcH}{R/W}{0}
+
+High byte of the source base address.
+
+% --- $BA8B-$BA8D BltDst -------------------------------------------------
+
+\mementry{BA8B}{BltDstL}{R/W}{0}
+
+Low byte of the 24-bit destination base address.
+
+\mementry{BA8C}{BltDstM}{R/W}{0}
+
+Middle byte of the destination base address.
+
+\mementry{BA8D}{BltDstH}{R/W}{0}
+
+High byte of the destination base address.
+
+% --- $BA8E-$BA8F BltWidth -----------------------------------------------
+
+\mementry{BA8E}{BltWidthL}{R/W}{0}
+
+Low byte of the rectangle width in bytes.
+
+\mementry{BA8F}{BltWidthH}{R/W}{0}
+
+High byte of the rectangle width.
+
+% --- $BA90-$BA91 BltHeight ----------------------------------------------
+
+\mementry{BA90}{BltHeightL}{R/W}{0}
+
+Low byte of the rectangle height in rows.
+
+\mementry{BA91}{BltHeightH}{R/W}{0}
+
+High byte of the rectangle height.
+
+% --- $BA92-$BA93 BltSrcStride -------------------------------------------
+
+\mementry{BA92}{BltSrcStrideL}{R/W}{0}
+
+Low byte of the source row stride.  The stride is the number of bytes
+between the start of one row and the start of the next in the source
+memory space.  For a full-width screen copy, this equals the screen width.
+
+\mementry{BA93}{BltSrcStrideH}{R/W}{0}
+
+High byte of the source row stride.
+
+% --- $BA94-$BA95 BltDstStride -------------------------------------------
+
+\mementry{BA94}{BltDstStrideL}{R/W}{0}
+
+Low byte of the destination row stride.
+
+\mementry{BA95}{BltDstStrideH}{R/W}{0}
+
+High byte of the destination row stride.
+
+% --- $BA96 BltMode ------------------------------------------------------
+
+\mementry{BA96}{BltMode}{R/W}{0}
+
+Blitter mode flags:
+
+\bitfield{---}{---}{---}{---}{---}{---}{Key}{Fill}
+
+\begin{center}
+\small
+\begin{tabular}{@{}cp{10cm}@{}}
+\toprule
+\textbf{Bit} & \textbf{Function} \\
+\midrule
+0 & Fill mode: when set, the destination is filled with BltFillValue
+    instead of copying from the source.  Width and height still control
+    the rectangular region. \\
+1 & Color-key transparency: when set, source bytes matching BltColorKey
+    are skipped (the destination byte is not overwritten).  This enables
+    transparent blitting for sprite-like effects. \\
+2--7 & Reserved (write 0) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% --- $BA97 BltFillValue -------------------------------------------------
+
+\mementry{BA97}{BltFillValue}{R/W}{0}
+
+Fill byte used when BltMode bit~0 is set.
+
+% --- $BA98 BltColorKey --------------------------------------------------
+
+\mementry{BA98}{BltColorKey}{R/W}{0}
+
+Transparent color.  When BltMode bit~1 is set, source bytes equal to this
+value are skipped during the copy, leaving the destination unchanged.
+
+% --- $BA99-$BA9B BltCount -----------------------------------------------
+
+\mementry{BA99}{BltCountL}{R}{0}
+
+Low byte of the 24-bit count of bytes actually written.
+
+\mementry{BA9A}{BltCountM}{R}{0}
+
+Middle byte.
+
+\mementry{BA9B}{BltCountH}{R}{0}
+
+High byte.  When color-key transparency is active, BltCount may be less
+than Width $\times$ Height because skipped pixels are not counted.
+
+\subsection{BASIC Examples}
+
+\subsubsection{Blit a Rectangular Region with Transparency}
+
+\begin{lstlisting}
+10 REM blit a 20x10 region from XRAM to graphics
+20 REM with color 0 as transparent
+30 POKE $BA86, 5      : REM source = XRAM
+40 POKE $BA87, 3      : REM destination = VGC graphics
+50 REM source address = XRAM $000000
+60 POKE $BA88, 0 : POKE $BA89, 0 : POKE $BA8A, 0
+70 REM destination = graphics offset 1000
+80 POKE $BA8B, $E8 : POKE $BA8C, $03 : POKE $BA8D, 0
+90 REM width=20, height=10
+100 DOKE $BA8E, 20 : DOKE $BA90, 10
+110 REM source stride = 20 (tiles packed tightly)
+120 DOKE $BA92, 20
+130 REM destination stride = 160 (320/2 nybbles per row)
+140 DOKE $BA94, 160
+150 REM mode: color-key transparency on (bit 1)
+160 POKE $BA96, 2
+170 POKE $BA98, 0     : REM color key = 0 (transparent)
+180 POKE $BA83, $01   : REM start blit
+190 IF PEEK($BA84)=$02 THEN PRINT "BLIT DONE"
+200 IF PEEK($BA84)=$03 THEN PRINT "ERROR:"; PEEK($BA85)
+\end{lstlisting}
+
+\subsubsection{Fill a Rectangle on Screen}
+
+\begin{lstlisting}
+10 REM fill a 40x5 rectangle of character RAM with 'X'
+20 POKE $BA87, 1      : REM destination = VGC char RAM
+30 REM destination = row 10, column 20 (offset = 10*80+20 = 820)
+40 POKE $BA8B, $34 : POKE $BA8C, $03 : POKE $BA8D, 0
+50 DOKE $BA8E, 40     : REM width = 40 columns
+60 DOKE $BA90, 5      : REM height = 5 rows
+70 DOKE $BA94, 80     : REM destination stride = 80 (screen width)
+80 POKE $BA96, 1      : REM fill mode
+90 POKE $BA97, ASC("X") : REM fill with 'X'
+100 POKE $BA83, $01   : REM start blit
+\end{lstlisting}
+
+\begin{tipbox}
+The BASIC statements \texttt{BLITCOPY} and \texttt{BLITFILL} provide
+convenient wrappers around the blitter.  Use direct register access when
+you need color-key transparency or cross-space blits that the BASIC
+statements do not expose.
+\end{tipbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{XMC Windows (\$BC00--\$BFFF)}
+\label{sec:xmc-windows}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{BC00}{BFFF}{XMC Window}{R/W}{0}
+
+The final 1\,KB of this address range is divided into four 256-byte
+windows that provide direct memory-mapped access to XRAM.  Each window
+maps a contiguous 256-byte page of XRAM into the 6502 address space,
+allowing reads and writes to pass through transparently --- no commands,
+no register setup, just ordinary \texttt{PEEK} and \texttt{POKE}.
+
+\begin{center}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{CPU Address} & \textbf{Window} & \textbf{Enable Bit} & \textbf{Base Register} \\
+\midrule
+\$BC00--\$BCFF & Window 0 & Bit 0 of \addr{BA16} & XmcWin0A (\addr{BA18}--\addr{BA1A}) \\
+\$BD00--\$BDFF & Window 1 & Bit 1 of \addr{BA16} & XmcWin1A (\addr{BA1B}--\addr{BA1D}) \\
+\$BE00--\$BEFF & Window 2 & Bit 2 of \addr{BA16} & XmcWin2A (\addr{BA1E}--\addr{BA20}) \\
+\$BF00--\$BFFF & Window 3 & Bit 3 of \addr{BA16} & XmcWin3A (\addr{BA21}--\addr{BA23}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+When a window is \textbf{enabled}, reads from its 256-byte range return the
+corresponding byte from XRAM, and writes store the byte into XRAM.  When a
+window is \textbf{disabled}, reads return \$00 and writes are silently
+discarded.
+
+The base address register specifies the XRAM address that the window's
+first byte (\$xx00) maps to.  The remaining 255 bytes map to consecutive
+XRAM addresses.
+
+\begin{lstlisting}
+10 REM map window 0 to XRAM page $000100
+20 POKE $BA18, 0 : POKE $BA19, 1 : POKE $BA1A, 0
+30 POKE $BA16, 1  : REM enable window 0
+40 POKE $BC00, 42 : REM writes to XRAM $000100
+50 PRINT PEEK($BC00) : REM reads from XRAM $000100
+\end{lstlisting}
+
+\begin{lstlisting}
+10 REM use all four windows simultaneously
+20 REM map to four consecutive XRAM pages
+30 FOR W=0 TO 3
+40   POKE $BA18+W*3, 0 : POKE $BA19+W*3, W : POKE $BA1A+W*3, 0
+50 NEXT W
+60 POKE $BA16, $0F : REM enable all four windows
+70 REM now $BC00-$BFFF maps to XRAM $000000-$0003FF
+80 FOR I=0 TO 1023
+90   POKE $BC00+I, I AND 255
+100 NEXT I
+110 PRINT "WROTE 1KB TO XRAM VIA WINDOWS"
+\end{lstlisting}
+
+\begin{notebox}
+Windows provide the fastest way to access small, frequently-used regions
+of XRAM.  For bulk transfers, the Stash/Fetch commands or DMA controller
+are more efficient.
+\end{notebox}

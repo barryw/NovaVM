@@ -1,0 +1,253 @@
+% =============================================================================
+% Chapter 11 — The ROM ($C000–$FFFF)
+% =============================================================================
+\chapter{The ROM}
+
+\epigraph{``In ROM we trust --- for everything else, there's RAM.''}%
+         {\textit{--- Anonymous systems programmer}}
+
+\section*{Introduction}
+
+The upper 16\,KB of the 6502 address space --- from \$C000 to \$FFFF ---
+is occupied by read-only memory containing the EhBASIC interpreter and
+monitor code.  Writes to this range are silently dropped, with two
+important exceptions:
+
+\begin{itemize}
+  \item \textbf{SID registers} at \$D400--\$D43F are intercepted on write
+        and routed to the SID sound chip emulation.  Reads still return ROM
+        data.
+  \item \textbf{Hardware vectors} at \$FFFA--\$FFFF are writable so that
+        programs can install custom interrupt handlers and SID players can
+        redirect execution.
+\end{itemize}
+
+The ROM image is loaded from \texttt{ehbasic.bin} at boot time.  It
+provides the complete NovaBASIC environment: tokenizer, expression
+evaluator, math library, string handling, I/O dispatch, and the extended
+command set that distinguishes NovaBASIC from stock EhBASIC.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{ROM Layout Overview}
+\label{sec:rom-layout}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{C000}{FFF9}{EhBASIC ROM}{R}{---}
+
+The 16\,KB ROM contains the following regions (approximate boundaries ---
+exact addresses depend on the build):
+
+\begin{center}
+\small
+\begin{longtable}{@{}llp{8cm}@{}}
+\toprule
+\textbf{Range} & \textbf{Region} & \textbf{Contents} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Range} & \textbf{Region} & \textbf{Contents} \\
+\midrule
+\endhead
+\$C000--\$C002 & Cold start entry   & JMP to EhBASIC initialization \\
+\$C003         & Warm start entry   & JMP to EhBASIC warm start \\
+\$C000--\$DFFF & Interpreter core   & Tokenizer, executor, math routines,
+                                       string handling, memory management \\
+\$E000--\$EFFF & Functions \& I/O   & Built-in functions, commands, I/O
+                                       handlers \\
+\$F000--\$FF7F & Extended commands  & NovaBASIC additions (graphics, sound,
+                                       networking, expansion memory, DMA,
+                                       blitter, etc.) \\
+\$FF80--\$FFF9 & Monitor code       & Power-on initialization and vector
+                                       setup \\
+\$FFFA--\$FFFF & Hardware vectors   & NMI, RESET, IRQ/BRK vectors
+                                       (writable) \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\begin{notebox}
+The boundaries above are approximate.  The interpreter, functions, and
+extended commands are compiled from assembly source, and their exact
+layout shifts with each build.  The entry points at \$C000, \$C003, and
+\$FF80 are fixed by design.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Key Entry Points}
+\label{sec:rom-entry}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $C000 LAB_COLD -----------------------------------------------------
+
+\par\vspace{1.2em}%
+\noindent
+\begin{tikzpicture}[baseline=(addr.base)]
+  \node[fill=retroblue, text=white, font=\ttfamily\bfseries\large,
+        inner sep=4pt, minimum width=5.5em, anchor=west]
+    (addr) {\$C000};
+  \node[anchor=west, font=\sffamily\bfseries\large, text=retroink,
+        xshift=6pt] at (addr.east)
+    {LAB\_COLD};
+  \node[anchor=east, font=\sffamily\small, text=retrogray]
+    at ([xshift=\linewidth-1em]addr.west)
+    {R\enspace|\enspace Default: ---};
+\end{tikzpicture}%
+\par\nopagebreak\vspace{0.3em}%
+\label{addr:C000-cold}%
+\index{\$C000@{\texttt{\$C000}} --- LAB\_COLD}%
+
+EhBASIC cold start entry point.  Jumping here initializes all interpreter
+state: clears variables, resets the program pointer, sets up the default
+I/O vectors, prints the startup banner, and enters the command loop (the
+\texttt{Ready} prompt).
+
+This is the normal entry path after the monitor code completes its setup.
+A cold start erases any BASIC program in memory.
+
+% --- $C003 LAB_WARM ----------------------------------------------------
+
+\par\vspace{1.2em}%
+\noindent
+\begin{tikzpicture}[baseline=(addr.base)]
+  \node[fill=retroblue, text=white, font=\ttfamily\bfseries\large,
+        inner sep=4pt, minimum width=5.5em, anchor=west]
+    (addr) {\$C003};
+  \node[anchor=west, font=\sffamily\bfseries\large, text=retroink,
+        xshift=6pt] at (addr.east)
+    {LAB\_WARM};
+  \node[anchor=east, font=\sffamily\small, text=retrogray]
+    at ([xshift=\linewidth-1em]addr.west)
+    {R\enspace|\enspace Default: ---};
+\end{tikzpicture}%
+\par\nopagebreak\vspace{0.3em}%
+\label{addr:C003}%
+\index{\$C003@{\texttt{\$C003}} --- LAB\_WARM}%
+
+EhBASIC warm start entry point.  Jumping here returns to the command
+prompt \emph{without} erasing the current BASIC program in memory.
+Variables are cleared, but program text is preserved.
+
+This entry point is used by the \texttt{STOP} statement, the
+\texttt{Break} key handler, and by user code that needs to abort execution
+without losing the loaded program.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Monitor Code (\$FF80--\$FFF9)}
+\label{sec:monitor}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{FF80}{FFF9}{Monitor Code}{R}{---}
+
+The reset vector at \$FFFC points to \$FF80.  This is the first code
+executed at power-on or after a hardware reset.  The monitor performs the
+following initialization sequence:
+
+\begin{enumerate}
+  \item \textbf{CLD} --- Clear decimal mode flag to ensure binary arithmetic.
+  \item \textbf{LDX \#\$FF; TXS} --- Initialize the stack pointer to the
+        top of the stack page (\$01FF).
+  \item \textbf{Copy I/O vectors} --- Writes the default I/O vector table
+        to page~2 (\$0200).  This table contains the addresses of the
+        character input, character output, and load/save routines that
+        EhBASIC calls through indirect jumps.
+  \item \textbf{Check NOAUTO} --- Reads the \texttt{NOAUTO} environment
+        variable.  If set, the monitor skips auto-run and proceeds
+        directly to EhBASIC.
+  \item \textbf{JMP LAB\_COLD} --- Transfers control to the EhBASIC cold
+        start at \$C000.
+\end{enumerate}
+
+\begin{notebox}
+The monitor code is deliberately minimal.  Its sole purpose is to bring
+the machine to a known good state and hand off to the BASIC interpreter.
+There is no built-in machine language monitor, hex editor, or disassembler
+--- those functions are provided by the host debugger or the MCP server.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{SID Register Window}
+\label{sec:rom-sid}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The SID sound chips are mapped at \$D400--\$D41F (SID~1) and
+\$D420--\$D43F (SID~2) within this ROM range.  Although reads return ROM
+data, writes are intercepted and routed to the SID emulation hardware.
+See Chapter~12 for complete SID register documentation.
+
+This dual-nature arrangement preserves compatibility with C64 SID player
+files, which expect to write SID registers at \$D400, while allowing the
+ROM image to occupy a contiguous 16\,KB block without gaps.
+
+\begin{tipbox}
+When reading back SID register values for diagnostic purposes, use the
+SID shadow registers or the MCP server's \texttt{sid\_read} command.
+Reading \$D400--\$D43F directly returns ROM bytes, not the values last
+written to the SID chips.
+\end{tipbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Hardware Vectors (\$FFFA--\$FFFF)}
+\label{sec:vectors}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{FFFA}{FFFF}{Hardware Vectors}{R/W}{Set at boot}
+
+The six bytes at the very top of the address space contain the three
+hardware interrupt vectors.  These are the \emph{only} writable bytes in
+the entire ROM range.  They are writable so that SID players, custom
+interrupt handlers, and timer-driven routines can redirect execution.
+
+\begin{center}
+\small
+\begin{tabular}{@{}llp{7.5cm}@{}}
+\toprule
+\textbf{Address} & \textbf{Vector} & \textbf{Description} \\
+\midrule
+\$FFFA--\$FFFB & NMI   & Non-Maskable Interrupt handler address.  Triggered
+                          by an external NMI signal; cannot be disabled by
+                          the I flag. \\
+\$FFFC--\$FFFD & RESET & Reset vector.  Points to \$FF80 (monitor code) at
+                          boot.  The CPU reads this vector on power-on and
+                          hardware reset. \\
+\$FFFE--\$FFFF & IRQ/BRK & Maskable Interrupt / Break handler address.
+                            Triggered by the IRQ line (when the I flag is
+                            clear) or by a BRK instruction. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each vector is a 16-bit little-endian address.  The CPU reads these
+vectors in hardware --- there is no software dispatch layer.
+
+\begin{warningbox}
+Overwriting the RESET vector will prevent the system from booting
+correctly on next reset.  Only modify the NMI and IRQ vectors unless you
+know what you are doing.
+\end{warningbox}
+
+\begin{lstlisting}
+10 REM read the hardware vectors
+20 PRINT "NMI:   $"; HEX$(DEEK($FFFA))
+30 PRINT "RESET: $"; HEX$(DEEK($FFFC))
+40 PRINT "IRQ:   $"; HEX$(DEEK($FFFE))
+\end{lstlisting}
+
+\begin{lstlisting}
+10 REM install a custom IRQ handler at address $8000
+20 REM (assumes handler code is already loaded there)
+30 DOKE $FFFE, $8000
+40 PRINT "IRQ VECTOR NOW POINTS TO $"; HEX$(DEEK($FFFE))
+\end{lstlisting}
+
+\begin{notebox}
+The BASIC statements \texttt{IRQ} and \texttt{NMI} provide a safer,
+higher-level way to install interrupt handlers.  They handle the vector
+setup, register saving, and proper return sequence automatically.  Direct
+vector manipulation is only needed for assembly-language interrupt
+handlers.
+\end{notebox}
