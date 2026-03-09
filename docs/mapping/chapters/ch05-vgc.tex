@@ -1,0 +1,1424 @@
+% =============================================================================
+% Chapter 5 — The Virtual Graphics Controller ($A000–$A0BF)
+% =============================================================================
+\chapter{The Virtual Graphics Controller}
+
+\epigraph{``Pixels are the atoms of the digital universe.  If you can control
+them, you can build anything.''}{\textit{--- Overheard at a demo party, 1987}}
+
+\section*{Introduction}
+
+The Virtual Graphics Controller --- VGC for short --- is the heart of the
+NovaVM's display system.  It manages three independent layers of visual output:
+an 80$\times$25 text screen, a 320$\times$200 pixel bitmap with 16 colours, and
+16 multicolour 16$\times$16 hardware sprites.  All three layers are composited
+at 60\,Hz into a single frame, with the rendering order determined by the
+active display mode.
+
+From the programmer's perspective, the VGC is a collection of memory-mapped
+registers starting at \$A000.  The core registers at \$A000--\$A00F control
+mode, colour, cursor, and status.  A command interface at \$A010--\$A01E
+provides graphics primitives, sprite manipulation, copper (raster) effects, and
+memory I/O.  Finally, 128 bytes of sprite registers at \$A040--\$A0BF give
+direct access to each sprite's position, shape, and flags.
+
+This chapter documents every register and command in the VGC.  It is the
+largest chapter in the book for good reason: the VGC is where programs become
+visible.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Display Modes}
+\label{sec:vgc-modes}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The VGC supports four display modes, selected by writing to \addr{A000}:
+
+\begin{center}
+\small
+\begin{tabular}{@{}clp{22em}@{}}
+\toprule
+\textbf{Mode} & \textbf{Name} & \textbf{Description} \\
+\midrule
+0 & Text only     & 80$\times$25 text screen.  No graphics bitmap is drawn.
+                     This is the default mode at power-on. \\
+1 & Gfx over text & The graphics bitmap is drawn on top of the text layer.
+                     Non-zero pixels in the bitmap obscure the text beneath. \\
+2 & Text over gfx & The text layer is drawn on top of the graphics bitmap.
+                     Characters with non-background colours obscure the bitmap. \\
+3 & Gfx + sprites & Graphics bitmap and sprites only, no text layer.
+                     Ideal for full-screen graphical games. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Rendering Order}
+
+Each frame at 60\,Hz proceeds in the following order:
+
+\begin{enumerate}
+  \item Background colour fill (the entire frame is cleared to \addr{A001}).
+  \item Priority-0 sprites are drawn (behind everything).
+  \item Text and/or graphics layers, in the order determined by the display mode.
+  \item Priority-1 sprites are drawn (between text and graphics layers).
+  \item Priority-2 sprites are drawn (in front of everything).
+  \item Collision detection is performed and results are latched into
+        \addr{A00B} and \addr{A00C}.
+\end{enumerate}
+
+\begin{lstlisting}
+10 MODE 2 : REM text over graphics
+20 GCLS   : REM clear bitmap
+30 CIRCLE 160,100,80,1
+40 PRINT "HELLO FROM TEXT LAYER"
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Core Registers (\$A000--\$A00F)}
+\label{sec:vgc-core}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+These sixteen registers control the fundamental display state: mode, colours,
+cursor position, scrolling, and I/O.
+
+% --- $A000 RegMode -----------------------------------------------------------
+
+\mementry{A000}{RegMode}{R/W}{0}
+
+Display mode selector.  Write a value from 0 to 3 to select the active display
+mode (see Section~\ref{sec:vgc-modes}).
+
+\begin{lstlisting}
+POKE $A000,1 : REM graphics over text
+\end{lstlisting}
+
+\begin{notebox}
+The BASIC command \texttt{MODE n} writes to this register.
+\end{notebox}
+
+% --- $A001 RegBgCol ----------------------------------------------------------
+
+\mementry{A001}{RegBgCol}{R/W}{0}
+
+Background colour (0--15).  This colour fills the entire screen behind all
+layers.  It is also the ``paper'' colour for the text layer --- character cells
+that are not covered by text are drawn in this colour.
+
+\begin{lstlisting}
+POKE $A001,6 : REM dark blue background
+\end{lstlisting}
+
+\begin{notebox}
+\texttt{COLOR fg,bg} sets both \addr{A002} and \addr{A001} simultaneously.
+\end{notebox}
+
+% --- $A002 RegFgCol ----------------------------------------------------------
+
+\mementry{A002}{RegFgCol}{R/W}{1}
+
+Foreground/text colour (0--15).  Characters printed after changing this
+register will appear in the new colour.
+
+\begin{lstlisting}
+POKE $A002,7 : REM white text
+PRINT "NOW IN WHITE"
+\end{lstlisting}
+
+% --- $A003 RegCursorX --------------------------------------------------------
+
+\mementry{A003}{RegCursorX}{R/W}{0}
+
+Cursor column position (0--79).  Reading returns the current column; writing
+moves the cursor.
+
+\begin{lstlisting}
+POKE $A003,40 : REM move cursor to column 40
+PRINT "CENTERED-ISH"
+\end{lstlisting}
+
+\begin{notebox}
+The BASIC command \texttt{LOCATE x,y} sets both \addr{A003} and \addr{A004}.
+\end{notebox}
+
+% --- $A004 RegCursorY --------------------------------------------------------
+
+\mementry{A004}{RegCursorY}{R/W}{0}
+
+Cursor row position (0--24).  Row 0 is the top of the screen.
+
+\begin{lstlisting}
+POKE $A004,12 : REM move cursor to row 12
+\end{lstlisting}
+
+% --- $A005 RegScrollX --------------------------------------------------------
+
+\mementry{A005}{RegScrollX}{R/W}{0}
+
+Horizontal scroll offset for the text layer.  Writing a non-zero value shifts
+the text layer left by that many pixels.
+
+\begin{lstlisting}
+POKE $A005,4 : REM shift text 4 pixels left
+\end{lstlisting}
+
+% --- $A006 RegScrollY --------------------------------------------------------
+
+\mementry{A006}{RegScrollY}{R/W}{0}
+
+Vertical scroll offset for the text layer.  Shifts the text layer up by the
+specified number of pixels.
+
+\begin{lstlisting}
+POKE $A006,2 : REM shift text 2 pixels up
+\end{lstlisting}
+
+% --- $A007 RegFont -----------------------------------------------------------
+
+\mementry{A007}{RegFont}{R/W}{0}
+
+Active font slot (0--7, 3 bits).  The VGC supports up to eight loaded font
+definitions.  Slot 0 is the built-in system font.
+
+\begin{lstlisting}
+POKE $A007,1 : REM switch to font slot 1
+\end{lstlisting}
+
+% --- $A008 RegStatus ---------------------------------------------------------
+
+\mementry{A008}{RegStatus}{R}{0}
+
+Frame counter.  Increments by one at each vertical blank (60\,Hz) and wraps
+from 255 back to 0.  This is the simplest way to synchronise with the display
+refresh.
+
+\begin{lstlisting}
+10 F = PEEK($A008)
+20 IF PEEK($A008) = F THEN 20
+30 REM -- new frame has started --
+\end{lstlisting}
+
+\begin{tipbox}
+The BASIC command \texttt{VSYNC} is equivalent to the wait loop above: it
+blocks until the frame counter changes, then returns.
+\end{tipbox}
+
+% --- $A009 RegSpriteCount ----------------------------------------------------
+
+\mementry{A009}{RegSpriteCount}{R}{0}
+
+Returns the number of sprites currently enabled (0--16).
+
+\begin{lstlisting}
+PRINT PEEK($A009);" SPRITES ACTIVE"
+\end{lstlisting}
+
+% --- $A00A RegCursorEnable ---------------------------------------------------
+
+\mementry{A00A}{RegCursorEnable}{R/W}{1}
+
+Cursor visibility.  Any non-zero value displays the blinking cursor; zero
+hides it.  Useful for games and full-screen applications where the cursor is
+a distraction.
+
+\begin{lstlisting}
+POKE $A00A,0  : REM hide cursor
+POKE $A00A,1  : REM show cursor
+\end{lstlisting}
+
+% --- $A00B RegColSt ----------------------------------------------------------
+
+\mementry{A00B}{RegColSt}{R}{0}
+
+Sprite-to-sprite collision bitmask.  After each frame, any sprite that
+overlaps with another sprite has its corresponding bit set.  Bit $N$ represents
+sprite $N$ (bit 0 = sprite 0, bit 7 = sprite 7).  For sprites 8--15 use the
+BASIC \texttt{COLLISION()} function.
+
+\begin{warningbox}
+Reading this register \textbf{clears} it.  If you need to test multiple bits,
+read the value into a variable first.
+\end{warningbox}
+
+\begin{lstlisting}
+10 C = PEEK($A00B)
+20 IF C AND 1 THEN PRINT "SPRITE 0 HIT SOMETHING"
+30 IF C AND 2 THEN PRINT "SPRITE 1 HIT SOMETHING"
+\end{lstlisting}
+
+% --- $A00C RegColBg ----------------------------------------------------------
+
+\mementry{A00C}{RegColBg}{R}{0}
+
+Sprite-to-background collision bitmask.  Bit $N$ is set when sprite $N$
+overlaps a non-zero pixel in the graphics bitmap.  Reading clears the
+register, just like \addr{A00B}.
+
+\begin{lstlisting}
+10 B = PEEK($A00C)
+20 IF B AND 1 THEN PRINT "SPRITE 0 HIT BACKGROUND"
+\end{lstlisting}
+
+% --- $A00D RegBorder ---------------------------------------------------------
+
+\mementry{A00D}{RegBorder}{R/W}{0}
+
+Border (frame) colour (0--15).  The border is the area outside the active
+display area, if the host window is larger than the 320$\times$200 pixel
+viewport.
+
+\begin{lstlisting}
+POKE $A00D,2 : REM red border
+\end{lstlisting}
+
+% --- $A00E RegCharOut --------------------------------------------------------
+
+\mementry{A00E}{RegCharOut}{W}{---}
+
+Character output port.  Writing a byte here places it on the screen at the
+current cursor position and advances the cursor, exactly as if the character
+had been PRINTed.  Control codes (carriage return, backspace, etc.)\ are
+interpreted.
+
+This is how BASIC's \texttt{PRINT} statement works internally --- every
+character ultimately arrives here.
+
+\begin{lstlisting}
+10 POKE $A00E,72  : REM 'H'
+20 POKE $A00E,73  : REM 'I'
+30 POKE $A00E,13  : REM carriage return
+\end{lstlisting}
+
+% --- $A00F RegCharIn ---------------------------------------------------------
+
+\mementry{A00F}{RegCharIn}{R}{---}
+
+Character input port.  Returns the ASCII code of the next key in the keyboard
+queue, or 0 if no key is pending.  This is how \texttt{INPUT} and \texttt{GET}
+work internally --- the interpreter polls this register until a key arrives.
+
+\begin{lstlisting}
+10 K = PEEK($A00F)
+20 IF K = 0 THEN 10
+30 PRINT "YOU PRESSED: ";CHR$(K)
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Command Interface (\$A010--\$A01E)}
+\label{sec:vgc-cmd}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The VGC command interface provides a rich set of graphics primitives, sprite
+manipulation, copper (raster) effects, and memory I/O --- all triggered by
+writing a command byte to the command register.
+
+% --- $A010 RegCmd ------------------------------------------------------------
+
+\mementry{A010}{RegCmd}{W}{---}
+
+Command register.  Writing a command byte here executes the command
+immediately.  Parameters must be loaded into P0--P13 (\$A011--\$A01E)
+\emph{before} writing the command byte.
+
+% --- $A011--$A01E RegP0--RegP13 ---------------------------------------------
+
+\memrange{A011}{A01E}{RegP0--RegP13 (Parameter Registers)}{R/W}{0}
+
+Fourteen parameter registers, addressed as \$A011 (P0) through \$A01E (P13).
+Each command uses a different subset of these registers; unused parameters are
+ignored.  Parameters are readable, so you can inspect the last-written values
+at any time.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ccl@{}}
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{Offset from \$A011} \\
+\midrule
+\$A011 & P0  & +0 \\
+\$A012 & P1  & +1 \\
+\$A013 & P2  & +2 \\
+\$A014 & P3  & +3 \\
+\$A015 & P4  & +4 \\
+\$A016 & P5  & +5 \\
+\$A017 & P6  & +6 \\
+\$A018 & P7  & +7 \\
+\$A019 & P8  & +8 \\
+\$A01A & P9  & +9 \\
+\$A01B & P10 & +10 \\
+\$A01C & P11 & +11 \\
+\$A01D & P12 & +12 \\
+\$A01E & P13 & +13 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+Many parameters represent 16-bit values split across two consecutive registers
+in little-endian order (low byte first, high byte second).  For example, an
+X coordinate of 260 would be stored as P0=\$04 (low), P1=\$01 (high):
+$260 = 256 \times 1 + 4$.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\subsection{Graphics Commands}
+\label{sec:vgc-gfx-cmds}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $01 CmdPlot -------------------------------------------------------------
+
+\cmdentry{01}{CmdPlot}{Plot a single pixel}
+
+Sets a pixel in the graphics bitmap.
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0, P1 & X coordinate (16-bit LE, 0--319) \\
+P2, P3 & Y coordinate (16-bit LE, 0--199) \\
+P8     & Colour (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM plot a red pixel at (100, 50)
+20 POKE $A011,100 : POKE $A012,0 : REM X=100
+30 POKE $A013,50  : POKE $A014,0 : REM Y=50
+40 POKE $A019,2                   : REM colour=red
+50 POKE $A010,$01                 : REM execute PLOT
+\end{lstlisting}
+
+\begin{notebox}
+The BASIC command \texttt{PLOT x,y,c} does exactly this.
+\end{notebox}
+
+% --- $02 CmdUnplot -----------------------------------------------------------
+
+\cmdentry{02}{CmdUnplot}{Erase a pixel (plot colour 0)}
+
+Identical to CmdPlot but always uses colour 0 (the background colour),
+effectively erasing the pixel.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0, P1 & X coordinate (16-bit LE) \\
+P2, P3 & Y coordinate (16-bit LE) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 POKE $A011,100 : POKE $A012,0
+20 POKE $A013,50  : POKE $A014,0
+30 POKE $A010,$02  : REM erase pixel at (100,50)
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{UNPLOT x,y}.
+\end{notebox}
+
+% --- $03 CmdLine -------------------------------------------------------------
+
+\cmdentry{03}{CmdLine}{Draw a line}
+
+Draws a straight line between two endpoints using Bresenham's algorithm.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0, P1 & X1 (16-bit LE) \\
+P2, P3 & Y1 (16-bit LE) \\
+P4, P5 & X2 (16-bit LE) \\
+P6, P7 & Y2 (16-bit LE) \\
+P8     & Colour (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM line from (0,0) to (319,199) in white
+20 POKE $A011,0 : POKE $A012,0 : REM X1=0
+30 POKE $A013,0 : POKE $A014,0 : REM Y1=0
+40 POKE $A015,$3F : POKE $A016,$01 : REM X2=319
+50 POKE $A017,$C7 : POKE $A018,$00 : REM Y2=199
+60 POKE $A019,1 : REM colour=white
+70 POKE $A010,$03 : REM execute LINE
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{LINE x1,y1,x2,y2,c}.
+\end{notebox}
+
+% --- $04 CmdCircle -----------------------------------------------------------
+
+\cmdentry{04}{CmdCircle}{Draw a circle outline}
+
+Draws a circle using the midpoint circle algorithm.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0, P1 & Centre X (16-bit LE) \\
+P2, P3 & Centre Y (16-bit LE) \\
+P4, P5 & Radius (16-bit LE) \\
+P8     & Colour (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM circle at centre (160,100) radius 50, green
+20 POKE $A011,160 : POKE $A012,0
+30 POKE $A013,100 : POKE $A014,0
+40 POKE $A015,50  : POKE $A016,0
+50 POKE $A019,5   : REM colour=green
+60 POKE $A010,$04  : REM execute CIRCLE
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{CIRCLE x,y,r,c}.
+\end{notebox}
+
+% --- $05 CmdRect -------------------------------------------------------------
+
+\cmdentry{05}{CmdRect}{Draw a rectangle outline}
+
+Draws a rectangular outline from the top-left corner to the bottom-right
+corner.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0, P1 & X1 top-left (16-bit LE) \\
+P2, P3 & Y1 top-left (16-bit LE) \\
+P4, P5 & X2 bottom-right (16-bit LE) \\
+P6, P7 & Y2 bottom-right (16-bit LE) \\
+P8     & Colour (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM rectangle from (10,10) to (100,80) in cyan
+20 POKE $A011,10 : POKE $A012,0
+30 POKE $A013,10 : POKE $A014,0
+40 POKE $A015,100 : POKE $A016,0
+50 POKE $A017,80  : POKE $A018,0
+60 POKE $A019,3   : REM colour=cyan
+70 POKE $A010,$05  : REM execute RECT
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{RECT x1,y1,x2,y2,c}.
+\end{notebox}
+
+% --- $06 CmdFill -------------------------------------------------------------
+
+\cmdentry{06}{CmdFill}{Draw a filled rectangle}
+
+Identical to CmdRect but fills the interior with the specified colour.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0, P1 & X1 top-left (16-bit LE) \\
+P2, P3 & Y1 top-left (16-bit LE) \\
+P4, P5 & X2 bottom-right (16-bit LE) \\
+P6, P7 & Y2 bottom-right (16-bit LE) \\
+P8     & Colour (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM filled blue box
+20 POKE $A011,0 : POKE $A012,0
+30 POKE $A013,0 : POKE $A014,0
+40 POKE $A015,$3F : POKE $A016,$01
+50 POKE $A017,$C7 : POKE $A018,$00
+60 POKE $A019,6 : REM colour=blue
+70 POKE $A010,$06 : REM execute FILL
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{FILL x1,y1,x2,y2,c}.
+\end{notebox}
+
+% --- $07 CmdGcls -------------------------------------------------------------
+
+\cmdentry{07}{CmdGcls}{Clear graphics bitmap}
+
+Clears the entire 320$\times$200 graphics bitmap to colour 0.  No parameters
+are needed.
+
+\begin{lstlisting}
+POKE $A010,$07 : REM clear bitmap
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{GCLS}.
+\end{notebox}
+
+% --- $08 CmdGcolor -----------------------------------------------------------
+
+\cmdentry{08}{CmdGcolor}{Set default drawing colour}
+
+Sets the default draw colour used by subsequent graphics commands when no
+explicit colour is provided.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & Colour (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+POKE $A011,5 : POKE $A010,$08 : REM default colour = green
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{GCOLOR c}.
+\end{notebox}
+
+% --- $09 CmdPaint ------------------------------------------------------------
+
+\cmdentry{09}{CmdPaint}{Flood fill from a point}
+
+Performs a flood fill starting from the specified point, filling all
+connected pixels of the same colour with the new colour.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0, P1 & X coordinate (16-bit LE) \\
+P2, P3 & Y coordinate (16-bit LE) \\
+P8     & Fill colour (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 CIRCLE 160,100,50,1  : REM draw circle outline
+20 REM flood fill the interior with yellow
+30 POKE $A011,160 : POKE $A012,0
+40 POKE $A013,100 : POKE $A014,0
+50 POKE $A019,7   : REM colour=yellow
+60 POKE $A010,$09  : REM execute PAINT
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{PAINT x,y,c}.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\subsection{Sprite Commands}
+\label{sec:vgc-spr-cmds}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Sprites are 16$\times$16 pixel objects with 4-bit colour per pixel (16 colours
+including transparent).  The VGC supports 16 sprites numbered 0--15.  Sprite
+shapes are stored in a separate shape RAM with 256 slots; each sprite register
+block selects which shape slot to display.
+
+% --- $10 CmdSprDef ----------------------------------------------------------
+
+\cmdentry{10}{CmdSprDef}{Define a single sprite pixel}
+
+Sets one pixel in a sprite's shape definition.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & Sprite number (0--15) \\
+P1 & Pixel X within sprite (0--15) \\
+P2 & Pixel Y within sprite (0--15) \\
+P3 & Colour (0--15, 0 = transparent) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM set pixel (7,7) of sprite 0 to red
+20 POKE $A011,0   : REM sprite 0
+30 POKE $A012,7   : REM x=7
+40 POKE $A013,7   : REM y=7
+50 POKE $A014,2   : REM colour=red
+60 POKE $A010,$10  : REM execute SPRDEF
+\end{lstlisting}
+
+% --- $11 CmdSprRow -----------------------------------------------------------
+
+\cmdentry{11}{CmdSprRow}{Load a sprite row (8 pixels)}
+
+Loads eight pixels into one half of a sprite row.  Since sprites are 16 pixels
+wide and each parameter byte holds one 4-bit colour value, two CmdSprRow
+calls are needed per row --- but the BASIC \texttt{SPRITEDATA} command handles
+this automatically.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0     & Sprite number (0--15) \\
+P1     & Row index (0--15) \\
+P2--P9 & Eight pixel colours (each 0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM load row 0 of sprite 0 with 8 red pixels
+20 POKE $A011,0    : REM sprite 0
+30 POKE $A012,0    : REM row 0
+40 FOR I=0 TO 7
+50   POKE $A013+I,2 : REM red
+60 NEXT
+70 POKE $A010,$11   : REM execute SPRROW
+\end{lstlisting}
+
+% --- $12 CmdSprClr ----------------------------------------------------------
+
+\cmdentry{12}{CmdSprClr}{Clear a sprite's shape data}
+
+Resets all pixels in the specified sprite's shape to transparent (colour 0).
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & Sprite number (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+POKE $A011,3 : POKE $A010,$12 : REM clear sprite 3
+\end{lstlisting}
+
+% --- $13 CmdSprCopy ---------------------------------------------------------
+
+\cmdentry{13}{CmdSprCopy}{Copy a sprite's shape to another}
+
+Duplicates the shape data from one sprite to another.  Useful for creating
+animation frames or mirrored variants.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & Source sprite number \\
+P1 & Destination sprite number \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM copy sprite 0's shape to sprite 1
+20 POKE $A011,0 : POKE $A012,1
+30 POKE $A010,$13
+\end{lstlisting}
+
+% --- $14 CmdSprPos -----------------------------------------------------------
+
+\cmdentry{14}{CmdSprPos}{Set sprite position}
+
+Positions a sprite at the given screen coordinates.  Coordinates can extend
+beyond the visible area for smooth entry/exit.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0       & Sprite number (0--15) \\
+P1, P2   & X position (16-bit LE) \\
+P3, P4   & Y position (16-bit LE) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM position sprite 2 at (160, 100)
+20 POKE $A011,2    : REM sprite 2
+30 POKE $A012,160  : POKE $A013,0 : REM X=160
+40 POKE $A014,100  : POKE $A015,0 : REM Y=100
+50 POKE $A010,$14   : REM execute SPRPOS
+\end{lstlisting}
+
+\begin{notebox}
+The BASIC command \texttt{SPRITE n,x,y} sets position and enables the sprite
+in one step.
+\end{notebox}
+
+% --- $15 CmdSprEna -----------------------------------------------------------
+
+\cmdentry{15}{CmdSprEna}{Enable (show) a sprite}
+
+Makes the sprite visible on screen.  The sprite must have shape data and a
+position set, or it will appear as a transparent rectangle at (0,0).
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & Sprite number (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+POKE $A011,0 : POKE $A010,$15 : REM enable sprite 0
+\end{lstlisting}
+
+% --- $16 CmdSprDis ----------------------------------------------------------
+
+\cmdentry{16}{CmdSprDis}{Disable (hide) a sprite}
+
+Removes the sprite from the display.  Its shape and position data are
+preserved.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & Sprite number (0--15) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+POKE $A011,0 : POKE $A010,$16 : REM disable sprite 0
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{SPRITE n,OFF}.
+\end{notebox}
+
+% --- $17 CmdSprFlip ----------------------------------------------------------
+
+\cmdentry{17}{CmdSprFlip}{Set sprite flip flags}
+
+Mirrors the sprite horizontally and/or vertically.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & Sprite number (0--15) \\
+P1 & Flip flags: bit 0 = X flip, bit 1 = Y flip \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 POKE $A011,0   : REM sprite 0
+20 POKE $A012,1   : REM flip horizontally
+30 POKE $A010,$17
+\end{lstlisting}
+
+Values for P1:
+\begin{itemize}
+  \item 0 = no flip
+  \item 1 = horizontal flip (mirror left-right)
+  \item 2 = vertical flip (mirror top-bottom)
+  \item 3 = both flips (180-degree rotation)
+\end{itemize}
+
+% --- $18 CmdSprPri ----------------------------------------------------------
+
+\cmdentry{18}{CmdSprPri}{Set sprite priority}
+
+Controls the sprite's draw order relative to the text and graphics layers.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & Sprite number (0--15) \\
+P1 & Priority (0--2) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Priority values:
+\begin{itemize}
+  \item 0 = behind all layers (drawn first)
+  \item 1 = between text and graphics layers
+  \item 2 = in front of all layers (drawn last)
+\end{itemize}
+
+\begin{lstlisting}
+10 POKE $A011,0   : REM sprite 0
+20 POKE $A012,2   : REM in front of everything
+30 POKE $A010,$18
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\subsection{Memory I/O Commands}
+\label{sec:vgc-mem-cmds}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+These commands allow direct read/write access to the VGC's internal memory
+spaces, which are not mapped into the CPU's address space.
+
+% --- $19 CmdMemRead ----------------------------------------------------------
+
+\cmdentry{19}{CmdMemRead}{Read from VGC memory}
+
+Reads a byte from one of the VGC's internal memory spaces and returns it in
+P3.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0     & Memory space selector \\
+P1, P2 & Address within space (16-bit LE) \\
+P3     & \textit{(output)} Data byte read \\
+P4     & Flags: bit 0 = auto-increment address \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Memory space values:
+\begin{itemize}
+  \item \$00 = Screen RAM (2000 bytes, character codes)
+  \item \$01 = Colour RAM (2000 bytes, per-cell colour attributes)
+  \item \$02 = Graphics bitmap (64000 bytes, 320$\times$200 pixels)
+  \item \$03 = Sprite shape RAM (256 slots $\times$ 128 bytes = 32768 bytes)
+\end{itemize}
+
+\begin{lstlisting}
+10 REM read the character at screen position 0
+20 POKE $A011,0  : REM space = screen RAM
+30 POKE $A012,0  : POKE $A013,0 : REM address = 0
+40 POKE $A015,0  : REM no auto-increment
+50 POKE $A010,$19 : REM execute MEMREAD
+60 PRINT "CHAR CODE: ";PEEK($A014)
+\end{lstlisting}
+
+\begin{tipbox}
+Set P4 bit 0 to enable auto-increment mode.  After each read, the address in
+P1/P2 is automatically advanced by one, making it efficient to read
+consecutive bytes in a loop without rewriting the address registers.
+\end{tipbox}
+
+% --- $1A CmdMemWrite ---------------------------------------------------------
+
+\cmdentry{1A}{CmdMemWrite}{Write to VGC memory}
+
+Writes a byte to one of the VGC's internal memory spaces.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0     & Memory space selector (same as CmdMemRead) \\
+P1, P2 & Address within space (16-bit LE) \\
+P3     & Data byte to write \\
+P4     & Flags: bit 0 = auto-increment address \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM write 'A' (65) to screen position 0
+20 POKE $A011,0   : REM space = screen RAM
+30 POKE $A012,0   : POKE $A013,0 : REM address = 0
+40 POKE $A014,65  : REM data = 'A'
+50 POKE $A015,0   : REM no auto-increment
+60 POKE $A010,$1A  : REM execute MEMWRITE
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\subsection{Copper (Raster) Commands}
+\label{sec:vgc-copper-cmds}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The copper is a raster-synchronised coprocessor inspired by the Amiga's
+Copper.  It executes a list of register-write events keyed to specific
+scanline positions, allowing per-scanline colour changes, split-screen
+effects, and raster bars --- all without CPU intervention.
+
+The VGC supports 128 copper lists, each holding up to 256 events.  One list
+is \emph{active} (being executed each frame) and one is the \emph{target}
+(being edited).  This double-buffering allows glitch-free list updates.
+
+% --- $1B CmdCopperAdd -------------------------------------------------------
+
+\cmdentry{1B}{CmdCopperAdd}{Add a copper event}
+
+Adds an event to the target copper list.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0, P1 & Scanline (16-bit LE, 0--199) \\
+P2     & Column \\
+P3, P4 & Target register address (16-bit LE) \\
+P5     & Value to write to the register \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM change background colour at scanline 100
+20 POKE $A011,100 : POKE $A012,0  : REM scanline 100
+30 POKE $A013,0                    : REM column 0
+40 POKE $A014,$01 : POKE $A015,$A0 : REM target = $A001 (BgCol)
+50 POKE $A016,2                    : REM value = red
+60 POKE $A010,$1B                  : REM add event
+\end{lstlisting}
+
+\begin{notebox}
+The BASIC command \texttt{COPPER} provides a higher-level interface to the
+copper system.
+\end{notebox}
+
+% --- $1C CmdCopperClear ------------------------------------------------------
+
+\cmdentry{1C}{CmdCopperClear}{Clear the target copper list}
+
+Removes all events from the currently selected target copper list.  No
+parameters.
+
+\begin{lstlisting}
+POKE $A010,$1C : REM clear target list
+\end{lstlisting}
+
+% --- $1D CmdCopperEnable -----------------------------------------------------
+
+\cmdentry{1D}{CmdCopperEnable}{Enable copper execution}
+
+Starts executing the active copper list each frame.  No parameters.
+
+\begin{lstlisting}
+POKE $A010,$1D : REM enable copper
+\end{lstlisting}
+
+% --- $1E CmdCopperDisable ----------------------------------------------------
+
+\cmdentry{1E}{CmdCopperDisable}{Disable copper execution}
+
+Stops copper execution.  The list contents are preserved.  No parameters.
+
+\begin{lstlisting}
+POKE $A010,$1E : REM disable copper
+\end{lstlisting}
+
+% --- $1F CmdSysReset ---------------------------------------------------------
+
+\cmdentry{1F}{CmdSysReset}{Full system reset}
+
+Performs a complete visual and audio reset: clears the screen, silences all
+audio, disables all sprites, resets colours to defaults.  No parameters.
+
+\begin{lstlisting}
+POKE $A010,$1F : REM full reset
+\end{lstlisting}
+
+\begin{notebox}
+BASIC equivalent: \texttt{RESET}.
+\end{notebox}
+
+% --- $20 CmdCopperList -------------------------------------------------------
+
+\cmdentry{20}{CmdCopperList}{Select copper list for editing}
+
+Selects which copper list is the \emph{target} for subsequent CmdCopperAdd
+and CmdCopperClear operations.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & List index (0--127) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+POKE $A011,1 : POKE $A010,$20 : REM edit list 1
+\end{lstlisting}
+
+% --- $21 CmdCopperUse --------------------------------------------------------
+
+\cmdentry{21}{CmdCopperUse}{Activate a copper list}
+
+Switches the active copper list to the specified index.  The switch takes
+effect at the next vertical blank.
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Param} & \textbf{Meaning} \\
+\midrule
+P0 & List index (0--127) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+POKE $A011,1 : POKE $A010,$21 : REM activate list 1
+\end{lstlisting}
+
+% --- $22 CmdCopperListEnd ----------------------------------------------------
+
+\cmdentry{22}{CmdCopperListEnd}{Reset target to active list}
+
+Sets the target copper list back to whichever list is currently active.
+Useful after finishing edits on a different list.  No parameters.
+
+\begin{lstlisting}
+POKE $A010,$22 : REM target = active list
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{IRQ Control Register (\$A01F)}
+\label{sec:vgc-irq}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\mementry{A01F}{RegIrqCtrl}{R/W}{0}
+
+Controls raster-triggered interrupts from the VGC.
+
+\bitfield{---}{---}{---}{---}{---}{---}{---}{RSTR}
+
+\begin{itemize}
+  \item \textbf{Bit 0 (RSTR)}: Raster IRQ enable.  When set, the VGC fires an
+        IRQ when the raster beam reaches the trigger scanline.  This allows
+        frame-synchronised processing and split-screen effects.
+\end{itemize}
+
+\begin{lstlisting}
+POKE $A01F,1 : REM enable raster IRQ
+POKE $A01F,0 : REM disable raster IRQ
+\end{lstlisting}
+
+\begin{tipbox}
+Combine the raster IRQ with the copper for advanced effects: use the IRQ
+handler to swap copper lists mid-frame, creating complex multi-zone colour
+schemes without burning CPU cycles in a polling loop.
+\end{tipbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Help System Registers (\$A020--\$A030)}
+\label{sec:vgc-help}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The VGC includes a built-in help system accessible through a small register
+block.
+
+\mementry{A020}{RegHelp}{W}{---}
+
+Help command register.  Write one of the following values:
+\begin{itemize}
+  \item \$01 --- Display the help index (list of available topics).
+  \item \$02 --- Search for a keyword.  The search query must be written to
+        the search buffer at \addr{A021} first.
+\end{itemize}
+
+\begin{lstlisting}
+POKE $A020,1 : REM show help index
+\end{lstlisting}
+
+\memrange{A021}{A030}{HelpSearchBuffer}{R/W}{0}
+
+A 16-byte buffer for the help search query.  Write a null-terminated ASCII
+string here, then write \$02 to \addr{A020} to execute the search.
+
+\begin{lstlisting}
+10 REM search for "PLOT" in help
+20 POKE $A021,ASC("P")
+30 POKE $A022,ASC("L")
+40 POKE $A023,ASC("O")
+50 POKE $A024,ASC("T")
+60 POKE $A025,0         : REM null terminator
+70 POKE $A020,2         : REM search
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Compiler Controller (\$A031--\$A03E)}
+\label{sec:vgc-compiler}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The NovaVM includes an on-board NCC compiler.  These registers provide
+access to compilation commands, status, and error reporting.
+
+\mementry{A031}{CmpCmd}{W}{---}
+
+Compiler command register.  Write one of:
+\begin{itemize}
+  \item \$01 --- Compile source code from XRAM at the address in \addr{A03B}--\addr{A03D}.
+  \item \$02 --- Populate error fields for the error at index \addr{A03A}.
+  \item \$03 --- Populate warning fields for the warning at index \addr{A03A}.
+\end{itemize}
+
+\mementry{A032}{CmpStatus}{R}{0}
+
+Compiler status:
+\begin{itemize}
+  \item \$00 = idle
+  \item \$01 = compiling
+  \item \$02 = compilation successful
+  \item \$03 = compilation failed with errors
+\end{itemize}
+
+\mementry{A033}{CmpErrCount}{R}{0}
+
+Number of errors from the last compilation.
+
+\mementry{A034}{CmpWarnCount}{R}{0}
+
+Number of warnings from the last compilation.
+
+\memrange{A035}{A036}{CmpErrLine}{R}{0}
+
+16-bit line number (little-endian) of the current error.
+
+\memrange{A037}{A038}{CmpCodeSize}{R}{0}
+
+16-bit size (little-endian) of the compiled code in bytes.
+
+\mementry{A039}{CmpErrMsg}{R}{---}
+
+Read this register repeatedly to retrieve the error message one byte at a
+time.  Returns 0 when the message is exhausted.
+
+\mementry{A03A}{CmpErrIdx}{W}{---}
+
+Write an error or warning index here (0-based), then issue command \$02 or
+\$03 to \addr{A031} to populate the error fields.
+
+\memrange{A03B}{A03D}{CmpSrcAddr}{W}{---}
+
+24-bit little-endian XRAM address of the source code to compile.  Set this
+before issuing the compile command.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{ROM Swap Register (\$A03F)}
+\label{sec:vgc-romswap}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\mementry{A03F}{RegRomSwap}{W}{---}
+
+Controls which ROM image is active in the \$C000--\$FFFF region.
+
+\begin{itemize}
+  \item \$01 --- Switch to NCC ROM (native code compiler).
+  \item \$02 --- Switch to EhBASIC ROM (the default).
+  \item \$03 --- Activate the NCC editor.
+\end{itemize}
+
+\begin{warningbox}
+Switching ROMs while BASIC is running will crash the system.  This register is
+intended for use by the boot loader and compiler infrastructure, not by user
+programs.
+\end{warningbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Sprite Registers (\$A040--\$A0BF)}
+\label{sec:vgc-sprite-regs}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The 128 bytes from \$A040 to \$A0BF are divided into 16 blocks of 8 bytes
+each, one block per sprite.  These registers provide direct read/write access
+to each sprite's position, shape slot, flags, priority, and transparent
+colour --- bypassing the command interface entirely.
+
+The base address of sprite $N$ is:
+
+\begin{center}
+\texttt{Base = \$A040 + $N$ $\times$ 8}
+\end{center}
+
+\begin{center}
+\small
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{Offset} & \textbf{Name} & \textbf{R/W} & \textbf{Description} \\
+\midrule
++0 & SprRegXLo       & R/W & X position low byte \\
++1 & SprRegXHi       & R/W & X position high byte \\
++2 & SprRegYLo       & R/W & Y position low byte \\
++3 & SprRegYHi       & R/W & Y position high byte \\
++4 & SprRegShape     & R/W & Shape slot index (0--255) \\
++5 & SprRegFlags     & R/W & Flags (see below) \\
++6 & SprRegPriority  & R/W & Draw priority (0--2) \\
++7 & SprRegTransColor & R/W & Transparent colour (default 0) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{SprRegFlags (offset +5)}
+
+\bitfield{ENA}{---}{---}{---}{---}{---}{YFLP}{XFLP}
+
+\begin{itemize}
+  \item \textbf{Bit 7 (ENA)}: Enable.  Set to show the sprite, clear to hide it.
+  \item \textbf{Bit 1 (YFLP)}: Vertical flip.
+  \item \textbf{Bit 0 (XFLP)}: Horizontal flip.
+\end{itemize}
+
+Bits 2--6 are unused and should be written as zero.
+
+\subsection*{Sprite Register Addresses}
+
+For quick reference, here are the base addresses for all 16 sprites:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\textbf{Sprite} & \textbf{Base} & \textbf{Sprite} & \textbf{Base} \\
+\midrule
+0  & \$A040 & 8  & \$A080 \\
+1  & \$A048 & 9  & \$A088 \\
+2  & \$A050 & 10 & \$A090 \\
+3  & \$A058 & 11 & \$A098 \\
+4  & \$A060 & 12 & \$A0A0 \\
+5  & \$A068 & 13 & \$A0A8 \\
+6  & \$A070 & 14 & \$A0B0 \\
+7  & \$A078 & 15 & \$A0B8 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Direct Register Access Example}
+
+\begin{lstlisting}
+10 REM position sprite 3 at (100, 50) via direct register access
+20 BASE = $A040 + 3*8
+30 POKE BASE+0, 100 : POKE BASE+1, 0  : REM X=100
+40 POKE BASE+2, 50  : POKE BASE+3, 0  : REM Y=50
+50 POKE BASE+5, $80                    : REM enable
+\end{lstlisting}
+
+\begin{lstlisting}
+10 REM read sprite 5's current position
+20 BASE = $A040 + 5*8
+30 X = PEEK(BASE+0) + PEEK(BASE+1)*256
+40 Y = PEEK(BASE+2) + PEEK(BASE+3)*256
+50 PRINT "SPRITE 5 AT ";X;",";Y
+\end{lstlisting}
+
+\begin{tipbox}
+Direct register access is faster than using the command interface for
+positioning sprites in a tight game loop.  Updating the X and Y registers
+directly avoids the overhead of loading the parameter registers and issuing a
+command.
+\end{tipbox}
+
+\begin{lstlisting}
+10 REM enable sprite 0 with horizontal flip
+20 POKE $A045, $80 OR $01 : REM ENA + XFLP
+\end{lstlisting}
+
+\begin{lstlisting}
+10 REM set sprite 0 to draw behind everything
+20 POKE $A046, 0 : REM priority = 0
+\end{lstlisting}
+
+\begin{notebox}
+The transparent colour register (offset +7) defaults to 0, meaning black
+pixels in the sprite shape are treated as transparent.  Change this if your
+sprite needs to contain black pixels --- for example, set it to 15 to make
+light grey transparent instead.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section*{Summary}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The VGC occupies addresses \$A000--\$A0BF and provides the complete visual
+output system for the NovaVM.  The table below summarises the register map:
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Range} & \textbf{Usage} & \textbf{Access} \\
+\midrule
+\$A000--\$A00F  & Core registers (mode, colour, cursor, I/O) & R/W \\
+\$A010          & Command register                           & W \\
+\$A011--\$A01E  & Parameter registers P0--P13                & R/W \\
+\$A01F          & IRQ control                                & R/W \\
+\$A020--\$A030  & Help system                                & R/W \\
+\$A031--\$A03E  & Compiler controller                        & R/W \\
+\$A03F          & ROM swap                                   & W \\
+\$A040--\$A0BF  & Sprite registers (16 $\times$ 8 bytes)     & R/W \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+With 9 graphics commands, 9 sprite commands, 2 memory I/O commands, 8 copper
+commands, and 128 bytes of direct sprite registers, the VGC packs a remarkable
+amount of capability into a small address range.  Master this chapter, and
+you have mastered the display.
