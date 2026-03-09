@@ -1,0 +1,354 @@
+% =============================================================================
+% Chapter 6 — The Network Interface Controller ($A100–$A13F)
+% =============================================================================
+\chapter{The Network Interface Controller}
+
+\epigraph{``The network is the computer.  The packet is the thought.''}%
+         {\textit{--- Sun Microsystems proverb, paraphrased}}
+
+\section*{Introduction}
+
+The Network Interface Controller --- NIC for short --- provides message-oriented
+TCP networking through four independent connection slots.  Each slot may operate
+as a \emph{client} (connecting out to a remote host) or as a \emph{server}
+(listening for incoming connections and accepting them).
+
+Messages on the wire are length-prefixed: a single byte gives the payload
+length, where a length byte of zero denotes 256 bytes.  This simple framing
+removes the need for delimiter parsing on the 6502 side.
+
+Data moves between the NIC and CPU RAM via DMA.  To send, the program writes
+the source address and length into the DMA registers and issues a Send command.
+To receive, the program issues a Recv command and the NIC copies the next
+queued message into RAM at the DMA address.  Up to 16 messages may be queued
+per slot before older messages are dropped.
+
+The NIC occupies 64 bytes of address space from \$A100 to \$A13F.
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Command Register}
+\label{sec:nic-cmd}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\mementry{A100}{NicCmd}{W}{---}
+
+Writing a command byte to this register executes the command immediately on the
+slot selected by \addr{A102}.  The available commands are:
+
+\cmdentry{01}{Connect}{Connect to remote host}
+
+Opens a TCP connection to the hostname in the name buffer (\addr{A120}) on the
+port specified by \addr{A108}--\addr{A109}.  The connection is established
+asynchronously; poll \addr{A118} (slot status) for the Connected bit, or check
+the Error bit on failure.  A 10-second timeout applies.
+
+\cmdentry{02}{Disconnect}{Close connection}
+
+Closes the active connection on the selected slot and drains any unread
+messages from the receive queue.
+
+\cmdentry{03}{Send}{Send message via DMA}
+
+Reads \addr{A112} bytes from CPU RAM starting at the DMA address
+(\addr{A110}--\addr{A111}) and sends them as a single length-prefixed message
+on the selected slot's TCP connection.  If the slot is not connected, the
+slot's Error flag is set.
+
+\cmdentry{04}{Recv}{Receive message via DMA}
+
+Dequeues the next message from the selected slot's receive queue and writes it
+into CPU RAM at the DMA address.  The length of the received message is stored
+in \addr{A113}.  If no message is available, \addr{A113} reads as zero.
+
+\cmdentry{05}{Listen}{Start listening for connections}
+
+Begins listening for incoming TCP connections on the local port specified by
+\addr{A10A}--\addr{A10B}.  The listener binds to the loopback interface.  When
+a remote client connects, the slot's Data Ready bit is set in the slot status
+register, indicating that an Accept command should be issued.
+
+\cmdentry{06}{Accept}{Accept pending connection}
+
+Accepts a pending inbound connection on the selected slot.  After acceptance,
+the slot transitions to Connected and incoming messages are queued automatically.
+
+\begin{notebox}
+All commands operate on the slot selected by \addr{A102}.  Set the slot
+\emph{before} writing any command, port, hostname, or DMA parameters.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Status and Control Registers}
+\label{sec:nic-status}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $A101 NicStatus ----------------------------------------------------------
+
+\mementry{A101}{NicStatus}{R}{---}
+
+Global NIC status register.  Provides a quick summary of the controller state.
+
+\bitfield{Err}{---}{---}{---}{---}{---}{Any}{Rdy}
+
+\begin{description}
+  \item[Bit 0 --- Ready]\hfill\\
+    Always set to 1 once the NIC is initialised.
+  \item[Bit 1 --- Any Data]\hfill\\
+    Set if \emph{any} slot has data waiting in its receive queue (or a pending
+    accept).  Useful for a single polling check across all slots.
+  \item[Bit 7 --- Error]\hfill\\
+    Set if any slot has encountered an error.
+\end{description}
+
+\begin{lstlisting}
+10 REM wait for data on any slot
+20 WAIT $A101, 2             : REM wait for bit 1 set
+\end{lstlisting}
+
+% --- $A102 NicSlot ------------------------------------------------------------
+
+\mementry{A102}{NicSlot}{R/W}{0}
+
+Active slot selector (0--3).  All commands, port settings, hostname writes, and
+DMA operations act on the slot selected here.
+
+\begin{lstlisting}
+POKE $A102, 2 : REM select slot 2
+\end{lstlisting}
+
+% --- $A103 NicIrqCtrl ---------------------------------------------------------
+
+\mementry{A103}{NicIrqCtrl}{R/W}{0}
+
+IRQ enable bitmask.  Bit~$N$ (0--3) enables an IRQ when data arrives on
+slot~$N$.  When a message is received on an enabled slot, the NIC asserts the
+CPU's IRQ line.
+
+\bitfield{---}{---}{---}{---}{Sl3}{Sl2}{Sl1}{Sl0}
+
+\begin{lstlisting}
+POKE $A103, 1   : REM enable IRQ on slot 0 only
+POKE $A103, $0F : REM enable IRQ on all 4 slots
+\end{lstlisting}
+
+% --- $A104 NicIrqStatus -------------------------------------------------------
+
+\mementry{A104}{NicIrqStatus}{R}{0}
+
+IRQ pending flags.  Bit~$N$ is set when data has arrived on slot~$N$ (and IRQ
+was enabled for that slot).  \textbf{Reading this register clears all pending
+flags} and de-asserts the IRQ line.
+
+\bitfield{---}{---}{---}{---}{Sl3}{Sl2}{Sl1}{Sl0}
+
+\begin{warningbox}
+Because reading clears the flags, read this register only once per interrupt
+handler and save the value for inspection.
+\end{warningbox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Port Registers}
+\label{sec:nic-ports}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $A108-$A109 NicRemotePort ------------------------------------------------
+
+\memrange{A108}{A109}{NicRemotePort}{R/W}{---}
+
+Remote port for the Connect command (16-bit, little-endian).  Write the low
+byte to \addr{A108} and the high byte to \addr{A109}.
+
+\begin{lstlisting}
+DOKE $A108, 8080 : REM port 8080
+\end{lstlisting}
+
+% --- $A10A-$A10B NicLocalPort -------------------------------------------------
+
+\memrange{A10A}{A10B}{NicLocalPort}{R/W}{---}
+
+Local port for the Listen command (16-bit, little-endian).  Write the low byte
+to \addr{A10A} and the high byte to \addr{A10B}.
+
+\begin{lstlisting}
+DOKE $A10A, 9000 : REM listen on port 9000
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{DMA Registers}
+\label{sec:nic-dma}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $A110-$A111 NicDmaAddr ---------------------------------------------------
+
+\memrange{A110}{A111}{NicDmaAddr}{R/W}{---}
+
+CPU RAM address for DMA transfers (16-bit, little-endian).  For Send, this is
+the source address.  For Recv, this is the destination address.
+
+\begin{lstlisting}
+DOKE $A110, $4000 : REM DMA to/from $4000
+\end{lstlisting}
+
+% --- $A112 NicDmaLen ----------------------------------------------------------
+
+\mementry{A112}{NicDmaLen}{R/W}{0}
+
+DMA transfer length for the Send command.  Valid values are 1--255.  A value of
+0 is treated as 256 (the maximum message size).
+
+% --- $A113 NicMsgLen ----------------------------------------------------------
+
+\mementry{A113}{NicMsgLen}{R}{0}
+
+Length of the last received message, set after a Recv command.  If no message
+was available, this reads as 0.  A received message of exactly 256 bytes is
+reported as 0 (matching the wire protocol convention).
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Per-Slot Status Registers}
+\label{sec:nic-slot-status}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $A118-$A11B NicSlotStatus ------------------------------------------------
+
+\memrange{A118}{A11B}{NicSlotStatus0--3}{R}{---}
+
+Four consecutive bytes, one per slot.  Each provides the current state of that
+connection.  Slot~$N$'s status is at \$A118~+~$N$.
+
+\bitfield{---}{---}{---}{RmCl}{Err}{SndR}{DatR}{Conn}
+
+\begin{description}
+  \item[Bit 0 --- Connected]\hfill\\
+    Set when the slot has an active TCP connection.
+  \item[Bit 1 --- Data Ready]\hfill\\
+    Set when one or more messages are waiting in the receive queue, or when
+    a pending accept is available (server mode).
+  \item[Bit 2 --- Send Ready]\hfill\\
+    Always set; indicates the slot can accept a Send command.
+  \item[Bit 3 --- Error]\hfill\\
+    Set on connection failure, send error, or receive queue overflow.
+  \item[Bit 4 --- Remote Closed]\hfill\\
+    Set when the remote peer has closed the connection.
+\end{description}
+
+\begin{lstlisting}
+10 REM check if slot 0 is connected
+20 IF PEEK($A118) AND 1 THEN PRINT "CONNECTED"
+\end{lstlisting}
+
+\begin{notebox}
+Use \texttt{WAIT \$A118, 1} to block until slot~0 becomes connected.  The
+\texttt{WAIT} instruction polls the address until the specified bits are set.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Hostname Buffer}
+\label{sec:nic-hostname}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $A120-$A13F NicNameBuf ---------------------------------------------------
+
+\memrange{A120}{A13F}{NicNameBuf}{R/W}{---}
+
+A 32-byte buffer for the hostname used by the Connect command.  The name must
+be null-terminated ASCII.  Write the hostname before issuing a Connect command.
+
+\begin{lstlisting}
+10 REM write "localhost" into the name buffer
+20 A$ = "localhost" + CHR$(0)
+30 FOR I=1 TO LEN(A$)
+40   POKE $A120+I-1, ASC(MID$(A$,I,1))
+50 NEXT I
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Complete Examples}
+\label{sec:nic-examples}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Client: Connect, Send, and Receive}
+
+This example connects to a server on localhost port~8080, sends a
+``HELLO'' message, and waits for a response.
+
+\begin{lstlisting}
+100 REM === TCP client example ===
+110 POKE $A102, 0              : REM select slot 0
+120 DOKE $A108, 8080           : REM remote port 8080
+130 REM write hostname
+140 A$ = "localhost" + CHR$(0)
+150 FOR I=1 TO LEN(A$)
+160   POKE $A120+I-1, ASC(MID$(A$,I,1))
+170 NEXT I
+180 POKE $A100, 1              : REM connect
+190 WAIT $A118, 1              : REM wait for connected
+200 PRINT "CONNECTED!"
+210 REM
+220 REM send "HELLO"
+230 A$ = "HELLO"
+240 FOR I=1 TO LEN(A$)
+250   POKE $3FFF+I, ASC(MID$(A$,I,1))
+260 NEXT I
+270 DOKE $A110, $4000          : REM DMA source address
+280 POKE $A112, LEN(A$)        : REM DMA length
+290 POKE $A100, 3              : REM send
+300 PRINT "SENT: "; A$
+310 REM
+320 REM receive response
+330 DOKE $A110, $4100          : REM DMA dest address
+340 WAIT $A118, 2              : REM wait for data ready
+350 POKE $A100, 4              : REM recv
+360 L = PEEK($A113)            : REM message length
+370 R$ = ""
+380 FOR I=0 TO L-1
+390   R$ = R$ + CHR$(PEEK($4100+I))
+400 NEXT I
+410 PRINT "RECEIVED: "; R$
+420 POKE $A100, 2              : REM disconnect
+\end{lstlisting}
+
+\subsection{Server: Listen, Accept, and Echo}
+
+This example listens on port~9000, accepts one connection, and echoes back
+every message it receives.
+
+\begin{lstlisting}
+100 REM === TCP echo server ===
+110 POKE $A102, 0              : REM select slot 0
+120 DOKE $A10A, 9000           : REM local port 9000
+130 POKE $A100, 5              : REM listen
+140 PRINT "LISTENING ON PORT 9000..."
+150 WAIT $A118, 2              : REM wait for pending accept
+160 POKE $A100, 6              : REM accept
+170 PRINT "CLIENT CONNECTED!"
+180 REM
+190 REM echo loop
+200 S = PEEK($A118)
+210 IF S AND 16 THEN GOTO 310  : REM remote closed?
+220 IF NOT(S AND 2) THEN 200   : REM no data? loop
+230 DOKE $A110, $4000          : REM DMA address
+240 POKE $A100, 4              : REM recv
+250 L = PEEK($A113)
+260 IF L=0 THEN 200            : REM empty message
+270 POKE $A112, L              : REM set send length
+280 POKE $A100, 3              : REM echo it back
+290 PRINT "ECHOED "; L; " BYTES"
+300 GOTO 200
+310 PRINT "CLIENT DISCONNECTED"
+320 POKE $A100, 2              : REM disconnect
+\end{lstlisting}
+
+\begin{tipbox}
+The BASIC commands \texttt{NOPEN}, \texttt{NCLOSE}, \texttt{NLISTEN},
+\texttt{NACCEPT}, and \texttt{NSEND} provide higher-level access to the NIC
+without direct register manipulation.  See the NovaVM BASIC User Guide for
+details.
+\end{tipbox}

@@ -1,0 +1,402 @@
+% =============================================================================
+% Chapter 7 — The Wavetable Synthesizer ($A140–$A1DF)
+% =============================================================================
+\chapter{The Wavetable Synthesizer}
+
+\epigraph{``Any sufficiently advanced synthesizer is indistinguishable from an
+orchestra.''}{\textit{--- With apologies to Arthur C.\ Clarke}}
+
+\section*{Introduction}
+
+The Wavetable Synthesizer --- WTS --- is an 8-voice sample-based sound engine
+that complements the SID chips' analog-style synthesis with realistic instrument
+timbres.  It loads standard SF2 soundfont files from the host filesystem,
+keeping sample data in host memory, and renders stereo PCM16 audio at
+44\,100\,Hz through OpenAL.
+
+Each voice provides independent control over note pitch, velocity, instrument
+selection, volume, stereo panning, and pitch bend.  Two global effects ---
+reverb (Freeverb algorithm) and chorus (modulated delay) --- process the mixed
+output before the master volume stage.
+
+The WTS occupies the address range \$A140--\$A1DF, divided into three regions:
+8 voice register blocks (\$A140--\$A17F), global control registers
+(\$A180--\$A187), and the instrument enumeration interface (\$A1A0--\$A1DF).
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Voice Registers (\$A140--\$A17F)}
+\label{sec:wts-voices}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Eight voices, eight bytes each.  The base address for voice~$N$ is
+\$A140~+~$N \times 8$.
+
+\begin{center}
+\small
+\begin{tabular}{@{}clcll@{}}
+\toprule
+\textbf{Voice} & \textbf{Base} & \textbf{End} & \textbf{Range} \\
+\midrule
+0 & \texttt{\$A140} & \texttt{\$A147} & Voice 0 \\
+1 & \texttt{\$A148} & \texttt{\$A14F} & Voice 1 \\
+2 & \texttt{\$A150} & \texttt{\$A157} & Voice 2 \\
+3 & \texttt{\$A158} & \texttt{\$A15F} & Voice 3 \\
+4 & \texttt{\$A160} & \texttt{\$A167} & Voice 4 \\
+5 & \texttt{\$A168} & \texttt{\$A16F} & Voice 5 \\
+6 & \texttt{\$A170} & \texttt{\$A177} & Voice 6 \\
+7 & \texttt{\$A178} & \texttt{\$A17F} & Voice 7 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The register offsets within each voice block are identical.  In the entries
+below, the address shown is for voice~0; add $N \times 8$ for voice~$N$.
+
+% --- +0 WtsVoiceNote ----------------------------------------------------------
+
+\mementry{A140}{WtsVoiceNote}{W}{---}
+
+MIDI note number.  Writing a value from 1 to 127 triggers a note-on at that
+pitch (60~=~middle~C).  Writing~0 triggers a note-off, releasing the voice into
+its envelope's release phase.
+
+Set the velocity and instrument \emph{before} writing the note number, as the
+write to this register is what triggers playback.
+
+\begin{lstlisting}
+POKE $A140, 60 : REM note on: middle C
+POKE $A140, 0  : REM note off
+\end{lstlisting}
+
+% --- +1 WtsVoiceVelocity ------------------------------------------------------
+
+\mementry{A141}{WtsVoiceVelocity}{W}{---}
+
+Note velocity (0--127).  Affects the volume and, depending on the soundfont,
+the timbre of the note.  Set this before writing the note number.
+
+\begin{lstlisting}
+POKE $A141, 100 : REM velocity 100 (moderately loud)
+\end{lstlisting}
+
+% --- +2 WtsVoiceInstrument ----------------------------------------------------
+
+\mementry{A142}{WtsVoiceInstrument}{W}{---}
+
+Instrument index (0--255).  Selects from the currently loaded soundfont.  The
+number of available instruments can be read from \addr{A184}.  Set this before
+playing notes.
+
+\begin{lstlisting}
+POKE $A142, 0   : REM instrument 0 (typically piano)
+POKE $A142, 40  : REM instrument 40 (typically violin)
+\end{lstlisting}
+
+% --- +3 WtsVoiceVolume --------------------------------------------------------
+
+\mementry{A143}{WtsVoiceVolume}{R/W}{255}
+
+Per-voice volume (0--255).  Independent of velocity --- this acts as a
+channel-level volume control.  The final output level is the product of
+velocity, voice volume, and master volume.
+
+\begin{lstlisting}
+POKE $A143, 128 : REM half volume on voice 0
+\end{lstlisting}
+
+% --- +4 WtsVoicePanning -------------------------------------------------------
+
+\mementry{A144}{WtsVoicePanning}{R/W}{128}
+
+Stereo position.  0~=~hard left, 128~=~centre, 255~=~hard right.
+
+\begin{lstlisting}
+POKE $A144, 0   : REM voice 0 hard left
+POKE $A14C, 255 : REM voice 1 hard right
+\end{lstlisting}
+
+% --- +5 WtsVoicePitchBendLo ---------------------------------------------------
+
+\mementry{A145}{WtsVoicePitchBendLo}{W}{0}
+
+Pitch bend low byte.  Combined with the high byte (\addr{A146}) to form a
+16-bit pitch bend value.
+
+% --- +6 WtsVoicePitchBendHi ---------------------------------------------------
+
+\mementry{A146}{WtsVoicePitchBendHi}{W}{\$80}
+
+Pitch bend high byte.  The centre (no bend) value is \$80.  Values above \$80
+bend the pitch upward; values below bend downward.  The bend range depends on
+the soundfont preset but is typically $\pm$2 semitones.
+
+\begin{lstlisting}
+10 REM bend voice 0 up one step
+20 POKE $A145, 0    : REM low byte
+30 POKE $A146, $C0  : REM high byte (above centre)
+\end{lstlisting}
+
+% --- +7 WtsVoiceStatus --------------------------------------------------------
+
+\mementry{A147}{WtsVoiceStatus}{R}{0}
+
+Voice status flags.
+
+\bitfield{---}{---}{---}{---}{---}{---}{Rel}{Act}
+
+\begin{description}
+  \item[Bit 0 --- Active]\hfill\\
+    Set while the voice is producing sound (note on or sustaining).
+  \item[Bit 1 --- Releasing]\hfill\\
+    Set when the voice is in the release phase of its envelope (after note off).
+    Cleared when the release completes and the voice becomes silent.
+\end{description}
+
+\begin{lstlisting}
+10 REM wait for voice 0 to finish releasing
+20 WAIT $A147, 3, 3  : REM wait until bits 0+1 both clear
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Global Registers (\$A180--\$A187)}
+\label{sec:wts-global}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+% --- $A180 WtsReverbLevel -----------------------------------------------------
+
+\mementry{A180}{WtsReverbLevel}{R/W}{80}
+
+Reverb wet level.  0~=~completely dry (no reverb), 255~=~maximum reverb.  The
+reverb uses a Freeverb algorithm with multiple comb and allpass filters.
+
+\begin{lstlisting}
+POKE $A180, 120 : REM generous reverb
+POKE $A180, 0   : REM reverb off
+\end{lstlisting}
+
+% --- $A181 WtsChorusLevel -----------------------------------------------------
+
+\mementry{A181}{WtsChorusLevel}{R/W}{40}
+
+Chorus depth.  0~=~no chorus effect, 255~=~maximum depth.  The chorus uses a
+modulated delay line to create a thickening, ensemble-like effect.
+
+\begin{lstlisting}
+POKE $A181, 80 : REM moderate chorus
+\end{lstlisting}
+
+% --- $A182 WtsMasterVolume ----------------------------------------------------
+
+\mementry{A182}{WtsMasterVolume}{R/W}{255}
+
+Master output volume for all WTS voices.  Scales the final mixed output before
+it is sent to the audio device.  0~=~silent, 255~=~full volume.
+
+\begin{lstlisting}
+POKE $A182, 200 : REM slightly reduced master volume
+\end{lstlisting}
+
+% --- $A183 WtsSoundfontStatus -------------------------------------------------
+
+\mementry{A183}{WtsSoundfontStatus}{R}{0}
+
+Soundfont loading status:
+
+\begin{center}
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+\$00 & No soundfont loaded \\
+\$01 & Ready --- soundfont loaded and playable \\
+\$02 & Loading --- soundfont is being loaded (wait before playing) \\
+\$FF & Error --- soundfont failed to load \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+10 REM wait for soundfont to finish loading
+20 WAIT $A183, 1   : REM wait for bit 0 (ready)
+30 PRINT "SOUNDFONT READY"
+\end{lstlisting}
+
+% --- $A184 WtsInstrumentCount -------------------------------------------------
+
+\mementry{A184}{WtsInstrumentCount}{R}{0}
+
+Number of instruments available in the currently loaded soundfont.  Returns 0
+if no soundfont is loaded.
+
+\begin{lstlisting}
+PRINT "INSTRUMENTS:"; PEEK($A184)
+\end{lstlisting}
+
+% --- $A185 WtsCommand ---------------------------------------------------------
+
+\mementry{A185}{WtsCommand}{W}{---}
+
+Command register.  Writing a command byte executes it immediately.
+
+\cmdentry{01}{AllNotesOff}{Silence all voices}
+
+Immediately stops all playing notes on all eight voices.
+
+\cmdentry{02}{ResetEffects}{Reset reverb and chorus}
+
+Resets reverb and chorus levels to their defaults (80 and 40 respectively) and
+clears any residual audio in the effect buffers.
+
+% --- $A186 WtsCommandArg -----------------------------------------------------
+
+\mementry{A186}{WtsCommandArg}{W}{---}
+
+Command argument byte.  Currently unused; reserved for future commands.
+
+% --- $A187 WtsActiveVoices ----------------------------------------------------
+
+\mementry{A187}{WtsActiveVoices}{R}{0}
+
+Bitmask of currently active voices.  Bit~$N$ is set if voice~$N$ is producing
+sound (either playing or releasing).
+
+\bitfield{V7}{V6}{V5}{V4}{V3}{V2}{V1}{V0}
+
+\begin{lstlisting}
+10 REM check which voices are active
+20 A = PEEK($A187)
+30 FOR I=0 TO 7
+40   IF A AND (2^I) THEN PRINT "VOICE"; I; "ACTIVE"
+50 NEXT I
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Instrument Enumeration (\$A1A0--\$A1DF)}
+\label{sec:wts-enum}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The enumeration interface allows programs to discover which instruments are
+available in the loaded soundfont.  Write an instrument index to \addr{A1A0}
+and the name, bank, and program number are populated for reading.
+
+% --- $A1A0 WtsEnumIndex -------------------------------------------------------
+
+\mementry{A1A0}{WtsEnumIndex}{W}{---}
+
+Write an instrument index (0 to \texttt{PEEK(\$A184)-1}) to populate the
+enumeration buffer.
+
+% --- $A1A1 WtsEnumBank --------------------------------------------------------
+
+\mementry{A1A1}{WtsEnumBank}{R}{---}
+
+MIDI bank number of the selected instrument.
+
+% --- $A1A2 WtsEnumProgram -----------------------------------------------------
+
+\mementry{A1A2}{WtsEnumProgram}{R}{---}
+
+MIDI program number of the selected instrument.
+
+% --- $A1A3-$A1DF WtsEnumName --------------------------------------------------
+
+\memrange{A1A3}{A1DF}{WtsEnumName}{R}{---}
+
+Null-terminated instrument name string, up to 28 characters.
+
+\begin{lstlisting}
+10 REM list all instruments
+20 N = PEEK($A184)
+30 IF N=0 THEN PRINT "NO SOUNDFONT" : END
+40 FOR I=0 TO N-1
+50   POKE $A1A0, I          : REM select instrument
+60   B = PEEK($A1A1)        : REM bank
+70   P = PEEK($A1A2)        : REM program
+80   N$ = ""
+90   FOR J=0 TO 27
+100    C = PEEK($A1A3+J)
+110    IF C=0 THEN J=27 : GOTO 130
+120    N$ = N$ + CHR$(C)
+130  NEXT J
+140  PRINT I; ": ["; B; ":"; P; "] "; N$
+150 NEXT I
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Complete Examples}
+\label{sec:wts-examples}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Loading a Soundfont}
+
+Soundfonts are loaded via the FileIoController at \texttt{\$B9A0}.
+Command \$15 loads an SF2 file by name.
+
+\begin{lstlisting}
+10 REM load a soundfont via FileIoController
+20 F$ = "GeneralUser.sf2" + CHR$(0)
+30 FOR I=1 TO LEN(F$)
+40   POKE $B9BF+I, ASC(MID$(F$,I,1))
+50 NEXT I
+60 POKE $B9A0, $15           : REM load soundfont command
+70 WAIT $A183, 1             : REM wait for ready
+80 PRINT PEEK($A184); " INSTRUMENTS LOADED"
+\end{lstlisting}
+
+\subsection{Playing a Note}
+
+\begin{lstlisting}
+10 REM play middle C on voice 0
+20 BASE = $A140
+30 POKE BASE+2, 0            : REM instrument 0 (piano)
+40 POKE BASE+1, 100          : REM velocity 100
+50 POKE BASE+0, 60           : REM note on: middle C
+60 FOR I=1 TO 5000 : NEXT I  : REM wait
+70 POKE BASE+0, 0            : REM note off
+\end{lstlisting}
+
+\subsection{Three-Note Chord with Panning}
+
+\begin{lstlisting}
+100 REM play a C major chord across the stereo field
+110 FOR V=0 TO 2
+120   B = $A140 + V*8
+130   POKE B+2, 0             : REM piano
+140   POKE B+3, 200           : REM volume
+150   POKE B+1, 90            : REM velocity
+160 NEXT V
+170 POKE $A144, 64            : REM voice 0: left of centre
+180 POKE $A14C, 128           : REM voice 1: centre
+190 POKE $A154, 192           : REM voice 2: right of centre
+200 REM play C-E-G
+210 POKE $A140, 60            : REM C
+220 POKE $A148, 64            : REM E
+230 POKE $A150, 67            : REM G
+240 FOR I=1 TO 10000 : NEXT I
+250 REM release all
+260 POKE $A140, 0
+270 POKE $A148, 0
+280 POKE $A150, 0
+\end{lstlisting}
+
+\subsection{Setting Up Reverb and Chorus}
+
+\begin{lstlisting}
+10 REM cathedral-style reverb with gentle chorus
+20 POKE $A180, 180           : REM heavy reverb
+30 POKE $A181, 60            : REM moderate chorus
+40 POKE $A182, 220           : REM master volume
+50 REM now any notes played will have these effects
+\end{lstlisting}
+
+\begin{tipbox}
+The MML \texttt{MUSIC} command supports WTS voices with the \texttt{@W}
+prefix.  For example, \texttt{MUSIC 6, "@W0 L4 CDEFG"} plays a C major scale
+on WTS voice~0 using instrument~0.  This is often easier than direct register
+manipulation for musical sequences.
+\end{tipbox}
