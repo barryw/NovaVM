@@ -646,3 +646,449 @@ fill_row:
     cpx #80
     bcc @fr_loop
     rts
+
+; =====================================================================
+; draw_tabs -- draw the PETSCII category tab bar
+; Draws a divider line on ROW_DIVIDER, then tabs on ROW_TABS.
+; Active tab gets rounded-corner borders and an open bottom gap.
+; Input:  zp_category = active tab (0-4)
+; Clobbers: A, X, Y, zp_tmp, zp_tmp2, zp_tmp3, zp_tmp4, zp_col
+; =====================================================================
+draw_tabs:
+    ; --- Fill ROW_DIVIDER with CH_HLINE in COL_DGRAY ---
+    lda #CH_HLINE
+    ldx #COL_DGRAY
+    ldy #ROW_DIVIDER
+    jsr fill_row
+
+    ; --- Draw each tab on ROW_TABS ---
+    lda #2
+    sta zp_col                      ; running column position, start at col 2
+
+    ldx #0                          ; tab index
+@dt_tab_loop:
+    stx zp_tmp4                     ; save tab index
+
+    ; Get this tab's width
+    lda tab_widths,x
+    sta zp_tmp2                     ; tab label width
+
+    ; Check if this is the active tab
+    cpx zp_category
+    beq @dt_active_tab
+
+    ; --- INACTIVE tab: print name in COL_DGRAY ---
+    lda zp_col
+    inc a                           ; col + 1 (skip left border column)
+    sta RegCursorX
+    lda #ROW_TABS
+    sta RegCursorY
+    lda #COL_DGRAY
+    sta RegFgCol
+
+    ; Set pointer to category name
+    ldx zp_tmp4
+    lda cat_names_lo,x
+    sta zp_ptr
+    lda cat_names_hi,x
+    sta zp_ptr+1
+    jsr print_str
+
+    jmp @dt_next_tab
+
+@dt_active_tab:
+    ; --- ACTIVE tab: draw bordered tab with open bottom ---
+
+    ; Get accent color for this category
+    ldx zp_tmp4
+    lda cat_colors,x
+    sta zp_tmp3                     ; save accent color
+
+    ; -- ROW_TABS: draw top border --
+    ; CH_RNDTL at zp_col
+    lda #ROW_TABS
+    sta RegCursorY
+    lda zp_col
+    sta RegCursorX
+    lda #COL_WHITE
+    sta RegFgCol
+    lda #CH_RNDTL
+    sta RegCharOut
+
+    ; CH_HLINE across the top (tab_width characters)
+    lda zp_col
+    inc a
+    sta RegCursorX
+    ldy #0
+@dt_top_line:
+    lda #CH_HLINE
+    sta RegCharOut
+    ; Advance cursor manually
+    lda RegCursorX
+    inc a
+    sta RegCursorX
+    iny
+    cpy zp_tmp2
+    bcc @dt_top_line
+
+    ; CH_RNDTR at end
+    lda #CH_RNDTR
+    sta RegCharOut
+
+    ; -- ROW_TABS: overwrite hlines with category name in COL_WHITE --
+    lda zp_col
+    inc a                           ; inside left border
+    sta RegCursorX
+    lda #ROW_TABS
+    sta RegCursorY
+    lda #COL_WHITE
+    sta RegFgCol
+    ldx zp_tmp4
+    lda cat_names_lo,x
+    sta zp_ptr
+    lda cat_names_hi,x
+    sta zp_ptr+1
+    jsr print_str
+
+    ; -- ROW_DIVIDER: draw open bottom (VLINE + spaces + VLINE) --
+    lda #ROW_DIVIDER
+    sta RegCursorY
+
+    ; CH_VLINE at left edge (zp_col)
+    lda zp_col
+    sta RegCursorX
+    lda #COL_WHITE
+    sta RegFgCol
+    lda #CH_VLINE
+    sta RegCharOut
+
+    ; Spaces inside (clear the hline)
+    lda zp_col
+    inc a
+    sta RegCursorX
+    ldy #0
+@dt_clear_div:
+    lda #' '
+    sta RegCharOut
+    lda RegCursorX
+    inc a
+    sta RegCursorX
+    iny
+    cpy zp_tmp2
+    bcc @dt_clear_div
+
+    ; CH_VLINE at right edge
+    ; Right edge = zp_col + tab_width + 1
+    lda zp_col
+    clc
+    adc zp_tmp2
+    inc a
+    sta RegCursorX
+    lda #CH_VLINE
+    sta RegCharOut
+
+@dt_next_tab:
+    ; Advance column: zp_col += tab_width + 3
+    lda zp_col
+    clc
+    adc zp_tmp2
+    adc #3
+    sta zp_col
+
+    ldx zp_tmp4
+    inx
+    cpx #NUM_CATEGORIES
+    bcs :+
+    jmp @dt_tab_loop
+:
+    rts
+
+; =====================================================================
+; draw_file_list -- display the scrollable file list
+; Shows VISIBLE_ROWS files starting from zp_scroll_top, highlighting
+; the selected entry (zp_sel_index) with the category accent color.
+; Input:  zp_category, zp_sel_index, zp_scroll_top
+; Clobbers: A, X, Y, zp_tmp, zp_tmp2, zp_tmp3, zp_ptr, zp_src
+; =====================================================================
+draw_file_list:
+    ; Get file count for current category
+    ldx zp_category
+    lda cat_counts,x
+    sta zp_tmp3                     ; total file count
+
+    ; Get base pointer for current category's entries
+    lda cat_ptrs_lo,x
+    sta zp_src
+    lda cat_ptrs_hi,x
+    sta zp_src+1
+
+    ; Advance pointer to scroll_top entry: src += scroll_top * ENTRY_SIZE
+    lda zp_scroll_top
+    beq @dfl_no_advance
+    tax                             ; loop counter
+@dfl_advance:
+    clc
+    lda zp_src
+    adc #ENTRY_SIZE
+    sta zp_src
+    lda zp_src+1
+    adc #0
+    sta zp_src+1
+    dex
+    bne @dfl_advance
+@dfl_no_advance:
+
+    ; zp_src now points to the first visible entry
+    lda #0
+    sta zp_tmp                      ; visible row counter (0 to VISIBLE_ROWS-1)
+
+@dfl_row_loop:
+    ; Set cursor to ROW_LIST_TOP + row, col 3
+    lda #ROW_LIST_TOP
+    clc
+    adc zp_tmp
+    sta RegCursorY
+    lda #3
+    sta RegCursorX
+
+    ; Calculate absolute file index = scroll_top + row
+    lda zp_scroll_top
+    clc
+    adc zp_tmp
+    sta zp_tmp2                     ; absolute index
+
+    ; Past end of file list?
+    cmp zp_tmp3
+    bcc @dfl_has_entry
+    jmp @dfl_clear_row
+@dfl_has_entry:
+
+    ; Determine color: selected = accent, else white
+    cmp zp_sel_index
+    bne @dfl_not_selected
+    ldx zp_category
+    lda cat_colors,x
+    bra @dfl_set_color
+@dfl_not_selected:
+    lda #COL_WHITE
+@dfl_set_color:
+    sta RegFgCol
+
+    ; Print filename from (zp_src), up to 32 chars, stop at null
+    ldy #0
+@dfl_name_loop:
+    lda (zp_src),y
+    beq @dfl_pad_name               ; null terminator
+    sta RegCharOut
+    iny
+    cpy #32
+    bcc @dfl_name_loop
+
+@dfl_pad_name:
+    ; Pad with spaces to column 44
+    ; Current column = 3 + Y (characters printed)
+    tya
+    clc
+    adc #3                          ; actual column
+@dfl_pad_loop:
+    cmp #44
+    bcs @dfl_print_badge
+    pha
+    lda #' '
+    sta RegCharOut
+    pla
+    inc a
+    sta RegCursorX
+    bra @dfl_pad_loop
+
+@dfl_print_badge:
+    ; Check file type at offset 32 of entry
+    ldy #32
+    lda (zp_src),y
+
+    cmp #$01                        ; SID type
+    bne @dfl_check_mid
+    ; Print "SID" in COL_LGREEN
+    lda #COL_LGREEN
+    sta RegFgCol
+    lda #'S'
+    sta RegCharOut
+    lda #'I'
+    sta RegCharOut
+    lda #'D'
+    sta RegCharOut
+    bra @dfl_pad_end
+
+@dfl_check_mid:
+    cmp #$03                        ; MID type
+    bne @dfl_pad_end
+    ; Print "MID" in COL_LBLUE
+    lda #COL_LBLUE
+    sta RegFgCol
+    lda #'M'
+    sta RegCharOut
+    lda #'I'
+    sta RegCharOut
+    lda #'D'
+    sta RegCharOut
+
+@dfl_pad_end:
+    ; Pad rest of line with spaces to column 78
+    ; Current column after badge = 44 + 3 = 47 (or 44 if no badge)
+    ; Just set cursor and fill
+    lda RegCursorX
+@dfl_trail_pad:
+    cmp #78
+    bcs @dfl_next_entry
+    sta RegCursorX
+    pha
+    lda #' '
+    sta RegCharOut
+    pla
+    inc a
+    bra @dfl_trail_pad
+
+@dfl_next_entry:
+    ; Advance source pointer by ENTRY_SIZE
+    clc
+    lda zp_src
+    adc #ENTRY_SIZE
+    sta zp_src
+    lda zp_src+1
+    adc #0
+    sta zp_src+1
+
+    ; Next row
+    inc zp_tmp
+    lda zp_tmp
+    cmp #VISIBLE_ROWS
+    bcs @dfl_done
+    jmp @dfl_row_loop
+@dfl_done:
+    rts
+
+@dfl_clear_row:
+    ; Clear this row with spaces to col 78
+    lda #COL_WHITE
+    sta RegFgCol
+    lda #3
+@dfl_clear_loop:
+    cmp #78
+    bcs @dfl_clear_next
+    sta RegCursorX
+    pha
+    lda #' '
+    sta RegCharOut
+    pla
+    inc a
+    bra @dfl_clear_loop
+@dfl_clear_next:
+    ; No entry here — don't advance src pointer
+    inc zp_tmp
+    lda zp_tmp
+    cmp #VISIBLE_ROWS
+    bcs @dfl_clear_done
+    jmp @dfl_row_loop
+@dfl_clear_done:
+    rts
+
+; =====================================================================
+; init_scroll -- initialize the scroll text engine
+; Zeros the scroll index and fills ROW_SCROLL with spaces in COL_LGREEN.
+; Clobbers: A, X, Y
+; =====================================================================
+init_scroll:
+    ; Zero the 16-bit scroll index
+    stz zp_scroll_idx
+    stz zp_scroll_idx+1
+
+    ; Fill ROW_SCROLL with spaces in COL_LGREEN
+    lda #' '
+    ldx #COL_LGREEN
+    ldy #ROW_SCROLL
+    jsr fill_row
+    rts
+
+; =====================================================================
+; advance_scroll -- shift ROW_SCROLL left by one char, append next char
+; Called once per frame.  Directly accesses CharRam for speed.
+; Clobbers: A, X, Y, zp_ptr
+; =====================================================================
+advance_scroll:
+    ; Row 24 starts at CharRamBase + 24*80 = CharRamBase + 1920
+    SCROLL_ROW_ADDR = CharRamBase + 1920
+
+    ; Shift bytes left: copy [offset+1] to [offset] for 79 iterations
+    ldx #0
+@as_shift:
+    lda SCROLL_ROW_ADDR+1,x
+    sta SCROLL_ROW_ADDR,x
+    inx
+    cpx #79
+    bcc @as_shift
+
+    ; Get next character from scroll_text using 16-bit index
+    lda zp_scroll_idx
+    sta zp_ptr
+    lda zp_scroll_idx+1
+    sta zp_ptr+1
+    ; Add base address of scroll_text
+    clc
+    lda zp_ptr
+    adc #<scroll_text
+    sta zp_ptr
+    lda zp_ptr+1
+    adc #>scroll_text
+    sta zp_ptr+1
+
+    ; Read character
+    ldy #0
+    lda (zp_ptr),y
+    bne @as_got_char
+
+    ; Null terminator — wrap index to 0
+    stz zp_scroll_idx
+    stz zp_scroll_idx+1
+    ; Get first character
+    lda scroll_text
+@as_got_char:
+    ; Write to column 79
+    sta SCROLL_ROW_ADDR+79
+
+    ; Increment 16-bit scroll index
+    inc zp_scroll_idx
+    bne @as_no_carry
+    inc zp_scroll_idx+1
+@as_no_carry:
+
+    ; Check if index reached SCROLL_TEXT_LEN — wrap to 0
+    lda zp_scroll_idx+1
+    cmp #>SCROLL_TEXT_LEN
+    bcc @as_done                    ; hi byte less, no wrap
+    bne @as_wrap                    ; hi byte greater, wrap
+    lda zp_scroll_idx
+    cmp #<SCROLL_TEXT_LEN
+    bcc @as_done                    ; lo byte less, no wrap
+@as_wrap:
+    stz zp_scroll_idx
+    stz zp_scroll_idx+1
+@as_done:
+    rts
+
+; =====================================================================
+; draw_nav -- draw the navigation help bar on ROW_NAV
+; Prints nav_text centered in COL_LGRAY.
+; Clobbers: A, Y, zp_ptr
+; =====================================================================
+draw_nav:
+    lda #11
+    sta RegCursorX
+    lda #ROW_NAV
+    sta RegCursorY
+    lda #<nav_text
+    sta zp_ptr
+    lda #>nav_text
+    sta zp_ptr+1
+    lda #COL_LGRAY
+    jsr print_str_color
+    rts
