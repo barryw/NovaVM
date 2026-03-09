@@ -1,0 +1,464 @@
+% =============================================================================
+% Chapter 12 — The SID Sound Chips ($D400–$D43F)
+% =============================================================================
+\chapter{The SID Sound Chips}
+
+\epigraph{``Without music, life would be a mistake.''}%
+         {\textit{--- Friedrich Nietzsche}}
+
+\section*{Introduction}
+
+The NovaVM includes a software emulation of the legendary MOS~6581 Sound
+Interface Device --- the \textbf{SID} chip that gave the Commodore~64 its
+distinctive sonic character.  Two independent SID chips are provided:
+
+\begin{center}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Chip} & \textbf{Address Range} & \textbf{Voices} & \textbf{Music Engine Voices} \\
+\midrule
+SID~1 & \$D400--\$D41F & 1--3 & 0--2 \\
+SID~2 & \$D420--\$D43F & 1--3 & 3--5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each chip provides three independently programmable voices, giving six SID
+voices in total.  Every voice has: 16-bit frequency control, 12-bit pulse
+width modulation, waveform selection (triangle, sawtooth, pulse, noise),
+a four-stage ADSR envelope generator, ring modulation, and hard
+synchronisation.  Each chip also provides a multi-mode resonant filter
+(low-pass, band-pass, high-pass) and a 4-bit master volume control.
+
+These addresses sit inside the ROM range (\$C000--\$FFFF).  Reads return
+ROM data --- you cannot read back SID register values from these addresses.
+Writes, however, are intercepted by the composite bus and routed to the SID
+emulation engine.
+
+\begin{notebox}
+The SID emulation renders audio in a background thread via OpenAL at
+44\,100\,Hz, fully decoupled from the CPU clock.  Audio output is mono per
+chip; stereo panning is available through the Wavetable Synthesizer or by
+using both SID chips simultaneously.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Voice Registers}
+\label{sec:sid-voices}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Each SID chip has three voices occupying seven bytes each.  The voice base
+addresses for SID~1 are:
+
+\begin{center}
+\small
+\begin{tabular}{@{}clcl@{}}
+\toprule
+\textbf{Voice} & \textbf{Base} & \textbf{End} & \textbf{Offset from SID base} \\
+\midrule
+1 & \texttt{\$D400} & \texttt{\$D406} & +\$00 \\
+2 & \texttt{\$D407} & \texttt{\$D40D} & +\$07 \\
+3 & \texttt{\$D40E} & \texttt{\$D414} & +\$0E \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For SID~2, add \$20 to all addresses (voice~1 starts at \$D420, etc.).
+
+The register offsets within each voice are identical.  In the entries below,
+the address shown is for SID~1 voice~1; add \$07 for voice~2, \$0E for
+voice~3, or \$20 for the corresponding SID~2 voice.
+
+
+% --- Offset +0: Frequency Low ------------------------------------------------
+
+\mementry{D400}{FreqLo --- Frequency Low}{W}{0}
+
+Low 8~bits of the 16-bit oscillator frequency.
+
+% --- Offset +1: Frequency High -----------------------------------------------
+
+\mementry{D401}{FreqHi --- Frequency High}{W}{0}
+
+High 8~bits of the 16-bit oscillator frequency.  The output frequency is
+calculated as:
+
+\[
+  f_{\text{out}} = \frac{(\mathit{FreqHi} \times 256 + \mathit{FreqLo})
+                         \times f_{\text{clock}}}{16\,777\,216}
+\]
+
+\noindent where $f_{\text{clock}}$ is the CPU clock rate (985\,248\,Hz PAL).
+
+\begin{center}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Note} & \textbf{Freq Value (hex)} & \textbf{Freq Value (dec)} \\
+\midrule
+C-4 (middle C) & \$1CD6 & 7382 \\
+A-4 (concert A) & \$23C5 & 9157 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% --- Offset +2: Pulse Width Low ----------------------------------------------
+
+\mementry{D402}{PwLo --- Pulse Width Low}{W}{0}
+
+Low 8~bits of the 12-bit pulse width value.
+
+% --- Offset +3: Pulse Width High ---------------------------------------------
+
+\mementry{D403}{PwHi --- Pulse Width High}{W}{0}
+
+High 4~bits of the 12-bit pulse width (bits~0--3 only; bits~4--7 are
+unused).  The duty cycle is:
+
+\[
+  \text{Duty} = \frac{\mathit{PW}}{4095}
+\]
+
+A value of \$800 (2048) produces a 50\% square wave.  Lower values narrow
+the pulse; higher values widen it.
+
+
+% --- Offset +4: Waveform Control ----------------------------------------------
+
+\mementry{D404}{WfCtrl --- Waveform Control}{W}{0}
+
+\bitfield{Noise}{Pulse}{Saw}{Tri}{Test}{Ring}{Sync}{Gate}
+
+\begin{description}
+  \item[Bit 7 --- Noise] Select noise waveform.
+  \item[Bit 6 --- Pulse] Select pulse waveform.  Width set by PwLo/PwHi.
+  \item[Bit 5 --- Saw] Select sawtooth waveform.
+  \item[Bit 4 --- Tri] Select triangle waveform.
+  \item[Bit 3 --- Test] Silence the voice and reset the noise LFSR.
+  \item[Bit 2 --- Ring] Enable ring modulation.  The triangle output of this
+        voice is XORed with bit~23 of the \emph{previous} voice's oscillator,
+        producing bell-like or metallic timbres.  Voice~1's ring mod source is
+        voice~3.
+  \item[Bit 1 --- Sync] Enable hard sync.  This voice's oscillator is reset
+        whenever the previous voice's oscillator completes a cycle, creating
+        harmonically rich timbres at the frequency ratio of the two voices.
+  \item[Bit 0 --- Gate] Setting this bit starts the attack phase of the ADSR
+        envelope.  Clearing it begins the release phase.
+\end{description}
+
+\begin{tipbox}
+Selecting multiple waveforms simultaneously produces their logical AND,
+which is generally not useful except for specific C64 sound effects.  Stick
+to one waveform bit at a time for predictable results.
+\end{tipbox}
+
+
+% --- Offset +5: Attack/Decay -------------------------------------------------
+
+\mementry{D405}{AD --- Attack / Decay}{W}{0}
+
+\bitfield{A3}{A2}{A1}{A0}{D3}{D2}{D1}{D0}
+
+\begin{description}
+  \item[Bits 7--4 --- Attack] Attack rate (0--15).  Controls how quickly the
+        envelope rises from zero to peak after the gate opens.
+  \item[Bits 3--0 --- Decay] Decay rate (0--15).  Controls how quickly the
+        envelope falls from peak to the sustain level.
+\end{description}
+
+\paragraph{ADSR Timing Table}
+The following table lists the approximate durations for each rate value.
+Attack times represent the time from zero to full amplitude; decay and
+release times represent the time from full amplitude to zero (the actual
+decay stops at the sustain level).
+
+\begin{center}
+\small
+\begin{tabular}{@{}cll@{}}
+\toprule
+\textbf{Value} & \textbf{Attack Time} & \textbf{Decay / Release Time} \\
+\midrule
+0  & 2\,ms   & 6\,ms   \\
+1  & 8\,ms   & 24\,ms  \\
+2  & 16\,ms  & 48\,ms  \\
+3  & 24\,ms  & 72\,ms  \\
+4  & 38\,ms  & 114\,ms \\
+5  & 56\,ms  & 168\,ms \\
+6  & 68\,ms  & 204\,ms \\
+7  & 80\,ms  & 240\,ms \\
+8  & 100\,ms & 300\,ms \\
+9  & 250\,ms & 750\,ms \\
+10 & 500\,ms & 1.5\,s  \\
+11 & 800\,ms & 2.4\,s  \\
+12 & 1\,s    & 3\,s    \\
+13 & 3\,s    & 9\,s    \\
+14 & 5\,s    & 15\,s   \\
+15 & 8\,s    & 24\,s   \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% --- Offset +6: Sustain/Release -----------------------------------------------
+
+\mementry{D406}{SR --- Sustain / Release}{W}{0}
+
+\bitfield{S3}{S2}{S1}{S0}{R3}{R2}{R1}{R0}
+
+\begin{description}
+  \item[Bits 7--4 --- Sustain] Sustain level (0--15).  The envelope holds at
+        this level after the decay phase completes, for as long as the gate
+        remains set.  0~=~silent, 15~=~full volume.
+  \item[Bits 3--0 --- Release] Release rate (0--15).  Controls how quickly the
+        envelope falls to zero after the gate is cleared.  Uses the same
+        timing values as the decay rate (see table above).
+\end{description}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Filter Registers (\$D415--\$D418)}
+\label{sec:sid-filter}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The SID filter is a state-variable design capable of low-pass, band-pass,
+and high-pass modes (and combinations thereof).  Each voice can be
+independently routed through the filter or mixed directly to the output.
+
+% --- $D415: Filter Cutoff Low ------------------------------------------------
+
+\mementry{D415}{FiltLoFreq --- Filter Cutoff Low}{W}{0}
+
+Low 3~bits of the 11-bit filter cutoff frequency (bits~0--2 only; bits~3--7
+are unused).
+
+% --- $D416: Filter Cutoff High -----------------------------------------------
+
+\mementry{D416}{FiltHiFreq --- Filter Cutoff High}{W}{0}
+
+High 8~bits of the 11-bit filter cutoff frequency.
+
+% --- $D417: Filter Resonance & Voice Select -----------------------------------
+
+\mementry{D417}{FiltCtrl --- Filter Resonance \& Voice Select}{W}{0}
+
+\bitfield{Res3}{Res2}{Res1}{Res0}{FiltEx}{Filt3}{Filt2}{Filt1}
+
+\begin{description}
+  \item[Bits 7--4 --- Resonance] Filter resonance (0--15).  Higher values
+        produce a sharper peak at the cutoff frequency.
+  \item[Bit 3 --- FiltEx] Route external audio input through the filter.
+        Not used in the NovaVM emulation.
+  \item[Bit 2 --- Filt3] Route voice~3 through the filter.
+  \item[Bit 1 --- Filt2] Route voice~2 through the filter.
+  \item[Bit 0 --- Filt1] Route voice~1 through the filter.
+\end{description}
+
+
+% --- $D418: Filter Mode & Master Volume ---------------------------------------
+
+\mementry{D418}{VolMode --- Filter Mode \& Master Volume}{W}{0}
+
+\bitfield{V3Off}{HP}{BP}{LP}{Vol3}{Vol2}{Vol1}{Vol0}
+
+\begin{description}
+  \item[Bit 7 --- V3Off] Mute voice~3 output.  The voice's oscillator
+        continues to run (useful as a modulation source for ring mod or sync
+        without producing audible output).
+  \item[Bit 6 --- HP] Enable high-pass filter mode.
+  \item[Bit 5 --- BP] Enable band-pass filter mode.
+  \item[Bit 4 --- LP] Enable low-pass filter mode.
+  \item[Bits 3--0 --- Volume] Master volume (0--15).  This is the overall
+        output level for all three voices on this chip.
+\end{description}
+
+\begin{notebox}
+Multiple filter modes can be enabled simultaneously.  Combining low-pass and
+high-pass produces a notch (band-reject) filter.  Enabling all three gives a
+roughly flat response with a resonant peak at the cutoff frequency.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Extended Per-Voice Volume (\$D41D--\$D41F)}
+\label{sec:sid-ext-volume}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\mementry{D41D}{Voice 1 Volume}{W}{\$0F}
+
+Per-voice volume for voice~1 (0--15, 4-bit).  Only the low nibble is used.
+
+\mementry{D41E}{Voice 2 Volume}{W}{\$0F}
+
+Per-voice volume for voice~2 (0--15, 4-bit).
+
+\mementry{D41F}{Voice 3 Volume}{W}{\$0F}
+
+Per-voice volume for voice~3 (0--15, 4-bit).
+
+\begin{notebox}
+These registers are a \textbf{NovaBASIC extension} not present on the
+original MOS~6581 or 8580.  They provide independent volume control for each
+voice, supplementing the 4-bit master volume in register \$D418.  The
+default value of \$0F (full) ensures that existing SID code behaves
+identically to a standard SID chip.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{SID 2 (\$D420--\$D43F)}
+\label{sec:sid2}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{D420}{D43F}{SID Chip 2}{W}{0}
+
+The second SID chip has an identical register layout, offset by \$20 from
+SID~1.  All voice, filter, and extended volume registers described above
+apply --- simply add \$20 to each address.
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{SID 1} & \textbf{SID 2} & \textbf{Function} \\
+\midrule
+\$D400--\$D406 & \$D420--\$D426 & Voice 1 \\
+\$D407--\$D40D & \$D427--\$D42D & Voice 2 \\
+\$D40E--\$D414 & \$D42E--\$D434 & Voice 3 \\
+\$D415--\$D418 & \$D435--\$D438 & Filter + master volume \\
+\$D41D--\$D41F & \$D43D--\$D43F & Per-voice volume (ext.) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{BASIC Examples}
+\label{sec:sid-examples}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection*{Playing a Simple Note}
+
+\begin{lstlisting}
+10 REM play middle C on SID voice 1
+20 POKE $D418, 15       : REM max volume
+30 POKE $D405, $22      : REM attack=2, decay=2
+40 POKE $D406, $A8      : REM sustain=10, release=8
+50 POKE $D400, $D6      : REM freq low
+60 POKE $D401, $1C      : REM freq high (middle C)
+70 POKE $D404, $21      : REM sawtooth + gate on
+80 FOR I=1 TO 5000:NEXT : REM wait
+90 POKE $D404, $20      : REM gate off (release)
+\end{lstlisting}
+
+\subsection*{Filter Sweep}
+
+\begin{lstlisting}
+10 REM low-pass filter sweep on a pulse wave
+20 POKE $D418, 15       : REM max volume
+30 POKE $D402, 0        : REM pulse width low
+40 POKE $D403, 8        : REM pulse width high (50%)
+50 POKE $D405, $09      : REM attack=0, decay=9
+60 POKE $D406, $A0      : REM sustain=10, release=0
+70 POKE $D400, $D6      : REM freq low  (middle C)
+80 POKE $D401, $1C      : REM freq high
+90 POKE $D417, $01      : REM route voice 1 through filter
+100 POKE $D418, $1F     : REM low-pass + max volume
+110 POKE $D404, $41     : REM pulse + gate on
+120 FOR F=0 TO 255
+130   POKE $D416, F      : REM sweep cutoff high byte
+140   FOR W=1 TO 20:NEXT : REM small delay
+150 NEXT F
+160 POKE $D404, $40     : REM gate off
+\end{lstlisting}
+
+\subsection*{Two-Voice Ring Modulation}
+
+\begin{lstlisting}
+10 REM ring modulation: voice 1 modulated by voice 3
+20 POKE $D418, 15       : REM max volume
+30 REM set voice 3 as modulation source (no audible output)
+40 POKE $D40E, $00      : REM voice 3 freq low
+50 POKE $D40F, $03      : REM voice 3 freq high (low freq)
+60 POKE $D412, $11      : REM triangle + gate on
+70 POKE $D413, $00      : REM attack/decay = 0
+80 POKE $D414, $F0      : REM sustain=15, release=0
+90 REM voice 1 with ring mod enabled
+100 POKE $D405, $09     : REM attack=0, decay=9
+110 POKE $D406, $A8     : REM sustain=10, release=8
+120 POKE $D400, $D6     : REM freq low  (middle C)
+130 POKE $D401, $1C     : REM freq high
+140 POKE $D404, $15     : REM triangle + ring mod + gate on
+150 FOR I=1 TO 8000:NEXT
+160 POKE $D404, $14     : REM gate off
+170 POKE $D412, $10     : REM voice 3 gate off
+\end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Register Summary}
+\label{sec:sid-summary}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The complete register map for SID~1 is shown below.  SID~2 is identical with
+a base address of \$D420.
+
+\begin{center}
+\small
+\begin{longtable}{@{}llcp{6.8cm}@{}}
+\toprule
+\textbf{Address} & \textbf{Register} & \textbf{R/W} &
+  \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Address} & \textbf{Register} & \textbf{R/W} &
+  \textbf{Description} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\small\itshape continued on next page\ldots} \\
+\endfoot
+\bottomrule
+\endlastfoot
+\multicolumn{4}{@{}l}{\textbf{Voice 1}} \\
+\$D400 & FreqLo   & W & Frequency low byte \\
+\$D401 & FreqHi   & W & Frequency high byte \\
+\$D402 & PwLo     & W & Pulse width low byte \\
+\$D403 & PwHi     & W & Pulse width high nibble (bits 0--3) \\
+\$D404 & WfCtrl   & W & Waveform / gate / ring / sync / test \\
+\$D405 & AD       & W & Attack (bits 7--4), decay (bits 3--0) \\
+\$D406 & SR       & W & Sustain (bits 7--4), release (bits 3--0) \\
+\midrule
+\multicolumn{4}{@{}l}{\textbf{Voice 2}} \\
+\$D407 & FreqLo   & W & Frequency low byte \\
+\$D408 & FreqHi   & W & Frequency high byte \\
+\$D409 & PwLo     & W & Pulse width low byte \\
+\$D40A & PwHi     & W & Pulse width high nibble (bits 0--3) \\
+\$D40B & WfCtrl   & W & Waveform / gate / ring / sync / test \\
+\$D40C & AD       & W & Attack (bits 7--4), decay (bits 3--0) \\
+\$D40D & SR       & W & Sustain (bits 7--4), release (bits 3--0) \\
+\midrule
+\multicolumn{4}{@{}l}{\textbf{Voice 3}} \\
+\$D40E & FreqLo   & W & Frequency low byte \\
+\$D40F & FreqHi   & W & Frequency high byte \\
+\$D410 & PwLo     & W & Pulse width low byte \\
+\$D411 & PwHi     & W & Pulse width high nibble (bits 0--3) \\
+\$D412 & WfCtrl   & W & Waveform / gate / ring / sync / test \\
+\$D413 & AD       & W & Attack (bits 7--4), decay (bits 3--0) \\
+\$D414 & SR       & W & Sustain (bits 7--4), release (bits 3--0) \\
+\midrule
+\multicolumn{4}{@{}l}{\textbf{Filter}} \\
+\$D415 & FiltLoFreq & W & Filter cutoff low (bits 0--2) \\
+\$D416 & FiltHiFreq & W & Filter cutoff high byte \\
+\$D417 & FiltCtrl   & W & Resonance (bits 7--4), voice routing (bits 0--2) \\
+\$D418 & VolMode    & W & Filter mode (bits 4--7), master volume (bits 0--3) \\
+\midrule
+\multicolumn{4}{@{}l}{\textbf{Extended (NovaBASIC)}} \\
+\$D41D & Voice 1 Vol & W & Per-voice volume (0--15, default \$0F) \\
+\$D41E & Voice 2 Vol & W & Per-voice volume (0--15, default \$0F) \\
+\$D41F & Voice 3 Vol & W & Per-voice volume (0--15, default \$0F) \\
+\end{longtable}
+\end{center}
