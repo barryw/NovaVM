@@ -212,6 +212,318 @@ main:
     rts
 
 ; =====================================================================
+; load_all_dirs -- scan all 5 category subdirectories into dir_buffer
+; Populates cat_ptrs_lo/hi, cat_counts, and dir_buffer with up to
+; MAX_FILES entries per category.  Each entry is 32 bytes of filename
+; plus 1 byte of FioDirType.
+; Clobbers: A, X, Y, zp_src, zp_dst, zp_count, zp_tmp
+; =====================================================================
+load_all_dirs:
+    ; Initialize destination pointer to start of dir_buffer
+    lda #<dir_buffer
+    sta zp_dst
+    lda #>dir_buffer
+    sta zp_dst+1
+
+    ldx #0                              ; category index
+@lad_cat_loop:
+    stx zp_tmp                         ; save category index
+
+    ; Record this category's buffer start address
+    lda zp_dst
+    sta cat_ptrs_lo,x
+    lda zp_dst+1
+    sta cat_ptrs_hi,x
+
+    ; CD into category subdirectory
+    lda cat_dirs_lo,x
+    sta zp_src
+    lda cat_dirs_hi,x
+    sta zp_src+1
+    jsr do_cd
+
+    ; Open directory listing (all files: FioNameLen=0)
+    stz FioNameLen
+    lda #FioCmdDirOpen
+    sta FioCmd
+
+    ; Read directory entries
+    stz zp_count                        ; file count for this category
+@lad_read_loop:
+    lda #FioCmdDirRead
+    sta FioCmd
+
+    ; Check for end-of-directory
+    lda FioStatus
+    cmp #FioStatusOk
+    bne @lad_dir_done                   ; not OK -> end of dir or error
+
+    lda FioErrCode
+    cmp #FioErrEndOfDir
+    beq @lad_dir_done
+
+    ; Skip subdirectories
+    lda FioDirType
+    cmp #FioDirTypeDir
+    beq @lad_read_loop
+
+    ; Copy 32 bytes of filename from FioName to (zp_dst)
+    ldy #0
+@lad_copy:
+    lda FioName,y
+    sta (zp_dst),y
+    iny
+    cpy #32
+    bcc @lad_copy
+
+    ; Store file type byte at offset 32
+    lda FioDirType
+    ldy #32
+    sta (zp_dst),y
+
+    ; Advance destination pointer by ENTRY_SIZE (33)
+    clc
+    lda zp_dst
+    adc #ENTRY_SIZE
+    sta zp_dst
+    lda zp_dst+1
+    adc #0
+    sta zp_dst+1
+
+    ; Increment file count, check limit
+    inc zp_count
+    lda zp_count
+    cmp #MAX_FILES
+    bcc @lad_read_loop
+
+@lad_dir_done:
+    ; Store file count for this category
+    ldx zp_tmp
+    lda zp_count
+    sta cat_counts,x
+
+    ; CD back to root
+    jsr cd_root
+
+    ; Next category
+    inx
+    cpx #NUM_CATEGORIES
+    bcc @lad_cat_loop
+
+    rts
+
+; =====================================================================
+; draw_header -- draw rainbow title header on the graphics layer
+; Clears graphics, draws rainbow bars above/below the title text,
+; and prints the centered title and subtitle on the text layer.
+; Clobbers: A, X, Y, zp_ptr, zp_tmp, zp_tmp2
+; =====================================================================
+draw_header:
+    ; Clear graphics layer
+    lda #CmdGcls
+    sta RegCmd
+
+    ; --- Draw 7 rainbow bars above title (y=4 to y=18, each 2px tall) ---
+    ldx #0                              ; color index
+    lda #4                              ; starting y
+    sta zp_tmp                          ; current y position
+@dh_top_loop:
+    ; Set draw color
+    lda rainbow_colors,x
+    sta RegP0
+    lda #CmdGcolor
+    sta RegCmd
+
+    ; Fill rectangle: x1=20, y1=zp_tmp, x2=299, y2=zp_tmp+1
+    lda #20                             ; x1 lo
+    sta RegP0
+    stz RegP1                           ; x1 hi
+    lda zp_tmp                          ; y1 lo
+    sta RegP2
+    stz RegP3                           ; y1 hi
+    lda #<299                           ; x2 lo
+    sta RegP4
+    lda #>299                           ; x2 hi
+    sta RegP5
+    lda zp_tmp                          ; y2 = y1 + 1
+    inc a
+    sta RegP6
+    stz RegP7                           ; y2 hi
+    lda #CmdFill
+    sta RegCmd
+
+    ; Advance y by 2
+    lda zp_tmp
+    clc
+    adc #2
+    sta zp_tmp
+
+    inx
+    cpx #RAINBOW_LEN
+    bcc @dh_top_loop
+
+    ; --- Print title centered on text row 3, col ~31 ---
+    lda #31
+    sta RegCursorX
+    lda #3
+    sta RegCursorY
+    lda #<title_str
+    sta zp_ptr
+    lda #>title_str
+    sta zp_ptr+1
+    lda #COL_CYAN
+    jsr print_str_color
+
+    ; --- Print subtitle centered on text row 5, col ~26 ---
+    lda #26
+    sta RegCursorX
+    lda #5
+    sta RegCursorY
+    lda #<subtitle_str
+    sta zp_ptr
+    lda #>subtitle_str
+    sta zp_ptr+1
+    lda #COL_LGRAY
+    jsr print_str_color
+
+    ; --- Draw 7 rainbow bars below title (y=46 to y=60, same pattern) ---
+    ldx #0
+    lda #46
+    sta zp_tmp
+@dh_bot_loop:
+    lda rainbow_colors,x
+    sta RegP0
+    lda #CmdGcolor
+    sta RegCmd
+
+    lda #20
+    sta RegP0
+    stz RegP1
+    lda zp_tmp
+    sta RegP2
+    stz RegP3
+    lda #<299
+    sta RegP4
+    lda #>299
+    sta RegP5
+    lda zp_tmp
+    inc a
+    sta RegP6
+    stz RegP7
+    lda #CmdFill
+    sta RegCmd
+
+    lda zp_tmp
+    clc
+    adc #2
+    sta zp_tmp
+
+    inx
+    cpx #RAINBOW_LEN
+    bcc @dh_bot_loop
+
+    rts
+
+; =====================================================================
+; build_copper -- pre-build 32 copper animation lists for raster bars
+; Each list writes a cycling color palette to RegBgCol across scanlines
+; 0-59 (step 4), then resets to black at scanline 60.
+; Clobbers: A, X, Y, zp_tmp, zp_tmp2, zp_tmp3
+; =====================================================================
+build_copper:
+    stz zp_tmp3                         ; frame_offset (list index 0-31)
+
+@bc_list_loop:
+    ; Select target copper list
+    lda zp_tmp3
+    sta RegP0
+    lda #CmdCopperList
+    sta RegCmd
+
+    ; Clear it
+    lda #CmdCopperClear
+    sta RegCmd
+
+    ; Add entries for scanlines 0, 4, 8, ... 56 (15 entries)
+    lda #0
+    sta zp_tmp                          ; current scanline
+@bc_scan_loop:
+    ; CopperAdd: P0/P1=x(0), P2=y, P3=register(1=RegBgCol), P4=0, P5=color
+    stz RegP0                           ; x lo = 0
+    stz RegP1                           ; x hi = 0
+    lda zp_tmp
+    sta RegP2                           ; y = scanline
+    lda #1                              ; register index 1 = RegBgCol offset
+    sta RegP3
+    stz RegP4                           ; reserved = 0
+
+    ; Color = raster_palette[(scanline/4 + frame_offset) % 16]
+    lda zp_tmp
+    lsr a
+    lsr a                               ; scanline / 4
+    clc
+    adc zp_tmp3                         ; + frame_offset
+    and #$0F                            ; % 16
+    tax
+    lda raster_palette,x
+    sta RegP5                           ; color value
+
+    lda #CmdCopperAdd
+    sta RegCmd
+
+    ; Next scanline (step 4)
+    lda zp_tmp
+    clc
+    adc #4
+    sta zp_tmp
+    cmp #60
+    bcc @bc_scan_loop
+
+    ; Final entry at scanline 60: reset RegBgCol to black
+    stz RegP0
+    stz RegP1
+    lda #60
+    sta RegP2
+    lda #1
+    sta RegP3
+    stz RegP4
+    lda #COL_BLACK
+    sta RegP5
+    lda #CmdCopperAdd
+    sta RegCmd
+
+    ; Next list
+    inc zp_tmp3
+    lda zp_tmp3
+    cmp #32
+    bcc @bc_list_loop
+
+    ; Activate list 0 and enable copper
+    stz RegP0
+    lda #CmdCopperUse
+    sta RegCmd
+    lda #CmdCopperEnable
+    sta RegCmd
+
+    rts
+
+; =====================================================================
+; advance_copper -- advance to next copper animation frame
+; Called once per vsync.  Increments zp_copper_frame (0-31, wraps)
+; and switches the active copper list.
+; Clobbers: A
+; =====================================================================
+advance_copper:
+    lda zp_copper_frame
+    inc a
+    and #$1F                            ; wrap 0-31
+    sta zp_copper_frame
+    sta RegP0
+    lda #CmdCopperUse
+    sta RegCmd
+    rts
+
+; =====================================================================
 ; wait_vsync -- wait for VGC frame counter to change
 ; Polls RegStatus ($A008) until the frame counter increments.
 ; =====================================================================
