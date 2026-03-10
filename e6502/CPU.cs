@@ -89,6 +89,13 @@ namespace KDS.e6502
 
         public CpuState GetState() => new(A, X, Y, Sp, Pc, Nf, Vf, Df, If, Zf, Cf);
 
+        public void RestoreState(CpuState s)
+        {
+            A = s.A; X = s.X; Y = s.Y; Sp = s.Sp; Pc = s.Pc;
+            Nf = s.Nf; Vf = s.Vf; Df = s.Df; If = s.If; Zf = s.Zf; Cf = s.Cf;
+            _prefetched = false;
+        }
+
         public (string Text, int Bytes) Disassemble(ushort address)
         {
             var op = _opCodeTable.OpCodes[SystemBus.Read(address)];

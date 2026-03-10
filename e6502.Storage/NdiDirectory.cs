@@ -9,7 +9,7 @@ public enum NdiEntryFlags : byte { Active = 0x01, Directory = 0x02, Locked = 0x8
 
 public sealed record NdiDirEntry(
     int Index, NdiEntryFlags Flags, NdiFileType FileType,
-    ushort ParentIndex, ushort StartSector, ushort SizeBytes,
+    ushort ParentIndex, ushort StartSector, int SizeBytes,
     string Filename, ushort SectorCount)
 {
     public bool IsActive => (Flags & NdiEntryFlags.Active) != 0;
@@ -29,7 +29,8 @@ public sealed record NdiDirEntry(
 ///   $06-$07  Size in bytes, little-endian
 ///   $08-$27  Filename (null-padded ASCII, max 32 chars)
 ///   $28-$29  Sector count (allocated), little-endian
-///   $2A-$2F  Reserved
+///   $2A-$2B  Size high word (bits 16-31), little-endian
+///   $2C-$2F  Reserved
 /// </summary>
 public sealed class NdiDirectory
 {
@@ -56,7 +57,7 @@ public sealed class NdiDirectory
     /// Adds a file entry. Returns the entry index, or throws if the directory is full.
     /// </summary>
     public int AddEntry(string name, NdiFileType type, ushort parentIndex,
-                        ushort startSector, ushort sizeBytes, ushort sectorCount = 0)
+                        ushort startSector, int sizeBytes, ushort sectorCount = 0)
     {
         int slot = FindFreeSlot();
         if (slot < 0)
@@ -160,7 +161,7 @@ public sealed class NdiDirectory
     }
 
     private void WriteEntry(int index, NdiEntryFlags flags, NdiFileType type,
-                            ushort parentIndex, ushort startSector, ushort sizeBytes,
+                            ushort parentIndex, ushort startSector, int sizeBytes,
                             string name, ushort sectorCount)
     {
         int o = index * EntrySize;
@@ -168,7 +169,7 @@ public sealed class NdiDirectory
         _data[o + 0x01] = (byte)type;
         WriteU16(o + 0x02, parentIndex);
         WriteU16(o + 0x04, startSector);
-        WriteU16(o + 0x06, sizeBytes);
+        WriteU16(o + 0x06, (ushort)(sizeBytes & 0xFFFF));
 
         // Filename: clear then write (null-padded)
         Array.Clear(_data, o + 0x08, MaxFilenameLength);
@@ -176,7 +177,8 @@ public sealed class NdiDirectory
         Array.Copy(nameBytes, 0, _data, o + 0x08, nameBytes.Length);
 
         WriteU16(o + 0x28, sectorCount);
-        // Reserved $2A-$2F already zeroed (or left as-is; spec says reserved)
+        // High 16 bits of file size at $2A-$2B (was reserved)
+        WriteU16(o + 0x2A, (ushort)((sizeBytes >> 16) & 0xFFFF));
     }
 
     private NdiDirEntry ReadEntry(int index)
@@ -186,7 +188,7 @@ public sealed class NdiDirectory
         var type = (NdiFileType)_data[o + 0x01];
         ushort parentIndex = ReadU16(o + 0x02);
         ushort startSector = ReadU16(o + 0x04);
-        ushort sizeBytes = ReadU16(o + 0x06);
+        ushort sizeLow = ReadU16(o + 0x06);
 
         var nameBytes = new byte[MaxFilenameLength];
         Array.Copy(_data, o + 0x08, nameBytes, 0, MaxFilenameLength);
@@ -194,6 +196,8 @@ public sealed class NdiDirectory
         string name = Encoding.ASCII.GetString(nameBytes, 0, nullPos < 0 ? MaxFilenameLength : nullPos);
 
         ushort sectorCount = ReadU16(o + 0x28);
+        ushort sizeHigh = ReadU16(o + 0x2A);
+        int sizeBytes = sizeLow | (sizeHigh << 16);
 
         return new NdiDirEntry(index, flags, type, parentIndex, startSector, sizeBytes, name, sectorCount);
     }

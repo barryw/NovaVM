@@ -163,6 +163,8 @@ public partial class MainWindow : Window
                     _bus.AdvanceCycles(cycles);
                     chunkCyclesExecuted += cycles;
 
+                    if (_bus.SidPlayer.HasPendingCall)
+                        _bus.SidPlayer.ExecutePendingCalls(_cpu);
                     if (_bus.Timer.IrqPending || _bus.Nic.IrqPending || _bus.ConsumeRasterIrqPending())
                         _cpu.IrqWaiting = true;
 

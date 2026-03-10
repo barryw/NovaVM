@@ -13,6 +13,8 @@ public static class Sf2Loader
     private const ushort GenSampleID = 53;
     private const ushort GenSampleModes = 54;
     private const ushort GenOverridingRootKey = 58;
+    private const ushort GenCoarseTune = 51;
+    private const ushort GenFineTune = 52;
     private const ushort GenAttackVolEnv = 34;
     private const ushort GenHoldVolEnv = 35;
     private const ushort GenDecayVolEnv = 36;
@@ -311,6 +313,7 @@ public static class Sf2Loader
     private static void ApplyGenerator(ushort oper, ushort amount,
         ref int keyLo, ref int keyHi, ref int velLo, ref int velHi,
         ref int sampleId, ref int sampleModes, ref int rootKeyOverride,
+        ref short coarseTune, ref short fineTune,
         ref short attackTC, ref short holdTC, ref short decayTC, ref short sustainCB, ref short releaseTC,
         ref short keynumToHoldTC, ref short keynumToDecayTC)
     {
@@ -332,6 +335,12 @@ public static class Sf2Loader
                 break;
             case GenOverridingRootKey:
                 rootKeyOverride = amount;
+                break;
+            case GenCoarseTune:
+                coarseTune = (short)amount;
+                break;
+            case GenFineTune:
+                fineTune = (short)amount;
                 break;
             case GenAttackVolEnv:
                 attackTC = (short)amount;
@@ -368,6 +377,8 @@ public static class Sf2Loader
         int sampleId = -1;
         int sampleModes = 0;
         int rootKeyOverride = -1;
+        short coarseTune = 0;
+        short fineTune = 0;
         short attackTC = -12000;
         short holdTC = -12000;
         short decayTC = -12000;
@@ -385,6 +396,7 @@ public static class Sf2Loader
                     continue;
                 ApplyGenerator(oper, amount, ref keyLo, ref keyHi, ref velLo, ref velHi,
                     ref sampleId, ref sampleModes, ref rootKeyOverride,
+                    ref coarseTune, ref fineTune,
                     ref attackTC, ref holdTC, ref decayTC, ref sustainCB, ref releaseTC,
                     ref keynumToHoldTC, ref keynumToDecayTC);
             }
@@ -396,6 +408,7 @@ public static class Sf2Loader
             ApplyGenerator(igens[g].Oper, igens[g].Amount,
                 ref keyLo, ref keyHi, ref velLo, ref velHi,
                 ref sampleId, ref sampleModes, ref rootKeyOverride,
+                ref coarseTune, ref fineTune,
                 ref attackTC, ref holdTC, ref decayTC, ref sustainCB, ref releaseTC,
                 ref keynumToHoldTC, ref keynumToDecayTC);
         }
@@ -414,6 +427,8 @@ public static class Sf2Loader
                     case GenReleaseVolEnv: releaseTC = ClampTC(releaseTC + offset); break;
                     case GenKeynumToVolEnvHold: keynumToHoldTC = ClampTC(keynumToHoldTC + offset); break;
                     case GenKeynumToVolEnvDecay: keynumToDecayTC = ClampTC(keynumToDecayTC + offset); break;
+                    case GenCoarseTune: coarseTune = ClampTC(coarseTune + offset); break;
+                    case GenFineTune: fineTune = ClampTC(fineTune + offset); break;
                     case GenSampleModes: sampleModes = (ushort)offset; break;
                 }
             }
@@ -426,6 +441,8 @@ public static class Sf2Loader
         var shdr = shdrs[sampleId];
 
         int rootKey = rootKeyOverride >= 0 ? rootKeyOverride : shdr.OriginalPitch;
+        // Total tuning: coarseTune (semitones) + fineTune (cents) + sample pitchCorrection (cents)
+        double tuningCents = coarseTune * 100.0 + fineTune + shdr.PitchCorrection;
         int loopStart = (int)(shdr.LoopStart - shdr.Start);
         int loopEnd = (int)(shdr.LoopEnd - shdr.Start);
         int sampleLen = (int)(shdr.End - shdr.Start);
@@ -452,6 +469,7 @@ public static class Sf2Loader
             SampleData = data,
             SampleRate = (int)shdr.SampleRate,
             RootKey = rootKey,
+            TuningCents = tuningCents,
             LoopStart = Math.Max(0, loopStart),
             LoopEnd = Math.Max(0, loopEnd),
             LoopEnabled = (sampleModes & 1) != 0,

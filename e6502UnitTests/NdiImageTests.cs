@@ -198,16 +198,22 @@ public class NdiImageTests
     }
 
     [TestMethod]
-    public void WriteFile_Over64KB_Throws()
+    public void WriteFile_Over64KB_RoundTrips()
     {
         string path = TempPath();
         try
         {
             NdiImage.CreateFormatted(path, "BIG", 800);
             using var img = NdiImage.Open(path);
-            var bigData = new byte[65536]; // exactly ushort.MaxValue + 1
-            Assert.ThrowsException<ArgumentException>(() =>
-                img.WriteFile("HUGE", NdiFileType.Bin, 0xFFFF, bigData));
+            var bigData = new byte[100_000];
+            new Random(42).NextBytes(bigData);
+            img.WriteFile("HUGE", NdiFileType.Bin, 0xFFFF, bigData);
+
+            byte[] read = img.ReadFile("HUGE", 0xFFFF);
+            CollectionAssert.AreEqual(bigData, read);
+
+            var entry = img.ListDirectory(0xFFFF).First(e => e.Filename == "HUGE");
+            Assert.AreEqual(100_000, entry.SizeBytes);
         }
         finally { File.Delete(path); }
     }
@@ -222,14 +228,13 @@ public class NdiImageTests
             NdiImage.CreateFormatted(path, "TINY", 170);
             using var img = NdiImage.Open(path);
 
-            // Fill the disk with large files (each up to 65535 bytes = 256 sectors)
+            // Fill the disk with large files (each up to 256 sectors)
             // to avoid exhausting the directory (192 entries) before the BAM
             int fileNum = 0;
             while (img.FreeSectors > 0)
             {
                 int sectorsTaken = Math.Min(img.FreeSectors, 256);
                 int writeBytes = sectorsTaken * 256;
-                if (writeBytes > 65535) writeBytes = 65535;
                 img.WriteFile($"F{fileNum++:D3}", NdiFileType.Bin, 0xFFFF, new byte[writeBytes]);
             }
 

@@ -98,12 +98,13 @@ save_mode:      .res 1
 save_bgcol:     .res 1
 save_fgcol:     .res 1
 save_cursor:    .res 1
+save_font:      .res 1
 
 ; ---------------------------------------------------------------------------
 ; Header -- 2-byte load address
 ; ---------------------------------------------------------------------------
 .segment "HEADER"
-    .byte $00, $90
+    .byte $00, $98
 
 ; ---------------------------------------------------------------------------
 ; CODE
@@ -123,6 +124,8 @@ main:
     sta save_fgcol
     lda RegCursorEnable
     sta save_cursor
+    lda RegFont
+    sta save_font
 
     ; Clear previous notes
     lda #0
@@ -136,9 +139,10 @@ main:
     stz zp_prev_bar+1
     stz zp_was_playing
 
-    ; Set mode 1 (gfx over text)
+    ; Set mode 1 (gfx over text), default font
     lda #1
     sta RegMode
+    stz RegFont
     lda #COL_BLACK
     sta RegBgCol
     lda #COL_WHITE
@@ -201,6 +205,8 @@ main:
     ; Restore state
     lda save_mode
     sta RegMode
+    lda save_font
+    sta RegFont
     lda save_bgcol
     sta RegBgCol
     lda save_fgcol

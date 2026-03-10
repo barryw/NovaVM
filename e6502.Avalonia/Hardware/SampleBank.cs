@@ -9,6 +9,8 @@ public sealed class SampleRegion
     public float[] SampleData { get; set; } = Array.Empty<float>();
     public int SampleRate { get; set; } = 44100;
     public int RootKey { get; set; } = 60;
+    /// <summary>Combined coarseTune + fineTune + pitchCorrection in cents.</summary>
+    public double TuningCents { get; set; }
     public int LoopStart { get; set; }
     public int LoopEnd { get; set; }
     public bool LoopEnabled { get; set; }

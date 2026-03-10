@@ -79,6 +79,12 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _deviceManager = new DeviceManager(hd0, hd1, disks);
         _deviceManager.AutoMount();
 
+        // If a mounted device has an autoboot file, make it the default device
+        // so the ROM's LOAD "AUTOBOOT" finds it without a prefix.
+        var autoboot = _deviceManager.FindAutoboot();
+        if (autoboot != null)
+            _deviceManager.DefaultDevice = autoboot.Value.Device.Prefix;
+
         _fio = new FileIoController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data,
@@ -136,6 +142,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     }
 
     /// <summary>Write directly to backing RAM, bypassing ROM protection and hardware routing.</summary>
+    public byte ReadRam(ushort address) => _ram[address];
     public void WriteRam(ushort address, byte data) => _ram[address] = data;
 
     public void Dispose()
@@ -316,6 +323,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _midiPlayback.Tick();
             if (_sidPlayer.IsPlaying)
             {
+                _sidPlayer.SetPlayPending();
                 SniffSidNotes();
                 _sidPlayer.IncrementElapsed();
             }
@@ -330,6 +338,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _rasterIrqPending = false;
         return true;
     }
+
 
     private void SniffSidNotes()
     {

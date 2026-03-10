@@ -14,12 +14,9 @@
 
         public static int HexToBcd(byte oper)
         {
-            // validate input is valid packed BCD 
-            if (oper > 0x99)
-                throw new InvalidOperationException($"Invalid BCD number: {oper:X2}");
-            if ((oper & 0x0f) > 0x09)
-                throw new InvalidOperationException($"Invalid BCD number: {oper:X2}");
-
+            // Real 6502 doesn't validate BCD digits — invalid values produce
+            // undefined but non-fatal results.  Tolerate them so SID routines
+            // (and anything else) that abuse decimal mode don't crash.
             return ((oper >> 4) * 10) + (oper & 0x0f);
         }
         public static int SignExtend(int num)

@@ -285,7 +285,8 @@ public sealed class WavetableSynth : IDisposable
 
                 // Advance phase
                 double bendSemitones = ((v.PitchBend - 0x8000) / 8192.0) * 2.0;
-                double pitchRatio = Math.Pow(2.0, (v.Note - region.RootKey + bendSemitones) / 12.0);
+                double tuning = region.TuningCents / 100.0; // cents → semitones
+                double pitchRatio = Math.Pow(2.0, (v.Note - region.RootKey + bendSemitones + tuning) / 12.0);
                 double phaseInc = region.SampleRate * pitchRatio / (double)SampleRate;
                 v.Phase += phaseInc;
 

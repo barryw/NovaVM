@@ -1,6 +1,6 @@
 ; demo.s -- Demo Disk Player for NovaVM
 ; A demo scene-style music browser and player that autoboots from NDI floppy.
-; Coexists with the keyboard visualizer at $9000.
+; Coexists with the keyboard visualizer at $9800.
 ;
 ; Load address: $4000   Invoke: SYS $4000
 ; Assembler:    ca65 --cpu 65c02
@@ -17,15 +17,11 @@ ENTRY_SIZE      = 33                ; 32 chars + null terminator per entry
 VISIBLE_ROWS    = 11                ; visible file rows in browser list
 
 ; Screen row assignments (80x25 text grid)
-ROW_TITLE       = 0                 ; title bar
-ROW_SUBTITLE    = 1                 ; subtitle / tagline
-ROW_TABS        = 3                 ; category tabs
-ROW_DIVIDER     = 4                 ; divider line under tabs
-ROW_LIST_TOP    = 5                 ; first visible file row
-ROW_LIST_BOT    = 15                ; last visible file row (5+11-1)
-ROW_SCROLLBAR   = 5                 ; scrollbar top (same as list top)
-ROW_INFO        = 17                ; song info area
-ROW_NAV         = 23                ; navigation help
+ROW_TABS        = 8                 ; category tabs
+ROW_DIVIDER     = 9                 ; divider line under tabs
+ROW_LIST_TOP    = 10                ; first visible file row
+ROW_LIST_BOT    = 20                ; last visible file row (10+11-1)
+ROW_NAV         = 22                ; navigation help
 ROW_SCROLL      = 24                ; scrolling credits ticker
 
 ; PETSCII character codes (mapped to ASCII positions via PETSCII Upper font)
@@ -90,6 +86,8 @@ zp_src:         .res 2              ; source pointer (lo/hi)
 zp_dst:         .res 2              ; destination pointer (lo/hi)
 zp_count:       .res 1              ; loop counter
 zp_last_frame:  .res 1              ; last frame counter for vsync
+zp_frame_tick:  .res 1              ; frame counter (for slowing copper animation)
+zp_scroll_tick: .res 1              ; frame counter (for slowing scroll text)
 zp_col:         .res 1              ; current column for printing
 zp_row:         .res 1              ; current row for printing
 
@@ -119,11 +117,15 @@ save_border:    .res 1
 ; Current playback file type (for stop_playback)
 play_type:      .res 1
 
+; Zero page save area (preserved across keyboard visualizer call)
+ZP_SAVE_LEN     = 24
+zp_save_buf:    .res ZP_SAVE_LEN
+
 ; ---------------------------------------------------------------------------
 ; Header -- 2-byte load address prefix
 ; ---------------------------------------------------------------------------
 .segment "HEADER"
-    .byte $00, $40
+    .byte $00, $72
 
 ; ---------------------------------------------------------------------------
 ; RODATA -- constant data
@@ -143,7 +145,7 @@ cat_names_lo:
 cat_names_hi:
     .byte >cat_name_0, >cat_name_1, >cat_name_2, >cat_name_3, >cat_name_4
 
-; Directory path strings (null-terminated) -- subdirectories on the NDI disk
+; Directory path strings (null-terminated) -- subdirectories on the boot disk
 cat_dir_0:      .byte "classical", 0
 cat_dir_1:      .byte "movies", 0
 cat_dir_2:      .byte "tv", 0
@@ -243,6 +245,8 @@ main:
     stz zp_scroll_top
     stz zp_kbd_loaded
     stz zp_copper_frame
+    stz zp_frame_tick
+    stz zp_scroll_tick
 
     ; --- Init screen and data ---
     jsr clear_text
@@ -367,9 +371,25 @@ main:
     ; If keyboard visualizer loaded, call it
     lda zp_kbd_loaded
     beq @no_kbd
-    jsr $9000
+    ; Save zero page state (keyboard uses the same ZP range)
+    ldx #ZP_SAVE_LEN - 1
+@save_zp:
+    lda $40,x
+    sta zp_save_buf,x
+    dex
+    bpl @save_zp
+    jsr $9800
+    ; Restore zero page state
+    ldx #ZP_SAVE_LEN - 1
+@restore_zp:
+    lda zp_save_buf,x
+    sta $40,x
+    dex
+    bpl @restore_zp
 @no_kbd:
     jsr stop_playback
+    ; Reload directories (SID payloads may have overwritten BSS)
+    jsr load_all_dirs
     ; Restore VGC for browser
     lda #1
     sta RegMode
@@ -432,7 +452,7 @@ main:
     rts
 
 ; =====================================================================
-; load_keyboard -- load keyboard visualizer binary to $9000
+; load_keyboard -- load keyboard visualizer binary to $9800
 ; Skips if already loaded (zp_kbd_loaded != 0).
 ; Clobbers: A, X, Y
 ; =====================================================================
@@ -449,9 +469,9 @@ load_keyboard:
     sta zp_src+1
     jsr copy_filename
 
-    ; Set load address $9000
+    ; Set load address $9800
     stz FioSrcL
-    lda #$90
+    lda #$98
     sta FioSrcH
 
     ; Issue load command
@@ -558,10 +578,13 @@ start_playback:
     sta FioCmd
 
 @sp_wait:
-    ; Wait ~10 frames for playback to start
-    ldx #10
+    ; Poll MusicStatus bit 1 until playback starts (timeout ~120 frames / 2 sec)
+    ldx #120
 @sp_wait_loop:
     jsr wait_vsync
+    lda MusicStatus
+    and #$02                        ; bit 1 = music playing
+    bne @sp_done                    ; playback started
     dex
     bne @sp_wait_loop
 @sp_done:
@@ -755,10 +778,10 @@ draw_header:
     cpx #RAINBOW_LEN
     bcc @dh_top_loop
 
-    ; --- Print title centered on text row 3, col ~31 ---
+    ; --- Print title centered on text row 4, col ~31 ---
     lda #31
     sta RegCursorX
-    lda #3
+    lda #4
     sta RegCursorY
     lda #<title_str
     sta zp_ptr
@@ -767,10 +790,10 @@ draw_header:
     lda #COL_CYAN
     jsr print_str_color
 
-    ; --- Print subtitle centered on text row 5, col ~26 ---
+    ; --- Print subtitle centered on text row 6, col ~26 ---
     lda #26
     sta RegCursorX
-    lda #5
+    lda #6
     sta RegCursorY
     lda #<subtitle_str
     sta zp_ptr
@@ -907,13 +930,24 @@ build_copper:
 ; Clobbers: A
 ; =====================================================================
 advance_copper:
-    lda zp_copper_frame
+    ; Only advance every 3rd frame for smoother animation
+    lda zp_frame_tick
     inc a
+    cmp #3
+    bcc @ac_store
+    lda #0
+    ; Advance copper frame
+    ldx zp_copper_frame
+    inx
+    txa
     and #$1F                            ; wrap 0-31
     sta zp_copper_frame
     sta RegP0
     lda #CmdCopperUse
     sta RegCmd
+    lda #0
+@ac_store:
+    sta zp_frame_tick
     rts
 
 ; =====================================================================
@@ -1048,6 +1082,12 @@ fill_row:
 ; Clobbers: A, X, Y, zp_tmp, zp_tmp2, zp_tmp3, zp_tmp4, zp_col
 ; =====================================================================
 draw_tabs:
+    ; --- Clear ROW_TABS (remove stale borders from previous active tab) ---
+    lda #' '
+    ldx #COL_BLACK
+    ldy #ROW_TABS
+    jsr fill_row
+
     ; --- Fill ROW_DIVIDER with CH_HLINE in COL_DGRAY ---
     lda #CH_HLINE
     ldx #COL_DGRAY
@@ -1128,13 +1168,13 @@ draw_tabs:
     lda #CH_RNDTR
     sta RegCharOut
 
-    ; -- ROW_TABS: overwrite hlines with category name in COL_WHITE --
+    ; -- ROW_TABS: overwrite hlines with category name in accent color --
     lda zp_col
     inc a                           ; inside left border
     sta RegCursorX
     lda #ROW_TABS
     sta RegCursorY
-    lda #COL_WHITE
+    lda zp_tmp3                     ; accent color (saved earlier)
     sta RegFgCol
     ldx zp_tmp4
     lda cat_names_lo,x
@@ -1395,11 +1435,18 @@ init_scroll:
     stz zp_scroll_idx
     stz zp_scroll_idx+1
 
-    ; Fill ROW_SCROLL with spaces in COL_LGREEN
+    ; Fill ROW_SCROLL with spaces in COL_LGREEN directly via CharRam/ColorRam
+    ; (Using RegCharOut on row 24 triggers ScrollUp — avoid that)
+    SCROLL_INIT_ADDR = CharRamBase + ROW_SCROLL * 80
+    SCROLL_INIT_COL  = ColorRamBase + ROW_SCROLL * 80
+    ldx #79
+@is_fill:
     lda #' '
-    ldx #COL_LGREEN
-    ldy #ROW_SCROLL
-    jsr fill_row
+    sta SCROLL_INIT_ADDR,x
+    lda #COL_LGREEN
+    sta SCROLL_INIT_COL,x
+    dex
+    bpl @is_fill
     rts
 
 ; =====================================================================
@@ -1408,6 +1455,20 @@ init_scroll:
 ; Clobbers: A, X, Y, zp_ptr
 ; =====================================================================
 advance_scroll:
+    ; Only scroll every 3rd frame (~20 chars/sec)
+    lda zp_scroll_tick
+    inc a
+    cmp #3
+    bcc @as_store_tick
+    ; Time to scroll
+    lda #0
+    sta zp_scroll_tick
+    bra @as_do_scroll
+@as_store_tick:
+    sta zp_scroll_tick
+    rts
+@as_do_scroll:
+
     ; Row 24 starts at CharRamBase + 24*80 = CharRamBase + 1920
     SCROLL_ROW_ADDR = CharRamBase + 1920
 

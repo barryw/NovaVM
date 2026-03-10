@@ -885,8 +885,8 @@ public sealed partial class FileIoController
             _sidPlayer.Play(info, song);
             SetOk();
         }
-        catch (FileNotFoundException) { SetError(VgcConstants.FioErrNotFound); }
-        catch { SetError(VgcConstants.FioErrIo); }
+        catch (FileNotFoundException ex) { Console.Error.WriteLine($"[SID] File not found: {ex.Message}"); SetError(VgcConstants.FioErrNotFound); }
+        catch (Exception ex) { Console.Error.WriteLine($"[SID] Error: {ex.Message}"); SetError(VgcConstants.FioErrIo); }
     }
 
     private void DoSidStop()
@@ -1191,6 +1191,7 @@ public sealed partial class FileIoController
             var (device, path) = _deviceManager.ResolveFilename(raw);
             if (!device.IsMounted) { SetError(VgcConstants.FioErrNotMounted); return; }
             device.CurrentDirectory = path;
+            _deviceManager.DefaultDevice = device.Prefix;
             SetOk();
         }
         catch { SetError(VgcConstants.FioErrIo); }
