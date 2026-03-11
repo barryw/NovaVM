@@ -82,4 +82,57 @@ public class RomSwapTests
         bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapBasic);
         Assert.AreEqual(originalByte, bus.Read(0xC000));
     }
+
+    [TestMethod]
+    public void WriteRomSwapExtension_SetsExtensionRom()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
+        Assert.AreEqual(CompositeBusDevice.ActiveRom.Extension, bus.CurrentRom);
+    }
+
+    [TestMethod]
+    public void ExtensionRom_HasEntryPoint()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
+        // Extension ROM entry at $C000: LDA $E4 = opcode $A5 $E4
+        Assert.AreEqual(0xA5, bus.Read(0xC000));
+        Assert.AreEqual(0xE4, bus.Read(0xC001));
+    }
+
+    [TestMethod]
+    public void ExtensionRom_SwapBackRestoresBasic()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        byte basicByte = bus.Read(0xC000);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
+        Assert.AreNotEqual(basicByte, bus.Read(0xC000));
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapBasic);
+        Assert.AreEqual(basicByte, bus.Read(0xC000));
+    }
+
+    [TestMethod]
+    public void ExtensionSwap_DoesNotFireEvent()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        int count = 0;
+        bus.RomSwapRequested += (_, _) => count++;
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapBasic);
+        Assert.AreEqual(0, count, "Extension ROM round-trip should not fire RomSwapRequested");
+    }
+
+    [TestMethod]
+    public void ExtensionRom_VectorsPointToRamHandlers()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
+        // NMI vector at $FFFA should point to $0217 (RAM NMI handler)
+        Assert.AreEqual(0x17, bus.Read(0xFFFA));
+        Assert.AreEqual(0x02, bus.Read(0xFFFB));
+        // IRQ vector at $FFFE should point to $020D (RAM IRQ handler)
+        Assert.AreEqual(0x0D, bus.Read(0xFFFE));
+        Assert.AreEqual(0x02, bus.Read(0xFFFF));
+    }
 }

@@ -297,7 +297,7 @@ IrqBase           = $DF       ; IRQ handler enabled/setup/triggered flags
 
 help_len          = $E2       ; scratch byte for HELP command keyword length
 ;                 = $E3       ; unused
-;                 = $E4       ; unused
+ExtCmdId          = $E4       ; extension ROM command ID (set by trampoline)
 ;                 = $E5       ; unused
 ;                 = $E6       ; unused
 ;                 = $E7       ; unused
@@ -524,6 +524,7 @@ XTK_FORMAT         = $4C              ; FORMAT "dev:",size
 XTK_MOUNT          = $4D              ; MOUNT "dev:","image"
 XTK_UNMOUNT        = $4E              ; UNMOUNT "dev:"
 XTK_PWD            = $4F              ; PWD
+XTK_SFLOAD         = $50              ; SFLOAD "filename" — load soundfont
 XTK_DIROPEN        = $2B              ; DIROPEN "pattern"
 XTK_DIRNEXT        = $2C              ; DIRNEXT — numeric function
 XTK_DIRNAM         = $2D              ; DIRNAM$ — string function
@@ -565,9 +566,11 @@ VEC_SV            = VEC_LD+2  ; save vector
 ; program RAM pages!
 
 ;Ibuffs            = IRQ_vec+$14
-Ibuffs            = VEC_SV+$16
-                              ; start of input buffer after IRQ/NMI code
-Ibuffe            = Ibuffs+$DE; end of input buffer (222 bytes, fills to $02FF)
+EXT_vec           = VEC_SV+$16
+                              ; extension ROM call trampoline in RAM ($0221)
+Ibuffs            = VEC_SV+$30
+                              ; start of input buffer after IRQ/NMI/ext code
+Ibuffe            = Ibuffs+$C4; end of input buffer (197 bytes, fills to $02FF)
 
 Ram_base          = $0300     ; start of user RAM (set as needed, should be page aligned)
 Ram_top           = $A000     ; end of contiguous BASIC RAM+1 (before MMIO window)
@@ -1948,6 +1951,7 @@ TAB_XTKCMD
       .word LAB_MOUNT-1       ; XTK_MOUNT      ($4D)
       .word LAB_UNMOUNT-1     ; XTK_UNMOUNT    ($4E)
       .word LAB_PWD-1         ; XTK_PWD        ($4F)
+      .word LAB_SFLOAD-1      ; XTK_SFLOAD     ($50)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -8662,54 +8666,13 @@ LAB_TWOPI
 ;; Prints confirmation, waits for Y/N, writes RomSwapNccEdit to $A03F
 ;; ========================================
 LAB_NCC
-      ; Print "THIS WILL CLEAR THE BASIC PROGRAM" + CR/LF
-      LDY   #$00
-@msg_loop1
-      LDA   @ncc_msg1,Y
-      BEQ   @msg1_done
-      JSR   V_OUTP
-      INY
-      BNE   @msg_loop1
-@msg1_done
-      JSR   LAB_CRLF
-
-      ; Print "ARE YOU SURE? (Y/N) "
-      LDY   #$00
-@msg_loop2
-      LDA   @ncc_msg2,Y
-      BEQ   @msg2_done
-      JSR   V_OUTP
-      INY
-      BNE   @msg_loop2
-@msg2_done
-
-      ; Wait for keypress
-@wait_key
-      JSR   V_INPT
-      BCC   @wait_key          ; no key yet
-      CMP   #'Y'
-      BEQ   @do_ncc
-      CMP   #'y'
-      BEQ   @do_ncc
-
-      ; Not Y — echo char + CR/LF, return to BASIC
-      JSR   V_OUTP
-      JMP   LAB_CRLF
-
-@do_ncc
-      JSR   V_OUTP             ; echo the Y
-      JSR   LAB_CRLF
-      LDA   #$03               ; RomSwapNccEdit
-      STA   $A03F              ; write to RegRomSwap
-      RTS
-
-@ncc_msg1: .byte "THIS WILL CLEAR THE BASIC PROGRAM",0
-@ncc_msg2: .byte "ARE YOU SURE? (Y/N) ",0
+      LDA   #EXT_CMD_NCC
+      JMP   EXT_vec            ; extension ROM handles confirmation dialog
 
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 79
+XTK_COUNT = 80
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8740,6 +8703,7 @@ TAB_XTKSTR
       .word @s_mount
       .word @s_unmount
       .word @s_pwd
+      .word @s_sfload
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8800,6 +8764,7 @@ TAB_XTKSTR
 @s_mount:  .byte "MOUNT",0
 @s_unmount: .byte "UNMOUNT",0
 @s_pwd:    .byte "PWD",0
+@s_sfload: .byte "SFLOAD",0
 @s_diropen: .byte "DIROPEN",0
 @s_dirnext: .byte "DIRNEXT",0
 @s_dirnam:  .byte "DIRNAM$",0
@@ -8940,6 +8905,11 @@ FIO_CMD_MLOOP  = $11           ; set music loop on/off
 FIO_CMD_MPRI   = $12           ; set SFX voice steal priority
 FIO_CMD_MIDPLAY = $13          ; load .mid and start playback
 FIO_CMD_MIDSTOP = $14          ; stop MIDI playback
+FIO_CMD_SFLOAD  = $15          ; load soundfont (.sf2)
+
+; --- Extension ROM command IDs (dispatched via EXT_vec trampoline) ---
+EXT_CMD_NCC     = $00          ; NCC confirmation dialog
+EXT_CMD_SFLOAD  = $01          ; soundfont load
 FIO_CMD_CD      = $20              ; change directory
 FIO_CMD_MKDIR   = $21              ; make directory
 FIO_CMD_RMDIR   = $22              ; remove directory
@@ -10698,6 +10668,17 @@ LAB_PWD
       JMP   LAB_CRLF          ; print CR/LF and return
 @pwd_err
       JMP   LAB_FIO_ERRIO
+
+; perform SFLOAD "filename" — load soundfont via extension ROM
+
+LAB_SFLOAD
+      JSR   LAB_FIO_GETNAME   ; parse filename into FIO_NAME/FIO_NAMELEN
+      LDA   #EXT_CMD_SFLOAD
+      JSR   EXT_vec            ; call extension ROM handler
+      BNE   @sf_err            ; nonzero A = error
+      RTS
+@sf_err
+      JMP   LAB_FIO_ERRHND    ; display error from FIO_ERRCODE
 
 ; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
 ; on invalid/empty/too-long name, jumps directly to LAB_FIO_ERRIO

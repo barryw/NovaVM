@@ -640,6 +640,7 @@ public static class VgcConstants
     public const byte RomSwapNcc      = 0x01;   // switch to NCC ROM
     public const byte RomSwapBasic    = 0x02;   // switch to BASIC ROM
     public const byte RomSwapNccEdit  = 0x03;   // activate NCC editor (from BASIC NCC command)
+    public const byte RomSwapExtension = 0x04;  // switch to extension ROM
 
     // -------------------------------------------------------------------------
     // Compiler Controller registers ($A031-$A03E)

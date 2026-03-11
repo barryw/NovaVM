@@ -3,7 +3,7 @@
 
 CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 
-all: basic.bin keyboard.bin demo.bin tokens.json
+all: basic.bin extension.bin keyboard.bin demo.bin tokens.json
 
 # ROM build
 basic.bin basic.sym: basic.o ehbasic.cfg
@@ -11,6 +11,13 @@ basic.bin basic.sym: basic.o ehbasic.cfg
 
 basic.o: basic.asm min_mon.asm
 	ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm
+
+# Extension ROM build
+extension.bin: extension.o extension.cfg
+	ld65 -C extension.cfg -o extension.bin extension.o
+
+extension.o: extension.s
+	ca65 --cpu 65c02 extension.s -o extension.o
 
 # Token table extraction
 tokens.json: basic.asm ../tools/gen_tokens.py

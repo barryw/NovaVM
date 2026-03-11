@@ -5,7 +5,7 @@ using KDS.e6502;
 
 public class CompositeBusDevice : IBusDevice, IDisposable
 {
-    public enum ActiveRom { Basic, Ncc }
+    public enum ActiveRom { Basic, Ncc, Extension }
 
     private readonly byte[] _ram = new byte[65536];
     private readonly VirtualGraphicsController _vgc = new();
@@ -30,6 +30,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private bool _rasterIrqPending;
     private readonly byte[] _basicRom;
     private readonly byte[] _nccRom;
+    private readonly byte[]? _extRom;
 
     public ActiveRom CurrentRom { get; private set; } = ActiveRom.Basic;
     public event EventHandler? RomSwapRequested;
@@ -137,6 +138,15 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
         // Build the NCC ROM using NccRomBuilder.
         _nccRom = new e6502.Avalonia.Compiler.NccRomBuilder().Build();
+
+        // Load extension ROM if available.
+        string extPath = Path.Combine(AppContext.BaseDirectory, "Resources", "extension.bin");
+        if (File.Exists(extPath))
+        {
+            _extRom = new byte[16384];
+            byte[] extData = File.ReadAllBytes(extPath);
+            Array.Copy(extData, _extRom, Math.Min(extData.Length, 16384));
+        }
 
         InitVectorTable();
     }
@@ -254,9 +264,19 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             }
             else if (data == VgcConstants.RomSwapBasic && CurrentRom != ActiveRom.Basic)
             {
+                var prev = CurrentRom;
                 Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, 16384);
                 CurrentRom = ActiveRom.Basic;
-                RomSwapRequested?.Invoke(this, EventArgs.Empty);
+                // Extension ROM swaps are transient (trampoline calls) — no CPU reboot.
+                // Only fire event when returning from NCC ROM.
+                if (prev == ActiveRom.Ncc)
+                    RomSwapRequested?.Invoke(this, EventArgs.Empty);
+            }
+            else if (data == VgcConstants.RomSwapExtension && _extRom != null && CurrentRom != ActiveRom.Extension)
+            {
+                Array.Copy(_extRom, 0, _ram, VgcConstants.RomBase, 16384);
+                CurrentRom = ActiveRom.Extension;
+                // No event — extension swaps are transient, managed by RAM trampoline.
             }
             else if (data == VgcConstants.RomSwapNccEdit)
             {

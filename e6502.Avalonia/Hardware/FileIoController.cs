@@ -314,23 +314,6 @@ public sealed partial class FileIoController
                 return;
             }
 
-            // Detect .sf2 extension and redirect to soundfont loader.
-            // This lets users type LOAD "GeneralUser.sf2" instead of manual POKEs.
-            if (filename.EndsWith(".sf2", StringComparison.OrdinalIgnoreCase))
-            {
-                // Re-write filename (without .sf2) back to FIO_NAME so DoSfLoad can read it.
-                string sfName = filename[..^4];
-                int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
-                for (int i = 0; i < sfName.Length; i++)
-                    _regs[nameOffset + i] = (byte)sfName[i];
-                _regs[VgcConstants.FioNameLen - VgcConstants.FioBase] = (byte)sfName.Length;
-                // Zero out FIO_SIZE so the 6502's LAB_FLOAD doesn't corrupt BASIC pointers.
-                _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = 0;
-                _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = 0;
-                DoSfLoad();
-                return;
-            }
-
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {

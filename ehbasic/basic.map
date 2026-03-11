@@ -1,13 +1,13 @@
 Modules list:
 -------------
 basic.o:
-    CODE              Offs=000000  Size=003FBA  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=003F9B  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
     BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
     DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
     ZEROPAGE          Offs=000000  Size=000000  Align=00001  Fill=0000
     NULL              Offs=000000  Size=000000  Align=00001  Fill=0000
-    MONITOR           Offs=000000  Size=00003B  Align=00001  Fill=0000
+    MONITOR           Offs=000000  Size=00001F  Align=00001  Fill=0000
     VECTORS           Offs=000000  Size=000006  Align=00001  Fill=0000
 
 
@@ -20,8 +20,8 @@ DATA                  000000  000000  000000  00001
 NULL                  000000  000000  000000  00001
 RODATA                000000  000000  000000  00001
 ZEROPAGE              000080  000080  000000  00001
-CODE                  00C000  00FFB9  003FBA  00001
-MONITOR               00FFBD  00FFF7  00003B  00001
+CODE                  00C000  00FF9A  003F9B  00001
+MONITOR               00FFBD  00FFDB  00001F  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 
 
