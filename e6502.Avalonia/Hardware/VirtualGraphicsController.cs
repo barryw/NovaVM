@@ -90,6 +90,12 @@ public class VirtualGraphicsController
     private bool _copperEnabled;
 
 
+    // Font for GTEXT command
+    private BitmapFont? _bitmapFont;
+
+    // Bus memory reference for reading FIO_NAME buffer
+    private byte[]? _busMemory;
+
     // Screen input source
     private IScreenInput? _screenEditor;
 
@@ -97,6 +103,9 @@ public class VirtualGraphicsController
     {
         Reset();
     }
+
+    public void SetFont(BitmapFont font) => _bitmapFont = font;
+    public void SetBusMemory(byte[] mem) => _busMemory = mem;
 
     public void Reset()
     {
@@ -620,7 +629,7 @@ public class VirtualGraphicsController
             ExecuteCopperCommand(cmd);
         else if (cmd >= VgcConstants.CmdCopperList && cmd <= VgcConstants.CmdCopperListEnd)
             ExecuteCopperCommand(cmd);
-        else if (cmd >= VgcConstants.CmdPlot && cmd <= VgcConstants.CmdPaint)
+        else if (cmd >= VgcConstants.CmdPlot && cmd <= VgcConstants.CmdGtext)
             ExecuteGfxCommand(cmd);
         else if (cmd == VgcConstants.CmdSysReset)
         {
@@ -657,7 +666,8 @@ public class VirtualGraphicsController
                 BlockGraphics.Line(_gfxBitmap, p0, p1, p2, p3, color);
                 break;
             case VgcConstants.CmdCircle:
-                BlockGraphics.Circle(_gfxBitmap, p0, p1, p2, color);
+                int ry = _cmdRegs[7] | (_cmdRegs[8] << 8);
+                BlockGraphics.Ellipse(_gfxBitmap, p0, p1, p2, ry == 0 ? p2 : ry, color);
                 break;
             case VgcConstants.CmdRect:
                 BlockGraphics.Rect(_gfxBitmap, p0, p1, p2, p3, color);
@@ -673,6 +683,18 @@ public class VirtualGraphicsController
                 break;
             case VgcConstants.CmdPaint:
                 BlockGraphics.FloodFill(_gfxBitmap, p0, p1, color);
+                break;
+            case VgcConstants.CmdGtext:
+                if (_bitmapFont != null && _busMemory != null)
+                {
+                    int fontSlot = _cmdRegs[5] & 0x07;
+                    int scale = _cmdRegs[6];
+                    if (scale < 1) scale = 1;
+                    int nameLen = _busMemory[VgcConstants.FioNameLen];
+                    var chars = new byte[nameLen];
+                    Array.Copy(_busMemory, VgcConstants.FioName, chars, 0, nameLen);
+                    BlockGraphics.Text(_gfxBitmap, p0, p1, scale, _bitmapFont, fontSlot, chars, nameLen, color);
+                }
                 break;
         }
     }

@@ -450,6 +450,7 @@ CmdFill                 = $06
 CmdGcls                 = $07
 CmdGcolor               = $08
 CmdPaint                = $09
+CmdGtext                = $0A
 
 ; --- Sprite commands ---
 CmdSprDef               = $10
@@ -492,6 +493,7 @@ RegRomSwap              = $A03F
 RomSwapNcc              = $01
 RomSwapBasic            = $02
 RomSwapNccEdit          = $03
+RomSwapExtension        = $04
 
 ; --- Compiler Controller registers ($A031-$A03E) ---
 CmpBase                 = $A031
@@ -519,7 +521,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E808
-V_OUTP                  = $E80B
-V_LOAD                  = $E80E
-V_SAVE                  = $E811
+V_INPT                  = $E7AF
+V_OUTP                  = $E7B2
+V_LOAD                  = $E7B5
+V_SAVE                  = $E7B8

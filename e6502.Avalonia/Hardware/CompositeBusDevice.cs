@@ -100,6 +100,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             wts: _wts);
         _fio.ProgramLoaded += name => LoadProgramHelp(name);
         _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
+        _vgc.SetBusMemory(_ram);
 
         _xmc = new VirtualExpansionMemoryController(
             addr => _ram[addr],
@@ -292,6 +293,14 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_compiler.OwnsAddress(address)) { _compiler.Write(address, data); return; }
         if (_vgc.OwnsAddress(address))
         {
+            // GTEXT needs FIO name buffer in _ram for VGC to read
+            if (address == VgcConstants.RegCmd && data == VgcConstants.CmdGtext)
+            {
+                int len = _fio.Read(VgcConstants.FioNameLen);
+                _ram[VgcConstants.FioNameLen] = (byte)len;
+                for (int i = 0; i < len; i++)
+                    _ram[VgcConstants.FioName + i] = _fio.Read((ushort)(VgcConstants.FioName + i));
+            }
             _vgc.Write(address, data);
             if (_vgc.SysResetRequested)
             {

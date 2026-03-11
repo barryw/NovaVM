@@ -38,30 +38,94 @@ public static class BlockGraphics
         }
     }
 
-    public static void Circle(byte[] bmp, int cx, int cy, int r, byte color)
+    public static void Ellipse(byte[] bmp, int cx, int cy, int rx, int ry, byte color)
     {
-        if (r < 0) return;
+        if (rx < 0 || ry < 0) return;
 
-        int x   = 0;
-        int y   = r;
-        int d   = 1 - r;
-
-        PlotOctants(bmp, cx, cy, x, y, color);
-
-        while (x < y)
+        if (rx == ry)
         {
-            if (d < 0)
+            // Circle: use octant-symmetric midpoint algorithm
+            int x = 0;
+            int y = rx;
+            int d = 1 - rx;
+
+            PlotOctants(bmp, cx, cy, x, y, color);
+
+            while (x < y)
             {
-                d += 2 * x + 3;
+                if (d < 0)
+                {
+                    d += 2 * x + 3;
+                }
+                else
+                {
+                    d += 2 * (x - y) + 5;
+                    y--;
+                }
+                x++;
+                PlotOctants(bmp, cx, cy, x, y, color);
+            }
+            return;
+        }
+
+        // Ellipse: midpoint ellipse algorithm (two regions)
+        long rx2 = (long)rx * rx;
+        long ry2 = (long)ry * ry;
+        long twoRx2 = 2 * rx2;
+        long twoRy2 = 2 * ry2;
+
+        int x2 = 0;
+        int y2 = ry;
+        long px = 0;
+        long py = twoRx2 * y2;
+
+        // Region 1: slope magnitude < 1
+        long d2 = ry2 - rx2 * ry + rx2 / 4;
+        while (px < py)
+        {
+            PlotQuadrants(bmp, cx, cy, x2, y2, color);
+            x2++;
+            px += twoRy2;
+            if (d2 < 0)
+            {
+                d2 += ry2 + px;
             }
             else
             {
-                d += 2 * (x - y) + 5;
-                y--;
+                y2--;
+                py -= twoRx2;
+                d2 += ry2 + px - py;
             }
-            x++;
-            PlotOctants(bmp, cx, cy, x, y, color);
         }
+
+        // Region 2: slope magnitude >= 1
+        d2 = ry2 * (long)(x2 * 2 + 1) * (x2 * 2 + 1) / 4
+           + rx2 * ((long)y2 - 1) * (y2 - 1)
+           - rx2 * ry2;
+        while (y2 >= 0)
+        {
+            PlotQuadrants(bmp, cx, cy, x2, y2, color);
+            y2--;
+            py -= twoRx2;
+            if (d2 > 0)
+            {
+                d2 += rx2 - py;
+            }
+            else
+            {
+                x2++;
+                px += twoRy2;
+                d2 += rx2 - py + px;
+            }
+        }
+    }
+
+    private static void PlotQuadrants(byte[] bmp, int cx, int cy, int x, int y, byte color)
+    {
+        Plot(bmp, cx + x, cy + y, color);
+        Plot(bmp, cx - x, cy + y, color);
+        Plot(bmp, cx + x, cy - y, color);
+        Plot(bmp, cx - x, cy - y, color);
     }
 
     private static void PlotOctants(byte[] bmp, int cx, int cy, int x, int y, byte color)
@@ -155,6 +219,34 @@ public static class BlockGraphics
             int rowBase = y * Width;
             for (int x = left; x <= right; x++)
                 bmp[rowBase + x] = color;
+        }
+    }
+
+    public static void Text(byte[] bmp, int startX, int startY, int scale,
+        BitmapFont font, int fontSlot, byte[] charCodes, int charCount, byte color)
+    {
+        if (scale < 1) scale = 1;
+        int penX = startX;
+        int glyphAdvance = BitmapFont.GlyphWidth * scale;
+
+        for (int i = 0; i < charCount; i++)
+        {
+            byte ch = charCodes[i];
+            for (int row = 0; row < BitmapFont.GlyphHeight; row++)
+            {
+                byte rowBits = font.GetRow(fontSlot, ch, row);
+                if (rowBits == 0) continue;
+                for (int col = 0; col < BitmapFont.GlyphWidth; col++)
+                {
+                    if ((rowBits & (0x80 >> col)) == 0) continue;
+                    int px = penX + col * scale;
+                    int py = startY + row * scale;
+                    for (int sy = 0; sy < scale; sy++)
+                        for (int sx = 0; sx < scale; sx++)
+                            Plot(bmp, px + sx, py + sy, color);
+                }
+            }
+            penX += glyphAdvance;
         }
     }
 }

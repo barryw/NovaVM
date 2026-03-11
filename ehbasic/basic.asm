@@ -525,6 +525,7 @@ XTK_MOUNT          = $4D              ; MOUNT "dev:","image"
 XTK_UNMOUNT        = $4E              ; UNMOUNT "dev:"
 XTK_PWD            = $4F              ; PWD
 XTK_SFLOAD         = $50              ; SFLOAD "filename" — load soundfont
+XTK_GTEXT          = $51              ; GTEXT x,y,font,scale,"string"
 XTK_DIROPEN        = $2B              ; DIROPEN "pattern"
 XTK_DIRNEXT        = $2C              ; DIRNEXT — numeric function
 XTK_DIRNAM         = $2D              ; DIRNAM$ — string function
@@ -1952,6 +1953,7 @@ TAB_XTKCMD
       .word LAB_UNMOUNT-1     ; XTK_UNMOUNT    ($4E)
       .word LAB_PWD-1         ; XTK_PWD        ($4F)
       .word LAB_SFLOAD-1      ; XTK_SFLOAD     ($50)
+      .word LAB_GTEXT-1       ; XTK_GTEXT      ($51)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -8672,7 +8674,7 @@ LAB_NCC
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 80
+XTK_COUNT = 81
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8704,6 +8706,7 @@ TAB_XTKSTR
       .word @s_unmount
       .word @s_pwd
       .word @s_sfload
+      .word @s_gtext
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8765,6 +8768,7 @@ TAB_XTKSTR
 @s_unmount: .byte "UNMOUNT",0
 @s_pwd:    .byte "PWD",0
 @s_sfload: .byte "SFLOAD",0
+@s_gtext:  .byte "GTEXT",0
 @s_diropen: .byte "DIROPEN",0
 @s_dirnext: .byte "DIRNEXT",0
 @s_dirnam:  .byte "DIRNAM$",0
@@ -8838,6 +8842,7 @@ VCMD_FILL     = $06
 VCMD_GCLS     = $07
 VCMD_GCOLOR   = $08
 VCMD_PAINT    = $09
+VCMD_GTEXT    = $0A
 
 ; --- VGC sprite command codes ---
 
@@ -8910,6 +8915,10 @@ FIO_CMD_SFLOAD  = $15          ; load soundfont (.sf2)
 ; --- Extension ROM command IDs (dispatched via EXT_vec trampoline) ---
 EXT_CMD_NCC     = $00          ; NCC confirmation dialog
 EXT_CMD_SFLOAD  = $01          ; soundfont load
+EXT_CMD_DIR     = $02          ; DIR listing loop
+EXT_CMD_PWD     = $03          ; PWD print working directory
+EXT_CMD_XMEM    = $04          ; XMEM status display
+EXT_CMD_XDIR    = $05          ; XDIR listing loop
 FIO_CMD_CD      = $20              ; change directory
 FIO_CMD_MKDIR   = $21              ; make directory
 FIO_CMD_RMDIR   = $22              ; remove directory
@@ -9238,17 +9247,47 @@ LAB_GLINE
       STA   VGC_CMD
       RTS
 
-; perform CIRCLE cx, cy, r
+; perform CIRCLE cx, cy, rx [, ry]
+; 3 args = circle (rx=ry), 4 args = ellipse
 
 LAB_CIRCLE
       JSR   LAB_VGC_XY        ; cx,cy → P0-P3
       JSR   LAB_1C01          ; comma
-      JSR   LAB_GTWRD         ; r as 16-bit
+      JSR   LAB_GTWRD         ; rx as 16-bit
       LDA   FAC1_3
-      STA   VGC_P4             ; r low
+      STA   VGC_P4             ; rx low
       LDA   FAC1_2
-      STA   VGC_P5             ; r high
+      STA   VGC_P5             ; rx high
+      LDA   #$00
+      STA   VGC_P6             ; ry low = 0 (circle)
+      STA   VGC_P7             ; ry high = 0
+      JSR   LAB_GBYT          ; peek next
+      CMP   #','
+      BNE   @circ_go
+      JSR   LAB_1C01          ; consume comma
+      JSR   LAB_GTWRD         ; ry as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P6             ; ry low
+      LDA   FAC1_2
+      STA   VGC_P7             ; ry high
+@circ_go
       LDA   #VCMD_CIRCLE      ; CIRCLE command
+      STA   VGC_CMD
+      RTS
+
+; perform GTEXT x, y, font, scale, "string"
+
+LAB_GTEXT
+      JSR   LAB_VGC_XY        ; x,y → P0-P3
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; font (0-7) → X
+      STX   VGC_P4             ; P4 = font index
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; scale (1-8) → X
+      STX   VGC_P5             ; P5 = scale
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_FIO_GETNAME   ; string → FIO_NAME/FIO_NAMELEN
+      LDA   #VCMD_GTEXT
       STA   VGC_CMD
       RTS
 
@@ -10650,24 +10689,8 @@ LAB_MOUNT
 ; perform PWD — print working directory
 
 LAB_PWD
-      LDA   #FIO_CMD_PWD
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
-      BNE   @pwd_err
-      ; print the string from FIO_NAME
-      LDY   #$00
-@pwd_lp
-      CPY   FIO_NAMELEN
-      BEQ   @pwd_nl
-      LDA   FIO_NAME,Y
-      JSR   V_OUTP
-      INY
-      BNE   @pwd_lp
-@pwd_nl
-      JMP   LAB_CRLF          ; print CR/LF and return
-@pwd_err
-      JMP   LAB_FIO_ERRIO
+      LDA   #EXT_CMD_PWD
+      JMP   EXT_vec            ; extension ROM handles output
 
 ; perform SFLOAD "filename" — load soundfont via extension ROM
 
@@ -10760,86 +10783,13 @@ LAB_DIR
       CMP   #':'
       BEQ   @dir_noarg        ; statement separator
       JSR   LAB_FIO_GETNAME   ; parse string, copy to FIO_NAME
-      JMP   @dir_start
+      LDA   #EXT_CMD_DIR
+      JMP   EXT_vec            ; extension ROM handles listing
 @dir_noarg
       LDA   #$00
       STA   FIO_NAMELEN
-@dir_start
-      ; trigger DirOpen
-      LDA   #FIO_CMD_DIROPEN
-      STA   FIO_CMD
-      ; check status — FIO_OK means first entry ready
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
-      BNE   @dir_done         ; no files or error — done
-      JSR   LAB_CRLF          ; blank line after DIR command
-@dir_loop
-      ; --- right-justified file size in 5-column field ---
-      ; Convert AX to string (reuse EhBASIC's FAC1→string)
-      LDA   FIO_SIZEH         ; high byte in A
-      LDX   FIO_SIZEL         ; low byte in X
-      STA   FAC1_1            ; FAC1 mantissa1
-      STX   FAC1_2            ; FAC1 mantissa2
-      LDX   #$90              ; exponent = 16 bits
-      SEC                     ; +ve flag
-      JSR   LAB_STFA          ; normalise into FAC1
-      LDY   #$00
-      TYA
-      JSR   LAB_297B          ; convert FAC1 → null-terminated string at Decssp1
-      ; Count string length at Decssp1 (result string, skips sign byte)
-      LDY   #$00
-@dir_slen
-      LDA   Decssp1,Y
-      BEQ   @dir_pad          ; null terminator found, Y = length
-      INY
-      BNE   @dir_slen
-@dir_pad
-      ; Pad with spaces until Y reaches 5
-      CPY   #$05
-      BCS   @dir_pnum         ; already 5+ chars, no padding
-      LDA   #' '
-      JSR   LAB_PRNA          ; print space
-      INY
-      BNE   @dir_pad          ; always branches
-@dir_pnum
-      ; Print the number string from Decssp1
-      LDA   #<Decssp1
-      LDY   #>Decssp1
-      JSR   LAB_18C3          ; print null terminated string
-      ; print type from table (0=BAS, 1=SID, 2=BIN, 3=MID)
-      LDA   FIO_DIRTYPE
-      ASL
-      TAX
-      LDA   TAB_DTYPE,X
-      LDY   TAB_DTYPE+1,X
-      JSR   LAB_18C3          ; print null terminated string
-      ; print filename from FIO_NAME (length in FIO_NAMELEN)
-      LDY   #$00
-@dir_pname
-      CPY   FIO_NAMELEN
-      BCS   @dir_nl           ; done printing name
-      LDA   FIO_NAME,Y
-      JSR   LAB_PRNA          ; print character
-      INY
-      BNE   @dir_pname        ; always branches (Y won't wrap for 63 chars)
-@dir_nl
-      JSR   LAB_CRLF          ; print CR/LF
-      ; advance to next entry
-      LDA   #FIO_CMD_DIRREAD
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
-      BEQ   @dir_loop         ; more entries
-@dir_done
-      RTS
-
-TAB_DTYPE   .word STR_BAS, STR_SID, STR_BIN, STR_MID, STR_GFX, STR_DIR
-STR_BAS     .byte "  BAS  ",$00
-STR_SID     .byte "  SID  ",$00
-STR_BIN     .byte "  BIN  ",$00
-STR_MID     .byte "  MID  ",$00
-STR_GFX     .byte "  GFX  ",$00
-STR_DIR     .byte "  DIR  ",$00
+      LDA   #EXT_CMD_DIR
+      JMP   EXT_vec            ; extension ROM handles listing
 
 ; --- XMC expansion memory handlers ---
 
@@ -10949,58 +10899,8 @@ LAB_XMC_SETWINADDR
 ; perform XMEM
 
 LAB_XMEM
-      LDA   #XMC_CMD_STATS
-      STA   XMC_CMD
-      LDA   #$00              ; print "<banks>"
-      LDX   XMC_BANKS
-      JSR   LAB_295E
-      LDA   #<STR_XBANKS
-      LDY   #>STR_XBANKS
-      JSR   LAB_18C3
-
-      ; print "<banks*64>" as KB
-      LDA   XMC_BANKS
-      STA   Itempl            ; low byte
-      LDA   #$00
-      STA   Itemph            ; high byte
-      LDY   #$06
-@xmem_kb_lp
-      ASL   Itempl
-      ROL   Itemph
-      DEY
-      BNE   @xmem_kb_lp
-      LDA   Itemph            ; high byte in A
-      LDX   Itempl            ; low byte in X
-      JSR   LAB_295E
-      LDA   #<STR_XKB
-      LDY   #>STR_XKB
-      JSR   LAB_18C3
-
-      LDA   #$00              ; print selected bank
-      LDX   XMC_BANK
-      JSR   LAB_295E
-      LDA   #<STR_XUSED
-      LDY   #>STR_XUSED
-      JSR   LAB_18C3
-      LDA   XMC_USEDH
-      LDX   XMC_USEDL
-      JSR   LAB_295E
-      LDA   #<STR_XFREE
-      LDY   #>STR_XFREE
-      JSR   LAB_18C3
-      LDA   XMC_FREEH
-      LDX   XMC_FREEL
-      JSR   LAB_295E
-      LDA   #<STR_XPAGES
-      LDY   #>STR_XPAGES
-      JSR   LAB_18C3
-      LDA   #<STR_XNAMED
-      LDY   #>STR_XNAMED
-      JSR   LAB_18C3
-      LDA   XMC_DIRCOUNTH
-      LDX   XMC_DIRCOUNTL
-      JSR   LAB_295E
-      JMP   LAB_CRLF
+      LDA   #EXT_CMD_XMEM
+      JMP   EXT_vec            ; extension ROM handles output
 
 ; perform XBANK n
 
@@ -11129,35 +11029,8 @@ LAB_XALLOC
 ; perform XDIR
 
 LAB_XDIR
-      LDA   #XMC_CMD_NDIRO
-      STA   XMC_CMD
-      LDA   XMC_STATUS
-      CMP   #XMC_OK
-      BNE   @xdir_done
-@xdir_loop
-      LDA   XMC_LENH
-      LDX   XMC_LENL
-      JSR   LAB_295E
-      LDA   #<STR_XDIRBY
-      LDY   #>STR_XDIRBY
-      JSR   LAB_18C3
-      LDY   #$00
-@xdir_name
-      CPY   XMC_NAMELEN
-      BCS   @xdir_nl
-      LDA   XMC_NAME,Y
-      JSR   LAB_PRNA
-      INY
-      BNE   @xdir_name
-@xdir_nl
-      JSR   LAB_CRLF
-      LDA   #XMC_CMD_NDIRR
-      STA   XMC_CMD
-      LDA   XMC_STATUS
-      CMP   #XMC_OK
-      BEQ   @xdir_loop
-@xdir_done
-      RTS
+      LDA   #EXT_CMD_XDIR
+      JMP   EXT_vec            ; extension ROM handles output
 
 ; perform XDEL "name"
 
@@ -11275,13 +11148,6 @@ LAB_AUTOBOOT
 @ab_name
       .byte "AUTOBOOT"
 
-STR_XBANKS  .byte " BANKS, ",$00
-STR_XKB     .byte " KB XRAM, BANK ",$00
-STR_XUSED   .byte ", USED ",$00
-STR_XFREE   .byte ", FREE ",$00
-STR_XPAGES  .byte " PAGES",$00
-STR_XNAMED  .byte ", NAMED ",$00
-STR_XDIRBY  .byte " BYTES  ",$00
 
 ; character get subroutine for zero page
 

@@ -577,6 +577,7 @@ public static class VgcConstants
     public const byte CmdGcls          = 0x07;
     public const byte CmdGcolor        = 0x08;
     public const byte CmdPaint         = 0x09;
+    public const byte CmdGtext         = 0x0A;
 
     // -------------------------------------------------------------------------
     // Sprite commands

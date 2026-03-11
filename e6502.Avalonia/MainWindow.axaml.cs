@@ -104,6 +104,7 @@ public partial class MainWindow : Window
         if (font.SlotCount > 2)
             font.SetKeymap(2, FontKeymap.PetsciiLower);
 
+        _bus.Vgc.SetFont(font);
         _canvas = new EmulatorCanvas(_bus.Vgc, font, _editor);
         Content = _canvas;
 
