@@ -77,7 +77,7 @@ $BA00-$BA3F  Expansion Memory Controller (XMC) registers
 $BA40-$BA4F  Timer Controller registers
 $A100-$A13F  Network Interface Controller (NIC) registers
 $A140-$A1DF  Wavetable Synthesizer (WTS) registers
-$BA50-$BA53  Music status + voice note readback
+$BA50-$BA62  Music status + voice note readback + elapsed/total frames
 $BC00-$BFFF  XMC window (4x256-byte pages into 512KB XRAM)
 $C000-$FFFF  ROM (EhBASIC, write-protected)
 $D400-$D41F  SID 1 registers (inside ROM range, intercepted on Write)
@@ -92,9 +92,9 @@ Rendering at 60Hz: background fill → priority-0 sprites → text/gfx layers (o
 
 ### SID Chip & Music Engine
 
-**SidChip** (`Hardware/SidChip.cs`): Software MOS 6581 emulation with 3 voices, ADSR envelopes, 4 waveforms, ring modulation, sync, and state-variable filter. Extended with per-voice volume registers at $1D-$1F (0-255, default 255) — not present on the real SID. Audio rendered in a background thread via OpenAL at 44100Hz, fully decoupled from CPU clock.
+**SidChip** (`Hardware/SidChip.cs`): Software MOS 6581 emulation with 3 voices, ADSR envelopes, 4 waveforms, ring modulation, sync, and state-variable filter. Extended with per-voice volume registers at $1D-$1F (0-15, 4-bit, default $0F) — not present on the real SID. Audio rendered in a background thread via OpenAL at 44100Hz, fully decoupled from CPU clock.
 
-**MusicEngine** (`Hardware/MusicEngine.cs`): 14-voice sequencer (6 SID + 8 WTS), ticked at 60Hz. Voices 0–5 route to SID chips, voices 6–13 route to WavetableSynth. Supports 16 SID instrument slots, one-shot SFX with voice stealing, and per-frame effects (arpeggio, vibrato, portamento, PWM/filter sweep). MML parsed by `MmlParser` into `MmlEvent` lists. `@W<n>` MML command selects WTS instrument.
+**MusicEngine** (`Hardware/MusicEngine.cs`): 14-voice sequencer (6 SID + 8 WTS), ticked at 60Hz. Voices 0–5 route to SID chips, voices 6–13 route to WavetableSynth. Supports 16 SID instrument slots, one-shot SFX with voice stealing, and per-frame effects (arpeggio, vibrato, portamento, PWM/filter sweep). MML parsed by `MmlParser` into `MmlEvent` lists. `I<n>` selects SID instrument, `@I<n>` selects WTS instrument by GM program, `@D<n>` selects WTS drum instrument.
 
 **WavetableSynth** (`Hardware/WavetableSynth.cs`): 8-voice sample-based synthesizer at $A140–$A1DF. Loads SF2 soundfonts from host filesystem (samples stay in host memory). Per-voice: volume, panning, pitch bend. Global: reverb (Freeverb), chorus (modulated delay), master volume. Stereo PCM16 output via OpenAL at 44100Hz. Register interface supports note-on/off, instrument selection, and instrument enumeration.
 

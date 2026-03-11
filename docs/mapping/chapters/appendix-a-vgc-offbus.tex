@@ -11,7 +11,7 @@
 The VGC manages two large memory spaces that live entirely outside the 6502's
 64\,KB address space.  The graphics bitmap holds 64,000 bytes of pixel data for
 the 320$\times$200 display, and the sprite shape RAM holds up to 256 shape
-definitions of 256 bytes each (64\,KB total).  Neither space can be addressed
+definitions of 128 bytes each (32\,KB total).  Neither space can be addressed
 directly by the CPU; instead, the VGC provides two access mechanisms:
 
 \begin{itemize}
@@ -95,16 +95,16 @@ reading individual pixel values or implementing custom rendering algorithms.
 
 \begin{lstlisting}
 10 REM read pixel at (100, 50)
-20 POKE $A011, 0  : POKE $A012, 2  : REM space=gfx
+20 POKE $A011, 2               : REM P0 = space (MemSpaceGfx)
 30 OFFSET = 50*320+100
-40 POKE $A013, OFFSET AND 255
-50 POKE $A014, INT(OFFSET/256)
-60 POKE $A010, $19 : REM MemRead
-70 PRINT "COLOR:"; PEEK($A015)
+40 POKE $A012, OFFSET AND 255  : REM P1 = offset low byte
+50 POKE $A013, INT(OFFSET/256) : REM P2 = offset high byte
+60 POKE $A010, $19             : REM MemRead
+70 PRINT "COLOR:"; PEEK($A014) : REM P3 = result
 80 REM
 90 REM write pixel at (100, 50) to color 1 (white)
-100 POKE $A015, 1
-110 POKE $A010, $1A : REM MemWrite
+100 POKE $A014, 1              : REM P3 = value to write
+110 POKE $A010, $1A            : REM MemWrite
 \end{lstlisting}
 
 \begin{notebox}
@@ -120,8 +120,10 @@ update the offset registers between commands.
 % ═══════════════════════════════════════════════════════════════════════════════
 
 Sprite shape RAM holds up to 256 shape definitions.  Each shape is a
-16$\times$16 pixel image stored as 256 bytes (one byte per pixel, colour index
-in the low nibble).  A pixel value of 0 is transparent by default.
+16$\times$16 pixel image stored as 128 bytes using 4-bit packed nibbles (two
+pixels per byte).  The high nibble holds the even-column pixel and the low
+nibble holds the odd-column pixel.  A pixel value of 0 is transparent by
+default.
 
 \begin{center}
 \small
@@ -131,9 +133,10 @@ in the low nibble).  A pixel value of 0 is transparent by default.
 \midrule
 Shape slots                & 256 (numbered 0--255) \\
 Shape dimensions           & 16$\times$16 pixels \\
-Bytes per shape            & 256 \\
-Bits per pixel             & 4 (stored in low nibble of each byte) \\
-Total size                 & 65,536 bytes (64\,KB) \\
+Bytes per row              & 8 (16 pixels $\times$ 4 bits $\div$ 8) \\
+Bytes per shape            & 128 (8 bytes/row $\times$ 16 rows) \\
+Bits per pixel             & 4 (packed: high nibble = even col, low nibble = odd col) \\
+Total size                 & 32,768 bytes (32\,KB) \\
 VGC MemRead/MemWrite space & \$03 (\texttt{MemSpaceSprite}) \\
 DMA space                  & 4 (\texttt{DmaSpaceVgcSprite}) \\
 \bottomrule
@@ -142,14 +145,15 @@ DMA space                  & 4 (\texttt{DmaSpaceVgcSprite}) \\
 
 \subsection{Address Calculation}
 
-The offset of any pixel within sprite shape RAM is:
+The byte offset within sprite shape RAM is:
 
 \[
-  \textit{offset} = \textit{slot} \times 256 + \textit{row} \times 16 + \textit{column}
+  \textit{offset} = \textit{slot} \times 128 + \textit{row} \times 8 + \lfloor\textit{column} \div 2\rfloor
 \]
 
 where \textit{slot}~$\in [0, 255]$, \textit{row}~$\in [0, 15]$, and
-\textit{column}~$\in [0, 15]$.
+\textit{column}~$\in [0, 15]$.  Within the byte, the even column occupies the
+high nibble (bits~7--4) and the odd column occupies the low nibble (bits~3--0).
 
 \subsection{Shape Slot Assignments}
 
@@ -166,19 +170,23 @@ to a different slot.
 
 \begin{lstlisting}
 10 REM define a simple arrow shape in slot 0
-20 POKE $A011, 0 : POKE $A012, 3 : REM space=sprite
-30 FOR ROW = 0 TO 15
-40   FOR COL = 0 TO 15
-50     OFFSET = 0*256 + ROW*16 + COL
-60     POKE $A013, OFFSET AND 255
-70     POKE $A014, INT(OFFSET/256)
-80     C = 0 : REM transparent
-90     IF COL = 7 AND ROW < 12 THEN C = 1
-100    IF ROW = 0 AND COL >= 5 AND COL <= 9 THEN C = 1
-110    POKE $A015, C
-120    POKE $A010, $1A : REM MemWrite
-130  NEXT COL
-140 NEXT ROW
+20 REM sprites are 4-bit packed: 8 bytes/row, 128 bytes/shape
+30 POKE $A011, 3               : REM P0 = space (MemSpaceSprite)
+40 FOR ROW = 0 TO 15
+50   FOR BYTECOL = 0 TO 7
+60     OFFSET = 0*128 + ROW*8 + BYTECOL
+70     POKE $A012, OFFSET AND 255  : REM P1 = offset low
+80     POKE $A013, INT(OFFSET/256) : REM P2 = offset high
+90     HI = 0 : LO = 0 : REM two pixels per byte
+100    LCOL = BYTECOL*2 : RCOL = LCOL+1
+110    IF LCOL = 6 AND ROW < 12 THEN HI = 1
+120    IF RCOL = 7 AND ROW < 12 THEN LO = 1
+130    IF ROW = 0 AND LCOL >= 4 AND LCOL <= 8 THEN HI = 1
+140    IF ROW = 0 AND RCOL >= 5 AND RCOL <= 9 THEN LO = 1
+150    POKE $A014, HI*16 + LO     : REM P3 = packed nibbles
+160    POKE $A010, $1A             : REM MemWrite
+170  NEXT BYTECOL
+180 NEXT ROW
 \end{lstlisting}
 
 \subsection{Using DMA for Bulk Shape Loading}
@@ -190,7 +198,7 @@ space to CPU RAM (space~0) or XRAM (space~5), the destination space to
 Chapter~\ref{sec:xmc-registers} for DMA register details.
 
 \begin{lstlisting}
-10 REM DMA copy 2560 bytes (10 shapes) from CPU RAM
+10 REM DMA copy 1280 bytes (10 shapes x 128) from CPU RAM
 20 REM at $2000 into sprite shape slot 0
-30 DMACOPY $2000, 0, 2560, 0, 4
+30 DMACOPY $2000, 0, 1280, 0, 4
 \end{lstlisting}

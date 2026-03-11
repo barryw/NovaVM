@@ -1024,8 +1024,16 @@ public class VirtualGraphicsController
             default:
                 if (data >= 0x20) // printable
                 {
+                    // When a PETSCII font is active (slot 1 = upper, slot 2 = lower),
+                    // map lowercase ASCII letters to uppercase so EhBASIC output like
+                    // "Ready" renders correctly (PETSCII uppercase set has no lowercase).
+                    byte ch = data;
+                    int fontSlot = _regs[VgcConstants.RegFont - VgcConstants.VgcBase];
+                    if (fontSlot == 1 && ch >= 0x61 && ch <= 0x7A)
+                        ch -= 0x20; // a-z -> A-Z
+
                     int idx = cy * VgcConstants.ScreenCols + cx;
-                    _screenRam[idx] = data;
+                    _screenRam[idx] = ch;
                     _colorRam[idx] = _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase];
                     cx++;
                     if (cx >= VgcConstants.ScreenCols)

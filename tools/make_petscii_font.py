@@ -27,10 +27,11 @@ Remapping (uppercase set as example):
   Screen code 30 (up-arrow)-> ASCII 0x5E
   Screen code 31 (left-arrow)->ASCII 0x5F  (underscore position)
   Screen codes 32-63       -> ASCII 0x20-0x3F (space..?)
-  Screen codes 64-89       -> 0x80-0x99 (shifted graphics)
-  Screen codes 90-95       -> 0x9A-0x9F (remaining shifted graphics)
-  Screen codes 96-121      -> 0xA0-0xB9 (C= key graphics)
-  Screen codes 122-127     -> 0xBA-0xBF (remaining C= key graphics)
+  Screen codes 64-95       -> 0x60-0x7F (shifted graphics, primary)
+  Screen codes 64-95       -> 0x80-0x9F (shifted graphics, mirror)
+  Screen codes 96-127      -> 0xA0-0xBF (C= key graphics, primary)
+  Screen codes 64-95       -> 0xC0-0xDF (shifted graphics, mirror)
+  Screen codes 96-127      -> 0xE0-0xFF (C= key graphics, mirror)
 
 Usage:
   python3 make_petscii_font.py [output_dir]
@@ -617,17 +618,20 @@ def remap_charset(rom_half: bytes) -> bytearray:
     for i in range(32):
         put(0xA0 + i, 96 + i)
 
-    # Lowercase ASCII positions (0x61-0x7A) -> show uppercase A-Z
-    # The C64 uppercase set has no lowercase; lowercase input rendered as uppercase.
-    # We duplicate the uppercase glyphs so mixed-case output (like "Ready") is visible.
-    for i in range(1, 27):
-        put(0x60 + i, i)  # same glyphs as SC 1-26 (A-Z)
+    # $60-$7F: shifted graphics (mirrors $80-$9F, same as real C64 PETSCII)
+    # On a real C64, PETSCII codes $60-$7F display the same shifted graphic
+    # characters as $C0-$DF.  Lowercase ASCII->uppercase mapping for EhBASIC
+    # output (e.g. "Ready") is handled at the display layer in HandleCharOut.
+    for i in range(32):
+        put(0x60 + i, 64 + i)
 
-    # 0x60 (backtick) -> horizontal bar graphic (SC 64)
-    put(0x60, 64)
-    # 0x7B-0x7F -> fill with remaining shifted graphics (SC 91-95)
-    for i in range(5):
-        put(0x7B + i, 91 + i)
+    # $C0-$DF: repeat of shifted graphics (SC 64-95, same as $80-$9F)
+    for i in range(32):
+        put(0xC0 + i, 64 + i)
+
+    # $E0-$FF: repeat of C= key graphics (SC 96-127, same as $A0-$BF)
+    for i in range(32):
+        put(0xE0 + i, 96 + i)
 
     return out
 
@@ -683,13 +687,18 @@ def remap_lower_charset(rom_half: bytes) -> bytearray:
     for i in range(32):
         put(0xA0 + i, 96 + i)
 
-    # Also copy shifted graphics (SC 64-89) to 0x80-0x99
+    # Also copy shifted graphics (SC 64-95) to 0x80-0x9F
     # (same graphic chars available in both sets)
-    for i in range(26):
+    for i in range(32):
         put(0x80 + i, 64 + i)
-    # SC 90-95 -> 0x9A-0x9F
-    for i in range(6):
-        put(0x9A + i, 90 + i)
+
+    # $C0-$DF: repeat of shifted graphics (SC 64-95, same as $80-$9F)
+    for i in range(32):
+        put(0xC0 + i, 64 + i)
+
+    # $E0-$FF: repeat of C= key graphics (SC 96-127, same as $A0-$BF)
+    for i in range(32):
+        put(0xE0 + i, 96 + i)
 
     return out
 

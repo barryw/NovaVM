@@ -335,6 +335,26 @@ apply --- simply add \$20 to each address.
 
 
 % ═══════════════════════════════════════════════════════════════════════════════
+\section{SID 2 Mirror (\$D500--\$D51C)}
+\label{sec:sid2-mirror}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\memrange{D500}{D51C}{SID 2 Mirror}{W}{---}
+
+Writes to \$D500--\$D51C are transparently remapped to SID~2 at
+\$D420--\$D43C.  This mirror exists for compatibility with \texttt{.sid} files
+that target the common C64 second-SID address of \$D500.  No special
+configuration is required --- the composite bus performs the remapping
+automatically on every write.
+
+\begin{notebox}
+Like SID~2 itself, this range lies inside the ROM region.  Reads return ROM
+data, not SID register values.  Only writes are intercepted and routed to the
+SID~2 emulation.
+\end{notebox}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
 \section{BASIC Examples}
 \label{sec:sid-examples}
 % ═══════════════════════════════════════════════════════════════════════════════

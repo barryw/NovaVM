@@ -340,8 +340,8 @@ Command \$15 loads an SF2 file by name.
 \begin{lstlisting}
 10 REM load a soundfont via FileIoController
 20 F$ = "GeneralUser.sf2" + CHR$(0)
-30 FOR I=1 TO LEN(F$)
-40   POKE $B9BF+I, ASC(MID$(F$,I,1))
+30 FOR I=0 TO LEN(F$)-1
+40   POKE $B9B0+I, ASC(MID$(F$,I+1,1))
 50 NEXT I
 60 POKE $B9A0, $15           : REM load soundfont command
 70 WAIT $A183, 1             : REM wait for ready
@@ -395,8 +395,9 @@ Command \$15 loads an SF2 file by name.
 \end{lstlisting}
 
 \begin{tipbox}
-The MML \texttt{MUSIC} command supports WTS voices with the \texttt{@W}
-prefix.  For example, \texttt{MUSIC 6, "@W0 L4 CDEFG"} plays a C major scale
-on WTS voice~0 using instrument~0.  This is often easier than direct register
-manipulation for musical sequences.
+The MML \texttt{MUSIC} command supports WTS voices.  Use \texttt{@I\textless n\textgreater}
+to select a WTS instrument by GM program number, or \texttt{@D\textless n\textgreater}
+to select a drum instrument.  For example, \texttt{MUSIC 6, "@I0 L4 CDEFG"} plays
+a C major scale on WTS voice~0 using instrument~0.  This is often easier than
+direct register manipulation for musical sequences.
 \end{tipbox}

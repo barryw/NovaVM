@@ -226,8 +226,8 @@ string or set FioNameLen to the correct length.
 \begin{lstlisting}
 10 REM store filename "MYFILE" into FioName buffer
 20 F$ = "MYFILE" + CHR$(0)
-30 FOR I=1 TO LEN(F$)
-40   POKE $B9AF+I, ASC(MID$(F$,I,1))
+30 FOR I=0 TO LEN(F$)-1
+40   POKE $B9B0+I, ASC(MID$(F$,I+1,1))
 50 NEXT I
 \end{lstlisting}
 
@@ -739,8 +739,8 @@ contents are overwritten by each subsequent DirRead.
 10 REM === SAVE a BASIC program ===
 20 REM set filename "MYPROG"
 30 F$ = "MYPROG" + CHR$(0)
-40 FOR I=1 TO LEN(F$)
-50   POKE $B9AF+I, ASC(MID$(F$,I,1))
+40 FOR I=0 TO LEN(F$)-1
+50   POKE $B9B0+I, ASC(MID$(F$,I+1,1))
 60 NEXT I
 70 REM set source range ($0300-$2000)
 80 DOKE $B9A4, $0300 : REM FioSrc
@@ -753,8 +753,8 @@ contents are overwritten by each subsequent DirRead.
 \begin{lstlisting}
 10 REM === LOAD a BASIC program ===
 20 F$ = "MYPROG" + CHR$(0)
-30 FOR I=1 TO LEN(F$)
-40   POKE $B9AF+I, ASC(MID$(F$,I,1))
+30 FOR I=0 TO LEN(F$)-1
+40   POKE $B9B0+I, ASC(MID$(F$,I+1,1))
 50 NEXT I
 60 DOKE $B9A4, $0300 : REM FioSrc (load destination)
 70 POKE $B9A0, $02   : REM execute Load
@@ -793,8 +793,8 @@ contents are overwritten by each subsequent DirRead.
 \begin{lstlisting}
 10 REM play a SID file named "COMMANDO"
 20 F$ = "COMMANDO" + CHR$(0)
-30 FOR I=1 TO LEN(F$)
-40   POKE $B9AF+I, ASC(MID$(F$,I,1))
+30 FOR I=0 TO LEN(F$)-1
+40   POKE $B9B0+I, ASC(MID$(F$,I+1,1))
 50 NEXT I
 60 POKE $B9A0, $08 : REM SidPlay
 70 IF PEEK($B9A1)=$02 THEN PRINT "PLAYING..."
@@ -809,16 +809,16 @@ contents are overwritten by each subsequent DirRead.
 \begin{lstlisting}
 10 REM load soundfont first
 20 F$ = "GeneralUser.sf2" + CHR$(0)
-30 FOR I=1 TO LEN(F$)
-40   POKE $B9AF+I, ASC(MID$(F$,I,1))
+30 FOR I=0 TO LEN(F$)-1
+40   POKE $B9B0+I, ASC(MID$(F$,I+1,1))
 50 NEXT I
 60 POKE $B9A0, $15   : REM SfLoad
 70 WAIT $A183, 1     : REM wait for WTS ready
 80 PRINT PEEK($A184); " INSTRUMENTS LOADED"
 90 REM now play a MIDI file
 100 F$ = "BACH_FUGUE" + CHR$(0)
-110 FOR I=1 TO LEN(F$)
-120   POKE $B9AF+I, ASC(MID$(F$,I,1))
+110 FOR I=0 TO LEN(F$)-1
+120   POKE $B9B0+I, ASC(MID$(F$,I+1,1))
 130 NEXT I
 140 POKE $B9A0, $13  : REM MidPlay
 150 IF PEEK($B9A1)=$02 THEN PRINT "MIDI PLAYING"
