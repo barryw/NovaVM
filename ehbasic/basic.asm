@@ -1373,6 +1373,12 @@ LAB_XCRNCHD
       BNE   @cmp_loop
 
 @matched
+      ; If next input char is A-Z, this is a prefix — try next token
+      LDA   Ibuffs,X
+      EOR   #$40              ; A-Z ($41-$5A) → $01-$1A
+      CMP   #$1B
+      BCC   @try_next         ; < $1B means was A-Z
+
       LDY   csidx
       INY
       LDA   #TKX_PREFIX
@@ -3705,6 +3711,7 @@ LAB_1BEE
       .byte XTK_BLITSTATUS, XTK_BLITERR, XTK_BLITCOUNT
       .byte XTK_DIRNEXT, XTK_DIRSIZ, XTK_DIRTYP, XTK_DIRNAM, XTK_META
       .byte XTK_TPEEK, XTK_TPEEKATTR
+      .byte XTK_TILECOL, XTK_TSCROLLX, XTK_TSCROLLY
 @FUNC_TBL_SZ = * - @func_ids
 @func_addrs
       .word @xtk_playing-1, @xtk_mnote-1, @xtk_xpeek-1
@@ -3713,6 +3720,7 @@ LAB_1BEE
       .word @xtk_blitstatus-1, @xtk_bliterr-1, @xtk_blitcount-1
       .word @xtk_dirnext-1, @xtk_dirsiz-1, @xtk_dirtyp-1, @xtk_dirnam-1, @xtk_meta-1
       .word @xtk_tpeek-1, @xtk_tpeekattr-1
+      .word @xtk_tilecol-1, @xtk_tscrollx-1, @xtk_tscrolly-1
 
 @xtk_xpeek
       ; '(' was consumed during tokenization as part of keyword
@@ -3963,6 +3971,27 @@ LAB_1BEE
 @tpeek_a
       LDY   TilePeekAttr
       JMP   @ret_0ay
+
+; TILECOL — returns 16-bit collision bitmask
+@xtk_tilecol
+      JSR   LAB_IGBY          ; consume token, advance
+      LDY   TileColL
+      LDA   TileColH
+      JMP   LAB_AYFC
+
+; TSCROLLX — returns 16-bit scroll X position
+@xtk_tscrollx
+      JSR   LAB_IGBY          ; consume token, advance
+      LDY   TileScrollXL
+      LDA   TileScrollXH
+      JMP   LAB_AYFC
+
+; TSCROLLY — returns 16-bit scroll Y position
+@xtk_tscrolly
+      JSR   LAB_IGBY          ; consume token, advance
+      LDY   TileScrollYL
+      LDA   TileScrollYH
+      JMP   LAB_AYFC
 
 LAB_1BEE_STD
       SEC                     ; plain token base subtraction
@@ -8685,27 +8714,27 @@ TAB_XTKSTR
 @s_pwd:    .byte "PWD",0
 @s_sfload: .byte "SFLOAD",0
 @s_gtext:  .byte "GTEXT",0
-@s_tilesize: .byte "TSIZ",0
-@s_mirror:  .byte "TMIR",0
-@s_ttrans:  .byte "TTRAN",0
+@s_tilesize: .byte "TILESIZE",0
+@s_mirror:  .byte "TMIRROR",0
+@s_ttrans:  .byte "TTRANS",0
 @s_tdef:    .byte "TDEF",0
 @s_tput:    .byte "TPUT",0
 @s_tattr:   .byte "TATTR",0
 @s_tfill:   .byte "TFILL",0
 @s_trow:    .byte "TROW",0
 @s_tcol:    .byte "TCOL",0
-@s_tntload: .byte "TNTLD",0
+@s_tntload: .byte "TNTLOAD",0
 @s_tcls:    .byte "TCLS",0
-@s_tscroll: .byte "TSCRL",0
+@s_tscroll: .byte "TSCROLL",0
 @s_tpal:    .byte "TPAL",0
 @s_tpalc:   .byte "TPALC",0
 @s_tsave:   .byte "TSAVE",0
 @s_tload:   .byte "TLOAD",0
 @s_tpeek:   .byte "TPEEK(",0
 @s_tpeekattr: .byte "TPATTR(",0
-@s_tilecol: .byte "TCOLL",0
-@s_tscrollx: .byte "TSCRX",0
-@s_tscrolly: .byte "TSCRY",0
+@s_tilecol: .byte "TILECOL",0
+@s_tscrollx: .byte "TSCROLLX",0
+@s_tscrolly: .byte "TSCROLLY",0
 @s_diropen: .byte "DIROPEN",0
 @s_dirnext: .byte "DIRNEXT",0
 @s_dirnam:  .byte "DIRNAM$",0
@@ -8859,6 +8888,8 @@ EXT_CMD_XDIR    = $05          ; XDIR listing loop
 EXT_CMD_TSAVE   = $06          ; TSAVE tile file save
 EXT_CMD_TLOAD   = $07          ; TLOAD tile file load
 EXT_CMD_HELP    = $08          ; HELP command
+EXT_CMD_DMAFILL = $09          ; DMAFILL epilogue (zero src, start, check)
+EXT_CMD_BLTFILL = $0A          ; BLITFILL epilogue (zero src, start, check)
 FIO_CMD_CD      = $20              ; change directory
 FIO_CMD_MKDIR   = $21              ; make directory
 FIO_CMD_RMDIR   = $22              ; remove directory
@@ -10561,22 +10592,8 @@ LAB_DMAFILL
       JSR   LAB_1C01
       JSR   LAB_GTBY
       STX   DMA_FILL
-      ; mode = fill
-      LDA   #DMA_MODE_FILL
-      STA   DMA_MODE
-      ; source fields are ignored in fill mode; keep deterministic
-      LDA   #$00
-      STA   DMA_SRCSPACE
-      STA   DMA_SRCL
-      STA   DMA_SRCM
-      STA   DMA_SRCH
-      ; start
-      LDA   #DMA_CMD_START
-      STA   DMA_CMD
-      LDA   DMA_STATUS
-      CMP   #DMA_BUSY
-      BEQ   @dmaf_ok
-      CMP   #DMA_OK
+      LDA   #EXT_CMD_DMAFILL
+      JSR   EXT_vec
       BEQ   @dmaf_ok
       JMP   LAB_FCER
 @dmaf_ok
@@ -10718,25 +10735,8 @@ LAB_BLITFILL
       JSR   LAB_1C01
       JSR   LAB_GTBY
       STX   BLT_FILL
-      ; source fields are ignored in fill mode; keep deterministic
-      LDA   #$00
-      STA   BLT_SRCSPACE
-      STA   BLT_SRCL
-      STA   BLT_SRCM
-      STA   BLT_SRCH
-      STA   BLT_SRCSTRL
-      STA   BLT_SRCSTRH
-      STA   BLT_CKEY
-      ; mode = fill
-      LDA   #BLT_MODE_FILL
-      STA   BLT_MODE
-      ; start
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD
-      LDA   BLT_STATUS
-      CMP   #BLT_BUSY
-      BEQ   @bltf_ok
-      CMP   #BLT_OK
+      LDA   #EXT_CMD_BLTFILL
+      JSR   EXT_vec
       BEQ   @bltf_ok
       JMP   LAB_FCER
 @bltf_ok

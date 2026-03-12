@@ -62,6 +62,8 @@ EXT_CMD_XDIR    = $05
 EXT_CMD_TSAVE   = $06
 EXT_CMD_TLOAD   = $07
 EXT_CMD_HELP    = $08
+EXT_CMD_DMAFILL = $09
+EXT_CMD_BLTFILL = $0A
 
 ; --- RAM addresses ---
 EXT_RESET_VEC   = $0233         ; reset recovery routine in RAM
@@ -93,6 +95,8 @@ ExtTable:
       .word EXT_TSAVE-1       ; cmd 6: TSAVE tile file
       .word EXT_TLOAD-1       ; cmd 7: TLOAD tile file
       .word EXT_HELP-1        ; cmd 8: HELP command
+      .word EXT_DMAFILL-1     ; cmd 9: DMAFILL epilogue
+      .word EXT_BLTFILL-1     ; cmd A: BLITFILL epilogue
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -554,6 +558,79 @@ EXT_HELP:
       LDA   #$01
       STA   REG_HELP
       LDA   #$00
+      RTS
+
+; =====================================================================
+; DMAFILL epilogue — zero source fields, set fill mode, start, check
+; Returns: A=0 success, A=1 error
+; =====================================================================
+DMA_CMD_REG   = $BA63
+DMA_STATUS_REG = $BA64
+DMA_SRCSPACE  = $BA66
+DMA_SRCL      = $BA68
+DMA_SRCM      = $BA69
+DMA_SRCH      = $BA6A
+DMA_MODE_REG  = $BA71
+DMA_CMD_START = $01
+DMA_MODE_FILL = $01
+HW_BUSY       = $01
+HW_OK         = $02
+
+EXT_DMAFILL:
+      LDA   #DMA_MODE_FILL
+      STA   DMA_MODE_REG
+      LDA   #$00
+      STA   DMA_SRCSPACE
+      STA   DMA_SRCL
+      STA   DMA_SRCM
+      STA   DMA_SRCH
+      LDA   #DMA_CMD_START
+      STA   DMA_CMD_REG
+      LDA   DMA_STATUS_REG
+      JMP   ext_hw_chk
+
+; =====================================================================
+; BLITFILL epilogue — zero source fields, set fill mode, start, check
+; Returns: A=0 success, A=1 error
+; =====================================================================
+BLT_CMD_REG   = $BA83
+BLT_STATUS_REG = $BA84
+BLT_SRCSPACE  = $BA86
+BLT_SRCL      = $BA88
+BLT_SRCM      = $BA89
+BLT_SRCH      = $BA8A
+BLT_SRCSTRL   = $BA92
+BLT_SRCSTRH   = $BA93
+BLT_MODE_REG  = $BA96
+BLT_CKEY      = $BA98
+BLT_MODE_FILL = $01
+BLT_CMD_START = $01
+
+EXT_BLTFILL:
+      LDA   #$00
+      STA   BLT_SRCSPACE
+      STA   BLT_SRCL
+      STA   BLT_SRCM
+      STA   BLT_SRCH
+      STA   BLT_SRCSTRL
+      STA   BLT_SRCSTRH
+      STA   BLT_CKEY
+      LDA   #BLT_MODE_FILL
+      STA   BLT_MODE_REG
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD_REG
+      LDA   BLT_STATUS_REG
+      ; fall through to ext_hw_chk
+
+; shared: check hardware status (A=status). Returns A=0 ok, A=1 error.
+ext_hw_chk:
+      CMP   #HW_BUSY
+      BEQ   @ok
+      CMP   #HW_OK
+      BEQ   @ok
+      LDA   #$01
+      RTS
+@ok:  LDA   #$00
       RTS
 
 ; =====================================================================
