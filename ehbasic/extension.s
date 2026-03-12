@@ -47,6 +47,8 @@ FIO_CMD_SFLOAD  = $15           ; soundfont load command
 FIO_CMD_DIROPEN = $03           ; open directory listing
 FIO_CMD_DIRREAD = $04           ; read next directory entry
 FIO_CMD_PWD     = $26           ; print working directory
+FIO_CMD_TSAVE   = $16           ; save tile state
+FIO_CMD_TLOAD   = $17           ; load tile state
 FIO_OK          = $02           ; status: success
 ROMSWAP_NCCEDIT = $03           ; NCC editor event
 
@@ -57,6 +59,9 @@ EXT_CMD_DIR     = $02
 EXT_CMD_PWD     = $03
 EXT_CMD_XMEM    = $04
 EXT_CMD_XDIR    = $05
+EXT_CMD_TSAVE   = $06
+EXT_CMD_TLOAD   = $07
+EXT_CMD_HELP    = $08
 
 ; --- RAM addresses ---
 EXT_RESET_VEC   = $0233         ; reset recovery routine in RAM
@@ -85,6 +90,9 @@ ExtTable:
       .word EXT_PWD-1         ; cmd 3: PWD print working directory
       .word EXT_XMEM-1        ; cmd 4: XMEM status display
       .word EXT_XDIR-1        ; cmd 5: XDIR listing loop
+      .word EXT_TSAVE-1       ; cmd 6: TSAVE tile file
+      .word EXT_TLOAD-1       ; cmd 7: TLOAD tile file
+      .word EXT_HELP-1        ; cmd 8: HELP command
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -426,6 +434,125 @@ EXT_XDIR:
       CMP   #XMC_OK
       BEQ   @xdir_loop
 @xdir_done:
+      LDA   #$00
+      RTS
+
+; =====================================================================
+; TSAVE handler — save tile state to .tile file
+; Filename already in FIO_NAME/FIO_NAMELEN.
+; Returns: A=0 success, A=errcode on error (Z flag set accordingly).
+; =====================================================================
+EXT_TSAVE:
+      LDA   #FIO_CMD_TSAVE
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BEQ   @tsave_ok
+      LDA   FIO_ERRCODE
+      RTS
+@tsave_ok:
+      LDA   #$00
+      RTS
+
+; =====================================================================
+; TLOAD handler — load tile state from .tile file
+; Filename already in FIO_NAME/FIO_NAMELEN.
+; Returns: A=0 success, A=errcode on error (Z flag set accordingly).
+; =====================================================================
+EXT_TLOAD:
+      LDA   #FIO_CMD_TLOAD
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BEQ   @tload_ok
+      LDA   FIO_ERRCODE
+      RTS
+@tload_ok:
+      LDA   #$00
+      RTS
+
+; =====================================================================
+; HELP handler — moved from BASIC ROM to save space.
+; Reads BASIC text at (Bpntrl),Y and copies raw bytes to help buffer.
+; The C# help system handles detokenization.
+; =====================================================================
+Bpntrl_ext      = $C3           ; BASIC execute pointer low
+Bpntrh_ext      = $C4           ; BASIC execute pointer high
+help_len_ext    = $E2           ; help keyword length scratch
+REG_HELP        = $A020         ; help command register
+HELP_BUF        = $A021         ; help buffer (16 bytes)
+TKX_PREFIX_EXT  = $01           ; extended token prefix
+
+EXT_HELP:
+      LDY   #$00
+      LDA   (Bpntrl_ext),Y
+      BEQ   @help_noarg
+      CMP   #':'
+      BEQ   @help_noarg
+      CMP   #'"'
+      BEQ   @help_quoted
+      LDX   #$00
+@help_raw:
+      LDA   (Bpntrl_ext),Y
+      BEQ   @help_rawdone
+      CMP   #':'
+      BEQ   @help_rawdone
+      STA   HELP_BUF,X
+      INY
+      INX
+      CPX   #$10
+      BCC   @help_raw
+@help_rawdone:
+      TYA
+      CLC
+      ADC   Bpntrl_ext
+      STA   Bpntrl_ext
+      BCC   @help_noinc
+      INC   Bpntrh_ext
+@help_noinc:
+      STX   help_len_ext
+      JMP   @help_trigger
+@help_quoted:
+      INY
+      LDX   #$00
+@help_qloop:
+      LDA   (Bpntrl_ext),Y
+      BEQ   @help_qdone
+      CMP   #'"'
+      BEQ   @help_qclose
+      STA   HELP_BUF,X
+      INY
+      INX
+      CPX   #$10
+      BCC   @help_qloop
+@help_qclose:
+      INY
+@help_qdone:
+      TYA
+      CLC
+      ADC   Bpntrl_ext
+      STA   Bpntrl_ext
+      BCC   @help_noinc2
+      INC   Bpntrh_ext
+@help_noinc2:
+      STX   help_len_ext
+@help_trigger:
+      LDY   help_len_ext
+@help_zero:
+      CPY   #$10
+      BCS   @help_search
+      LDA   #$00
+      STA   HELP_BUF,Y
+      INY
+      BNE   @help_zero
+@help_search:
+      LDA   #$02
+      STA   REG_HELP
+      LDA   #$00
+      RTS
+@help_noarg:
+      LDA   #$01
+      STA   REG_HELP
       LDA   #$00
       RTS
 

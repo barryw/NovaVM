@@ -402,6 +402,67 @@ SprFlagFlipMask         = $03
 SprFlagEnable           = $80
 ShapeSlotCount          = $0100
 
+; --- Tile engine registers ($A0C0-$A0DF) ---
+TileRegBase             = $A0C0
+TileRegEnd              = $A0DF
+TileConfig              = $A0C0
+TileTransColor          = $A0C1
+TileScrollXL            = $A0C2
+TileScrollXH            = $A0C3
+TileScrollYL            = $A0C4
+TileScrollYH            = $A0C5
+TileStatus              = $A0C6
+TileCmd                 = $A0C7
+TileP0                  = $A0C8
+TileP1                  = $A0C9
+TileP2                  = $A0CA
+TileP3                  = $A0CB
+TileAddrL               = $A0CC
+TileAddrH               = $A0CD
+TilePalP0               = $A0CE
+TilePalP1               = $A0CF
+TileColL                = $A0D0
+TileColH                = $A0D1
+TilePeekVal             = $A0D2
+TilePeekAttr            = $A0D3
+TileCmdDef              = $01
+TileCmdDefBulk          = $02
+TileCmdPut              = $03
+TileCmdAttr             = $04
+TileCmdFill             = $05
+TileCmdRow              = $06
+TileCmdCol              = $07
+TileCmdLoad             = $08
+TileCmdALoad            = $09
+TileCmdPal              = $0A
+TileCmdPalC             = $0B
+TileCmdPeek             = $0C
+TileCmdRowAttr          = $0D
+TileCmdColAttr          = $0E
+TileCmdCls              = $0F
+TileCfgSize16           = $01
+TileCfgMirrorMask       = $06
+TileCfgMirrorShift      = $01
+TileMirrorH             = $00
+TileMirrorV             = $01
+TileMirrorFour          = $02
+TileMirrorSingle        = $03
+TileAttrVFlip           = $80
+TileAttrHFlip           = $40
+TileAttrPriority        = $20
+TileAttrPalMask         = $0F
+TileCount               = $0100
+NametableCount          = $04
+NametableCols           = $28
+NametableRows           = $19
+TileSize8               = $20
+TileSize16              = $80
+TilePaletteCount        = $10
+TilePaletteColors       = $10
+FioCmdTSave             = $16
+FioCmdTLoad             = $17
+DmaSpaceVgcTile         = $06
+
 ; --- VGC core registers ($A000-$A00F) ---
 RegMode                 = $A000
 RegBgCol                = $A001
@@ -482,6 +543,7 @@ MemSpaceScreen          = $00
 MemSpaceColor           = $01
 MemSpaceGfx             = $02
 MemSpaceSprite          = $03
+MemSpaceTile            = $04
 
 ; --- Help system registers ($A020-$A030) ---
 RegHelp                 = $A020
@@ -521,7 +583,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E7AF
-V_OUTP                  = $E7B2
-V_LOAD                  = $E7B5
-V_SAVE                  = $E7B8
+V_INPT                  = $E7D1
+V_OUTP                  = $E7D4
+V_LOAD                  = $E7D7
+V_SAVE                  = $E7DA

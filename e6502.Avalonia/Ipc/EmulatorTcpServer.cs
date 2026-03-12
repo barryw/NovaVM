@@ -194,6 +194,23 @@ public sealed class EmulatorTcpServer : IDisposable
                 "wts_set_panning" => CmdWtsSetPanning(req),
                 "wts_set_reverb" => CmdWtsSetReverb(req),
                 "wts_set_chorus" => CmdWtsSetChorus(req),
+                // Tile commands
+                "tile_def" => CmdTileDef(req),
+                "tile_def_bulk" => CmdTileDefBulk(req),
+                "tile_put" => CmdTilePut(req),
+                "tile_attr" => CmdTileAttr(req),
+                "tile_fill" => CmdTileFill(req),
+                "tile_row" => CmdTileRow(req),
+                "tile_col" => CmdTileCol(req),
+                "tile_scroll" => CmdTileScroll(req),
+                "tile_config" => CmdTileConfig(req),
+                "tile_palette" => CmdTilePalette(req),
+                "tile_palette_color" => CmdTilePaletteColor(req),
+                "tile_cls" => CmdTileCls(),
+                "tile_peek" => CmdTilePeek(req),
+                "tile_collision" => CmdTileCollision(),
+                "tile_save" => CmdTileSave(req),
+                "tile_load" => CmdTileLoad(req),
                 // Debugger commands
                 "dbg_state" => CmdDbgState(),
                 "dbg_pause" => CmdDbgPause(),
@@ -1623,6 +1640,316 @@ public sealed class EmulatorTcpServer : IDisposable
         if (level is null) return Error("Need level");
 
         _bus.Wts.ChorusLevel = (byte)level.Value;
+        return Ok();
+    }
+
+    // ── Tile commands ────────────────────────────────────────────────────
+
+    private string CmdTileDef(JsonNode req)
+    {
+        int? tile = req["tile"]?.GetValue<int>();
+        string? hex = req["data"]?.GetValue<string>();
+        if (tile is null || hex is null) return Error("Need tile, data (hex)");
+
+        byte[] data = Convert.FromHexString(hex);
+        var vgc = _bus.Vgc;
+        int tileSize = vgc.IsTileSize16 ? VgcConstants.TileSize16 : VgcConstants.TileSize8;
+        if (data.Length < tileSize) return Error($"Need {tileSize} bytes of tile data");
+
+        // Write data to CPU RAM at a temp location and use TDEF
+        ushort addr = 0x0200; // use vector table area temporarily
+        for (int i = 0; i < tileSize; i++)
+            _bus.Write((ushort)(addr + i), data[i]);
+
+        vgc.Write(VgcConstants.TileP0, (byte)tile);
+        vgc.Write(VgcConstants.TileAddrL, (byte)(addr & 0xFF));
+        vgc.Write(VgcConstants.TileAddrH, (byte)(addr >> 8));
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdDef);
+        return Ok();
+    }
+
+    private string CmdTileDefBulk(JsonNode req)
+    {
+        int? start = req["start"]?.GetValue<int>();
+        int? count = req["count"]?.GetValue<int>();
+        string? hex = req["data"]?.GetValue<string>();
+        if (start is null || count is null || hex is null)
+            return Error("Need start, count, data (hex)");
+
+        byte[] data = Convert.FromHexString(hex);
+        var vgc = _bus.Vgc;
+        int tileSize = vgc.IsTileSize16 ? VgcConstants.TileSize16 : VgcConstants.TileSize8;
+        int needed = count.Value * tileSize;
+        if (data.Length < needed) return Error($"Need {needed} bytes of tile data");
+
+        // Write bulk data into CPU RAM starting at a safe address
+        ushort addr = 0x0200;
+        for (int i = 0; i < needed; i++)
+            _bus.Write((ushort)(addr + i), data[i]);
+
+        vgc.Write(VgcConstants.TileP0, (byte)start);
+        vgc.Write(VgcConstants.TileP1, (byte)count);
+        vgc.Write(VgcConstants.TileAddrL, (byte)(addr & 0xFF));
+        vgc.Write(VgcConstants.TileAddrH, (byte)(addr >> 8));
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdDefBulk);
+        return Ok();
+    }
+
+    private string CmdTilePut(JsonNode req)
+    {
+        int? nt = req["nt"]?.GetValue<int>();
+        int? x = req["x"]?.GetValue<int>();
+        int? y = req["y"]?.GetValue<int>();
+        int? tile = req["tile"]?.GetValue<int>();
+        if (nt is null || x is null || y is null || tile is null)
+            return Error("Need nt, x, y, tile");
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TileP0, (byte)nt);
+        vgc.Write(VgcConstants.TileP1, (byte)x);
+        vgc.Write(VgcConstants.TileP2, (byte)y);
+        vgc.Write(VgcConstants.TileP3, (byte)tile);
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdPut);
+        return Ok();
+    }
+
+    private string CmdTileAttr(JsonNode req)
+    {
+        int? nt = req["nt"]?.GetValue<int>();
+        int? x = req["x"]?.GetValue<int>();
+        int? y = req["y"]?.GetValue<int>();
+        int? attr = req["attr"]?.GetValue<int>();
+        if (nt is null || x is null || y is null || attr is null)
+            return Error("Need nt, x, y, attr");
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TileP0, (byte)nt);
+        vgc.Write(VgcConstants.TileP1, (byte)x);
+        vgc.Write(VgcConstants.TileP2, (byte)y);
+        vgc.Write(VgcConstants.TileP3, (byte)attr);
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdAttr);
+        return Ok();
+    }
+
+    private string CmdTileFill(JsonNode req)
+    {
+        int? nt = req["nt"]?.GetValue<int>();
+        int? tile = req["tile"]?.GetValue<int>();
+        if (nt is null || tile is null) return Error("Need nt, tile");
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TileP0, (byte)nt);
+        vgc.Write(VgcConstants.TileP1, (byte)tile);
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdFill);
+        return Ok();
+    }
+
+    private string CmdTileRow(JsonNode req)
+    {
+        int? nt = req["nt"]?.GetValue<int>();
+        int? y = req["y"]?.GetValue<int>();
+        string? hex = req["data"]?.GetValue<string>();
+        if (nt is null || y is null || hex is null) return Error("Need nt, y, data (hex)");
+
+        byte[] data = Convert.FromHexString(hex);
+        if (data.Length < VgcConstants.NametableCols)
+            return Error($"Need {VgcConstants.NametableCols} bytes");
+
+        ushort addr = 0x0200;
+        for (int i = 0; i < VgcConstants.NametableCols; i++)
+            _bus.Write((ushort)(addr + i), data[i]);
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TileP0, (byte)nt);
+        vgc.Write(VgcConstants.TileP1, (byte)y);
+        vgc.Write(VgcConstants.TileAddrL, (byte)(addr & 0xFF));
+        vgc.Write(VgcConstants.TileAddrH, (byte)(addr >> 8));
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdRow);
+        return Ok();
+    }
+
+    private string CmdTileCol(JsonNode req)
+    {
+        int? nt = req["nt"]?.GetValue<int>();
+        int? x = req["x"]?.GetValue<int>();
+        string? hex = req["data"]?.GetValue<string>();
+        if (nt is null || x is null || hex is null) return Error("Need nt, x, data (hex)");
+
+        byte[] data = Convert.FromHexString(hex);
+        if (data.Length < VgcConstants.NametableRows)
+            return Error($"Need {VgcConstants.NametableRows} bytes");
+
+        ushort addr = 0x0200;
+        for (int i = 0; i < VgcConstants.NametableRows; i++)
+            _bus.Write((ushort)(addr + i), data[i]);
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TileP0, (byte)nt);
+        vgc.Write(VgcConstants.TileP1, (byte)x);
+        vgc.Write(VgcConstants.TileAddrL, (byte)(addr & 0xFF));
+        vgc.Write(VgcConstants.TileAddrH, (byte)(addr >> 8));
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdCol);
+        return Ok();
+    }
+
+    private string CmdTileScroll(JsonNode req)
+    {
+        int? x = req["x"]?.GetValue<int>();
+        int? y = req["y"]?.GetValue<int>();
+        if (x is null || y is null) return Error("Need x, y");
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TileScrollXL, (byte)(x & 0xFF));
+        vgc.Write(VgcConstants.TileScrollXH, (byte)((x >> 8) & 0xFF));
+        vgc.Write(VgcConstants.TileScrollYL, (byte)(y & 0xFF));
+        vgc.Write(VgcConstants.TileScrollYH, (byte)((y >> 8) & 0xFF));
+        return Ok();
+    }
+
+    private string CmdTileConfig(JsonNode req)
+    {
+        int? size = req["size"]?.GetValue<int>();
+        int? mirror = req["mirror"]?.GetValue<int>();
+        int? trans = req["trans"]?.GetValue<int>();
+
+        var vgc = _bus.Vgc;
+
+        if (size is not null || mirror is not null)
+        {
+            byte config = 0;
+            if (size == 16) config |= VgcConstants.TileCfgSize16;
+            if (mirror is not null)
+                config |= (byte)((mirror.Value & 0x03) << VgcConstants.TileCfgMirrorShift);
+            vgc.Write(VgcConstants.TileConfig, config);
+        }
+
+        if (trans is not null)
+            vgc.Write(VgcConstants.TileTransColor, (byte)trans);
+
+        // Set mode to 4
+        vgc.Write(VgcConstants.RegMode, 4);
+        return Ok();
+    }
+
+    private string CmdTilePalette(JsonNode req)
+    {
+        int? index = req["index"]?.GetValue<int>();
+        string? hex = req["data"]?.GetValue<string>();
+        if (index is null || hex is null) return Error("Need index, data (hex)");
+
+        byte[] data = Convert.FromHexString(hex);
+        if (data.Length < 48) return Error("Need 48 bytes (16 × RGB)");
+
+        ushort addr = 0x0200;
+        for (int i = 0; i < 48; i++)
+            _bus.Write((ushort)(addr + i), data[i]);
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TilePalP0, (byte)index);
+        vgc.Write(VgcConstants.TileAddrL, (byte)(addr & 0xFF));
+        vgc.Write(VgcConstants.TileAddrH, (byte)(addr >> 8));
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdPal);
+        return Ok();
+    }
+
+    private string CmdTilePaletteColor(JsonNode req)
+    {
+        int? sub = req["sub"]?.GetValue<int>();
+        int? color = req["color"]?.GetValue<int>();
+        int? r = req["r"]?.GetValue<int>();
+        int? g = req["g"]?.GetValue<int>();
+        int? b = req["b"]?.GetValue<int>();
+        if (sub is null || color is null || r is null || g is null || b is null)
+            return Error("Need sub, color, r, g, b");
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TilePalP0, (byte)sub);
+        vgc.Write(VgcConstants.TilePalP1, (byte)color);
+        vgc.Write(VgcConstants.TileP0, (byte)r);
+        vgc.Write(VgcConstants.TileP1, (byte)g);
+        vgc.Write(VgcConstants.TileP2, (byte)b);
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdPalC);
+        return Ok();
+    }
+
+    private string CmdTileCls()
+    {
+        _bus.Vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdCls);
+        return Ok();
+    }
+
+    private string CmdTilePeek(JsonNode req)
+    {
+        int? nt = req["nt"]?.GetValue<int>();
+        int? x = req["x"]?.GetValue<int>();
+        int? y = req["y"]?.GetValue<int>();
+        if (nt is null || x is null || y is null) return Error("Need nt, x, y");
+
+        var vgc = _bus.Vgc;
+        vgc.Write(VgcConstants.TileP0, (byte)nt);
+        vgc.Write(VgcConstants.TileP1, (byte)x);
+        vgc.Write(VgcConstants.TileP2, (byte)y);
+        vgc.Write(VgcConstants.TileCmd, VgcConstants.TileCmdPeek);
+
+        byte tileIndex = vgc.Read(VgcConstants.TilePeekVal);
+        byte attr = vgc.Read(VgcConstants.TilePeekAttr);
+
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["tile"] = tileIndex,
+            ["attr"] = attr
+        }.ToJsonString();
+    }
+
+    private string CmdTileCollision()
+    {
+        var vgc = _bus.Vgc;
+        byte lo = vgc.Read(VgcConstants.TileColL);
+        byte hi = vgc.Read(VgcConstants.TileColH);
+        int mask = lo | (hi << 8);
+
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["collision"] = mask
+        }.ToJsonString();
+    }
+
+    private string CmdTileSave(JsonNode req)
+    {
+        string? filename = req["filename"]?.GetValue<string>();
+        if (filename is null) return Error("Need filename");
+
+        var fio = _bus.Fio;
+        fio.Write(VgcConstants.FioNameLen, (byte)filename.Length);
+        for (int i = 0; i < filename.Length; i++)
+            fio.Write((ushort)(VgcConstants.FioName + i), (byte)filename[i]);
+        fio.Write(VgcConstants.FioCmd, VgcConstants.FioCmdTSave);
+
+        byte status = fio.Read(VgcConstants.FioStatus);
+        if (status != VgcConstants.FioStatusOk)
+            return Error("TSAVE failed");
+        return Ok();
+    }
+
+    private string CmdTileLoad(JsonNode req)
+    {
+        string? filename = req["filename"]?.GetValue<string>();
+        if (filename is null) return Error("Need filename");
+
+        var fio = _bus.Fio;
+        fio.Write(VgcConstants.FioNameLen, (byte)filename.Length);
+        for (int i = 0; i < filename.Length; i++)
+            fio.Write((ushort)(VgcConstants.FioName + i), (byte)filename[i]);
+        fio.Write(VgcConstants.FioCmd, VgcConstants.FioCmdTLoad);
+
+        byte status = fio.Read(VgcConstants.FioStatus);
+        if (status != VgcConstants.FioStatusOk)
+        {
+            byte err = fio.Read(VgcConstants.FioErrCode);
+            return Error(err == VgcConstants.FioErrNotFound ? "File not found" : "TLOAD failed");
+        }
         return Ok();
     }
 

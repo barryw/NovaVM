@@ -1020,6 +1020,238 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
+    // ── Tile engine commands ─────────────────────────────────────────────
+
+    [McpServerTool, Description("Define a tile from hex pixel data. Data length depends on tile size: 32 bytes (8x8) or 128 bytes (16x16). Packed nibbles, high nibble first.")]
+    public static async Task<string> TileDef(
+        EmulatorClient client,
+        [Description("Tile index (0-255)")] int tile,
+        [Description("Hex-encoded pixel data")] string data)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_def",
+            ["tile"] = tile,
+            ["data"] = data
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Define multiple consecutive tiles from hex pixel data.")]
+    public static async Task<string> TileDefBulk(
+        EmulatorClient client,
+        [Description("Starting tile index (0-255)")] int start,
+        [Description("Number of tiles to define")] int count,
+        [Description("Hex-encoded pixel data for all tiles")] string data)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_def_bulk",
+            ["start"] = start,
+            ["count"] = count,
+            ["data"] = data
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set a single nametable entry (place a tile on the map).")]
+    public static async Task<string> TilePut(
+        EmulatorClient client,
+        [Description("Nametable index (0-3)")] int nt,
+        [Description("X position (0-39)")] int x,
+        [Description("Y position (0-24)")] int y,
+        [Description("Tile index (0-255)")] int tile)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_put",
+            ["nt"] = nt, ["x"] = x, ["y"] = y, ["tile"] = tile
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set attribute for a nametable entry. Bits: 7=VFlip, 6=HFlip, 5=Priority, 3-0=SubPalette.")]
+    public static async Task<string> TileAttr(
+        EmulatorClient client,
+        [Description("Nametable index (0-3)")] int nt,
+        [Description("X position (0-39)")] int x,
+        [Description("Y position (0-24)")] int y,
+        [Description("Attribute byte")] int attr)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_attr",
+            ["nt"] = nt, ["x"] = x, ["y"] = y, ["attr"] = attr
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Fill an entire nametable with one tile index. Clears attributes to 0.")]
+    public static async Task<string> TileFill(
+        EmulatorClient client,
+        [Description("Nametable index (0-3)")] int nt,
+        [Description("Tile index to fill with (0-255)")] int tile)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_fill",
+            ["nt"] = nt, ["tile"] = tile
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Write 40 tile indices to a nametable row.")]
+    public static async Task<string> TileRow(
+        EmulatorClient client,
+        [Description("Nametable index (0-3)")] int nt,
+        [Description("Row Y (0-24)")] int y,
+        [Description("Hex-encoded 40 bytes of tile indices")] string data)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_row",
+            ["nt"] = nt, ["y"] = y, ["data"] = data
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Write 25 tile indices to a nametable column.")]
+    public static async Task<string> TileCol(
+        EmulatorClient client,
+        [Description("Nametable index (0-3)")] int nt,
+        [Description("Column X (0-39)")] int x,
+        [Description("Hex-encoded 25 bytes of tile indices")] string data)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_col",
+            ["nt"] = nt, ["x"] = x, ["data"] = data
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set tile scroll position in pixels.")]
+    public static async Task<string> TileScroll(
+        EmulatorClient client,
+        [Description("Scroll X in pixels")] int x,
+        [Description("Scroll Y in pixels")] int y)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_scroll",
+            ["x"] = x, ["y"] = y
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Configure tile engine: tile size, mirror mode, transparent color. Sets display mode to 4 (tiles+sprites).")]
+    public static async Task<string> TileConfig(
+        EmulatorClient client,
+        [Description("Tile size: 8 or 16 (default 8)")] int size = 8,
+        [Description("Mirror mode: 0=H-mirror, 1=V-mirror, 2=four-screen, 3=single (default 2)")] int mirror = 2,
+        [Description("Transparent color index 0-15 (default 0)")] int trans = 0)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_config",
+            ["size"] = size, ["mirror"] = mirror, ["trans"] = trans
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Load a 16-color sub-palette from hex RGB data (48 bytes = 16 colors × 3 bytes R,G,B).")]
+    public static async Task<string> TilePalette(
+        EmulatorClient client,
+        [Description("Sub-palette index (0-15)")] int index,
+        [Description("Hex-encoded 48 bytes of RGB data")] string data)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_palette",
+            ["index"] = index, ["data"] = data
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Set a single color in a sub-palette.")]
+    public static async Task<string> TilePaletteColor(
+        EmulatorClient client,
+        [Description("Sub-palette index (0-15)")] int sub,
+        [Description("Color index within sub-palette (0-15)")] int color,
+        [Description("Red (0-255)")] int r,
+        [Description("Green (0-255)")] int g,
+        [Description("Blue (0-255)")] int b)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_palette_color",
+            ["sub"] = sub, ["color"] = color,
+            ["r"] = r, ["g"] = g, ["b"] = b
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Clear all nametables and attributes to 0.")]
+    public static async Task<string> TileCls(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_cls"
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Read the tile index and attribute at a nametable position.")]
+    public static async Task<string> TilePeek(
+        EmulatorClient client,
+        [Description("Nametable index (0-3)")] int nt,
+        [Description("X position (0-39)")] int x,
+        [Description("Y position (0-24)")] int y)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_peek",
+            ["nt"] = nt, ["x"] = x, ["y"] = y
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Read the 16-bit sprite-tile collision bitmask. Each bit = one sprite overlapping a tile. Reading clears the register.")]
+    public static async Task<string> TileCollision(EmulatorClient client)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_collision"
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Save tile state to a .tile file (tileset, nametables, attributes, palettes, config).")]
+    public static async Task<string> TileSave(
+        EmulatorClient client,
+        [Description("Filename (without .tile extension)")] string filename)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_save",
+            ["filename"] = filename
+        });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Load tile state from a .tile file. Sets mode to 4 automatically.")]
+    public static async Task<string> TileLoad(
+        EmulatorClient client,
+        [Description("Filename (without .tile extension)")] string filename)
+    {
+        var result = await client.SendAsync(new JsonObject
+        {
+            ["command"] = "tile_load",
+            ["filename"] = filename
+        });
+        return result.ToJsonString();
+    }
+
     private static string FormatScreen(JsonNode screen)
     {
         var sb = new StringBuilder();

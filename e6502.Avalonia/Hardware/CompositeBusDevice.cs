@@ -97,7 +97,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             musicEngine: _musicEngine,
             midiPlayback: _midiPlayback,
             deviceManager: _deviceManager,
-            wts: _wts);
+            wts: _wts,
+            vgc: _vgc);
         _fio.ProgramLoaded += name => LoadProgramHelp(name);
         _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
         _vgc.SetBusMemory(_ram);

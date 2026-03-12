@@ -526,6 +526,27 @@ XTK_UNMOUNT        = $4E              ; UNMOUNT "dev:"
 XTK_PWD            = $4F              ; PWD
 XTK_SFLOAD         = $50              ; SFLOAD "filename" — load soundfont
 XTK_GTEXT          = $51              ; GTEXT x,y,font,scale,"string"
+XTK_TILESIZE       = $52              ; TILESIZE n
+XTK_MIRROR         = $53              ; MIRROR n
+XTK_TTRANS         = $54              ; TTRANS n
+XTK_TDEF           = $55              ; TDEF tile#,addr / TDEF start,count,addr
+XTK_TPUT           = $56              ; TPUT nt,x,y,tile#
+XTK_TATTR          = $57              ; TATTR nt,x,y,attr
+XTK_TFILL          = $58              ; TFILL nt,tile#
+XTK_TROW           = $59              ; TROW nt,y,addr
+XTK_TCOL           = $5A              ; TCOL nt,x,addr
+XTK_TNTLOAD        = $5B              ; TNTLOAD nt,addr
+XTK_TCLS           = $5C              ; TCLS
+XTK_TSCROLL        = $5D              ; TSCROLL x,y
+XTK_TPAL           = $5E              ; TPAL sub,addr
+XTK_TPALC          = $5F              ; TPALC sub,color,r,g,b
+XTK_TSAVE          = $60              ; TSAVE "file"
+XTK_TLOAD          = $61              ; TLOAD "file"
+XTK_TPEEK          = $62              ; TPEEK(nt,x,y) — function
+XTK_TPEEKATTR      = $63              ; TPEEKATTR(nt,x,y) — function
+XTK_TILECOL        = $64              ; TILECOL — function (no args)
+XTK_TSCROLLX       = $65              ; TSCROLLX — function (no args)
+XTK_TSCROLLY       = $66              ; TSCROLLY — function (no args)
 XTK_DIROPEN        = $2B              ; DIROPEN "pattern"
 XTK_DIRNEXT        = $2C              ; DIRNEXT — numeric function
 XTK_DIRNAM         = $2D              ; DIRNAM$ — string function
@@ -1954,6 +1975,27 @@ TAB_XTKCMD
       .word LAB_PWD-1         ; XTK_PWD        ($4F)
       .word LAB_SFLOAD-1      ; XTK_SFLOAD     ($50)
       .word LAB_GTEXT-1       ; XTK_GTEXT      ($51)
+      .word LAB_TILESIZE-1    ; XTK_TILESIZE   ($52)
+      .word LAB_MIRROR-1      ; XTK_MIRROR     ($53)
+      .word LAB_TTRANS-1      ; XTK_TTRANS     ($54)
+      .word LAB_TDEF-1        ; XTK_TDEF       ($55)
+      .word LAB_TPUT-1        ; XTK_TPUT       ($56)
+      .word LAB_TATTR-1       ; XTK_TATTR      ($57)
+      .word LAB_TFILL-1       ; XTK_TFILL      ($58)
+      .word LAB_TROW-1        ; XTK_TROW       ($59)
+      .word LAB_TCOL-1        ; XTK_TCOL       ($5A)
+      .word LAB_TNTLOAD-1     ; XTK_TNTLOAD    ($5B)
+      .word LAB_TCLS-1        ; XTK_TCLS       ($5C)
+      .word LAB_TSCROLL-1     ; XTK_TSCROLL    ($5D)
+      .word LAB_TPAL-1        ; XTK_TPAL       ($5E)
+      .word LAB_TPALC-1       ; XTK_TPALC      ($5F)
+      .word LAB_TSAVE-1       ; XTK_TSAVE      ($60)
+      .word LAB_TLOAD-1       ; XTK_TLOAD      ($61)
+      .word LAB_15D9-1        ; XTK_TPEEK      ($62) — function only
+      .word LAB_15D9-1        ; XTK_TPEEKATTR  ($63) — function only
+      .word LAB_15D9-1        ; XTK_TILECOL    ($64) — function only
+      .word LAB_15D9-1        ; XTK_TSCROLLX   ($65) — function only
+      .word LAB_15D9-1        ; XTK_TSCROLLY   ($66) — function only
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -3662,6 +3704,7 @@ LAB_1BEE
       .byte XTK_DMASTATUS, XTK_DMAERR, XTK_DMACOUNT
       .byte XTK_BLITSTATUS, XTK_BLITERR, XTK_BLITCOUNT
       .byte XTK_DIRNEXT, XTK_DIRSIZ, XTK_DIRTYP, XTK_DIRNAM, XTK_META
+      .byte XTK_TPEEK, XTK_TPEEKATTR
 @FUNC_TBL_SZ = * - @func_ids
 @func_addrs
       .word @xtk_playing-1, @xtk_mnote-1, @xtk_xpeek-1
@@ -3669,6 +3712,7 @@ LAB_1BEE
       .word @xtk_dmastatus-1, @xtk_dmaerr-1, @xtk_dmacount-1
       .word @xtk_blitstatus-1, @xtk_bliterr-1, @xtk_blitcount-1
       .word @xtk_dirnext-1, @xtk_dirsiz-1, @xtk_dirtyp-1, @xtk_dirnam-1, @xtk_meta-1
+      .word @xtk_tpeek-1, @xtk_tpeekattr-1
 
 @xtk_xpeek
       ; '(' was consumed during tokenization as part of keyword
@@ -3890,6 +3934,35 @@ LAB_1BEE
 @ret_0ay
       LDA   #$00              ; A=0 (high byte)
       JMP   LAB_AYFC          ; return AY as FAC1
+
+; TPEEK(nt,x,y) — returns tile index
+@xtk_tpeek
+      LDX   #$00
+      BEQ   @tpeek_go
+; TPEEKATTR(nt,x,y) — returns attribute byte
+@xtk_tpeekattr
+      LDX   #$01
+@tpeek_go
+      STX   Itempl
+      JSR   LAB_IGBY
+      JSR   LAB_GTBY
+      STX   TileP0
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP1
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP2
+      JSR   LAB_1BFB
+      LDA   #TileCmdPeek
+      STA   TileCmd
+      LDX   Itempl
+      BNE   @tpeek_a
+      LDY   TilePeekVal
+      JMP   @ret_0ay
+@tpeek_a
+      LDY   TilePeekAttr
+      JMP   @ret_0ay
 
 LAB_1BEE_STD
       SEC                     ; plain token base subtraction
@@ -7791,170 +7864,8 @@ LAB_BITTGL
 ;; Opens the help panel, optionally searching for a keyword
 ;; ========================================
 LAB_HELP
-      JSR   LAB_GBYT          ; peek at next byte (don't consume)
-      BNE   @has_arg           ; not end of statement, check what it is
-      JMP   @no_arg            ; end of statement -> open general help
-
-@has_arg
-      CMP   #'"'              ; quoted string?
-      BNE   @not_quote
-      JMP   @string_arg        ; handle with expression evaluator
-
-@not_quote
-      CMP   #TKX_PREFIX       ; extended token prefix?
-      BEQ   @ext_token
-
-      CMP   #$80              ; primary token? (bit 7 set)
-      BCS   @pri_token
-
-      ; --- Raw ASCII text: copy until end of statement ---
-      LDY   #$00              ; buffer index
-@raw_loop
-      LDA   (Bpntrl),Y        ; read from BASIC text (don't consume yet)
-      BEQ   @raw_done          ; end of line
-      CMP   #':'              ; end of statement
-      BEQ   @raw_done
-      STA   $A021,Y           ; store in help buffer
-      INY
-      CPY   #$10              ; max 16 chars
-      BCC   @raw_loop
-@raw_done
-      STY   help_len          ; save how many we wrote
-      ; advance BASIC pointer past the chars we consumed
-      TYA
-      CLC
-      ADC   Bpntrl
-      STA   Bpntrl
-      BCC   @raw_noinc
-      INC   Bpntrh
-@raw_noinc
-      JMP   @zero_and_trigger
-
-      ; --- Primary token: detokenize via LAB_KEYT table ---
-@pri_token
-      PHA                     ; save token (LAB_GBYT returned it in A)
-      JSR   LAB_IGBY          ; consume the token byte (advances Bpntrl)
-      PLA                     ; restore token to A
-      ; use LAB_KEYT lookup (same method as LIST decoder)
-      LDX   #>LAB_KEYT        ; table high byte
-      ASL                     ; *2 (shifts out bit 7 into carry)
-      ASL                     ; *4
-      BCC   @pk_nc1
-      INX                     ; carry into high byte
-      CLC
-@pk_nc1
-      ADC   #<LAB_KEYT        ; add table base low byte
-      BCC   @pk_nc2
-      INX
-@pk_nc2
-      STA   ut2_pl            ; pointer to 4-byte entry
-      STX   ut2_ph
-      LDY   #$00
-      LDA   (ut2_pl),Y        ; byte 0 = keyword length
-      STA   help_len          ; total chars to copy
-      INY
-      LDA   (ut2_pl),Y        ; byte 1 = first character
-      STA   $A021             ; store first char in buffer
-      INY
-      LDA   (ut2_pl),Y        ; byte 2 = rest-of-keyword pointer low
-      PHA
-      INY
-      LDA   (ut2_pl),Y        ; byte 3 = rest-of-keyword pointer high
-      STA   ut2_ph
-      PLA
-      STA   ut2_pl            ; ut2 now points to remaining chars
-
-      LDX   help_len          ; total keyword length
-      DEX                     ; remaining chars = length - 1
-      LDY   #$00              ; index into remaining chars
-      LDX   #$01              ; buffer write index (char 0 already written)
-@pk_copy
-      CPX   help_len
-      BCS   @pk_done           ; copied all chars
-      LDA   (ut2_pl),Y        ; get next keyword char
-      AND   #$7F              ; clear bit 7 (last char in cruncher table has it set)
-      STA   $A021,X
-      INY
-      INX
-      CPX   #$10              ; buffer max
-      BCC   @pk_copy
-@pk_done
-      STX   help_len          ; actual chars written
-      JMP   @zero_and_trigger
-
-      ; --- Extended token: look up in TAB_XTKSTR ---
-@ext_token
-      JSR   LAB_IGBY          ; consume prefix byte ($01)
-      LDY   #$00
-      LDA   (Bpntrl),Y        ; read raw extension id
-      PHA                     ; save it
-      JSR   LAB_IGBY          ; consume extension id byte
-      PLA                     ; restore extension id
-      CMP   #$01
-      BCC   @no_arg            ; invalid, treat as no arg
-      CMP   #XTK_COUNT+1
-      BCS   @no_arg            ; out of range
-      SEC
-      SBC   #$01              ; 0-based index
-      ASL                     ; *2 for word pointer
-      TAX
-      LDA   TAB_XTKSTR,X      ; string pointer low
-      STA   ut2_pl
-      LDA   TAB_XTKSTR+1,X    ; string pointer high
-      STA   ut2_ph
-      LDY   #$00
-@xt_copy
-      LDA   (ut2_pl),Y        ; get char from null-terminated string
-      BEQ   @xt_done           ; null terminator
-      CMP   #'('              ; strip trailing '(' from function tokens like XPEEK(
-      BEQ   @xt_done
-      STA   $A021,Y
-      INY
-      CPY   #$10              ; buffer max
-      BCC   @xt_copy
-@xt_done
-      STY   help_len
-      JMP   @zero_and_trigger
-
-      ; --- Quoted string: use expression evaluator ---
-@string_arg
-      JSR   LAB_EVEX          ; evaluate expression
-      JSR   LAB_EVST          ; pop string: A=length, ut1_pl/ph=pointer
-      TAY                     ; Y = length
-      CPY   #$10
-      BCC   @sl_ok
-      LDY   #$10              ; clamp to 16
-@sl_ok
-      STY   help_len
-      DEY
-@sl_copy
-      BMI   @sl_done
-      LDA   (ut1_pl),Y
-      STA   $A021,Y
-      DEY
-      BPL   @sl_copy
-@sl_done
-      ; fall through to zero_and_trigger
-
-      ; --- Zero-fill remainder and trigger search ---
-@zero_and_trigger
-      LDY   help_len
-@zero_loop
-      CPY   #$10
-      BCS   @trigger_search
-      LDA   #$00
-      STA   $A021,Y
-      INY
-      BNE   @zero_loop
-@trigger_search
-      LDA   #$02              ; command: search
-      STA   $A020             ; RegHelp
-      RTS
-
-@no_arg
-      LDA   #$01              ; command: open
-      STA   $A020             ; RegHelp
-      RTS
+      LDA   #EXT_CMD_HELP
+      JMP   EXT_vec
 
 
 ; perform BITTST(addr, mask) — returns -1 if ALL masked bits set, else 0
@@ -8674,7 +8585,7 @@ LAB_NCC
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 81
+XTK_COUNT = 102
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8707,6 +8618,11 @@ TAB_XTKSTR
       .word @s_pwd
       .word @s_sfload
       .word @s_gtext
+      .word @s_tilesize, @s_mirror, @s_ttrans, @s_tdef, @s_tput
+      .word @s_tattr, @s_tfill, @s_trow, @s_tcol, @s_tntload
+      .word @s_tcls, @s_tscroll, @s_tpal, @s_tpalc
+      .word @s_tsave, @s_tload
+      .word @s_tpeek, @s_tpeekattr, @s_tilecol, @s_tscrollx, @s_tscrolly
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8769,6 +8685,27 @@ TAB_XTKSTR
 @s_pwd:    .byte "PWD",0
 @s_sfload: .byte "SFLOAD",0
 @s_gtext:  .byte "GTEXT",0
+@s_tilesize: .byte "TSIZ",0
+@s_mirror:  .byte "TMIR",0
+@s_ttrans:  .byte "TTRAN",0
+@s_tdef:    .byte "TDEF",0
+@s_tput:    .byte "TPUT",0
+@s_tattr:   .byte "TATTR",0
+@s_tfill:   .byte "TFILL",0
+@s_trow:    .byte "TROW",0
+@s_tcol:    .byte "TCOL",0
+@s_tntload: .byte "TNTLD",0
+@s_tcls:    .byte "TCLS",0
+@s_tscroll: .byte "TSCRL",0
+@s_tpal:    .byte "TPAL",0
+@s_tpalc:   .byte "TPALC",0
+@s_tsave:   .byte "TSAVE",0
+@s_tload:   .byte "TLOAD",0
+@s_tpeek:   .byte "TPEEK(",0
+@s_tpeekattr: .byte "TPATTR(",0
+@s_tilecol: .byte "TCOLL",0
+@s_tscrollx: .byte "TSCRX",0
+@s_tscrolly: .byte "TSCRY",0
 @s_diropen: .byte "DIROPEN",0
 @s_dirnext: .byte "DIRNEXT",0
 @s_dirnam:  .byte "DIRNAM$",0
@@ -8919,6 +8856,9 @@ EXT_CMD_DIR     = $02          ; DIR listing loop
 EXT_CMD_PWD     = $03          ; PWD print working directory
 EXT_CMD_XMEM    = $04          ; XMEM status display
 EXT_CMD_XDIR    = $05          ; XDIR listing loop
+EXT_CMD_TSAVE   = $06          ; TSAVE tile file save
+EXT_CMD_TLOAD   = $07          ; TLOAD tile file load
+EXT_CMD_HELP    = $08          ; HELP command
 FIO_CMD_CD      = $20              ; change directory
 FIO_CMD_MKDIR   = $21              ; make directory
 FIO_CMD_RMDIR   = $22              ; remove directory
@@ -9081,6 +9021,43 @@ BLT_BUSY      = $01
 BLT_OK        = $02
 BLT_MODE_FILL = $01
 BLT_SPACE_XRAM = $05
+
+; --- Tile engine registers ---
+
+TileConfig     = $A0C0
+TileTransColor = $A0C1
+TileScrollXL   = $A0C2
+TileScrollXH   = $A0C3
+TileScrollYL   = $A0C4
+TileScrollYH   = $A0C5
+TileCmd        = $A0C7
+TileP0         = $A0C8
+TileP1         = $A0C9
+TileP2         = $A0CA
+TileP3         = $A0CB
+TileAddrL      = $A0CC
+TileAddrH      = $A0CD
+TilePalP0      = $A0CE
+TilePalP1      = $A0CF
+TileColL       = $A0D0
+TileColH       = $A0D1
+TilePeekVal    = $A0D2
+TilePeekAttr   = $A0D3
+TileCfgSize16  = $01
+TileCmdDef     = $01
+TileCmdDefBulk = $02
+TileCmdPut     = $03
+TileCmdAttr    = $04
+TileCmdFill    = $05
+TileCmdRow     = $06
+TileCmdCol     = $07
+TileCmdLoad    = $08
+TileCmdPal     = $0A
+TileCmdPalC    = $0B
+TileCmdPeek    = $0C
+TileCmdCls     = $0F
+FioCmdTSave    = $16
+FioCmdTLoad    = $17
 
 ; --- VGC command handlers ---
 
@@ -9289,6 +9266,176 @@ LAB_GTEXT
       JSR   LAB_FIO_GETNAME   ; string → FIO_NAME/FIO_NAMELEN
       LDA   #VCMD_GTEXT
       STA   VGC_CMD
+      RTS
+
+; ── Tile engine shared ────────────────────────────────────────
+
+LAB_TB0C
+      JSR   LAB_GTBY          ; byte → TileP0, comma
+      STX   TileP0
+      JMP   LAB_1C01
+LAB_TWAD
+      JSR   LAB_GTWRD         ; word → TileAddrL/H
+      LDA   FAC1_3
+      STA   TileAddrL
+      LDA   FAC1_2
+      STA   TileAddrH
+      RTS
+
+; ── Tile engine BASIC commands ────────────────────────────────
+
+LAB_TILESIZE
+      JSR   LAB_GTBY
+      LDA   TileConfig
+      AND   #$FE
+      CPX   #16
+      BNE   @ts_s
+      ORA   #TileCfgSize16
+@ts_s STA   TileConfig
+      RTS
+LAB_MIRROR
+      JSR   LAB_GTBY
+      TXA
+      AND   #$03
+      ASL
+      STA   Itempl
+      LDA   TileConfig
+      AND   #$F9
+      ORA   Itempl
+      STA   TileConfig
+      RTS
+LAB_TTRANS
+      JSR   LAB_GTBY
+      STX   TileTransColor
+      RTS
+LAB_TDEF
+      JSR   LAB_TB0C
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   Itempl
+      LDA   FAC1_2
+      STA   Itemph
+      JSR   LAB_GBYT
+      CMP   #','
+      BEQ   @td3
+      LDA   Itempl
+      STA   TileAddrL
+      LDA   Itemph
+      STA   TileAddrH
+      LDA   #TileCmdDef
+      STA   TileCmd
+      RTS
+@td3  LDA   Itempl
+      STA   TileP1
+      JSR   LAB_1C01
+      JSR   LAB_TWAD
+      LDA   #TileCmdDefBulk
+      STA   TileCmd
+      RTS
+LAB_TPUT
+      LDA   #TileCmdPut
+      .byte $2C
+LAB_TATTR
+      LDA   #TileCmdAttr
+      PHA
+      JSR   LAB_GTBY
+      STX   TileP0
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP1
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP2
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP3
+      PLA
+      STA   TileCmd
+      RTS
+LAB_TFILL
+      JSR   LAB_TB0C
+      JSR   LAB_GTBY
+      STX   TileP1
+      LDA   #TileCmdFill
+      STA   TileCmd
+      RTS
+LAB_TROW
+      LDA   #TileCmdRow
+      .byte $2C
+LAB_TCOL
+      LDA   #TileCmdCol
+      PHA
+      JSR   LAB_GTBY
+      STX   TileP0
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP1
+      JSR   LAB_1C01
+      JSR   LAB_TWAD
+      PLA
+      STA   TileCmd
+      RTS
+LAB_TNTLOAD
+      JSR   LAB_TB0C
+      JSR   LAB_TWAD
+      LDA   #TileCmdLoad
+      STA   TileCmd
+      RTS
+LAB_TCLS
+      LDA   #TileCmdCls
+      STA   TileCmd
+      RTS
+LAB_TSCROLL
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   TileScrollXL
+      LDA   FAC1_2
+      STA   TileScrollXH
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   TileScrollYL
+      LDA   FAC1_2
+      STA   TileScrollYH
+      RTS
+LAB_TPAL
+      JSR   LAB_GTBY
+      STX   TilePalP0
+      JSR   LAB_1C01
+      JSR   LAB_TWAD
+      LDA   #TileCmdPal
+      STA   TileCmd
+      RTS
+LAB_TPALC
+      JSR   LAB_GTBY
+      STX   TilePalP0
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TilePalP1
+      JSR   LAB_1C01
+      JSR   LAB_TB0C
+      JSR   LAB_GTBY
+      STX   TileP1
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP2
+      LDA   #TileCmdPalC
+      STA   TileCmd
+      RTS
+LAB_TSAVE
+      LDA   #FioCmdTSave
+      .byte $2C
+LAB_TLOAD
+      LDA   #FioCmdTLoad
+      PHA
+      JSR   LAB_FIO_GETNAME
+      PLA
+      STA   FIO_CMD
+      LDA   FIO_STATUS
+      CMP   #FIO_OK
+      BEQ   @tfio_ok
+      JMP   LAB_FIO_ERRHND
+@tfio_ok
       RTS
 
 ; perform RECT x0, y0, x1, y1

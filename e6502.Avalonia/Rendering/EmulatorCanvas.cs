@@ -30,6 +30,8 @@ public class EmulatorCanvas : Control
     private readonly ushort[] _spriteMask = new ushort[VgcConstants.GfxWidth];
     private readonly byte[] _shapeRamSnapshot = new byte[VgcConstants.ShapeRamSize];
     private bool _shapeRamInitialized;
+    private readonly uint[] _tileLine = new uint[VgcConstants.GfxWidth];
+    private readonly byte[] _tileOpaque = new byte[VgcConstants.GfxWidth];
 
     private readonly List<ScreenTextEditor> _editors = new();
 
@@ -326,7 +328,11 @@ public class EmulatorCanvas : Control
         int cursorY = _vgc.GetCursorY();
         bool cursorEnabled = _cursorVisible && _vgc.IsCursorEnabled;
 
+        bool tileMode = state.Mode == 4;
+        TileRenderState? tiles = tileMode ? TileRenderState.FromVgc(_vgc) : null;
+
         ushort colSS = 0, colSB = 0;
+        ushort colTile = 0;
 
         for (int y = 0; y < VgcConstants.GfxHeight; y++)
         {
@@ -347,9 +353,23 @@ public class EmulatorCanvas : Control
             SpriteRenderer.RasterizeScanline(y, sprites, shapeRam,
                 _lineBehind, _lineBetween, _lineFront, _spriteMask);
 
+            // Rasterize tiles for this scanline (Mode 4 only)
+            if (tileMode)
+                TileRenderer.RasterizeScanline(y, tiles!, _tileLine, _tileOpaque);
+
             // Accumulate collision data
             SpriteRenderer.AccumulateCollisions(_spriteMask, _vgc,
                 state.ScrollX, state.ScrollY, y, ref colSS, ref colSB);
+
+            // Sprite-tile collision: any sprite pixel overlapping a non-transparent tile pixel
+            if (tileMode)
+            {
+                for (int cx = 0; cx < VgcConstants.GfxWidth; cx++)
+                {
+                    if (_spriteMask[cx] != 0 && _tileOpaque[cx] != 0)
+                        colTile |= _spriteMask[cx];
+                }
+            }
 
             for (int x = 0; x < VgcConstants.GfxWidth; x++)
             {
@@ -391,7 +411,22 @@ public class EmulatorCanvas : Control
                         if (state.Mode != 3)
                             textOpaque = TrySampleTextPixel(px, py, state, cursorX, cursorY, cursorEnabled, out textPixel);
 
-                        if (state.Mode == 3)
+                        if (tileMode)
+                        {
+                            // Mode 4: tiles + sprites
+                            byte tilePri = _tileOpaque[x];
+                            uint tilePixel = _tileLine[x];
+
+                            // Behind tiles (priority 0)
+                            if (tilePri == 1)
+                                pixel = tilePixel;
+                            if (spriteBetween != 0)
+                                pixel = Palette[spriteBetween & 0x0F];
+                            // Front tiles (priority 1) go over between-sprites
+                            if (tilePri == 2)
+                                pixel = tilePixel;
+                        }
+                        else if (state.Mode == 3)
                         {
                             if (gfxPixel != 0)
                                 pixel = gfxPixel;
@@ -427,6 +462,8 @@ public class EmulatorCanvas : Control
         }
 
         _vgc.SetCollisionRegisters(colSS, colSB);
+        if (tileMode)
+            _vgc.SetTileCollision(colTile);
     }
 
     private bool TrySampleTextPixel(
