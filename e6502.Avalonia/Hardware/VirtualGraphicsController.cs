@@ -85,6 +85,7 @@ public class VirtualGraphicsController
     private readonly byte[] _tileData = new byte[VgcConstants.TileRamSize16];
     private readonly object _tileLock = new();
     private volatile bool _tileDirty;
+    private readonly byte[] _columnBuffer = new byte[VgcConstants.NametableRows]; // 25-entry column buffer
 
     // 4 nametables, each 1000 bytes (40x25 tile indices)
     private readonly byte[][] _nametables = new byte[VgcConstants.NametableCount][];
@@ -1232,6 +1233,18 @@ public class VirtualGraphicsController
             case VgcConstants.TileCmdCls:
                 TileClearAll();
                 break;
+            case VgcConstants.TileCmdBufFill:
+                TileBufferFill(p0);
+                break;
+            case VgcConstants.TileCmdBufSet:
+                TileBufferSet(p0, p1);
+                break;
+            case VgcConstants.TileCmdBufRange:
+                TileBufferRange(p0, p1, p2);
+                break;
+            case VgcConstants.TileCmdBufPut:
+                TileBufferPut(p0, p1);
+                break;
             default:
                 _tileStatus = 1; // unknown command
                 break;
@@ -1333,6 +1346,33 @@ public class VirtualGraphicsController
             _nametables[nt][r * VgcConstants.NametableCols + col] = _busMemory[cpuAddr + r];
     }
 
+    private void TileBufferFill(byte tile)
+    {
+        Array.Fill(_columnBuffer, tile);
+    }
+
+    private void TileBufferSet(int row, byte tile)
+    {
+        if ((uint)row < VgcConstants.NametableRows)
+            _columnBuffer[row] = tile;
+    }
+
+    private void TileBufferRange(int y1, int y2, byte tile)
+    {
+        if (y1 < 0) y1 = 0;
+        if (y2 >= VgcConstants.NametableRows) y2 = VgcConstants.NametableRows - 1;
+        for (int r = y1; r <= y2; r++)
+            _columnBuffer[r] = tile;
+    }
+
+    private void TileBufferPut(int nt, int col)
+    {
+        nt = ResolveMirroredNT(nt & 0x03);
+        if ((uint)col >= VgcConstants.NametableCols) return;
+        for (int r = 0; r < VgcConstants.NametableRows; r++)
+            _nametables[nt][r * VgcConstants.NametableCols + col] = _columnBuffer[r];
+    }
+
     private void TileLoadNametable(int nt, int cpuAddr)
     {
         nt = ResolveMirroredNT(nt & 0x03);
@@ -1429,13 +1469,13 @@ public class VirtualGraphicsController
     /// <summary>Copies tile definition data under lock. Returns true if data was dirty.</summary>
     public bool SnapshotTileData(byte[] buffer)
     {
-        if (!_tileDirty) return false;
+        bool wasDirty = _tileDirty;
         lock (_tileLock)
         {
             Array.Copy(_tileData, buffer, Math.Min(_tileData.Length, buffer.Length));
             _tileDirty = false;
         }
-        return true;
+        return wasDirty;
     }
 
     /// <summary>Copies a nametable for rendering.</summary>

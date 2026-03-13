@@ -568,6 +568,10 @@ public static class VgcConstants
     public const byte TileCmdRowAttr   = 0x0D;     // write attr row: P0=NT, P1=Y, TileAddr=src
     public const byte TileCmdColAttr   = 0x0E;     // write attr col: P0=NT, P1=X, TileAddr=src
     public const byte TileCmdCls       = 0x0F;     // clear all NTs and attrs to 0
+    public const byte TileCmdBufFill   = 0x10;     // fill column buffer: P0=tile#
+    public const byte TileCmdBufSet    = 0x11;     // set buffer entry: P0=row, P1=tile#
+    public const byte TileCmdBufRange  = 0x12;     // fill buffer range: P0=y1, P1=y2, P2=tile#
+    public const byte TileCmdBufPut    = 0x13;     // write buffer to NT: P0=NT, P1=col
 
     // Tile config bit masks
     public const byte TileCfgSize16    = 0x01;     // bit 0: 0=8x8, 1=16x16

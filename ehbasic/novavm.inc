@@ -440,6 +440,10 @@ TileCmdPeek             = $0C
 TileCmdRowAttr          = $0D
 TileCmdColAttr          = $0E
 TileCmdCls              = $0F
+TileCmdBufFill          = $10
+TileCmdBufSet           = $11
+TileCmdBufRange         = $12
+TileCmdBufPut           = $13
 TileCfgSize16           = $01
 TileCfgMirrorMask       = $06
 TileCfgMirrorShift      = $01
@@ -583,7 +587,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E81B
-V_OUTP                  = $E81E
-V_LOAD                  = $E821
-V_SAVE                  = $E824
+V_INPT                  = $E843
+V_OUTP                  = $E846
+V_LOAD                  = $E849
+V_SAVE                  = $E84C

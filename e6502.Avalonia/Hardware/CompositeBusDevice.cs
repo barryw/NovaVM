@@ -1,5 +1,6 @@
 namespace e6502.Avalonia.Hardware;
 
+using System.Diagnostics;
 using e6502.Storage;
 using KDS.e6502;
 
@@ -28,6 +29,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private long _frameNumeratorAccumulator;
     private long _totalFrames;
     private bool _rasterIrqPending;
+    private long _lastMusicWallTick;
+    private double _musicFrameAccum;
     private readonly byte[] _basicRom;
     private readonly byte[] _nccRom;
     private readonly byte[]? _extRom;
@@ -349,14 +352,33 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _frameNumeratorAccumulator -= _cpuHz;
             _totalFrames++;
             _vgc.IncrementFrameCounter();
-            _musicEngine.Tick();
-            _midiPlayback.Tick();
-            if (_sidPlayer.IsPlaying)
+
+            // Gate music/audio ticks to wall-clock time so catch-up bursts
+            // don't cause music to play faster than real-time.
+            long now = Stopwatch.GetTimestamp();
+            if (_lastMusicWallTick == 0) _lastMusicWallTick = now;
+            double wallElapsed = (double)(now - _lastMusicWallTick) / Stopwatch.Frequency;
+            _lastMusicWallTick = now;
+            _musicFrameAccum += wallElapsed * _frameRateHz;
+            if (_musicFrameAccum >= 1.0)
             {
-                _sidPlayer.SetPlayPending();
-                SniffSidNotes();
-                _sidPlayer.IncrementElapsed();
+                // Consume at most 2 frames to allow minor drift recovery
+                // without large catch-up bursts
+                int musicTicks = Math.Min((int)_musicFrameAccum, 2);
+                _musicFrameAccum -= musicTicks;
+                for (int mt = 0; mt < musicTicks; mt++)
+                {
+                    _musicEngine.Tick();
+                    _midiPlayback.Tick();
+                    if (_sidPlayer.IsPlaying)
+                    {
+                        _sidPlayer.SetPlayPending();
+                        SniffSidNotes();
+                        _sidPlayer.IncrementElapsed();
+                    }
+                }
             }
+
             if (_vgc.IsRasterIrqEnabled)
                 _rasterIrqPending = true;
         }

@@ -298,8 +298,8 @@ IrqBase           = $DF       ; IRQ handler enabled/setup/triggered flags
 help_len          = $E2       ; scratch byte for HELP command keyword length
 ;                 = $E3       ; unused
 ExtCmdId          = $E4       ; extension ROM command ID (set by trampoline)
-;                 = $E5       ; unused
-;                 = $E6       ; unused
+CwrdPtr           = $E5       ; LAB_CWRD pointer low byte
+;                              ; $E6 = CwrdPtr high byte (used by LAB_CWRD)
 ;                 = $E7       ; unused
 ;                 = $E8       ; unused
 ;                 = $E9       ; unused
@@ -547,6 +547,10 @@ XTK_TPEEKATTR      = $63              ; TPEEKATTR(nt,x,y) — function
 XTK_TILECOL        = $64              ; TILECOL — function (no args)
 XTK_TSCROLLX       = $65              ; TSCROLLX — function (no args)
 XTK_TSCROLLY       = $66              ; TSCROLLY — function (no args)
+XTK_TBUF           = $67              ; TBUF tile — fill column buffer
+XTK_TBSET          = $68              ; TBSET row,tile — set buffer entry
+XTK_TBFILL         = $69              ; TBFILL y1,y2,tile — fill buffer range
+XTK_TBPUT          = $6A              ; TBPUT nt,x — write buffer to nametable
 XTK_DIROPEN        = $2B              ; DIROPEN "pattern"
 XTK_DIRNEXT        = $2C              ; DIRNEXT — numeric function
 XTK_DIRNAM         = $2D              ; DIRNAM$ — string function
@@ -2002,6 +2006,10 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_TILECOL    ($64) — function only
       .word LAB_15D9-1        ; XTK_TSCROLLX   ($65) — function only
       .word LAB_15D9-1        ; XTK_TSCROLLY   ($66) — function only
+      .word LAB_TBUF-1        ; XTK_TBUF       ($67)
+      .word LAB_TBSET-1       ; XTK_TBSET      ($68)
+      .word LAB_TBFILL-1      ; XTK_TBFILL     ($69)
+      .word LAB_TBPUT-1       ; XTK_TBPUT      ($6A)
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -8614,7 +8622,7 @@ LAB_NCC
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 102
+XTK_COUNT = 106
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8652,6 +8660,7 @@ TAB_XTKSTR
       .word @s_tcls, @s_tscroll, @s_tpal, @s_tpalc
       .word @s_tsave, @s_tload
       .word @s_tpeek, @s_tpeekattr, @s_tilecol, @s_tscrollx, @s_tscrolly
+      .word @s_tbuf, @s_tbset, @s_tbfill, @s_tbput
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8735,6 +8744,10 @@ TAB_XTKSTR
 @s_tilecol: .byte "TILECOL",0
 @s_tscrollx: .byte "TSCROLLX",0
 @s_tscrolly: .byte "TSCROLLY",0
+@s_tbuf:    .byte "TBUF",0
+@s_tbset:   .byte "TBSET",0
+@s_tbfill:  .byte "TBFILL",0
+@s_tbput:   .byte "TBPUT",0
 @s_diropen: .byte "DIROPEN",0
 @s_dirnext: .byte "DIRNEXT",0
 @s_dirnam:  .byte "DIRNAM$",0
@@ -9087,6 +9100,10 @@ TileCmdPal     = $0A
 TileCmdPalC    = $0B
 TileCmdPeek    = $0C
 TileCmdCls     = $0F
+TileCmdBufFill = $10
+TileCmdBufSet  = $11
+TileCmdBufRange = $12
+TileCmdBufPut  = $13
 FioCmdTSave    = $16
 FioCmdTLoad    = $17
 
@@ -9414,6 +9431,38 @@ LAB_TNTLOAD
       RTS
 LAB_TCLS
       LDA   #TileCmdCls
+      STA   TileCmd
+      RTS
+LAB_TBUF
+      JSR   LAB_GTBY
+      STX   TileP0
+      LDA   #TileCmdBufFill
+      STA   TileCmd
+      RTS
+LAB_TBSET
+      LDA   #TileCmdBufSet
+      .byte $2C
+LAB_TBPUT
+      LDA   #TileCmdBufPut
+      PHA
+      JSR   LAB_GTBY
+      STX   TileP0
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP1
+      PLA
+      STA   TileCmd
+      RTS
+LAB_TBFILL
+      JSR   LAB_GTBY
+      STX   TileP0
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP1
+      JSR   LAB_1C01
+      JSR   LAB_GTBY
+      STX   TileP2
+      LDA   #TileCmdBufRange
       STA   TileCmd
       RTS
 LAB_TSCROLL
@@ -10489,6 +10538,22 @@ LAB_NSEND
 @nsend_err
       JMP   LAB_FCER
 
+; LAB_CWRD: parse comma + 16-bit word, store L/H to address in X:A
+; Entry: X = target address low, A = target address high
+; Stores parsed low byte at (ptr), high byte at (ptr)+1
+LAB_CWRD
+      STX   CwrdPtr
+      STA   CwrdPtr+1
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDY   #$00
+      LDA   FAC1_3
+      STA   (CwrdPtr),Y
+      INY
+      LDA   FAC1_2
+      STA   (CwrdPtr),Y
+      RTS
+
 ; DMACOPY srcSpace,srcAddr,dstSpace,dstAddr,len
 ; Address arguments are 16-bit offsets. For XRAM space (5), current XBANK
 ; is used as the high address byte.
@@ -10498,12 +10563,9 @@ LAB_DMACOPY
       STX   DMA_SRCSPACE
       STX   Itempl
       ; src addr
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   DMA_SRCL
-      LDA   FAC1_2
-      STA   DMA_SRCM
+      LDX   #<DMA_SRCL
+      LDA   #>DMA_SRCL
+      JSR   LAB_CWRD
       LDA   #$00
       STA   DMA_SRCH
       LDY   Itempl
@@ -10518,12 +10580,9 @@ LAB_DMACOPY
       STX   DMA_DSTSPACE
       STX   Itempl
       ; dst addr
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   DMA_DSTL
-      LDA   FAC1_2
-      STA   DMA_DSTM
+      LDX   #<DMA_DSTL
+      LDA   #>DMA_DSTL
+      JSR   LAB_CWRD
       LDA   #$00
       STA   DMA_DSTH
       LDY   Itempl
@@ -10533,12 +10592,9 @@ LAB_DMACOPY
       STA   DMA_DSTH
 @dmac_dstok
       ; len
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   DMA_LENL
-      LDA   FAC1_2
-      STA   DMA_LENM
+      LDX   #<DMA_LENL
+      LDA   #>DMA_LENL
+      JSR   LAB_CWRD
       LDA   #$00
       STA   DMA_LENH
       ; mode = copy
@@ -10565,12 +10621,9 @@ LAB_DMAFILL
       STX   DMA_DSTSPACE
       STX   Itempl
       ; dst addr
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   DMA_DSTL
-      LDA   FAC1_2
-      STA   DMA_DSTM
+      LDX   #<DMA_DSTL
+      LDA   #>DMA_DSTL
+      JSR   LAB_CWRD
       LDA   #$00
       STA   DMA_DSTH
       LDY   Itempl
@@ -10580,12 +10633,9 @@ LAB_DMAFILL
       STA   DMA_DSTH
 @dmaf_dstok
       ; len
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   DMA_LENL
-      LDA   FAC1_2
-      STA   DMA_LENM
+      LDX   #<DMA_LENL
+      LDA   #>DMA_LENL
+      JSR   LAB_CWRD
       LDA   #$00
       STA   DMA_LENH
       ; fill value
@@ -10608,12 +10658,9 @@ LAB_BLITCOPY
       STX   BLT_SRCSPACE
       STX   Itempl
       ; src addr
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_SRCL
-      LDA   FAC1_2
-      STA   BLT_SRCM
+      LDX   #<BLT_SRCL
+      LDA   #>BLT_SRCL
+      JSR   LAB_CWRD
       LDA   #$00
       STA   BLT_SRCH
       LDY   Itempl
@@ -10623,24 +10670,18 @@ LAB_BLITCOPY
       STA   BLT_SRCH
 @bltc_srcok
       ; src stride
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_SRCSTRL
-      LDA   FAC1_2
-      STA   BLT_SRCSTRH
+      LDX   #<BLT_SRCSTRL
+      LDA   #>BLT_SRCSTRL
+      JSR   LAB_CWRD
       ; dst space
       JSR   LAB_1C01
       JSR   LAB_GTBY
       STX   BLT_DSTSPACE
       STX   Itempl
       ; dst addr
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_DSTL
-      LDA   FAC1_2
-      STA   BLT_DSTM
+      LDX   #<BLT_DSTL
+      LDA   #>BLT_DSTL
+      JSR   LAB_CWRD
       LDA   #$00
       STA   BLT_DSTH
       LDY   Itempl
@@ -10650,26 +10691,17 @@ LAB_BLITCOPY
       STA   BLT_DSTH
 @bltc_dstok
       ; dst stride
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_DSTSTRL
-      LDA   FAC1_2
-      STA   BLT_DSTSTRH
+      LDX   #<BLT_DSTSTRL
+      LDA   #>BLT_DSTSTRL
+      JSR   LAB_CWRD
       ; width
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_WIDTHL
-      LDA   FAC1_2
-      STA   BLT_WIDTHH
+      LDX   #<BLT_WIDTHL
+      LDA   #>BLT_WIDTHL
+      JSR   LAB_CWRD
       ; height
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_HEIGHTL
-      LDA   FAC1_2
-      STA   BLT_HEIGHTH
+      LDX   #<BLT_HEIGHTL
+      LDA   #>BLT_HEIGHTL
+      JSR   LAB_CWRD
       ; mode = copy
       LDA   #$00
       STA   BLT_MODE
@@ -10696,12 +10728,9 @@ LAB_BLITFILL
       STX   BLT_DSTSPACE
       STX   Itempl
       ; dst addr
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_DSTL
-      LDA   FAC1_2
-      STA   BLT_DSTM
+      LDX   #<BLT_DSTL
+      LDA   #>BLT_DSTL
+      JSR   LAB_CWRD
       LDA   #$00
       STA   BLT_DSTH
       LDY   Itempl
@@ -10711,26 +10740,17 @@ LAB_BLITFILL
       STA   BLT_DSTH
 @bltf_dstok
       ; dst stride
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_DSTSTRL
-      LDA   FAC1_2
-      STA   BLT_DSTSTRH
+      LDX   #<BLT_DSTSTRL
+      LDA   #>BLT_DSTSTRL
+      JSR   LAB_CWRD
       ; width
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_WIDTHL
-      LDA   FAC1_2
-      STA   BLT_WIDTHH
+      LDX   #<BLT_WIDTHL
+      LDA   #>BLT_WIDTHL
+      JSR   LAB_CWRD
       ; height
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   BLT_HEIGHTL
-      LDA   FAC1_2
-      STA   BLT_HEIGHTH
+      LDX   #<BLT_HEIGHTL
+      LDA   #>BLT_HEIGHTL
+      JSR   LAB_CWRD
       ; fill value
       JSR   LAB_1C01
       JSR   LAB_GTBY
