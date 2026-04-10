@@ -1,0 +1,12 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "e6502"
+  ],
+  "permissions": {
+    "allow": [
+      "Read(//Users/barry/Git/e6502/**)",
+      "Bash(dotnet build:*)"
+    ]
+  }
+}

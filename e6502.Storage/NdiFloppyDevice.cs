@@ -76,6 +76,18 @@ public sealed class NdiFloppyDevice : IStorageDevice
         _parentIndex = 0xFFFF;
     }
 
+    /// <summary>
+    /// Mount an NDI disk image from a byte array (in-memory).
+    /// The image is fully functional — reads and writes stay in memory.
+    /// </summary>
+    public void MountFromBytes(byte[] data)
+    {
+        _image?.Dispose();
+        _image = NdiImage.OpenFromBytes(data);
+        _currentDir = "/";
+        _parentIndex = 0xFFFF;
+    }
+
     public void Unmount()
     {
         _image?.Dispose();

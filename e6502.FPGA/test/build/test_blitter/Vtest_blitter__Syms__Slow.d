@@ -1,0 +1,12 @@
+Vtest_blitter__Syms__Slow.o: \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_blitter/Vtest_blitter__pch.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_config.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilatedos.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_types.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_funcs.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_blitter/Vtest_blitter__Syms.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_blitter/Vtest_blitter.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_blitter/Vtest_blitter___024root.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_timing.h \
+  Vtest_blitter__Syms__Slow.cpp Vtest_blitter__pch.h

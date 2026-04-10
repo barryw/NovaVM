@@ -150,8 +150,9 @@
 \contentsline {section}{\numberline {12.2}Filter Registers (\$D415--\$D418)}{108}{section.12.2}%
 \contentsline {section}{\numberline {12.3}Extended Per-Voice Volume (\$D41D--\$D41F)}{109}{section.12.3}%
 \contentsline {section}{\numberline {12.4}SID 2 (\$D420--\$D43F)}{109}{section.12.4}%
-\contentsline {section}{\numberline {12.5}BASIC Examples}{109}{section.12.5}%
-\contentsline {section}{\numberline {12.6}Register Summary}{110}{section.12.6}%
+\contentsline {section}{\numberline {12.5}SID 2 Mirror (\$D500--\$D51C)}{109}{section.12.5}%
+\contentsline {section}{\numberline {12.6}BASIC Examples}{110}{section.12.6}%
+\contentsline {section}{\numberline {12.7}Register Summary}{111}{section.12.7}%
 \contentsline {chapter}{\numberline {A}VGC Bitmap \& Sprite Shape RAM}{113}{appendix.A}%
 \contentsline {section}{\numberline {A.1}Graphics Bitmap}{113}{section.A.1}%
 \contentsline {subsection}{\numberline {A.1.1}Address Calculation}{113}{subsection.A.1.1}%
@@ -187,5 +188,8 @@
 \contentsline {section}{\numberline {E.2}Control Characters Used by the Screen Editor}{128}{section.E.2}%
 \contentsline {section}{\numberline {E.3}Extended Characters (128--255)}{128}{section.E.3}%
 \contentsline {section}{\numberline {E.4}BASIC String Functions}{128}{section.E.4}%
-\contentsline {chapter}{Address Index}{131}{section*.11}%
+\contentsline {chapter}{\numberline {F}Font Glyphs: CP437 (IBM/DOS)}{131}{appendix.F}%
+\contentsline {chapter}{\numberline {G}Font Glyphs: PETSCII Uppercase}{133}{appendix.G}%
+\contentsline {chapter}{\numberline {H}Font Glyphs: PETSCII Lowercase}{135}{appendix.H}%
+\contentsline {chapter}{Address Index}{137}{section*.11}%
 \contentsfinish 

@@ -8,16 +8,15 @@ namespace e6502.MCP;
 [McpServerToolType]
 public static class EmulatorTools
 {
-    [McpServerTool, Description("Enter a BASIC line. Uppercases text outside quotes, sends Enter, waits for Ready prompt.")]
+    [McpServerTool, Description("Enter a BASIC line, sends Enter, waits for Ready prompt.")]
     public static async Task<string> EnterBasicLine(
         EmulatorClient client,
         [Description("The BASIC line to enter (e.g. '10 PRINT \"HELLO\"')")] string line)
     {
-        string converted = ConvertToUpperOutsideQuotes(line);
         await client.SendAsync(new JsonObject
         {
             ["command"] = "type_text",
-            ["text"] = converted
+            ["text"] = line
         });
         await client.SendAsync(new JsonObject
         {
@@ -744,18 +743,6 @@ public static class EmulatorTools
                 foreach (var row in shape)
                     sb.AppendLine($"  {row?.GetValue<string>()}");
             }
-        }
-        return sb.ToString();
-    }
-
-    private static string ConvertToUpperOutsideQuotes(string text)
-    {
-        var sb = new StringBuilder(text.Length);
-        bool inQuotes = false;
-        foreach (char c in text)
-        {
-            if (c == '"') inQuotes = !inQuotes;
-            sb.Append(!inQuotes && c >= 'a' && c <= 'z' ? (char)(c - 32) : c);
         }
         return sb.ToString();
     }

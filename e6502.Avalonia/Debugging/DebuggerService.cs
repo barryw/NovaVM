@@ -120,6 +120,55 @@ public sealed class DebuggerService
         return _cpu.GetState();
     }
 
+    /// <summary>
+    /// Execute exactly the requested number of cycles (or slightly more, since instructions
+    /// aren't divisible). Returns total cycles actually executed.
+    /// CPU must be paused before calling. Leaves CPU paused when done.
+    /// </summary>
+    public (CpuState State, int CyclesExecuted) RunCycles(int targetCycles)
+    {
+        if (!_paused) Pause();
+        Thread.Sleep(1);
+
+        int executed = 0;
+        while (executed < targetCycles)
+        {
+            int cycles = _cpu.ClocksForNext();
+            _cpu.ExecuteNext();
+            if (_bus is Hardware.CompositeBusDevice composite)
+                composite.AdvanceCycles(cycles);
+            executed += cycles;
+        }
+
+        return (_cpu.GetState(), executed);
+    }
+
+    /// <summary>
+    /// Poll memory until addr==value, or timeout. CPU must be running (not paused).
+    /// Returns (matched, finalValue).
+    /// </summary>
+    public (bool Matched, byte FinalValue) WatchMemory(ushort address, byte value, int timeoutMs)
+    {
+        bool wasPaused = _paused;
+        if (wasPaused) Resume();
+
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            byte current = _bus.Read(address);
+            if (current == value)
+            {
+                if (wasPaused) Pause();
+                return (true, current);
+            }
+            Thread.Sleep(5);
+        }
+
+        byte final_ = _bus.Read(address);
+        if (wasPaused) Pause();
+        return (final_ == value, final_);
+    }
+
     public void AddBreakpoint(ushort address, BreakpointCondition? condition)
     {
         _breakpoints.AddOrUpdate(address,

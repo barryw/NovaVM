@@ -25,6 +25,7 @@ FIO_NAME        = $B9B0         ; filename buffer (64 bytes)
 ; --- XMC registers ---
 XMC_CMD         = $BA00         ; command register
 XMC_STATUS      = $BA01         ; status
+XMC_ERRCODE     = $BA02         ; error code
 XMC_BANK        = $BA0C         ; current bank
 XMC_BANKS       = $BA0D         ; total banks
 XMC_USEDL       = $BA0E         ; used pages low
@@ -64,6 +65,53 @@ EXT_CMD_TLOAD   = $07
 EXT_CMD_HELP    = $08
 EXT_CMD_DMAFILL = $09
 EXT_CMD_BLTFILL = $0A
+EXT_CMD_XMCCMD  = $0B
+
+; --- XMC command codes (written to $BA00 before calling processor) ---
+XMC_CMD_GET     = $01           ; GetByte: read XRAM[XA] → DATA
+XMC_CMD_PUT     = $02           ; PutByte: write DATA → XRAM[XA]
+XMC_CMD_STASH   = $03           ; Stash: RAM → XRAM via blitter
+XMC_CMD_FETCH   = $04           ; Fetch: XRAM → RAM via blitter
+XMC_CMD_FILL    = $05           ; Fill: fill XRAM with DATA
+XMC_CMD_RSTUS   = $08           ; ResetUsage: clear page tracking
+XMC_CMD_REL     = $09           ; Release: mark pages free
+XMC_CMD_ALLOC   = $0A           ; Alloc: find free pages
+XMC_CMD_NSTSH   = $0B           ; Named stash
+XMC_CMD_NFETC   = $0C           ; Named fetch
+XMC_CMD_NDEL    = $0D           ; Named delete
+; XMC_CMD_NDIRO ($0E) and XMC_CMD_NDIRR ($0F) already defined above
+
+; --- Additional XMC register addresses ---
+XMC_XAL         = $BA04         ; XRAM address low
+XMC_XAM         = $BA05         ; XRAM address mid
+XMC_XAH         = $BA06         ; XRAM address high
+XMC_RAML        = $BA07         ; CPU RAM address low
+XMC_RAMH        = $BA08         ; CPU RAM address high
+XMC_DATA        = $BA0B         ; data port byte
+XMC_HANDLE      = $BA13         ; block handle
+
+; --- Blitter register addresses ---
+BLT_DSTSPACE    = $BA87
+BLT_DSTL        = $BA8B
+BLT_DSTM        = $BA8C
+BLT_DSTH        = $BA8D
+BLT_WIDTHL      = $BA8E
+BLT_WIDTHH      = $BA8F
+BLT_HEIGHTL     = $BA90
+BLT_HEIGHTH     = $BA91
+BLT_DSTSTRL     = $BA94
+BLT_DSTRH       = $BA95
+BLT_FILLVAL     = $BA97
+
+; --- Window 3 registers (used for single-byte XRAM access) ---
+WIN3_LO         = $BA21         ; window 3 base address low (ignored)
+WIN3_MI         = $BA22         ; window 3 base address mid
+WIN3_HI         = $BA23         ; window 3 base address high
+WIN3_BASE       = $BF00         ; window 3 data area ($BF00-$BFFF)
+
+; --- XRAM metadata layout ---
+META_PAGES      = 16            ; first 16 pages reserved for metadata
+TOTAL_PAGES     = 2048          ; 512KB / 256 bytes per page
 
 ; --- RAM addresses ---
 EXT_RESET_VEC   = $0233         ; reset recovery routine in RAM
@@ -97,6 +145,7 @@ ExtTable:
       .word EXT_HELP-1        ; cmd 8: HELP command
       .word EXT_DMAFILL-1     ; cmd 9: DMAFILL epilogue
       .word EXT_BLTFILL-1     ; cmd A: BLITFILL epilogue
+      .word EXT_XMCCMD-1      ; cmd B: XMC command processor
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -362,6 +411,7 @@ EXT_PWD:
 EXT_XMEM:
       LDA   #XMC_CMD_STATS
       STA   XMC_CMD
+      JSR   xmc_process         ; process locally (FPGA has no hardware XMC)
       ; print "<banks>"
       LDA   #$00
       LDX   XMC_BANKS
@@ -413,6 +463,7 @@ EXT_XMEM:
 EXT_XDIR:
       LDA   #XMC_CMD_NDIRO
       STA   XMC_CMD
+      JSR   xmc_process
       LDA   XMC_STATUS
       CMP   #XMC_OK
       BNE   @xdir_done
@@ -434,6 +485,7 @@ EXT_XDIR:
       JSR   ext_crlf
       LDA   #XMC_CMD_NDIRR
       STA   XMC_CMD
+      JSR   xmc_process
       LDA   XMC_STATUS
       CMP   #XMC_OK
       BEQ   @xdir_loop
@@ -675,6 +727,782 @@ ext_crlf:
       LDA   #$0A
       STA   VGC_CHAROUT
       RTS
+
+; =====================================================================
+; EXT_XMCCMD — entry point for XMC command processing from BASIC ROM
+; Called via EXT_vec. Returns A=0 ok, A=1 error (for BNE in CHKOK).
+; =====================================================================
+EXT_XMCCMD:
+      JSR   xmc_process
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BEQ   @xmc_ret_ok
+      LDA   #$01
+      RTS
+@xmc_ret_ok:
+      LDA   #$00
+      RTS
+
+; =====================================================================
+; xmc_process — internal XMC command dispatcher
+; Reads XMC_CMD ($BA00) and executes the requested operation.
+; Sets XMC_STATUS and XMC_ERRCODE on completion.
+; =====================================================================
+xmc_process:
+      LDA   XMC_CMD
+      ; Build index: cmd * 2 for word table lookup
+      ; Commands 1-15 map to table entries 0-14
+      BEQ   @xmc_nop             ; cmd 0 = no-op
+      CMP   #$10
+      BCS   @xmc_nop             ; cmd >= 16 = no-op
+      SEC
+      SBC   #$01                 ; cmd 1 -> index 0
+      ASL                        ; * 2 for word table
+      TAX
+      LDA   xmc_jtab+1,X
+      PHA
+      LDA   xmc_jtab,X
+      PHA
+      RTS                        ; dispatch via RTS trick
+@xmc_nop:
+      JMP   xmc_ok
+
+; Jump table for XMC commands 1-15 (address-1 for RTS trick)
+xmc_jtab:
+      .word xmc_getbyte-1        ; cmd $01: GetByte
+      .word xmc_putbyte-1        ; cmd $02: PutByte
+      .word xmc_stash-1          ; cmd $03: Stash
+      .word xmc_fetch-1          ; cmd $04: Fetch
+      .word xmc_fill-1           ; cmd $05: Fill
+      .word xmc_ok-1             ; cmd $06: (unused)
+      .word xmc_stats-1          ; cmd $07: Stats
+      .word xmc_resetusage-1     ; cmd $08: ResetUsage
+      .word xmc_ok-1             ; cmd $09: Release (no-op in bump allocator)
+      .word xmc_alloc-1          ; cmd $0A: Alloc
+      .word xmc_nstash-1         ; cmd $0B: NStash
+      .word xmc_nfetch-1         ; cmd $0C: NFetch
+      .word xmc_ndelete-1        ; cmd $0D: NDelete
+      .word xmc_ndiropen-1       ; cmd $0E: NDirOpen
+      .word xmc_ndirread-1       ; cmd $0F: NDirRead
+
+; --- Helper: set XMC status OK ---
+xmc_ok:
+      LDA   #XMC_OK
+      STA   XMC_STATUS
+      LDA   #$00
+      STA   XMC_ERRCODE
+      RTS
+
+; --- Helper: map window 3 to XRAM page at XMC_XAH:XMC_XAM ---
+xmc_map_win3:
+      LDA   #$00
+      STA   WIN3_LO
+      LDA   XMC_XAM
+      STA   WIN3_MI
+      LDA   XMC_XAH
+      STA   WIN3_HI
+      RTS
+
+; =====================================================================
+; GetByte — read XRAM[XA] into XMC_DATA
+; =====================================================================
+xmc_getbyte:
+      JSR   xmc_map_win3
+      LDX   XMC_XAL
+      LDA   WIN3_BASE,X
+      STA   XMC_DATA
+      JMP   xmc_ok
+
+; =====================================================================
+; PutByte — write XMC_DATA to XRAM[XA]
+; =====================================================================
+xmc_putbyte:
+      JSR   xmc_map_win3
+      LDX   XMC_XAL
+      LDA   XMC_DATA
+      STA   WIN3_BASE,X
+      JMP   xmc_ok
+
+; =====================================================================
+; Stash — copy RAM → XRAM using blitter
+; XMC_RAML/H = source, XMC_XAL/M/H = dest, XMC_LENL/H = count
+; =====================================================================
+xmc_stash:
+      ; Source = CPU RAM (space 0)
+      LDA   #$00
+      STA   BLT_SRCSPACE
+      STA   BLT_SRCH
+      LDA   XMC_RAML
+      STA   BLT_SRCL
+      LDA   XMC_RAMH
+      STA   BLT_SRCM
+      ; Destination = XRAM (space 5)
+      LDA   #$05
+      STA   BLT_DSTSPACE
+      LDA   XMC_XAL
+      STA   BLT_DSTL
+      LDA   XMC_XAM
+      STA   BLT_DSTM
+      LDA   XMC_XAH
+      STA   BLT_DSTH
+      ; Set up 1D transfer: width=len, height=1, stride=width
+      LDA   XMC_LENL
+      STA   BLT_WIDTHL
+      STA   BLT_SRCSTRL
+      STA   BLT_DSTSTRL
+      LDA   XMC_LENH
+      STA   BLT_WIDTHH
+      STA   BLT_SRCSTRH
+      STA   BLT_DSTRH
+      LDA   #$01
+      STA   BLT_HEIGHTL
+      LDA   #$00
+      STA   BLT_HEIGHTH
+      STA   BLT_MODE_REG         ; mode = 0 (copy)
+      STA   BLT_CKEY
+      ; Start — blitter stalls CPU via RDY, so it's done when we return
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD_REG
+      ; Check blitter status → XMC status
+      LDA   BLT_STATUS_REG
+      CMP   #HW_OK
+      BEQ   @stash_ok
+      LDA   #$03                 ; XMC error
+      STA   XMC_STATUS
+      LDA   #$01
+      STA   XMC_ERRCODE
+      RTS
+@stash_ok:
+      JMP   xmc_ok
+
+; =====================================================================
+; Fetch — copy XRAM → RAM using blitter
+; XMC_XAL/M/H = source, XMC_RAML/H = dest, XMC_LENL/H = count
+; =====================================================================
+xmc_fetch:
+      ; Source = XRAM (space 5)
+      LDA   #$05
+      STA   BLT_SRCSPACE
+      LDA   XMC_XAL
+      STA   BLT_SRCL
+      LDA   XMC_XAM
+      STA   BLT_SRCM
+      LDA   XMC_XAH
+      STA   BLT_SRCH
+      ; Destination = CPU RAM (space 0)
+      LDA   #$00
+      STA   BLT_DSTSPACE
+      STA   BLT_DSTH
+      LDA   XMC_RAML
+      STA   BLT_DSTL
+      LDA   XMC_RAMH
+      STA   BLT_DSTM
+      ; 1D transfer
+      LDA   XMC_LENL
+      STA   BLT_WIDTHL
+      STA   BLT_SRCSTRL
+      STA   BLT_DSTSTRL
+      LDA   XMC_LENH
+      STA   BLT_WIDTHH
+      STA   BLT_SRCSTRH
+      STA   BLT_DSTRH
+      LDA   #$01
+      STA   BLT_HEIGHTL
+      LDA   #$00
+      STA   BLT_HEIGHTH
+      STA   BLT_MODE_REG
+      STA   BLT_CKEY
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD_REG
+      LDA   BLT_STATUS_REG
+      CMP   #HW_OK
+      BEQ   @fetch_ok
+      LDA   #$03
+      STA   XMC_STATUS
+      LDA   #$01
+      STA   XMC_ERRCODE
+      RTS
+@fetch_ok:
+      JMP   xmc_ok
+
+; =====================================================================
+; Fill — fill XRAM with XMC_DATA using blitter
+; XMC_XAL/M/H = start, XMC_LENL/H = count, XMC_DATA = fill byte
+; =====================================================================
+xmc_fill:
+      ; Destination = XRAM (space 5)
+      LDA   #$05
+      STA   BLT_DSTSPACE
+      LDA   XMC_XAL
+      STA   BLT_DSTL
+      LDA   XMC_XAM
+      STA   BLT_DSTM
+      LDA   XMC_XAH
+      STA   BLT_DSTH
+      ; 1D fill
+      LDA   XMC_LENL
+      STA   BLT_WIDTHL
+      STA   BLT_DSTSTRL
+      LDA   XMC_LENH
+      STA   BLT_WIDTHH
+      STA   BLT_DSTRH
+      LDA   #$01
+      STA   BLT_HEIGHTL
+      LDA   #$00
+      STA   BLT_HEIGHTH
+      LDA   XMC_DATA
+      STA   BLT_FILLVAL
+      LDA   #BLT_MODE_FILL
+      STA   BLT_MODE_REG
+      LDA   #$00
+      STA   BLT_SRCSPACE
+      STA   BLT_SRCL
+      STA   BLT_SRCM
+      STA   BLT_SRCH
+      STA   BLT_SRCSTRL
+      STA   BLT_SRCSTRH
+      STA   BLT_CKEY
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD_REG
+      LDA   BLT_STATUS_REG
+      CMP   #HW_OK
+      BEQ   @fill_ok
+      LDA   #$03
+      STA   XMC_STATUS
+      LDA   #$01
+      STA   XMC_ERRCODE
+      RTS
+@fill_ok:
+      JMP   xmc_ok
+
+; =====================================================================
+; XRAM metadata layout (bump allocator + directory)
+;
+; Page 0 ($000000): Control block
+;   $00-$02: next_free_addr (24-bit LE)
+;   $03:     next_handle (1-255)
+;   $04:     dir_count (active named entries)
+;   $0F:     magic sentinel ($A5 = initialized)
+;
+; Pages 1-4 ($000100-$0004FF): Directory (32 entries × 32 bytes)
+;   Per entry: name[24], handle, xaddrL, xaddrM, xaddrH, lenL, lenH, pagesL, pagesH
+;
+; Data starts at $000500 (page 5). META_PAGES = 5.
+; =====================================================================
+
+MAGIC_VAL       = $A5
+CTRL_NEXTFREE   = $00           ; 3 bytes
+CTRL_NEXTHDL    = $03           ; 1 byte
+CTRL_DIRCOUNT   = $04           ; 1 byte
+CTRL_MAGIC      = $0F           ; 1 byte
+DIR_ENTRY_SIZE  = 32
+DIR_MAX_ENTRIES = 32
+DIR_NAME_LEN    = 24
+DIR_OFF_HANDLE  = 24
+DIR_OFF_XAL     = 25
+DIR_OFF_XAM     = 26
+DIR_OFF_XAH     = 27
+DIR_OFF_LENL    = 28
+DIR_OFF_LENH    = 29
+DIR_OFF_PGSL    = 30
+DIR_OFF_PGSH    = 31
+DATA_START_LO   = $00
+DATA_START_MI   = $05
+DATA_START_HI   = $00
+XMC_ERR_RANGE   = $01
+XMC_ERR_BADARGS = $02
+XMC_ERR_NOSPACE = $03
+XMC_ERR_NAME    = $04
+XMC_ERR_NF      = $05
+XMC_ERR_EOD     = $06
+
+; --- Zero page scratch for XMC ---
+xmc_eidx        = $E5           ; directory entry index (0-31)
+xmc_npgL        = $E6           ; pages needed low
+xmc_npgH        = $E7           ; pages needed high
+xmc_dircur      = $E8           ; directory cursor for NDirOpen/Read
+xmc_tmp         = $E9           ; scratch
+
+; --- Helper: set XMC error status ---
+xmc_err:
+      ; A = error code
+      PHA
+      LDA   #$03
+      STA   XMC_STATUS
+      PLA
+      STA   XMC_ERRCODE
+      RTS
+
+; --- Helper: map window 3 to XRAM page N (A=mid, X=high) ---
+xmc_map_w3_ax:
+      STX   WIN3_HI
+      STA   WIN3_MI
+      LDA   #$00
+      STA   WIN3_LO
+      RTS
+
+; --- Helper: map window 3 to control page (page 0) ---
+xmc_map_ctrl:
+      LDA   #$00
+      TAX
+      JMP   xmc_map_w3_ax
+
+; --- Helper: map window 3 to directory page for entry xmc_eidx ---
+; Entry N is at XRAM page (1 + N/8), offset (N%8)*32
+xmc_map_dir_entry:
+      LDA   xmc_eidx
+      LSR
+      LSR
+      LSR                        ; A = N/8
+      CLC
+      ADC   #$01                 ; page = 1 + N/8
+      LDX   #$00
+      JMP   xmc_map_w3_ax
+
+; --- Helper: get window offset for entry xmc_eidx → Y ---
+xmc_dir_offset:
+      LDA   xmc_eidx
+      AND   #$07                 ; N % 8
+      ASL
+      ASL
+      ASL
+      ASL
+      ASL                        ; * 32
+      TAY
+      RTS
+
+; --- Helper: ensure metadata initialized ---
+xmc_init_check:
+      JSR   xmc_map_ctrl
+      LDA   WIN3_BASE + CTRL_MAGIC
+      CMP   #MAGIC_VAL
+      BEQ   @init_done
+      ; First use — initialize metadata
+      ; Clear all of pages 0-4 (1280 bytes) via blitter fill
+      LDA   #$05
+      STA   BLT_DSTSPACE
+      LDA   #$00
+      STA   BLT_DSTL
+      STA   BLT_DSTM
+      STA   BLT_DSTH
+      STA   BLT_SRCSPACE
+      STA   BLT_SRCL
+      STA   BLT_SRCM
+      STA   BLT_SRCH
+      STA   BLT_SRCSTRL
+      STA   BLT_SRCSTRH
+      STA   BLT_CKEY
+      STA   BLT_HEIGHTH
+      STA   BLT_FILLVAL
+      LDA   #<1280
+      STA   BLT_WIDTHL
+      STA   BLT_DSTSTRL
+      LDA   #>1280
+      STA   BLT_WIDTHH
+      STA   BLT_DSTRH
+      LDA   #$01
+      STA   BLT_HEIGHTL
+      LDA   #BLT_MODE_FILL
+      STA   BLT_MODE_REG
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD_REG
+      ; Set control block defaults
+      JSR   xmc_map_ctrl
+      LDA   #DATA_START_LO
+      STA   WIN3_BASE + CTRL_NEXTFREE
+      LDA   #DATA_START_MI
+      STA   WIN3_BASE + CTRL_NEXTFREE + 1
+      LDA   #DATA_START_HI
+      STA   WIN3_BASE + CTRL_NEXTFREE + 2
+      LDA   #$01
+      STA   WIN3_BASE + CTRL_NEXTHDL
+      LDA   #$00
+      STA   WIN3_BASE + CTRL_DIRCOUNT
+      LDA   #MAGIC_VAL
+      STA   WIN3_BASE + CTRL_MAGIC
+@init_done:
+      RTS
+
+; =====================================================================
+; Stats — compute XRAM usage from control block
+; =====================================================================
+xmc_stats:
+      JSR   xmc_init_check
+      JSR   xmc_map_ctrl
+      ; used_pages = (next_free - $500) / 256 + META_PAGES
+      ; Since data starts at $500, next_free mid byte = pages used (+ $500 offset)
+      LDA   WIN3_BASE + CTRL_NEXTFREE + 1
+      SEC
+      SBC   #DATA_START_MI       ; subtract $05
+      STA   XMC_USEDL
+      LDA   WIN3_BASE + CTRL_NEXTFREE + 2
+      SBC   #DATA_START_HI
+      STA   XMC_USEDH
+      ; Add META_PAGES to used count
+      LDA   XMC_USEDL
+      CLC
+      ADC   #META_PAGES
+      STA   XMC_USEDL
+      LDA   XMC_USEDH
+      ADC   #$00
+      STA   XMC_USEDH
+      ; free = TOTAL_PAGES - used
+      LDA   #<TOTAL_PAGES
+      SEC
+      SBC   XMC_USEDL
+      STA   XMC_FREEL
+      LDA   #>TOTAL_PAGES
+      SBC   XMC_USEDH
+      STA   XMC_FREEH
+      ; Count named entries
+      LDA   WIN3_BASE + CTRL_DIRCOUNT
+      STA   XMC_DIRCOUNTL
+      LDA   #$00
+      STA   XMC_DIRCOUNTH
+      JMP   xmc_ok
+
+; =====================================================================
+; ResetUsage — clear all allocations and directory
+; =====================================================================
+xmc_resetusage:
+      ; Reset magic to force re-init on next use
+      JSR   xmc_map_ctrl
+      LDA   #$00
+      STA   WIN3_BASE + CTRL_MAGIC
+      JSR   xmc_init_check
+      JMP   xmc_ok
+
+; =====================================================================
+; Alloc — allocate pages from bump pointer
+; Input: XMC_LENL/H = bytes needed
+; Output: XMC_XAL/M/H = allocated address, XMC_HANDLE
+; =====================================================================
+xmc_alloc:
+      JSR   xmc_init_check
+      ; Calculate pages = (len + 255) / 256 = (lenH) + (lenL > 0 ? 1 : 0)
+      LDA   XMC_LENH
+      STA   xmc_npgH
+      LDA   XMC_LENL
+      BEQ   @al_nornd
+      INC   xmc_npgH            ; round up if low byte nonzero
+      CLC                        ; but if lenH was $FF, this overflows — cap at $FF
+@al_nornd:
+      LDA   xmc_npgH
+      STA   xmc_npgL             ; pages low = npgH (since pages = bytes/256 rounded up)
+      LDA   #$00
+      STA   xmc_npgH             ; pages high = 0 for <=255 pages (max 64KB alloc)
+      ; Check we have space: next_free + pages*256 <= $080000 (512KB)
+      JSR   xmc_map_ctrl
+      ; Capture next_free as result address
+      LDA   WIN3_BASE + CTRL_NEXTFREE
+      STA   XMC_XAL
+      LDA   WIN3_BASE + CTRL_NEXTFREE + 1
+      STA   XMC_XAM
+      LDA   WIN3_BASE + CTRL_NEXTFREE + 2
+      STA   XMC_XAH
+      ; Advance: next_free += pages * 256 (= pages in mid byte)
+      LDA   WIN3_BASE + CTRL_NEXTFREE + 1
+      CLC
+      ADC   xmc_npgL
+      STA   WIN3_BASE + CTRL_NEXTFREE + 1
+      LDA   WIN3_BASE + CTRL_NEXTFREE + 2
+      ADC   #$00
+      STA   WIN3_BASE + CTRL_NEXTFREE + 2
+      ; Check overflow: if high byte >= $08, out of space (512KB = $080000)
+      CMP   #$08
+      BCS   @al_nospace
+      ; Allocate handle
+      LDA   WIN3_BASE + CTRL_NEXTHDL
+      STA   XMC_HANDLE
+      INC   WIN3_BASE + CTRL_NEXTHDL
+      LDA   WIN3_BASE + CTRL_NEXTHDL
+      BNE   @al_hdlok
+      LDA   #$01                 ; wrap from 0 to 1
+      STA   WIN3_BASE + CTRL_NEXTHDL
+@al_hdlok:
+      ; Find free directory entry
+      JSR   xmc_dir_find_free
+      BCS   @al_nospace          ; no free entries
+      ; Write directory entry
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset       ; Y = offset within page
+      LDA   XMC_HANDLE
+      STA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      LDA   XMC_XAL
+      STA   WIN3_BASE + DIR_OFF_XAL,Y
+      LDA   XMC_XAM
+      STA   WIN3_BASE + DIR_OFF_XAM,Y
+      LDA   XMC_XAH
+      STA   WIN3_BASE + DIR_OFF_XAH,Y
+      LDA   XMC_LENL
+      STA   WIN3_BASE + DIR_OFF_LENL,Y
+      LDA   XMC_LENH
+      STA   WIN3_BASE + DIR_OFF_LENH,Y
+      LDA   xmc_npgL
+      STA   WIN3_BASE + DIR_OFF_PGSL,Y
+      LDA   #$00
+      STA   WIN3_BASE + DIR_OFF_PGSH,Y
+      ; Clear name (unnamed alloc)
+      LDX   #DIR_NAME_LEN-1
+@al_clrnm:
+      STA   WIN3_BASE,Y
+      INY
+      DEX
+      BPL   @al_clrnm
+      JMP   xmc_ok
+@al_nospace:
+      LDA   #XMC_ERR_NOSPACE
+      JMP   xmc_err
+
+; --- Find free directory entry → xmc_eidx, carry clear=found ---
+xmc_dir_find_free:
+      LDA   #$00
+      STA   xmc_eidx
+@dff_loop:
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset
+      LDA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      BEQ   @dff_found           ; handle=0 means free
+      INC   xmc_eidx
+      LDA   xmc_eidx
+      CMP   #DIR_MAX_ENTRIES
+      BCC   @dff_loop
+      SEC                        ; not found
+      RTS
+@dff_found:
+      CLC
+      RTS
+
+; --- Find directory entry by name → xmc_eidx, carry clear=found ---
+xmc_dir_find_name:
+      LDA   #$00
+      STA   xmc_eidx
+@dfn_loop:
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset
+      LDA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      BEQ   @dfn_next            ; skip free entries
+      ; Compare name: XMC_NAME[0..NAMELEN-1] vs entry name
+      TYA
+      TAX                        ; X = base offset
+      LDY   #$00
+@dfn_cmp:
+      CPY   XMC_NAMELEN
+      BCS   @dfn_cmpend
+      LDA   XMC_NAME,Y
+      CMP   WIN3_BASE,X
+      BNE   @dfn_next
+      INX
+      INY
+      BNE   @dfn_cmp
+@dfn_cmpend:
+      ; Lengths must match: entry name[NAMELEN] should be 0 (null)
+      LDA   WIN3_BASE,X
+      BEQ   @dfn_found           ; entry name ends here too
+@dfn_next:
+      INC   xmc_eidx
+      LDA   xmc_eidx
+      CMP   #DIR_MAX_ENTRIES
+      BCC   @dfn_loop
+      SEC
+      RTS
+@dfn_found:
+      CLC
+      RTS
+
+; =====================================================================
+; NStash — named stash: allocate (or reuse) block, copy RAM → XRAM
+; Input: XMC_NAME/NAMELEN, XMC_RAML/H, XMC_LENL/H
+; =====================================================================
+xmc_nstash:
+      JSR   xmc_init_check
+      LDA   XMC_NAMELEN
+      BEQ   @ns_badname
+      CMP   #DIR_NAME_LEN+1
+      BCS   @ns_badname
+      ; Check if name already exists
+      JSR   xmc_dir_find_name
+      BCS   @ns_new              ; not found → allocate new
+      ; Found existing — delete it first, then allocate fresh
+      JSR   xmc_dir_delete_entry
+@ns_new:
+      ; Allocate block
+      JSR   xmc_alloc
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BNE   @ns_done             ; alloc failed, status already set
+      ; Write name into directory entry
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset       ; Y = page offset
+      LDX   #$00
+@ns_wrnm:
+      CPX   XMC_NAMELEN
+      BCS   @ns_pad
+      LDA   XMC_NAME,X
+      STA   WIN3_BASE,Y
+      INY
+      INX
+      BNE   @ns_wrnm
+@ns_pad:
+      CPX   #DIR_NAME_LEN
+      BCS   @ns_nameset
+      LDA   #$00
+      STA   WIN3_BASE,Y
+      INY
+      INX
+      BNE   @ns_pad
+@ns_nameset:
+      ; Update dir_count
+      JSR   xmc_map_ctrl
+      INC   WIN3_BASE + CTRL_DIRCOUNT
+      ; Copy RAM → XRAM via blitter (XMC_XAL/M/H already set by alloc)
+      JSR   xmc_stash
+@ns_done:
+      RTS
+@ns_badname:
+      LDA   #XMC_ERR_NAME
+      JMP   xmc_err
+
+; --- Delete directory entry at xmc_eidx ---
+xmc_dir_delete_entry:
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset
+      ; Clear the entry (32 bytes of zeros)
+      LDX   #DIR_ENTRY_SIZE
+@dde_clr:
+      LDA   #$00
+      STA   WIN3_BASE,Y
+      INY
+      DEX
+      BNE   @dde_clr
+      ; Decrement dir_count
+      JSR   xmc_map_ctrl
+      DEC   WIN3_BASE + CTRL_DIRCOUNT
+      RTS
+
+; =====================================================================
+; NFetch — named fetch: look up block, copy XRAM → RAM
+; Input: XMC_NAME/NAMELEN, XMC_RAML/H, XMC_LENL/H (0=all)
+; =====================================================================
+xmc_nfetch:
+      JSR   xmc_init_check
+      LDA   XMC_NAMELEN
+      BEQ   @nf_badname
+      JSR   xmc_dir_find_name
+      BCS   @nf_notfound
+      ; Read entry address and length
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset
+      LDA   WIN3_BASE + DIR_OFF_XAL,Y
+      STA   XMC_XAL
+      LDA   WIN3_BASE + DIR_OFF_XAM,Y
+      STA   XMC_XAM
+      LDA   WIN3_BASE + DIR_OFF_XAH,Y
+      STA   XMC_XAH
+      LDA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      STA   XMC_HANDLE
+      ; If requested length is 0, use block's full length
+      LDA   XMC_LENL
+      ORA   XMC_LENH
+      BNE   @nf_haslen
+      LDA   WIN3_BASE + DIR_OFF_LENL,Y
+      STA   XMC_LENL
+      LDA   WIN3_BASE + DIR_OFF_LENH,Y
+      STA   XMC_LENH
+@nf_haslen:
+      ; Copy XRAM → RAM via blitter
+      JMP   xmc_fetch
+@nf_notfound:
+      LDA   #XMC_ERR_NF
+      JMP   xmc_err
+@nf_badname:
+      LDA   #XMC_ERR_NAME
+      JMP   xmc_err
+
+; =====================================================================
+; NDelete — delete named block
+; Input: XMC_NAME/NAMELEN
+; =====================================================================
+xmc_ndelete:
+      JSR   xmc_init_check
+      LDA   XMC_NAMELEN
+      BEQ   @nd_badname
+      JSR   xmc_dir_find_name
+      BCS   @nd_notfound
+      JSR   xmc_dir_delete_entry
+      JMP   xmc_ok
+@nd_notfound:
+      LDA   #XMC_ERR_NF
+      JMP   xmc_err
+@nd_badname:
+      LDA   #XMC_ERR_NAME
+      JMP   xmc_err
+
+; =====================================================================
+; NDirOpen — start directory enumeration, emit first entry
+; =====================================================================
+xmc_ndiropen:
+      JSR   xmc_init_check
+      LDA   #$00
+      STA   xmc_dircur
+      ; Find first named entry
+      JMP   xmc_dir_emit_next
+
+; =====================================================================
+; NDirRead — emit next directory entry
+; =====================================================================
+xmc_ndirread:
+      INC   xmc_dircur
+      ; fall through
+
+; --- Emit directory entry at or after xmc_dircur, advance cursor ---
+xmc_dir_emit_next:
+@den_loop:
+      LDA   xmc_dircur
+      CMP   #DIR_MAX_ENTRIES
+      BCS   @den_eod
+      STA   xmc_eidx
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset
+      ; Check if entry is active and named
+      LDA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      BEQ   @den_skip            ; free entry
+      LDA   WIN3_BASE,Y          ; first byte of name
+      BEQ   @den_skip            ; unnamed entry
+      ; Emit this entry to XMC registers
+      LDA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      STA   XMC_HANDLE
+      LDA   WIN3_BASE + DIR_OFF_XAL,Y
+      STA   XMC_XAL
+      LDA   WIN3_BASE + DIR_OFF_XAM,Y
+      STA   XMC_XAM
+      LDA   WIN3_BASE + DIR_OFF_XAH,Y
+      STA   XMC_XAH
+      LDA   WIN3_BASE + DIR_OFF_LENL,Y
+      STA   XMC_LENL
+      LDA   WIN3_BASE + DIR_OFF_LENH,Y
+      STA   XMC_LENH
+      ; Copy name to XMC_NAME
+      TYA
+      TAX                        ; X = base offset of name in window
+      LDY   #$00
+@den_cpnm:
+      LDA   WIN3_BASE,X
+      STA   XMC_NAME,Y
+      BEQ   @den_nmend           ; null terminator
+      INX
+      INY
+      CPY   #DIR_NAME_LEN
+      BCC   @den_cpnm
+@den_nmend:
+      STY   XMC_NAMELEN
+      JMP   xmc_ok
+@den_skip:
+      INC   xmc_dircur
+      JMP   @den_loop
+@den_eod:
+      LDA   #XMC_ERR_EOD
+      JMP   xmc_err
 
 ; =====================================================================
 ; Reset handler — if RESET fires while extension ROM is active,

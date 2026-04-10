@@ -1,0 +1,136 @@
+; Text Display Integration Tests — PRINT, cursor, color, CLS
+; Run: sim6502 -s tests/integration/text.6502 --backend novavm
+; Note: BASIC strings use CHR$(34) for quotes since DSL uses " as delimiter
+; Note: EhBASIC prints numbers with a leading space (positive) or minus (negative)
+; Note: CURSOR is not valid EhBASIC — use POKE to set cursor registers
+
+suites {
+  suite("Text Display") {
+
+    test("print-number", "PRINT displays numeric value") {
+      basic("10 PRINT 42")
+      run()
+      assert(screen_contains("42"), "number visible")
+    }
+
+    test("print-expression", "PRINT evaluates expression") {
+      basic("10 PRINT 6*7")
+      run()
+      assert(screen_contains("42"), "expression result visible")
+    }
+
+    test("print-string-via-chr", "PRINT with CHR$ builds string") {
+      basic("10 PRINT CHR$(72);CHR$(69);CHR$(76);CHR$(76);CHR$(79)")
+      run()
+      assert(screen_contains("HELLO"), "CHR$ string visible")
+    }
+
+    test("cls-clears-screen", "CLS clears all text") {
+      basic("10 PRINT 99999")
+      basic("20 CLS")
+      basic("30 PRINT 12345")
+      run()
+      assert(screen_contains("12345"), "new text visible")
+    }
+
+    test("home-via-poke", "POKE cursor registers to move to origin") {
+      ; HOME is not valid EhBASIC — use POKE to cursor X/Y registers
+      basic("10 CLS")
+      basic("20 PRINT 11111")
+      basic("30 POKE $A003,0:POKE $A004,0")
+      basic("40 PRINT 33333")
+      run()
+      assert(screen_line(0, "33333"), "cursor moved to top")
+    }
+
+    test("cursor-via-poke", "POKE sets cursor position registers") {
+      ; CURSOR not valid in EhBASIC — use POKE to set cursor X/Y registers
+      basic("10 CLS")
+      basic("20 POKE $A003,10")
+      basic("30 POKE $A004,5")
+      basic("40 PRINT 77777")
+      run()
+      assert(screen_line(5, "77777"), "text at row 5")
+    }
+
+    test("color-sets-foreground", "COLOR changes text color register") {
+      basic("10 COLOR 5")
+      run()
+      assert(peekbyte($A002) == 5, "fg color set to 5")
+    }
+
+    test("multiline-print", "Multiple PRINT on consecutive lines") {
+      basic("10 CLS")
+      basic("20 PRINT 111")
+      basic("30 PRINT 222")
+      basic("40 PRINT 333")
+      run()
+      assert(screen_contains("111"), "first line")
+      assert(screen_contains("222"), "second line")
+      assert(screen_contains("333"), "third line")
+    }
+
+    test("print-semicolon", "Semicolon keeps cursor on same line") {
+      ; EhBASIC numbers have leading space, so "12" prints as " 12"
+      ; With semicolon: " 12 34" (space-12-space-34 on same line)
+      basic("10 CLS")
+      basic("20 PRINT 12;34")
+      run()
+      assert(screen_contains("12"), "first value")
+      assert(screen_contains("34"), "second value")
+      ; Both on same line (line 0)
+      assert(screen_line(0, "12"), "12 on line 0")
+      assert(screen_line(0, "34"), "34 on line 0")
+    }
+
+    test("string-variable", "String assignment and print") {
+      basic("10 A$=CHR$(72)+CHR$(73)")
+      basic("20 PRINT A$")
+      run()
+      assert(screen_contains("HI"), "string variable printed")
+    }
+
+    test("print-multiple-items", "PRINT with comma separator") {
+      basic("10 PRINT 1,2,3")
+      run()
+      assert(screen_contains("1"), "item 1")
+      assert(screen_contains("2"), "item 2")
+      assert(screen_contains("3"), "item 3")
+    }
+
+    test("font-sets-register", "FONT sets font register") {
+      basic("10 FONT 3")
+      run()
+      assert(peekbyte($A007) == 3, "font register set to 3")
+    }
+
+    test("locate-sets-cursor", "LOCATE moves cursor position") {
+      basic("10 CLS")
+      basic("20 LOCATE 5,3")
+      basic("30 PRINT 88888")
+      run()
+      assert(screen_line(3, "88888"), "text at row 3")
+    }
+
+    test("bitset-sets-bits", "BITSET sets memory bits") {
+      basic("10 POKE $2000,$00")
+      basic("20 BITSET $2000,$0F")
+      run()
+      assert(peekbyte($2000) == $0F, "low nibble set")
+    }
+
+    test("bitclr-clears-bits", "BITCLR clears memory bits") {
+      basic("10 POKE $2000,$FF")
+      basic("20 BITCLR $2000,$0F")
+      run()
+      assert(peekbyte($2000) == $F0, "low nibble cleared")
+    }
+
+    test("bittgl-toggles-bits", "BITTGL toggles memory bits") {
+      basic("10 POKE $2000,$AA")
+      basic("20 BITTGL $2000,$FF")
+      run()
+      assert(peekbyte($2000) == $55, "all bits toggled")
+    }
+  }
+}

@@ -537,16 +537,16 @@ XTK_TROW           = $59              ; TROW nt,y,addr
 XTK_TCOL           = $5A              ; TCOL nt,x,addr
 XTK_TNTLOAD        = $5B              ; TNTLOAD nt,addr
 XTK_TCLS           = $5C              ; TCLS
-XTK_TSCROLL        = $5D              ; TSCROLL x,y
-XTK_TPAL           = $5E              ; TPAL sub,addr
-XTK_TPALC          = $5F              ; TPALC sub,color,r,g,b
-XTK_TSAVE          = $60              ; TSAVE "file"
-XTK_TLOAD          = $61              ; TLOAD "file"
-XTK_TPEEK          = $62              ; TPEEK(nt,x,y) — function
-XTK_TPEEKATTR      = $63              ; TPEEKATTR(nt,x,y) — function
-XTK_TILECOL        = $64              ; TILECOL — function (no args)
-XTK_TSCROLLX       = $65              ; TSCROLLX — function (no args)
-XTK_TSCROLLY       = $66              ; TSCROLLY — function (no args)
+XTK_TSCROLLX       = $5D              ; TSCROLLX — function (no args)
+XTK_TSCROLLY       = $5E              ; TSCROLLY — function (no args)
+XTK_TSCROLL        = $5F              ; TSCROLL x,y
+XTK_TPALC          = $60              ; TPALC sub,color,r,g,b
+XTK_TPAL           = $61              ; TPAL sub,addr
+XTK_TSAVE          = $62              ; TSAVE "file"
+XTK_TLOAD          = $63              ; TLOAD "file"
+XTK_TPEEK          = $64              ; TPEEK(nt,x,y) — function
+XTK_TPEEKATTR      = $65              ; TPEEKATTR(nt,x,y) — function
+XTK_TILECOL        = $66              ; TILECOL — function (no args)
 XTK_TBUF           = $67              ; TBUF tile — fill column buffer
 XTK_TBSET          = $68              ; TBSET row,tile — set buffer entry
 XTK_TBFILL         = $69              ; TBFILL y1,y2,tile — fill buffer range
@@ -1191,6 +1191,16 @@ LAB_138E
       BNE   LAB_137F          ; go print the [BELL] but ignore input character
                               ; branch always
 
+; uppercase A if lowercase letter (a-z → A-Z), preserves carry for non-letters
+LAB_TOUC
+      CMP   #$61              ; < 'a'?
+      BCC   LAB_TOUCR
+      CMP   #$7B              ; > 'z'?
+      BCS   LAB_TOUCR
+      AND   #$DF              ; uppercase
+LAB_TOUCR
+      RTS
+
 ; crunch keywords into Basic tokens
 ; position independent buffer version ..
 ; faster, dictionary search version ....
@@ -1207,6 +1217,9 @@ LAB_13A6
 LAB_13AC
       LDA   Ibuffs,X          ; get byte from input buffer
       BEQ   LAB_13EC          ; if null save byte then exit
+
+      JSR   LAB_TOUC          ; uppercase a-z → A-Z (outside quotes)
+      STA   Ibuffs,X          ; store back (uppercased in buffer)
 
       CMP   #'_'              ; compare with "_"
       BCS   LAB_13EC          ; if >= go save byte then continue crunching
@@ -1273,7 +1286,11 @@ LAB_13D8
       BMI   LAB_13EA          ; all bytes matched so go save token
 
       INX                     ; next buffer byte
-      CMP   Ibuffs,X          ; compare with byte from input buffer
+      LDA   Ibuffs,X          ; get input byte
+      JSR   LAB_TOUC          ; uppercase if a-z
+      STA   Ibuffs,X          ; store uppercased back
+      LDA   (ut2_pl),Y        ; re-read table byte
+      CMP   Ibuffs,X          ; compare table vs uppercased input
       BEQ   LAB_13D6          ; go compare next if match
 
       BNE   LAB_1417          ; branch if >< (not found keyword)
@@ -1304,8 +1321,9 @@ LAB_13FF
       STA   Oquote            ; save token-$3A (clear for ":", TK_DATA-$3A for DATA)
 LAB_1401
       EOR   #TK_REM-$3A       ; effectively subtract REM token offset
-      BNE   LAB_13AC          ; If wasn't REM then go crunch rest of line
-
+      BEQ   LAB_1401R         ; if REM, skip ahead
+      JMP   LAB_13AC          ; else go crunch rest of line
+LAB_1401R
       STA   Asrch             ; else was REM so set search for [EOL]
 
                               ; loop for REM, "..." etc.
@@ -1377,12 +1395,6 @@ LAB_XCRNCHD
       BNE   @cmp_loop
 
 @matched
-      ; If next input char is A-Z, this is a prefix — try next token
-      LDA   Ibuffs,X
-      EOR   #$40              ; A-Z ($41-$5A) → $01-$1A
-      CMP   #$1B
-      BCC   @try_next         ; < $1B means was A-Z
-
       LDY   csidx
       INY
       LDA   #TKX_PREFIX
@@ -1996,16 +2008,16 @@ TAB_XTKCMD
       .word LAB_TCOL-1        ; XTK_TCOL       ($5A)
       .word LAB_TNTLOAD-1     ; XTK_TNTLOAD    ($5B)
       .word LAB_TCLS-1        ; XTK_TCLS       ($5C)
-      .word LAB_TSCROLL-1     ; XTK_TSCROLL    ($5D)
-      .word LAB_TPAL-1        ; XTK_TPAL       ($5E)
-      .word LAB_TPALC-1       ; XTK_TPALC      ($5F)
-      .word LAB_TSAVE-1       ; XTK_TSAVE      ($60)
-      .word LAB_TLOAD-1       ; XTK_TLOAD      ($61)
-      .word LAB_15D9-1        ; XTK_TPEEK      ($62) — function only
-      .word LAB_15D9-1        ; XTK_TPEEKATTR  ($63) — function only
-      .word LAB_15D9-1        ; XTK_TILECOL    ($64) — function only
-      .word LAB_15D9-1        ; XTK_TSCROLLX   ($65) — function only
-      .word LAB_15D9-1        ; XTK_TSCROLLY   ($66) — function only
+      .word LAB_15D9-1        ; XTK_TSCROLLX   ($5D) — function only
+      .word LAB_15D9-1        ; XTK_TSCROLLY   ($5E) — function only
+      .word LAB_TSCROLL-1     ; XTK_TSCROLL    ($5F)
+      .word LAB_TPALC-1       ; XTK_TPALC      ($60)
+      .word LAB_TPAL-1        ; XTK_TPAL       ($61)
+      .word LAB_TSAVE-1       ; XTK_TSAVE      ($62)
+      .word LAB_TLOAD-1       ; XTK_TLOAD      ($63)
+      .word LAB_15D9-1        ; XTK_TPEEK      ($64) — function only
+      .word LAB_15D9-1        ; XTK_TPEEKATTR  ($65) — function only
+      .word LAB_15D9-1        ; XTK_TILECOL    ($66) — function only
       .word LAB_TBUF-1        ; XTK_TBUF       ($67)
       .word LAB_TBSET-1       ; XTK_TBSET      ($68)
       .word LAB_TBFILL-1      ; XTK_TBFILL     ($69)
@@ -8657,9 +8669,9 @@ TAB_XTKSTR
       .word @s_gtext
       .word @s_tilesize, @s_mirror, @s_ttrans, @s_tdef, @s_tput
       .word @s_tattr, @s_tfill, @s_trow, @s_tcol, @s_tntload
-      .word @s_tcls, @s_tscroll, @s_tpal, @s_tpalc
-      .word @s_tsave, @s_tload
-      .word @s_tpeek, @s_tpeekattr, @s_tilecol, @s_tscrollx, @s_tscrolly
+      .word @s_tcls, @s_tscrollx, @s_tscrolly, @s_tscroll
+      .word @s_tpalc, @s_tpal
+      .word @s_tsave, @s_tload, @s_tpeek, @s_tpeekattr, @s_tilecol
       .word @s_tbuf, @s_tbset, @s_tbfill, @s_tbput
 
 @s_dir:    .byte "DIR",0
@@ -10302,7 +10314,10 @@ LAB_COPPER
       BEQ   @c_mode
       CMP   #'S'
       BEQ   @c_s_dispatch
-      JMP   LAB_15D9          ; syntax error
+      ; numeric register index fallback
+      JSR   LAB_GTBY          ; evaluate 8-bit expression → X
+      TXA
+      JMP   @c_store_idx
 
 @c_bgcol
       LDX   #5
@@ -10960,13 +10975,14 @@ LAB_DIR
 
 ; --- XMC expansion memory handlers ---
 
+EXT_CMD_XMCCMD = $0B             ; XMC command processor in extension ROM
+
 LAB_XMC_CHKOK
-      LDA   XMC_STATUS
-      CMP   #XMC_OK
-      BEQ   @xok
-      JMP   LAB_FCER
-@xok
+      LDA   #EXT_CMD_XMCCMD     ; extension ROM processes cmd & returns A=0/1
+      JSR   EXT_vec
+      BNE   @xerr
       RTS
+@xerr JMP   LAB_FCER
 
 LAB_XMC_SETOFF
       JSR   LAB_GTWRD         ; parse 16-bit offset

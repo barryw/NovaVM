@@ -1,0 +1,131 @@
+; Math & Control Flow Integration Tests — arithmetic, strings, control structures
+; Run: sim6502 -s tests/integration/math.6502 --backend novavm
+; Note: BASIC strings use CHR$ since DSL uses " as delimiter
+
+suites {
+  suite("Math and Control Flow") {
+
+    test("integer-arithmetic", "Basic integer operations") {
+      basic("10 A=10+20:PRINT A")
+      run()
+      assert(screen_contains("30"), "addition")
+
+      basic("10 A=100-37:PRINT A")
+      run()
+      assert(screen_contains("63"), "subtraction")
+
+      basic("10 A=6*7:PRINT A")
+      run()
+      assert(screen_contains("42"), "multiplication")
+
+      basic("10 A=100/4:PRINT A")
+      run()
+      assert(screen_contains("25"), "division")
+    }
+
+    test("operator-precedence", "Multiplication before addition") {
+      basic("10 PRINT 2+3*4")
+      run()
+      assert(screen_contains("14"), "2+3*4=14")
+    }
+
+    test("parentheses", "Parentheses override precedence") {
+      basic("10 PRINT (2+3)*4")
+      run()
+      assert(screen_contains("20"), "(2+3)*4=20")
+    }
+
+    test("negative-numbers", "Negative number handling") {
+      basic("10 A=-5:PRINT A")
+      run()
+      assert(screen_contains("-5"), "negative value")
+
+      basic("10 PRINT -3+8")
+      run()
+      assert(screen_contains("5"), "negative in expression")
+    }
+
+    test("for-next-loop", "FOR/NEXT loop counts correctly") {
+      basic("10 S=0")
+      basic("20 FOR I=1 TO 10:S=S+I:NEXT")
+      basic("30 PRINT S")
+      run()
+      assert(screen_contains("55"), "sum 1..10 = 55")
+    }
+
+    test("for-step", "FOR with STEP") {
+      basic("10 S=0")
+      basic("20 FOR I=0 TO 10 STEP 2:S=S+1:NEXT")
+      basic("30 PRINT S")
+      run()
+      assert(screen_contains("6"), "6 iterations: 0,2,4,6,8,10")
+    }
+
+    test("if-then", "IF/THEN conditional") {
+      basic("10 A=42")
+      basic("20 IF A=42 THEN PRINT 9999")
+      run()
+      assert(screen_contains("9999"), "condition true")
+    }
+
+    test("if-then-else", "IF/THEN/ELSE branching") {
+      basic("10 A=10")
+      basic("20 IF A>20 THEN PRINT 1111 ELSE PRINT 2222")
+      run()
+      assert(screen_contains("2222"), "else branch taken")
+    }
+
+    test("gosub-return", "GOSUB/RETURN subroutine") {
+      basic("10 GOSUB 100")
+      basic("20 PRINT 8888")
+      basic("30 END")
+      basic("100 PRINT 7777;")
+      basic("110 RETURN")
+      run()
+      assert(screen_contains("7777"), "subroutine executed")
+      assert(screen_contains("8888"), "returned from subroutine")
+    }
+
+    test("string-via-chr", "String variable via CHR$") {
+      basic("10 A$=CHR$(72)+CHR$(69)+CHR$(76)+CHR$(76)+CHR$(79)")
+      basic("20 PRINT A$")
+      run()
+      assert(screen_contains("HELLO"), "string printed")
+    }
+
+    test("len-function", "LEN returns string length") {
+      basic("10 A$=CHR$(65)+CHR$(66)+CHR$(67)+CHR$(68)+CHR$(69)")
+      basic("20 PRINT LEN(A$)")
+      run()
+      assert(screen_contains("5"), "length is 5")
+    }
+
+    test("poke-peek-roundtrip", "POKE then PEEK verifies memory write") {
+      basic("10 POKE $2000,$42")
+      basic("20 PRINT PEEK($2000)")
+      run()
+      assert(screen_contains("66"), "PEEK returns 66 ($42)")
+      assert(peekbyte($2000) == $42, "memory written correctly")
+    }
+
+    test("array-operations", "DIM and array access") {
+      basic("10 DIM A(10)")
+      basic("20 FOR I=0 TO 10:A(I)=I*I:NEXT")
+      basic("30 PRINT A(5)")
+      run()
+      assert(screen_contains("25"), "A(5)=25")
+    }
+
+    test("nested-loops", "Nested FOR loops") {
+      basic("10 S=0")
+      basic("20 FOR I=1 TO 5")
+      basic("30 FOR J=1 TO 5")
+      basic("40 S=S+1")
+      basic("50 NEXT J")
+      basic("60 NEXT I")
+      basic("70 PRINT S")
+      run()
+      assert(screen_contains("25"), "5x5=25 iterations")
+    }
+  }
+}

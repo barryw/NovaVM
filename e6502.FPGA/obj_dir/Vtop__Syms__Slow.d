@@ -1,0 +1,10 @@
+Vtop__Syms__Slow.o: /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop__pch.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_config.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilatedos.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_types.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_funcs.h \
+  /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop__Syms.h \
+  /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop.h \
+  /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop___024root.h \
+  Vtop__Syms__Slow.cpp Vtop__pch.h

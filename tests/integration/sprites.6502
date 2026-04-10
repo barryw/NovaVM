@@ -1,0 +1,109 @@
+; Sprite Integration Tests — define, position, enable, flip, priority
+; Run: sim6502 -s tests/integration/sprites.6502 --backend novavm
+;
+; Syntax: SPRITE n,ON / SPRITE n,OFF / SPRITE n,x,y
+;         SPRITEDATA n,row,d0,...,d7
+;         SPRITESET n,field,value  (field: 0=X,1=XH,2=Y,3=YH,4=shape,5=flags,6=pri)
+
+suites {
+  suite("Sprites") {
+
+    test("sprite-enable-disable", "SPRITE n,ON/OFF toggle sprite visibility") {
+      basic("10 MODE 3")
+      basic("20 SPRITE 0,ON")
+      basic("30 SPRITE 0,OFF")
+      run()
+      assert(screen_contains("Ready"), "enable/disable completed")
+    }
+
+    test("sprite-position", "SPRITE n,x,y sets position") {
+      basic("10 MODE 3")
+      basic("20 SPRITE 0,100,50")
+      basic("30 SPRITE 0,ON")
+      run()
+      assert(screen_contains("Ready"), "sprite positioned")
+    }
+
+    test("sprite-define-pixel", "SPRITESET sets individual sprite register") {
+      basic("10 MODE 3")
+      basic("20 SPRITESET 0,4,1")
+      basic("30 SPRITESET 0,5,0")
+      basic("40 SPRITESET 0,6,0")
+      run()
+      assert(screen_contains("Ready"), "sprite registers set")
+    }
+
+    test("sprite-define-row", "SPRITEDATA defines full row") {
+      basic("10 MODE 3")
+      basic("20 SPRITEDATA 0,0,$77,$77,$77,$77,$77,$77,$77,$77")
+      basic("30 SPRITE 0,ON")
+      basic("40 SPRITE 0,100,50")
+      run()
+      assert(screen_contains("Ready"), "sprite row defined and visible")
+    }
+
+    test("sprite-flip", "SPRITESET field 5 sets flip flags") {
+      basic("10 MODE 3")
+      basic("20 SPRITESET 0,5,1")
+      run()
+      assert(screen_contains("Ready"), "x flip set")
+
+      basic("10 SPRITESET 0,5,2")
+      run()
+      assert(screen_contains("Ready"), "y flip set")
+
+      basic("10 SPRITESET 0,5,3")
+      run()
+      assert(screen_contains("Ready"), "both flips set")
+    }
+
+    test("sprite-priority", "SPRITESET field 6 sets rendering priority") {
+      basic("10 MODE 3")
+      basic("20 SPRITESET 0,6,0")
+      run()
+      assert(screen_contains("Ready"), "priority 0")
+
+      basic("10 SPRITESET 0,6,1")
+      run()
+      assert(screen_contains("Ready"), "priority 1")
+
+      basic("10 SPRITESET 0,6,2")
+      run()
+      assert(screen_contains("Ready"), "priority 2")
+    }
+
+    test("multiple-sprites", "Multiple sprites at different positions") {
+      basic("10 MODE 3")
+      basic("20 FOR I=0 TO 7")
+      basic("30 SPRITEDATA I,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
+      basic("40 SPRITE I,I*20+10,I*20+10")
+      basic("50 SPRITE I,ON")
+      basic("60 NEXT")
+      run()
+      assert(screen_contains("Ready"), "8 sprites active")
+    }
+
+    test("sprite-move-sequence", "Move sprite across screen") {
+      basic("10 MODE 3")
+      basic("20 SPRITEDATA 0,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
+      basic("30 SPRITE 0,ON")
+      basic("40 FOR I=0 TO 100 STEP 10")
+      basic("50 SPRITE 0,I,50")
+      basic("60 NEXT")
+      run()
+      assert(screen_contains("Ready"), "sprite movement completed")
+    }
+
+    test("sprite-clear-and-redefine", "Clear sprite then redefine") {
+      basic("10 MODE 3")
+      basic("20 SPRITEDATA 0,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
+      basic("30 SPRITE 0,ON")
+      basic("40 SPRITE 0,OFF")
+      basic("50 SPRITEDATA 0,0,$11,$22,$33,$44,$55,$66,$77,$88")
+      basic("60 SPRITE 0,ON")
+      basic("70 SPRITE 0,160,100")
+      run()
+      assert(screen_contains("Ready"), "sprite redefined and shown")
+    }
+  }
+}

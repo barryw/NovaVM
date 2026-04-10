@@ -74,14 +74,14 @@ EXT_CODE
 EXT_RESET_CODE
       LDA   #$02              ; RomSwapBasic
       STA   $A03F             ; swap to BASIC ROM
-      JMP   $FFBD             ; jump to BASIC reset handler (RES_vec)
+      JMP   $FFD7             ; jump to BASIC reset handler (RES_vec)
 
 END_CODE
 
-; --- Monitor code (in MONITOR segment at $FFBD) ---
+; --- Monitor code (in MONITOR segment at $FFD7) ---
 
       .segment "MONITOR"
-      .org    $FFBD
+      .org    $FFD7
 
 ; reset vector points here
 

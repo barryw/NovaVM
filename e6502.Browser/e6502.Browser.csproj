@@ -1,0 +1,87 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RunAOTCompilation>true</RunAOTCompilation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Browser" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
+    <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\e6502\e6502.csproj" />
+    <ProjectReference Include="..\e6502.Storage\e6502.Storage.csproj" />
+  </ItemGroup>
+
+  <!-- ================================================================== -->
+  <!-- Linked source files from e6502.Avalonia                            -->
+  <!-- ================================================================== -->
+
+  <!-- Hardware (shared — excludes CompositeBusDevice, OpenAlRenderer,
+       CompilerController, MidiAutoSoundfont which have browser-specific versions) -->
+  <ItemGroup>
+    <Compile Include="..\e6502.Avalonia\Hardware\VgcConstants.cs" Link="Hardware\VgcConstants.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\VirtualGraphicsController.cs" Link="Hardware\VirtualGraphicsController.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\SidChip.cs" Link="Hardware\SidChip.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\SidFileParser.cs" Link="Hardware\SidFileParser.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\SidRelocator.cs" Link="Hardware\SidRelocator.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\SidPlayer.cs" Link="Hardware\SidPlayer.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\MusicEngine.cs" Link="Hardware\MusicEngine.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\MmlParser.cs" Link="Hardware\MmlParser.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\MmlTypes.cs" Link="Hardware\MmlTypes.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\MidiPlayback.cs" Link="Hardware\MidiPlayback.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\MidPlayParser.cs" Link="Hardware\MidPlayParser.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\MidiEngine.cs" Link="Hardware\MidiEngine.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\WavetableSynth.cs" Link="Hardware\WavetableSynth.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\Sf2Loader.cs" Link="Hardware\Sf2Loader.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\SampleBank.cs" Link="Hardware\SampleBank.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\ReverbEffect.cs" Link="Hardware\ReverbEffect.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\ChorusEffect.cs" Link="Hardware\ChorusEffect.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\VirtualExpansionMemoryController.cs" Link="Hardware\VirtualExpansionMemoryController.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\VirtualTimerController.cs" Link="Hardware\VirtualTimerController.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\VirtualDmaController.cs" Link="Hardware\VirtualDmaController.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\VirtualBlitterController.cs" Link="Hardware\VirtualBlitterController.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\VirtualNetworkController.cs" Link="Hardware\VirtualNetworkController.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\FileIoController.cs" Link="Hardware\FileIoController.cs" />
+  </ItemGroup>
+
+  <!-- Rendering (EmulatorCanvas replaced by browser-local DirectCanvas) -->
+  <ItemGroup>
+    <Compile Include="..\e6502.Avalonia\Rendering\BitmapFont.cs" Link="Rendering\BitmapFont.cs" />
+    <Compile Include="..\e6502.Avalonia\Rendering\ColorPalette.cs" Link="Rendering\ColorPalette.cs" />
+    <Compile Include="..\e6502.Avalonia\Rendering\SpriteRenderer.cs" Link="Rendering\SpriteRenderer.cs" />
+    <Compile Include="..\e6502.Avalonia\Rendering\SpriteRenderState.cs" Link="Rendering\SpriteRenderState.cs" />
+    <Compile Include="..\e6502.Avalonia\Rendering\BlockGraphics.cs" Link="Rendering\BlockGraphics.cs" />
+    <Compile Include="..\e6502.Avalonia\Rendering\TileRenderState.cs" Link="Rendering\TileRenderState.cs" />
+    <Compile Include="..\e6502.Avalonia\Rendering\TileRenderer.cs" Link="Rendering\TileRenderer.cs" />
+  </ItemGroup>
+
+  <!-- Input -->
+  <ItemGroup>
+    <Compile Include="..\e6502.Avalonia\Input\ScreenEditor.cs" Link="Input\ScreenEditor.cs" />
+    <Compile Include="..\e6502.Avalonia\Input\FontKeymap.cs" Link="Input\FontKeymap.cs" />
+  </ItemGroup>
+
+  <!-- Misc shared -->
+  <ItemGroup>
+    <Compile Include="..\e6502.Avalonia\UiTransitionGate.cs" Link="UiTransitionGate.cs" />
+  </ItemGroup>
+
+  <!-- Embedded resources (ROMs, fonts, demo disk) -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\e6502.Avalonia\Resources\ehbasic.bin" LogicalName="ehbasic.bin" />
+    <EmbeddedResource Include="..\e6502.Avalonia\Resources\extension.bin" LogicalName="extension.bin" />
+    <EmbeddedResource Include="..\e6502.Avalonia\Resources\cp437.bin" LogicalName="cp437.bin" />
+    <EmbeddedResource Include="..\e6502.Avalonia\Resources\petscii_upper.bin" LogicalName="petscii_upper.bin" />
+    <EmbeddedResource Include="..\e6502.Avalonia\Resources\petscii_lower.bin" LogicalName="petscii_lower.bin" />
+    <EmbeddedResource Include="..\docs\programs\demo.ndi" LogicalName="demo.ndi" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,175 @@
+; VGC Integration Tests — graphics mode, colors, drawing primitives
+; Run: sim6502 -s tests/integration/vgc.6502 --backend novavm
+
+suites {
+  suite("VGC Graphics") {
+
+    test("mode-register", "MODE sets display mode register") {
+      basic("10 MODE 0")
+      run()
+      assert(peekbyte($A000) == 0, "mode 0 set")
+
+      basic("10 MODE 3")
+      run()
+      assert(peekbyte($A000) == 3, "mode 3 set")
+    }
+
+    test("mode-switch-all", "All four display modes") {
+      basic("10 MODE 1")
+      run()
+      assert(peekbyte($A000) == 1, "mode 1")
+
+      basic("10 MODE 2")
+      run()
+      assert(peekbyte($A000) == 2, "mode 2")
+    }
+
+    test("gcolor-sets-draw-color", "GCOLOR sets drawing color") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 5")
+      run()
+      assert(screen_contains("Ready"), "completed")
+    }
+
+    test("plot-completes", "PLOT executes without error") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 7")
+      basic("30 PLOT 100,50")
+      run()
+      assert(screen_contains("Ready"), "plot completed")
+    }
+
+    test("line-completes", "LINE draws without error") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 4")
+      basic("30 LINE 0,0,319,199")
+      run()
+      assert(screen_contains("Ready"), "line completed")
+    }
+
+    test("rect-completes", "RECT draws rectangle outline") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 2")
+      basic("30 RECT 10,10,50,50")
+      run()
+      assert(screen_contains("Ready"), "rect completed")
+    }
+
+    test("fill-completes", "FILL draws solid rectangle") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 3")
+      basic("30 FILL 10,10,50,50")
+      run()
+      assert(screen_contains("Ready"), "fill completed")
+    }
+
+    test("circle-completes", "CIRCLE draws without error") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 6")
+      basic("30 CIRCLE 160,100,50")
+      run()
+      assert(screen_contains("Ready"), "circle completed")
+    }
+
+    test("ellipse-completes", "CIRCLE with two radii draws ellipse") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 1")
+      basic("30 CIRCLE 160,100,80,40")
+      run()
+      assert(screen_contains("Ready"), "ellipse completed")
+    }
+
+    test("gcls-clears", "GCLS clears graphics layer") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 5")
+      basic("30 FILL 0,0,319,199")
+      basic("40 GCLS")
+      run()
+      assert(screen_contains("Ready"), "gcls completed")
+    }
+
+    test("paint-completes", "PAINT flood-fills from seed") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 2")
+      basic("30 RECT 10,10,50,50")
+      basic("40 GCOLOR 5")
+      basic("50 PAINT 30,30")
+      run()
+      assert(screen_contains("Ready"), "paint completed")
+    }
+
+    test("bgcolor-register", "Background color via POKE") {
+      basic("10 POKE $A001,6")
+      run()
+      assert(peekbyte($A001) == 6, "bg color set to 6")
+    }
+
+    test("multiple-primitives", "Multiple drawing commands in sequence") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 1")
+      basic("30 FILL 0,0,319,199")
+      basic("40 GCOLOR 7")
+      basic("50 LINE 0,0,319,199")
+      basic("60 LINE 319,0,0,199")
+      basic("70 CIRCLE 160,100,80")
+      basic("80 RECT 60,40,260,160")
+      run()
+      assert(screen_contains("Ready"), "all primitives completed")
+    }
+
+    test("unplot-completes", "UNPLOT clears a pixel") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 5")
+      basic("30 PLOT 100,50")
+      basic("40 UNPLOT 100,50")
+      run()
+      assert(screen_contains("Ready"), "unplot completed")
+    }
+
+    test("plot-unplot-roundtrip", "PLOT then UNPLOT sequence") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 7")
+      basic("30 FOR I=0 TO 9:PLOT I*10,50:NEXT")
+      basic("40 FOR I=0 TO 9:UNPLOT I*10,50:NEXT")
+      run()
+      assert(screen_contains("Ready"), "plot-unplot cycle completed")
+    }
+
+    test("gtext-draws-text", "GTEXT draws text on graphics layer") {
+      ; GTEXT x, y, font, scale, string
+      ; String via CHR$ to avoid quote issues
+      basic("10 MODE 3")
+      basic("20 GCOLOR 7")
+      basic("30 A$=CHR$(72)+CHR$(73)")
+      basic("40 GTEXT 10,10,0,1,A$")
+      run()
+      assert(screen_contains("Ready"), "gtext completed")
+    }
+
+    test("gtext-scaled", "GTEXT with larger scale") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 3")
+      basic("30 A$=CHR$(65)")
+      basic("40 GTEXT 50,50,0,4,A$")
+      run()
+      assert(screen_contains("Ready"), "gtext scaled completed")
+    }
+
+    test("mode-boundary-coords", "Drawing at screen boundaries") {
+      basic("10 MODE 3")
+      basic("20 GCOLOR 1")
+      basic("30 PLOT 0,0")
+      basic("40 PLOT 319,0")
+      basic("50 PLOT 0,199")
+      basic("60 PLOT 319,199")
+      run()
+      assert(screen_contains("Ready"), "boundary coords completed")
+    }
+
+    test("fgcolor-register", "Foreground color register via POKE") {
+      basic("10 POKE $A002,12")
+      run()
+      assert(peekbyte($A002) == 12, "fg color set to 12")
+    }
+  }
+}

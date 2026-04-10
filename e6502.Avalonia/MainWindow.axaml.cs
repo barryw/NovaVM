@@ -880,8 +880,7 @@ public partial class MainWindow : Window
                 var delay = TimeSpan.FromMilliseconds(50 * (i + 1));
                 DispatcherTimer.RunOnce(() =>
                 {
-                    var upper = ConvertToUpperOutsideQuotes(capturedLine);
-                    QueueString(upper);
+                    QueueString(capturedLine);
                     QueueByte(0x0D);
                 }, delay);
             }
@@ -897,18 +896,6 @@ public partial class MainWindow : Window
     private void QueueByte(byte b)
     {
         _editor.QueueInput(b);
-    }
-
-    private static string ConvertToUpperOutsideQuotes(string text)
-    {
-        var sb = new System.Text.StringBuilder(text.Length);
-        var inQuotes = false;
-        foreach (var c in text)
-        {
-            if (c == '"') inQuotes = !inQuotes;
-            sb.Append(!inQuotes && c >= 'a' && c <= 'z' ? (char)(c - 32) : c);
-        }
-        return sb.ToString();
     }
 
     private void ClearMacAspectRatio()

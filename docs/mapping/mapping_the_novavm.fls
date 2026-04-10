@@ -535,6 +535,11 @@ INPUT ./chapters/appendix-e-ascii-table.tex
 INPUT ./chapters/appendix-e-ascii-table.tex
 INPUT chapters/appendix-e-ascii-table.tex
 INPUT /opt/homebrew/Cellar/texlive/20250308_2/share/texmf-dist/fonts/tfm/public/lm/ec-lmtti10.tfm
+INPUT ./chapters/appendix-f-font-glyphs.tex
+INPUT ./chapters/appendix-f-font-glyphs.tex
+INPUT ./chapters/appendix-f-font-glyphs.tex
+INPUT ./chapters/appendix-f-font-glyphs.tex
+INPUT chapters/appendix-f-font-glyphs.tex
 INPUT ./mapping_the_novavm.ind
 INPUT ./mapping_the_novavm.ind
 INPUT mapping_the_novavm.ind

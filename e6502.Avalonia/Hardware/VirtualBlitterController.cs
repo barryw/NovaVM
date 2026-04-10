@@ -302,6 +302,10 @@ public sealed class VirtualBlitterController
         _rowBufferReadCol = 0;
         _rowBufferedReady = !_useRowBuffer;
         _rowBuffer = _useRowBuffer ? new byte[width] : null;
+
+        // Complete transfer synchronously — emulates RDY stalling on real hardware.
+        // The extension ROM reads status immediately after starting the blitter.
+        AdvanceCycles(int.MaxValue / VgcConstants.BltOpsPerCycle);
     }
 
     private void AdvanceCursor()

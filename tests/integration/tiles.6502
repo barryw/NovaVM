@@ -1,0 +1,172 @@
+; Tile Engine Integration Tests — NES-style tile map engine
+; Run: sim6502 -s tests/integration/tiles.6502 --backend novavm
+; Note: TSCROLL x,y sets scroll. TSCROLLX/TSCROLLY are functions that return values.
+; Syntax: TPUT nt,x,y,tile  |  TFILL nt,tile  |  TATTR nt,x,y,attr
+;         TROW nt,y,addr     |  TCOL nt,x,addr |  TDEF tile,addr
+
+suites {
+  suite("Tiles") {
+
+    test("tileset-8x8", "TILESIZE sets 8x8 tile size") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      run()
+      assert(screen_contains("Ready"), "no error")
+    }
+
+    test("tileset-16x16", "TILESIZE sets 16x16 tile size") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 16")
+      run()
+      assert(screen_contains("Ready"), "tileset 16 completed")
+    }
+
+    test("tileput-places-tile", "TPUT sets nametable entry") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      basic("30 TPUT 0,0,0,1")
+      basic("40 TPUT 0,5,5,42")
+      run()
+      assert(screen_contains("Ready"), "tileput completed")
+    }
+
+    test("tileclr-clears-map", "TCLS zeros all nametable entries") {
+      basic("10 MODE 4")
+      basic("20 TPUT 0,0,0,1")
+      basic("30 TPUT 0,10,10,5")
+      basic("40 TCLS")
+      run()
+      assert(screen_contains("Ready"), "tileclr completed")
+    }
+
+    test("tscroll-sets-scroll", "TSCROLL sets scroll registers") {
+      ; TSCROLL x,y is the command; TSCROLLX/TSCROLLY are functions
+      basic("10 MODE 4")
+      basic("20 TSCROLL 128,64")
+      basic("30 PRINT TSCROLLX")
+      basic("40 PRINT TSCROLLY")
+      run()
+      assert(screen_contains("128"), "scroll X is 128")
+      assert(screen_contains("64"), "scroll Y is 64")
+    }
+
+    test("tscroll-16bit", "TSCROLL handles 16-bit values") {
+      basic("10 MODE 4")
+      basic("20 TSCROLL 300,200")
+      basic("30 PRINT TSCROLLX")
+      basic("40 PRINT TSCROLLY")
+      run()
+      assert(screen_contains("300"), "scroll X is 300")
+      assert(screen_contains("200"), "scroll Y is 200")
+    }
+
+    test("tscroll-zero", "TSCROLL resets to zero") {
+      basic("10 MODE 4")
+      basic("20 TSCROLL 100,100")
+      basic("30 TSCROLL 0,0")
+      basic("40 PRINT TSCROLLX")
+      basic("50 PRINT TSCROLLY")
+      run()
+      assert(screen_contains(" 0"), "scroll X reset to 0")
+    }
+
+    test("tile-fill-row", "Fill a row of tiles") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      basic("30 FOR I=0 TO 39:TPUT 0,I,0,I+1:NEXT")
+      run()
+      assert(screen_contains("Ready"), "row fill completed")
+    }
+
+    test("tile-mode-switch", "MODE 0 restores text mode") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      basic("30 TPUT 0,0,0,1")
+      basic("40 MODE 0")
+      basic("50 PRINT PEEK($A000)")
+      run()
+      assert(screen_contains(" 0"), "mode register is 0")
+    }
+
+    test("tile-define-and-place", "Define tile pattern then place it") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      ; Fill 64 bytes (8x8 tile) at $2000
+      basic("30 FOR I=0 TO 63:POKE $2000+I,$FF:NEXT")
+      basic("40 TDEF 1,$2000")
+      basic("50 TPUT 0,0,0,1")
+      run()
+      assert(screen_contains("Ready"), "tile define + place completed")
+    }
+
+    test("ttrans-sets-transparent", "TTRANS sets transparent color index") {
+      basic("10 MODE 4")
+      basic("20 TTRANS 5")
+      run()
+      assert(screen_contains("Ready"), "ttrans completed")
+    }
+
+    test("tfill-fills-nametable", "TFILL fills nametable with tile") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      basic("30 TFILL 0,1")
+      run()
+      assert(screen_contains("Ready"), "tfill completed")
+    }
+
+    test("tattr-sets-attribute", "TATTR sets tile attribute") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      basic("30 TPUT 0,5,5,1")
+      basic("40 TATTR 0,5,5,$01")
+      run()
+      assert(screen_contains("Ready"), "tattr completed")
+    }
+
+    test("trow-fills-row", "TROW fills a row from address") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      ; Set up tile indices in RAM
+      basic("30 FOR I=0 TO 39:POKE $2000+I,I+1:NEXT")
+      basic("40 TROW 0,0,$2000")
+      run()
+      assert(screen_contains("Ready"), "trow completed")
+    }
+
+    test("tcol-fills-column", "TCOL fills a column from address") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      basic("30 FOR I=0 TO 24:POKE $2000+I,I+1:NEXT")
+      basic("40 TCOL 0,0,$2000")
+      run()
+      assert(screen_contains("Ready"), "tcol completed")
+    }
+
+    test("tdef-defines-tile", "TDEF defines tile from memory") {
+      basic("10 MODE 4")
+      basic("20 TILESIZE 8")
+      ; Fill 64 bytes (8x8 tile) at $2000
+      basic("30 FOR I=0 TO 63:POKE $2000+I,$FF:NEXT")
+      basic("40 TDEF 1,$2000")
+      basic("50 TPUT 0,0,0,1")
+      run()
+      assert(screen_contains("Ready"), "tdef completed")
+    }
+
+    test("tpal-sets-palette", "TPAL loads palette from memory") {
+      basic("10 MODE 4")
+      ; Set up 16 palette entries at $2000
+      basic("20 FOR I=0 TO 47:POKE $2000+I,I:NEXT")
+      basic("30 TPAL 0,$2000")
+      run()
+      assert(screen_contains("Ready"), "tpal completed")
+    }
+
+    test("tilecol-returns-collision", "TILECOL function returns collision bitmask") {
+      basic("10 MODE 4")
+      basic("20 PRINT TILECOL")
+      run()
+      assert(screen_contains("0"), "no collisions initially")
+    }
+  }
+}

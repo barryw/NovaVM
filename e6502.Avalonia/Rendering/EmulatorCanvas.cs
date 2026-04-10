@@ -22,7 +22,6 @@ public class EmulatorCanvas : Control
     private readonly ScreenEditor _editor;
     private readonly object _renderLock = new();
     private bool _cursorVisible = true;
-    private bool _quoteMode;
     private static readonly uint[] Palette = BuildPalette();
     private readonly byte[] _lineBehind = new byte[VgcConstants.GfxWidth];
     private readonly byte[] _lineBetween = new byte[VgcConstants.GfxWidth];
@@ -222,7 +221,6 @@ public class EmulatorCanvas : Control
         await Task.Delay(4);
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
         await WaitForInputIdleAsync(maxWaitMs: 250);
-        _quoteMode = false;
         _editor.QueueInput(0x0D);
     }
 
@@ -248,7 +246,6 @@ public class EmulatorCanvas : Control
             {
                 if (ch == '\n' && i > 0 && text[i - 1] == '\r')
                     continue;
-                _quoteMode = false;
                 _editor.QueueInput(0x0D);
                 await WaitForInputIdleAsync(maxWaitMs: 8000);
                 continue;
@@ -278,10 +275,6 @@ public class EmulatorCanvas : Control
 
     private void QueuePrintableChar(byte ch)
     {
-        if (ch == '"')
-            _quoteMode = !_quoteMode;
-        if (!_quoteMode && ch >= 0x61 && ch <= 0x7A)
-            ch -= 0x20;
         _editor.QueueInput(ch);
     }
 

@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "e6502.Storage", "e6502.Stor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "e6502.NDI", "e6502.NDI\e6502.NDI.csproj", "{BC454C03-5C42-4381-B3B7-6D8410C67AE3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "e6502.Browser", "e6502.Browser\e6502.Browser.csproj", "{1A634A0C-7FF9-48B2-8911-1234569B9A48}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -137,6 +139,18 @@ Global
 		{BC454C03-5C42-4381-B3B7-6D8410C67AE3}.Release|x64.Build.0 = Release|Any CPU
 		{BC454C03-5C42-4381-B3B7-6D8410C67AE3}.Release|x86.ActiveCfg = Release|Any CPU
 		{BC454C03-5C42-4381-B3B7-6D8410C67AE3}.Release|x86.Build.0 = Release|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Debug|x64.Build.0 = Debug|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Debug|x86.Build.0 = Debug|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Release|x64.ActiveCfg = Release|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Release|x64.Build.0 = Release|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Release|x86.ActiveCfg = Release|Any CPU
+		{1A634A0C-7FF9-48B2-8911-1234569B9A48}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

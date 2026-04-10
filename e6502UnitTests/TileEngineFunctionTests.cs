@@ -99,12 +99,12 @@ public class TileEngineFunctionTests
             $"TSCROLLY line corrupted.\n{screen}");
 
         // Verify correct extended tokens: prefix $01 + token ID
-        Assert.IsTrue(line10Hex.Contains("01 64", StringComparison.Ordinal),
-            $"TILECOL token ($64) missing.\n{line10Hex}");
-        Assert.IsTrue(line20Hex.Contains("01 65", StringComparison.Ordinal),
-            $"TSCROLLX token ($65) missing.\n{line20Hex}");
-        Assert.IsTrue(line30Hex.Contains("01 66", StringComparison.Ordinal),
-            $"TSCROLLY token ($66) missing.\n{line30Hex}");
+        Assert.IsTrue(line10Hex.Contains("01 66", StringComparison.Ordinal),
+            $"TILECOL token ($66) missing.\n{line10Hex}");
+        Assert.IsTrue(line20Hex.Contains("01 5D", StringComparison.Ordinal),
+            $"TSCROLLX token ($5D) missing.\n{line20Hex}");
+        Assert.IsTrue(line30Hex.Contains("01 5E", StringComparison.Ordinal),
+            $"TSCROLLY token ($5E) missing.\n{line30Hex}");
     }
 
     // =========================================================================

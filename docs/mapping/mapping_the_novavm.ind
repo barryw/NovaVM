@@ -338,6 +338,7 @@
   \item {\texttt  {\$D41E}} --- Voice 2 Volume \dotfill\ 109
   \item {\texttt  {\$D41F}} --- Voice 3 Volume \dotfill\ 109
   \item {\texttt  {\$D420--\$D43F}} --- SID Chip 2 \dotfill\ 109
+  \item {\texttt  {\$D500--\$D51C}} --- SID 2 Mirror \dotfill\ 109
   \item {\texttt  {\$FF80--\$FFF9}} --- Monitor Code \dotfill\ 102
   \item {\texttt  {\$FFFA--\$FFFF}} --- Hardware Vectors \dotfill\ 103
 

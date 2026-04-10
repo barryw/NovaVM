@@ -13,13 +13,13 @@ public sealed class NdiImage : IDisposable
     private NdiHeader _header;
     private readonly NdiBam _bam;
     private readonly NdiDirectory _directory;
-    private readonly FileStream _stream;
+    private readonly Stream _stream;
     private bool _disposed;
 
     public NdiHeader Header => _header;
     public int FreeSectors => _bam.FreeCount;
 
-    private NdiImage(NdiHeader header, NdiBam bam, NdiDirectory directory, FileStream stream)
+    private NdiImage(NdiHeader header, NdiBam bam, NdiDirectory directory, Stream stream)
     {
         _header = header;
         _bam = bam;
@@ -72,28 +72,48 @@ public sealed class NdiImage : IDisposable
     public static NdiImage Open(string path)
     {
         var fs = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        return OpenFromStream(fs);
+    }
 
+    /// <summary>
+    /// Opens an NDI disk image from a byte array (in-memory).
+    /// The image is read/write — mutations stay in the MemoryStream.
+    /// Caller must dispose the returned instance.
+    /// </summary>
+    public static NdiImage OpenFromBytes(byte[] data)
+    {
+        var ms = new MemoryStream();
+        ms.Write(data, 0, data.Length);
+        ms.Position = 0;
+        return OpenFromStream(ms);
+    }
+
+    /// <summary>
+    /// Opens an NDI disk image from any seekable, readable, writable stream.
+    /// </summary>
+    private static NdiImage OpenFromStream(Stream stream)
+    {
         // Read header.
         var headerBuf = new byte[256];
-        fs.Seek(0, SeekOrigin.Begin);
-        fs.ReadExactly(headerBuf);
+        stream.Seek(0, SeekOrigin.Begin);
+        stream.ReadExactly(headerBuf);
         var header = NdiHeader.FromBytes(headerBuf);
 
         // Read BAM.
         int bamSectorCount = header.DirectoryStartSector - 1;
         int dataSectorCount = header.TotalSectors - header.DataStartSector;
         byte[] bamBuf = new byte[bamSectorCount * 256];
-        fs.Seek(256, SeekOrigin.Begin);
-        fs.ReadExactly(bamBuf);
+        stream.Seek(256, SeekOrigin.Begin);
+        stream.ReadExactly(bamBuf);
         var bam = NdiBam.FromBytes(bamBuf, dataSectorCount);
 
         // Read directory.
         byte[] dirBuf = new byte[header.DirectorySectorCount * 256];
-        fs.Seek(header.DirectoryStartSector * 256L, SeekOrigin.Begin);
-        fs.ReadExactly(dirBuf);
+        stream.Seek(header.DirectoryStartSector * 256L, SeekOrigin.Begin);
+        stream.ReadExactly(dirBuf);
         var directory = NdiDirectory.FromBytes(dirBuf, header.DirectorySectorCount);
 
-        return new NdiImage(header, bam, directory, fs);
+        return new NdiImage(header, bam, directory, stream);
     }
 
     // -------------------------------------------------------------------------

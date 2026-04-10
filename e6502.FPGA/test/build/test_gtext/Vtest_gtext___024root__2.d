@@ -1,0 +1,12 @@
+Vtest_gtext___024root__2.o: \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_gtext/Vtest_gtext__pch.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_config.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilatedos.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_types.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_funcs.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_gtext/Vtest_gtext__Syms.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_gtext/Vtest_gtext.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_gtext/Vtest_gtext___024root.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_timing.h \
+  Vtest_gtext___024root__2.cpp Vtest_gtext__pch.h

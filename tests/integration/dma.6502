@@ -1,0 +1,81 @@
+; DMA Controller Integration Tests — DMACOPY, DMAFILL, DMASTATUS
+; Run: sim6502 -s tests/integration/dma.6502 --backend novavm
+; Syntax: DMACOPY srcSpace,srcAddr,dstSpace,dstAddr,length
+;         DMAFILL dstSpace,dstAddr,length,fillValue
+;         DMASTATUS — function, returns status byte
+
+suites {
+  suite("DMA Controller") {
+
+    test("dmafill-cpu-ram", "DMAFILL fills CPU RAM") {
+      basic("10 DMAFILL 0,$2000,256,$AA")
+      run()
+      assert(peekbyte($2000) == $AA, "first byte")
+      assert(peekbyte($2080) == $AA, "middle byte")
+      assert(peekbyte($20FF) == $AA, "last byte")
+    }
+
+    test("dmafill-zero", "DMAFILL with zero value clears memory") {
+      basic("10 DMAFILL 0,$2000,128,$FF")
+      basic("20 DMAFILL 0,$2000,128,$00")
+      run()
+      assert(peekbyte($2000) == $00, "first byte cleared")
+      assert(peekbyte($207F) == $00, "last byte cleared")
+    }
+
+    test("dmafill-different-values", "DMAFILL with various fill values") {
+      basic("10 DMAFILL 0,$3000,16,$55")
+      run()
+      assert(peekbyte($3000) == $55, "fill $55")
+
+      basic("10 DMAFILL 0,$3000,16,$FF")
+      run()
+      assert(peekbyte($3000) == $FF, "fill $FF")
+
+      basic("10 DMAFILL 0,$3000,16,$01")
+      run()
+      assert(peekbyte($3000) == $01, "fill $01")
+    }
+
+    test("dmacopy-cpu-to-cpu", "DMACOPY within CPU RAM") {
+      basic("10 FOR I=0 TO 7:POKE $2000+I,I+10:NEXT")
+      basic("20 DMACOPY 0,$2000,0,$3000,8")
+      run()
+      assert(peekbyte($3000) == 10, "byte 0 copied")
+      assert(peekbyte($3003) == 13, "byte 3 copied")
+      assert(peekbyte($3007) == 17, "byte 7 copied")
+    }
+
+    test("dmacopy-preserves-source", "DMACOPY does not modify source") {
+      basic("10 FOR I=0 TO 3:POKE $2000+I,I+100:NEXT")
+      basic("20 DMACOPY 0,$2000,0,$3000,4")
+      run()
+      assert(peekbyte($2000) == 100, "source byte 0 intact")
+      assert(peekbyte($2003) == 103, "source byte 3 intact")
+      assert(peekbyte($3000) == 100, "dest byte 0 copied")
+    }
+
+    test("dmafill-then-copy-verify", "DMAFILL then DMACOPY round-trip") {
+      basic("10 DMAFILL 0,$2000,64,$CC")
+      basic("20 DMACOPY 0,$2000,0,$3000,64")
+      run()
+      assert(peekbyte($3000) == $CC, "copied byte matches fill")
+      assert(peekbyte($303F) == $CC, "last copied byte matches")
+    }
+
+    test("dmastatus-after-fill", "DMASTATUS returns value after operation") {
+      basic("10 DMAFILL 0,$2000,16,$42")
+      basic("20 PRINT DMASTATUS")
+      run()
+      assert(screen_contains("Ready"), "dmastatus completed")
+    }
+
+    test("dmacopy-larger-block", "DMACOPY handles 1KB block") {
+      basic("10 FOR I=0 TO 255:POKE $2000+I,I:NEXT")
+      basic("20 DMACOPY 0,$2000,0,$3000,256")
+      run()
+      assert(peekbyte($3000) == 0, "first byte")
+      assert(peekbyte($30FF) == 255, "last byte")
+    }
+  }
+}

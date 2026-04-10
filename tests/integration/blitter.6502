@@ -1,0 +1,111 @@
+; Blitter Integration Tests — BLITFILL and BLITCOPY in CPU RAM
+; Run: sim6502 -s tests/integration/blitter.6502 --backend novavm
+
+suites {
+  suite("Blitter") {
+
+    test("blitfill-cpu-ram", "BLITFILL fills CPU RAM region") {
+      basic("10 BLITFILL 0,$2000,256,256,1,$AA")
+      run()
+      assert(peekbyte($2000) == $AA, "first byte filled")
+      assert(peekbyte($2080) == $AA, "middle byte filled")
+      assert(peekbyte($20FF) == $AA, "last byte filled")
+    }
+
+    test("blitfill-different-values", "BLITFILL with various fill values") {
+      basic("10 BLITFILL 0,$3000,256,16,1,$55")
+      run()
+      assert(peekbyte($3000) == $55, "fill $55")
+
+      basic("10 BLITFILL 0,$3000,256,16,1,$00")
+      run()
+      assert(peekbyte($3000) == $00, "fill $00")
+
+      basic("10 BLITFILL 0,$3000,256,16,1,$FF")
+      run()
+      assert(peekbyte($3000) == $FF, "fill $FF")
+    }
+
+    test("blitfill-stride", "BLITFILL respects stride") {
+      ; Clear target area first
+      basic("10 BLITFILL 0,$4000,256,256,1,$00")
+      ; Fill 4 wide, 2 high, stride 8 — should fill 4 bytes then skip 4
+      basic("20 BLITFILL 0,$4000,8,4,2,$BB")
+      run()
+      ; Row 0: bytes 0-3 filled, 4-7 not
+      assert(peekbyte($4000) == $BB, "row 0 col 0")
+      assert(peekbyte($4003) == $BB, "row 0 col 3")
+      assert(peekbyte($4004) == $00, "row 0 stride gap")
+      ; Row 1: bytes 8-11 filled
+      assert(peekbyte($4008) == $BB, "row 1 col 0")
+      assert(peekbyte($400B) == $BB, "row 1 col 3")
+    }
+
+    test("blitcopy-cpu-to-cpu", "BLITCOPY copies within CPU RAM") {
+      ; Setup source data
+      basic("10 FOR I=0 TO 7:POKE $2000+I,I+1:NEXT")
+      ; Copy 8 bytes from $2000 to $3000, stride=8, 8 wide, 1 high
+      basic("20 BLITCOPY 0,$2000,8,0,$3000,8,8,1")
+      run()
+      assert(peekbyte($3000) == 1, "byte 0 copied")
+      assert(peekbyte($3003) == 4, "byte 3 copied")
+      assert(peekbyte($3007) == 8, "byte 7 copied")
+    }
+
+    test("blitcopy-stride-gap", "BLITCOPY with different src/dst strides") {
+      ; Clear destination first, then copy with wider dst stride
+      basic("10 BLITFILL 0,$3000,256,16,1,$00")
+      basic("20 FOR I=0 TO 3:POKE $2000+I,I+1:NEXT")
+      ; Copy 4 wide, 1 high, src stride 4, dst stride 8
+      basic("30 BLITCOPY 0,$2000,4,0,$3000,8,4,1")
+      run()
+      assert(peekbyte($3000) == 1, "col 0")
+      assert(peekbyte($3003) == 4, "col 3")
+      assert(peekbyte($3004) == 0, "stride gap clean")
+    }
+
+    test("blitcopy-multi-row", "BLITCOPY handles multiple rows") {
+      ; Fill source: 2 rows of 4 bytes, stride 4
+      basic("10 FOR I=0 TO 7:POKE $2000+I,(I+1)*10:NEXT")
+      ; Copy 4 wide, 2 high
+      basic("20 BLITCOPY 0,$2000,4,0,$3000,4,4,2")
+      run()
+      assert(peekbyte($3000) == 10, "row 0 col 0")
+      assert(peekbyte($3003) == 40, "row 0 col 3")
+      assert(peekbyte($3004) == 50, "row 1 col 0")
+      assert(peekbyte($3007) == 80, "row 1 col 3")
+    }
+
+    test("blitfill-then-copy-verify", "BLITFILL then BLITCOPY round-trip") {
+      basic("10 BLITFILL 0,$2000,256,32,1,$CC")
+      basic("20 BLITCOPY 0,$2000,256,0,$3000,256,32,1")
+      run()
+      assert(peekbyte($3000) == $CC, "copied byte matches fill")
+      assert(peekbyte($301F) == $CC, "last copied byte matches")
+    }
+
+    test("blitstatus-after-fill", "BLITSTATUS returns value after operation") {
+      basic("10 BLITFILL 0,$2000,256,16,1,$42")
+      basic("20 PRINT BLITSTATUS")
+      run()
+      assert(screen_contains("Ready"), "blitstatus completed")
+    }
+
+    test("blitfill-large-block", "BLITFILL handles 1KB contiguous fill") {
+      basic("10 BLITFILL 0,$2000,1024,1024,1,$EE")
+      run()
+      assert(peekbyte($2000) == $EE, "first byte")
+      assert(peekbyte($23FF) == $EE, "last byte at $23FF")
+    }
+
+    test("blitcopy-overlapping-forward", "BLITCOPY with overlapping src/dst forward") {
+      ; Fill source, then copy overlapping forward
+      basic("10 FOR I=0 TO 15:POKE $2000+I,I+1:NEXT")
+      basic("20 BLITCOPY 0,$2000,16,0,$2008,16,8,1")
+      run()
+      ; First 8 bytes of source copied to $2008
+      assert(peekbyte($2008) == 1, "overlap byte 0")
+      assert(peekbyte($200F) == 8, "overlap byte 7")
+    }
+  }
+}

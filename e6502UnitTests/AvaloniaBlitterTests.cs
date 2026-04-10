@@ -135,9 +135,7 @@ public class AvaloniaBlitterTests
             srcStride: 1,
             dstStride: 1);
 
-        Assert.AreEqual(VgcConstants.BltStatusBusy, bus.Read((ushort)VgcConstants.BltStatus));
-        Assert.AreEqual(0, GetBlitCount(bus));
-        RunUntilBlitNotBusy(bus);
+        // Blitter completes synchronously (emulates RDY stall)
         Assert.AreEqual(VgcConstants.BltStatusOk, bus.Read((ushort)VgcConstants.BltStatus));
     }
 

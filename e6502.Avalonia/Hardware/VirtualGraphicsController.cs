@@ -1548,8 +1548,8 @@ public class VirtualGraphicsController
 
     protected virtual void HandleCharOut(byte data)
     {
-        int cx = _regs[VgcConstants.RegCursorX - VgcConstants.VgcBase];
-        int cy = _regs[VgcConstants.RegCursorY - VgcConstants.VgcBase];
+        int cx = Math.Min((int)_regs[VgcConstants.RegCursorX - VgcConstants.VgcBase], VgcConstants.ScreenCols - 1);
+        int cy = Math.Min((int)_regs[VgcConstants.RegCursorY - VgcConstants.VgcBase], VgcConstants.ScreenRows - 1);
 
         switch (data)
         {

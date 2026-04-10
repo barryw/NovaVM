@@ -211,6 +211,9 @@ public sealed class EmulatorTcpServer : IDisposable
                 "tile_collision" => CmdTileCollision(),
                 "tile_save" => CmdTileSave(req),
                 "tile_load" => CmdTileLoad(req),
+                // Integration test commands
+                "run_cycles" => CmdRunCycles(req),
+                "watch" => CmdWatch(req),
                 // Debugger commands
                 "dbg_state" => CmdDbgState(),
                 "dbg_pause" => CmdDbgPause(),
@@ -1201,6 +1204,46 @@ public sealed class EmulatorTcpServer : IDisposable
     {
         _bus.MidiPlayback.Stop();
         return Ok();
+    }
+
+    // ── Integration test commands ─────────────────────────────────────────
+
+    private string CmdRunCycles(JsonNode req)
+    {
+        int? cycles = req["cycles"]?.GetValue<int>();
+        if (cycles is null) return Error("Missing 'cycles'");
+        if (cycles.Value <= 0) return Error("'cycles' must be positive");
+
+        var (state, executed) = _debugger.RunCycles(cycles.Value);
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["cycles_executed"] = executed,
+            ["a"] = state.A, ["x"] = state.X, ["y"] = state.Y, ["sp"] = state.Sp, ["pc"] = state.Pc,
+            ["nf"] = state.Nf, ["vf"] = state.Vf, ["df"] = state.Df, ["if"] = state.If, ["zf"] = state.Zf, ["cf"] = state.Cf,
+            ["paused"] = true
+        };
+        return result.ToJsonString();
+    }
+
+    private string CmdWatch(JsonNode req)
+    {
+        int? address = req["address"]?.GetValue<int>();
+        if (address is null) return Error("Missing 'address'");
+        int? value = req["value"]?.GetValue<int>();
+        if (value is null) return Error("Missing 'value'");
+        int timeoutMs = req["timeout_ms"]?.GetValue<int>() ?? 5000;
+
+        var (matched, finalValue) = _debugger.WatchMemory((ushort)address.Value, (byte)value.Value, timeoutMs);
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["matched"] = matched,
+            ["address"] = address.Value,
+            ["expected"] = value.Value,
+            ["actual"] = finalValue
+        };
+        return result.ToJsonString();
     }
 
     // ── Debugger commands ──────────────────────────────────────────────────

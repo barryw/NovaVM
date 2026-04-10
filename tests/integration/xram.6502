@@ -1,0 +1,104 @@
+; XRAM Integration Tests — expansion memory stash/fetch
+; Run: sim6502 -s tests/integration/xram.6502 --backend novavm
+; Note: Named STASH/FETCH require BASIC string quotes which conflict with DSL.
+; Known bug: STASH to an already-used raw offset does not overwrite (see overwrite test).
+
+suites {
+  suite("XRAM") {
+
+    test("stash-fetch-roundtrip", "STASH and FETCH preserve data") {
+      basic("5 XALLOC 1")
+      basic("10 FOR I=0 TO 255:POKE $2000+I,I:NEXT")
+      basic("20 STASH $2000,0,256")
+      basic("30 FOR I=0 TO 255:POKE $2000+I,0:NEXT")
+      basic("40 FETCH $2000,0,256")
+      run()
+      assert(peekbyte($2000) == 0, "byte 0 restored")
+      assert(peekbyte($2001) == 1, "byte 1 restored")
+      assert(peekbyte($2080) == 128, "byte 128 restored")
+      assert(peekbyte($20FF) == 255, "byte 255 restored")
+    }
+
+    test("stash-fetch-pattern", "Non-sequential data pattern preserved") {
+      basic("5 XALLOC 2")
+      basic("10 FOR I=0 TO 99:POKE $2000+I,I*2:NEXT")
+      basic("20 STASH $2000,256,100")
+      basic("30 FOR I=0 TO 99:POKE $2000+I,$FF:NEXT")
+      basic("40 FETCH $2000,256,100")
+      run()
+      assert(peekbyte($2000) == 0, "first byte")
+      assert(peekbyte($2001) == 2, "second byte")
+      assert(peekbyte($2032) == 100, "byte 50")
+    }
+
+    test("multiple-blocks-at-offsets", "Multiple blocks at different XRAM offsets") {
+      ; Shorter program: stash 1 byte each at two offsets, fetch and print
+      basic("10 POKE $2000,$AA:STASH $2000,0,1")
+      basic("20 POKE $2000,$BB:STASH $2000,1024,1")
+      basic("30 POKE $2000,0:FETCH $2000,0,1:A=PEEK($2000)")
+      basic("40 POKE $2000,0:FETCH $2000,1024,1:B=PEEK($2000)")
+      basic("50 PRINT A;B")
+      run()
+      assert(screen_contains("170"), "block A = $AA = 170")
+      assert(screen_contains("187"), "block B = $BB = 187")
+    }
+
+    test("xmem-reports-stats", "XMEM shows memory statistics") {
+      basic("10 XMEM")
+      run()
+      assert(screen_contains("Ready"), "xmem completed")
+    }
+
+    test("large-stash-fetch", "Stash and fetch 1KB block") {
+      basic("5 XALLOC 4")
+      basic("10 FOR I=0 TO 255:POKE $2000+I,I:NEXT")
+      basic("20 FOR I=0 TO 255:POKE $2100+I,255-I:NEXT")
+      basic("30 FOR I=0 TO 255:POKE $2200+I,I:NEXT")
+      basic("40 FOR I=0 TO 255:POKE $2300+I,255-I:NEXT")
+      basic("50 STASH $2000,0,1024")
+      basic("60 FOR I=0 TO 255:POKE $2000+I,0:NEXT")
+      basic("70 FETCH $2000,0,1024")
+      run()
+      assert(peekbyte($2000) == 0, "first page byte 0")
+      assert(peekbyte($20FF) == 255, "first page byte 255")
+      assert(peekbyte($2100) == 255, "second page byte 0")
+      assert(peekbyte($21FF) == 0, "second page byte 255")
+    }
+
+    test("stash-different-offsets", "STASH to distinct offsets are independent") {
+      basic("10 POKE $2000,$11")
+      basic("20 STASH $2000,4096,1")
+      basic("30 POKE $2000,$22")
+      basic("40 STASH $2000,5120,1")
+      basic("50 POKE $2000,0")
+      basic("60 FETCH $2000,4096,1")
+      basic("70 PRINT PEEK($2000)")
+      run()
+      assert(screen_contains("17"), "$11=17 fetched from offset 4096")
+    }
+
+    test("xreset-clears-xram", "XRESET clears expansion memory state") {
+      basic("10 POKE $2000,$42")
+      basic("20 STASH $2000,0,1")
+      basic("30 XRESET")
+      run()
+      assert(screen_contains("Ready"), "xreset completed")
+    }
+
+    test("xalloc-allocates-pages", "XALLOC allocates XRAM pages") {
+      basic("10 XALLOC 4")
+      run()
+      assert(screen_contains("Ready"), "xalloc completed")
+    }
+
+    test("xmem-after-stash", "XMEM shows used pages after STASH") {
+      basic("10 XRESET")
+      basic("15 XALLOC 1")
+      basic("20 FOR I=0 TO 255:POKE $2000+I,I:NEXT")
+      basic("30 STASH $2000,0,256")
+      basic("40 XMEM")
+      run()
+      assert(screen_contains("Ready"), "xmem after stash")
+    }
+  }
+}

@@ -382,7 +382,7 @@ public class EhBasicTokenizationTests
 
         // Use debugger to break at LAB_SNER (syntax error handler)
         var debugger = new e6502.Avalonia.Debugging.DebuggerService(cpu, bus);
-        const ushort LAB_SNER = 0xCE0E;
+        const ushort LAB_SNER = 0xCDC4;
         debugger.AddBreakpoint(LAB_SNER, null);
 
         // RUN with cycle-driven device ticking to match runtime scheduling.
@@ -1527,6 +1527,80 @@ public class EhBasicTokenizationTests
         Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 240)));
         Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 241)));
 
+    }
+
+    [TestMethod]
+    public void AvaloniaRomCopperClearRunsWithoutSyntaxError()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "10 COPPER CLEAR");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "20 COPPER ADD 0,50,1,6");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "30 COPPER ON");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "40 COPPER OFF");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        // Dump tokenized lines before RUN
+        string hex10 = DumpLineHex(bus, 10);
+        string hex20 = DumpLineHex(bus, 20);
+        string hex30 = DumpLineHex(bus, 30);
+        string hex40 = DumpLineHex(bus, 40);
+
+        // Break at syntax error handler
+        const ushort LAB_SNER = 0xCDC4;
+        const ushort LAB_15D9 = 0xC59A;
+
+        EnterLine(editor, "RUN");
+        for (int i = 0; i < 100_000_000; i++)
+        {
+            int cycles = cpu.ClocksForNext();
+            cpu.ExecuteNext();
+            bus.AdvanceCycles(cycles);
+            var state = cpu.GetState();
+            if (state.Pc == LAB_SNER || state.Pc == LAB_15D9)
+            {
+                ushort bp = (ushort)(bus.Read(0xC3) | (bus.Read(0xC4) << 8));
+                string nearBp = string.Join(" ", Enumerable.Range(-5, 16)
+                    .Select(off => bus.Read((ushort)(bp + off)).ToString("X2")));
+
+                // Show current byte and next few bytes
+                byte curByte = bus.Read(bp);
+                string curByteInfo = $"CurByte=${curByte:X2} ('{(curByte >= 0x20 && curByte <= 0x7E ? (char)curByte : '?')}')";
+
+                var stackBytes = new List<string>();
+                for (int s = state.Sp + 1; s <= 0xFF && stackBytes.Count < 20; s++)
+                    stackBytes.Add(bus.Read((ushort)(0x100 + s)).ToString("X2"));
+
+                Assert.Fail($"Syntax error at cycle {i}!\n" +
+                    $"PC=${state.Pc:X4} A=${state.A:X2} X=${state.X:X2} Y=${state.Y:X2} SP=${state.Sp:X2}\n" +
+                    $"Bpntr=${bp:X4} {curByteInfo}\n" +
+                    $"Near Bpntr: [{nearBp}]\n" +
+                    $"Stack: {string.Join(" ", stackBytes)}\n" +
+                    $"{hex10}\n{hex20}\n{hex30}\n{hex40}\n" +
+                    SnapshotScreen(bus.Vgc));
+            }
+
+            // Check for "Ready" to know program finished
+            if ((i & 0xFFF) == 0)
+            {
+                string scr = SnapshotScreen(bus.Vgc);
+                if (scr.Contains("Ready", StringComparison.Ordinal) && !scr.Contains("Syntax Error", StringComparison.Ordinal))
+                    return; // success
+                if (scr.Contains("Syntax Error", StringComparison.Ordinal))
+                    Assert.Fail($"Syntax error on screen (breakpoint missed).\n{hex10}\n{hex20}\n{hex30}\n{hex40}\n{scr}");
+            }
+        }
+
+        Assert.Fail($"Timed out.\n{SnapshotScreen(bus.Vgc)}");
     }
 
     private static string BuildRandomStressLine(Random rng, int i)
