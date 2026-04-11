@@ -15,8 +15,9 @@ clone:
 steps:
   - name: check-commits
     image: ghcr.io/barryw/novavm-ci:2
+    failure: ignore
     commands:
-      - cog check || echo "cog check failed (may need initial tag) — continuing"
+      - cog check
 
   - name: build-and-test
     image: ghcr.io/barryw/novavm-ci:2
