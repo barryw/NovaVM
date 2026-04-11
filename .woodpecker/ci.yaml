@@ -13,15 +13,10 @@ clone:
       tags: true
 
 steps:
-  - name: check-commits
-    image: ghcr.io/barryw/novavm-ci:2
-    failure: ignore
-    commands:
-      - cog check
-
   - name: build-and-test
     image: ghcr.io/barryw/novavm-ci:2
     commands:
+      - cog check || true
       - dotnet workload install wasm-tools
       - dotnet build -c Release
       - dotnet test -c Release --verbosity normal
