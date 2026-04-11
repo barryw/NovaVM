@@ -1,6 +1,7 @@
-// Top-level: 6502 CPU + VGC + Blitter + 64KB RAM + 512KB XRAM
+// Top-level: 6502 CPU + VGC + Blitter + SID + 64KB RAM + 512KB XRAM
 // VGC snoops bus for register/charout writes, generates video
 // Blitter performs 2D DMA across all memory spaces, stalls CPU via RDY
+// SID: dual 6581/8580 sound chips, runtime model select via $D440
 // XMC bank switching: 4×256-byte windows at $BC00-$BFFF into 512KB XRAM
 
 module top (
@@ -21,6 +22,10 @@ module top (
     output logic        vid_hsync,
     output logic        vid_vsync,
     output logic        vid_de,
+
+    // Audio output (signed 18-bit, active each frame)
+    output logic signed [17:0] audio_l,
+    output logic signed [17:0] audio_r,
 
     // Debug/simulation interface
     input  logic        dbg_peek_en,
@@ -51,6 +56,13 @@ module top (
     localparam XMC_REG_END  = 16'hBA3F;
     localparam XMC_WIN_BASE = 16'hBC00;  // 4×256-byte windows
     localparam XMC_WIN_END  = 16'hBFFF;
+
+    // SID address map
+    localparam SID1_BASE    = 16'hD400;  // SID 1 registers $D400-$D41F
+    localparam SID1_END     = 16'hD41F;
+    localparam SID2_BASE    = 16'hD420;  // SID 2 registers $D420-$D43F
+    localparam SID2_END     = 16'hD43F;
+    localparam SID_CFG      = 16'hD440;  // SID config: bit0=SID1 mode, bit1=SID2 mode
 
     // CPU bus
     wire [15:0] cpu_addr;
@@ -120,6 +132,9 @@ module top (
     // =========================================================================
     wire cpu_in_rom = (cpu_addr >= ROM_BASE);
     wire blt_reg_sel = (cpu_addr >= 16'hBA83 && cpu_addr <= 16'hBA9B);
+    wire sid1_reg_sel = (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
+    wire sid2_reg_sel = (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
+    wire sid_cfg_sel  = (cpu_addr == SID_CFG);
 
     always_ff @(posedge clk) begin
         if (xmc_win_sel && xmc_win_enabled)
@@ -130,6 +145,12 @@ module top (
             cpu_din <= xmc_regs[xmc_reg_off];
         else if (blt_reg_sel)
             cpu_din <= blt_cpu_rdata;
+        else if (sid1_reg_sel)
+            cpu_din <= sid1_dout;
+        else if (sid2_reg_sel)
+            cpu_din <= sid2_dout;
+        else if (sid_cfg_sel)
+            cpu_din <= sid_cfg_reg;
         else if (cpu_in_rom)
             cpu_din <= ext_rom_active ? ext_rom[cpu_addr - ROM_BASE]
                                      : basic_rom[cpu_addr - ROM_BASE];
@@ -233,6 +254,67 @@ module top (
     );
 
     // =========================================================================
+    // SID — dual 6581/8580 sound chips
+    // =========================================================================
+
+    // ~1 MHz clock enable from pixel clock: 25.175 MHz / 25 ≈ 1.007 MHz
+    logic [4:0] sid_clk_div;
+    logic       sid_ce_1m;
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            sid_clk_div <= 0;
+            sid_ce_1m   <= 0;
+        end else begin
+            sid_ce_1m <= (sid_clk_div == 5'd24);
+            sid_clk_div <= (sid_clk_div == 5'd24) ? 5'd0 : sid_clk_div + 1'd1;
+        end
+    end
+
+    // SID config register ($D440): bit 0 = SID1 mode, bit 1 = SID2 mode
+    // 0 = MOS 6581, 1 = MOS 8580
+    logic [7:0] sid_cfg_reg;
+    always_ff @(posedge clk) begin
+        if (rst)
+            sid_cfg_reg <= 8'h00;  // default: both chips = 6581
+        else if (cpu_we && cpu_addr == SID_CFG)
+            sid_cfg_reg <= cpu_dout;
+    end
+
+    // Chip select and address decode
+    wire sid1_cs = cpu_we && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
+    wire sid2_cs = cpu_we && (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
+    wire sid1_rd = !cpu_we && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
+    wire sid2_rd = !cpu_we && (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
+
+    wire [7:0] sid1_dout, sid2_dout;
+
+    sid_chip sid1_inst (
+        .clk        (clk),
+        .rst        (rst),
+        .ce_1m      (sid_ce_1m),
+        .mode       (sid_cfg_reg[0]),
+        .cs         (sid1_cs),
+        .we         (1'b1),
+        .addr       (cpu_addr[4:0]),
+        .din        (cpu_dout),
+        .dout       (sid1_dout),
+        .audio_out  (audio_l)
+    );
+
+    sid_chip sid2_inst (
+        .clk        (clk),
+        .rst        (rst),
+        .ce_1m      (sid_ce_1m),
+        .mode       (sid_cfg_reg[1]),
+        .cs         (sid2_cs),
+        .we         (1'b1),
+        .addr       (cpu_addr[4:0]),
+        .din        (cpu_dout),
+        .dout       (sid2_dout),
+        .audio_out  (audio_r)
+    );
+
+    // =========================================================================
     // CPU
     // =========================================================================
     cpu cpu_inst (
@@ -294,13 +376,19 @@ module top (
     // Debug/simulation interface
     // =========================================================================
 
-    // Peek: route through VGC for VGC-owned addresses, ROM banks for ROM space, RAM otherwise
+    // Peek: route through VGC, SID, ROM banks, or RAM
     // Mirrors Avalonia CompositeBusDevice routing
     assign vgc_dbg_owns = vgc_inst.dbg_owns;
     wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
+    wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
+    wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
+    wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
     wire [7:0] dbg_rom_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
                                              : basic_rom[dbg_peek_addr - ROM_BASE];
     assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns ? vgc_dbg_rdata :
+                                          dbg_sid1     ? sid1_dout     :
+                                          dbg_sid2     ? sid2_dout     :
+                                          dbg_sidcfg   ? sid_cfg_reg   :
                                           dbg_in_rom   ? dbg_rom_data  :
                                                           ram[dbg_peek_addr]) : 8'h00;
 

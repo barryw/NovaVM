@@ -21,6 +21,7 @@ steps:
   - name: build-and-test
     image: ghcr.io/barryw/novavm-ci:2
     commands:
+      - dotnet workload install wasm-tools
       - dotnet build -c Release
       - dotnet test -c Release --verbosity normal
 

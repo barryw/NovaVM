@@ -15,8 +15,10 @@ RTL   = ../rtl
 BD    = build
 
 VGC   = $(RTL)/vgc.sv $(RTL)/tile_engine.sv
+SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.sv \
+        $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_tile_engine test_blitter
+TESTS = test_copper test_copper_lists test_gtext test_tile_engine test_blitter test_sid
 
 .PHONY: all clean $(TESTS) run
 
@@ -40,6 +42,9 @@ test_tile_engine: test_tile_engine.sv $(RTL)/tile_engine.sv
 
 test_blitter: test_blitter.sv $(RTL)/blitter.sv
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/blitter.sv $< && $(RUN) test/$(BD)/$@/$@
+
+test_sid: test_sid.sv $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) $< && $(RUN) test/$(BD)/$@/$@
 
 clean:
 	rm -rf $(BD)

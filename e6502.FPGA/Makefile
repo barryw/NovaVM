@@ -1,5 +1,8 @@
 PROJ     = e6502_sim
-RTL      = rtl/top.sv rtl/vgc.sv rtl/tile_engine.sv rtl/blitter.sv rtl/arlet_6502/cpu.v rtl/arlet_6502/ALU.v
+RTL      = rtl/top.sv rtl/vgc.sv rtl/tile_engine.sv rtl/blitter.sv \
+           rtl/sid/sid_chip.sv rtl/sid/sid_voice.sv rtl/sid/sid_envelope.sv \
+           rtl/sid/sid_filter.sv rtl/sid/sid_tables.sv rtl/sid/sid_dac.sv \
+           rtl/arlet_6502/cpu.v rtl/arlet_6502/ALU.v
 SIM_SRC  = sim/sim_main.cpp
 ROM_BIN  = rom/ehbasic.bin
 ROM_HEX  = rom/ehbasic.hex
@@ -12,7 +15,7 @@ VFLAGS    = --cc --exe --build -Wall \
             -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND \
             -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-CASEINCOMPLETE \
             -Wno-PROCASSINIT -Wno-CASEX -Wno-SYNCASYNCNET -Wno-UNOPTFLAT -Wno-LATCH \
-            -Wno-PINCONNECTEMPTY \
+            -Wno-PINCONNECTEMPTY -Wno-IMPLICITSTATIC -Wno-SELRANGE \
             --top-module top \
             -CFLAGS "-O2 -DSIM $(shell sdl2-config --cflags)" \
             -LDFLAGS "$(shell sdl2-config --libs)" \

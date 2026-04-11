@@ -1,0 +1,200 @@
+; SID Integration Tests — register access, tone generation, dual SID, model switching
+; Run: sim6502 -s tests/integration/sid.6502 --backend novavm
+;   or: sim6502 -s tests/integration/sid.6502 --backend verilator
+;
+; Tests verify SID register read/write through PEEK/POKE and BASIC SOUND/VOLUME commands.
+; SID1 at $D400-$D41F, SID2 at $D420-$D43F, config at $D440.
+
+suites {
+  suite("SID Registers") {
+
+    test("sid1-freq-write", "Write and read back SID1 voice 1 frequency") {
+      basic("10 POKE $D400,$37")
+      basic("20 POKE $D401,$1C")
+      basic("30 PRINT PEEK($D400)")
+      basic("40 PRINT PEEK($D401)")
+      run()
+      assert(screen_contains("55"), "freq lo $37 = 55 decimal")
+      assert(screen_contains("28"), "freq hi $1C = 28 decimal")
+    }
+
+    test("sid1-master-volume", "Write and read SID1 master volume register") {
+      basic("10 POKE $D418,$0F")
+      basic("20 PRINT PEEK($D418)")
+      run()
+      assert(screen_contains("15"), "master volume $0F = 15")
+    }
+
+    test("sid2-freq-write", "Write and read back SID2 voice 1 frequency") {
+      basic("10 POKE $D420,$AB")
+      basic("20 POKE $D421,$CD")
+      basic("30 PRINT PEEK($D420)")
+      basic("40 PRINT PEEK($D421)")
+      run()
+      assert(screen_contains("171"), "freq lo $AB = 171 decimal")
+      assert(screen_contains("205"), "freq hi $CD = 205 decimal")
+    }
+
+    test("sid1-sid2-independent", "SID1 and SID2 registers are independent") {
+      basic("10 POKE $D400,$AA")
+      basic("20 POKE $D420,$55")
+      basic("30 PRINT PEEK($D400)")
+      basic("40 PRINT PEEK($D420)")
+      run()
+      assert(screen_contains("170"), "SID1 freq lo = $AA = 170")
+      assert(screen_contains("85"), "SID2 freq lo = $55 = 85")
+    }
+
+    test("sid-per-voice-volume", "Per-voice volume extension registers") {
+      basic("10 POKE $D41D,7")
+      basic("20 PRINT PEEK($D41D)")
+      run()
+      assert(screen_contains("7"), "voice 1 volume set to 7")
+    }
+
+    test("sid-filter-registers", "Filter cutoff and resonance write") {
+      basic("10 POKE $D415,7")
+      basic("20 POKE $D416,$80")
+      basic("30 POKE $D417,$F1")
+      basic("40 PRINT PEEK($D415)")
+      basic("50 PRINT PEEK($D416)")
+      basic("60 PRINT PEEK($D417)")
+      run()
+      assert(screen_contains("7"), "filter cutoff lo")
+      assert(screen_contains("128"), "filter cutoff hi")
+      assert(screen_contains("241"), "resonance + filter route")
+    }
+  }
+
+  suite("SID Model Select") {
+
+    test("sid-config-default", "Config register defaults to 0 (both 6581)") {
+      basic("10 PRINT PEEK($D440)")
+      run()
+      assert(screen_contains("0"), "default model = 6581 for both")
+    }
+
+    test("sid-config-write", "Write config to select 8580 for SID1") {
+      basic("10 POKE $D440,1")
+      basic("20 PRINT PEEK($D440)")
+      run()
+      assert(screen_contains("1"), "SID1 set to 8580")
+    }
+
+    test("sid-config-both-8580", "Set both SIDs to 8580 mode") {
+      basic("10 POKE $D440,3")
+      basic("20 PRINT PEEK($D440)")
+      run()
+      assert(screen_contains("3"), "both SIDs set to 8580")
+    }
+  }
+
+  suite("SID Sound Generation") {
+
+    test("sound-basic-note", "SOUND command plays a note without error") {
+      basic("10 VOLUME 12")
+      basic("20 SOUND 60,15")
+      run()
+      assert(screen_contains("Ready"), "SOUND completed")
+    }
+
+    test("sound-multiple-notes", "Play a sequence of notes") {
+      basic("10 VOLUME 12")
+      basic("20 SOUND 60,10")
+      basic("30 SOUND 64,10")
+      basic("40 SOUND 67,10")
+      basic("50 SOUND 72,10")
+      run()
+      assert(screen_contains("Ready"), "note sequence completed")
+    }
+
+    test("volume-command", "VOLUME sets master volume register") {
+      basic("10 VOLUME 8")
+      run()
+      assert(screen_contains("Ready"), "VOLUME completed")
+    }
+
+    test("sound-with-instrument", "SOUND with instrument preset") {
+      basic("10 VOLUME 12")
+      basic("20 INSTRUMENT 0,$21,0,$F0")
+      basic("30 SOUND 69,15,0")
+      run()
+      assert(screen_contains("Ready"), "instrument sound completed")
+    }
+
+    test("sound-all-waveforms", "Play notes with each waveform type") {
+      basic("10 VOLUME 12")
+      basic("20 INSTRUMENT 0,$11,0,$F0")
+      basic("30 SOUND 60,10,0")
+      basic("40 INSTRUMENT 1,$21,0,$F0")
+      basic("50 SOUND 60,10,1")
+      basic("60 INSTRUMENT 2,$41,0,$F0")
+      basic("70 SOUND 60,10,2")
+      basic("80 INSTRUMENT 3,$81,0,$F0")
+      basic("90 SOUND 60,10,3")
+      run()
+      assert(screen_contains("Ready"), "all waveforms played")
+    }
+
+    test("poke-sawtooth-tone", "Direct POKE to SID produces a tone") {
+      basic("10 POKE $D418,15")
+      basic("20 POKE $D400,$37")
+      basic("30 POKE $D401,$1C")
+      basic("40 POKE $D405,0")
+      basic("50 POKE $D406,$F0")
+      basic("60 POKE $D404,$21")
+      basic("70 FOR I=0 TO 500:NEXT")
+      basic("80 POKE $D404,$20")
+      run()
+      assert(screen_contains("Ready"), "direct SID POKE completed")
+    }
+
+    test("poke-dual-sid-chord", "Play different tones on both SIDs") {
+      basic("10 POKE $D418,15")
+      basic("20 POKE $D438,15")
+      basic("30 POKE $D400,$37:POKE $D401,$1C")
+      basic("40 POKE $D405,0:POKE $D406,$F0")
+      basic("50 POKE $D404,$21")
+      basic("60 POKE $D420,$8F:POKE $D421,$08")
+      basic("70 POKE $D425,0:POKE $D426,$F0")
+      basic("80 POKE $D42B,$11")
+      basic("90 FOR I=0 TO 500:NEXT")
+      basic("100 POKE $D404,$20:POKE $D42B,$10")
+      run()
+      assert(screen_contains("Ready"), "dual SID chord completed")
+    }
+  }
+
+  suite("SID Multi-Voice") {
+
+    test("three-voice-chord", "Three voices via direct POKE") {
+      basic("10 POKE $D418,15")
+      basic("20 POKE $D400,$37:POKE $D401,$1C")
+      basic("30 POKE $D405,0:POKE $D406,$F0")
+      basic("40 POKE $D404,$21")
+      basic("50 POKE $D407,$8F:POKE $D408,$23")
+      basic("60 POKE $D40C,0:POKE $D40D,$F0")
+      basic("70 POKE $D40B,$21")
+      basic("80 POKE $D40E,$AB:POKE $D40F,$2B")
+      basic("90 POKE $D413,0:POKE $D414,$F0")
+      basic("100 POKE $D412,$21")
+      basic("110 FOR I=0 TO 500:NEXT")
+      basic("120 POKE $D404,$20:POKE $D40B,$20:POKE $D412,$20")
+      run()
+      assert(screen_contains("Ready"), "three-voice chord completed")
+    }
+
+    test("rapid-note-sequence", "Rapid SID frequency changes") {
+      basic("10 POKE $D418,15")
+      basic("20 POKE $D405,0:POKE $D406,$F0")
+      basic("30 POKE $D404,$21")
+      basic("40 FOR N=16 TO 64 STEP 4")
+      basic("50 POKE $D401,N")
+      basic("60 FOR I=0 TO 50:NEXT")
+      basic("70 NEXT N")
+      basic("80 POKE $D404,$20")
+      run()
+      assert(screen_contains("Ready"), "rapid note sequence completed")
+    }
+  }
+}

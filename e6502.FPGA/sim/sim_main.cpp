@@ -33,6 +33,62 @@ static uint32_t framebuf[DISP_W * DISP_H];
 static Vtop *top = nullptr;
 static std::queue<uint8_t> key_queue;
 
+// ── Audio ──
+// SID outputs signed 18-bit audio at ~1 MHz. We downsample to 44100 Hz
+// by averaging samples. Pixel clock / 44100 ≈ 570 clocks per audio sample.
+static const int AUDIO_RATE = 44100;
+static const int AUDIO_BUFSIZE = 2048;  // SDL audio buffer size in samples
+static const int PIX_PER_SAMPLE = 25175000 / AUDIO_RATE;  // ~570
+
+// Ring buffer for audio output (stereo interleaved int16)
+static const int AUDIO_RING_SIZE = 16384;
+static int16_t audio_ring[AUDIO_RING_SIZE * 2];  // stereo
+static volatile int audio_ring_rd = 0;
+static volatile int audio_ring_wr = 0;
+
+static void audio_callback(void*, Uint8 *stream, int len) {
+    int16_t *out = (int16_t*)stream;
+    int samples = len / 4;  // stereo int16 = 4 bytes per sample
+    for (int i = 0; i < samples; i++) {
+        int rd = audio_ring_rd;
+        if (rd != audio_ring_wr) {
+            out[i*2]   = audio_ring[rd*2];
+            out[i*2+1] = audio_ring[rd*2+1];
+            audio_ring_rd = (rd + 1) % AUDIO_RING_SIZE;
+        } else {
+            out[i*2] = 0;
+            out[i*2+1] = 0;
+        }
+    }
+}
+
+// Accumulator for downsampling
+static int32_t audio_acc_l = 0, audio_acc_r = 0;
+static int audio_acc_count = 0;
+
+static void audio_push_sample(int32_t left18, int32_t right18) {
+    // Sign-extend 18-bit to 32-bit
+    if (left18  & 0x20000) left18  |= ~0x3FFFF;
+    if (right18 & 0x20000) right18 |= ~0x3FFFF;
+    audio_acc_l += left18;
+    audio_acc_r += right18;
+    audio_acc_count++;
+    if (audio_acc_count >= PIX_PER_SAMPLE) {
+        int32_t avg_l = audio_acc_l / audio_acc_count;
+        int32_t avg_r = audio_acc_r / audio_acc_count;
+        // Scale 18-bit range to 16-bit
+        int16_t sl = (int16_t)(avg_l >> 2);
+        int16_t sr = (int16_t)(avg_r >> 2);
+        int next_wr = (audio_ring_wr + 1) % AUDIO_RING_SIZE;
+        if (next_wr != audio_ring_rd) {
+            audio_ring[audio_ring_wr*2]   = sl;
+            audio_ring[audio_ring_wr*2+1] = sr;
+            audio_ring_wr = next_wr;
+        }
+        audio_acc_l = audio_acc_r = audio_acc_count = 0;
+    }
+}
+
 // ── Key translation ──
 static int sdl_key_to_ascii(SDL_Keycode key, uint16_t mod) {
     bool shift = (mod & KMOD_SHIFT) != 0;
@@ -347,7 +403,15 @@ int main(int argc, char **argv) {
     int tcp_port=DEFAULT_TCP_PORT;
     for (int i=1;i<argc;i++) if (strcmp(argv[i],"--port")==0&&i+1<argc) tcp_port=atoi(argv[++i]);
 
-    if (SDL_Init(SDL_INIT_VIDEO)<0) { fprintf(stderr,"SDL init failed: %s\n",SDL_GetError()); return 1; }
+    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO)<0) { fprintf(stderr,"SDL init failed: %s\n",SDL_GetError()); return 1; }
+
+    // Init audio
+    SDL_AudioSpec want={}, have={};
+    want.freq=AUDIO_RATE; want.format=AUDIO_S16SYS; want.channels=2;
+    want.samples=AUDIO_BUFSIZE; want.callback=audio_callback;
+    SDL_AudioDeviceID audio_dev=SDL_OpenAudioDevice(NULL,0,&want,&have,0);
+    if (audio_dev>0) { SDL_PauseAudioDevice(audio_dev,0); fprintf(stderr,"Audio: %dHz stereo\n",have.freq); }
+    else fprintf(stderr,"Audio init failed: %s\n",SDL_GetError());
     SDL_Window *win=SDL_CreateWindow("e6502 FPGA",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,DISP_W*SCALE,DISP_H*SCALE,SDL_WINDOW_SHOWN);
     SDL_Renderer *ren=SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
     SDL_RenderSetLogicalSize(ren,DISP_W,DISP_H);
@@ -372,6 +436,7 @@ int main(int argc, char **argv) {
 
         for (int i=0;i<FRAME_CLKS;i++) {
             step_clock();
+            audio_push_sample(top->audio_l, top->audio_r);
             if (top->vid_de) {
                 int dy=v_pos-V_BORDER;
                 if (h_pos<DISP_W&&dy>=0&&dy<DISP_H) {
@@ -407,7 +472,9 @@ int main(int argc, char **argv) {
         SDL_UpdateTexture(tex,NULL,framebuf,DISP_W*sizeof(uint32_t));
         SDL_RenderClear(ren);SDL_RenderCopy(ren,tex,NULL,NULL);SDL_RenderPresent(ren);
     }
-    tcp_cleanup();delete top;
+    tcp_cleanup();
+    if (audio_dev>0) SDL_CloseAudioDevice(audio_dev);
+    delete top;
     SDL_DestroyTexture(tex);SDL_DestroyRenderer(ren);SDL_DestroyWindow(win);SDL_Quit();
     return 0;
 }
