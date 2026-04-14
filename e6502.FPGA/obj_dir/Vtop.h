@@ -12,6 +12,8 @@
 
 class Vtop__Syms;
 class Vtop___024root;
+class Vtop_sid_chip;
+
 
 // This class is the main interface to the Verilated model
 class alignas(VL_CACHE_LINE_BYTES) Vtop VL_NOT_FINAL : public VerilatedModel {
@@ -53,10 +55,14 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop VL_NOT_FINAL : public VerilatedModel {
     VL_IN16(&dbg_peek_addr,15,0);
     VL_IN16(&dbg_poke_addr,15,0);
     VL_OUT16(&dbg_cpu_pc,15,0);
+    VL_OUT(&audio_l,17,0);
+    VL_OUT(&audio_r,17,0);
 
     // CELLS
     // Public to allow access to /* verilator public */ items.
     // Otherwise the application code can consider these internals.
+    Vtop_sid_chip* const __PVT__top__DOT__sid1_inst;
+    Vtop_sid_chip* const __PVT__top__DOT__sid2_inst;
 
     // Root instance pointer to allow access to model internals,
     // including inlined /* verilator public_flat_* */ items.

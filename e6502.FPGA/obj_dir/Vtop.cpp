@@ -34,6 +34,10 @@ Vtop::Vtop(VerilatedContext* _vcontextp__, const char* _vcname__)
     , dbg_peek_addr{vlSymsp->TOP.dbg_peek_addr}
     , dbg_poke_addr{vlSymsp->TOP.dbg_poke_addr}
     , dbg_cpu_pc{vlSymsp->TOP.dbg_cpu_pc}
+    , audio_l{vlSymsp->TOP.audio_l}
+    , audio_r{vlSymsp->TOP.audio_r}
+    , __PVT__top__DOT__sid1_inst{vlSymsp->TOP.__PVT__top__DOT__sid1_inst}
+    , __PVT__top__DOT__sid2_inst{vlSymsp->TOP.__PVT__top__DOT__sid2_inst}
     , rootp{&(vlSymsp->TOP)}
 {
     // Register model with the context

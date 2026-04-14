@@ -6,5 +6,6 @@ Vtop.o: /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop__pch.h \
   /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_funcs.h \
   /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop__Syms.h \
   /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop.h \
-  /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop___024root.h Vtop.cpp \
+  /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop___024root.h \
+  /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop_sid_chip.h Vtop.cpp \
   Vtop__pch.h

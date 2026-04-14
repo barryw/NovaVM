@@ -4,4 +4,4 @@ Vtop__pch.h.fast.gch: Vtop__pch.h \
   /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilatedos.h \
   /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_types.h \
   /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_funcs.h \
-  Vtop__Syms.h Vtop.h Vtop___024root.h
+  Vtop__Syms.h Vtop.h Vtop___024root.h Vtop_sid_chip.h

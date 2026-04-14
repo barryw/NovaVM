@@ -6,12 +6,16 @@
 #define VERILATED_VTOP___024ROOT_H_  // guard
 
 #include "verilated.h"
+class Vtop_sid_chip;
 
 
 class Vtop__Syms;
 
 class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
   public:
+    // CELLS
+    Vtop_sid_chip* __PVT__top__DOT__sid1_inst;
+    Vtop_sid_chip* __PVT__top__DOT__sid2_inst;
 
     // DESIGN SPECIFIC STATE
     // Anonymous structures to workaround compiler member-count bugs
@@ -46,6 +50,8 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         CData/*0:0*/ top__DOT__xmc_win_sel;
         CData/*0:0*/ top__DOT__xmc_win_enabled;
         CData/*0:0*/ top__DOT__blt_reg_sel;
+        CData/*0:0*/ top__DOT__sid1_reg_sel;
+        CData/*0:0*/ top__DOT__sid2_reg_sel;
         CData/*0:0*/ top__DOT__clear_input;
         CData/*7:0*/ top__DOT__blt_ram_wdata;
         CData/*0:0*/ top__DOT__blt_ram_we;
@@ -55,7 +61,11 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         CData/*7:0*/ top__DOT__blt_vgc_wdata;
         CData/*0:0*/ top__DOT__blt_vgc_we;
         CData/*7:0*/ top__DOT__blt_cpu_rdata;
+        CData/*4:0*/ top__DOT__sid_clk_div;
+        CData/*0:0*/ top__DOT__sid_ce_1m;
+        CData/*7:0*/ top__DOT__sid_cfg_reg;
         CData/*0:0*/ top__DOT____Vcellinp__cpu_inst__RDY;
+        CData/*7:0*/ top__DOT__vgc_dbg_rdata;
         CData/*7:0*/ top__DOT__tile_dma_data;
         CData/*7:0*/ top__DOT__blt_inst__DOT____Vlvbound_hf31f73b8__0;
         CData/*3:0*/ top__DOT__blt_inst__DOT__state;
@@ -74,14 +84,14 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         CData/*7:0*/ top__DOT__cpu_inst__DOT__ADD;
         CData/*7:0*/ top__DOT__cpu_inst__DOT__DIHOLD;
         CData/*7:0*/ top__DOT__cpu_inst__DOT__DIMUX;
+    };
+    struct {
         CData/*7:0*/ top__DOT__cpu_inst__DOT__IRHOLD;
         CData/*0:0*/ top__DOT__cpu_inst__DOT__IRHOLD_valid;
         CData/*0:0*/ top__DOT__cpu_inst__DOT__C;
         CData/*0:0*/ top__DOT__cpu_inst__DOT__Z;
         CData/*0:0*/ top__DOT__cpu_inst__DOT__I;
         CData/*0:0*/ top__DOT__cpu_inst__DOT__D;
-    };
-    struct {
         CData/*0:0*/ top__DOT__cpu_inst__DOT__V;
         CData/*0:0*/ top__DOT__cpu_inst__DOT__N;
         CData/*0:0*/ top__DOT__cpu_inst__DOT__AN;
@@ -140,14 +150,14 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_h5a8b2575__0;
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_h28c4f18f__0;
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_hced7a248__0;
+    };
+    struct {
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_h87c37a99__0;
         CData/*3:0*/ top__DOT__vgc_inst__DOT____Vlvbound_h45978041__0;
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_hd4129f91__0;
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_ha13cfb6b__0;
         CData/*3:0*/ top__DOT__vgc_inst__DOT____Vlvbound_hde0d773d__1;
         CData/*3:0*/ top__DOT__vgc_inst__DOT____Vlvbound_hde0d773d__0;
-    };
-    struct {
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_h5d6d955d__0;
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_h2b480197__0;
         CData/*7:0*/ top__DOT__vgc_inst__DOT____Vlvbound_hb8130fd5__0;
@@ -206,14 +216,14 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         CData/*6:0*/ top__DOT__vgc_inst__DOT__copper_active_list;
         CData/*6:0*/ top__DOT__vgc_inst__DOT__copper_pending_list;
         CData/*0:0*/ top__DOT__vgc_inst__DOT__copper_loading;
+    };
+    struct {
         CData/*6:0*/ top__DOT__vgc_inst__DOT__copper_load_src;
         CData/*5:0*/ top__DOT__vgc_inst__DOT__fio_name_len;
         CData/*0:0*/ top__DOT__vgc_inst__DOT__cmd_busy;
         CData/*7:0*/ top__DOT__vgc_inst__DOT__cmd_op;
         CData/*7:0*/ top__DOT__vgc_inst__DOT__cmd_cy;
         CData/*0:0*/ top__DOT__vgc_inst__DOT__vgc_reg_sel;
-    };
-    struct {
         CData/*0:0*/ top__DOT__vgc_inst__DOT__char_ram_sel;
         CData/*0:0*/ top__DOT__vgc_inst__DOT__color_ram_sel;
         CData/*0:0*/ top__DOT__vgc_inst__DOT__tile_reg_sel;
@@ -261,14 +271,19 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         CData/*7:0*/ __VdfgRegularize_hebeb780c_0_14;
         CData/*7:0*/ __VdfgRegularize_hebeb780c_0_15;
         CData/*3:0*/ __VdfgRegularize_hebeb780c_0_19;
+        CData/*4:0*/ __Vdly__top__DOT__sid_clk_div;
         CData/*5:0*/ __Vdly__top__DOT__cpu_inst__DOT__state;
+        CData/*0:0*/ __VstlDidInit;
         CData/*0:0*/ __VstlFirstIteration;
         CData/*0:0*/ __VstlPhaseResult;
         CData/*0:0*/ __VicoFirstIteration;
         CData/*0:0*/ __VicoPhaseResult;
         CData/*0:0*/ __Vtrigprevexpr___TOP__clk__0;
         CData/*0:0*/ __Vtrigprevexpr___TOP__rst__0;
+        CData/*0:0*/ __VactDidInit;
         CData/*0:0*/ __VactPhaseResult;
+    };
+    struct {
         CData/*0:0*/ __VnbaPhaseResult;
         VL_IN16(dbg_peek_addr,15,0);
         VL_IN16(dbg_poke_addr,15,0);
@@ -278,8 +293,6 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         SData/*15:0*/ top__DOT__blt_vgc_addr;
         SData/*15:0*/ top__DOT__tile_dma_addr;
         SData/*15:0*/ top__DOT__blt_inst__DOT__width;
-    };
-    struct {
         SData/*15:0*/ top__DOT__blt_inst__DOT__height;
         SData/*15:0*/ top__DOT__blt_inst__DOT__src_stride;
         SData/*15:0*/ top__DOT__blt_inst__DOT__dst_stride;
@@ -319,6 +332,8 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         SData/*15:0*/ __VdfgRegularize_hebeb780c_0_8;
         SData/*15:0*/ __VdfgRegularize_hebeb780c_0_9;
         SData/*15:0*/ __VdfgRegularize_hebeb780c_0_10;
+        VL_OUT(audio_l,17,0);
+        VL_OUT(audio_r,17,0);
         IData/*18:0*/ top__DOT__xmc_addr;
         IData/*18:0*/ top__DOT__blt_xram_addr;
         IData/*23:0*/ top__DOT__blt_inst__DOT__src_base;
@@ -333,6 +348,8 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         VlUnpacked<CData/*7:0*/, 65536> top__DOT__ram;
         VlUnpacked<CData/*7:0*/, 16384> top__DOT__basic_rom;
         VlUnpacked<CData/*7:0*/, 16384> top__DOT__ext_rom;
+    };
+    struct {
         VlUnpacked<CData/*7:0*/, 524288> top__DOT__xram;
         VlUnpacked<CData/*7:0*/, 64> top__DOT__xmc_regs;
         VlUnpacked<CData/*7:0*/, 25> top__DOT__blt_inst__DOT__regs;
@@ -344,8 +361,6 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         VlUnpacked<CData/*7:0*/, 2048> top__DOT__vgc_inst__DOT__font_rom;
         VlUnpacked<CData/*3:0*/, 64000> top__DOT__vgc_inst__DOT__gfx_ram;
         VlUnpacked<CData/*7:0*/, 2048> top__DOT__vgc_inst__DOT__sprite_shapes;
-    };
-    struct {
         VlUnpacked<SData/*8:0*/, 16> top__DOT__vgc_inst__DOT__spr_x;
         VlUnpacked<CData/*7:0*/, 16> top__DOT__vgc_inst__DOT__spr_y;
         VlUnpacked<CData/*0:0*/, 16> top__DOT__vgc_inst__DOT__spr_enable;
@@ -377,9 +392,35 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop___024root final {
         VlUnpacked<CData/*7:0*/, 4000> top__DOT__vgc_inst__DOT__tile_inst__DOT__nametable;
         VlUnpacked<CData/*7:0*/, 4000> top__DOT__vgc_inst__DOT__tile_inst__DOT__attr_table;
         VlUnpacked<SData/*11:0*/, 256> top__DOT__vgc_inst__DOT__tile_inst__DOT__pal_ram;
-        VlUnpacked<QData/*63:0*/, 1> __VstlTriggered;
+        VlUnpacked<QData/*63:0*/, 2> __VstlTriggered;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v1__DOT__waveform_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v1__DOT__envelope_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v2__DOT__waveform_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v2__DOT__envelope_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v3__DOT__waveform_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v3__DOT__envelope_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v1__DOT__waveform_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v1__DOT__envelope_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v2__DOT__waveform_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v2__DOT__envelope_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v3__DOT__waveform_dac__DOT__bitsum__0;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v3__DOT__envelope_dac__DOT__bitsum__0;
         VlUnpacked<QData/*63:0*/, 1> __VicoTriggered;
         VlUnpacked<QData/*63:0*/, 1> __VactTriggered;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v1__DOT__waveform_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v1__DOT__envelope_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v2__DOT__waveform_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v2__DOT__envelope_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v3__DOT__waveform_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid1_inst____PVT__v3__DOT__envelope_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v1__DOT__waveform_dac__DOT__bitsum__1;
+    };
+    struct {
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v1__DOT__envelope_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v2__DOT__waveform_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v2__DOT__envelope_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v3__DOT__waveform_dac__DOT__bitsum__1;
+        VlUnpacked<SData/*11:0*/, 8> __Vtrigprevexpr___TOP__top__DOT__sid2_inst____PVT__v3__DOT__envelope_dac__DOT__bitsum__1;
         VlUnpacked<QData/*63:0*/, 1> __VnbaTriggered;
     };
     VlNBACommitQueue<VlUnpacked<CData/*7:0*/, 2000>, false, CData/*7:0*/, 1> __VdlyCommitQueuetop__DOT__vgc_inst__DOT__char_ram;

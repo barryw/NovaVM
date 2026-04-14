@@ -268,7 +268,13 @@
       "Bash(npm ls:*)",
       "Bash(npm outdated:*)",
       "Bash(npm view:*)",
-      "Bash(npm audit:*)"
+      "Bash(npm audit:*)",
+      "Skill(mempalace:mine)",
+      "Skill(mempalace:mempalace)",
+      "Bash(mempalace --palace ~/.mempalace mine /Users/barry/Git/e6502 --wing e6502)",
+      "Bash(mempalace init:*)",
+      "Bash(mempalace --palace ~/.mempalace mine /Users/barry/Git/sim6502 --wing sim6502)",
+      "WebFetch(domain:ci.barrywalker.io)"
     ]
   },
   "enableAllProjectMcpServers": true,

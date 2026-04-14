@@ -8,4 +8,5 @@ Vtop___024root__Slow.o: \
   /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop__Syms.h \
   /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop.h \
   /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop___024root.h \
+  /Users/barry/Git/e6502/e6502.FPGA/obj_dir/Vtop_sid_chip.h \
   Vtop___024root__Slow.cpp Vtop__pch.h

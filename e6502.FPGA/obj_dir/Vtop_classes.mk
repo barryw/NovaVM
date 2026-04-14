@@ -28,12 +28,18 @@ VM_CLASSES_FAST += \
   Vtop \
   Vtop___024root__0 \
   Vtop___024root__1 \
+  Vtop_sid_chip__0 \
 
 # Generated module classes, non-fast-path, compile with low/medium optimization
 VM_CLASSES_SLOW += \
   Vtop__ConstPool__0__Slow \
+  Vtop__ConstPool__1__Slow \
   Vtop___024root__Slow \
   Vtop___024root__0__Slow \
+  Vtop_sid_chip__Slow \
+  Vtop_sid_chip__0__Slow \
+  Vtop_sid_chip__1__Slow \
+  Vtop_sid_chip__2__Slow \
 
 # Generated support classes, fast-path, compile with highest optimization
 VM_SUPPORT_FAST += \

@@ -1,0 +1,12 @@
+Vtest_sid__main.o: \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_sid/Vtest_sid__pch.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_config.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilatedos.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_types.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_funcs.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_sid/Vtest_sid__Syms.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_sid/Vtest_sid.h \
+  /Users/barry/Git/e6502/e6502.FPGA/test/build/test_sid/Vtest_sid___024root.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_timing.h \
+  Vtest_sid__main.cpp Vtest_sid.h
