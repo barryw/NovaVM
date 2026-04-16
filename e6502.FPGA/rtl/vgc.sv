@@ -1,9 +1,13 @@
-// VGC — Virtual Graphics Controller
+// VGC — Virtual Graphics Controller (NOVA — top level)
 // 80x25 text + 320x200 block graphics + tile engine + command processor
 // Generates standard VGA 640x480@60Hz RGB + sync signals
 //
 // Modes: 0=text only, 1=gfx over text, 2=text over gfx, 3=gfx only, 4=tiles+sprites
 // Drawing: command register at $A010, parameters at $A011-$A01F
+//
+// Instantiates sub-modules: vgc_timing (VESTA), vgc_text (SCRIBE),
+// vgc_gfx (CANVAS), vgc_sprites (PIXIE), vgc_copper (CONDUCTOR)
+// Plus the existing tile_engine (MOSAIC)
 
 module vgc (
     input  logic        clk,        // pixel clock (~25 MHz)
@@ -65,7 +69,7 @@ module vgc (
     // Address map
     localparam VGC_BASE       = 16'hA000;
     localparam VGC_REGS_END   = 16'hA01F;
-    localparam SPR_REG_BASE   = 16'hA040;  // sprite registers: 16 × 8 bytes
+    localparam SPR_REG_BASE   = 16'hA040;
     localparam SPR_REG_END    = 16'hA0BF;
     localparam CHAR_RAM_BASE  = 16'hAA00;
     localparam CHAR_RAM_END   = 16'hB1CF;
@@ -73,20 +77,17 @@ module vgc (
     localparam COLOR_RAM_END  = 16'hB99F;
 
     // Register offsets
-    localparam REG_MODE    = 0;    // $A000 — display mode (0-3)
-    localparam REG_BGCOL   = 1;    // $A001 — background color
-    localparam REG_FGCOL   = 2;    // $A002 — foreground color
-    localparam REG_CURSORX = 3;    // $A003
-    localparam REG_CURSORY = 4;    // $A004
-    localparam REG_BORDER  = 13;   // $A00D
-    localparam REG_CHAROUT = 14;   // $A00E
-    localparam REG_CHARIN  = 15;   // $A00F
-    localparam REG_CMD     = 16;   // $A010 — command register (write triggers)
-    // Parameters: regs[17..30] = P0..P13 ($A011-$A01E)
-    // 16-bit params: p0=regs[17]|regs[18]<<8 (X0), p1=regs[19]|regs[20]<<8 (Y0)
-    //               p2=regs[21]|regs[22]<<8 (X1), p3=regs[23]|regs[24]<<8 (Y1)
+    localparam REG_MODE    = 0;
+    localparam REG_BGCOL   = 1;
+    localparam REG_FGCOL   = 2;
+    localparam REG_CURSORX = 3;
+    localparam REG_CURSORY = 4;
+    localparam REG_BORDER  = 13;
+    localparam REG_CHAROUT = 14;
+    localparam REG_CHARIN  = 15;
+    localparam REG_CMD     = 16;
 
-    // Drawing commands (match Avalonia VgcConstants)
+    // Drawing commands
     localparam CMD_PLOT    = 8'h01;
     localparam CMD_UNPLOT  = 8'h02;
     localparam CMD_LINE    = 8'h03;
@@ -99,56 +100,82 @@ module vgc (
     localparam CMD_GTEXT   = 8'h0A;
 
     // Sprite commands
-    localparam CMD_SPRDEF  = 8'h10;   // define shape: P0=sprite#, shape data follows via MemWrite
-    localparam CMD_SPRROW  = 8'h11;   // set row: P0=sprite#, P1=row#, P2..P9=8 bytes packed
-    localparam CMD_SPRCLR  = 8'h12;   // clear sprite shape: P0=sprite#
-    localparam CMD_SPRCOPY = 8'h13;   // copy shape: P0=dest, P1=src
-    localparam CMD_SPRPOS  = 8'h14;   // position: P0=sprite#, P1|P2=X, P3|P4=Y
-    localparam CMD_SPRENA  = 8'h15;   // enable: P0=sprite#
-    localparam CMD_SPRDIS  = 8'h16;   // disable: P0=sprite#
-    localparam CMD_SPRFLIP = 8'h17;   // flip: P0=sprite#, P1=mode (b0=H, b1=V)
-    localparam CMD_SPRPRI  = 8'h18;   // priority: P0=sprite#, P1=pri (0-2)
+    localparam CMD_SPRDEF  = 8'h10;
+    localparam CMD_SPRROW  = 8'h11;
+    localparam CMD_SPRCLR  = 8'h12;
+    localparam CMD_SPRCOPY = 8'h13;
+    localparam CMD_SPRPOS  = 8'h14;
+    localparam CMD_SPRENA  = 8'h15;
+    localparam CMD_SPRDIS  = 8'h16;
+    localparam CMD_SPRFLIP = 8'h17;
+    localparam CMD_SPRPRI  = 8'h18;
 
-    // Advanced copper commands
-    localparam CMD_COPPERLIST    = 8'h20;  // select target list: P0=index (0-127)
-    localparam CMD_COPPERUSE     = 8'h21;  // activate list at vblank: P0=index (0-127)
-    localparam CMD_COPPERLISTEND = 8'h22;  // reset target to active list
+    // Copper commands
+    localparam CMD_COPPERLIST    = 8'h20;
+    localparam CMD_COPPERUSE     = 8'h21;
+    localparam CMD_COPPERLISTEND = 8'h22;
 
-    // Internal ops (not CPU-triggered, used by charout)
-    localparam CMD_TXTCLS  = 8'hF0;   // text clear screen (internal)
+    // Internal ops
+    localparam CMD_TXTCLS  = 8'hF0;
 
     localparam NUM_SPRITES = 16;
     localparam SPR_W       = 16;
     localparam SPR_H       = 16;
 
     // =========================================================================
-    // Video timing
+    // Timing sub-module (VESTA)
     // =========================================================================
     logic [9:0] h_count, v_count;
+    logic       h_sync_area, v_sync_area, h_visible, v_visible, visible, in_text_area;
+    logic [9:0] h_count_d1, h_count_d2, v_count_d1, v_count_d2;
+    logic       visible_d1, visible_d2;
+    logic       in_text_area_d1, in_text_area_d2;
+    logic       h_sync_area_d1, h_sync_area_d2;
+    logic       v_sync_area_d1, v_sync_area_d2;
+    logic [6:0] text_col;
+    logic [4:0] text_row, real_row;
+    logic [2:0] font_line, font_pixel;
+    logic [8:0] gfx_x;
+    logic [7:0] gfx_y;
+    logic [9:0] text_line;
+    logic [6:0] text_col_d1, text_col_d2;
+    logic [4:0] text_row_d1, text_row_d2;
+    logic [2:0] font_pixel_d1, font_pixel_d2;
+    logic [8:0] gfx_x_d1, gfx_x_d2;
+    logic [7:0] gfx_y_d1, gfx_y_d2;
+    logic [2:0] font_line_d1;
+    logic [8:0] pre_gfx_x;
+    logic [7:0] pre_gfx_y;
+    logic [4:0] scroll_offset;
 
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            h_count <= 0; v_count <= 0;
-        end else begin
-            if (h_count == H_TOTAL - 1) begin
-                h_count <= 0;
-                v_count <= (v_count == V_TOTAL - 1) ? 10'd0 : v_count + 1;
-            end else
-                h_count <= h_count + 1;
-        end
-    end
-
-    wire h_sync_area = (h_count >= H_ACTIVE + H_FRONT) &&
-                       (h_count <  H_ACTIVE + H_FRONT + H_SYNC);
-    wire v_sync_area = (v_count >= V_ACTIVE + V_FRONT) &&
-                       (v_count <  V_ACTIVE + V_FRONT + V_SYNC);
-    wire h_visible   = (h_count < H_ACTIVE);
-    wire v_visible   = (v_count < V_ACTIVE);
-    wire visible     = h_visible && v_visible;
-    wire in_text_area = visible && (v_count >= V_BORDER) && (v_count < V_BORDER + TEXT_H);
+    vgc_timing timing_inst (
+        .clk(clk), .rst(rst),
+        .h_count(h_count), .v_count(v_count),
+        .h_sync_area(h_sync_area), .v_sync_area(v_sync_area),
+        .h_visible(h_visible), .v_visible(v_visible),
+        .visible(visible), .in_text_area(in_text_area),
+        .h_count_d1(h_count_d1), .h_count_d2(h_count_d2),
+        .v_count_d1(v_count_d1), .v_count_d2(v_count_d2),
+        .visible_d1(visible_d1), .visible_d2(visible_d2),
+        .in_text_area_d1(in_text_area_d1), .in_text_area_d2(in_text_area_d2),
+        .h_sync_area_d1(h_sync_area_d1), .h_sync_area_d2(h_sync_area_d2),
+        .v_sync_area_d1(v_sync_area_d1), .v_sync_area_d2(v_sync_area_d2),
+        .text_col(text_col), .text_row(text_row),
+        .font_line(font_line), .font_pixel(font_pixel),
+        .gfx_x(gfx_x), .gfx_y(gfx_y),
+        .text_line(text_line), .real_row(real_row),
+        .text_col_d1(text_col_d1), .text_col_d2(text_col_d2),
+        .text_row_d1(text_row_d1), .text_row_d2(text_row_d2),
+        .font_pixel_d1(font_pixel_d1), .font_pixel_d2(font_pixel_d2),
+        .gfx_x_d1(gfx_x_d1), .gfx_x_d2(gfx_x_d2),
+        .gfx_y_d1(gfx_y_d1), .gfx_y_d2(gfx_y_d2),
+        .font_line_d1(font_line_d1),
+        .scroll_offset(scroll_offset),
+        .pre_gfx_x(pre_gfx_x), .pre_gfx_y(pre_gfx_y)
+    );
 
     // =========================================================================
-    // Palette (16 C64-style colors → 12-bit RGB) — declared early for use in pixel pipeline
+    // Palette (16 C64-style colors → 12-bit RGB)
     // =========================================================================
     logic [11:0] palette [0:15];
     initial begin
@@ -159,40 +186,241 @@ module vgc (
     end
 
     // =========================================================================
-    // Memory
+    // Text sub-module (SCRIBE) — dpram port A signals
     // =========================================================================
-    logic [7:0] char_ram [0:1999];
-    logic [7:0] color_ram [0:1999];
-    logic [7:0] font_rom [0:2047];
-    logic [3:0] gfx_ram [0:GFX_SIZE-1];   // 320x200 x 4-bit color
+    logic [10:0] char_a_addr;
+    logic [7:0]  char_a_din;
+    logic        char_a_we;
+    logic [7:0]  char_a_dout;
+    logic [10:0] color_a_addr;
+    logic [7:0]  color_a_din;
+    logic        color_a_we;
+    logic [7:0]  color_a_dout;
+    logic [10:0] font_a_addr;
+    logic [7:0]  font_a_din;
+    logic        font_a_we;
+    logic [7:0]  font_a_dout;
+    logic [7:0]  char_b_dout, color_b_dout, font_b_dout;
 
-    // Sprite shape RAM: 16 shapes × 128 bytes (16×16 pixels, 4-bit, packed nibbles)
-    logic [7:0] sprite_shapes [0:2047];
+    vgc_text text_inst (
+        .clk(clk), .rst(rst),
+        .char_a_addr(char_a_addr), .char_a_din(char_a_din),
+        .char_a_we(char_a_we), .char_a_dout(char_a_dout),
+        .color_a_addr(color_a_addr), .color_a_din(color_a_din),
+        .color_a_we(color_a_we), .color_a_dout(color_a_dout),
+        .font_a_addr(font_a_addr), .font_a_din(font_a_din),
+        .font_a_we(font_a_we), .font_a_dout(font_a_dout),
+        .real_row(real_row), .text_col(text_col), .font_line(font_line), .font_line_d1(font_line_d1),
+        .char_b_dout(char_b_dout), .color_b_dout(color_b_dout),
+        .font_b_dout(font_b_dout)
+    );
 
-    // Sprite attributes
-    logic [8:0]  spr_x [0:15];       // X position
-    logic [7:0]  spr_y [0:15];       // Y position
+    // =========================================================================
+    // Graphics sub-module (CANVAS) — dpram port A signals
+    // =========================================================================
+    logic [15:0] gfx_a_addr;
+    logic [3:0]  gfx_a_din;
+    logic        gfx_a_we;
+    logic [3:0]  gfx_a_dout;
+    logic [3:0]  gfx_b_dout;
+
+    vgc_gfx gfx_inst (
+        .clk(clk), .rst(rst),
+        .gfx_a_addr(gfx_a_addr), .gfx_a_din(gfx_a_din),
+        .gfx_a_we(gfx_a_we), .gfx_a_dout(gfx_a_dout),
+        .gfx_y(gfx_y), .gfx_x(gfx_x),
+        .gfx_b_dout(gfx_b_dout)
+    );
+
+    // =========================================================================
+    // Drawing coprocessor (ARTIST)
+    // =========================================================================
+    // Pack fio_name array into flat vector for ARTIST
+    logic [64*8-1:0] fio_name_flat;
+    always_comb begin
+        for (int i = 0; i < 64; i++)
+            fio_name_flat[i*8 +: 8] = fio_name[i];
+    end
+
+    artist artist_inst (
+        .clk(clk), .rst(rst),
+        .cmd_valid(artist_cmd_valid),
+        .cmd_code(artist_cmd_code),
+        .cmd_x0({regs[18][0], regs[17]}),
+        .cmd_y0(regs[19]),
+        .cmd_x1({regs[22][0], regs[21]}),
+        .cmd_y1(regs[23]),
+        .cmd_color(gfx_color),
+        .cmd_radius(regs[21]),
+        .busy(artist_busy),
+        .gfx_addr(artist_gfx_addr),
+        .gfx_wdata(artist_gfx_wdata),
+        .gfx_we(artist_gfx_we),
+        .gfx_raddr(artist_gfx_raddr),
+        .gfx_rdata(artist_gfx_rdata),
+        .gfx_re(artist_gfx_re),
+        .font_addr(artist_font_addr),
+        .font_data(artist_font_data),
+        .font_re(artist_font_re),
+        .gt_char_flat(fio_name_flat),
+        .gt_char_len(fio_name_len),
+        .gt_scale_in(regs[22])
+    );
+
+    // ARTIST read port: connect to gfx_ram dout_a (flood fill reads)
+    assign artist_gfx_rdata = gfx_a_dout;
+
+    // ARTIST font port: connect to font_rom dout_a
+    assign artist_font_data = font_a_dout;
+
+    // =========================================================================
+    // Sprite sub-module (PIXIE)
+    // =========================================================================
+    logic [10:0] spr_a_addr;
+    logic [7:0]  spr_a_din;
+    logic        spr_a_we;
+    logic [7:0]  spr_a_dout;
+
+    // Sprite attributes — small register arrays (no dpram needed)
+    logic [8:0]  spr_x [0:15];
+    logic [7:0]  spr_y [0:15];
     logic        spr_enable [0:15];
     logic        spr_flip_h [0:15];
     logic        spr_flip_v [0:15];
-    logic [1:0]  spr_pri [0:15];     // 0=behind gfx, 1=over gfx, 2=topmost
-    logic [3:0]  spr_shape [0:15];   // which shape (0-15)
+    logic [1:0]  spr_pri [0:15];
+    logic [3:0]  spr_shape [0:15];
+    logic [3:0]  spr_trans [0:15];
 
     initial begin
-        for (int i = 0; i < 2000; i++) begin
-            char_ram[i] = 8'h20;
-            color_ram[i] = 8'h01;
-        end
-        for (int i = 0; i < GFX_SIZE; i++)
-            gfx_ram[i] = 4'h0;
-        for (int i = 0; i < 2048; i++)
-            sprite_shapes[i] = 8'h00;
         for (int i = 0; i < 16; i++) begin
             spr_x[i] = 0; spr_y[i] = 0;
             spr_enable[i] = 0; spr_flip_h[i] = 0; spr_flip_v[i] = 0;
             spr_pri[i] = 2'd1; spr_shape[i] = i[3:0];
         end
-        $readmemh("rom/cp437.hex", font_rom);
+    end
+
+    logic [3:0]  spr_pixel;
+    logic [1:0]  spr_pixel_pri;
+    logic        spr_pixel_hit;
+    logic [7:0]  spr_collision_bg_bits;
+
+    // Pack sprite attribute arrays into flat vectors for sub-module
+    logic [16*9-1:0]  spr_x_flat;
+    logic [16*8-1:0]  spr_y_flat;
+    logic [15:0]      spr_enable_flat;
+    logic [15:0]      spr_flip_h_flat;
+    logic [15:0]      spr_flip_v_flat;
+    logic [16*2-1:0]  spr_pri_flat;
+    logic [16*4-1:0]  spr_shape_flat;
+    logic [16*4-1:0]  spr_trans_flat;
+
+    always_comb begin
+        for (int i = 0; i < 16; i++) begin
+            spr_x_flat[i*9 +: 9]     = spr_x[i];
+            spr_y_flat[i*8 +: 8]     = spr_y[i];
+            spr_enable_flat[i]        = spr_enable[i];
+            spr_flip_h_flat[i]        = spr_flip_h[i];
+            spr_flip_v_flat[i]        = spr_flip_v[i];
+            spr_pri_flat[i*2 +: 2]   = spr_pri[i];
+            spr_shape_flat[i*4 +: 4] = spr_shape[i];
+            spr_trans_flat[i*4 +: 4] = spr_trans[i];
+        end
+    end
+
+    vgc_sprites sprite_inst (
+        .clk(clk), .rst(rst),
+        .spr_a_addr(spr_a_addr), .spr_a_din(spr_a_din),
+        .spr_a_we(spr_a_we), .spr_a_dout(spr_a_dout),
+        .h_count(h_count), .v_count(v_count),
+        .in_text_area_d2(in_text_area_d2), .gfx_x_d2(gfx_x_d2),
+        .spr_x_flat(spr_x_flat), .spr_y_flat(spr_y_flat),
+        .spr_enable_flat(spr_enable_flat),
+        .spr_flip_h_flat(spr_flip_h_flat), .spr_flip_v_flat(spr_flip_v_flat),
+        .spr_pri_flat(spr_pri_flat), .spr_shape_flat(spr_shape_flat),
+        .spr_trans_flat(spr_trans_flat),
+        .spr_pixel(spr_pixel), .spr_pixel_pri(spr_pixel_pri),
+        .spr_pixel_hit(spr_pixel_hit),
+        .collision_bg_bits(spr_collision_bg_bits)
+    );
+
+    // =========================================================================
+    // Copper sub-module (CONDUCTOR)
+    // =========================================================================
+    // Copper — raster-synchronized register writer with multi-list support
+    localparam COPPER_MAX   = 32;
+`ifdef SYNTHESIS
+    localparam COPPER_LISTS = 8;    // 8 lists for FPGA (saves ~127K bits of registers)
+`else
+    localparam COPPER_LISTS = 128;  // 128 lists for simulation (full software compat)
+`endif
+
+    // Active list: used during rendering
+    logic [16:0] copper_pos   [0:COPPER_MAX-1];
+    logic [7:0]  copper_reg   [0:COPPER_MAX-1];
+    logic [7:0]  copper_val   [0:COPPER_MAX-1];
+    logic [8:0]  copper_count;
+    logic [8:0]  copper_index;
+    logic        copper_enabled;
+
+    // Multi-list storage
+    logic [16:0] copper_list_pos [0:COPPER_LISTS*COPPER_MAX-1];
+    logic [7:0]  copper_list_reg [0:COPPER_LISTS*COPPER_MAX-1];
+    logic [7:0]  copper_list_val [0:COPPER_LISTS*COPPER_MAX-1];
+    logic [8:0]  copper_list_count [0:COPPER_LISTS-1];
+    logic [6:0]  copper_target_list;
+    logic [6:0]  copper_active_list;
+    logic [6:0]  copper_pending_list;
+
+    // Copper list copy state machine
+    logic        copper_loading;
+    logic [8:0]  copper_load_idx;
+    logic [6:0]  copper_load_src;
+
+    // Copper fire signals from sub-module
+    logic        copper_fire;
+    logic [7:0]  copper_fire_reg;
+    logic [7:0]  copper_fire_val;
+
+    // Pack copper active list arrays into flat vectors for sub-module
+    logic [32*17-1:0] copper_pos_flat;
+    logic [32*8-1:0]  copper_reg_flat;
+    logic [32*8-1:0]  copper_val_flat;
+
+    always_comb begin
+        for (int i = 0; i < COPPER_MAX; i++) begin
+            copper_pos_flat[i*17 +: 17] = copper_pos[i];
+            copper_reg_flat[i*8 +: 8]   = copper_reg[i];
+            copper_val_flat[i*8 +: 8]   = copper_val[i];
+        end
+    end
+
+    vgc_copper copper_inst (
+        .clk(clk), .rst(rst),
+        .h_count(h_count), .v_count(v_count),
+        .in_text_area(in_text_area),
+        .gfx_x(gfx_x), .gfx_y(gfx_y),
+        .copper_pos_flat(copper_pos_flat), .copper_reg_flat(copper_reg_flat),
+        .copper_val_flat(copper_val_flat), .copper_count(copper_count),
+        .copper_enabled(copper_enabled),
+        .copper_index(copper_index),
+        .copper_fire(copper_fire),
+        .copper_fire_reg(copper_fire_reg),
+        .copper_fire_val(copper_fire_val)
+    );
+
+    initial begin
+        for (int i = 0; i < COPPER_MAX; i++) begin
+            copper_pos[i] = 0; copper_reg[i] = 0; copper_val[i] = 0;
+        end
+        for (int i = 0; i < COPPER_LISTS * COPPER_MAX; i++) begin
+            copper_list_pos[i] = 0; copper_list_reg[i] = 0; copper_list_val[i] = 0;
+        end
+        for (int i = 0; i < COPPER_LISTS; i++)
+            copper_list_count[i] = 0;
+        copper_count = 0; copper_enabled = 0;
+        copper_target_list = 0; copper_active_list = 0;
+        copper_pending_list = 0;
+        copper_loading = 0; copper_load_idx = 0; copper_load_src = 0;
     end
 
     // =========================================================================
@@ -204,81 +432,25 @@ module vgc (
     logic [3:0]  fg_color, bg_color, border_color, gfx_color;
     logic [2:0]  mode;
     logic        cursor_enable;
-    logic [7:0]  scroll_x, scroll_y;   // pixel scroll offsets
-    logic [3:0]  spr_trans [0:15];     // per-sprite transparent color
+    logic [7:0]  scroll_x, scroll_y;
     logic [7:0]  char_in_reg;
-    logic [2:0]  font_slot;            // active font (0-7)
-    logic [7:0]  collision_ss;         // sprite-sprite collision (read-clears)
-    logic [7:0]  collision_bg;         // sprite-background collision (read-clears)
-    logic [7:0]  irq_ctrl;             // bit0=raster IRQ enable, bits 1-7=raster line
+    logic [2:0]  font_slot;
+    logic [7:0]  collision_ss;
+    logic [7:0]  collision_bg;
+    logic [7:0]  irq_ctrl;
     logic        irq_raster_pending;
-    logic [4:0]  scroll_offset;
     logic        scroll_pending;
     logic [6:0]  scroll_col;
 
-    // Flood fill stack (for Paint command)
-    localparam FILL_STACK_SIZE = 512;
-    logic [16:0] fill_stack [0:FILL_STACK_SIZE-1]; // packed x|y coordinates
-    logic [9:0]  fill_sp;              // stack pointer
-    logic [3:0]  fill_target;          // color being replaced
-
-    // Gtext state machine
-    localparam FIO_NAME_LEN = 16'hB9A3;   // filename length register
-    localparam FIO_NAME     = 16'hB9B0;   // filename buffer (64 bytes)
-    logic [5:0]  gt_char_idx;              // current character index in string
-    logic [5:0]  gt_char_len;              // total string length
-    logic [2:0]  gt_font_row;             // current row within glyph (0-7)
-    logic [2:0]  gt_font_col;             // current column within glyph (0-7)
-    logic [7:0]  gt_scale;                // scale factor
-    logic [7:0]  gt_scale_x;             // current scale X counter
-    logic [7:0]  gt_scale_y;             // current scale Y counter
-    logic [8:0]  gt_pen_x;               // current pen X position (start of current char)
-    logic [7:0]  gt_start_y;             // Y position (top of string)
-    logic [7:0]  gt_cur_char;            // current character code
-    logic [7:0]  gt_font_byte;           // current font row bitmap
-
-    // Copper — raster-synchronized register writer with multi-list support
-    localparam COPPER_MAX   = 32;    // max entries per list (C# allows 256; 32 is practical)
-    localparam COPPER_LISTS = 128;   // 128 lists — matches C# API
-    // Active list: used during rendering
-    logic [16:0] copper_pos   [0:COPPER_MAX-1];
-    logic [7:0]  copper_reg   [0:COPPER_MAX-1];
-    logic [7:0]  copper_val   [0:COPPER_MAX-1];
-    logic [8:0]  copper_count;                   // active list entry count
-    logic [8:0]  copper_index;                   // current scan position during frame
-    logic        copper_enabled;
-
-    // Multi-list storage: 128 lists × 32 entries = 4096 entries (~16.5KB BRAM)
-    logic [16:0] copper_list_pos [0:COPPER_LISTS*COPPER_MAX-1];
-    logic [7:0]  copper_list_reg [0:COPPER_LISTS*COPPER_MAX-1];
-    logic [7:0]  copper_list_val [0:COPPER_LISTS*COPPER_MAX-1];
-    logic [8:0]  copper_list_count [0:COPPER_LISTS-1];
-    logic [6:0]  copper_target_list;   // list being edited (0-127)
-    logic [6:0]  copper_active_list;   // list currently rendering
-    logic [6:0]  copper_pending_list;  // becomes active at next vblank
-
-    // Copper list copy state machine (loads pending→active at vblank)
-    logic        copper_loading;
-    logic [8:0]  copper_load_idx;
-    logic [6:0]  copper_load_src;
+    // Gtext / FIO name buffer
+    localparam FIO_NAME_LEN = 16'hB9A3;
+    localparam FIO_NAME     = 16'hB9B0;
 
     // FIO name buffer shadow (snooped from CPU writes for Gtext)
-    logic [7:0]  fio_name [0:63];     // 64-byte string buffer ($B9B0-$B9EF)
-    logic [5:0]  fio_name_len;        // string length ($B9A3)
+    logic [7:0]  fio_name [0:63];
+    logic [5:0]  fio_name_len;
 
     initial begin
-        for (int i = 0; i < COPPER_MAX; i++) begin
-            copper_pos[i] = 0; copper_reg[i] = 0; copper_val[i] = 0;
-        end
-        for (int i = 0; i < COPPER_LISTS * COPPER_MAX; i++) begin
-            copper_list_pos[i] = 0; copper_list_reg[i] = 0; copper_list_val[i] = 0;
-        end
-        for (int i = 0; i < COPPER_LISTS; i++)
-            copper_list_count[i] = 0;
-        copper_count = 0; copper_index = 0; copper_enabled = 0;
-        copper_target_list = 0; copper_active_list = 0;
-        copper_pending_list = 0;
-        copper_loading = 0; copper_load_idx = 0; copper_load_src = 0;
         for (int i = 0; i < 64; i++) fio_name[i] = 0;
         fio_name_len = 0;
     end
@@ -286,13 +458,53 @@ module vgc (
     // Command state machine
     logic        cmd_busy;
     logic [7:0]  cmd_op;
-    // Line drawing state
     logic signed [9:0] cmd_x, cmd_y, cmd_x2, cmd_y2;
-    logic signed [9:0] cmd_dx, cmd_dy, cmd_err;
-    logic signed [9:0] cmd_sx, cmd_sy;
-    // Rect/clear state
     logic [8:0]  cmd_cx;
     logic [7:0]  cmd_cy;
+
+    // SPRROW serialization
+    logic [2:0]  sprrow_count;
+    logic [7:0]  sprrow_data [0:7];
+    logic [3:0]  sprrow_spr;
+    logic [3:0]  sprrow_row;
+
+    // SprCopy state
+    logic        sprcopy_phase;
+    logic [7:0]  sprcopy_data;
+
+    // MemRead latency state
+    logic        memread_pending;
+    logic [2:0]  memread_space;
+
+    // Port A write signals from command processor
+    logic [10:0] cmd_char_addr;
+    logic [7:0]  cmd_char_din;
+    logic        cmd_char_we;
+    logic [10:0] cmd_color_addr;
+    logic [7:0]  cmd_color_din;
+    logic        cmd_color_we;
+    logic [15:0] cmd_gfx_addr;
+    logic [3:0]  cmd_gfx_din;
+    logic        cmd_gfx_we;
+    logic        cmd_gfx_re;
+    logic [10:0] cmd_spr_addr;
+    logic [7:0]  cmd_spr_din;
+    logic        cmd_spr_we;
+    logic        cmd_spr_re;
+
+    // ARTIST drawing coprocessor signals
+    logic        artist_cmd_valid;
+    logic [7:0]  artist_cmd_code;
+    logic [15:0] artist_gfx_addr;
+    logic [3:0]  artist_gfx_wdata;
+    logic        artist_gfx_we;
+    logic [15:0] artist_gfx_raddr;
+    logic [3:0]  artist_gfx_rdata;
+    logic        artist_gfx_re;
+    logic [10:0] artist_font_addr;
+    logic [7:0]  artist_font_data;
+    logic        artist_font_re;
+    logic        artist_busy;
 
     initial begin
         for (int i = 0; i < 32; i++) regs[i] = 0;
@@ -304,18 +516,16 @@ module vgc (
         scroll_offset = 0; scroll_pending = 0; scroll_col = 0;
         char_in_reg = 0; cmd_busy = 0;
         font_slot = 0; collision_ss = 0; collision_bg = 0;
-        irq_ctrl = 0; irq_raster_pending = 0; fill_sp = 0;
+        irq_ctrl = 0; irq_raster_pending = 0;
+        sprrow_count = 0; sprcopy_phase = 0;
+        memread_pending = 0;
+        vgc_tile_addr = 0; vgc_tile_wdata = 0; vgc_tile_we = 0; vgc_tile_re = 0;
+        artist_cmd_valid = 0;
     end
 
-    // =========================================================================
-    // Keyboard input
-    // =========================================================================
-    always_ff @(posedge clk) begin
-        if (key_valid)
-            char_in_reg <= key_data;
-        else if (cpu_re && cpu_ce && cpu_addr == (VGC_BASE + REG_CHARIN) && char_in_reg != 0)
-            char_in_reg <= 0;
-    end
+    // Keyboard input is handled inside the main always_ff block below
+    // to avoid a multi-driver conflict on char_in_reg (which is also
+    // cleared in the reset branch of that block).
 
     // =========================================================================
     // Address decode
@@ -327,14 +537,56 @@ module vgc (
     wire fio_name_sel  = (cpu_addr >= FIO_NAME && cpu_addr <= 16'hB9EF);
     wire fio_len_sel   = (cpu_addr == FIO_NAME_LEN);
     wire tile_reg_sel  = (cpu_addr >= 16'hA0C0 && cpu_addr <= 16'hA0DF);
-    wire [7:0]  tile_rdata;  // forward declaration — driven by tile_engine instance below
+    wire [7:0]  tile_rdata;
     wire [4:0]  reg_offset   = cpu_addr[4:0];
-    wire [3:0]  spr_index    = cpu_addr[6:3];  // sprite number (0-15)
-    wire [2:0]  spr_field    = cpu_addr[2:0];  // field within sprite (0-7)
+    wire [3:0]  spr_index    = cpu_addr[6:3];
+    wire [2:0]  spr_field    = cpu_addr[2:0];
     wire [10:0] char_offset  = cpu_addr - CHAR_RAM_BASE;
     wire [10:0] color_offset = cpu_addr - COLOR_RAM_BASE;
 
-    // Read mux
+    // =========================================================================
+    // Screen address helper
+    // =========================================================================
+    function automatic logic [10:0] screen_addr(input logic [6:0] col, input logic [4:0] row);
+        logic [4:0] rr;
+        rr = row + scroll_offset;
+        if (rr >= ROWS) rr = rr - ROWS;
+        screen_addr = {4'b0, rr} * COLS + {4'b0, col};
+    endfunction
+
+    // =========================================================================
+    // CPU reads
+    // =========================================================================
+    logic        cpu_rd_pending;
+    logic [2:0]  cpu_rd_source;
+    logic [7:0]  cpu_rd_latch;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            cpu_rd_pending <= 0;
+            cpu_rd_source <= 0;
+        end else begin
+            cpu_rd_pending <= 0;
+            cpu_rd_source <= 0;
+            if (cpu_re && cpu_ce) begin
+                if (char_ram_sel) begin
+                    cpu_rd_pending <= 1;
+                    cpu_rd_source <= 3'd1;
+                end else if (color_ram_sel) begin
+                    cpu_rd_pending <= 1;
+                    cpu_rd_source <= 3'd2;
+                end
+            end
+            if (cpu_rd_pending) begin
+                case (cpu_rd_source)
+                    3'd1: cpu_rd_latch <= char_a_dout;
+                    3'd2: cpu_rd_latch <= color_a_dout;
+                    default: ;
+                endcase
+            end
+        end
+    end
+
     always_comb begin
         cpu_rdata = 8'h00;
         if (vgc_reg_sel) begin
@@ -344,32 +596,31 @@ module vgc (
                 REG_FGCOL:   cpu_rdata = {4'b0, fg_color};
                 REG_CURSORX: cpu_rdata = {1'b0, cursor_x};
                 REG_CURSORY: cpu_rdata = {3'b0, cursor_y};
-                5'd5:        cpu_rdata = scroll_x;              // ScrollX
-                5'd6:        cpu_rdata = scroll_y;              // ScrollY
-                5'd7:        cpu_rdata = {5'b0, font_slot};     // Font
-                5'd8:        cpu_rdata = {4'b0, gfx_color};    // gfx draw color
-                5'd9:        begin                               // SpriteCount (read-only)
+                5'd5:        cpu_rdata = scroll_x;
+                5'd6:        cpu_rdata = scroll_y;
+                5'd7:        cpu_rdata = {5'b0, font_slot};
+                5'd8:        cpu_rdata = {4'b0, gfx_color};
+                5'd9:        begin
                     cpu_rdata = 0;
                     for (int i = 0; i < 16; i++)
                         if (spr_enable[i]) cpu_rdata = cpu_rdata + 1;
                 end
-                5'd10:       cpu_rdata = {7'b0, cursor_enable}; // CursorEnable
-                5'd11:       cpu_rdata = collision_ss;           // ColSt (read-clears)
-                5'd12:       cpu_rdata = collision_bg;           // ColBg (read-clears)
+                5'd10:       cpu_rdata = {7'b0, cursor_enable};
+                5'd11:       cpu_rdata = collision_ss;
+                5'd12:       cpu_rdata = collision_bg;
                 REG_BORDER:  cpu_rdata = {4'b0, border_color};
                 REG_CHARIN:  cpu_rdata = char_in_reg;
-                REG_CMD:     cpu_rdata = {7'b0, cmd_busy};
-                5'd31:       cpu_rdata = irq_ctrl;              // IrqCtrl
+                REG_CMD:     cpu_rdata = {7'b0, cmd_busy || artist_busy};
+                5'd31:       cpu_rdata = irq_ctrl;
                 default:     cpu_rdata = regs[reg_offset];
             endcase
         end
         else if (tile_reg_sel)   cpu_rdata = tile_rdata;
-        else if (char_ram_sel)  cpu_rdata = char_ram[char_offset];
-        else if (color_ram_sel) cpu_rdata = color_ram[color_offset];
+        else if (char_ram_sel)  cpu_rdata = cpu_rd_latch;
+        else if (color_ram_sel) cpu_rdata = cpu_rd_latch;
     end
 
-    // Debug read port — mirrors cpu_rdata mux but uses dbg_addr
-    // No side effects (no CHARIN clear, no collision register clear)
+    // Debug read port
     wire dbg_char_sel  = (dbg_addr >= CHAR_RAM_BASE && dbg_addr <= CHAR_RAM_END);
     wire dbg_color_sel = (dbg_addr >= COLOR_RAM_BASE && dbg_addr <= COLOR_RAM_END);
     wire dbg_vgc_sel   = (dbg_addr >= VGC_BASE && dbg_addr <= VGC_REGS_END);
@@ -377,10 +628,38 @@ module vgc (
     wire dbg_spr_sel   = (dbg_addr >= SPR_REG_BASE && dbg_addr <= SPR_REG_END);
     wire dbg_owns      = dbg_char_sel || dbg_color_sel || dbg_vgc_sel || dbg_tile_sel || dbg_spr_sel;
 
+    logic        dbg_rd_pending;
+    logic [1:0]  dbg_rd_source;
+    logic [7:0]  dbg_rd_latch;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            dbg_rd_pending <= 0;
+            dbg_rd_source <= 0;
+        end else begin
+            dbg_rd_pending <= 0;
+            dbg_rd_source <= 0;
+            if (dbg_char_sel) begin
+                dbg_rd_pending <= 1;
+                dbg_rd_source <= 2'd1;
+            end else if (dbg_color_sel) begin
+                dbg_rd_pending <= 1;
+                dbg_rd_source <= 2'd2;
+            end
+            if (dbg_rd_pending) begin
+                case (dbg_rd_source)
+                    2'd1: dbg_rd_latch <= char_a_dout;
+                    2'd2: dbg_rd_latch <= color_a_dout;
+                    default: ;
+                endcase
+            end
+        end
+    end
+
     always_comb begin
         dbg_rdata = 8'h00;
-        if (dbg_char_sel)       dbg_rdata = char_ram[dbg_addr - CHAR_RAM_BASE];
-        else if (dbg_color_sel) dbg_rdata = color_ram[dbg_addr - COLOR_RAM_BASE];
+        if (dbg_char_sel)       dbg_rdata = dbg_rd_latch;
+        else if (dbg_color_sel) dbg_rdata = dbg_rd_latch;
         else if (dbg_vgc_sel) begin
             case (dbg_addr[4:0])
                 REG_MODE:    dbg_rdata = {5'b0, mode};
@@ -396,23 +675,6 @@ module vgc (
     end
 
     // =========================================================================
-    // Screen address helper
-    // =========================================================================
-    function automatic logic [10:0] screen_addr(input logic [6:0] col, input logic [4:0] row);
-        logic [4:0] rr;
-        rr = row + scroll_offset;
-        if (rr >= ROWS) rr = rr - ROWS;
-        return {4'b0, rr} * COLS + {4'b0, col};
-    endfunction
-
-    // =========================================================================
-    // GFX pixel write helper
-    // =========================================================================
-    function automatic logic [16:0] gfx_addr(input logic [8:0] x, input logic [7:0] y);
-        return {9'b0, y} * GFX_W + {8'b0, x};
-    endfunction
-
-    // =========================================================================
     // CPU writes + command processor
     // =========================================================================
     always_ff @(posedge clk) begin
@@ -425,108 +687,74 @@ module vgc (
             cmd_busy <= 0; char_in_reg <= 0;
             collision_ss <= 0; collision_bg <= 0;
             irq_ctrl <= 0; irq_raster_pending <= 0;
-            copper_enabled <= 0; copper_count <= 0; copper_index <= 0;
+            copper_enabled <= 0; copper_count <= 0;
             copper_target_list <= 0; copper_pending_list <= 0;
             copper_loading <= 0;
-            fill_sp <= 0;
+            sprrow_count <= 0; sprcopy_phase <= 0;
+            memread_pending <= 0;
+            vgc_tile_we <= 0; vgc_tile_re <= 0;
+            artist_cmd_valid <= 0;
             for (int i = 0; i < 32; i++) regs[i] <= 0;
             for (int i = 0; i < 16; i++) begin
                 spr_x[i] <= 0; spr_y[i] <= 0; spr_enable[i] <= 0;
                 spr_flip_h[i] <= 0; spr_flip_v[i] <= 0;
                 spr_pri[i] <= 0; spr_shape[i] <= 0; spr_trans[i] <= 0;
             end
-            // Clear screen on reset
-            for (int i = 0; i < 2000; i++) begin
-                char_ram[i] <= 8'h20;    // space
-                color_ram[i] <= 8'h01;   // default fg color
-            end
-            // Clear graphics and sprite data
-            for (int i = 0; i < GFX_SIZE; i++) gfx_ram[i] <= 4'h0;
-            for (int i = 0; i < 2048; i++) sprite_shapes[i] <= 8'h0;
         end else begin
+
+            // Default: no command writes this cycle
+            cmd_char_we <= 0;
+            cmd_color_we <= 0;
+            cmd_gfx_we <= 0;
+            cmd_gfx_re <= 0;
+            cmd_spr_we <= 0;
+            cmd_spr_re <= 0;
+            artist_cmd_valid <= 0;
+
+            // Keyboard input — merged here to avoid multi-driver on char_in_reg
+            if (key_valid)
+                char_in_reg <= key_data;
+            else if (cpu_re && cpu_ce && cpu_addr == (VGC_BASE + REG_CHARIN) && char_in_reg != 0)
+                char_in_reg <= 0;
 
             // Scroll state machine
             if (scroll_pending) begin
-                char_ram[screen_addr(scroll_col, ROWS - 1)] <= 8'h20;
-                color_ram[screen_addr(scroll_col, ROWS - 1)] <= {4'b0, fg_color};
+                cmd_char_addr <= screen_addr(scroll_col, ROWS - 1);
+                cmd_char_din <= 8'h20;
+                cmd_char_we <= 1;
+                cmd_color_addr <= screen_addr(scroll_col, ROWS - 1);
+                cmd_color_din <= {4'b0, fg_color};
+                cmd_color_we <= 1;
                 if (scroll_col == COLS - 1) begin
                     scroll_pending <= 0; scroll_col <= 0;
                 end else
                     scroll_col <= scroll_col + 1;
             end
 
-            // Drawing command state machine
+            // Clear VGC tile command strobes
+            vgc_tile_we <= 0;
+            vgc_tile_re <= 0;
+
+            // MemRead latency: latch data one cycle after setting address
+            if (memread_pending) begin
+                case (memread_space)
+                    3'd0: regs[20] <= char_a_dout;
+                    3'd1: regs[20] <= color_a_dout;
+                    3'd2: regs[20] <= {4'b0, gfx_a_dout};
+                    3'd3: regs[20] <= spr_a_dout;
+                    3'd4: regs[20] <= tile_blt_rdata;
+                    default: ;
+                endcase
+                memread_pending <= 0;
+            end
+
+            // Drawing command state machine (non-drawing ops remain here)
             if (cmd_busy) begin
                 case (cmd_op)
-                    CMD_LINE: begin
-                        // Bresenham line — one pixel per clock
-                        if (cmd_x >= 0 && cmd_x < GFX_W && cmd_y >= 0 && cmd_y < GFX_H)
-                            gfx_ram[cmd_y * GFX_W + cmd_x] <= gfx_color;
-                        if (cmd_x == cmd_x2 && cmd_y == cmd_y2 ||
-                            cmd_x < -16 || cmd_x > GFX_W + 16 ||
-                            cmd_y < -16 || cmd_y > GFX_H + 16) begin
-                            cmd_busy <= 0;  // done or out of bounds safety
-                        end else begin
-                            // Compute both step conditions from current err
-                            // Must update err atomically to avoid dual-assignment bug
-                            if (cmd_err * 2 >= cmd_dy && cmd_err * 2 <= cmd_dx) begin
-                                cmd_err <= cmd_err + cmd_dy + cmd_dx;
-                                cmd_x <= cmd_x + cmd_sx;
-                                cmd_y <= cmd_y + cmd_sy;
-                            end else if (cmd_err * 2 >= cmd_dy) begin
-                                cmd_err <= cmd_err + cmd_dy;
-                                cmd_x <= cmd_x + cmd_sx;
-                            end else if (cmd_err * 2 <= cmd_dx) begin
-                                cmd_err <= cmd_err + cmd_dx;
-                                cmd_y <= cmd_y + cmd_sy;
-                            end
-                        end
-                    end
-                    CMD_RECT: begin
-                        // Rectangle outline — one pixel per clock
-                        // Draw top/bottom edges and left/right edges
-                        if (cmd_cx < GFX_W && cmd_cy < GFX_H) begin
-                            if (cmd_cy == cmd_y[7:0] || cmd_cy == cmd_y2[7:0] ||
-                                cmd_cx == cmd_x[8:0] || cmd_cx == cmd_x2[8:0])
-                                gfx_ram[{9'b0, cmd_cy} * GFX_W + {8'b0, cmd_cx}] <= gfx_color;
-                        end
-                        if (cmd_cx >= cmd_x2[8:0]) begin
-                            cmd_cx <= cmd_x[8:0];
-                            if (cmd_cy >= cmd_y2[7:0])
-                                cmd_busy <= 0;
-                            else
-                                cmd_cy <= cmd_cy + 1;
-                        end else
-                            cmd_cx <= cmd_cx + 1;
-                    end
-                    CMD_FILL: begin
-                        // Filled rectangle — one pixel per clock
-                        if (cmd_cx < GFX_W && cmd_cy < GFX_H)
-                            gfx_ram[{9'b0, cmd_cy} * GFX_W + {8'b0, cmd_cx}] <= gfx_color;
-                        if (cmd_cx >= cmd_x2[8:0]) begin
-                            cmd_cx <= cmd_x[8:0];
-                            if (cmd_cy >= cmd_y2[7:0])
-                                cmd_busy <= 0;
-                            else
-                                cmd_cy <= cmd_cy + 1;
-                        end else
-                            cmd_cx <= cmd_cx + 1;
-                    end
-                    CMD_GCLS: begin
-                        // Clear entire framebuffer
-                        gfx_ram[{9'b0, cmd_cy} * GFX_W + {8'b0, cmd_cx}] <= 4'h0;
-                        if (cmd_cx == GFX_W - 1) begin
-                            cmd_cx <= 0;
-                            if (cmd_cy == GFX_H - 1)
-                                cmd_busy <= 0;
-                            else
-                                cmd_cy <= cmd_cy + 1;
-                        end else
-                            cmd_cx <= cmd_cx + 1;
-                    end
                     CMD_SPRCLR: begin
-                        // Clear 128 bytes of sprite shape data
-                        sprite_shapes[{cmd_x[4:1], cmd_cy[3:0], cmd_cx[2:0]}] <= 8'h00;
+                        cmd_spr_addr <= {cmd_x[4:1], cmd_cy[3:0], cmd_cx[2:0]};
+                        cmd_spr_din <= 8'h00;
+                        cmd_spr_we <= 1;
                         if (cmd_cx == 7) begin
                             cmd_cx <= 0;
                             if (cmd_cy == 15)
@@ -537,9 +765,12 @@ module vgc (
                             cmd_cx <= cmd_cx + 1;
                     end
                     CMD_TXTCLS: begin
-                        // Clear text screen — 80 cols × 25 rows
-                        char_ram[{4'b0, cmd_cy[4:0]} * COLS + {2'b0, cmd_cx[6:0]}] <= 8'h20;
-                        color_ram[{4'b0, cmd_cy[4:0]} * COLS + {2'b0, cmd_cx[6:0]}] <= {4'b0, fg_color};
+                        cmd_char_addr <= {4'b0, cmd_cy[4:0]} * COLS + {2'b0, cmd_cx[6:0]};
+                        cmd_char_din <= 8'h20;
+                        cmd_char_we <= 1;
+                        cmd_color_addr <= {4'b0, cmd_cy[4:0]} * COLS + {2'b0, cmd_cx[6:0]};
+                        cmd_color_din <= {4'b0, fg_color};
+                        cmd_color_we <= 1;
                         if (cmd_cx == COLS - 1) begin
                             cmd_cx <= 0;
                             if (cmd_cy == ROWS - 1)
@@ -549,124 +780,40 @@ module vgc (
                         end else
                             cmd_cx <= cmd_cx + 1;
                     end
-                    8'h04: begin // Circle — midpoint algorithm
-                        // Plot 8 octant points from center (cmd_x, cmd_y) with dx, dy
-                        // cmd_dx = current x offset, cmd_dy = current y offset
-                        if (cmd_dx <= cmd_dy) begin
-                            // Plot 8 symmetric points
-                            if (cmd_x+cmd_dx >= 0 && cmd_x+cmd_dx < GFX_W && cmd_y+cmd_dy >= 0 && cmd_y+cmd_dy < GFX_H)
-                                gfx_ram[(cmd_y+cmd_dy) * GFX_W + (cmd_x+cmd_dx)] <= gfx_color;
-                            if (cmd_x-cmd_dx >= 0 && cmd_x-cmd_dx < GFX_W && cmd_y+cmd_dy >= 0 && cmd_y+cmd_dy < GFX_H)
-                                gfx_ram[(cmd_y+cmd_dy) * GFX_W + (cmd_x-cmd_dx)] <= gfx_color;
-                            if (cmd_x+cmd_dx >= 0 && cmd_x+cmd_dx < GFX_W && cmd_y-cmd_dy >= 0 && cmd_y-cmd_dy < GFX_H)
-                                gfx_ram[(cmd_y-cmd_dy) * GFX_W + (cmd_x+cmd_dx)] <= gfx_color;
-                            if (cmd_x-cmd_dx >= 0 && cmd_x-cmd_dx < GFX_W && cmd_y-cmd_dy >= 0 && cmd_y-cmd_dy < GFX_H)
-                                gfx_ram[(cmd_y-cmd_dy) * GFX_W + (cmd_x-cmd_dx)] <= gfx_color;
-                            if (cmd_x+cmd_dy >= 0 && cmd_x+cmd_dy < GFX_W && cmd_y+cmd_dx >= 0 && cmd_y+cmd_dx < GFX_H)
-                                gfx_ram[(cmd_y+cmd_dx) * GFX_W + (cmd_x+cmd_dy)] <= gfx_color;
-                            if (cmd_x-cmd_dy >= 0 && cmd_x-cmd_dy < GFX_W && cmd_y+cmd_dx >= 0 && cmd_y+cmd_dx < GFX_H)
-                                gfx_ram[(cmd_y+cmd_dx) * GFX_W + (cmd_x-cmd_dy)] <= gfx_color;
-                            if (cmd_x+cmd_dy >= 0 && cmd_x+cmd_dy < GFX_W && cmd_y-cmd_dx >= 0 && cmd_y-cmd_dx < GFX_H)
-                                gfx_ram[(cmd_y-cmd_dx) * GFX_W + (cmd_x+cmd_dy)] <= gfx_color;
-                            if (cmd_x-cmd_dy >= 0 && cmd_x-cmd_dy < GFX_W && cmd_y-cmd_dx >= 0 && cmd_y-cmd_dx < GFX_H)
-                                gfx_ram[(cmd_y-cmd_dx) * GFX_W + (cmd_x-cmd_dy)] <= gfx_color;
-                            // Step
-                            cmd_dx <= cmd_dx + 1;
-                            if (cmd_err < 0) begin
-                                cmd_err <= cmd_err + 2 * cmd_dx + 3;
-                            end else begin
-                                cmd_err <= cmd_err + 2 * (cmd_dx - cmd_dy) + 5;
-                                cmd_dy <= cmd_dy - 1;
-                            end
-                        end else
-                            cmd_busy <= 0;
-                    end
-                    8'h13: begin // SprCopy — copy 128 bytes of shape data
-                        sprite_shapes[{cmd_x[3:0], cmd_cy[3:0], cmd_cx[2:0]}]
-                            <= sprite_shapes[{cmd_y[3:0], cmd_cy[3:0], cmd_cx[2:0]}];
-                        if (cmd_cx == 7) begin
-                            cmd_cx <= 0;
-                            if (cmd_cy == 15)
-                                cmd_busy <= 0;
-                            else
-                                cmd_cy <= cmd_cy + 1;
-                        end else
-                            cmd_cx <= cmd_cx + 1;
-                    end
-                    8'h09: begin // Paint — flood fill
-                        if (fill_sp > 0 && fill_sp < FILL_STACK_SIZE) begin
-                            // Pop coordinate from stack
-                            fill_sp <= fill_sp - 1;
-                            cmd_cx <= fill_stack[fill_sp - 1][8:0];  // x
-                            cmd_cy <= fill_stack[fill_sp - 1][16:9]; // y
-                        end else if (fill_sp == 0) begin
-                            cmd_busy <= 0; // stack empty, done
+                    8'h13: begin // SprCopy
+                        if (!sprcopy_phase) begin
+                            cmd_spr_addr <= {cmd_y[3:0], cmd_cy[3:0], cmd_cx[2:0]};
+                            cmd_spr_re <= 1;
+                            sprcopy_phase <= 1;
                         end else begin
-                            // Process current pixel
-                            if (cmd_cx < GFX_W && cmd_cy < GFX_H &&
-                                gfx_ram[{9'b0, cmd_cy} * GFX_W + {8'b0, cmd_cx}] == fill_target &&
-                                fill_target != gfx_color) begin
-                                gfx_ram[{9'b0, cmd_cy} * GFX_W + {8'b0, cmd_cx}] <= gfx_color;
-                                // Push 4 neighbors
-                                if (fill_sp + 3 < FILL_STACK_SIZE) begin
-                                    fill_stack[fill_sp]   <= {cmd_cy, cmd_cx + 9'd1};
-                                    fill_stack[fill_sp+1] <= {cmd_cy, cmd_cx - 9'd1};
-                                    fill_stack[fill_sp+2] <= {cmd_cy + 8'd1, cmd_cx};
-                                    fill_stack[fill_sp+3] <= {cmd_cy - 8'd1, cmd_cx};
-                                    fill_sp <= fill_sp + 4;
-                                end
-                            end
+                            cmd_spr_addr <= {cmd_x[3:0], cmd_cy[3:0], cmd_cx[2:0]};
+                            cmd_spr_din <= spr_a_dout;
+                            cmd_spr_we <= 1;
+                            sprcopy_phase <= 0;
+                            if (cmd_cx == 7) begin
+                                cmd_cx <= 0;
+                                if (cmd_cy == 15)
+                                    cmd_busy <= 0;
+                                else
+                                    cmd_cy <= cmd_cy + 1;
+                            end else
+                                cmd_cx <= cmd_cx + 1;
                         end
                     end
-                    CMD_GTEXT: begin
-                        // Render text string to gfx framebuffer using font ROM
-                        // One pixel per clock through nested loops:
-                        //   char_idx → font_row → scale_y → font_col → scale_x
-                        if (gt_char_idx < gt_char_len) begin
-                            if (gt_font_byte[3'd7 - gt_font_col]) begin
-                                // Font bit set — compute and plot pixel
-                                // px = pen_x + col*scale + scale_x,  py = start_y + row*scale + scale_y
-                                if ((16'(gt_pen_x) + 16'(gt_font_col) * 16'(gt_scale) + 16'(gt_scale_x)) < GFX_W &&
-                                    (16'(gt_start_y) + 16'(gt_font_row) * 16'(gt_scale) + 16'(gt_scale_y)) < GFX_H)
-                                    gfx_ram[(17'(gt_start_y) + 17'(gt_font_row) * 17'(gt_scale) + 17'(gt_scale_y)) * GFX_W +
-                                            (17'(gt_pen_x) + 17'(gt_font_col) * 17'(gt_scale) + 17'(gt_scale_x))] <= gfx_color;
-                            end
-                            // Advance innermost to outermost
-                            if (gt_scale_x + 8'd1 < gt_scale)
-                                gt_scale_x <= gt_scale_x + 1;
-                            else begin
-                                gt_scale_x <= 0;
-                                if (gt_font_col < 7)
-                                    gt_font_col <= gt_font_col + 1;
-                                else begin
-                                    gt_font_col <= 0;
-                                    if (gt_scale_y + 8'd1 < gt_scale)
-                                        gt_scale_y <= gt_scale_y + 1;
-                                    else begin
-                                        gt_scale_y <= 0;
-                                        if (gt_font_row < 7) begin
-                                            gt_font_row <= gt_font_row + 1;
-                                            gt_font_byte <= font_rom[{gt_cur_char, gt_font_row + 3'd1}];
-                                        end else begin
-                                            gt_font_row <= 0;
-                                            gt_char_idx <= gt_char_idx + 1;
-                                            gt_pen_x <= gt_pen_x + 16'(8) * 16'(gt_scale);
-                                            if (gt_char_idx + 1 < gt_char_len) begin
-                                                gt_cur_char <= fio_name[gt_char_idx + 1];
-                                                gt_font_byte <= font_rom[{fio_name[gt_char_idx + 1], 3'b000}];
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end else
+                    CMD_SPRROW: begin
+                        cmd_spr_addr <= {sprrow_spr, sprrow_row, sprrow_count};
+                        cmd_spr_din <= sprrow_data[sprrow_count];
+                        cmd_spr_we <= 1;
+                        if (sprrow_count == 7)
                             cmd_busy <= 0;
+                        else
+                            sprrow_count <= sprrow_count + 1;
                     end
                     default: cmd_busy <= 0;
                 endcase
             end
 
-            // Copper list loading state machine (copies list entries to active arrays)
+            // Copper list loading state machine
             if (copper_loading) begin
                 if (copper_load_idx < copper_list_count[copper_load_src]) begin
                     copper_pos[copper_load_idx] <= copper_list_pos[{copper_load_src, copper_load_idx[4:0]}];
@@ -679,8 +826,30 @@ module vgc (
                 end
             end
 
-            // CPU writes
-            if (cpu_we) begin
+            // Copper vblank: swap pending→active list if changed
+            if (h_count == 0 && v_count == V_ACTIVE) begin
+                if (copper_pending_list != copper_active_list && !copper_loading) begin
+                    copper_active_list <= copper_pending_list;
+                    copper_loading <= 1;
+                    copper_load_idx <= 0;
+                    copper_load_src <= copper_pending_list;
+                end
+            end
+
+            // Copper fire: apply register writes from sub-module
+            if (copper_fire) begin
+                case (copper_fire_reg)
+                    8'd1: bg_color     <= copper_fire_val[3:0];
+                    8'd2: fg_color     <= copper_fire_val[3:0];
+                    8'd13: border_color <= copper_fire_val[3:0];
+                    default: regs[copper_fire_reg[4:0]] <= copper_fire_val;
+                endcase
+            end
+
+            // CPU writes — gated by cpu_ce so the VGC only captures
+            // each bus transaction once (the CPU holds WE between
+            // clock-enable cycles when stalled via RDY).
+            if (cpu_we && cpu_ce) begin
                 if (vgc_reg_sel) begin
                     case (reg_offset)
                         REG_MODE:    mode <= cpu_wdata[2:0];
@@ -688,20 +857,22 @@ module vgc (
                         REG_FGCOL:   fg_color <= cpu_wdata[3:0];
                         REG_CURSORX: cursor_x <= cpu_wdata[6:0];
                         REG_CURSORY: cursor_y <= cpu_wdata[4:0];
-                        5'd5:        scroll_x <= cpu_wdata;         // ScrollX
-                        5'd6:        scroll_y <= cpu_wdata;         // ScrollY
-                        5'd7:        font_slot <= cpu_wdata[2:0];  // Font
-                        5'd8:        gfx_color <= cpu_wdata[3:0];  // direct color write
-                        5'd10:       cursor_enable <= cpu_wdata[0]; // CursorEnable
-                        5'd11:       collision_ss <= 0;             // ColSt write-clears
-                        5'd12:       collision_bg <= 0;             // ColBg write-clears
+                        5'd5:        scroll_x <= cpu_wdata;
+                        5'd6:        scroll_y <= cpu_wdata;
+                        5'd7:        font_slot <= cpu_wdata[2:0];
+                        5'd8:        gfx_color <= cpu_wdata[3:0];
+                        5'd10:       cursor_enable <= cpu_wdata[0];
+                        5'd11:       collision_ss <= 0;
+                        5'd12:       collision_bg <= 0;
                         REG_BORDER:  border_color <= cpu_wdata[3:0];
-                        5'd31:       irq_ctrl <= cpu_wdata;         // IrqCtrl
+                        5'd31:       irq_ctrl <= cpu_wdata;
                         REG_CHAROUT: begin
                             case (cpu_wdata)
                                 8'h08: begin
                                     if (cursor_x > 0) cursor_x <= cursor_x - 1;
-                                    char_ram[screen_addr(cursor_x > 0 ? cursor_x - 1 : 0, cursor_y)] <= 8'h20;
+                                    cmd_char_addr <= screen_addr(cursor_x > 0 ? cursor_x - 1 : 0, cursor_y);
+                                    cmd_char_din <= 8'h20;
+                                    cmd_char_we <= 1;
                                 end
                                 8'h0A: begin
                                     if (cursor_y >= ROWS - 1) begin
@@ -711,18 +882,21 @@ module vgc (
                                         cursor_y <= cursor_y + 1;
                                 end
                                 8'h0C: begin
-                                    // Form feed — clear screen via state machine
                                     cursor_x <= 0; cursor_y <= 0;
                                     scroll_offset <= 0;
                                     cmd_cx <= 0; cmd_cy <= 0;
                                     cmd_busy <= 1; cmd_op <= CMD_TXTCLS;
                                 end
                                 8'h0D: cursor_x <= 0;
-                                8'h13: begin cursor_x <= 0; cursor_y <= 0; end // HOME
+                                8'h13: begin cursor_x <= 0; cursor_y <= 0; end
                                 default: begin
                                     if (cpu_wdata >= 8'h20) begin
-                                        char_ram[screen_addr(cursor_x, cursor_y)] <= cpu_wdata;
-                                        color_ram[screen_addr(cursor_x, cursor_y)] <= {4'b0, fg_color};
+                                        cmd_char_addr <= screen_addr(cursor_x, cursor_y);
+                                        cmd_char_din <= cpu_wdata;
+                                        cmd_char_we <= 1;
+                                        cmd_color_addr <= screen_addr(cursor_x, cursor_y);
+                                        cmd_color_din <= {4'b0, fg_color};
+                                        cmd_color_we <= 1;
                                         if (cursor_x >= COLS - 1) begin
                                             cursor_x <= 0;
                                             if (cursor_y >= ROWS - 1) begin
@@ -737,90 +911,51 @@ module vgc (
                             endcase
                         end
                         REG_CMD: begin
-                            // Command dispatch — parameter layout matches Avalonia:
-                            // p0 (X0) = regs[17]|regs[18]<<8
-                            // p1 (Y0) = regs[19]|regs[20]<<8
-                            // p2 (X1) = regs[21]|regs[22]<<8
-                            // p3 (Y1) = regs[23]|regs[24]<<8
-                            if (!cmd_busy) begin
-                                // Extract 16-bit params
+                            if (!cmd_busy && !artist_busy) begin
                                 cmd_x  <= {regs[18][1:0], regs[17]};
                                 cmd_y  <= {regs[20][1:0], regs[19]};
                                 cmd_x2 <= {regs[22][1:0], regs[21]};
                                 cmd_y2 <= {regs[24][1:0], regs[23]};
 
                                 case (cpu_wdata)
-                                    CMD_PLOT: begin
-                                        // Immediate: plot at (p0, p1)
-                                        if ({regs[18][0], regs[17]} < GFX_W && regs[19] < GFX_H)
-                                            gfx_ram[{8'b0, regs[19]} * GFX_W + {8'b0, regs[18][0], regs[17]}] <= gfx_color;
+                                    // Drawing commands → ARTIST
+                                    CMD_PLOT, CMD_UNPLOT, CMD_LINE,
+                                    CMD_CIRCLE, CMD_RECT, CMD_FILL,
+                                    CMD_GCLS, CMD_PAINT, CMD_GTEXT: begin
+                                        artist_cmd_valid <= 1;
+                                        artist_cmd_code <= cpu_wdata;
                                     end
-                                    CMD_UNPLOT: begin
-                                        if ({regs[18][0], regs[17]} < GFX_W && regs[19] < GFX_H)
-                                            gfx_ram[{8'b0, regs[19]} * GFX_W + {8'b0, regs[18][0], regs[17]}] <= 4'h0;
-                                    end
-                                    CMD_LINE: begin
-                                        // Bresenham setup
-                                        cmd_dx <= ({regs[22][0], regs[21]} >= {regs[18][0], regs[17]})
-                                                  ? ({regs[22][0], regs[21]} - {regs[18][0], regs[17]})
-                                                  : ({regs[18][0], regs[17]} - {regs[22][0], regs[21]});
-                                        cmd_dy <= (regs[23] >= regs[19])
-                                                  ? -(10'(regs[23] - regs[19]))
-                                                  : 10'(regs[19] - regs[23]);
-                                        cmd_sx <= ({regs[22][0], regs[21]} >= {regs[18][0], regs[17]}) ? 10'd1 : -10'd1;
-                                        cmd_sy <= (regs[23] >= regs[19]) ? 10'd1 : -10'd1;
-                                        cmd_err <= (({regs[22][0], regs[21]} >= {regs[18][0], regs[17]})
-                                                   ? ({regs[22][0], regs[21]} - {regs[18][0], regs[17]})
-                                                   : ({regs[18][0], regs[17]} - {regs[22][0], regs[21]}))
-                                                 + ((regs[23] >= regs[19])
-                                                   ? -(10'(regs[23] - regs[19]))
-                                                   : 10'(regs[19] - regs[23]));
-                                        cmd_busy <= 1; cmd_op <= CMD_LINE;
-                                    end
-                                    CMD_RECT, CMD_FILL: begin
-                                        // Rect outline or filled rect
-                                        cmd_cx <= {regs[18][0], regs[17]};
-                                        cmd_cy <= regs[19];
-                                        cmd_busy <= 1;
-                                        cmd_op <= cpu_wdata; // RECT or FILL
-                                    end
-                                    CMD_GCLS: begin
-                                        cmd_cx <= 0; cmd_cy <= 0;
-                                        cmd_busy <= 1; cmd_op <= CMD_GCLS;
-                                    end
+
                                     CMD_GCOLOR: begin
                                         gfx_color <= regs[17][3:0];
                                     end
-                                    // Sprite commands — P0 (regs[17]) = sprite index
                                     CMD_SPRDEF: begin
-                                        // Set individual sprite pixel: P0=sprite#, P1=x, P2=y, P3=color
                                         if (regs[17] < NUM_SPRITES && regs[18] < SPR_W && regs[19] < SPR_H) begin
-                                            if (regs[18][0]) // odd x: low nibble
-                                                sprite_shapes[{regs[17][3:0], regs[19][3:0], regs[18][3:1]}]
-                                                    <= {sprite_shapes[{regs[17][3:0], regs[19][3:0], regs[18][3:1]}][7:4], regs[20][3:0]};
-                                            else // even x: high nibble
-                                                sprite_shapes[{regs[17][3:0], regs[19][3:0], regs[18][3:1]}]
-                                                    <= {regs[20][3:0], sprite_shapes[{regs[17][3:0], regs[19][3:0], regs[18][3:1]}][3:0]};
+                                            cmd_spr_addr <= {regs[17][3:0], regs[19][3:0], regs[18][3:1]};
+                                            cmd_spr_re <= 1;
+                                            cmd_busy <= 1; cmd_op <= CMD_SPRDEF;
                                         end
                                     end
                                     CMD_SPRROW: begin
-                                        // Set one row: P0=sprite#, P1=row, P2..P9=8 bytes
                                         if (regs[17] < NUM_SPRITES && regs[18] < SPR_H) begin
-                                            sprite_shapes[{regs[17][3:0], regs[18][3:0], 3'b000}] <= regs[19];
-                                            sprite_shapes[{regs[17][3:0], regs[18][3:0], 3'b001}] <= regs[20];
-                                            sprite_shapes[{regs[17][3:0], regs[18][3:0], 3'b010}] <= regs[21];
-                                            sprite_shapes[{regs[17][3:0], regs[18][3:0], 3'b011}] <= regs[22];
-                                            sprite_shapes[{regs[17][3:0], regs[18][3:0], 3'b100}] <= regs[23];
-                                            sprite_shapes[{regs[17][3:0], regs[18][3:0], 3'b101}] <= regs[24];
-                                            sprite_shapes[{regs[17][3:0], regs[18][3:0], 3'b110}] <= regs[25];
-                                            sprite_shapes[{regs[17][3:0], regs[18][3:0], 3'b111}] <= regs[26];
+                                            sprrow_spr <= regs[17][3:0];
+                                            sprrow_row <= regs[18][3:0];
+                                            sprrow_data[0] <= regs[19];
+                                            sprrow_data[1] <= regs[20];
+                                            sprrow_data[2] <= regs[21];
+                                            sprrow_data[3] <= regs[22];
+                                            sprrow_data[4] <= regs[23];
+                                            sprrow_data[5] <= regs[24];
+                                            sprrow_data[6] <= regs[25];
+                                            sprrow_data[7] <= regs[26];
+                                            sprrow_count <= 0;
+                                            cmd_busy <= 1; cmd_op <= CMD_SPRROW;
                                         end
                                     end
                                     CMD_SPRCLR: begin
-                                        // Clear sprite shape — runs as state machine
                                         if (regs[17] < NUM_SPRITES) begin
                                             cmd_cx <= 0; cmd_cy <= 0;
-                                            cmd_x <= {5'b0, regs[17][3:0], 1'b0};  // store sprite# in cmd_x
+                                            cmd_x <= {5'b0, regs[17][3:0], 1'b0};
                                             cmd_busy <= 1; cmd_op <= CMD_SPRCLR;
                                         end
                                     end
@@ -848,58 +983,28 @@ module vgc (
                                         if (regs[17] < NUM_SPRITES)
                                             spr_pri[regs[17][3:0]] <= regs[18][1:0];
                                     end
-                                    // Circle: P0|P1=cx, P2|P3=cy, P4|P5=radius
-                                    8'h04: begin // CmdCircle
-                                        cmd_x  <= {regs[18][1:0], regs[17]};  // center x
-                                        cmd_y  <= {regs[20][1:0], regs[19]};  // center y
-                                        cmd_x2 <= {regs[22][1:0], regs[21]};  // radius
-                                        cmd_dx <= 0;                           // Bresenham x = 0
-                                        cmd_dy <= {regs[22][1:0], regs[21]};  // Bresenham y = radius
-                                        cmd_err <= 1 - {regs[22][1:0], regs[21]}; // err = 1 - radius
-                                        cmd_busy <= 1; cmd_op <= 8'h04;
-                                    end
-                                    // SprCopy: P0=dest sprite#, P1=src sprite#
                                     8'h13: begin // CmdSprCopy
                                         if (regs[17] < NUM_SPRITES && regs[18] < NUM_SPRITES) begin
-                                            cmd_x <= {6'b0, regs[17][3:0]};  // dest
-                                            cmd_y <= {6'b0, regs[18][3:0]};  // src
+                                            cmd_x <= {6'b0, regs[17][3:0]};
+                                            cmd_y <= {6'b0, regs[18][3:0]};
                                             cmd_cx <= 0; cmd_cy <= 0;
+                                            sprcopy_phase <= 0;
                                             cmd_busy <= 1; cmd_op <= 8'h13;
                                         end
                                     end
-                                    // SysReset
-                                    8'h1F: begin
+                                    8'h1F: begin // SysReset
                                         cursor_x <= 0; cursor_y <= 0;
                                         mode <= 0; fg_color <= 4'd1; bg_color <= 4'd6;
                                         border_color <= 4'd6; gfx_color <= 4'd1;
                                         scroll_offset <= 0; scroll_x <= 0; scroll_y <= 0;
                                         cursor_enable <= 1; copper_enabled <= 0;
-                                        copper_count <= 0; copper_index <= 0;
+                                        copper_count <= 0;
                                         copper_target_list <= 0; copper_active_list <= 0;
                                         copper_pending_list <= 0; copper_loading <= 0;
                                         for (int i = 0; i < COPPER_LISTS; i++)
                                             copper_list_count[i] <= 0;
                                     end
-                                    // Gtext: P0|P1=x, P2|P3=y, P4=font slot, P5=scale
-                                    CMD_GTEXT: begin
-                                        if (fio_name_len > 0) begin
-                                            gt_pen_x <= {regs[18][0], regs[17]};
-                                            gt_start_y <= regs[19];
-                                            gt_scale <= (regs[22] < 1) ? 8'd1 : regs[22];
-                                            gt_char_idx <= 0;
-                                            gt_char_len <= fio_name_len;
-                                            gt_font_row <= 0;
-                                            gt_font_col <= 0;
-                                            gt_scale_x <= 0;
-                                            gt_scale_y <= 0;
-                                            gt_cur_char <= fio_name[0];
-                                            gt_font_byte <= font_rom[{fio_name[0], 3'b000}];
-                                            cmd_busy <= 1; cmd_op <= CMD_GTEXT;
-                                        end
-                                    end
-                                    // Copper commands — write to target list storage
                                     8'h1B: begin // CmdCopperAdd
-                                        // P0/P1=x, P2=y, P3/P4=reg, P5=value
                                         if (copper_list_count[copper_target_list] < COPPER_MAX) begin
                                             copper_list_pos[{copper_target_list, copper_list_count[copper_target_list][4:0]}]
                                                 <= {1'b0, regs[19]} * GFX_W + {8'b0, regs[18][0], regs[17]};
@@ -908,7 +1013,6 @@ module vgc (
                                             copper_list_val[{copper_target_list, copper_list_count[copper_target_list][4:0]}]
                                                 <= regs[22];
                                             copper_list_count[copper_target_list] <= copper_list_count[copper_target_list] + 1;
-                                            // If editing active list, also update live arrays
                                             if (copper_target_list == copper_active_list) begin
                                                 copper_pos[copper_count] <= {1'b0, regs[19]} * GFX_W + {8'b0, regs[18][0], regs[17]};
                                                 copper_reg[copper_count] <= regs[20];
@@ -917,11 +1021,10 @@ module vgc (
                                             end
                                         end
                                     end
-                                    8'h1C: begin // CmdCopperClear — clear target list
+                                    8'h1C: begin // CmdCopperClear
                                         copper_list_count[copper_target_list] <= 0;
                                         if (copper_target_list == copper_active_list) begin
                                             copper_count <= 0;
-                                            copper_index <= 0;
                                         end
                                     end
                                     8'h1D: begin // CmdCopperEnable
@@ -930,46 +1033,75 @@ module vgc (
                                     8'h1E: begin // CmdCopperDisable
                                         copper_enabled <= 0;
                                     end
-                                    // Advanced copper list management
-                                    CMD_COPPERLIST: begin // Select target list for editing
+                                    CMD_COPPERLIST: begin
                                         copper_target_list <= regs[17][6:0];
                                     end
-                                    CMD_COPPERUSE: begin // Select list to activate at next vblank
+                                    CMD_COPPERUSE: begin
                                         copper_pending_list <= regs[17][6:0];
                                     end
-                                    CMD_COPPERLISTEND: begin // Reset target to active list
+                                    CMD_COPPERLISTEND: begin
                                         copper_target_list <= copper_active_list;
                                     end
-                                    // Paint (flood fill): P0|P1=x, P2|P3=y
-                                    8'h09: begin
-                                        cmd_x <= {regs[18][1:0], regs[17]};
-                                        cmd_y <= {regs[20][1:0], regs[19]};
-                                        if ({regs[18][0], regs[17]} < GFX_W && regs[19] < GFX_H) begin
-                                            fill_target <= gfx_ram[{8'b0, regs[19]} * GFX_W + {8'b0, regs[18][0], regs[17]}];
-                                            fill_stack[0] <= {regs[19][7:0], regs[18][0], regs[17]};
-                                            fill_sp <= 1;
-                                            cmd_busy <= 1; cmd_op <= 8'h09;
-                                        end
-                                    end
-                                    // MemRead: P0=space, P1|P2=addr → P3=data
-                                    8'h19: begin
-                                        case (regs[17]) // memory space
-                                            8'd0: regs[20] <= char_ram[{regs[19], regs[18]}]; // screen
-                                            8'd1: regs[20] <= color_ram[{regs[19], regs[18]}]; // color
-                                            8'd2: regs[20] <= {4'b0, gfx_ram[{regs[19], regs[18]}]}; // gfx
-                                            8'd3: regs[20] <= sprite_shapes[{regs[19], regs[18]}]; // sprite
-                                            8'd4: regs[20] <= tile_inst.tile_data[{regs[19], regs[18]}]; // tile
+                                    8'h19: begin // MemRead
+                                        case (regs[17])
+                                            8'd0: begin
+                                                cmd_char_addr <= {regs[19], regs[18]};
+                                                memread_pending <= 1;
+                                                memread_space <= 3'd0;
+                                            end
+                                            8'd1: begin
+                                                cmd_color_addr <= {regs[19], regs[18]};
+                                                memread_pending <= 1;
+                                                memread_space <= 3'd1;
+                                            end
+                                            8'd2: begin
+                                                cmd_gfx_addr <= {regs[19], regs[18]};
+                                                cmd_gfx_re <= 1;
+                                                memread_pending <= 1;
+                                                memread_space <= 3'd2;
+                                            end
+                                            8'd3: begin
+                                                cmd_spr_addr <= {regs[19], regs[18]};
+                                                cmd_spr_re <= 1;
+                                                memread_pending <= 1;
+                                                memread_space <= 3'd3;
+                                            end
+                                            8'd4: begin
+                                                vgc_tile_addr <= {regs[19][6:0], regs[18]};
+                                                vgc_tile_re <= 1;
+                                                memread_pending <= 1;
+                                                memread_space <= 3'd4;
+                                            end
                                             default: ;
                                         endcase
                                     end
-                                    // MemWrite: P0=space, P1|P2=addr, P3=data
-                                    8'h1A: begin
+                                    8'h1A: begin // MemWrite
                                         case (regs[17])
-                                            8'd0: char_ram[{regs[19], regs[18]}] <= regs[20];
-                                            8'd1: color_ram[{regs[19], regs[18]}] <= regs[20];
-                                            8'd2: gfx_ram[{regs[19], regs[18]}] <= regs[20][3:0];
-                                            8'd3: sprite_shapes[{regs[19], regs[18]}] <= regs[20];
-                                            8'd4: tile_inst.tile_data[{regs[19], regs[18]}] <= regs[20]; // tile
+                                            8'd0: begin
+                                                cmd_char_addr <= {regs[19], regs[18]};
+                                                cmd_char_din <= regs[20];
+                                                cmd_char_we <= 1;
+                                            end
+                                            8'd1: begin
+                                                cmd_color_addr <= {regs[19], regs[18]};
+                                                cmd_color_din <= regs[20];
+                                                cmd_color_we <= 1;
+                                            end
+                                            8'd2: begin
+                                                cmd_gfx_addr <= {regs[19], regs[18]};
+                                                cmd_gfx_din <= regs[20][3:0];
+                                                cmd_gfx_we <= 1;
+                                            end
+                                            8'd3: begin
+                                                cmd_spr_addr <= {regs[19], regs[18]};
+                                                cmd_spr_din <= regs[20];
+                                                cmd_spr_we <= 1;
+                                            end
+                                            8'd4: begin
+                                                vgc_tile_addr <= {regs[19][6:0], regs[18]};
+                                                vgc_tile_wdata <= regs[20];
+                                                vgc_tile_we <= 1;
+                                            end
                                             default: ;
                                         endcase
                                     end
@@ -981,31 +1113,188 @@ module vgc (
                     endcase
                 end
 
-                if (char_ram_sel)  char_ram[char_offset]   <= cpu_wdata;
-                if (color_ram_sel) color_ram[color_offset]  <= cpu_wdata;
+                if (char_ram_sel) begin
+                    cmd_char_addr <= char_offset;
+                    cmd_char_din <= cpu_wdata;
+                    cmd_char_we <= 1;
+                end
+                if (color_ram_sel) begin
+                    cmd_color_addr <= color_offset;
+                    cmd_color_din <= cpu_wdata;
+                    cmd_color_we <= 1;
+                end
 
                 // Shadow FIO name buffer for Gtext
                 if (fio_len_sel)   fio_name_len <= cpu_wdata[5:0];
                 if (fio_name_sel)  fio_name[cpu_addr - FIO_NAME] <= cpu_wdata;
 
-                // Sprite register writes ($A040-$A0BF): 8 bytes per sprite
+                // Sprite register writes
                 if (spr_reg_sel) begin
                     case (spr_field)
-                        3'd0: spr_x[spr_index][7:0] <= cpu_wdata;          // X low
-                        3'd1: spr_x[spr_index][8]   <= cpu_wdata[0];       // X high
-                        3'd2: spr_y[spr_index]       <= cpu_wdata;          // Y low
-                        3'd3: ;                                              // Y high (unused, Y < 200)
-                        3'd4: spr_shape[spr_index]   <= cpu_wdata[3:0];     // shape index
-                        3'd5: begin                                          // flags
+                        3'd0: spr_x[spr_index][7:0] <= cpu_wdata;
+                        3'd1: spr_x[spr_index][8]   <= cpu_wdata[0];
+                        3'd2: spr_y[spr_index]       <= cpu_wdata;
+                        3'd3: ;
+                        3'd4: spr_shape[spr_index]   <= cpu_wdata[3:0];
+                        3'd5: begin
                             spr_flip_h[spr_index] <= cpu_wdata[0];
                             spr_flip_v[spr_index] <= cpu_wdata[1];
                             spr_enable[spr_index] <= cpu_wdata[7];
                         end
-                        3'd6: spr_pri[spr_index]     <= cpu_wdata[1:0];     // priority
-                        3'd7: spr_trans[spr_index]    <= cpu_wdata[3:0];     // trans color
+                        3'd6: spr_pri[spr_index]     <= cpu_wdata[1:0];
+                        3'd7: spr_trans[spr_index]    <= cpu_wdata[3:0];
                     endcase
                 end
             end
+
+            // SPRDEF: complete the read-modify-write
+            if (cmd_busy && cmd_op == CMD_SPRDEF && !memread_pending) begin
+                cmd_spr_addr <= {regs[17][3:0], regs[19][3:0], regs[18][3:1]};
+                if (regs[18][0])
+                    cmd_spr_din <= {spr_a_dout[7:4], regs[20][3:0]};
+                else
+                    cmd_spr_din <= {regs[20][3:0], spr_a_dout[3:0]};
+                cmd_spr_we <= 1;
+                cmd_busy <= 0;
+            end
+
+            // Collision detection — accumulate during active display
+            if (in_text_area_d2 && gfx_x_d2 < GFX_W) begin
+                if (spr_pixel_hit && gfx_b_dout != 0)
+                    collision_bg <= collision_bg | 8'hFF;
+            end
+        end
+    end
+
+    // =========================================================================
+    // Port A write mux — blitter takes priority over command processor
+    // =========================================================================
+    // Blitter read latching
+    logic        blt_rd_pending;
+    logic [2:0]  blt_rd_space;
+    logic [7:0]  blt_rd_latch;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            blt_rd_pending <= 0;
+            blt_rd_space <= 0;
+        end else begin
+            blt_rd_pending <= 0;
+            if (blt_re) begin
+                blt_rd_pending <= 1;
+                blt_rd_space <= blt_space;
+            end
+            if (blt_rd_pending) begin
+                case (blt_rd_space)
+                    3'd1: blt_rd_latch <= char_a_dout;
+                    3'd2: blt_rd_latch <= color_a_dout;
+                    3'd3: blt_rd_latch <= {4'b0, gfx_a_dout};
+                    3'd4: blt_rd_latch <= spr_a_dout;
+                    3'd6: blt_rd_latch <= tile_blt_rdata;
+                    default: ;
+                endcase
+            end
+        end
+    end
+
+    always_comb begin
+        blt_rdata = blt_rd_latch;
+    end
+
+    // Port A address/data/we mux for each memory
+    always_comb begin
+        // char_ram port A
+        char_a_we = 0;
+        char_a_addr = 11'd0;
+        char_a_din = 8'd0;
+        if (blt_we && blt_space == 3'd1) begin
+            char_a_addr = blt_addr[10:0];
+            char_a_din = blt_wdata;
+            char_a_we = 1;
+        end else if (cmd_char_we) begin
+            char_a_addr = cmd_char_addr;
+            char_a_din = cmd_char_din;
+            char_a_we = 1;
+        end else if (blt_re && blt_space == 3'd1) begin
+            char_a_addr = blt_addr[10:0];
+        end else if (cpu_re && cpu_ce && char_ram_sel) begin
+            char_a_addr = char_offset;
+        end else if (dbg_char_sel) begin
+            char_a_addr = dbg_addr - CHAR_RAM_BASE;
+        end else begin
+            char_a_addr = cmd_char_addr;
+        end
+
+        // color_ram port A
+        color_a_we = 0;
+        color_a_addr = 11'd0;
+        color_a_din = 8'd0;
+        if (blt_we && blt_space == 3'd2) begin
+            color_a_addr = blt_addr[10:0];
+            color_a_din = blt_wdata;
+            color_a_we = 1;
+        end else if (cmd_color_we) begin
+            color_a_addr = cmd_color_addr;
+            color_a_din = cmd_color_din;
+            color_a_we = 1;
+        end else if (blt_re && blt_space == 3'd2) begin
+            color_a_addr = blt_addr[10:0];
+        end else if (cpu_re && cpu_ce && color_ram_sel) begin
+            color_a_addr = color_offset;
+        end else if (dbg_color_sel) begin
+            color_a_addr = dbg_addr - COLOR_RAM_BASE;
+        end else begin
+            color_a_addr = cmd_color_addr;
+        end
+
+        // font_rom port A — ARTIST font reads take priority
+        font_a_we = 0;
+        font_a_addr = 11'd0;
+        font_a_din = 8'd0;
+        if (artist_font_re) begin
+            font_a_addr = artist_font_addr;
+        end
+
+        // gfx_ram port A — priority: blitter > ARTIST > cmd > blitter-read > cmd-read
+        gfx_a_we = 0;
+        gfx_a_addr = 16'd0;
+        gfx_a_din = 4'd0;
+        if (blt_we && blt_space == 3'd3) begin
+            gfx_a_addr = blt_addr;
+            gfx_a_din = blt_wdata[3:0];
+            gfx_a_we = 1;
+        end else if (artist_gfx_we) begin
+            gfx_a_addr = artist_gfx_addr;
+            gfx_a_din = artist_gfx_wdata;
+            gfx_a_we = 1;
+        end else if (cmd_gfx_we) begin
+            gfx_a_addr = cmd_gfx_addr;
+            gfx_a_din = cmd_gfx_din;
+            gfx_a_we = 1;
+        end else if (blt_re && blt_space == 3'd3) begin
+            gfx_a_addr = blt_addr;
+        end else if (artist_gfx_re) begin
+            gfx_a_addr = artist_gfx_raddr;
+        end else if (cmd_gfx_re) begin
+            gfx_a_addr = cmd_gfx_addr;
+        end
+
+        // sprite_shapes port A
+        spr_a_we = 0;
+        spr_a_addr = 11'd0;
+        spr_a_din = 8'd0;
+        if (blt_we && blt_space == 3'd4) begin
+            spr_a_addr = blt_addr[10:0];
+            spr_a_din = blt_wdata;
+            spr_a_we = 1;
+        end else if (cmd_spr_we) begin
+            spr_a_addr = cmd_spr_addr;
+            spr_a_din = cmd_spr_din;
+            spr_a_we = 1;
+        end else if (blt_re && blt_space == 3'd4) begin
+            spr_a_addr = blt_addr[10:0];
+        end else if (cmd_spr_re) begin
+            spr_a_addr = cmd_spr_addr;
         end
     end
 
@@ -1014,30 +1303,34 @@ module vgc (
     // =========================================================================
     wire [11:0] tile_rgb;
     wire [1:0]  tile_opaque;
+    wire [7:0]  tile_blt_rdata;
 
-    // Pixel coordinates (computed early for tile engine)
-    logic [6:0]  text_col;
-    logic [4:0]  text_row, real_row;
-    logic [2:0]  font_line, font_pixel;
-    logic [9:0]  text_line;
-    logic [8:0]  gfx_x;
-    logic [7:0]  gfx_y;
+    logic [14:0] vgc_tile_addr;
+    logic [7:0]  vgc_tile_wdata;
+    logic        vgc_tile_we;
+    logic        vgc_tile_re;
 
-    // Pre-compute gfx coordinates for tile engine (combinational)
-    wire [8:0] pre_gfx_x = h_count[9:1];
-    wire [7:0] pre_gfx_y = ((v_count - V_BORDER) >> 1);
+    wire [14:0] tile_blt_addr  = (vgc_tile_we || vgc_tile_re) ? vgc_tile_addr : blt_addr[14:0];
+    wire [7:0]  tile_blt_wdata = vgc_tile_we ? vgc_tile_wdata : blt_wdata;
+    wire        tile_blt_we    = vgc_tile_we || (blt_we && blt_space == 3'd6);
+    wire        tile_blt_re    = vgc_tile_re || (blt_re && blt_space == 3'd6);
 
     tile_engine tile_inst (
         .clk        (clk),
         .rst        (rst),
         .cpu_addr   (cpu_addr),
         .cpu_wdata  (cpu_wdata),
-        .cpu_we     (cpu_we),
+        .cpu_we     (cpu_we & cpu_ce),
         .cpu_rdata  (tile_rdata),
         .cpu_re     (cpu_re),
         .dma_addr   (tile_dma_addr),
         .dma_data   (tile_dma_data),
         .dma_active (tile_dma_active),
+        .blt_tile_addr (tile_blt_addr),
+        .blt_tile_wdata(tile_blt_wdata),
+        .blt_tile_we   (tile_blt_we),
+        .blt_tile_re   (tile_blt_re),
+        .blt_tile_rdata(tile_blt_rdata),
         .pixel_x    (pre_gfx_x),
         .pixel_y    (pre_gfx_y),
         .pixel_valid(in_text_area),
@@ -1046,122 +1339,59 @@ module vgc (
     );
 
     // =========================================================================
-    // Pixel pipeline
+    // Pixel compositing
     // =========================================================================
+    logic [3:0]  cur_fg_d2;
+    logic [3:0]  cur_gfx_d2;
+    logic        pixel_on_d2;
+    logic [11:0] text_pixel_d2, gfx_pixel_d2, pixel_color;
 
-    always_comb begin
-        text_col   = h_count[9:3];
-        font_pixel = h_count[2:0];
-        text_line  = (v_count - V_BORDER) >> 1;
-        text_row   = text_line[7:3];
-        font_line  = text_line[2:0];
-        real_row   = text_row + scroll_offset;
-        if (real_row >= ROWS) real_row = real_row - ROWS;
-
-        // Graphics coordinates (320x200, pixel doubled to 640x400)
-        gfx_x = h_count[9:1];           // h_count / 2
-        gfx_y = text_line[7:0];         // 0-199
+    // Tile engine output delayed to match pipeline
+    logic [11:0] tile_rgb_d1, tile_rgb_d2;
+    logic [1:0]  tile_opaque_d1, tile_opaque_d2;
+    always_ff @(posedge clk) begin
+        tile_rgb_d1 <= tile_rgb;       tile_rgb_d2 <= tile_rgb_d1;
+        tile_opaque_d1 <= tile_opaque; tile_opaque_d2 <= tile_opaque_d1;
     end
 
-    // Pixel generation
-    logic [7:0]  cur_char;
-    logic [3:0]  cur_fg, cur_gfx;
-    logic [7:0]  font_byte;
-    logic        pixel_on;
-    logic [11:0] text_pixel, gfx_pixel, pixel_color;
-
-    // Sprite scratch signals
-    logic signed [9:0] spr_dx [0:15];
-    logic signed [9:0] spr_dy [0:15];
-    logic [3:0]  spr_fx [0:15];
-    logic [3:0]  spr_fy [0:15];
-    logic [10:0] spr_sa [0:15];
-    logic [3:0]  spr_pix [0:15];
-    logic        spr_vis [0:15];
-
-    // Sprite rendering — check all 16 sprites for current pixel
-    logic [3:0]  spr_pixel;      // winning sprite color (0 = transparent)
-    logic [1:0]  spr_pixel_pri;  // winning sprite priority
-    logic        spr_pixel_hit;  // any sprite visible here
-
     always_comb begin
-        // Text layer
-        cur_char   = char_ram[real_row * COLS + text_col];
-        cur_fg     = color_ram[real_row * COLS + text_col][3:0];
-        font_byte  = font_rom[{cur_char, font_line}];
-        pixel_on   = font_byte[3'd7 - font_pixel];
-        text_pixel = pixel_on ? palette[cur_fg] : palette[bg_color];
+        cur_fg_d2     = color_b_dout[3:0];
+        pixel_on_d2   = font_b_dout[3'd7 - font_pixel_d2];
+        text_pixel_d2 = pixel_on_d2 ? palette[cur_fg_d2] : palette[bg_color];
 
-        // Graphics layer
-        cur_gfx    = gfx_ram[{8'b0, gfx_y} * GFX_W + {7'b0, gfx_x}];
-        gfx_pixel  = palette[cur_gfx];
-
-        // Sprite layer — compute per-sprite visibility and pixel
-        for (int s = 0; s < 16; s++) begin
-            spr_dx[s] = {1'b0, gfx_x} - {1'b0, spr_x[s]};
-            spr_dy[s] = {2'b0, gfx_y} - {2'b0, spr_y[s]};
-            spr_fx[s] = spr_flip_h[s] ? (4'd15 - spr_dx[s][3:0]) : spr_dx[s][3:0];
-            spr_fy[s] = spr_flip_v[s] ? (4'd15 - spr_dy[s][3:0]) : spr_dy[s][3:0];
-            spr_sa[s] = {spr_shape[s], spr_fy[s], spr_fx[s][3:1]};
-            spr_pix[s] = spr_fx[s][0] ? sprite_shapes[spr_sa[s]][3:0]
-                                       : sprite_shapes[spr_sa[s]][7:4];
-            spr_vis[s] = spr_enable[s] && in_text_area &&
-                         spr_dx[s] >= 0 && spr_dx[s] < SPR_W &&
-                         spr_dy[s] >= 0 && spr_dy[s] < SPR_H &&
-                         spr_pix[s] != spr_trans[s];
-        end
-
-        // Pick winning sprite — highest index wins on overlap
-        spr_pixel     = 4'h0;
-        spr_pixel_pri = 2'd0;
-        spr_pixel_hit = 0;
-        for (int s = 0; s < 16; s++) begin
-            if (spr_vis[s]) begin
-                spr_pixel     = spr_pix[s];
-                spr_pixel_pri = spr_pri[s];
-                spr_pixel_hit = 1;
-            end
-        end
+        cur_gfx_d2    = gfx_b_dout;
+        gfx_pixel_d2  = palette[cur_gfx_d2];
 
         // Layer compositing with sprite priorities
-        // Priority 0: behind gfx/text, 1: over gfx/text, 2: topmost
-        if (!visible)
+        if (!visible_d2)
             pixel_color = 12'h000;
-        else if (!in_text_area)
+        else if (!in_text_area_d2)
             pixel_color = palette[border_color];
         else begin
-            // Base layer from mode
             case (mode)
-                3'd0: pixel_color = text_pixel;
-                3'd1: pixel_color = (cur_gfx != 0) ? gfx_pixel : text_pixel;
-                3'd2: pixel_color = pixel_on ? palette[cur_fg] :
-                                    (cur_gfx != 0) ? gfx_pixel : palette[bg_color];
-                3'd3: pixel_color = (cur_gfx != 0) ? gfx_pixel : palette[bg_color];
-                3'd4: pixel_color = (tile_opaque != 0) ? tile_rgb : palette[bg_color];
-                default: pixel_color = text_pixel;
+                3'd0: pixel_color = text_pixel_d2;
+                3'd1: pixel_color = (cur_gfx_d2 != 0) ? gfx_pixel_d2 : text_pixel_d2;
+                3'd2: pixel_color = pixel_on_d2 ? palette[cur_fg_d2] :
+                                    (cur_gfx_d2 != 0) ? gfx_pixel_d2 : palette[bg_color];
+                3'd3: pixel_color = (cur_gfx_d2 != 0) ? gfx_pixel_d2 : palette[bg_color];
+                3'd4: pixel_color = (tile_opaque_d2 != 0) ? tile_rgb_d2 : palette[bg_color];
+                default: pixel_color = text_pixel_d2;
             endcase
 
-            // Sprite overlay based on priority
             if (spr_pixel_hit) begin
                 if (mode == 3'd4) begin
-                    // Mode 4: tiles + sprites with tile priority
-                    // Pri 0 sprites: behind tiles
-                    // Pri 1 sprites: between tile layers (behind pri=2 tiles, over pri=1 tiles)
-                    // Pri 2 sprites: over everything
                     if (spr_pixel_pri == 2'd0) begin
-                        if (tile_opaque == 0) pixel_color = palette[spr_pixel];
+                        if (tile_opaque_d2 == 0) pixel_color = palette[spr_pixel];
                     end else if (spr_pixel_pri == 2'd1) begin
-                        if (tile_opaque < 2'd2) pixel_color = palette[spr_pixel];
+                        if (tile_opaque_d2 < 2'd2) pixel_color = palette[spr_pixel];
                     end else begin
                         pixel_color = palette[spr_pixel];
                     end
                 end else begin
                     if (spr_pixel_pri == 2'd0) begin
-                        // Priority 0: behind text/gfx — only shows through background
-                        if (!pixel_on && cur_gfx == 0)
+                        if (!pixel_on_d2 && cur_gfx_d2 == 0)
                             pixel_color = palette[spr_pixel];
                     end else begin
-                        // Priority 1+2: over everything
                         pixel_color = palette[spr_pixel];
                     end
                 end
@@ -1169,7 +1399,7 @@ module vgc (
         end
     end
 
-    // Cursor — 250ms toggle = 15 frames at 60Hz, 2 full blinks/sec
+    // Cursor
     logic [4:0] blink_count;
     logic       cursor_blink;
     always_ff @(posedge clk) begin
@@ -1181,72 +1411,16 @@ module vgc (
                 blink_count <= blink_count + 1;
         end
     end
-    wire cursor_here  = cursor_enable && in_text_area && (text_col == cursor_x) && (text_row == cursor_y);
+    wire cursor_here = cursor_enable && in_text_area_d2 && (text_col_d2 == cursor_x) && (text_row_d2 == cursor_y);
 
-    // =========================================================================
-    // Copper execution — apply register writes at beam positions
-    // =========================================================================
-    wire [16:0] beam_pos = {8'b0, gfx_y} * GFX_W + {7'b0, gfx_x};
-
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            copper_index <= 0;
-            copper_active_list <= 0;
-        end else begin
-            // Vblank: reset index and swap pending→active list if changed
-            if (h_count == 0 && v_count == V_ACTIVE) begin
-                copper_index <= 0;
-                if (copper_pending_list != copper_active_list && !copper_loading) begin
-                    copper_active_list <= copper_pending_list;
-                    copper_loading <= 1;
-                    copper_load_idx <= 0;
-                    copper_load_src <= copper_pending_list;
-                end
-            end
-
-            // Fire copper entries when beam reaches their position
-            if (copper_enabled && in_text_area &&
-                copper_index < copper_count &&
-                beam_pos >= copper_pos[copper_index]) begin
-                // Apply the register write
-                case (copper_reg[copper_index])
-                    8'd1: bg_color     <= copper_val[copper_index][3:0]; // REG_BGCOL
-                    8'd2: fg_color     <= copper_val[copper_index][3:0]; // REG_FGCOL
-                    8'd13: border_color <= copper_val[copper_index][3:0]; // REG_BORDER
-                    default: regs[copper_reg[copper_index][4:0]] <= copper_val[copper_index];
-                endcase
-                copper_index <= copper_index + 1;
-            end
-        end
-    end
-
-    // Raster IRQ — fire when beam reaches configured line
+    // Raster IRQ
     assign irq_out = irq_ctrl[0] && (v_count == {3'b0, irq_ctrl[7:1]} * 2 + V_BORDER);
-
-    // Collision detection — accumulate during sprite rendering
-    always_ff @(posedge clk) begin
-        if (h_count == 0 && v_count == 0) begin
-            // Start of frame — clear collision for this frame
-            // (actual clearing happens on CPU read, but we accumulate here)
-        end
-        // Check for sprite overlaps during rendering
-        if (in_text_area) begin
-            for (int s1 = 0; s1 < 15; s1++)
-                for (int s2 = s1 + 1; s2 < 16; s2++)
-                    if (spr_vis[s1] && spr_vis[s2])
-                        collision_ss <= collision_ss | (1 << (s1 < 8 ? s1 : s2));
-            // Sprite-background: any visible sprite over non-zero gfx pixel
-            for (int s = 0; s < 16; s++)
-                if (spr_vis[s] && cur_gfx != 0)
-                    collision_bg <= collision_bg | (1 << s[2:0]);
-        end
-    end
 
     // Output
     always_ff @(posedge clk) begin
-        vid_hsync <= ~h_sync_area;
-        vid_vsync <= ~v_sync_area;
-        vid_de    <= visible;
+        vid_hsync <= ~h_sync_area_d2;
+        vid_vsync <= ~v_sync_area_d2;
+        vid_de    <= visible_d2;
 
         if (cursor_here && cursor_blink) begin
             vid_r <= palette[fg_color][11:8];
@@ -1256,38 +1430,6 @@ module vgc (
             vid_r <= pixel_color[11:8];
             vid_g <= pixel_color[7:4];
             vid_b <= pixel_color[3:0];
-        end
-    end
-
-    // =========================================================================
-    // Blitter memory port — read/write access to VGC internal memories
-    // =========================================================================
-    // Combinational read
-    always_comb begin
-        blt_rdata = 8'h00;
-        if (blt_re) begin
-            case (blt_space)
-                3'd1: blt_rdata = char_ram[blt_addr[10:0]];
-                3'd2: blt_rdata = color_ram[blt_addr[10:0]];
-                3'd3: blt_rdata = {4'b0, gfx_ram[blt_addr]};
-                3'd4: blt_rdata = sprite_shapes[blt_addr[10:0]];
-                3'd6: blt_rdata = tile_inst.tile_data[blt_addr[14:0]];
-                default: blt_rdata = 8'h00;
-            endcase
-        end
-    end
-
-    // Sequential write
-    always_ff @(posedge clk) begin
-        if (blt_we) begin
-            case (blt_space)
-                3'd1: char_ram[blt_addr[10:0]]   <= blt_wdata;
-                3'd2: color_ram[blt_addr[10:0]]   <= blt_wdata;
-                3'd3: gfx_ram[blt_addr]           <= blt_wdata[3:0];
-                3'd4: sprite_shapes[blt_addr[10:0]] <= blt_wdata;
-                3'd6: tile_inst.tile_data[blt_addr[14:0]] <= blt_wdata;
-                default: ;
-            endcase
         end
     end
 

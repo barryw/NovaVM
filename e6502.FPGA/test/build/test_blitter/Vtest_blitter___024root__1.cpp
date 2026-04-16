@@ -510,10 +510,16 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v17 = 0;
     CData/*0:0*/ __VdlySet__test_blitter__DOT__dut__DOT__regs__v18;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v18 = 0;
+    CData/*0:0*/ __VdlySet__test_blitter__DOT__dut__DOT__regs__v19;
+    __VdlySet__test_blitter__DOT__dut__DOT__regs__v19 = 0;
     CData/*0:0*/ __VdlySet__test_blitter__DOT__dut__DOT__regs__v20;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v20 = 0;
+    CData/*0:0*/ __VdlySet__test_blitter__DOT__dut__DOT__regs__v21;
+    __VdlySet__test_blitter__DOT__dut__DOT__regs__v21 = 0;
     CData/*0:0*/ __VdlySet__test_blitter__DOT__dut__DOT__regs__v22;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v22 = 0;
+    CData/*0:0*/ __VdlySet__test_blitter__DOT__dut__DOT__regs__v23;
+    __VdlySet__test_blitter__DOT__dut__DOT__regs__v23 = 0;
     CData/*7:0*/ __VdlyVal__test_blitter__DOT__dut__DOT__regs__v24;
     __VdlyVal__test_blitter__DOT__dut__DOT__regs__v24 = 0;
     CData/*4:0*/ __VdlyDim0__test_blitter__DOT__dut__DOT__regs__v24;
@@ -548,8 +554,11 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v16 = 0U;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v17 = 0U;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v18 = 0U;
+    __VdlySet__test_blitter__DOT__dut__DOT__regs__v19 = 0U;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v20 = 0U;
+    __VdlySet__test_blitter__DOT__dut__DOT__regs__v21 = 0U;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v22 = 0U;
+    __VdlySet__test_blitter__DOT__dut__DOT__regs__v23 = 0U;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v24 = 0U;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v25 = 0U;
     __VdlySet__test_blitter__DOT__dut__DOT__regs__v30 = 0U;
@@ -848,18 +857,13 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                                         = vlSelfRef.test_blitter__DOT__dut__DOT__width;
                                     __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__base 
                                         = vlSelfRef.test_blitter__DOT__dut__DOT__src_base;
-                                    {
-                                        __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__Vfuncout = 0;
-                                        __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__last_row_start = 0;
-                                        __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__last_byte = 0;
-                                        if ((((0U == (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__w)) 
-                                              | (0U 
-                                                 == (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__h))) 
-                                             | (0U 
-                                                == __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__sz))) {
-                                            __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__Vfuncout = 0U;
-                                            goto __Vlabel0;
-                                        }
+                                    __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__last_row_start = 0;
+                                    __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__last_byte = 0;
+                                    if ((((0U == (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__w)) 
+                                          | (0U == (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__h))) 
+                                         | (0U == __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__sz))) {
+                                        __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__Vfuncout = 0U;
+                                    } else {
                                         __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__last_row_start 
                                             = (__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__base 
                                                + (((IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__h) 
@@ -873,11 +877,11 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                                                 <= __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__sz) 
                                                & (__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__base 
                                                   < __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__sz));
-                                        __Vlabel0: ;
                                     }
                                 }(), (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__673__Vfuncout)))))) {
                 __VdlySet__test_blitter__DOT__dut__DOT__regs__v18 = 1U;
                 __Vdly__test_blitter__DOT__dut__DOT__state = 6U;
+                __VdlySet__test_blitter__DOT__dut__DOT__regs__v19 = 1U;
             } else if (([&]() {
                         __Vfunc_test_blitter__DOT__dut__DOT__space_size__676__sp 
                             = vlSelfRef.test_blitter__DOT__dut__DOT__dst_space;
@@ -906,16 +910,13 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                             = vlSelfRef.test_blitter__DOT__dut__DOT__width;
                         __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__base 
                             = vlSelfRef.test_blitter__DOT__dut__DOT__dst_base;
-                        {
-                            __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__Vfuncout = 0;
-                            __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__last_row_start = 0;
-                            __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__last_byte = 0;
-                            if ((((0U == (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__w)) 
-                                  | (0U == (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__h))) 
-                                 | (0U == __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__sz))) {
-                                __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__Vfuncout = 0U;
-                                goto __Vlabel1;
-                            }
+                        __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__last_row_start = 0;
+                        __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__last_byte = 0;
+                        if ((((0U == (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__w)) 
+                              | (0U == (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__h))) 
+                             | (0U == __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__sz))) {
+                            __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__Vfuncout = 0U;
+                        } else {
                             __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__last_row_start 
                                 = (__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__base 
                                    + (((IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__h) 
@@ -929,7 +930,6 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                                     <= __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__sz) 
                                    & (__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__base 
                                       < __Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__sz));
-                            __Vlabel1: ;
                         }
                     }(), (IData)(__Vfunc_test_blitter__DOT__dut__DOT__rect_fits__675__Vfuncout))) {
                 if (([&]() {
@@ -943,13 +943,10 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                                 = vlSelfRef.test_blitter__DOT__dut__DOT__dst_base;
                             __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__space 
                                 = vlSelfRef.test_blitter__DOT__dut__DOT__dst_space;
-                            {
-                                __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__Vfuncout = 0;
-                                __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__last_byte = 0;
-                                if ((0U != (IData)(__Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__space))) {
-                                    __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__Vfuncout = 1U;
-                                    goto __Vlabel2;
-                                }
+                            __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__last_byte = 0;
+                            if ((0U != (IData)(__Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__space))) {
+                                __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__Vfuncout = 1U;
+                            } else {
                                 __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__last_byte 
                                     = ((__Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__base 
                                         + (((IData)(__Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__h) 
@@ -959,14 +956,13 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                                 __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__Vfuncout 
                                     = (0x0000c000U 
                                        >= __Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__last_byte);
-                                __Vlabel2: ;
                             }
                         }(), (IData)(__Vfunc_test_blitter__DOT__dut__DOT__write_protect_ok__677__Vfuncout))) {
                     if (vlSelfRef.test_blitter__DOT__dut__DOT__fill_mode) {
-                        __Vdly__test_blitter__DOT__dut__DOT__state = 3U;
-                        __Vdly__test_blitter__DOT__dut__DOT__read_valid = 1U;
                         vlSelfRef.test_blitter__DOT__dut__DOT__read_byte 
                             = vlSelfRef.test_blitter__DOT__dut__DOT__fill_value;
+                        __Vdly__test_blitter__DOT__dut__DOT__state = 3U;
+                        __Vdly__test_blitter__DOT__dut__DOT__read_valid = 1U;
                     } else if (vlSelfRef.test_blitter__DOT__dut__DOT__use_row_buffer) {
                         __Vdly__test_blitter__DOT__dut__DOT__state = 4U;
                         __Vdly__test_blitter__DOT__dut__DOT__col = 0U;
@@ -978,10 +974,12 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                 } else {
                     __VdlySet__test_blitter__DOT__dut__DOT__regs__v20 = 1U;
                     __Vdly__test_blitter__DOT__dut__DOT__state = 6U;
+                    __VdlySet__test_blitter__DOT__dut__DOT__regs__v21 = 1U;
                 }
             } else {
                 __VdlySet__test_blitter__DOT__dut__DOT__regs__v22 = 1U;
                 __Vdly__test_blitter__DOT__dut__DOT__state = 6U;
+                __VdlySet__test_blitter__DOT__dut__DOT__regs__v23 = 1U;
             }
         }
         if (((IData)(vlSelfRef.test_blitter__DOT__cpu_we) 
@@ -1013,8 +1011,14 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                                        - (IData)(3U))))) {
                 if ((1U == (IData)(vlSelfRef.test_blitter__DOT__cpu_wdata))) {
                     if ((0U == (IData)(vlSelfRef.test_blitter__DOT__dut__DOT__state))) {
+                        __Vdly__test_blitter__DOT__dut__DOT__row = 0U;
                         vlSelfRef.test_blitter__DOT__dut__DOT__src_space 
                             = (7U & vlSelfRef.test_blitter__DOT__dut__DOT__regs[3U]);
+                        __Vdly__test_blitter__DOT__dut__DOT__col = 0U;
+                        __Vdly__test_blitter__DOT__dut__DOT__wrote_count = 0U;
+                        __Vdly__test_blitter__DOT__dut__DOT__read_valid = 0U;
+                        __Vdly__test_blitter__DOT__dut__DOT__buf_idx = 0U;
+                        __Vdly__test_blitter__DOT__dut__DOT__state = 1U;
                         vlSelfRef.test_blitter__DOT__dut__DOT__dst_space 
                             = (7U & vlSelfRef.test_blitter__DOT__dut__DOT__regs[4U]);
                         vlSelfRef.test_blitter__DOT__dut__DOT__src_base 
@@ -1054,13 +1058,7 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
                             = ((~ vlSelfRef.test_blitter__DOT__dut__DOT__regs[19U]) 
                                & ((7U & vlSelfRef.test_blitter__DOT__dut__DOT__regs[3U]) 
                                   == (7U & vlSelfRef.test_blitter__DOT__dut__DOT__regs[4U])));
-                        __Vdly__test_blitter__DOT__dut__DOT__row = 0U;
-                        __Vdly__test_blitter__DOT__dut__DOT__col = 0U;
-                        __Vdly__test_blitter__DOT__dut__DOT__wrote_count = 0U;
-                        __Vdly__test_blitter__DOT__dut__DOT__read_valid = 0U;
-                        __Vdly__test_blitter__DOT__dut__DOT__buf_idx = 0U;
                         __VdlySet__test_blitter__DOT__dut__DOT__regs__v25 = 1U;
-                        __Vdly__test_blitter__DOT__dut__DOT__state = 1U;
                     } else {
                         __VdlySet__test_blitter__DOT__dut__DOT__regs__v30 = 1U;
                     }
@@ -1149,14 +1147,20 @@ void Vtest_blitter___024root___nba_sequent__TOP__0(Vtest_blitter___024root* vlSe
     }
     if (__VdlySet__test_blitter__DOT__dut__DOT__regs__v18) {
         vlSelfRef.test_blitter__DOT__dut__DOT__regs[1U] = 3U;
+    }
+    if (__VdlySet__test_blitter__DOT__dut__DOT__regs__v19) {
         vlSelfRef.test_blitter__DOT__dut__DOT__regs[2U] = 3U;
     }
     if (__VdlySet__test_blitter__DOT__dut__DOT__regs__v20) {
         vlSelfRef.test_blitter__DOT__dut__DOT__regs[1U] = 3U;
+    }
+    if (__VdlySet__test_blitter__DOT__dut__DOT__regs__v21) {
         vlSelfRef.test_blitter__DOT__dut__DOT__regs[2U] = 5U;
     }
     if (__VdlySet__test_blitter__DOT__dut__DOT__regs__v22) {
         vlSelfRef.test_blitter__DOT__dut__DOT__regs[1U] = 3U;
+    }
+    if (__VdlySet__test_blitter__DOT__dut__DOT__regs__v23) {
         vlSelfRef.test_blitter__DOT__dut__DOT__regs[2U] = 3U;
     }
     if (__VdlySet__test_blitter__DOT__dut__DOT__regs__v24) {

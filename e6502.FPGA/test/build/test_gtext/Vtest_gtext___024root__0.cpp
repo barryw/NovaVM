@@ -396,6 +396,8 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     VL_WRITEF_NX("=== Gtext Unit Tests ===\n\n",0);
     vlSelfRef.test_gtext__DOT__rst = 1U;
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_re = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     vlSelfRef.test_gtext__DOT__cpu_addr = 0U;
     vlSelfRef.test_gtext__DOT__cpu_wdata = 0U;
     test_gtext__DOT__unnamedblk1_2__DOT____Vrepeat1 = 0x00000032U;
@@ -438,6 +440,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__0__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__0__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -446,6 +449,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__1__data = 0U;
     __Vtask_test_gtext__DOT__write_param__1__idx = 0U;
     __Vtask_test_gtext__DOT__write_reg__2__data = __Vtask_test_gtext__DOT__write_param__1__data;
@@ -462,6 +466,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__2__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__2__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -470,6 +475,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__3__data = 0U;
     __Vtask_test_gtext__DOT__write_param__3__idx = 1U;
     __Vtask_test_gtext__DOT__write_reg__4__data = __Vtask_test_gtext__DOT__write_param__3__data;
@@ -486,6 +492,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__4__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__4__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -494,6 +501,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__5__data = 0U;
     __Vtask_test_gtext__DOT__write_param__5__idx = 2U;
     __Vtask_test_gtext__DOT__write_reg__6__data = __Vtask_test_gtext__DOT__write_param__5__data;
@@ -510,6 +518,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__6__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__6__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -518,6 +527,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__7__data = 0U;
     __Vtask_test_gtext__DOT__write_param__7__idx = 3U;
     __Vtask_test_gtext__DOT__write_reg__8__data = __Vtask_test_gtext__DOT__write_param__7__data;
@@ -534,6 +544,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__8__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__8__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -542,6 +553,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__9__data = 1U;
     __Vtask_test_gtext__DOT__write_param__9__idx = 5U;
     __Vtask_test_gtext__DOT__write_reg__10__data = __Vtask_test_gtext__DOT__write_param__9__data;
@@ -557,6 +569,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__10__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__10__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -565,6 +578,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_cmd__11__cmd = 0x0aU;
     __Vtask_test_gtext__DOT__write_reg__12__data = __Vtask_test_gtext__DOT__write_cmd__11__cmd;
     __Vtask_test_gtext__DOT__write_reg__12__addr = 0xa010U;
@@ -578,6 +592,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__12__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__12__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -586,6 +601,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     test_gtext__DOT__unnamedblk1_4__DOT____Vrepeat3 = 5U;
     while (VL_LTS_III(32, 0U, test_gtext__DOT__unnamedblk1_4__DOT____Vrepeat3)) {
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
@@ -600,7 +616,8 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                - (IData)(1U));
     }
     __Vtask_test_gtext__DOT__check__13__condition = 
-        (1U & (~ (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy)));
+        (1U & ((~ (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy)) 
+               & (~ (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__artist_busy))));
     vlSelfRef.__Vtask_test_gtext__DOT__check__13__name = "empty string: cmd not busy"s;
     vlSelfRef.test_gtext__DOT__test_num = ((IData)(1U) 
                                            + vlSelfRef.test_gtext__DOT__test_num);
@@ -629,6 +646,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__15__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__15__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -637,6 +655,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__16__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_gtext__DOT__wait_cmd_done__16__timeout = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__16__timeout = 0U;
@@ -653,7 +672,8 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
             = (__Vtask_test_gtext__DOT__wait_cmd_done__16__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 
                - (IData)(1U));
     }
-    while (((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+    while ((((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+             | (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__artist_busy)) 
             & VL_GTS_III(32, 0x0007a120U, __Vtask_test_gtext__DOT__wait_cmd_done__16__timeout))) {
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
@@ -680,6 +700,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__18__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__18__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -688,6 +709,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_cmd__19__cmd = 8U;
     __Vtask_test_gtext__DOT__write_reg__20__data = __Vtask_test_gtext__DOT__write_cmd__19__cmd;
     __Vtask_test_gtext__DOT__write_reg__20__addr = 0xa010U;
@@ -701,6 +723,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__20__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__20__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -709,6 +732,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     vlSelfRef.__Vtask_test_gtext__DOT__set_fio_string__21__s = "A"s;
     __Vtask_test_gtext__DOT__set_fio_string__21__i = 0U;
     __Vtask_test_gtext__DOT__write_reg__22__data = 
@@ -724,6 +748,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__22__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__22__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -732,6 +757,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__set_fio_string__21__i = 0U;
     while (VL_LTS_III(32, __Vtask_test_gtext__DOT__set_fio_string__21__i, 
                       VL_LEN_IN(vlSelfRef.__Vtask_test_gtext__DOT__set_fio_string__21__s))) {
@@ -749,6 +775,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__23__addr;
         vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__23__data;
         vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+        vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
         co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -757,6 +784,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                              "test_gtext.sv", 
                                                              54);
         vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+        vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
         __Vtask_test_gtext__DOT__set_fio_string__21__i 
             = ((IData)(1U) + __Vtask_test_gtext__DOT__set_fio_string__21__i);
     }
@@ -775,6 +803,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__25__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__25__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -783,6 +812,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__26__data = 0U;
     __Vtask_test_gtext__DOT__write_param__26__idx = 1U;
     __Vtask_test_gtext__DOT__write_reg__27__data = __Vtask_test_gtext__DOT__write_param__26__data;
@@ -798,6 +828,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__27__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__27__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -806,6 +837,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__28__data = 0U;
     __Vtask_test_gtext__DOT__write_param__28__idx = 2U;
     __Vtask_test_gtext__DOT__write_reg__29__data = __Vtask_test_gtext__DOT__write_param__28__data;
@@ -821,6 +853,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__29__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__29__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -829,6 +862,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__30__data = 0U;
     __Vtask_test_gtext__DOT__write_param__30__idx = 3U;
     __Vtask_test_gtext__DOT__write_reg__31__data = __Vtask_test_gtext__DOT__write_param__30__data;
@@ -844,6 +878,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__31__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__31__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -852,6 +887,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__32__data = 0U;
     __Vtask_test_gtext__DOT__write_param__32__idx = 4U;
     __Vtask_test_gtext__DOT__write_reg__33__data = __Vtask_test_gtext__DOT__write_param__32__data;
@@ -867,6 +903,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__33__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__33__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -875,6 +912,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__34__data = 1U;
     __Vtask_test_gtext__DOT__write_param__34__idx = 5U;
     __Vtask_test_gtext__DOT__write_reg__35__data = __Vtask_test_gtext__DOT__write_param__34__data;
@@ -890,6 +928,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__35__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__35__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -898,6 +937,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_cmd__36__cmd = 0x0aU;
     __Vtask_test_gtext__DOT__write_reg__37__data = __Vtask_test_gtext__DOT__write_cmd__36__cmd;
     __Vtask_test_gtext__DOT__write_reg__37__addr = 0xa010U;
@@ -911,6 +951,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__37__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__37__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -919,6 +960,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__38__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_gtext__DOT__wait_cmd_done__38__timeout = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__38__timeout = 0U;
@@ -935,7 +977,8 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
             = (__Vtask_test_gtext__DOT__wait_cmd_done__38__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 
                - (IData)(1U));
     }
-    while (((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+    while ((((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+             | (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__artist_busy)) 
             & VL_GTS_III(32, 0x0007a120U, __Vtask_test_gtext__DOT__wait_cmd_done__38__timeout))) {
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
@@ -956,7 +999,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -972,7 +1015,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -988,7 +1031,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1004,7 +1047,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1020,7 +1063,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1036,7 +1079,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1052,7 +1095,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1068,7 +1111,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1084,7 +1127,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1100,7 +1143,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1116,7 +1159,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1132,7 +1175,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1148,7 +1191,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1164,7 +1207,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1180,7 +1223,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1196,7 +1239,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1212,7 +1255,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1228,7 +1271,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1244,7 +1287,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1260,7 +1303,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1276,7 +1319,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1292,7 +1335,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1308,7 +1351,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1324,7 +1367,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1340,7 +1383,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1356,7 +1399,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1372,7 +1415,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1388,7 +1431,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1404,7 +1447,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1420,7 +1463,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1436,7 +1479,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1452,7 +1495,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1468,7 +1511,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1484,7 +1527,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1500,7 +1543,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1516,7 +1559,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1532,7 +1575,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1548,7 +1591,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1564,7 +1607,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1580,7 +1623,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1596,7 +1639,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1612,7 +1655,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1628,7 +1671,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1644,7 +1687,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1660,7 +1703,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1676,7 +1719,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1692,7 +1735,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1708,7 +1751,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1724,7 +1767,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1740,7 +1783,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1756,7 +1799,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1772,7 +1815,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1788,7 +1831,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1804,7 +1847,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1820,7 +1863,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1836,7 +1879,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1852,7 +1895,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1868,7 +1911,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1884,7 +1927,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1900,7 +1943,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1916,7 +1959,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1932,7 +1975,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1948,7 +1991,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -1964,7 +2007,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__39__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__39__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__39__x))]
                             : 0U);
@@ -2006,7 +2049,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     }
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__match = 1U;
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb 
-        = vlSelfRef.test_gtext__DOT__dut__DOT__font_rom[520U];
+        = vlSelfRef.test_gtext__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem[520U];
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__unnamedblk7__DOT__unnamedblk8__DOT__expected 
         = (1U & ((IData)(vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb) 
                  >> 7U));
@@ -2019,7 +2062,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2035,7 +2078,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2054,7 +2097,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2070,7 +2113,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2089,7 +2132,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2105,7 +2148,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2124,7 +2167,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2140,7 +2183,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2159,7 +2202,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2175,7 +2218,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2194,7 +2237,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2210,7 +2253,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2229,7 +2272,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2245,7 +2288,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2263,7 +2306,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2279,7 +2322,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2287,7 +2330,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__match = 0U;
     }
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb 
-        = vlSelfRef.test_gtext__DOT__dut__DOT__font_rom[521U];
+        = vlSelfRef.test_gtext__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem[521U];
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__unnamedblk7__DOT__unnamedblk8__DOT__expected 
         = (1U & ((IData)(vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb) 
                  >> 7U));
@@ -2300,7 +2343,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2316,7 +2359,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2335,7 +2378,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2351,7 +2394,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2370,7 +2413,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2386,7 +2429,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2405,7 +2448,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2421,7 +2464,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2440,7 +2483,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2456,7 +2499,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2475,7 +2518,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2491,7 +2534,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2510,7 +2553,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2526,7 +2569,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2544,7 +2587,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2560,7 +2603,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2568,7 +2611,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__match = 0U;
     }
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb 
-        = vlSelfRef.test_gtext__DOT__dut__DOT__font_rom[522U];
+        = vlSelfRef.test_gtext__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem[522U];
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__unnamedblk7__DOT__unnamedblk8__DOT__expected 
         = (1U & ((IData)(vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb) 
                  >> 7U));
@@ -2581,7 +2624,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2597,7 +2640,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2616,7 +2659,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2632,7 +2675,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2651,7 +2694,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2667,7 +2710,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2686,7 +2729,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2702,7 +2745,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2721,7 +2764,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2737,7 +2780,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2756,7 +2799,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2772,7 +2815,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2791,7 +2834,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2807,7 +2850,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2825,7 +2868,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2841,7 +2884,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2849,7 +2892,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__match = 0U;
     }
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb 
-        = vlSelfRef.test_gtext__DOT__dut__DOT__font_rom[523U];
+        = vlSelfRef.test_gtext__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem[523U];
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__unnamedblk7__DOT__unnamedblk8__DOT__expected 
         = (1U & ((IData)(vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb) 
                  >> 7U));
@@ -2862,7 +2905,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2878,7 +2921,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2897,7 +2940,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2913,7 +2956,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2932,7 +2975,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2948,7 +2991,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -2967,7 +3010,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -2983,7 +3026,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3002,7 +3045,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3018,7 +3061,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3037,7 +3080,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3053,7 +3096,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3072,7 +3115,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3088,7 +3131,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3106,7 +3149,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3122,7 +3165,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3130,7 +3173,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__match = 0U;
     }
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb 
-        = vlSelfRef.test_gtext__DOT__dut__DOT__font_rom[524U];
+        = vlSelfRef.test_gtext__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem[524U];
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__unnamedblk7__DOT__unnamedblk8__DOT__expected 
         = (1U & ((IData)(vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb) 
                  >> 7U));
@@ -3143,7 +3186,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3159,7 +3202,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3178,7 +3221,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3194,7 +3237,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3213,7 +3256,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3229,7 +3272,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3248,7 +3291,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3264,7 +3307,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3283,7 +3326,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3299,7 +3342,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3318,7 +3361,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3334,7 +3377,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3353,7 +3396,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3369,7 +3412,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3387,7 +3430,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3403,7 +3446,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3411,7 +3454,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__match = 0U;
     }
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb 
-        = vlSelfRef.test_gtext__DOT__dut__DOT__font_rom[525U];
+        = vlSelfRef.test_gtext__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem[525U];
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__unnamedblk7__DOT__unnamedblk8__DOT__expected 
         = (1U & ((IData)(vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb) 
                  >> 7U));
@@ -3424,7 +3467,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3440,7 +3483,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3459,7 +3502,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3475,7 +3518,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3494,7 +3537,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3510,7 +3553,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3529,7 +3572,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3545,7 +3588,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3564,7 +3607,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3580,7 +3623,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3599,7 +3642,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3615,7 +3658,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3634,7 +3677,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3650,7 +3693,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3668,7 +3711,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3684,7 +3727,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3692,7 +3735,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__match = 0U;
     }
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb 
-        = vlSelfRef.test_gtext__DOT__dut__DOT__font_rom[526U];
+        = vlSelfRef.test_gtext__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem[526U];
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__unnamedblk7__DOT__unnamedblk8__DOT__expected 
         = (1U & ((IData)(vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb) 
                  >> 7U));
@@ -3705,7 +3748,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3721,7 +3764,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3740,7 +3783,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3756,7 +3799,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3775,7 +3818,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3791,7 +3834,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3810,7 +3853,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3826,7 +3869,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3845,7 +3888,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3861,7 +3904,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3880,7 +3923,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3896,7 +3939,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3915,7 +3958,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3931,7 +3974,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3949,7 +3992,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -3965,7 +4008,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -3973,7 +4016,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__match = 0U;
     }
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb 
-        = vlSelfRef.test_gtext__DOT__dut__DOT__font_rom[527U];
+        = vlSelfRef.test_gtext__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem[527U];
     vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__unnamedblk7__DOT__unnamedblk8__DOT__expected 
         = (1U & ((IData)(vlSelfRef.test_gtext__DOT__unnamedblk4__DOT__unnamedblk5__DOT__unnamedblk6__DOT__fb) 
                  >> 7U));
@@ -3986,7 +4029,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -4002,7 +4045,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -4021,7 +4064,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -4037,7 +4080,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -4056,7 +4099,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -4072,7 +4115,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -4091,7 +4134,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -4107,7 +4150,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -4126,7 +4169,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -4142,7 +4185,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -4161,7 +4204,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -4177,7 +4220,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -4196,7 +4239,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -4212,7 +4255,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -4230,7 +4273,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__42__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__42__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__42__x))]
                                 : 0U);
@@ -4246,7 +4289,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                             = ((0xf9ffU >= (0x0000ffffU 
                                             & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                + __Vfunc_test_gtext__DOT__gfx_pixel__43__x)))
-                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                                ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                                [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__43__y) 
                                                 + __Vfunc_test_gtext__DOT__gfx_pixel__43__x))]
                                 : 0U);
@@ -4283,6 +4326,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__46__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__46__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4291,6 +4335,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__47__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_gtext__DOT__wait_cmd_done__47__timeout = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__47__timeout = 0U;
@@ -4307,7 +4352,8 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
             = (__Vtask_test_gtext__DOT__wait_cmd_done__47__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 
                - (IData)(1U));
     }
-    while (((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+    while ((((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+             | (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__artist_busy)) 
             & VL_GTS_III(32, 0x0007a120U, __Vtask_test_gtext__DOT__wait_cmd_done__47__timeout))) {
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
@@ -4334,6 +4380,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__49__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__49__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4342,6 +4389,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__set_fio_string__48__i = 0U;
     while (VL_LTS_III(32, __Vtask_test_gtext__DOT__set_fio_string__48__i, 
                       VL_LEN_IN(vlSelfRef.__Vtask_test_gtext__DOT__set_fio_string__48__s))) {
@@ -4359,6 +4407,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__50__addr;
         vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__50__data;
         vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+        vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
         co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4367,6 +4416,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                              "test_gtext.sv", 
                                                              54);
         vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+        vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
         __Vtask_test_gtext__DOT__set_fio_string__48__i 
             = ((IData)(1U) + __Vtask_test_gtext__DOT__set_fio_string__48__i);
     }
@@ -4385,6 +4435,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__52__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__52__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4393,6 +4444,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__53__data = 0U;
     __Vtask_test_gtext__DOT__write_param__53__idx = 1U;
     __Vtask_test_gtext__DOT__write_reg__54__data = __Vtask_test_gtext__DOT__write_param__53__data;
@@ -4408,6 +4460,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__54__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__54__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4416,6 +4469,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__55__data = 0x32U;
     __Vtask_test_gtext__DOT__write_param__55__idx = 2U;
     __Vtask_test_gtext__DOT__write_reg__56__data = __Vtask_test_gtext__DOT__write_param__55__data;
@@ -4431,6 +4485,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__56__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__56__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4439,6 +4494,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__57__data = 0U;
     __Vtask_test_gtext__DOT__write_param__57__idx = 3U;
     __Vtask_test_gtext__DOT__write_reg__58__data = __Vtask_test_gtext__DOT__write_param__57__data;
@@ -4454,6 +4510,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__58__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__58__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4462,6 +4519,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__59__data = 0U;
     __Vtask_test_gtext__DOT__write_param__59__idx = 4U;
     __Vtask_test_gtext__DOT__write_reg__60__data = __Vtask_test_gtext__DOT__write_param__59__data;
@@ -4477,6 +4535,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__60__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__60__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4485,6 +4544,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__61__data = 1U;
     __Vtask_test_gtext__DOT__write_param__61__idx = 5U;
     __Vtask_test_gtext__DOT__write_reg__62__data = __Vtask_test_gtext__DOT__write_param__61__data;
@@ -4500,6 +4560,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__62__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__62__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4508,6 +4569,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_cmd__63__cmd = 0x0aU;
     __Vtask_test_gtext__DOT__write_reg__64__data = __Vtask_test_gtext__DOT__write_cmd__63__cmd;
     __Vtask_test_gtext__DOT__write_reg__64__addr = 0xa010U;
@@ -4521,6 +4583,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__64__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__64__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -4529,6 +4592,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__65__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_gtext__DOT__wait_cmd_done__65__timeout = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__65__timeout = 0U;
@@ -4545,7 +4609,8 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
             = (__Vtask_test_gtext__DOT__wait_cmd_done__65__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 
                - (IData)(1U));
     }
-    while (((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+    while ((((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+             | (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__artist_busy)) 
             & VL_GTS_III(32, 0x0007a120U, __Vtask_test_gtext__DOT__wait_cmd_done__65__timeout))) {
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
@@ -4566,7 +4631,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                     = ((0xf9ffU >= (0x0000ffffU & (
                                                    VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__67__y) 
                                                    + __Vfunc_test_gtext__DOT__gfx_pixel__67__x)))
-                        ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                        ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                        [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__67__y) 
                                         + __Vfunc_test_gtext__DOT__gfx_pixel__67__x))]
                         : 0U);
@@ -4594,7 +4659,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                     = ((0xf9ffU >= (0x0000ffffU & (
                                                    VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__69__y) 
                                                    + __Vfunc_test_gtext__DOT__gfx_pixel__69__x)))
-                        ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                        ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                        [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__69__y) 
                                         + __Vfunc_test_gtext__DOT__gfx_pixel__69__x))]
                         : 0U);
@@ -4622,7 +4687,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4638,7 +4703,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4654,7 +4719,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4670,7 +4735,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4686,7 +4751,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4702,7 +4767,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4718,7 +4783,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4734,7 +4799,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4750,7 +4815,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4766,7 +4831,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4782,7 +4847,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4798,7 +4863,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4814,7 +4879,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4830,7 +4895,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4846,7 +4911,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4862,7 +4927,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4878,7 +4943,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4894,7 +4959,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4910,7 +4975,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4926,7 +4991,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4942,7 +5007,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4958,7 +5023,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4974,7 +5039,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -4990,7 +5055,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5006,7 +5071,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5022,7 +5087,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5038,7 +5103,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5054,7 +5119,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5070,7 +5135,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5086,7 +5151,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5102,7 +5167,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5118,7 +5183,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5134,7 +5199,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5150,7 +5215,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5166,7 +5231,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5182,7 +5247,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5198,7 +5263,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5214,7 +5279,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5230,7 +5295,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5246,7 +5311,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5262,7 +5327,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5278,7 +5343,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5294,7 +5359,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5310,7 +5375,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5326,7 +5391,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5342,7 +5407,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5358,7 +5423,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5374,7 +5439,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5390,7 +5455,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5406,7 +5471,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5422,7 +5487,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5438,7 +5503,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5454,7 +5519,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5470,7 +5535,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5486,7 +5551,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5502,7 +5567,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5518,7 +5583,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5534,7 +5599,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5550,7 +5615,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5566,7 +5631,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5582,7 +5647,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5598,7 +5663,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5614,7 +5679,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5630,7 +5695,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                            + __Vfunc_test_gtext__DOT__gfx_pixel__70__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), __Vfunc_test_gtext__DOT__gfx_pixel__70__y) 
                                             + __Vfunc_test_gtext__DOT__gfx_pixel__70__x))]
                             : 0U);
@@ -5668,6 +5733,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__73__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__73__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5676,6 +5742,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__74__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_gtext__DOT__wait_cmd_done__74__timeout = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__74__timeout = 0U;
@@ -5692,7 +5759,8 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
             = (__Vtask_test_gtext__DOT__wait_cmd_done__74__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 
                - (IData)(1U));
     }
-    while (((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+    while ((((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+             | (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__artist_busy)) 
             & VL_GTS_III(32, 0x0007a120U, __Vtask_test_gtext__DOT__wait_cmd_done__74__timeout))) {
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
@@ -5719,6 +5787,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__76__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__76__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5727,6 +5796,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__set_fio_string__75__i = 0U;
     while (VL_LTS_III(32, __Vtask_test_gtext__DOT__set_fio_string__75__i, 
                       VL_LEN_IN(vlSelfRef.__Vtask_test_gtext__DOT__set_fio_string__75__s))) {
@@ -5744,6 +5814,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
         vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__77__addr;
         vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__77__data;
         vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+        vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
         co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5752,6 +5823,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                              "test_gtext.sv", 
                                                              54);
         vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+        vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
         __Vtask_test_gtext__DOT__set_fio_string__75__i 
             = ((IData)(1U) + __Vtask_test_gtext__DOT__set_fio_string__75__i);
     }
@@ -5770,6 +5842,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__79__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__79__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5778,6 +5851,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__80__data = 0U;
     __Vtask_test_gtext__DOT__write_param__80__idx = 1U;
     __Vtask_test_gtext__DOT__write_reg__81__data = __Vtask_test_gtext__DOT__write_param__80__data;
@@ -5793,6 +5867,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__81__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__81__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5801,6 +5876,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__82__data = 0U;
     __Vtask_test_gtext__DOT__write_param__82__idx = 2U;
     __Vtask_test_gtext__DOT__write_reg__83__data = __Vtask_test_gtext__DOT__write_param__82__data;
@@ -5816,6 +5892,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__83__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__83__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5824,6 +5901,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__84__data = 0U;
     __Vtask_test_gtext__DOT__write_param__84__idx = 3U;
     __Vtask_test_gtext__DOT__write_reg__85__data = __Vtask_test_gtext__DOT__write_param__84__data;
@@ -5839,6 +5917,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__85__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__85__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5847,6 +5926,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__86__data = 0U;
     __Vtask_test_gtext__DOT__write_param__86__idx = 4U;
     __Vtask_test_gtext__DOT__write_reg__87__data = __Vtask_test_gtext__DOT__write_param__86__data;
@@ -5862,6 +5942,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__87__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__87__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5870,6 +5951,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_param__88__data = 2U;
     __Vtask_test_gtext__DOT__write_param__88__idx = 5U;
     __Vtask_test_gtext__DOT__write_reg__89__data = __Vtask_test_gtext__DOT__write_param__88__data;
@@ -5885,6 +5967,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__89__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__89__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5893,6 +5976,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__write_cmd__90__cmd = 0x0aU;
     __Vtask_test_gtext__DOT__write_reg__91__data = __Vtask_test_gtext__DOT__write_cmd__90__cmd;
     __Vtask_test_gtext__DOT__write_reg__91__addr = 0xa010U;
@@ -5906,6 +5990,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
     vlSelfRef.test_gtext__DOT__cpu_addr = __Vtask_test_gtext__DOT__write_reg__91__addr;
     vlSelfRef.test_gtext__DOT__cpu_wdata = __Vtask_test_gtext__DOT__write_reg__91__data;
     vlSelfRef.test_gtext__DOT__cpu_we = 1U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 1U;
     Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                       "@(posedge test_gtext.clk)");
     co_await vlSelfRef.__VtrigSched_h8248a36b__0.trigger(0U, 
@@ -5914,6 +5999,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                                                          "test_gtext.sv", 
                                                          54);
     vlSelfRef.test_gtext__DOT__cpu_we = 0U;
+    vlSelfRef.test_gtext__DOT__cpu_ce = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__92__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_gtext__DOT__wait_cmd_done__92__timeout = 0U;
     __Vtask_test_gtext__DOT__wait_cmd_done__92__timeout = 0U;
@@ -5930,7 +6016,8 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
             = (__Vtask_test_gtext__DOT__wait_cmd_done__92__test_gtext__DOT__unnamedblk1_1__DOT____Vrepeat0 
                - (IData)(1U));
     }
-    while (((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+    while ((((IData)(vlSelfRef.test_gtext__DOT__dut__DOT__cmd_busy) 
+             | (IData)(vlSelfRef.test_gtext__DOT__dut__DOT__artist_busy)) 
             & VL_GTS_III(32, 0x0007a120U, __Vtask_test_gtext__DOT__wait_cmd_done__92__timeout))) {
         Vtest_gtext___024root____VbeforeTrig_h8248a36b__0(vlSelf, 
                                                           "@(posedge test_gtext.clk)");
@@ -5951,7 +6038,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -5967,7 +6054,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -5983,7 +6070,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -5999,7 +6086,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6015,7 +6102,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6031,7 +6118,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6047,7 +6134,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6063,7 +6150,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6079,7 +6166,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6095,7 +6182,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6111,7 +6198,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6127,7 +6214,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6143,7 +6230,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6159,7 +6246,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6175,7 +6262,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6191,7 +6278,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6207,7 +6294,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6223,7 +6310,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6239,7 +6326,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6255,7 +6342,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6271,7 +6358,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6287,7 +6374,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6303,7 +6390,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6319,7 +6406,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6335,7 +6422,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6351,7 +6438,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6367,7 +6454,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6383,7 +6470,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6399,7 +6486,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6415,7 +6502,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6431,7 +6518,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6447,7 +6534,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6463,7 +6550,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6479,7 +6566,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6495,7 +6582,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6511,7 +6598,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6527,7 +6614,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6543,7 +6630,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6559,7 +6646,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6575,7 +6662,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6591,7 +6678,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6607,7 +6694,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6623,7 +6710,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6639,7 +6726,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6655,7 +6742,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6671,7 +6758,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6687,7 +6774,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6703,7 +6790,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6719,7 +6806,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6735,7 +6822,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6751,7 +6838,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6767,7 +6854,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6783,7 +6870,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6799,7 +6886,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6815,7 +6902,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6831,7 +6918,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6847,7 +6934,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6863,7 +6950,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6879,7 +6966,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6895,7 +6982,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6911,7 +6998,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6927,7 +7014,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6943,7 +7030,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6959,7 +7046,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6975,7 +7062,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -6991,7 +7078,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7007,7 +7094,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7023,7 +7110,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7039,7 +7126,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7055,7 +7142,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7071,7 +7158,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7087,7 +7174,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7103,7 +7190,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7119,7 +7206,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7135,7 +7222,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7151,7 +7238,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7167,7 +7254,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7183,7 +7270,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7199,7 +7286,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7215,7 +7302,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7231,7 +7318,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7247,7 +7334,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7263,7 +7350,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7279,7 +7366,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7295,7 +7382,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7311,7 +7398,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7327,7 +7414,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7343,7 +7430,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7359,7 +7446,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7375,7 +7462,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7391,7 +7478,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7407,7 +7494,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7423,7 +7510,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7439,7 +7526,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7455,7 +7542,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7471,7 +7558,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7487,7 +7574,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7503,7 +7590,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7519,7 +7606,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7535,7 +7622,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7551,7 +7638,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);
@@ -7567,87 +7654,7 @@ VlCoroutine Vtest_gtext___024root___eval_initial__TOP__Vtiming__0__0(Vtest_gtext
                         = ((0xf9ffU >= (0x0000ffffU 
                                         & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
-                           [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
-                            : 0U);
-                }(), (IData)(vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout)))) {
-        vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc 
-            = ((IData)(1U) + vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc);
-    }
-    if ((0U != ([&]() {
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y = 6U;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x = 6U;
-                    vlSelf->__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout = 0;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout 
-                        = ((0xf9ffU >= (0x0000ffffU 
-                                        & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                           + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
-                           [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
-                            : 0U);
-                }(), (IData)(vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout)))) {
-        vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc 
-            = ((IData)(1U) + vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc);
-    }
-    if ((0U != ([&]() {
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y = 6U;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x = 7U;
-                    vlSelf->__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout = 0;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout 
-                        = ((0xf9ffU >= (0x0000ffffU 
-                                        & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                           + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
-                           [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
-                            : 0U);
-                }(), (IData)(vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout)))) {
-        vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc 
-            = ((IData)(1U) + vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc);
-    }
-    if ((0U != ([&]() {
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y = 6U;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x = 8U;
-                    vlSelf->__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout = 0;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout 
-                        = ((0xf9ffU >= (0x0000ffffU 
-                                        & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                           + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
-                           [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
-                            : 0U);
-                }(), (IData)(vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout)))) {
-        vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc 
-            = ((IData)(1U) + vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc);
-    }
-    if ((0U != ([&]() {
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y = 6U;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x = 9U;
-                    vlSelf->__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout = 0;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout 
-                        = ((0xf9ffU >= (0x0000ffffU 
-                                        & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                           + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
-                           [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                            + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
-                            : 0U);
-                }(), (IData)(vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout)))) {
-        vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc 
-            = ((IData)(1U) + vlSelfRef.test_gtext__DOT__unnamedblk12__DOT__pc);
-    }
-    if ((0U != ([&]() {
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y = 6U;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x = 0x0000000aU;
-                    vlSelf->__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout = 0;
-                    vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__Vfuncout 
-                        = ((0xf9ffU >= (0x0000ffffU 
-                                        & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
-                                           + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x)))
-                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_ram
+                            ? vlSelfRef.test_gtext__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
                            [(0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__y) 
                                             + vlSelfRef.__Vfunc_test_gtext__DOT__gfx_pixel__93__x))]
                             : 0U);

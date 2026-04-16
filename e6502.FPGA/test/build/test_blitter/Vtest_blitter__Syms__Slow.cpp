@@ -11,7 +11,7 @@ Vtest_blitter__Syms::Vtest_blitter__Syms(VerilatedContext* contextp, const char*
     , TOP{this, namep}
 {
     // Check resources
-    Verilated::stackCheck(8831);
+    Verilated::stackCheck(8837);
     // Setup sub module instances
     // Configure time unit / time precision
     _vm_contextp__->timeunit(-9);

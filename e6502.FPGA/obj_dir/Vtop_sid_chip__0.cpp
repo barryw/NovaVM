@@ -605,9 +605,6 @@ void Vtop_sid_chip___nba_sequent__TOP__top__DOT__sid1_inst__0(Vtop_sid_chip* vlS
         = vlSelfRef.__PVT__v2__DOT__adsr__DOT__unnamedblk1__DOT__rate_counter;
     __Vdly__v1__DOT__adsr__DOT__state = vlSelfRef.__PVT__v1__DOT__adsr__DOT__state;
     __Vdly__v2__DOT__adsr__DOT__state = vlSelfRef.__PVT__v2__DOT__adsr__DOT__state;
-    __Vdly__v1__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v1__DOT__unnamedblk3__DOT__keep_cnt;
-    __Vdly__v2__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v2__DOT__unnamedblk3__DOT__keep_cnt;
-    __Vdly__v3__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v3__DOT__unnamedblk3__DOT__keep_cnt;
     __Vdly__v3__DOT__adsr__DOT__unnamedblk1__DOT__exponential_counter_period 
         = vlSelfRef.__PVT__v3__DOT__adsr__DOT__unnamedblk1__DOT__exponential_counter_period;
     __Vdly__v3__DOT__adsr__DOT__unnamedblk1__DOT__hold_zero 
@@ -617,6 +614,9 @@ void Vtop_sid_chip___nba_sequent__TOP__top__DOT__sid1_inst__0(Vtop_sid_chip* vlS
     __Vdly__v3__DOT__adsr__DOT__unnamedblk1__DOT__rate_counter 
         = vlSelfRef.__PVT__v3__DOT__adsr__DOT__unnamedblk1__DOT__rate_counter;
     __Vdly__v3__DOT__adsr__DOT__state = vlSelfRef.__PVT__v3__DOT__adsr__DOT__state;
+    __Vdly__v1__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v1__DOT__unnamedblk3__DOT__keep_cnt;
+    __Vdly__v2__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v2__DOT__unnamedblk3__DOT__keep_cnt;
+    __Vdly__v3__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v3__DOT__unnamedblk3__DOT__keep_cnt;
     __Vdly__v1__DOT__envelope = vlSelfRef.__PVT__v1__DOT__envelope;
     __Vdly__v2__DOT__envelope = vlSelfRef.__PVT__v2__DOT__envelope;
     __Vdly__v3__DOT__envelope = vlSelfRef.__PVT__v3__DOT__envelope;
@@ -2876,9 +2876,6 @@ void Vtop_sid_chip___nba_sequent__TOP__top__DOT__sid2_inst__0(Vtop_sid_chip* vlS
         = vlSelfRef.__PVT__v2__DOT__adsr__DOT__unnamedblk1__DOT__rate_counter;
     __Vdly__v1__DOT__adsr__DOT__state = vlSelfRef.__PVT__v1__DOT__adsr__DOT__state;
     __Vdly__v2__DOT__adsr__DOT__state = vlSelfRef.__PVT__v2__DOT__adsr__DOT__state;
-    __Vdly__v1__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v1__DOT__unnamedblk3__DOT__keep_cnt;
-    __Vdly__v2__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v2__DOT__unnamedblk3__DOT__keep_cnt;
-    __Vdly__v3__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v3__DOT__unnamedblk3__DOT__keep_cnt;
     __Vdly__v3__DOT__adsr__DOT__unnamedblk1__DOT__exponential_counter_period 
         = vlSelfRef.__PVT__v3__DOT__adsr__DOT__unnamedblk1__DOT__exponential_counter_period;
     __Vdly__v3__DOT__adsr__DOT__unnamedblk1__DOT__hold_zero 
@@ -2888,6 +2885,9 @@ void Vtop_sid_chip___nba_sequent__TOP__top__DOT__sid2_inst__0(Vtop_sid_chip* vlS
     __Vdly__v3__DOT__adsr__DOT__unnamedblk1__DOT__rate_counter 
         = vlSelfRef.__PVT__v3__DOT__adsr__DOT__unnamedblk1__DOT__rate_counter;
     __Vdly__v3__DOT__adsr__DOT__state = vlSelfRef.__PVT__v3__DOT__adsr__DOT__state;
+    __Vdly__v1__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v1__DOT__unnamedblk3__DOT__keep_cnt;
+    __Vdly__v2__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v2__DOT__unnamedblk3__DOT__keep_cnt;
+    __Vdly__v3__DOT__unnamedblk3__DOT__keep_cnt = vlSelfRef.__PVT__v3__DOT__unnamedblk3__DOT__keep_cnt;
     __Vdly__v1__DOT__envelope = vlSelfRef.__PVT__v1__DOT__envelope;
     __Vdly__v2__DOT__envelope = vlSelfRef.__PVT__v2__DOT__envelope;
     __Vdly__v3__DOT__envelope = vlSelfRef.__PVT__v3__DOT__envelope;

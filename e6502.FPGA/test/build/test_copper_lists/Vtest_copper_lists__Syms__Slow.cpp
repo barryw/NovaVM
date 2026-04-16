@@ -11,7 +11,7 @@ Vtest_copper_lists__Syms::Vtest_copper_lists__Syms(VerilatedContext* contextp, c
     , TOP{this, namep}
 {
     // Check resources
-    Verilated::stackCheck(5304);
+    Verilated::stackCheck(3646);
     // Setup sub module instances
     // Configure time unit / time precision
     _vm_contextp__->timeunit(-9);

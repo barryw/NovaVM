@@ -2,7 +2,9 @@
 // VGC snoops bus for register/charout writes, generates video
 // Blitter performs 2D DMA across all memory spaces, stalls CPU via RDY
 // SID: dual 6581/8580 sound chips, runtime model select via $D440
-// XMC bank switching: 4×256-byte windows at $BC00-$BFFF into 512KB XRAM
+// XMC bank switching: 4x256-byte windows at $BC00-$BFFF into 512KB XRAM
+//
+// All large memories use dpram instances for BRAM inference during synthesis.
 
 module top (
     input  logic        clk,        // pixel clock (~25 MHz)
@@ -54,7 +56,7 @@ module top (
     // XMC address map
     localparam XMC_REG_BASE = 16'hBA00;  // XMC registers $BA00-$BA3F
     localparam XMC_REG_END  = 16'hBA3F;
-    localparam XMC_WIN_BASE = 16'hBC00;  // 4×256-byte windows
+    localparam XMC_WIN_BASE = 16'hBC00;  // 4x256-byte windows
     localparam XMC_WIN_END  = 16'hBFFF;
 
     // SID address map
@@ -71,12 +73,320 @@ module top (
     logic [7:0] cpu_din;
 
     // =========================================================================
-    // 64KB main memory (RAM + ROM) + extension ROM bank
+    // 64KB main memory — dpram for BRAM inference
+    // Port A: CPU read/write (+ blitter write when CPU stalled)
+    // Port B: tile DMA / blitter reads / debug reads
     // =========================================================================
+`ifdef SYNTHESIS
+    // --- SYNTHESIS: use dpram instances for BRAM inference ---
+
+    // CPU clock enable — halve to ~12.5 MHz for timing closure.
+    // The DI→state→AB combinational path exceeds 25 MHz.
+    logic cpu_ce;
+    always_ff @(posedge clk) begin
+        if (rst) cpu_ce <= 0;
+        else     cpu_ce <= ~cpu_ce;
+    end
+
+    // Held CPU address: freeze during stall cycle so dpram keeps
+    // outputting the correct data (no overwrite by the new address).
+    logic [15:0] held_cpu_addr;
+    always_ff @(posedge clk) begin
+        if (cpu_ce)
+            held_cpu_addr <= cpu_addr;
+    end
+    // Use held address for all dpram reads and decode during stall
+    wire [15:0] mem_addr = cpu_ce ? cpu_addr : held_cpu_addr;
+
+    // Main RAM: 64KB
+    logic [15:0] ram_a_addr;
+    logic [7:0]  ram_a_din;
+    logic        ram_a_we;
+    logic [7:0]  ram_a_dout;
+    logic [15:0] ram_b_addr;
+    logic [7:0]  ram_b_dout;
+
+    dpram #(.WIDTH(8), .DEPTH(65536)) main_ram (
+        .clk(clk),
+        .addr_a(ram_a_addr), .din_a(ram_a_din), .we_a(ram_a_we), .dout_a(ram_a_dout),
+        .addr_b(ram_b_addr), .dout_b(ram_b_dout)
+    );
+
+    // EhBASIC ROM: 16KB
+    logic [13:0] brom_b_addr;
+    logic [7:0]  brom_b_dout;
+
+    dpram #(.WIDTH(8), .DEPTH(16384), .INIT_FILE("rom/ehbasic.hex")) basic_rom_inst (
+        .clk(clk),
+        .addr_a(14'd0), .din_a(8'd0), .we_a(1'b0), .dout_a(),
+        .addr_b(brom_b_addr), .dout_b(brom_b_dout)
+    );
+
+    // Extension ROM: 16KB
+    logic [13:0] erom_b_addr;
+    logic [7:0]  erom_b_dout;
+
+    dpram #(.WIDTH(8), .DEPTH(16384), .INIT_FILE("rom/extension.hex")) ext_rom_inst (
+        .clk(clk),
+        .addr_a(14'd0), .din_a(8'd0), .we_a(1'b0), .dout_a(),
+        .addr_b(erom_b_addr), .dout_b(erom_b_dout)
+    );
+
+    // XRAM: 4KB BRAM stub for initial bring-up
+    localparam XRAM_SIZE = 4096;
+    logic [11:0] xram_a_addr;
+    logic [7:0]  xram_a_din;
+    logic        xram_a_we;
+    logic [7:0]  xram_a_dout;
+
+    dpram #(.WIDTH(8), .DEPTH(XRAM_SIZE)) xram_inst (
+        .clk(clk),
+        .addr_a(xram_a_addr), .din_a(xram_a_din), .we_a(xram_a_we), .dout_a(xram_a_dout),
+        .addr_b(12'd0), .dout_b()
+    );
+
+    logic ext_rom_active;
+
+    initial begin
+        ext_rom_active = 0;
+    end
+
+    // XMC register file ($BA00-$BA3F)
+    logic [7:0] xmc_regs [0:63];
+
+    localparam XMC_BANKS_REG = 6'h0D;
+    localparam XMC_WINCTL_REG = 6'h16;
+
+    initial begin
+        for (int i = 0; i < 64; i++) xmc_regs[i] = 0;
+        xmc_regs[XMC_BANKS_REG] = 8'd8;
+        xmc_regs[XMC_WINCTL_REG] = 8'h0F;
+    end
+
+    // XMC address decode — use mem_addr (frozen during CPU stall)
+    wire xmc_reg_sel = (mem_addr >= XMC_REG_BASE && mem_addr <= XMC_REG_END);
+    wire xmc_win_sel = (mem_addr >= XMC_WIN_BASE && mem_addr <= XMC_WIN_END);
+    wire [5:0]  xmc_reg_off = mem_addr[5:0];
+    wire [1:0]  xmc_page    = mem_addr[9:8];
+    wire [7:0]  xmc_offset  = mem_addr[7:0];
+
+    wire [18:0] xmc_addr_raw = {xmc_regs[6'h1A + {xmc_page, 1'b0} + xmc_page],
+                                xmc_regs[6'h19 + {xmc_page, 1'b0} + xmc_page],
+                                xmc_offset};
+    wire [18:0] xmc_addr = xmc_addr_raw[18:0] & (XRAM_SIZE - 1);
+    wire xmc_win_enabled = xmc_regs[XMC_WINCTL_REG][xmc_page];
+
+    // =========================================================================
+    // Memory read — pipelined for dpram 1-cycle latency
+    // mem_addr is held stable during CPU stall cycles (cpu_ce=0)
+    // so dpram outputs don't get overwritten by the new address.
+    // =========================================================================
+    wire cpu_in_rom = (mem_addr >= ROM_BASE);
+    wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B);
+    wire sid1_reg_sel = (mem_addr >= SID1_BASE && mem_addr <= SID1_END);
+    wire sid2_reg_sel = (mem_addr >= SID2_BASE && mem_addr <= SID2_END);
+    wire sid_cfg_sel  = (mem_addr == SID_CFG);
+
+    // Register the decode signals for next-cycle mux
+    logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
+    logic r_blt_reg_sel, r_sid1_reg_sel, r_sid2_reg_sel, r_sid_cfg_sel;
+    logic r_cpu_in_rom, r_ext_rom_active;
+    logic [5:0] r_xmc_reg_off;
+
+    // Register decode signals every cycle — they align with dpram outputs
+    // since both are captured from the same cpu_addr at the same posedge.
+    always_ff @(posedge clk) begin
+        r_xmc_win_sel     <= xmc_win_sel;
+        r_xmc_win_enabled <= xmc_win_enabled;
+        r_xmc_reg_sel     <= xmc_reg_sel;
+        r_blt_reg_sel     <= blt_reg_sel;
+        r_sid1_reg_sel    <= sid1_reg_sel;
+        r_sid2_reg_sel    <= sid2_reg_sel;
+        r_sid_cfg_sel     <= sid_cfg_sel;
+        r_cpu_in_rom      <= cpu_in_rom;
+        r_ext_rom_active  <= ext_rom_active;
+        r_xmc_reg_off     <= xmc_reg_off;
+    end
+
+    // Present addresses to dpram read ports
+    // Use mem_addr (frozen during stall) so dpram output stays stable
+    assign brom_b_addr = mem_addr[13:0];
+    assign erom_b_addr = mem_addr[13:0];
+
+    // XRAM: present address for CPU reads via port A
+    // Port A serves both CPU reads and writes; writes are gated by xram_a_we
+    always_comb begin
+        xram_a_addr = xmc_addr[11:0];
+        xram_a_din  = cpu_dout;
+        xram_a_we   = 1'b0;
+
+        // CPU write to XRAM
+        if (cpu_we && cpu_active && xmc_win_sel && xmc_win_enabled)
+            xram_a_we = 1'b1;
+
+        // Blitter XRAM write
+        if (blt_xram_we)  begin
+            xram_a_addr = blt_xram_addr[11:0];
+            xram_a_din  = blt_xram_wdata;
+            xram_a_we   = 1'b1;
+        end
+    end
+
+    // Registered XMC register read (for cpu_din mux)
+    logic [7:0] r_xmc_reg_data;
+    always_ff @(posedge clk)
+        r_xmc_reg_data <= xmc_regs[xmc_reg_off];
+
+    // Registered SID read data (SID dout is combinational)
+    logic [7:0] r_sid1_dout, r_sid2_dout, r_sid_cfg_reg;
+    always_ff @(posedge clk) begin
+        r_sid1_dout   <= sid1_dout;
+        r_sid2_dout   <= sid2_dout;
+        r_sid_cfg_reg <= sid_cfg_reg;
+    end
+
+    // Registered blitter register read
+    logic [7:0] r_blt_cpu_rdata;
+    always_ff @(posedge clk)
+        r_blt_cpu_rdata <= blt_cpu_rdata;
+
+    // CPU read data mux — all sources are registered/synchronous.
+    // dpram outputs and registered decode signals both have 1-cycle latency
+    // from cpu_addr, matching the Arlet 6502's DI timing (address on cycle N,
+    // data read on cycle N+1).
+    always_comb begin
+        if (r_xmc_win_sel && r_xmc_win_enabled)
+            cpu_din = xram_a_dout;
+        else if (r_xmc_win_sel && !r_xmc_win_enabled)
+            cpu_din = 8'hFF;
+        else if (r_xmc_reg_sel)
+            cpu_din = r_xmc_reg_data;
+        else if (r_blt_reg_sel)
+            cpu_din = r_blt_cpu_rdata;
+        else if (r_sid1_reg_sel)
+            cpu_din = r_sid1_dout;
+        else if (r_sid2_reg_sel)
+            cpu_din = r_sid2_dout;
+        else if (r_sid_cfg_sel)
+            cpu_din = r_sid_cfg_reg;
+        else if (r_cpu_in_rom)
+            cpu_din = r_ext_rom_active ? erom_b_dout : brom_b_dout;
+        else
+            cpu_din = ram_a_dout;
+    end
+
+    // =========================================================================
+    // Main RAM port A: CPU reads/writes + blitter writes
+    // When blitter is writing to RAM, CPU is stalled — port A available
+    // =========================================================================
+    always_comb begin
+        ram_a_addr = mem_addr;  // default: held address for reads
+        ram_a_din  = cpu_dout;
+        ram_a_we   = 1'b0;
+
+        if (blt_ram_we && blt_ram_addr < ROM_BASE) begin
+            // Blitter write (CPU stalled)
+            ram_a_addr = blt_ram_addr;
+            ram_a_din  = blt_ram_wdata;
+            ram_a_we   = 1'b1;
+        end else if (dbg_poke_en && dbg_poke_addr < ROM_BASE) begin
+            // Debug poke
+            ram_a_addr = dbg_poke_addr;
+            ram_a_din  = dbg_poke_data;
+            ram_a_we   = 1'b1;
+        end else if (cpu_we && cpu_active && cpu_addr < ROM_BASE &&
+                     !xmc_win_sel && !xmc_reg_sel) begin
+            // CPU write to RAM
+            ram_a_we = 1'b1;
+        end
+    end
+
+    // =========================================================================
+    // Main RAM port B: tile DMA / blitter reads / debug reads
+    // Priority: tile DMA > blitter > debug
+    // =========================================================================
+    always_comb begin
+        if (tile_dma_active)
+            ram_b_addr = tile_dma_addr;
+        else if (blt_ram_read_active)
+            ram_b_addr = blt_ram_addr;
+        else
+            ram_b_addr = dbg_peek_addr;
+    end
+
+    // Blitter RAM read: the blitter presents ram_addr during S_READ state.
+    // dpram port B output (ram_b_dout) is available next cycle.
+    // The blitter FSM already has S_READ→S_WRITE pipeline, consuming data
+    // in S_WRITE via mem_read_data → read_byte. We register this properly.
+    wire blt_ram_read_active = (blt_rdy == 1'b0) && !blt_ram_we;
+    wire [7:0] blt_ram_rdata  = ram_b_dout;
+    wire [7:0] blt_xram_rdata = xram_a_dout;
+
+    // Tile DMA read: tile engine sets dma_addr on cycle N (registered output),
+    // dpram port B outputs data on cycle N+1. The tile engine's dma_data_valid
+    // flag goes high on cycle N+1, so data arrives exactly when needed.
+    wire [7:0] tile_dma_data = ram_b_dout;
+
+    // =========================================================================
+    // Memory writes — non-RAM (XMC regs, ROM bank switching)
+    // =========================================================================
+    always_ff @(posedge clk) begin
+        if (cpu_we && cpu_active) begin
+            if (xmc_reg_sel) begin
+                if (xmc_reg_off != XMC_BANKS_REG)
+                    xmc_regs[xmc_reg_off] <= cpu_dout;
+            end
+        end
+
+        // ROM bank switching: write to $A03F toggles active ROM bank
+        if (cpu_we && cpu_active && cpu_addr == REG_ROMSWAP) begin
+            if (cpu_dout == ROMSWAP_EXT)
+                ext_rom_active <= 1;
+            else if (cpu_dout == ROMSWAP_BASIC)
+                ext_rom_active <= 0;
+        end
+
+        // Reset restores BASIC ROM
+        if (rst)
+            ext_rom_active <= 0;
+    end
+
+    // =========================================================================
+    // Keyboard — write to RAM via port A needs special handling
+    // Since we can't write to dpram directly from here, we snoop key input
+    // and write CHARIN via a registered path
+    // =========================================================================
+    // Key input buffer — small register, written to RAM on next cycle
+    logic [7:0] key_buf;
+    logic       key_buf_valid;
+    logic       clear_input;
+
+    initial begin
+        key_buf = 0;
+        key_buf_valid = 0;
+        clear_input = 0;
+    end
+
+    // For keyboard CHARIN: the CPU reads $A00F through the VGC, not through
+    // main RAM. The VGC has its own char_in_reg. In top.sv the old code wrote
+    // key_data to ram[CHARIN] and cleared it on CPU read — but the CPU read
+    // path for $A00F goes through the VGC (it's in VGC address space $A000-$A01F).
+    // So ram[CHARIN] was only used for the "is there a key" check.
+    // With dpram we can't easily do this. Instead, keyboard input is handled
+    // entirely by the VGC's char_in_reg. The ram[CHARIN] write was redundant.
+    // We keep the clear_input logic for behavioral compatibility with simulation.
+    // (On FPGA, the CPU reads CHARIN from VGC, not from RAM.)
+
+`else
+    // --- SIMULATION: keep original register arrays for Verilator compatibility ---
+
     logic [7:0] ram [0:65535];
-    logic [7:0] basic_rom [0:16383];   // EhBASIC ROM backup
-    logic [7:0] ext_rom [0:16383];     // Extension ROM
-    logic       ext_rom_active;         // 1 = extension ROM mapped at $C000
+    logic [7:0] basic_rom [0:16383];
+    logic [7:0] ext_rom [0:16383];
+    logic       ext_rom_active;
+
+    localparam XRAM_SIZE = 524288;
+    logic [7:0] xram [0:XRAM_SIZE-1];
 
     initial begin
         for (int i = 0; i < 65536; i++)
@@ -90,13 +400,8 @@ module top (
         ext_rom_active = 0;
     end
 
-    // =========================================================================
-    // 512KB extended memory (XRAM) — external SRAM on real FPGA
-    // =========================================================================
-    logic [7:0] xram [0:524287];  // 512KB
-
     initial begin
-        for (int i = 0; i < 524288; i++)
+        for (int i = 0; i < XRAM_SIZE; i++)
             xram[i] = 8'h00;
     end
 
@@ -104,12 +409,12 @@ module top (
     logic [7:0] xmc_regs [0:63];
 
     localparam XMC_BANKS_REG = 6'h0D;
-    localparam XMC_WINCTL_REG = 6'h16;  // window enable: bit N = window N enabled
+    localparam XMC_WINCTL_REG = 6'h16;
 
     initial begin
         for (int i = 0; i < 64; i++) xmc_regs[i] = 0;
-        xmc_regs[XMC_BANKS_REG] = 8'd8;    // 8 × 64KB = 512KB
-        xmc_regs[XMC_WINCTL_REG] = 8'h0F;  // all 4 windows enabled by default
+        xmc_regs[XMC_BANKS_REG] = 8'd8;
+        xmc_regs[XMC_WINCTL_REG] = 8'h0F;
     end
 
     // XMC address decode
@@ -119,16 +424,14 @@ module top (
     wire [1:0]  xmc_page    = cpu_addr[9:8];
     wire [7:0]  xmc_offset  = cpu_addr[7:0];
 
-    wire [18:0] xmc_addr = {xmc_regs[6'h1A + {xmc_page, 1'b0} + xmc_page],
-                            xmc_regs[6'h19 + {xmc_page, 1'b0} + xmc_page],
-                            xmc_offset};
-
-    // Window enable check: bit N of WinCtl enables window N
+    wire [18:0] xmc_addr_raw = {xmc_regs[6'h1A + {xmc_page, 1'b0} + xmc_page],
+                                xmc_regs[6'h19 + {xmc_page, 1'b0} + xmc_page],
+                                xmc_offset};
+    wire [18:0] xmc_addr = xmc_addr_raw[18:0] & (XRAM_SIZE - 1);
     wire xmc_win_enabled = xmc_regs[XMC_WINCTL_REG][xmc_page];
 
     // =========================================================================
     // Memory read mux — registered (Arlet 6502 expects DI one cycle after AB)
-    // ROM reads come from banked ROM arrays, not ram[]
     // =========================================================================
     wire cpu_in_rom = (cpu_addr >= ROM_BASE);
     wire blt_reg_sel = (cpu_addr >= 16'hBA83 && cpu_addr <= 16'hBA9B);
@@ -178,7 +481,7 @@ module top (
         if (blt_xram_we)
             xram[blt_xram_addr] <= blt_xram_wdata;
 
-        // ROM bank switching: write to $A03F toggles active ROM bank
+        // ROM bank switching
         if (cpu_we && cpu_addr == REG_ROMSWAP) begin
             if (cpu_dout == ROMSWAP_EXT)
                 ext_rom_active <= 1;
@@ -186,7 +489,6 @@ module top (
                 ext_rom_active <= 0;
         end
 
-        // Reset restores BASIC ROM
         if (rst)
             ext_rom_active <= 0;
     end
@@ -206,6 +508,20 @@ module top (
             ram[CHARIN] <= 0;
     end
 
+    // Combinational RAM/XRAM reads for blitter and tile DMA (simulation only)
+    wire [7:0] blt_ram_rdata  = ram[blt_ram_addr];
+    wire [7:0] blt_xram_rdata = xram[blt_xram_addr];
+    wire [7:0] tile_dma_data  = ram[tile_dma_addr];
+
+`endif
+
+    // cpu_active: high on cycles when the CPU is actually executing.
+`ifdef SYNTHESIS
+    wire cpu_active = cpu_ce;
+`else
+    wire cpu_active = 1'b1;
+`endif
+
     // =========================================================================
     // Blitter
     // =========================================================================
@@ -224,16 +540,12 @@ module top (
     wire [7:0]  blt_cpu_rdata;
     wire        blt_rdy;
 
-    // Combinational RAM/XRAM reads for blitter
-    wire [7:0] blt_ram_rdata  = ram[blt_ram_addr];
-    wire [7:0] blt_xram_rdata = xram[blt_xram_addr];
-
     blitter blt_inst (
         .clk        (clk),
         .rst        (rst),
         .cpu_addr   (cpu_addr),
         .cpu_wdata  (cpu_dout),
-        .cpu_we     (cpu_we),
+        .cpu_we     (cpu_we & cpu_active),
         .cpu_rdata  (blt_cpu_rdata),
         .cpu_re     (1'b0),
         .rdy_out    (blt_rdy),
@@ -257,7 +569,7 @@ module top (
     // SID — dual 6581/8580 sound chips
     // =========================================================================
 
-    // ~1 MHz clock enable from pixel clock: 25.175 MHz / 25 ≈ 1.007 MHz
+    // ~1 MHz clock enable from pixel clock: 25.175 MHz / 25 ~ 1.007 MHz
     logic [4:0] sid_clk_div;
     logic       sid_ce_1m;
     always_ff @(posedge clk) begin
@@ -271,18 +583,17 @@ module top (
     end
 
     // SID config register ($D440): bit 0 = SID1 mode, bit 1 = SID2 mode
-    // 0 = MOS 6581, 1 = MOS 8580
     logic [7:0] sid_cfg_reg;
     always_ff @(posedge clk) begin
         if (rst)
-            sid_cfg_reg <= 8'h00;  // default: both chips = 6581
-        else if (cpu_we && cpu_addr == SID_CFG)
+            sid_cfg_reg <= 8'h00;
+        else if (cpu_we && cpu_active && cpu_addr == SID_CFG)
             sid_cfg_reg <= cpu_dout;
     end
 
     // Chip select and address decode
-    wire sid1_cs = cpu_we && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
-    wire sid2_cs = cpu_we && (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
+    wire sid1_cs = cpu_we && cpu_active && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
+    wire sid2_cs = cpu_we && cpu_active && (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
     wire sid1_rd = !cpu_we && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
     wire sid2_rd = !cpu_we && (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
 
@@ -326,7 +637,7 @@ module top (
         .WE     (cpu_we),
         .IRQ    (~irq_n),
         .NMI    (~nmi_n),
-        .RDY    (blt_rdy & ~dbg_pause)
+        .RDY    (blt_rdy & ~dbg_pause & cpu_active)
     );
 
     // =========================================================================
@@ -338,20 +649,17 @@ module top (
     wire [15:0] tile_dma_addr;
     wire        tile_dma_active;
 
-    // Tile engine DMA read port — combinational read from main RAM
-    wire [7:0] tile_dma_data = ram[tile_dma_addr];
-
     vgc vgc_inst (
         .clk            (clk),
         .rst            (rst),
-        .cpu_ce         (1'b1),
+        .cpu_ce         (cpu_active),
         .cpu_addr       (cpu_addr),
         .cpu_wdata      (cpu_dout),
         .cpu_rdata      (vgc_rdata_unused),
         .cpu_we         (cpu_we),
         .cpu_re         (1'b0),
-        .key_valid      (1'b0),
-        .key_data       (8'h00),
+        .key_valid      (key_valid),
+        .key_data       (key_data),
         .tile_dma_addr  (tile_dma_addr),
         .tile_dma_data  (tile_dma_data),
         .tile_dma_active(tile_dma_active),
@@ -376,8 +684,25 @@ module top (
     // Debug/simulation interface
     // =========================================================================
 
-    // Peek: route through VGC, SID, ROM banks, or RAM
-    // Mirrors Avalonia CompositeBusDevice routing
+`ifdef SYNTHESIS
+    // On FPGA: debug peek routed through VGC, SID, ROM dprams, or main RAM dpram
+    assign vgc_dbg_owns = vgc_inst.dbg_owns;
+    wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
+    wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
+    wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
+    wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
+
+    // For debug reads, RAM port B serves as the read port.
+    // ROM reads use the same brom_b/erom_b ports (address set combinationally).
+    // This is acceptable since debug is not used on real FPGA hardware.
+    assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns ? vgc_dbg_rdata :
+                                          dbg_sid1     ? sid1_dout     :
+                                          dbg_sid2     ? sid2_dout     :
+                                          dbg_sidcfg   ? sid_cfg_reg   :
+                                          dbg_in_rom   ? (ext_rom_active ? erom_b_dout : brom_b_dout) :
+                                                          ram_b_dout) : 8'h00;
+`else
+    // Simulation: full debug with combinational reads
     assign vgc_dbg_owns = vgc_inst.dbg_owns;
     wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
     wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
@@ -397,6 +722,7 @@ module top (
         if (dbg_poke_en && dbg_poke_addr < ROM_BASE)
             ram[dbg_poke_addr] <= dbg_poke_data;
     end
+`endif
 
     // CPU state: route from Arlet 6502 internal signals
     assign dbg_cpu_pc    = cpu_inst.PC;

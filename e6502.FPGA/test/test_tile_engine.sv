@@ -1,4 +1,4 @@
-// Tile engine unit tests — iverilog testbench
+// Tile engine unit tests — Verilator testbench
 // Tests tile definition, nametable operations, scrolling, mirroring, palette, pixel output
 
 `timescale 1ns/1ps
@@ -20,6 +20,13 @@ module test_tile_engine;
     wire  [7:0]  dma_data;
     wire         dma_active;
 
+    // Blitter access port
+    logic [14:0] blt_tile_addr;
+    logic [7:0]  blt_tile_wdata;
+    logic        blt_tile_we;
+    logic        blt_tile_re;
+    wire  [7:0]  blt_tile_rdata;
+
     // Pixel interface
     logic [8:0]  pixel_x;
     logic [7:0]  pixel_y;
@@ -38,6 +45,9 @@ module test_tile_engine;
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
         .dma_addr(dma_addr), .dma_data(dma_data), .dma_active(dma_active),
+        .blt_tile_addr(blt_tile_addr), .blt_tile_wdata(blt_tile_wdata),
+        .blt_tile_we(blt_tile_we), .blt_tile_re(blt_tile_re),
+        .blt_tile_rdata(blt_tile_rdata),
         .pixel_x(pixel_x), .pixel_y(pixel_y), .pixel_valid(pixel_valid),
         .tile_rgb(tile_rgb), .tile_opaque(tile_opaque)
     );
@@ -97,12 +107,21 @@ module test_tile_engine;
     endtask
 
     // Sample tile pixel output at given coordinates
+    // Pipeline has 3 stages of latency, so we need extra cycles
     task automatic sample_pixel(input int x, input int y);
         @(posedge clk);
         pixel_x <= x[8:0];
         pixel_y <= y[7:0];
         pixel_valid <= 1;
-        @(posedge clk); // let combinational settle
+        // Stage 0: addresses presented to BRAM port B
+        @(posedge clk);
+        // Stage 1: nt/attr data available, tile_data addr presented
+        @(posedge clk);
+        // Stage 2: tile_data available, palette addr presented
+        @(posedge clk);
+        // Stage 3: palette data available, output valid
+        @(posedge clk);
+        // Let output settle
         @(posedge clk);
     endtask
 
@@ -117,6 +136,8 @@ module test_tile_engine;
         cpu_we = 0; cpu_re = 0;
         cpu_addr = 0; cpu_wdata = 0;
         pixel_x = 0; pixel_y = 0; pixel_valid = 0;
+        blt_tile_addr = 0; blt_tile_wdata = 0;
+        blt_tile_we = 0; blt_tile_re = 0;
 
         for (int i = 0; i < 65536; i++) sim_ram[i] = 0;
 
@@ -154,7 +175,7 @@ module test_tile_engine;
         write_tile_cmd(8'h03);  // TCMD_PUT
         repeat(5) @(posedge clk);
 
-        check("nametable[0][3*40+5] = 42", dut.nametable[3*40+5] == 42);
+        check("nametable[0][3*40+5] = 42", dut.nametable_ram.mem[3*40+5] == 42);
 
         // ----- Test 4: TileCmdAttr — set attribute -----
         $display("Test: TileCmdAttr");
@@ -165,18 +186,19 @@ module test_tile_engine;
         write_tile_cmd(8'h04);      // TCMD_ATTR
         repeat(5) @(posedge clk);
 
-        check("attr_table[0][3*40+5] = 0xC3", dut.attr_table[3*40+5] == 8'hC3);
+        check("attr_table[0][3*40+5] = 0xC3", dut.attr_table_ram.mem[3*40+5] == 8'hC3);
 
         // ----- Test 5: TileCmdFill — fill nametable -----
         $display("Test: TileCmdFill");
         write_tile_reg(8, 1);   // NT 1
         write_tile_reg(9, 99);  // tile# 99
         write_tile_cmd(8'h05);  // TCMD_FILL
+        wait_dma_done();
         repeat(5) @(posedge clk);
 
-        check("nametable[1][0] filled with 99", dut.nametable[1000] == 99);
-        check("nametable[1][999] filled with 99", dut.nametable[1999] == 99);
-        check("nametable[0][0] unchanged", dut.nametable[0] == 0); // NT 0 untouched
+        check("nametable[1][0] filled with 99", dut.nametable_ram.mem[1000] == 99);
+        check("nametable[1][999] filled with 99", dut.nametable_ram.mem[1999] == 99);
+        check("nametable[0][0] unchanged", dut.nametable_ram.mem[0] == 0); // NT 0 untouched
 
         // ----- Test 6: TileCmdDef — define tile from RAM via DMA -----
         $display("Test: TileCmdDef (DMA)");
@@ -192,10 +214,10 @@ module test_tile_engine;
         repeat(5) @(posedge clk);
 
         // Tile 10 starts at offset 10*32=320
-        check("tile_data[320] = 1", dut.tile_data[320] == 1);
-        check("tile_data[321] = 2", dut.tile_data[321] == 2);
-        $display("  DEBUG: tile_data[351]=%0d, dma_state=%0d, dma_count=%0d", dut.tile_data[351], dut.dma_state, dut.dma_count);
-        check("tile_data[351] = 32", dut.tile_data[351] == 32);
+        check("tile_data[320] = 1", dut.tile_data_ram.mem[320] == 1);
+        check("tile_data[321] = 2", dut.tile_data_ram.mem[321] == 2);
+        $display("  DEBUG: tile_data[351]=%0d, dma_state=%0d, dma_count=%0d", dut.tile_data_ram.mem[351], dut.dma_state, dut.dma_count);
+        check("tile_data[351] = 32", dut.tile_data_ram.mem[351] == 32);
 
         // ----- Test 7: TileCmdPeek -----
         $display("Test: TileCmdPeek");
@@ -203,9 +225,10 @@ module test_tile_engine;
         write_tile_reg(9, 5);   // X = 5
         write_tile_reg(10, 3);  // Y = 3
         write_tile_cmd(8'h0C);  // TCMD_PEEK
+        wait_dma_done();
         repeat(5) @(posedge clk);
 
-        $display("  DEBUG: peek_val=%0d peek_attr=%h dma_state=%0d nametable[125]=%0d", dut.peek_val, dut.peek_attr, dut.dma_state, dut.nametable[125]);
+        $display("  DEBUG: peek_val=%0d peek_attr=%h dma_state=%0d nametable[125]=%0d", dut.peek_val, dut.peek_attr, dut.dma_state, dut.nametable_ram.mem[125]);
         check("peek_val = 42", dut.peek_val == 42);
         check("peek_attr = 0xC3", dut.peek_attr == 8'hC3);
 
@@ -220,8 +243,8 @@ module test_tile_engine;
         repeat(5) @(posedge clk);
 
         $display("  DEBUG: pal_ram[37]=%h dma_state=%0d tregs8=%h tregs9=%h tregs10=%h tregs14=%h tregs15=%h",
-            dut.pal_ram[37], dut.dma_state, dut.tregs[8], dut.tregs[9], dut.tregs[10], dut.tregs[14], dut.tregs[15]);
-        check("pal_ram[2*16+5] = 0xA5F", dut.pal_ram[2*16+5] == 12'hA5F);
+            dut.pal_ram_inst.mem[37], dut.dma_state, dut.tregs[8], dut.tregs[9], dut.tregs[10], dut.tregs[14], dut.tregs[15]);
+        check("pal_ram[2*16+5] = 0xA5F", dut.pal_ram_inst.mem[2*16+5] == 12'hA5F);
 
         // ----- Test 9: Scroll registers -----
         $display("Test: Scroll registers");
@@ -290,9 +313,9 @@ module test_tile_engine;
         wait_dma_done();
         repeat(5) @(posedge clk);
 
-        check("nametable[0][0] cleared", dut.nametable[0] == 0);
-        check("nametable[1][0] cleared", dut.nametable[1000] == 0);
-        check("attr_table[0][3*40+5] cleared", dut.attr_table[3*40+5] == 0);
+        check("nametable[0][0] cleared", dut.nametable_ram.mem[0] == 0);
+        check("nametable[1][0] cleared", dut.nametable_ram.mem[1000] == 0);
+        check("attr_table[0][3*40+5] cleared", dut.attr_table_ram.mem[3*40+5] == 0);
 
         // ----- Test 12: Column buffer operations -----
         $display("Test: Column buffer");
@@ -326,10 +349,11 @@ module test_tile_engine;
         write_tile_reg(8, 0);   // P0 = NT 0
         write_tile_reg(9, 3);   // P1 = col 3
         write_tile_cmd(8'h13);  // TCMD_BUFPUT
+        wait_dma_done();
         repeat(5) @(posedge clk);
-        check("NT0 row0 col3 = 7", dut.nametable[0*40+3] == 7);
-        check("NT0 row5 col3 = 99", dut.nametable[5*40+3] == 99);
-        check("NT0 row10 col3 = 55", dut.nametable[10*40+3] == 55);
+        check("NT0 row0 col3 = 7", dut.nametable_ram.mem[0*40+3] == 7);
+        check("NT0 row5 col3 = 99", dut.nametable_ram.mem[5*40+3] == 99);
+        check("NT0 row10 col3 = 55", dut.nametable_ram.mem[10*40+3] == 55);
 
         // ----- Test 13: TileCmdLoad — load entire nametable via DMA -----
         $display("Test: TileCmdLoad (DMA)");
@@ -344,9 +368,9 @@ module test_tile_engine;
         wait_dma_done();
         repeat(5) @(posedge clk);
 
-        check("NT2[0] loaded", dut.nametable[2000] == 0);
-        check("NT2[1] loaded", dut.nametable[2001] == 1);
-        check("NT2[255] loaded", dut.nametable[2255] == 255);
+        check("NT2[0] loaded", dut.nametable_ram.mem[2000] == 0);
+        check("NT2[1] loaded", dut.nametable_ram.mem[2001] == 1);
+        check("NT2[255] loaded", dut.nametable_ram.mem[2255] == 255);
 
         // ----- Test 14: TileCmdDefBulk — multi-tile DMA -----
         $display("Test: TileCmdDefBulk");
@@ -362,8 +386,8 @@ module test_tile_engine;
         repeat(5) @(posedge clk);
 
         // Tile 20 = offset 640, tile 21 = offset 672
-        check("tile 20 byte 0 = 0xAA", dut.tile_data[640] == 8'hAA);
-        check("tile 21 byte 0 = 0xAA", dut.tile_data[672] == 8'hAA);
+        check("tile 20 byte 0 = 0xAA", dut.tile_data_ram.mem[640] == 8'hAA);
+        check("tile 21 byte 0 = 0xAA", dut.tile_data_ram.mem[672] == 8'hAA);
 
         // ----- Test 15: Mirror modes -----
         $display("Test: Mirror resolution");
@@ -404,8 +428,8 @@ module test_tile_engine;
         wait_dma_done();
         repeat(5) @(posedge clk);
 
-        check("NT0 row7 col0 = 10", dut.nametable[7*40+0] == 10);
-        check("NT0 row7 col39 = 49", dut.nametable[7*40+39] == 49);
+        check("NT0 row7 col0 = 10", dut.nametable_ram.mem[7*40+0] == 10);
+        check("NT0 row7 col39 = 49", dut.nametable_ram.mem[7*40+39] == 49);
 
         // ----- Test 17: Transparent color -----
         $display("Test: Transparent color");
@@ -413,6 +437,28 @@ module test_tile_engine;
         write_tile_reg(1, 5);
         repeat(2) @(posedge clk);
         check("trans_color = 5", dut.trans_color == 5);
+
+        // ----- Test 18: Blitter write + read -----
+        $display("Test: Blitter access");
+        // Write via blitter port
+        @(posedge clk);
+        blt_tile_addr <= 15'd100;
+        blt_tile_wdata <= 8'hAB;
+        blt_tile_we <= 1;
+        @(posedge clk);
+        blt_tile_we <= 0;
+        repeat(2) @(posedge clk);
+        check("blitter write stored", dut.tile_data_ram.mem[100] == 8'hAB);
+
+        // Read via blitter port
+        @(posedge clk);
+        blt_tile_addr <= 15'd100;
+        blt_tile_re <= 1;
+        @(posedge clk);
+        blt_tile_re <= 0;
+        @(posedge clk); // wait for BRAM latency
+        @(posedge clk);
+        check("blitter read returns 0xAB", blt_tile_rdata == 8'hAB);
 
         // ---------------------------------------------------------------
         $display("");

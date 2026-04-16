@@ -181,6 +181,7 @@ class alignas(VL_CACHE_LINE_BYTES) Vtop_sid_chip final {
         VlUnpacked<CData/*7:0*/, 2048> __PVT__tbl__DOT__wave8580_p_t;
         VlUnpacked<CData/*7:0*/, 4096> __PVT__tbl__DOT__wave8580_ps_;
         VlUnpacked<SData/*15:0*/, 4096> __PVT__tbl__DOT__f6581_curve;
+        VlUnpacked<SData/*14:0*/, 1024> __PVT__tbl__DOT___unused_f6581_adj;
         VlUnpacked<SData/*10:0*/, 32> __PVT__flt__DOT___1_Q_lsl10_tbl;
     };
 

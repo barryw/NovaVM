@@ -399,6 +399,8 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     VL_WRITEF_NX("=== Copper Unit Tests ===\n\n",0);
     vlSelfRef.test_copper__DOT__rst = 1U;
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_re = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     vlSelfRef.test_copper__DOT__cpu_addr = 0U;
     vlSelfRef.test_copper__DOT__cpu_wdata = 0U;
     __Vtask_test_copper__DOT__run_clocks__0__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0x00000032U;
@@ -485,6 +487,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__6__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__6__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -493,6 +496,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__7__data 
         = (0x000000ffU & (__Vtask_test_copper__DOT__copper_add__4__x 
                           >> 8U));
@@ -510,6 +514,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__8__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__8__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -518,6 +523,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__9__data 
         = (0x000000ffU & __Vtask_test_copper__DOT__copper_add__4__y);
     __Vtask_test_copper__DOT__write_param__9__idx = 2U;
@@ -534,6 +540,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__10__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__10__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -542,6 +549,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__11__data 
         = (0x000000ffU & __Vtask_test_copper__DOT__copper_add__4__reg_idx);
     __Vtask_test_copper__DOT__write_param__11__idx = 3U;
@@ -558,6 +566,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__12__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__12__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -566,6 +575,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__13__data 
         = (0x000000ffU & (__Vtask_test_copper__DOT__copper_add__4__reg_idx 
                           >> 8U));
@@ -583,6 +593,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__14__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__14__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -591,6 +602,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__15__data 
         = __Vtask_test_copper__DOT__copper_add__4__value;
     __Vtask_test_copper__DOT__write_param__15__idx = 5U;
@@ -607,6 +619,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__16__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__16__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -615,6 +628,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_cmd__17__cmd = 0x1bU;
     __Vtask_test_copper__DOT__write_reg__18__data = __Vtask_test_copper__DOT__write_cmd__17__cmd;
     __Vtask_test_copper__DOT__write_reg__18__addr = 0xa010U;
@@ -628,6 +642,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__18__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__18__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -636,6 +651,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_cmd__20__cmd = 0x1dU;
     __Vtask_test_copper__DOT__write_reg__21__data = __Vtask_test_copper__DOT__write_cmd__20__cmd;
     __Vtask_test_copper__DOT__write_reg__21__addr = 0xa010U;
@@ -649,6 +665,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__21__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__21__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -657,6 +674,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__run_clocks__22__n = 2U;
     __Vtask_test_copper__DOT__run_clocks__22__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_copper__DOT__run_clocks__22__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 
@@ -714,6 +732,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__25__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__25__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -722,6 +741,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__run_clocks__26__n = 2U;
     __Vtask_test_copper__DOT__run_clocks__26__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_copper__DOT__run_clocks__26__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 
@@ -819,6 +839,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__32__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__32__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -827,6 +848,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__run_clocks__33__n = 2U;
     __Vtask_test_copper__DOT__run_clocks__33__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_copper__DOT__run_clocks__33__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 
@@ -872,6 +894,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__37__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__37__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -880,6 +903,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__run_clocks__38__n = 2U;
     __Vtask_test_copper__DOT__run_clocks__38__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_copper__DOT__run_clocks__38__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 
@@ -954,6 +978,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__45__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__45__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -962,6 +987,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_reg__46__data = 6U;
     __Vtask_test_copper__DOT__write_reg__46__addr = 0xa001U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
@@ -974,6 +1000,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__46__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__46__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -982,6 +1009,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__run_clocks__47__n = 2U;
     __Vtask_test_copper__DOT__run_clocks__47__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_copper__DOT__run_clocks__47__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 
@@ -1011,6 +1039,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__50__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__50__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1019,6 +1048,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__run_clocks__52__n = 0x000668a0U;
     __Vtask_test_copper__DOT__run_clocks__52__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_copper__DOT__run_clocks__52__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 
@@ -1084,6 +1114,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__57__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__57__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1092,6 +1123,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__58__data 
         = (0x000000ffU & (__Vtask_test_copper__DOT__copper_add__55__x 
                           >> 8U));
@@ -1109,6 +1141,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__59__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__59__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1117,6 +1150,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__60__data 
         = (0x000000ffU & __Vtask_test_copper__DOT__copper_add__55__y);
     __Vtask_test_copper__DOT__write_param__60__idx = 2U;
@@ -1133,6 +1167,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__61__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__61__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1141,6 +1176,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__62__data 
         = (0x000000ffU & __Vtask_test_copper__DOT__copper_add__55__reg_idx);
     __Vtask_test_copper__DOT__write_param__62__idx = 3U;
@@ -1157,6 +1193,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__63__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__63__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1165,6 +1202,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__64__data 
         = (0x000000ffU & (__Vtask_test_copper__DOT__copper_add__55__reg_idx 
                           >> 8U));
@@ -1182,6 +1220,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__65__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__65__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1190,6 +1229,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__66__data 
         = __Vtask_test_copper__DOT__copper_add__55__value;
     __Vtask_test_copper__DOT__write_param__66__idx = 5U;
@@ -1206,6 +1246,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__67__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__67__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1214,6 +1255,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_cmd__68__cmd = 0x1bU;
     __Vtask_test_copper__DOT__write_reg__69__data = __Vtask_test_copper__DOT__write_cmd__68__cmd;
     __Vtask_test_copper__DOT__write_reg__69__addr = 0xa010U;
@@ -1227,6 +1269,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__69__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__69__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1235,6 +1278,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__copper_add__70__value = 2U;
     __Vtask_test_copper__DOT__copper_add__70__reg_idx = 1U;
     __Vtask_test_copper__DOT__copper_add__70__y = 0x00000064U;
@@ -1255,6 +1299,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__72__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__72__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1263,6 +1308,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__73__data 
         = (0x000000ffU & (__Vtask_test_copper__DOT__copper_add__70__x 
                           >> 8U));
@@ -1280,6 +1326,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__74__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__74__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1288,6 +1335,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__75__data 
         = (0x000000ffU & __Vtask_test_copper__DOT__copper_add__70__y);
     __Vtask_test_copper__DOT__write_param__75__idx = 2U;
@@ -1304,6 +1352,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__76__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__76__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1312,6 +1361,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__77__data 
         = (0x000000ffU & __Vtask_test_copper__DOT__copper_add__70__reg_idx);
     __Vtask_test_copper__DOT__write_param__77__idx = 3U;
@@ -1328,6 +1378,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__78__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__78__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1336,6 +1387,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__79__data 
         = (0x000000ffU & (__Vtask_test_copper__DOT__copper_add__70__reg_idx 
                           >> 8U));
@@ -1353,6 +1405,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__80__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__80__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1361,6 +1414,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__81__data 
         = __Vtask_test_copper__DOT__copper_add__70__value;
     __Vtask_test_copper__DOT__write_param__81__idx = 5U;
@@ -1377,6 +1431,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__82__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__82__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1385,6 +1440,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_cmd__83__cmd = 0x1bU;
     __Vtask_test_copper__DOT__write_reg__84__data = __Vtask_test_copper__DOT__write_cmd__83__cmd;
     __Vtask_test_copper__DOT__write_reg__84__addr = 0xa010U;
@@ -1398,6 +1454,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__84__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__84__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1406,6 +1463,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__copper_add__85__value = 7U;
     __Vtask_test_copper__DOT__copper_add__85__reg_idx = 1U;
     __Vtask_test_copper__DOT__copper_add__85__y = 0x00000096U;
@@ -1426,6 +1484,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__87__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__87__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1434,6 +1493,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__88__data 
         = (0x000000ffU & (__Vtask_test_copper__DOT__copper_add__85__x 
                           >> 8U));
@@ -1451,6 +1511,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__89__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__89__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1459,6 +1520,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__90__data 
         = (0x000000ffU & __Vtask_test_copper__DOT__copper_add__85__y);
     __Vtask_test_copper__DOT__write_param__90__idx = 2U;
@@ -1475,6 +1537,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__91__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__91__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1483,6 +1546,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__92__data 
         = (0x000000ffU & __Vtask_test_copper__DOT__copper_add__85__reg_idx);
     __Vtask_test_copper__DOT__write_param__92__idx = 3U;
@@ -1499,6 +1563,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__93__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__93__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1507,6 +1572,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__94__data 
         = (0x000000ffU & (__Vtask_test_copper__DOT__copper_add__85__reg_idx 
                           >> 8U));
@@ -1524,6 +1590,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__95__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__95__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1532,6 +1599,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_param__96__data 
         = __Vtask_test_copper__DOT__copper_add__85__value;
     __Vtask_test_copper__DOT__write_param__96__idx = 5U;
@@ -1548,6 +1616,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__97__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__97__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1556,6 +1625,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_cmd__98__cmd = 0x1bU;
     __Vtask_test_copper__DOT__write_reg__99__data = __Vtask_test_copper__DOT__write_cmd__98__cmd;
     __Vtask_test_copper__DOT__write_reg__99__addr = 0xa010U;
@@ -1569,6 +1639,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__99__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__99__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1577,6 +1648,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__write_reg__100__data = 6U;
     __Vtask_test_copper__DOT__write_reg__100__addr = 0xa001U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
@@ -1589,6 +1661,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
     vlSelfRef.test_copper__DOT__cpu_addr = __Vtask_test_copper__DOT__write_reg__100__addr;
     vlSelfRef.test_copper__DOT__cpu_wdata = __Vtask_test_copper__DOT__write_reg__100__data;
     vlSelfRef.test_copper__DOT__cpu_we = 1U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 1U;
     Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(vlSelf, 
                                                        "@(posedge test_copper.clk)");
     co_await vlSelfRef.__VtrigSched_hbd4d80cf__0.trigger(0U, 
@@ -1597,6 +1670,7 @@ VlCoroutine Vtest_copper___024root___eval_initial__TOP__Vtiming__0(Vtest_copper_
                                                          "test_copper.sv", 
                                                          60);
     vlSelfRef.test_copper__DOT__cpu_we = 0U;
+    vlSelfRef.test_copper__DOT__cpu_ce = 0U;
     __Vtask_test_copper__DOT__run_clocks__101__n = 2U;
     __Vtask_test_copper__DOT__run_clocks__101__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 = 0;
     __Vtask_test_copper__DOT__run_clocks__101__test_copper__DOT__unnamedblk1_1__DOT____Vrepeat0 
@@ -1781,39 +1855,106 @@ void Vtest_copper___024root___act_sequent__TOP__0(Vtest_copper___024root* vlSelf
     VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___act_sequent__TOP__0\n"); );
     Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
     auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Locals
+    CData/*0:0*/ __VdfgRegularize_hebeb780c_0_0;
+    __VdfgRegularize_hebeb780c_0_0 = 0;
     // Body
     vlSelfRef.test_copper__DOT__dut__DOT__vgc_reg_sel 
         = ((0xa000U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
            & (0xa01fU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+    vlSelfRef.test_copper__DOT__dut__DOT__spr_reg_sel 
+        = ((0xa040U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+           & (0xa0bfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel 
+        = ((0xa0c0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+           & (0xa0dfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+    vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__tile_inst__cpu_we 
+        = ((IData)(vlSelfRef.test_copper__DOT__cpu_ce) 
+           & (IData)(vlSelfRef.test_copper__DOT__cpu_we));
     vlSelfRef.test_copper__DOT__dut__DOT__char_ram_sel 
         = ((0xaa00U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
            & (0xb1cfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
     vlSelfRef.test_copper__DOT__dut__DOT__color_ram_sel 
         = ((0xb1d0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
            & (0xb99fU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel 
-        = ((0xa0c0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
-           & (0xa0dfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+    __VdfgRegularize_hebeb780c_0_0 = ((IData)(vlSelfRef.test_copper__DOT__cpu_ce) 
+                                      & (IData)(vlSelfRef.test_copper__DOT__cpu_re));
+    vlSelfRef.test_copper__DOT__dut__DOT__char_a_addr 
+        = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we)
+                           ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr)
+                           : (((IData)(__VdfgRegularize_hebeb780c_0_0) 
+                               & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__char_ram_sel))
+                               ? ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                  - (IData)(0x0200U))
+                               : ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_char_sel)
+                                   ? ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_addr) 
+                                      - (IData)(0x0200U))
+                                   : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__color_a_addr 
+        = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we)
+                           ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr)
+                           : (((IData)(__VdfgRegularize_hebeb780c_0_0) 
+                               & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__color_ram_sel))
+                               ? ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                  - (IData)(0x01d0U))
+                               : ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_color_sel)
+                                   ? ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_addr) 
+                                      - (IData)(0x01d0U))
+                                   : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr)))));
 }
 
 void Vtest_copper___024root___eval_act(Vtest_copper___024root* vlSelf) {
     VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___eval_act\n"); );
     Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
     auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Locals
+    CData/*0:0*/ __Vinline__act_sequent__TOP__0___VdfgRegularize_hebeb780c_0_0;
+    __Vinline__act_sequent__TOP__0___VdfgRegularize_hebeb780c_0_0 = 0;
     // Body
     if ((1ULL & vlSelfRef.__VactTriggered[0U])) {
         vlSelfRef.test_copper__DOT__dut__DOT__vgc_reg_sel 
             = ((0xa000U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
                & (0xa01fU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+        vlSelfRef.test_copper__DOT__dut__DOT__spr_reg_sel 
+            = ((0xa040U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+               & (0xa0bfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+        vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel 
+            = ((0xa0c0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+               & (0xa0dfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+        vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__tile_inst__cpu_we 
+            = ((IData)(vlSelfRef.test_copper__DOT__cpu_ce) 
+               & (IData)(vlSelfRef.test_copper__DOT__cpu_we));
         vlSelfRef.test_copper__DOT__dut__DOT__char_ram_sel 
             = ((0xaa00U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
                & (0xb1cfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
         vlSelfRef.test_copper__DOT__dut__DOT__color_ram_sel 
             = ((0xb1d0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
                & (0xb99fU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
-        vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel 
-            = ((0xa0c0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
-               & (0xa0dfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+        __Vinline__act_sequent__TOP__0___VdfgRegularize_hebeb780c_0_0 
+            = ((IData)(vlSelfRef.test_copper__DOT__cpu_ce) 
+               & (IData)(vlSelfRef.test_copper__DOT__cpu_re));
+        vlSelfRef.test_copper__DOT__dut__DOT__char_a_addr 
+            = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we)
+                               ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr)
+                               : ((__Vinline__act_sequent__TOP__0___VdfgRegularize_hebeb780c_0_0 
+                                   & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__char_ram_sel))
+                                   ? ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                      - (IData)(0x0200U))
+                                   : ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_char_sel)
+                                       ? ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_addr) 
+                                          - (IData)(0x0200U))
+                                       : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr)))));
+        vlSelfRef.test_copper__DOT__dut__DOT__color_a_addr 
+            = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we)
+                               ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr)
+                               : ((__Vinline__act_sequent__TOP__0___VdfgRegularize_hebeb780c_0_0 
+                                   & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__color_ram_sel))
+                                   ? ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                      - (IData)(0x01d0U))
+                                   : ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_color_sel)
+                                       ? ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_addr) 
+                                          - (IData)(0x01d0U))
+                                       : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr)))));
     }
 }
 
@@ -1822,8 +1963,16 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
     auto& vlSelfRef = std::ref(*vlSelf).get();
     // Locals
+    IData/*16:0*/ test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0;
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 = 0;
     CData/*0:0*/ test_copper__DOT__dut__DOT__visible;
     test_copper__DOT__dut__DOT__visible = 0;
+    CData/*4:0*/ test_copper__DOT__dut__DOT__text_row;
+    test_copper__DOT__dut__DOT__text_row = 0;
+    CData/*4:0*/ test_copper__DOT__dut__DOT__real_row;
+    test_copper__DOT__dut__DOT__real_row = 0;
+    SData/*9:0*/ test_copper__DOT__dut__DOT__text_line;
+    test_copper__DOT__dut__DOT__text_line = 0;
     VlUnpacked<SData/*8:0*/, 16> test_copper__DOT__dut__DOT__spr_x;
     for (int __Vi0 = 0; __Vi0 < 16; ++__Vi0) {
         test_copper__DOT__dut__DOT__spr_x[__Vi0] = 0;
@@ -1848,24 +1997,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     for (int __Vi0 = 0; __Vi0 < 16; ++__Vi0) {
         test_copper__DOT__dut__DOT__spr_pri[__Vi0] = 0;
     }
-    VlUnpacked<CData/*3:0*/, 16> test_copper__DOT__dut__DOT__spr_shape;
-    for (int __Vi0 = 0; __Vi0 < 16; ++__Vi0) {
-        test_copper__DOT__dut__DOT__spr_shape[__Vi0] = 0;
-    }
-    VlUnpacked<CData/*3:0*/, 16> test_copper__DOT__dut__DOT__spr_trans;
-    for (int __Vi0 = 0; __Vi0 < 16; ++__Vi0) {
-        test_copper__DOT__dut__DOT__spr_trans[__Vi0] = 0;
-    }
-    CData/*4:0*/ test_copper__DOT__dut__DOT__text_row;
-    test_copper__DOT__dut__DOT__text_row = 0;
-    CData/*4:0*/ test_copper__DOT__dut__DOT__real_row;
-    test_copper__DOT__dut__DOT__real_row = 0;
-    SData/*9:0*/ test_copper__DOT__dut__DOT__text_line;
-    test_copper__DOT__dut__DOT__text_line = 0;
-    VlUnpacked<SData/*11:0*/, 256> test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram;
-    for (int __Vi0 = 0; __Vi0 < 256; ++__Vi0) {
-        test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram[__Vi0] = 0;
-    }
+    SData/*14:0*/ test_copper__DOT__dut__DOT__tile_blt_addr;
+    test_copper__DOT__dut__DOT__tile_blt_addr = 0;
+    CData/*7:0*/ test_copper__DOT__dut__DOT__tile_blt_wdata;
+    test_copper__DOT__dut__DOT__tile_blt_wdata = 0;
     SData/*10:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__Vfuncout;
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__Vfuncout = 0;
     CData/*6:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__col;
@@ -1882,12 +2017,16 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__Vfuncout = 0;
     CData/*6:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__col;
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__col = 0;
+    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__row;
+    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__row = 0;
     CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr;
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr = 0;
     SData/*10:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__Vfuncout;
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__Vfuncout = 0;
     CData/*6:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__col;
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__col = 0;
+    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__row;
+    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__row = 0;
     CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr;
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr = 0;
     SData/*10:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__Vfuncout;
@@ -1898,58 +2037,26 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__row = 0;
     CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr;
     __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr = 0;
-    SData/*10:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__Vfuncout;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__Vfuncout = 0;
-    CData/*6:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__col;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__col = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__row;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__row = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__rr;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__rr = 0;
-    SData/*10:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__Vfuncout;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__Vfuncout = 0;
-    CData/*6:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__col;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__col = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__row;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__row = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__rr;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__rr = 0;
-    SData/*10:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__Vfuncout;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__Vfuncout = 0;
-    CData/*6:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__col;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__col = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__row;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__row = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__rr;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__rr = 0;
-    SData/*10:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__Vfuncout;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__Vfuncout = 0;
-    CData/*6:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__col;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__col = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__row;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__row = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__rr;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__rr = 0;
-    SData/*10:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__Vfuncout;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__Vfuncout = 0;
-    CData/*6:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__col;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__col = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__row;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__row = 0;
-    CData/*4:0*/ __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__rr;
-    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__rr = 0;
-    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__h_count;
-    __Vdly__test_copper__DOT__dut__DOT__h_count = 0;
-    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__v_count;
-    __Vdly__test_copper__DOT__dut__DOT__v_count = 0;
+    CData/*7:0*/ __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__Vfuncout;
+    __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__Vfuncout = 0;
+    CData/*5:0*/ __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__idx;
+    __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__idx = 0;
+    CData/*7:0*/ __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__Vfuncout;
+    __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__Vfuncout = 0;
+    CData/*5:0*/ __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__idx;
+    __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__idx = 0;
+    CData/*7:0*/ __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__117__Vfuncout;
+    __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__117__Vfuncout = 0;
+    CData/*7:0*/ __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__118__Vfuncout;
+    __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__118__Vfuncout = 0;
+    CData/*0:0*/ __VdfgRegularize_hebeb780c_0_0;
+    __VdfgRegularize_hebeb780c_0_0 = 0;
     CData/*6:0*/ __Vdly__test_copper__DOT__dut__DOT__cursor_x;
     __Vdly__test_copper__DOT__dut__DOT__cursor_x = 0;
     CData/*4:0*/ __Vdly__test_copper__DOT__dut__DOT__cursor_y;
     __Vdly__test_copper__DOT__dut__DOT__cursor_y = 0;
     CData/*3:0*/ __Vdly__test_copper__DOT__dut__DOT__fg_color;
     __Vdly__test_copper__DOT__dut__DOT__fg_color = 0;
-    CData/*3:0*/ __Vdly__test_copper__DOT__dut__DOT__gfx_color;
-    __Vdly__test_copper__DOT__dut__DOT__gfx_color = 0;
     CData/*4:0*/ __Vdly__test_copper__DOT__dut__DOT__scroll_offset;
     __Vdly__test_copper__DOT__dut__DOT__scroll_offset = 0;
     CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__scroll_pending;
@@ -1958,170 +2065,98 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __Vdly__test_copper__DOT__dut__DOT__scroll_col = 0;
     CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_busy;
     __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0;
+    CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__copper_enabled;
+    __Vdly__test_copper__DOT__dut__DOT__copper_enabled = 0;
     SData/*8:0*/ __Vdly__test_copper__DOT__dut__DOT__copper_count;
     __Vdly__test_copper__DOT__dut__DOT__copper_count = 0;
-    SData/*8:0*/ __Vdly__test_copper__DOT__dut__DOT__copper_index;
-    __Vdly__test_copper__DOT__dut__DOT__copper_index = 0;
     CData/*6:0*/ __Vdly__test_copper__DOT__dut__DOT__copper_target_list;
     __Vdly__test_copper__DOT__dut__DOT__copper_target_list = 0;
     CData/*6:0*/ __Vdly__test_copper__DOT__dut__DOT__copper_pending_list;
     __Vdly__test_copper__DOT__dut__DOT__copper_pending_list = 0;
     CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__copper_loading;
     __Vdly__test_copper__DOT__dut__DOT__copper_loading = 0;
-    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__fill_sp;
-    __Vdly__test_copper__DOT__dut__DOT__fill_sp = 0;
+    CData/*2:0*/ __Vdly__test_copper__DOT__dut__DOT__sprrow_count;
+    __Vdly__test_copper__DOT__dut__DOT__sprrow_count = 0;
+    CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__sprcopy_phase;
+    __Vdly__test_copper__DOT__dut__DOT__sprcopy_phase = 0;
+    CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__memread_pending;
+    __Vdly__test_copper__DOT__dut__DOT__memread_pending = 0;
     SData/*8:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_cx;
     __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0;
     CData/*7:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_cy;
     __Vdly__test_copper__DOT__dut__DOT__cmd_cy = 0;
-    CData/*2:0*/ __Vdly__test_copper__DOT__dut__DOT__gt_font_row;
-    __Vdly__test_copper__DOT__dut__DOT__gt_font_row = 0;
-    CData/*5:0*/ __Vdly__test_copper__DOT__dut__DOT__gt_char_idx;
-    __Vdly__test_copper__DOT__dut__DOT__gt_char_idx = 0;
-    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_dx;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_dx = 0;
-    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_err;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_err = 0;
-    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_dy;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_dy = 0;
-    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_x;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_x = 0;
-    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_y;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_y = 0;
     CData/*6:0*/ __Vdly__test_copper__DOT__dut__DOT__copper_active_list;
     __Vdly__test_copper__DOT__dut__DOT__copper_active_list = 0;
-    CData/*3:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state;
+    CData/*7:0*/ __Vdly__test_copper__DOT__dut__DOT__cmd_op;
+    __Vdly__test_copper__DOT__dut__DOT__cmd_op = 0;
+    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__h_count;
+    __Vdly__test_copper__DOT__dut__DOT__h_count = 0;
+    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__v_count;
+    __Vdly__test_copper__DOT__dut__DOT__v_count = 0;
+    CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_busy;
+    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0;
+    CData/*7:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op = 0;
+    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp = 0;
+    CData/*2:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 0;
+    CData/*2:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 0;
+    CData/*1:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending = 0;
+    CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init = 0;
+    CData/*7:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_byte;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_byte = 0;
+    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err = 0;
+    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x = 0;
+    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y = 0;
+    SData/*8:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx = 0;
+    CData/*7:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy = 0;
+    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dx;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dx = 0;
+    SData/*9:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dy;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dy = 0;
+    CData/*3:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target = 0;
+    SData/*8:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_addr;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_addr = 0;
+    CData/*2:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row = 0;
+    CData/*5:0*/ __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx = 0;
+    SData/*8:0*/ __Vdly__test_copper__DOT__dut__DOT__copper_index;
+    __Vdly__test_copper__DOT__dut__DOT__copper_index = 0;
+    CData/*4:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state;
     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0;
     CData/*0:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid;
     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid = 0;
-    SData/*15:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count = 0;
     CData/*4:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx;
     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx = 0;
+    SData/*15:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count;
+    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count = 0;
     SData/*15:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src;
     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src = 0;
     SData/*15:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst;
     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst = 0;
-    CData/*7:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_r;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_r = 0;
     CData/*7:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase;
     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase = 0;
-    CData/*7:0*/ __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_g;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_g = 0;
     CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v0;
     __VdlySet__test_copper__DOT__dut__DOT__regs__v0 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v0 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v0 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v0 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v0 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v0 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v0 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v0 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v1;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v1 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v1;
-    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v1 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v1 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v1;
-    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v1 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v1 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v2;
-    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v2 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v2;
-    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v2 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v2;
-    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v2 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v2;
-    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v2 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v1;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v1 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v1 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v2;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v2 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v1;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v1 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v1 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v2;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v2 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v2;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v2 = 0;
-    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v0 = 0;
-    SData/*8:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v0 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__fill_stack__v0;
-    __VdlySet__test_copper__DOT__dut__DOT__fill_stack__v0 = 0;
-    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v1;
-    __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v1 = 0;
-    SData/*8:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v1 = 0;
-    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v2;
-    __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v2 = 0;
-    SData/*8:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v2;
-    __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v2 = 0;
-    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v3;
-    __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v3 = 0;
-    SData/*8:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v3;
-    __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v3 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v3;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v3 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v3;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v3 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v4;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v4 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v4;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v4 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v5;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v5 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v5;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v5 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v6;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v6 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v6;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v6 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v7;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v7 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v7;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v7 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v8;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v8 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v8;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v8 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v9;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v9 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v9;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v9 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v10;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v10 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v10;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v10 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v11;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v11 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v11;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v11 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v12;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v12 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v12;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v12 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v13;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v13 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v13;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v13 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v14;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v14 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v14;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v14 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v32;
+    __VdlyVal__test_copper__DOT__dut__DOT__regs__v32 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v32;
+    __VdlySet__test_copper__DOT__dut__DOT__regs__v32 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v33;
+    __VdlyVal__test_copper__DOT__dut__DOT__regs__v33 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v33;
+    __VdlySet__test_copper__DOT__dut__DOT__regs__v33 = 0;
     IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__copper_pos__v0;
     __VdlyVal__test_copper__DOT__dut__DOT__copper_pos__v0 = 0;
     CData/*4:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__copper_pos__v0;
@@ -2136,18 +2171,12 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __VdlyVal__test_copper__DOT__dut__DOT__copper_val__v0 = 0;
     CData/*4:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__copper_val__v0;
     __VdlyDim0__test_copper__DOT__dut__DOT__copper_val__v0 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v3;
-    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v3 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v3;
-    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v3 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v4;
-    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v4 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v4;
-    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v4 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v3;
-    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v3 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v3;
-    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v3 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v34;
+    __VdlyVal__test_copper__DOT__dut__DOT__regs__v34 = 0;
+    CData/*4:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__regs__v34;
+    __VdlyDim0__test_copper__DOT__dut__DOT__regs__v34 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v34;
+    __VdlySet__test_copper__DOT__dut__DOT__regs__v34 = 0;
     CData/*6:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__copper_list_count__v0;
     __VdlyDim0__test_copper__DOT__dut__DOT__copper_list_count__v0 = 0;
     CData/*6:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__copper_list_count__v1;
@@ -2184,48 +2213,6 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __VdlyVal__test_copper__DOT__dut__DOT__copper_val__v1 = 0;
     CData/*4:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__copper_val__v1;
     __VdlyDim0__test_copper__DOT__dut__DOT__copper_val__v1 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v5;
-    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v5 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v5;
-    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v5 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v4;
-    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v4 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v4;
-    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v4 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v15;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v15 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v15;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v15 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v3;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v3 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v3;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v3 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0 = 0;
-    SData/*14:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v32;
-    __VdlyVal__test_copper__DOT__dut__DOT__regs__v32 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v32;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v32 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v33;
-    __VdlyVal__test_copper__DOT__dut__DOT__regs__v33 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v33;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v33 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v34;
-    __VdlyVal__test_copper__DOT__dut__DOT__regs__v34 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v34;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v34 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v35;
-    __VdlyVal__test_copper__DOT__dut__DOT__regs__v35 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v35;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v35 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v36;
-    __VdlyVal__test_copper__DOT__dut__DOT__regs__v36 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v36;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v36 = 0;
     CData/*1:0*/ __VdlyVal__test_copper__DOT__dut__DOT__spr_pri__v16;
     __VdlyVal__test_copper__DOT__dut__DOT__spr_pri__v16 = 0;
     CData/*3:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__spr_pri__v16;
@@ -2260,80 +2247,30 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __VdlyVal__test_copper__DOT__dut__DOT__spr_y__v16 = 0;
     CData/*3:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__spr_y__v16;
     __VdlyDim0__test_copper__DOT__dut__DOT__spr_y__v16 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v4;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v4 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v4;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v4 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v5;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v5 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v5;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v5 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v6;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v6 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v6;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v6 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v7;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v7 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v7;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v7 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v8;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v8 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v8;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v8 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v9;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v9 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v9;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v9 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v10;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v10 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v10;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v10 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v11;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v11 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v11;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v11 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v12;
-    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v12 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v12;
-    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v12 = 0;
-    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v4;
-    __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v4 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__fill_stack__v4;
-    __VdlySet__test_copper__DOT__dut__DOT__fill_stack__v4 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v16;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v16 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v16;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v16 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v17;
-    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v17 = 0;
-    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v17;
-    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v17 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v37;
-    __VdlyVal__test_copper__DOT__dut__DOT__regs__v37 = 0;
-    CData/*4:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__regs__v37;
-    __VdlyDim0__test_copper__DOT__dut__DOT__regs__v37 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v37;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v37 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v6;
-    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v6 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v6;
-    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v6 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__fio_name__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__fio_name__v0 = 0;
-    CData/*5:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__fio_name__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__fio_name__v0 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__fio_name__v0;
-    __VdlySet__test_copper__DOT__dut__DOT__fio_name__v0 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v5;
-    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v5 = 0;
-    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v5;
-    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v5 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__spr_trans__v16;
-    __VdlyVal__test_copper__DOT__dut__DOT__spr_trans__v16 = 0;
-    CData/*3:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__spr_trans__v16;
-    __VdlyDim0__test_copper__DOT__dut__DOT__spr_trans__v16 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__spr_trans__v16;
-    __VdlySet__test_copper__DOT__dut__DOT__spr_trans__v16 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__sprrow_data__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__sprrow_data__v0 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v1;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v1 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v2;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v2 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v3;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v3 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v4;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v4 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v5;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v5 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v6;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v6 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v7;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v7 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v35;
+    __VdlyVal__test_copper__DOT__dut__DOT__regs__v35 = 0;
+    CData/*4:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__regs__v35;
+    __VdlyDim0__test_copper__DOT__dut__DOT__regs__v35 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v35;
+    __VdlySet__test_copper__DOT__dut__DOT__regs__v35 = 0;
     CData/*1:0*/ __VdlyVal__test_copper__DOT__dut__DOT__spr_pri__v17;
     __VdlyVal__test_copper__DOT__dut__DOT__spr_pri__v17 = 0;
     CData/*3:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__spr_pri__v17;
@@ -2354,12 +2291,6 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __VdlyVal__test_copper__DOT__dut__DOT__spr_enable__v18 = 0;
     CData/*3:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__spr_enable__v18;
     __VdlyDim0__test_copper__DOT__dut__DOT__spr_enable__v18 = 0;
-    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__spr_shape__v16;
-    __VdlyVal__test_copper__DOT__dut__DOT__spr_shape__v16 = 0;
-    CData/*3:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__spr_shape__v16;
-    __VdlyDim0__test_copper__DOT__dut__DOT__spr_shape__v16 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__spr_shape__v16;
-    __VdlySet__test_copper__DOT__dut__DOT__spr_shape__v16 = 0;
     CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__spr_y__v17;
     __VdlyVal__test_copper__DOT__dut__DOT__spr_y__v17 = 0;
     CData/*3:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__spr_y__v17;
@@ -2378,162 +2309,52 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __VdlyDim0__test_copper__DOT__dut__DOT__spr_x__v18 = 0;
     CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__spr_x__v18;
     __VdlySet__test_copper__DOT__dut__DOT__spr_x__v18 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__regs__v38;
-    __VdlyVal__test_copper__DOT__dut__DOT__regs__v38 = 0;
-    CData/*4:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__regs__v38;
-    __VdlyDim0__test_copper__DOT__dut__DOT__regs__v38 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__regs__v38;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v38 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v0 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v0 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v1;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v1 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v1 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v2;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v2 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v2;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v2 = 0;
-    SData/*11:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0 = 0;
-    CData/*7:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v3;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v3 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v3;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v3 = 0;
-    SData/*14:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v4;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v4 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v4;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v4 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v5;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v5 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v5;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v5 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v6;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v6 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v6;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v6 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v7;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v7 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v7;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v7 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v8;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v8 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v8;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v8 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v9;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v9 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v9;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v9 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v10;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v10 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v10;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v10 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v11;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v11 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v11;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v11 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v12;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v12 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v12;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v12 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v13;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v13 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v13;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v13 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v14;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v14 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v14;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v14 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v15;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v15 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v15;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v15 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v16;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v16 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v16;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v16 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v17;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v17 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v17;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v17 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v18;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v18 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v18;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v18 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v19;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v19 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v19;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v19 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v20;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v20 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v20;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v20 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v21;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v21 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v21;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v21 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v22;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v22 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v22;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v22 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v23;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v23 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v23;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v23 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v24;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v24 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v24;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v24 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v25;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v25 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v25;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v25 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v26;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v26 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v26;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v26 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v27;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v27 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v27;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v27 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v28;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v28 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v28;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v28 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__fio_name__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__fio_name__v0 = 0;
+    CData/*5:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__fio_name__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__fio_name__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__fio_name__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__fio_name__v0 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0 = 0;
+    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0 = 0;
+    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0 = 0;
+    CData/*3:0*/ __VdlyVal__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0 = 0;
+    SData/*15:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0 = 0;
+    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0 = 0;
+    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v1;
+    __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v1 = 0;
+    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v2;
+    __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v2 = 0;
+    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v3;
+    __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v3 = 0;
+    IData/*16:0*/ __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0 = 0;
+    SData/*8:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0 = 0;
+    SData/*10:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0 = 0;
     CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v0;
     __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v0 = 0;
     CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v0;
@@ -2740,125 +2561,147 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v50 = 0;
     CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v50;
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v50 = 0;
-    SData/*11:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1 = 0;
-    CData/*7:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v29;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v29 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v29;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v29 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4 = 0;
-    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4 = 0;
-    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v30;
-    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v30 = 0;
-    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v30;
-    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v30 = 0;
     CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0;
     __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0 = 0;
     CData/*4:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0;
     __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0 = 0;
     CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0;
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0 = 0;
+    SData/*14:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0 = 0;
+    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0 = 0;
+    CData/*7:0*/ __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0;
+    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0 = 0;
+    SData/*11:0*/ __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0;
+    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0 = 0;
+    CData/*0:0*/ __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0;
+    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0 = 0;
     // Body
+    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__fio_name__v0 = 0U;
     __Vdly__test_copper__DOT__dut__DOT__h_count = vlSelfRef.test_copper__DOT__dut__DOT__h_count;
     __Vdly__test_copper__DOT__dut__DOT__v_count = vlSelfRef.test_copper__DOT__dut__DOT__v_count;
+    __Vdly__test_copper__DOT__dut__DOT__copper_index 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_index;
     __Vdly__test_copper__DOT__dut__DOT__cursor_x = vlSelfRef.test_copper__DOT__dut__DOT__cursor_x;
     __Vdly__test_copper__DOT__dut__DOT__cursor_y = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
-    __Vdly__test_copper__DOT__dut__DOT__gfx_color = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
+    __Vdly__test_copper__DOT__dut__DOT__fg_color = vlSelfRef.test_copper__DOT__dut__DOT__fg_color;
     __Vdly__test_copper__DOT__dut__DOT__scroll_pending 
         = vlSelfRef.test_copper__DOT__dut__DOT__scroll_pending;
     __Vdly__test_copper__DOT__dut__DOT__scroll_col 
         = vlSelfRef.test_copper__DOT__dut__DOT__scroll_col;
     __Vdly__test_copper__DOT__dut__DOT__cmd_busy = vlSelfRef.test_copper__DOT__dut__DOT__cmd_busy;
+    __Vdly__test_copper__DOT__dut__DOT__copper_enabled 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_enabled;
     __Vdly__test_copper__DOT__dut__DOT__copper_count 
         = vlSelfRef.test_copper__DOT__dut__DOT__copper_count;
     __Vdly__test_copper__DOT__dut__DOT__copper_target_list 
         = vlSelfRef.test_copper__DOT__dut__DOT__copper_target_list;
     __Vdly__test_copper__DOT__dut__DOT__copper_pending_list 
         = vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list;
-    __Vdly__test_copper__DOT__dut__DOT__fill_sp = vlSelfRef.test_copper__DOT__dut__DOT__fill_sp;
+    __Vdly__test_copper__DOT__dut__DOT__copper_loading 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_loading;
+    __Vdly__test_copper__DOT__dut__DOT__sprrow_count 
+        = vlSelfRef.test_copper__DOT__dut__DOT__sprrow_count;
+    __Vdly__test_copper__DOT__dut__DOT__sprcopy_phase 
+        = vlSelfRef.test_copper__DOT__dut__DOT__sprcopy_phase;
+    __Vdly__test_copper__DOT__dut__DOT__memread_pending 
+        = vlSelfRef.test_copper__DOT__dut__DOT__memread_pending;
     __Vdly__test_copper__DOT__dut__DOT__cmd_cx = vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx;
     __Vdly__test_copper__DOT__dut__DOT__cmd_cy = vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy;
-    __Vdly__test_copper__DOT__dut__DOT__gt_font_row 
-        = vlSelfRef.test_copper__DOT__dut__DOT__gt_font_row;
-    __Vdly__test_copper__DOT__dut__DOT__gt_char_idx 
-        = vlSelfRef.test_copper__DOT__dut__DOT__gt_char_idx;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_dx = vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_err = vlSelfRef.test_copper__DOT__dut__DOT__cmd_err;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_dy = vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_x = vlSelfRef.test_copper__DOT__dut__DOT__cmd_x;
-    __Vdly__test_copper__DOT__dut__DOT__cmd_y = vlSelfRef.test_copper__DOT__dut__DOT__cmd_y;
-    __VdlySet__test_copper__DOT__dut__DOT__fio_name__v0 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__spr_shape__v16 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__spr_trans__v16 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0 = 0U;
+    __Vdly__test_copper__DOT__dut__DOT__copper_active_list 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_active_list;
+    __Vdly__test_copper__DOT__dut__DOT__cmd_op = vlSelfRef.test_copper__DOT__dut__DOT__cmd_op;
     __VdlySet__test_copper__DOT__dut__DOT__spr_y__v17 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__spr_pri__v16 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__spr_pri__v17 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__spr_enable__v16 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__spr_enable__v17 = 0U;
-    __Vdly__test_copper__DOT__dut__DOT__scroll_offset 
-        = vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset;
+    __VdlySet__test_copper__DOT__dut__DOT__sprrow_data__v0 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__spr_x__v17 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__spr_x__v18 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__fill_stack__v0 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__fill_stack__v4 = 0U;
+    __Vdly__test_copper__DOT__dut__DOT__scroll_offset 
+        = vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset;
     __VdlySet__test_copper__DOT__dut__DOT__copper_list_pos__v0 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__spr_flip_h__v16 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__regs__v32 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__regs__v33 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__regs__v34 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__regs__v35 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v36 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v37 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__spr_flip_h__v16 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__spr_x__v16 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__spr_flip_h__v17 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__copper_pos__v0 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__copper_pos__v1 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__spr_flip_h__v17 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__regs__v0 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v1 = 0U;
-    __Vdly__test_copper__DOT__dut__DOT__copper_loading 
-        = vlSelfRef.test_copper__DOT__dut__DOT__copper_loading;
-    __Vdly__test_copper__DOT__dut__DOT__copper_active_list 
-        = vlSelfRef.test_copper__DOT__dut__DOT__copper_active_list;
-    __VdlySet__test_copper__DOT__dut__DOT__regs__v38 = 0U;
-    __Vdly__test_copper__DOT__dut__DOT__fg_color = vlSelfRef.test_copper__DOT__dut__DOT__fg_color;
-    __Vdly__test_copper__DOT__dut__DOT__copper_index 
-        = vlSelfRef.test_copper__DOT__dut__DOT__copper_index;
+    __VdlySet__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0 = 0U;
+    __Vdly__test_copper__DOT__dut__DOT__artist_busy 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_busy;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_byte 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_byte;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dx 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dy 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_addr 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_addr;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row;
+    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx;
+    __VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0 = 0U;
+    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src 
+        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src;
+    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase 
+        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase;
+    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
+        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count;
+    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
+        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst;
+    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx 
+        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx;
     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state 
         = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state;
     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid 
         = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
-        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx 
-        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src 
-        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
-        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_r 
-        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_r;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase 
-        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase;
-    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_g 
-        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_g;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3 = 0U;
-    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v0 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v1 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v2 = 0U;
@@ -2910,8 +2753,52 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v48 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v49 = 0U;
     __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v50 = 0U;
+    __VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0 = 0U;
+    __VdfgRegularize_hebeb780c_0_0 = ((IData)(vlSelfRef.test_copper__DOT__cpu_ce) 
+                                      & (IData)(vlSelfRef.test_copper__DOT__cpu_re));
+    if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_we_a) {
+        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_din_a;
+        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a;
+        __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0 = 1U;
+    }
+    if (vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_we) {
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT____Vlvbound_h0a4ce44c__0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_din;
+        if ((0xf9ffU >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr))) {
+            __VdlyVal__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0 
+                = vlSelfRef.test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT____Vlvbound_h0a4ce44c__0;
+            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0 
+                = vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr;
+            __VdlySet__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0 = 1U;
+        }
+    }
+    if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a) {
+        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a;
+        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a;
+        __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0 = 1U;
+    }
+    if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a) {
+        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a;
+        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a;
+        __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0 = 1U;
+    }
+    if (vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_we) {
+        __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_din;
+        __VdlyDim0__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_addr;
+        __VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0 = 1U;
+    }
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_we = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_we = 0U;
     if ((1U & (~ (IData)(vlSelfRef.test_copper__DOT__rst)))) {
-        if (((IData)(vlSelfRef.test_copper__DOT__cpu_we) 
+        if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__tile_inst__cpu_we) 
              & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel))) {
             __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0 
                 = vlSelfRef.test_copper__DOT__cpu_wdata;
@@ -2919,79 +2806,88 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                 = (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__cpu_addr));
             __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0 = 1U;
         }
+        if (((IData)(vlSelfRef.test_copper__DOT__cpu_we) 
+             & (IData)(vlSelfRef.test_copper__DOT__cpu_ce))) {
+            if (((0xb9b0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+                 & (0xb9efU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
+                __VdlyVal__test_copper__DOT__dut__DOT__fio_name__v0 
+                    = vlSelfRef.test_copper__DOT__cpu_wdata;
+                __VdlyDim0__test_copper__DOT__dut__DOT__fio_name__v0 
+                    = (0x0000003fU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                      - (IData)(0x30U)));
+                __VdlySet__test_copper__DOT__dut__DOT__fio_name__v0 = 1U;
+            }
+        }
+    }
+    if (__VdlySet__test_copper__DOT__dut__DOT__fio_name__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__fio_name[__VdlyDim0__test_copper__DOT__dut__DOT__fio_name__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__fio_name__v0;
+    }
+    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table_ram__DOT__mem__v0;
+    }
+    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable_ram__DOT__mem__v0;
     }
     if (vlSelfRef.test_copper__DOT__rst) {
         __Vdly__test_copper__DOT__dut__DOT__h_count = 0U;
         __Vdly__test_copper__DOT__dut__DOT__v_count = 0U;
-    } else if ((0x031fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count))) {
-        __Vdly__test_copper__DOT__dut__DOT__v_count 
-            = ((0x020cU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count))
-                ? 0U : (0x000003ffU & ((IData)(1U) 
-                                       + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count))));
-        __Vdly__test_copper__DOT__dut__DOT__h_count = 0U;
-    } else {
-        __Vdly__test_copper__DOT__dut__DOT__h_count 
-            = (0x000003ffU & ((IData)(1U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count)));
-    }
-    if (vlSelfRef.test_copper__DOT__rst) {
         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0U;
         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid = 0U;
     } else {
+        if ((0x031fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count))) {
+            __Vdly__test_copper__DOT__dut__DOT__v_count 
+                = ((0x020cU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count))
+                    ? 0U : (0x000003ffU & ((IData)(1U) 
+                                           + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count))));
+            __Vdly__test_copper__DOT__dut__DOT__h_count = 0U;
+        } else {
+            __Vdly__test_copper__DOT__dut__DOT__h_count 
+                = (0x000003ffU & ((IData)(1U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count)));
+        }
         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid = 0U;
-        if ((8U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+        if ((0x00000010U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+            __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0U;
+        } else if ((8U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
             if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
-                __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0U;
+                __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state 
+                    = ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))
+                        ? 0U : ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))
+                                 ? 0x0eU : 0x0dU));
             } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
-                __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0U;
-            } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
-                if ((0x0fa0U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count))) {
-                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hf26d05a2__0 = 0U;
-                    if ((0x0f9fU >= (0x00000fffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count)))) {
-                        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hf26d05a2__0;
-                        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v0 
-                            = (0x00000fffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count));
-                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v0, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v0));
+                if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                    if ((0x18U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) {
+                        __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx 
+                            = (0x0000001fU & ((IData)(1U) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx)));
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0U;
                     }
-                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hf7076230__0 = 0U;
-                    if ((0x0f9fU >= (0x00000fffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count)))) {
-                        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hf7076230__0;
-                        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0 
-                            = (0x00000fffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count));
-                        __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0 = 1U;
-                    }
+                } else if ((0x03e7U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count))) {
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
                         = (0x0000ffffU & ((IData)(1U) 
                                           + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count)));
                 } else {
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0U;
                 }
+            } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                if ((0x0fa0U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_addr))) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_addr 
+                        = (0x00000fffU & ((IData)(1U) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_addr)));
+                } else {
+                    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0U;
+                }
             } else {
                 if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
-                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h8c784627__0 = 0U;
-                    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
-                        = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
-                                          - (IData)(1U)));
-                    if ((0x0f9fU >= (0x00000fffU & 
-                                     ((((IData)(0x000003e8U) 
-                                        * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                       + ((IData)(0x00000028U) 
-                                          * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) 
-                                      + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row))))) {
-                        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h8c784627__0;
-                        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1 
-                            = (0x00000fffU & ((((IData)(0x000003e8U) 
-                                                * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                               + ((IData)(0x00000028U) 
-                                                  * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row)));
-                        __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1 = 1U;
-                    }
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx 
                         = (0x0000001fU & ((IData)(1U) 
                                           + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx)));
+                    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
+                        = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
+                                          - (IData)(1U)));
                 }
                 if (((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count)) 
                      & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid)))) {
@@ -3008,31 +2904,9 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
             if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
                 if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
                     if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
-                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02aa0280__0 = 0U;
                         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
                             = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
                                               - (IData)(1U)));
-                        if ((0x0f9fU >= (0x00000fffU 
-                                         & ((((IData)(0x000003e8U) 
-                                              * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                             + ((IData)(0x00000028U) 
-                                                * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row))) 
-                                            + (0x0000003fU 
-                                               & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2 
-                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02aa0280__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2 
-                                = (0x00000fffU & ((
-                                                   ((IData)(0x000003e8U) 
-                                                    * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                                   + 
-                                                   ((IData)(0x00000028U) 
-                                                    * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row))) 
-                                                  + 
-                                                  (0x0000003fU 
-                                                   & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst))));
-                            __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2 = 1U;
-                        }
                         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
                             = (0x0000ffffU & ((IData)(1U) 
                                               + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)));
@@ -3049,31 +2923,12 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                     }
                 } else {
                     if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
-                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h21da2949__0 = 0U;
-                        __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
-                            = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
-                                              - (IData)(1U)));
-                        if ((0x0f9fU >= (0x00000fffU 
-                                         & ((((IData)(0x000003e8U) 
-                                              * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                             + ((IData)(0x00000028U) 
-                                                * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) 
-                                            + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v1 
-                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h21da2949__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v1 
-                                = (0x00000fffU & ((
-                                                   ((IData)(0x000003e8U) 
-                                                    * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                                   + 
-                                                   ((IData)(0x00000028U) 
-                                                    * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row)));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v1, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v1));
-                        }
                         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx 
                             = (0x0000001fU & ((IData)(1U) 
                                               + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx)));
+                        __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
+                            = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
+                                              - (IData)(1U)));
                     }
                     if (((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count)) 
                          & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid)))) {
@@ -3088,28 +2943,9 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                 }
             } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
                 if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
-                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h17e6e432__0 = 0U;
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
                         = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
                                           - (IData)(1U)));
-                    if ((0x0f9fU >= (0x00000fffU & 
-                                     ((((IData)(0x000003e8U) 
-                                        * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                       + ((IData)(0x00000028U) 
-                                          * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row))) 
-                                      + (0x0000003fU 
-                                         & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)))))) {
-                        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v2 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h17e6e432__0;
-                        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v2 
-                            = (0x00000fffU & ((((IData)(0x000003e8U) 
-                                                * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                               + ((IData)(0x00000028U) 
-                                                  * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row))) 
-                                              + (0x0000003fU 
-                                                 & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst))));
-                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v2, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v2));
-                    }
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
                         = (0x0000ffffU & ((IData)(1U) 
                                           + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)));
@@ -3127,20 +2963,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
             } else {
                 if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
                     if ((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase))) {
-                        __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_r = 0U;
                         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase = 1U;
                     } else if ((1U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase))) {
-                        __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_g = 0U;
                         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase = 2U;
                     } else if ((2U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase))) {
-                        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0 
-                            = ((0x00000f00U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_r) 
-                                               << 4U)) 
-                               | (0x000000f0U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_g)));
-                        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0 
-                            = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_sub) 
-                                << 4U) | (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_cidx));
-                        __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0 = 1U;
                         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase = 0U;
                         if ((0x0fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_cidx))) {
                             __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count = 0U;
@@ -3167,24 +2993,9 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
             if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
                 if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
-                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h3335cc4a__0 = 0U;
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
                         = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
                                           - (IData)(1U)));
-                    if ((0x0f9fU >= (0x00000fffU & 
-                                     (((IData)(0x000003e8U) 
-                                       * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                      + (0x000003ffU 
-                                         & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)))))) {
-                        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h3335cc4a__0;
-                        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3 
-                            = (0x00000fffU & (((IData)(0x000003e8U) 
-                                               * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                              + (0x000003ffU 
-                                                 & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst))));
-                        __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3 = 1U;
-                    }
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
                         = (0x0000ffffU & ((IData)(1U) 
                                           + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)));
@@ -3201,24 +3012,9 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                 }
             } else {
                 if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
-                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha65a9a44__0 = 0U;
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
                         = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
                                           - (IData)(1U)));
-                    if ((0x0f9fU >= (0x00000fffU & 
-                                     (((IData)(0x000003e8U) 
-                                       * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                      + (0x000003ffU 
-                                         & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)))))) {
-                        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v3 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha65a9a44__0;
-                        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v3 
-                            = (0x00000fffU & (((IData)(0x000003e8U) 
-                                               * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
-                                              + (0x000003ffU 
-                                                 & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst))));
-                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v3, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v3));
-                    }
                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
                         = (0x0000ffffU & ((IData)(1U) 
                                           + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)));
@@ -3239,9 +3035,6 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                 __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
                     = (0x0000ffffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count) 
                                       - (IData)(1U)));
-                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1 
-                    = (0x00007fffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst));
-                __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1 = 1U;
                 __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
                     = (0x0000ffffU & ((IData)(1U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst)));
             }
@@ -3255,7 +3048,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                 __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid = 1U;
             }
         }
-        if (((IData)(vlSelfRef.test_copper__DOT__cpu_we) 
+        if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__tile_inst__cpu_we) 
              & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel))) {
             if ((0U != (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
                 if ((1U != (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
@@ -3306,586 +3099,25 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x28U 
                                                                                 > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[0U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v4 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v4 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt 
                                                                                 = 
-                                                                                (0x00000fffU 
-                                                                                & (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v4, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v4));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[1U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0028U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v5 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v5 
+                                                                                (3U 
+                                                                                & vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]);
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row 
                                                                                 = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0028U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v5, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v5));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[2U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0050U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v6 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v6 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0050U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v6, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v6));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[3U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0078U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v7 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v7 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0078U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v7, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v7));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[4U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x00a0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v8 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v8 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x00a0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v8, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v8));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[5U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x00c8U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v9 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v9 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x00c8U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v9, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v9));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[6U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x00f0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v10 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v10 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x00f0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v10, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v10));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[7U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0118U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v11 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v11 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0118U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v11, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v11));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[8U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0140U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v12 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v12 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0140U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v12, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v12));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[9U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0168U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v13 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v13 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0168U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v13, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v13));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[10U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0190U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v14 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v14 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0190U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v14, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v14));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[11U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x01b8U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v15 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v15 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x01b8U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v15, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v15));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[12U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x01e0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v16 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v16 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x01e0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v16, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v16));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[13U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0208U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v17 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v17 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0208U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v17, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v17));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[14U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0230U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v18 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v18 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0230U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v18, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v18));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[15U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0258U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v19 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v19 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0258U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v19, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v19));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[16U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0280U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v20 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v20 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0280U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v20, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v20));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[17U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x02a8U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v21 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v21 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x02a8U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v21, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v21));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[18U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x02d0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v22 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v22 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x02d0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v22, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v22));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[19U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x02f8U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v23 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v23 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x02f8U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v23, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v23));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[20U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0320U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v24 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v24 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0320U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v24, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v24));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[21U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0348U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v25 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v25 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0348U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v25, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v25));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[22U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0370U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v26 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v26 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0370U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v26, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v26));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[23U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0398U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v27 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v27 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x0398U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v27, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v27));
-                                                                                }
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[24U];
-                                                                                if (
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x03c0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))))) {
-                                                                                __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v28 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h021f5fae__0;
-                                                                                __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v28 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & ((IData)(0x03c0U) 
-                                                                                + 
-                                                                                (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])));
-                                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v28, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v28));
-                                                                                }
+                                                                                (0x0000003fU 
+                                                                                & vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]);
+                                                                                __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx = 0U;
+                                                                                __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0x0bU;
                                                                             }
                                                                         } else {
                                                                             if (
                                                                                 (0U 
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U])) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v0 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v0 = 1U;
                                                                             }
                                                                             if (
@@ -3893,10 +3125,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (1U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v1 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v1 = 1U;
                                                                             }
                                                                             if (
@@ -3904,10 +3136,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (2U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v2 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v2 = 1U;
                                                                             }
                                                                             if (
@@ -3915,10 +3147,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (3U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v3 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v3 = 1U;
                                                                             }
                                                                             if (
@@ -3926,10 +3158,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (4U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v4 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v4 = 1U;
                                                                             }
                                                                             if (
@@ -3937,10 +3169,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (5U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v5 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v5 = 1U;
                                                                             }
                                                                             if (
@@ -3948,10 +3180,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (6U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v6 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v6 = 1U;
                                                                             }
                                                                             if (
@@ -3959,10 +3191,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (7U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v7 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v7 = 1U;
                                                                             }
                                                                             if (
@@ -3970,10 +3202,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (8U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v8 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v8 = 1U;
                                                                             }
                                                                             if (
@@ -3981,10 +3213,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (9U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v9 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v9 = 1U;
                                                                             }
                                                                             if (
@@ -3992,10 +3224,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x0aU 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v10 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v10 = 1U;
                                                                             }
                                                                             if (
@@ -4003,10 +3235,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x0bU 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v11 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v11 = 1U;
                                                                             }
                                                                             if (
@@ -4014,10 +3246,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x0cU 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v12 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v12 = 1U;
                                                                             }
                                                                             if (
@@ -4025,10 +3257,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x0dU 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v13 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v13 = 1U;
                                                                             }
                                                                             if (
@@ -4036,10 +3268,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x0eU 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v14 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v14 = 1U;
                                                                             }
                                                                             if (
@@ -4047,10 +3279,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x0fU 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v15 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v15 = 1U;
                                                                             }
                                                                             if (
@@ -4058,10 +3290,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x10U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v16 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v16 = 1U;
                                                                             }
                                                                             if (
@@ -4069,10 +3301,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x11U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v17 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v17 = 1U;
                                                                             }
                                                                             if (
@@ -4080,10 +3312,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x12U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v18 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v18 = 1U;
                                                                             }
                                                                             if (
@@ -4091,10 +3323,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x13U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v19 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v19 = 1U;
                                                                             }
                                                                             if (
@@ -4102,10 +3334,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x14U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v20 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v20 = 1U;
                                                                             }
                                                                             if (
@@ -4113,10 +3345,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x15U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v21 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v21 = 1U;
                                                                             }
                                                                             if (
@@ -4124,10 +3356,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x16U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v22 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v22 = 1U;
                                                                             }
                                                                             if (
@@ -4135,10 +3367,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x17U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v23 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v23 = 1U;
                                                                             }
                                                                             if (
@@ -4146,10 +3378,10 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
                                                                                 & (0x18U 
                                                                                 <= vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]))) {
-                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0 
+                                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0 
                                                                                 = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U];
                                                                                 __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v24 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h02fc01d7__0;
+                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha768cd16__0;
                                                                                 __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v24 = 1U;
                                                                             }
                                                                         }
@@ -4176,130 +3408,130 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                             }
                                                                         }
                                                                     } else {
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v26 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v26 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v27 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v27 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v28 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v28 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v29 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v29 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v30 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v30 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v31 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v31 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v32 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v32 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v33 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v33 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v34 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v34 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v35 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v35 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v36 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v36 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v37 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v37 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v38 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v38 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v39 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v39 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v40 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v40 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v41 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v41 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v42 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v42 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v43 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v43 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v44 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v44 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v45 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v45 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v46 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v46 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v47 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v47 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v48 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v48 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v49 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v49 = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0 
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0 
                                                                             = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U];
                                                                         __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v50 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha057723b__0;
+                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_hbbfa6b2d__0;
                                                                         __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v50 = 1U;
                                                                     }
                                                                 }
@@ -4316,7 +3548,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                     if (
                                                                         (1U 
                                                                          & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                                        __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count = 0U;
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_addr = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 9U;
                                                                     } else {
                                                                         __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src 
@@ -4357,42 +3589,45 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count = 0x0028U;
                                                                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 7U;
                                                                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid = 0U;
+                                                                } else if (
+                                                                           (((4U 
+                                                                              > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
+                                                                             & (0x28U 
+                                                                                > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])) 
+                                                                            & (0x19U 
+                                                                               > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U]))) {
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_addr 
+                                                                        = 
+                                                                        (0x00000fffU 
+                                                                         & ((((IData)(0x000003e8U) 
+                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
+                                                                             + 
+                                                                             ((IData)(0x00000028U) 
+                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U])) 
+                                                                            + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]));
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_addr 
+                                                                        = 
+                                                                        (0x00000fffU 
+                                                                         & ((((IData)(0x000003e8U) 
+                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
+                                                                             + 
+                                                                             ((IData)(0x00000028U) 
+                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U])) 
+                                                                            + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]));
+                                                                    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0x0cU;
                                                                 }
                                                             } else if (
                                                                        (2U 
                                                                         & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
                                                                 if (
                                                                     (1U 
-                                                                     & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1 
-                                                                        = 
-                                                                        ((0x00000f00U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U] 
-                                                                             << 4U)) 
-                                                                         | ((0x000000f0U 
-                                                                             & vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]) 
-                                                                            | (0x0000000fU 
-                                                                               & (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U] 
-                                                                                >> 4U))));
-                                                                    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1 
-                                                                        = 
-                                                                        ((0x000000f0U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[14U] 
-                                                                             << 4U)) 
-                                                                         | (0x0000000fU 
-                                                                            & vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[15U]));
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1 = 1U;
-                                                                } else {
+                                                                     & (~ (IData)(vlSelfRef.test_copper__DOT__cpu_wdata)))) {
                                                                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src 
                                                                         = 
                                                                         ((vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[13U] 
                                                                           << 8U) 
                                                                          | vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[12U]);
                                                                     vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_cidx = 0U;
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_sub 
-                                                                        = 
-                                                                        (0x0000000fU 
-                                                                         & vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[14U]);
                                                                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase = 0U;
                                                                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count = 0x0030U;
                                                                     __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 4U;
@@ -4480,33 +3715,14 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                 if (
                                                                     (4U 
                                                                      > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U])) {
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__unnamedblk6__DOT__i = 0U;
-                                                                    while (
-                                                                           VL_GTS_III(32, 0x000003e8U, vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__unnamedblk6__DOT__i)) {
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h8898988b__0 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U];
-                                                                        if (VL_LIKELY((
-                                                                                (0x0f9fU 
-                                                                                >= 
-                                                                                (0x00000fffU 
-                                                                                & (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__unnamedblk6__DOT__i)))))) {
-                                                                            __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v29 
-                                                                                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h8898988b__0;
-                                                                            __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v29 
-                                                                                = 
-                                                                                (0x00000fffU 
-                                                                                & (((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__unnamedblk6__DOT__i));
-                                                                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v29, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v29));
-                                                                        }
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__unnamedblk6__DOT__i 
-                                                                            = 
-                                                                            ((IData)(1U) 
-                                                                             + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__unnamedblk6__DOT__i);
-                                                                    }
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt 
+                                                                        = 
+                                                                        (3U 
+                                                                         & vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]);
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_val 
+                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U];
+                                                                    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count = 0U;
+                                                                    __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state = 0x0aU;
                                                                 }
                                                             } else if (
                                                                        (((4U 
@@ -4515,31 +3731,18 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                             > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])) 
                                                                         & (0x19U 
                                                                            > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U]))) {
-                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha3d87205__0 
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_addr 
+                                                                    = 
+                                                                    (0x00000fffU 
+                                                                     & ((((IData)(0x000003e8U) 
+                                                                          * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
+                                                                         + 
+                                                                         ((IData)(0x00000028U) 
+                                                                          * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U])) 
+                                                                        + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]));
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_din 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[11U];
-                                                                if (
-                                                                    (0x0f9fU 
-                                                                     >= 
-                                                                     (0x00000fffU 
-                                                                      & ((((IData)(0x000003e8U) 
-                                                                           * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                          + 
-                                                                          ((IData)(0x00000028U) 
-                                                                           * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U])) 
-                                                                         + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])))) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4 
-                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_ha3d87205__0;
-                                                                    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4 
-                                                                        = 
-                                                                        (0x00000fffU 
-                                                                         & ((((IData)(0x000003e8U) 
-                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                             + 
-                                                                             ((IData)(0x00000028U) 
-                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U])) 
-                                                                            + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]));
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4 = 1U;
-                                                                }
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_we = 1U;
                                                             }
                                                         } else if (
                                                                    (2U 
@@ -4554,31 +3757,18 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                          > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])) 
                                                                      & (0x19U 
                                                                         > vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U]))) {
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h353a15af__0 
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_addr 
+                                                                        = 
+                                                                        (0x00000fffU 
+                                                                         & ((((IData)(0x000003e8U) 
+                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
+                                                                             + 
+                                                                             ((IData)(0x00000028U) 
+                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U])) 
+                                                                            + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]));
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_din 
                                                                         = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[11U];
-                                                                    if (
-                                                                        (0x0f9fU 
-                                                                         >= 
-                                                                         (0x00000fffU 
-                                                                          & ((((IData)(0x000003e8U) 
-                                                                               * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                              + 
-                                                                              ((IData)(0x00000028U) 
-                                                                               * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U])) 
-                                                                             + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U])))) {
-                                                                        __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v30 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT____Vlvbound_h353a15af__0;
-                                                                        __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v30 
-                                                                            = 
-                                                                            (0x00000fffU 
-                                                                             & ((((IData)(0x000003e8U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[8U]) 
-                                                                                + 
-                                                                                ((IData)(0x00000028U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[10U])) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[9U]));
-                                                                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v30, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__nametable__v30));
-                                                                    }
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_we = 1U;
                                                                 }
                                                             } else {
                                                                 __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src 
@@ -4645,98 +3835,22 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
             }
         }
     }
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state 
-        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state;
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid 
-        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid;
-    if (vlSelfRef.test_copper__DOT__rst) {
-        __Vdly__test_copper__DOT__dut__DOT__copper_index = 0U;
-    } else {
-        if (((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count)) 
-             & (0x01e0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count)))) {
-            __Vdly__test_copper__DOT__dut__DOT__copper_index = 0U;
-        }
-        if (((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_enabled) 
-               & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__in_text_area)) 
-              & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index) 
-                 < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_count))) 
-             & ((0x0001ffffU & (((IData)(0x00000140U) 
-                                 * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gfx_y)) 
-                                + (0x000001ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count) 
-                                                  >> 1U)))) 
-                >= vlSelfRef.test_copper__DOT__dut__DOT__copper_pos
-                [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))]))) {
-            if ((1U == vlSelfRef.test_copper__DOT__dut__DOT__copper_reg
-                 [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))])) {
-                vlSelfRef.test_copper__DOT__dut__DOT__bg_color 
-                    = (0x0000000fU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val
-                       [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))]);
-            } else if ((2U == vlSelfRef.test_copper__DOT__dut__DOT__copper_reg
-                        [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))])) {
-                __Vdly__test_copper__DOT__dut__DOT__fg_color 
-                    = (0x0000000fU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val
-                       [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))]);
-            } else if ((0x0dU != vlSelfRef.test_copper__DOT__dut__DOT__copper_reg
-                        [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))])) {
-                __VdlyVal__test_copper__DOT__dut__DOT__regs__v38 
-                    = vlSelfRef.test_copper__DOT__dut__DOT__copper_val
-                    [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))];
-                __VdlyDim0__test_copper__DOT__dut__DOT__regs__v38 
-                    = (0x0000001fU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg
-                       [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))]);
-                __VdlySet__test_copper__DOT__dut__DOT__regs__v38 = 1U;
-            }
-            __Vdly__test_copper__DOT__dut__DOT__copper_index 
-                = (0x000001ffU & ((IData)(1U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index)));
-        }
-    }
-    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__tile_inst__DOT__nametable.commit(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nametable);
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
-        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count;
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx 
-        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx;
     vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src 
         = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_src;
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
-        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst;
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_r 
-        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_r;
     vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase 
         = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_phase;
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_g 
-        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_pal_g;
     if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0) {
         vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tregs[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0] 
             = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tregs__v0;
     }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0) {
-        test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v0;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1) {
-        test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__pal_ram__v1;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0) {
-        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v0;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1) {
-        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v1;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2) {
-        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v2;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3) {
-        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v3;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4) {
-        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__attr_table__v4;
-    }
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count 
+        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst 
+        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx 
+        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid 
+        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid;
     if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v0) {
         vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[0U] 
             = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v0;
@@ -4941,162 +4055,1463 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer[24U] 
             = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer__v50;
     }
+    if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__blt_tile_rd_pending) {
+        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__blt_tile_rd_latch 
+            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_dout_a;
+    }
+    if (vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we) {
+        __VdlyVal__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0 
+            = ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we)
+                ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_din)
+                : 0U);
+        __VdlyDim0__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0 
+            = vlSelfRef.test_copper__DOT__dut__DOT__spr_a_addr;
+        __VdlySet__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0 = 1U;
+    }
+    if (vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we) {
+        vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT____Vlvbound_hcad4ec09__0 
+            = ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we)
+                ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_din)
+                : 0U);
+        if ((0x07cfU >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__color_a_addr))) {
+            __VdlyVal__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0 
+                = vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT____Vlvbound_hcad4ec09__0;
+            __VdlyDim0__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0 
+                = vlSelfRef.test_copper__DOT__dut__DOT__color_a_addr;
+            __VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0 = 1U;
+        }
+    }
+    if (vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we) {
+        vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT____Vlvbound_hcad4ec09__0 
+            = ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we)
+                ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_din)
+                : 0U);
+        if ((0x07cfU >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__char_a_addr))) {
+            __VdlyVal__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0 
+                = vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT____Vlvbound_hcad4ec09__0;
+            __VdlyDim0__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0 
+                = vlSelfRef.test_copper__DOT__dut__DOT__char_a_addr;
+            __VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0 = 1U;
+        }
+    }
+    if (vlSelfRef.test_copper__DOT__rst) {
+        __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_re = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_font_re = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_we = 0U;
+    } else {
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_re = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_font_re = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_we = 0U;
+        if ((1U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending))) {
+            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending = 2U;
+        } else if ((2U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending))) {
+            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_byte 
+                = vlSelfRef.test_copper__DOT__dut__DOT__font_a_dout;
+            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending = 0U;
+        }
+        if (vlSelfRef.test_copper__DOT__dut__DOT__artist_busy) {
+            if ((3U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op))) {
+                if ((((VL_LTES_III(32, 0U, VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x))) 
+                       & VL_GTS_III(32, 0x00000140U, 
+                                    VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)))) 
+                      & VL_LTES_III(32, 0U, VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)))) 
+                     & VL_GTS_III(32, 0x000000c8U, 
+                                  VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y))))) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                        = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                      VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y))) 
+                                          + VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x))));
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                }
+                if ((((((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x) 
+                          == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x2)) 
+                         & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y) 
+                            == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y2))) 
+                        | VL_GTS_III(32, 0xfffffff0U, 
+                                     VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)))) 
+                       | VL_LTS_III(32, 0x00000150U, 
+                                    VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)))) 
+                      | VL_GTS_III(32, 0xfffffff0U, 
+                                   VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)))) 
+                     | VL_LTS_III(32, 0x000000d8U, 
+                                  VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y))))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+                } else if ((VL_GTES_III(32, VL_MULS_III(32, (IData)(2U), 
+                                                        VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err))), 
+                                        VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))) 
+                            & VL_LTES_III(32, VL_MULS_III(32, (IData)(2U), 
+                                                          VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err))), 
+                                          VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+                        = (0x000003ffU & (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err) 
+                                           + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)));
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x 
+                        = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__sx)));
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y 
+                        = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__sy)));
+                } else if (VL_GTES_III(32, VL_MULS_III(32, (IData)(2U), 
+                                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err))), 
+                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+                        = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)));
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x 
+                        = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__sx)));
+                } else if (VL_LTES_III(32, VL_MULS_III(32, (IData)(2U), 
+                                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err))), 
+                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+                        = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)));
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y 
+                        = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__sy)));
+                }
+            } else if ((5U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op))) {
+                if (((0x0140U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)) 
+                     & (0xc8U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)))) {
+                    if ((((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy) 
+                            == (0x000000ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y))) 
+                           | ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy) 
+                              == (0x000000ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y2)))) 
+                          | ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx) 
+                             == (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)))) 
+                         | ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx) 
+                            == (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x2))))) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                            = (0x0000ffffU & (((IData)(0x00000140U) 
+                                               * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                    }
+                }
+                if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx) 
+                     >= (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x2)))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+                        = (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x));
+                    if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy) 
+                         >= (0x000000ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y2)))) {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy 
+                            = (0x000000ffU & ((IData)(1U) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)));
+                    }
+                } else {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+                        = (0x000001ffU & ((IData)(1U) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)));
+                }
+            } else if ((6U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op))) {
+                if (((0x0140U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)) 
+                     & (0xc8U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)))) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                        = (0x0000ffffU & (((IData)(0x00000140U) 
+                                           * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)));
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                }
+                if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx) 
+                     >= (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x2)))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+                        = (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x));
+                    if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy) 
+                         >= (0x000000ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y2)))) {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy 
+                            = (0x000000ffU & ((IData)(1U) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)));
+                    }
+                } else {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+                        = (0x000001ffU & ((IData)(1U) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)));
+                }
+            } else if ((7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op))) {
+                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                    = (0x0000ffffU & (((IData)(0x00000140U) 
+                                       * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)) 
+                                      + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)));
+                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata = 0U;
+                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                if ((0x013fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx = 0U;
+                    if ((0xc7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy))) {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy 
+                            = (0x000000ffU & ((IData)(1U) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)));
+                    }
+                } else {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+                        = (0x000001ffU & ((IData)(1U) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)));
+                }
+            } else if ((4U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op))) {
+                if (VL_LTES_III(10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx), (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))) {
+                    if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count))) {
+                        if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count))) {
+                            if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count))) {
+                                if ((((VL_LTES_III(32, 0U, 
+                                                   (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                    - 
+                                                    VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) 
+                                       & VL_GTS_III(32, 0x00000140U, 
+                                                    (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                     - 
+                                                     VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))))) 
+                                      & VL_LTES_III(32, 0U, 
+                                                    (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                     - 
+                                                     VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) 
+                                     & VL_GTS_III(32, 0x000000c8U, 
+                                                  (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                   - 
+                                                   VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))))) {
+                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                        = (0x0000ffffU 
+                                           & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                          (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                           - 
+                                                           VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) 
+                                              + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                 - 
+                                                 VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))));
+                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                                }
+                                __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 0U;
+                                __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dx 
+                                    = (0x000003ffU 
+                                       & ((IData)(1U) 
+                                          + VL_EXTENDS_II(10,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))));
+                                if (VL_GTS_III(32, 0U, 
+                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err)))) {
+                                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+                                        = (0x000003ffU 
+                                           & ((IData)(3U) 
+                                              + (VL_EXTENDS_II(10,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err)) 
+                                                 + 
+                                                 VL_MULS_III(32, (IData)(2U), 
+                                                             VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))));
+                                } else {
+                                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+                                        = (0x000003ffU 
+                                           & ((IData)(5U) 
+                                              + (VL_EXTENDS_II(10,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err)) 
+                                                 + 
+                                                 VL_MULS_III(32, (IData)(2U), 
+                                                             (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)) 
+                                                              - 
+                                                              VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))))));
+                                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dy 
+                                        = (0x000003ffU 
+                                           & (VL_EXTENDS_II(10,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)) 
+                                              - (IData)(1U)));
+                                }
+                            } else {
+                                if ((((VL_LTES_III(32, 0U, 
+                                                   (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                    + 
+                                                    VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) 
+                                       & VL_GTS_III(32, 0x00000140U, 
+                                                    (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                     + 
+                                                     VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))))) 
+                                      & VL_LTES_III(32, 0U, 
+                                                    (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                     - 
+                                                     VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) 
+                                     & VL_GTS_III(32, 0x000000c8U, 
+                                                  (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                   - 
+                                                   VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))))) {
+                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                        = (0x0000ffffU 
+                                           & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                          (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                           - 
+                                                           VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) 
+                                              + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                 + 
+                                                 VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))));
+                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                                }
+                                __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 7U;
+                            }
+                        } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count))) {
+                            if ((((VL_LTES_III(32, 0U, 
+                                               (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) 
+                                   & VL_GTS_III(32, 0x00000140U, 
+                                                (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                 - 
+                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))))) 
+                                  & VL_LTES_III(32, 0U, 
+                                                (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                 + 
+                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) 
+                                 & VL_GTS_III(32, 0x000000c8U, 
+                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                               + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))))) {
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                    = (0x0000ffffU 
+                                       & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                       + 
+                                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) 
+                                          + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                             - VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))));
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                    = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                            }
+                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 6U;
+                        } else {
+                            if ((((VL_LTES_III(32, 0U, 
+                                               (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) 
+                                   & VL_GTS_III(32, 0x00000140U, 
+                                                (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                 + 
+                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))))) 
+                                  & VL_LTES_III(32, 0U, 
+                                                (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                 + 
+                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) 
+                                 & VL_GTS_III(32, 0x000000c8U, 
+                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                               + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))))) {
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                    = (0x0000ffffU 
+                                       & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                       + 
+                                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) 
+                                          + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                             + VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))));
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                    = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                            }
+                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 5U;
+                        }
+                    } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count))) {
+                        if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count))) {
+                            if ((((VL_LTES_III(32, 0U, 
+                                               (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) 
+                                   & VL_GTS_III(32, 0x00000140U, 
+                                                (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                 - 
+                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) 
+                                  & VL_LTES_III(32, 0U, 
+                                                (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                 - 
+                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))))) 
+                                 & VL_GTS_III(32, 0x000000c8U, 
+                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                               - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))))) {
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                    = (0x0000ffffU 
+                                       & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                       - 
+                                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) 
+                                          + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                             - VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))));
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                    = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                            }
+                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 4U;
+                        } else {
+                            if ((((VL_LTES_III(32, 0U, 
+                                               (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) 
+                                   & VL_GTS_III(32, 0x00000140U, 
+                                                (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                 + 
+                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) 
+                                  & VL_LTES_III(32, 0U, 
+                                                (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                 - 
+                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))))) 
+                                 & VL_GTS_III(32, 0x000000c8U, 
+                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                               - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))))) {
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                    = (0x0000ffffU 
+                                       & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                       - 
+                                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) 
+                                          + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                             + VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))));
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                    = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                            }
+                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 3U;
+                        }
+                    } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count))) {
+                        if ((((VL_LTES_III(32, 0U, 
+                                           (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                            - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) 
+                               & VL_GTS_III(32, 0x00000140U, 
+                                            (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                             - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) 
+                              & VL_LTES_III(32, 0U, 
+                                            (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                             + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))))) 
+                             & VL_GTS_III(32, 0x000000c8U, 
+                                          (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                           + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))))) {
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                               + 
+                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) 
+                                                  + 
+                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                   - 
+                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))));
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                        }
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 2U;
+                    } else {
+                        if ((((VL_LTES_III(32, 0U, 
+                                           (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                            + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))) 
+                               & VL_GTS_III(32, 0x00000140U, 
+                                            (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                             + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx))))) 
+                              & VL_LTES_III(32, 0U, 
+                                            (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                             + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy))))) 
+                             & VL_GTS_III(32, 0x000000c8U, 
+                                          (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                           + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))))) {
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
+                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y)) 
+                                                               + 
+                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy)))) 
+                                                  + 
+                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x)) 
+                                                   + 
+                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx)))));
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                        }
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 1U;
+                    }
+                } else {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+                }
+            } else if ((9U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op))) {
+                if (vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_dout;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init = 0U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 0U;
+                } else if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase))) {
+                    if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase))) {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 0U;
+                    } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase))) {
+                        if ((0x0200U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp))) {
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_addr 
+                                = (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp));
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_din 
+                                = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors
+                                [vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_count];
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_we = 1U;
+                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp 
+                                = (0x000003ffU & ((IData)(1U) 
+                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp)));
+                        }
+                        if ((3U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_count))) {
+                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 0U;
+                        } else {
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_count 
+                                = (3U & ((IData)(1U) 
+                                         + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_count)));
+                        }
+                    } else if ((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_dout) 
+                                 == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target)) 
+                                & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target) 
+                                   != (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color)))) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                            = (0x0000ffffU & (((IData)(0x00000140U) 
+                                               * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx)));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_count = 0U;
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 5U;
+                        __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0 
+                            = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy) 
+                                << 9U) | (0x000001ffU 
+                                          & ((IData)(1U) 
+                                             + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx))));
+                        __VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0 = 1U;
+                        __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v1 
+                            = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy) 
+                                << 9U) | (0x000001ffU 
+                                          & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx) 
+                                             - (IData)(1U))));
+                        __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v2 
+                            = ((0x0001fe00U & (((IData)(1U) 
+                                                + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy)) 
+                                               << 9U)) 
+                               | (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx));
+                        __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v3 
+                            = ((0x0001fe00U & (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy) 
+                                                - (IData)(1U)) 
+                                               << 9U)) 
+                               | (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx));
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 0U;
+                    }
+                } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase))) {
+                    if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase))) {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 4U;
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+                            = (0x000001ffU & vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_dout);
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy 
+                            = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_dout 
+                                              >> 9U));
+                        if (((0x0140U > (0x000001ffU 
+                                         & vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_dout)) 
+                             & (0xc8U > (0x000000ffU 
+                                         & (vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_dout 
+                                            >> 9U))))) {
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_raddr 
+                                = (0x0000ffffU & (((IData)(0x00000140U) 
+                                                   * 
+                                                   (0x000000ffU 
+                                                    & (vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_dout 
+                                                       >> 9U))) 
+                                                  + 
+                                                  (0x000001ffU 
+                                                   & vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_dout)));
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_re = 1U;
+                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 3U;
+                        } else {
+                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 0U;
+                        }
+                    }
+                } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 2U;
+                } else if ((0U < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_addr 
+                        = (0x000001ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp) 
+                                          - (IData)(1U)));
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp 
+                        = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp) 
+                                          - (IData)(1U)));
+                } else {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+                }
+            } else if ((0x0aU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op))) {
+                if ((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending))) {
+                    if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx) 
+                         < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_len))) {
+                        if ((1U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_byte) 
+                                   >> (7U & ((IData)(7U) 
+                                             - (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_col)))))) {
+                            if (((0x00000140U > (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_pen_x) 
+                                                  + 
+                                                  ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_col) 
+                                                   * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale))) 
+                                                 + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_x))) 
+                                 & (0x000000c8U > (
+                                                   ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_start_y) 
+                                                    + 
+                                                    ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row) 
+                                                     * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale))) 
+                                                   + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_y))))) {
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                                    = (0x0000ffffU 
+                                       & (((IData)(0x00000140U) 
+                                           * (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_start_y) 
+                                               + ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row) 
+                                                  * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale))) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_y))) 
+                                          + (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_pen_x) 
+                                              + ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_col) 
+                                                 * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale))) 
+                                             + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_x))));
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                                    = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color;
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                            }
+                        }
+                        if (((0x000000ffU & ((IData)(1U) 
+                                             + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_x))) 
+                             < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale))) {
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_x 
+                                = (0x000000ffU & ((IData)(1U) 
+                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_x)));
+                        } else {
+                            vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_x = 0U;
+                            if ((7U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_col))) {
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_col 
+                                    = (7U & ((IData)(1U) 
+                                             + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_col)));
+                            } else {
+                                vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_col = 0U;
+                                if (((0x000000ffU & 
+                                      ((IData)(1U) 
+                                       + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_y))) 
+                                     < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale))) {
+                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_y 
+                                        = (0x000000ffU 
+                                           & ((IData)(1U) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_y)));
+                                } else {
+                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_y = 0U;
+                                    if ((7U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row))) {
+                                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row 
+                                            = (7U & 
+                                               ((IData)(1U) 
+                                                + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row)));
+                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_font_addr 
+                                            = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_cur_char) 
+                                                << 3U) 
+                                               | (7U 
+                                                  & ((IData)(1U) 
+                                                     + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row))));
+                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_font_re = 1U;
+                                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending = 1U;
+                                    } else {
+                                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx 
+                                            = (0x0000003fU 
+                                               & ((IData)(1U) 
+                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx)));
+                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_pen_x 
+                                            = (0x000001ffU 
+                                               & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_pen_x) 
+                                                  + 
+                                                  (0x0000ffffU 
+                                                   & VL_SHIFTL_III(16,16,32, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale), 3U))));
+                                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row = 0U;
+                                        if ((((IData)(1U) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx)) 
+                                             < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_len))) {
+                                            __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__idx 
+                                                = (0x0000003fU 
+                                                   & ((IData)(1U) 
+                                                      + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx)));
+                                            __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__Vfuncout 
+                                                = (0x000000ffU 
+                                                   & (((0U 
+                                                        == 
+                                                        (0x0000001fU 
+                                                         & VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__idx), 3U)))
+                                                        ? 0U
+                                                        : 
+                                                       (vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat
+                                                        [
+                                                        (((IData)(7U) 
+                                                          + 
+                                                          (0x000001ffU 
+                                                           & VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__idx), 3U))) 
+                                                         >> 5U)] 
+                                                        << 
+                                                        ((IData)(0x00000020U) 
+                                                         - 
+                                                         (0x0000001fU 
+                                                          & VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__idx), 3U))))) 
+                                                      | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat
+                                                         [
+                                                         (0x0000000fU 
+                                                          & (VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__idx), 3U) 
+                                                             >> 5U))] 
+                                                         >> 
+                                                         (0x0000001fU 
+                                                          & VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__idx), 3U)))));
+                                            vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_cur_char 
+                                                = __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__115__Vfuncout;
+                                            vlSelfRef.test_copper__DOT__dut__DOT__artist_font_re = 1U;
+                                            __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending = 1U;
+                                            vlSelfRef.test_copper__DOT__dut__DOT__artist_font_addr 
+                                                = (
+                                                   ([&]() {
+                                                        __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__idx 
+                                                            = 
+                                                            (0x0000003fU 
+                                                             & ((IData)(1U) 
+                                                                + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx)));
+                                                        __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__Vfuncout 
+                                                            = 
+                                                            (0x000000ffU 
+                                                             & (((0U 
+                                                                  == 
+                                                                  (0x0000001fU 
+                                                                   & VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__idx), 3U)))
+                                                                  ? 0U
+                                                                  : 
+                                                                 (vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat
+                                                                  [
+                                                                  (((IData)(7U) 
+                                                                    + 
+                                                                    (0x000001ffU 
+                                                                     & VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__idx), 3U))) 
+                                                                   >> 5U)] 
+                                                                  << 
+                                                                  ((IData)(0x00000020U) 
+                                                                   - 
+                                                                   (0x0000001fU 
+                                                                    & VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__idx), 3U))))) 
+                                                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat
+                                                                   [
+                                                                   (0x0000000fU 
+                                                                    & (VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__idx), 3U) 
+                                                                       >> 5U))] 
+                                                                   >> 
+                                                                   (0x0000001fU 
+                                                                    & VL_SHIFTL_III(9,32,32, (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__idx), 3U)))));
+                                                    }(), (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__116__Vfuncout)) 
+                                                   << 3U);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+                    }
+                }
+            } else {
+                __Vdly__test_copper__DOT__dut__DOT__artist_busy = 0U;
+            }
+        }
+        if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_valid) 
+             & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_busy)))) {
+            vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__color 
+                = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
+            if (((((((((1U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code)) 
+                       | (2U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) 
+                      | (3U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) 
+                     | ((5U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code)) 
+                        || (6U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code)))) 
+                    | (7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) 
+                   | (4U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) 
+                  | (9U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) 
+                 | (0x0aU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code)))) {
+                if ((1U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) {
+                    if (((0x0140U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0)) 
+                         & (0xc8U > vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                            = (0x0000ffffU & (((IData)(0x00000140U) 
+                                               * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0)));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                    }
+                } else if ((2U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) {
+                    if (((0x0140U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0)) 
+                         & (0xc8U > vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr 
+                            = (0x0000ffffU & (((IData)(0x00000140U) 
+                                               * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0)));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata = 0U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we = 1U;
+                    }
+                } else if ((3U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
+                    if ((vlSelfRef.test_copper__DOT__dut__DOT__regs[23U] 
+                         >= vlSelfRef.test_copper__DOT__dut__DOT__regs[19U])) {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dy 
+                            = (0x000003ffU & (- (vlSelfRef.test_copper__DOT__dut__DOT__regs[23U] 
+                                                 - vlSelfRef.test_copper__DOT__dut__DOT__regs[19U])));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__sy = 1U;
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dy 
+                            = (0x000003ffU & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                              - vlSelfRef.test_copper__DOT__dut__DOT__regs[23U]));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__sy = 0x03ffU;
+                    }
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+                        = (0x000003ffU & ((((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1) 
+                                            >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0))
+                                            ? ((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1) 
+                                               - (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0))
+                                            : ((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0) 
+                                               - (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1))) 
+                                          + ((vlSelfRef.test_copper__DOT__dut__DOT__regs[23U] 
+                                              >= vlSelfRef.test_copper__DOT__dut__DOT__regs[19U])
+                                              ? (- 
+                                                 (vlSelfRef.test_copper__DOT__dut__DOT__regs[23U] 
+                                                  - vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))
+                                              : (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                                 - vlSelfRef.test_copper__DOT__dut__DOT__regs[23U]))));
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x2 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y2 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[23U];
+                    if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1) 
+                         >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0))) {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dx 
+                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1) 
+                                              - (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0)));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__sx = 1U;
+                    } else {
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dx 
+                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0) 
+                                              - (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1)));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__sx = 0x03ffU;
+                    }
+                    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op = 3U;
+                } else if (((5U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code)) 
+                            || (6U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code)))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x2 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y2 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[23U];
+                    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code;
+                } else if ((7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx = 0U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy = 0U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op = 7U;
+                } else if ((4U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dy 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+                        = (0x000003ffU & ((IData)(1U) 
+                                          - (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1)));
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x2 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dx = 0U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count = 0U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op = 4U;
+                } else if ((9U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code))) {
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
+                    if (((0x0140U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0)) 
+                         & (0xc8U > vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_raddr 
+                            = (0x0000ffffU & (((IData)(0x00000140U) 
+                                               * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0)));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_re = 1U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_addr = 0U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_din 
+                            = ((vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                << 9U) | (IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0));
+                        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_a_we = 1U;
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp = 1U;
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase = 3U;
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init = 1U;
+                        __Vdly__test_copper__DOT__dut__DOT__artist_busy = 1U;
+                        __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op = 9U;
+                    }
+                } else if ((0U < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fio_name_len))) {
+                    __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__117__Vfuncout 
+                        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[0U]);
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_pen_x 
+                        = vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_start_y 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale 
+                        = ((1U > vlSelfRef.test_copper__DOT__dut__DOT__regs[22U])
+                            ? 1U : vlSelfRef.test_copper__DOT__dut__DOT__regs[22U]);
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_len 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__fio_name_len;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_col = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_x = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_scale_y = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_cur_char 
+                        = __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__117__Vfuncout;
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_font_addr 
+                        = (([&]() {
+                                __Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__118__Vfuncout 
+                                    = (0x000000ffU 
+                                       & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[0U]);
+                            }(), (IData)(__Vfunc_test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char__118__Vfuncout)) 
+                           << 3U);
+                    vlSelfRef.test_copper__DOT__dut__DOT__artist_font_re = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_busy = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op = 0x0aU;
+                }
+            }
+        }
+    }
+    if ((1U & (~ (IData)(vlSelfRef.test_copper__DOT__rst)))) {
+        if (((IData)(vlSelfRef.test_copper__DOT__cpu_we) 
+             & (IData)(vlSelfRef.test_copper__DOT__cpu_ce))) {
+            if ((0xb9a3U == (IData)(vlSelfRef.test_copper__DOT__cpu_addr))) {
+                vlSelfRef.test_copper__DOT__dut__DOT__fio_name_len 
+                    = (0x0000003fU & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata));
+            }
+        }
+    }
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_dout_a 
+        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem
+        [vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a];
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__blt_tile_rd_pending 
+        = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_re) 
+            & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we))) 
+           & (0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state)));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[0U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[0U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[2U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[1U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__fio_name[0U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[0U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[0U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[3U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[1U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[1U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[5U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[4U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[3U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[1U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[1U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[7U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[6U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[2U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[2U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[8U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[7U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[6U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[2U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[2U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[11U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[10U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[9U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[3U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[3U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[14U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[13U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__fio_name[12U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[3U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[3U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[15U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[4U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[4U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[17U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[16U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[15U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[4U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[4U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[19U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[18U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[5U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[5U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[20U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[19U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[18U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[5U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[5U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[23U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[22U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[21U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[6U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[6U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[26U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[25U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__fio_name[24U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[6U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[6U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[27U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[7U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[7U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[29U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[28U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[27U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[7U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[7U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[31U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[30U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[8U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[8U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[32U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[31U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[30U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[8U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[8U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[35U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[34U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[33U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[9U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[9U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[38U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[37U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__fio_name[36U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[9U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[9U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[39U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[10U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[10U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[41U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[40U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[39U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[10U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[10U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[43U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[42U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[11U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[11U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[44U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[43U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[42U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[11U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[11U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[47U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[46U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[45U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[12U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[12U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[50U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[49U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__fio_name[48U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[12U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[12U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[51U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[13U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[13U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[53U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[52U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[51U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[13U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[13U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[55U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[54U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[14U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[14U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name[56U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[55U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[54U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[14U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[14U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[59U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[58U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[57U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[15U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[15U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[62U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__fio_name[61U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__fio_name[60U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[15U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__fio_name_flat[15U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[63U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__op 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__op;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_sp;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__octant_count;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_phase;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_pending;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__paint_init;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_byte 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_byte;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__err 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__err;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__x 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__x;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__y 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__y;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cx 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cx;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__cy 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__cy;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dx 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dx;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__dy 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__dy;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_target;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_font_row;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__gt_char_idx;
+    if (__VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors[0U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v0;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors[1U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v1;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors[2U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v2;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors[3U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__push_neighbors__v3;
+    }
+    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data_ram__DOT__mem__v0;
+    }
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state 
+        = __Vdly__test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state;
     if (vlSelfRef.test_copper__DOT__rst) {
         vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tile_size16 = 0U;
-    } else if (((IData)(vlSelfRef.test_copper__DOT__cpu_we) 
+    } else if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__tile_inst__cpu_we) 
                 & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel))) {
         if ((0U == (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
             vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tile_size16 
                 = (1U & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata));
         }
     }
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel 
+        = ((0xa0c0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+           & (0xa0dfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+    vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__tile_inst__cpu_we 
+        = ((IData)(vlSelfRef.test_copper__DOT__cpu_ce) 
+           & (IData)(vlSelfRef.test_copper__DOT__cpu_we));
+    vlSelfRef.test_copper__DOT__dut__DOT__font_a_dout 
+        = vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__font_mem__DOT__mem
+        [vlSelfRef.test_copper__DOT__dut__DOT__font_a_addr];
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_dout 
+        = vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem
+        [vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_addr];
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a = 0U;
+    if ((0x00000010U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+        if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_we) {
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a = 1U;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a 
+                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_din;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a 
+                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_addr;
+        }
+        if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_we) {
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a 
+                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_din;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_addr;
+        }
+    } else if ((8U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+        if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+            if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                    if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_we) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a = 1U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_din;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_addr;
+                    }
+                    if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_we) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_din;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_addr;
+                    }
+                }
+            } else {
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a 
+                    = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_addr;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                    = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_addr;
+            }
+        } else {
+            if ((1U & (~ ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state) 
+                          >> 1U)))) {
+                if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                    if ((0x0fa0U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_addr))) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a = 1U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a = 0U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_addr;
+                    }
+                } else if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a = 1U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a 
+                        = (0x00000fffU & ((((IData)(0x000003e8U) 
+                                            * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
+                                           + ((IData)(0x0028U) 
+                                              * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row)));
+                }
+            }
+            if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                    if ((0x19U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a 
+                            = ((0x18U >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))
+                                ? vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__col_buffer
+                               [vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx]
+                                : 0U);
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                            = (0x00000fffU & ((((IData)(0x000003e8U) 
+                                                * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
+                                               + ((IData)(0x0028U) 
+                                                  * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row)));
+                    }
+                } else if ((0x03e8U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count))) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_val;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                        = (0x00000fffU & (((IData)(0x000003e8U) 
+                                           * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_count)));
+                }
+            } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                if ((0x0fa0U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_addr))) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_fill_addr;
+                }
+            }
+        }
+    } else if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+        if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+            if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a = 1U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a 
+                        = (0x00000fffU & ((((IData)(0x000003e8U) 
+                                            * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
+                                           + ((IData)(0x00000028U) 
+                                              * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row))) 
+                                          + (0x0000003fU 
+                                             & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst))));
+                }
+            }
+            if ((1U & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state)))) {
+                if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                        = (0x00000fffU & ((((IData)(0x000003e8U) 
+                                            * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
+                                           + ((IData)(0x0028U) 
+                                              * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_idx))) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row)));
+                }
+            }
+        } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+            if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a = 0U;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                    = (0x00000fffU & ((((IData)(0x000003e8U) 
+                                        * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
+                                       + ((IData)(0x00000028U) 
+                                          * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_col_row))) 
+                                      + (0x0000003fU 
+                                         & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst))));
+            }
+        }
+    } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+        if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+            if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a = 0U;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a 
+                    = (0x00000fffU & (((IData)(0x000003e8U) 
+                                       * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
+                                      + (0x000003ffU 
+                                         & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst))));
+            }
+        }
+        if ((1U & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state)))) {
+            if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a = 0U;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                    = (0x00000fffU & (((IData)(0x000003e8U) 
+                                       * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_nt)) 
+                                      + (0x000003ffU 
+                                         & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst))));
+            }
+        }
+    } else if ((1U & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state)))) {
+        if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_we) {
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_we_a = 1U;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_din_a 
+                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_din;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__at_addr_a 
+                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_at_addr;
+        }
+        if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_we) {
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_we_a = 1U;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_din_a 
+                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_din;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__nt_addr_a 
+                = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__cmd_nt_addr;
+        }
+    }
     if (vlSelfRef.test_copper__DOT__rst) {
-        vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i = 0U;
-        vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk15__DOT__i = 0U;
-        vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk16__DOT__i = 0U;
         __Vdly__test_copper__DOT__dut__DOT__cursor_x = 0U;
         __Vdly__test_copper__DOT__dut__DOT__cursor_y = 0U;
         __Vdly__test_copper__DOT__dut__DOT__fg_color = 1U;
         vlSelfRef.test_copper__DOT__dut__DOT__bg_color = 6U;
-        __Vdly__test_copper__DOT__dut__DOT__gfx_color = 1U;
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_color = 1U;
         __Vdly__test_copper__DOT__dut__DOT__scroll_offset = 0U;
         __Vdly__test_copper__DOT__dut__DOT__scroll_pending = 0U;
         __Vdly__test_copper__DOT__dut__DOT__scroll_col = 0U;
         __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-        vlSelfRef.test_copper__DOT__dut__DOT__copper_enabled = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__copper_enabled = 0U;
         __Vdly__test_copper__DOT__dut__DOT__copper_count = 0U;
-        __Vdly__test_copper__DOT__dut__DOT__copper_index = 0U;
         __Vdly__test_copper__DOT__dut__DOT__copper_target_list = 0U;
         __Vdly__test_copper__DOT__dut__DOT__copper_pending_list = 0U;
         __Vdly__test_copper__DOT__dut__DOT__copper_loading = 0U;
-        __Vdly__test_copper__DOT__dut__DOT__fill_sp = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__sprrow_count = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__sprcopy_phase = 0U;
+        __Vdly__test_copper__DOT__dut__DOT__memread_pending = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_re = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_valid = 0U;
         __VdlySet__test_copper__DOT__dut__DOT__regs__v0 = 1U;
-        while (VL_GTS_III(32, 0x000007d0U, vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i)) {
-            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h9d4d7d6f__0 = 0x20U;
-            if (VL_LIKELY(((0x07cfU >= (0x000007ffU 
-                                        & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i))))) {
-                __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v0 
-                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h9d4d7d6f__0;
-                __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v0 
-                    = (0x000007ffU & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i);
-                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__char_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__char_ram__v0, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v0));
-            }
-            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hef6c2195__0 = 1U;
-            if (VL_LIKELY(((0x07cfU >= (0x000007ffU 
-                                        & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i))))) {
-                __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v0 
-                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hef6c2195__0;
-                __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v0 
-                    = (0x000007ffU & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i);
-                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__color_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__color_ram__v0, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v0));
-            }
-            vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i 
-                = ((IData)(1U) + vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i);
-        }
-        while (VL_GTS_III(32, 0x0000fa00U, vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk15__DOT__i)) {
-            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h9d27345d__0 = 0U;
-            if (VL_LIKELY(((0xf9ffU >= (0x0000ffffU 
-                                        & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk15__DOT__i))))) {
-                __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v0 
-                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h9d27345d__0;
-                __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v0 
-                    = (0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk15__DOT__i);
-                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v0, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v0));
-            }
-            vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk15__DOT__i 
-                = ((IData)(1U) + vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk15__DOT__i);
-        }
-        while (VL_GTS_III(32, 0x00000800U, vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk16__DOT__i)) {
-            __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v0 
-                = (0x000007ffU & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk16__DOT__i);
-            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(0U, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v0));
-            vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk16__DOT__i 
-                = ((IData)(1U) + vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk16__DOT__i);
-        }
-        __VdlySet__test_copper__DOT__dut__DOT__regs__v1 = 1U;
     } else {
+        vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_we = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_re = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_re = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_valid = 0U;
         if (vlSelfRef.test_copper__DOT__dut__DOT__scroll_pending) {
-            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h902d5c6a__0 = 0x20U;
-            if (VL_LIKELY(((0x07cfU >= ([&]() {
-                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__col 
-                                        = vlSelfRef.test_copper__DOT__dut__DOT__scroll_col;
-                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr 
-                                        = (0x0000001fU 
-                                           & ((IData)(0x18U) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                                    if ((0x19U <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr))) {
-                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr 
-                                            = (0x0000001fU 
-                                               & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr) 
-                                                  - (IData)(0x19U)));
-                                    }
-                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__Vfuncout 
-                                        = (0x000007ffU 
-                                           & (((IData)(0x00000050U) 
-                                               * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr)) 
-                                              + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__col)));
-                                }(), (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__Vfuncout)))))) {
-                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__col 
-                    = vlSelfRef.test_copper__DOT__dut__DOT__scroll_col;
-                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr 
-                    = (0x0000001fU & ((IData)(0x18U) 
-                                      + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                if ((0x19U <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr))) {
-                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr 
-                        = (0x0000001fU & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr) 
-                                          - (IData)(0x19U)));
-                }
-                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__Vfuncout 
-                    = (0x000007ffU & (((IData)(0x00000050U) 
-                                       * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr)) 
-                                      + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__col)));
-                __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v1 
-                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h902d5c6a__0;
-                __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v1 
-                    = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__Vfuncout;
-                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__char_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__char_ram__v1, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v1));
+            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__col 
+                = vlSelfRef.test_copper__DOT__dut__DOT__scroll_col;
+            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr 
+                = (0x0000001fU & ((IData)(0x18U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
+            if ((0x19U <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr))) {
+                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr 
+                    = (0x0000001fU & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr) 
+                                      - (IData)(0x19U)));
             }
-            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hdecc4094__0 
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_din = 0x20U;
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we = 1U;
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_din 
                 = vlSelfRef.test_copper__DOT__dut__DOT__fg_color;
-            if (VL_LIKELY(((0x07cfU >= ([&]() {
-                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__col 
-                                        = vlSelfRef.test_copper__DOT__dut__DOT__scroll_col;
-                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr 
-                                        = (0x0000001fU 
-                                           & ((IData)(0x18U) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                                    if ((0x19U <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr))) {
-                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr 
-                                            = (0x0000001fU 
-                                               & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr) 
-                                                  - (IData)(0x19U)));
-                                    }
-                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__Vfuncout 
-                                        = (0x000007ffU 
-                                           & (((IData)(0x00000050U) 
-                                               * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr)) 
-                                              + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__col)));
-                                }(), (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__Vfuncout)))))) {
-                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__col 
-                    = vlSelfRef.test_copper__DOT__dut__DOT__scroll_col;
-                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr 
-                    = (0x0000001fU & ((IData)(0x18U) 
-                                      + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                if ((0x19U <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr))) {
-                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr 
-                        = (0x0000001fU & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr) 
-                                          - (IData)(0x19U)));
-                }
-                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__Vfuncout 
-                    = (0x000007ffU & (((IData)(0x00000050U) 
-                                       * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr)) 
-                                      + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__col)));
-                __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v1 
-                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hdecc4094__0;
-                __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v1 
-                    = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__Vfuncout;
-                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__color_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__color_ram__v1, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v1));
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we = 1U;
+            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__Vfuncout 
+                = (0x000007ffU & (((IData)(0x00000050U) 
+                                   * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__rr)) 
+                                  + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__col)));
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr 
+                = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__110__Vfuncout;
+            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__col 
+                = vlSelfRef.test_copper__DOT__dut__DOT__scroll_col;
+            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr 
+                = (0x0000001fU & ((IData)(0x18U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
+            if ((0x19U <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr))) {
+                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr 
+                    = (0x0000001fU & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr) 
+                                      - (IData)(0x19U)));
             }
+            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__Vfuncout 
+                = (0x000007ffU & (((IData)(0x00000050U) 
+                                   * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__rr)) 
+                                  + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__col)));
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr 
+                = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__111__Vfuncout;
             if ((0x4fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_col))) {
                 __Vdly__test_copper__DOT__dut__DOT__scroll_pending = 0U;
                 __Vdly__test_copper__DOT__dut__DOT__scroll_col = 0U;
@@ -5105,486 +5520,103 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                     = (0x0000007fU & ((IData)(1U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_col)));
             }
         }
+        vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_re = 0U;
+        if (vlSelfRef.test_copper__DOT__dut__DOT__memread_pending) {
+            if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__memread_space))) {
+                if ((1U & (~ ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__memread_space) 
+                              >> 1U)))) {
+                    if ((1U & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__memread_space)))) {
+                        __VdlyVal__test_copper__DOT__dut__DOT__regs__v32 
+                            = vlSelfRef.test_copper__DOT__dut__DOT__tile_blt_rdata;
+                        __VdlySet__test_copper__DOT__dut__DOT__regs__v32 = 1U;
+                    }
+                }
+            } else {
+                __VdlyVal__test_copper__DOT__dut__DOT__regs__v33 
+                    = ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__memread_space))
+                        ? ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__memread_space))
+                            ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__spr_a_dout)
+                            : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_dout))
+                        : ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__memread_space))
+                            ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__color_a_dout)
+                            : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__char_a_dout)));
+                __VdlySet__test_copper__DOT__dut__DOT__regs__v33 = 1U;
+            }
+            __Vdly__test_copper__DOT__dut__DOT__memread_pending = 0U;
+        }
         if (vlSelfRef.test_copper__DOT__dut__DOT__cmd_busy) {
-            if ((0x00000080U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                if ((0x00000040U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    if ((0x00000020U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                        if ((0x00000010U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                            if ((8U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                            } else if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                            } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                            } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                            } else {
-                                vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h6e0ff81d__0 = 0x20U;
-                                if (VL_LIKELY(((0x07cfU 
-                                                >= 
-                                                (0x000007ffU 
-                                                 & (((IData)(0x00000050U) 
-                                                     * 
-                                                     (0x0000001fU 
-                                                      & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) 
-                                                    + 
-                                                    (0x0000007fU 
-                                                     & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)))))))) {
-                                    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v2 
-                                        = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h6e0ff81d__0;
-                                    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v2 
-                                        = (0x000007ffU 
-                                           & (((IData)(0x00000050U) 
-                                               * (0x0000001fU 
-                                                  & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) 
-                                              + (0x0000007fU 
-                                                 & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
-                                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__char_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__char_ram__v2, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v2));
-                                }
-                                vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h1cc62cc7__0 
-                                    = vlSelfRef.test_copper__DOT__dut__DOT__fg_color;
-                                if (VL_LIKELY(((0x07cfU 
-                                                >= 
-                                                (0x000007ffU 
-                                                 & (((IData)(0x00000050U) 
-                                                     * 
-                                                     (0x0000001fU 
-                                                      & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) 
-                                                    + 
-                                                    (0x0000007fU 
-                                                     & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)))))))) {
-                                    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v2 
-                                        = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h1cc62cc7__0;
-                                    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v2 
-                                        = (0x000007ffU 
-                                           & (((IData)(0x00000050U) 
-                                               * (0x0000001fU 
-                                                  & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) 
-                                              + (0x0000007fU 
-                                                 & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
-                                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__color_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__color_ram__v2, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v2));
-                                }
-                                if ((0x004fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))) {
-                                    __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
-                                    if ((0x18U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) {
-                                        __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                                    } else {
-                                        __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
-                                            = (0x000000ffU 
-                                               & ((IData)(1U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)));
-                                    }
-                                } else {
-                                    __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                                        = (0x000001ffU 
-                                           & ((IData)(1U) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                                }
-                            }
-                        } else {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                        }
-                    } else {
+            if ((0x12U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr 
+                    = ((0x00000780U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x) 
+                                       << 6U)) | ((0x00000078U 
+                                                   & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
+                                                      << 3U)) 
+                                                  | (7U 
+                                                     & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_din = 0U;
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we = 1U;
+                if ((7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))) {
+                    __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
+                    if ((0x0fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) {
                         __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                    }
-                } else {
-                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                }
-            } else if ((0x00000040U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-            } else if ((0x00000020U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-            } else if ((0x00000010U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                if ((8U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                } else if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                        __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v1 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__sprite_shapes
-                            [((0x00000780U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y) 
-                                              << 7U)) 
-                              | ((0x00000078U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                                 << 3U)) 
-                                 | (7U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))))];
-                        __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v1 
-                            = ((0x00000780U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x) 
-                                               << 7U)) 
-                               | ((0x00000078U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                                  << 3U)) 
-                                  | (7U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
-                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v1, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v1));
-                        if ((7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))) {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
-                            if ((0x0fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                            } else {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
-                                    = (0x000000ffU 
-                                       & ((IData)(1U) 
-                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)));
-                            }
-                        } else {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                                = (0x000001ffU & ((IData)(1U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                        }
                     } else {
-                        __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v2 
-                            = ((0x00000780U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x) 
-                                               << 6U)) 
-                               | ((0x00000078U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                                  << 3U)) 
-                                  | (7U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
-                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(0U, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v2));
-                        if ((7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))) {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
-                            if ((0x0fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                            } else {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
-                                    = (0x000000ffU 
-                                       & ((IData)(1U) 
-                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)));
-                            }
-                        } else {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                                = (0x000001ffU & ((IData)(1U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                        }
-                    }
-                } else {
-                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                }
-            } else if ((8U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                    } else if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_char_idx) 
-                                < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_char_len))) {
-                        if ((1U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_byte) 
-                                   >> (7U & ((IData)(7U) 
-                                             - (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col)))))) {
-                            if (((0x00000140U > (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_pen_x) 
-                                                  + 
-                                                  ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col) 
-                                                   * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale))) 
-                                                 + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_x))) 
-                                 & (0x000000c8U > (
-                                                   ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_start_y) 
-                                                    + 
-                                                    ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_row) 
-                                                     * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale))) 
-                                                   + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_y))))) {
-                                vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_he1a62a70__0 
-                                    = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                                if (VL_LIKELY(((0xf9ffU 
-                                                >= 
-                                                (0x0000ffffU 
-                                                 & (((IData)(0x00000140U) 
-                                                     * 
-                                                     (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_start_y) 
-                                                       + 
-                                                       ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_row) 
-                                                        * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale))) 
-                                                      + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_y))) 
-                                                    + 
-                                                    (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_pen_x) 
-                                                      + 
-                                                      ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col) 
-                                                       * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale))) 
-                                                     + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_x)))))))) {
-                                    __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v1 
-                                        = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_he1a62a70__0;
-                                    __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v1 
-                                        = (0x0000ffffU 
-                                           & (((IData)(0x00000140U) 
-                                               * (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_start_y) 
-                                                   + 
-                                                   ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_row) 
-                                                    * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale))) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_y))) 
-                                              + (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_pen_x) 
-                                                  + 
-                                                  ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col) 
-                                                   * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale))) 
-                                                 + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_x))));
-                                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v1, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v1));
-                                }
-                            }
-                        }
-                        if (((0x000000ffU & ((IData)(1U) 
-                                             + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_x))) 
-                             < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale))) {
-                            vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_x 
-                                = (0x000000ffU & ((IData)(1U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_x)));
-                        } else {
-                            vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_x = 0U;
-                            if ((7U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col))) {
-                                vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col 
-                                    = (7U & ((IData)(1U) 
-                                             + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col)));
-                            } else {
-                                vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col = 0U;
-                                if (((0x000000ffU & 
-                                      ((IData)(1U) 
-                                       + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_y))) 
-                                     < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale))) {
-                                    vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_y 
-                                        = (0x000000ffU 
-                                           & ((IData)(1U) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_y)));
-                                } else {
-                                    vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_y = 0U;
-                                    if ((7U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_row))) {
-                                        __Vdly__test_copper__DOT__dut__DOT__gt_font_row 
-                                            = (7U & 
-                                               ((IData)(1U) 
-                                                + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_row)));
-                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_font_byte 
-                                            = vlSelfRef.test_copper__DOT__dut__DOT__font_rom
-                                            [(((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_cur_char) 
-                                               << 3U) 
-                                              | (7U 
-                                                 & ((IData)(1U) 
-                                                    + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_font_row))))];
-                                    } else {
-                                        __Vdly__test_copper__DOT__dut__DOT__gt_char_idx 
-                                            = (0x0000003fU 
-                                               & ((IData)(1U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_char_idx)));
-                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_pen_x 
-                                            = (0x000001ffU 
-                                               & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_pen_x) 
-                                                  + 
-                                                  (0x0000ffffU 
-                                                   & VL_SHIFTL_III(16,16,32, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_scale), 3U))));
-                                        __Vdly__test_copper__DOT__dut__DOT__gt_font_row = 0U;
-                                        if ((((IData)(1U) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_char_idx)) 
-                                             < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_char_len))) {
-                                            vlSelfRef.test_copper__DOT__dut__DOT__gt_cur_char 
-                                                = vlSelfRef.test_copper__DOT__dut__DOT__fio_name
-                                                [(0x0000003fU 
-                                                  & ((IData)(1U) 
-                                                     + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_char_idx)))];
-                                            vlSelfRef.test_copper__DOT__dut__DOT__gt_font_byte 
-                                                = vlSelfRef.test_copper__DOT__dut__DOT__font_rom
-                                                [(vlSelfRef.test_copper__DOT__dut__DOT__fio_name
-                                                  [
-                                                  (0x0000003fU 
-                                                   & ((IData)(1U) 
-                                                      + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gt_char_idx)))] 
-                                                  << 3U)];
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                    }
-                } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    if (((0U < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp)) 
-                         & (0x0200U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp)))) {
-                        __Vdly__test_copper__DOT__dut__DOT__fill_sp 
-                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp) 
-                                              - (IData)(1U)));
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                            = (0x000001ffU & vlSelfRef.test_copper__DOT__dut__DOT__fill_stack
-                               [(0x000001ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp) 
-                                                - (IData)(1U)))]);
                         __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
-                            = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__fill_stack
-                                              [(0x000001ffU 
-                                                & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp) 
-                                                   - (IData)(1U)))] 
-                                              >> 9U));
-                    } else if ((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp))) {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                    } else if (((((0x0140U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)) 
-                                  & (0xc8U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) 
-                                 & (((0xf9ffU >= (0x0000ffffU 
-                                                  & (((IData)(0x00000140U) 
-                                                      * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                                     + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))))
-                                      ? vlSelfRef.test_copper__DOT__dut__DOT__gfx_ram
-                                     [(0x0000ffffU 
-                                       & (((IData)(0x00000140U) 
-                                           * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)))]
-                                      : 0U) == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_target))) 
-                                & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_target) 
-                                   != (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gfx_color)))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h3f27e46b__3 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (((IData)(0x00000140U) 
-                                             * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                            + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v2 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h3f27e46b__3;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v2 
-                                = (0x0000ffffU & (((IData)(0x00000140U) 
-                                                   * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v2, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v2));
-                        }
-                        if ((0x00000200U > ((IData)(3U) 
-                                            + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp)))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v0 
-                                = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                    << 9U) | (0x000001ffU 
-                                              & ((IData)(1U) 
-                                                 + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
-                            __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v0 
-                                = (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp));
-                            __VdlySet__test_copper__DOT__dut__DOT__fill_stack__v0 = 1U;
-                            __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v1 
-                                = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                    << 9U) | (0x000001ffU 
-                                              & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx) 
-                                                 - (IData)(1U))));
-                            __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v1 
-                                = (0x000001ffU & ((IData)(1U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp)));
-                            __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v2 
-                                = ((0x0001fe00U & (
-                                                   ((IData)(1U) 
-                                                    + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                                   << 9U)) 
-                                   | (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx));
-                            __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v2 
-                                = (0x000001ffU & ((IData)(2U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp)));
-                            __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v3 
-                                = ((0x0001fe00U & (
-                                                   ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                                    - (IData)(1U)) 
-                                                   << 9U)) 
-                                   | (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx));
-                            __VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v3 
-                                = (0x000001ffU & ((IData)(3U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp)));
-                            __Vdly__test_copper__DOT__dut__DOT__fill_sp 
-                                = (0x000003ffU & ((IData)(4U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fill_sp)));
-                        }
+                            = (0x000000ffU & ((IData)(1U) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)));
                     }
                 } else {
-                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
+                    __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
+                        = (0x000001ffU & ((IData)(1U) 
+                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
                 }
-            } else if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h3f27e46b__2 = 0U;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (((IData)(0x00000140U) 
-                                             * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                            + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v3 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h3f27e46b__2;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v3 
-                                = (0x0000ffffU & (((IData)(0x00000140U) 
-                                                   * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v3, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v3));
-                        }
-                        if ((0x013fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))) {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
-                            if ((0xc7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                            } else {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
-                                    = (0x000000ffU 
-                                       & ((IData)(1U) 
-                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)));
-                            }
-                        } else {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                                = (0x000001ffU & ((IData)(1U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                        }
+            } else if ((0xf0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr 
+                    = (0x000007ffU & (((IData)(0x00000050U) 
+                                       * (0x0000001fU 
+                                          & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) 
+                                      + (0x0000007fU 
+                                         & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_din = 0x20U;
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_din 
+                    = vlSelfRef.test_copper__DOT__dut__DOT__fg_color;
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr 
+                    = (0x000007ffU & (((IData)(0x00000050U) 
+                                       * (0x0000001fU 
+                                          & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) 
+                                      + (0x0000007fU 
+                                         & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
+                if ((0x004fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))) {
+                    __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
+                    if ((0x18U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) {
+                        __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
                     } else {
-                        if (((0x0140U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)) 
-                             & (0xc8U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)))) {
-                            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h3f27e46b__1 
-                                = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                            if (VL_LIKELY(((0xf9ffU 
-                                            >= (0x0000ffffU 
-                                                & (((IData)(0x00000140U) 
-                                                    * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                                   + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))))))) {
-                                __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v4 
-                                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h3f27e46b__1;
-                                __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v4 
-                                    = (0x0000ffffU 
-                                       & (((IData)(0x00000140U) 
-                                           * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v4, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v4));
-                            }
-                        }
-                        if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx) 
-                             >= (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x2)))) {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                                = (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x));
-                            if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                 >= (0x000000ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y2)))) {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                            } else {
-                                __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
-                                    = (0x000000ffU 
-                                       & ((IData)(1U) 
-                                          + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)));
-                            }
-                        } else {
-                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                                = (0x000001ffU & ((IData)(1U) 
-                                                  + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                        }
+                        __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
+                            = (0x000000ffU & ((IData)(1U) 
+                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)));
                     }
-                } else if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    if (((0x0140U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)) 
-                         & (0xc8U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)))) {
-                        if ((((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                == (0x000000ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y))) 
-                               | ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                                  == (0x000000ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y2)))) 
-                              | ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx) 
-                                 == (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)))) 
-                             | ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx) 
-                                == (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x2))))) {
-                            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h3f27e46b__0 
-                                = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                            if (VL_LIKELY(((0xf9ffU 
-                                            >= (0x0000ffffU 
-                                                & (((IData)(0x00000140U) 
-                                                    * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
-                                                   + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))))))) {
-                                __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v5 
-                                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h3f27e46b__0;
-                                __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v5 
-                                    = (0x0000ffffU 
-                                       & (((IData)(0x00000140U) 
-                                           * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy)) 
+                } else {
+                    __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
+                        = (0x000001ffU & ((IData)(1U) 
                                           + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
-                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v5, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v5));
-                            }
-                        }
-                    }
-                    if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx) 
-                         >= (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x2)))) {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                            = (0x000001ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x));
-                        if (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
-                             >= (0x000000ffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y2)))) {
+                }
+            } else if ((0x13U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
+                if (vlSelfRef.test_copper__DOT__dut__DOT__sprcopy_phase) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr 
+                        = ((0x00000780U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x) 
+                                           << 7U)) 
+                           | ((0x00000078U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
+                                              << 3U)) 
+                              | (7U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
+                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_din 
+                        = vlSelfRef.test_copper__DOT__dut__DOT__spr_a_dout;
+                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__sprcopy_phase = 0U;
+                    if ((7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))) {
+                        __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
+                        if ((0x0fU == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy))) {
                             __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
                         } else {
                             __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
@@ -5596,388 +5628,30 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                             = (0x000001ffU & ((IData)(1U) 
                                               + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx)));
                     }
-                } else if (VL_LTES_III(10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx), (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))) {
-                    if ((((VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                         + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) 
-                          & VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                 + 
-                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                       + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hafb21497__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                         + 
-                                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                                            + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                               + VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v6 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hafb21497__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v6 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                               + 
-                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                                                  + 
-                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                   + 
-                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v6, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v6));
-                        }
-                    }
-                    if ((((VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                         - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) 
-                          & VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                 + 
-                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                       + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_haf1931bd__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                         + 
-                                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                                            + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                               - VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v7 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_haf1931bd__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v7 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                               + 
-                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                                                  + 
-                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                   - 
-                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v7, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v7));
-                        }
-                    }
-                    if ((((VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                         + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) 
-                          & VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                 - 
-                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                       - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hc84a7865__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                         - 
-                                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                                            + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                               + VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v8 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hc84a7865__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v8 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                               - 
-                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                                                  + 
-                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                   + 
-                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v8, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v8));
-                        }
-                    }
-                    if ((((VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                         - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) 
-                          & VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                 - 
-                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                       - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hed509973__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                         - 
-                                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                                            + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                               - VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v9 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hed509973__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v9 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                               - 
-                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                                                  + 
-                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                   - 
-                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v9, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v9));
-                        }
-                    }
-                    if ((((VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                         + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))) 
-                          & VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                 + 
-                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                       + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hd5133de6__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                         + 
-                                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                                            + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                               + VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v10 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hd5133de6__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v10 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                               + 
-                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                                                  + 
-                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                   + 
-                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v10, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v10));
-                        }
-                    }
-                    if ((((VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                         - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))) 
-                          & VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                 + 
-                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                       + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hd5fa5e14__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                         + 
-                                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                                            + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                               - VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v11 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hd5fa5e14__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v11 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                               + 
-                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                                                  + 
-                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                   - 
-                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v11, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v11));
-                        }
-                    }
-                    if ((((VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                         + VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))) 
-                          & VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                 - 
-                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                       - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_haa426699__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                         - 
-                                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                                            + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                               + VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v12 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_haa426699__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v12 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                               - 
-                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                                                  + 
-                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                   + 
-                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v12, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v12));
-                        }
-                    }
-                    if ((((VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                         - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))) 
-                          & VL_LTES_III(32, 0U, (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                 - 
-                                                 VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                       - VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h9f4406d7__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                         - 
-                                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                                            + (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                               - VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v13 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h9f4406d7__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v13 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)) 
-                                                               - 
-                                                               VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) 
-                                                  + 
-                                                  (VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)) 
-                                                   - 
-                                                   VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v13, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v13));
-                        }
-                    }
-                    __Vdly__test_copper__DOT__dut__DOT__cmd_dx 
-                        = (0x000003ffU & ((IData)(1U) 
-                                          + VL_EXTENDS_II(10,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))));
-                    if (VL_GTS_III(32, 0U, VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err)))) {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_err 
-                            = (0x000003ffU & ((IData)(3U) 
-                                              + (VL_EXTENDS_II(10,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err)) 
-                                                 + 
-                                                 VL_MULS_III(32, (IData)(2U), 
-                                                             VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))));
-                    } else {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_err 
-                            = (0x000003ffU & ((IData)(5U) 
-                                              + (VL_EXTENDS_II(10,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err)) 
-                                                 + 
-                                                 VL_MULS_III(32, (IData)(2U), 
-                                                             (VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)) 
-                                                              - 
-                                                              VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))))));
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_dy 
-                            = (0x000003ffU & (VL_EXTENDS_II(10,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)) 
-                                              - (IData)(1U)));
-                    }
                 } else {
-                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr 
+                        = ((0x00000780U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y) 
+                                           << 7U)) 
+                           | ((0x00000078U & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy) 
+                                              << 3U)) 
+                              | (7U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx))));
+                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_re = 1U;
+                    __Vdly__test_copper__DOT__dut__DOT__sprcopy_phase = 1U;
                 }
-            } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
-                    if ((((VL_LTES_III(32, 0U, VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x))) 
-                           & VL_GTS_III(32, 0x00000140U, 
-                                        VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)))) 
-                          & VL_LTES_III(32, 0U, VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)))) 
-                         & VL_GTS_III(32, 0x000000c8U, 
-                                      VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y))))) {
-                        vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hc0a966b6__0 
-                            = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                        if (VL_LIKELY(((0xf9ffU >= 
-                                        (0x0000ffffU 
-                                         & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                        VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y))) 
-                                            + VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)))))))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v14 
-                                = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hc0a966b6__0;
-                            __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v14 
-                                = (0x0000ffffU & (VL_MULS_III(32, (IData)(0x00000140U), 
-                                                              VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y))) 
-                                                  + 
-                                                  VL_EXTENDS_II(16,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x))));
-                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v14, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v14));
-                        }
-                    }
-                    if ((((((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x) 
-                              == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x2)) 
-                             & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y) 
-                                == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y2))) 
-                            | VL_GTS_III(32, 0xfffffff0U, 
-                                         VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)))) 
-                           | VL_LTS_III(32, 0x00000150U, 
-                                        VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x)))) 
-                          | VL_GTS_III(32, 0xfffffff0U, 
-                                       VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y)))) 
-                         | VL_LTS_III(32, 0x000000d8U, 
-                                      VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y))))) {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
-                    } else if ((VL_GTES_III(32, VL_MULS_III(32, (IData)(2U), 
-                                                            VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err))), 
-                                            VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy))) 
-                                & VL_LTES_III(32, VL_MULS_III(32, (IData)(2U), 
-                                                              VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err))), 
-                                              VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx))))) {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_err 
-                            = (0x000003ffU & (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err) 
-                                               + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)));
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_x 
-                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_sx)));
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_y 
-                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_sy)));
-                    } else if (VL_GTES_III(32, VL_MULS_III(32, (IData)(2U), 
-                                                           VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err))), 
-                                           VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)))) {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_err 
-                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy)));
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_x 
-                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_x) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_sx)));
-                    } else if (VL_LTES_III(32, VL_MULS_III(32, (IData)(2U), 
-                                                           VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err))), 
-                                           VL_EXTENDS_II(32,10, (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)))) {
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_err 
-                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_err) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx)));
-                        __Vdly__test_copper__DOT__dut__DOT__cmd_y 
-                            = (0x000003ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_y) 
-                                              + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_sy)));
-                    }
-                } else {
+            } else if ((0x11U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) {
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr 
+                    = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__sprrow_spr) 
+                        << 7U) | (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__sprrow_row) 
+                                   << 3U) | (IData)(vlSelfRef.test_copper__DOT__dut__DOT__sprrow_count)));
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_din 
+                    = vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data
+                    [vlSelfRef.test_copper__DOT__dut__DOT__sprrow_count];
+                if ((7U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__sprrow_count))) {
                     __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
+                } else {
+                    __Vdly__test_copper__DOT__dut__DOT__sprrow_count 
+                        = (7U & ((IData)(1U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__sprrow_count)));
                 }
             } else {
                 __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
@@ -6015,7 +5689,36 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                 __Vdly__test_copper__DOT__dut__DOT__copper_loading = 0U;
             }
         }
-        if (vlSelfRef.test_copper__DOT__cpu_we) {
+        if (((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count)) 
+             & (0x01e0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count)))) {
+            if ((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list) 
+                  != (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_active_list)) 
+                 & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_loading)))) {
+                vlSelfRef.test_copper__DOT__dut__DOT__copper_load_idx = 0U;
+                __Vdly__test_copper__DOT__dut__DOT__copper_active_list 
+                    = vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list;
+                __Vdly__test_copper__DOT__dut__DOT__copper_loading = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__copper_load_src 
+                    = vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list;
+            }
+        }
+        if (vlSelfRef.test_copper__DOT__dut__DOT__copper_fire) {
+            if ((1U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_reg))) {
+                vlSelfRef.test_copper__DOT__dut__DOT__bg_color 
+                    = (0x0000000fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_val));
+            } else if ((2U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_reg))) {
+                __Vdly__test_copper__DOT__dut__DOT__fg_color 
+                    = (0x0000000fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_val));
+            } else if ((0x0dU != (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_reg))) {
+                __VdlyVal__test_copper__DOT__dut__DOT__regs__v34 
+                    = vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_val;
+                __VdlyDim0__test_copper__DOT__dut__DOT__regs__v34 
+                    = (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_reg));
+                __VdlySet__test_copper__DOT__dut__DOT__regs__v34 = 1U;
+            }
+        }
+        if (((IData)(vlSelfRef.test_copper__DOT__cpu_we) 
+             & (IData)(vlSelfRef.test_copper__DOT__cpu_ce))) {
             if (vlSelfRef.test_copper__DOT__dut__DOT__vgc_reg_sel) {
                 if (((((((((0U == (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__cpu_addr))) 
                            | (1U == (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) 
@@ -6060,7 +5763,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                             | (0x10U == (0x0000001fU 
                                          & (IData)(vlSelfRef.test_copper__DOT__cpu_addr))))) {
                     if ((8U == (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
-                        __Vdly__test_copper__DOT__dut__DOT__gfx_color 
+                        vlSelfRef.test_copper__DOT__dut__DOT__gfx_color 
                             = (0x0000000fU & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata));
                     } else if ((0x0aU != (0x0000001fU 
                                           & (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
@@ -6085,81 +5788,40 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                         (0x0000007fU 
                                                          & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cursor_x) 
                                                             - (IData)(1U)));
-                                                }
-                                                vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hb8130fd5__0 = 0x20U;
-                                                if (VL_LIKELY((
-                                                               (0x07cfU 
-                                                                >= 
-                                                                ([&]() {
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__row 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__col 
-                                                                            = 
-                                                                            ((0U 
-                                                                              < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cursor_x))
-                                                                              ? 
-                                                                             (0x0000007fU 
-                                                                              & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cursor_x) 
-                                                                                - (IData)(1U)))
-                                                                              : 0U);
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr 
-                                                                            = 
-                                                                            (0x0000001fU 
-                                                                             & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__row) 
-                                                                                + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                                                                        if (
-                                                                            (0x19U 
-                                                                             <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr))) {
-                                                                            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr 
-                                                                                = 
-                                                                                (0x0000001fU 
-                                                                                & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr) 
-                                                                                - (IData)(0x19U)));
-                                                                        }
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__Vfuncout 
-                                                                            = 
-                                                                            (0x000007ffU 
-                                                                             & (((IData)(0x00000050U) 
-                                                                                * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr)) 
-                                                                                + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__col)));
-                                                                    }(), (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__Vfuncout)))))) {
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__row 
-                                                        = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__col 
+                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__col 
                                                         = 
-                                                        ((0U 
-                                                          < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cursor_x))
-                                                          ? 
-                                                         (0x0000007fU 
-                                                          & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cursor_x) 
-                                                             - (IData)(1U)))
-                                                          : 0U);
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__rr 
+                                                        (0x0000007fU 
+                                                         & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cursor_x) 
+                                                            - (IData)(1U)));
+                                                } else {
+                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__col = 0U;
+                                                }
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_din = 0x20U;
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we = 1U;
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__row 
+                                                    = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr 
+                                                    = 
+                                                    (0x0000001fU 
+                                                     & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__row) 
+                                                        + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
+                                                if (
+                                                    (0x19U 
+                                                     <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr))) {
+                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr 
                                                         = 
                                                         (0x0000001fU 
-                                                         & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__row) 
-                                                            + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                                                    if (
-                                                        (0x19U 
-                                                         <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__rr))) {
-                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__rr 
-                                                            = 
-                                                            (0x0000001fU 
-                                                             & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__rr) 
-                                                                - (IData)(0x19U)));
-                                                    }
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__Vfuncout 
-                                                        = 
-                                                        (0x000007ffU 
-                                                         & (((IData)(0x00000050U) 
-                                                             * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__rr)) 
-                                                            + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__col)));
-                                                    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v3 
-                                                        = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hb8130fd5__0;
-                                                    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v3 
-                                                        = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__115__Vfuncout;
-                                                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__char_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__char_ram__v3, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v3));
+                                                         & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr) 
+                                                            - (IData)(0x19U)));
                                                 }
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__Vfuncout 
+                                                    = 
+                                                    (0x000007ffU 
+                                                     & (((IData)(0x00000050U) 
+                                                         * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__rr)) 
+                                                        + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__col)));
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr 
+                                                    = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__112__Vfuncout;
                                             } else if (
                                                        (0x0aU 
                                                         == (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
@@ -6187,13 +5849,13 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                             } else if (
                                                        (0x0cU 
                                                         == (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
+                                                __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
                                                 __Vdly__test_copper__DOT__dut__DOT__cmd_cy = 0U;
                                                 __Vdly__test_copper__DOT__dut__DOT__cursor_x = 0U;
                                                 __Vdly__test_copper__DOT__dut__DOT__cursor_y = 0U;
                                                 __Vdly__test_copper__DOT__dut__DOT__scroll_offset = 0U;
-                                                __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
                                                 __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = 0xf0U;
+                                                __Vdly__test_copper__DOT__dut__DOT__cmd_op = 0xf0U;
                                             } else if (
                                                        (0x0dU 
                                                         == (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
@@ -6206,128 +5868,64 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                             } else if (
                                                        (0x20U 
                                                         <= (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h2b480197__0 
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__row 
+                                                    = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__col 
+                                                    = vlSelfRef.test_copper__DOT__dut__DOT__cursor_x;
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr 
+                                                    = 
+                                                    (0x0000001fU 
+                                                     & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__row) 
+                                                        + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_din 
                                                     = vlSelfRef.test_copper__DOT__cpu_wdata;
-                                                if (VL_LIKELY((
-                                                               (0x07cfU 
-                                                                >= 
-                                                                ([&]() {
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__row 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__col 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__cursor_x;
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__rr 
-                                                                            = 
-                                                                            (0x0000001fU 
-                                                                             & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__row) 
-                                                                                + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                                                                        if (
-                                                                            (0x19U 
-                                                                             <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__rr))) {
-                                                                            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__rr 
-                                                                                = 
-                                                                                (0x0000001fU 
-                                                                                & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__rr) 
-                                                                                - (IData)(0x19U)));
-                                                                        }
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__Vfuncout 
-                                                                            = 
-                                                                            (0x000007ffU 
-                                                                             & (((IData)(0x00000050U) 
-                                                                                * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__rr)) 
-                                                                                + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__col)));
-                                                                    }(), (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__116__Vfuncout)))))) {
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__row 
-                                                        = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__col 
-                                                        = vlSelfRef.test_copper__DOT__dut__DOT__cursor_x;
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__rr 
-                                                        = 
-                                                        (0x0000001fU 
-                                                         & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__row) 
-                                                            + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                                                    if (
-                                                        (0x19U 
-                                                         <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__rr))) {
-                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__rr 
-                                                            = 
-                                                            (0x0000001fU 
-                                                             & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__rr) 
-                                                                - (IData)(0x19U)));
-                                                    }
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__Vfuncout 
-                                                        = 
-                                                        (0x000007ffU 
-                                                         & (((IData)(0x00000050U) 
-                                                             * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__rr)) 
-                                                            + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__col)));
-                                                    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v4 
-                                                        = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h2b480197__0;
-                                                    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v4 
-                                                        = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__117__Vfuncout;
-                                                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__char_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__char_ram__v4, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v4));
-                                                }
-                                                vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h5d6d955d__0 
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we = 1U;
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_din 
                                                     = vlSelfRef.test_copper__DOT__dut__DOT__fg_color;
-                                                if (VL_LIKELY((
-                                                               (0x07cfU 
-                                                                >= 
-                                                                ([&]() {
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__row 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__col 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__cursor_x;
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__rr 
-                                                                            = 
-                                                                            (0x0000001fU 
-                                                                             & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__row) 
-                                                                                + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                                                                        if (
-                                                                            (0x19U 
-                                                                             <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__rr))) {
-                                                                            __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__rr 
-                                                                                = 
-                                                                                (0x0000001fU 
-                                                                                & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__rr) 
-                                                                                - (IData)(0x19U)));
-                                                                        }
-                                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__Vfuncout 
-                                                                            = 
-                                                                            (0x000007ffU 
-                                                                             & (((IData)(0x00000050U) 
-                                                                                * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__rr)) 
-                                                                                + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__col)));
-                                                                    }(), (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__118__Vfuncout)))))) {
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__row 
-                                                        = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__col 
-                                                        = vlSelfRef.test_copper__DOT__dut__DOT__cursor_x;
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__rr 
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we = 1U;
+                                                if (
+                                                    (0x19U 
+                                                     <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr))) {
+                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr 
                                                         = 
                                                         (0x0000001fU 
-                                                         & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__row) 
-                                                            + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
-                                                    if (
-                                                        (0x19U 
-                                                         <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__rr))) {
-                                                        __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__rr 
-                                                            = 
-                                                            (0x0000001fU 
-                                                             & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__rr) 
-                                                                - (IData)(0x19U)));
-                                                    }
-                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__Vfuncout 
-                                                        = 
-                                                        (0x000007ffU 
-                                                         & (((IData)(0x00000050U) 
-                                                             * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__rr)) 
-                                                            + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__col)));
-                                                    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v3 
-                                                        = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h5d6d955d__0;
-                                                    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v3 
-                                                        = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__119__Vfuncout;
-                                                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__color_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__color_ram__v3, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v3));
+                                                         & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr) 
+                                                            - (IData)(0x19U)));
                                                 }
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__Vfuncout 
+                                                    = 
+                                                    (0x000007ffU 
+                                                     & (((IData)(0x00000050U) 
+                                                         * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__rr)) 
+                                                        + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__col)));
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr 
+                                                    = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__113__Vfuncout;
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__row 
+                                                    = vlSelfRef.test_copper__DOT__dut__DOT__cursor_y;
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__col 
+                                                    = vlSelfRef.test_copper__DOT__dut__DOT__cursor_x;
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr 
+                                                    = 
+                                                    (0x0000001fU 
+                                                     & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__row) 
+                                                        + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset)));
+                                                if (
+                                                    (0x19U 
+                                                     <= (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr))) {
+                                                    __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr 
+                                                        = 
+                                                        (0x0000001fU 
+                                                         & ((IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr) 
+                                                            - (IData)(0x19U)));
+                                                }
+                                                __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__Vfuncout 
+                                                    = 
+                                                    (0x000007ffU 
+                                                     & (((IData)(0x00000050U) 
+                                                         * (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__rr)) 
+                                                        + (IData)(__Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__col)));
+                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr 
+                                                    = __Vfunc_test_copper__DOT__dut__DOT__screen_addr__114__Vfuncout;
                                                 if (
                                                     (0x4fU 
                                                      <= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cursor_x))) {
@@ -6363,31 +5961,20 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                             }
                                         } else if (
                                                    (1U 
-                                                    & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_busy)))) {
-                                            __Vdly__test_copper__DOT__dut__DOT__cmd_x 
+                                                    & ((~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_busy)) 
+                                                       & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_busy))))) {
+                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_x 
                                                 = (
                                                    (0x00000300U 
                                                     & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
                                                        << 8U)) 
                                                    | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
-                                            __Vdly__test_copper__DOT__dut__DOT__cmd_y 
+                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_y 
                                                 = (
                                                    (0x00000300U 
                                                     & (vlSelfRef.test_copper__DOT__dut__DOT__regs[20U] 
                                                        << 8U)) 
                                                    | vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]);
-                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_x2 
-                                                = (
-                                                   (0x00000300U 
-                                                    & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                       << 8U)) 
-                                                   | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]);
-                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_y2 
-                                                = (
-                                                   (0x00000300U 
-                                                    & (vlSelfRef.test_copper__DOT__dut__DOT__regs[24U] 
-                                                       << 8U)) 
-                                                   | vlSelfRef.test_copper__DOT__dut__DOT__regs[23U]);
                                             if ((1U 
                                                  & (~ 
                                                     ((IData)(vlSelfRef.test_copper__DOT__cpu_wdata) 
@@ -6455,39 +6042,38 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                     if (
                                                                         (1U 
                                                                          & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk17__DOT__i = 0U;
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__cursor_x = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__cursor_y = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__fg_color = 1U;
                                                                         vlSelfRef.test_copper__DOT__dut__DOT__bg_color = 6U;
-                                                                        __Vdly__test_copper__DOT__dut__DOT__gfx_color = 1U;
+                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gfx_color = 1U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__scroll_offset = 0U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__copper_enabled = 0U;
+                                                                        __Vdly__test_copper__DOT__dut__DOT__copper_enabled = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__copper_count = 0U;
-                                                                        __Vdly__test_copper__DOT__dut__DOT__copper_index = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__copper_target_list = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__copper_active_list = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__copper_pending_list = 0U;
                                                                         __Vdly__test_copper__DOT__dut__DOT__copper_loading = 0U;
                                                                         while (
-                                                                               VL_GTS_III(32, 0x00000080U, vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk17__DOT__i)) {
+                                                                               VL_GTS_III(32, 0x00000080U, vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i)) {
                                                                             __VdlyDim0__test_copper__DOT__dut__DOT__copper_list_count__v0 
                                                                                 = 
                                                                                 (0x0000007fU 
-                                                                                & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk17__DOT__i);
+                                                                                & vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i);
                                                                             vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__copper_list_count.enqueue(0U, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__copper_list_count__v0));
-                                                                            vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk17__DOT__i 
+                                                                            vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i 
                                                                                 = 
                                                                                 ((IData)(1U) 
-                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk17__DOT__i);
+                                                                                + vlSelfRef.test_copper__DOT__dut__DOT__unnamedblk14__DOT__i);
                                                                         }
                                                                     } else {
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__copper_enabled = 0U;
+                                                                        __Vdly__test_copper__DOT__dut__DOT__copper_enabled = 0U;
                                                                     }
                                                                 } else if (
                                                                            (1U 
                                                                             & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT__copper_enabled = 1U;
+                                                                    __Vdly__test_copper__DOT__dut__DOT__copper_enabled = 1U;
                                                                 } else {
                                                                     __VdlyDim0__test_copper__DOT__dut__DOT__copper_list_count__v1 
                                                                         = vlSelfRef.test_copper__DOT__dut__DOT__copper_target_list;
@@ -6496,7 +6082,6 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                         ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_target_list) 
                                                                          == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_active_list))) {
                                                                         __Vdly__test_copper__DOT__dut__DOT__copper_count = 0U;
-                                                                        __Vdly__test_copper__DOT__dut__DOT__copper_index = 0U;
                                                                     }
                                                                 }
                                                             } else if (
@@ -6594,93 +6179,64 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                 } else if (
                                                                            (0U 
                                                                             == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_ha13cfb6b__0 
-                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
-                                                                    if (VL_LIKELY((
-                                                                                (0x07cfU 
-                                                                                >= 
-                                                                                ((0x00000700U 
-                                                                                & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                                << 8U)) 
-                                                                                | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]))))) {
-                                                                        __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v5 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_ha13cfb6b__0;
-                                                                        __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v5 
-                                                                            = 
-                                                                            ((0x00000700U 
-                                                                              & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                                << 8U)) 
-                                                                             | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
-                                                                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__char_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__char_ram__v5, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v5));
-                                                                    }
-                                                                } else if (
-                                                                           (1U 
-                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hd4129f91__0 
-                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
-                                                                    if (VL_LIKELY((
-                                                                                (0x07cfU 
-                                                                                >= 
-                                                                                ((0x00000700U 
-                                                                                & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                                << 8U)) 
-                                                                                | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]))))) {
-                                                                        __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v4 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hd4129f91__0;
-                                                                        __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v4 
-                                                                            = 
-                                                                            ((0x00000700U 
-                                                                              & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                                << 8U)) 
-                                                                             | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
-                                                                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__color_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__color_ram__v4, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v4));
-                                                                    }
-                                                                } else if (
-                                                                           (2U 
-                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h45978041__0 
-                                                                        = 
-                                                                        (0x0000000fU 
-                                                                         & vlSelfRef.test_copper__DOT__dut__DOT__regs[20U]);
-                                                                    if (VL_LIKELY((
-                                                                                (0xf9ffU 
-                                                                                >= 
-                                                                                ((vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                                << 8U) 
-                                                                                | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]))))) {
-                                                                        __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v15 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h45978041__0;
-                                                                        __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v15 
-                                                                            = 
-                                                                            ((vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                              << 8U) 
-                                                                             | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
-                                                                        vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v15, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v15));
-                                                                    }
-                                                                } else if (
-                                                                           (3U 
-                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v3 
-                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
-                                                                    __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v3 
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr 
                                                                         = 
                                                                         ((0x00000700U 
                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
                                                                              << 8U)) 
                                                                          | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
-                                                                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v3, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v3));
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_din 
+                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
+                                                                } else if (
+                                                                           (1U 
+                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr 
+                                                                        = 
+                                                                        ((0x00000700U 
+                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                                                             << 8U)) 
+                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_din 
+                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
+                                                                } else if (
+                                                                           (2U 
+                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_addr 
+                                                                        = 
+                                                                        ((vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                                                          << 8U) 
+                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_we = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_din 
+                                                                        = 
+                                                                        (0x0000000fU 
+                                                                         & vlSelfRef.test_copper__DOT__dut__DOT__regs[20U]);
+                                                                } else if (
+                                                                           (3U 
+                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr 
+                                                                        = 
+                                                                        ((0x00000700U 
+                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                                                             << 8U)) 
+                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_din 
+                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
                                                                 } else if (
                                                                            (4U 
                                                                             == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0 
-                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
-                                                                    __VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0 
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_addr 
                                                                         = 
                                                                         ((0x00007f00U 
                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
                                                                              << 8U)) 
                                                                          | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0 = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_wdata 
+                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
                                                                 }
                                                             } else if (
                                                                        (1U 
@@ -6688,80 +6244,60 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                 if (
                                                                     (0U 
                                                                      == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__regs__v32 
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr 
                                                                         = 
-                                                                        ((0x07cfU 
-                                                                          >= 
-                                                                          ((0x00000700U 
-                                                                            & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                               << 8U)) 
-                                                                           | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]))
-                                                                          ? vlSelfRef.test_copper__DOT__dut__DOT__char_ram
-                                                                         [
-                                                                         ((0x00000700U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                              << 8U)) 
-                                                                          | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U])]
-                                                                          : 0U);
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__regs__v32 = 1U;
-                                                                } else if (
-                                                                           (1U 
-                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__regs__v33 
-                                                                        = 
-                                                                        ((0x07cfU 
-                                                                          >= 
-                                                                          ((0x00000700U 
-                                                                            & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                               << 8U)) 
-                                                                           | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]))
-                                                                          ? vlSelfRef.test_copper__DOT__dut__DOT__color_ram
-                                                                         [
-                                                                         ((0x00000700U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                              << 8U)) 
-                                                                          | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U])]
-                                                                          : 0U);
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__regs__v33 = 1U;
-                                                                } else if (
-                                                                           (2U 
-                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__regs__v34 
-                                                                        = 
-                                                                        ((0xf9ffU 
-                                                                          >= 
-                                                                          ((vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                            << 8U) 
-                                                                           | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]))
-                                                                          ? vlSelfRef.test_copper__DOT__dut__DOT__gfx_ram
-                                                                         [
-                                                                         ((vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                           << 8U) 
-                                                                          | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U])]
-                                                                          : 0U);
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__regs__v34 = 1U;
-                                                                } else if (
-                                                                           (3U 
-                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__regs__v35 
-                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__sprite_shapes
-                                                                        [
                                                                         ((0x00000700U 
                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
                                                                              << 8U)) 
-                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U])];
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__regs__v35 = 1U;
+                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                    __Vdly__test_copper__DOT__dut__DOT__memread_pending = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__memread_space = 0U;
+                                                                } else if (
+                                                                           (1U 
+                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr 
+                                                                        = 
+                                                                        ((0x00000700U 
+                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                                                             << 8U)) 
+                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                    __Vdly__test_copper__DOT__dut__DOT__memread_pending = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__memread_space = 1U;
+                                                                } else if (
+                                                                           (2U 
+                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_addr 
+                                                                        = 
+                                                                        ((vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                                                          << 8U) 
+                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_re = 1U;
+                                                                    __Vdly__test_copper__DOT__dut__DOT__memread_pending = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__memread_space = 2U;
+                                                                } else if (
+                                                                           (3U 
+                                                                            == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr 
+                                                                        = 
+                                                                        ((0x00000700U 
+                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                                                             << 8U)) 
+                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_re = 1U;
+                                                                    __Vdly__test_copper__DOT__dut__DOT__memread_pending = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__memread_space = 3U;
                                                                 } else if (
                                                                            (4U 
                                                                             == vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__regs__v36 
-                                                                        = vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data
-                                                                        [
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_addr 
+                                                                        = 
                                                                         ((0x00007f00U 
                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
                                                                              << 8U)) 
-                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U])];
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__regs__v36 = 1U;
+                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_re = 1U;
+                                                                    __Vdly__test_copper__DOT__dut__DOT__memread_pending = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__memread_space = 4U;
                                                                 }
                                                             } else if (
                                                                        (0x10U 
@@ -6860,31 +6396,32 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                       > vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]) 
                                                                      & (0x10U 
                                                                         > vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]))) {
-                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_x 
+                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
+                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_cy = 0U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_x 
                                                                         = 
                                                                         (0x0000000fU 
                                                                          & vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
-                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_cy = 0U;
-                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_y 
+                                                                    __Vdly__test_copper__DOT__dut__DOT__sprcopy_phase = 0U;
+                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
+                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_op = 0x13U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_y 
                                                                         = 
                                                                         (0x0000000fU 
                                                                          & vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
-                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
-                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = 0x13U;
                                                                 }
                                                             } else if (
                                                                        (0x10U 
                                                                         > vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) {
+                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
                                                                 __Vdly__test_copper__DOT__dut__DOT__cmd_cy = 0U;
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_x 
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_x 
                                                                     = 
                                                                     (0x0000001eU 
                                                                      & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
                                                                         << 1U));
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
                                                                 __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = 0x12U;
+                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_op = 0x12U;
                                                             }
                                                         } else if (
                                                                    (1U 
@@ -6894,101 +6431,34 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                   > vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]) 
                                                                  & (0x10U 
                                                                     > vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]))) {
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v4 
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__sprrow_spr 
+                                                                    = 
+                                                                    (0x0000000fU 
+                                                                     & vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
+                                                                __Vdly__test_copper__DOT__dut__DOT__sprrow_count = 0U;
+                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
+                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_op = 0x11U;
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__sprrow_row 
+                                                                    = 
+                                                                    (0x0000000fU 
+                                                                     & vlSelfRef.test_copper__DOT__dut__DOT__regs[18U]);
+                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v0 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v4 
-                                                                    = 
-                                                                    ((0x00000780U 
-                                                                      & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                         << 7U)) 
-                                                                     | (0x00000078U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                           << 3U)));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v4, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v4));
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v5 
+                                                                __VdlySet__test_copper__DOT__dut__DOT__sprrow_data__v0 = 1U;
+                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v1 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__regs[20U];
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v5 
-                                                                    = 
-                                                                    (1U 
-                                                                     | ((0x00000780U 
-                                                                         & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                            << 7U)) 
-                                                                        | (0x00000078U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                              << 3U))));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v5, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v5));
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v6 
+                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v2 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__regs[21U];
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v6 
-                                                                    = 
-                                                                    (2U 
-                                                                     | ((0x00000780U 
-                                                                         & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                            << 7U)) 
-                                                                        | (0x00000078U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                              << 3U))));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v6, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v6));
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v7 
+                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v3 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__regs[22U];
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v7 
-                                                                    = 
-                                                                    (3U 
-                                                                     | ((0x00000780U 
-                                                                         & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                            << 7U)) 
-                                                                        | (0x00000078U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                              << 3U))));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v7, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v7));
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v8 
+                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v4 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__regs[23U];
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v8 
-                                                                    = 
-                                                                    (4U 
-                                                                     | ((0x00000780U 
-                                                                         & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                            << 7U)) 
-                                                                        | (0x00000078U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                              << 3U))));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v8, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v8));
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v9 
+                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v5 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__regs[24U];
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v9 
-                                                                    = 
-                                                                    (5U 
-                                                                     | ((0x00000780U 
-                                                                         & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                            << 7U)) 
-                                                                        | (0x00000078U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                              << 3U))));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v9, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v9));
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v10 
+                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v6 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__regs[25U];
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v10 
-                                                                    = 
-                                                                    (6U 
-                                                                     | ((0x00000780U 
-                                                                         & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                            << 7U)) 
-                                                                        | (0x00000078U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                              << 3U))));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v10, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v10));
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v11 
+                                                                __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v7 
                                                                     = vlSelfRef.test_copper__DOT__dut__DOT__regs[26U];
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v11 
-                                                                    = 
-                                                                    (7U 
-                                                                     | ((0x00000780U 
-                                                                         & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                            << 7U)) 
-                                                                        | (0x00000078U 
-                                                                           & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                              << 3U))));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v11, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v11));
                                                             }
                                                         } else if (
                                                                    (((0x10U 
@@ -6997,42 +6467,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                         > vlSelfRef.test_copper__DOT__dut__DOT__regs[18U])) 
                                                                     & (0x10U 
                                                                        > vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))) {
-                                                            __VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v12 
-                                                                = 
-                                                                ((1U 
-                                                                  & vlSelfRef.test_copper__DOT__dut__DOT__regs[18U])
-                                                                  ? 
-                                                                 ((0x000000f0U 
-                                                                   & vlSelfRef.test_copper__DOT__dut__DOT__sprite_shapes
-                                                                   [
-                                                                   ((0x00000780U 
-                                                                     & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                        << 7U)) 
-                                                                    | ((0x00000078U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                           << 3U)) 
-                                                                       | (7U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                             >> 1U))))]) 
-                                                                  | (0x0000000fU 
-                                                                     & vlSelfRef.test_copper__DOT__dut__DOT__regs[20U]))
-                                                                  : 
-                                                                 ((0x000000f0U 
-                                                                   & (vlSelfRef.test_copper__DOT__dut__DOT__regs[20U] 
-                                                                      << 4U)) 
-                                                                  | (0x0000000fU 
-                                                                     & vlSelfRef.test_copper__DOT__dut__DOT__sprite_shapes
-                                                                     [
-                                                                     ((0x00000780U 
-                                                                       & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
-                                                                          << 7U)) 
-                                                                      | ((0x00000078U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                             << 3U)) 
-                                                                         | (7U 
-                                                                            & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                               >> 1U))))])));
-                                                            __VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v12 
+                                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr 
                                                                 = 
                                                                 ((0x00000780U 
                                                                   & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
@@ -7043,7 +6478,9 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                     | (7U 
                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
                                                                           >> 1U))));
-                                                            vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__sprite_shapes__v12, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__sprite_shapes__v12));
+                                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_re = 1U;
+                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
+                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_op = 0x10U;
                                                         }
                                                     } else if (
                                                                (8U 
@@ -7059,103 +6496,18 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                                 if (
                                                                     (1U 
                                                                      & (~ (IData)(vlSelfRef.test_copper__DOT__cpu_wdata)))) {
-                                                                    if (
-                                                                        (0U 
-                                                                         < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__fio_name_len))) {
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_pen_x 
-                                                                            = 
-                                                                            ((0x00000100U 
-                                                                              & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                                << 8U)) 
-                                                                             | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_start_y 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
-                                                                        __Vdly__test_copper__DOT__dut__DOT__gt_char_idx = 0U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_char_len 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__fio_name_len;
-                                                                        __Vdly__test_copper__DOT__dut__DOT__gt_font_row = 0U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_font_col = 0U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_x = 0U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_scale_y = 0U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_cur_char 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__fio_name[0U];
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_font_byte 
-                                                                            = vlSelfRef.test_copper__DOT__dut__DOT__font_rom
-                                                                            [
-                                                                            (vlSelfRef.test_copper__DOT__dut__DOT__fio_name[0U] 
-                                                                             << 3U)];
-                                                                        __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = 0x0aU;
-                                                                        vlSelfRef.test_copper__DOT__dut__DOT__gt_scale 
-                                                                            = 
-                                                                            ((1U 
-                                                                              > vlSelfRef.test_copper__DOT__dut__DOT__regs[22U])
-                                                                              ? 1U
-                                                                              : vlSelfRef.test_copper__DOT__dut__DOT__regs[22U]);
-                                                                    }
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_valid = 1U;
+                                                                    vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code 
+                                                                        = vlSelfRef.test_copper__DOT__cpu_wdata;
                                                                 }
                                                             } else if (
                                                                        (1U 
                                                                         & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_x 
-                                                                    = 
-                                                                    ((0x00000300U 
-                                                                      & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                         << 8U)) 
-                                                                     | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_y 
-                                                                    = 
-                                                                    ((0x00000300U 
-                                                                      & (vlSelfRef.test_copper__DOT__dut__DOT__regs[20U] 
-                                                                         << 8U)) 
-                                                                     | vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]);
-                                                                if (
-                                                                    ((0x0140U 
-                                                                      > 
-                                                                      ((0x00000100U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                           << 8U)) 
-                                                                       | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) 
-                                                                     & (0xc8U 
-                                                                        > vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))) {
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT__fill_target 
-                                                                        = 
-                                                                        ((0xf9ffU 
-                                                                          >= 
-                                                                          (0x0000ffffU 
-                                                                           & (((IData)(0x00000140U) 
-                                                                               * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
-                                                                              + 
-                                                                              ((0x00000100U 
-                                                                                & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                                << 8U)) 
-                                                                               | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]))))
-                                                                          ? vlSelfRef.test_copper__DOT__dut__DOT__gfx_ram
-                                                                         [
-                                                                         (0x0000ffffU 
-                                                                          & (((IData)(0x00000140U) 
-                                                                              * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
-                                                                             + 
-                                                                             ((0x00000100U 
-                                                                               & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                                << 8U)) 
-                                                                              | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])))]
-                                                                          : 0U);
-                                                                    __Vdly__test_copper__DOT__dut__DOT__fill_sp = 1U;
-                                                                    __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                                    vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = 9U;
-                                                                    __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v4 
-                                                                        = 
-                                                                        ((vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                          << 9U) 
-                                                                         | ((0x00000100U 
-                                                                             & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                                << 8U)) 
-                                                                            | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]));
-                                                                    __VdlySet__test_copper__DOT__dut__DOT__fill_stack__v4 = 1U;
-                                                                }
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_valid = 1U;
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code 
+                                                                    = vlSelfRef.test_copper__DOT__cpu_wdata;
                                                             } else {
-                                                                __Vdly__test_copper__DOT__dut__DOT__gfx_color 
+                                                                vlSelfRef.test_copper__DOT__dut__DOT__gfx_color 
                                                                     = 
                                                                     (0x0000000fU 
                                                                      & vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
@@ -7164,263 +6516,21 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                                                     } else if (
                                                                (4U 
                                                                 & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                        if (
-                                                            (2U 
-                                                             & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                            if (
-                                                                (1U 
-                                                                 & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_cy = 0U;
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_cx = 0U;
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = 7U;
-                                                            } else {
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                                                                    = 
-                                                                    ((0x00000100U 
-                                                                      & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                         << 8U)) 
-                                                                     | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_op 
-                                                                    = vlSelfRef.test_copper__DOT__cpu_wdata;
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
-                                                                    = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
-                                                            }
-                                                        } else if (
-                                                                   (1U 
-                                                                    & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_cx 
-                                                                = 
-                                                                ((0x00000100U 
-                                                                  & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                     << 8U)) 
-                                                                 | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_op 
-                                                                = vlSelfRef.test_copper__DOT__cpu_wdata;
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_cy 
-                                                                = vlSelfRef.test_copper__DOT__dut__DOT__regs[19U];
-                                                        } else {
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_x 
-                                                                = 
-                                                                ((0x00000300U 
-                                                                  & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                     << 8U)) 
-                                                                 | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_y 
-                                                                = 
-                                                                ((0x00000300U 
-                                                                  & (vlSelfRef.test_copper__DOT__dut__DOT__regs[20U] 
-                                                                     << 8U)) 
-                                                                 | vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]);
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_dx = 0U;
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = 4U;
-                                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_x2 
-                                                                = 
-                                                                ((0x00000300U 
-                                                                  & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                     << 8U)) 
-                                                                 | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]);
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_dy 
-                                                                = 
-                                                                ((0x00000300U 
-                                                                  & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                     << 8U)) 
-                                                                 | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]);
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_err 
-                                                                = 
-                                                                (0x000003ffU 
-                                                                 & ((IData)(1U) 
-                                                                    - 
-                                                                    ((0x00000300U 
-                                                                      & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                         << 8U)) 
-                                                                     | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U])));
-                                                        }
+                                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_valid = 1U;
+                                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code 
+                                                            = vlSelfRef.test_copper__DOT__cpu_wdata;
                                                     } else if (
                                                                (2U 
                                                                 & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                        if (
-                                                            (1U 
-                                                             & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                            if (
-                                                                (((0x00000100U 
-                                                                   & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                      << 8U)) 
-                                                                  | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]) 
-                                                                 >= 
-                                                                 ((0x00000100U 
-                                                                   & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                      << 8U)) 
-                                                                  | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]))) {
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_dx 
-                                                                    = 
-                                                                    (0x000003ffU 
-                                                                     & (((0x00000100U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                             << 8U)) 
-                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]) 
-                                                                        - 
-                                                                        ((0x00000100U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                             << 8U)) 
-                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])));
-                                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_sx = 1U;
-                                                            } else {
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_dx 
-                                                                    = 
-                                                                    (0x000003ffU 
-                                                                     & (((0x00000100U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                             << 8U)) 
-                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]) 
-                                                                        - 
-                                                                        ((0x00000100U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                             << 8U)) 
-                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U])));
-                                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_sx = 0x03ffU;
-                                                            }
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 1U;
-                                                            vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = 3U;
-                                                            if (
-                                                                (vlSelfRef.test_copper__DOT__dut__DOT__regs[23U] 
-                                                                 >= vlSelfRef.test_copper__DOT__dut__DOT__regs[19U])) {
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_dy 
-                                                                    = 
-                                                                    (0x000003ffU 
-                                                                     & (- 
-                                                                        (vlSelfRef.test_copper__DOT__dut__DOT__regs[23U] 
-                                                                         - vlSelfRef.test_copper__DOT__dut__DOT__regs[19U])));
-                                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_sy = 1U;
-                                                            } else {
-                                                                __Vdly__test_copper__DOT__dut__DOT__cmd_dy 
-                                                                    = 
-                                                                    (0x000003ffU 
-                                                                     & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                        - vlSelfRef.test_copper__DOT__dut__DOT__regs[23U]));
-                                                                vlSelfRef.test_copper__DOT__dut__DOT__cmd_sy = 0x03ffU;
-                                                            }
-                                                            __Vdly__test_copper__DOT__dut__DOT__cmd_err 
-                                                                = 
-                                                                (0x000003ffU 
-                                                                 & (((((0x00000100U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                           << 8U)) 
-                                                                       | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]) 
-                                                                      >= 
-                                                                      ((0x00000100U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                           << 8U)) 
-                                                                       | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]))
-                                                                      ? 
-                                                                     (((0x00000100U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                           << 8U)) 
-                                                                       | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]) 
-                                                                      - 
-                                                                      ((0x00000100U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                           << 8U)) 
-                                                                       | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]))
-                                                                      : 
-                                                                     (((0x00000100U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                           << 8U)) 
-                                                                       | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]) 
-                                                                      - 
-                                                                      ((0x00000100U 
-                                                                        & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
-                                                                           << 8U)) 
-                                                                       | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]))) 
-                                                                    + 
-                                                                    ((vlSelfRef.test_copper__DOT__dut__DOT__regs[23U] 
-                                                                      >= vlSelfRef.test_copper__DOT__dut__DOT__regs[19U])
-                                                                      ? 
-                                                                     (- 
-                                                                      (vlSelfRef.test_copper__DOT__dut__DOT__regs[23U] 
-                                                                       - vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))
-                                                                      : 
-                                                                     (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
-                                                                      - vlSelfRef.test_copper__DOT__dut__DOT__regs[23U]))));
-                                                        } else if (
-                                                                   ((0x0140U 
-                                                                     > 
-                                                                     ((0x00000100U 
-                                                                       & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                          << 8U)) 
-                                                                      | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) 
-                                                                    & (0xc8U 
-                                                                       > vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))) {
-                                                            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hde0d773d__1 = 0U;
-                                                            if (VL_LIKELY((
-                                                                           (0xf9ffU 
-                                                                            >= 
-                                                                            (0x0000ffffU 
-                                                                             & (((IData)(0x00000140U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
-                                                                                + 
-                                                                                ((0x00000100U 
-                                                                                & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                                << 8U)) 
-                                                                                | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]))))))) {
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v16 
-                                                                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hde0d773d__1;
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v16 
-                                                                    = 
-                                                                    (0x0000ffffU 
-                                                                     & (((IData)(0x00000140U) 
-                                                                         * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
-                                                                        + 
-                                                                        ((0x00000100U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                             << 8U)) 
-                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v16, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v16));
-                                                            }
-                                                        }
+                                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_valid = 1U;
+                                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code 
+                                                            = vlSelfRef.test_copper__DOT__cpu_wdata;
                                                     } else if (
                                                                (1U 
                                                                 & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata))) {
-                                                        if (
-                                                            ((0x0140U 
-                                                              > 
-                                                              ((0x00000100U 
-                                                                & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                   << 8U)) 
-                                                               | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])) 
-                                                             & (0xc8U 
-                                                                > vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]))) {
-                                                            vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hde0d773d__0 
-                                                                = vlSelfRef.test_copper__DOT__dut__DOT__gfx_color;
-                                                            if (VL_LIKELY((
-                                                                           (0xf9ffU 
-                                                                            >= 
-                                                                            (0x0000ffffU 
-                                                                             & (((IData)(0x00000140U) 
-                                                                                * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
-                                                                                + 
-                                                                                ((0x00000100U 
-                                                                                & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                                << 8U)) 
-                                                                                | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]))))))) {
-                                                                __VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v17 
-                                                                    = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hde0d773d__0;
-                                                                __VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v17 
-                                                                    = 
-                                                                    (0x0000ffffU 
-                                                                     & (((IData)(0x00000140U) 
-                                                                         * vlSelfRef.test_copper__DOT__dut__DOT__regs[19U]) 
-                                                                        + 
-                                                                        ((0x00000100U 
-                                                                          & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
-                                                                             << 8U)) 
-                                                                         | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U])));
-                                                                vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__gfx_ram__v17, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__gfx_ram__v17));
-                                                            }
-                                                        }
+                                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_valid = 1U;
+                                                        vlSelfRef.test_copper__DOT__dut__DOT__artist_cmd_code 
+                                                            = vlSelfRef.test_copper__DOT__cpu_wdata;
                                                     }
                                                 }
                                             }
@@ -7431,66 +6541,33 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                         }
                     }
                 } else {
-                    __VdlyVal__test_copper__DOT__dut__DOT__regs__v37 
+                    __VdlyVal__test_copper__DOT__dut__DOT__regs__v35 
                         = vlSelfRef.test_copper__DOT__cpu_wdata;
-                    __VdlyDim0__test_copper__DOT__dut__DOT__regs__v37 
+                    __VdlyDim0__test_copper__DOT__dut__DOT__regs__v35 
                         = (0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__cpu_addr));
-                    __VdlySet__test_copper__DOT__dut__DOT__regs__v37 = 1U;
+                    __VdlySet__test_copper__DOT__dut__DOT__regs__v35 = 1U;
                 }
             }
             if (vlSelfRef.test_copper__DOT__dut__DOT__char_ram_sel) {
-                vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h87c37a99__0 
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr 
+                    = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                      - (IData)(0x0200U)));
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_din 
                     = vlSelfRef.test_copper__DOT__cpu_wdata;
-                if (VL_LIKELY(((0x07cfU >= (0x000007ffU 
-                                            & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
-                                               - (IData)(0x0200U))))))) {
-                    __VdlyVal__test_copper__DOT__dut__DOT__char_ram__v6 
-                        = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_h87c37a99__0;
-                    __VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v6 
-                        = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
-                                          - (IData)(0x0200U)));
-                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__char_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__char_ram__v6, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__char_ram__v6));
-                }
-            }
-            if ((0xb9a3U == (IData)(vlSelfRef.test_copper__DOT__cpu_addr))) {
-                vlSelfRef.test_copper__DOT__dut__DOT__fio_name_len 
-                    = (0x0000003fU & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata));
-            }
-            if (((0xb9b0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
-                 & (0xb9efU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
-                __VdlyVal__test_copper__DOT__dut__DOT__fio_name__v0 
-                    = vlSelfRef.test_copper__DOT__cpu_wdata;
-                __VdlyDim0__test_copper__DOT__dut__DOT__fio_name__v0 
-                    = (0x0000003fU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
-                                      - (IData)(0x30U)));
-                __VdlySet__test_copper__DOT__dut__DOT__fio_name__v0 = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we = 1U;
             }
             if (vlSelfRef.test_copper__DOT__dut__DOT__color_ram_sel) {
-                vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hced7a248__0 
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr 
+                    = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                      - (IData)(0x01d0U)));
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_din 
                     = vlSelfRef.test_copper__DOT__cpu_wdata;
-                if (VL_LIKELY(((0x07cfU >= (0x000007ffU 
-                                            & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
-                                               - (IData)(0x01d0U))))))) {
-                    __VdlyVal__test_copper__DOT__dut__DOT__color_ram__v5 
-                        = vlSelfRef.test_copper__DOT__dut__DOT____Vlvbound_hced7a248__0;
-                    __VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v5 
-                        = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
-                                          - (IData)(0x01d0U)));
-                    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__color_ram.enqueue(__VdlyVal__test_copper__DOT__dut__DOT__color_ram__v5, (IData)(__VdlyDim0__test_copper__DOT__dut__DOT__color_ram__v5));
-                }
+                vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we = 1U;
             }
-            if (((0xa040U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
-                 & (0xa0bfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
+            if (vlSelfRef.test_copper__DOT__dut__DOT__spr_reg_sel) {
                 if ((4U & (IData)(vlSelfRef.test_copper__DOT__cpu_addr))) {
                     if ((2U & (IData)(vlSelfRef.test_copper__DOT__cpu_addr))) {
-                        if ((1U & (IData)(vlSelfRef.test_copper__DOT__cpu_addr))) {
-                            __VdlyVal__test_copper__DOT__dut__DOT__spr_trans__v16 
-                                = (0x0000000fU & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata));
-                            __VdlyDim0__test_copper__DOT__dut__DOT__spr_trans__v16 
-                                = (0x0000000fU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
-                                                  >> 3U));
-                            __VdlySet__test_copper__DOT__dut__DOT__spr_trans__v16 = 1U;
-                        } else {
+                        if ((1U & (~ (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
                             __VdlyVal__test_copper__DOT__dut__DOT__spr_pri__v17 
                                 = (3U & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata));
                             __VdlyDim0__test_copper__DOT__dut__DOT__spr_pri__v17 
@@ -7517,13 +6594,6 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                         __VdlyDim0__test_copper__DOT__dut__DOT__spr_enable__v18 
                             = (0x0000000fU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
                                               >> 3U));
-                    } else {
-                        __VdlyVal__test_copper__DOT__dut__DOT__spr_shape__v16 
-                            = (0x0000000fU & (IData)(vlSelfRef.test_copper__DOT__cpu_wdata));
-                        __VdlyDim0__test_copper__DOT__dut__DOT__spr_shape__v16 
-                            = (0x0000000fU & ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
-                                              >> 3U));
-                        __VdlySet__test_copper__DOT__dut__DOT__spr_shape__v16 = 1U;
                     }
                 } else if ((2U & (IData)(vlSelfRef.test_copper__DOT__cpu_addr))) {
                     if ((1U & (~ (IData)(vlSelfRef.test_copper__DOT__cpu_addr)))) {
@@ -7551,25 +6621,50 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
                 }
             }
         }
+        if ((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_busy) 
+              & (0x10U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_op))) 
+             & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__memread_pending)))) {
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr 
+                = ((0x00000780U & (vlSelfRef.test_copper__DOT__dut__DOT__regs[17U] 
+                                   << 7U)) | ((0x00000078U 
+                                               & (vlSelfRef.test_copper__DOT__dut__DOT__regs[19U] 
+                                                  << 3U)) 
+                                              | (7U 
+                                                 & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
+                                                    >> 1U))));
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we = 1U;
+            __Vdly__test_copper__DOT__dut__DOT__cmd_busy = 0U;
+            vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_din 
+                = ((1U & vlSelfRef.test_copper__DOT__dut__DOT__regs[18U])
+                    ? ((0x000000f0U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__spr_a_dout)) 
+                       | (0x0000000fU & vlSelfRef.test_copper__DOT__dut__DOT__regs[20U]))
+                    : ((0x000000f0U & (vlSelfRef.test_copper__DOT__dut__DOT__regs[20U] 
+                                       << 4U)) | (0x0000000fU 
+                                                  & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__spr_a_dout))));
+        }
     }
-    vlSelfRef.test_copper__DOT__dut__DOT__tile_reg_sel 
-        = ((0xa0c0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
-           & (0xa0dfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+    vlSelfRef.test_copper__DOT__dut__DOT__font_a_addr 
+        = ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_font_re)
+            ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__artist_font_addr)
+            : 0U);
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_addr 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_inst__DOT__fs_b_addr;
+    if (__VdlySet__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem[__VdlyDim0__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__artist_inst__DOT__fill_stack_mem__DOT__mem__v0;
+    }
     vlSelfRef.test_copper__DOT__dut__DOT__vgc_reg_sel 
         = ((0xa000U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
            & (0xa01fU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
-    vlSelfRef.test_copper__DOT__dut__DOT__char_ram_sel 
-        = ((0xaa00U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
-           & (0xb1cfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
-    vlSelfRef.test_copper__DOT__dut__DOT__color_ram_sel 
-        = ((0xb1d0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
-           & (0xb99fU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+    vlSelfRef.test_copper__DOT__dut__DOT__spr_reg_sel 
+        = ((0xa040U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+           & (0xa0bfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
     vlSelfRef.test_copper__DOT__dut__DOT__cursor_x 
         = __Vdly__test_copper__DOT__dut__DOT__cursor_x;
     vlSelfRef.test_copper__DOT__dut__DOT__cursor_y 
         = __Vdly__test_copper__DOT__dut__DOT__cursor_y;
-    vlSelfRef.test_copper__DOT__dut__DOT__gfx_color 
-        = __Vdly__test_copper__DOT__dut__DOT__gfx_color;
+    vlSelfRef.test_copper__DOT__dut__DOT__fg_color 
+        = __Vdly__test_copper__DOT__dut__DOT__fg_color;
     vlSelfRef.test_copper__DOT__dut__DOT__scroll_pending 
         = __Vdly__test_copper__DOT__dut__DOT__scroll_pending;
     vlSelfRef.test_copper__DOT__dut__DOT__scroll_col 
@@ -7578,71 +6673,84 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         = __Vdly__test_copper__DOT__dut__DOT__cmd_busy;
     vlSelfRef.test_copper__DOT__dut__DOT__copper_target_list 
         = __Vdly__test_copper__DOT__dut__DOT__copper_target_list;
-    vlSelfRef.test_copper__DOT__dut__DOT__fill_sp = __Vdly__test_copper__DOT__dut__DOT__fill_sp;
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list 
+        = __Vdly__test_copper__DOT__dut__DOT__copper_pending_list;
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_loading 
+        = __Vdly__test_copper__DOT__dut__DOT__copper_loading;
+    vlSelfRef.test_copper__DOT__dut__DOT__sprrow_count 
+        = __Vdly__test_copper__DOT__dut__DOT__sprrow_count;
+    vlSelfRef.test_copper__DOT__dut__DOT__sprcopy_phase 
+        = __Vdly__test_copper__DOT__dut__DOT__sprcopy_phase;
+    vlSelfRef.test_copper__DOT__dut__DOT__memread_pending 
+        = __Vdly__test_copper__DOT__dut__DOT__memread_pending;
     vlSelfRef.test_copper__DOT__dut__DOT__cmd_cx = __Vdly__test_copper__DOT__dut__DOT__cmd_cx;
     vlSelfRef.test_copper__DOT__dut__DOT__cmd_cy = __Vdly__test_copper__DOT__dut__DOT__cmd_cy;
-    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__sprite_shapes.commit(vlSelfRef.test_copper__DOT__dut__DOT__sprite_shapes);
-    vlSelfRef.test_copper__DOT__dut__DOT__gt_font_row 
-        = __Vdly__test_copper__DOT__dut__DOT__gt_font_row;
-    vlSelfRef.test_copper__DOT__dut__DOT__gt_char_idx 
-        = __Vdly__test_copper__DOT__dut__DOT__gt_char_idx;
-    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__gfx_ram.commit(vlSelfRef.test_copper__DOT__dut__DOT__gfx_ram);
-    vlSelfRef.test_copper__DOT__dut__DOT__cmd_dx = __Vdly__test_copper__DOT__dut__DOT__cmd_dx;
-    vlSelfRef.test_copper__DOT__dut__DOT__cmd_err = __Vdly__test_copper__DOT__dut__DOT__cmd_err;
-    vlSelfRef.test_copper__DOT__dut__DOT__cmd_dy = __Vdly__test_copper__DOT__dut__DOT__cmd_dy;
-    vlSelfRef.test_copper__DOT__dut__DOT__cmd_x = __Vdly__test_copper__DOT__dut__DOT__cmd_x;
-    vlSelfRef.test_copper__DOT__dut__DOT__cmd_y = __Vdly__test_copper__DOT__dut__DOT__cmd_y;
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_active_list 
+        = __Vdly__test_copper__DOT__dut__DOT__copper_active_list;
+    vlSelfRef.test_copper__DOT__dut__DOT__cmd_op = __Vdly__test_copper__DOT__dut__DOT__cmd_op;
+    vlSelfRef.test_copper__DOT__dut__DOT__artist_busy 
+        = __Vdly__test_copper__DOT__dut__DOT__artist_busy;
     vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__copper_list_count.commit(vlSelfRef.test_copper__DOT__dut__DOT__copper_list_count);
-    vlSelfRef.test_copper__DOT__dut__DOT__copper_count 
-        = __Vdly__test_copper__DOT__dut__DOT__copper_count;
-    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__char_ram.commit(vlSelfRef.test_copper__DOT__dut__DOT__char_ram);
-    vlSelfRef.__VdlyCommitQueuetest_copper__DOT__dut__DOT__color_ram.commit(vlSelfRef.test_copper__DOT__dut__DOT__color_ram);
     if (vlSelfRef.test_copper__DOT__rst) {
-        __Vdly__test_copper__DOT__dut__DOT__copper_active_list = 0U;
-    } else if (((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count)) 
-                & (0x01e0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count)))) {
-        if ((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list) 
-              != (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_active_list)) 
-             & (~ (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_loading)))) {
-            __Vdly__test_copper__DOT__dut__DOT__copper_active_list 
-                = vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list;
-            __Vdly__test_copper__DOT__dut__DOT__copper_loading = 1U;
-            vlSelfRef.test_copper__DOT__dut__DOT__copper_load_idx = 0U;
-            vlSelfRef.test_copper__DOT__dut__DOT__copper_load_src 
-                = vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list;
+        __Vdly__test_copper__DOT__dut__DOT__copper_index = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__copper_fire = 0U;
+    } else {
+        vlSelfRef.test_copper__DOT__dut__DOT__copper_fire = 0U;
+        if (((0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count)) 
+             & (0x01e0U == (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count)))) {
+            __Vdly__test_copper__DOT__dut__DOT__copper_index = 0U;
+        }
+        if (((((IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_enabled) 
+               & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__in_text_area)) 
+              & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index) 
+                 < (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_count))) 
+             & ((0x0001ffffU & (((IData)(0x00000140U) 
+                                 * (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gfx_y)) 
+                                + (0x000001ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__h_count) 
+                                                  >> 1U)))) 
+                >= vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos
+                [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))]))) {
+            vlSelfRef.test_copper__DOT__dut__DOT__copper_fire = 1U;
+            vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_reg 
+                = vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg
+                [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))];
+            vlSelfRef.test_copper__DOT__dut__DOT__copper_fire_val 
+                = vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val
+                [(0x0000001fU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index))];
+            __Vdly__test_copper__DOT__dut__DOT__copper_index 
+                = (0x000001ffU & ((IData)(1U) + (IData)(vlSelfRef.test_copper__DOT__dut__DOT__copper_index)));
         }
     }
-    vlSelfRef.test_copper__DOT__dut__DOT__fg_color 
-        = __Vdly__test_copper__DOT__dut__DOT__fg_color;
-    vlSelfRef.test_copper__DOT__dut__DOT__copper_index 
-        = __Vdly__test_copper__DOT__dut__DOT__copper_index;
-    if (__VdlySet__test_copper__DOT__dut__DOT__fio_name__v0) {
-        vlSelfRef.test_copper__DOT__dut__DOT__fio_name[__VdlyDim0__test_copper__DOT__dut__DOT__fio_name__v0] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__fio_name__v0;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_blt_rdata 
+        = ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__blt_tile_rd_pending)
+            ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_dout_a)
+            : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__blt_tile_rd_latch));
+    if (__VdlySet__test_copper__DOT__dut__DOT__sprrow_data__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data[0U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v0;
+        vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data[1U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v1;
+        vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data[2U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v2;
+        vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data[3U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v3;
+        vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data[4U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v4;
+        vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data[5U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v5;
+        vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data[6U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v6;
+        vlSelfRef.test_copper__DOT__dut__DOT__sprrow_data[7U] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprrow_data__v7;
     }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0) {
-        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v0;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1) {
-        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data[__VdlyDim0__test_copper__DOT__dut__DOT__tile_inst__DOT__tile_data__v1] = 0U;
-    }
+    vlSelfRef.test_copper__DOT__dut__DOT__char_ram_sel 
+        = ((0xaa00U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+           & (0xb1cfU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
+    vlSelfRef.test_copper__DOT__dut__DOT__color_ram_sel 
+        = ((0xb1d0U <= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)) 
+           & (0xb99fU >= (IData)(vlSelfRef.test_copper__DOT__cpu_addr)));
     vlSelfRef.test_copper__DOT__dut__DOT__scroll_offset 
         = __Vdly__test_copper__DOT__dut__DOT__scroll_offset;
-    if (__VdlySet__test_copper__DOT__dut__DOT__fill_stack__v0) {
-        vlSelfRef.test_copper__DOT__dut__DOT__fill_stack[__VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v0] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v0;
-        vlSelfRef.test_copper__DOT__dut__DOT__fill_stack[__VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v1] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v1;
-        vlSelfRef.test_copper__DOT__dut__DOT__fill_stack[__VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v2] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v2;
-        vlSelfRef.test_copper__DOT__dut__DOT__fill_stack[__VdlyDim0__test_copper__DOT__dut__DOT__fill_stack__v3] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v3;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__fill_stack__v4) {
-        vlSelfRef.test_copper__DOT__dut__DOT__fill_stack[0U] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__fill_stack__v4;
-    }
     if (__VdlySet__test_copper__DOT__dut__DOT__copper_list_pos__v0) {
         vlSelfRef.test_copper__DOT__dut__DOT__copper_list_pos[__VdlyDim0__test_copper__DOT__dut__DOT__copper_list_pos__v0] 
             = __VdlyVal__test_copper__DOT__dut__DOT__copper_list_pos__v0;
@@ -7652,63 +6760,23 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
             = __VdlyVal__test_copper__DOT__dut__DOT__copper_list_val__v0;
     }
     if (__VdlySet__test_copper__DOT__dut__DOT__copper_pos__v0) {
-        vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[__VdlyDim0__test_copper__DOT__dut__DOT__copper_pos__v0] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__copper_pos__v0;
         vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[__VdlyDim0__test_copper__DOT__dut__DOT__copper_reg__v0] 
             = __VdlyVal__test_copper__DOT__dut__DOT__copper_reg__v0;
         vlSelfRef.test_copper__DOT__dut__DOT__copper_val[__VdlyDim0__test_copper__DOT__dut__DOT__copper_val__v0] 
             = __VdlyVal__test_copper__DOT__dut__DOT__copper_val__v0;
+        vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[__VdlyDim0__test_copper__DOT__dut__DOT__copper_pos__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__copper_pos__v0;
     }
     if (__VdlySet__test_copper__DOT__dut__DOT__copper_pos__v1) {
-        vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[__VdlyDim0__test_copper__DOT__dut__DOT__copper_pos__v1] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__copper_pos__v1;
         vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[__VdlyDim0__test_copper__DOT__dut__DOT__copper_reg__v1] 
             = __VdlyVal__test_copper__DOT__dut__DOT__copper_reg__v1;
         vlSelfRef.test_copper__DOT__dut__DOT__copper_val[__VdlyDim0__test_copper__DOT__dut__DOT__copper_val__v1] 
             = __VdlyVal__test_copper__DOT__dut__DOT__copper_val__v1;
+        vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[__VdlyDim0__test_copper__DOT__dut__DOT__copper_pos__v1] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__copper_pos__v1;
     }
     if (__VdlySet__test_copper__DOT__dut__DOT__regs__v0) {
-        test_copper__DOT__dut__DOT__spr_shape[0U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[0U] = 0U;
         test_copper__DOT__dut__DOT__spr_y[0U] = 0U;
-        test_copper__DOT__dut__DOT__spr_flip_h[0U] = 0U;
-        test_copper__DOT__dut__DOT__spr_flip_v[0U] = 0U;
-        test_copper__DOT__dut__DOT__spr_pri[0U] = 0U;
-        test_copper__DOT__dut__DOT__spr_enable[0U] = 0U;
-        test_copper__DOT__dut__DOT__spr_x[0U] = 0U;
-        vlSelfRef.test_copper__DOT__dut__DOT__regs[0U] = 0U;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__regs__v1) {
-        test_copper__DOT__dut__DOT__spr_shape[1U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[2U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[3U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[4U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[5U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[6U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[7U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[8U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[9U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[10U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[11U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[12U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[13U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[14U] = 0U;
-        test_copper__DOT__dut__DOT__spr_shape[15U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[1U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[2U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[3U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[4U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[5U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[6U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[7U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[8U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[9U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[10U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[11U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[12U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[13U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[14U] = 0U;
-        test_copper__DOT__dut__DOT__spr_trans[15U] = 0U;
         test_copper__DOT__dut__DOT__spr_y[1U] = 0U;
         test_copper__DOT__dut__DOT__spr_y[2U] = 0U;
         test_copper__DOT__dut__DOT__spr_y[3U] = 0U;
@@ -7724,6 +6792,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         test_copper__DOT__dut__DOT__spr_y[13U] = 0U;
         test_copper__DOT__dut__DOT__spr_y[14U] = 0U;
         test_copper__DOT__dut__DOT__spr_y[15U] = 0U;
+        test_copper__DOT__dut__DOT__spr_flip_h[0U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_h[1U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_h[2U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_h[3U] = 0U;
@@ -7739,6 +6808,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         test_copper__DOT__dut__DOT__spr_flip_h[13U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_h[14U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_h[15U] = 0U;
+        test_copper__DOT__dut__DOT__spr_flip_v[0U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_v[1U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_v[2U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_v[3U] = 0U;
@@ -7754,6 +6824,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         test_copper__DOT__dut__DOT__spr_flip_v[13U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_v[14U] = 0U;
         test_copper__DOT__dut__DOT__spr_flip_v[15U] = 0U;
+        test_copper__DOT__dut__DOT__spr_pri[0U] = 0U;
         test_copper__DOT__dut__DOT__spr_pri[1U] = 0U;
         test_copper__DOT__dut__DOT__spr_pri[2U] = 0U;
         test_copper__DOT__dut__DOT__spr_pri[3U] = 0U;
@@ -7769,6 +6840,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         test_copper__DOT__dut__DOT__spr_pri[13U] = 0U;
         test_copper__DOT__dut__DOT__spr_pri[14U] = 0U;
         test_copper__DOT__dut__DOT__spr_pri[15U] = 0U;
+        test_copper__DOT__dut__DOT__spr_enable[0U] = 0U;
         test_copper__DOT__dut__DOT__spr_enable[1U] = 0U;
         test_copper__DOT__dut__DOT__spr_enable[2U] = 0U;
         test_copper__DOT__dut__DOT__spr_enable[3U] = 0U;
@@ -7784,6 +6856,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         test_copper__DOT__dut__DOT__spr_enable[13U] = 0U;
         test_copper__DOT__dut__DOT__spr_enable[14U] = 0U;
         test_copper__DOT__dut__DOT__spr_enable[15U] = 0U;
+        test_copper__DOT__dut__DOT__spr_x[0U] = 0U;
         test_copper__DOT__dut__DOT__spr_x[1U] = 0U;
         test_copper__DOT__dut__DOT__spr_x[2U] = 0U;
         test_copper__DOT__dut__DOT__spr_x[3U] = 0U;
@@ -7799,6 +6872,7 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         test_copper__DOT__dut__DOT__spr_x[13U] = 0U;
         test_copper__DOT__dut__DOT__spr_x[14U] = 0U;
         test_copper__DOT__dut__DOT__spr_x[15U] = 0U;
+        vlSelfRef.test_copper__DOT__dut__DOT__regs[0U] = 0U;
         vlSelfRef.test_copper__DOT__dut__DOT__regs[1U] = 0U;
         vlSelfRef.test_copper__DOT__dut__DOT__regs[2U] = 0U;
         vlSelfRef.test_copper__DOT__dut__DOT__regs[3U] = 0U;
@@ -7830,14 +6904,6 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
         vlSelfRef.test_copper__DOT__dut__DOT__regs[29U] = 0U;
         vlSelfRef.test_copper__DOT__dut__DOT__regs[30U] = 0U;
         vlSelfRef.test_copper__DOT__dut__DOT__regs[31U] = 0U;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__spr_shape__v16) {
-        test_copper__DOT__dut__DOT__spr_shape[__VdlyDim0__test_copper__DOT__dut__DOT__spr_shape__v16] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__spr_shape__v16;
-    }
-    if (__VdlySet__test_copper__DOT__dut__DOT__spr_trans__v16) {
-        test_copper__DOT__dut__DOT__spr_trans[__VdlyDim0__test_copper__DOT__dut__DOT__spr_trans__v16] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__spr_trans__v16;
     }
     if (__VdlySet__test_copper__DOT__dut__DOT__spr_x__v16) {
         test_copper__DOT__dut__DOT__spr_y[__VdlyDim0__test_copper__DOT__dut__DOT__spr_y__v16] 
@@ -7899,31 +6965,896 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
             = __VdlyVal__test_copper__DOT__dut__DOT__regs__v33;
     }
     if (__VdlySet__test_copper__DOT__dut__DOT__regs__v34) {
-        vlSelfRef.test_copper__DOT__dut__DOT__regs[20U] 
+        vlSelfRef.test_copper__DOT__dut__DOT__regs[__VdlyDim0__test_copper__DOT__dut__DOT__regs__v34] 
             = __VdlyVal__test_copper__DOT__dut__DOT__regs__v34;
     }
     if (__VdlySet__test_copper__DOT__dut__DOT__regs__v35) {
-        vlSelfRef.test_copper__DOT__dut__DOT__regs[20U] 
+        vlSelfRef.test_copper__DOT__dut__DOT__regs[__VdlyDim0__test_copper__DOT__dut__DOT__regs__v35] 
             = __VdlyVal__test_copper__DOT__dut__DOT__regs__v35;
     }
-    if (__VdlySet__test_copper__DOT__dut__DOT__regs__v36) {
-        vlSelfRef.test_copper__DOT__dut__DOT__regs[20U] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__regs__v36;
+    vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_we = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_din = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__spr_a_dout 
+        = vlSelfRef.test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem
+        [vlSelfRef.test_copper__DOT__dut__DOT__spr_a_addr];
+    vlSelfRef.test_copper__DOT__dut__DOT__color_a_dout 
+        = ((0x07cfU >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__color_a_addr))
+            ? vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem
+           [vlSelfRef.test_copper__DOT__dut__DOT__color_a_addr]
+            : 0U);
+    vlSelfRef.test_copper__DOT__dut__DOT__color_a_addr 
+        = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_we)
+                           ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr)
+                           : (((IData)(__VdfgRegularize_hebeb780c_0_0) 
+                               & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__color_ram_sel))
+                               ? ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                  - (IData)(0x01d0U))
+                               : ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_color_sel)
+                                   ? ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_addr) 
+                                      - (IData)(0x01d0U))
+                                   : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_color_addr)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__char_a_dout 
+        = ((0x07cfU >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__char_a_addr))
+            ? vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem
+           [vlSelfRef.test_copper__DOT__dut__DOT__char_a_addr]
+            : 0U);
+    vlSelfRef.test_copper__DOT__dut__DOT__char_a_addr 
+        = (0x000007ffU & ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_we)
+                           ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr)
+                           : (((IData)(__VdfgRegularize_hebeb780c_0_0) 
+                               & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__char_ram_sel))
+                               ? ((IData)(vlSelfRef.test_copper__DOT__cpu_addr) 
+                                  - (IData)(0x0200U))
+                               : ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_char_sel)
+                                   ? ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__dbg_addr) 
+                                      - (IData)(0x0200U))
+                                   : (IData)(vlSelfRef.test_copper__DOT__dut__DOT__cmd_char_addr)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_dout 
+        = ((0xf9ffU >= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr))
+            ? vlSelfRef.test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem
+           [vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr]
+            : 0U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[0U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[0U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[2U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[1U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[0U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[0U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[0U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[3U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[1U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[1U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[5U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[4U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[3U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[1U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[1U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[7U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[6U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[2U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[2U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[8U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[7U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[6U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[2U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[2U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[11U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[10U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[9U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[3U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[3U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[14U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[13U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[12U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[3U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[3U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[15U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[4U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[4U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[17U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[16U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[15U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[4U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[4U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[19U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[18U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[5U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[5U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[20U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[19U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[18U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[5U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[5U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[23U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[22U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[21U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[6U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[6U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[26U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[25U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[24U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[6U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[6U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[27U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[7U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[7U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[29U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[28U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[27U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[7U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[7U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[31U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg[30U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[0U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[0U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[2U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[1U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__copper_val[0U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[0U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[0U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[3U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[1U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[1U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[5U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val[4U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[3U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[1U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[1U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[7U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[6U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[2U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[2U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val[8U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[7U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[6U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[2U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[2U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[11U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[10U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[9U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[3U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[3U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[14U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[13U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__copper_val[12U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[3U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[3U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[15U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[4U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[4U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[17U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val[16U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[15U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[4U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[4U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[19U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[18U] 
+                                                 << 0x00000010U))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[5U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[5U]) 
+           | (0x0000ffffU & ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val[20U]) 
+                             | ((0x0000ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[19U] 
+                                                >> 8U)) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[18U] 
+                                   >> 0x00000010U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[5U] 
+        = ((0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[5U]) 
+           | (0xffffff00U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[23U] 
+                              << 0x00000018U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[22U] 
+                                                  << 0x00000010U) 
+                                                 | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[21U] 
+                                                    << 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[6U] 
+        = ((0xff000000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[6U]) 
+           | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[26U] 
+               << 0x00000010U) | ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[25U] 
+                                   << 8U) | vlSelfRef.test_copper__DOT__dut__DOT__copper_val[24U])));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[6U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[6U]) 
+           | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[27U] 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[7U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[7U]) 
+           | (0x00ffffffU & ((0x00ffff00U & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[29U] 
+                                             << 8U)) 
+                             | ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val[28U]) 
+                                | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[27U] 
+                                   >> 8U)))));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[7U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[7U]) 
+           | (0xffff0000U & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_val[31U] 
+                              << 0x00000018U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_val[30U] 
+                                                 << 0x00000010U))));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[0U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[0U] 
+        = ((0xfffe0000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[0U]) 
+           | test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0);
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[1U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[0U] 
+        = ((0x0001ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[0U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000011U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U] 
+        = ((0xfffffffcU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 0x0000000fU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[2U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U] 
+        = ((0xfff80003U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 2U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[3U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U] 
+        = ((0x0007ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000013U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U] 
+        = ((0xfffffff0U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 0x0000000dU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[4U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U] 
+        = ((0xffe0000fU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 4U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[5U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U] 
+        = ((0x001fffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000015U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U] 
+        = ((0xffffffc0U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 0x0000000bU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[6U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U] 
+        = ((0xff80003fU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 6U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[7U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U] 
+        = ((0x007fffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000017U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U] 
+        = ((0xffffff00U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 9U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[8U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U] 
+        = ((0xfe0000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 8U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[9U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U] 
+        = ((0x01ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000019U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U] 
+        = ((0xfffffc00U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 7U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[10U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U] 
+        = ((0xf80003ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000000aU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[11U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U] 
+        = ((0x07ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000001bU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U] 
+        = ((0xfffff000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 5U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[12U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U] 
+        = ((0xe0000fffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000000cU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[13U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U] 
+        = ((0x1fffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000001dU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U] 
+        = ((0xffffc000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 3U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[14U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U] 
+        = ((0x80003fffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000000eU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[15U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U] 
+        = ((0x7fffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000001fU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[8U] 
+        = ((0xffff0000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[8U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 1U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[16U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[8U] 
+        = ((0x0000ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[8U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U] 
+        = ((0xfffffffeU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 0x00000010U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[17U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U] 
+        = ((0xfffc0001U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 1U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[18U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U] 
+        = ((0x0003ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000012U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U] 
+        = ((0xfffffff8U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 0x0000000eU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[19U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U] 
+        = ((0xfff00007U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 3U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[20U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U] 
+        = ((0x000fffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000014U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U] 
+        = ((0xffffffe0U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 0x0000000cU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[21U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U] 
+        = ((0xffc0001fU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 5U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[22U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U] 
+        = ((0x003fffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000016U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U] 
+        = ((0xffffff80U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 0x0000000aU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[23U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U] 
+        = ((0xff00007fU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 7U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[24U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U] 
+        = ((0x00ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x00000018U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U] 
+        = ((0xfffffe00U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 8U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[25U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U] 
+        = ((0xfc0001ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 9U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[26U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U] 
+        = ((0x03ffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000001aU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U] 
+        = ((0xfffff800U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 6U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[27U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U] 
+        = ((0xf00007ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000000bU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[28U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U] 
+        = ((0x0fffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000001cU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U] 
+        = ((0xffffe000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 4U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[29U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U] 
+        = ((0xc0001fffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000000dU));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[30U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U] 
+        = ((0x3fffffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000001eU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[16U] 
+        = ((0xffff8000U & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[16U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              >> 2U));
+    test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+        = vlSelfRef.test_copper__DOT__dut__DOT__copper_pos[31U];
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[16U] 
+        = ((0x00007fffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[16U]) 
+           | (test_copper__DOT__dut__DOT____Vlvbound_h3e9a9ec3__0 
+              << 0x0000000fU));
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_we_a = 0U;
+    test_copper__DOT__dut__DOT__tile_blt_wdata = ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we)
+                                                   ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_wdata)
+                                                   : 0U);
+    test_copper__DOT__dut__DOT__tile_blt_addr = (((IData)(vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_re) 
+                                                  | (IData)(vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we))
+                                                  ? (IData)(vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_addr)
+                                                  : 0U);
+    vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x0 
+        = ((0x00000100U & (vlSelfRef.test_copper__DOT__dut__DOT__regs[18U] 
+                           << 8U)) | vlSelfRef.test_copper__DOT__dut__DOT__regs[17U]);
+    vlSelfRef.test_copper__DOT__dut__DOT____Vcellinp__artist_inst__cmd_x1 
+        = ((0x00000100U & (vlSelfRef.test_copper__DOT__dut__DOT__regs[22U] 
+                           << 8U)) | vlSelfRef.test_copper__DOT__dut__DOT__regs[21U]);
+    if (__VdlySet__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem[__VdlyDim0__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__sprite_inst__DOT__spr_mem__DOT__mem__v0;
     }
-    if (__VdlySet__test_copper__DOT__dut__DOT__regs__v37) {
-        vlSelfRef.test_copper__DOT__dut__DOT__regs[__VdlyDim0__test_copper__DOT__dut__DOT__regs__v37] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__regs__v37;
+    vlSelfRef.test_copper__DOT__dut__DOT__spr_a_addr = 0U;
+    if (vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_we) {
+        vlSelfRef.test_copper__DOT__dut__DOT__spr_a_addr 
+            = vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr;
+    } else if (vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_re) {
+        vlSelfRef.test_copper__DOT__dut__DOT__spr_a_addr 
+            = vlSelfRef.test_copper__DOT__dut__DOT__cmd_spr_addr;
     }
-    if (__VdlySet__test_copper__DOT__dut__DOT__regs__v38) {
-        vlSelfRef.test_copper__DOT__dut__DOT__regs[__VdlyDim0__test_copper__DOT__dut__DOT__regs__v38] 
-            = __VdlyVal__test_copper__DOT__dut__DOT__regs__v38;
+    if (__VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem[__VdlyDim0__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__text_inst__DOT__color_mem__DOT__mem__v0;
     }
-    vlSelfRef.test_copper__DOT__dut__DOT__copper_pending_list 
-        = __Vdly__test_copper__DOT__dut__DOT__copper_pending_list;
-    vlSelfRef.test_copper__DOT__dut__DOT__copper_active_list 
-        = __Vdly__test_copper__DOT__dut__DOT__copper_active_list;
-    vlSelfRef.test_copper__DOT__dut__DOT__copper_loading 
-        = __Vdly__test_copper__DOT__dut__DOT__copper_loading;
+    if (__VdlySet__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem[__VdlyDim0__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__text_inst__DOT__char_mem__DOT__mem__v0;
+    }
+    if (__VdlySet__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0) {
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem[__VdlyDim0__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0] 
+            = __VdlyVal__test_copper__DOT__dut__DOT__gfx_inst__DOT__gfx_mem__DOT__mem__v0;
+    }
+    vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr = 0U;
+    if (vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_we) {
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_we = 1U;
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_din 
+            = vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_wdata;
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr 
+            = vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_addr;
+    } else if (vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_we) {
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_we = 1U;
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_din 
+            = vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_din;
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr 
+            = vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_addr;
+    } else if (vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_re) {
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr 
+            = vlSelfRef.test_copper__DOT__dut__DOT__artist_gfx_raddr;
+    } else if (vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_re) {
+        vlSelfRef.test_copper__DOT__dut__DOT__gfx_a_addr 
+            = vlSelfRef.test_copper__DOT__dut__DOT__cmd_gfx_addr;
+    }
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_din_a = 0U;
+    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a = 0U;
+    if ((0x00000010U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+        if (vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we) {
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_we_a = 1U;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_din_a 
+                = test_copper__DOT__dut__DOT__tile_blt_wdata;
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a 
+                = test_copper__DOT__dut__DOT__tile_blt_addr;
+        } else if (vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_re) {
+            vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a 
+                = test_copper__DOT__dut__DOT__tile_blt_addr;
+        }
+    } else if ((8U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+        if ((4U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+            if ((2U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                    if (vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_we_a = 1U;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_din_a 
+                            = test_copper__DOT__dut__DOT__tile_blt_wdata;
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a 
+                            = test_copper__DOT__dut__DOT__tile_blt_addr;
+                    } else if (vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_re) {
+                        vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a 
+                            = test_copper__DOT__dut__DOT__tile_blt_addr;
+                    }
+                }
+            }
+        }
+    } else if ((1U & (~ ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state) 
+                         >> 2U)))) {
+        if ((1U & (~ ((IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state) 
+                      >> 1U)))) {
+            if ((1U & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_state))) {
+                if (vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_data_valid) {
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_we_a = 1U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_din_a = 0U;
+                    vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a 
+                        = (0x00007fffU & (IData)(vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__dma_dst));
+                }
+            } else if (vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_we) {
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_we_a = 1U;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_din_a 
+                    = test_copper__DOT__dut__DOT__tile_blt_wdata;
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a 
+                    = test_copper__DOT__dut__DOT__tile_blt_addr;
+            } else if (vlSelfRef.test_copper__DOT__dut__DOT__vgc_tile_re) {
+                vlSelfRef.test_copper__DOT__dut__DOT__tile_inst__DOT__td_addr_a 
+                    = test_copper__DOT__dut__DOT__tile_blt_addr;
+            }
+        }
+    }
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_enabled 
+        = __Vdly__test_copper__DOT__dut__DOT__copper_enabled;
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[0U] 
+        = (0x0001ffffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[0U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[1U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U] 
+                           << 0x0000000fU) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[0U] 
+                                              >> 0x00000011U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[2U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U] 
+                          >> 2U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[3U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U] 
+                           << 0x0000000dU) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[1U] 
+                                              >> 0x00000013U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[4U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U] 
+                          >> 4U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[5U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U] 
+                           << 0x0000000bU) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[2U] 
+                                              >> 0x00000015U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[6U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U] 
+                          >> 6U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[7U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U] 
+                           << 9U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[3U] 
+                                     >> 0x00000017U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[8U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[9U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U] 
+                           << 7U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[4U] 
+                                     >> 0x00000019U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[10U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U] 
+                          >> 0x0000000aU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[11U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U] 
+                           << 5U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[5U] 
+                                     >> 0x0000001bU)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[12U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U] 
+                          >> 0x0000000cU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[13U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U] 
+                           << 3U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[6U] 
+                                     >> 0x0000001dU)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[14U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U] 
+                          >> 0x0000000eU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[15U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[8U] 
+                           << 1U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[7U] 
+                                     >> 0x0000001fU)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[16U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U] 
+                           << 0x00000010U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[8U] 
+                                              >> 0x00000010U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[17U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U] 
+                          >> 1U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[18U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U] 
+                           << 0x0000000eU) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[9U] 
+                                              >> 0x00000012U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[19U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U] 
+                          >> 3U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[20U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U] 
+                           << 0x0000000cU) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[10U] 
+                                              >> 0x00000014U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[21U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U] 
+                          >> 5U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[22U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U] 
+                           << 0x0000000aU) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[11U] 
+                                              >> 0x00000016U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[23U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U] 
+                          >> 7U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[24U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U] 
+                           << 8U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[12U] 
+                                     >> 0x00000018U)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[25U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U] 
+                          >> 9U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[26U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U] 
+                           << 6U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[13U] 
+                                     >> 0x0000001aU)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[27U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U] 
+                          >> 0x0000000bU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[28U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U] 
+                           << 4U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[14U] 
+                                     >> 0x0000001cU)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[29U] 
+        = (0x0001ffffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U] 
+                          >> 0x0000000dU));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[30U] 
+        = (0x0001ffffU & ((vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[16U] 
+                           << 2U) | (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[15U] 
+                                     >> 0x0000001eU)));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_pos[31U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_pos_flat[16U] 
+           >> 0x0000000fU);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[0U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[0U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[1U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[0U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[2U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[0U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[3U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[0U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[4U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[1U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[5U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[1U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[6U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[1U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[7U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[1U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[8U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[2U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[9U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[2U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[10U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[2U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[11U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[2U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[12U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[3U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[13U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[3U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[14U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[3U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[15U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[3U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[16U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[4U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[17U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[4U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[18U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[4U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[19U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[4U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[20U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[5U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[21U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[5U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[22U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[5U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[23U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[5U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[24U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[6U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[25U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[6U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[26U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[6U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[27U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[6U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[28U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[7U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[29U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[7U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[30U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[7U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_reg[31U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_reg_flat[7U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[0U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[0U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[1U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[0U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[2U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[0U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[3U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[0U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[4U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[1U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[5U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[1U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[6U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[1U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[7U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[1U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[8U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[2U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[9U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[2U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[10U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[2U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[11U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[2U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[12U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[3U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[13U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[3U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[14U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[3U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[15U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[3U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[16U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[4U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[17U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[4U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[18U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[4U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[19U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[4U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[20U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[5U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[21U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[5U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[22U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[5U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[23U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[5U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[24U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[6U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[25U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[6U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[26U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[6U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[27U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[6U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[28U] 
+        = (0x000000ffU & vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[7U]);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[29U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[7U] 
+                          >> 8U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[30U] 
+        = (0x000000ffU & (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[7U] 
+                          >> 0x00000010U));
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_inst__DOT__copper_val[31U] 
+        = (vlSelfRef.test_copper__DOT__dut__DOT__copper_val_flat[7U] 
+           >> 0x00000018U);
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_index 
+        = __Vdly__test_copper__DOT__dut__DOT__copper_index;
+    vlSelfRef.test_copper__DOT__dut__DOT__copper_count 
+        = __Vdly__test_copper__DOT__dut__DOT__copper_count;
     vlSelfRef.test_copper__DOT__dut__DOT__h_count = __Vdly__test_copper__DOT__dut__DOT__h_count;
     vlSelfRef.test_copper__DOT__dut__DOT__v_count = __Vdly__test_copper__DOT__dut__DOT__v_count;
     test_copper__DOT__dut__DOT__visible = ((0x0280U 
@@ -7952,277 +7883,3 @@ void Vtest_copper___024root___nba_sequent__TOP__0(Vtest_copper___024root* vlSelf
            & ((0x0028U <= (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count)) 
               & (0x01b8U > (IData)(vlSelfRef.test_copper__DOT__dut__DOT__v_count))));
 }
-
-void Vtest_copper___024root___eval_nba(Vtest_copper___024root* vlSelf) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___eval_nba\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-    // Body
-    if ((1ULL & vlSelfRef.__VnbaTriggered[0U])) {
-        Vtest_copper___024root___nba_sequent__TOP__0(vlSelf);
-    }
-}
-
-void Vtest_copper___024root___timing_ready(Vtest_copper___024root* vlSelf) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___timing_ready\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-    // Body
-    if ((1ULL & vlSelfRef.__VactTriggered[0U])) {
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready("@(posedge test_copper.clk)");
-    }
-}
-
-void Vtest_copper___024root___timing_resume(Vtest_copper___024root* vlSelf) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___timing_resume\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-    // Body
-    vlSelfRef.__VtrigSched_hbd4d80cf__0.moveToResumeQueue(
-                                                          "@(posedge test_copper.clk)");
-    vlSelfRef.__VtrigSched_hbd4d80cf__0.resume("@(posedge test_copper.clk)");
-    if ((2ULL & vlSelfRef.__VactTriggered[0U])) {
-        vlSelfRef.__VdlySched.resume();
-    }
-}
-
-void Vtest_copper___024root___trigger_orInto__act_vec_vec(VlUnpacked<QData/*63:0*/, 1> &out, const VlUnpacked<QData/*63:0*/, 1> &in) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___trigger_orInto__act_vec_vec\n"); );
-    // Locals
-    IData/*31:0*/ n;
-    // Body
-    n = 0U;
-    do {
-        out[n] = (out[n] | in[n]);
-        n = ((IData)(1U) + n);
-    } while ((0U >= n));
-}
-
-#ifdef VL_DEBUG
-VL_ATTR_COLD void Vtest_copper___024root___dump_triggers__act(const VlUnpacked<QData/*63:0*/, 1> &triggers, const std::string &tag);
-#endif  // VL_DEBUG
-
-bool Vtest_copper___024root___eval_phase__act(Vtest_copper___024root* vlSelf) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___eval_phase__act\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-    // Locals
-    CData/*0:0*/ __VactExecute;
-    // Body
-    Vtest_copper___024root___eval_triggers_vec__act(vlSelf);
-    Vtest_copper___024root___timing_ready(vlSelf);
-    Vtest_copper___024root___trigger_orInto__act_vec_vec(vlSelfRef.__VactTriggered, vlSelfRef.__VactTriggeredAcc);
-#ifdef VL_DEBUG
-    if (VL_UNLIKELY(vlSymsp->_vm_contextp__->debug())) {
-        Vtest_copper___024root___dump_triggers__act(vlSelfRef.__VactTriggered, "act"s);
-    }
-#endif
-    Vtest_copper___024root___trigger_orInto__act_vec_vec(vlSelfRef.__VnbaTriggered, vlSelfRef.__VactTriggered);
-    __VactExecute = Vtest_copper___024root___trigger_anySet__act(vlSelfRef.__VactTriggered);
-    if (__VactExecute) {
-        vlSelfRef.__VactTriggeredAcc.fill(0ULL);
-        Vtest_copper___024root___timing_resume(vlSelf);
-        Vtest_copper___024root___eval_act(vlSelf);
-    }
-    return (__VactExecute);
-}
-
-bool Vtest_copper___024root___eval_phase__inact(Vtest_copper___024root* vlSelf) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___eval_phase__inact\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-    // Locals
-    CData/*0:0*/ __VinactExecute;
-    // Body
-    __VinactExecute = vlSelfRef.__VdlySched.awaitingZeroDelay();
-    if (__VinactExecute) {
-        VL_FATAL_MT("test_copper.sv", 6, "", "ZERODLY: Design Verilated with '--no-sched-zero-delay', but #0 delay executed at runtime");
-    }
-    return (__VinactExecute);
-}
-
-void Vtest_copper___024root___trigger_clear__act(VlUnpacked<QData/*63:0*/, 1> &out) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___trigger_clear__act\n"); );
-    // Locals
-    IData/*31:0*/ n;
-    // Body
-    n = 0U;
-    do {
-        out[n] = 0ULL;
-        n = ((IData)(1U) + n);
-    } while ((1U > n));
-}
-
-bool Vtest_copper___024root___eval_phase__nba(Vtest_copper___024root* vlSelf) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___eval_phase__nba\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-    // Locals
-    CData/*0:0*/ __VnbaExecute;
-    // Body
-    __VnbaExecute = Vtest_copper___024root___trigger_anySet__act(vlSelfRef.__VnbaTriggered);
-    if (__VnbaExecute) {
-        Vtest_copper___024root___eval_nba(vlSelf);
-        Vtest_copper___024root___trigger_clear__act(vlSelfRef.__VnbaTriggered);
-    }
-    return (__VnbaExecute);
-}
-
-void Vtest_copper___024root___eval(Vtest_copper___024root* vlSelf) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___eval\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-    // Locals
-    IData/*31:0*/ __VnbaIterCount;
-    // Body
-    __VnbaIterCount = 0U;
-    do {
-        if (VL_UNLIKELY(((0x00000064U < __VnbaIterCount)))) {
-#ifdef VL_DEBUG
-            Vtest_copper___024root___dump_triggers__act(vlSelfRef.__VnbaTriggered, "nba"s);
-#endif
-            VL_FATAL_MT("test_copper.sv", 6, "", "DIDNOTCONVERGE: NBA region did not converge after '--converge-limit' of 100 tries");
-        }
-        __VnbaIterCount = ((IData)(1U) + __VnbaIterCount);
-        vlSelfRef.__VinactIterCount = 0U;
-        do {
-            if (VL_UNLIKELY(((0x00000064U < vlSelfRef.__VinactIterCount)))) {
-                VL_FATAL_MT("test_copper.sv", 6, "", "DIDNOTCONVERGE: Inactive region did not converge after '--converge-limit' of 100 tries");
-            }
-            vlSelfRef.__VinactIterCount = ((IData)(1U) 
-                                           + vlSelfRef.__VinactIterCount);
-            vlSelfRef.__VactIterCount = 0U;
-            do {
-                if (VL_UNLIKELY(((0x00000064U < vlSelfRef.__VactIterCount)))) {
-#ifdef VL_DEBUG
-                    Vtest_copper___024root___dump_triggers__act(vlSelfRef.__VactTriggered, "act"s);
-#endif
-                    VL_FATAL_MT("test_copper.sv", 6, "", "DIDNOTCONVERGE: Active region did not converge after '--converge-limit' of 100 tries");
-                }
-                vlSelfRef.__VactIterCount = ((IData)(1U) 
-                                             + vlSelfRef.__VactIterCount);
-                vlSelfRef.__VactPhaseResult = Vtest_copper___024root___eval_phase__act(vlSelf);
-            } while (vlSelfRef.__VactPhaseResult);
-            vlSelfRef.__VinactPhaseResult = Vtest_copper___024root___eval_phase__inact(vlSelf);
-        } while (vlSelfRef.__VinactPhaseResult);
-        vlSelfRef.__VnbaPhaseResult = Vtest_copper___024root___eval_phase__nba(vlSelf);
-    } while (vlSelfRef.__VnbaPhaseResult);
-}
-
-void Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0(Vtest_copper___024root* vlSelf, const char* __VeventDescription) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root____VbeforeTrig_hbd4d80cf__0\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-    // Locals
-    VlUnpacked<QData/*63:0*/, 1> __VTmp;
-    // Body
-    __VTmp[0U] = (QData)((IData)(((IData)(vlSelfRef.test_copper__DOT__clk) 
-                                  & (~ (IData)(vlSelfRef.__Vtrigprevexpr___TOP__test_copper__DOT__clk__0)))));
-    vlSelfRef.__Vtrigprevexpr___TOP__test_copper__DOT__clk__0 
-        = vlSelfRef.test_copper__DOT__clk;
-    if ((1ULL & __VTmp[0U])) {
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-        vlSelfRef.__VtrigSched_hbd4d80cf__0.ready(__VeventDescription);
-    }
-    vlSelfRef.__VactTriggeredAcc[0U] = (vlSelfRef.__VactTriggeredAcc[0U] 
-                                        | __VTmp[0U]);
-}
-
-#ifdef VL_DEBUG
-void Vtest_copper___024root___eval_debug_assertions(Vtest_copper___024root* vlSelf) {
-    VL_DEBUG_IF(VL_DBG_MSGF("+    Vtest_copper___024root___eval_debug_assertions\n"); );
-    Vtest_copper__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
-    auto& vlSelfRef = std::ref(*vlSelf).get();
-}
-#endif  // VL_DEBUG

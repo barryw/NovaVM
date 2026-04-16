@@ -38,8 +38,6 @@ VM_CLASSES_SLOW += \
   Vtop___024root__0__Slow \
   Vtop_sid_chip__Slow \
   Vtop_sid_chip__0__Slow \
-  Vtop_sid_chip__1__Slow \
-  Vtop_sid_chip__2__Slow \
 
 # Generated support classes, fast-path, compile with highest optimization
 VM_SUPPORT_FAST += \

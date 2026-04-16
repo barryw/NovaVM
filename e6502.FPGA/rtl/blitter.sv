@@ -138,14 +138,14 @@ module blitter (
     // Space size lookup
     function automatic logic [19:0] space_size(input logic [2:0] sp);
         case (sp)
-            SPACE_CPU:    return 20'(65536);
-            SPACE_CHAR:   return 20'(2000);
-            SPACE_COLOR:  return 20'(2000);
-            SPACE_GFX:    return 20'(64000);
-            SPACE_SPRITE: return 20'(32768);
-            SPACE_XRAM:   return 20'(524288);
-            SPACE_TILE:   return 20'(32768);
-            default:      return 0;
+            SPACE_CPU:    space_size = 20'(65536);
+            SPACE_CHAR:   space_size = 20'(2000);
+            SPACE_COLOR:  space_size = 20'(2000);
+            SPACE_GFX:    space_size = 20'(64000);
+            SPACE_SPRITE: space_size = 20'(32768);
+            SPACE_XRAM:   space_size = 20'(524288);
+            SPACE_TILE:   space_size = 20'(32768);
+            default:      space_size = 0;
         endcase
     endfunction
 
@@ -155,10 +155,12 @@ module blitter (
         input logic [15:0] stride, input logic [19:0] sz
     );
         logic [31:0] last_row_start, last_byte;
-        if (w == 0 || h == 0 || sz == 0) return 0;
-        last_row_start = {8'b0, base} + 32'(h - 1) * 32'(stride);
-        last_byte = last_row_start + 32'(w);
-        return (last_byte <= {12'b0, sz}) && ({8'b0, base} < {12'b0, sz});
+        if (w == 0 || h == 0 || sz == 0) begin rect_fits = 0; end
+        else begin
+            last_row_start = {8'b0, base} + 32'(h - 1) * 32'(stride);
+            last_byte = last_row_start + 32'(w);
+            rect_fits = (last_byte <= {12'b0, sz}) && ({8'b0, base} < {12'b0, sz});
+        end
     endfunction
 
     // Write-protect check: CPU RAM writes must stay below ROM
@@ -167,9 +169,11 @@ module blitter (
         input logic [15:0] w, input logic [15:0] h, input logic [15:0] stride
     );
         logic [31:0] last_byte;
-        if (space != SPACE_CPU) return 1;
-        last_byte = {8'b0, base} + 32'(h - 1) * 32'(stride) + 32'(w);
-        return (last_byte <= {8'b0, ROM_BASE});
+        if (space != SPACE_CPU) begin write_protect_ok = 1; end
+        else begin
+            last_byte = {8'b0, base} + 32'(h - 1) * 32'(stride) + 32'(w);
+            write_protect_ok = (last_byte <= {8'b0, ROM_BASE});
+        end
     endfunction
 
     // =========================================================================

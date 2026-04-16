@@ -41,11 +41,17 @@ function signed [15:0] clamp(input signed [16:0] x);
 	clamp = ^x[16:15] ? {x[16], {15{x[15]}}} : x[15:0];
 endfunction
 
-wire [10:0] _1_Q_lsl10_tbl[32] =
-'{
-	1448, 1324, 1219, 1129, 1052, 984, 925, 872, 826, 783, 745, 711, 679, 651, 624, 600,
-	1448, 1328, 1218, 1117, 1024, 939, 861, 790, 724, 664, 609, 558, 512, 470, 431, 395
-};
+reg [10:0] _1_Q_lsl10_tbl[0:31];
+initial begin
+	_1_Q_lsl10_tbl[ 0] = 1448; _1_Q_lsl10_tbl[ 1] = 1324; _1_Q_lsl10_tbl[ 2] = 1219; _1_Q_lsl10_tbl[ 3] = 1129;
+	_1_Q_lsl10_tbl[ 4] = 1052; _1_Q_lsl10_tbl[ 5] =  984; _1_Q_lsl10_tbl[ 6] =  925; _1_Q_lsl10_tbl[ 7] =  872;
+	_1_Q_lsl10_tbl[ 8] =  826; _1_Q_lsl10_tbl[ 9] =  783; _1_Q_lsl10_tbl[10] =  745; _1_Q_lsl10_tbl[11] =  711;
+	_1_Q_lsl10_tbl[12] =  679; _1_Q_lsl10_tbl[13] =  651; _1_Q_lsl10_tbl[14] =  624; _1_Q_lsl10_tbl[15] =  600;
+	_1_Q_lsl10_tbl[16] = 1448; _1_Q_lsl10_tbl[17] = 1328; _1_Q_lsl10_tbl[18] = 1218; _1_Q_lsl10_tbl[19] = 1117;
+	_1_Q_lsl10_tbl[20] = 1024; _1_Q_lsl10_tbl[21] =  939; _1_Q_lsl10_tbl[22] =  861; _1_Q_lsl10_tbl[23] =  790;
+	_1_Q_lsl10_tbl[24] =  724; _1_Q_lsl10_tbl[25] =  664; _1_Q_lsl10_tbl[26] =  609; _1_Q_lsl10_tbl[27] =  558;
+	_1_Q_lsl10_tbl[28] =  512; _1_Q_lsl10_tbl[29] =  470; _1_Q_lsl10_tbl[30] =  431; _1_Q_lsl10_tbl[31] =  395;
+end
 
 // o = c +- (a * b)
 reg signed  [31:0] c;
@@ -78,8 +84,8 @@ end
 always @(posedge clk) begin
 	reg [10:0] _1_Q_lsl10;
 
-	reg signed [15:0] vi = 0;
-	reg signed [15:0] vd = 0;
+	reg signed [15:0] vi;
+	reg signed [15:0] vd;
 
 	case (state)
 		2:	begin

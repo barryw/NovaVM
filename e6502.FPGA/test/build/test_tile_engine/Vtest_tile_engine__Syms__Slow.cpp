@@ -11,7 +11,7 @@ Vtest_tile_engine__Syms::Vtest_tile_engine__Syms(VerilatedContext* contextp, con
     , TOP{this, namep}
 {
     // Check resources
-    Verilated::stackCheck(3540);
+    Verilated::stackCheck(3474);
     // Setup sub module instances
     // Configure time unit / time precision
     _vm_contextp__->timeunit(-9);

@@ -67,9 +67,9 @@ module test_gtext;
     task automatic wait_cmd_done();
         int timeout;
         timeout = 0;
-        // Wait 2 clocks for NBA to propagate cmd_busy
+        // Wait 2 clocks for NBA to propagate busy flags
         repeat(2) @(posedge clk);
-        while (dut.cmd_busy && timeout < 500000) begin
+        while ((dut.cmd_busy || dut.artist_inst.busy) && timeout < 500000) begin
             @(posedge clk);
             timeout++;
         end
@@ -98,7 +98,7 @@ module test_gtext;
 
     // Read gfx pixel at (x, y)
     function automatic logic [3:0] gfx_pixel(input int x, input int y);
-        return dut.gfx_ram[y * 320 + x];
+        return dut.gfx_inst.gfx_mem.mem[y * 320 + x];
     endfunction
 
     // ---------------------------------------------------------------
@@ -124,7 +124,7 @@ module test_gtext;
         write_param(5, 1);                        // scale = 1
         write_cmd(8'h0A);  // CmdGtext
         repeat(5) @(posedge clk);
-        check("empty string: cmd not busy", dut.cmd_busy == 0);
+        check("empty string: cmd not busy", dut.cmd_busy == 0 && dut.artist_inst.busy == 0);
 
         // ----- Test 2: Single character 'A' at (0,0), scale=1 -----
         $display("Test: Single char 'A' at (0,0) scale=1");
@@ -168,7 +168,7 @@ module test_gtext;
             match = 1;
             for (int r = 0; r < 8; r++) begin
                 logic [7:0] fb;
-                fb = dut.font_rom[{8'd65, r[2:0]}];
+                fb = dut.text_inst.font_mem.mem[{8'd65, r[2:0]}];
                 for (int c = 0; c < 8; c++) begin
                     logic expected;
                     expected = fb[7 - c];
@@ -236,7 +236,7 @@ module test_gtext;
         begin
             logic [7:0] fb;
             int ok;
-            fb = dut.font_rom[{8'd73, 3'b000}]; // 'I' row 0
+            fb = dut.text_inst.font_mem.mem[{8'd73, 3'b000}]; // 'I' row 0
             ok = 1;
             for (int c = 0; c < 8; c++) begin
                 if (fb[7-c]) begin
@@ -288,7 +288,7 @@ module test_gtext;
         wait_cmd_done();
 
         // Should not crash, pixels within bounds should be set
-        check("off-screen render completed", dut.cmd_busy == 0);
+        check("off-screen render completed", dut.cmd_busy == 0 && dut.artist_inst.busy == 0);
 
         // ----- Test 7: Draw color -----
         $display("Test: Draw color");

@@ -11,7 +11,7 @@ Vtop__Syms::Vtop__Syms(VerilatedContext* contextp, const char* namep, Vtop* mode
     , TOP{this, namep}
 {
     // Check resources
-    Verilated::stackCheck(2844);
+    Verilated::stackCheck(2322);
     // Setup sub module instances
     TOP__top__DOT__sid1_inst.ctor(this, "top.sid1_inst");
     TOP__top__DOT__sid2_inst.ctor(this, "top.sid2_inst");

@@ -194,6 +194,7 @@ class alignas(VL_CACHE_LINE_BYTES) Vtest_sid___024root final {
         VlUnpacked<CData/*7:0*/, 2048> test_sid__DOT__uut__DOT__tbl__DOT__wave8580_p_t;
         VlUnpacked<CData/*7:0*/, 4096> test_sid__DOT__uut__DOT__tbl__DOT__wave8580_ps_;
         VlUnpacked<SData/*15:0*/, 4096> test_sid__DOT__uut__DOT__tbl__DOT__f6581_curve;
+        VlUnpacked<SData/*14:0*/, 1024> test_sid__DOT__uut__DOT__tbl__DOT___unused_f6581_adj;
         VlUnpacked<SData/*10:0*/, 32> test_sid__DOT__uut__DOT__flt__DOT___1_Q_lsl10_tbl;
         VlUnpacked<QData/*63:0*/, 2> __VstlTriggered;
         VlUnpacked<SData/*15:0*/, 12> __Vtrigprevexpr___TOP__test_sid__DOT__uut__DOT__v1__DOT__waveform_dac__DOT__bitsum__0;

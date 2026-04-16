@@ -11,7 +11,7 @@ Vtest_gtext__Syms::Vtest_gtext__Syms(VerilatedContext* contextp, const char* nam
     , TOP{this, namep}
 {
     // Check resources
-    Verilated::stackCheck(5702);
+    Verilated::stackCheck(4044);
     // Setup sub module instances
     // Configure time unit / time precision
     _vm_contextp__->timeunit(-9);
