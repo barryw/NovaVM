@@ -9,9 +9,8 @@
 module fpga_top (
     input  logic        clk25_mhz,
 
-    // HDMI (GPDI)
+    // HDMI (GPDI) — only positive pins; ECP5 LVCMOS33D generates complement
     output logic [3:0]  gpdi_dp,
-    output logic [3:0]  gpdi_dn,
 
     // LEDs and buttons
     output logic [7:0]  leds,
@@ -129,12 +128,14 @@ module fpga_top (
     // HDMI output — VGA signals through TMDS encoder to GPDI
     // =========================================================================
 
-    // Pad 4-bit color to 8-bit: {nibble, nibble} gives full range 0x00-0xFF
-    wire [23:0] rgb24 = {vid_r, vid_r, vid_g, vid_g, vid_b, vid_b};
+    // DEBUG: bypass VGC, output solid blue to test HDMI chain
+    // Remove this block once HDMI is confirmed working
+    wire [23:0] rgb24 = vid_de ? 24'h0000AA : 24'h000000;
+    // Original: wire [23:0] rgb24 = {vid_r, vid_r, vid_g, vid_g, vid_b, vid_b};
 
     wire [1:0] tmds_red, tmds_green, tmds_blue, tmds_clock;
 
-    vga2dvid vga2dvid_inst (
+    vga2dvid #(.C_shift_clock_synchronizer(1'b0)) vga2dvid_inst (
         .clk_pixel (clk_pixel),
         .clk_shift (clk_shift),
         .in_color  (rgb24),
@@ -151,15 +152,11 @@ module fpga_top (
         .out_clock (tmds_clock)
     );
 
-    fake_differential fake_diff_inst (
-        .clk_shift(clk_shift),
-        .in_clock (tmds_clock),
-        .in_red   (tmds_red),
-        .in_green (tmds_green),
-        .in_blue  (tmds_blue),
-        .out_p    (gpdi_dp),
-        .out_n    (gpdi_dn)
-    );
+    // DDR output to GPDI positive pins only — LVCMOS33D generates complement
+    ODDRX1F ddr_b (.D0(tmds_blue[0]),  .D1(tmds_blue[1]),  .Q(gpdi_dp[0]), .SCLK(clk_shift), .RST(0));
+    ODDRX1F ddr_g (.D0(tmds_green[0]), .D1(tmds_green[1]), .Q(gpdi_dp[1]), .SCLK(clk_shift), .RST(0));
+    ODDRX1F ddr_r (.D0(tmds_red[0]),   .D1(tmds_red[1]),   .Q(gpdi_dp[2]), .SCLK(clk_shift), .RST(0));
+    ODDRX1F ddr_c (.D0(tmds_clock[0]), .D1(tmds_clock[1]), .Q(gpdi_dp[3]), .SCLK(clk_shift), .RST(0));
 
     // =========================================================================
     // Audio — convert signed 18-bit SID output to unsigned 4-bit for DAC

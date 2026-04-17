@@ -28,7 +28,7 @@ module artist (
 
     // GFX RAM read port (for flood fill)
     output logic [15:0] gfx_raddr,       // read address
-    input  logic [3:0]  gfx_rdata,       // read data (1-cycle latency)
+    input  logic [3:0]  gfx_rdata_raw,   // read data (1-cycle latency from dpram)
     output logic        gfx_re,          // read enable
 
     // Font ROM read port (for GTEXT)
@@ -96,9 +96,14 @@ module artist (
     logic [9:0]  fill_sp;
     logic [3:0]  fill_target;
     logic [2:0]  paint_phase;  // expanded for serialized pushes
-    logic        paint_init;
+    logic [1:0]  paint_init;  // countdown: 2=issued read, 1=dpram done, 0=ready
     logic [1:0]  push_count;   // 0-3: which neighbor to push
     logic [16:0] push_neighbors [0:3];  // latched neighbors to push
+
+    // Pipeline register for gfx_rdata — breaks critical timing path
+    // (BRAM output → paint address calc was ~19ns combinational)
+    logic [3:0] gfx_rdata;
+    always_ff @(posedge clk) gfx_rdata <= gfx_rdata_raw;
 
     // Gtext state
     logic [5:0]  gt_char_idx;
@@ -307,11 +312,14 @@ module artist (
                     end
 
                     CMD_PAINT: begin
-                        if (paint_init) begin
-                            // First read returned — latch fill_target
-                            fill_target <= gfx_rdata;
-                            paint_init <= 0;
-                            paint_phase <= 3'd0;
+                        if (paint_init != 0) begin
+                            // Countdown for first gfx read (dpram + pipeline reg)
+                            if (paint_init == 2'd1) begin
+                                fill_target <= gfx_rdata;
+                                paint_init <= 0;
+                                paint_phase <= 3'd0;
+                            end else
+                                paint_init <= paint_init - 1;
                         end else begin
                             case (paint_phase)
                                 3'd0: begin // Pop: request stack read
@@ -337,7 +345,10 @@ module artist (
                                         paint_phase <= 3'd0; // out of bounds, skip
                                     end
                                 end
-                                3'd3: begin // Wait for gfx read
+                                3'd3: begin // Wait for dpram gfx read
+                                    paint_phase <= 3'd7;
+                                end
+                                3'd7: begin // Wait for gfx_rdata pipeline register
                                     paint_phase <= 3'd4;
                                 end
                                 3'd4: begin // Check pixel, write + latch neighbors
@@ -508,7 +519,7 @@ module artist (
                             fs_a_we <= 1;
                             fill_sp <= 1;
                             paint_phase <= 3'd3; // skip to gfx read wait
-                            paint_init <= 1;
+                            paint_init <= 2'd2;  // 2 cycles: dpram + pipeline reg
                             busy <= 1; op <= CMD_PAINT;
                         end
                     end

@@ -45,7 +45,7 @@ module vgc_text (
     // --- char_ram (2000 bytes) ---
     logic [10:0] char_b_addr;
 
-    dpram #(.WIDTH(8), .DEPTH(2000)) char_mem (
+    dpram #(.WIDTH(8), .DEPTH(2000), .INIT_FILE("rom/char_init.hex")) char_mem (
         .clk(clk),
         .addr_a(char_a_addr), .din_a(char_a_din), .we_a(char_a_we), .dout_a(char_a_dout),
         .addr_b(char_b_addr), .dout_b(char_b_dout)
@@ -54,7 +54,7 @@ module vgc_text (
     // --- color_ram (2000 bytes) ---
     logic [10:0] color_b_addr;
 
-    dpram #(.WIDTH(8), .DEPTH(2000)) color_mem (
+    dpram #(.WIDTH(8), .DEPTH(2000), .INIT_FILE("rom/color_init.hex")) color_mem (
         .clk(clk),
         .addr_a(color_a_addr), .din_a(color_a_din), .we_a(color_a_we), .dout_a(color_a_dout),
         .addr_b(color_b_addr), .dout_b(color_b_dout)

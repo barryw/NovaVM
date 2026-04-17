@@ -257,7 +257,7 @@ module vgc (
         .gfx_wdata(artist_gfx_wdata),
         .gfx_we(artist_gfx_we),
         .gfx_raddr(artist_gfx_raddr),
-        .gfx_rdata(artist_gfx_rdata),
+        .gfx_rdata_raw(artist_gfx_rdata),
         .gfx_re(artist_gfx_re),
         .font_addr(artist_font_addr),
         .font_data(artist_font_data),

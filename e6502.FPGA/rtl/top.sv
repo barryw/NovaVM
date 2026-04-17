@@ -251,9 +251,6 @@ module top (
         r_blt_cpu_rdata <= blt_cpu_rdata;
 
     // CPU read data mux — all sources are registered/synchronous.
-    // dpram outputs and registered decode signals both have 1-cycle latency
-    // from cpu_addr, matching the Arlet 6502's DI timing (address on cycle N,
-    // data read on cycle N+1).
     always_comb begin
         if (r_xmc_win_sel && r_xmc_win_enabled)
             cpu_din = xram_a_dout;
@@ -299,6 +296,18 @@ module top (
             // CPU write to RAM
             ram_a_we = 1'b1;
         end
+    end
+
+    // Keyboard input register — intercepts CPU reads of $A00F
+    // instead of writing to RAM (which would conflict with port A)
+    logic [7:0] key_reg;
+    always_ff @(posedge clk) begin
+        if (rst)
+            key_reg <= 8'h00;
+        else if (key_valid)
+            key_reg <= key_data;
+        else if (!cpu_we && cpu_active && cpu_addr == CHARIN && key_reg != 0)
+            key_reg <= 8'h00;  // clear after CPU read
     end
 
     // =========================================================================
