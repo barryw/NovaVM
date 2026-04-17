@@ -1,0 +1,9 @@
+{
+  "additionalFiles": "",
+  "compiler.optimization_flags": "-Os",
+  "customBuildProperties": "",
+  "fqbn": "esp32:esp32:lolin32",
+  "hardwareFolders": "/Users/barry/Library/Arduino15/packages/esp32/hardware/esp32/3.3.8,/Users/barry/Library/Arduino15/packages/esp32/hardware/esp32/3.3.8",
+  "otherLibrariesFolders": "/Users/barry/Documents/Arduino/libraries",
+  "sketchLocation": "/Users/barry/Git/e6502/e6502.ESP32/novahost"
+}

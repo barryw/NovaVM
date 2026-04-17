@@ -355,7 +355,21 @@
       "WebFetch(domain:blog.dave.tf)",
       "Bash(openFPGALoader --board ulx3s --erase-flash --unprotect-flash)",
       "Bash(openFPGALoader --help)",
-      "Bash(openFPGALoader --board ulx3s --bulk-erase --unprotect-flash)"
+      "Bash(openFPGALoader --board ulx3s --bulk-erase --unprotect-flash)",
+      "WebFetch(domain:radiona.org)",
+      "Bash(ecppack --compress esp32_pass.config esp32_pass.bit)",
+      "Bash(openFPGALoader --board ulx3s esp32_pass.bit)",
+      "Bash(openFPGALoader --board ulx3s --unprotect-flash -f /tmp/ulx3s-bin/fpga/passthru/passthru-v20-85f/ulx3s_85f_passthru.bit)",
+      "Bash(openFPGALoader --board ulx3s --reset)",
+      "Bash(openFPGALoader --board ulx3s /tmp/ulx3s-bin/fpga/passthru/passthru-v20-85f/ulx3s_85f_passthru.bit)",
+      "Bash(arduino-cli core *)",
+      "Bash(arduino-cli board *)",
+      "Bash(arduino-cli compile *)",
+      "Bash(arduino-cli upload *)",
+      "Bash(timeout 5 arduino-cli monitor --port /dev/cu.usbserial-D01457 --config baudrate=115200)",
+      "Bash(read -t 30 dummy)",
+      "Bash(ecppack --compress esp32_boot.config esp32_boot.bit)",
+      "Bash(openFPGALoader --board ulx3s esp32_boot.bit)"
     ]
   },
   "enableAllProjectMcpServers": true,
