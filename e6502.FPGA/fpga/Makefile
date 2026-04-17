@@ -11,7 +11,7 @@ YOSYS = yosys
 SV = read_verilog -sv -DSYNTHESIS
 VL = read_verilog -DSYNTHESIS
 
-NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --timing-allow-fail
+NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed 5 --timing-allow-fail
 
 .PHONY: all synth pnr bitstream prog prog_flash clean
 
@@ -69,7 +69,7 @@ RTL_TOP = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv fpga_top.sv uart_rx.sv
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
            $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv
-RTL_HDMI = $(RTLDIR)/hdmi/tmds_encoder.v $(RTLDIR)/hdmi/vga2dvid.v $(RTLDIR)/hdmi/fake_differential.v
+RTL_HDMI = $(RTLDIR)/hdmi/hdmi_device.v $(RTLDIR)/hdmi/tmds_encoder.v $(RTLDIR)/hdmi/fake_differential.v
 
 $(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)

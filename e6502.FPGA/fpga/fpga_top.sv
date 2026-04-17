@@ -9,8 +9,9 @@
 module fpga_top (
     input  logic        clk25_mhz,
 
-    // HDMI (GPDI) — only positive pins; ECP5 LVCMOS33D generates complement
+    // HDMI (GPDI)
     output logic [3:0]  gpdi_dp,
+    output logic [3:0]  gpdi_dn,
 
     // LEDs and buttons
     output logic [7:0]  leds,
@@ -128,35 +129,49 @@ module fpga_top (
     // HDMI output — VGA signals through TMDS encoder to GPDI
     // =========================================================================
 
-    // DEBUG: bypass VGC, output solid blue to test HDMI chain
-    // Remove this block once HDMI is confirmed working
-    wire [23:0] rgb24 = vid_de ? 24'h0000AA : 24'h000000;
-    // Original: wire [23:0] rgb24 = {vid_r, vid_r, vid_g, vid_g, vid_b, vid_b};
+    // Pad 4-bit color to 8-bit
+    wire [23:0] rgb24 = {vid_r, vid_r, vid_g, vid_g, vid_b, vid_b};
+
+    // Generate our OWN VGA timing (bypass VGC sync — proven to work in color bar test)
+    reg [9:0] hdmi_h = 0, hdmi_v = 0;
+    always @(posedge clk_pixel) begin
+        if (hdmi_h == 799) begin
+            hdmi_h <= 0;
+            hdmi_v <= (hdmi_v == 524) ? 0 : hdmi_v + 1;
+        end else
+            hdmi_h <= hdmi_h + 1;
+    end
+    wire hdmi_visible = (hdmi_h < 640) && (hdmi_v < 480);
+    wire hdmi_hsync = (hdmi_h >= 656) && (hdmi_h < 752);
+    wire hdmi_vsync = (hdmi_v >= 490) && (hdmi_v < 492);
 
     wire [1:0] tmds_red, tmds_green, tmds_blue, tmds_clock;
 
-    vga2dvid #(.C_shift_clock_synchronizer(1'b0)) vga2dvid_inst (
-        .clk_pixel (clk_pixel),
-        .clk_shift (clk_shift),
-        .in_color  (rgb24),
-        .in_blank  (~vid_de),
-        .in_hsync  (vid_hsync),
-        .in_vsync  (vid_vsync),
-        .resetn    (~rst),
-        .outp_red  (),
-        .outp_green(),
-        .outp_blue (),
-        .out_red   (tmds_red),
-        .out_green (tmds_green),
-        .out_blue  (tmds_blue),
-        .out_clock (tmds_clock)
+    hdmi_device #(.DDR_ENABLED(1)) hdmi_inst (
+        .pclk      (clk_pixel),
+        .tmds_clk  (clk_shift),
+        .in_vga_red  (hdmi_visible ? rgb24[23:16] : 8'h00),
+        .in_vga_green(hdmi_visible ? rgb24[15:8]  : 8'h00),
+        .in_vga_blue (hdmi_visible ? rgb24[7:0]   : 8'h00),
+        .in_vga_blank(~hdmi_visible),
+        .in_vga_hsync(hdmi_hsync),
+        .in_vga_vsync(hdmi_vsync),
+        .out_tmds_red  (tmds_red),
+        .out_tmds_green(tmds_green),
+        .out_tmds_blue (tmds_blue),
+        .out_tmds_clk  (tmds_clock)
     );
 
-    // DDR output to GPDI positive pins only — LVCMOS33D generates complement
-    ODDRX1F ddr_b (.D0(tmds_blue[0]),  .D1(tmds_blue[1]),  .Q(gpdi_dp[0]), .SCLK(clk_shift), .RST(0));
-    ODDRX1F ddr_g (.D0(tmds_green[0]), .D1(tmds_green[1]), .Q(gpdi_dp[1]), .SCLK(clk_shift), .RST(0));
-    ODDRX1F ddr_r (.D0(tmds_red[0]),   .D1(tmds_red[1]),   .Q(gpdi_dp[2]), .SCLK(clk_shift), .RST(0));
-    ODDRX1F ddr_c (.D0(tmds_clock[0]), .D1(tmds_clock[1]), .Q(gpdi_dp[3]), .SCLK(clk_shift), .RST(0));
+    // DDR output via fake_differential (drives both P and N pins)
+    fake_differential #(.C_ddr(1)) fake_diff_inst (
+        .clk_shift(clk_shift),
+        .in_clock (tmds_clock),
+        .in_red   (tmds_red),
+        .in_green (tmds_green),
+        .in_blue  (tmds_blue),
+        .out_p    (gpdi_dp),
+        .out_n    (gpdi_dn)
+    );
 
     // =========================================================================
     // Audio — convert signed 18-bit SID output to unsigned 4-bit for DAC
