@@ -19,6 +19,15 @@
       <None Update="Resources\ehbasic.bin">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
+      <None Update="Resources\extension.bin">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
+
+    <Target Name="AssembleRom" BeforeTargets="PreBuildEvent">
+      <Exec Command="make -C $(ProjectDir)../ehbasic" />
+      <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+      <Copy SourceFiles="$(ProjectDir)../ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
+    </Target>
 
 </Project>

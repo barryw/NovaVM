@@ -14,9 +14,8 @@
 // Configuration
 // =========================================================================
 
-// WiFi credentials — change these
-const char* WIFI_SSID     = "walker";
-const char* WIFI_PASSWORD = "Vallejo90";
+// WiFi credentials — kept in wifi_config.h (gitignored)
+#include "wifi_config.h"
 
 // FPGA UART — uses ESP32 Serial2 (GPIO16=RX from FPGA, GPIO17=TX to FPGA)
 #define FPGA_SERIAL Serial2

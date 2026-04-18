@@ -11,7 +11,7 @@ YOSYS = yosys
 SV = read_verilog -sv -DSYNTHESIS
 VL = read_verilog -DSYNTHESIS
 
-NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed 5 --timing-allow-fail
+NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --timing-allow-fail
 
 .PHONY: all synth pnr bitstream prog prog_flash clean
 
@@ -35,13 +35,6 @@ $(BUILDDIR)/sid.json: $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv \
 	$(YOSYS) -q -p "$(SV) $^; synth_ecp5 -top sid_chip -json $@"
 	@echo "  [cached] sid"
 
-# HDMI output — never changes
-$(BUILDDIR)/hdmi.json: $(RTLDIR)/hdmi/tmds_encoder.v $(RTLDIR)/hdmi/vga2dvid.v \
-                       $(RTLDIR)/hdmi/fake_differential.v
-	@mkdir -p $(BUILDDIR)
-	$(YOSYS) -q -p "$(VL) $^; synth_ecp5 -top fake_differential -json $@"
-	@echo "  [cached] hdmi"
-
 # Blitter — rarely changes
 $(BUILDDIR)/blitter.json: $(RTLDIR)/blitter.sv
 	@mkdir -p $(BUILDDIR)
@@ -54,7 +47,7 @@ $(BUILDDIR)/tile_engine.json: $(DPRAM) $(RTLDIR)/tile_engine.sv
 	$(YOSYS) -q -p "$(SV) $^; synth_ecp5 -top tile_engine -json $@"
 	@echo "  [cached] tile_engine"
 
-CACHED_JSONS = $(BUILDDIR)/cpu.json $(BUILDDIR)/sid.json $(BUILDDIR)/hdmi.json \
+CACHED_JSONS = $(BUILDDIR)/cpu.json $(BUILDDIR)/sid.json \
                $(BUILDDIR)/blitter.json $(BUILDDIR)/tile_engine.json
 
 # =========================================================================
@@ -69,7 +62,7 @@ RTL_TOP = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv fpga_top.sv uart_rx.sv
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
            $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv
-RTL_HDMI = $(RTLDIR)/hdmi/hdmi_device.v $(RTLDIR)/hdmi/tmds_encoder.v $(RTLDIR)/hdmi/fake_differential.v
+RTL_HDMI = $(RTLDIR)/hdmi/vga2dvid.v $(RTLDIR)/hdmi/tmds_encoder.v $(RTLDIR)/hdmi/fake_differential.v
 
 $(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)

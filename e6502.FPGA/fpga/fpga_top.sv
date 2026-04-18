@@ -1,7 +1,7 @@
 // FPGA top-level for ULX3S (ECP5-85F)
 // Wraps the simulation 'top' module with board-level I/O:
 //   - PLL: 25 MHz osc -> 25 MHz pixel clock + 125 MHz TMDS shift clock
-//   - HDMI output via GPDI (fake differential TMDS)
+//   - HDMI output via GPDI (vga2dvid + fake differential DDR)
 //   - UART keyboard input via FTDI serial
 //   - 4-bit R-2R DAC audio output
 //   - LEDs for debug, buttons for reset
@@ -132,34 +132,22 @@ module fpga_top (
     // Pad 4-bit color to 8-bit
     wire [23:0] rgb24 = {vid_r, vid_r, vid_g, vid_g, vid_b, vid_b};
 
-    // Generate our OWN VGA timing (bypass VGC sync — proven to work in color bar test)
-    reg [9:0] hdmi_h = 0, hdmi_v = 0;
-    always @(posedge clk_pixel) begin
-        if (hdmi_h == 799) begin
-            hdmi_h <= 0;
-            hdmi_v <= (hdmi_v == 524) ? 0 : hdmi_v + 1;
-        end else
-            hdmi_h <= hdmi_h + 1;
-    end
-    wire hdmi_visible = (hdmi_h < 640) && (hdmi_v < 480);
-    wire hdmi_hsync = (hdmi_h >= 656) && (hdmi_h < 752);
-    wire hdmi_vsync = (hdmi_v >= 490) && (hdmi_v < 492);
-
+    // VGA timing — use VGC's own sync/DE signals (pipeline-aligned with pixel data)
+    // VGC outputs active-LOW hsync/vsync; vga2dvid expects active-HIGH hsync/vsync
     wire [1:0] tmds_red, tmds_green, tmds_blue, tmds_clock;
 
-    hdmi_device #(.DDR_ENABLED(1)) hdmi_inst (
-        .pclk      (clk_pixel),
-        .tmds_clk  (clk_shift),
-        .in_vga_red  (hdmi_visible ? rgb24[23:16] : 8'h00),
-        .in_vga_green(hdmi_visible ? rgb24[15:8]  : 8'h00),
-        .in_vga_blue (hdmi_visible ? rgb24[7:0]   : 8'h00),
-        .in_vga_blank(~hdmi_visible),
-        .in_vga_hsync(hdmi_hsync),
-        .in_vga_vsync(hdmi_vsync),
-        .out_tmds_red  (tmds_red),
-        .out_tmds_green(tmds_green),
-        .out_tmds_blue (tmds_blue),
-        .out_tmds_clk  (tmds_clock)
+    vga2dvid vga2dvid_inst (
+        .clk_pixel (clk_pixel),
+        .clk_shift (clk_shift),
+        .in_color  (rgb24),
+        .in_blank  (~vid_de),
+        .in_hsync  (~vid_hsync),
+        .in_vsync  (~vid_vsync),
+        .resetn    (~rst),
+        .out_red   (tmds_red),
+        .out_green (tmds_green),
+        .out_blue  (tmds_blue),
+        .out_clock (tmds_clock)
     );
 
     // DDR output via fake_differential (drives both P and N pins)

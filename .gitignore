@@ -250,3 +250,14 @@ paket-files/
 # JetBrains Rider
 .idea/
 *.sln.iml
+
+# ESP32 credentials and build artifacts
+e6502.ESP32/**/wifi_config.h
+e6502.ESP32/**/build/
+
+# FPGA build artifacts
+e6502.FPGA/fpga/build/
+e6502.FPGA/obj_dir/
+e6502.FPGA/e6502_sim
+e6502.FPGA/e6502_sim_synth
+e6502.FPGA/test/build/

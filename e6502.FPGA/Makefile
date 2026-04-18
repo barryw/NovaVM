@@ -26,6 +26,12 @@ VFLAGS    = --cc --exe --build -Wall \
 
 all: $(PROJ)
 
+# Build ROMs from ehbasic source and copy to rom/
+$(ROM_BIN) $(EXT_BIN): ../ehbasic/basic.asm
+	@make -C ../ehbasic
+	@cp ../ehbasic/basic.bin $(ROM_BIN)
+	@cp ../ehbasic/extension.bin $(EXT_BIN)
+
 # Convert binary ROM to hex format for $readmemh
 $(ROM_HEX): $(ROM_BIN)
 	@echo "Converting ROM to hex..."
