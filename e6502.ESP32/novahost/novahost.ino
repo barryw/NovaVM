@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <ESPmDNS.h>
+#include <ArduinoOTA.h>
 #include <HardwareSerial.h>
 #include "fpga_bridge.h"
 #include "debug_server.h"
@@ -109,6 +110,17 @@ void setupWiFi() {
         logLn("Connect with: nc %s %d", WiFi.localIP().toString().c_str(), LOG_PORT);
 
         debugServer.begin();
+
+        // OTA firmware update — push via `arduino-cli upload --port novahost.local`
+        ArduinoOTA.setHostname("novahost");
+        ArduinoOTA.onStart([]() {
+            logLn("OTA: upload starting (%s)",
+                  ArduinoOTA.getCommand() == U_FLASH ? "flash" : "filesystem");
+        });
+        ArduinoOTA.onEnd([]() { logLn("OTA: upload complete, rebooting"); });
+        ArduinoOTA.onError([](ota_error_t err) { logLn("OTA: error %u", err); });
+        ArduinoOTA.begin();
+        logLn("OTA enabled on novahost.local:3232");
     } else {
         Serial.println("\nWiFi connection failed — running without network");
     }
@@ -165,6 +177,7 @@ void setup() {
 void loop() {
     // Accept new log viewer connections
     if (wifi_connected) {
+        ArduinoOTA.handle();
         handleLogClients();
         debugServer.loop();
     }
