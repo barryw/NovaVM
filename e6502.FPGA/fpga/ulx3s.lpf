@@ -1,6 +1,6 @@
 BLOCK RESETPATHS;
 BLOCK ASYNCPATHS;
-## ULX3S v2.x.x / v3.0.x — e6502 FPGA pin constraints
+## ULX3S 85F — e6502 FPGA pin constraints
 
 # Clock — 25 MHz oscillator
 LOCATE COMP "clk25_mhz" SITE "G2";
@@ -47,11 +47,12 @@ LOCATE COMP "ftdi_txd" SITE "M1";  # FTDI TX -> FPGA RX
 IOBUF  PORT "ftdi_rxd" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=4;
 IOBUF  PORT "ftdi_txd" PULLMODE=UP IO_TYPE=LVCMOS33;
 
-# ESP32 control and debug UART
-LOCATE COMP "wifi_gpio0" SITE "L2";
+# ESP32 control and debug UART. This board reports v3.0.8, but reset probing
+# confirms the v3.1.x GPIO0 routing.
+LOCATE COMP "wifi_gpio0" SITE "F1";
 IOBUF  PORT "wifi_gpio0" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=4;
-LOCATE COMP "wifi_txd" SITE "K3";   # ESP32 TX (GPIO17) -> FPGA RX
-LOCATE COMP "wifi_rxd" SITE "K4";   # FPGA TX -> ESP32 RX (GPIO16)
+LOCATE COMP "wifi_rxd" SITE "K3";   # FPGA TX -> ESP32 RX
+LOCATE COMP "wifi_txd" SITE "K4";   # ESP32 TX -> FPGA RX
 IOBUF  PORT "wifi_txd" PULLMODE=UP IO_TYPE=LVCMOS33;
 IOBUF  PORT "wifi_rxd" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
 
