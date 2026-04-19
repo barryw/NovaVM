@@ -63,8 +63,12 @@ IOBUF  PORT "ftdi_txd" PULLMODE=UP IO_TYPE=LVCMOS33;
 # See e6502.FPGA/fpga/BOARD.md for the full diagnostic procedure.
 LOCATE COMP "wifi_gpio0" SITE "F1";
 IOBUF  PORT "wifi_gpio0" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=4;
-LOCATE COMP "wifi_rxd" SITE "K3";   # FPGA TX -> ESP32 RX
-LOCATE COMP "wifi_txd" SITE "K4";   # ESP32 TX -> FPGA RX
+
+# Debug bridge UART — uses ESP32 Serial2 pins. On v3.1.x boards L1/N3 route
+# to ESP32 GPIO26/GPIO27 (NOT GPIO16/17 as on v3.0.x). NovaHost firmware
+# must configure Serial2 on GPIO26/27 to match.
+LOCATE COMP "wifi_rxd" SITE "L1";   # FPGA TX -> ESP32 GPIO26 (RX)
+LOCATE COMP "wifi_txd" SITE "N3";   # ESP32 GPIO27 (TX) -> FPGA RX
 IOBUF  PORT "wifi_txd" PULLMODE=UP IO_TYPE=LVCMOS33;
 IOBUF  PORT "wifi_rxd" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
 

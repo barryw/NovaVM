@@ -21,11 +21,13 @@
 // WiFi credentials — kept in wifi_config.h (gitignored)
 #include "wifi_config.h"
 
-// FPGA UART — uses ESP32 Serial2 (GPIO16=RX from FPGA, GPIO17=TX to FPGA)
+// FPGA UART — uses ESP32 Serial2.
+// ULX3S v3.1.x: GPIO26/GPIO27 route to FPGA pins L1/N3.
+// (v3.0.x used GPIO16/17 on the same FPGA pins — different board revision.)
 #define FPGA_SERIAL Serial2
 #define FPGA_BAUD   115200
-#define FPGA_RX_PIN 16
-#define FPGA_TX_PIN 17
+#define FPGA_RX_PIN 26   // ESP32 GPIO26 = Serial2 RX (receives from FPGA L1)
+#define FPGA_TX_PIN 27   // ESP32 GPIO27 = Serial2 TX (transmits to FPGA N3)
 
 // Debug log server — telnet-style TCP on port 23
 #define LOG_PORT 23
@@ -163,7 +165,8 @@ void setup() {
 
     // FPGA UART — binary debug protocol via debug_bridge.sv
     FPGA_SERIAL.begin(FPGA_BAUD, SERIAL_8N1, FPGA_RX_PIN, FPGA_TX_PIN);
-    Serial.println("FPGA UART initialized on GPIO16/17 (binary debug protocol)");
+    Serial.printf("FPGA UART initialized on GPIO%d/%d (binary debug protocol)\n",
+                  FPGA_RX_PIN, FPGA_TX_PIN);
 
     // WiFi + servers
     setupWiFi();
