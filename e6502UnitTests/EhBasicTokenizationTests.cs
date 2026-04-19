@@ -382,7 +382,7 @@ public class EhBasicTokenizationTests
 
         // Use debugger to break at LAB_SNER (syntax error handler)
         var debugger = new e6502.Avalonia.Debugging.DebuggerService(cpu, bus);
-        const ushort LAB_SNER = 0xCDC4;
+        const ushort LAB_SNER = 0xCDBD;
         debugger.AddBreakpoint(LAB_SNER, null);
 
         // RUN with cycle-driven device ticking to match runtime scheduling.
@@ -1556,7 +1556,7 @@ public class EhBasicTokenizationTests
         string hex40 = DumpLineHex(bus, 40);
 
         // Break at syntax error handler
-        const ushort LAB_SNER = 0xCDC4;
+        const ushort LAB_SNER = 0xCDBD;
         const ushort LAB_15D9 = 0xC59A;
 
         EnterLine(editor, "RUN");
