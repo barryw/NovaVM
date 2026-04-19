@@ -120,6 +120,16 @@ Message-oriented TCP networking at $A100-$A13F. 4 connection slots, each support
 
 ROM (`ehbasic.bin`, 16KB) loaded at $C000. Reset vector at $FFFC points to monitor code at $FF80 which sets up the vector table and jumps to EhBASIC cold start. BASIC I/O wired to VGC: output via `STA $A00E` (RegCharOut), input via `LDA $A00F` (RegCharIn) polling the `ScreenEditor` key queue.
 
+## FPGA / ULX3S hardware notes
+
+The `e6502.FPGA/` directory targets the ULX3S (ECP5) with a matching ESP32
+companion in `e6502.ESP32/novahost/`. See `e6502.FPGA/fpga/BOARD.md` for the
+important gotcha: **boards labeled v3.0.8 in silkscreen/FTDI product string
+can actually have the v3.1.x physical pinout** (`wifi_en=J5`, `wifi_gpio0=F1`
+instead of `F1`/`L2`). If ESP32 serial flashing fails silently ("No serial
+data received"), this is the first thing to check. Once NovaHost is flashed
+once over serial, subsequent updates go via OTA (`--port novahost.local`).
+
 ## Tests
 
 MSTest framework. CPU correctness validated by running real 6502 test suite binaries (Klaus Dormann's functional/interrupt tests, AllSuiteA, 65C02 extended opcodes) to completion — each loops on itself when done, test asserts final PC value.
