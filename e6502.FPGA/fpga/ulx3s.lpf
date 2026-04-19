@@ -47,8 +47,20 @@ LOCATE COMP "ftdi_txd" SITE "M1";  # FTDI TX -> FPGA RX
 IOBUF  PORT "ftdi_rxd" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=4;
 IOBUF  PORT "ftdi_txd" PULLMODE=UP IO_TYPE=LVCMOS33;
 
-# ESP32 control and debug UART. This board reports v3.0.8, but reset probing
-# confirms the v3.1.x GPIO0 routing.
+# ESP32 control and debug UART.
+#
+# This board enumerates as "ULX3S FPGA 85K v3.0.8", but ESP32 reset probing
+# confirms the v3.1.x EN/GPIO0 routing:
+#   wifi_en:    J5
+#   wifi_gpio0: F1
+#   wifi_rxd:   K3
+#   wifi_txd:   K4
+#
+# Do not use the older v2.x/v3.0.x ESP reset mapping:
+#   wifi_en:    F1
+#   wifi_gpio0: L2
+#
+# See e6502.FPGA/fpga/BOARD.md for the full diagnostic procedure.
 LOCATE COMP "wifi_gpio0" SITE "F1";
 IOBUF  PORT "wifi_gpio0" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=4;
 LOCATE COMP "wifi_rxd" SITE "K3";   # FPGA TX -> ESP32 RX

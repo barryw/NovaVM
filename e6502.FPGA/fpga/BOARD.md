@@ -1,19 +1,25 @@
 # ULX3S board notes
 
-## Version detection caveat
+## Version detection caveat — READ FIRST
 
 **The silkscreen and FTDI product-string version are NOT reliable for pin layout.**
 
-Boards sold as "v3.0.8" (silkscreen and `lsusb` both report this) have been
-observed with the **v3.1.x physical pinout**. The ESP32 reset/boot control
-lines specifically were remapped between early and late v3.x board revisions:
+This board enumerates as `ULX3S FPGA 85K v3.0.8`, but ESP32 reset probing
+confirms the v3.1.x EN/GPIO0 routing:
 
-| Signal        | v2.x / early v3.0.x   | v3.1.x+ (this board)    |
-| ------------- | --------------------- | ----------------------- |
-| `wifi_en`     | F1                    | **J5**                  |
-| `wifi_gpio0`  | L2                    | **F1**                  |
-| `wifi_rxd`    | K3                    | K3                      |
-| `wifi_txd`    | K4                    | K4                      |
+- `wifi_en`:    **J5**
+- `wifi_gpio0`: **F1**
+- `wifi_rxd`:   K3
+- `wifi_txd`:   K4
+
+Do **not** use the older v2.x/v3.0.x ESP reset mapping:
+
+- `wifi_en`:    F1
+- `wifi_gpio0`: L2
+
+Using the wrong mapping silently — the FPGA drives F1 low thinking it's EN,
+but that pin is actually GPIO0 on this hardware, so the ESP32 never resets
+and esptool times out with "No serial data received".
 
 If `arduino-cli upload` fails with "Failed to connect to ESP32: No serial data
 received", verify EN reset actually reaches the ESP32:
