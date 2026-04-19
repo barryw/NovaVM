@@ -451,24 +451,36 @@ void DebugServer::respondError(const char* msg) {
 // =========================================================================
 
 String DebugServer::extractString(const String& json, const char* key) {
-    // Find "key":"value" pattern
-    String search = String("\"") + key + "\":\"";
-    int idx = json.indexOf(search);
+    // Find "key" then the colon, then optional whitespace, then the quoted value.
+    String needle = String("\"") + key + "\"";
+    int idx = json.indexOf(needle);
     if (idx < 0) return "";
-    idx += search.length();
+    idx += needle.length();
+    // Skip whitespace before colon
+    while (idx < (int)json.length() && (json[idx] == ' ' || json[idx] == '\t')) idx++;
+    if (idx >= (int)json.length() || json[idx] != ':') return "";
+    idx++;
+    // Skip whitespace after colon
+    while (idx < (int)json.length() && (json[idx] == ' ' || json[idx] == '\t')) idx++;
+    if (idx >= (int)json.length() || json[idx] != '"') return "";
+    idx++;
     int end = json.indexOf('"', idx);
     if (end < 0) return "";
     return json.substring(idx, end);
 }
 
 int DebugServer::extractInt(const String& json, const char* key, int defaultVal) {
-    // Find "key":number pattern
-    String search = String("\"") + key + "\":";
-    int idx = json.indexOf(search);
+    // Find "key" then colon, then optional whitespace, then the number.
+    String needle = String("\"") + key + "\"";
+    int idx = json.indexOf(needle);
     if (idx < 0) return defaultVal;
-    idx += search.length();
-    // Skip whitespace
-    while (idx < (int)json.length() && json[idx] == ' ') idx++;
+    idx += needle.length();
+    // Skip whitespace before colon
+    while (idx < (int)json.length() && (json[idx] == ' ' || json[idx] == '\t')) idx++;
+    if (idx >= (int)json.length() || json[idx] != ':') return defaultVal;
+    idx++;
+    // Skip whitespace after colon
+    while (idx < (int)json.length() && (json[idx] == ' ' || json[idx] == '\t')) idx++;
     // Parse digits (with optional leading minus)
     String num;
     if (idx < (int)json.length() && json[idx] == '-') num += json[idx++];
