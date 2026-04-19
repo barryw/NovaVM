@@ -1388,8 +1388,9 @@ LAB_XCRNCHD
 @cmp_loop
       LDA   (ut2_pl),Y       ; table char
       BEQ   @matched          ; null terminator = full match
-      CMP   Ibuffs,X
-      BNE   @try_next
+      EOR   Ibuffs,X          ; XOR with input byte
+      AND   #$DF              ; ignore case bit (bit 5)
+      BNE   @try_next         ; if any other bits differ, no match
       INY
       INX
       BNE   @cmp_loop

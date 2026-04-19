@@ -21,6 +21,9 @@ module fpga_top (
     input  logic        ftdi_txd,     // FPGA receives from FTDI
     output logic        ftdi_rxd,     // FPGA transmits to FTDI
 
+    // ESP32 control
+    output logic        wifi_gpio0,   // keep ESP32 out of download mode
+
     // Audio DAC (4-bit R-2R)
     output logic [3:0]  audio_l,
     output logic [3:0]  audio_r
@@ -73,7 +76,7 @@ module fpga_top (
 
     uart_rx #(
         .CLK_HZ(25000000),
-        .BAUD  (115200)
+        .BAUD  (9600)
     ) uart_inst (
         .clk  (clk_pixel),
         .rst  (rst),
@@ -178,15 +181,30 @@ module fpga_top (
     always_ff @(posedge clk_pixel)
         heartbeat <= heartbeat + 1;
 
-    assign leds[7]   = heartbeat[23];   // ~1.5 Hz blink = clock alive
-    assign leds[6]   = pll_locked;      // PLL locked
-    assign leds[5]   = ~rst;            // reset released
-    assign leds[4]   = uart_valid;      // UART activity flash
-    assign leds[3:0] = 4'b0;
+    reg [7:0] last_uart_byte;
+    reg       uart_ever_received;
+    always_ff @(posedge clk_pixel) begin
+        if (rst) begin
+            last_uart_byte <= 0;
+            uart_ever_received <= 0;
+        end else if (uart_valid) begin
+            last_uart_byte <= uart_data;
+            uart_ever_received <= 1;
+        end
+    end
+
+    assign leds[7]   = heartbeat[23];
+    assign leds[6]   = pll_locked;
+    assign leds[5]   = ~rst;
+    assign leds[4]   = uart_ever_received;
+    assign leds[3:0] = last_uart_byte[3:0];
 
     // =========================================================================
     // FTDI TX — unused for now, drive idle high
     // =========================================================================
     assign ftdi_rxd = 1'b1;
+
+    // Keep ESP32 out of download mode
+    assign wifi_gpio0 = 1'b1;
 
 endmodule

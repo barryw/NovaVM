@@ -186,11 +186,13 @@ module top (
     wire sid1_reg_sel = (mem_addr >= SID1_BASE && mem_addr <= SID1_END);
     wire sid2_reg_sel = (mem_addr >= SID2_BASE && mem_addr <= SID2_END);
     wire sid_cfg_sel  = (mem_addr == SID_CFG);
+    wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hB99F);
 
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
     logic r_blt_reg_sel, r_sid1_reg_sel, r_sid2_reg_sel, r_sid_cfg_sel;
     logic r_cpu_in_rom, r_ext_rom_active;
+    logic r_vgc_read_sel;
     logic [5:0] r_xmc_reg_off;
 
     // Register decode signals every cycle — they align with dpram outputs
@@ -205,6 +207,7 @@ module top (
         r_sid_cfg_sel     <= sid_cfg_sel;
         r_cpu_in_rom      <= cpu_in_rom;
         r_ext_rom_active  <= ext_rom_active;
+        r_vgc_read_sel    <= vgc_read_sel;
         r_xmc_reg_off     <= xmc_reg_off;
     end
 
@@ -250,9 +253,25 @@ module top (
     always_ff @(posedge clk)
         r_blt_cpu_rdata <= blt_cpu_rdata;
 
+    // Registered VGC read data
+    logic [7:0] r_vgc_cpu_rdata;
+    always_ff @(posedge clk)
+        r_vgc_cpu_rdata <= vgc_cpu_rdata;
+
+    // Keyboard: snapshot key_reg on cpu_ce edges (before clear-on-read races)
+    logic r_charin_sel;
+    logic [7:0] r_key_snapshot;
+    always_ff @(posedge clk) begin
+        r_charin_sel <= (mem_addr == CHARIN);
+        if (cpu_ce)
+            r_key_snapshot <= key_reg;
+    end
+
     // CPU read data mux — all sources are registered/synchronous.
     always_comb begin
-        if (r_xmc_win_sel && r_xmc_win_enabled)
+        if (r_charin_sel)
+            cpu_din = r_key_snapshot;
+        else if (r_xmc_win_sel && r_xmc_win_enabled)
             cpu_din = xram_a_dout;
         else if (r_xmc_win_sel && !r_xmc_win_enabled)
             cpu_din = 8'hFF;
@@ -266,6 +285,8 @@ module top (
             cpu_din = r_sid2_dout;
         else if (r_sid_cfg_sel)
             cpu_din = r_sid_cfg_reg;
+        else if (r_vgc_read_sel)
+            cpu_din = r_vgc_cpu_rdata;
         else if (r_cpu_in_rom)
             cpu_din = r_ext_rom_active ? erom_b_dout : brom_b_dout;
         else
@@ -305,7 +326,7 @@ module top (
         if (rst)
             key_reg <= 8'h00;
         else if (key_valid)
-            key_reg <= key_data;
+            key_reg <= (key_data == 8'h7F) ? 8'h08 : key_data; // DEL→BS
         else if (!cpu_we && cpu_active && cpu_addr == CHARIN && key_reg != 0)
             key_reg <= 8'h00;  // clear after CPU read
     end
@@ -652,7 +673,7 @@ module top (
     // =========================================================================
     // VGC — snoops bus, generates video
     // =========================================================================
-    wire [7:0]  vgc_rdata_unused;
+    wire [7:0]  vgc_cpu_rdata;
     wire [7:0]  vgc_dbg_rdata;
     wire        vgc_dbg_owns;
     wire [15:0] tile_dma_addr;
@@ -664,9 +685,9 @@ module top (
         .cpu_ce         (cpu_active),
         .cpu_addr       (cpu_addr),
         .cpu_wdata      (cpu_dout),
-        .cpu_rdata      (vgc_rdata_unused),
+        .cpu_rdata      (vgc_cpu_rdata),
         .cpu_we         (cpu_we),
-        .cpu_re         (1'b0),
+        .cpu_re         (~cpu_we),
         .key_valid      (key_valid),
         .key_data       (key_data),
         .tile_dma_addr  (tile_dma_addr),
