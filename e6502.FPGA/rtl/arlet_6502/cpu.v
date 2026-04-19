@@ -18,9 +18,10 @@
  * on the output pads if external memory is required.
  */
 
-module cpu( clk, reset, AB, DI, DO, WE, IRQ, NMI, RDY );
+module cpu( clk, reset, AB, DI, DO, WE, IRQ, NMI, RDY,
+            dbg_pc, dbg_a, dbg_x, dbg_y, dbg_s, dbg_flags );
 
-input clk;              // CPU clock 
+input clk;              // CPU clock
 input reset;            // reset signal
 output reg [15:0] AB;   // address bus
 input [7:0] DI;         // data in, read bus
@@ -28,7 +29,16 @@ output [7:0] DO;        // data out, write bus
 output WE;              // write enable
 input IRQ;              // interrupt request
 input NMI;              // non-maskable interrupt request
-input RDY;              // Ready signal. Pauses CPU when RDY=0 
+input RDY;              // Ready signal. Pauses CPU when RDY=0
+
+// Debug taps — expose internal registers as proper ports so cross-module
+// access works reliably through Yosys synth_ecp5 -noflatten.
+output [15:0] dbg_pc;
+output  [7:0] dbg_a;
+output  [7:0] dbg_x;
+output  [7:0] dbg_y;
+output  [7:0] dbg_s;
+output  [7:0] dbg_flags;
 
 /*
  * internal signals
@@ -1216,5 +1226,13 @@ always @(posedge clk )
         NMI_edge <= 0;
     else if( NMI & ~NMI_1 )
         NMI_edge <= 1;
+
+// Debug taps — drive via continuous assigns so synthesis preserves them.
+assign dbg_pc    = PC;
+assign dbg_a     = AXYS[SEL_A];
+assign dbg_x     = AXYS[SEL_X];
+assign dbg_y     = AXYS[SEL_Y];
+assign dbg_s     = AXYS[SEL_S];
+assign dbg_flags = { N, V, 2'b11, D, I, Z, C };
 
 endmodule

@@ -662,6 +662,9 @@ module top (
     // =========================================================================
     // CPU
     // =========================================================================
+    wire [15:0] cpu_dbg_pc;
+    wire  [7:0] cpu_dbg_a, cpu_dbg_x, cpu_dbg_y, cpu_dbg_s, cpu_dbg_flags;
+
     cpu cpu_inst (
         .clk    (clk),
         .reset  (rst),
@@ -671,7 +674,13 @@ module top (
         .WE     (cpu_we),
         .IRQ    (~irq_n),
         .NMI    (~nmi_n),
-        .RDY    (blt_rdy & ~dbg_pause & cpu_active)
+        .RDY    (blt_rdy & ~dbg_pause & cpu_active),
+        .dbg_pc    (cpu_dbg_pc),
+        .dbg_a     (cpu_dbg_a),
+        .dbg_x     (cpu_dbg_x),
+        .dbg_y     (cpu_dbg_y),
+        .dbg_s     (cpu_dbg_s),
+        .dbg_flags (cpu_dbg_flags)
     );
 
     // =========================================================================
@@ -758,14 +767,13 @@ module top (
     end
 `endif
 
-    // CPU state: route from Arlet 6502 internal signals.
-    // Arlet's AXYS register file indices: SEL_A=0, SEL_S=1, SEL_X=2, SEL_Y=3.
-    assign dbg_cpu_pc    = cpu_inst.PC;
-    assign dbg_cpu_a     = cpu_inst.AXYS[0];  // A
-    assign dbg_cpu_sp    = cpu_inst.AXYS[1];  // S
-    assign dbg_cpu_x     = cpu_inst.AXYS[2];  // X
-    assign dbg_cpu_y     = cpu_inst.AXYS[3];  // Y
-    assign dbg_cpu_flags = {cpu_inst.N, cpu_inst.V, 2'b11,
-                            cpu_inst.D, cpu_inst.I, cpu_inst.Z, cpu_inst.C};
+    // CPU state — use proper debug output ports on the cpu module instead of
+    // cross-module references which don't reliably survive synthesis.
+    assign dbg_cpu_pc    = cpu_dbg_pc;
+    assign dbg_cpu_a     = cpu_dbg_a;
+    assign dbg_cpu_x     = cpu_dbg_x;
+    assign dbg_cpu_y     = cpu_dbg_y;
+    assign dbg_cpu_sp    = cpu_dbg_s;
+    assign dbg_cpu_flags = cpu_dbg_flags;
 
 endmodule
