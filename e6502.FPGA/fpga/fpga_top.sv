@@ -21,8 +21,10 @@ module fpga_top (
     input  logic        ftdi_txd,     // FPGA receives from FTDI
     output logic        ftdi_rxd,     // FPGA transmits to FTDI
 
-    // ESP32 control
+    // ESP32 control and debug UART
     output logic        wifi_gpio0,   // keep ESP32 out of download mode
+    input  logic        wifi_txd,     // ESP32 TX -> FPGA RX (debug commands)
+    output logic        wifi_rxd,     // FPGA TX -> ESP32 RX (debug responses)
 
     // Audio DAC (4-bit R-2R)
     output logic [3:0]  audio_l,
@@ -86,6 +88,85 @@ module fpga_top (
     );
 
     // =========================================================================
+    // Debug UART — ESP32 WiFi serial (115200 8N1)
+    // =========================================================================
+    wire [7:0] dbg_rx_data;
+    wire       dbg_rx_valid;
+    wire [7:0] dbg_tx_data;
+    wire       dbg_tx_start;
+    wire       dbg_tx_busy;
+    wire       dbg_tx_out;
+
+    uart_rx #(
+        .CLK_HZ(25000000),
+        .BAUD  (115200)
+    ) dbg_uart_rx (
+        .clk  (clk_pixel),
+        .rst  (rst),
+        .rx   (wifi_txd),
+        .data (dbg_rx_data),
+        .valid(dbg_rx_valid)
+    );
+
+    uart_tx #(
+        .CLK_HZ(25000000),
+        .BAUD  (115200)
+    ) dbg_uart_tx (
+        .clk  (clk_pixel),
+        .rst  (rst),
+        .data (dbg_tx_data),
+        .start(dbg_tx_start),
+        .tx   (dbg_tx_out),
+        .busy (dbg_tx_busy)
+    );
+
+    assign wifi_rxd = dbg_tx_out;
+
+    // =========================================================================
+    // Debug bridge — binary protocol between ESP32 UART and core debug ports
+    // =========================================================================
+    wire        brg_peek_en;
+    wire [15:0] brg_peek_addr;
+    wire [7:0]  brg_peek_data;
+    wire        brg_poke_en;
+    wire [15:0] brg_poke_addr;
+    wire [7:0]  brg_poke_data;
+    wire        brg_pause;
+    wire [15:0] brg_cpu_pc;
+    wire [7:0]  brg_cpu_a, brg_cpu_x, brg_cpu_y, brg_cpu_sp, brg_cpu_flags;
+    wire        brg_key_valid;
+    wire [7:0]  brg_key_data;
+
+    debug_bridge dbg_bridge (
+        .clk             (clk_pixel),
+        .rst             (rst),
+        .rx_data         (dbg_rx_data),
+        .rx_valid        (dbg_rx_valid),
+        .tx_data         (dbg_tx_data),
+        .tx_start        (dbg_tx_start),
+        .tx_busy         (dbg_tx_busy),
+        .dbg_peek_en     (brg_peek_en),
+        .dbg_peek_addr   (brg_peek_addr),
+        .dbg_peek_data   (brg_peek_data),
+        .dbg_poke_en     (brg_poke_en),
+        .dbg_poke_addr   (brg_poke_addr),
+        .dbg_poke_data   (brg_poke_data),
+        .dbg_pause       (brg_pause),
+        .dbg_cpu_pc      (brg_cpu_pc),
+        .dbg_cpu_a       (brg_cpu_a),
+        .dbg_cpu_x       (brg_cpu_x),
+        .dbg_cpu_y       (brg_cpu_y),
+        .dbg_cpu_sp      (brg_cpu_sp),
+        .dbg_cpu_flags   (brg_cpu_flags),
+        .key_inject_valid(brg_key_valid),
+        .key_inject_data (brg_key_data)
+    );
+
+    // Key input: debug bridge overrides UART keyboard
+    wire       key_valid_mux = brg_key_valid ? 1'b1    : uart_valid;
+    wire [7:0] key_data_mux  = brg_key_valid ? brg_key_data : uart_data;
+
+    // =========================================================================
     // Core system — 6502 + VGC + Blitter + SID
     // =========================================================================
     wire [3:0]  vid_r, vid_g, vid_b;
@@ -96,8 +177,8 @@ module fpga_top (
         .clk        (clk_pixel),
         .rst        (rst),
 
-        .key_valid  (uart_valid),
-        .key_data   (uart_data),
+        .key_valid  (key_valid_mux),
+        .key_data   (key_data_mux),
 
         .irq_n      (1'b1),
         .nmi_n      (1'b1),
@@ -112,20 +193,20 @@ module fpga_top (
         .audio_l    (sid_audio_l),
         .audio_r    (sid_audio_r),
 
-        // Debug interface — unused on real hardware
-        .dbg_peek_en  (1'b0),
-        .dbg_peek_addr(16'h0000),
-        .dbg_peek_data(),
-        .dbg_poke_en  (1'b0),
-        .dbg_poke_addr(16'h0000),
-        .dbg_poke_data(8'h00),
-        .dbg_pause    (1'b0),
-        .dbg_cpu_pc   (),
-        .dbg_cpu_a    (),
-        .dbg_cpu_x    (),
-        .dbg_cpu_y    (),
-        .dbg_cpu_sp   (),
-        .dbg_cpu_flags()
+        // Debug interface — driven by debug bridge via ESP32 UART
+        .dbg_peek_en  (brg_peek_en),
+        .dbg_peek_addr(brg_peek_addr),
+        .dbg_peek_data(brg_peek_data),
+        .dbg_poke_en  (brg_poke_en),
+        .dbg_poke_addr(brg_poke_addr),
+        .dbg_poke_data(brg_poke_data),
+        .dbg_pause    (brg_pause),
+        .dbg_cpu_pc   (brg_cpu_pc),
+        .dbg_cpu_a    (brg_cpu_a),
+        .dbg_cpu_x    (brg_cpu_x),
+        .dbg_cpu_y    (brg_cpu_y),
+        .dbg_cpu_sp   (brg_cpu_sp),
+        .dbg_cpu_flags(brg_cpu_flags)
     );
 
     // =========================================================================
@@ -204,7 +285,7 @@ module fpga_top (
     // =========================================================================
     assign ftdi_rxd = 1'b1;
 
-    // Keep ESP32 out of download mode
+    // Keep ESP32 out of download mode and drive debug LED
     assign wifi_gpio0 = 1'b1;
 
 endmodule

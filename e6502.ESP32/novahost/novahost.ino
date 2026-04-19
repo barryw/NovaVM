@@ -1,14 +1,17 @@
 // NovaHost — ESP32 host services for the e6502 FPGA computer
 // Communicates with FPGA via UART (Serial2: wifi_rxd/wifi_txd)
-// Provides: WiFi, SD card FAT32, Bluetooth keyboard, MIDI, MCP server
+// Provides: WiFi, debug bridge (TCP:6503 ↔ FPGA binary protocol)
 //
 // Debug logs streamed over WiFi: connect with `nc <ip> 23`
+// Test connection: connect with test suite to novahost.local:6503
 // Board: ESP32 on ULX3S (select WEMOS LOLIN32 in Arduino IDE)
 
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <ESPmDNS.h>
 #include <HardwareSerial.h>
+#include "fpga_bridge.h"
+#include "debug_server.h"
 
 // =========================================================================
 // Configuration
@@ -25,10 +28,6 @@
 
 // Debug log server — telnet-style TCP on port 23
 #define LOG_PORT 23
-
-// Protocol: newline-delimited JSON messages (same as Avalonia TCP protocol)
-// FPGA sends: {"cmd":"load","path":"HELLO.BAS"}
-// ESP32 replies: {"ok":true,"size":123,"data":"..."}
 
 // =========================================================================
 // Debug logging — streams to WiFi TCP clients + Serial
@@ -70,10 +69,11 @@ void logLn(const char* fmt, ...) {
 }
 
 // =========================================================================
-// State
+// Global objects
 // =========================================================================
 bool wifi_connected = false;
-String fpga_rx_buf = "";
+FpgaBridge fpgaBridge(FPGA_SERIAL);
+DebugServer debugServer(fpgaBridge);
 
 // =========================================================================
 // WiFi setup
@@ -99,13 +99,16 @@ void setupWiFi() {
         // mDNS: access as novahost.local
         if (MDNS.begin("novahost")) {
             MDNS.addService("telnet", "tcp", LOG_PORT);
+            MDNS.addService("e6502-debug", "tcp", 6503);
             logLn("mDNS: novahost.local");
         }
 
-        // Start log server
+        // Start servers
         logServer.begin();
         logLn("Debug log server on port %d", LOG_PORT);
         logLn("Connect with: nc %s %d", WiFi.localIP().toString().c_str(), LOG_PORT);
+
+        debugServer.begin();
     } else {
         Serial.println("\nWiFi connection failed — running without network");
     }
@@ -140,21 +143,18 @@ void handleLogClients() {
 // =========================================================================
 void setup() {
     Serial.begin(115200);
-    Serial.println("\n=== NovaHost v0.2 ===");
+    Serial.println("\n=== NovaHost v0.3 ===");
     Serial.printf("Chip: %s rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
     Serial.printf("CPU: %d MHz, %d cores\n", ESP.getCpuFreqMHz(), ESP.getChipCores());
     Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());
     Serial.printf("Flash: %d MB\n", ESP.getFlashChipSize() / (1024 * 1024));
 
-    // FPGA UART
+    // FPGA UART — binary debug protocol via debug_bridge.sv
     FPGA_SERIAL.begin(FPGA_BAUD, SERIAL_8N1, FPGA_RX_PIN, FPGA_TX_PIN);
-    Serial.println("FPGA UART initialized on GPIO16/17");
+    Serial.println("FPGA UART initialized on GPIO16/17 (binary debug protocol)");
 
-    // WiFi + debug log server
+    // WiFi + servers
     setupWiFi();
-
-    // Send ready signal to FPGA
-    FPGA_SERIAL.println("{\"event\":\"ready\",\"version\":\"0.2\"}");
 
     logLn("NovaHost ready.");
 }
@@ -166,19 +166,7 @@ void loop() {
     // Accept new log viewer connections
     if (wifi_connected) {
         handleLogClients();
-    }
-
-    // Read commands from FPGA
-    while (FPGA_SERIAL.available()) {
-        char c = FPGA_SERIAL.read();
-        if (c == '\n') {
-            if (fpga_rx_buf.length() > 0) {
-                processCommand(fpga_rx_buf);
-                fpga_rx_buf = "";
-            }
-        } else if (c != '\r') {
-            fpga_rx_buf += c;
-        }
+        debugServer.loop();
     }
 
     // Check WiFi reconnection
@@ -187,28 +175,5 @@ void loop() {
         lastWifiCheck = millis();
         logLn("WiFi lost — reconnecting...");
         WiFi.reconnect();
-    }
-}
-
-// =========================================================================
-// Command processor
-// =========================================================================
-void processCommand(const String& json) {
-    logLn("FPGA> %s", json.c_str());
-
-    if (json.indexOf("\"ping\"") >= 0) {
-        FPGA_SERIAL.println("{\"ok\":true,\"pong\":true}");
-        logLn("  -> pong");
-    }
-    else if (json.indexOf("\"info\"") >= 0) {
-        FPGA_SERIAL.printf("{\"ok\":true,\"heap\":%d,\"wifi\":%s,\"ip\":\"%s\"}\n",
-            ESP.getFreeHeap(),
-            wifi_connected ? "true" : "false",
-            wifi_connected ? WiFi.localIP().toString().c_str() : "none");
-        logLn("  -> info sent");
-    }
-    else {
-        FPGA_SERIAL.println("{\"ok\":false,\"error\":\"unknown command\"}");
-        logLn("  -> unknown command");
     }
 }
