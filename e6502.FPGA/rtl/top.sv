@@ -211,10 +211,14 @@ module top (
         r_xmc_reg_off     <= xmc_reg_off;
     end
 
-    // Present addresses to dpram read ports
-    // Use mem_addr (frozen during stall) so dpram output stays stable
-    assign brom_b_addr = mem_addr[13:0];
-    assign erom_b_addr = mem_addr[13:0];
+    // Present addresses to dpram read ports.
+    // Normally the CPU's mem_addr drives port B for instruction fetch.
+    // When a debug peek targets the ROM range, route the debug address in
+    // instead so peek returns the actual ROM byte rather than whatever the
+    // CPU happens to be fetching.
+    wire dbg_rom_read = dbg_peek_en && (dbg_peek_addr >= ROM_BASE);
+    assign brom_b_addr = dbg_rom_read ? dbg_peek_addr[13:0] : mem_addr[13:0];
+    assign erom_b_addr = dbg_rom_read ? dbg_peek_addr[13:0] : mem_addr[13:0];
 
     // XRAM: present address for CPU reads via port A
     // Port A serves both CPU reads and writes; writes are gated by xram_a_we
@@ -754,12 +758,13 @@ module top (
     end
 `endif
 
-    // CPU state: route from Arlet 6502 internal signals
+    // CPU state: route from Arlet 6502 internal signals.
+    // Arlet's AXYS register file indices: SEL_A=0, SEL_S=1, SEL_X=2, SEL_Y=3.
     assign dbg_cpu_pc    = cpu_inst.PC;
     assign dbg_cpu_a     = cpu_inst.AXYS[0];  // A
-    assign dbg_cpu_x     = cpu_inst.AXYS[1];  // X
-    assign dbg_cpu_y     = cpu_inst.AXYS[2];  // Y
-    assign dbg_cpu_sp    = cpu_inst.AXYS[3];  // S
+    assign dbg_cpu_sp    = cpu_inst.AXYS[1];  // S
+    assign dbg_cpu_x     = cpu_inst.AXYS[2];  // X
+    assign dbg_cpu_y     = cpu_inst.AXYS[3];  // Y
     assign dbg_cpu_flags = {cpu_inst.N, cpu_inst.V, 2'b11,
                             cpu_inst.D, cpu_inst.I, cpu_inst.Z, cpu_inst.C};
 
