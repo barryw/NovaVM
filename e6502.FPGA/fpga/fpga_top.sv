@@ -97,6 +97,9 @@ module fpga_top (
     wire       dbg_tx_busy;
     wire       dbg_tx_out;
 
+    // Debug UART runs at 115200 — known-reliable on flying wires between
+    // ESP32 and FPGA. 3.125 Mbaud attempted and failed on this wiring; can
+    // revisit with proper signal conditioning later.
     uart_rx #(
         .CLK_HZ(25000000),
         .BAUD  (115200)
@@ -132,6 +135,11 @@ module fpga_top (
     wire [15:0] brg_poke_addr;
     wire [7:0]  brg_poke_data;
     wire        brg_pause;
+    wire        brg_rom_we;
+    wire        brg_rom_idx;
+    wire [13:0] brg_rom_addr;
+    wire [7:0]  brg_rom_data;
+    wire        brg_cpu_reset;
     wire [15:0] brg_cpu_pc;
     wire [7:0]  brg_cpu_a, brg_cpu_x, brg_cpu_y, brg_cpu_sp, brg_cpu_flags;
     wire        brg_key_valid;
@@ -152,6 +160,11 @@ module fpga_top (
         .dbg_poke_addr   (brg_poke_addr),
         .dbg_poke_data   (brg_poke_data),
         .dbg_pause       (brg_pause),
+        .dbg_rom_we      (brg_rom_we),
+        .dbg_rom_idx     (brg_rom_idx),
+        .dbg_rom_addr    (brg_rom_addr),
+        .dbg_rom_data    (brg_rom_data),
+        .dbg_cpu_reset   (brg_cpu_reset),
         .dbg_cpu_pc      (brg_cpu_pc),
         .dbg_cpu_a       (brg_cpu_a),
         .dbg_cpu_x       (brg_cpu_x),
@@ -201,6 +214,11 @@ module fpga_top (
         .dbg_poke_addr(brg_poke_addr),
         .dbg_poke_data(brg_poke_data),
         .dbg_pause    (brg_pause),
+        .dbg_rom_we   (brg_rom_we),
+        .dbg_rom_idx  (brg_rom_idx),
+        .dbg_rom_addr (brg_rom_addr),
+        .dbg_rom_data (brg_rom_data),
+        .dbg_cpu_reset(brg_cpu_reset),
         .dbg_cpu_pc   (brg_cpu_pc),
         .dbg_cpu_a    (brg_cpu_a),
         .dbg_cpu_x    (brg_cpu_x),

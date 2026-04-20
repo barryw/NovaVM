@@ -31,6 +31,19 @@ module debug_bridge (
     output logic [7:0]  dbg_poke_data,
     output logic        dbg_pause,
 
+    // ROM write port — single-cycle pulse writes one byte to a ROM bank.
+    // dbg_rom_idx: 0=basic_rom, 1=ext_rom. dbg_rom_addr is the 14-bit offset
+    // within the 16KB ROM.
+    output logic        dbg_rom_we,
+    output logic        dbg_rom_idx,
+    output logic [13:0] dbg_rom_addr,
+    output logic [7:0]  dbg_rom_data,
+
+    // CPU soft-reset — asserts while high. NovaHost holds this during ROM
+    // load so the CPU fetches a clean reset vector from the freshly-loaded
+    // ROM when it's released. OR'd with the top-level rst inside top.sv.
+    output logic        dbg_cpu_reset,
+
     // CPU state (directly wired from top.sv)
     input  logic [15:0] dbg_cpu_pc,
     input  logic [7:0]  dbg_cpu_a,
@@ -56,6 +69,11 @@ module debug_bridge (
     localparam CMD_PAUSE       = 8'h07;
     localparam CMD_RESUME      = 8'h08;
     localparam CMD_PEEK_BLOCK  = 8'h09;
+    localparam CMD_POKE_ROM    = 8'h0A;  // [idx, addr_hi, addr_lo, data]
+    localparam CMD_RESET_HOLD  = 8'h0B;  // assert cpu reset (level-held)
+    localparam CMD_RESET_REL   = 8'h0C;  // release cpu reset
+    localparam CMD_POKE_ROM_BLK= 8'h0D;  // [idx, addr_hi, addr_lo, count, ...data]
+                                         // count=0 means 256. Single ack at end.
 
     localparam SCREEN_BASE = 16'hAA00;
     localparam COLOR_BASE  = 16'hB1D0;
@@ -79,7 +97,7 @@ module debug_bridge (
         S_BULK_TX_WAIT,  // 11: wait for bulk TX to complete
         S_POKE_DONE,     // 12: poke deassert cycle
         S_KEY_DONE,      // 13: key deassert cycle
-        S_UNUSED_14,     // 14
+        S_ROM_BULK_WRITE,// 14: stream incoming bytes into ROM
         S_UNUSED_15      // 15
     } state_t;
 
@@ -87,9 +105,9 @@ module debug_bridge (
 
     // Command and parameters
     logic [7:0]  cmd;
-    logic [7:0]  param0, param1, param2;   // received parameter bytes
-    logic [1:0]  recv_cnt;                 // bytes received so far
-    logic [1:0]  recv_need;                // bytes needed for this command
+    logic [7:0]  param0, param1, param2, param3;   // received parameter bytes
+    logic [2:0]  recv_cnt;                         // bytes received so far
+    logic [2:0]  recv_need;                        // bytes needed for this command
 
     // Derived fields
     wire [15:0] cmd_addr = {param0, param1};
@@ -161,8 +179,15 @@ module debug_bridge (
             param0           <= 0;
             param1           <= 0;
             param2           <= 0;
-            recv_cnt         <= 0;
-            recv_need        <= 0;
+            param3           <= 0;
+            recv_cnt         <= 3'd0;
+            recv_need        <= 3'd0;
+            dbg_rom_we       <= 0;
+            dbg_rom_idx      <= 0;
+            dbg_rom_addr     <= 0;
+            dbg_rom_data     <= 0;
+            // Hold CPU reset until NovaHost has loaded ROM and releases it.
+            dbg_cpu_reset    <= 1'b1;
             resp_idx         <= 0;
             resp_total       <= 0;
             peek_latch       <= 0;
@@ -190,6 +215,7 @@ module debug_bridge (
             // Default: clear single-cycle pulses
             tx_start         <= 0;
             dbg_poke_en      <= 0;
+            dbg_rom_we       <= 0;
             key_inject_valid <= 0;
 
             case (state)
@@ -204,10 +230,12 @@ module debug_bridge (
                         recv_cnt   <= 0;
                         status_err <= 0;
                         case (rx_data)
-                            CMD_PEEK:        begin recv_need <= 2; state <= S_RECV; end
-                            CMD_POKE:        begin recv_need <= 2'd3; state <= S_RECV; end
-                            CMD_SEND_KEY:    begin recv_need <= 1; state <= S_RECV; end
-                            CMD_PEEK_BLOCK:  begin recv_need <= 2'd3; state <= S_RECV; end
+                            CMD_PEEK:        begin recv_need <= 3'd2; state <= S_RECV; end
+                            CMD_POKE:        begin recv_need <= 3'd3; state <= S_RECV; end
+                            CMD_SEND_KEY:    begin recv_need <= 3'd1; state <= S_RECV; end
+                            CMD_PEEK_BLOCK:  begin recv_need <= 3'd3; state <= S_RECV; end
+                            CMD_POKE_ROM:    begin recv_need <= 3'd4; state <= S_RECV; end
+                            CMD_POKE_ROM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
 
                             CMD_READ_SCREEN: begin
                                 bulk_addr      <= SCREEN_BASE;
@@ -243,6 +271,20 @@ module debug_bridge (
                                 state      <= S_TX_BYTE;
                             end
 
+                            CMD_RESET_HOLD: begin
+                                dbg_cpu_reset <= 1'b1;
+                                resp_idx      <= 0;
+                                resp_total    <= 1;
+                                state         <= S_TX_BYTE;
+                            end
+
+                            CMD_RESET_REL: begin
+                                dbg_cpu_reset <= 1'b0;
+                                resp_idx      <= 0;
+                                resp_total    <= 1;
+                                state         <= S_TX_BYTE;
+                            end
+
                             default: begin
                                 // Unknown command — send error status
                                 status_err <= 1;
@@ -261,9 +303,10 @@ module debug_bridge (
                 S_RECV: begin
                     if (rx_valid) begin
                         case (recv_cnt)
-                            2'd0: param0 <= rx_data;
-                            2'd1: param1 <= rx_data;
-                            2'd2: param2 <= rx_data;
+                            3'd0: param0 <= rx_data;
+                            3'd1: param1 <= rx_data;
+                            3'd2: param2 <= rx_data;
+                            3'd3: param3 <= rx_data;
                             default: ;
                         endcase
                         recv_cnt <= recv_cnt + 1;
@@ -300,6 +343,29 @@ module debug_bridge (
                                     resp_idx       <= 0;
                                     resp_total     <= 1;  // status, then bulk
                                     state          <= S_TX_BYTE;
+                                end
+
+                                CMD_POKE_ROM: begin
+                                    // Wire byte order (big-endian, matches
+                                    // CMD_POKE): [idx, addr_hi, addr_lo, data].
+                                    // param0=idx, param1=addr_hi, param2=addr_lo,
+                                    // rx_data=data (4th byte arriving this cycle).
+                                    dbg_rom_idx  <= param0[0];
+                                    dbg_rom_addr <= {param1[5:0], param2};
+                                    dbg_rom_data <= rx_data;
+                                    dbg_rom_we   <= 1;
+                                    state        <= S_POKE_DONE;
+                                end
+
+                                CMD_POKE_ROM_BLK: begin
+                                    // param0=idx, param1=addr_hi, param2=addr_lo,
+                                    // rx_data=count (4th param, count=0 means 256).
+                                    // The data bytes follow in S_ROM_BULK_WRITE.
+                                    dbg_rom_idx    <= param0[0];
+                                    bulk_addr      <= {param1, param2};
+                                    bulk_remaining <= (rx_data == 0) ? 11'd256
+                                                                     : {3'b0, rx_data};
+                                    state          <= S_ROM_BULK_WRITE;
                                 end
 
                                 default: begin
@@ -448,6 +514,27 @@ module debug_bridge (
                             state <= S_IDLE;
                         end else begin
                             state <= S_BULK_PEEK;
+                        end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // ROM_BULK_WRITE: stream incoming bytes into the selected
+                // ROM dpram, auto-incrementing the address. When the count
+                // reaches zero, send a single status ack and return to IDLE.
+                // ---------------------------------------------------------
+                S_ROM_BULK_WRITE: begin
+                    if (rx_valid) begin
+                        dbg_rom_addr   <= bulk_addr[13:0];
+                        dbg_rom_data   <= rx_data;
+                        dbg_rom_we     <= 1;
+                        bulk_addr      <= bulk_addr + 1;
+                        bulk_remaining <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            // Last byte — schedule status ack
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
                         end
                     end
                 end

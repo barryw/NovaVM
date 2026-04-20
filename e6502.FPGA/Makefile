@@ -22,15 +22,22 @@ VFLAGS    = --cc --exe --build -Wall \
             -LDFLAGS "$(shell sdl2-config --libs)" \
             --Mdir $(OBJ_DIR) -o ../$(PROJ)
 
-.PHONY: all run clean hex
+.PHONY: all run clean hex ehbasic
 
 all: $(PROJ)
 
-# Build ROMs from ehbasic source and copy to rom/
-$(ROM_BIN) $(EXT_BIN): ../ehbasic/basic.asm
-	@make -C ../ehbasic
-	@cp ../ehbasic/basic.bin $(ROM_BIN)
-	@cp ../ehbasic/extension.bin $(EXT_BIN)
+# Always rebuild ehbasic from source so every sim build picks up the latest
+# ROM. The inner `make -C ../ehbasic` is a fast no-op when no source changed.
+# Copies use cmp||cp so rom/ehbasic.bin mtime stays stable unless content
+# actually changed — that way rom/ehbasic.hex only regenerates when needed.
+ehbasic:
+	@$(MAKE) --no-print-directory -C ../ehbasic
+
+$(ROM_BIN): ehbasic
+	@cmp -s ../ehbasic/basic.bin $@ 2>/dev/null || cp ../ehbasic/basic.bin $@
+
+$(EXT_BIN): ehbasic
+	@cmp -s ../ehbasic/extension.bin $@ 2>/dev/null || cp ../ehbasic/extension.bin $@
 
 # Convert binary ROM to hex format for $readmemh
 $(ROM_HEX): $(ROM_BIN)

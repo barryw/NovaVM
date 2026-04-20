@@ -258,6 +258,9 @@ e6502.ESP32/**/build/
 # FPGA build artifacts
 e6502.FPGA/fpga/build/
 e6502.FPGA/obj_dir/
+e6502.FPGA/obj_dir_synth/
 e6502.FPGA/e6502_sim
 e6502.FPGA/e6502_sim_synth
 e6502.FPGA/test/build/
+e6502.FPGA/fpga/bit_backups/
+e6502.FPGA/fpga/.claude/

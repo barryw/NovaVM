@@ -54,6 +54,7 @@ private:
     void cmdWaitReady(const String& json);
     void cmdWatch(const String& json);
     void cmdRunCycles(const String& json);
+    void cmdReloadRom();
 
     // Response helpers
     void respond(const char* json);

@@ -13,9 +13,15 @@ VL = read_verilog -DSYNTHESIS
 
 NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --timing-allow-fail
 
-.PHONY: all synth pnr bitstream prog prog_flash clean fast
+.PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic
 
-all: bitstream
+all: ehbasic bitstream
+
+# Refresh ROMs from ehbasic source before any synthesis run. Delegates to the
+# parent Makefile's hex target, which rebuilds ehbasic and regenerates
+# rom/*.hex only when content changed (so synth skips unchanged builds).
+ehbasic:
+	@$(MAKE) --no-print-directory -C .. hex
 
 # =========================================================================
 # Source files
@@ -40,7 +46,7 @@ $(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI
 		$(VL) $(RTL_CPU) $(RTL_HDMI); \
 		synth_ecp5 -noflatten -top fpga_top -json $@"
 
-synth: $(BUILDDIR)/$(PROJ).json
+synth: ehbasic $(BUILDDIR)/$(PROJ).json
 
 # =========================================================================
 # Place & Route + Bitstream
@@ -48,22 +54,22 @@ synth: $(BUILDDIR)/$(PROJ).json
 $(BUILDDIR)/$(PROJ).config: $(BUILDDIR)/$(PROJ).json $(PIN_DEF)
 	nextpnr-ecp5 $(NEXTPNR_FLAGS) --textcfg $@ --json $< --lpf $(PIN_DEF)
 
-pnr: $(BUILDDIR)/$(PROJ).config
+pnr: ehbasic $(BUILDDIR)/$(PROJ).config
 
 $(BUILDDIR)/$(PROJ).bit: $(BUILDDIR)/$(PROJ).config
 	ecppack --compress $< $@
 
-bitstream: $(BUILDDIR)/$(PROJ).bit
+bitstream: ehbasic $(BUILDDIR)/$(PROJ).bit
 
 # Program
-prog: $(BUILDDIR)/$(PROJ).bit
-	openFPGALoader --board ulx3s $<
+prog: ehbasic $(BUILDDIR)/$(PROJ).bit
+	openFPGALoader --board ulx3s $(BUILDDIR)/$(PROJ).bit
 
-prog_flash: $(BUILDDIR)/$(PROJ).bit
-	openFPGALoader --board ulx3s -f $<
+prog_flash: ehbasic $(BUILDDIR)/$(PROJ).bit
+	openFPGALoader --board ulx3s -f $(BUILDDIR)/$(PROJ).bit
 
 # Fast: build + flash to SRAM in one command
-fast: bitstream
+fast: ehbasic bitstream
 	openFPGALoader --board ulx3s $(BUILDDIR)/$(PROJ).bit
 
 clean:

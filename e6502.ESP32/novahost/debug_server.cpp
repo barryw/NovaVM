@@ -84,6 +84,7 @@ void DebugServer::handleCommand(const String& json) {
     else if (cmd == "wait_ready")  cmdWaitReady(json);
     else if (cmd == "watch")       cmdWatch(json);
     else if (cmd == "run_cycles")  cmdRunCycles(json);
+    else if (cmd == "reload_rom")  cmdReloadRom();
     else {
         char buf[128];
         snprintf(buf, sizeof(buf),
@@ -253,6 +254,19 @@ void DebugServer::cmdDbgResume() {
     if (!_bridge.resume()) { respondError("FPGA resume failed"); return; }
     _paused = false;
     respondOk();
+}
+
+// Manual ROM reload — re-runs the boot-time load sequence. Useful after a
+// bitstream reflash when NovaHost's boot-time load ran against a different
+// (now-replaced) bitstream.
+extern bool loadRomsToFPGA();
+
+void DebugServer::cmdReloadRom() {
+    if (loadRomsToFPGA()) {
+        respondOk();
+    } else {
+        respondError("ROM reload failed (see NovaHost log for details)");
+    }
 }
 
 // =========================================================================

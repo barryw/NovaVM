@@ -13,6 +13,10 @@
 #define CMD_PAUSE       0x07
 #define CMD_RESUME      0x08
 #define CMD_PEEK_BLOCK  0x09
+#define CMD_POKE_ROM    0x0A
+#define CMD_RESET_HOLD  0x0B
+#define CMD_RESET_REL   0x0C
+#define CMD_POKE_ROM_BLK 0x0D
 
 // =========================================================================
 // Low-level serial helpers
@@ -121,4 +125,58 @@ bool FpgaBridge::peekBlock(uint16_t addr, uint8_t count, uint8_t* buf) {
     if (!recvStatus()) return false;
     int n = (count == 0) ? 256 : count;
     return recvBytes(buf, n);
+}
+
+bool FpgaBridge::resetHold() {
+    drain();
+    _serial.write(CMD_RESET_HOLD);
+    return recvStatus();
+}
+
+bool FpgaBridge::resetRelease() {
+    drain();
+    _serial.write(CMD_RESET_REL);
+    return recvStatus();
+}
+
+bool FpgaBridge::pokeRom(uint8_t idx, uint16_t addr, uint8_t value) {
+    drain();
+    uint8_t buf[5] = {
+        CMD_POKE_ROM,
+        (uint8_t)(idx & 0x01),
+        (uint8_t)(addr >> 8),
+        (uint8_t)(addr & 0xFF),
+        value
+    };
+    _serial.write(buf, 5);
+    return recvStatus();
+}
+
+bool FpgaBridge::pokeRomBlock(uint8_t idx, uint16_t start_addr,
+                              const uint8_t* data, uint16_t count) {
+    // count==0 means 256 in the wire protocol; reject anything larger.
+    if (count > 256) return false;
+    drain();
+    uint8_t header[5] = {
+        CMD_POKE_ROM_BLK,
+        (uint8_t)(idx & 0x01),
+        (uint8_t)(start_addr >> 8),
+        (uint8_t)(start_addr & 0xFF),
+        (uint8_t)(count & 0xFF)     // 256 encodes as 0
+    };
+    _serial.write(header, 5);
+    _serial.write(data, (count == 0) ? 256 : count);
+    return recvStatus();
+}
+
+bool FpgaBridge::loadRom(uint8_t idx, const uint8_t* data, size_t len) {
+    // Split into 256-byte blocks. At 3.125 Mbaud, 16KB is ~52ms.
+    const size_t BLOCK = 256;
+    for (size_t off = 0; off < len; off += BLOCK) {
+        size_t chunk = (len - off >= BLOCK) ? BLOCK : (len - off);
+        uint16_t wire_count = (chunk == 256) ? 0 : (uint16_t)chunk;
+        if (!pokeRomBlock(idx, (uint16_t)off, data + off, wire_count))
+            return false;
+    }
+    return true;
 }

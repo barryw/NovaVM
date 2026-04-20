@@ -37,6 +37,14 @@ module top (
     input  logic [15:0] dbg_poke_addr,
     input  logic [7:0]  dbg_poke_data,
     input  logic        dbg_pause,        // halt CPU when high
+    // ROM-load port — write one byte at a time into either ROM bank.
+    // idx=0 → basic_rom, idx=1 → ext_rom. Used by NovaHost to stream the
+    // EhBASIC + extension binaries into BRAM at boot.
+    input  logic        dbg_rom_we,
+    input  logic        dbg_rom_idx,
+    input  logic [13:0] dbg_rom_addr,
+    input  logic [7:0]  dbg_rom_data,
+    input  logic        dbg_cpu_reset,     // ESP32-driven soft reset, ORs with rst
     output logic [15:0] dbg_cpu_pc,
     output logic [7:0]  dbg_cpu_a,
     output logic [7:0]  dbg_cpu_x,
@@ -112,23 +120,25 @@ module top (
         .addr_b(ram_b_addr), .dout_b(ram_b_dout)
     );
 
-    // EhBASIC ROM: 16KB
+    // EhBASIC ROM: 16KB — runtime-loaded via dbg_rom_we (idx=0)
     logic [13:0] brom_b_addr;
     logic [7:0]  brom_b_dout;
+    wire         brom_we = dbg_rom_we && (dbg_rom_idx == 1'b0);
 
-    dpram #(.WIDTH(8), .DEPTH(16384), .INIT_FILE("rom/ehbasic.hex")) basic_rom_inst (
+    dpram #(.WIDTH(8), .DEPTH(16384)) basic_rom_inst (
         .clk(clk),
-        .addr_a(14'd0), .din_a(8'd0), .we_a(1'b0), .dout_a(),
+        .addr_a(dbg_rom_addr), .din_a(dbg_rom_data), .we_a(brom_we), .dout_a(),
         .addr_b(brom_b_addr), .dout_b(brom_b_dout)
     );
 
-    // Extension ROM: 16KB
+    // Extension ROM: 16KB — runtime-loaded via dbg_rom_we (idx=1)
     logic [13:0] erom_b_addr;
     logic [7:0]  erom_b_dout;
+    wire         erom_we = dbg_rom_we && (dbg_rom_idx == 1'b1);
 
-    dpram #(.WIDTH(8), .DEPTH(16384), .INIT_FILE("rom/extension.hex")) ext_rom_inst (
+    dpram #(.WIDTH(8), .DEPTH(16384)) ext_rom_inst (
         .clk(clk),
-        .addr_a(14'd0), .din_a(8'd0), .we_a(1'b0), .dout_a(),
+        .addr_a(dbg_rom_addr), .din_a(dbg_rom_data), .we_a(erom_we), .dout_a(),
         .addr_b(erom_b_addr), .dout_b(erom_b_dout)
     );
 
@@ -515,6 +525,14 @@ module top (
         if (blt_xram_we)
             xram[blt_xram_addr] <= blt_xram_wdata;
 
+        // Debug ROM-load writes (mirrors the SYNTHESIS dpram port A path)
+        if (dbg_rom_we) begin
+            if (dbg_rom_idx == 1'b0)
+                basic_rom[dbg_rom_addr] <= dbg_rom_data;
+            else
+                ext_rom[dbg_rom_addr] <= dbg_rom_data;
+        end
+
         // ROM bank switching
         if (cpu_we && cpu_addr == REG_ROMSWAP) begin
             if (cpu_dout == ROMSWAP_EXT)
@@ -667,7 +685,7 @@ module top (
 
     cpu cpu_inst (
         .clk    (clk),
-        .reset  (rst),
+        .reset  (rst | dbg_cpu_reset),
         .AB     (cpu_addr),
         .DI     (cpu_din),
         .DO     (cpu_dout),
@@ -751,14 +769,14 @@ module top (
     wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
     wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
     wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
-    wire [7:0] dbg_rom_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
-                                             : basic_rom[dbg_peek_addr - ROM_BASE];
-    assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns ? vgc_dbg_rdata :
-                                          dbg_sid1     ? sid1_dout     :
-                                          dbg_sid2     ? sid2_dout     :
-                                          dbg_sidcfg   ? sid_cfg_reg   :
-                                          dbg_in_rom   ? dbg_rom_data  :
-                                                          ram[dbg_peek_addr]) : 8'h00;
+    wire [7:0] dbg_rom_read_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
+                                                  : basic_rom[dbg_peek_addr - ROM_BASE];
+    assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :
+                                          dbg_sid1         ? sid1_dout     :
+                                          dbg_sid2         ? sid2_dout     :
+                                          dbg_sidcfg       ? sid_cfg_reg   :
+                                          dbg_in_rom       ? dbg_rom_read_data :
+                                                             ram[dbg_peek_addr]) : 8'h00;
 
     // Poke: write to main RAM on clock edge (ROM-protected)
     always_ff @(posedge clk) begin

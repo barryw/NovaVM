@@ -34,8 +34,28 @@ public:
     bool pause();
     bool resume();
 
+    // CPU soft-reset (separate from pause — resets 6502 state, not just halts).
+    // Call resetHold() before loading a ROM, resetRelease() once load is done
+    // so the CPU starts fresh from the freshly-written reset vector.
+    bool resetHold();
+    bool resetRelease();
+
     // Block read (count=0 means 256)
     bool peekBlock(uint16_t addr, uint8_t count, uint8_t* buf);
+
+    // Write one byte into a ROM bank. idx=0 → basic_rom ($C000-$FFFF when
+    // ext_rom_active=0), idx=1 → ext_rom. addr is the 14-bit offset (0..16383).
+    bool pokeRom(uint8_t idx, uint16_t addr, uint8_t value);
+
+    // Block-write up to 256 bytes into a ROM bank. count=0 means 256. This is
+    // the fast path: one command + ack wraps 256 bytes, vs one ack per byte
+    // for pokeRom. At 3.125 Mbaud a full 32KB ROM load completes in ~100ms.
+    bool pokeRomBlock(uint8_t idx, uint16_t start_addr, const uint8_t* data, uint16_t count);
+
+    // Bulk-load a ROM bank via 256-byte blocks. Caller must hold the CPU
+    // in reset (resetHold()) before calling so the CPU doesn't observe
+    // partially-loaded ROM. Returns false on any block-level failure.
+    bool loadRom(uint8_t idx, const uint8_t* data, size_t len);
 
     // Drain stale bytes from serial
     void drain();

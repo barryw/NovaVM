@@ -13,6 +13,12 @@
 #include <HardwareSerial.h>
 #include "fpga_bridge.h"
 #include "debug_server.h"
+// Embedded EhBASIC + extension ROM binaries — auto-generated from
+// ehbasic/basic.bin and ehbasic/extension.bin by tools/bin2header.py.
+// NovaHost streams these into FPGA BRAM at boot, so ROM iteration costs
+// ~5s OTA instead of a 17-min bitstream rebuild.
+#include "ehbasic_rom.h"
+#include "extension_rom.h"
 
 // =========================================================================
 // Configuration
@@ -25,6 +31,9 @@
 // ULX3S v3.1.x: GPIO26/GPIO27 route to FPGA pins L1/N3.
 // (v3.0.x used GPIO16/17 on the same FPGA pins — different board revision.)
 #define FPGA_SERIAL Serial2
+// 115200 — known-reliable on flying wires between ESP32 and FPGA.
+// 3.125 Mbaud attempted and failed (bridge commands all timed out; likely
+// signal integrity). Can bump again with proper signal conditioning later.
 #define FPGA_BAUD   115200
 #define FPGA_RX_PIN 26   // ESP32 GPIO26 = Serial2 RX (receives from FPGA L1)
 #define FPGA_TX_PIN 27   // ESP32 GPIO27 = Serial2 TX (transmits to FPGA N3)
@@ -129,6 +138,59 @@ void setupWiFi() {
 }
 
 // =========================================================================
+// Boot-time ROM load into FPGA BRAM via debug bridge
+// =========================================================================
+// At 115200 baud with bulk CMD_POKE_ROM_BLK (one ack per 256-byte block),
+// full 32 KB ROM load takes ~3 seconds.
+bool loadRomsToFPGA() {
+    logLn("Loading ROM into FPGA BRAM (ehbasic=%u bytes, extension=%u bytes)...",
+          (unsigned)EHBASIC_ROM_LEN, (unsigned)EXTENSION_ROM_LEN);
+    unsigned long t0 = millis();
+
+    // Drain any stale bytes from a previous session.
+    fpgaBridge.drain();
+
+    // The FPGA may still be configuring from flash when ESP32 setup() runs —
+    // retry resetHold several times before giving up. A single attempt is
+    // ~220 ms with the byte timeout, so 20 attempts gives the FPGA ~4 s to
+    // come up before we bail.
+    bool ack = false;
+    for (int attempt = 0; attempt < 20 && !ack; attempt++) {
+        fpgaBridge.drain();
+        if (fpgaBridge.resetHold()) {
+            ack = true;
+            if (attempt > 0)
+                logLn("FPGA bridge responded on attempt %d", attempt + 1);
+        } else {
+            delay(200);
+        }
+    }
+    if (!ack) {
+        logLn("ROM load FAILED: FPGA bridge never acked resetHold (wired up? bitstream loaded?)");
+        return false;
+    }
+
+    if (!fpgaBridge.loadRom(0, EHBASIC_ROM, EHBASIC_ROM_LEN)) {
+        logLn("ROM load FAILED: basic_rom streaming aborted");
+        return false;
+    }
+
+    if (!fpgaBridge.loadRom(1, EXTENSION_ROM, EXTENSION_ROM_LEN)) {
+        logLn("ROM load FAILED: ext_rom streaming aborted");
+        return false;
+    }
+
+    if (!fpgaBridge.resetRelease()) {
+        logLn("ROM load FAILED: resetRelease did not ack");
+        return false;
+    }
+
+    unsigned long dt = millis() - t0;
+    logLn("ROM load OK — CPU released (took %lu ms)", dt);
+    return true;
+}
+
+// =========================================================================
 // Accept new log viewer connections
 // =========================================================================
 void handleLogClients() {
@@ -167,6 +229,15 @@ void setup() {
     FPGA_SERIAL.begin(FPGA_BAUD, SERIAL_8N1, FPGA_RX_PIN, FPGA_TX_PIN);
     Serial.printf("FPGA UART initialized on GPIO%d/%d (binary debug protocol)\n",
                   FPGA_RX_PIN, FPGA_TX_PIN);
+
+    // Give the FPGA debug bridge a moment to settle before we start poking it.
+    delay(100);
+
+    // Stream ROM into FPGA BRAM. FPGA's debug_bridge boots with dbg_cpu_reset=1,
+    // so the CPU stays held in reset until we've loaded ROM + released. If the
+    // FPGA isn't wired up (or is running the old bitstream), this logs a
+    // failure and we continue — OTA still works via WiFi for recovery.
+    loadRomsToFPGA();
 
     // WiFi + servers
     setupWiFi();
