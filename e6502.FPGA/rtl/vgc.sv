@@ -469,8 +469,12 @@ module vgc (
     logic [3:0]  sprrow_row;
 
     // SprCopy state
-    logic        sprcopy_phase;
+    // sprcopy_phase: 0=issue read, 1=wait for dpram latency, 2=capture+write
+    logic [1:0]  sprcopy_phase;
     logic [7:0]  sprcopy_data;
+    // sprdef_wait: delays the SPRDEF read-modify-write completion by one
+    // cycle so spr_a_dout reflects the freshly-issued read address.
+    logic        sprdef_wait;
 
     // MemRead latency state
     logic        memread_pending;
@@ -690,7 +694,7 @@ module vgc (
             copper_enabled <= 0; copper_count <= 0;
             copper_target_list <= 0; copper_pending_list <= 0;
             copper_loading <= 0;
-            sprrow_count <= 0; sprcopy_phase <= 0;
+            sprrow_count <= 0; sprcopy_phase <= 0; sprdef_wait <= 0;
             memread_pending <= 0;
             vgc_tile_we <= 0; vgc_tile_re <= 0;
             artist_cmd_valid <= 0;
@@ -781,24 +785,38 @@ module vgc (
                             cmd_cx <= cmd_cx + 1;
                     end
                     8'h13: begin // SprCopy
-                        if (!sprcopy_phase) begin
-                            cmd_spr_addr <= {cmd_y[3:0], cmd_cy[3:0], cmd_cx[2:0]};
-                            cmd_spr_re <= 1;
-                            sprcopy_phase <= 1;
-                        end else begin
-                            cmd_spr_addr <= {cmd_x[3:0], cmd_cy[3:0], cmd_cx[2:0]};
-                            cmd_spr_din <= spr_a_dout;
-                            cmd_spr_we <= 1;
-                            sprcopy_phase <= 0;
-                            if (cmd_cx == 7) begin
-                                cmd_cx <= 0;
-                                if (cmd_cy == 15)
-                                    cmd_busy <= 0;
-                                else
-                                    cmd_cy <= cmd_cy + 1;
-                            end else
-                                cmd_cx <= cmd_cx + 1;
-                        end
+                        // 3-phase machine: issue read → wait 1 cycle for
+                        // dpram latency → capture spr_a_dout and write to
+                        // destination. The original 2-phase code sampled
+                        // spr_a_dout the same cycle the read address took
+                        // effect, so every byte written was stale data.
+                        case (sprcopy_phase)
+                            2'd0: begin
+                                cmd_spr_addr  <= {cmd_y[3:0], cmd_cy[3:0], cmd_cx[2:0]};
+                                cmd_spr_re    <= 1;
+                                sprcopy_phase <= 2'd1;
+                            end
+                            2'd1: begin
+                                // dpram is reading this cycle — spr_a_dout
+                                // will be valid at the next posedge.
+                                sprcopy_phase <= 2'd2;
+                            end
+                            2'd2: begin
+                                cmd_spr_addr  <= {cmd_x[3:0], cmd_cy[3:0], cmd_cx[2:0]};
+                                cmd_spr_din   <= spr_a_dout;
+                                cmd_spr_we    <= 1;
+                                sprcopy_phase <= 2'd0;
+                                if (cmd_cx == 7) begin
+                                    cmd_cx <= 0;
+                                    if (cmd_cy == 15)
+                                        cmd_busy <= 0;
+                                    else
+                                        cmd_cy <= cmd_cy + 1;
+                                end else
+                                    cmd_cx <= cmd_cx + 1;
+                            end
+                            default: sprcopy_phase <= 2'd0;
+                        endcase
                     end
                     CMD_SPRROW: begin
                         cmd_spr_addr <= {sprrow_spr, sprrow_row, sprrow_count};
@@ -809,6 +827,12 @@ module vgc (
                         else
                             sprrow_count <= sprrow_count + 1;
                     end
+                    // SPRDEF is handled in a separate always_ff section
+                    // below (the read-modify-write gated by sprdef_wait).
+                    // If we don't list it here, the default arm would
+                    // clear cmd_busy on the first cycle and the RMW would
+                    // never fire.
+                    CMD_SPRDEF: ;
                     default: cmd_busy <= 0;
                 endcase
             end
@@ -934,6 +958,9 @@ module vgc (
                                             cmd_spr_addr <= {regs[17][3:0], regs[19][3:0], regs[18][3:1]};
                                             cmd_spr_re <= 1;
                                             cmd_busy <= 1; cmd_op <= CMD_SPRDEF;
+                                            // Defer RMW one cycle so spr_a_dout
+                                            // reflects the new read address.
+                                            sprdef_wait <= 1;
                                         end
                                     end
                                     CMD_SPRROW: begin
@@ -1147,8 +1174,16 @@ module vgc (
                 end
             end
 
-            // SPRDEF: complete the read-modify-write
-            if (cmd_busy && cmd_op == CMD_SPRDEF && !memread_pending) begin
+            // SPRDEF: complete the read-modify-write, delayed one cycle so
+            // spr_a_dout reflects the freshly-issued read address. We must
+            // re-assert cmd_spr_re during the wait — otherwise the port A
+            // mux falls through to its default (addr=0) and dpram reads
+            // mem[0] instead of the target byte.
+            if (sprdef_wait) begin
+                cmd_spr_addr <= {regs[17][3:0], regs[19][3:0], regs[18][3:1]};
+                cmd_spr_re   <= 1;
+                sprdef_wait  <= 0;
+            end else if (cmd_busy && cmd_op == CMD_SPRDEF && !memread_pending) begin
                 cmd_spr_addr <= {regs[17][3:0], regs[19][3:0], regs[18][3:1]};
                 if (regs[18][0])
                     cmd_spr_din <= {spr_a_dout[7:4], regs[20][3:0]};

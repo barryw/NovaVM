@@ -459,24 +459,30 @@ module artist (
                     end
 
                     CMD_LINE: begin
+                        // Bresenham needs dx = +|x1-x0| and dy = -|y1-y0|,
+                        // err = dx + dy. The previous "reversed" branches
+                        // forgot to negate |y1-y0|, which broke every line
+                        // drawn from higher-y to lower-y: the y step term
+                        // pushed err the wrong way and the endpoint fell
+                        // off the end of the iteration.
                         x  <= {1'b0, cmd_x0};
                         y  <= {2'b0, cmd_y0};
                         x2 <= {1'b0, cmd_x1};
                         y2 <= {2'b0, cmd_y1};
                         dx <= (cmd_x1 >= cmd_x0)
-                              ? (cmd_x1 - cmd_x0)
-                              : (cmd_x0 - cmd_x1);
+                              ? 10'(cmd_x1 - cmd_x0)
+                              : 10'(cmd_x0 - cmd_x1);
                         dy <= (cmd_y1 >= cmd_y0)
                               ? -(10'(cmd_y1 - cmd_y0))
-                              : 10'(cmd_y0 - cmd_y1);
+                              : -(10'(cmd_y0 - cmd_y1));
                         sx <= (cmd_x1 >= cmd_x0) ? 10'd1 : -10'd1;
                         sy <= (cmd_y1 >= cmd_y0) ? 10'd1 : -10'd1;
                         err <= ((cmd_x1 >= cmd_x0)
-                               ? (cmd_x1 - cmd_x0)
-                               : (cmd_x0 - cmd_x1))
+                               ? 10'(cmd_x1 - cmd_x0)
+                               : 10'(cmd_x0 - cmd_x1))
                              + ((cmd_y1 >= cmd_y0)
                                ? -(10'(cmd_y1 - cmd_y0))
-                               : 10'(cmd_y0 - cmd_y1));
+                               : -(10'(cmd_y0 - cmd_y1)));
                         busy <= 1; op <= CMD_LINE;
                     end
 

@@ -172,6 +172,40 @@ function automatic logic [7:0] peek_char_cell(input int col, input int row);
     peek_char_cell = dut.text_inst.char_mem.mem[row * COLS_TB + col];
 endfunction
 
+// Graphics pixel peek — 320x200, 4-bit color per pixel
+function automatic logic [3:0] peek_gfx(input int x, input int y);
+    peek_gfx = dut.gfx_inst.gfx_mem.mem[y * 320 + x];
+endfunction
+
+// Count set (non-zero) gfx pixels in a rectangle
+function automatic int count_gfx_pixels(input int x0, input int y0,
+                                         input int x1, input int y1);
+    int n = 0;
+    for (int yy = y0; yy <= y1; yy++)
+        for (int xx = x0; xx <= x1; xx++)
+            if (peek_gfx(xx, yy) != 4'd0) n++;
+    return n;
+endfunction
+
+// Sprite memory peek — spr_mem is 2048 bytes, addressed as
+// {sprite_idx[3:0], row[3:0], col_pair[2:0]}. Each byte packs two 4-bit
+// pixels: hi nibble = even column, lo nibble = odd column.
+function automatic logic [7:0] peek_spr_byte(input int spr_idx,
+                                              input int row,
+                                              input int col_pair);
+    peek_spr_byte = dut.sprite_inst.spr_mem.mem[
+        (spr_idx * 16 + row) * 8 + col_pair];
+endfunction
+
+// Read one sprite pixel (0..15 x, 0..15 y) as a 4-bit color.
+function automatic logic [3:0] peek_spr_pixel(input int spr_idx,
+                                               input int x,
+                                               input int y);
+    logic [7:0] b;
+    b = peek_spr_byte(spr_idx, y, x / 2);
+    peek_spr_pixel = (x[0] == 1'b0) ? b[7:4] : b[3:0];
+endfunction
+
 // ---------------------------------------------------------------------------
 // VGC command / parameter helpers
 // ---------------------------------------------------------------------------
@@ -191,6 +225,11 @@ task automatic wait_cmd_done();
         @(posedge clk);
         timeout++;
     end
+    // After busy deasserts, give the last pending gfx write two more clocks
+    // to propagate through port A → dpram. Without this the assertion can
+    // fire before the final pixel commits to memory, masking a real success
+    // with a false failure.
+    repeat(4) @(posedge clk);
 endtask
 
 // ---------------------------------------------------------------------------
