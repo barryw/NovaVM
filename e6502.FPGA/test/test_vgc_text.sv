@@ -178,6 +178,56 @@ module test_vgc_text;
         check_eq("no stray 'Y' mirrors", x, 0);
     endtask
 
+    // T-FF: FF (0x0C) runs CMD_TXTCLS which iterates 2000 cells. Confirm
+    // every cell gets cleared to 0x20 and the fg-color RAM gets filled too.
+    task automatic test_txtcls_full_coverage();
+        int char_dirty_count;
+        int color_dirty_count;
+        int char_cleared_count;
+        int color_matched_count;
+        $display("");
+        $display("Test: FF (0x0C) CMD_TXTCLS clears ALL 2000 cells");
+        // Pre-dirty every char and color cell with a non-default value
+        for (int i = 0; i < 2000; i++) begin
+            dut.text_inst.char_mem.mem[i]  = 8'hFE;
+            dut.text_inst.color_mem.mem[i] = 8'hFF;
+        end
+        step(2);
+        // Verify pre-dirty state actually took
+        char_dirty_count = 0;
+        color_dirty_count = 0;
+        for (int i = 0; i < 2000; i++) begin
+            if (dut.text_inst.char_mem.mem[i]  == 8'hFE) char_dirty_count++;
+            if (dut.text_inst.color_mem.mem[i] == 8'hFF) color_dirty_count++;
+        end
+        check_eq("pre-FF: 2000 char cells dirtied",  char_dirty_count,  2000);
+        check_eq("pre-FF: 2000 color cells dirtied", color_dirty_count, 2000);
+
+        // Set a recognizable fg_color so TXTCLS fills color RAM with it
+        bus_write(REG_FGCOL_A, 8'd7);
+        step(2);
+        type_char(8'h0C);            // FF
+        wait_cmd_done();
+        step(10);
+
+        // EVERY char cell must be 0x20 (space), EVERY color cell must be fg_color
+        char_cleared_count  = 0;
+        color_matched_count = 0;
+        for (int i = 0; i < 2000; i++) begin
+            if (dut.text_inst.char_mem.mem[i]  == 8'h20) char_cleared_count++;
+            if (dut.text_inst.color_mem.mem[i][3:0] == 4'd7) color_matched_count++;
+        end
+        check_eq("post-FF: all 2000 char cells == 0x20",
+                 char_cleared_count, 2000);
+        check_eq("post-FF: all 2000 color cells == fg_color(7)",
+                 color_matched_count, 2000);
+
+        // cursor and scroll state should also reset
+        check_eq("post-FF: cursor_x = 0",    dut.cursor_x,      0);
+        check_eq("post-FF: cursor_y = 0",    dut.cursor_y,      0);
+        check_eq("post-FF: scroll_offset=0", dut.scroll_offset, 0);
+    endtask
+
     // T6b: push scroll_offset past its wrap point.
     // The formula is: scroll_offset = (scroll_offset >= 24) ? 0 : scroll_offset + 1.
     // Scrolling 25 times from a fresh screen must wrap scroll_offset back to 0,
@@ -289,6 +339,7 @@ module test_vgc_text;
         test_scroll_offset_write_alignment();
         test_scroll_wraparound();
         test_regcharout_control_chars();
+        test_txtcls_full_coverage();
 
         summary();
         $finish;

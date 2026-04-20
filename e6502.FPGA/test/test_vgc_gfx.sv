@@ -331,6 +331,22 @@ module test_vgc_gfx;
         end
     endtask
 
+    task automatic test_gcls_full_coverage();
+        int cleared;
+        $display("");
+        $display("Test: GCLS clears EVERY pixel of 320x200 gfx RAM");
+        // Pre-dirty every pixel
+        for (int i = 0; i < 64000; i++)
+            dut.gfx_inst.gfx_mem.mem[i] = 4'hF;
+        step(2);
+        gcls();
+        step(10);
+        cleared = 0;
+        for (int i = 0; i < 64000; i++)
+            if (dut.gfx_inst.gfx_mem.mem[i] == 4'h0) cleared++;
+        check_eq("GCLS: all 64000 pixels == 0", cleared, 64000);
+    endtask
+
     task automatic test_out_of_bounds_plot();
         $display("");
         $display("Test: out-of-bounds PLOT does not corrupt screen");
@@ -361,6 +377,7 @@ module test_vgc_gfx;
         test_fill_solid();
         test_circle_basic();
         test_paint_flood_fill();
+        test_gcls_full_coverage();
         test_out_of_bounds_plot();
 
         summary();
