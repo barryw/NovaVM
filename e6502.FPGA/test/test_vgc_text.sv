@@ -178,6 +178,102 @@ module test_vgc_text;
         check_eq("no stray 'Y' mirrors", x, 0);
     endtask
 
+    // T6b: push scroll_offset past its wrap point.
+    // The formula is: scroll_offset = (scroll_offset >= 24) ? 0 : scroll_offset + 1.
+    // Scrolling 25 times from a fresh screen must wrap scroll_offset back to 0,
+    // and writes at cursor_y=0 must then land at char RAM row 0.
+    task automatic test_scroll_wraparound();
+        int scroll_count;
+        int expected;
+        $display("");
+        $display("Test: scroll_offset wraps back to 0 after 25 scrolls");
+        type_char(8'h0C);
+        wait_cmd_done(); step(4);
+        bus_write(REG_CURSORY_A, 8'(ROWS_TB - 1));  // park at bottom
+        step(4);
+        for (int i = 0; i < 25; i++) begin
+            type_char(8'h0A);           // LF
+            step(400);                  // let scroll_pending clear 80 cells
+        end
+        scroll_count = dut.scroll_offset;
+        check_eq("scroll_offset after 25 LFs wraps to 0", scroll_count, 0);
+
+        // Now type 'W' at (0,0). It should land at char RAM row 0 since
+        // scroll_offset=0. This exercises the wrap-back path.
+        bus_write(REG_CURSORX_A, 8'h00);
+        bus_write(REG_CURSORY_A, 8'h00);
+        step(4);
+        type_char(8'h57);  // 'W'
+        check_eq("post-wrap: 'W' at char RAM row 0 col 0",
+                 peek_char_cell(0, 0), 8'h57);
+
+        // And spot check another offset value: scroll 12 more times → offset=12.
+        for (int i = 0; i < 12; i++) begin
+            bus_write(REG_CURSORY_A, 8'(ROWS_TB - 1));
+            step(4);
+            type_char(8'h0A);
+            step(400);
+        end
+        check_eq("scroll_offset after 12 more LFs", dut.scroll_offset, 12);
+
+        // Write 'Q' at (0,3) → should land at row (3+12)%25 = 15.
+        bus_write(REG_CURSORX_A, 8'h00);
+        bus_write(REG_CURSORY_A, 8'h03);
+        step(4);
+        type_char(8'h51);  // 'Q'
+        expected = (3 + 12) % ROWS_TB;
+        check_eq("'Q' lands at (3+12) mod 25 = 15",
+                 peek_char_cell(0, expected), 8'h51);
+    endtask
+
+    // T7: REG_CHAROUT control chars — BS (0x08), CR (0x0D), Reverse-CR (0x13), FF (0x0C)
+    task automatic test_regcharout_control_chars();
+        $display("");
+        $display("Test: REG_CHAROUT control chars (BS/CR/FF/reverse-CR)");
+        // BS: move cursor left, erase char behind, don't underflow
+        type_char(8'h0C);                    // FF: clean slate
+        wait_cmd_done(); step(4);
+        type_char(8'h41);                    // 'A'
+        type_char(8'h42);                    // 'B'
+        type_char(8'h43);                    // 'C'  — cursor now at col 3
+        check_eq("pre-BS: cursor_x",    dut.cursor_x, 3);
+        check_eq("pre-BS: char col 2",  peek_char_cell(2, 0), 8'h43);
+        type_char(8'h08);                    // BS
+        step(4);
+        check_eq("BS: cursor_x decremented to 2", dut.cursor_x, 2);
+        check_eq("BS: erased char at col 2",      peek_char_cell(2, 0), 8'h20);
+        check_eq("BS: char col 1 preserved",      peek_char_cell(1, 0), 8'h42);
+
+        // BS at col 0 must not underflow
+        type_char(8'h0C); wait_cmd_done(); step(4);
+        type_char(8'h08);
+        step(4);
+        check_eq("BS at col 0: cursor_x stays 0", dut.cursor_x, 0);
+
+        // CR (0x0D): return cursor to column 0, y unchanged
+        type_char(8'h0C); wait_cmd_done(); step(4);
+        for (int i = 0; i < 10; i++) type_char(8'h58);  // 10 'X's → col 10
+        type_char(8'h0A); step(4);                       // LF → row 1 col 0... wait, LF only moves y
+        // Actually LF advances y but leaves x alone in this VGC; let's just set
+        // cursor via direct poke to (5, 3), then CR, and check cursor.
+        bus_write(REG_CURSORX_A, 8'd5);
+        bus_write(REG_CURSORY_A, 8'd3);
+        step(4);
+        type_char(8'h0D);                    // CR
+        step(4);
+        check_eq("CR: cursor_x reset to 0", dut.cursor_x, 0);
+        check_eq("CR: cursor_y unchanged",   dut.cursor_y, 3);
+
+        // Reverse-CR (0x13): home cursor to (0,0)
+        bus_write(REG_CURSORX_A, 8'd40);
+        bus_write(REG_CURSORY_A, 8'd15);
+        step(4);
+        type_char(8'h13);                    // reverse-CR
+        step(4);
+        check_eq("Rev-CR: cursor_x = 0", dut.cursor_x, 0);
+        check_eq("Rev-CR: cursor_y = 0", dut.cursor_y, 0);
+    endtask
+
     // -----------------------------------------------------------------------
     // Runner
     // -----------------------------------------------------------------------
@@ -191,6 +287,8 @@ module test_vgc_text;
         test_newline_no_scroll();
         test_newline_at_bottom_scrolls();
         test_scroll_offset_write_alignment();
+        test_scroll_wraparound();
+        test_regcharout_control_chars();
 
         summary();
         $finish;

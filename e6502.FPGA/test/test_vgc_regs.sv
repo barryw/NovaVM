@@ -140,6 +140,68 @@ module test_vgc_regs;
         check_eq("irq_ctrl = 0xA5", int'(dut.irq_ctrl), 8'hA5);
     endtask
 
+    // CMD_MEMREAD = $19. Params: regs[17]=space, regs[18]=addr_lo, regs[19]=addr_hi.
+    // Result lands in regs[20] ($A014). Space 0=char, 1=color, 2=gfx, 3=sprite.
+    task automatic test_memread_char();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: CMD_MEMREAD (space 0 = char RAM)");
+        dut.text_inst.char_mem.mem[16'h0123] = 8'h5A;
+        step(2);
+        write_param(0, 8'd0);           // space = char
+        write_param(1, 8'h23);          // addr_lo
+        write_param(2, 8'h01);          // addr_hi → 0x0123
+        write_cmd(8'h19);               // MemRead
+        wait_cmd_done();
+        bus_read(16'hA014, rb);         // regs[20]
+        check_eq("MemRead char[0x0123] → regs[20] = 0x5A", int'(rb), 8'h5A);
+    endtask
+
+    task automatic test_memread_color();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: CMD_MEMREAD (space 1 = color RAM)");
+        dut.text_inst.color_mem.mem[16'h0456] = 8'h3C;
+        step(2);
+        write_param(0, 8'd1);           // space = color
+        write_param(1, 8'h56);
+        write_param(2, 8'h04);
+        write_cmd(8'h19);
+        wait_cmd_done();
+        bus_read(16'hA014, rb);
+        check_eq("MemRead color[0x0456] → regs[20] = 0x3C", int'(rb), 8'h3C);
+    endtask
+
+    task automatic test_memread_gfx();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: CMD_MEMREAD (space 2 = gfx RAM, 4-bit)");
+        dut.gfx_inst.gfx_mem.mem[16'h1234] = 4'hB;
+        step(2);
+        write_param(0, 8'd2);
+        write_param(1, 8'h34);
+        write_param(2, 8'h12);
+        write_cmd(8'h19);
+        wait_cmd_done();
+        bus_read(16'hA014, rb);
+        check_eq("MemRead gfx[0x1234] → regs[20] = 0x0B", int'(rb), 8'h0B);
+    endtask
+
+    task automatic test_memread_sprite();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: CMD_MEMREAD (space 3 = sprite RAM)");
+        dut.sprite_inst.spr_mem.mem[11'h1AB] = 8'hDE;
+        step(2);
+        write_param(0, 8'd3);
+        write_param(1, 8'hAB);
+        write_param(2, 8'h01);
+        write_cmd(8'h19);
+        wait_cmd_done();
+        bus_read(16'hA014, rb);
+        check_eq("MemRead sprite[0x01AB] → regs[20] = 0xDE", int'(rb), 8'hDE);
+    endtask
+
     task automatic test_cpu_read_char_ram();
         logic [7:0] rb;
         $display("");
@@ -191,6 +253,63 @@ module test_vgc_regs;
         bus_read(16'hA009, rb);   check_eq("count=16 (all enabled)", int'(rb), 16);
     endtask
 
+    // Drive the VGC's blitter-side read port, sample blt_rdata after
+    // dpram latency settles.
+    task automatic blt_read(input logic [2:0] space, input logic [15:0] addr,
+                             output logic [7:0] data);
+        @(posedge clk);
+        tb_blt_space <= space;
+        tb_blt_addr  <= addr;
+        tb_blt_re    <= 1;
+        @(posedge clk);
+        tb_blt_re    <= 0;
+        // Data path: cycle N re=1 → addr latched on cycle N+1 posedge (by
+        // blt_rd_pending always_ff) → blt_rd_latch valid at end of N+1 →
+        // blt_rdata (combinational from latch) visible at start of N+2.
+        repeat(3) @(posedge clk);
+        data = tb_blt_rdata;
+    endtask
+
+    task automatic test_blt_read_char();
+        logic [7:0] d;
+        $display("");
+        $display("Test: blitter-port read of char RAM");
+        dut.text_inst.char_mem.mem[11'h0AB] = 8'hC3;
+        step(4);
+        blt_read(3'd1, 16'h00AB, d);
+        check_eq("blt read char[0x0AB]", int'(d), 8'hC3);
+    endtask
+
+    task automatic test_blt_read_color();
+        logic [7:0] d;
+        $display("");
+        $display("Test: blitter-port read of color RAM");
+        dut.text_inst.color_mem.mem[11'h012] = 8'h7E;
+        step(4);
+        blt_read(3'd2, 16'h0012, d);
+        check_eq("blt read color[0x012]", int'(d), 8'h7E);
+    endtask
+
+    task automatic test_blt_read_gfx();
+        logic [7:0] d;
+        $display("");
+        $display("Test: blitter-port read of gfx RAM");
+        dut.gfx_inst.gfx_mem.mem[16'h1F0] = 4'hA;
+        step(4);
+        blt_read(3'd3, 16'h01F0, d);
+        check_eq("blt read gfx[0x1F0]", int'(d), 8'h0A);
+    endtask
+
+    task automatic test_blt_read_sprite();
+        logic [7:0] d;
+        $display("");
+        $display("Test: blitter-port read of sprite RAM");
+        dut.sprite_inst.spr_mem.mem[11'h200] = 8'h91;
+        step(4);
+        blt_read(3'd4, 16'h0200, d);
+        check_eq("blt read sprite[0x200]", int'(d), 8'h91);
+    endtask
+
     task automatic test_independent_registers();
         $display("");
         $display("Test: writing each register does not disturb others");
@@ -238,9 +357,17 @@ module test_vgc_regs;
         test_cursor_enable();
         test_collision_clear_on_write();
         test_irq_ctrl();
+        test_memread_char();
+        test_memread_color();
+        test_memread_gfx();
+        test_memread_sprite();
         test_cpu_read_char_ram();
         test_cpu_read_color_ram();
         test_sprite_count_reg();
+        test_blt_read_char();
+        test_blt_read_color();
+        test_blt_read_gfx();
+        test_blt_read_sprite();
         test_independent_registers();
 
         summary();

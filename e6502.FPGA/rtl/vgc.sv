@@ -476,8 +476,10 @@ module vgc (
     // cycle so spr_a_dout reflects the freshly-issued read address.
     logic        sprdef_wait;
 
-    // MemRead latency state
-    logic        memread_pending;
+    // MemRead latency state — 2-bit counter: 2 = just dispatched, 1 = dpram
+    // now valid to capture, 0 = idle. The original 1-bit flag captured
+    // *_a_dout the same cycle the read address took effect (stale read).
+    logic [1:0]  memread_pending;
     logic [2:0]  memread_space;
 
     // Port A write signals from command processor
@@ -522,7 +524,7 @@ module vgc (
         font_slot = 0; collision_ss = 0; collision_bg = 0;
         irq_ctrl = 0; irq_raster_pending = 0;
         sprrow_count = 0; sprcopy_phase = 0;
-        memread_pending = 0;
+        memread_pending = 2'd0;
         vgc_tile_addr = 0; vgc_tile_wdata = 0; vgc_tile_we = 0; vgc_tile_re = 0;
         artist_cmd_valid = 0;
     end
@@ -695,7 +697,7 @@ module vgc (
             copper_target_list <= 0; copper_pending_list <= 0;
             copper_loading <= 0;
             sprrow_count <= 0; sprcopy_phase <= 0; sprdef_wait <= 0;
-            memread_pending <= 0;
+            memread_pending <= 2'd0;
             vgc_tile_we <= 0; vgc_tile_re <= 0;
             artist_cmd_valid <= 0;
             for (int i = 0; i < 32; i++) regs[i] <= 0;
@@ -739,8 +741,22 @@ module vgc (
             vgc_tile_we <= 0;
             vgc_tile_re <= 0;
 
-            // MemRead latency: latch data one cycle after setting address
-            if (memread_pending) begin
+            // MemRead latency: 2-cycle pipeline.
+            //   memread_pending==2 after dispatch — re-assert the read
+            //     strobe / keep the address alive so the dpram samples it
+            //     during this cycle; data will be valid next cycle.
+            //   memread_pending==1 — capture *_a_dout into regs[20].
+            if (memread_pending == 2'd2) begin
+                case (memread_space)
+                    3'd2: cmd_gfx_re <= 1;       // keep gfx read active
+                    3'd3: cmd_spr_re <= 1;       // keep sprite read active
+                    3'd4: vgc_tile_re <= 1;      // keep tile read active
+                    // spaces 0/1 (char/color) use the port A default-addr
+                    // path which holds cmd_char_addr / cmd_color_addr.
+                    default: ;
+                endcase
+                memread_pending <= 2'd1;
+            end else if (memread_pending == 2'd1) begin
                 case (memread_space)
                     3'd0: regs[20] <= char_a_dout;
                     3'd1: regs[20] <= color_a_dout;
@@ -749,7 +765,7 @@ module vgc (
                     3'd4: regs[20] <= tile_blt_rdata;
                     default: ;
                 endcase
-                memread_pending <= 0;
+                memread_pending <= 2'd0;
             end
 
             // Drawing command state machine (non-drawing ops remain here)
@@ -1073,30 +1089,30 @@ module vgc (
                                         case (regs[17])
                                             8'd0: begin
                                                 cmd_char_addr <= {regs[19], regs[18]};
-                                                memread_pending <= 1;
+                                                memread_pending <= 2'd2;
                                                 memread_space <= 3'd0;
                                             end
                                             8'd1: begin
                                                 cmd_color_addr <= {regs[19], regs[18]};
-                                                memread_pending <= 1;
+                                                memread_pending <= 2'd2;
                                                 memread_space <= 3'd1;
                                             end
                                             8'd2: begin
                                                 cmd_gfx_addr <= {regs[19], regs[18]};
                                                 cmd_gfx_re <= 1;
-                                                memread_pending <= 1;
+                                                memread_pending <= 2'd2;
                                                 memread_space <= 3'd2;
                                             end
                                             8'd3: begin
                                                 cmd_spr_addr <= {regs[19], regs[18]};
                                                 cmd_spr_re <= 1;
-                                                memread_pending <= 1;
+                                                memread_pending <= 2'd2;
                                                 memread_space <= 3'd3;
                                             end
                                             8'd4: begin
                                                 vgc_tile_addr <= {regs[19][6:0], regs[18]};
                                                 vgc_tile_re <= 1;
-                                                memread_pending <= 1;
+                                                memread_pending <= 2'd2;
                                                 memread_space <= 3'd4;
                                             end
                                             default: ;

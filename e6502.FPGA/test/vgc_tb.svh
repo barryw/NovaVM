@@ -45,6 +45,16 @@ logic [7:0]  key_data;
 wire  [15:0] tile_dma_addr;
 wire         tile_dma_active;
 
+// Blitter-style memory interface — exposed as driver signals so tests can
+// exercise the VGC's blt_* read/write path directly without instantiating
+// the full blitter module. Default to idle (all zero).
+logic [2:0]  tb_blt_space  = 3'd0;
+logic [15:0] tb_blt_addr   = 16'd0;
+wire  [7:0]  tb_blt_rdata;
+logic [7:0]  tb_blt_wdata  = 8'd0;
+logic        tb_blt_we     = 1'b0;
+logic        tb_blt_re     = 1'b0;
+
 logic [15:0] dbg_addr;
 wire  [7:0]  dbg_rdata;
 
@@ -61,8 +71,8 @@ vgc dut (
     .tile_dma_addr(tile_dma_addr),
     .tile_dma_data(8'h00),
     .tile_dma_active(tile_dma_active),
-    .blt_space(3'd0), .blt_addr(16'd0), .blt_rdata(),
-    .blt_wdata(8'd0), .blt_we(1'b0), .blt_re(1'b0),
+    .blt_space(tb_blt_space), .blt_addr(tb_blt_addr), .blt_rdata(tb_blt_rdata),
+    .blt_wdata(tb_blt_wdata), .blt_we(tb_blt_we), .blt_re(tb_blt_re),
     .dbg_addr(dbg_addr), .dbg_rdata(dbg_rdata),
     .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
     .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
