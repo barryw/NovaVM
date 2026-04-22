@@ -50,7 +50,16 @@ module top (
     output logic [7:0]  dbg_cpu_x,
     output logic [7:0]  dbg_cpu_y,
     output logic [7:0]  dbg_cpu_sp,
-    output logic [7:0]  dbg_cpu_flags
+    output logic [7:0]  dbg_cpu_flags,
+
+    // SDRAM port A — driven by the XRAM-over-SDRAM wrapper. fpga_top
+    // connects these to sdram.v's port A; in sim the test harness
+    // instantiates its own sdram + mock chip.
+    output logic [24:0] sdram_addrA,
+    output logic [7:0]  sdram_dinA,
+    output logic        sdram_weA,
+    output logic        sdram_oeA,
+    input  logic [7:0]  sdram_doutA
 );
 
     localparam ROM_BASE  = 16'hC000;
@@ -91,9 +100,14 @@ module top (
     // CPU clock enable — halve to ~12.5 MHz for timing closure.
     // The DI→state→AB combinational path exceeds 25 MHz.
     logic cpu_ce;
+    // xram_stall holds cpu_ce low whenever an XMC-window access is pending
+    // or in flight in the xram_sdram wrapper, so the CPU doesn't advance
+    // past the access before its data is ready.
+    wire xram_stall;
     always_ff @(posedge clk) begin
-        if (rst) cpu_ce <= 0;
-        else     cpu_ce <= ~cpu_ce;
+        if (rst)            cpu_ce <= 0;
+        else if (xram_stall) cpu_ce <= 0;
+        else                cpu_ce <= ~cpu_ce;
     end
 
     // Held CPU address: freeze during stall cycle so dpram keeps
@@ -142,17 +156,31 @@ module top (
         .addr_b(erom_b_addr), .dout_b(erom_b_dout)
     );
 
-    // XRAM: 4KB BRAM stub for initial bring-up
-    localparam XRAM_SIZE = 4096;
-    logic [11:0] xram_a_addr;
+    // XRAM: 512KB backed by SDRAM via xram_sdram wrapper. Phase 2.5 Step 2
+    // replaces the old 4KB BRAM stub; interface signals keep their dpram
+    // names at this layer so the CPU/blitter decode logic is unchanged.
+    localparam XRAM_SIZE = 524288;       // 512 KB — full SDRAM-backed region
+    logic [18:0] xram_a_addr;
     logic [7:0]  xram_a_din;
     logic        xram_a_we;
+    logic        xram_a_re;
     logic [7:0]  xram_a_dout;
+    logic        xram_busy;
 
-    dpram #(.WIDTH(8), .DEPTH(XRAM_SIZE)) xram_inst (
-        .clk(clk),
-        .addr_a(xram_a_addr), .din_a(xram_a_din), .we_a(xram_a_we), .dout_a(xram_a_dout),
-        .addr_b(12'd0), .dout_b()
+    xram_sdram xram_sdram_inst (
+        .clk      (clk),
+        .rst      (rst),
+        .req_addr (xram_a_addr),
+        .req_din  (xram_a_din),
+        .req_we   (xram_a_we),
+        .req_re   (xram_a_re),
+        .req_dout (xram_a_dout),
+        .busy     (xram_busy),
+        .sdram_addr(sdram_addrA),
+        .sdram_din (sdram_dinA),
+        .sdram_we  (sdram_weA),
+        .sdram_oe  (sdram_oeA),
+        .sdram_dout(sdram_doutA)
     );
 
     logic ext_rom_active;
@@ -183,7 +211,8 @@ module top (
     wire [18:0] xmc_addr_raw = {xmc_regs[6'h1A + {xmc_page, 1'b0} + xmc_page],
                                 xmc_regs[6'h19 + {xmc_page, 1'b0} + xmc_page],
                                 xmc_offset};
-    wire [18:0] xmc_addr = xmc_addr_raw[18:0] & (XRAM_SIZE - 1);
+    // Full 19-bit XMC address maps directly into the 512 KB SDRAM region.
+    wire [18:0] xmc_addr = xmc_addr_raw;
     wire xmc_win_enabled = xmc_regs[XMC_WINCTL_REG][xmc_page];
 
     // =========================================================================
@@ -230,22 +259,56 @@ module top (
     assign brom_b_addr = dbg_rom_read ? dbg_peek_addr[13:0] : mem_addr[13:0];
     assign erom_b_addr = dbg_rom_read ? dbg_peek_addr[13:0] : mem_addr[13:0];
 
-    // XRAM: present address for CPU reads via port A
-    // Port A serves both CPU reads and writes; writes are gated by xram_a_we
+    // XRAM: drive the xram_sdram wrapper. The wrapper is edge-triggered —
+    // req_re / req_we must be asserted for exactly one pixel clock per
+    // transaction. An arming latch fires once per XMC access and re-arms
+    // when the window deasserts.
+    logic xmc_armed;
+    wire  xmc_access     = xmc_win_sel && xmc_win_enabled;
+    wire  xmc_fire       = xmc_access && xmc_armed && !xram_busy;
+    wire  xmc_cpu_read   = xmc_fire && !cpu_we;
+    wire  xmc_cpu_write  = xmc_fire &&  cpu_we && cpu_active;
+
+    // Blitter XRAM write is fire-and-forget (single-cycle pulse on
+    // blt_xram_we from the blitter state machine). TODO Phase 2.5 Step 2a:
+    // add back-pressure into blitter.sv so XRAM reads (blt_xram_rdata) wait
+    // for the wrapper — right now blitter reads will sample stale data.
+    logic blt_xram_armed;
+    wire  blt_fire = blt_xram_we && blt_xram_armed && !xram_busy;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            xmc_armed       <= 1'b1;
+            blt_xram_armed  <= 1'b1;
+        end else begin
+            if (!xmc_access)       xmc_armed      <= 1'b1;
+            else if (xmc_fire)     xmc_armed      <= 1'b0;
+            if (!blt_xram_we)      blt_xram_armed <= 1'b1;
+            else if (blt_fire)     blt_xram_armed <= 1'b0;
+        end
+    end
+
+    // CPU-side stall: hold cpu_ce low any time a CPU XMC access is
+    // outstanding (armed but not fired, or fired and still busy).
+    assign xram_stall = xmc_access && (xmc_armed || xram_busy);
+
     always_comb begin
-        xram_a_addr = xmc_addr[11:0];
-        xram_a_din  = cpu_dout;
-        xram_a_we   = 1'b0;
-
-        // CPU write to XRAM
-        if (cpu_we && cpu_active && xmc_win_sel && xmc_win_enabled)
-            xram_a_we = 1'b1;
-
-        // Blitter XRAM write
-        if (blt_xram_we)  begin
-            xram_a_addr = blt_xram_addr[11:0];
+        // CPU path has priority; blitter gets the bus when CPU isn't firing.
+        if (xmc_cpu_read || xmc_cpu_write) begin
+            xram_a_addr = xmc_addr;
+            xram_a_din  = cpu_dout;
+            xram_a_we   = xmc_cpu_write;
+            xram_a_re   = xmc_cpu_read;
+        end else if (blt_fire) begin
+            xram_a_addr = blt_xram_addr[18:0];
             xram_a_din  = blt_xram_wdata;
             xram_a_we   = 1'b1;
+            xram_a_re   = 1'b0;
+        end else begin
+            xram_a_addr = 19'd0;
+            xram_a_din  = 8'd0;
+            xram_a_we   = 1'b0;
+            xram_a_re   = 1'b0;
         end
     end
 
@@ -564,6 +627,12 @@ module top (
     wire [7:0] blt_ram_rdata  = ram[blt_ram_addr];
     wire [7:0] blt_xram_rdata = xram[blt_xram_addr];
     wire [7:0] tile_dma_data  = ram[tile_dma_addr];
+
+    // Sim path: SDRAM ports are unused — drive to sane defaults
+    assign sdram_addrA = 25'd0;
+    assign sdram_dinA  = 8'd0;
+    assign sdram_weA   = 1'b0;
+    assign sdram_oeA   = 1'b0;
 
 `endif
 

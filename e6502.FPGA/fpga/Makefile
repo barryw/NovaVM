@@ -35,17 +35,18 @@ RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
            $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv
 RTL_HDMI = $(RTLDIR)/hdmi/vga2dvid.v $(RTLDIR)/hdmi/tmds_encoder.v $(RTLDIR)/hdmi/fake_differential.v
-RTL_SDRAM = $(RTLDIR)/sdram/sdram.v
+RTL_SDRAM_V  = $(RTLDIR)/sdram/sdram.v
+RTL_SDRAM_SV = $(RTLDIR)/sdram/xram_sdram.sv
 
 # =========================================================================
 # Synthesis — rebuilds only when source files change (don't 'make clean'!)
 # =========================================================================
-$(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM) ../rom/ehbasic.hex ../rom/extension.hex
+$(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
-		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID); \
-		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM); \
+		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_SDRAM_SV); \
+		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM_V); \
 		synth_ecp5 -noflatten -top fpga_top -json $@; \
 		write_verilog $(BUILDDIR)/post_synth.v; \
 		write_rtlil $(BUILDDIR)/post_synth.il"
@@ -57,12 +58,12 @@ $(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI
 # =========================================================================
 diag: $(BUILDDIR)/post_synth.v
 
-$(BUILDDIR)/post_synth.v: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM) ../rom/ehbasic.hex ../rom/extension.hex
+$(BUILDDIR)/post_synth.v: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
-		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID); \
-		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM); \
+		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_SDRAM_SV); \
+		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM_V); \
 		synth_ecp5 -noflatten -top fpga_top; \
 		stat; \
 		write_verilog $@; \

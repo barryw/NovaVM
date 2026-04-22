@@ -247,8 +247,22 @@ module fpga_top (
         .dbg_cpu_x    (brg_cpu_x),
         .dbg_cpu_y    (brg_cpu_y),
         .dbg_cpu_sp   (brg_cpu_sp),
-        .dbg_cpu_flags(brg_cpu_flags)
+        .dbg_cpu_flags(brg_cpu_flags),
+
+        // SDRAM port A — connected to the sdram_inst further down
+        .sdram_addrA(core_sdram_addrA),
+        .sdram_dinA (core_sdram_dinA),
+        .sdram_weA  (core_sdram_weA),
+        .sdram_oeA  (core_sdram_oeA),
+        .sdram_doutA(core_sdram_doutA)
     );
+
+    // SDRAM port A wires from core
+    wire [24:0] core_sdram_addrA;
+    wire [7:0]  core_sdram_dinA;
+    wire        core_sdram_weA;
+    wire        core_sdram_oeA;
+    wire [7:0]  core_sdram_doutA;
 
     // =========================================================================
     // HDMI output — VGA signals through TMDS encoder to GPDI
@@ -340,8 +354,10 @@ module fpga_top (
         .clkref (clk_sdref),
         .we_out (sd_we_out),
 
-        // Port A idle
-        .addrA(25'd0), .weA(1'b0), .dinA(8'd0), .oeA(1'b0), .doutA(),
+        // Port A — CPU / XMC via xram_sdram wrapper inside top core
+        .addrA(core_sdram_addrA), .weA(core_sdram_weA),
+        .dinA(core_sdram_dinA),  .oeA(core_sdram_oeA),
+        .doutA(core_sdram_doutA),
         // Port B idle
         .addrB(25'd0), .weB(1'b0), .dinB(8'd0), .oeB(1'b0), .doutB()
     );
