@@ -254,18 +254,28 @@ module top (
     always_ff @(posedge clk)
         r_xmc_reg_data <= xmc_regs[xmc_reg_off];
 
-    // Registered SID read data (SID dout is combinational)
+    // Registered SID read data (SID dout is combinational on cpu_addr[4:0]).
+    // sid1/sid2 dout MUST be cpu_ce-gated for the same reason as r_vgc_cpu_rdata
+    // (see below): during cpu_ce=0 Arlet has advanced cpu_addr past the SID
+    // target, so an unconditional capture would overwrite the correct value
+    // before Arlet samples DI on its next cpu_ce=1 edge. r_sid_cfg_reg reads a
+    // register (not cpu_addr-combinational) so it is safe unconditional.
     logic [7:0] r_sid1_dout, r_sid2_dout, r_sid_cfg_reg;
     always_ff @(posedge clk) begin
-        r_sid1_dout   <= sid1_dout;
-        r_sid2_dout   <= sid2_dout;
+        if (cpu_ce) begin
+            r_sid1_dout   <= sid1_dout;
+            r_sid2_dout   <= sid2_dout;
+        end
         r_sid_cfg_reg <= sid_cfg_reg;
     end
 
-    // Registered blitter register read
+    // Registered blitter register read. blt_cpu_rdata is combinational on
+    // cpu_addr (blitter.sv uses cpu_addr directly for blt_sel + reg_off), so
+    // this capture also needs cpu_ce gating — same bug class as r_vgc_cpu_rdata.
     logic [7:0] r_blt_cpu_rdata;
     always_ff @(posedge clk)
-        r_blt_cpu_rdata <= blt_cpu_rdata;
+        if (cpu_ce)
+            r_blt_cpu_rdata <= blt_cpu_rdata;
 
     // Registered VGC read data. Must be cpu_ce-gated like r_key_snapshot
     // used to be — otherwise the value captured during cpu_ce=0 cycles
