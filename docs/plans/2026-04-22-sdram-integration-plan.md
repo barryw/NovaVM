@@ -1,7 +1,7 @@
 # Phase 2.5 — SDRAM Integration
 
-**Status**: Drafted 2026-04-22 PM after Phase 2 Batch A confirmed tight on BRAM.
-Execution starts next session.
+**Status**: Step 1 + Step 2 shipped 2026-04-22. Step 3 + Step 4 deferred — see
+"Closure" section at the bottom.
 
 ## Why Now
 
@@ -211,6 +211,29 @@ fonts, signed sprite coords, REG_BORDER removal).
 - `feedback_ecp5_dualport_bram_aspect.md` — why repacking didn't help
 - `feedback_one_change_at_a_time.md` — hence the 4-step phasing
 - `feedback_rtl_discipline.md` — 99.99% sure before 17-min synth; diag between steps
+
+## Closure — 2026-04-22 PM
+
+Phase 2.5 closed after Steps 1 + 2. Summary:
+
+| Step | Status | Commit | DP16KD delta | Notes |
+|---|---|---|---|---|
+| 1 | SHIPPED | `e6c176d` + `f891dc7` | +0 | sdram.v instantiated idle; clkref 16:1 fix landed as follow-up |
+| 2 | SHIPPED | `f28df2b` | −4 | xram 4KB BRAM → 512KB SDRAM via `xram_sdram.sv` |
+| 3 | DEFERRED | — | would be −4 | Full migration needs NovaHost firmware extension (ESP32 streams `f6581_curve.hex` to SDRAM at boot via new `POKE_SDRAM` debug_bridge command). Right sequencing is to do the FPGA + ESP32 halves together, not bolted onto an RTL-only session. |
+| 4 | SKIPPED | — | — | Plan's own criterion: skip if headroom ≥ 4. We're at 10 blocks after Step 2 (198/208). |
+
+Current budget:
+
+- DP16KD: **198 / 208** — 10 blocks free
+- Phase 2 Batch B–E planned growth: **+8 blocks** (gfx_mem for 320×240 full-screen, font_mem for 3-slot)
+- Expected post-Phase 2 state: **206 / 208** = 2 blocks margin
+
+2-block margin is tight but not broken. If Phase 2 ultimately overruns, Step 3 (SID tables → SDRAM) is the escape hatch — 4 more blocks available when NovaHost firmware is extended.
+
+Known follow-ups from Step 2 (track outside this plan):
+- `blitter.sv` doesn't yet respect `xram_busy` — blitter XRAM reads sample stale data on hardware. Writes are fire-and-forget and work today.
+- Step 3 full migration: ESP32 firmware + FPGA `POKE_SDRAM` path. Own phase when tackled.
 
 ## Historical Context
 
