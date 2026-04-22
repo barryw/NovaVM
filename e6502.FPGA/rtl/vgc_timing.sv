@@ -107,14 +107,25 @@ module vgc_timing (
     // =========================================================================
     // Derived coordinate signals (current cycle)
     // =========================================================================
+    // 6-bit intermediate for real_row arithmetic. Previously we had
+    //     real_row = text_row + scroll_offset;     // both 5-bit → 5-bit sum
+    // which truncated mod 32 BEFORE the `>= ROWS` fixup could run. When
+    // text_row + scroll_offset reached 32, the sum wrapped to 0 and
+    // bypassed the subtraction, causing rows 18..24 (with scroll_offset
+    // from 8 upwards) to collide with rows 0..6 — the 7-row mirror bug
+    // visible on hardware once the screen scrolled past the first full
+    // page. The widened sum keeps the carry bit so the fixup works.
+    logic [5:0] real_row_sum;
+
     always_comb begin
         text_col   = h_count[9:3];
         font_pixel = h_count[2:0];
         text_line  = (v_count - V_BORDER) >> 1;
         text_row   = text_line[7:3];
         font_line  = text_line[2:0];
-        real_row   = text_row + scroll_offset;
-        if (real_row >= ROWS) real_row = real_row - ROWS;
+        real_row_sum = {1'b0, text_row} + {1'b0, scroll_offset};
+        real_row   = (real_row_sum >= 6'(ROWS)) ? real_row_sum[4:0] - 5'(ROWS)
+                                                : real_row_sum[4:0];
 
         // Graphics coordinates (320x200, pixel doubled to 640x400)
         gfx_x = h_count[9:1];
