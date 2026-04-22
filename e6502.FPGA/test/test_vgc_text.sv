@@ -116,7 +116,7 @@ module test_vgc_text;
         // Now a newline should not advance cursor_y — it should scroll.
         type_char(8'h0A);
         step(400);  // let scroll_pending clear the new bottom row
-        check_eq("cursor_y pinned at 24",    dut.cursor_y,     ROWS_TB - 1);
+        check_eq("cursor_y pinned at bottom", dut.cursor_y,    ROWS_TB - 1);
         check_eq("scroll_offset advanced",   dut.scroll_offset, 1);
         // The "new bottom row" in char RAM (where writes at cursor_y=24
         // will land) is (24 + 1) mod 25 = 0. Its first cell should have
@@ -125,15 +125,15 @@ module test_vgc_text;
         check_eq("wrapped bottom cleared col 79", peek_char_cell(79, 0),  8'h20);
     endtask
 
-    // T6: the "7-row mirror" repro. After N scrolls, a char typed at
-    // cursor_y=K should land at char-RAM row (K + scroll_offset) mod 25.
+    // T6: typed-char row landing after scroll. After N scrolls, a char typed
+    // at cursor_y=K should land at char-RAM row (K + scroll_offset) mod ROWS.
     // If it lands anywhere else, we've caught the bug.
     task automatic test_scroll_offset_write_alignment();
         int so;
         int expected_row;
         int x;
         $display("");
-        $display("Test: typed chars land at cursor_y + scroll_offset mod 25");
+        $display("Test: typed chars land at cursor_y + scroll_offset mod ROWS");
         type_char(8'h0C);
         wait_cmd_done();
         step(4);
@@ -148,7 +148,7 @@ module test_vgc_text;
         check_eq("scroll_offset after 7 bottom newlines", so, 7);
 
         // Move cursor to (0, 0) and type 'Z'. The byte should land at
-        // char RAM row (0 + scroll_offset) mod 25 = scroll_offset.
+        // char RAM row (0 + scroll_offset) mod ROWS = scroll_offset.
         bus_write(REG_CURSORX_A, 8'h00);
         bus_write(REG_CURSORY_A, 8'h00);
         step(4);
@@ -163,13 +163,13 @@ module test_vgc_text;
                 x++;
         check_eq("no stray 'Z' mirrors", x, 0);
 
-        // Now type at (0, 5): expected row = (5 + scroll_offset) mod 25.
+        // Now type at (0, 5): expected row = (5 + scroll_offset) mod ROWS.
         bus_write(REG_CURSORX_A, 8'h00);
         bus_write(REG_CURSORY_A, 8'h05);
         step(4);
         type_char(8'h59);  // 'Y'
         expected_row = (5 + so) % ROWS_TB;
-        check_eq("'Y' landed at (5+scroll_offset) mod 25 col 0",
+        check_eq("'Y' landed at (5+scroll_offset) mod ROWS col 0",
                  peek_char_cell(0, expected_row), 8'h59);
         x = 0;
         for (int r = 0; r < ROWS_TB; r++)
@@ -178,17 +178,18 @@ module test_vgc_text;
         check_eq("no stray 'Y' mirrors", x, 0);
     endtask
 
-    // T-FF: FF (0x0C) runs CMD_TXTCLS which iterates 2000 cells. Confirm
-    // every cell gets cleared to 0x20 and the fg-color RAM gets filled too.
+    // T-FF: FF (0x0C) runs CMD_TXTCLS which iterates all ROWS*COLS cells.
+    // Confirm every cell gets cleared to 0x20 and the fg-color RAM is filled.
     task automatic test_txtcls_full_coverage();
+        localparam int SCREEN_CELLS = COLS_TB * ROWS_TB;
         int char_dirty_count;
         int color_dirty_count;
         int char_cleared_count;
         int color_matched_count;
         $display("");
-        $display("Test: FF (0x0C) CMD_TXTCLS clears ALL 2000 cells");
+        $display("Test: FF (0x0C) CMD_TXTCLS clears ALL %0d cells", SCREEN_CELLS);
         // Pre-dirty every char and color cell with a non-default value
-        for (int i = 0; i < 2000; i++) begin
+        for (int i = 0; i < SCREEN_CELLS; i++) begin
             dut.text_inst.char_mem.mem[i]  = 8'hFE;
             dut.text_inst.color_mem.mem[i] = 8'hFF;
         end
@@ -196,12 +197,12 @@ module test_vgc_text;
         // Verify pre-dirty state actually took
         char_dirty_count = 0;
         color_dirty_count = 0;
-        for (int i = 0; i < 2000; i++) begin
+        for (int i = 0; i < SCREEN_CELLS; i++) begin
             if (dut.text_inst.char_mem.mem[i]  == 8'hFE) char_dirty_count++;
             if (dut.text_inst.color_mem.mem[i] == 8'hFF) color_dirty_count++;
         end
-        check_eq("pre-FF: 2000 char cells dirtied",  char_dirty_count,  2000);
-        check_eq("pre-FF: 2000 color cells dirtied", color_dirty_count, 2000);
+        check_eq("pre-FF: all char cells dirtied",  char_dirty_count,  SCREEN_CELLS);
+        check_eq("pre-FF: all color cells dirtied", color_dirty_count, SCREEN_CELLS);
 
         // Set a recognizable fg_color so TXTCLS fills color RAM with it
         bus_write(REG_FGCOL_A, 8'd7);
@@ -213,14 +214,14 @@ module test_vgc_text;
         // EVERY char cell must be 0x20 (space), EVERY color cell must be fg_color
         char_cleared_count  = 0;
         color_matched_count = 0;
-        for (int i = 0; i < 2000; i++) begin
+        for (int i = 0; i < SCREEN_CELLS; i++) begin
             if (dut.text_inst.char_mem.mem[i]  == 8'h20) char_cleared_count++;
             if (dut.text_inst.color_mem.mem[i][3:0] == 4'd7) color_matched_count++;
         end
-        check_eq("post-FF: all 2000 char cells == 0x20",
-                 char_cleared_count, 2000);
-        check_eq("post-FF: all 2000 color cells == fg_color(7)",
-                 color_matched_count, 2000);
+        check_eq("post-FF: all char cells == 0x20",
+                 char_cleared_count, SCREEN_CELLS);
+        check_eq("post-FF: all color cells == fg_color(7)",
+                 color_matched_count, SCREEN_CELLS);
 
         // cursor and scroll state should also reset
         check_eq("post-FF: cursor_x = 0",    dut.cursor_x,      0);
@@ -229,24 +230,24 @@ module test_vgc_text;
     endtask
 
     // T6b: push scroll_offset past its wrap point.
-    // The formula is: scroll_offset = (scroll_offset >= 24) ? 0 : scroll_offset + 1.
-    // Scrolling 25 times from a fresh screen must wrap scroll_offset back to 0,
+    // The formula is: scroll_offset = (scroll_offset >= ROWS-1) ? 0 : scroll_offset + 1.
+    // Scrolling ROWS times from a fresh screen must wrap scroll_offset back to 0,
     // and writes at cursor_y=0 must then land at char RAM row 0.
     task automatic test_scroll_wraparound();
         int scroll_count;
         int expected;
         $display("");
-        $display("Test: scroll_offset wraps back to 0 after 25 scrolls");
+        $display("Test: scroll_offset wraps back to 0 after %0d scrolls", ROWS_TB);
         type_char(8'h0C);
         wait_cmd_done(); step(4);
         bus_write(REG_CURSORY_A, 8'(ROWS_TB - 1));  // park at bottom
         step(4);
-        for (int i = 0; i < 25; i++) begin
+        for (int i = 0; i < ROWS_TB; i++) begin
             type_char(8'h0A);           // LF
             step(400);                  // let scroll_pending clear 80 cells
         end
         scroll_count = dut.scroll_offset;
-        check_eq("scroll_offset after 25 LFs wraps to 0", scroll_count, 0);
+        check_eq("scroll_offset after ROWS LFs wraps to 0", scroll_count, 0);
 
         // Now type 'W' at (0,0). It should land at char RAM row 0 since
         // scroll_offset=0. This exercises the wrap-back path.
@@ -266,13 +267,13 @@ module test_vgc_text;
         end
         check_eq("scroll_offset after 12 more LFs", dut.scroll_offset, 12);
 
-        // Write 'Q' at (0,3) → should land at row (3+12)%25 = 15.
+        // Write 'Q' at (0,3) → should land at row (3+12) mod ROWS.
         bus_write(REG_CURSORX_A, 8'h00);
         bus_write(REG_CURSORY_A, 8'h03);
         step(4);
         type_char(8'h51);  // 'Q'
         expected = (3 + 12) % ROWS_TB;
-        check_eq("'Q' lands at (3+12) mod 25 = 15",
+        check_eq("'Q' lands at (3+12) mod ROWS",
                  peek_char_cell(0, expected), 8'h51);
     endtask
 

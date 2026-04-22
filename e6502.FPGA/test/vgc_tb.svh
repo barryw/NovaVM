@@ -19,7 +19,7 @@ localparam logic [15:0] CHAR_RAM_BASE_A = 16'hAA00;
 localparam logic [15:0] COLOR_RAM_BASE_A= 16'hB1D0;
 
 localparam int COLS_TB = 80;
-localparam int ROWS_TB = 25;
+localparam int ROWS_TB = 60;
 
 // ---------------------------------------------------------------------------
 // Clock / reset

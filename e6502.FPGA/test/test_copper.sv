@@ -171,11 +171,12 @@ module test_copper;
         write_reg(16'hA001, 8'd6);
         run_clocks(2);
         run_to_scanline(0);  // start of new frame
-        run_to_scanline(40 + 50*2 - 1);  // just before gfx line 50
+        // V_BORDER=0 now (no border). Gfx line N maps to scanlines N*2..N*2+1.
+        run_to_scanline(50*2 - 1);  // just before gfx line 50
         check("bg_color still 6 before trigger", dut.bg_color == 4'd6);
 
         // Now cross the trigger line
-        run_to_scanline(40 + 50*2 + 1);
+        run_to_scanline(50*2 + 1);
         check("bg_color changed to 2 after trigger", dut.bg_color == 4'd2);
 
         // ----- Test 5: Copper disable -----
@@ -214,13 +215,13 @@ module test_copper;
         run_to_scanline(480);
         run_to_scanline(0);
 
-        run_to_scanline(40 + 10*2 + 1);
+        run_to_scanline(10*2 + 1);
         check("bg=5 (green) after line 10", dut.bg_color == 4'd5);
 
-        run_to_scanline(40 + 100*2 + 1);
+        run_to_scanline(100*2 + 1);
         check("bg=2 (red) after line 100", dut.bg_color == 4'd2);
 
-        run_to_scanline(40 + 150*2 + 1);
+        run_to_scanline(150*2 + 1);
         check("bg=7 (yellow) after line 150", dut.bg_color == 4'd7);
 
         // ---------------------------------------------------------------

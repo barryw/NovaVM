@@ -28,24 +28,24 @@ module vgc_timing (
 
     // Derived coordinate signals (current cycle)
     output logic [6:0]  text_col,
-    output logic [4:0]  text_row,
+    output logic [5:0]  text_row,
     output logic [2:0]  font_line,
     output logic [2:0]  font_pixel,
     output logic [8:0]  gfx_x,
     output logic [7:0]  gfx_y,
     output logic [9:0]  text_line,
-    output logic [4:0]  real_row,   // after scroll_offset applied
+    output logic [5:0]  real_row,   // after scroll_offset applied
 
     // Delayed coordinate signals
     output logic [6:0]  text_col_d1, text_col_d2,
-    output logic [4:0]  text_row_d1, text_row_d2,
+    output logic [5:0]  text_row_d1, text_row_d2,
     output logic [2:0]  font_pixel_d1, font_pixel_d2,
     output logic [8:0]  gfx_x_d1, gfx_x_d2,
     output logic [7:0]  gfx_y_d1, gfx_y_d2,
     output logic [2:0]  font_line_d1,
 
     // Scroll offset (from register file)
-    input  logic [4:0]  scroll_offset,
+    input  logic [5:0]  scroll_offset,
 
     // Pre-computed gfx coordinates for tile engine
     output logic [8:0]  pre_gfx_x,
@@ -58,10 +58,10 @@ module vgc_timing (
     localparam H_ACTIVE = 640, H_FRONT = 16, H_SYNC = 96, H_BACK = 48, H_TOTAL = 800;
     localparam V_ACTIVE = 480, V_FRONT = 10, V_SYNC = 2,  V_BACK = 33, V_TOTAL = 525;
 
-    localparam COLS     = 80,  ROWS    = 25;
+    localparam COLS     = 80,  ROWS    = 60;
     localparam CHAR_H   = 8;
-    localparam TEXT_H   = ROWS * CHAR_H * 2;           // 400 pixels (doubled)
-    localparam V_BORDER = (V_ACTIVE - TEXT_H) / 2;     // 40 lines
+    localparam TEXT_H   = ROWS * CHAR_H;               // 480 pixels (1:1, no doubling)
+    localparam V_BORDER = (V_ACTIVE - TEXT_H) / 2;     // 0 lines (no border)
 
     // =========================================================================
     // Video timing counters
@@ -86,11 +86,14 @@ module vgc_timing (
     assign h_visible   = (h_count < H_ACTIVE);
     assign v_visible   = (v_count < V_ACTIVE);
     assign visible     = h_visible && v_visible;
-    assign in_text_area = visible && (v_count >= V_BORDER) && (v_count < V_BORDER + TEXT_H);
+    // With V_BORDER=0 and TEXT_H=V_ACTIVE, the text area covers the entire
+    // visible region. Kept as a conditional so the generalized form still
+    // reads correctly if V_BORDER ever becomes non-zero again.
+    assign in_text_area = visible && (v_count < V_BORDER + TEXT_H);
 
     // Pre-compute gfx coordinates for tile engine (combinational)
     assign pre_gfx_x = h_count[9:1];
-    assign pre_gfx_y = ((v_count - V_BORDER) >> 1);
+    assign pre_gfx_y = (v_count >> 1);                 // V_BORDER=0: no subtract
 
     // =========================================================================
     // Pipeline delay registers — 2 cycles to match BRAM read latency
@@ -107,29 +110,25 @@ module vgc_timing (
     // =========================================================================
     // Derived coordinate signals (current cycle)
     // =========================================================================
-    // 6-bit intermediate for real_row arithmetic. Previously we had
-    //     real_row = text_row + scroll_offset;     // both 5-bit → 5-bit sum
-    // which truncated mod 32 BEFORE the `>= ROWS` fixup could run. When
-    // text_row + scroll_offset reached 32, the sum wrapped to 0 and
-    // bypassed the subtraction, causing rows 18..24 (with scroll_offset
-    // from 8 upwards) to collide with rows 0..6 — the 7-row mirror bug
-    // visible on hardware once the screen scrolled past the first full
-    // page. The widened sum keeps the carry bit so the fixup works.
-    logic [5:0] real_row_sum;
+    // 7-bit intermediate for real_row arithmetic. ROWS=60, so text_row and
+    // scroll_offset are both 6-bit; their unsigned sum can reach 118, which
+    // needs 7 bits so the `>= ROWS` mod-fixup can run before wrap. Same class
+    // of fix as the prior 7-row mirror bug — the extra carry bit matters.
+    logic [6:0] real_row_sum;
 
     always_comb begin
         text_col   = h_count[9:3];
         font_pixel = h_count[2:0];
-        text_line  = (v_count - V_BORDER) >> 1;
-        text_row   = text_line[7:3];
+        text_line  = v_count - V_BORDER;            // 1:1 text (no pixel doubling)
+        text_row   = text_line[8:3];                // 6-bit, 0..63
         font_line  = text_line[2:0];
         real_row_sum = {1'b0, text_row} + {1'b0, scroll_offset};
-        real_row   = (real_row_sum >= 6'(ROWS)) ? real_row_sum[4:0] - 5'(ROWS)
-                                                : real_row_sum[4:0];
+        real_row   = (real_row_sum >= 7'(ROWS)) ? real_row_sum[5:0] - 6'(ROWS)
+                                                : real_row_sum[5:0];
 
-        // Graphics coordinates (320x200, pixel doubled to 640x400)
+        // Graphics coordinates (320x240, pixel-doubled to 640x480)
         gfx_x = h_count[9:1];
-        gfx_y = text_line[7:0];
+        gfx_y = v_count[8:1];                       // halved v_count (0..239)
     end
 
     // =========================================================================

@@ -66,12 +66,12 @@ module test_vgc_regs;
 
         bus_write(REG_CURSORY_A, 8'd0);    step(2);
         check_eq("cursor_y=0",  int'(dut.cursor_y), 0);
-        bus_write(REG_CURSORY_A, 8'd24);   step(2);
-        check_eq("cursor_y=24", int'(dut.cursor_y), 24);
-        // top bits masked to 5 bits
+        bus_write(REG_CURSORY_A, 8'd59);   step(2);
+        check_eq("cursor_y=59 (max valid row)", int'(dut.cursor_y), 59);
+        // top bits masked to 6 bits (ROWS=60 needs 6-bit field)
         bus_write(REG_CURSORY_A, 8'hFF);   step(2);
-        check_eq("cursor_y masks to 5 bits (0xFF → 31)",
-                 int'(dut.cursor_y), 31);
+        check_eq("cursor_y masks to 6 bits (0xFF → 63)",
+                 int'(dut.cursor_y), 63);
     endtask
 
     task automatic test_scroll_registers();

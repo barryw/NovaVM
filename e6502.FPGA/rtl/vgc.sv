@@ -58,13 +58,13 @@ module vgc (
     localparam H_ACTIVE = 640, H_FRONT = 16, H_SYNC = 96, H_BACK = 48, H_TOTAL = 800;
     localparam V_ACTIVE = 480, V_FRONT = 10, V_SYNC = 2,  V_BACK = 33, V_TOTAL = 525;
 
-    localparam COLS     = 80,  ROWS    = 25;
+    localparam COLS     = 80,  ROWS    = 60;
     localparam CHAR_W   = 8,   CHAR_H  = 8;
-    localparam TEXT_H   = ROWS * CHAR_H * 2;           // 400 pixels (doubled)
-    localparam V_BORDER = (V_ACTIVE - TEXT_H) / 2;     // 40 lines
+    localparam TEXT_H   = ROWS * CHAR_H;               // 480 pixels (1:1, no doubling)
+    localparam V_BORDER = (V_ACTIVE - TEXT_H) / 2;     // 0 lines (no border)
 
-    localparam GFX_W    = 320, GFX_H   = 200;
-    localparam GFX_SIZE = GFX_W * GFX_H;               // 64000 pixels
+    localparam GFX_W    = 320, GFX_H   = 240;
+    localparam GFX_SIZE = GFX_W * GFX_H;               // 76800 pixels
 
     // Address map
     localparam VGC_BASE       = 16'hA000;
@@ -133,20 +133,20 @@ module vgc (
     logic       h_sync_area_d1, h_sync_area_d2;
     logic       v_sync_area_d1, v_sync_area_d2;
     logic [6:0] text_col;
-    logic [4:0] text_row, real_row;
+    logic [5:0] text_row, real_row;
     logic [2:0] font_line, font_pixel;
     logic [8:0] gfx_x;
     logic [7:0] gfx_y;
     logic [9:0] text_line;
     logic [6:0] text_col_d1, text_col_d2;
-    logic [4:0] text_row_d1, text_row_d2;
+    logic [5:0] text_row_d1, text_row_d2;
     logic [2:0] font_pixel_d1, font_pixel_d2;
     logic [8:0] gfx_x_d1, gfx_x_d2;
     logic [7:0] gfx_y_d1, gfx_y_d2;
     logic [2:0] font_line_d1;
     logic [8:0] pre_gfx_x;
     logic [7:0] pre_gfx_y;
-    logic [4:0] scroll_offset;
+    logic [5:0] scroll_offset;
 
     vgc_timing timing_inst (
         .clk(clk), .rst(rst),
@@ -188,11 +188,11 @@ module vgc (
     // =========================================================================
     // Text sub-module (SCRIBE) — dpram port A signals
     // =========================================================================
-    logic [10:0] char_a_addr;
+    logic [12:0] char_a_addr;
     logic [7:0]  char_a_din;
     logic        char_a_we;
     logic [7:0]  char_a_dout;
-    logic [10:0] color_a_addr;
+    logic [12:0] color_a_addr;
     logic [7:0]  color_a_din;
     logic        color_a_we;
     logic [7:0]  color_a_dout;
@@ -428,7 +428,7 @@ module vgc (
     // =========================================================================
     logic [7:0]  regs [0:31];
     logic [6:0]  cursor_x;
-    logic [4:0]  cursor_y;
+    logic [5:0]  cursor_y;
     logic [3:0]  fg_color, bg_color, border_color, gfx_color;
     logic [2:0]  mode;
     logic        cursor_enable;
@@ -519,10 +519,10 @@ module vgc (
     logic [2:0]  memread_space;
 
     // Port A write signals from command processor
-    logic [10:0] cmd_char_addr;
+    logic [12:0] cmd_char_addr;
     logic [7:0]  cmd_char_din;
     logic        cmd_char_we;
-    logic [10:0] cmd_color_addr;
+    logic [12:0] cmd_color_addr;
     logic [7:0]  cmd_color_din;
     logic        cmd_color_we;
     logic [15:0] cmd_gfx_addr;
@@ -584,17 +584,17 @@ module vgc (
     wire [4:0]  reg_offset   = cpu_addr[4:0];
     wire [3:0]  spr_index    = cpu_addr[6:3];
     wire [2:0]  spr_field    = cpu_addr[2:0];
-    wire [10:0] char_offset  = cpu_addr - CHAR_RAM_BASE;
-    wire [10:0] color_offset = cpu_addr - COLOR_RAM_BASE;
+    wire [12:0] char_offset  = {2'b0, cpu_addr - CHAR_RAM_BASE};
+    wire [12:0] color_offset = {2'b0, cpu_addr - COLOR_RAM_BASE};
 
     // =========================================================================
     // Screen address helper
     // =========================================================================
-    function automatic logic [10:0] screen_addr(input logic [6:0] col, input logic [4:0] row);
-        logic [4:0] rr;
+    function automatic logic [12:0] screen_addr(input logic [6:0] col, input logic [5:0] row);
+        logic [5:0] rr;
         rr = row + scroll_offset;
         if (rr >= ROWS) rr = rr - ROWS;
-        screen_addr = {4'b0, rr} * COLS + {4'b0, col};
+        screen_addr = {7'b0, rr} * COLS + {6'b0, col};
     endfunction
 
     // =========================================================================
@@ -638,7 +638,7 @@ module vgc (
                 REG_BGCOL:   cpu_rdata = {4'b0, bg_color};
                 REG_FGCOL:   cpu_rdata = {4'b0, fg_color};
                 REG_CURSORX: cpu_rdata = {1'b0, cursor_x};
-                REG_CURSORY: cpu_rdata = {3'b0, cursor_y};
+                REG_CURSORY: cpu_rdata = {2'b0, cursor_y};
                 5'd5:        cpu_rdata = scroll_x;
                 5'd6:        cpu_rdata = scroll_y;
                 5'd7:        cpu_rdata = {5'b0, font_slot};
@@ -709,7 +709,7 @@ module vgc (
                 REG_BGCOL:   dbg_rdata = {4'b0, bg_color};
                 REG_FGCOL:   dbg_rdata = {4'b0, fg_color};
                 REG_CURSORX: dbg_rdata = {1'b0, cursor_x};
-                REG_CURSORY: dbg_rdata = {3'b0, cursor_y};
+                REG_CURSORY: dbg_rdata = {2'b0, cursor_y};
                 5'd7:        dbg_rdata = {5'b0, font_slot};
                 5'd8:        dbg_rdata = frame_counter;  // VGC_FRAME
                 REG_CHARIN:  dbg_rdata = char_in_reg;
@@ -829,10 +829,10 @@ module vgc (
                             cmd_cx <= cmd_cx + 1;
                     end
                     CMD_TXTCLS: begin
-                        cmd_char_addr <= {4'b0, cmd_cy[4:0]} * COLS + {2'b0, cmd_cx[6:0]};
+                        cmd_char_addr <= {7'b0, cmd_cy[5:0]} * COLS + {6'b0, cmd_cx[6:0]};
                         cmd_char_din <= 8'h20;
                         cmd_char_we <= 1;
-                        cmd_color_addr <= {4'b0, cmd_cy[4:0]} * COLS + {2'b0, cmd_cx[6:0]};
+                        cmd_color_addr <= {7'b0, cmd_cy[5:0]} * COLS + {6'b0, cmd_cx[6:0]};
                         cmd_color_din <= {4'b0, fg_color};
                         cmd_color_we <= 1;
                         if (cmd_cx == COLS - 1) begin
@@ -946,7 +946,7 @@ module vgc (
                         REG_BGCOL:   bg_color <= cpu_wdata[3:0];
                         REG_FGCOL:   fg_color <= cpu_wdata[3:0];
                         REG_CURSORX: cursor_x <= cpu_wdata[6:0];
-                        REG_CURSORY: cursor_y <= cpu_wdata[4:0];
+                        REG_CURSORY: cursor_y <= cpu_wdata[5:0];
                         5'd5:        scroll_x <= cpu_wdata;
                         5'd6:        scroll_y <= cpu_wdata;
                         5'd7:        font_slot <= cpu_wdata[2:0];
@@ -966,7 +966,7 @@ module vgc (
                                 end
                                 8'h0A: begin
                                     if (cursor_y >= ROWS - 1) begin
-                                        scroll_offset <= (scroll_offset >= ROWS - 1) ? 5'd0 : scroll_offset + 1;
+                                        scroll_offset <= (scroll_offset >= ROWS - 1) ? 6'd0 : scroll_offset + 1;
                                         scroll_pending <= 1; scroll_col <= 0;
                                     end else
                                         cursor_y <= cursor_y + 1;
@@ -990,7 +990,7 @@ module vgc (
                                         if (cursor_x >= COLS - 1) begin
                                             cursor_x <= 0;
                                             if (cursor_y >= ROWS - 1) begin
-                                                scroll_offset <= (scroll_offset >= ROWS - 1) ? 5'd0 : scroll_offset + 1;
+                                                scroll_offset <= (scroll_offset >= ROWS - 1) ? 6'd0 : scroll_offset + 1;
                                                 scroll_pending <= 1; scroll_col <= 0;
                                             end else
                                                 cursor_y <= cursor_y + 1;
@@ -1306,10 +1306,10 @@ module vgc (
     always_comb begin
         // char_ram port A
         char_a_we = 0;
-        char_a_addr = 11'd0;
+        char_a_addr = 13'd0;
         char_a_din = 8'd0;
         if (blt_we && blt_space == 3'd1) begin
-            char_a_addr = blt_addr[10:0];
+            char_a_addr = blt_addr[12:0];
             char_a_din = blt_wdata;
             char_a_we = 1;
         end else if (cmd_char_we) begin
@@ -1317,21 +1317,21 @@ module vgc (
             char_a_din = cmd_char_din;
             char_a_we = 1;
         end else if (blt_re && blt_space == 3'd1) begin
-            char_a_addr = blt_addr[10:0];
+            char_a_addr = blt_addr[12:0];
         end else if (cpu_re && cpu_ce && char_ram_sel) begin
             char_a_addr = char_offset;
         end else if (dbg_char_sel) begin
-            char_a_addr = dbg_addr - CHAR_RAM_BASE;
+            char_a_addr = {2'b0, dbg_addr - CHAR_RAM_BASE};
         end else begin
             char_a_addr = cmd_char_addr;
         end
 
         // color_ram port A
         color_a_we = 0;
-        color_a_addr = 11'd0;
+        color_a_addr = 13'd0;
         color_a_din = 8'd0;
         if (blt_we && blt_space == 3'd2) begin
-            color_a_addr = blt_addr[10:0];
+            color_a_addr = blt_addr[12:0];
             color_a_din = blt_wdata;
             color_a_we = 1;
         end else if (cmd_color_we) begin
@@ -1339,11 +1339,11 @@ module vgc (
             color_a_din = cmd_color_din;
             color_a_we = 1;
         end else if (blt_re && blt_space == 3'd2) begin
-            color_a_addr = blt_addr[10:0];
+            color_a_addr = blt_addr[12:0];
         end else if (cpu_re && cpu_ce && color_ram_sel) begin
             color_a_addr = color_offset;
         end else if (dbg_color_sel) begin
-            color_a_addr = dbg_addr - COLOR_RAM_BASE;
+            color_a_addr = {2'b0, dbg_addr - COLOR_RAM_BASE};
         end else begin
             color_a_addr = cmd_color_addr;
         end

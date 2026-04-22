@@ -24,13 +24,13 @@ module test_vgc_scroll_wrap;
     logic clk = 0;
     always #20 clk = ~clk;
 
-    localparam int ROWS = 25;
-    localparam int V_BORDER = 40;
-    localparam int CHAR_H_DOUBLED = 16;  // CHAR_H=8 doubled for VGA
+    localparam int ROWS = 60;
+    localparam int V_BORDER = 0;           // no border in 80x60 @ 8x8 1:1
+    localparam int CHAR_H_NATIVE = 8;      // 8x8 cells 1:1 (no pixel doubling)
 
     logic [9:0] h_count = 0;
     logic [9:0] v_count = 0;
-    logic [4:0] scroll_offset = 0;
+    logic [5:0] scroll_offset = 0;
 
     wire  [9:0] h_count_d1, h_count_d2, v_count_d1, v_count_d2;
     wire        visible, h_visible, v_visible, in_text_area;
@@ -38,16 +38,16 @@ module test_vgc_scroll_wrap;
     wire        h_sync_area, v_sync_area;
     wire        h_sync_area_d1, h_sync_area_d2, v_sync_area_d1, v_sync_area_d2;
     wire [6:0]  text_col;
-    wire [4:0]  text_row;
+    wire [5:0]  text_row;
     wire [9:0]  text_line;
-    wire [4:0]  real_row;
+    wire [5:0]  real_row;
     wire [2:0]  font_pixel, font_line;
     wire [8:0]  pre_gfx_x;
     wire [7:0]  pre_gfx_y;
     wire [8:0]  gfx_x;
     wire [7:0]  gfx_y;
     wire [6:0]  text_col_d1, text_col_d2;
-    wire [4:0]  text_row_d1, text_row_d2;
+    wire [5:0]  text_row_d1, text_row_d2;
     wire [2:0]  font_pixel_d1, font_pixel_d2;
     wire [8:0]  gfx_x_d1, gfx_x_d2;
     wire [7:0]  gfx_y_d1, gfx_y_d2;
@@ -82,13 +82,12 @@ module test_vgc_scroll_wrap;
     int pass_count = 0, fail_count = 0;
 
     task automatic check_row(input int t_row, input int s_off, input int expected);
-        // Drive v_count to a line inside the t_row character row (center of
-        // the doubled 16-px cell). Start of text row N occupies screen lines
-        // V_BORDER + N*16 .. V_BORDER + N*16+15.
-        v_count = V_BORDER + t_row * CHAR_H_DOUBLED + 4;  // anywhere within cell
-        scroll_offset = 5'(s_off);
+        // Drive v_count to a line inside the t_row character row. Each row
+        // occupies 8 native scanlines at 8x8 1:1: V_BORDER + N*8 .. +7.
+        v_count = V_BORDER + t_row * CHAR_H_NATIVE + 4;  // anywhere within cell
+        scroll_offset = 6'(s_off);
         #1;  // let combinational propagate
-        if (real_row == 5'(expected)) begin
+        if (real_row == 6'(expected)) begin
             pass_count++;
         end else begin
             $display("  FAIL text_row=%0d scroll=%0d: got real_row=%0d want %0d",
@@ -114,19 +113,20 @@ module test_vgc_scroll_wrap;
             end
         end
 
-        $display("  PASS/FAIL totals for full 25x25 row-mapping grid");
+        $display("  PASS/FAIL totals for full 60x60 row-mapping grid");
 
-        // Also explicitly prove the specific 7-row mirror scenario the user
-        // saw: with scroll_offset=14, rows 18..24 must NOT map to the same
-        // real_row as any of rows 11..17.
-        $display("-- explicit 7-row mirror scenario (scroll_offset=14) --");
+        // Regression: every scroll_offset ∈ [0,59] must produce a bijective
+        // row mapping. No two text_rows should map to the same real_row.
+        // This was the 7-row mirror bug class at ROWS=25; widened real_row_sum
+        // now carries an extra bit so the fixup runs before wrap.
+        $display("-- bijectivity scan at scroll_offset=30 --");
         duplicates_found = 0;
         begin : mirror_scan
-            logic [4:0] seen_for_row [0:24];
-            for (int r = 0; r < ROWS; r++) seen_for_row[r] = 5'h1F;
+            logic [5:0] seen_for_row [0:59];
+            for (int r = 0; r < ROWS; r++) seen_for_row[r] = 6'h3F;
             for (int r = 0; r < ROWS; r++) begin
-                v_count = V_BORDER + r * CHAR_H_DOUBLED + 4;
-                scroll_offset = 5'd14;
+                v_count = V_BORDER + r * CHAR_H_NATIVE + 4;
+                scroll_offset = 6'd30;
                 #1;
                 for (int q = 0; q < r; q++)
                     if (seen_for_row[q] == real_row) duplicates_found++;
@@ -134,9 +134,9 @@ module test_vgc_scroll_wrap;
             end
         end
         if (duplicates_found == 0)
-            $display("  PASS scroll_offset=14: all 25 rows map to distinct real_rows");
+            $display("  PASS scroll_offset=30: all 60 rows map to distinct real_rows");
         else begin
-            $display("  FAIL scroll_offset=14: %0d row collisions found",
+            $display("  FAIL scroll_offset=30: %0d row collisions found",
                      duplicates_found);
             fail_count++;
         end
