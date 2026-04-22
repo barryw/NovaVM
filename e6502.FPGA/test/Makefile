@@ -20,7 +20,7 @@ VGC   = $(RTL)/dpram.sv $(RTL)/vgc_timing.sv $(RTL)/vgc_text.sv $(RTL)/vgc_gfx.s
 SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.sv \
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_sid test_rom_load test_debug_bridge test_debug_peek test_key_inject test_sid_readback
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_sid test_rom_load test_debug_bridge test_debug_peek test_key_inject test_sid_readback test_vgc_frame_counter
 
 .PHONY: all clean $(TESTS) run
 
@@ -89,6 +89,12 @@ test_key_inject: test_key_inject.sv $(ROM_LOAD_RTL)
 # cross-contamination between slots that this test detects.
 test_sid_readback: test_sid_readback.sv $(ROM_LOAD_RTL)
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
+# Regression for VGC $A008 frame counter. Before the fix $A008 was mapped
+# to gfx_color (static) so BASIC's SPRITESET vblank-wait hung the CPU.
+# This test probes the internal signal to prove it increments.
+test_vgc_frame_counter: test_vgc_frame_counter.sv $(VGC)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) $< && $(RUN) test/$(BD)/$@/$@
 
 clean:
 	rm -rf $(BD)

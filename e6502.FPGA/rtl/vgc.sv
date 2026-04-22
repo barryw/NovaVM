@@ -432,6 +432,11 @@ module vgc (
     logic [3:0]  fg_color, bg_color, border_color, gfx_color;
     logic [2:0]  mode;
     logic        cursor_enable;
+    // Frame counter at $A008 (VGC_FRAME in basic.asm:8806). Increments once
+    // per vblank entry — EhBASIC's SPRITESET/SPRPRI use `LDA VGC_FRAME;
+    // CMP VGC_FRAME; BEQ loop` to wait for vblank sync. Without this,
+    // any BASIC command that syncs on VGC_FRAME hangs the CPU forever.
+    logic [7:0]  frame_counter;
     logic [7:0]  scroll_x, scroll_y;
     // Keyboard input — 256-byte ring buffer (ZipCPU sfifo, public domain,
     // formally verified). Replaces the single-entry char_in_reg that
@@ -548,6 +553,7 @@ module vgc (
         cursor_x = 0; cursor_y = 0;
         fg_color = 4'd1; bg_color = 4'd6; border_color = 4'd6;
         gfx_color = 4'd1; mode = 0; cursor_enable = 1;
+        frame_counter = 0;
         scroll_x = 0; scroll_y = 0;
         for (int i = 0; i < 16; i++) spr_trans[i] = 4'd0;
         scroll_offset = 0; scroll_pending = 0; scroll_col = 0;
@@ -636,7 +642,7 @@ module vgc (
                 5'd5:        cpu_rdata = scroll_x;
                 5'd6:        cpu_rdata = scroll_y;
                 5'd7:        cpu_rdata = {5'b0, font_slot};
-                5'd8:        cpu_rdata = {4'b0, gfx_color};
+                5'd8:        cpu_rdata = frame_counter;  // VGC_FRAME
                 5'd9:        begin
                     cpu_rdata = 0;
                     for (int i = 0; i < 16; i++)
@@ -705,6 +711,7 @@ module vgc (
                 REG_CURSORX: dbg_rdata = {1'b0, cursor_x};
                 REG_CURSORY: dbg_rdata = {3'b0, cursor_y};
                 5'd7:        dbg_rdata = {5'b0, font_slot};
+                5'd8:        dbg_rdata = frame_counter;  // VGC_FRAME
                 REG_CHARIN:  dbg_rdata = char_in_reg;
                 default:     dbg_rdata = regs[dbg_addr[4:0]];
             endcase
@@ -719,6 +726,7 @@ module vgc (
             cursor_x <= 0; cursor_y <= 0; mode <= 0;
             fg_color <= 4'd1; bg_color <= 4'd6; border_color <= 4'd6;
             gfx_color <= 4'd1; cursor_enable <= 1; font_slot <= 0;
+            frame_counter <= 0;
             scroll_offset <= 0; scroll_pending <= 0; scroll_col <= 0;
             scroll_x <= 0; scroll_y <= 0;
             cmd_busy <= 0;
@@ -901,6 +909,12 @@ module vgc (
                     copper_loading <= 0;
                 end
             end
+
+            // Vblank-aligned frame counter tick. BASIC uses $A008 (VGC_FRAME)
+            // as a vblank barrier — it reads the value, loops until it
+            // changes, then proceeds. 8-bit wrap is fine for that pattern.
+            if (h_count == 0 && v_count == V_ACTIVE)
+                frame_counter <= frame_counter + 1'b1;
 
             // Copper vblank: swap pending→active list if changed
             if (h_count == 0 && v_count == V_ACTIVE) begin
