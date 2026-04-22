@@ -267,25 +267,21 @@ module top (
     always_ff @(posedge clk)
         r_blt_cpu_rdata <= blt_cpu_rdata;
 
-    // Registered VGC read data
+    // Registered VGC read data. Must be cpu_ce-gated like r_key_snapshot
+    // used to be — otherwise the value captured during cpu_ce=0 cycles
+    // (when Arlet has already moved cpu_addr past $A00F) overwrites the
+    // correct value before the CPU samples DI on its next cpu_ce=1 edge.
+    // See ASCII trace in project_key_fifo_in_progress.md.
     logic [7:0] r_vgc_cpu_rdata;
     always_ff @(posedge clk)
-        r_vgc_cpu_rdata <= vgc_cpu_rdata;
-
-    // Keyboard: snapshot key_reg on cpu_ce edges (before clear-on-read races)
-    logic r_charin_sel;
-    logic [7:0] r_key_snapshot;
-    always_ff @(posedge clk) begin
-        r_charin_sel <= (mem_addr == CHARIN);
         if (cpu_ce)
-            r_key_snapshot <= key_reg;
-    end
+            r_vgc_cpu_rdata <= vgc_cpu_rdata;
 
     // CPU read data mux — all sources are registered/synchronous.
+    // Keyboard ($A00F) flows through r_vgc_read_sel → r_vgc_cpu_rdata since
+    // $A00F is inside VGC_BASE..VGC_REGS_END; VGC returns the sfifo head.
     always_comb begin
-        if (r_charin_sel)
-            cpu_din = r_key_snapshot;
-        else if (r_xmc_win_sel && r_xmc_win_enabled)
+        if (r_xmc_win_sel && r_xmc_win_enabled)
             cpu_din = xram_a_dout;
         else if (r_xmc_win_sel && !r_xmc_win_enabled)
             cpu_din = 8'hFF;
@@ -333,17 +329,11 @@ module top (
         end
     end
 
-    // Keyboard input register — intercepts CPU reads of $A00F
-    // instead of writing to RAM (which would conflict with port A)
-    logic [7:0] key_reg;
-    always_ff @(posedge clk) begin
-        if (rst)
-            key_reg <= 8'h00;
-        else if (key_valid)
-            key_reg <= (key_data == 8'h7F) ? 8'h08 : key_data; // DEL→BS
-        else if (!cpu_we && cpu_active && cpu_addr == CHARIN && key_reg != 0)
-            key_reg <= 8'h00;  // clear after CPU read
-    end
+    // Keyboard input — handled entirely by VGC's sfifo (256-byte ring
+    // buffer in rtl/thirdparty/sfifo.v). Previously duplicated here with a
+    // single-entry latch that had the same drop-rate bug as vgc.sv's pre-
+    // fifo char_in_reg. CHARIN reads now flow through r_vgc_read_sel →
+    // vgc_cpu_rdata → char_in_reg which reads the sfifo head.
 
     // =========================================================================
     // Main RAM port B: tile DMA / blitter reads / debug reads
@@ -747,11 +737,19 @@ module top (
 
 `ifdef SYNTHESIS
     // On FPGA: debug peek routed through VGC, SID, ROM dprams, or main RAM dpram
-    assign vgc_dbg_owns = vgc_inst.dbg_owns;
+    // Compute VGC ownership here in top.sv — cross-module ref failed (ea510bd
+    // class), output port also failed to drive through synth. Duplicating the
+    // small range-decode here is reliable.
     wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
     wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
     wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
     wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
+    wire dbg_vgc_char  = (dbg_peek_addr >= 16'hAA00 && dbg_peek_addr <= 16'hB1CF);
+    wire dbg_vgc_color = (dbg_peek_addr >= 16'hB1D0 && dbg_peek_addr <= 16'hB99F);
+    wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F);
+    wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
+    wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
+    assign vgc_dbg_owns = dbg_vgc_char | dbg_vgc_color | dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr;
 
     // For debug reads, RAM port B serves as the read port.
     // ROM reads use the same brom_b/erom_b ports (address set combinationally).
@@ -763,12 +761,18 @@ module top (
                                           dbg_in_rom   ? (ext_rom_active ? erom_b_dout : brom_b_dout) :
                                                           ram_b_dout) : 8'h00;
 `else
-    // Simulation: full debug with combinational reads
-    assign vgc_dbg_owns = vgc_inst.dbg_owns;
+    // Simulation: full debug with combinational reads — ownership decoded
+    // directly in top.sv (symmetric with synthesis path)
     wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
     wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
     wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
     wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
+    wire dbg_vgc_char  = (dbg_peek_addr >= 16'hAA00 && dbg_peek_addr <= 16'hB1CF);
+    wire dbg_vgc_color = (dbg_peek_addr >= 16'hB1D0 && dbg_peek_addr <= 16'hB99F);
+    wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F);
+    wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
+    wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
+    assign vgc_dbg_owns = dbg_vgc_char | dbg_vgc_color | dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr;
     wire [7:0] dbg_rom_read_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
                                                   : basic_rom[dbg_peek_addr - ROM_BASE];
     assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :

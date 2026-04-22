@@ -433,7 +433,38 @@ module vgc (
     logic [2:0]  mode;
     logic        cursor_enable;
     logic [7:0]  scroll_x, scroll_y;
-    logic [7:0]  char_in_reg;
+    // Keyboard input — 256-byte ring buffer (ZipCPU sfifo, public domain,
+    // formally verified). Replaces the single-entry char_in_reg that
+    // previously dropped rapid keystrokes. See rtl/thirdparty/sfifo.v.
+    wire        key_fifo_full;
+    wire        key_fifo_empty;
+    wire [7:0]  key_fifo_head;   // head byte (valid when !empty)
+    wire [8:0]  key_fifo_fill;   // 0..256
+    logic       key_fifo_rd;     // pulsed high for one cycle to pop head
+    logic       charin_sel_prev; // previous cycle's "CPU addressing CHARIN" state (for edge detect)
+
+    // "char_in_reg" — legacy head-read wire so existing register-mux code
+    // keeps working. Returns 0 when empty (matches original behavior).
+    wire [7:0]  char_in_reg = key_fifo_empty ? 8'h00 : key_fifo_head;
+
+    // DEL (0x7F) → BS (0x08) translation applied at push time.
+    // Previously done in top.sv's key_reg latch which has been removed.
+    wire [7:0] key_data_xlat = (key_data == 8'h7F) ? 8'h08 : key_data;
+
+    sfifo #(
+        .BW(8),
+        .LGFLEN(8)               // 2^8 = 256 entries
+    ) key_fifo_inst (
+        .i_clk  (clk),
+        .i_reset(rst),
+        .i_wr   (key_valid && !key_fifo_full),
+        .i_data (key_data_xlat),
+        .o_full (key_fifo_full),
+        .o_fill (key_fifo_fill),
+        .i_rd   (key_fifo_rd),
+        .o_data (key_fifo_head),
+        .o_empty(key_fifo_empty)
+    );
     logic [2:0]  font_slot;
     logic [7:0]  collision_ss;
     logic [7:0]  collision_bg;
@@ -520,7 +551,7 @@ module vgc (
         scroll_x = 0; scroll_y = 0;
         for (int i = 0; i < 16; i++) spr_trans[i] = 4'd0;
         scroll_offset = 0; scroll_pending = 0; scroll_col = 0;
-        char_in_reg = 0; cmd_busy = 0;
+        key_fifo_rd = 0; cmd_busy = 0;
         font_slot = 0; collision_ss = 0; collision_bg = 0;
         irq_ctrl = 0; irq_raster_pending = 0;
         sprrow_count = 0; sprcopy_phase = 0;
@@ -632,7 +663,7 @@ module vgc (
     wire dbg_vgc_sel   = (dbg_addr >= VGC_BASE && dbg_addr <= VGC_REGS_END);
     wire dbg_tile_sel  = (dbg_addr >= 16'hA0C0 && dbg_addr <= 16'hA0DF);
     wire dbg_spr_sel   = (dbg_addr >= SPR_REG_BASE && dbg_addr <= SPR_REG_END);
-    wire dbg_owns      = dbg_char_sel || dbg_color_sel || dbg_vgc_sel || dbg_tile_sel || dbg_spr_sel;
+    // dbg_owns driven inside always_comb below to match dbg_rdata pattern
 
     logic        dbg_rd_pending;
     logic [1:0]  dbg_rd_source;
@@ -690,7 +721,8 @@ module vgc (
             gfx_color <= 4'd1; cursor_enable <= 1; font_slot <= 0;
             scroll_offset <= 0; scroll_pending <= 0; scroll_col <= 0;
             scroll_x <= 0; scroll_y <= 0;
-            cmd_busy <= 0; char_in_reg <= 0;
+            cmd_busy <= 0;
+            key_fifo_rd <= 0;
             collision_ss <= 0; collision_bg <= 0;
             irq_ctrl <= 0; irq_raster_pending <= 0;
             copper_enabled <= 0; copper_count <= 0;
@@ -717,11 +749,15 @@ module vgc (
             cmd_spr_re <= 0;
             artist_cmd_valid <= 0;
 
-            // Keyboard input — merged here to avoid multi-driver on char_in_reg
-            if (key_valid)
-                char_in_reg <= key_data;
-            else if (cpu_re && cpu_ce && cpu_addr == (VGC_BASE + REG_CHARIN) && char_in_reg != 0)
-                char_in_reg <= 0;
+            // Keyboard input — pop FIFO head exactly once per CPU read of
+            // REG_CHARIN, on the RISING edge of the CPU's address-match.
+            // cpu_addr stays at $A00F for ~2 cycles (cpu_ce alternates half
+            // rate), so we must not pop every cycle. Rising-edge detection
+            // via charin_sel_prev.
+            charin_sel_prev <= (cpu_re && cpu_addr == (VGC_BASE + REG_CHARIN));
+            key_fifo_rd <= (cpu_re && cpu_addr == (VGC_BASE + REG_CHARIN))
+                        && !charin_sel_prev
+                        && !key_fifo_empty;
 
             // Scroll state machine
             if (scroll_pending) begin

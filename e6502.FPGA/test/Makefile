@@ -15,11 +15,12 @@ RTL   = ../rtl
 BD    = build
 
 VGC   = $(RTL)/dpram.sv $(RTL)/vgc_timing.sv $(RTL)/vgc_text.sv $(RTL)/vgc_gfx.sv \
-        $(RTL)/artist.sv $(RTL)/vgc_sprites.sv $(RTL)/vgc_copper.sv $(RTL)/vgc.sv $(RTL)/tile_engine.sv
+        $(RTL)/artist.sv $(RTL)/vgc_sprites.sv $(RTL)/vgc_copper.sv $(RTL)/vgc.sv $(RTL)/tile_engine.sv \
+        $(RTL)/thirdparty/sfifo.v
 SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.sv \
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_sid test_rom_load test_debug_bridge
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_sid test_rom_load test_debug_bridge test_debug_peek test_key_inject
 
 .PHONY: all clean $(TESTS) run
 
@@ -68,6 +69,18 @@ test_debug_bridge: test_debug_bridge.sv $(RTL)/debug_bridge.sv
 # streams a tiny 6502 program into basic_rom via dbg_rom_we, verifies execution.
 ROM_LOAD_RTL = $(VGC) $(SID) $(RTL)/blitter.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv
 test_rom_load: test_rom_load.sv $(ROM_LOAD_RTL)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
+# Debug peek regression test — exercises top.sv's debug-peek mux on the
+# synthesis code path (`ifdef SYNTHESIS`). Reproduces the hardware bug where
+# peek of VGC-owned addresses falls through to main RAM.
+test_debug_peek: test_debug_peek.sv $(ROM_LOAD_RTL)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
+# Key-injection drop-rate regression test — drives key_valid/key_data directly
+# on top.sv, peeks $A00F to observe char_in_reg. Reproduces the hardware-observed
+# behavior where rapid-fire keys overwrite each other (single-entry latch, not FIFO).
+test_key_inject: test_key_inject.sv $(ROM_LOAD_RTL)
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
 clean:

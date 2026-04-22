@@ -13,7 +13,7 @@ VL = read_verilog -DSYNTHESIS
 
 NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --timing-allow-fail
 
-.PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic
+.PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag
 
 all: ehbasic bitstream
 
@@ -28,7 +28,8 @@ ehbasic:
 # =========================================================================
 RTL_VGC = $(DPRAM) $(RTLDIR)/vgc.sv $(RTLDIR)/vgc_timing.sv $(RTLDIR)/vgc_text.sv \
           $(RTLDIR)/vgc_gfx.sv $(RTLDIR)/artist.sv $(RTLDIR)/vgc_sprites.sv \
-          $(RTLDIR)/vgc_copper.sv $(RTLDIR)/tile_engine.sv $(RTLDIR)/blitter.sv
+          $(RTLDIR)/vgc_copper.sv $(RTLDIR)/tile_engine.sv $(RTLDIR)/blitter.sv \
+          $(RTLDIR)/thirdparty/sfifo.v
 RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv fpga_top.sv uart_rx.sv uart_tx.sv
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
@@ -44,7 +45,30 @@ $(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI
 		verilog_defaults -add -DSYNTHESIS; \
 		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID); \
 		$(VL) $(RTL_CPU) $(RTL_HDMI); \
-		synth_ecp5 -noflatten -top fpga_top -json $@"
+		synth_ecp5 -noflatten -top fpga_top -json $@; \
+		write_verilog $(BUILDDIR)/post_synth.v; \
+		write_rtlil $(BUILDDIR)/post_synth.il"
+
+# =========================================================================
+# Diagnostic — run yosys only (no nextpnr/ecppack) to dump post-synth
+# verilog + ilang + stats for inspection. Much faster than full synth
+# (~3-5 min vs ~15). Use when debugging what yosys transformed.
+# =========================================================================
+diag: $(BUILDDIR)/post_synth.v
+
+$(BUILDDIR)/post_synth.v: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) ../rom/ehbasic.hex ../rom/extension.hex
+	@mkdir -p $(BUILDDIR)
+	$(YOSYS) -p "\
+		verilog_defaults -add -DSYNTHESIS; \
+		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID); \
+		$(VL) $(RTL_CPU) $(RTL_HDMI); \
+		synth_ecp5 -noflatten -top fpga_top; \
+		stat; \
+		write_verilog $@; \
+		write_rtlil $(BUILDDIR)/post_synth.il"
+	@echo "Post-synth artifacts:"
+	@echo "  Verilog: $@"
+	@echo "  ILANG:   $(BUILDDIR)/post_synth.il"
 
 synth: ehbasic $(BUILDDIR)/$(PROJ).json
 
