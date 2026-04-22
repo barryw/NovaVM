@@ -3,40 +3,56 @@
 ; Note: TSCROLL x,y sets scroll. TSCROLLX/TSCROLLY are functions that return values.
 ; Syntax: TPUT nt,x,y,tile  |  TFILL nt,tile  |  TATTR nt,x,y,attr
 ;         TROW nt,y,addr     |  TCOL nt,x,addr |  TDEF tile,addr
+;
+; Assertion pattern: POKE-sentinel ($0100) to verify BASIC ran the
+; tested command without error, plus peekbyte($A010)==0 for VGC idle.
+; Some tests also use PRINT + screen_contains on the printed value.
 
 suites {
   suite("Tiles") {
 
     test("tileset-8x8", "TILESIZE sets 8x8 tile size") {
       basic("10 MODE 4")
-      basic("20 TILESIZE 8")
+      basic("20 POKE $0100,$FF")
+      basic("30 TILESIZE 8")
+      basic("40 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "no error")
+      assert(peekbyte($0100) == $AA, "TILESIZE 8 ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tileset-16x16", "TILESIZE sets 16x16 tile size") {
       basic("10 MODE 4")
-      basic("20 TILESIZE 16")
+      basic("20 POKE $0100,$FF")
+      basic("30 TILESIZE 16")
+      basic("40 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tileset 16 completed")
+      assert(peekbyte($0100) == $AA, "TILESIZE 16 ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tileput-places-tile", "TPUT sets nametable entry") {
       basic("10 MODE 4")
       basic("20 TILESIZE 8")
-      basic("30 TPUT 0,0,0,1")
-      basic("40 TPUT 0,5,5,42")
+      basic("30 POKE $0100,$FF")
+      basic("40 TPUT 0,0,0,1")
+      basic("50 TPUT 0,5,5,42")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tileput completed")
+      assert(peekbyte($0100) == $AA, "TPUT ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tileclr-clears-map", "TCLS zeros all nametable entries") {
       basic("10 MODE 4")
       basic("20 TPUT 0,0,0,1")
       basic("30 TPUT 0,10,10,5")
-      basic("40 TCLS")
+      basic("40 POKE $0100,$FF")
+      basic("50 TCLS")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tileclr completed")
+      assert(peekbyte($0100) == $AA, "TCLS ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tscroll-sets-scroll", "TSCROLL sets scroll registers") {
@@ -73,9 +89,12 @@ suites {
     test("tile-fill-row", "Fill a row of tiles") {
       basic("10 MODE 4")
       basic("20 TILESIZE 8")
-      basic("30 FOR I=0 TO 39:TPUT 0,I,0,I+1:NEXT")
+      basic("30 POKE $0100,$FF")
+      basic("40 FOR I=0 TO 39:TPUT 0,I,0,I+1:NEXT")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "row fill completed")
+      assert(peekbyte($0100) == $AA, "row fill ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tile-mode-switch", "MODE 0 restores text mode") {
@@ -83,9 +102,10 @@ suites {
       basic("20 TILESIZE 8")
       basic("30 TPUT 0,0,0,1")
       basic("40 MODE 0")
-      basic("50 PRINT PEEK($A000)")
       run()
-      assert(screen_contains(" 0"), "mode register is 0")
+      ; Mode register ($A000) is peekable — verify directly
+      assert(peekbyte($A000) == 0, "mode register is 0")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tile-define-and-place", "Define tile pattern then place it") {
@@ -93,34 +113,46 @@ suites {
       basic("20 TILESIZE 8")
       ; Fill 64 bytes (8x8 tile) at $2000
       basic("30 FOR I=0 TO 63:POKE $2000+I,$FF:NEXT")
-      basic("40 TDEF 1,$2000")
-      basic("50 TPUT 0,0,0,1")
+      basic("40 POKE $0100,$FF")
+      basic("50 TDEF 1,$2000")
+      basic("60 TPUT 0,0,0,1")
+      basic("70 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tile define + place completed")
+      assert(peekbyte($0100) == $AA, "TDEF+TPUT ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("ttrans-sets-transparent", "TTRANS sets transparent color index") {
       basic("10 MODE 4")
-      basic("20 TTRANS 5")
+      basic("20 POKE $0100,$FF")
+      basic("30 TTRANS 5")
+      basic("40 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "ttrans completed")
+      assert(peekbyte($0100) == $AA, "TTRANS ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tfill-fills-nametable", "TFILL fills nametable with tile") {
       basic("10 MODE 4")
       basic("20 TILESIZE 8")
-      basic("30 TFILL 0,1")
+      basic("30 POKE $0100,$FF")
+      basic("40 TFILL 0,1")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tfill completed")
+      assert(peekbyte($0100) == $AA, "TFILL ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tattr-sets-attribute", "TATTR sets tile attribute") {
       basic("10 MODE 4")
       basic("20 TILESIZE 8")
       basic("30 TPUT 0,5,5,1")
-      basic("40 TATTR 0,5,5,$01")
+      basic("40 POKE $0100,$FF")
+      basic("50 TATTR 0,5,5,$01")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tattr completed")
+      assert(peekbyte($0100) == $AA, "TATTR ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("trow-fills-row", "TROW fills a row from address") {
@@ -128,18 +160,24 @@ suites {
       basic("20 TILESIZE 8")
       ; Set up tile indices in RAM
       basic("30 FOR I=0 TO 39:POKE $2000+I,I+1:NEXT")
-      basic("40 TROW 0,0,$2000")
+      basic("40 POKE $0100,$FF")
+      basic("50 TROW 0,0,$2000")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "trow completed")
+      assert(peekbyte($0100) == $AA, "TROW ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tcol-fills-column", "TCOL fills a column from address") {
       basic("10 MODE 4")
       basic("20 TILESIZE 8")
       basic("30 FOR I=0 TO 24:POKE $2000+I,I+1:NEXT")
-      basic("40 TCOL 0,0,$2000")
+      basic("40 POKE $0100,$FF")
+      basic("50 TCOL 0,0,$2000")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tcol completed")
+      assert(peekbyte($0100) == $AA, "TCOL ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tdef-defines-tile", "TDEF defines tile from memory") {
@@ -147,19 +185,25 @@ suites {
       basic("20 TILESIZE 8")
       ; Fill 64 bytes (8x8 tile) at $2000
       basic("30 FOR I=0 TO 63:POKE $2000+I,$FF:NEXT")
-      basic("40 TDEF 1,$2000")
-      basic("50 TPUT 0,0,0,1")
+      basic("40 POKE $0100,$FF")
+      basic("50 TDEF 1,$2000")
+      basic("60 TPUT 0,0,0,1")
+      basic("70 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tdef completed")
+      assert(peekbyte($0100) == $AA, "TDEF ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tpal-sets-palette", "TPAL loads palette from memory") {
       basic("10 MODE 4")
       ; Set up 16 palette entries at $2000
       basic("20 FOR I=0 TO 47:POKE $2000+I,I:NEXT")
-      basic("30 TPAL 0,$2000")
+      basic("30 POKE $0100,$FF")
+      basic("40 TPAL 0,$2000")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "tpal completed")
+      assert(peekbyte($0100) == $AA, "TPAL ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("tilecol-returns-collision", "TILECOL function returns collision bitmask") {

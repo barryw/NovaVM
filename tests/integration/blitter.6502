@@ -85,10 +85,15 @@ suites {
     }
 
     test("blitstatus-after-fill", "BLITSTATUS returns value after operation") {
-      basic("10 BLITFILL 0,$2000,256,16,1,$42")
-      basic("20 PRINT BLITSTATUS")
+      basic("10 POKE $0100,$FF")
+      basic("20 BLITFILL 0,$2000,256,16,1,$42")
+      basic("30 A=BLITSTATUS")
+      basic("40 POKE $0101,A")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "blitstatus completed")
+      assert(peekbyte($0100) == $AA, "BLITSTATUS read ran without error")
+      ; After a clean fill, error bit (bit 7) should not be set.
+      assert(peekbyte($0101) < 128, "BLITSTATUS error bit not set after clean fill")
     }
 
     test("blitfill-large-block", "BLITFILL handles 1KB contiguous fill") {

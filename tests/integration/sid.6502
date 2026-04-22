@@ -4,6 +4,13 @@
 ;
 ; Tests verify SID register read/write through PEEK/POKE and BASIC SOUND/VOLUME commands.
 ; SID1 at $D400-$D41F, SID2 at $D420-$D43F, config at $D440.
+;
+; Assertion patterns:
+;   1. For direct POKE/PEEK tests, use PEEK + screen_contains (strong).
+;   2. For BASIC-level SOUND/VOLUME/INSTRUMENT, use POKE-sentinel
+;      ($0100) to verify BASIC ran the line without error, PLUS
+;      peek the SID register the command should have written where
+;      determinable (VOLUME→$D418, etc).
 
 suites {
   suite("SID Registers") {
@@ -92,66 +99,84 @@ suites {
   suite("SID Sound Generation") {
 
     test("sound-basic-note", "SOUND command plays a note without error") {
-      basic("10 VOLUME 12")
-      basic("20 SOUND 60,15")
+      basic("10 POKE $0100,$FF")
+      basic("20 VOLUME 12")
+      basic("30 SOUND 60,15")
+      basic("40 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "SOUND completed")
+      assert(peekbyte($0100) == $AA, "SOUND ran without error")
+      ; VOLUME 12 writes master volume $0C into SID1 $D418
+      assert(peekbyte($D418) == 12, "master volume set by VOLUME")
     }
 
     test("sound-multiple-notes", "Play a sequence of notes") {
-      basic("10 VOLUME 12")
-      basic("20 SOUND 60,10")
-      basic("30 SOUND 64,10")
-      basic("40 SOUND 67,10")
-      basic("50 SOUND 72,10")
+      basic("10 POKE $0100,$FF")
+      basic("20 VOLUME 12")
+      basic("30 SOUND 60,10")
+      basic("40 SOUND 64,10")
+      basic("50 SOUND 67,10")
+      basic("60 SOUND 72,10")
+      basic("70 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "note sequence completed")
+      assert(peekbyte($0100) == $AA, "SOUND sequence ran without error")
     }
 
     test("volume-command", "VOLUME sets master volume register") {
-      basic("10 VOLUME 8")
+      basic("10 POKE $0100,$FF")
+      basic("20 VOLUME 8")
+      basic("30 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "VOLUME completed")
+      assert(peekbyte($0100) == $AA, "VOLUME ran without error")
+      assert(peekbyte($D418) == 8, "master volume is 8")
     }
 
     test("sound-with-instrument", "SOUND with instrument preset") {
-      basic("10 VOLUME 12")
-      basic("20 INSTRUMENT 0,$21,0,$F0")
-      basic("30 SOUND 69,15,0")
+      basic("10 POKE $0100,$FF")
+      basic("20 VOLUME 12")
+      basic("30 INSTRUMENT 0,$21,0,$F0")
+      basic("40 SOUND 69,15,0")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "instrument sound completed")
+      assert(peekbyte($0100) == $AA, "INSTRUMENT+SOUND ran without error")
     }
 
     test("sound-all-waveforms", "Play notes with each waveform type") {
-      basic("10 VOLUME 12")
-      basic("20 INSTRUMENT 0,$11,0,$F0")
-      basic("30 SOUND 60,10,0")
-      basic("40 INSTRUMENT 1,$21,0,$F0")
-      basic("50 SOUND 60,10,1")
-      basic("60 INSTRUMENT 2,$41,0,$F0")
-      basic("70 SOUND 60,10,2")
-      basic("80 INSTRUMENT 3,$81,0,$F0")
-      basic("90 SOUND 60,10,3")
+      basic("10 POKE $0100,$FF")
+      basic("20 VOLUME 12")
+      basic("30 INSTRUMENT 0,$11,0,$F0")
+      basic("40 SOUND 60,10,0")
+      basic("50 INSTRUMENT 1,$21,0,$F0")
+      basic("60 SOUND 60,10,1")
+      basic("70 INSTRUMENT 2,$41,0,$F0")
+      basic("80 SOUND 60,10,2")
+      basic("90 INSTRUMENT 3,$81,0,$F0")
+      basic("100 SOUND 60,10,3")
+      basic("110 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "all waveforms played")
+      assert(peekbyte($0100) == $AA, "all waveforms ran without error")
     }
 
     test("poke-sawtooth-tone", "Direct POKE to SID produces a tone") {
-      basic("10 POKE $D418,15")
-      basic("20 POKE $D400,$37")
-      basic("30 POKE $D401,$1C")
-      basic("40 POKE $D405,0")
-      basic("50 POKE $D406,$F0")
-      basic("60 POKE $D404,$21")
-      basic("70 FOR I=0 TO 500:NEXT")
-      basic("80 POKE $D404,$20")
+      basic("10 POKE $0100,$FF")
+      basic("20 POKE $D418,15")
+      basic("30 POKE $D400,$37")
+      basic("40 POKE $D401,$1C")
+      basic("50 POKE $D405,0")
+      basic("60 POKE $D406,$F0")
+      basic("70 POKE $D404,$21")
+      basic("80 FOR I=0 TO 500:NEXT")
+      basic("90 POKE $D404,$20")
+      basic("100 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "direct SID POKE completed")
+      assert(peekbyte($0100) == $AA, "SID POKE sequence ran without error")
+      ; Final POKE $D404,$20 gated the voice off — verify frequency latched
+      assert(peekbyte($D400) == $37, "voice 1 freq lo latched")
+      assert(peekbyte($D401) == $1C, "voice 1 freq hi latched")
     }
 
     test("poke-dual-sid-chord", "Play different tones on both SIDs") {
-      basic("10 POKE $D418,15")
-      basic("20 POKE $D438,15")
+      basic("10 POKE $0100,$FF")
+      basic("20 POKE $D418,15:POKE $D438,15")
       basic("30 POKE $D400,$37:POKE $D401,$1C")
       basic("40 POKE $D405,0:POKE $D406,$F0")
       basic("50 POKE $D404,$21")
@@ -160,41 +185,54 @@ suites {
       basic("80 POKE $D42B,$11")
       basic("90 FOR I=0 TO 500:NEXT")
       basic("100 POKE $D404,$20:POKE $D42B,$10")
+      basic("110 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "dual SID chord completed")
+      assert(peekbyte($0100) == $AA, "dual SID chord ran without error")
+      assert(peekbyte($D418) == 15, "SID1 master volume latched")
+      assert(peekbyte($D438) == 15, "SID2 master volume latched")
     }
   }
 
   suite("SID Multi-Voice") {
 
     test("three-voice-chord", "Three voices via direct POKE") {
-      basic("10 POKE $D418,15")
-      basic("20 POKE $D400,$37:POKE $D401,$1C")
-      basic("30 POKE $D405,0:POKE $D406,$F0")
-      basic("40 POKE $D404,$21")
-      basic("50 POKE $D407,$8F:POKE $D408,$23")
-      basic("60 POKE $D40C,0:POKE $D40D,$F0")
-      basic("70 POKE $D40B,$21")
-      basic("80 POKE $D40E,$AB:POKE $D40F,$2B")
-      basic("90 POKE $D413,0:POKE $D414,$F0")
-      basic("100 POKE $D412,$21")
-      basic("110 FOR I=0 TO 500:NEXT")
-      basic("120 POKE $D404,$20:POKE $D40B,$20:POKE $D412,$20")
+      basic("10 POKE $0100,$FF")
+      basic("20 POKE $D418,15")
+      basic("30 POKE $D400,$37:POKE $D401,$1C")
+      basic("40 POKE $D405,0:POKE $D406,$F0")
+      basic("50 POKE $D404,$21")
+      basic("60 POKE $D407,$8F:POKE $D408,$23")
+      basic("70 POKE $D40C,0:POKE $D40D,$F0")
+      basic("80 POKE $D40B,$21")
+      basic("90 POKE $D40E,$AB:POKE $D40F,$2B")
+      basic("100 POKE $D413,0:POKE $D414,$F0")
+      basic("110 POKE $D412,$21")
+      basic("120 FOR I=0 TO 500:NEXT")
+      basic("130 POKE $D404,$20:POKE $D40B,$20:POKE $D412,$20")
+      basic("140 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "three-voice chord completed")
+      assert(peekbyte($0100) == $AA, "three-voice chord ran without error")
+      ; Verify all three voices' frequencies are still latched
+      assert(peekbyte($D400) == $37, "voice 1 freq lo")
+      assert(peekbyte($D407) == $8F, "voice 2 freq lo")
+      assert(peekbyte($D40E) == $AB, "voice 3 freq lo")
     }
 
     test("rapid-note-sequence", "Rapid SID frequency changes") {
-      basic("10 POKE $D418,15")
-      basic("20 POKE $D405,0:POKE $D406,$F0")
-      basic("30 POKE $D404,$21")
-      basic("40 FOR N=16 TO 64 STEP 4")
-      basic("50 POKE $D401,N")
-      basic("60 FOR I=0 TO 50:NEXT")
-      basic("70 NEXT N")
-      basic("80 POKE $D404,$20")
+      basic("10 POKE $0100,$FF")
+      basic("20 POKE $D418,15")
+      basic("30 POKE $D405,0:POKE $D406,$F0")
+      basic("40 POKE $D404,$21")
+      basic("50 FOR N=16 TO 64 STEP 4")
+      basic("60 POKE $D401,N")
+      basic("70 FOR I=0 TO 50:NEXT")
+      basic("80 NEXT N")
+      basic("90 POKE $D404,$20")
+      basic("100 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "rapid note sequence completed")
+      assert(peekbyte($0100) == $AA, "rapid note sequence ran without error")
+      ; Final POKE $D401,N with N=64 after the loop
+      assert(peekbyte($D401) == 64, "last frequency value latched (N=64)")
     }
   }
 }

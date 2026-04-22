@@ -44,9 +44,11 @@ suites {
     }
 
     test("xmem-reports-stats", "XMEM shows memory statistics") {
-      basic("10 XMEM")
+      basic("10 POKE $0100,$FF")
+      basic("20 XMEM")
+      basic("30 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "xmem completed")
+      assert(peekbyte($0100) == $AA, "XMEM ran without error")
     }
 
     test("large-stash-fetch", "Stash and fetch 1KB block") {
@@ -78,27 +80,33 @@ suites {
     }
 
     test("xreset-clears-xram", "XRESET clears expansion memory state") {
-      basic("10 POKE $2000,$42")
-      basic("20 STASH $2000,0,1")
-      basic("30 XRESET")
+      basic("10 POKE $0100,$FF")
+      basic("20 POKE $2000,$42")
+      basic("30 STASH $2000,0,1")
+      basic("40 XRESET")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "xreset completed")
+      assert(peekbyte($0100) == $AA, "XRESET ran without error")
     }
 
     test("xalloc-allocates-pages", "XALLOC allocates XRAM pages") {
-      basic("10 XALLOC 4")
+      basic("10 POKE $0100,$FF")
+      basic("20 XALLOC 4")
+      basic("30 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "xalloc completed")
+      assert(peekbyte($0100) == $AA, "XALLOC ran without error")
     }
 
     test("xmem-after-stash", "XMEM shows used pages after STASH") {
-      basic("10 XRESET")
-      basic("15 XALLOC 1")
-      basic("20 FOR I=0 TO 255:POKE $2000+I,I:NEXT")
-      basic("30 STASH $2000,0,256")
-      basic("40 XMEM")
+      basic("10 POKE $0100,$FF")
+      basic("20 XRESET")
+      basic("30 XALLOC 1")
+      basic("40 FOR I=0 TO 255:POKE $2000+I,I:NEXT")
+      basic("50 STASH $2000,0,256")
+      basic("60 XMEM")
+      basic("70 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "xmem after stash")
+      assert(peekbyte($0100) == $AA, "XMEM after STASH ran without error")
     }
   }
 }

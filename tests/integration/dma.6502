@@ -64,10 +64,17 @@ suites {
     }
 
     test("dmastatus-after-fill", "DMASTATUS returns value after operation") {
-      basic("10 DMAFILL 0,$2000,16,$42")
-      basic("20 PRINT DMASTATUS")
+      basic("10 POKE $0100,$FF")
+      basic("20 DMAFILL 0,$2000,16,$42")
+      basic("30 A=DMASTATUS")
+      basic("40 POKE $0101,A")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "dmastatus completed")
+      assert(peekbyte($0100) == $AA, "DMASTATUS read + POKE ran without error")
+      ; DMAFILL with matching source/dest sizes should not set an error bit.
+      ; Exact value depends on controller; assert the byte was captured and
+      ; does not have the error bit set (bit 7 on real DMA controllers).
+      assert(peekbyte($0101) < 128, "DMASTATUS error bit not set after clean fill")
     }
 
     test("dmacopy-larger-block", "DMACOPY handles 1KB block") {
