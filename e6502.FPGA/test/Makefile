@@ -20,7 +20,7 @@ VGC   = $(RTL)/dpram.sv $(RTL)/vgc_timing.sv $(RTL)/vgc_text.sv $(RTL)/vgc_gfx.s
 SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.sv \
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_sid test_rom_load test_debug_bridge test_debug_peek test_key_inject test_sid_readback test_vgc_frame_counter test_vgc_scroll_wrap
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_sid test_rom_load test_debug_bridge test_debug_peek test_key_inject test_sid_readback test_vgc_frame_counter test_vgc_scroll_wrap test_sdram_loopback
 
 .PHONY: all clean $(TESTS) run
 
@@ -103,6 +103,12 @@ test_vgc_frame_counter: test_vgc_frame_counter.sv $(VGC)
 # wraps before the `>= ROWS` fixup runs.
 test_vgc_scroll_wrap: test_vgc_scroll_wrap.sv $(RTL)/vgc_timing.sv
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/vgc_timing.sv $< && $(RUN) test/$(BD)/$@/$@
+
+# SDRAM controller loopback — stand-alone, no top.sv. Instantiates sdram.v
+# against a behavioural MT48LC16M16 model and probes a write→read roundtrip.
+# First exit gate for Phase 2.5 Step 1.
+test_sdram_loopback: test_sdram_loopback.sv $(RTL)/sdram/sdram.v
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/sdram/sdram.v $< && $(RUN) test/$(BD)/$@/$@
 
 clean:
 	rm -rf $(BD)

@@ -28,7 +28,20 @@ module fpga_top (
 
     // Audio DAC (4-bit R-2R)
     output logic [3:0]  audio_l,
-    output logic [3:0]  audio_r
+    output logic [3:0]  audio_r,
+
+    // SDRAM — MT48LC16M16 (32MB). Not yet used by the core, just brought up
+    // on the pads so Phase 2.5 Step 2 can migrate XRAM into it.
+    output logic        sdram_clk,
+    output logic        sdram_cke,
+    output logic        sdram_csn,
+    output logic        sdram_wen,
+    output logic        sdram_rasn,
+    output logic        sdram_casn,
+    output logic [1:0]  sdram_ba,
+    output logic [1:0]  sdram_dqm,
+    output logic [12:0] sdram_a,
+    inout  wire  [15:0] sdram_d
 );
 
     // =========================================================================
@@ -40,7 +53,9 @@ module fpga_top (
     ecp5pll #(
         .in_hz  (25000000),
         .out0_hz(25000000),   // pixel clock
-        .out1_hz(125000000)   // 5x pixel clock for DDR TMDS
+        .out1_hz(125000000),  // 5x pixel clock for DDR TMDS
+        .out2_hz(100000000)   // SDRAM clock — 4:1 ratio with pixel clock
+                              // matches sdram.v clkref-resync assumptions
     ) pll_inst (
         .clk_i      (clk25_mhz),
         .clk_o      (pll_clk),
@@ -55,6 +70,7 @@ module fpga_top (
 
     wire clk_pixel = pll_clk[0];  // 25 MHz
     wire clk_shift = pll_clk[1];  // 125 MHz
+    wire clk_sdram = pll_clk[2];  // 100 MHz
 
     // =========================================================================
     // Reset: hold reset until PLL locks, then release
@@ -272,6 +288,52 @@ module fpga_top (
 
     assign audio_l = audio_l_unsigned[17:14];
     assign audio_r = audio_r_unsigned[17:14];
+
+    // =========================================================================
+    // SDRAM bring-up — instantiated idle for Phase 2.5 Step 1
+    //
+    // Port A and port B are held idle; the controller will auto-refresh on
+    // otherwise-unused cycles. Data-bus tri-state follows sd_we_out: when
+    // the controller is writing it drives sdram_d, otherwise it floats so
+    // the chip can drive reads back.
+    //
+    // clk (100 MHz) vs clkref (25 MHz pixel clock) is exactly the 4:1 ratio
+    // the MiST controller was designed for, so the q-counter resync at
+    // each clkref rising edge lines up naturally.
+    // =========================================================================
+    wire        sd_we_out;
+    wire [15:0] sd_data_out_ctrl;
+    wire [15:0] sd_data_in_ctrl = sdram_d;
+
+    // Direct SDRAM clock output — registered by the IOBUF on the pad.
+    assign sdram_clk = clk_sdram;
+    // Chip enable is tied high while the controller is running (init pulse
+    // is what takes the chip from reset to idle, not CKE).
+    assign sdram_cke = 1'b1;
+
+    assign sdram_d = sd_we_out ? sd_data_out_ctrl : 16'bzzzzzzzzzzzzzzzz;
+
+    sdram sdram_inst (
+        .sd_data_in (sd_data_in_ctrl),
+        .sd_data_out(sd_data_out_ctrl),
+        .sd_addr    (sdram_a),
+        .sd_dqm     (sdram_dqm),
+        .sd_ba      (sdram_ba),
+        .sd_cs      (sdram_csn),
+        .sd_we      (sdram_wen),
+        .sd_ras     (sdram_rasn),
+        .sd_cas     (sdram_casn),
+
+        .init   (rst),
+        .clk    (clk_sdram),
+        .clkref (clk_pixel),
+        .we_out (sd_we_out),
+
+        // Port A idle
+        .addrA(25'd0), .weA(1'b0), .dinA(8'd0), .oeA(1'b0), .doutA(),
+        // Port B idle
+        .addrB(25'd0), .weB(1'b0), .dinB(8'd0), .oeB(1'b0), .doutB()
+    );
 
     // =========================================================================
     // LEDs — useful debug indicators
