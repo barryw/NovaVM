@@ -54,8 +54,14 @@ module fpga_top (
         .in_hz  (25000000),
         .out0_hz(25000000),   // pixel clock
         .out1_hz(125000000),  // 5x pixel clock for DDR TMDS
-        .out2_hz(100000000)   // SDRAM clock — 4:1 ratio with pixel clock
-                              // matches sdram.v clkref-resync assumptions
+        .out2_hz(100000000),  // SDRAM clock
+        .out3_hz(6250000)     // SDRAM clkref — each port gets a full q=0..7
+                              // state machine cycle per clkref HALF-period,
+                              // so SDRAM:clkref must be 16:1. At 8:1 port A's
+                              // READ data becomes valid at q=7 but clkref has
+                              // flipped to LOW by then, so doutA never latches
+                              // (controller only latches port A when clkref is
+                              // HIGH at q=7). Ratios verified in sim.
     ) pll_inst (
         .clk_i      (clk25_mhz),
         .clk_o      (pll_clk),
@@ -68,9 +74,10 @@ module fpga_top (
         .phaseloadreg(1'b0)
     );
 
-    wire clk_pixel = pll_clk[0];  // 25 MHz
-    wire clk_shift = pll_clk[1];  // 125 MHz
-    wire clk_sdram = pll_clk[2];  // 100 MHz
+    wire clk_pixel  = pll_clk[0];  // 25 MHz
+    wire clk_shift  = pll_clk[1];  // 125 MHz
+    wire clk_sdram  = pll_clk[2];  // 100 MHz
+    wire clk_sdref  = pll_clk[3];  // 6.25 MHz — clkref for sdram.v (16:1)
 
     // =========================================================================
     // Reset: hold reset until PLL locks, then release
@@ -297,9 +304,13 @@ module fpga_top (
     // the controller is writing it drives sdram_d, otherwise it floats so
     // the chip can drive reads back.
     //
-    // clk (100 MHz) vs clkref (25 MHz pixel clock) is exactly the 4:1 ratio
-    // the MiST controller was designed for, so the q-counter resync at
-    // each clkref rising edge lines up naturally.
+    // clk (100 MHz) vs clkref (6.25 MHz dedicated PLL output) is 16:1. Each
+    // port gets its own full q=0..7 state machine cycle per clkref HALF-
+    // period: clkref HIGH = port A slot, clkref LOW = port B slot. The
+    // MiST controller only latches doutA at q=7 when clkref is still HIGH,
+    // so port A's full transaction must fit in one half-period = 8 SDRAM
+    // clocks. Tighter ratios broke in sim: 4:1 stuck in reset, 8:1 never
+    // latched reads.
     // =========================================================================
     wire        sd_we_out;
     wire [15:0] sd_data_out_ctrl;
@@ -326,7 +337,7 @@ module fpga_top (
 
         .init   (rst),
         .clk    (clk_sdram),
-        .clkref (clk_pixel),
+        .clkref (clk_sdref),
         .we_out (sd_we_out),
 
         // Port A idle

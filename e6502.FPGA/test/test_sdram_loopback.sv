@@ -33,7 +33,7 @@ module test_sdram_loopback;
     logic       clkref = 0;
     always @(posedge clk) begin
         clkref_div <= clkref_div + 1'b1;
-        if (clkref_div == 4'd7) begin
+        if (clkref_div == 4'd7) begin  // 16:1 — matches fpga_top wiring
             clkref   <= ~clkref;
             clkref_div <= 0;
         end
