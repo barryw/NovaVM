@@ -4,106 +4,132 @@
 ; Syntax: SPRITE n,ON / SPRITE n,OFF / SPRITE n,x,y
 ;         SPRITEDATA n,row,d0,...,d7
 ;         SPRITESET n,field,value  (field: 0=X,1=XH,2=Y,3=YH,4=shape,5=flags,6=pri)
+;
+; NOTE: Sprite registers at $A040..$A0BF are WRITE-ONLY from the CPU and
+; are not exposed through the debug-peek path either. Strong state
+; verification (e.g. "sprite 0's X coord is 100") isn't possible today;
+; assertions fall back to the POKE-sentinel pattern (POKE a known byte
+; AFTER the command — if BASIC errored, the sentinel stays unset) plus
+; a VGC-idle check at $A010.
+;
+; Each sprite command is on its own BASIC line. EhBASIC's SPRITE/
+; SPRITEDATA tokenizer doesn't reliably accept colon-chaining with
+; a trailing POKE, so the sentinel POKE gets its own numbered line.
 
 suites {
   suite("Sprites") {
 
     test("sprite-enable-disable", "SPRITE n,ON/OFF toggle sprite visibility") {
       basic("10 MODE 3")
-      basic("20 SPRITE 0,ON")
-      basic("30 SPRITE 0,OFF")
+      basic("20 POKE $0100,$FF")
+      basic("30 SPRITE 0,ON")
+      basic("40 SPRITE 0,OFF")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "enable/disable completed")
+      assert(peekbyte($0100) == $AA, "SPRITE ON/OFF ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("sprite-position", "SPRITE n,x,y sets position") {
       basic("10 MODE 3")
-      basic("20 SPRITE 0,100,50")
-      basic("30 SPRITE 0,ON")
+      basic("20 POKE $0100,$FF")
+      basic("30 SPRITE 0,100,50")
+      basic("40 SPRITE 0,ON")
+      basic("50 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "sprite positioned")
+      assert(peekbyte($0100) == $AA, "SPRITE position ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("sprite-define-pixel", "SPRITESET sets individual sprite register") {
       basic("10 MODE 3")
-      basic("20 SPRITESET 0,4,1")
-      basic("30 SPRITESET 0,5,0")
-      basic("40 SPRITESET 0,6,0")
+      basic("20 POKE $0100,$FF")
+      basic("30 SPRITESET 0,4,1")
+      basic("40 SPRITESET 0,5,0")
+      basic("50 SPRITESET 0,6,0")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "sprite registers set")
+      assert(peekbyte($0100) == $AA, "SPRITESET ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("sprite-define-row", "SPRITEDATA defines full row") {
       basic("10 MODE 3")
-      basic("20 SPRITEDATA 0,0,$77,$77,$77,$77,$77,$77,$77,$77")
-      basic("30 SPRITE 0,ON")
-      basic("40 SPRITE 0,100,50")
+      basic("20 POKE $0100,$FF")
+      basic("30 SPRITEDATA 0,0,$77,$77,$77,$77,$77,$77,$77,$77")
+      basic("40 SPRITE 0,ON")
+      basic("50 SPRITE 0,100,50")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "sprite row defined and visible")
+      assert(peekbyte($0100) == $AA, "SPRITEDATA ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("sprite-flip", "SPRITESET field 5 sets flip flags") {
       basic("10 MODE 3")
-      basic("20 SPRITESET 0,5,1")
+      basic("20 POKE $0100,$FF")
+      basic("30 SPRITESET 0,5,1")
+      basic("40 SPRITESET 0,5,2")
+      basic("50 SPRITESET 0,5,3")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "x flip set")
-
-      basic("10 SPRITESET 0,5,2")
-      run()
-      assert(screen_contains("Ready"), "y flip set")
-
-      basic("10 SPRITESET 0,5,3")
-      run()
-      assert(screen_contains("Ready"), "both flips set")
+      assert(peekbyte($0100) == $AA, "SPRITESET flip variants ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("sprite-priority", "SPRITESET field 6 sets rendering priority") {
       basic("10 MODE 3")
-      basic("20 SPRITESET 0,6,0")
+      basic("20 POKE $0100,$FF")
+      basic("30 SPRITESET 0,6,0")
+      basic("40 SPRITESET 0,6,1")
+      basic("50 SPRITESET 0,6,2")
+      basic("60 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "priority 0")
-
-      basic("10 SPRITESET 0,6,1")
-      run()
-      assert(screen_contains("Ready"), "priority 1")
-
-      basic("10 SPRITESET 0,6,2")
-      run()
-      assert(screen_contains("Ready"), "priority 2")
+      assert(peekbyte($0100) == $AA, "SPRITESET priority variants ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("multiple-sprites", "Multiple sprites at different positions") {
       basic("10 MODE 3")
-      basic("20 FOR I=0 TO 7")
-      basic("30 SPRITEDATA I,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
-      basic("40 SPRITE I,I*20+10,I*20+10")
-      basic("50 SPRITE I,ON")
-      basic("60 NEXT")
+      basic("20 POKE $0100,$FF")
+      basic("30 FOR I=0 TO 7")
+      basic("40 SPRITEDATA I,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
+      basic("50 SPRITE I,I*20+10,I*20+10")
+      basic("60 SPRITE I,ON")
+      basic("70 NEXT")
+      basic("80 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "8 sprites active")
+      assert(peekbyte($0100) == $AA, "8-sprite loop ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("sprite-move-sequence", "Move sprite across screen") {
       basic("10 MODE 3")
-      basic("20 SPRITEDATA 0,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
-      basic("30 SPRITE 0,ON")
-      basic("40 FOR I=0 TO 100 STEP 10")
-      basic("50 SPRITE 0,I,50")
-      basic("60 NEXT")
+      basic("20 POKE $0100,$FF")
+      basic("30 SPRITEDATA 0,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
+      basic("40 SPRITE 0,ON")
+      basic("50 FOR I=0 TO 100 STEP 10")
+      basic("60 SPRITE 0,I,50")
+      basic("70 NEXT")
+      basic("80 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "sprite movement completed")
+      assert(peekbyte($0100) == $AA, "sprite motion loop ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
 
     test("sprite-clear-and-redefine", "Clear sprite then redefine") {
       basic("10 MODE 3")
-      basic("20 SPRITEDATA 0,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
-      basic("30 SPRITE 0,ON")
-      basic("40 SPRITE 0,OFF")
-      basic("50 SPRITEDATA 0,0,$11,$22,$33,$44,$55,$66,$77,$88")
-      basic("60 SPRITE 0,ON")
-      basic("70 SPRITE 0,160,100")
+      basic("20 POKE $0100,$FF")
+      basic("30 SPRITEDATA 0,0,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF")
+      basic("40 SPRITE 0,ON")
+      basic("50 SPRITE 0,OFF")
+      basic("60 SPRITEDATA 0,0,$11,$22,$33,$44,$55,$66,$77,$88")
+      basic("70 SPRITE 0,ON")
+      basic("80 SPRITE 0,160,100")
+      basic("90 POKE $0100,$AA")
       run()
-      assert(screen_contains("Ready"), "sprite redefined and shown")
+      assert(peekbyte($0100) == $AA, "sprite redefine ran without error")
+      assert(peekbyte($A010) == 0, "VGC idle")
     }
   }
 }
