@@ -381,30 +381,43 @@ module top (
     wire [7:0]  r_bm_cpu_rdata = r_dma_reg_sel ? r_dma_cpu_rdata
                                                : r_blt_cpu_rdata;
 
-    // CPU read data mux — all sources are registered/synchronous.
-    // Keyboard ($A00F) flows through r_vgc_read_sel → r_vgc_cpu_rdata since
-    // $A00F is inside VGC_BASE..VGC_REGS_END; VGC returns the sfifo head.
+    // CPU read data mux — two-level grouped design to keep the critical
+    // path short. The previous 10-branch priority chain put ram_a_dout
+    // (the else-case fallthrough) through all 10 muxes in series — ~10
+    // LUT levels, the worst clk_pixel path. Splitting into three parallel
+    // group muxes + one 3:1 final cuts that to ~6 LUT levels.
+    //
+    // Selects are mutually exclusive (disjoint address ranges), so the
+    // within-group priority order is for readability only.
+    //
+    // Group A — XMC window + XMC regs + bus-master ($BA63-$BAA2).
+    wire [7:0] xmc_group_data =
+        (r_xmc_win_sel && r_xmc_win_enabled) ? xram_a_dout  :
+         r_xmc_win_sel                        ? 8'hFF        :
+         r_xmc_reg_sel                        ? r_xmc_reg_data :
+                                                r_bm_cpu_rdata;
+    wire xmc_group_sel = r_xmc_win_sel | r_xmc_reg_sel | r_bm_reg_sel;
+
+    // Group B — SID (1 / 2 / cfg) + VGC register space.
+    wire [7:0] io_group_data =
+        r_sid1_reg_sel ? r_sid1_dout   :
+        r_sid2_reg_sel ? r_sid2_dout   :
+        r_sid_cfg_sel  ? r_sid_cfg_reg :
+                         r_vgc_cpu_rdata;
+    wire io_group_sel = r_sid1_reg_sel | r_sid2_reg_sel | r_sid_cfg_sel | r_vgc_read_sel;
+
+    // Group C — ROM (active bank) + main RAM (default fallback).
+    wire [7:0] mem_group_data =
+        r_cpu_in_rom ? (r_ext_rom_active ? erom_b_dout : brom_b_dout)
+                     : ram_a_dout;
+
+    // Level-2 select: one 3-way mux. ram_a_dout critical path is now
+    // mem_group_data → level-2 only (~2 LUT levels) instead of walking
+    // a 10-deep else-if tail.
     always_comb begin
-        if (r_xmc_win_sel && r_xmc_win_enabled)
-            cpu_din = xram_a_dout;
-        else if (r_xmc_win_sel && !r_xmc_win_enabled)
-            cpu_din = 8'hFF;
-        else if (r_xmc_reg_sel)
-            cpu_din = r_xmc_reg_data;
-        else if (r_bm_reg_sel)
-            cpu_din = r_bm_cpu_rdata;
-        else if (r_sid1_reg_sel)
-            cpu_din = r_sid1_dout;
-        else if (r_sid2_reg_sel)
-            cpu_din = r_sid2_dout;
-        else if (r_sid_cfg_sel)
-            cpu_din = r_sid_cfg_reg;
-        else if (r_vgc_read_sel)
-            cpu_din = r_vgc_cpu_rdata;
-        else if (r_cpu_in_rom)
-            cpu_din = r_ext_rom_active ? erom_b_dout : brom_b_dout;
-        else
-            cpu_din = ram_a_dout;
+        if      (xmc_group_sel) cpu_din = xmc_group_data;
+        else if (io_group_sel)  cpu_din = io_group_data;
+        else                    cpu_din = mem_group_data;
     end
 
     // =========================================================================
