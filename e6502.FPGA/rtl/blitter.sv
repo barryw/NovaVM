@@ -116,6 +116,7 @@ module blitter (
         fill_value = 0; color_key = 0;
         row = 0; col = 0; wrote_count = 0;
         read_byte = 0; read_valid = 0; buf_idx = 0;
+        src_row_off = 0; dst_row_off = 0;
     end
 
     // =========================================================================
@@ -131,9 +132,19 @@ module blitter (
 
     // =========================================================================
     // Address computation
+    //
+    // A straight combinational `base + row*stride + col` synthesized into a
+    // MULT18X18D plus a long CCU2 carry chain in the pixel-clock domain —
+    // its worst path missed 25 MHz timing by ~0.7 ns. Replacing the runtime
+    // multiply with an accumulator (`row_off += stride` on each row step)
+    // drops the path to a pure 24-bit add and closes timing.
+    //
+    // src_row_off / dst_row_off are zeroed at blit start (same instant as
+    // `row <= 0`) and incremented by stride whenever `row` advances.
     // =========================================================================
-    wire [23:0] src_addr = src_base + {8'b0, row} * {8'b0, src_stride} + {8'b0, col};
-    wire [23:0] dst_addr = dst_base + {8'b0, row} * {8'b0, dst_stride} + {8'b0, col};
+    logic [23:0] src_row_off, dst_row_off;
+    wire  [23:0] src_addr = src_base + src_row_off + {8'b0, col};
+    wire  [23:0] dst_addr = dst_base + dst_row_off + {8'b0, col};
 
     // Space size lookup
     function automatic logic [19:0] space_size(input logic [2:0] sp);
@@ -312,6 +323,8 @@ module blitter (
                                 state <= S_DONE;
                             end else begin
                                 row <= row + 1;
+                                src_row_off <= src_row_off + {8'b0, src_stride};
+                                dst_row_off <= dst_row_off + {8'b0, dst_stride};
                                 if (fill_mode) begin
                                     state <= S_WRITE;
                                     read_byte <= fill_value;
@@ -360,6 +373,8 @@ module blitter (
                             state <= S_DONE;
                         end else begin
                             row <= row + 1;
+                            src_row_off <= src_row_off + {8'b0, src_stride};
+                            dst_row_off <= dst_row_off + {8'b0, dst_stride};
                             state <= S_ROWBUF_READ;
                         end
                     end else begin
@@ -399,6 +414,10 @@ module blitter (
                             use_row_buffer <= !regs[R_MODE][MODE_FILL] &&
                                               regs[R_SRCSPACE][2:0] == regs[R_DSTSPACE][2:0];
                             row <= 0; col <= 0;
+                            // Reset row-offset accumulators so address math
+                            // starts at base. They advance by stride each row.
+                            src_row_off <= 0;
+                            dst_row_off <= 0;
                             wrote_count <= 0;
                             read_valid <= 0;
                             buf_idx <= 0;
