@@ -19,10 +19,14 @@ module vgc_text (
     output logic [7:0]  color_a_dout,
 
     // --- font_rom port A (from top-level mux) ---
-    input  logic [10:0] font_a_addr,
+    // 13-bit addr covers 8192 bytes (4 slots × 2048-byte glyph tables).
+    input  logic [12:0] font_a_addr,
     input  logic [7:0]  font_a_din,
     input  logic        font_a_we,
     output logic [7:0]  font_a_dout,
+
+    // --- Active font slot (picks one of the 4 banks inside font_mem) ---
+    input  logic [1:0]  font_slot,
 
     // --- Rendering (port B) inputs from timing ---
     input  logic [5:0]  real_row,
@@ -60,10 +64,15 @@ module vgc_text (
         .addr_b(color_b_addr), .dout_b(color_b_dout)
     );
 
-    // --- font_rom (2048 bytes, initialized from file) ---
-    logic [10:0] font_b_addr;
+    // --- font_rom (8192 bytes = 4 × 2048-byte glyph tables) ---
+    // Bank layout inside fonts.hex:
+    //   [0000..07FF] slot 0 — cp437
+    //   [0800..0FFF] slot 1 — petscii_upper
+    //   [1000..17FF] slot 2 — petscii_lower
+    //   [1800..1FFF] slot 3 — reserved (padding)
+    logic [12:0] font_b_addr;
 
-    dpram #(.WIDTH(8), .DEPTH(2048), .INIT_FILE("rom/cp437.hex")) font_mem (
+    dpram #(.WIDTH(8), .DEPTH(8192), .INIT_FILE("rom/fonts.hex")) font_mem (
         .clk(clk),
         .addr_a(font_a_addr), .din_a(font_a_din), .we_a(font_a_we), .dout_a(font_a_dout),
         .addr_b(font_b_addr), .dout_b(font_b_dout)
@@ -79,6 +88,6 @@ module vgc_text (
     // =========================================================================
     assign char_b_addr  = real_row * COLS + {6'b0, text_col};
     assign color_b_addr = real_row * COLS + {6'b0, text_col};
-    assign font_b_addr  = {char_b_dout, font_line};
+    assign font_b_addr  = {font_slot, char_b_dout, font_line};  // 2+8+3 = 13
 
 endmodule

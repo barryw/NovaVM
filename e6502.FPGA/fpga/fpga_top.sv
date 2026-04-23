@@ -249,12 +249,19 @@ module fpga_top (
         .dbg_cpu_sp   (brg_cpu_sp),
         .dbg_cpu_flags(brg_cpu_flags),
 
-        // SDRAM port A — connected to the sdram_inst further down
+        // SDRAM port A — xram_sdram wrapper (XRAM BRAM replacement)
         .sdram_addrA(core_sdram_addrA),
         .sdram_dinA (core_sdram_dinA),
         .sdram_weA  (core_sdram_weA),
         .sdram_oeA  (core_sdram_oeA),
-        .sdram_doutA(core_sdram_doutA)
+        .sdram_doutA(core_sdram_doutA),
+
+        // SDRAM port B — sid_curve_reader (f6581_curve lookup)
+        .sdram_addrB(core_sdram_addrB),
+        .sdram_dinB (core_sdram_dinB),
+        .sdram_weB  (core_sdram_weB),
+        .sdram_oeB  (core_sdram_oeB),
+        .sdram_doutB(core_sdram_doutB)
     );
 
     // SDRAM port A wires from core
@@ -263,6 +270,13 @@ module fpga_top (
     wire        core_sdram_weA;
     wire        core_sdram_oeA;
     wire [7:0]  core_sdram_doutA;
+
+    // SDRAM port B wires from core
+    wire [24:0] core_sdram_addrB;
+    wire [7:0]  core_sdram_dinB;
+    wire        core_sdram_weB;
+    wire        core_sdram_oeB;
+    wire [7:0]  core_sdram_doutB;
 
     // =========================================================================
     // HDMI output — VGA signals through TMDS encoder to GPDI
@@ -358,8 +372,10 @@ module fpga_top (
         .addrA(core_sdram_addrA), .weA(core_sdram_weA),
         .dinA(core_sdram_dinA),  .oeA(core_sdram_oeA),
         .doutA(core_sdram_doutA),
-        // Port B idle
-        .addrB(25'd0), .weB(1'b0), .dinB(8'd0), .oeB(1'b0), .doutB()
+        // Port B — SID filter curve via sid_curve_reader (Phase 2.5 Step 3)
+        .addrB(core_sdram_addrB), .weB(core_sdram_weB),
+        .dinB(core_sdram_dinB),   .oeB(core_sdram_oeB),
+        .doutB(core_sdram_doutB)
     );
 
     // =========================================================================

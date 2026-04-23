@@ -21,7 +21,13 @@ module sid_chip (
     output logic [7:0]  dout,
 
     // Audio output (signed 18-bit)
-    output logic signed [17:0] audio_out
+    output logic signed [17:0] audio_out,
+
+    // Filter curve pulled from SDRAM by an external sid_curve_reader.
+    // We publish our Fc so it can detect changes; f0_in returns the
+    // 16-bit cached curve value.
+    output logic [10:0] filter_fc_out,
+    input  logic [15:0] filter_f0_in
 );
 
     // =========================================================================
@@ -190,8 +196,13 @@ module sid_chip (
         .ps__out(f_ps__out),
         .pst_out(f_pst_out),
         .Fc(filter_fc),
+        .f0_in(filter_f0_in),
         .F0(F0)
     );
+
+    // Publish filter_fc so the top-level SDRAM curve reader can refresh
+    // filter_f0_in when it changes.
+    assign filter_fc_out = filter_fc;
 
     // Time-multiplex table lookups across 3 voices
     always_ff @(posedge clk) begin

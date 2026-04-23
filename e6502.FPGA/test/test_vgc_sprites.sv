@@ -45,8 +45,9 @@ module test_vgc_sprites;
     task automatic spr_pos(input int idx, input int x, input int y);
         write_param(0, idx[7:0]);
         write_param(1, x[7:0]);
-        write_param(2, {7'd0, x[8]});   // bit 0 = x_hi (9-bit coord)
+        write_param(2, x[15:8]);       // x_hi (full byte for signed-16)
         write_param(3, y[7:0]);
+        write_param(4, y[15:8]);       // y_hi (full byte for signed-16)
         write_cmd(CMD_SPRPOS);
         wait_cmd_done();
     endtask

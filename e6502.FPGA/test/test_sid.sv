@@ -13,6 +13,13 @@ module test_sid;
     logic [7:0] din, dout;
     logic signed [17:0] audio_out;
 
+    // SID filter curve now comes from an external SDRAM reader. In this
+    // stand-alone SID unit test we pass a fixed mid-range f0 so the
+    // filter exercises consistently — audio tests don't rely on exact
+    // curve values, just that the module processes them.
+    logic [10:0] filter_fc_out;
+    logic [15:0] filter_f0_in = 16'h8000;
+
     sid_chip uut (.*);
 
     // Generate ~1 MHz clock enable

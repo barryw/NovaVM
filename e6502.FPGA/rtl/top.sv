@@ -59,7 +59,14 @@ module top (
     output logic [7:0]  sdram_dinA,
     output logic        sdram_weA,
     output logic        sdram_oeA,
-    input  logic [7:0]  sdram_doutA
+    input  logic [7:0]  sdram_doutA,
+
+    // SDRAM port B — driven by the SID curve reader (Phase 2.5 Step 3).
+    output logic [24:0] sdram_addrB,
+    output logic [7:0]  sdram_dinB,
+    output logic        sdram_weB,
+    output logic        sdram_oeB,
+    input  logic [7:0]  sdram_doutB
 );
 
     localparam ROM_BASE  = 16'hC000;
@@ -628,7 +635,9 @@ module top (
     wire [7:0] blt_xram_rdata = xram[blt_xram_addr];
     wire [7:0] tile_dma_data  = ram[tile_dma_addr];
 
-    // Sim path: SDRAM ports are unused — drive to sane defaults
+    // Sim path: xram_sdram_inst isn't instantiated here (`ifdef SYNTHESIS`
+    // branch owns it), so port A must be zeroed. Port B is always driven
+    // by sid_curve_reader which sits outside this ifdef.
     assign sdram_addrA = 25'd0;
     assign sdram_dinA  = 8'd0;
     assign sdram_weA   = 1'b0;
@@ -720,6 +729,11 @@ module top (
 
     wire [7:0] sid1_dout, sid2_dout;
 
+    // SID filter curve pulled from SDRAM (Phase 2.5 Step 3). One reader
+    // serves both chips via SDRAM port B; each chip caches its own f0.
+    wire [10:0] sid1_filter_fc, sid2_filter_fc;
+    wire [15:0] sid1_filter_f0, sid2_filter_f0;
+
     sid_chip sid1_inst (
         .clk        (clk),
         .rst        (rst),
@@ -730,7 +744,9 @@ module top (
         .addr       (cpu_addr[4:0]),
         .din        (cpu_dout),
         .dout       (sid1_dout),
-        .audio_out  (audio_l)
+        .audio_out  (audio_l),
+        .filter_fc_out(sid1_filter_fc),
+        .filter_f0_in (sid1_filter_f0)
     );
 
     sid_chip sid2_inst (
@@ -743,7 +759,23 @@ module top (
         .addr       (cpu_addr[4:0]),
         .din        (cpu_dout),
         .dout       (sid2_dout),
-        .audio_out  (audio_r)
+        .audio_out  (audio_r),
+        .filter_fc_out(sid2_filter_fc),
+        .filter_f0_in (sid2_filter_f0)
+    );
+
+    sid_curve_reader curve_reader_inst (
+        .clk         (clk),
+        .rst         (rst),
+        .sid1_Fc     (sid1_filter_fc),
+        .sid1_f0     (sid1_filter_f0),
+        .sid2_Fc     (sid2_filter_fc),
+        .sid2_f0     (sid2_filter_f0),
+        .sdram_addrB (sdram_addrB),
+        .sdram_weB   (sdram_weB),
+        .sdram_dinB  (sdram_dinB),
+        .sdram_oeB   (sdram_oeB),
+        .sdram_doutB (sdram_doutB)
     );
 
     // =========================================================================

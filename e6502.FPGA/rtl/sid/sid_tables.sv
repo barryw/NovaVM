@@ -15,8 +15,11 @@ module sid_tables
 	output reg  [7:0] ps__out,
 	output reg  [7:0] pst_out,
 
-	// filter
+	// filter — f6581_curve lookup is provided externally (from SDRAM
+	// via sid_curve_reader at the top level). f0_in is the 16-bit
+	// curve value for the current Fc[10:1] after SDRAM fetch.
 	input      [10:0] Fc,
+	input      [15:0] f0_in,
 	output     [15:0] F0
 );
 
@@ -90,20 +93,13 @@ initial $readmemh("rom/wave8580_ps_.hex", wave8580_ps_);
 
 /////////////////////////////////////////////////////////////////////////////////////
 
-reg [15:0] f0;
-always @(posedge clock) f0 <= f6581_curve[Fc[10:1]];
-
-// No Fc_offset adjustment — use default curve for 6581, linear for 8580
-assign F0 = mode ? ({ 3'b000, Fc, 2'b00 } + Fc) : {1'b0, f0[15:1]};
-
-// value = pi * 1.048576 * f0[fc]
-reg [15:0] f6581_curve[0:4095];
-initial $readmemh("rom/f6581_curve.hex", f6581_curve);
-
-// f6581_adj table removed — not needed without Fc_offset adjustment
-/* verilator lint_off UNUSED */
-reg [14:0] _unused_f6581_adj[0:1023];
-initial $readmemh("rom/_unused_f6581_adj.hex", _unused_f6581_adj);
-/* verilator lint_on UNUSED */
+// 8580 uses a linear curve (cheap arithmetic). 6581 reads the
+// empirical filter curve from SDRAM via sid_curve_reader — the f0_in
+// port carries the cached value, updated on Fc changes.
+//
+// Previously f6581_curve was 4K×16 BRAM (4 DP16KDs per sid_tables;
+// two SID chips = 8 blocks total). Moving to SDRAM frees those
+// blocks for the 3-font text memory instead.
+assign F0 = mode ? ({ 3'b000, Fc, 2'b00 } + Fc) : {1'b0, f0_in[15:1]};
 
 endmodule

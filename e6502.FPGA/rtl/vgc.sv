@@ -198,7 +198,7 @@ module vgc (
     logic [7:0]  color_a_din;
     logic        color_a_we;
     logic [7:0]  color_a_dout;
-    logic [10:0] font_a_addr;
+    logic [12:0] font_a_addr;
     logic [7:0]  font_a_din;
     logic        font_a_we;
     logic [7:0]  font_a_dout;
@@ -212,6 +212,7 @@ module vgc (
         .color_a_we(color_a_we), .color_a_dout(color_a_dout),
         .font_a_addr(font_a_addr), .font_a_din(font_a_din),
         .font_a_we(font_a_we), .font_a_dout(font_a_dout),
+        .font_slot(font_slot[1:0]),
         .real_row(real_row), .text_col(text_col), .font_line(font_line), .font_line_d1(font_line_d1),
         .char_b_dout(char_b_dout), .color_b_dout(color_b_dout),
         .font_b_dout(font_b_dout)
@@ -285,8 +286,10 @@ module vgc (
     logic [7:0]  spr_a_dout;
 
     // Sprite attributes — small register arrays (no dpram needed)
-    logic [8:0]  spr_x [0:15];
-    logic [7:0]  spr_y [0:15];
+    // Sprite coords signed 16-bit so BASIC can place sprites partly
+    // off-screen (negative X/Y clip via vgc_sprites.sv's edge checks).
+    logic signed [15:0] spr_x [0:15];
+    logic signed [15:0] spr_y [0:15];
     logic        spr_enable [0:15];
     logic        spr_flip_h [0:15];
     logic        spr_flip_v [0:15];
@@ -308,8 +311,8 @@ module vgc (
     logic [7:0]  spr_collision_bg_bits;
 
     // Pack sprite attribute arrays into flat vectors for sub-module
-    logic [16*9-1:0]  spr_x_flat;
-    logic [16*8-1:0]  spr_y_flat;
+    logic [16*16-1:0] spr_x_flat;
+    logic [16*16-1:0] spr_y_flat;
     logic [15:0]      spr_enable_flat;
     logic [15:0]      spr_flip_h_flat;
     logic [15:0]      spr_flip_v_flat;
@@ -319,8 +322,8 @@ module vgc (
 
     always_comb begin
         for (int i = 0; i < 16; i++) begin
-            spr_x_flat[i*9 +: 9]     = spr_x[i];
-            spr_y_flat[i*8 +: 8]     = spr_y[i];
+            spr_x_flat[i*16 +: 16]   = spr_x[i];
+            spr_y_flat[i*16 +: 16]   = spr_y[i];
             spr_enable_flat[i]        = spr_enable[i];
             spr_flip_h_flat[i]        = spr_flip_h[i];
             spr_flip_v_flat[i]        = spr_flip_v[i];
@@ -1059,9 +1062,14 @@ module vgc (
                                         end
                                     end
                                     CMD_SPRPOS: begin
+                                        // Signed-16 coords: regs[18]/regs[19] = X lo/hi,
+                                        // regs[20]/regs[21] = Y lo/hi. Legacy firmware
+                                        // that only writes regs[18..20] still lands a
+                                        // positive coord since the high bytes (regs[19],
+                                        // regs[21]) zero-extend for unsigned values.
                                         if (regs[17] < NUM_SPRITES) begin
-                                            spr_x[regs[17][3:0]] <= {regs[19][0], regs[18]};
-                                            spr_y[regs[17][3:0]] <= regs[20];
+                                            spr_x[regs[17][3:0]] <= signed'({regs[19], regs[18]});
+                                            spr_y[regs[17][3:0]] <= signed'({regs[21], regs[20]});
                                         end
                                     end
                                     CMD_SPRENA: begin
@@ -1230,10 +1238,10 @@ module vgc (
                 // Sprite register writes
                 if (spr_reg_sel) begin
                     case (spr_field)
-                        3'd0: spr_x[spr_index][7:0] <= cpu_wdata;
-                        3'd1: spr_x[spr_index][8]   <= cpu_wdata[0];
-                        3'd2: spr_y[spr_index]       <= cpu_wdata;
-                        3'd3: ;
+                        3'd0: spr_x[spr_index][7:0]  <= cpu_wdata;
+                        3'd1: spr_x[spr_index][15:8] <= cpu_wdata;
+                        3'd2: spr_y[spr_index][7:0]  <= cpu_wdata;
+                        3'd3: spr_y[spr_index][15:8] <= cpu_wdata;
                         3'd4: spr_shape[spr_index]   <= cpu_wdata[3:0];
                         3'd5: begin
                             spr_flip_h[spr_index] <= cpu_wdata[0];
@@ -1354,12 +1362,14 @@ module vgc (
             color_a_addr = cmd_color_addr;
         end
 
-        // font_rom port A — ARTIST font reads take priority
+        // font_rom port A — ARTIST font reads take priority.
+        // artist_font_addr is per-slot (11-bit glyph index); prefix with the
+        // active font_slot so GTEXT uses the same bank the text renderer does.
         font_a_we = 0;
-        font_a_addr = 11'd0;
+        font_a_addr = 13'd0;
         font_a_din = 8'd0;
         if (artist_font_re) begin
-            font_a_addr = artist_font_addr;
+            font_a_addr = {font_slot[1:0], artist_font_addr};
         end
 
         // gfx_ram port A — priority: blitter > ARTIST > cmd > blitter-read > cmd-read

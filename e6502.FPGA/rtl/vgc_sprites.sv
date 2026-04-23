@@ -22,8 +22,10 @@ module vgc_sprites (
     input  logic [8:0]  gfx_x_d2,
 
     // --- Sprite attributes (packed: 16 entries per vector) ---
-    input  logic [16*9-1:0]  spr_x_flat,
-    input  logic [16*8-1:0]  spr_y_flat,
+    // Sprite X/Y are signed 16-bit so firmware can place sprites
+    // partly or fully off the left/top edges (negative coords).
+    input  logic [16*16-1:0] spr_x_flat,
+    input  logic [16*16-1:0] spr_y_flat,
     input  logic [15:0]      spr_enable_flat,
     input  logic [15:0]      spr_flip_h_flat,
     input  logic [15:0]      spr_flip_v_flat,
@@ -50,8 +52,8 @@ module vgc_sprites (
     localparam SPR_H     = 16;
 
     // Unpack flat vectors into local arrays for readability
-    logic [8:0]  spr_x [0:15];
-    logic [7:0]  spr_y [0:15];
+    logic signed [15:0] spr_x [0:15];
+    logic signed [15:0] spr_y [0:15];
     logic        spr_enable [0:15];
     logic        spr_flip_h [0:15];
     logic        spr_flip_v [0:15];
@@ -61,8 +63,8 @@ module vgc_sprites (
 
     always_comb begin
         for (int i = 0; i < 16; i++) begin
-            spr_x[i]      = spr_x_flat[i*9 +: 9];
-            spr_y[i]      = spr_y_flat[i*8 +: 8];
+            spr_x[i]      = spr_x_flat[i*16 +: 16];
+            spr_y[i]      = spr_y_flat[i*16 +: 16];
             spr_enable[i]  = spr_enable_flat[i];
             spr_flip_h[i]  = spr_flip_h_flat[i];
             spr_flip_v[i]  = spr_flip_v_flat[i];
@@ -123,7 +125,7 @@ module vgc_sprites (
     logic        spr_eval_flip_h;
     logic        spr_eval_flip_v;
     logic [1:0]  spr_eval_pri_r;
-    logic [8:0]  spr_eval_x_r;
+    logic signed [15:0] spr_eval_x_r;
     logic [3:0]  spr_eval_shape_r;
     logic [3:0]  spr_eval_trans_r;
     logic [7:0]  spr_next_scanline;
@@ -198,9 +200,11 @@ module vgc_sprites (
                 SPR_CHECK: begin
                     if (spr_eval_idx < 16) begin
                         if (spr_enable[spr_eval_idx]) begin
-                            if (spr_next_scanline >= spr_y[spr_eval_idx] &&
-                                spr_next_scanline < spr_y[spr_eval_idx] + SPR_H) begin
-                                spr_eval_y_line <= spr_next_scanline - spr_y[spr_eval_idx];
+                            // Signed compare: spr_y may be negative (partially
+                            // off-screen sprite sliding in from the top).
+                            if ($signed({8'b0, spr_next_scanline}) >= spr_y[spr_eval_idx] &&
+                                $signed({8'b0, spr_next_scanline}) <  spr_y[spr_eval_idx] + 16'sd16) begin
+                                spr_eval_y_line <= 8'($signed({8'b0, spr_next_scanline}) - spr_y[spr_eval_idx]);
                                 spr_eval_flip_h <= spr_flip_h[spr_eval_idx];
                                 spr_eval_flip_v <= spr_flip_v[spr_eval_idx];
                                 spr_eval_pri_r <= spr_pri[spr_eval_idx];
@@ -243,7 +247,9 @@ module vgc_sprites (
                     begin
                         logic [3:0] fx;
                         logic [3:0] color;
-                        logic [8:0] screen_x;
+                        // Signed screen_x so spr_eval_x_r < 0 clips naturally —
+                        // the left-edge guard rejects negatives.
+                        logic signed [15:0] screen_x;
 
                         fx = spr_eval_flip_h ? (4'd15 - spr_write_px[3:0]) : spr_write_px[3:0];
                         if (fx[0])
@@ -251,9 +257,9 @@ module vgc_sprites (
                         else
                             color = spr_row_data[fx[3:1]][7:4];
 
-                        screen_x = spr_eval_x_r + spr_write_px[3:0];
-                        if (screen_x < GFX_W && color != spr_eval_trans_r) begin
-                            slb_a_addr <= screen_x;
+                        screen_x = spr_eval_x_r + {12'b0, spr_write_px[3:0]};
+                        if (screen_x >= 0 && screen_x < 16'sd320 && color != spr_eval_trans_r) begin
+                            slb_a_addr <= screen_x[8:0];
                             slb_a_din  <= {spr_eval_pri_r, color, 1'b1};
                             slb_a_we   <= 1;
                         end
