@@ -36,14 +36,16 @@ module test_vgc_regs;
     task automatic test_color_registers();
         logic [7:0] rb;
         $display("");
-        $display("Test: BG/FG/BORDER color registers — 4-bit");
+        $display("Test: BG/FG color registers — 4-bit (BORDER now no-op)");
         for (int c = 0; c < 16; c++) begin
             bus_write(REG_BGCOL_A,  8'(c));   step(2);
             bus_write(REG_FGCOL_A,  8'(c));   step(2);
-            bus_write(16'hA00D,      8'(c));   step(2);  // BORDER
+            // $A00D writes accepted but ignored — border removed in 480-line mode
+            bus_write(16'hA00D,      8'(c));   step(2);
             check_eq($sformatf("bg_color=%0d",     c), int'(dut.bg_color),     c);
             check_eq($sformatf("fg_color=%0d",     c), int'(dut.fg_color),     c);
-            check_eq($sformatf("border_color=%0d", c), int'(dut.border_color), c);
+            bus_read(16'hA00D, rb); step(2);
+            check_eq($sformatf("$A00D reads 0 (c=%0d)", c), int'(rb), 0);
         end
         // High nibble must be masked off
         bus_write(REG_BGCOL_A, 8'hF5); step(2);
@@ -324,6 +326,7 @@ module test_vgc_regs;
         bus_write(16'hA007,       8'd1);   step(2);
         bus_write(16'hA008,       8'd9);   step(2);
         bus_write(16'hA00A,       8'd1);   step(2);
+        // $A00D write accepted but no-op — border removed, nothing to assert
         bus_write(16'hA00D,       8'd11);  step(2);
         bus_write(16'hA01F,       8'hC3);  step(2);
 
@@ -337,7 +340,6 @@ module test_vgc_regs;
         check_eq("font_slot stable",    int'(dut.font_slot),     1);
         check_eq("gfx_color stable",    int'(dut.gfx_color),     9);
         check_eq("cursor_enable stable", int'(dut.cursor_enable), 1);
-        check_eq("border_color stable", int'(dut.border_color),  11);
         check_eq("irq_ctrl stable",     int'(dut.irq_ctrl),      8'hC3);
     endtask
 

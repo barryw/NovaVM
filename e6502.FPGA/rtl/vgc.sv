@@ -432,7 +432,10 @@ module vgc (
     logic [7:0]  regs [0:31];
     logic [6:0]  cursor_x;
     logic [5:0]  cursor_y;
-    logic [3:0]  fg_color, bg_color, border_color, gfx_color;
+    // border_color removed: V_BORDER=0 in 480-line mode leaves no border
+    // region to paint, so the register was dead silicon. $A00D stays
+    // addressable as a no-op slot for source compat.
+    logic [3:0]  fg_color, bg_color, gfx_color;
     logic [2:0]  mode;
     logic        cursor_enable;
     // Frame counter at $A008 (VGC_FRAME in basic.asm:8806). Increments once
@@ -554,7 +557,7 @@ module vgc (
     initial begin
         for (int i = 0; i < 32; i++) regs[i] = 0;
         cursor_x = 0; cursor_y = 0;
-        fg_color = 4'd1; bg_color = 4'd6; border_color = 4'd6;
+        fg_color = 4'd1; bg_color = 4'd6;
         gfx_color = 4'd1; mode = 0; cursor_enable = 1;
         frame_counter = 0;
         scroll_x = 0; scroll_y = 0;
@@ -654,7 +657,7 @@ module vgc (
                 5'd10:       cpu_rdata = {7'b0, cursor_enable};
                 5'd11:       cpu_rdata = collision_ss;
                 5'd12:       cpu_rdata = collision_bg;
-                REG_BORDER:  cpu_rdata = {4'b0, border_color};
+                REG_BORDER:  cpu_rdata = 8'd0;  // border removed (V_BORDER=0), reads 0
                 REG_CHARIN:  cpu_rdata = char_in_reg;
                 REG_CMD:     cpu_rdata = {7'b0, cmd_busy || artist_busy};
                 5'd31:       cpu_rdata = irq_ctrl;
@@ -727,7 +730,7 @@ module vgc (
     always_ff @(posedge clk) begin
         if (rst) begin
             cursor_x <= 0; cursor_y <= 0; mode <= 0;
-            fg_color <= 4'd1; bg_color <= 4'd6; border_color <= 4'd6;
+            fg_color <= 4'd1; bg_color <= 4'd6;
             gfx_color <= 4'd1; cursor_enable <= 1; font_slot <= 0;
             frame_counter <= 0;
             scroll_offset <= 0; scroll_pending <= 0; scroll_col <= 0;
@@ -934,7 +937,7 @@ module vgc (
                 case (copper_fire_reg)
                     8'd1: bg_color     <= copper_fire_val[3:0];
                     8'd2: fg_color     <= copper_fire_val[3:0];
-                    8'd13: border_color <= copper_fire_val[3:0];
+                    // 8'd13 (border) was copper-settable; now no-op, drops to default.
                     default: regs[copper_fire_reg[4:0]] <= copper_fire_val;
                 endcase
             end
@@ -957,7 +960,7 @@ module vgc (
                         5'd10:       cursor_enable <= cpu_wdata[0];
                         5'd11:       collision_ss <= 0;
                         5'd12:       collision_bg <= 0;
-                        REG_BORDER:  border_color <= cpu_wdata[3:0];
+                        REG_BORDER:  /* $A00D no-op — border removed */;
                         5'd31:       irq_ctrl <= cpu_wdata;
                         REG_CHAROUT: begin
                             case (cpu_wdata)
@@ -1091,7 +1094,7 @@ module vgc (
                                     8'h1F: begin // SysReset
                                         cursor_x <= 0; cursor_y <= 0;
                                         mode <= 0; fg_color <= 4'd1; bg_color <= 4'd6;
-                                        border_color <= 4'd6; gfx_color <= 4'd1;
+                                        gfx_color <= 4'd1;
                                         scroll_offset <= 0; scroll_x <= 0; scroll_y <= 0;
                                         cursor_enable <= 1; copper_enabled <= 0;
                                         copper_count <= 0;
@@ -1466,11 +1469,12 @@ module vgc (
         cur_gfx_d2    = gfx_b_dout;
         gfx_pixel_d2  = palette[cur_gfx_d2];
 
-        // Layer compositing with sprite priorities
+        // Layer compositing with sprite priorities.
+        // No border branch: V_BORDER=0 means in_text_area_d2 is always true
+        // when visible_d2 is, so the former `!in_text_area_d2` arm was
+        // unreachable. See also: border_color register removal.
         if (!visible_d2)
             pixel_color = 12'h000;
-        else if (!in_text_area_d2)
-            pixel_color = palette[border_color];
         else begin
             case (mode)
                 3'd0: pixel_color = text_pixel_d2;
