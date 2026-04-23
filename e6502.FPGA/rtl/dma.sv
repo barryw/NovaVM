@@ -75,7 +75,8 @@ module dma (
     typedef enum logic [2:0] {
         S_IDLE,
         S_VALIDATE,
-        S_READ,
+        S_READ,      // drive ram_addr = src_addr (dpram port B latches this)
+        S_READ_WAIT, // hold ram_addr, let dpram output settle one cycle
         S_WRITE,
         S_DONE
     } state_t;
@@ -174,8 +175,13 @@ module dma (
         xram_addr = 0; xram_we = 0; xram_wdata = 0;
         vgc_space = 0; vgc_addr = 0; vgc_we = 0; vgc_wdata = 0; vgc_re = 0;
 
-        // Read address setup (for S_READ)
-        if (state == S_READ && !fill_mode) begin
+        // Read address setup (for S_READ and S_READ_WAIT). dpram port B
+        // has one cycle of read latency in synthesis: address registered
+        // at posedge, data valid next cycle. Holding the address for two
+        // states gives the dout a full cycle to settle before S_WRITE
+        // samples it. Sim harnesses use combinational reads and don't
+        // exercise this latency — a subtle source of sim/synth drift.
+        if ((state == S_READ || state == S_READ_WAIT) && !fill_mode) begin
             case (src_space)
                 SPACE_CPU:  ram_addr = src_addr[15:0];
                 SPACE_XRAM: xram_addr = src_addr[18:0];
@@ -266,6 +272,14 @@ module dma (
                 end
 
                 S_READ: begin
+                    // Issue cycle — address was driven combinationally this
+                    // cycle; dpram captured it at the posedge. Wait one
+                    // cycle for dout to become valid before sampling.
+                    state <= S_READ_WAIT;
+                end
+
+                S_READ_WAIT: begin
+                    // mem_read_data is now valid for src_addr.
                     read_byte <= mem_read_data;
                     read_valid <= 1;
                     state <= S_WRITE;

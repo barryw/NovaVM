@@ -44,20 +44,26 @@ module test_dma;
     logic [3:0] sim_gfx [0:76799];
     logic [7:0] sim_sprite [0:32767];
 
-    // Combinational RAM/XRAM reads
-    wire [7:0] dma_ram_rdata  = sim_ram[dma_ram_addr];
-    wire [7:0] dma_xram_rdata = sim_xram[dma_xram_addr];
+    // Synchronous 1-cycle RAM/XRAM reads — matches real dpram behavior in
+    // synthesis (address registered at posedge, data valid next cycle).
+    // If test harnesses use combinational reads, sim will pass but real
+    // hardware reads stale data. Caught 2026-04-23 on DMACOPY CPU→CPU
+    // hardware regression.
+    logic [7:0] dma_ram_rdata, dma_xram_rdata;
+    always_ff @(posedge clk) begin
+        dma_ram_rdata  <= sim_ram[dma_ram_addr];
+        dma_xram_rdata <= sim_xram[dma_xram_addr];
+    end
 
-    // VGC memory read mux
+    // VGC memory read mux — also registered one cycle to match dpram.
     logic [7:0] dma_vgc_rdata;
-    always_comb begin
-        dma_vgc_rdata = 8'h00;
+    always_ff @(posedge clk) begin
         case (dma_vgc_space)
-            3'd1: dma_vgc_rdata = sim_char[dma_vgc_addr[12:0]];
-            3'd2: dma_vgc_rdata = sim_color[dma_vgc_addr[12:0]];
-            3'd3: dma_vgc_rdata = {4'b0, sim_gfx[dma_vgc_addr]};
-            3'd4: dma_vgc_rdata = sim_sprite[dma_vgc_addr[14:0]];
-            default: dma_vgc_rdata = 8'h00;
+            3'd1: dma_vgc_rdata <= sim_char[dma_vgc_addr[12:0]];
+            3'd2: dma_vgc_rdata <= sim_color[dma_vgc_addr[12:0]];
+            3'd3: dma_vgc_rdata <= {4'b0, sim_gfx[dma_vgc_addr]};
+            3'd4: dma_vgc_rdata <= sim_sprite[dma_vgc_addr[14:0]];
+            default: dma_vgc_rdata <= 8'h00;
         endcase
     end
 
@@ -116,7 +122,8 @@ module test_dma;
 
     task automatic wait_dma_done();
         repeat(2) @(posedge clk);
-        while (dut.state != 0 && dut.state != 4) @(posedge clk);
+        // S_IDLE=0, S_DONE=5 after S_READ_WAIT insertion (commit 844481c~)
+        while (dut.state != 0 && dut.state != 5) @(posedge clk);
         repeat(2) @(posedge clk);
     endtask
 
