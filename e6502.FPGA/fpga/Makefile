@@ -5,6 +5,11 @@ PIN_DEF  = ulx3s.lpf
 BUILDDIR = build
 RTLDIR   = ../rtl
 
+# OSS CAD Suite (yosys, nextpnr-ecp5, ecppack, fujprog) — prepend to PATH
+# so the build works regardless of the user's shell configuration.
+OSS_CAD_SUITE_BIN := /opt/homebrew/oss-cad-suite/bin
+export PATH := $(OSS_CAD_SUITE_BIN):$(PATH)
+
 DPRAM = $(RTLDIR)/dpram.sv
 
 YOSYS = yosys

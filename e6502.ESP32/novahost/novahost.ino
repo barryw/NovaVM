@@ -185,10 +185,15 @@ bool loadRomsToFPGA() {
     // hardcoded in rtl/sid/sid_curve_reader.sv (25'h0_8_00_00 = $800000).
     // Done before resetRelease so sid_curve_reader (which is held in reset
     // by dbg_cpu_reset) sees valid data on its first read.
+    // Not a hard dependency: only SID 6581 filter uses the curve, and an
+    // older bitstream won't support CMD_POKE_SDRAM_BLK. Log and continue
+    // so the CPU still boots EhBASIC.
     const uint32_t CURVE_BASE = 0x800000;
     if (!fpgaBridge.loadSdram(CURVE_BASE, SID_CURVE_ROM, SID_CURVE_ROM_LEN)) {
-        logLn("ROM load FAILED: sid curve streaming aborted");
-        return false;
+        logLn("WARN: SID curve streaming failed (old bitstream? SID 6581 filter will be silent)");
+    } else {
+        logLn("SID curve streamed (%u bytes @ SDRAM $%06X)",
+              (unsigned)SID_CURVE_ROM_LEN, (unsigned)CURVE_BASE);
     }
 
     if (!fpgaBridge.resetRelease()) {

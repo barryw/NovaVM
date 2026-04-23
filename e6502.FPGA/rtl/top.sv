@@ -373,6 +373,14 @@ module top (
         if (cpu_ce)
             r_vgc_cpu_rdata <= vgc_cpu_rdata;
 
+    // Bus-master register reads share one slot in the cpu_din mux chain so
+    // DMA doesn't add a LUT level to the already-long ram_a_dout path.
+    // DMA ($BA63-$BA75) and blitter ($BA83-$BA9B) disjoint, so the sub-mux
+    // is a simple 2:1 that resolves in parallel with the main chain.
+    wire        r_bm_reg_sel   = r_dma_reg_sel | r_blt_reg_sel;
+    wire [7:0]  r_bm_cpu_rdata = r_dma_reg_sel ? r_dma_cpu_rdata
+                                               : r_blt_cpu_rdata;
+
     // CPU read data mux — all sources are registered/synchronous.
     // Keyboard ($A00F) flows through r_vgc_read_sel → r_vgc_cpu_rdata since
     // $A00F is inside VGC_BASE..VGC_REGS_END; VGC returns the sfifo head.
@@ -383,10 +391,8 @@ module top (
             cpu_din = 8'hFF;
         else if (r_xmc_reg_sel)
             cpu_din = r_xmc_reg_data;
-        else if (r_dma_reg_sel)
-            cpu_din = r_dma_cpu_rdata;
-        else if (r_blt_reg_sel)
-            cpu_din = r_blt_cpu_rdata;
+        else if (r_bm_reg_sel)
+            cpu_din = r_bm_cpu_rdata;
         else if (r_sid1_reg_sel)
             cpu_din = r_sid1_dout;
         else if (r_sid2_reg_sel)
