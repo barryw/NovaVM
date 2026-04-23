@@ -44,20 +44,26 @@ module test_blitter;
     logic [3:0] sim_gfx [0:76799];
     logic [7:0] sim_sprite [0:32767];
 
-    // Combinational RAM/XRAM reads
-    wire [7:0] blt_ram_rdata  = sim_ram[blt_ram_addr];
-    wire [7:0] blt_xram_rdata = sim_xram[blt_xram_addr];
+    // Synchronous 1-cycle RAM/XRAM reads — matches real dpram behavior in
+    // synthesis (address registered at posedge, data valid next cycle).
+    // A combinational `wire rdata = sim_mem[addr]` harness produces false
+    // green tests that miss stale-data bugs at read→write transitions.
+    // Same pattern as test_dma.sv (commit 2f21297).
+    logic [7:0] blt_ram_rdata, blt_xram_rdata;
+    always_ff @(posedge clk) begin
+        blt_ram_rdata  <= sim_ram[blt_ram_addr];
+        blt_xram_rdata <= sim_xram[blt_xram_addr];
+    end
 
-    // VGC memory read mux
+    // VGC memory read mux — registered one cycle to match dpram.
     logic [7:0] blt_vgc_rdata;
-    always_comb begin
-        blt_vgc_rdata = 8'h00;
+    always_ff @(posedge clk) begin
         case (blt_vgc_space)
-            3'd1: blt_vgc_rdata = sim_char[blt_vgc_addr[12:0]];
-            3'd2: blt_vgc_rdata = sim_color[blt_vgc_addr[12:0]];
-            3'd3: blt_vgc_rdata = {4'b0, sim_gfx[blt_vgc_addr]};
-            3'd4: blt_vgc_rdata = sim_sprite[blt_vgc_addr[14:0]];
-            default: blt_vgc_rdata = 8'h00;
+            3'd1: blt_vgc_rdata <= sim_char[blt_vgc_addr[12:0]];
+            3'd2: blt_vgc_rdata <= sim_color[blt_vgc_addr[12:0]];
+            3'd3: blt_vgc_rdata <= {4'b0, sim_gfx[blt_vgc_addr]};
+            3'd4: blt_vgc_rdata <= sim_sprite[blt_vgc_addr[14:0]];
+            default: blt_vgc_rdata <= 8'h00;
         endcase
     end
 
@@ -127,7 +133,8 @@ module test_blitter;
     task automatic wait_blt_done();
         repeat(2) @(posedge clk); // let state machine start
         // Wait for IDLE (0) or DONE (6) — don't match on intermediate states
-        while (dut.state != 0 && dut.state != 6) @(posedge clk);
+        // S_IDLE=0, S_DONE=8 after adding S_READ_WAIT / S_ROWBUF_READ_WAIT
+        while (dut.state != 0 && dut.state != 8) @(posedge clk);
         repeat(2) @(posedge clk); // settle
     endtask
 

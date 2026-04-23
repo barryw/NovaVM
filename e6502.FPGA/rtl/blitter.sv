@@ -81,10 +81,12 @@ module blitter (
     typedef enum logic [3:0] {
         S_IDLE,
         S_VALIDATE,
-        S_READ,
+        S_READ,             // issue read (dpram latches addr at posedge)
+        S_READ_WAIT,        // dpram dout settles; capture read_byte
         S_WRITE,
-        S_ROWBUF_READ,    // buffered mode: read row into buffer
-        S_ROWBUF_WRITE,   // buffered mode: write row from buffer
+        S_ROWBUF_READ,      // buffered mode: issue read into buffer
+        S_ROWBUF_READ_WAIT, // dpram dout settles; capture row_buf[buf_idx]
+        S_ROWBUF_WRITE,     // buffered mode: write row from buffer
         S_DONE
     } state_t;
 
@@ -203,8 +205,12 @@ module blitter (
         xram_addr = 0; xram_we = 0; xram_wdata = 0;
         vgc_space = 0; vgc_addr = 0; vgc_we = 0; vgc_wdata = 0; vgc_re = 0;
 
-        // Read address setup (for S_READ and S_ROWBUF_READ)
-        if (state == S_READ || state == S_ROWBUF_READ) begin
+        // Read address setup — hold addr stable across S_READ → S_READ_WAIT
+        // and S_ROWBUF_READ → S_ROWBUF_READ_WAIT so dpram port B has time
+        // to latch + produce valid dout. One-cycle dpram latency would
+        // otherwise capture stale data on the S_*→S_*_WAIT transition.
+        if (state == S_READ        || state == S_READ_WAIT ||
+            state == S_ROWBUF_READ || state == S_ROWBUF_READ_WAIT) begin
             if (!fill_mode) begin
                 case (src_space)
                     SPACE_CPU:  ram_addr = src_addr[15:0];
@@ -303,6 +309,13 @@ module blitter (
 
                 // --- Direct mode (different spaces) ---
                 S_READ: begin
+                    // Issue cycle — ram_addr was driven combinationally this
+                    // cycle; dpram latched it at the posedge. Next cycle dout
+                    // will be valid.
+                    state <= S_READ_WAIT;
+                end
+
+                S_READ_WAIT: begin
                     read_byte <= mem_read_data;
                     read_valid <= 1;
                     state <= S_WRITE;
@@ -343,8 +356,14 @@ module blitter (
                 end
 
                 // --- Buffered mode (same-space copies) ---
+                // Issue → wait → capture pattern, 2 cycles per byte. Old
+                // 1-cycle-per-byte loop captured mem_read_data one cycle
+                // early and missed the final byte on dpram-backed memories.
                 S_ROWBUF_READ: begin
-                    // Read one byte per clock into row buffer
+                    state <= S_ROWBUF_READ_WAIT;
+                end
+
+                S_ROWBUF_READ_WAIT: begin
                     row_buf[buf_idx] <= mem_read_data;
                     if (col + 1 >= width) begin
                         // Row fully buffered, switch to writing
@@ -354,6 +373,7 @@ module blitter (
                     end else begin
                         col <= col + 1;
                         buf_idx <= buf_idx + 1;
+                        state <= S_ROWBUF_READ;
                     end
                 end
 
