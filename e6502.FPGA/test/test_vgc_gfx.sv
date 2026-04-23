@@ -334,17 +334,17 @@ module test_vgc_gfx;
     task automatic test_gcls_full_coverage();
         int cleared;
         $display("");
-        $display("Test: GCLS clears EVERY pixel of 320x200 gfx RAM");
+        $display("Test: GCLS clears EVERY pixel of 320x240 gfx RAM");
         // Pre-dirty every pixel
-        for (int i = 0; i < 64000; i++)
+        for (int i = 0; i < 76800; i++)
             dut.gfx_inst.gfx_mem.mem[i] = 4'hF;
         step(2);
         gcls();
         step(10);
         cleared = 0;
-        for (int i = 0; i < 64000; i++)
+        for (int i = 0; i < 76800; i++)
             if (dut.gfx_inst.gfx_mem.mem[i] == 4'h0) cleared++;
-        check_eq("GCLS: all 64000 pixels == 0", cleared, 64000);
+        check_eq("GCLS: all 76800 pixels == 0", cleared, 76800);
     endtask
 
     task automatic test_out_of_bounds_plot();

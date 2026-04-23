@@ -32,7 +32,7 @@ module blitter (
 
     // Memory port C: VGC internal (char/color/gfx/sprite/tile)
     output logic [2:0]  vgc_space,
-    output logic [15:0] vgc_addr,
+    output logic [16:0] vgc_addr,     // 17-bit to reach gfx_mem 76800
     input  logic [7:0]  vgc_rdata,
     output logic [7:0]  vgc_wdata,
     output logic        vgc_we,
@@ -139,9 +139,9 @@ module blitter (
     function automatic logic [19:0] space_size(input logic [2:0] sp);
         case (sp)
             SPACE_CPU:    space_size = 20'(65536);
-            SPACE_CHAR:   space_size = 20'(2000);
-            SPACE_COLOR:  space_size = 20'(2000);
-            SPACE_GFX:    space_size = 20'(64000);
+            SPACE_CHAR:   space_size = 20'(4800);
+            SPACE_COLOR:  space_size = 20'(4800);
+            SPACE_GFX:    space_size = 20'(76800);
             SPACE_SPRITE: space_size = 20'(32768);
             SPACE_XRAM:   space_size = 20'(524288);
             SPACE_TILE:   space_size = 20'(32768);
@@ -200,7 +200,7 @@ module blitter (
                     SPACE_XRAM: xram_addr = src_addr[18:0];
                     default: begin
                         vgc_space = src_space;
-                        vgc_addr = src_addr[15:0];
+                        vgc_addr = src_addr[16:0];
                         vgc_re = 1;
                     end
                 endcase
@@ -223,7 +223,7 @@ module blitter (
                 end
                 default: begin
                     vgc_space = dst_space;
-                    vgc_addr = dst_addr[15:0];
+                    vgc_addr = dst_addr[16:0];
                     vgc_wdata = (state == S_ROWBUF_WRITE) ? row_buf[buf_idx] : read_byte;
                     vgc_we = 1;
                 end

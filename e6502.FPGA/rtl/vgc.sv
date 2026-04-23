@@ -30,9 +30,11 @@ module vgc (
     input  logic [7:0]  tile_dma_data,
     output logic        tile_dma_active,
 
-    // Blitter memory port — read/write access to VGC internal memories
+    // Blitter memory port — read/write access to VGC internal memories.
+    // Width is 17 bits so gfx_mem (76800 pixels) is fully addressable.
+    // Other spaces use fewer bits (char/color 13, sprite 11) and ignore the top.
     input  logic [2:0]  blt_space,    // 1=char, 2=color, 3=gfx, 4=sprite, 6=tile
-    input  logic [15:0] blt_addr,
+    input  logic [16:0] blt_addr,
     output logic [7:0]  blt_rdata,
     input  logic [7:0]  blt_wdata,
     input  logic        blt_we,
@@ -218,7 +220,8 @@ module vgc (
     // =========================================================================
     // Graphics sub-module (CANVAS) — dpram port A signals
     // =========================================================================
-    logic [15:0] gfx_a_addr;
+    // 17-bit for 76800 pixel GFX memory (320×240)
+    logic [16:0] gfx_a_addr;
     logic [3:0]  gfx_a_din;
     logic        gfx_a_we;
     logic [3:0]  gfx_a_dout;
@@ -525,7 +528,7 @@ module vgc (
     logic [12:0] cmd_color_addr;
     logic [7:0]  cmd_color_din;
     logic        cmd_color_we;
-    logic [15:0] cmd_gfx_addr;
+    logic [16:0] cmd_gfx_addr;
     logic [3:0]  cmd_gfx_din;
     logic        cmd_gfx_we;
     logic        cmd_gfx_re;
@@ -537,10 +540,10 @@ module vgc (
     // ARTIST drawing coprocessor signals
     logic        artist_cmd_valid;
     logic [7:0]  artist_cmd_code;
-    logic [15:0] artist_gfx_addr;
+    logic [16:0] artist_gfx_addr;
     logic [3:0]  artist_gfx_wdata;
     logic        artist_gfx_we;
-    logic [15:0] artist_gfx_raddr;
+    logic [16:0] artist_gfx_raddr;
     logic [3:0]  artist_gfx_rdata;
     logic        artist_gfx_re;
     logic [10:0] artist_font_addr;
@@ -1358,7 +1361,7 @@ module vgc (
 
         // gfx_ram port A — priority: blitter > ARTIST > cmd > blitter-read > cmd-read
         gfx_a_we = 0;
-        gfx_a_addr = 16'd0;
+        gfx_a_addr = 17'd0;
         gfx_a_din = 4'd0;
         if (blt_we && blt_space == 3'd3) begin
             gfx_a_addr = blt_addr;

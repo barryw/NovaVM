@@ -14,20 +14,20 @@ module artist (
     input  logic        cmd_valid,       // pulse: new command
     input  logic [7:0]  cmd_code,        // which command
     input  logic [8:0]  cmd_x0,          // X0 (0-319)
-    input  logic [7:0]  cmd_y0,          // Y0 (0-199)
+    input  logic [7:0]  cmd_y0,          // Y0 (0-239)
     input  logic [8:0]  cmd_x1,          // X1 (0-319)
-    input  logic [7:0]  cmd_y1,          // Y1 (0-199)
+    input  logic [7:0]  cmd_y1,          // Y1 (0-239)
     input  logic [3:0]  cmd_color,       // drawing color
     input  logic [7:0]  cmd_radius,      // for CIRCLE (radius = x1 low bits)
     output logic        busy,            // high while processing
 
-    // GFX RAM write port
-    output logic [15:0] gfx_addr,        // pixel address
+    // GFX RAM write port — 17-bit address covers 76800 pixels (320×240)
+    output logic [16:0] gfx_addr,        // pixel address
     output logic [3:0]  gfx_wdata,       // pixel color
     output logic        gfx_we,          // write enable
 
     // GFX RAM read port (for flood fill)
-    output logic [15:0] gfx_raddr,       // read address
+    output logic [16:0] gfx_raddr,       // read address
     input  logic [3:0]  gfx_rdata_raw,   // read data (1-cycle latency from dpram)
     output logic        gfx_re,          // read enable
 
@@ -46,7 +46,7 @@ module artist (
     // Parameters
     // =========================================================================
     localparam GFX_W = 320;
-    localparam GFX_H = 200;
+    localparam GFX_H = 240;
 
     // Extract character from packed flat vector
     function automatic logic [7:0] gt_char(input logic [5:0] idx);

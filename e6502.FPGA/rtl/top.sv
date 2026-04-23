@@ -653,7 +653,7 @@ module top (
     wire [7:0]  blt_xram_wdata;
     wire        blt_xram_we;
     wire [2:0]  blt_vgc_space;
-    wire [15:0] blt_vgc_addr;
+    wire [16:0] blt_vgc_addr;     // 17-bit for gfx_mem 76800 reach
     wire [7:0]  blt_vgc_wdata;
     wire        blt_vgc_we;
     wire        blt_vgc_re;

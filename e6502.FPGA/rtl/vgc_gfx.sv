@@ -7,7 +7,8 @@ module vgc_gfx (
     input  logic        rst,
 
     // --- gfx_ram port A (from top-level mux) ---
-    input  logic [15:0] gfx_a_addr,
+    // 17-bit addresses needed: 320×240 = 76800 pixels > 65535 (16-bit range).
+    input  logic [16:0] gfx_a_addr,
     input  logic [3:0]  gfx_a_din,
     input  logic        gfx_a_we,
     output logic [3:0]  gfx_a_dout,
@@ -25,9 +26,9 @@ module vgc_gfx (
     // =========================================================================
     // Memory — dpram instance
     // =========================================================================
-    logic [15:0] gfx_b_addr;
+    logic [16:0] gfx_b_addr;
 
-    dpram #(.WIDTH(4), .DEPTH(64000)) gfx_mem (
+    dpram #(.WIDTH(4), .DEPTH(76800)) gfx_mem (
         .clk(clk),
         .addr_a(gfx_a_addr), .din_a(gfx_a_din), .we_a(gfx_a_we), .dout_a(gfx_a_dout),
         .addr_b(gfx_b_addr), .dout_b(gfx_b_dout)
@@ -37,7 +38,7 @@ module vgc_gfx (
     // Port B address generation
     // =========================================================================
     always_ff @(posedge clk) begin
-        gfx_b_addr <= {8'b0, gfx_y} * GFX_W + {7'b0, gfx_x};
+        gfx_b_addr <= {9'b0, gfx_y} * GFX_W + {8'b0, gfx_x};
     end
 
 endmodule
