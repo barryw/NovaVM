@@ -19,6 +19,7 @@
 // ~5s OTA instead of a 17-min bitstream rebuild.
 #include "ehbasic_rom.h"
 #include "extension_rom.h"
+#include "sid_curve_rom.h"
 
 // =========================================================================
 // Configuration
@@ -177,6 +178,16 @@ bool loadRomsToFPGA() {
 
     if (!fpgaBridge.loadRom(1, EXTENSION_ROM, EXTENSION_ROM_LEN)) {
         logLn("ROM load FAILED: ext_rom streaming aborted");
+        return false;
+    }
+
+    // Stream the 6581 filter curve into SDRAM at the CURVE_BASE offset
+    // hardcoded in rtl/sid/sid_curve_reader.sv (25'h0_8_00_00 = $800000).
+    // Done before resetRelease so sid_curve_reader (which is held in reset
+    // by dbg_cpu_reset) sees valid data on its first read.
+    const uint32_t CURVE_BASE = 0x800000;
+    if (!fpgaBridge.loadSdram(CURVE_BASE, SID_CURVE_ROM, SID_CURVE_ROM_LEN)) {
+        logLn("ROM load FAILED: sid curve streaming aborted");
         return false;
     }
 

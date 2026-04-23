@@ -57,6 +57,15 @@ public:
     // partially-loaded ROM. Returns false on any block-level failure.
     bool loadRom(uint8_t idx, const uint8_t* data, size_t len);
 
+    // Block-write up to 256 bytes into SDRAM via debug-bridge port B.
+    // addr is a 24-bit byte address (covers the 16 MB used by curve+XRAM).
+    // count=0 means 256. Caller must hold the CPU in reset during the
+    // entire sequence so sid_curve_reader doesn't race the writes.
+    bool pokeSdramBlock(uint32_t addr, const uint8_t* data, uint16_t count);
+
+    // Bulk-load an arbitrary region of SDRAM via 256-byte blocks.
+    bool loadSdram(uint32_t base_addr, const uint8_t* data, size_t len);
+
     // Drain stale bytes from serial
     void drain();
 

@@ -1,6 +1,6 @@
 PROJ     = e6502_sim
 RTL      = rtl/top.sv rtl/vgc.sv rtl/vgc_timing.sv rtl/vgc_text.sv rtl/vgc_gfx.sv \
-           rtl/artist.sv rtl/vgc_sprites.sv rtl/vgc_copper.sv rtl/tile_engine.sv rtl/blitter.sv rtl/dpram.sv \
+           rtl/artist.sv rtl/vgc_sprites.sv rtl/vgc_copper.sv rtl/tile_engine.sv rtl/blitter.sv rtl/dma.sv rtl/dpram.sv \
            rtl/sid/sid_chip.sv rtl/sid/sid_voice.sv rtl/sid/sid_envelope.sv \
            rtl/sid/sid_filter.sv rtl/sid/sid_tables.sv rtl/sid/sid_dac.sv \
            rtl/arlet_6502/cpu.v rtl/arlet_6502/ALU.v

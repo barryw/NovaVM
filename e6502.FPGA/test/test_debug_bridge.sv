@@ -47,6 +47,10 @@ module test_debug_bridge;
     wire        key_inject_valid;
     wire [7:0]  key_inject_data;
 
+    wire        sdram_b_we;
+    wire [24:0] sdram_b_addr;
+    wire [7:0]  sdram_b_din;
+
     debug_bridge dut (
         .clk(clk), .rst(rst),
         .rx_data(rx_data), .rx_valid(rx_valid),
@@ -64,7 +68,10 @@ module test_debug_bridge;
         .dbg_cpu_y(dbg_cpu_y), .dbg_cpu_sp(dbg_cpu_sp),
         .dbg_cpu_flags(dbg_cpu_flags),
         .key_inject_valid(key_inject_valid),
-        .key_inject_data(key_inject_data)
+        .key_inject_data(key_inject_data),
+        .sdram_b_we(sdram_b_we),
+        .sdram_b_addr(sdram_b_addr),
+        .sdram_b_din(sdram_b_din)
     );
 
     // ------------------------------------------------------------------
@@ -228,6 +235,53 @@ module test_debug_bridge;
     endtask
 
     // ------------------------------------------------------------------
+    // SDRAM port B shadow — captures bytes the bridge writes via
+    // sdram_b_we. Addresses are 25-bit byte addresses.
+    // ------------------------------------------------------------------
+    logic [7:0] sdram_shadow [0:255];
+    logic [7:0] sdram_prev_we;
+    logic [24:0] sdram_prev_addr;
+
+    always_ff @(posedge clk) begin
+        // Capture on the rising edge of weB (first cycle of the 8-cycle
+        // hold) so each byte is stored exactly once.
+        if (sdram_b_we && !sdram_prev_we) begin
+            if (sdram_b_addr < 25'd256)
+                sdram_shadow[sdram_b_addr[7:0]] <= sdram_b_din;
+        end
+        sdram_prev_we   <= sdram_b_we;
+        sdram_prev_addr <= sdram_b_addr;
+    end
+
+    task automatic test_bulk_poke_sdram();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_POKE_SDRAM_BLK — 8 bytes to addr 0x000010");
+        for (int i = 0; i < 256; i++) sdram_shadow[i] = 8'hFF;
+        send_byte(8'h0E);   // CMD_POKE_SDRAM_BLK
+        send_byte(8'h00);   // addr_hi
+        send_byte(8'h00);   // addr_mid
+        send_byte(8'h10);   // addr_lo → 0x000010
+        send_byte(8'h08);   // count = 8
+        // Each SDRAM write holds weB for 8 pixel-clocks. UART runs at
+        // ~2150 clocks/byte at 115200 baud, so inter-byte gap is never
+        // the bottleneck in production. The testbench must emulate that
+        // pacing — clock-rate send_byte would overrun the hold window.
+        for (int i = 0; i < 8; i++) begin
+            send_byte(8'hC0 + 8'(i));
+            repeat(12) @(posedge clk);
+        end
+        wait_tx(ack);
+        check_eq8("sdram ack status", ack, 8'h00);
+        for (int i = 0; i < 8; i++)
+            check_eq8($sformatf("sdram_shadow[0x%04X]", 16 + i),
+                      sdram_shadow[16 + i], 8'hC0 + 8'(i));
+        // Boundaries untouched.
+        check_eq8("sdram_shadow[0x000F] untouched", sdram_shadow[15], 8'hFF);
+        check_eq8("sdram_shadow[0x0018] untouched", sdram_shadow[24], 8'hFF);
+    endtask
+
+    // ------------------------------------------------------------------
     // Runner
     // ------------------------------------------------------------------
     initial begin
@@ -246,6 +300,7 @@ module test_debug_bridge;
         test_single_poke_rom_idx1();
         test_bulk_poke_rom();
         test_bulk_count_zero_means_256();
+        test_bulk_poke_sdram();
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

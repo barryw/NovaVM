@@ -1,6 +1,9 @@
-// Top-level: 6502 CPU + VGC + Blitter + SID + 64KB RAM + 512KB XRAM
+// Top-level: 6502 CPU + VGC + Blitter + DMA + SID + 64KB RAM + 512KB XRAM
 // VGC snoops bus for register/charout writes, generates video
-// Blitter performs 2D DMA across all memory spaces, stalls CPU via RDY
+// Blitter performs 2D DMA across all memory spaces ($BA83-$BA9B), stalls CPU via RDY
+// DMA performs 1D bulk copy/fill ($BA63-$BA75), stalls CPU via RDY
+// Blitter and DMA are mutually exclusive via RDY stall; top.sv muxes their
+// memory-port outputs into a single bus-master signal set (bm_*).
 // SID: dual 6581/8580 sound chips, runtime model select via $D440
 // XMC bank switching: 4x256-byte windows at $BC00-$BFFF into 512KB XRAM
 //
@@ -45,6 +48,12 @@ module top (
     input  logic [13:0] dbg_rom_addr,
     input  logic [7:0]  dbg_rom_data,
     input  logic        dbg_cpu_reset,     // ESP32-driven soft reset, ORs with rst
+    // Debug-bridge SDRAM port B write path — NovaHost streams preload data
+    // (6581 filter curve) here while dbg_cpu_reset is asserted. sid_curve_reader
+    // is held in reset during this window so there's no port B contention.
+    input  logic        brg_sdram_b_we,
+    input  logic [24:0] brg_sdram_b_addr,
+    input  logic [7:0]  brg_sdram_b_din,
     output logic [15:0] dbg_cpu_pc,
     output logic [7:0]  dbg_cpu_a,
     output logic [7:0]  dbg_cpu_x,
@@ -228,6 +237,7 @@ module top (
     // so dpram outputs don't get overwritten by the new address.
     // =========================================================================
     wire cpu_in_rom = (mem_addr >= ROM_BASE);
+    wire dma_reg_sel = (mem_addr >= 16'hBA63 && mem_addr <= 16'hBA75);
     wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B);
     wire sid1_reg_sel = (mem_addr >= SID1_BASE && mem_addr <= SID1_END);
     wire sid2_reg_sel = (mem_addr >= SID2_BASE && mem_addr <= SID2_END);
@@ -236,7 +246,7 @@ module top (
 
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
-    logic r_blt_reg_sel, r_sid1_reg_sel, r_sid2_reg_sel, r_sid_cfg_sel;
+    logic r_dma_reg_sel, r_blt_reg_sel, r_sid1_reg_sel, r_sid2_reg_sel, r_sid_cfg_sel;
     logic r_cpu_in_rom, r_ext_rom_active;
     logic r_vgc_read_sel;
     logic [5:0] r_xmc_reg_off;
@@ -247,6 +257,7 @@ module top (
         r_xmc_win_sel     <= xmc_win_sel;
         r_xmc_win_enabled <= xmc_win_enabled;
         r_xmc_reg_sel     <= xmc_reg_sel;
+        r_dma_reg_sel     <= dma_reg_sel;
         r_blt_reg_sel     <= blt_reg_sel;
         r_sid1_reg_sel    <= sid1_reg_sel;
         r_sid2_reg_sel    <= sid2_reg_sel;
@@ -276,22 +287,21 @@ module top (
     wire  xmc_cpu_read   = xmc_fire && !cpu_we;
     wire  xmc_cpu_write  = xmc_fire &&  cpu_we && cpu_active;
 
-    // Blitter XRAM write is fire-and-forget (single-cycle pulse on
-    // blt_xram_we from the blitter state machine). TODO Phase 2.5 Step 2a:
-    // add back-pressure into blitter.sv so XRAM reads (blt_xram_rdata) wait
-    // for the wrapper — right now blitter reads will sample stale data.
-    logic blt_xram_armed;
-    wire  blt_fire = blt_xram_we && blt_xram_armed && !xram_busy;
+    // Bus-master XRAM write (blitter or DMA) is fire-and-forget (single-cycle
+    // pulse on bm_xram_we). TODO Phase 2.5 Step 2a: add back-pressure so XRAM
+    // reads wait for the wrapper — right now bus-master reads sample stale data.
+    logic bm_xram_armed;
+    wire  bm_xram_fire = bm_xram_we && bm_xram_armed && !xram_busy;
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            xmc_armed       <= 1'b1;
-            blt_xram_armed  <= 1'b1;
+            xmc_armed      <= 1'b1;
+            bm_xram_armed  <= 1'b1;
         end else begin
             if (!xmc_access)       xmc_armed      <= 1'b1;
             else if (xmc_fire)     xmc_armed      <= 1'b0;
-            if (!blt_xram_we)      blt_xram_armed <= 1'b1;
-            else if (blt_fire)     blt_xram_armed <= 1'b0;
+            if (!bm_xram_we)       bm_xram_armed  <= 1'b1;
+            else if (bm_xram_fire) bm_xram_armed  <= 1'b0;
         end
     end
 
@@ -300,15 +310,15 @@ module top (
     assign xram_stall = xmc_access && (xmc_armed || xram_busy);
 
     always_comb begin
-        // CPU path has priority; blitter gets the bus when CPU isn't firing.
+        // CPU path has priority; bus master gets the bus when CPU isn't firing.
         if (xmc_cpu_read || xmc_cpu_write) begin
             xram_a_addr = xmc_addr;
             xram_a_din  = cpu_dout;
             xram_a_we   = xmc_cpu_write;
             xram_a_re   = xmc_cpu_read;
-        end else if (blt_fire) begin
-            xram_a_addr = blt_xram_addr[18:0];
-            xram_a_din  = blt_xram_wdata;
+        end else if (bm_xram_fire) begin
+            xram_a_addr = bm_xram_addr[18:0];
+            xram_a_din  = bm_xram_wdata;
             xram_a_we   = 1'b1;
             xram_a_re   = 1'b0;
         end else begin
@@ -347,6 +357,12 @@ module top (
         if (cpu_ce)
             r_blt_cpu_rdata <= blt_cpu_rdata;
 
+    // Registered DMA register read — same rationale as r_blt_cpu_rdata.
+    logic [7:0] r_dma_cpu_rdata;
+    always_ff @(posedge clk)
+        if (cpu_ce)
+            r_dma_cpu_rdata <= dma_cpu_rdata;
+
     // Registered VGC read data. Must be cpu_ce-gated like r_key_snapshot
     // used to be — otherwise the value captured during cpu_ce=0 cycles
     // (when Arlet has already moved cpu_addr past $A00F) overwrites the
@@ -367,6 +383,8 @@ module top (
             cpu_din = 8'hFF;
         else if (r_xmc_reg_sel)
             cpu_din = r_xmc_reg_data;
+        else if (r_dma_reg_sel)
+            cpu_din = r_dma_cpu_rdata;
         else if (r_blt_reg_sel)
             cpu_din = r_blt_cpu_rdata;
         else if (r_sid1_reg_sel)
@@ -392,10 +410,10 @@ module top (
         ram_a_din  = cpu_dout;
         ram_a_we   = 1'b0;
 
-        if (blt_ram_we && blt_ram_addr < ROM_BASE) begin
-            // Blitter write (CPU stalled)
-            ram_a_addr = blt_ram_addr;
-            ram_a_din  = blt_ram_wdata;
+        if (bm_ram_we && bm_ram_addr < ROM_BASE) begin
+            // Bus master (blitter or DMA) write — CPU stalled
+            ram_a_addr = bm_ram_addr;
+            ram_a_din  = bm_ram_wdata;
             ram_a_we   = 1'b1;
         end else if (dbg_poke_en && dbg_poke_addr < ROM_BASE) begin
             // Debug poke
@@ -422,19 +440,21 @@ module top (
     always_comb begin
         if (tile_dma_active)
             ram_b_addr = tile_dma_addr;
-        else if (blt_ram_read_active)
-            ram_b_addr = blt_ram_addr;
+        else if (bm_ram_read_active)
+            ram_b_addr = bm_ram_addr;
         else
             ram_b_addr = dbg_peek_addr;
     end
 
-    // Blitter RAM read: the blitter presents ram_addr during S_READ state.
-    // dpram port B output (ram_b_dout) is available next cycle.
-    // The blitter FSM already has S_READ→S_WRITE pipeline, consuming data
-    // in S_WRITE via mem_read_data → read_byte. We register this properly.
-    wire blt_ram_read_active = (blt_rdy == 1'b0) && !blt_ram_we;
+    // Bus-master RAM read: blitter or DMA presents ram_addr during their
+    // S_READ state. dpram port B output (ram_b_dout) is available next cycle.
+    // Both FSMs have S_READ→S_WRITE pipelines that consume data in S_WRITE.
+    wire bm_ram_read_active = ((blt_rdy == 1'b0) && !blt_ram_we)
+                           || ((dma_rdy == 1'b0) && !dma_ram_we);
     wire [7:0] blt_ram_rdata  = ram_b_dout;
     wire [7:0] blt_xram_rdata = xram_a_dout;
+    wire [7:0] dma_ram_rdata  = ram_b_dout;
+    wire [7:0] dma_xram_rdata = xram_a_dout;
 
     // Tile DMA read: tile engine sets dma_addr on cycle N (registered output),
     // dpram port B outputs data on cycle N+1. The tile engine's dma_data_valid
@@ -548,6 +568,7 @@ module top (
     // Memory read mux — registered (Arlet 6502 expects DI one cycle after AB)
     // =========================================================================
     wire cpu_in_rom = (cpu_addr >= ROM_BASE);
+    wire dma_reg_sel = (cpu_addr >= 16'hBA63 && cpu_addr <= 16'hBA75);
     wire blt_reg_sel = (cpu_addr >= 16'hBA83 && cpu_addr <= 16'hBA9B);
     wire sid1_reg_sel = (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
     wire sid2_reg_sel = (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
@@ -560,6 +581,8 @@ module top (
             cpu_din <= 8'hFF;
         else if (xmc_reg_sel)
             cpu_din <= xmc_regs[xmc_reg_off];
+        else if (dma_reg_sel)
+            cpu_din <= dma_cpu_rdata;
         else if (blt_reg_sel)
             cpu_din <= blt_cpu_rdata;
         else if (sid1_reg_sel)
@@ -589,11 +612,11 @@ module top (
                 ram[cpu_addr] <= cpu_dout;
         end
 
-        // Blitter RAM/XRAM writes
-        if (blt_ram_we && blt_ram_addr < ROM_BASE)
-            ram[blt_ram_addr] <= blt_ram_wdata;
-        if (blt_xram_we)
-            xram[blt_xram_addr] <= blt_xram_wdata;
+        // Bus-master (blitter/DMA) RAM/XRAM writes
+        if (bm_ram_we && bm_ram_addr < ROM_BASE)
+            ram[bm_ram_addr] <= bm_ram_wdata;
+        if (bm_xram_we)
+            xram[bm_xram_addr] <= bm_xram_wdata;
 
         // Debug ROM-load writes (mirrors the SYNTHESIS dpram port A path)
         if (dbg_rom_we) begin
@@ -630,9 +653,14 @@ module top (
             ram[CHARIN] <= 0;
     end
 
-    // Combinational RAM/XRAM reads for blitter and tile DMA (simulation only)
-    wire [7:0] blt_ram_rdata  = ram[blt_ram_addr];
-    wire [7:0] blt_xram_rdata = xram[blt_xram_addr];
+    // Combinational RAM/XRAM reads for blitter, DMA, and tile engine (sim only).
+    // The bus-master is whichever of blitter/DMA is currently active; its
+    // addr drives these reads. The idle master's addr is 0 and sees ram[0],
+    // which the idle-state machine ignores.
+    wire [7:0] blt_ram_rdata  = ram[bm_ram_addr];
+    wire [7:0] blt_xram_rdata = xram[bm_xram_addr];
+    wire [7:0] dma_ram_rdata  = ram[bm_ram_addr];
+    wire [7:0] dma_xram_rdata = xram[bm_xram_addr];
     wire [7:0] tile_dma_data  = ram[tile_dma_addr];
 
     // Sim path: xram_sdram_inst isn't instantiated here (`ifdef SYNTHESIS`
@@ -653,7 +681,8 @@ module top (
 `endif
 
     // =========================================================================
-    // Blitter
+    // Blitter + DMA — share the same memory ports; mutually exclusive
+    // via CPU RDY stall, muxed at top-level into bm_* signals.
     // =========================================================================
     wire [15:0] blt_ram_addr;
     wire [7:0]  blt_ram_wdata;
@@ -666,9 +695,41 @@ module top (
     wire [7:0]  blt_vgc_wdata;
     wire        blt_vgc_we;
     wire        blt_vgc_re;
-    wire [7:0]  blt_vgc_rdata;
     wire [7:0]  blt_cpu_rdata;
     wire        blt_rdy;
+
+    wire [15:0] dma_ram_addr;
+    wire [7:0]  dma_ram_wdata;
+    wire        dma_ram_we;
+    wire [18:0] dma_xram_addr;
+    wire [7:0]  dma_xram_wdata;
+    wire        dma_xram_we;
+    wire [2:0]  dma_vgc_space;
+    wire [16:0] dma_vgc_addr;
+    wire [7:0]  dma_vgc_wdata;
+    wire        dma_vgc_we;
+    wire        dma_vgc_re;
+    wire [7:0]  dma_cpu_rdata;
+    wire        dma_rdy;
+
+    // Bus-master mux — DMA takes priority when busy, blitter otherwise.
+    // Both are idle (rdy=1) → signals default to 0 in each module.
+    wire        dma_busy = !dma_rdy;
+    wire [15:0] bm_ram_addr   = dma_busy ? dma_ram_addr   : blt_ram_addr;
+    wire [7:0]  bm_ram_wdata  = dma_busy ? dma_ram_wdata  : blt_ram_wdata;
+    wire        bm_ram_we     = dma_busy ? dma_ram_we     : blt_ram_we;
+    wire [18:0] bm_xram_addr  = dma_busy ? dma_xram_addr  : blt_xram_addr;
+    wire [7:0]  bm_xram_wdata = dma_busy ? dma_xram_wdata : blt_xram_wdata;
+    wire        bm_xram_we    = dma_busy ? dma_xram_we    : blt_xram_we;
+    wire [2:0]  bm_vgc_space  = dma_busy ? dma_vgc_space  : blt_vgc_space;
+    wire [16:0] bm_vgc_addr   = dma_busy ? dma_vgc_addr   : blt_vgc_addr;
+    wire [7:0]  bm_vgc_wdata  = dma_busy ? dma_vgc_wdata  : blt_vgc_wdata;
+    wire        bm_vgc_we     = dma_busy ? dma_vgc_we     : blt_vgc_we;
+    wire        bm_vgc_re     = dma_busy ? dma_vgc_re     : blt_vgc_re;
+    // VGC rdata + memory reads feed both masters (the idle one ignores them)
+    wire [7:0]  bm_vgc_rdata;
+    wire [7:0]  blt_vgc_rdata = bm_vgc_rdata;
+    wire [7:0]  dma_vgc_rdata = bm_vgc_rdata;
 
     blitter blt_inst (
         .clk        (clk),
@@ -693,6 +754,31 @@ module top (
         .vgc_wdata  (blt_vgc_wdata),
         .vgc_we     (blt_vgc_we),
         .vgc_re     (blt_vgc_re)
+    );
+
+    dma dma_inst (
+        .clk        (clk),
+        .rst        (rst),
+        .cpu_addr   (cpu_addr),
+        .cpu_wdata  (cpu_dout),
+        .cpu_we     (cpu_we & cpu_active),
+        .cpu_rdata  (dma_cpu_rdata),
+        .cpu_re     (1'b0),
+        .rdy_out    (dma_rdy),
+        .ram_addr   (dma_ram_addr),
+        .ram_rdata  (dma_ram_rdata),
+        .ram_wdata  (dma_ram_wdata),
+        .ram_we     (dma_ram_we),
+        .xram_addr  (dma_xram_addr),
+        .xram_rdata (dma_xram_rdata),
+        .xram_wdata (dma_xram_wdata),
+        .xram_we    (dma_xram_we),
+        .vgc_space  (dma_vgc_space),
+        .vgc_addr   (dma_vgc_addr),
+        .vgc_rdata  (dma_vgc_rdata),
+        .vgc_wdata  (dma_vgc_wdata),
+        .vgc_we     (dma_vgc_we),
+        .vgc_re     (dma_vgc_re)
     );
 
     // =========================================================================
@@ -764,19 +850,35 @@ module top (
         .filter_f0_in (sid2_filter_f0)
     );
 
+    // Curve reader SDRAM port B — muxed with bridge preload below. Held
+    // in reset whenever NovaHost holds the CPU reset so that it doesn't
+    // issue reads while the bridge is preloading the filter curve.
+    wire [24:0] curve_addrB;
+    wire        curve_weB;
+    wire [7:0]  curve_dinB;
+    wire        curve_oeB;
+
     sid_curve_reader curve_reader_inst (
         .clk         (clk),
-        .rst         (rst),
+        .rst         (rst | dbg_cpu_reset),
         .sid1_Fc     (sid1_filter_fc),
         .sid1_f0     (sid1_filter_f0),
         .sid2_Fc     (sid2_filter_fc),
         .sid2_f0     (sid2_filter_f0),
-        .sdram_addrB (sdram_addrB),
-        .sdram_weB   (sdram_weB),
-        .sdram_dinB  (sdram_dinB),
-        .sdram_oeB   (sdram_oeB),
+        .sdram_addrB (curve_addrB),
+        .sdram_weB   (curve_weB),
+        .sdram_dinB  (curve_dinB),
+        .sdram_oeB   (curve_oeB),
         .sdram_doutB (sdram_doutB)
     );
+
+    // Port B arbitration: bridge writes win while the CPU is held in reset.
+    // Curve reader owns the port otherwise (it is held in reset during
+    // preload, so its signals are idle).
+    assign sdram_addrB = brg_sdram_b_we ? brg_sdram_b_addr : curve_addrB;
+    assign sdram_weB   = brg_sdram_b_we ? 1'b1             : curve_weB;
+    assign sdram_dinB  = brg_sdram_b_we ? brg_sdram_b_din  : curve_dinB;
+    assign sdram_oeB   = brg_sdram_b_we ? 1'b0             : curve_oeB;
 
     // =========================================================================
     // CPU
@@ -793,7 +895,7 @@ module top (
         .WE     (cpu_we),
         .IRQ    (~irq_n),
         .NMI    (~nmi_n),
-        .RDY    (blt_rdy & ~dbg_pause & cpu_active),
+        .RDY    (blt_rdy & dma_rdy & ~dbg_pause & cpu_active),
         .dbg_pc    (cpu_dbg_pc),
         .dbg_a     (cpu_dbg_a),
         .dbg_x     (cpu_dbg_x),
@@ -825,12 +927,12 @@ module top (
         .tile_dma_addr  (tile_dma_addr),
         .tile_dma_data  (tile_dma_data),
         .tile_dma_active(tile_dma_active),
-        .blt_space      (blt_vgc_space),
-        .blt_addr       (blt_vgc_addr),
-        .blt_rdata      (blt_vgc_rdata),
-        .blt_wdata      (blt_vgc_wdata),
-        .blt_we         (blt_vgc_we),
-        .blt_re         (blt_vgc_re),
+        .blt_space      (bm_vgc_space),
+        .blt_addr       (bm_vgc_addr),
+        .blt_rdata      (bm_vgc_rdata),
+        .blt_wdata      (bm_vgc_wdata),
+        .blt_we         (bm_vgc_we),
+        .blt_re         (bm_vgc_re),
         .dbg_addr       (dbg_peek_addr),
         .dbg_rdata      (vgc_dbg_rdata),
         .vid_r          (vid_r),

@@ -167,6 +167,9 @@ module fpga_top (
     wire [7:0]  brg_cpu_a, brg_cpu_x, brg_cpu_y, brg_cpu_sp, brg_cpu_flags;
     wire        brg_key_valid;
     wire [7:0]  brg_key_data;
+    wire        brg_sdram_b_we;
+    wire [24:0] brg_sdram_b_addr;
+    wire [7:0]  brg_sdram_b_din;
 
     debug_bridge dbg_bridge (
         .clk             (clk_pixel),
@@ -195,7 +198,10 @@ module fpga_top (
         .dbg_cpu_sp      (brg_cpu_sp),
         .dbg_cpu_flags   (brg_cpu_flags),
         .key_inject_valid(brg_key_valid),
-        .key_inject_data (brg_key_data)
+        .key_inject_data (brg_key_data),
+        .sdram_b_we      (brg_sdram_b_we),
+        .sdram_b_addr    (brg_sdram_b_addr),
+        .sdram_b_din     (brg_sdram_b_din)
     );
 
     // Key input: debug bridge overrides UART keyboard
@@ -242,6 +248,9 @@ module fpga_top (
         .dbg_rom_addr (brg_rom_addr),
         .dbg_rom_data (brg_rom_data),
         .dbg_cpu_reset(brg_cpu_reset),
+        .brg_sdram_b_we  (brg_sdram_b_we),
+        .brg_sdram_b_addr(brg_sdram_b_addr),
+        .brg_sdram_b_din (brg_sdram_b_din),
         .dbg_cpu_pc   (brg_cpu_pc),
         .dbg_cpu_a    (brg_cpu_a),
         .dbg_cpu_x    (brg_cpu_x),

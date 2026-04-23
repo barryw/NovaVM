@@ -69,6 +69,7 @@ module test_debug_peek;
         .dbg_rom_we(dbg_rom_we), .dbg_rom_idx(dbg_rom_idx),
         .dbg_rom_addr(dbg_rom_addr), .dbg_rom_data(dbg_rom_data),
         .dbg_cpu_reset(dbg_cpu_reset),
+        .brg_sdram_b_we(1'b0), .brg_sdram_b_addr(25'd0), .brg_sdram_b_din(8'd0),
         .dbg_cpu_pc(dbg_cpu_pc),
         .dbg_cpu_a(dbg_cpu_a), .dbg_cpu_x(dbg_cpu_x),
         .dbg_cpu_y(dbg_cpu_y), .dbg_cpu_sp(dbg_cpu_sp),

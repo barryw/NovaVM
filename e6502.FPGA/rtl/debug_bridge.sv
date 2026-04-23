@@ -54,7 +54,14 @@ module debug_bridge (
 
     // Key injection
     output logic        key_inject_valid,
-    output logic [7:0]  key_inject_data
+    output logic [7:0]  key_inject_data,
+
+    // SDRAM port B write (used during CPU-reset to preload tables like the
+    // 6581 filter curve — see CMD_POKE_SDRAM_BLK below). Only drives weB/dinB
+    // while actively writing; top.sv muxes these against sid_curve_reader.
+    output logic        sdram_b_we,
+    output logic [24:0] sdram_b_addr,
+    output logic [7:0]  sdram_b_din
 );
 
     // =========================================================================
@@ -74,6 +81,15 @@ module debug_bridge (
     localparam CMD_RESET_REL   = 8'h0C;  // release cpu reset
     localparam CMD_POKE_ROM_BLK= 8'h0D;  // [idx, addr_hi, addr_lo, count, ...data]
                                          // count=0 means 256. Single ack at end.
+    localparam CMD_POKE_SDRAM_BLK=8'h0E; // [addr_hi, addr_mid, addr_lo, count, ...data]
+                                         // 24-bit byte address into SDRAM. count=0
+                                         // means 256. Used to preload the 6581
+                                         // filter curve at SDRAM byte offset $80_0000
+                                         // during CPU reset-hold.
+
+    // SDRAM port B write pulse width — matches sid_curve_reader's HOLD_CYCLES
+    // budget for a full clkref 16:1 cycle plus CAS pipeline.
+    localparam int SDRAM_HOLD = 8;
 
     localparam SCREEN_BASE = 16'hAA00;
     localparam COLOR_BASE  = 16'hB1D0;
@@ -82,7 +98,7 @@ module debug_bridge (
     // =========================================================================
     // State machine
     // =========================================================================
-    typedef enum logic [3:0] {
+    typedef enum logic [4:0] {
         S_IDLE,          // 0: wait for command byte
         S_RECV,          // 1: collecting parameter bytes
         S_PEEK_WAIT,     // 2: dpram read latency (2 cycles)
@@ -98,7 +114,8 @@ module debug_bridge (
         S_POKE_DONE,     // 12: poke deassert cycle
         S_KEY_DONE,      // 13: key deassert cycle
         S_ROM_BULK_WRITE,// 14: stream incoming bytes into ROM
-        S_UNUSED_15      // 15
+        S_SDRAM_RECV,    // 15: wait for next SDRAM data byte
+        S_SDRAM_HOLD     // 16: hold SDRAM we for SDRAM_HOLD cycles
     } state_t;
 
     state_t state;
@@ -130,6 +147,10 @@ module debug_bridge (
     // Bulk read state
     logic [15:0] bulk_addr;
     logic [10:0] bulk_remaining;   // 0-2000
+
+    // SDRAM bulk-write state (port B)
+    logic [24:0] sdram_bulk_addr;
+    logic [3:0]  sdram_hold_cnt;
 
     // Pause register
     logic paused;
@@ -211,6 +232,11 @@ module debug_bridge (
             key_inject_data  <= 0;
             tx_data          <= 0;
             tx_start         <= 0;
+            sdram_b_we       <= 0;
+            sdram_b_addr     <= 0;
+            sdram_b_din      <= 0;
+            sdram_bulk_addr  <= 0;
+            sdram_hold_cnt   <= 0;
         end else begin
             // Default: clear single-cycle pulses
             tx_start         <= 0;
@@ -236,6 +262,7 @@ module debug_bridge (
                             CMD_PEEK_BLOCK:  begin recv_need <= 3'd3; state <= S_RECV; end
                             CMD_POKE_ROM:    begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_ROM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
+                            CMD_POKE_SDRAM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
 
                             CMD_READ_SCREEN: begin
                                 bulk_addr      <= SCREEN_BASE;
@@ -366,6 +393,16 @@ module debug_bridge (
                                     bulk_remaining <= (rx_data == 0) ? 11'd256
                                                                      : {3'b0, rx_data};
                                     state          <= S_ROM_BULK_WRITE;
+                                end
+
+                                CMD_POKE_SDRAM_BLK: begin
+                                    // param0=addr_hi, param1=addr_mid, param2=addr_lo,
+                                    // rx_data=count (count=0 means 256). Data bytes
+                                    // stream in via S_SDRAM_RECV.
+                                    sdram_bulk_addr <= {1'b0, param0, param1, param2};
+                                    bulk_remaining  <= (rx_data == 0) ? 11'd256
+                                                                      : {3'b0, rx_data};
+                                    state           <= S_SDRAM_RECV;
                                 end
 
                                 default: begin
@@ -535,6 +572,42 @@ module debug_bridge (
                             resp_idx   <= 0;
                             resp_total <= 1;
                             state      <= S_TX_BYTE;
+                        end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // SDRAM_RECV: wait for next data byte. On arrival, drive
+                // port B (addr + din + we=1), start hold counter.
+                // ---------------------------------------------------------
+                S_SDRAM_RECV: begin
+                    if (rx_valid) begin
+                        sdram_b_addr   <= sdram_bulk_addr;
+                        sdram_b_din    <= rx_data;
+                        sdram_b_we     <= 1;
+                        sdram_hold_cnt <= SDRAM_HOLD - 1;
+                        state          <= S_SDRAM_HOLD;
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // SDRAM_HOLD: keep weB asserted for SDRAM_HOLD pixel-clocks
+                // (matches sid_curve_reader's CAS budget). At the end,
+                // advance address, decrement count, loop or ack.
+                // ---------------------------------------------------------
+                S_SDRAM_HOLD: begin
+                    if (sdram_hold_cnt != 0) begin
+                        sdram_hold_cnt <= sdram_hold_cnt - 1;
+                    end else begin
+                        sdram_b_we      <= 0;
+                        sdram_bulk_addr <= sdram_bulk_addr + 25'd1;
+                        bulk_remaining  <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
+                        end else begin
+                            state <= S_SDRAM_RECV;
                         end
                     end
                 end
