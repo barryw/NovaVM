@@ -87,12 +87,14 @@ module test_vgc_regs;
 
     task automatic test_font_slot();
         $display("");
-        $display("Test: font_slot (3-bit)");
+        $display("Test: font_slot (valid 0..2, clamps 3..7 to 0)");
+        bus_write(16'hA007, 8'd2); step(2);
+        check_eq("font_slot=2 (valid)", int'(dut.font_slot), 2);
         bus_write(16'hA007, 8'd3); step(2);
-        check_eq("font_slot=3", int'(dut.font_slot), 3);
+        check_eq("font_slot=3 clamps to 0", int'(dut.font_slot), 0);
         bus_write(16'hA007, 8'hFF); step(2);
-        check_eq("font_slot masks to 3 bits (0xFF → 7)",
-                 int'(dut.font_slot), 7);
+        check_eq("font_slot=0xFF clamps to 0 (was 7)",
+                 int'(dut.font_slot), 0);
     endtask
 
     task automatic test_gfx_color();

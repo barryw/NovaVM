@@ -98,10 +98,16 @@ suites {
       assert(screen_contains("3"), "item 3")
     }
 
-    test("font-sets-register", "FONT sets font register") {
+    test("font-sets-register", "FONT sets font register (valid slot)") {
+      basic("10 FONT 2")
+      run()
+      assert(peekbyte($A007) == 2, "font register set to 2")
+    }
+
+    test("font-clamps-out-of-range", "FONT n>=3 clamps to 0 (cp437)") {
       basic("10 FONT 3")
       run()
-      assert(peekbyte($A007) == 3, "font register set to 3")
+      assert(peekbyte($A007) == 0, "font register clamped to 0 for invalid slot")
     }
 
     test("locate-sets-cursor", "LOCATE moves cursor position") {

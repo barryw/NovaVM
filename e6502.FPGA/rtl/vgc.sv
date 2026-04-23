@@ -958,7 +958,8 @@ module vgc (
                         REG_CURSORY: cursor_y <= cpu_wdata[5:0];
                         5'd5:        scroll_x <= cpu_wdata;
                         5'd6:        scroll_y <= cpu_wdata;
-                        5'd7:        font_slot <= cpu_wdata[2:0];
+                        5'd7:        font_slot <= (cpu_wdata[2:0] >= 3'd3) ? 3'd0
+                                                                               : cpu_wdata[2:0];
                         5'd8:        gfx_color <= cpu_wdata[3:0];
                         5'd10:       cursor_enable <= cpu_wdata[0];
                         5'd11:       collision_ss <= 0;
