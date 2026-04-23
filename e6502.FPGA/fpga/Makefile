@@ -5,14 +5,19 @@ PIN_DEF  = ulx3s.lpf
 BUILDDIR = build
 RTLDIR   = ../rtl
 
-# OSS CAD Suite (yosys, nextpnr-ecp5, ecppack, fujprog) — prepend to PATH
-# so the build works regardless of the user's shell configuration.
+# OSS CAD Suite (yosys, nextpnr-ecp5, ecppack, fujprog) — use absolute
+# paths so the build works regardless of the user's shell configuration.
+# `export PATH := ...` is unreliable across Make versions on macOS — some
+# recipes exec directly and bypass the export. Absolute paths always work.
 OSS_CAD_SUITE_BIN := /opt/homebrew/oss-cad-suite/bin
 export PATH := $(OSS_CAD_SUITE_BIN):$(PATH)
 
 DPRAM = $(RTLDIR)/dpram.sv
 
-YOSYS = yosys
+YOSYS    = $(OSS_CAD_SUITE_BIN)/yosys
+NEXTPNR  = $(OSS_CAD_SUITE_BIN)/nextpnr-ecp5
+ECPPACK  = $(OSS_CAD_SUITE_BIN)/ecppack
+FPGALOAD = openFPGALoader
 SV = read_verilog -sv -DSYNTHESIS
 VL = read_verilog -DSYNTHESIS
 
@@ -84,12 +89,12 @@ synth: ehbasic $(BUILDDIR)/$(PROJ).json
 # Place & Route + Bitstream
 # =========================================================================
 $(BUILDDIR)/$(PROJ).config: $(BUILDDIR)/$(PROJ).json $(PIN_DEF)
-	nextpnr-ecp5 $(NEXTPNR_FLAGS) --textcfg $@ --json $< --lpf $(PIN_DEF)
+	$(NEXTPNR) $(NEXTPNR_FLAGS) --textcfg $@ --json $< --lpf $(PIN_DEF)
 
 pnr: ehbasic $(BUILDDIR)/$(PROJ).config
 
 $(BUILDDIR)/$(PROJ).bit: $(BUILDDIR)/$(PROJ).config
-	ecppack --compress $< $@
+	$(ECPPACK) --compress $< $@
 
 bitstream: ehbasic $(BUILDDIR)/$(PROJ).bit
 

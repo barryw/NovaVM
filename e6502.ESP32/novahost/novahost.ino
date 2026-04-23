@@ -94,6 +94,23 @@ DebugServer debugServer(fpgaBridge);
 void setupWiFi() {
     logLn("Connecting to WiFi: %s", WIFI_SSID);
     WiFi.mode(WIFI_STA);
+
+#ifdef WIFI_STATIC_IP
+    // Pin a static IP so deploy tooling (OTA, test harness, debug bridge)
+    // doesn't depend on mDNS. Must be called before WiFi.begin().
+    IPAddress ip, gw, sn, dns;
+    if (ip.fromString(WIFI_STATIC_IP) &&
+        gw.fromString(WIFI_GATEWAY) &&
+        sn.fromString(WIFI_SUBNET) &&
+        dns.fromString(WIFI_DNS)) {
+        WiFi.config(ip, gw, sn, dns);
+        Serial.printf("Static IP requested: %s (gw %s, mask %s, dns %s)\n",
+                      WIFI_STATIC_IP, WIFI_GATEWAY, WIFI_SUBNET, WIFI_DNS);
+    } else {
+        Serial.println("Invalid static-IP config — falling back to DHCP");
+    }
+#endif
+
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     int attempts = 0;
