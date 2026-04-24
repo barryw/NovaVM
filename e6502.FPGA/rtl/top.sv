@@ -287,27 +287,38 @@ module top (
     wire  xmc_cpu_read   = xmc_fire && !cpu_we;
     wire  xmc_cpu_write  = xmc_fire &&  cpu_we && cpu_active;
 
-    // Bus-master XRAM write (blitter or DMA) is fire-and-forget (single-cycle
-    // pulse on bm_xram_we). TODO Phase 2.5 Step 2a: add back-pressure so XRAM
-    // reads wait for the wrapper — right now bus-master reads sample stale data.
-    logic bm_xram_armed;
-    wire  bm_xram_fire = bm_xram_we && bm_xram_armed && !xram_busy;
+    // Bus-master XRAM write (blitter or DMA). Previously used a `bm_xram_armed`
+    // single-shot latch that cleared on fire and re-armed only when `bm_xram_we`
+    // dropped. That worked for COPY (which cycles through S_READ between
+    // bytes, dropping we=0) but BROKE FILL: fill-mode stays in S_WRITE
+    // continuously with we=1 across bytes, so armed stayed 0 after the first
+    // byte and every subsequent byte was dropped. XRESET's 1280-byte XRAM
+    // fill left pages 1-4 uncleared, which then tripped `xmc_alloc`'s
+    // directory-entry scan into ERR_NOSPACE and returned FCER from BASIC.
+    //
+    // xram_sdram.sv already protects against double-latch: it only accepts
+    // req_we in S_IDLE (busy=0). Holding we=1 during busy is harmless —
+    // the wrapper ignores it. With the blitter/DMA back-pressure stall
+    // (blitter.sv / dma.sv hold we/addr/data stable while xram_busy=1),
+    // exactly one byte lands per intended write. Removing the arm latch.
+    wire  bm_xram_fire = bm_xram_we && !xram_busy;
 
     always_ff @(posedge clk) begin
         if (rst) begin
             xmc_armed      <= 1'b1;
-            bm_xram_armed  <= 1'b1;
         end else begin
             if (!xmc_access)       xmc_armed      <= 1'b1;
             else if (xmc_fire)     xmc_armed      <= 1'b0;
-            if (!bm_xram_we)       bm_xram_armed  <= 1'b1;
-            else if (bm_xram_fire) bm_xram_armed  <= 1'b0;
         end
     end
 
     // CPU-side stall: hold cpu_ce low any time a CPU XMC access is
     // outstanding (armed but not fired, or fired and still busy).
     assign xram_stall = xmc_access && (xmc_armed || xram_busy);
+
+    // Bus-master read fire gate — same shape as bm_xram_fire. Separate so
+    // a read during write-busy doesn't accidentally convert to a write.
+    wire bm_xram_read_fire = bm_xram_re && !xram_busy;
 
     always_comb begin
         // CPU path has priority; bus master gets the bus when CPU isn't firing.
@@ -321,6 +332,11 @@ module top (
             xram_a_din  = bm_xram_wdata;
             xram_a_we   = 1'b1;
             xram_a_re   = 1'b0;
+        end else if (bm_xram_read_fire) begin
+            xram_a_addr = bm_xram_addr[18:0];
+            xram_a_din  = 8'd0;
+            xram_a_we   = 1'b0;
+            xram_a_re   = 1'b1;
         end else begin
             xram_a_addr = 19'd0;
             xram_a_din  = 8'd0;
@@ -721,6 +737,7 @@ module top (
     wire [18:0] blt_xram_addr;
     wire [7:0]  blt_xram_wdata;
     wire        blt_xram_we;
+    wire        blt_xram_re;
     wire [2:0]  blt_vgc_space;
     wire [16:0] blt_vgc_addr;     // 17-bit for gfx_mem 76800 reach
     wire [7:0]  blt_vgc_wdata;
@@ -735,6 +752,7 @@ module top (
     wire [18:0] dma_xram_addr;
     wire [7:0]  dma_xram_wdata;
     wire        dma_xram_we;
+    wire        dma_xram_re;
     wire [2:0]  dma_vgc_space;
     wire [16:0] dma_vgc_addr;
     wire [7:0]  dma_vgc_wdata;
@@ -752,6 +770,7 @@ module top (
     wire [18:0] bm_xram_addr  = dma_busy ? dma_xram_addr  : blt_xram_addr;
     wire [7:0]  bm_xram_wdata = dma_busy ? dma_xram_wdata : blt_xram_wdata;
     wire        bm_xram_we    = dma_busy ? dma_xram_we    : blt_xram_we;
+    wire        bm_xram_re    = dma_busy ? dma_xram_re    : blt_xram_re;
     wire [2:0]  bm_vgc_space  = dma_busy ? dma_vgc_space  : blt_vgc_space;
     wire [16:0] bm_vgc_addr   = dma_busy ? dma_vgc_addr   : blt_vgc_addr;
     wire [7:0]  bm_vgc_wdata  = dma_busy ? dma_vgc_wdata  : blt_vgc_wdata;
@@ -779,6 +798,8 @@ module top (
         .xram_rdata (blt_xram_rdata),
         .xram_wdata (blt_xram_wdata),
         .xram_we    (blt_xram_we),
+        .xram_re    (blt_xram_re),
+        .xram_busy  (xram_busy),
         .vgc_space  (blt_vgc_space),
         .vgc_addr   (blt_vgc_addr),
         .vgc_rdata  (blt_vgc_rdata),
@@ -804,6 +825,8 @@ module top (
         .xram_rdata (dma_xram_rdata),
         .xram_wdata (dma_xram_wdata),
         .xram_we    (dma_xram_we),
+        .xram_re    (dma_xram_re),
+        .xram_busy  (xram_busy),
         .vgc_space  (dma_vgc_space),
         .vgc_addr   (dma_vgc_addr),
         .vgc_rdata  (dma_vgc_rdata),

@@ -25,10 +25,23 @@ module blitter (
     output logic        ram_we,
 
     // Memory port B: XRAM (512KB)
+    // xram_busy signals that the SDRAM-backed XRAM wrapper cannot accept a
+    // write this cycle. The blitter must hold xram_we + xram_addr + xram_wdata
+    // stable until xram_busy drops; otherwise the byte is silently dropped
+    // (top.sv gates `bm_xram_fire = bm_xram_we && !xram_busy`). Manifests as
+    // STASH/FETCH round-trip dropping bytes at any length > ~1 byte.
+    //
+    // xram_re fires a 1-cycle pulse on S_READ when src=XRAM. The wrapper
+    // latches in S_IDLE, transitions to S_ACTIVE (busy=1) for HOLD_CYCLES,
+    // then S_CAPTURE latches r_dout, then back to S_IDLE (busy=0). The
+    // blitter stalls in S_READ_WAIT while xram_busy is high — data on
+    // xram_rdata becomes valid the cycle after busy drops.
     output logic [18:0] xram_addr,
     input  logic [7:0]  xram_rdata,
     output logic [7:0]  xram_wdata,
     output logic        xram_we,
+    output logic        xram_re,
+    input  logic        xram_busy,
 
     // Memory port C: VGC internal (char/color/gfx/sprite/tile)
     output logic [2:0]  vgc_space,
@@ -202,7 +215,7 @@ module blitter (
     // =========================================================================
     always_comb begin
         ram_addr = 0; ram_we = 0; ram_wdata = 0;
-        xram_addr = 0; xram_we = 0; xram_wdata = 0;
+        xram_addr = 0; xram_we = 0; xram_wdata = 0; xram_re = 0;
         vgc_space = 0; vgc_addr = 0; vgc_we = 0; vgc_wdata = 0; vgc_re = 0;
 
         // Read address setup — hold addr stable across S_READ → S_READ_WAIT
@@ -214,7 +227,16 @@ module blitter (
             if (!fill_mode) begin
                 case (src_space)
                     SPACE_CPU:  ram_addr = src_addr[15:0];
-                    SPACE_XRAM: xram_addr = src_addr[18:0];
+                    SPACE_XRAM: begin
+                        xram_addr = src_addr[18:0];
+                        // Pulse read enable only on the first S_READ cycle
+                        // (not S_READ_WAIT). The wrapper latches the addr
+                        // when in S_IDLE and ignores subsequent asserts
+                        // during its internal S_ACTIVE / S_CAPTURE, so the
+                        // 1-cycle pulse is sufficient and avoids re-firing.
+                        if (state == S_READ || state == S_ROWBUF_READ)
+                            xram_re = 1;
+                    end
                     default: begin
                         vgc_space = src_space;
                         vgc_addr = src_addr[16:0];
@@ -316,13 +338,27 @@ module blitter (
                 end
 
                 S_READ_WAIT: begin
-                    read_byte <= mem_read_data;
-                    read_valid <= 1;
-                    state <= S_WRITE;
+                    // XRAM reads take ~HOLD_CYCLES+2 cycles through xram_sdram.
+                    // busy=1 while the wrapper is processing the latched
+                    // req_re. When busy drops, r_dout is valid; latch it.
+                    if (src_space == SPACE_XRAM && xram_busy) begin
+                        // stall — r_dout not yet valid
+                    end else begin
+                        read_byte <= mem_read_data;
+                        read_valid <= 1;
+                        state <= S_WRITE;
+                    end
                 end
 
                 S_WRITE: begin
-                    if (read_valid) begin
+                    // Back-pressure: if destination is XRAM and the wrapper
+                    // is busy, keep xram_we / xram_addr / xram_wdata asserted
+                    // (combinationally driven from this state) until the
+                    // wrapper can accept the byte. Hold state until ready.
+                    if (dst_space == SPACE_XRAM && xram_busy) begin
+                        // stall — re-enter S_WRITE implicitly by not advancing
+                    end
+                    else if (read_valid) begin
                         if (!(colorkey_mode && read_byte == color_key))
                             wrote_count <= wrote_count + 1;
 
@@ -364,20 +400,31 @@ module blitter (
                 end
 
                 S_ROWBUF_READ_WAIT: begin
-                    row_buf[buf_idx] <= mem_read_data;
-                    if (col + 1 >= width) begin
-                        // Row fully buffered, switch to writing
-                        col <= 0;
-                        buf_idx <= 0;
-                        state <= S_ROWBUF_WRITE;
+                    // Same multi-cycle read handshake as S_READ_WAIT.
+                    // Same-space XRAM→XRAM copies buffer through here.
+                    if (src_space == SPACE_XRAM && xram_busy) begin
+                        // stall — r_dout not yet valid
                     end else begin
-                        col <= col + 1;
-                        buf_idx <= buf_idx + 1;
-                        state <= S_ROWBUF_READ;
+                        row_buf[buf_idx] <= mem_read_data;
+                        if (col + 1 >= width) begin
+                            col <= 0;
+                            buf_idx <= 0;
+                            state <= S_ROWBUF_WRITE;
+                        end else begin
+                            col <= col + 1;
+                            buf_idx <= buf_idx + 1;
+                            state <= S_ROWBUF_READ;
+                        end
                     end
                 end
 
                 S_ROWBUF_WRITE: begin
+                    // Same back-pressure gating as S_WRITE. Same-space XRAM
+                    // copies (src_space == dst_space == XRAM) use this path
+                    // via the row-buffer.
+                    if (dst_space == SPACE_XRAM && xram_busy) begin
+                        // stall — hold the row-buffer write steady until ready
+                    end else begin
                     // Write one byte per clock from row buffer
                     if (!(colorkey_mode && row_buf[buf_idx] == color_key))
                         wrote_count <= wrote_count + 1;
@@ -401,6 +448,7 @@ module blitter (
                         col <= col + 1;
                         buf_idx <= buf_idx + 1;
                     end
+                    end  // end of (!xram_busy) block
                 end
 
                 S_DONE: begin

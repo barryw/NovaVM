@@ -77,6 +77,46 @@ public class BasicRegressionTests
             $"After STASH/FETCH roundtrip, $2000 should hold $42=66 but got:\n{screen}");
     }
 
+    [TestMethod]
+    public void XramStash256ByteRoundtripRestoresAllBytes()
+    {
+        // Mirrors tests/integration/xram.6502 stash-fetch-roundtrip — fails
+        // on FPGA HW (blitter → XRAM back-pressure drops writes when
+        // xram_busy=1). This test verifies the Avalonia software path:
+        // if it passes, the BASIC / extension ROM / blitter-simulation
+        // chain is correct and the HW failure is purely RTL.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        foreach (string line in new[]
+        {
+            "10 XALLOC 1",
+            "20 FOR I=0 TO 255:POKE $2000+I,I:NEXT",
+            "30 STASH $2000,0,256",
+            "40 FOR I=0 TO 255:POKE $2000+I,0:NEXT",
+            "50 FETCH $2000,0,256",
+            "RUN",
+        })
+        {
+            foreach (char ch in line)
+                editor.QueueInput((byte)ch);
+            editor.QueueInput(0x0D);
+            RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+        }
+
+        for (int i = 0; i < 256; i++)
+        {
+            byte got = bus.Read((ushort)(0x2000 + i));
+            Assert.AreEqual((byte)i, got,
+                $"After STASH/FETCH 256-byte roundtrip, $2000+{i} should be {i:X2} but is {got:X2}");
+        }
+    }
+
     private static string RunProgram(string[] lines)
     {
         using var bus = new CompositeBusDevice(enableSound: false);

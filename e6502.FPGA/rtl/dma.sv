@@ -24,6 +24,12 @@ module dma (
     output logic        ram_we,
 
     // Memory port B: XRAM (512KB)
+    // See the matching comment in blitter.sv: xram_busy back-pressures the
+    // write port so DMA doesn't drop bytes when the SDRAM wrapper is mid-burst.
+    // xram_re pulses when DMA reads XRAM — otherwise the wrapper never fires
+    // a SDRAM read and DMA samples stale r_dout.
+    input  logic        xram_busy,
+    output logic        xram_re,
     output logic [18:0] xram_addr,
     input  logic [7:0]  xram_rdata,
     output logic [7:0]  xram_wdata,
@@ -172,7 +178,7 @@ module dma (
     // =========================================================================
     always_comb begin
         ram_addr = 0; ram_we = 0; ram_wdata = 0;
-        xram_addr = 0; xram_we = 0; xram_wdata = 0;
+        xram_addr = 0; xram_we = 0; xram_wdata = 0; xram_re = 0;
         vgc_space = 0; vgc_addr = 0; vgc_we = 0; vgc_wdata = 0; vgc_re = 0;
 
         // Read address setup (for S_READ and S_READ_WAIT). dpram port B
@@ -184,7 +190,10 @@ module dma (
         if ((state == S_READ || state == S_READ_WAIT) && !fill_mode) begin
             case (src_space)
                 SPACE_CPU:  ram_addr = src_addr[15:0];
-                SPACE_XRAM: xram_addr = src_addr[18:0];
+                SPACE_XRAM: begin
+                    xram_addr = src_addr[18:0];
+                    if (state == S_READ) xram_re = 1;
+                end
                 default: begin
                     vgc_space = src_space;
                     vgc_addr = src_addr[16:0];
@@ -279,14 +288,22 @@ module dma (
                 end
 
                 S_READ_WAIT: begin
-                    // mem_read_data is now valid for src_addr.
-                    read_byte <= mem_read_data;
-                    read_valid <= 1;
-                    state <= S_WRITE;
+                    // For XRAM reads the wrapper takes multi-cycle; stall
+                    // while busy, then r_dout is valid when busy drops.
+                    if (src_space == SPACE_XRAM && xram_busy) begin
+                        // stall
+                    end else begin
+                        read_byte <= mem_read_data;
+                        read_valid <= 1;
+                        state <= S_WRITE;
+                    end
                 end
 
                 S_WRITE: begin
-                    if (read_valid) begin
+                    if (dst_space == SPACE_XRAM && xram_busy) begin
+                        // stall until XRAM wrapper accepts the write
+                    end
+                    else if (read_valid) begin
                         moved <= moved + 1;
                         if (idx + 1 >= length) begin
                             regs[R_STATUS] <= ST_OK;

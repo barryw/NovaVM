@@ -21,7 +21,7 @@ SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.s
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv \
         $(RTL)/sid/sid_curve_reader.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_dma test_sid test_sid_per_reg_readback test_rom_load test_debug_bridge test_debug_peek test_key_inject test_rom_over_sid test_vgc_frame_counter test_vgc_scroll_wrap test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_sid test_sid_per_reg_readback test_rom_load test_debug_bridge test_debug_peek test_key_inject test_rom_over_sid test_vgc_frame_counter test_vgc_scroll_wrap test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -56,6 +56,13 @@ test_tile_engine: test_tile_engine.sv $(RTL)/dpram.sv $(RTL)/tile_engine.sv
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/dpram.sv $(RTL)/tile_engine.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_blitter: test_blitter.sv $(RTL)/blitter.sv
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/blitter.sv $< && $(RUN) test/$(BD)/$@/$@
+
+# RAM→XRAM back-pressure regression. Forces xram_busy pulses during
+# the blitter copy to verify writes are held (not dropped) when the
+# XRAM wrapper is busy. Reproduces the integration-level STASH/FETCH
+# round-trip failure.
+test_blitter_xram_backpressure: test_blitter_xram_backpressure.sv $(RTL)/blitter.sv
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/blitter.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_dma: test_dma.sv $(RTL)/dma.sv
