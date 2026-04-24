@@ -119,9 +119,43 @@ module sid_chip (
 
     // =========================================================================
     // Register read
+    //
+    // Write-registers shadow the last write so PEEK returns the written value.
+    // Real 6581 returns bus-latched garbage for write-only regs; shadowing is a
+    // convenience for the integration suite and matches the software emulator.
     // =========================================================================
     always_comb begin
         case (addr)
+            // Voice 1
+            5'h00: dout = voice_freq[0][7:0];
+            5'h01: dout = voice_freq[0][15:8];
+            5'h02: dout = voice_pw[0][7:0];
+            5'h03: dout = {4'h0, voice_pw[0][11:8]};
+            5'h04: dout = voice_ctrl[0];
+            5'h05: dout = voice_ad[0];
+            5'h06: dout = voice_sr[0];
+            // Voice 2
+            5'h07: dout = voice_freq[1][7:0];
+            5'h08: dout = voice_freq[1][15:8];
+            5'h09: dout = voice_pw[1][7:0];
+            5'h0A: dout = {4'h0, voice_pw[1][11:8]};
+            5'h0B: dout = voice_ctrl[1];
+            5'h0C: dout = voice_ad[1];
+            5'h0D: dout = voice_sr[1];
+            // Voice 3
+            5'h0E: dout = voice_freq[2][7:0];
+            5'h0F: dout = voice_freq[2][15:8];
+            5'h10: dout = voice_pw[2][7:0];
+            5'h11: dout = {4'h0, voice_pw[2][11:8]};
+            5'h12: dout = voice_ctrl[2];
+            5'h13: dout = voice_ad[2];
+            5'h14: dout = voice_sr[2];
+            // Filter
+            5'h15: dout = {5'h00, filter_fc[2:0]};
+            5'h16: dout = filter_fc[10:3];
+            5'h17: dout = filter_res_filt;
+            5'h18: dout = filter_mode_vol;
+            // External inputs / per-voice extensions
             5'h19: dout = 8'h00;       // pot_x (not connected)
             5'h1A: dout = 8'h00;       // pot_y (not connected)
             5'h1B: dout = osc3_out;    // voice 3 oscillator

@@ -21,7 +21,7 @@ SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.s
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv \
         $(RTL)/sid/sid_curve_reader.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_dma test_sid test_rom_load test_debug_bridge test_debug_peek test_key_inject test_sid_readback test_vgc_frame_counter test_vgc_scroll_wrap test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_dma test_sid test_sid_per_reg_readback test_rom_load test_debug_bridge test_debug_peek test_key_inject test_rom_over_sid test_vgc_frame_counter test_vgc_scroll_wrap test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -64,6 +64,12 @@ test_dma: test_dma.sv $(RTL)/dma.sv
 test_sid: test_sid.sv $(SID)
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) $< && $(RUN) test/$(BD)/$@/$@
 
+# Per-register readback test. Writes a distinct value to every write-register
+# then reads each back; validates that each slot shadows its own value
+# rather than returning `last_written`.
+test_sid_per_reg_readback: test_sid_per_reg_readback.sv $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) $< && $(RUN) test/$(BD)/$@/$@
+
 # Debug-bridge protocol unit test — drives rx_valid/rx_data directly, verifies
 # CMD_POKE_ROM, CMD_POKE_ROM_BLK, CMD_RESET_HOLD/REL decode + outputs.
 test_debug_bridge: test_debug_bridge.sv $(RTL)/debug_bridge.sv
@@ -87,11 +93,12 @@ test_debug_peek: test_debug_peek.sv $(ROM_LOAD_RTL)
 test_key_inject: test_key_inject.sv $(ROM_LOAD_RTL)
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
-# Regression test for the cpu_ce-gating fix on r_sid1_dout / r_sid2_dout /
-# r_blt_cpu_rdata (commit c1e75da). Writes distinct values to SID voice_vol
-# slots then reads them back — a captured-at-wrong-cpu_addr bug produces
-# cross-contamination between slots that this test detects.
-test_sid_readback: test_sid_readback.sv $(ROM_LOAD_RTL)
+# ROM-over-SID regression — proves reads from $D400/$D420/$D440 return
+# ROM bytes, not SID register shadows. Guards against reintroducing the
+# cpu_din-mux SID intercept that silently broke array-handling code
+# because EhBASIC places live ROM at those addresses. Replaces the old
+# test_sid_readback which tested the (now removed) SID-over-ROM intercept.
+test_rom_over_sid: test_rom_over_sid.sv $(ROM_LOAD_RTL)
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
 # Regression for VGC $A008 frame counter. Before the fix $A008 was mapped

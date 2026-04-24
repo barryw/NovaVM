@@ -398,13 +398,25 @@ module top (
                                                 r_bm_cpu_rdata;
     wire xmc_group_sel = r_xmc_win_sel | r_xmc_reg_sel | r_bm_reg_sel;
 
-    // Group B — SID (1 / 2 / cfg) + VGC register space.
-    wire [7:0] io_group_data =
-        r_sid1_reg_sel ? r_sid1_dout   :
-        r_sid2_reg_sel ? r_sid2_dout   :
-        r_sid_cfg_sel  ? r_sid_cfg_reg :
-                         r_vgc_cpu_rdata;
-    wire io_group_sel = r_sid1_reg_sel | r_sid2_reg_sel | r_sid_cfg_sel | r_vgc_read_sel;
+    // Group B — VGC register space. SID register reads DELIBERATELY fall
+    // through to the ROM / RAM group: $D400-$D43F overlaps BASIC ROM
+    // (EhBASIC's array-handling code — LAB_1F45/1F48/1F7B — happens to
+    // land at $D3FF-$D430), so an unconditional SID-read intercept
+    // returns SID register values for legitimate opcode fetches into
+    // that ROM block. CPU executes SID-reg-as-opcode, BRKs, and drops
+    // back to Ready. The symptom is silent array failure (DIM/PRINT
+    // returns no output) and caused the math.array-operations and
+    // xram STASH/FETCH integration test failures. Removing SID from the
+    // read mux makes BASIC PEEK($D400) return the ROM byte — the same
+    // trade-off Avalonia makes. SID is still writable, per-register
+    // shadow is still in sid_chip.sv for future use via an alternate
+    // non-ROM-overlapping mirror.
+    // $D440 (sid_cfg_reg) is also inside ROM — ROM byte at that offset
+    // is $A2 = LDX #$00, part of LAB_1F7C (array-index multiply). An
+    // interception would replace a live instruction with the config
+    // register's stored byte. Fall through to ROM for all SID addresses.
+    wire [7:0] io_group_data = r_vgc_cpu_rdata;
+    wire io_group_sel        = r_vgc_read_sel;
 
     // Group C — ROM (active bank) + main RAM (default fallback).
     wire [7:0] mem_group_data =
