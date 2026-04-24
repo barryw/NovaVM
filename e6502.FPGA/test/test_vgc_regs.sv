@@ -233,6 +233,50 @@ module test_vgc_regs;
         bus_read(COLOR_RAM_BASE_A + 1999, rb);  check_eq("color[1999]", int'(rb), 8'h33);
     endtask
 
+    // Sprite register readback — $A040-$A0BF was write-only before this test.
+    // Each sprite has 8 bytes: X lo, X hi, Y lo, Y hi, shape, flags, pri, trans.
+    // Flags byte: bit 7 = enable, bit 1 = flip_v, bit 0 = flip_h.
+    task automatic test_sprite_register_readback();
+        logic [7:0] rb;
+        logic [15:0] base;
+        $display("");
+        $display("Test: sprite register readback ($A040-$A0BF)");
+
+        // Sprite 0 — X=$1234, Y=$5678, shape=7, enable+flip_h, pri=2, trans=$A
+        base = 16'hA040;
+        bus_write(base + 0, 8'h34); step(2);
+        bus_write(base + 1, 8'h12); step(2);
+        bus_write(base + 2, 8'h78); step(2);
+        bus_write(base + 3, 8'h56); step(2);
+        bus_write(base + 4, 8'h07); step(2);
+        bus_write(base + 5, 8'h81); step(2);  // enable+flip_h
+        bus_write(base + 6, 8'h02); step(2);
+        bus_write(base + 7, 8'h0A); step(2);
+        bus_read (base + 0, rb); check_eq("spr0 X lo  = 0x34", int'(rb), 8'h34);
+        bus_read (base + 1, rb); check_eq("spr0 X hi  = 0x12", int'(rb), 8'h12);
+        bus_read (base + 2, rb); check_eq("spr0 Y lo  = 0x78", int'(rb), 8'h78);
+        bus_read (base + 3, rb); check_eq("spr0 Y hi  = 0x56", int'(rb), 8'h56);
+        bus_read (base + 4, rb); check_eq("spr0 shape = 0x07", int'(rb), 8'h07);
+        bus_read (base + 5, rb); check_eq("spr0 flags = 0x81", int'(rb), 8'h81);
+        bus_read (base + 6, rb); check_eq("spr0 pri   = 0x02", int'(rb), 8'h02);
+        bus_read (base + 7, rb); check_eq("spr0 trans = 0x0A", int'(rb), 8'h0A);
+
+        // Sprite 15 — distinct values, confirms address decode at upper bound
+        base = 16'hA040 + 16'd120;  // 15*8 = 120
+        bus_write(base + 0, 8'hAB); step(2);
+        bus_write(base + 1, 8'hCD); step(2);
+        bus_write(base + 3, 8'hEF); step(2);
+        bus_write(base + 5, 8'h82); step(2);  // enable+flip_v
+        bus_read (base + 0, rb); check_eq("spr15 X lo  = 0xAB", int'(rb), 8'hAB);
+        bus_read (base + 1, rb); check_eq("spr15 X hi  = 0xCD", int'(rb), 8'hCD);
+        bus_read (base + 3, rb); check_eq("spr15 Y hi  = 0xEF", int'(rb), 8'hEF);
+        bus_read (base + 5, rb); check_eq("spr15 flags = 0x82", int'(rb), 8'h82);
+
+        // Spr0 must be independent of spr15 writes
+        base = 16'hA040;
+        bus_read (base + 0, rb); check_eq("spr0 X lo independent", int'(rb), 8'h34);
+    endtask
+
     task automatic test_sprite_count_reg();
         logic [7:0] rb;
         $display("");
@@ -367,6 +411,7 @@ module test_vgc_regs;
         test_memread_sprite();
         test_cpu_read_char_ram();
         test_cpu_read_color_ram();
+        test_sprite_register_readback();
         test_sprite_count_reg();
         test_blt_read_char();
         test_blt_read_color();

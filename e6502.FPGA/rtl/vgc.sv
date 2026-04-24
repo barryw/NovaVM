@@ -591,8 +591,18 @@ module vgc (
     wire tile_reg_sel  = (cpu_addr >= 16'hA0C0 && cpu_addr <= 16'hA0DF);
     wire [7:0]  tile_rdata;
     wire [4:0]  reg_offset   = cpu_addr[4:0];
-    wire [3:0]  spr_index    = cpu_addr[6:3];
-    wire [2:0]  spr_field    = cpu_addr[2:0];
+    // Sprite register map starts at $A040 and spans $A040-$A0BF.
+    // Offsets from the base are 0..127 = sprite (4 bits) << 3 | field (3 bits).
+    // Earlier versions used `cpu_addr[6:3]` directly, which worked only as long
+    // as the read and write paths were SYMMETRIC (both wrong in the same way —
+    // sprites 0-7 decoded as 8-15 and vice versa). That breaks as soon as any
+    // command path (e.g. CMD_SPRPOS via regs[17]=P0) indexes by the REAL
+    // sprite number — SPRITESET-set state and SPRITE-command-set state land
+    // in different sprites, and sprite register readback reports the wrong
+    // sprite's state.
+    wire [6:0]  spr_offset   = cpu_addr[6:0] - 7'h40;
+    wire [3:0]  spr_index    = spr_offset[6:3];
+    wire [2:0]  spr_field    = spr_offset[2:0];
     wire [12:0] char_offset  = {2'b0, cpu_addr - CHAR_RAM_BASE};
     wire [12:0] color_offset = {2'b0, cpu_addr - COLOR_RAM_BASE};
 
@@ -670,6 +680,22 @@ module vgc (
         else if (tile_reg_sel)   cpu_rdata = tile_rdata;
         else if (char_ram_sel)  cpu_rdata = cpu_rd_latch;
         else if (color_ram_sel) cpu_rdata = cpu_rd_latch;
+        else if (spr_reg_sel) begin
+            // 8 regs per sprite: X lo, X hi, Y lo, Y hi, shape, flags, pri, trans
+            // Flags byte layout matches the write path (bit 7 = enable,
+            // bit 1 = flip_v, bit 0 = flip_h) and Avalonia's ReadSpriteRegister.
+            case (spr_field)
+                3'd0: cpu_rdata = spr_x[spr_index][7:0];
+                3'd1: cpu_rdata = spr_x[spr_index][15:8];
+                3'd2: cpu_rdata = spr_y[spr_index][7:0];
+                3'd3: cpu_rdata = spr_y[spr_index][15:8];
+                3'd4: cpu_rdata = {4'b0, spr_shape[spr_index]};
+                3'd5: cpu_rdata = {spr_enable[spr_index], 5'b0,
+                                   spr_flip_v[spr_index], spr_flip_h[spr_index]};
+                3'd6: cpu_rdata = {6'b0, spr_pri[spr_index]};
+                3'd7: cpu_rdata = {4'b0, spr_trans[spr_index]};
+            endcase
+        end
     end
 
     // Debug read port
@@ -708,6 +734,13 @@ module vgc (
         end
     end
 
+    // Debug-side sprite register decode (dbg_addr indexing mirrors the
+    // cpu_addr path so peek returns exactly what PEEK from BASIC does).
+    // Subtract the $A040 base — see the note on spr_offset above for why.
+    wire [6:0] dbg_spr_offset = dbg_addr[6:0] - 7'h40;
+    wire [3:0] dbg_spr_index  = dbg_spr_offset[6:3];
+    wire [2:0] dbg_spr_field  = dbg_spr_offset[2:0];
+
     always_comb begin
         dbg_rdata = 8'h00;
         if (dbg_char_sel)       dbg_rdata = dbg_rd_latch;
@@ -723,6 +756,19 @@ module vgc (
                 5'd8:        dbg_rdata = frame_counter;  // VGC_FRAME
                 REG_CHARIN:  dbg_rdata = char_in_reg;
                 default:     dbg_rdata = regs[dbg_addr[4:0]];
+            endcase
+        end
+        else if (dbg_spr_sel) begin
+            case (dbg_spr_field)
+                3'd0: dbg_rdata = spr_x[dbg_spr_index][7:0];
+                3'd1: dbg_rdata = spr_x[dbg_spr_index][15:8];
+                3'd2: dbg_rdata = spr_y[dbg_spr_index][7:0];
+                3'd3: dbg_rdata = spr_y[dbg_spr_index][15:8];
+                3'd4: dbg_rdata = {4'b0, spr_shape[dbg_spr_index]};
+                3'd5: dbg_rdata = {spr_enable[dbg_spr_index], 5'b0,
+                                   spr_flip_v[dbg_spr_index], spr_flip_h[dbg_spr_index]};
+                3'd6: dbg_rdata = {6'b0, spr_pri[dbg_spr_index]};
+                3'd7: dbg_rdata = {4'b0, spr_trans[dbg_spr_index]};
             endcase
         end
     end
