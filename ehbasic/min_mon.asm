@@ -13,6 +13,9 @@ IRQ_vec     = VEC_SV+2        ; IRQ code vector
 NMI_vec     = IRQ_vec+$0A     ; NMI code vector
 ; EXT_vec defined in basic.asm (= VEC_SV+$16 = $0221)
 EXT_RST     = EXT_vec+$12     ; extension ROM reset recovery in RAM
+EXT_GTBY    = EXT_RST+$08     ; bridge: extension → BASIC LAB_GTBY → extension
+EXT_GTWRD   = EXT_GTBY+$0E    ; bridge: extension → BASIC LAB_GTWRD → extension
+EXT_SNERR   = EXT_GTWRD+$0E   ; bridge: extension → BASIC LAB_15D9 (syntax error)
 
 ; setup for the 6502 simulator environment
 
@@ -75,6 +78,35 @@ EXT_RESET_CODE
       LDA   #$02              ; RomSwapBasic
       STA   $A03F             ; swap to BASIC ROM
       JMP   $FFD7             ; jump to BASIC reset handler (RES_vec)
+
+; Extension → BASIC bridges (run from RAM at $0236, $0244, $0252).
+; Extension ROM handlers JSR these to invoke BASIC parser helpers
+; (numeric expression eval, syntax error) without losing access to
+; the active ROM bank. Each trampoline maps BASIC, calls the helper,
+; remaps extension, and returns. Result conventions match the wrapped
+; BASIC routines: GTBY → X, GTWRD → FAC1_3 (lo) / FAC1_2 (hi). SNERR
+; never returns — jumps into BASIC's standard syntax-error path.
+
+EXT_GTBY_CODE
+      LDA   #$02              ; RomSwapBasic
+      STA   $A03F             ; swap to BASIC ROM
+      JSR   LAB_GTBY          ; parse byte expression → X
+      LDA   #$04              ; RomSwapExtension
+      STA   $A03F             ; swap back
+      RTS                     ; X holds parsed byte
+
+EXT_GTWRD_CODE
+      LDA   #$02
+      STA   $A03F
+      JSR   LAB_GTWRD         ; parse 16-bit expression → FAC1_3 (lo), FAC1_2 (hi)
+      LDA   #$04
+      STA   $A03F
+      RTS
+
+EXT_SNERR_CODE
+      LDA   #$02              ; RomSwapBasic
+      STA   $A03F             ; swap to BASIC ROM
+      JMP   LAB_15D9          ; jump to BASIC syntax-error path (no return)
 
 END_CODE
 

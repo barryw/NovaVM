@@ -66,6 +66,7 @@ EXT_CMD_HELP    = $08
 EXT_CMD_DMAFILL = $09
 EXT_CMD_BLTFILL = $0A
 EXT_CMD_XMCCMD  = $0B
+EXT_CMD_COPPER  = $0C           ; COPPER subcommand parser
 
 ; --- XMC command codes (written to $BA00 before calling processor) ---
 XMC_CMD_GET     = $01           ; GetByte: read XRAM[XA] → DATA
@@ -115,6 +116,45 @@ TOTAL_PAGES     = 2048          ; 512KB / 256 bytes per page
 
 ; --- RAM addresses ---
 EXT_RESET_VEC   = $0233         ; reset recovery routine in RAM
+EXT_GTBY_VEC    = $0236         ; bridge: extension → BASIC LAB_GTBY → extension
+EXT_GTWRD_VEC   = $0244         ; bridge: extension → BASIC LAB_GTWRD → extension
+EXT_SNERR_VEC   = $0252         ; bridge: extension → BASIC LAB_15D9 syntax err
+
+; --- BASIC ZP routines (RAM-resident, callable from extension ROM) ---
+LAB_IGBY        = $BC           ; advance + skip-spaces + return byte (A)
+LAB_GBYT        = $C2           ; peek current + skip-spaces + return byte (A)
+
+; --- BASIC ZP scratch / FAC1 ---
+Bpntrl          = $C3           ; BASIC execute pointer low (alias of Bpntrl_ext)
+Bpntrh          = $C4
+FAC1_2          = $AE           ; FAC1 mantissa2 (16-bit hi after LAB_GTWRD)
+FAC1_3          = $AF           ; FAC1 mantissa3 (16-bit lo after LAB_GTWRD)
+
+; --- BASIC token bytes (sequential from $80, see basic.asm:321) ---
+TK_END_VAL      = $80
+TK_ON_VAL       = $93
+TK_LIST_VAL     = $A1
+TK_CLEAR_VAL    = $A2
+TK_GMODE_VAL    = $B5
+TK_OFF_VAL      = $CB
+
+; --- VGC command + parameter registers ---
+VGC_CMD         = $A010
+VGC_P0          = $A011
+VGC_P1          = $A012
+VGC_P2          = $A013
+VGC_P3          = $A014
+VGC_P4          = $A015
+VGC_P5          = $A016
+
+; --- VGC copper command codes (from basic.asm:8856-8863) ---
+VCMD_COPPERADD  = $1B
+VCMD_COPPERCLR  = $1C
+VCMD_COPPERENA  = $1D
+VCMD_COPPERDIS  = $1E
+VCMD_COPPERLIST = $20
+VCMD_COPPERUSE  = $21
+VCMD_COPPEREND  = $22
 
       .segment "CODE"
       .org    $C000
@@ -146,6 +186,7 @@ ExtTable:
       .word EXT_DMAFILL-1     ; cmd 9: DMAFILL epilogue
       .word EXT_BLTFILL-1     ; cmd A: BLITFILL epilogue
       .word EXT_XMCCMD-1      ; cmd B: XMC command processor
+      .word EXT_COPPER-1      ; cmd C: COPPER subcommand parser
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -1503,6 +1544,279 @@ xmc_dir_emit_next:
 @den_eod:
       LDA   #XMC_ERR_EOD
       JMP   xmc_err
+
+; =====================================================================
+; EXT_COPPER — COPPER subcommand parser.
+; Relocated from BASIC ROM (LAB_COPPER) to free ~390 bytes there.
+; Original handler lived in basic.asm and used LAB_GBYT / LAB_IGBY ZP
+; helpers (still callable from extension ROM since they are RAM-
+; resident) plus LAB_GTBY / LAB_GTWRD / LAB_1C01 / LAB_15D9 ROM helpers
+; (NOT callable here — replaced with the EXT_GTBY / EXT_GTWRD /
+; EXT_1C01 / EXT_SNERR_VEC bridges).
+;
+; Subcommand grammar:
+;   COPPER CLEAR | ON | OFF
+;   COPPER LIST n | LIST END
+;   COPPER USE n
+;   COPPER ADD x, y, reg, value
+;     reg = MODE | BGCOL | SCROLLX | SCROLLY |
+;           SPRX(n) | SPRXH(n) | SPRY(n) | SPRYH(n) |
+;           SPRSHAPE(n) | SPRFLAGS(n) | SPRPRI(n) |
+;           <8-bit numeric expression>
+; =====================================================================
+EXT_COPPER:
+      JSR   LAB_GBYT          ; peek next byte (ZP routine, skips spaces)
+      CMP   #TK_CLEAR_VAL
+      BEQ   @c_clear
+      CMP   #TK_ON_VAL
+      BEQ   @c_on
+      CMP   #TK_OFF_VAL
+      BEQ   @c_off
+      CMP   #'A'
+      BEQ   @c_add
+      CMP   #TK_LIST_VAL
+      BEQ   @c_list
+      CMP   #'U'
+      BEQ   @c_use
+      JMP   EXT_SNERR_VEC     ; syntax error
+
+; --- COPPER CLEAR ---
+@c_clear:
+      JSR   LAB_IGBY          ; consume CLEAR token
+      LDA   #VCMD_COPPERCLR
+      STA   VGC_CMD
+      LDA   #$00
+      RTS
+
+; --- COPPER ON ---
+@c_on:
+      JSR   LAB_IGBY          ; consume ON token
+      LDA   #VCMD_COPPERENA
+      STA   VGC_CMD
+      LDA   #$00
+      RTS
+
+; --- COPPER OFF ---
+@c_off:
+      JSR   LAB_IGBY          ; consume OFF token
+      LDA   #VCMD_COPPERDIS
+      STA   VGC_CMD
+      LDA   #$00
+      RTS
+
+; --- COPPER LIST n / COPPER LIST END ---
+@c_list:
+      JSR   LAB_IGBY          ; consume LIST token
+      JSR   LAB_GBYT          ; peek next
+      CMP   #TK_END_VAL
+      BEQ   @c_list_end
+      JSR   EXT_GTBY_VEC      ; bridge: parse 8-bit expr → X
+      STX   VGC_P0
+      LDA   #VCMD_COPPERLIST
+      STA   VGC_CMD
+      LDA   #$00
+      RTS
+@c_list_end:
+      JSR   LAB_IGBY          ; consume END token
+      LDA   #VCMD_COPPEREND
+      STA   VGC_CMD
+      LDA   #$00
+      RTS
+
+; --- COPPER USE n ---
+@c_use:
+      LDX   #3
+      JSR   ext_skipx         ; USE
+      JSR   EXT_GTBY_VEC      ; list index → X
+      STX   VGC_P0
+      LDA   #VCMD_COPPERUSE
+      STA   VGC_CMD
+      LDA   #$00
+      RTS
+
+; --- COPPER ADD x, y, reg, value ---
+@c_add:
+      LDX   #3
+      JSR   ext_skipx         ; ADD
+      JSR   EXT_GTWRD_VEC     ; x (16-bit) → FAC1_3 (lo) / FAC1_2 (hi)
+      LDA   FAC1_3
+      STA   VGC_P0
+      LDA   FAC1_2
+      STA   VGC_P1
+      JSR   ext_comma         ; comma
+      JSR   EXT_GTBY_VEC      ; y (8-bit) → X
+      STX   VGC_P2
+      JSR   ext_comma         ; comma
+      ; parse register name
+      JSR   LAB_GBYT          ; peek
+      CMP   #'B'
+      BEQ   @c_bgcol
+      CMP   #TK_GMODE_VAL
+      BEQ   @c_mode
+      CMP   #'S'
+      BEQ   @c_s_dispatch
+      ; numeric register index fallback
+      JSR   EXT_GTBY_VEC      ; 8-bit expression → X
+      TXA
+      JMP   @c_store_idx
+
+@c_bgcol:
+      LDX   #5
+      JSR   ext_skipx         ; BGCOL
+      LDA   #$01
+      JMP   @c_store_idx
+
+@c_mode:
+      JSR   LAB_IGBY          ; consume MODE token
+      LDA   #$00
+      JMP   @c_store_idx
+
+@c_s_dispatch:
+      JSR   LAB_IGBY          ; consume S
+      JSR   LAB_GBYT          ; peek next: C=scroll, P=sprite
+      CMP   #'C'
+      BEQ   @c_scroll
+      CMP   #'P'
+      BEQ   @c_spr
+      JMP   EXT_SNERR_VEC
+
+@c_scroll:
+      LDX   #5
+      JSR   ext_skipx         ; CROLL
+      JSR   LAB_GBYT          ; peek X or Y
+      CMP   #'X'
+      BEQ   @c_scrollx
+      CMP   #'Y'
+      BEQ   @c_scrolly
+      JMP   EXT_SNERR_VEC
+
+@c_scrollx:
+      JSR   LAB_IGBY          ; consume X
+      LDA   #$05
+      JMP   @c_store_idx
+
+@c_scrolly:
+      JSR   LAB_IGBY          ; consume Y
+      LDA   #$06
+      JMP   @c_store_idx
+
+@c_store_idx:
+      STA   VGC_P3
+      LDA   #$00
+      STA   VGC_P4
+      JMP   @c_store_val
+
+      ; --- Sprite register names: SPR + field + (n) ---
+@c_spr:
+      JSR   LAB_IGBY          ; consume P
+      JSR   LAB_IGBY          ; consume R
+      JSR   LAB_GBYT          ; peek field start: X, Y, S, F, P
+      CMP   #'X'
+      BEQ   @cs_x
+      CMP   #'Y'
+      BEQ   @cs_y
+      CMP   #'S'
+      BEQ   @cs_shape
+      CMP   #'F'
+      BEQ   @cs_flags
+      CMP   #'P'
+      BEQ   @cs_pri
+      JMP   EXT_SNERR_VEC
+
+@cs_x:
+      JSR   LAB_IGBY          ; consume X
+      JSR   LAB_GBYT          ; peek H or (
+      CMP   #'H'
+      BEQ   @cs_xh
+      LDA   #$00
+      JMP   @c_spr_idx
+@cs_xh:
+      JSR   LAB_IGBY          ; consume H
+      LDA   #$01
+      JMP   @c_spr_idx
+
+@cs_y:
+      JSR   LAB_IGBY          ; consume Y
+      JSR   LAB_GBYT          ; peek H or (
+      CMP   #'H'
+      BEQ   @cs_yh
+      LDA   #$02
+      JMP   @c_spr_idx
+@cs_yh:
+      JSR   LAB_IGBY          ; consume H
+      LDA   #$03
+      JMP   @c_spr_idx
+
+@cs_shape:
+      LDX   #5
+      JSR   ext_skipx         ; SHAPE
+      LDA   #$04
+      JMP   @c_spr_idx
+
+@cs_flags:
+      LDX   #5
+      JSR   ext_skipx         ; FLAGS
+      LDA   #$05
+      JMP   @c_spr_idx
+
+@cs_pri:
+      LDX   #3
+      JSR   ext_skipx         ; PRI
+      LDA   #$06
+      ; fall through
+
+      ; A = field offset, parse (n) and compute $A040 + n*8 + A
+@c_spr_idx:
+      PHA                     ; save field offset
+      JSR   LAB_IGBY          ; consume '('
+      JSR   EXT_GTBY_VEC      ; sprite index → X
+      CPX   #$10
+      BCC   @cs_idx_ok
+      JMP   EXT_SNERR_VEC
+@cs_idx_ok:
+      JSR   LAB_IGBY          ; consume ')'
+      TXA                     ; A = sprite index
+      ASL                     ; *2
+      ASL                     ; *4
+      ASL                     ; *8
+      STA   VGC_P3            ; temp = n*8
+      PLA                     ; A = field offset
+      CLC
+      ADC   VGC_P3
+      ADC   #$40              ; +$40 (low byte of $A040)
+      STA   VGC_P3
+      LDA   #$A0              ; high byte of $A040
+      ADC   #$00              ; add carry
+      STA   VGC_P4
+
+@c_store_val:
+      JSR   ext_comma         ; comma
+      JSR   EXT_GTBY_VEC      ; value → X
+      STX   VGC_P5
+      LDA   #VCMD_COPPERADD
+      STA   VGC_CMD
+      LDA   #$00
+      RTS
+
+; --- Local helpers used only by EXT_COPPER ---
+
+; ext_skipx — skip X bytes of BASIC text (LAB_SKIPX equivalent)
+ext_skipx:
+      JSR   LAB_IGBY          ; advance + skip spaces
+      DEX
+      BNE   ext_skipx
+      RTS
+
+; ext_comma — consume comma (LAB_1C01 equivalent). Triggers syntax
+; error via EXT_SNERR_VEC if next non-space char isn't ','.
+ext_comma:
+      JSR   LAB_GBYT          ; peek (skips spaces)
+      CMP   #','
+      BNE   @no_comma
+      JSR   LAB_IGBY          ; consume comma
+      RTS
+@no_comma:
+      JMP   EXT_SNERR_VEC
 
 ; =====================================================================
 ; Reset handler — if RESET fires while extension ROM is active,

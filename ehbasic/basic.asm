@@ -594,9 +594,14 @@ VEC_SV            = VEC_LD+2  ; save vector
 ;Ibuffs            = IRQ_vec+$14
 EXT_vec           = VEC_SV+$16
                               ; extension ROM call trampoline in RAM ($0221)
-Ibuffs            = VEC_SV+$30
+                              ; Followed by EXT_RESET_CODE ($022E, 8 bytes) and
+                              ; the Extension→BASIC bridge trampolines:
+                              ;   EXT_GTBY  ($0236, 14 bytes) — parse byte expr
+                              ;   EXT_GTWRD ($0244, 14 bytes) — parse 16-bit expr
+                              ;   EXT_SNERR ($0252,  8 bytes) — syntax error
+Ibuffs            = VEC_SV+$54
                               ; start of input buffer after IRQ/NMI/ext code
-Ibuffe            = Ibuffs+$C4; end of input buffer (197 bytes, fills to $02FF)
+Ibuffe            = Ibuffs+$A0; end of input buffer (160 bytes, ends at $02FA)
 
 Ram_base          = $0300     ; start of user RAM (set as needed, should be page aligned)
 Ram_top           = $A000     ; end of contiguous BASIC RAM+1 (before MMIO window)
@@ -8916,6 +8921,8 @@ EXT_CMD_TLOAD   = $07          ; TLOAD tile file load
 EXT_CMD_HELP    = $08          ; HELP command
 EXT_CMD_DMAFILL = $09          ; DMAFILL epilogue (zero src, start, check)
 EXT_CMD_BLTFILL = $0A          ; BLITFILL epilogue (zero src, start, check)
+; EXT_CMD_XMCCMD ($0B) defined locally near LAB_XMCCMD callsite
+EXT_CMD_COPPER  = $0C          ; COPPER subcommand parser (full handler)
 FIO_CMD_CD      = $20              ; change directory
 FIO_CMD_MKDIR   = $21              ; make directory
 FIO_CMD_RMDIR   = $22              ; remove directory
@@ -10223,244 +10230,15 @@ LAB_MUSIC
 @m_seq_err
       JMP   LAB_FIO_ERRIO
 
-; perform COPPER subcommand
-; COPPER ADD x, y, reg, value
-; COPPER CLEAR | ON | OFF
+; perform COPPER subcommand — full handler relocated to extension ROM.
+; Saves ~390 bytes in BASIC ROM. EXT_COPPER in extension.s parses raw
+; BASIC text via (Bpntrl),Y and uses RAM bridges (EXT_GTBY, EXT_GTWRD,
+; EXT_SNERR) to reach BASIC's numeric expression evaluator and syntax
+; error path.
 
 LAB_COPPER
-      JSR   LAB_GBYT          ; peek next byte
-      CMP   #TK_CLEAR
-      BEQ   @c_clear
-      CMP   #TK_ON
-      BEQ   @c_on
-      CMP   #TK_OFF
-      BEQ   @c_off
-      CMP   #'A'
-      BEQ   @c_add
-      CMP   #TK_LIST
-      BEQ   @c_list
-      CMP   #'U'
-      BEQ   @c_use
-      JMP   LAB_15D9          ; syntax error
-
-; --- COPPER CLEAR ---
-@c_clear
-      JSR   LAB_IGBY          ; consume CLEAR token
-      LDA   #VCMD_COPPERCLR
-      STA   VGC_CMD
-      RTS
-
-; --- COPPER ON ---
-@c_on
-      JSR   LAB_IGBY          ; consume ON token
-      LDA   #VCMD_COPPERENA
-      STA   VGC_CMD
-      RTS
-
-; --- COPPER OFF ---
-@c_off
-      JSR   LAB_IGBY          ; consume OFF token
-      LDA   #VCMD_COPPERDIS
-      STA   VGC_CMD
-      RTS
-
-; --- COPPER LIST n / COPPER LIST END ---
-@c_list
-      JSR   LAB_IGBY          ; consume LIST token
-      JSR   LAB_GBYT          ; peek next
-      CMP   #TK_END
-      BEQ   @c_list_end
-      ; LIST n — parse list index
-      JSR   LAB_GTBY          ; 8-bit → X
-      STX   VGC_P0             ; list index
-      LDA   #VCMD_COPPERLIST
-      STA   VGC_CMD
-      RTS
-
-@c_list_end
-      JSR   LAB_IGBY          ; consume END token
-      LDA   #VCMD_COPPEREND
-      STA   VGC_CMD
-      RTS
-
-; --- COPPER USE n ---
-@c_use
-      LDX   #3
-      JSR   LAB_SKIPX          ; USE
-      JSR   LAB_GTBY          ; list index → X
-      STX   VGC_P0
-      LDA   #VCMD_COPPERUSE
-      STA   VGC_CMD
-      RTS
-
-; --- COPPER ADD x, y, reg, value ---
-@c_add
-      LDX   #3
-      JSR   LAB_SKIPX          ; ADD
-      JSR   LAB_GTWRD         ; x (16-bit) → FAC1_3(lo), FAC1_2(hi)
-      LDA   FAC1_3
-      STA   VGC_P0             ; x low
-      LDA   FAC1_2
-      STA   VGC_P1             ; x high
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y (8-bit) → X
-      STX   VGC_P2             ; y
-      JSR   LAB_1C01          ; comma
-      ; parse register name: BGCOL, MODE, SCROLLX, SCROLLY,
-      ; SPRX(n), SPRXH(n), SPRY(n), SPRYH(n), SPRSHAPE(n), SPRFLAGS(n), SPRPRI(n)
-      JSR   LAB_GBYT          ; peek
-      CMP   #'B'
-      BEQ   @c_bgcol
-      CMP   #TK_GMODE
-      BEQ   @c_mode
-      CMP   #'S'
-      BEQ   @c_s_dispatch
-      ; numeric register index fallback
-      JSR   LAB_GTBY          ; evaluate 8-bit expression → X
-      TXA
-      JMP   @c_store_idx
-
-@c_bgcol
-      LDX   #5
-      JSR   LAB_SKIPX          ; BGCOL
-      LDA   #$01              ; reg index 1 = BGCOL
-      JMP   @c_store_idx
-
-@c_mode
-      JSR   LAB_IGBY          ; consume MODE token
-      LDA   #$00              ; reg index 0 = MODE
-      JMP   @c_store_idx
-
-@c_s_dispatch
-      JSR   LAB_IGBY          ; consume S
-      JSR   LAB_GBYT          ; peek next: C=scroll, P=sprite
-      CMP   #'C'
-      BEQ   @c_scroll
-      CMP   #'P'
-      BEQ   @c_spr
-      JMP   LAB_15D9          ; syntax error
-
-@c_scroll
-      LDX   #5
-      JSR   LAB_SKIPX          ; CROLL
-      JSR   LAB_GBYT          ; peek X or Y
-      CMP   #'X'
-      BEQ   @c_scrollx
-      CMP   #'Y'
-      BEQ   @c_scrolly
-      JMP   LAB_15D9          ; syntax error
-
-@c_scrollx
-      JSR   LAB_IGBY          ; consume X
-      LDA   #$05              ; reg index 5 = SCROLLX
-      JMP   @c_store_idx
-
-@c_scrolly
-      JSR   LAB_IGBY          ; consume Y
-      LDA   #$06              ; reg index 6 = SCROLLY
-      JMP   @c_store_idx
-
-@c_store_idx
-      STA   VGC_P3             ; register index (low byte)
-      LDA   #$00
-      STA   VGC_P4             ; high byte = 0
-      JMP   @c_store_val
-
-      ; --- Sprite register names: SPR + field + (n) ---
-      ; SPRX(n)=$A040+n*8+0, SPRXH(n)=+1, SPRY(n)=+2, SPRYH(n)=+3,
-      ; SPRSHAPE(n)=+4, SPRFLAGS(n)=+5, SPRPRI(n)=+6
-@c_spr
-      JSR   LAB_IGBY          ; consume P
-      JSR   LAB_IGBY          ; consume R
-      JSR   LAB_GBYT          ; peek field start: X, Y, S, F, P
-      CMP   #'X'
-      BEQ   @cs_x
-      CMP   #'Y'
-      BEQ   @cs_y
-      CMP   #'S'
-      BEQ   @cs_shape
-      CMP   #'F'
-      BEQ   @cs_flags
-      CMP   #'P'
-      BEQ   @cs_pri
-      JMP   LAB_15D9          ; syntax error
-
-@cs_x
-      JSR   LAB_IGBY          ; consume X
-      JSR   LAB_GBYT          ; peek: H or (
-      CMP   #'H'
-      BEQ   @cs_xh
-      LDA   #$00              ; field offset 0 = X low
-      JMP   @c_spr_idx
-
-@cs_xh
-      JSR   LAB_IGBY          ; consume H
-      LDA   #$01              ; field offset 1 = X high
-      JMP   @c_spr_idx
-
-@cs_y
-      JSR   LAB_IGBY          ; consume Y
-      JSR   LAB_GBYT          ; peek: H or (
-      CMP   #'H'
-      BEQ   @cs_yh
-      LDA   #$02              ; field offset 2 = Y low
-      JMP   @c_spr_idx
-
-@cs_yh
-      JSR   LAB_IGBY          ; consume H
-      LDA   #$03              ; field offset 3 = Y high
-      JMP   @c_spr_idx
-
-@cs_shape
-      LDX   #5
-      JSR   LAB_SKIPX          ; SHAPE
-      LDA   #$04              ; field offset 4 = Shape
-      JMP   @c_spr_idx
-
-@cs_flags
-      LDX   #5
-      JSR   LAB_SKIPX          ; FLAGS
-      LDA   #$05              ; field offset 5 = Flags
-      JMP   @c_spr_idx
-
-@cs_pri
-      LDX   #3
-      JSR   LAB_SKIPX          ; PRI
-      LDA   #$06              ; field offset 6 = Priority
-      ; fall through to @c_spr_idx
-
-      ; A = field offset, now parse (n) and compute address $A040 + n*8 + A
-@c_spr_idx
-      PHA                     ; save field offset
-      JSR   LAB_IGBY          ; consume '('
-      JSR   LAB_GTBY          ; sprite index (0-15) → X
-      CPX   #$10
-      BCC   @cs_idx_ok
-      JMP   LAB_15D9          ; syntax error if n > 15
-@cs_idx_ok
-      JSR   LAB_IGBY          ; consume ')'
-      ; compute address: $A040 + X*8 + field
-      TXA                     ; A = sprite index
-      ASL                     ; *2
-      ASL                     ; *4
-      ASL                     ; *8
-      STA   VGC_P3             ; temp = n*8
-      PLA                     ; A = field offset
-      CLC
-      ADC   VGC_P3             ; A = n*8 + field
-      ADC   #$40              ; A = n*8 + field + $40 (low byte of $A040)
-      STA   VGC_P3             ; P3 = address low byte
-      LDA   #$A0              ; high byte of $A040
-      ADC   #$00              ; add carry if low byte wrapped
-      STA   VGC_P4             ; P4 = address high byte
-
-@c_store_val
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; value (8-bit) → X
-      STX   VGC_P5             ; value
-      LDA   #VCMD_COPPERADD
-      STA   VGC_CMD            ; trigger
-      RTS
+      LDA   #EXT_CMD_COPPER
+      JMP   EXT_vec
 
 ; perform RESET — full system reset (VGC, SID, music) + cold start BASIC
 

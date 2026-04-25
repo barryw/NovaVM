@@ -73,5 +73,171 @@ suites {
       run()
       assert(peekbyte($0100) == $AA, "ON/OFF cycling ran without error")
     }
+
+    ; --- Coverage tests for LAB_COPPER subcommand parser ---
+    ; These exercise every branch of the parser before relocation
+    ; to extension ROM. If any sub-keyword or register-name dispatch
+    ; breaks during the refactor, the corresponding test halts with
+    ; a syntax error before reaching the $AA sentinel.
+
+    test("copper-list-n", "COPPER LIST n parses and accepts list index") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERLIST 0")
+      basic("30 COPPERADD 0,10,1,3")
+      basic("40 COPPERLIST 1")
+      basic("50 COPPERADD 0,20,1,4")
+      basic("60 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER LIST n parsed for two list indices")
+    }
+
+    test("copper-list-end", "COPPER LIST END finalizes current list") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERLIST 0")
+      basic("30 COPPERADD 0,10,1,3")
+      basic("40 COPPERLIST END")
+      basic("50 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER LIST END parsed without error")
+    }
+
+    test("copper-use-n", "COPPER USE n activates list n") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERLIST 0")
+      basic("30 COPPERADD 0,10,1,5")
+      basic("40 COPPERLIST END")
+      basic("50 COPPERUSE 0")
+      basic("60 COPPERON")
+      basic("70 FOR I=1 TO 200:NEXT")
+      basic("80 COPPEROFF")
+      basic("90 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER USE n parsed and activated list")
+    }
+
+    test("copper-add-mode", "COPPER ADD with MODE register name") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,0,MODE,1")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD MODE accepted")
+    }
+
+    test("copper-add-bgcol", "COPPER ADD with BGCOL register name") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,50,BGCOL,7")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD BGCOL accepted")
+    }
+
+    test("copper-add-scrollx", "COPPER ADD with SCROLLX register name") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,100,SCROLLX,8")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SCROLLX accepted")
+    }
+
+    test("copper-add-scrolly", "COPPER ADD with SCROLLY register name") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,100,SCROLLY,12")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SCROLLY accepted")
+    }
+
+    test("copper-add-sprx", "COPPER ADD with SPRX(n) — sprite X low") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,30,SPRX(0),120")
+      basic("30 COPPERADD 0,30,SPRX(15),200")
+      basic("40 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SPRX(n) parsed for sprite 0 and 15")
+    }
+
+    test("copper-add-sprxh", "COPPER ADD with SPRXH(n) — sprite X high") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,30,SPRXH(3),1")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SPRXH(n) parsed")
+    }
+
+    test("copper-add-spry", "COPPER ADD with SPRY(n) — sprite Y low") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,30,SPRY(2),100")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SPRY(n) parsed")
+    }
+
+    test("copper-add-spryh", "COPPER ADD with SPRYH(n) — sprite Y high") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,30,SPRYH(2),1")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SPRYH(n) parsed")
+    }
+
+    test("copper-add-sprshape", "COPPER ADD with SPRSHAPE(n)") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,30,SPRSHAPE(4),5")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SPRSHAPE(n) parsed")
+    }
+
+    test("copper-add-sprflags", "COPPER ADD with SPRFLAGS(n)") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,30,SPRFLAGS(7),3")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SPRFLAGS(n) parsed")
+    }
+
+    test("copper-add-sprpri", "COPPER ADD with SPRPRI(n)") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,30,SPRPRI(8),1")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD SPRPRI(n) parsed")
+    }
+
+    test("copper-add-numeric-reg", "COPPER ADD with numeric register index fallback") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 0,40,42,99")
+      basic("30 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD numeric reg index accepted")
+    }
+
+    test("copper-add-x-16bit", "COPPER ADD x argument is 16-bit") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERADD 300,50,1,4")
+      basic("30 COPPERADD 1023,200,1,5")
+      basic("40 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "COPPER ADD parsed 16-bit x values >255")
+    }
+
+    test("copper-mixed-subcommands", "Full subcommand sequence in one program") {
+      basic("10 POKE $0100,$FF")
+      basic("20 COPPERCLEAR")
+      basic("30 COPPERLIST 0")
+      basic("40 COPPERADD 0,10,MODE,1")
+      basic("50 COPPERADD 0,30,BGCOL,3")
+      basic("60 COPPERADD 0,60,SCROLLX,4")
+      basic("70 COPPERADD 0,90,SCROLLY,5")
+      basic("80 COPPERADD 0,120,SPRX(0),100")
+      basic("90 COPPERLIST END")
+      basic("100 COPPERUSE 0")
+      basic("110 COPPERON")
+      basic("120 FOR I=1 TO 200:NEXT")
+      basic("130 COPPEROFF")
+      basic("140 POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "full subcommand sequence parsed and executed")
+    }
   }
 }
