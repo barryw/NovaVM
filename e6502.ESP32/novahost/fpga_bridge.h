@@ -63,6 +63,16 @@ public:
     // entire sequence so sid_curve_reader doesn't race the writes.
     bool pokeSdramBlock(uint32_t addr, const uint8_t* data, uint16_t count);
 
+    // Block-write up to 256 bytes into CPU RAM. count=0 means 256.
+    // Used by FIO LOAD to push file payload from SD into CPU RAM.
+    // CPU is NOT held in reset — writes interleave with CPU activity
+    // via the existing dbg_poke path.
+    bool pokeBlock(uint16_t addr, const uint8_t* data, uint16_t count);
+
+    // Bulk-load an arbitrary region of CPU RAM via 256-byte blocks.
+    // Returns false on any block failure. Wraps pokeBlock.
+    bool loadRam(uint16_t base_addr, const uint8_t* data, size_t len);
+
     // Bulk-load an arbitrary region of SDRAM via 256-byte blocks.
     bool loadSdram(uint32_t base_addr, const uint8_t* data, size_t len);
 

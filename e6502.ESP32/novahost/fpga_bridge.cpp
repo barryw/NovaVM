@@ -18,6 +18,7 @@
 #define CMD_RESET_REL   0x0C
 #define CMD_POKE_ROM_BLK 0x0D
 #define CMD_POKE_SDRAM_BLK 0x0E
+#define CMD_POKE_BLOCK   0x0F
 
 // =========================================================================
 // Low-level serial helpers
@@ -204,6 +205,31 @@ bool FpgaBridge::loadSdram(uint32_t base_addr, const uint8_t* data, size_t len) 
         size_t chunk = (len - off >= BLOCK) ? BLOCK : (len - off);
         uint16_t wire_count = (chunk == 256) ? 0 : (uint16_t)chunk;
         if (!pokeSdramBlock(base_addr + off, data + off, wire_count))
+            return false;
+    }
+    return true;
+}
+
+bool FpgaBridge::pokeBlock(uint16_t addr, const uint8_t* data, uint16_t count) {
+    if (count > 256) return false;
+    drain();
+    uint8_t header[4] = {
+        CMD_POKE_BLOCK,
+        (uint8_t)(addr >> 8),
+        (uint8_t)(addr & 0xFF),
+        (uint8_t)(count & 0xFF)            // 256 encodes as 0
+    };
+    _serial.write(header, 4);
+    _serial.write(data, (count == 0) ? 256 : count);
+    return recvStatus();
+}
+
+bool FpgaBridge::loadRam(uint16_t base_addr, const uint8_t* data, size_t len) {
+    const size_t BLOCK = 256;
+    for (size_t off = 0; off < len; off += BLOCK) {
+        size_t chunk = (len - off >= BLOCK) ? BLOCK : (len - off);
+        uint16_t wire_count = (chunk == 256) ? 0 : (uint16_t)chunk;
+        if (!pokeBlock((uint16_t)(base_addr + off), data + off, wire_count))
             return false;
     }
     return true;

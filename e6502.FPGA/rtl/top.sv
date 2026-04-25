@@ -75,7 +75,12 @@ module top (
     output logic [7:0]  sdram_dinB,
     output logic        sdram_weB,
     output logic        sdram_oeB,
-    input  logic [7:0]  sdram_doutB
+    input  logic [7:0]  sdram_doutB,
+
+    // File I/O event — pulses one clock when the CPU writes a non-zero
+    // value to FioCmd ($B9A0). fpga_top.sv routes this to the debug
+    // bridge, which emits an async EVENT_FIO to the ESP32.
+    output logic        fio_event
 );
 
     localparam ROM_BASE  = 16'hC000;
@@ -239,6 +244,7 @@ module top (
     wire cpu_in_rom = (mem_addr >= ROM_BASE);
     wire dma_reg_sel = (mem_addr >= 16'hBA63 && mem_addr <= 16'hBA75);
     wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B);
+    wire fio_reg_sel = (mem_addr >= 16'hB9A0 && mem_addr <= 16'hB9EF);
     wire sid1_reg_sel = (mem_addr >= SID1_BASE && mem_addr <= SID1_END);
     wire sid2_reg_sel = (mem_addr >= SID2_BASE && mem_addr <= SID2_END);
     wire sid_cfg_sel  = (mem_addr == SID_CFG);
@@ -249,6 +255,7 @@ module top (
     logic r_dma_reg_sel, r_blt_reg_sel, r_sid1_reg_sel, r_sid2_reg_sel, r_sid_cfg_sel;
     logic r_cpu_in_rom, r_ext_rom_active;
     logic r_vgc_read_sel;
+    logic r_fio_reg_sel;
     logic [5:0] r_xmc_reg_off;
 
     // Register decode signals every cycle — they align with dpram outputs
@@ -265,6 +272,7 @@ module top (
         r_cpu_in_rom      <= cpu_in_rom;
         r_ext_rom_active  <= ext_rom_active;
         r_vgc_read_sel    <= vgc_read_sel;
+        r_fio_reg_sel     <= fio_reg_sel;
         r_xmc_reg_off     <= xmc_reg_off;
     end
 
@@ -389,6 +397,38 @@ module top (
         if (cpu_ce)
             r_vgc_cpu_rdata <= vgc_cpu_rdata;
 
+    // ==========================================================================
+    // File I/O register bank ($B9A0-$B9EF). CPU writes captured here;
+    // fio_event pulses on CPU write of non-zero to $B9A0 (FioCmd).
+    // Debug-bridge pokes to this range land in fio.sv via dbg_poke
+    // (different offset calculation), NOT in main RAM.
+    // ==========================================================================
+    wire [7:0] fio_cpu_rdata;
+    wire       dbg_poke_fio = dbg_poke_en &&
+                              (dbg_poke_addr >= 16'hB9A0) &&
+                              (dbg_poke_addr <= 16'hB9EF);
+
+    fio fio_inst (
+        .clk       (clk),
+        .rst       (rst),
+        .cpu_ce    (cpu_ce),
+        .cpu_addr  (cpu_addr),
+        .cpu_wdata (cpu_dout),
+        .cpu_we    (cpu_we),
+        .cpu_rdata (fio_cpu_rdata),
+        .dbg_we    (dbg_poke_fio),
+        .dbg_addr  (dbg_poke_addr[6:0] - 7'h20),   // $B9A0[6:0]=$20
+        .dbg_wdata (dbg_poke_data),
+        .fio_event (fio_event)
+    );
+
+    // Registered FIO read data. Same cpu_ce gating as the other
+    // combinational MMIO reads.
+    logic [7:0] r_fio_cpu_rdata;
+    always_ff @(posedge clk)
+        if (cpu_ce)
+            r_fio_cpu_rdata <= fio_cpu_rdata;
+
     // Bus-master register reads share one slot in the cpu_din mux chain so
     // DMA doesn't add a LUT level to the already-long ram_a_dout path.
     // DMA ($BA63-$BA75) and blitter ($BA83-$BA9B) disjoint, so the sub-mux
@@ -431,8 +471,9 @@ module top (
     // is $A2 = LDX #$00, part of LAB_1F7C (array-index multiply). An
     // interception would replace a live instruction with the config
     // register's stored byte. Fall through to ROM for all SID addresses.
-    wire [7:0] io_group_data = r_vgc_cpu_rdata;
-    wire io_group_sel        = r_vgc_read_sel;
+    wire [7:0] io_group_data = r_fio_reg_sel ? r_fio_cpu_rdata
+                                              : r_vgc_cpu_rdata;
+    wire io_group_sel        = r_vgc_read_sel | r_fio_reg_sel;
 
     // Group C — ROM (active bank) + main RAM (default fallback).
     wire [7:0] mem_group_data =

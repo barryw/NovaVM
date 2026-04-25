@@ -7,6 +7,17 @@ if (args.Length < 1)
     return 1;
 }
 
+// Strip a leading --remote=<host> global flag if present. Remote verbs
+// (ls/put/get/rm) talk to NovaHost's HTTP file server; other verbs
+// remain local for now.
+string? remoteHost = null;
+if (args.Length > 0 && args[0].StartsWith("--remote=", StringComparison.Ordinal))
+{
+    remoteHost = args[0]["--remote=".Length..];
+    args = args[1..];
+    if (args.Length < 1) { PrintUsage(); return 1; }
+}
+
 string verb = args[0].ToLowerInvariant();
 return verb switch
 {
@@ -22,8 +33,180 @@ return verb switch
     "rmdir"      => DoRmdir(args[1..]),
     "tokenize"   => DoTokenize(args[1..]),
     "detokenize" => DoDetokenize(args[1..]),
+    "ls"         => DoLs(args[1..], remoteHost),
+    "put"        => DoPut(args[1..], remoteHost),
+    "get"        => DoGet(args[1..], remoteHost),
+    "rm"         => DoRm(args[1..], remoteHost),
     _            => UnknownVerb(verb),
 };
+
+// ===========================================================================
+// Remote SD operations — talks to NovaHost's HTTP file server (port 80).
+// Default endpoint base is http://<host>/sd/.
+// ===========================================================================
+
+static int DoLs(string[] args, string? host)
+{
+    if (host is null) {
+        Console.Error.WriteLine("Usage: ndi --remote=<host> ls [path]");
+        return 1;
+    }
+    string subdir = (args.Length > 0) ? args[0] : "";
+    if (subdir.Length > 0 && !subdir.EndsWith('/')) subdir += "/";
+    string url = $"http://{host}/sd/{subdir}";
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    try {
+        var resp = http.GetAsync(url).GetAwaiter().GetResult();
+        if (!resp.IsSuccessStatusCode) {
+            Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            return 1;
+        }
+        string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        // Body is a JSON array of {name,size,dir}. Print a simple table
+        // without pulling in System.Text.Json — naive split is fine for
+        // the simple shape NovaHost emits.
+        Console.WriteLine($"Listing of /sd/{subdir} on {host}:");
+        Console.WriteLine();
+        Console.WriteLine("  Name                              Size      Type");
+        Console.WriteLine("  --------------------------------  --------  ----");
+        foreach (var entry in ParseJsonArray(body)) {
+            string name = entry.GetValueOrDefault("name") ?? "?";
+            string size = entry.GetValueOrDefault("size") ?? "0";
+            bool isDir = (entry.GetValueOrDefault("dir") ?? "false") == "true";
+            string sizeStr = isDir ? "<DIR>" : size;
+            string typeStr = isDir ? "DIR" : "FILE";
+            Console.WriteLine($"  {name,-32}  {sizeStr,8}  {typeStr}");
+        }
+        return 0;
+    } catch (Exception ex) {
+        Console.Error.WriteLine($"ls: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoPut(string[] args, string? host)
+{
+    if (host is null || args.Length < 1) {
+        Console.Error.WriteLine("Usage: ndi --remote=<host> put <local-path> [remote-path]");
+        return 1;
+    }
+    string local  = args[0];
+    string remote = (args.Length > 1) ? args[1] : Path.GetFileName(local);
+    if (!File.Exists(local)) {
+        Console.Error.WriteLine($"local file not found: {local}");
+        return 1;
+    }
+    string url = $"http://{host}/sd/{remote}";
+    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+    try {
+        using var fs = new FileStream(local, FileMode.Open, FileAccess.Read);
+        var content = new StreamContent(fs);
+        var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
+        if (!resp.IsSuccessStatusCode) {
+            Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            return 1;
+        }
+        var info = new FileInfo(local);
+        Console.WriteLine($"PUT {local} → {url} ({info.Length} bytes) OK");
+        return 0;
+    } catch (Exception ex) {
+        Console.Error.WriteLine($"put: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoGet(string[] args, string? host)
+{
+    if (host is null || args.Length < 1) {
+        Console.Error.WriteLine("Usage: ndi --remote=<host> get <remote-path> [local-path]");
+        return 1;
+    }
+    string remote = args[0];
+    string local  = (args.Length > 1) ? args[1] : Path.GetFileName(remote);
+    string url = $"http://{host}/sd/{remote}";
+    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+    try {
+        using var resp = http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
+                              .GetAwaiter().GetResult();
+        if (!resp.IsSuccessStatusCode) {
+            Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            return 1;
+        }
+        using var src = resp.Content.ReadAsStream();
+        using var fs  = new FileStream(local, FileMode.Create, FileAccess.Write);
+        src.CopyTo(fs);
+        Console.WriteLine($"GET {url} → {local} ({fs.Length} bytes) OK");
+        return 0;
+    } catch (Exception ex) {
+        Console.Error.WriteLine($"get: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoRm(string[] args, string? host)
+{
+    if (host is null || args.Length < 1) {
+        Console.Error.WriteLine("Usage: ndi --remote=<host> rm <remote-path>");
+        return 1;
+    }
+    string url = $"http://{host}/sd/{args[0]}";
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    try {
+        var resp = http.DeleteAsync(url).GetAwaiter().GetResult();
+        if (!resp.IsSuccessStatusCode) {
+            Console.Error.WriteLine($"DELETE {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            return 1;
+        }
+        Console.WriteLine($"DELETE {url} OK");
+        return 0;
+    } catch (Exception ex) {
+        Console.Error.WriteLine($"rm: {ex.Message}");
+        return 1;
+    }
+}
+
+// Tiny ad-hoc JSON parser for the array-of-flat-objects we get from
+// NovaHost's listing endpoint. Avoids adding a System.Text.Json dep.
+static IEnumerable<Dictionary<string, string>> ParseJsonArray(string json)
+{
+    int i = 0;
+    while (i < json.Length && json[i] != '[') i++;
+    i++;
+    while (i < json.Length) {
+        while (i < json.Length && (json[i] == ',' || char.IsWhiteSpace(json[i]))) i++;
+        if (i >= json.Length || json[i] == ']') yield break;
+        if (json[i] != '{') yield break;
+        i++;
+        var dict = new Dictionary<string, string>();
+        while (i < json.Length && json[i] != '}') {
+            // skip whitespace, comma
+            while (i < json.Length && (json[i] == ',' || char.IsWhiteSpace(json[i]))) i++;
+            if (json[i] != '"') break;
+            i++;
+            int keyStart = i;
+            while (i < json.Length && json[i] != '"') i++;
+            string key = json.Substring(keyStart, i - keyStart);
+            i++; // closing quote
+            while (i < json.Length && (json[i] == ':' || char.IsWhiteSpace(json[i]))) i++;
+            string val;
+            if (json[i] == '"') {
+                i++;
+                int vs = i;
+                while (i < json.Length && json[i] != '"') i++;
+                val = json.Substring(vs, i - vs);
+                i++;
+            } else {
+                int vs = i;
+                while (i < json.Length && json[i] != ',' && json[i] != '}'
+                       && !char.IsWhiteSpace(json[i])) i++;
+                val = json.Substring(vs, i - vs);
+            }
+            dict[key] = val;
+        }
+        if (i < json.Length && json[i] == '}') i++;
+        yield return dict;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // create <file.ndi> [--size <KB>] [--label <name>]

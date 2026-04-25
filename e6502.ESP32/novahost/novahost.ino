@@ -11,8 +11,13 @@
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 #include <HardwareSerial.h>
+#include <SD_MMC.h>
 #include "fpga_bridge.h"
 #include "debug_server.h"
+#include "device_manager.h"
+#include "fio_event_reader.h"
+#include "fio_dispatcher.h"
+#include "sd_http_server.h"
 // Embedded EhBASIC + extension ROM binaries — auto-generated from
 // ehbasic/basic.bin and ehbasic/extension.bin by tools/bin2header.py.
 // NovaHost streams these into FPGA BRAM at boot, so ROM iteration costs
@@ -87,6 +92,12 @@ void logLn(const char* fmt, ...) {
 bool wifi_connected = false;
 FpgaBridge fpgaBridge(FPGA_SERIAL);
 DebugServer debugServer(fpgaBridge);
+
+// File I/O subsystem — SD card, mount manager, dispatcher, event reader.
+DeviceManager   deviceManager;
+FioDispatcher   fioDispatcher(fpgaBridge, deviceManager);
+FioEventReader  fioEventReader(FPGA_SERIAL);
+SdHttpServer    sdHttpServer(deviceManager);
 
 // =========================================================================
 // WiFi setup
@@ -272,8 +283,39 @@ void setup() {
     // failure and we continue — OTA still works via WiFi for recovery.
     loadRomsToFPGA();
 
+    // SD card + file I/O subsystem.
+    // ULX3S wires SD to ESP32 GPIO 14/15/2/4/12/13 in 4-bit SDIO mode.
+    // SD_MMC.begin defaults to mountpoint "/sdcard" but we don't use VFS
+    // paths — the library's own File API works regardless.
+    // 3rd arg (format_if_mount_failed=true) auto-formats the card as
+    // FAT32 if the current filesystem isn't recognized — catches the
+    // common "brand-new 128GB card shipped as exFAT" case. ESP-IDF's
+    // esp_vfs_fat_sdmmc_mount does the actual formatting under the hood.
+    if (!SD_MMC.begin("/sdcard", false, true)) {
+        logLn("SD card mount FAILED — file I/O disabled");
+    } else {
+        logLn("SD card OK (type=%d, size=%llu MB)",
+              (int)SD_MMC.cardType(),
+              (unsigned long long)(SD_MMC.cardSize() / (1024ULL * 1024ULL)));
+        int hd_count = deviceManager.auto_mount_hds();
+        logLn("Auto-mounted %d hd*.ndi disk image(s)", hd_count);
+    }
+
+    // Wire the FIO event reader → dispatcher trampoline. Whenever the
+    // FPGA emits 0xFE 0xE0 on the bridge, the reader fires the
+    // dispatcher to drain registers + execute the file op.
+    fioEventReader.onEvent(FioDispatcher::onFioEventStatic, &fioDispatcher);
+
     // WiFi + servers
     setupWiFi();
+
+    // SD HTTP file server — must come AFTER setupWiFi() since the
+    // AsyncWebServer needs the WiFi stack live.
+    if (wifi_connected) {
+        sdHttpServer.begin();
+        logLn("SD HTTP server ready: http://%s/sd/",
+              WiFi.localIP().toString().c_str());
+    }
 
     logLn("NovaHost ready.");
 }
@@ -282,6 +324,11 @@ void setup() {
 // Main loop
 // =========================================================================
 void loop() {
+    // Drain async FIO events from the FPGA before anything else.
+    // poll() consumes serial bytes, dispatches 0xFE 0xE0 sequences to
+    // the FioDispatcher, and drops anything else with a log.
+    fioEventReader.poll();
+
     // Accept new log viewer connections
     if (wifi_connected) {
         ArduinoOTA.handle();

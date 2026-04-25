@@ -21,7 +21,7 @@ SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.s
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv \
         $(RTL)/sid/sid_curve_reader.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_sid test_sid_per_reg_readback test_rom_load test_debug_bridge test_debug_peek test_key_inject test_rom_over_sid test_vgc_frame_counter test_vgc_scroll_wrap test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_bridge test_debug_peek test_key_inject test_rom_over_sid test_vgc_frame_counter test_vgc_scroll_wrap test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -77,6 +77,71 @@ test_sid: test_sid.sv $(SID)
 test_sid_per_reg_readback: test_sid_per_reg_readback.sv $(SID)
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) $< && $(RUN) test/$(BD)/$@/$@
 
+# ADSR rate-timing test. Gates voice 3 on/off and samples env3 at $1C
+# across three attack rates and two release rates.
+test_sid_adsr: test_sid_adsr.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_adsr.sv && $(RUN) test/$(BD)/$@/$@
+
+# Waveform correctness test. Samples $1B (OSC3 readback) across triangle,
+# sawtooth, pulse (50/25/75% duty) and noise. Verifies periodicity,
+# distinct-sample count, and duty tracking.
+test_sid_waveforms: test_sid_waveforms.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_waveforms.sv && $(RUN) test/$(BD)/$@/$@
+
+# Pulse-width exhaustive sweep. Writes values across the 12-bit PW
+# register ($02/$03) and verifies duty cycle tracks (4096-pw)/4096.
+test_sid_pulse: test_sid_pulse.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_pulse.sv && $(RUN) test/$(BD)/$@/$@
+
+# Oscillator sync test. V2 drives V3's sync; verify V3 period latches
+# to V2 when sync bit is set.
+test_sid_sync: test_sid_sync.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_sync.sv && $(RUN) test/$(BD)/$@/$@
+
+# Ring modulation test. Triangle waveform with ringmod bit; V3 ringmods
+# from V2. Verify waveform distortion increases markedly when ring is on.
+test_sid_ringmod: test_sid_ringmod.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_ringmod.sv && $(RUN) test/$(BD)/$@/$@
+
+# Combined waveforms test. Exercises tri+saw, pulse+tri, pulse+saw, and
+# triple-combined outputs in both 6581/8580 modes. Verifies non-trivial
+# output and mode-distinct table contents.
+test_sid_combined: test_sid_combined.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_combined.sv && $(RUN) test/$(BD)/$@/$@
+
+# Filter curve reader — stand-alone test with a mock SDRAM port B.
+# Verifies Fc-change detection, fetch latency, and round-robin between
+# SID1 and SID2.
+test_sid_curve: test_sid_curve.sv $(RTL)/sid/sid_curve_reader.sv
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/sid/sid_curve_reader.sv test_sid_curve.sv && $(RUN) test/$(BD)/$@/$@
+
+# Filter routing + resonance + mode test. Exercises $D417/$D418 bits
+# and verifies audio path through direct vs LP/BP/HP filter output.
+test_sid_filter: test_sid_filter.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_filter.sv && $(RUN) test/$(BD)/$@/$@
+
+# Per-voice volume extension test. Validates the NovaBASIC $1D/$1E/$1F
+# per-voice amplitude registers.
+test_sid_pervoice_vol: test_sid_pervoice_vol.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_pervoice_vol.sv && $(RUN) test/$(BD)/$@/$@
+
+# 6581 vs 8580 DAC distortion model test. Verifies mode pin switches
+# DC offset, envelope DAC path, and waveform DAC distortion.
+test_sid_model: test_sid_model.sv sid_tb.svh $(SID)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_model.sv && $(RUN) test/$(BD)/$@/$@
+
+# FIO register bank — 80-byte file at $B9A0-$B9EF with fio_event pulse
+# on CPU writes to FioCmd. Stand-alone module test.
+test_fio: test_fio.sv $(RTL)/fio.sv
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/fio.sv test_fio.sv && $(RUN) test/$(BD)/$@/$@
+
+# FIO integration in top.sv — proves fio.sv is wired correctly through
+# the io_group cpu_din mux, dbg_poke routing, and fio_event output.
+# Loads a tiny 6502 program that writes to $B9A0/$B9A1, counts
+# fio_event pulses, exercises debug-bridge poke/peek of the bank.
+test_fio_top: test_fio_top.sv $(ROM_LOAD_RTL)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
 # Debug-bridge protocol unit test — drives rx_valid/rx_data directly, verifies
 # CMD_POKE_ROM, CMD_POKE_ROM_BLK, CMD_RESET_HOLD/REL decode + outputs.
 test_debug_bridge: test_debug_bridge.sv $(RTL)/debug_bridge.sv
@@ -84,7 +149,7 @@ test_debug_bridge: test_debug_bridge.sv $(RTL)/debug_bridge.sv
 
 # End-to-end test: instantiates full top.sv (CPU + VGC + SID + blitter + RAM/ROM),
 # streams a tiny 6502 program into basic_rom via dbg_rom_we, verifies execution.
-ROM_LOAD_RTL = $(VGC) $(SID) $(RTL)/blitter.sv $(RTL)/dma.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv $(RTL)/sdram/sdram.v $(RTL)/sdram/xram_sdram.sv
+ROM_LOAD_RTL = $(VGC) $(SID) $(RTL)/blitter.sv $(RTL)/dma.sv $(RTL)/fio.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv $(RTL)/sdram/sdram.v $(RTL)/sdram/xram_sdram.sv
 test_rom_load: test_rom_load.sv $(ROM_LOAD_RTL)
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 

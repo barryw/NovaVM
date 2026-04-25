@@ -61,7 +61,13 @@ module debug_bridge (
     // while actively writing; top.sv muxes these against sid_curve_reader.
     output logic        sdram_b_we,
     output logic [24:0] sdram_b_addr,
-    output logic [7:0]  sdram_b_din
+    output logic [7:0]  sdram_b_din,
+
+    // File I/O event — pulses one clock when the CPU writes a non-zero
+    // value to FioCmd ($B9A0). Bridge latches the pulse and emits an
+    // async 2-byte EVENT_FIO sequence (0xFE 0xE0) to the ESP32 the
+    // next time it enters S_IDLE with no RX pending.
+    input  logic        fio_event
 );
 
     // =========================================================================
@@ -86,6 +92,20 @@ module debug_bridge (
                                          // means 256. Used to preload the 6581
                                          // filter curve at SDRAM byte offset $80_0000
                                          // during CPU reset-hold.
+    localparam CMD_POKE_BLOCK  = 8'h0F;  // [addr_hi, addr_lo, count, ...data]
+                                         // count=0 means 256. Streams data bytes
+                                         // into CPU RAM one byte per dbg_poke pulse.
+                                         // Used by FIO LOAD to deliver up to 64KB
+                                         // of file payload without per-byte CMD
+                                         // overhead.
+
+    // Async FPGA→ESP event marker bytes. Sent as a 2-byte sequence
+    // (EVENT_MARKER, EVENT_TYPE_FIO) when fio_event pulses. EVENT_MARKER
+    // (0xFE) is unused by the request/response protocol (which uses 0x00
+    // for status-OK and 0xFF for status-error), so the ESP's RX handler
+    // can dispatch on 0xFE in its idle path.
+    localparam EVENT_MARKER    = 8'hFE;
+    localparam EVENT_TYPE_FIO  = 8'hE0;
 
     // SDRAM port B write pulse width — matches sid_curve_reader's HOLD_CYCLES
     // budget for a full clkref 16:1 cycle plus CAS pipeline.
@@ -115,7 +135,12 @@ module debug_bridge (
         S_KEY_DONE,      // 13: key deassert cycle
         S_ROM_BULK_WRITE,// 14: stream incoming bytes into ROM
         S_SDRAM_RECV,    // 15: wait for next SDRAM data byte
-        S_SDRAM_HOLD     // 16: hold SDRAM we for SDRAM_HOLD cycles
+        S_SDRAM_HOLD,    // 16: hold SDRAM we for SDRAM_HOLD cycles
+        S_EVENT_TX_MARK, // 17: async event — transmit marker byte
+        S_EVENT_TX_MARK_WAIT,// 18: wait for marker TX to complete
+        S_EVENT_TX_TYPE, // 19: async event — transmit type byte
+        S_EVENT_TX_TYPE_WAIT,// 20: wait for type TX to complete
+        S_RAM_BULK_WRITE // 21: stream incoming bytes into CPU RAM
     } state_t;
 
     state_t state;
@@ -151,6 +176,18 @@ module debug_bridge (
     // SDRAM bulk-write state (port B)
     logic [24:0] sdram_bulk_addr;
     logic [3:0]  sdram_hold_cnt;
+
+    // Async FIO event latch — fio_event is a 1-clock pulse; stash it
+    // until we can send the 2-byte marker sequence to the ESP.
+    logic event_pending;
+
+    // 1-byte RX buffer — the UART RX module has no FIFO, so if an
+    // incoming byte arrives while the state machine is in a non-RX
+    // state (e.g. emitting an async event or waiting on TX), the pulse
+    // would be lost. Buffer any rx_valid pulse and present it to the
+    // state machine via rx_buf_valid until consumed.
+    logic        rx_buf_valid;
+    logic [7:0]  rx_buf_data;
 
     // Pause register
     logic paused;
@@ -237,12 +274,26 @@ module debug_bridge (
             sdram_b_din      <= 0;
             sdram_bulk_addr  <= 0;
             sdram_hold_cnt   <= 0;
+            event_pending    <= 0;
+            rx_buf_valid     <= 0;
+            rx_buf_data      <= 0;
         end else begin
             // Default: clear single-cycle pulses
             tx_start         <= 0;
             dbg_poke_en      <= 0;
             dbg_rom_we       <= 0;
             key_inject_valid <= 0;
+
+            // Latch any fio_event pulse — sticks until drained by the
+            // S_EVENT_TX_MARK path below.
+            if (fio_event) event_pending <= 1;
+
+            // RX buffer: latch any incoming byte if buffer is empty.
+            // Consumed by state machine via `rx_buf_valid <= 0`.
+            if (rx_valid && !rx_buf_valid) begin
+                rx_buf_valid <= 1;
+                rx_buf_data  <= rx_data;
+            end
 
             case (state)
 
@@ -251,11 +302,17 @@ module debug_bridge (
                 // ---------------------------------------------------------
                 S_IDLE: begin
                     dbg_peek_en <= 0;
-                    if (rx_valid) begin
-                        cmd        <= rx_data;
-                        recv_cnt   <= 0;
-                        status_err <= 0;
-                        case (rx_data)
+                    // Priority: service any buffered CMD byte first.
+                    // Event emission only runs when the RX buffer is
+                    // empty — otherwise a pending CMD would be starved.
+                    if (!rx_buf_valid && event_pending && !tx_busy) begin
+                        state <= S_EVENT_TX_MARK;
+                    end else if (rx_buf_valid) begin
+                        cmd          <= rx_buf_data;
+                        rx_buf_valid <= 0;           // consume
+                        recv_cnt     <= 0;
+                        status_err   <= 0;
+                        case (rx_buf_data)
                             CMD_PEEK:        begin recv_need <= 3'd2; state <= S_RECV; end
                             CMD_POKE:        begin recv_need <= 3'd3; state <= S_RECV; end
                             CMD_SEND_KEY:    begin recv_need <= 3'd1; state <= S_RECV; end
@@ -263,6 +320,7 @@ module debug_bridge (
                             CMD_POKE_ROM:    begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_ROM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_SDRAM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
+                            CMD_POKE_BLOCK:  begin recv_need <= 3'd3; state <= S_RECV; end
 
                             CMD_READ_SCREEN: begin
                                 bulk_addr      <= SCREEN_BASE;
@@ -328,12 +386,13 @@ module debug_bridge (
                 // RECV: collect parameter bytes
                 // ---------------------------------------------------------
                 S_RECV: begin
-                    if (rx_valid) begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid <= 0;           // consume
                         case (recv_cnt)
-                            3'd0: param0 <= rx_data;
-                            3'd1: param1 <= rx_data;
-                            3'd2: param2 <= rx_data;
-                            3'd3: param3 <= rx_data;
+                            3'd0: param0 <= rx_buf_data;
+                            3'd1: param1 <= rx_buf_data;
+                            3'd2: param2 <= rx_buf_data;
+                            3'd3: param3 <= rx_buf_data;
                             default: ;
                         endcase
                         recv_cnt <= recv_cnt + 1;
@@ -344,8 +403,8 @@ module debug_bridge (
                                 CMD_PEEK: begin
                                     // param0=addr_hi, param1 will be set this cycle
                                     // but registered value won't be available until
-                                    // next cycle. Use rx_data for addr_lo.
-                                    dbg_peek_addr <= {param0, rx_data};
+                                    // next cycle. Use rx_buf_data for addr_lo.
+                                    dbg_peek_addr <= {param0, rx_buf_data};
                                     dbg_peek_en   <= 1;
                                     wait_done     <= 0;
                                     state         <= S_PEEK_WAIT;
@@ -353,56 +412,57 @@ module debug_bridge (
 
                                 CMD_POKE: begin
                                     dbg_poke_addr <= {param0, param1};
-                                    dbg_poke_data <= rx_data;
+                                    dbg_poke_data <= rx_buf_data;
                                     dbg_poke_en   <= 1;
                                     state         <= S_POKE_DO;
                                 end
 
                                 CMD_SEND_KEY: begin
-                                    key_inject_data  <= rx_data;
+                                    key_inject_data  <= rx_buf_data;
                                     key_inject_valid <= 1;
                                     state            <= S_KEY_DO;
                                 end
 
                                 CMD_PEEK_BLOCK: begin
                                     bulk_addr      <= {param0, param1};
-                                    bulk_remaining <= (rx_data == 0) ? 11'd256 : {3'b0, rx_data};
+                                    bulk_remaining <= (rx_buf_data == 0) ? 11'd256
+                                                                         : {3'b0, rx_buf_data};
                                     resp_idx       <= 0;
                                     resp_total     <= 1;  // status, then bulk
                                     state          <= S_TX_BYTE;
                                 end
 
                                 CMD_POKE_ROM: begin
-                                    // Wire byte order (big-endian, matches
-                                    // CMD_POKE): [idx, addr_hi, addr_lo, data].
-                                    // param0=idx, param1=addr_hi, param2=addr_lo,
-                                    // rx_data=data (4th byte arriving this cycle).
                                     dbg_rom_idx  <= param0[0];
                                     dbg_rom_addr <= {param1[5:0], param2};
-                                    dbg_rom_data <= rx_data;
+                                    dbg_rom_data <= rx_buf_data;
                                     dbg_rom_we   <= 1;
                                     state        <= S_POKE_DONE;
                                 end
 
                                 CMD_POKE_ROM_BLK: begin
-                                    // param0=idx, param1=addr_hi, param2=addr_lo,
-                                    // rx_data=count (4th param, count=0 means 256).
-                                    // The data bytes follow in S_ROM_BULK_WRITE.
                                     dbg_rom_idx    <= param0[0];
                                     bulk_addr      <= {param1, param2};
-                                    bulk_remaining <= (rx_data == 0) ? 11'd256
-                                                                     : {3'b0, rx_data};
+                                    bulk_remaining <= (rx_buf_data == 0) ? 11'd256
+                                                                         : {3'b0, rx_buf_data};
                                     state          <= S_ROM_BULK_WRITE;
                                 end
 
                                 CMD_POKE_SDRAM_BLK: begin
-                                    // param0=addr_hi, param1=addr_mid, param2=addr_lo,
-                                    // rx_data=count (count=0 means 256). Data bytes
-                                    // stream in via S_SDRAM_RECV.
                                     sdram_bulk_addr <= {1'b0, param0, param1, param2};
-                                    bulk_remaining  <= (rx_data == 0) ? 11'd256
-                                                                      : {3'b0, rx_data};
+                                    bulk_remaining  <= (rx_buf_data == 0) ? 11'd256
+                                                                          : {3'b0, rx_buf_data};
                                     state           <= S_SDRAM_RECV;
+                                end
+
+                                CMD_POKE_BLOCK: begin
+                                    // param0=addr_hi, param1=addr_lo,
+                                    // rx_buf_data=count (=0 means 256).
+                                    // Data bytes stream in via S_RAM_BULK_WRITE.
+                                    bulk_addr      <= {param0, param1};
+                                    bulk_remaining <= (rx_buf_data == 0) ? 11'd256
+                                                                         : {3'b0, rx_buf_data};
+                                    state          <= S_RAM_BULK_WRITE;
                                 end
 
                                 default: begin
@@ -561,9 +621,10 @@ module debug_bridge (
                 // reaches zero, send a single status ack and return to IDLE.
                 // ---------------------------------------------------------
                 S_ROM_BULK_WRITE: begin
-                    if (rx_valid) begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid   <= 0;          // consume
                         dbg_rom_addr   <= bulk_addr[13:0];
-                        dbg_rom_data   <= rx_data;
+                        dbg_rom_data   <= rx_buf_data;
                         dbg_rom_we     <= 1;
                         bulk_addr      <= bulk_addr + 1;
                         bulk_remaining <= bulk_remaining - 1;
@@ -581,12 +642,36 @@ module debug_bridge (
                 // port B (addr + din + we=1), start hold counter.
                 // ---------------------------------------------------------
                 S_SDRAM_RECV: begin
-                    if (rx_valid) begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid   <= 0;          // consume
                         sdram_b_addr   <= sdram_bulk_addr;
-                        sdram_b_din    <= rx_data;
+                        sdram_b_din    <= rx_buf_data;
                         sdram_b_we     <= 1;
                         sdram_hold_cnt <= SDRAM_HOLD - 1;
                         state          <= S_SDRAM_HOLD;
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // RAM_BULK_WRITE: stream incoming bytes into CPU RAM via
+                // dbg_poke. One byte per RX → one dbg_poke pulse. Auto-
+                // increments the address. Used by FIO LOAD to push file
+                // payload from ESP into CPU RAM in 256-byte chunks.
+                // ---------------------------------------------------------
+                S_RAM_BULK_WRITE: begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid   <= 0;          // consume
+                        dbg_poke_addr  <= bulk_addr;
+                        dbg_poke_data  <= rx_buf_data;
+                        dbg_poke_en    <= 1;
+                        bulk_addr      <= bulk_addr + 1;
+                        bulk_remaining <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            // Last byte — schedule status ack.
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
+                        end
                     end
                 end
 
@@ -610,6 +695,45 @@ module debug_bridge (
                             state <= S_SDRAM_RECV;
                         end
                     end
+                end
+
+                // ---------------------------------------------------------
+                // EVENT_TX_MARK: TX the event marker byte (0xFE)
+                // ---------------------------------------------------------
+                S_EVENT_TX_MARK: begin
+                    if (!tx_busy) begin
+                        tx_data  <= EVENT_MARKER;
+                        tx_start <= 1;
+                        state    <= S_EVENT_TX_MARK_WAIT;
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // EVENT_TX_MARK_WAIT: wait for marker TX, then send type.
+                // ---------------------------------------------------------
+                S_EVENT_TX_MARK_WAIT: begin
+                    if (!tx_busy) state <= S_EVENT_TX_TYPE;
+                end
+
+                // ---------------------------------------------------------
+                // EVENT_TX_TYPE: TX the event type byte (0xE0 for FIO).
+                // Clearing event_pending here lets a new fio_event arrive
+                // during emission and queue up another notification.
+                // ---------------------------------------------------------
+                S_EVENT_TX_TYPE: begin
+                    if (!tx_busy) begin
+                        tx_data       <= EVENT_TYPE_FIO;
+                        tx_start      <= 1;
+                        event_pending <= 0;
+                        state         <= S_EVENT_TX_TYPE_WAIT;
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // EVENT_TX_TYPE_WAIT: wait for type TX, back to IDLE.
+                // ---------------------------------------------------------
+                S_EVENT_TX_TYPE_WAIT: begin
+                    if (!tx_busy) state <= S_IDLE;
                 end
 
                 default: state <= S_IDLE;

@@ -171,6 +171,10 @@ module fpga_top (
     wire [24:0] brg_sdram_b_addr;
     wire [7:0]  brg_sdram_b_din;
 
+    // File I/O event — pulsed by core's fio.sv on CPU write to $B9A0.
+    // Bridge latches it and emits an async EVENT_FIO sequence to the ESP.
+    wire        core_fio_event;
+
     debug_bridge dbg_bridge (
         .clk             (clk_pixel),
         .rst             (rst),
@@ -201,7 +205,8 @@ module fpga_top (
         .key_inject_data (brg_key_data),
         .sdram_b_we      (brg_sdram_b_we),
         .sdram_b_addr    (brg_sdram_b_addr),
-        .sdram_b_din     (brg_sdram_b_din)
+        .sdram_b_din     (brg_sdram_b_din),
+        .fio_event       (core_fio_event)
     );
 
     // Key input: debug bridge overrides UART keyboard
@@ -270,7 +275,9 @@ module fpga_top (
         .sdram_dinB (core_sdram_dinB),
         .sdram_weB  (core_sdram_weB),
         .sdram_oeB  (core_sdram_oeB),
-        .sdram_doutB(core_sdram_doutB)
+        .sdram_doutB(core_sdram_doutB),
+
+        .fio_event  (core_fio_event)
     );
 
     // SDRAM port A wires from core

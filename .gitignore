@@ -264,3 +264,7 @@ e6502.FPGA/e6502_sim_synth
 e6502.FPGA/test/build/
 e6502.FPGA/fpga/bit_backups/
 e6502.FPGA/fpga/.claude/
+
+# NovaHost host-side test binaries
+e6502.ESP32/novahost/test/test_ndi
+e6502.ESP32/novahost/test/*.dSYM/
