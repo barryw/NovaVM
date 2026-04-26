@@ -101,8 +101,9 @@ module artist (
     logic [16:0] push_neighbors [0:3];  // latched neighbors to push
 
     // Pipeline register for gfx_rdata — breaks critical timing path
-    // (BRAM output → paint address calc was ~19ns combinational)
-    logic [3:0] gfx_rdata;
+    // (BRAM output → paint address calc was ~19ns combinational).
+    // POR determinism via declaration init (`= 0` encoded in bitstream).
+    logic [3:0] gfx_rdata = 0;
     always_ff @(posedge clk) gfx_rdata <= gfx_rdata_raw;
 
     // Gtext state

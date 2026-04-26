@@ -21,7 +21,7 @@ SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.s
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv \
         $(RTL)/sid/sid_curve_reader.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_bridge test_debug_peek test_key_inject test_rom_over_sid test_vgc_frame_counter test_vgc_scroll_wrap test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_bridge test_debug_peek test_key_inject test_rom_over_sid test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -51,6 +51,14 @@ test_vgc_sprites: test_vgc_sprites.sv vgc_tb.svh $(VGC)
 
 test_vgc_regs: test_vgc_regs.sv vgc_tb.svh $(VGC)
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_regs.sv && $(RUN) test/$(BD)/$@/$@
+
+# POR-determinism regression. Built with --x-assign unique so every
+# uninitialized reg starts with a non-zero value — models ECP5 power-on
+# indeterminacy. Verifies vid_hsync/vsync/de stay at idle during rst and
+# that no phantom sync pulse appears in the first 200 cycles after
+# rst-release. Was the boot-artifact bug diagnosed 2026-04-26.
+test_vgc_por_determinism: test_vgc_por_determinism.sv vgc_tb.svh $(VGC)
+	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --x-assign unique --x-initial unique --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_por_determinism.sv && $(RUN) test/$(BD)/$@/$@ +verilator+rand+reset+2
 
 test_tile_engine: test_tile_engine.sv $(RTL)/dpram.sv $(RTL)/tile_engine.sv
 	@rm -rf $(BD)/$@ && mkdir -p $(BD)/$@ && $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/dpram.sv $(RTL)/tile_engine.sv $< && $(RUN) test/$(BD)/$@/$@

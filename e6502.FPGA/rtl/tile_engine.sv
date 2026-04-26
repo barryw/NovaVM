@@ -296,8 +296,8 @@ module tile_engine (
     logic [11:0] cmd_pal_din;
 
     // Blitter read data latch (1-cycle latency)
-    logic        blt_tile_rd_pending;
-    logic [7:0]  blt_tile_rd_latch;
+    logic        blt_tile_rd_pending = 0;  // POR init
+    logic [7:0]  blt_tile_rd_latch = 0;
 
     always_comb begin
         // Defaults: no writes, address idle
@@ -887,10 +887,11 @@ module tile_engine (
     assign at_addr_b = nt_lookup_addr;
 
     // --- Stage 1 registers (capture after 1-cycle BRAM latency) ---
-    logic [3:0] s1_pix_in_x, s1_pix_in_y;
-    logic       s1_pixel_valid;
-    logic       s1_tile_size16;
-    logic [3:0] s1_tile_w, s1_tile_h;
+    // POR init = 0 for ECP5 determinism (same pattern as vgc_timing pipeline).
+    logic [3:0] s1_pix_in_x = 0, s1_pix_in_y = 0;
+    logic       s1_pixel_valid = 0;
+    logic       s1_tile_size16 = 0;
+    logic [3:0] s1_tile_w = 0, s1_tile_h = 0;
 
     always_ff @(posedge clk) begin
         s1_pix_in_x    <= pix_in_x;
@@ -917,11 +918,11 @@ module tile_engine (
     // Present tile_data address to port B
     assign td_addr_b = s1_tile_byte_offset;
 
-    // --- Stage 2 registers ---
-    logic       s2_pixel_valid;
-    logic [3:0] s2_sub_pal;
-    logic [0:0] s2_sample_x_lsb;
-    logic [1:0] s2_tile_pri;
+    // --- Stage 2 registers --- (POR init = 0)
+    logic       s2_pixel_valid = 0;
+    logic [3:0] s2_sub_pal = 0;
+    logic [0:0] s2_sample_x_lsb = 0;
+    logic [1:0] s2_tile_pri = 0;
 
     always_ff @(posedge clk) begin
         s2_pixel_valid   <= s1_pixel_valid;
@@ -937,11 +938,11 @@ module tile_engine (
     // Present palette address to port B
     assign pr_addr_b = {s2_sub_pal, s2_color_idx};
 
-    // --- Stage 3 registers ---
-    logic       s3_pixel_valid;
-    logic [3:0] s3_color_idx;
-    logic [1:0] s3_tile_pri;
-    logic [3:0] s3_trans_color;
+    // --- Stage 3 registers --- (POR init = 0)
+    logic       s3_pixel_valid = 0;
+    logic [3:0] s3_color_idx = 0;
+    logic [1:0] s3_tile_pri = 0;
+    logic [3:0] s3_trans_color = 0;
 
     always_ff @(posedge clk) begin
         s3_pixel_valid <= s2_pixel_valid;

@@ -18,7 +18,8 @@ module vgc_timing (
     output logic        visible,
     output logic        in_text_area,
 
-    // 2-cycle delayed versions (match BRAM pipeline)
+    // 2-cycle delayed versions (match BRAM pipeline). POR init via separate
+    // initial block below — yosys rejects port-level `= 0` defaults.
     output logic [9:0]  h_count_d1,  h_count_d2,
     output logic [9:0]  v_count_d1,  v_count_d2,
     output logic        visible_d1,  visible_d2,
@@ -36,7 +37,7 @@ module vgc_timing (
     output logic [9:0]  text_line,
     output logic [5:0]  real_row,   // after scroll_offset applied
 
-    // Delayed coordinate signals
+    // Delayed coordinate signals — POR init via initial block below.
     output logic [6:0]  text_col_d1, text_col_d2,
     output logic [5:0]  text_row_d1, text_row_d2,
     output logic [2:0]  font_pixel_d1, font_pixel_d2,
@@ -62,6 +63,30 @@ module vgc_timing (
     localparam CHAR_H   = 8;
     localparam TEXT_H   = ROWS * CHAR_H;               // 480 pixels (1:1, no doubling)
     localparam V_BORDER = (V_ACTIVE - TEXT_H) / 2;     // 0 lines (no border)
+
+    // =========================================================================
+    // POR initialization — pipeline regs start at 0. ECP5 trellis encodes
+    // these in the bitstream as FF init values. Avoids needing `if (rst) ...`
+    // muxes on every pipeline FF (which would cost ~3.5 MHz of clk_pixel).
+    // Diagnosed 2026-04-26: same bitstream produced different visual artifacts
+    // across reflashes (50px black bar / 1-char shift / clean) because uninit
+    // pipeline regs fed garbage to vid_hsync/de during ~10µs rst window,
+    // causing HDMI sink to lock onto wrong horizontal phase.
+    // =========================================================================
+    initial begin
+        h_count_d1 = 0; h_count_d2 = 0;
+        v_count_d1 = 0; v_count_d2 = 0;
+        visible_d1 = 0; visible_d2 = 0;
+        in_text_area_d1 = 0; in_text_area_d2 = 0;
+        h_sync_area_d1 = 0; h_sync_area_d2 = 0;
+        v_sync_area_d1 = 0; v_sync_area_d2 = 0;
+        text_col_d1 = 0; text_col_d2 = 0;
+        text_row_d1 = 0; text_row_d2 = 0;
+        font_pixel_d1 = 0; font_pixel_d2 = 0;
+        gfx_x_d1 = 0; gfx_x_d2 = 0;
+        gfx_y_d1 = 0; gfx_y_d2 = 0;
+        font_line_d1 = 0;
+    end
 
     // =========================================================================
     // Video timing counters
@@ -96,7 +121,17 @@ module vgc_timing (
     assign pre_gfx_y = (v_count >> 1);                 // V_BORDER=0: no subtract
 
     // =========================================================================
-    // Pipeline delay registers — 2 cycles to match BRAM read latency
+    // Pipeline delay registers — 2 cycles to match BRAM read latency.
+    //
+    // POR determinism comes from declaration `= 0` initializers on the port
+    // declarations above. ECP5 trellis encodes these as FF init values in the
+    // bitstream — POR delivers a known state without needing a synchronous-
+    // reset mux on every register (which would cost ~3.5 MHz of clk_pixel
+    // margin). Diagnosed 2026-04-26: same bitstream produced different
+    // visual artifacts across reflashes (50px black bar / 1-char shift /
+    // clean) because uninit regs fed garbage to vid_hsync/de during the
+    // ~10µs rst window, causing HDMI sink to lock onto wrong horizontal
+    // phase. Init values fix this without rst muxes.
     // =========================================================================
     always_ff @(posedge clk) begin
         h_count_d1 <= h_count;       h_count_d2 <= h_count_d1;
@@ -132,7 +167,7 @@ module vgc_timing (
     end
 
     // =========================================================================
-    // Delayed coordinate signals
+    // Delayed coordinate signals — POR determinism via port `= 0` init above.
     // =========================================================================
     always_ff @(posedge clk) begin
         text_col_d1 <= text_col;      text_col_d2 <= text_col_d1;

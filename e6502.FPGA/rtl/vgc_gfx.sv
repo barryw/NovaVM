@@ -26,7 +26,7 @@ module vgc_gfx (
     // =========================================================================
     // Memory — dpram instance
     // =========================================================================
-    logic [16:0] gfx_b_addr;
+    logic [16:0] gfx_b_addr = 0;  // POR-init for determinism
 
     dpram #(.WIDTH(4), .DEPTH(76800)) gfx_mem (
         .clk(clk),
@@ -35,7 +35,7 @@ module vgc_gfx (
     );
 
     // =========================================================================
-    // Port B address generation
+    // Port B address generation. POR determinism via declaration init.
     // =========================================================================
     always_ff @(posedge clk) begin
         gfx_b_addr <= {9'b0, gfx_y} * GFX_W + {8'b0, gfx_x};

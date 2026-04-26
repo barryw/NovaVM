@@ -80,14 +80,30 @@ module fpga_top (
     wire clk_sdref  = pll_clk[3];  // 6.25 MHz — clkref for sdram.v (16:1)
 
     // =========================================================================
-    // Reset: hold reset until PLL locks, then release
-    // btn[0] is active-low power button — directly usable as manual reset
+    // Reset: hold reset until PLL locks, then release.
+    // btn[0] is active-low power button — directly usable as manual reset.
+    //
+    // pll_locked is async to clk_pixel (PLL has its own lock-detect circuit).
+    // btn[0] is a raw external button input. Both must be 2FF-synchronized
+    // before being sampled into the clk_pixel domain — otherwise metastability
+    // can momentarily glitch rst_cnt mid-edge → variable rst pulse length →
+    // variable boot state. Diagnosed 2026-04-26 as a co-cause of POR
+    // non-determinism.
     // =========================================================================
     reg [7:0] rst_cnt = 8'hFF;
     wire      rst = (rst_cnt != 0);
 
+    reg [1:0] pll_lock_sync = 2'b00;
+    reg [1:0] btn0_sync     = 2'b00;
     always_ff @(posedge clk_pixel) begin
-        if (!pll_locked || !btn[0])
+        pll_lock_sync <= {pll_lock_sync[0], pll_locked};
+        btn0_sync     <= {btn0_sync[0],     btn[0]};
+    end
+    wire pll_locked_safe = pll_lock_sync[1];
+    wire btn0_safe       = btn0_sync[1];
+
+    always_ff @(posedge clk_pixel) begin
+        if (!pll_locked_safe || !btn0_safe)
             rst_cnt <= 8'hFF;
         else if (rst_cnt != 0)
             rst_cnt <= rst_cnt - 1;
@@ -397,7 +413,7 @@ module fpga_top (
     // =========================================================================
     // LEDs — useful debug indicators
     // =========================================================================
-    reg [23:0] heartbeat;
+    reg [23:0] heartbeat = 0;  // POR init for clean LED phase from boot
     always_ff @(posedge clk_pixel)
         heartbeat <= heartbeat + 1;
 

@@ -1510,9 +1510,12 @@ module vgc (
     logic        pixel_on_d2;
     logic [11:0] text_pixel_d2, gfx_pixel_d2, pixel_color;
 
-    // Tile engine output delayed to match pipeline
-    logic [11:0] tile_rgb_d1, tile_rgb_d2;
-    logic [1:0]  tile_opaque_d1, tile_opaque_d2;
+    // Tile engine output delayed to match pipeline. POR determinism via
+    // declaration init — ECP5 trellis honors `= 0` as bitstream FF init,
+    // costs nothing in fabric. Without init, mode-4 boot starts with garbage
+    // tile pixels until the first valid tile_rgb propagates.
+    logic [11:0] tile_rgb_d1 = 0, tile_rgb_d2 = 0;
+    logic [1:0]  tile_opaque_d1 = 0, tile_opaque_d2 = 0;
     always_ff @(posedge clk) begin
         tile_rgb_d1 <= tile_rgb;       tile_rgb_d2 <= tile_rgb_d1;
         tile_opaque_d1 <= tile_opaque; tile_opaque_d2 <= tile_opaque_d1;
@@ -1564,9 +1567,9 @@ module vgc (
         end
     end
 
-    // Cursor
-    logic [4:0] blink_count;
-    logic       cursor_blink;
+    // Cursor blink — POR determinism via declaration init.
+    logic [4:0] blink_count = 0;
+    logic       cursor_blink = 0;
     always_ff @(posedge clk) begin
         if (h_count == 0 && v_count == 0) begin
             if (blink_count >= 14) begin
@@ -1582,19 +1585,37 @@ module vgc (
     assign irq_out = irq_ctrl[0] && (v_count == {3'b0, irq_ctrl[7:1]} * 2 + V_BORDER);
 
     // Output
+    //
+    // MUST reset to known idle. Without rst, vid_hsync/vsync/de come up at
+    // implementation-defined ECP5 power-up state. If vid_hsync starts at 0
+    // (sync asserted) for the first cycles after PLL lock + rst release,
+    // the HDMI sink interprets that as the start-of-line sync pulse at the
+    // wrong h_count, locks onto the wrong horizontal phase, and never
+    // re-syncs → variable horizontal shift across reflashes of the same
+    // bitstream (50px black bar / 1-char shift / clean). Idle = HIGH for
+    // both syncs (we drive negative-polarity sync). Diagnosed 2026-04-26.
     always_ff @(posedge clk) begin
-        vid_hsync <= ~h_sync_area_d2;
-        vid_vsync <= ~v_sync_area_d2;
-        vid_de    <= visible_d2;
-
-        if (cursor_here && cursor_blink) begin
-            vid_r <= palette[fg_color][11:8];
-            vid_g <= palette[fg_color][7:4];
-            vid_b <= palette[fg_color][3:0];
+        if (rst) begin
+            vid_hsync <= 1'b1;
+            vid_vsync <= 1'b1;
+            vid_de    <= 1'b0;
+            vid_r     <= 4'h0;
+            vid_g     <= 4'h0;
+            vid_b     <= 4'h0;
         end else begin
-            vid_r <= pixel_color[11:8];
-            vid_g <= pixel_color[7:4];
-            vid_b <= pixel_color[3:0];
+            vid_hsync <= ~h_sync_area_d2;
+            vid_vsync <= ~v_sync_area_d2;
+            vid_de    <= visible_d2;
+
+            if (cursor_here && cursor_blink) begin
+                vid_r <= palette[fg_color][11:8];
+                vid_g <= palette[fg_color][7:4];
+                vid_b <= palette[fg_color][3:0];
+            end else begin
+                vid_r <= pixel_color[11:8];
+                vid_g <= pixel_color[7:4];
+                vid_b <= pixel_color[3:0];
+            end
         end
     end
 
