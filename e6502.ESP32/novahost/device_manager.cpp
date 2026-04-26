@@ -23,7 +23,10 @@ bool DeviceManager::mount(int slot, const char* sd_path) {
     if (slot < 0 || slot >= NUM_SLOTS || !sd_path) return false;
     unmount(slot);
 
-    _files[slot] = SD_MMC.open(sd_path, FILE_WRITE);
+    // "r+" — open existing file for read+write without truncation. NDI
+    // disk images must persist across mounts; FILE_WRITE ("w") would
+    // truncate them on every boot.
+    _files[slot] = SD.open(sd_path, "r+");
     if (!_files[slot]) {
         Serial.printf("[dm] mount %s: open failed\n", sd_path);
         return false;
@@ -229,7 +232,7 @@ bool DeviceManager::resolve_path(const char* path, int& out_slot,
 // ---------------------------------------------------------------------------
 int DeviceManager::auto_mount_hds() {
     int mounted = 0;
-    File root = SD_MMC.open("/");
+    File root = SD.open("/");
     if (!root || !root.isDirectory()) return 0;
 
     File entry;

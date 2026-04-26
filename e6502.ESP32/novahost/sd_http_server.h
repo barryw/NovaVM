@@ -43,7 +43,8 @@ private:
         bool   active;
         File   file;
         String path;
-    } _upload = { false, File(), "" };
+        String last_err;
+    } _upload = { false, File(), "", "" };
 
     // Handlers — separate methods so they're easier to read + test.
     void handle_list(AsyncWebServerRequest* req, const String& path);

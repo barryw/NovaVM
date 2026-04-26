@@ -4,7 +4,7 @@
 // anything about Arduino.
 //
 // Usage (on ESP32):
-//   File f = SD_MMC.open("/games/spaceinv.ndi", FILE_READ);
+//   File f = SD.open("/games/spaceinv.ndi", FILE_READ);
 //   SdStream s(f);
 //   ndi::NdiImage img;
 //   img.open(&s);

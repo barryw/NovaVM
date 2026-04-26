@@ -1,5 +1,7 @@
 #include "sd_http_server.h"
-#include <SD_MMC.h>
+#include <SD.h>
+
+extern void logLn(const char* fmt, ...);
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -33,10 +35,16 @@ void SdHttpServer::begin() {
     _server.on("/sd/*", HTTP_PUT,
         [this](AsyncWebServerRequest* req) {
             // Final callback after all body chunks delivered.
+            bool ok = _upload.active;
             handle_put_done();
-            req->send(_upload.active ? 200 : 500,
-                       "application/json",
-                       _upload.active ? "{\"ok\":true}" : "{\"error\":\"write failed\"}");
+            if (ok) {
+                req->send(200, "application/json", "{\"ok\":true}");
+            } else {
+                String err = "{\"error\":\"";
+                err += _upload.last_err.length() ? _upload.last_err : String("write failed");
+                err += "\"}";
+                req->send(500, "application/json", err);
+            }
         },
         nullptr,
         [this](AsyncWebServerRequest* req, uint8_t* data, size_t len,
@@ -53,29 +61,33 @@ void SdHttpServer::begin() {
         req->send(200, "application/json", "{\"ok\":true}");
     });
 
-    // SD status — diagnoses mount/format issues remotely.
+    // SD status — diagnoses mount/format issues remotely. The bootDiag
+    // field captures the SD.begin() outcome so failures are visible
+    // post-boot (TCP log server starts after SD mount, so log lines from
+    // the mount call would otherwise be invisible).
+    extern String g_sd_diag;
     _server.on("/sd-status", HTTP_GET, [](AsyncWebServerRequest* req) {
-        sdmmc_card_t* card = nullptr;
-        uint8_t  ct        = SD_MMC.cardType();
-        uint64_t card_sz   = SD_MMC.cardSize();
-        uint64_t total_sz  = SD_MMC.totalBytes();
-        uint64_t used_sz   = SD_MMC.usedBytes();
+        uint8_t  ct        = SD.cardType();
+        uint64_t card_sz   = SD.cardSize();
+        uint64_t total_sz  = SD.totalBytes();
+        uint64_t used_sz   = SD.usedBytes();
         const char* type_name =
             ct == CARD_NONE ? "NONE" :
             ct == CARD_MMC  ? "MMC"  :
             ct == CARD_SD   ? "SDSC" :
             ct == CARD_SDHC ? "SDHC" :
             "UNKNOWN";
-        char buf[256];
+        char buf[512];
         snprintf(buf, sizeof(buf),
             "{\"cardType\":\"%s\",\"cardTypeId\":%u,"
-            "\"cardSize\":%llu,\"totalBytes\":%llu,\"usedBytes\":%llu}",
+            "\"cardSize\":%llu,\"totalBytes\":%llu,\"usedBytes\":%llu,"
+            "\"bootDiag\":\"%s\"}",
             type_name, (unsigned)ct,
             (unsigned long long)card_sz,
             (unsigned long long)total_sz,
-            (unsigned long long)used_sz);
+            (unsigned long long)used_sz,
+            g_sd_diag.c_str());
         req->send(200, "application/json", buf);
-        (void)card;
     });
 
     _server.onNotFound([](AsyncWebServerRequest* req) {
@@ -96,9 +108,9 @@ void SdHttpServer::begin() {
 // ---------------------------------------------------------------------------
 String SdHttpServer::path_after_sd(AsyncWebServerRequest* req) {
     // URL is something like /sd/foo/bar.ndi → return "foo/bar.ndi".
-    // Or /sd/ → "".
+    // Or /sd/ or /sd → "".
     String url = req->url();
-    if (url.startsWith("/sd/*")) return url.substring(4);
+    if (url.startsWith("/sd/")) return url.substring(4);  // strip "/sd/"
     if (url == "/sd")           return "";
     return url;
 }
@@ -138,10 +150,22 @@ bool SdHttpServer::path_safe_for_write(const String& path) {
 void SdHttpServer::send_json_listing(AsyncWebServerRequest* req,
                                       const String& dir_path) {
     String root = "/" + dir_path;
-    File dir = SD_MMC.open(root);
+    File dir = SD.open(root);
     if (!dir || !dir.isDirectory()) {
-        req->send(404, "application/json",
-                  "{\"error\":\"not a directory\"}");
+        char err[200];
+        snprintf(err, sizeof(err),
+                 "{\"error\":\"not a directory\","
+                  "\"path\":\"%s\","
+                  "\"open\":%d,"
+                  "\"isDir\":%d,"
+                  "\"exists\":%d,"
+                  "\"cardType\":%d}",
+                 root.c_str(),
+                 (int)(bool)dir,
+                 dir ? (int)dir.isDirectory() : -1,
+                 (int)SD.exists(root),
+                 (int)SD.cardType());
+        req->send(404, "application/json", err);
         return;
     }
 
@@ -176,14 +200,14 @@ void SdHttpServer::handle_list(AsyncWebServerRequest* req,
 void SdHttpServer::handle_get(AsyncWebServerRequest* req,
                                const String& path) {
     String full = "/" + path;
-    if (!SD_MMC.exists(full)) {
+    if (!SD.exists(full)) {
         req->send(404, "application/json",
                   "{\"error\":\"not found\"}");
         return;
     }
-    // ESPAsyncWebServer streams files efficiently via SD_MMC's fs::FS.
+    // ESPAsyncWebServer streams files efficiently via the SD fs::FS.
     AsyncWebServerResponse* resp =
-        req->beginResponse(SD_MMC, full, "application/octet-stream");
+        req->beginResponse(SD, full, "application/octet-stream");
     if (!resp) {
         req->send(500, "application/json",
                   "{\"error\":\"open failed\"}");
@@ -198,7 +222,7 @@ void SdHttpServer::handle_get(AsyncWebServerRequest* req,
 void SdHttpServer::handle_delete(AsyncWebServerRequest* req,
                                   const String& path) {
     String full = "/" + path;
-    if (!SD_MMC.exists(full)) {
+    if (!SD.exists(full)) {
         req->send(404, "application/json",
                   "{\"error\":\"not found\"}");
         return;
@@ -208,11 +232,11 @@ void SdHttpServer::handle_delete(AsyncWebServerRequest* req,
                   "{\"error\":\"file is mounted; UNMOUNT first\"}");
         return;
     }
-    File entry = SD_MMC.open(full);
+    File entry = SD.open(full);
     bool is_dir = entry && entry.isDirectory();
     if (entry) entry.close();
 
-    bool ok = is_dir ? SD_MMC.rmdir(full) : SD_MMC.remove(full);
+    bool ok = is_dir ? SD.rmdir(full) : SD.remove(full);
     if (!ok) {
         req->send(500, "application/json",
                   "{\"error\":\"delete failed\"}");
@@ -233,7 +257,7 @@ void SdHttpServer::handle_put_begin(AsyncWebServerRequest* req,
     }
 
     if (!path_safe_for_write(path)) {
-        Serial.printf("[sdhttp] PUT refused: /%s is mounted\n", path.c_str());
+        logLn("[sdhttp] PUT refused: /%s is mounted\n", path.c_str());
         req->send(409, "application/json",
                   "{\"error\":\"file is mounted; UNMOUNT first\"}");
         return;
@@ -245,19 +269,28 @@ void SdHttpServer::handle_put_begin(AsyncWebServerRequest* req,
     int last_slash = full.lastIndexOf('/');
     if (last_slash > 0) {
         String parent = full.substring(0, last_slash);
-        if (parent.length() > 0 && !SD_MMC.exists(parent)) {
-            SD_MMC.mkdir(parent);
+        if (parent.length() > 0 && !SD.exists(parent)) {
+            SD.mkdir(parent);
         }
     }
 
-    _upload.file = SD_MMC.open(full, FILE_WRITE);
+    // FS::open default for `create` is false — must pass true here so
+    // SD will create the file if it doesn't already exist.
+    _upload.file = SD.open(full, FILE_WRITE, true);
     if (!_upload.file) {
-        Serial.printf("[sdhttp] PUT %s: open(W) failed\n", full.c_str());
+        char buf[160];
+        snprintf(buf, sizeof(buf),
+                 "open(W) failed path=%s exists=%d cardType=%d",
+                 full.c_str(),
+                 (int)SD.exists(full),
+                 (int)SD.cardType());
+        _upload.last_err = String(buf);
+        logLn("[sdhttp] PUT: %s", buf);
         return;
     }
     _upload.active = true;
     _upload.path   = full;
-    Serial.printf("[sdhttp] PUT %s opened\n", full.c_str());
+    logLn("[sdhttp] PUT %s opened\n", full.c_str());
 }
 
 void SdHttpServer::handle_put_chunk(uint8_t* data, size_t len,
@@ -266,7 +299,7 @@ void SdHttpServer::handle_put_chunk(uint8_t* data, size_t len,
     if (!_upload.active || !_upload.file) return;
     size_t wrote = _upload.file.write(data, len);
     if (wrote != len) {
-        Serial.printf("[sdhttp] PUT %s: short write %u/%u\n",
+        logLn("[sdhttp] PUT %s: short write %u/%u\n",
                       _upload.path.c_str(), (unsigned)wrote, (unsigned)len);
         _upload.file.close();
         _upload.active = false;
@@ -277,7 +310,7 @@ void SdHttpServer::handle_put_done() {
     if (_upload.active && _upload.file) {
         size_t size = _upload.file.size();
         _upload.file.close();
-        Serial.printf("[sdhttp] PUT %s closed (%u bytes)\n",
+        logLn("[sdhttp] PUT %s closed (%u bytes)\n",
                       _upload.path.c_str(), (unsigned)size);
     }
     _upload.active = false;

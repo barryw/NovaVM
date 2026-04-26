@@ -11,7 +11,8 @@
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 #include <HardwareSerial.h>
-#include <SD_MMC.h>
+#include <SD.h>
+#include <SPI.h>
 #include "fpga_bridge.h"
 #include "debug_server.h"
 #include "device_manager.h"
@@ -98,6 +99,9 @@ DeviceManager   deviceManager;
 FioDispatcher   fioDispatcher(fpgaBridge, deviceManager);
 FioEventReader  fioEventReader(FPGA_SERIAL);
 SdHttpServer    sdHttpServer(deviceManager);
+
+// SD mount diagnostic — captured at boot, exposed via /sd-status JSON.
+String g_sd_diag = "(boot in progress)";
 
 // =========================================================================
 // WiFi setup
@@ -283,22 +287,46 @@ void setup() {
     // failure and we continue — OTA still works via WiFi for recovery.
     loadRomsToFPGA();
 
-    // SD card + file I/O subsystem.
-    // ULX3S wires SD to ESP32 GPIO 14/15/2/4/12/13 in 4-bit SDIO mode.
-    // SD_MMC.begin defaults to mountpoint "/sdcard" but we don't use VFS
-    // paths — the library's own File API works regardless.
-    // 3rd arg (format_if_mount_failed=true) auto-formats the card as
-    // FAT32 if the current filesystem isn't recognized — catches the
-    // common "brand-new 128GB card shipped as exFAT" case. ESP-IDF's
-    // esp_vfs_fat_sdmmc_mount does the actual formatting under the hood.
-    if (!SD_MMC.begin("/sdcard", false, true)) {
-        logLn("SD card mount FAILED — file I/O disabled");
+    // SD card mount via SPI mode. ULX3S routes SD to ESP32 GPIOs in a
+    // way that's incompatible with SDIO 1-bit/4-bit on this board (verified
+    // 2026-04-25 — SD_MMC.begin() returns false even with proper setPins,
+    // 1-bit mode, 400kHz init, fresh FAT32 format, and full power cycle;
+    // a parallel SD.begin() probe at the same time successfully reads the
+    // card as SDHC). Pinout (SCK=GPIO14, MISO=GPIO2/sd_d[0], MOSI=GPIO15/
+    // sd_cmd, CS=GPIO13/sd_d[3]) per emard/ulx3s_v20.lpf.
+    // Throughput tradeoff: SPI ~3-6 MB/s vs SDIO 25 MB/s — fine for BASIC
+    // file I/O. SD.h doesn't auto-format, so card MUST be FAT32 already.
+    logLn("SD: mounting via SPI (SCK=14 MISO=2 MOSI=15 CS=13)...");
+    SPI.begin(14, 2, 15, 13);
+    bool sd_ok = SD.begin(13, SPI, 4000000);  // 4 MHz init
+    char diag_buf[256];
+    if (!sd_ok) {
+        snprintf(diag_buf, sizeof(diag_buf),
+                 "SD.begin()=false — check FAT32 format + card seating");
+        g_sd_diag = String(diag_buf);
+        logLn("SD: mount FAILED. %s", diag_buf);
     } else {
-        logLn("SD card OK (type=%d, size=%llu MB)",
-              (int)SD_MMC.cardType(),
-              (unsigned long long)(SD_MMC.cardSize() / (1024ULL * 1024ULL)));
+        uint8_t  ct = SD.cardType();
+        uint64_t sz = SD.cardSize();
+        const char* type_str = "UNKNOWN";
+        switch (ct) {
+            case CARD_NONE: type_str = "NONE"; break;
+            case CARD_MMC:  type_str = "MMC";  break;
+            case CARD_SD:   type_str = "SDSC"; break;
+            case CARD_SDHC: type_str = "SDHC"; break;
+        }
+        snprintf(diag_buf, sizeof(diag_buf),
+                 "SD.begin()=true SPI type=%s size=%llu MB",
+                 type_str,
+                 (unsigned long long)(sz / (1024ULL * 1024ULL)));
+        g_sd_diag = String(diag_buf);
+        logLn("SD: mount OK — %s", diag_buf);
+
         int hd_count = deviceManager.auto_mount_hds();
-        logLn("Auto-mounted %d hd*.ndi disk image(s)", hd_count);
+        logLn("SD: auto-mounted %d hd*.ndi disk image(s)", hd_count);
+        char mount_buf[48];
+        snprintf(mount_buf, sizeof(mount_buf), " | hd_mounts=%d", hd_count);
+        g_sd_diag += String(mount_buf);
     }
 
     // Wire the FIO event reader → dispatcher trampoline. Whenever the

@@ -1,0 +1,64 @@
+; SD I/O Integration Tests — NovaBASIC SAVE/LOAD round-trip via FIO bus
+; Run: sim6502 -s tests/integration/sd.6502 --backend novavm \
+;        --novavm-host novahost.local --novavm-port 6503
+;
+; Requires:
+;   - NovaHost firmware booted with hd0.ndi auto-mounted (verify via
+;     curl http://novahost.local/sd-status — should show hd_mounts=1)
+;   - FPGA bitstream containing fio.sv (current production .bit)
+;
+; The dispatcher's default device is HD0, so SAVE/LOAD without an
+; explicit "hd0:" prefix lands on the auto-mounted disk image.
+;
+; Filename strings are built via CHR$ to sidestep nested-quote issues
+; in the test grammar. "HELLO" = 72,69,76,76,79.
+
+suites {
+  suite("SD I/O") {
+
+    test("save-load-roundtrip", "BASIC program SAVE → NEW → LOAD → RUN preserves program") {
+      ; Build a small program that writes two distinct sentinels into
+      ; stack-page RAM. Stack page is not cleared by NEW or LOAD, so
+      ; we can prove that LOAD actually re-executed the saved program
+      ; (vs. some stale in-memory copy) by wiping sentinels in
+      ; immediate mode and watching them reappear after RUN.
+      basic("10 POKE $0100,42")
+      basic("20 POKE $0101,99")
+      basic("30 F$=CHR$(72)+CHR$(69)+CHR$(76)+CHR$(76)+CHR$(79)")
+      basic("40 SAVE F$")
+      run()
+      assert(peekbyte($0100) == 42, "save phase: sentinel 0 set by RUN")
+      assert(peekbyte($0101) == 99, "save phase: sentinel 1 set by RUN")
+
+      ; Wipe sentinels and clear program memory.
+      basic("POKE $0100,0")
+      basic("POKE $0101,0")
+      basic("NEW")
+      assert(peekbyte($0100) == 0, "wipe: sentinel 0 cleared")
+      assert(peekbyte($0101) == 0, "wipe: sentinel 1 cleared")
+
+      ; F$ was a BASIC variable — wiped by NEW. Re-define before LOAD.
+      basic("F$=CHR$(72)+CHR$(69)+CHR$(76)+CHR$(76)+CHR$(79)")
+      basic("LOAD F$")
+      run()
+      assert(peekbyte($0100) == 42, "load+run: sentinel 0 restored from SD")
+      assert(peekbyte($0101) == 99, "load+run: sentinel 1 restored from SD")
+    }
+
+    test("save-with-explicit-device", "SAVE with explicit hd0: prefix routes correctly") {
+      ; "HD0:HI" = 72,68,48,58,72,73
+      basic("10 POKE $0102,$5A")
+      basic("20 F$=CHR$(72)+CHR$(68)+CHR$(48)+CHR$(58)+CHR$(72)+CHR$(73)")
+      basic("30 SAVE F$")
+      run()
+      assert(peekbyte($0102) == $5A, "explicit prefix save executed")
+
+      basic("POKE $0102,0")
+      basic("NEW")
+      basic("F$=CHR$(72)+CHR$(68)+CHR$(48)+CHR$(58)+CHR$(72)+CHR$(73)")
+      basic("LOAD F$")
+      run()
+      assert(peekbyte($0102) == $5A, "explicit prefix load+run restored sentinel")
+    }
+  }
+}

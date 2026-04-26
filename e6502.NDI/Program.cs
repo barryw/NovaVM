@@ -101,6 +101,10 @@ static int DoPut(string[] args, string? host)
     try {
         using var fs = new FileStream(local, FileMode.Open, FileAccess.Read);
         var content = new StreamContent(fs);
+        // ESPAsyncWebServer treats application/x-www-form-urlencoded as form
+        // params and never delivers the body to the chunk callback — must
+        // mark the upload as opaque bytes for PUT to succeed.
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
         if (!resp.IsSuccessStatusCode) {
             Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");

@@ -12,7 +12,7 @@
 #define NOVAHOST_DEVICE_MANAGER_H
 
 #include <FS.h>
-#include <SD_MMC.h>
+#include <SD.h>
 #include "ndi_image.h"
 #include "sd_stream.h"
 

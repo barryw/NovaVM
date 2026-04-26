@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <string.h>
 
+extern void logLn(const char* fmt, ...);
+
 // Maximum LOAD payload we'll buffer in RAM at once. ESP32 has plenty of
 // heap but we keep this conservative — most BASIC programs are <8KB.
 // For larger files, the LOAD streams in chunks via loadRam().
@@ -19,7 +21,7 @@ void FioDispatcher::handle_event() {
         // Spurious event: bank shows no pending cmd. Drop.
         return;
     }
-    Serial.printf("[fio] cmd=0x%02X namelen=%u\n",
+    logLn("[fio] cmd=0x%02X namelen=%u\n",
                   (unsigned)c, (unsigned)namelen());
 
     switch (c) {
@@ -34,7 +36,7 @@ void FioDispatcher::handle_event() {
         case CMD_MOUNT:    handle_mount();    break;
         case CMD_UNMOUNT:  handle_unmount();  break;
         default:
-            Serial.printf("[fio] unknown cmd 0x%02X\n", (unsigned)c);
+            logLn("[fio] unknown cmd 0x%02X\n", (unsigned)c);
             respond_err(ERR_IO);
             break;
     }
@@ -79,7 +81,7 @@ void FioDispatcher::handle_load() {
     int slot;
     uint16_t parent;
     if (!_dm.resolve_path(name, slot, parent, scratch)) {
-        Serial.printf("[fio] LOAD resolve failed: %s\n", name);
+        logLn("[fio] LOAD resolve failed: %s\n", name);
         respond_err(ERR_NOT_FOUND);
         return;
     }
@@ -88,7 +90,7 @@ void FioDispatcher::handle_load() {
 
     int idx = img->find_entry(scratch, parent);
     if (idx < 0) {
-        Serial.printf("[fio] LOAD: '%s' not found in dev=%s\n",
+        logLn("[fio] LOAD: '%s' not found in dev=%s\n",
                       scratch, DeviceManager::prefix_for_slot(slot));
         respond_err(ERR_NOT_FOUND);
         return;
@@ -98,7 +100,7 @@ void FioDispatcher::handle_load() {
     img->get_entry(idx, e);
     if (e.size_bytes > LOAD_BUF_BYTES) {
         // Future: stream in chunks. For now, hard cap.
-        Serial.printf("[fio] LOAD %s: %u bytes exceeds %d cap\n",
+        logLn("[fio] LOAD %s: %u bytes exceeds %d cap\n",
                       scratch, (unsigned)e.size_bytes, LOAD_BUF_BYTES);
         respond_err(ERR_IO);
         return;
@@ -114,7 +116,7 @@ void FioDispatcher::handle_load() {
         return;
     }
     write_size((uint32_t)got);
-    Serial.printf("[fio] LOAD %s → $%04X (%d bytes) OK\n",
+    logLn("[fio] LOAD %s → $%04X (%d bytes) OK\n",
                   scratch, dest, got);
     respond_ok();
 }
@@ -178,7 +180,7 @@ void FioDispatcher::handle_save() {
         respond_err(ERR_FULL);
         return;
     }
-    Serial.printf("[fio] SAVE %s ($%04X-$%04X, %u bytes) OK\n",
+    logLn("[fio] SAVE %s ($%04X-$%04X, %u bytes) OK\n",
                   scratch, s, e, (unsigned)size);
     respond_ok();
 }
