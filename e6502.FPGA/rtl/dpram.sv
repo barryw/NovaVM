@@ -23,6 +23,22 @@ module dpram #(
 
     reg [WIDTH-1:0] mem [0:DEPTH-1];
 
+    // POR init — output regs MUST start at 0. Without this, dout_a/dout_b
+    // hold whatever bits the silicon's output latch came up with for the
+    // first cycle after rst-release. With every BRAM in the design (char
+    // RAM, font ROM, color RAM, gfx RAM, sprite RAM, palette, ROM banks,
+    // etc.) doing the same, the visible pipeline samples 1 cycle of
+    // garbage from EACH and renders intermittent wrong glyphs across boots.
+    // Cannot use port-level `output reg = 0` because yosys rejects port-
+    // default initializers. Diagnosed 2026-04-26 with iteration sweep
+    // (1/5 boots showed garbage chars on rows 0-1 with char RAM verified
+    // correct via peek — i.e., RAM had spaces but render-side output was
+    // showing previous-state $AA).
+    initial begin
+        dout_a = 0;
+        dout_b = 0;
+    end
+
     // Yosys cannot process $readmemh inside a runtime conditional.
     // Use a generate block so the condition is resolved at elaboration time.
     // The zero-init loop is also kept in a separate initial block and only
