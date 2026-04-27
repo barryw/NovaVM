@@ -7,8 +7,8 @@ module vgc_timing (
     input  logic        rst,
 
     // Raw counters
-    output logic [9:0]  h_count,
-    output logic [9:0]  v_count,
+    output logic [9:0]  h_count = 10'd0,
+    output logic [9:0]  v_count = 10'd0,
 
     // Sync and visibility
     output logic        h_sync_area,
@@ -89,18 +89,26 @@ module vgc_timing (
     end
 
     // =========================================================================
-    // Video timing counters
+    // Video timing counters — BOTH declaration init (INITVAL=0 for FPGA POR)
+    // AND rst clause (forces realignment on every dbg_cpu_reset). Without the
+    // rst clause, h_count free-runs through every cold_start while the HDMI
+    // encoder resets via ~rst — counter and encoder go out of phase, producing
+    // a permanent 1-character LEFT shift in the rendered display. With BOTH,
+    // yosys+nextpnr-ecp5 encodes the FF with REGSET="RESET" matching the
+    // declaration init AND wires LSR=rst for runtime resync. Diagnosed
+    // 2026-04-27 after several iterations — the prior comment claiming INITVAL
+    // is dropped when LSR is non-trivial was incorrect; REGSET serves as the
+    // POR state on ECP5 when no separate INIT attribute is present, and that
+    // matches the declaration init value.
     // =========================================================================
     always_ff @(posedge clk) begin
         if (rst) begin
             h_count <= 0; v_count <= 0;
-        end else begin
-            if (h_count == H_TOTAL - 1) begin
-                h_count <= 0;
-                v_count <= (v_count == V_TOTAL - 1) ? 10'd0 : v_count + 1;
-            end else
-                h_count <= h_count + 1;
-        end
+        end else if (h_count == H_TOTAL - 1) begin
+            h_count <= 0;
+            v_count <= (v_count == V_TOTAL - 1) ? 10'd0 : v_count + 1;
+        end else
+            h_count <= h_count + 1;
     end
 
     // Combinational sync/visibility signals

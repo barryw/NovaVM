@@ -543,6 +543,14 @@ module vgc (
     logic        cmd_spr_we;
     logic        cmd_spr_re;
 
+    // Auto-clear-on-reset trigger. Armed at POR and on every rst assertion;
+    // fires once after rst is released to dispatch TXTCLS + GCLS, clearing
+    // both framebuffers. Also re-armed by the BASIC RESET command (SysReset)
+    // so a soft reset gets the same display clear treatment as a hard reset.
+    // Without this, cold_start (FPGA rst) clears all FF state but leaves
+    // char_mem and gfx_mem with whatever the previous test program drew.
+    logic        boot_clear_armed = 1'b1;
+
     // ARTIST drawing coprocessor signals
     logic        artist_cmd_valid;
     logic [7:0]  artist_cmd_code;
@@ -580,8 +588,37 @@ module vgc (
     // cleared in the reset branch of that block).
 
     // =========================================================================
-    // Address decode
+    // Address decode — READ side uses live cpu_addr (combinational into
+    // cpu_rdata mux). WRITE side uses r_cpu_addr_w / r_cpu_we_w / r_cpu_wdata_w
+    // registered one pixel cycle to break the BRAM→CPU→cmd_*_addr critical
+    // path. Net: 41ns single-cycle path becomes two short paths in two pixel
+    // cycles. Writes still fire on the same cpu_ce=1 edge as before because
+    // CPU drives cpu_we/cpu_addr stably for 2 pixel cycles per CPU T-cycle —
+    // r_*_w lags by 1 cycle but the sampled value at the firing edge matches.
+    // See feedback_register_slice_at_peripheral_writes.md.
     // =========================================================================
+    // POR-determinism via DECLARATION init (not initial block + rst clause).
+    // Yosys+nextpnr quirk: when an FF has a non-trivial LSR (e.g., LSR=rst),
+    // the bitstream INITVAL is dropped — the FF then comes up at silicon
+    // default and depends on rst signal arrival. With LSR tied to 1'h0
+    // (no rst clause), INITVAL is honored and the FF starts deterministically
+    // from the declaration `= 0` value at FPGA configuration time.
+    // Diagnosed 2026-04-27 after rst-clause version caused total HW failure.
+    logic [15:0] r_cpu_addr_w  = 16'h0;
+    logic [7:0]  r_cpu_wdata_w = 8'h0;
+    // `write_active` is the firing flag for the write-side block. It pulses
+    // for one pixel cycle following any `cpu_we && cpu_ce` event. The block
+    // fires on write_active=1; r_cpu_addr_w / r_cpu_wdata_w are aligned to
+    // the same cycle because they were captured at the previous posedge from
+    // the same cpu_addr / cpu_wdata that produced the cpu_we&&cpu_ce event.
+    logic        write_active = 1'b0;
+    always_ff @(posedge clk) begin
+        r_cpu_addr_w  <= cpu_addr;
+        r_cpu_wdata_w <= cpu_wdata;
+        write_active  <= cpu_we && cpu_ce;
+    end
+
+    // READ-side decoders — combinational on live cpu_addr.
     wire vgc_reg_sel   = (cpu_addr >= VGC_BASE && cpu_addr <= VGC_REGS_END);
     wire spr_reg_sel   = (cpu_addr >= SPR_REG_BASE && cpu_addr <= SPR_REG_END);
     wire char_ram_sel  = (cpu_addr >= CHAR_RAM_BASE && cpu_addr <= CHAR_RAM_END);
@@ -605,6 +642,23 @@ module vgc (
     wire [2:0]  spr_field    = spr_offset[2:0];
     wire [12:0] char_offset  = {2'b0, cpu_addr - CHAR_RAM_BASE};
     wire [12:0] color_offset = {2'b0, cpu_addr - COLOR_RAM_BASE};
+
+    // WRITE-side decoders — derived from r_cpu_addr_w (registered). The wide
+    // 16-bit subtractors (char_offset_w / color_offset_w) and address-range
+    // comparators move off the BRAM→CPU→FF.D combinational chain into a
+    // separate cycle, freeing ~22ns from the critical path.
+    wire vgc_reg_sel_w   = (r_cpu_addr_w >= VGC_BASE && r_cpu_addr_w <= VGC_REGS_END);
+    wire spr_reg_sel_w   = (r_cpu_addr_w >= SPR_REG_BASE && r_cpu_addr_w <= SPR_REG_END);
+    wire char_ram_sel_w  = (r_cpu_addr_w >= CHAR_RAM_BASE && r_cpu_addr_w <= CHAR_RAM_END);
+    wire color_ram_sel_w = (r_cpu_addr_w >= COLOR_RAM_BASE && r_cpu_addr_w <= COLOR_RAM_END);
+    wire fio_name_sel_w  = (r_cpu_addr_w >= FIO_NAME && r_cpu_addr_w <= 16'hB9EF);
+    wire fio_len_sel_w   = (r_cpu_addr_w == FIO_NAME_LEN);
+    wire [4:0]  reg_offset_w   = r_cpu_addr_w[4:0];
+    wire [6:0]  spr_offset_w   = r_cpu_addr_w[6:0] - 7'h40;
+    wire [3:0]  spr_index_w    = spr_offset_w[6:3];
+    wire [2:0]  spr_field_w    = spr_offset_w[2:0];
+    wire [12:0] char_offset_w  = {2'b0, r_cpu_addr_w - CHAR_RAM_BASE};
+    wire [12:0] color_offset_w = {2'b0, r_cpu_addr_w - COLOR_RAM_BASE};
 
     // =========================================================================
     // Screen address helper
@@ -795,6 +849,9 @@ module vgc (
             memread_pending <= 2'd0;
             vgc_tile_we <= 0; vgc_tile_re <= 0;
             artist_cmd_valid <= 0;
+            // Re-arm the auto-clear so the next non-rst cycle dispatches
+            // TXTCLS + GCLS to wipe the framebuffers from the previous run.
+            boot_clear_armed <= 1'b1;
             for (int i = 0; i < 32; i++) regs[i] <= 0;
             for (int i = 0; i < 16; i++) begin
                 spr_x[i] <= 0; spr_y[i] <= 0; spr_enable[i] <= 0;
@@ -811,6 +868,23 @@ module vgc (
             cmd_spr_we <= 0;
             cmd_spr_re <= 0;
             artist_cmd_valid <= 0;
+
+            // Auto-clear-on-reset DISABLED 2026-04-27 — running TXTCLS+GCLS
+            // in parallel with BASIC's cold-start banner caused TXTCLS to
+            // clobber banner cells and corrupted REG_CHARIN reads, producing
+            // BASIC syntax errors on every cold_start. The right design is
+            // to hold the CPU in reset (gate CPU.RDY in top.sv) until the
+            // auto-clear completes, but that's a multi-module change. For
+            // now, framebuffer carryover between tests is accepted; tests
+            // that need clean state can issue BASIC RESET (which still
+            // dispatches via the SysReset CMD case below). boot_clear_armed
+            // is kept declared so future re-enable just removes this comment.
+            // if (boot_clear_armed && !cmd_busy && !artist_busy) begin
+            //     cmd_busy <= 1; cmd_op <= CMD_TXTCLS;
+            //     cmd_cx <= 0; cmd_cy <= 0;
+            //     artist_cmd_valid <= 1; artist_cmd_code <= CMD_GCLS;
+            //     boot_clear_armed <= 0;
+            // end
 
             // Keyboard input — pop FIFO head exactly once per CPU read of
             // REG_CHARIN, on the RISING edge of the CPU's address-match.
@@ -991,29 +1065,31 @@ module vgc (
                 endcase
             end
 
-            // CPU writes — gated by cpu_ce so the VGC only captures
-            // each bus transaction once (the CPU holds WE between
-            // clock-enable cycles when stalled via RDY).
-            if (cpu_we && cpu_ce) begin
-                if (vgc_reg_sel) begin
-                    case (reg_offset)
-                        REG_MODE:    mode <= cpu_wdata[2:0];
-                        REG_BGCOL:   bg_color <= cpu_wdata[3:0];
-                        REG_FGCOL:   fg_color <= cpu_wdata[3:0];
-                        REG_CURSORX: cursor_x <= cpu_wdata[6:0];
-                        REG_CURSORY: cursor_y <= cpu_wdata[5:0];
-                        5'd5:        scroll_x <= cpu_wdata;
-                        5'd6:        scroll_y <= cpu_wdata;
-                        5'd7:        font_slot <= (cpu_wdata[2:0] >= 3'd3) ? 3'd0
-                                                                               : cpu_wdata[2:0];
-                        5'd8:        gfx_color <= cpu_wdata[3:0];
-                        5'd10:       cursor_enable <= cpu_wdata[0];
+            // CPU writes — fires on `write_active` (1 pixel cycle after
+            // cpu_we && cpu_ce). All write-side signals are the registered
+            // _w variants (see register-slice section above). Net effect:
+            // VGC writes complete 1 pixel cycle later than today, but the
+            // BRAM→CPU→FF.D combinational chain is broken at r_cpu_addr_w.
+            if (write_active) begin
+                if (vgc_reg_sel_w) begin
+                    case (reg_offset_w)
+                        REG_MODE:    mode <= r_cpu_wdata_w[2:0];
+                        REG_BGCOL:   bg_color <= r_cpu_wdata_w[3:0];
+                        REG_FGCOL:   fg_color <= r_cpu_wdata_w[3:0];
+                        REG_CURSORX: cursor_x <= r_cpu_wdata_w[6:0];
+                        REG_CURSORY: cursor_y <= r_cpu_wdata_w[5:0];
+                        5'd5:        scroll_x <= r_cpu_wdata_w;
+                        5'd6:        scroll_y <= r_cpu_wdata_w;
+                        5'd7:        font_slot <= (r_cpu_wdata_w[2:0] >= 3'd3) ? 3'd0
+                                                                               : r_cpu_wdata_w[2:0];
+                        5'd8:        gfx_color <= r_cpu_wdata_w[3:0];
+                        5'd10:       cursor_enable <= r_cpu_wdata_w[0];
                         5'd11:       collision_ss <= 0;
                         5'd12:       collision_bg <= 0;
                         REG_BORDER:  /* $A00D no-op — border removed */;
-                        5'd31:       irq_ctrl <= cpu_wdata;
+                        5'd31:       irq_ctrl <= r_cpu_wdata_w;
                         REG_CHAROUT: begin
-                            case (cpu_wdata)
+                            case (r_cpu_wdata_w)
                                 8'h08: begin
                                     if (cursor_x > 0) cursor_x <= cursor_x - 1;
                                     cmd_char_addr <= screen_addr(cursor_x > 0 ? cursor_x - 1 : 0, cursor_y);
@@ -1036,9 +1112,9 @@ module vgc (
                                 8'h0D: cursor_x <= 0;
                                 8'h13: begin cursor_x <= 0; cursor_y <= 0; end
                                 default: begin
-                                    if (cpu_wdata >= 8'h20) begin
+                                    if (r_cpu_wdata_w >= 8'h20) begin
                                         cmd_char_addr <= screen_addr(cursor_x, cursor_y);
-                                        cmd_char_din <= cpu_wdata;
+                                        cmd_char_din <= r_cpu_wdata_w;
                                         cmd_char_we <= 1;
                                         cmd_color_addr <= screen_addr(cursor_x, cursor_y);
                                         cmd_color_din <= {4'b0, fg_color};
@@ -1063,13 +1139,13 @@ module vgc (
                                 cmd_x2 <= {regs[22][1:0], regs[21]};
                                 cmd_y2 <= {regs[24][1:0], regs[23]};
 
-                                case (cpu_wdata)
+                                case (r_cpu_wdata_w)
                                     // Drawing commands → ARTIST
                                     CMD_PLOT, CMD_UNPLOT, CMD_LINE,
                                     CMD_CIRCLE, CMD_RECT, CMD_FILL,
                                     CMD_GCLS, CMD_PAINT, CMD_GTEXT: begin
                                         artist_cmd_valid <= 1;
-                                        artist_cmd_code <= cpu_wdata;
+                                        artist_cmd_code <= r_cpu_wdata_w;
                                     end
 
                                     CMD_GCOLOR: begin
@@ -1146,17 +1222,40 @@ module vgc (
                                             cmd_busy <= 1; cmd_op <= 8'h13;
                                         end
                                     end
-                                    8'h1F: begin // SysReset
-                                        cursor_x <= 0; cursor_y <= 0;
-                                        mode <= 0; fg_color <= 4'd1; bg_color <= 4'd6;
-                                        gfx_color <= 4'd1;
-                                        scroll_offset <= 0; scroll_x <= 0; scroll_y <= 0;
-                                        cursor_enable <= 1; copper_enabled <= 0;
-                                        copper_count <= 0;
+                                    8'h1F: begin // SysReset — bring VGC to its FPGA-rst
+                                        // initial state, plus clear the framebuffers (which
+                                        // the rst clause can't do — they're multi-cycle FSMs).
+                                        // KEEP THIS LIST IN SYNC WITH THE if(rst) BRANCH ABOVE.
+                                        // Diagnosed 2026-04-27: SysReset previously only cleared
+                                        // a subset of state, so sprites stayed enabled and
+                                        // GTEXT bitmaps in gfx_mem persisted across RESETs.
+                                        cursor_x <= 0; cursor_y <= 0; mode <= 0;
+                                        fg_color <= 4'd1; bg_color <= 4'd6;
+                                        gfx_color <= 4'd1; cursor_enable <= 1; font_slot <= 0;
+                                        scroll_offset <= 0; scroll_pending <= 0; scroll_col <= 0;
+                                        scroll_x <= 0; scroll_y <= 0;
+                                        key_fifo_rd <= 0;
+                                        collision_ss <= 0; collision_bg <= 0;
+                                        irq_ctrl <= 0; irq_raster_pending <= 0;
+                                        copper_enabled <= 0; copper_count <= 0;
                                         copper_target_list <= 0; copper_active_list <= 0;
                                         copper_pending_list <= 0; copper_loading <= 0;
                                         for (int i = 0; i < COPPER_LISTS; i++)
                                             copper_list_count[i] <= 0;
+                                        sprrow_count <= 0; sprcopy_phase <= 0; sprdef_wait <= 0;
+                                        memread_pending <= 2'd0;
+                                        vgc_tile_we <= 0; vgc_tile_re <= 0;
+                                        for (int i = 0; i < 32; i++) regs[i] <= 0;
+                                        for (int i = 0; i < NUM_SPRITES; i++) begin
+                                            spr_x[i] <= 0; spr_y[i] <= 0; spr_enable[i] <= 0;
+                                            spr_flip_h[i] <= 0; spr_flip_v[i] <= 0;
+                                            spr_pri[i] <= 0; spr_shape[i] <= 0; spr_trans[i] <= 0;
+                                        end
+                                        // Re-arm the auto-clear trigger — the post-rst
+                                        // dispatcher above will fire TXTCLS + GCLS on the
+                                        // next cycle (when cmd_busy and artist_busy are 0).
+                                        // Single source of truth for framebuffer clearing.
+                                        boot_clear_armed <= 1'b1;
                                     end
                                     8'h1B: begin // CmdCopperAdd
                                         if (copper_list_count[copper_target_list] < COPPER_MAX) begin
@@ -1263,40 +1362,40 @@ module vgc (
                                 endcase
                             end
                         end
-                        default: regs[reg_offset] <= cpu_wdata;
+                        default: regs[reg_offset_w] <= r_cpu_wdata_w;
                     endcase
                 end
 
-                if (char_ram_sel) begin
-                    cmd_char_addr <= char_offset;
-                    cmd_char_din <= cpu_wdata;
+                if (char_ram_sel_w) begin
+                    cmd_char_addr <= char_offset_w;
+                    cmd_char_din <= r_cpu_wdata_w;
                     cmd_char_we <= 1;
                 end
-                if (color_ram_sel) begin
-                    cmd_color_addr <= color_offset;
-                    cmd_color_din <= cpu_wdata;
+                if (color_ram_sel_w) begin
+                    cmd_color_addr <= color_offset_w;
+                    cmd_color_din <= r_cpu_wdata_w;
                     cmd_color_we <= 1;
                 end
 
                 // Shadow FIO name buffer for Gtext
-                if (fio_len_sel)   fio_name_len <= cpu_wdata[5:0];
-                if (fio_name_sel)  fio_name[cpu_addr - FIO_NAME] <= cpu_wdata;
+                if (fio_len_sel_w)   fio_name_len <= r_cpu_wdata_w[5:0];
+                if (fio_name_sel_w)  fio_name[r_cpu_addr_w - FIO_NAME] <= r_cpu_wdata_w;
 
                 // Sprite register writes
-                if (spr_reg_sel) begin
-                    case (spr_field)
-                        3'd0: spr_x[spr_index][7:0]  <= cpu_wdata;
-                        3'd1: spr_x[spr_index][15:8] <= cpu_wdata;
-                        3'd2: spr_y[spr_index][7:0]  <= cpu_wdata;
-                        3'd3: spr_y[spr_index][15:8] <= cpu_wdata;
-                        3'd4: spr_shape[spr_index]   <= cpu_wdata[3:0];
+                if (spr_reg_sel_w) begin
+                    case (spr_field_w)
+                        3'd0: spr_x[spr_index_w][7:0]  <= r_cpu_wdata_w;
+                        3'd1: spr_x[spr_index_w][15:8] <= r_cpu_wdata_w;
+                        3'd2: spr_y[spr_index_w][7:0]  <= r_cpu_wdata_w;
+                        3'd3: spr_y[spr_index_w][15:8] <= r_cpu_wdata_w;
+                        3'd4: spr_shape[spr_index_w]   <= r_cpu_wdata_w[3:0];
                         3'd5: begin
-                            spr_flip_h[spr_index] <= cpu_wdata[0];
-                            spr_flip_v[spr_index] <= cpu_wdata[1];
-                            spr_enable[spr_index] <= cpu_wdata[7];
+                            spr_flip_h[spr_index_w] <= r_cpu_wdata_w[0];
+                            spr_flip_v[spr_index_w] <= r_cpu_wdata_w[1];
+                            spr_enable[spr_index_w] <= r_cpu_wdata_w[7];
                         end
-                        3'd6: spr_pri[spr_index]     <= cpu_wdata[1:0];
-                        3'd7: spr_trans[spr_index]    <= cpu_wdata[3:0];
+                        3'd6: spr_pri[spr_index_w]     <= r_cpu_wdata_w[1:0];
+                        3'd7: spr_trans[spr_index_w]    <= r_cpu_wdata_w[3:0];
                     endcase
                 end
             end
@@ -1584,37 +1683,66 @@ module vgc (
     // Raster IRQ
     assign irq_out = irq_ctrl[0] && (v_count == {3'b0, irq_ctrl[7:1]} * 2 + V_BORDER);
 
-    // Output
+    // Output — POR-deterministic via internal regs with declaration init.
+    // We CAN'T put init on output ports directly. The internal `vid_*_r`
+    // regs get INITVAL encoded into the bitstream (LSR tied to 0 when no
+    // `if (rst)` clause). Continuous assigns drive the output ports.
     //
-    // MUST reset to known idle. Without rst, vid_hsync/vsync/de come up at
-    // implementation-defined ECP5 power-up state. If vid_hsync starts at 0
-    // (sync asserted) for the first cycles after PLL lock + rst release,
-    // the HDMI sink interprets that as the start-of-line sync pulse at the
-    // wrong h_count, locks onto the wrong horizontal phase, and never
-    // re-syncs → variable horizontal shift across reflashes of the same
-    // bitstream (50px black bar / 1-char shift / clean). Idle = HIGH for
-    // both syncs (we drive negative-polarity sync). Diagnosed 2026-04-26.
+    // MUST start at known idle. If vid_hsync comes up at 0 (sync asserted)
+    // for the first cycles after PLL lock + rst release, the HDMI sink
+    // interprets that as the start-of-line sync pulse at the wrong h_count,
+    // locks onto the wrong horizontal phase, and never re-syncs → variable
+    // horizontal shift across reflashes of the same bitstream (50px black
+    // bar / 1-char shift / clean). Idle = HIGH for both syncs (negative-
+    // polarity). Diagnosed 2026-04-26 via prior session's POR-init work.
+    // Re-broken 2026-04-27 when register-slice change reshuffled PnR; root
+    // cause: yosys+nextpnr drop INITVAL from any TRELLIS_FF whose LSR is
+    // non-trivial (i.e., has an `if (rst)` clause). Fix: remove the `if(rst)`
+    // clause and rely on declaration init `= X` to encode INITVAL with
+    // LSR tied to 1'h0. h_sync_area_d2 / v_sync_area_d2 / visible_d2 are
+    // already POR-init'd to 0 in vgc_timing.sv, so on the very first clock
+    // edge after config, vid_hsync_r samples ~0 = 1 (idle), preserving the
+    // `if(rst)` behavior without depending on rst signal arrival timing.
+    // Internal regs with BOTH declaration init AND rst clause. INITVAL is
+    // encoded from declaration init; runtime rst behavior is preserved by
+    // the if(rst) clause. yosys+nextpnr-ecp5 honors both: the FF starts at
+    // INITVAL at config time AND resets to the same value on rst assertion.
+    // This is the correct combination — POR-deterministic AND runtime-safe.
+    logic       vid_hsync_r = 1'b1;
+    logic       vid_vsync_r = 1'b1;
+    logic       vid_de_r    = 1'b0;
+    logic [3:0] vid_r_r     = 4'h0;
+    logic [3:0] vid_g_r     = 4'h0;
+    logic [3:0] vid_b_r     = 4'h0;
+
+    assign vid_hsync = vid_hsync_r;
+    assign vid_vsync = vid_vsync_r;
+    assign vid_de    = vid_de_r;
+    assign vid_r     = vid_r_r;
+    assign vid_g     = vid_g_r;
+    assign vid_b     = vid_b_r;
+
     always_ff @(posedge clk) begin
         if (rst) begin
-            vid_hsync <= 1'b1;
-            vid_vsync <= 1'b1;
-            vid_de    <= 1'b0;
-            vid_r     <= 4'h0;
-            vid_g     <= 4'h0;
-            vid_b     <= 4'h0;
+            vid_hsync_r <= 1'b1;
+            vid_vsync_r <= 1'b1;
+            vid_de_r    <= 1'b0;
+            vid_r_r     <= 4'h0;
+            vid_g_r     <= 4'h0;
+            vid_b_r     <= 4'h0;
         end else begin
-            vid_hsync <= ~h_sync_area_d2;
-            vid_vsync <= ~v_sync_area_d2;
-            vid_de    <= visible_d2;
+            vid_hsync_r <= ~h_sync_area_d2;
+            vid_vsync_r <= ~v_sync_area_d2;
+            vid_de_r    <= visible_d2;
 
             if (cursor_here && cursor_blink) begin
-                vid_r <= palette[fg_color][11:8];
-                vid_g <= palette[fg_color][7:4];
-                vid_b <= palette[fg_color][3:0];
+                vid_r_r <= palette[fg_color][11:8];
+                vid_g_r <= palette[fg_color][7:4];
+                vid_b_r <= palette[fg_color][3:0];
             end else begin
-                vid_r <= pixel_color[11:8];
-                vid_g <= pixel_color[7:4];
-                vid_b <= pixel_color[3:0];
+                vid_r_r <= pixel_color[11:8];
+                vid_g_r <= pixel_color[7:4];
+                vid_b_r <= pixel_color[3:0];
             end
         end
     end

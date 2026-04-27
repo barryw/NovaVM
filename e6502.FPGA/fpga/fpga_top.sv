@@ -443,4 +443,23 @@ module fpga_top (
     // Keep ESP32 out of download mode and drive debug LED
     assign wifi_gpio0 = 1'b1;
 
+    // ECP5 POR — GSR(.GSR(1'b1)) is config-time-only (.GSR is active-LOW per
+    // nextpnr ecp5/pack.cc; tied HIGH = inactive at runtime). After flatten,
+    // yosys's lattice_gsr pass resolves every TRELLIS_FF to GSR("ENABLED"),
+    // so every FF lands at its REGSET state at config-done — deterministic
+    // POR, zero fabric cost, no LSR fanout. Requires `synth_ecp5` WITHOUT
+    // `-noflatten` so the pass sees one module containing this primitive.
+    // Verify: grep -c 'GSR("ENABLED")' build/post_synth.v == total FF count.
+    //
+    // SGSR(.GSR(~rst), .CLK(clk_pixel)) was tried 2026-04-27 — feedback loop:
+    // rst deasserts → ~rst HIGH → SGSR fires → resets rst_cnt → rst back HIGH
+    // → forever. Signature: LED6 (pll_locked) on, LED5 (~rst) off, LED7
+    // (heartbeat) dead. Don't drive runtime reset through GSR.
+    //
+    // SYNTHESIS-only: verilator has no GSR blackbox (yosys cells_bb_ecp5.v).
+    // Reference: Lattice "How to Use GSR/PUR/TSALL" technote.
+`ifdef SYNTHESIS
+    GSR GSR_INST (.GSR(1'b1));
+`endif
+
 endmodule

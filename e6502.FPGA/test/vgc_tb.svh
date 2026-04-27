@@ -139,6 +139,10 @@ endtask
 
 // ---------------------------------------------------------------------------
 // Bus helpers — single-cycle ce pulses, matches how top.sv drives the VGC.
+// VGC write-side has a 1-cycle register-slice (write_active stage) added in
+// 2026-04-27 to break the BRAM→CPU→cmd_*_addr critical path. So writes need
+// one extra @(posedge clk) before they land in the cmd_* capture FFs, plus
+// another for the dpram write to complete. Reads are unchanged.
 // ---------------------------------------------------------------------------
 task automatic bus_write(input logic [15:0] addr, input logic [7:0] data);
     @(posedge clk);
@@ -150,6 +154,11 @@ task automatic bus_write(input logic [15:0] addr, input logic [7:0] data);
     @(posedge clk);
     cpu_we    <= 0;
     cpu_ce    <= 0;
+    // Allow VGC's write_active stage to fire and the downstream cmd_*_we
+    // pulse to land in the dpram. Without these the test would peek char_mem
+    // before the write completes.
+    @(posedge clk);
+    @(posedge clk);
 endtask
 
 // bus_read asserts cpu_re for one cycle, waits the dpram latency and the

@@ -58,7 +58,8 @@ $(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI
 		verilog_defaults -add -DSYNTHESIS; \
 		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_SDRAM_SV); \
 		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM_V); \
-		synth_ecp5 -noflatten -top fpga_top -json $@; \
+		synth_ecp5 -top fpga_top; \
+		write_json $@; \
 		write_verilog $(BUILDDIR)/post_synth.v; \
 		write_rtlil $(BUILDDIR)/post_synth.il"
 
@@ -75,7 +76,7 @@ $(BUILDDIR)/post_synth.v: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI
 		verilog_defaults -add -DSYNTHESIS; \
 		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_SDRAM_SV); \
 		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM_V); \
-		synth_ecp5 -noflatten -top fpga_top; \
+		synth_ecp5 -top fpga_top; \
 		stat; \
 		write_verilog $@; \
 		write_rtlil $(BUILDDIR)/post_synth.il"
