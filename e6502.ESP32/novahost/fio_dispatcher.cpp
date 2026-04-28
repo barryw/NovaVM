@@ -347,10 +347,15 @@ void FioDispatcher::handle_rmdir() {
 // MOUNT / UNMOUNT
 // ---------------------------------------------------------------------------
 void FioDispatcher::handle_mount() {
-    // Nova writes "FDx:filename_no_ext" into the name buffer. Convert
-    // into ("FDx" slot prefix, "filename_no_ext.ndi" SD path).
+    // BASIC LAB_MOUNT packs both args into the name buffer separated by a
+    // NULL byte: e.g. `MOUNT "FD0:","fd0"` becomes "FD0:\0fd0" (FIO_NAMELEN
+    // covers all 8 bytes). Skip past one or more NULL separators to find
+    // the second string.
     char name[64];
     copy_filename(name);
+    int total = namelen();
+    if (total < 0) total = 0;
+    if (total > 63) total = 63;
 
     char* colon = strchr(name, ':');
     if (!colon) { respond_err(ERR_IO); return; }
@@ -358,8 +363,14 @@ void FioDispatcher::handle_mount() {
     int slot = DeviceManager::slot_for_prefix(name);
     if (slot < 0) { respond_err(ERR_IO); return; }
 
+    // Walk past null separator(s) to the start of the image-name string.
+    char* second = colon + 1;
+    char* end    = name + total;
+    while (second < end && *second == 0) second++;
+    if (second >= end || *second == 0) { respond_err(ERR_IO); return; }
+
     char sd_path[96];
-    snprintf(sd_path, sizeof(sd_path), "/%s.ndi", colon + 1);
+    snprintf(sd_path, sizeof(sd_path), "/%s.ndi", second);
 
     if (!_dm.mount(slot, sd_path)) {
         respond_err(ERR_NOT_FOUND); return;

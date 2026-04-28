@@ -3,6 +3,7 @@
 // line-delimited JSON as the Verilator simulator.
 
 #include "debug_server.h"
+#include <ArduinoJson.h>
 
 // VGC register addresses
 #define REG_CURSOR_X 0xA003
@@ -464,43 +465,28 @@ void DebugServer::respondError(const char* msg) {
 // JSON extraction helpers
 // =========================================================================
 
+// Use ArduinoJson (Benoit Blanchon, the de-facto Arduino JSON library) for
+// proper RFC-8259 string-escape decoding. The previous hand-rolled extractor
+// terminated string values at the first raw `"` byte, which broke any text
+// containing `\"`, `\\`, `\n`, `\r`, etc. — making it impossible to drive
+// BASIC commands like `LOAD "foo"` over the TCP test harness. Each call
+// re-parses the line; cheap because protocol traffic is human-paced.
 String DebugServer::extractString(const String& json, const char* key) {
-    // Find "key" then the colon, then optional whitespace, then the quoted value.
-    String needle = String("\"") + key + "\"";
-    int idx = json.indexOf(needle);
-    if (idx < 0) return "";
-    idx += needle.length();
-    // Skip whitespace before colon
-    while (idx < (int)json.length() && (json[idx] == ' ' || json[idx] == '\t')) idx++;
-    if (idx >= (int)json.length() || json[idx] != ':') return "";
-    idx++;
-    // Skip whitespace after colon
-    while (idx < (int)json.length() && (json[idx] == ' ' || json[idx] == '\t')) idx++;
-    if (idx >= (int)json.length() || json[idx] != '"') return "";
-    idx++;
-    int end = json.indexOf('"', idx);
-    if (end < 0) return "";
-    return json.substring(idx, end);
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json);
+    if (err) return String();
+    JsonVariantConst v = doc[key];
+    if (!v.is<const char*>()) return String();
+    return String(v.as<const char*>());
 }
 
 int DebugServer::extractInt(const String& json, const char* key, int defaultVal) {
-    // Find "key" then colon, then optional whitespace, then the number.
-    String needle = String("\"") + key + "\"";
-    int idx = json.indexOf(needle);
-    if (idx < 0) return defaultVal;
-    idx += needle.length();
-    // Skip whitespace before colon
-    while (idx < (int)json.length() && (json[idx] == ' ' || json[idx] == '\t')) idx++;
-    if (idx >= (int)json.length() || json[idx] != ':') return defaultVal;
-    idx++;
-    // Skip whitespace after colon
-    while (idx < (int)json.length() && (json[idx] == ' ' || json[idx] == '\t')) idx++;
-    // Parse digits (with optional leading minus)
-    String num;
-    if (idx < (int)json.length() && json[idx] == '-') num += json[idx++];
-    while (idx < (int)json.length() && isDigit(json[idx])) num += json[idx++];
-    if (num.length() == 0) return defaultVal;
-    return num.toInt();
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json);
+    if (err) return defaultVal;
+    JsonVariantConst v = doc[key];
+    if (!v.is<int>() && !v.is<long>() && !v.is<unsigned int>()) return defaultVal;
+    return v.as<int>();
 }
 
 // =========================================================================
