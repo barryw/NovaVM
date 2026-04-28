@@ -21,6 +21,54 @@ module test_vgc_sprites;
     localparam logic [7:0] CMD_SPRFLIP = 8'h17;
     localparam logic [7:0] CMD_SPRPRI  = 8'h18;
 
+    // Stand-alone PIXIE instance used for pixel/scanline-buffer regressions.
+    // The top-level VGC tests above exercise command wiring; this instance
+    // lets us drive exact VGA line starts and verify the sprite plane itself.
+    logic [10:0] probe_spr_a_addr = 0;
+    logic [7:0]  probe_spr_a_din = 0;
+    logic        probe_spr_a_we = 0;
+    wire [7:0]   probe_spr_a_dout;
+    logic [9:0]  probe_h_count = 0;
+    logic [9:0]  probe_v_count = 0;
+    logic        probe_in_text_area_d2 = 1;
+    logic [8:0]  probe_gfx_x_d2 = 0;
+    logic [16*16-1:0] probe_spr_x_flat = 0;
+    logic [16*16-1:0] probe_spr_y_flat = 0;
+    logic [15:0]      probe_spr_enable_flat = 0;
+    logic [15:0]      probe_spr_flip_h_flat = 0;
+    logic [15:0]      probe_spr_flip_v_flat = 0;
+    logic [16*2-1:0]  probe_spr_pri_flat = 0;
+    logic [16*4-1:0]  probe_spr_shape_flat = 0;
+    logic [16*4-1:0]  probe_spr_trans_flat = 0;
+    wire [3:0]        probe_spr_pixel;
+    wire [1:0]        probe_spr_pixel_pri;
+    wire              probe_spr_pixel_hit;
+    wire [7:0]        probe_collision_bg_bits;
+
+    vgc_sprites sprite_probe (
+        .clk(clk), .rst(rst),
+        .spr_a_addr(probe_spr_a_addr),
+        .spr_a_din(probe_spr_a_din),
+        .spr_a_we(probe_spr_a_we),
+        .spr_a_dout(probe_spr_a_dout),
+        .h_count(probe_h_count),
+        .v_count(probe_v_count),
+        .in_text_area_d2(probe_in_text_area_d2),
+        .gfx_x_d2(probe_gfx_x_d2),
+        .spr_x_flat(probe_spr_x_flat),
+        .spr_y_flat(probe_spr_y_flat),
+        .spr_enable_flat(probe_spr_enable_flat),
+        .spr_flip_h_flat(probe_spr_flip_h_flat),
+        .spr_flip_v_flat(probe_spr_flip_v_flat),
+        .spr_pri_flat(probe_spr_pri_flat),
+        .spr_shape_flat(probe_spr_shape_flat),
+        .spr_trans_flat(probe_spr_trans_flat),
+        .spr_pixel(probe_spr_pixel),
+        .spr_pixel_pri(probe_spr_pixel_pri),
+        .spr_pixel_hit(probe_spr_pixel_hit),
+        .collision_bg_bits(probe_collision_bg_bits)
+    );
+
     // -----------------------------------------------------------------------
     // Command helpers
     // -----------------------------------------------------------------------
@@ -94,6 +142,53 @@ module test_vgc_sprites;
         write_param(3, color[7:0]);
         write_cmd(CMD_SPRDEF);
         wait_cmd_done();
+    endtask
+
+    task automatic probe_clear_line_buffers();
+        for (int bank = 0; bank < 2; bank++)
+            for (int x = 0; x < 320; x++)
+                sprite_probe.slb_mem[bank][x] = 7'd0;
+    endtask
+
+    task automatic probe_config_solid_sprite(input int y);
+        probe_spr_x_flat = '0;
+        probe_spr_y_flat = '0;
+        probe_spr_enable_flat = '0;
+        probe_spr_flip_h_flat = '0;
+        probe_spr_flip_v_flat = '0;
+        probe_spr_pri_flat = '0;
+        probe_spr_shape_flat = '0;
+        probe_spr_trans_flat = '0;
+
+        probe_spr_x_flat[0 +: 16] = 16'd0;
+        probe_spr_y_flat[0 +: 16] = 16'(y);
+        probe_spr_enable_flat[0] = 1'b1;
+        probe_spr_pri_flat[0 +: 2] = 2'd2;
+        probe_spr_shape_flat[0 +: 4] = 4'd0;
+        probe_spr_trans_flat[0 +: 4] = 4'd0;
+
+        for (int row = 0; row < 16; row++)
+            for (int col_pair = 0; col_pair < 8; col_pair++)
+                sprite_probe.spr_mem.mem[row * 8 + col_pair] = 8'hFF;
+    endtask
+
+    task automatic probe_prepare_then_display(input int prep_v, input int display_v);
+        probe_h_count <= 10'd0;
+        probe_v_count <= prep_v[9:0];
+        probe_gfx_x_d2 <= 9'd0;
+        @(posedge clk);
+
+        probe_h_count <= 10'd1;
+        step(760);
+
+        probe_h_count <= 10'd0;
+        probe_v_count <= display_v[9:0];
+        @(posedge clk);
+
+        probe_h_count <= 10'd1;
+        probe_gfx_x_d2 <= 9'd0;
+        @(posedge clk);
+        @(posedge clk);
     endtask
 
     // -----------------------------------------------------------------------
@@ -306,6 +401,26 @@ module test_vgc_sprites;
         end
     endtask
 
+    task automatic test_sprite_probe_covers_320x240_plane();
+        $display("");
+        $display("Test: PIXIE prepares top and bottom rows of the 320x240 sprite plane");
+
+        probe_clear_line_buffers();
+        probe_config_solid_sprite(0);
+        // Native line 479 prepares gfx/sprite row 0 for the next frame's
+        // native line 0. This catches the old 320x200/V_BORDER=40 evaluator.
+        probe_prepare_then_display(479, 0);
+        check_eq("probe top row pixel hit", int'(probe_spr_pixel_hit), 1);
+        check_eq("probe top row color", int'(probe_spr_pixel), 15);
+
+        probe_clear_line_buffers();
+        probe_config_solid_sprite(239);
+        // Native line 478 prepares native line 479, which maps to sprite y=239.
+        probe_prepare_then_display(478, 479);
+        check_eq("probe bottom row pixel hit", int'(probe_spr_pixel_hit), 1);
+        check_eq("probe bottom row color", int'(probe_spr_pixel), 15);
+    endtask
+
     // -----------------------------------------------------------------------
     // Runner
     // -----------------------------------------------------------------------
@@ -323,6 +438,7 @@ module test_vgc_sprites;
         test_sprdef_preserves_other_pixel();
         test_oob_sprite_index();
         test_multiple_sprites_independent();
+        test_sprite_probe_covers_320x240_plane();
 
         summary();
         $finish;

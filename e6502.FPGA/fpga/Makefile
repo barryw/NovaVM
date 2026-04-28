@@ -23,7 +23,7 @@ VL = read_verilog -DSYNTHESIS
 
 NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --timing-allow-fail
 
-.PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag
+.PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag diag-vgc diag-sprites
 
 all: ehbasic bitstream
 
@@ -70,6 +70,10 @@ $(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI
 # =========================================================================
 diag: $(BUILDDIR)/post_synth.v
 
+diag-vgc: $(BUILDDIR)/post_synth_vgc.v
+
+diag-sprites: $(BUILDDIR)/post_synth_sprites.v
+
 $(BUILDDIR)/post_synth.v: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
@@ -83,6 +87,32 @@ $(BUILDDIR)/post_synth.v: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI
 	@echo "Post-synth artifacts:"
 	@echo "  Verilog: $@"
 	@echo "  ILANG:   $(BUILDDIR)/post_synth.il"
+
+$(BUILDDIR)/post_synth_vgc.v: $(RTL_VGC)
+	@mkdir -p $(BUILDDIR)
+	$(YOSYS) -p "\
+		verilog_defaults -add -DSYNTHESIS; \
+		$(SV) $(RTL_VGC); \
+		synth_ecp5 -top vgc; \
+		stat; \
+		write_verilog $@; \
+		write_rtlil $(BUILDDIR)/post_synth_vgc.il"
+	@echo "VGC post-synth artifacts:"
+	@echo "  Verilog: $@"
+	@echo "  ILANG:   $(BUILDDIR)/post_synth_vgc.il"
+
+$(BUILDDIR)/post_synth_sprites.v: $(DPRAM) $(RTLDIR)/vgc_sprites.sv
+	@mkdir -p $(BUILDDIR)
+	$(YOSYS) -p "\
+		verilog_defaults -add -DSYNTHESIS; \
+		$(SV) $(DPRAM) $(RTLDIR)/vgc_sprites.sv; \
+		synth_ecp5 -top vgc_sprites; \
+		stat; \
+		write_verilog $@; \
+		write_rtlil $(BUILDDIR)/post_synth_sprites.il"
+	@echo "Sprite post-synth artifacts:"
+	@echo "  Verilog: $@"
+	@echo "  ILANG:   $(BUILDDIR)/post_synth_sprites.il"
 
 synth: ehbasic $(BUILDDIR)/$(PROJ).json
 

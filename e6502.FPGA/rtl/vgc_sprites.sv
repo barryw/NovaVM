@@ -44,9 +44,8 @@ module vgc_sprites (
 
     localparam H_ACTIVE  = 640;
     localparam V_ACTIVE  = 480;
-    localparam V_BORDER  = 40;
-    localparam TEXT_H    = 400;
     localparam GFX_W     = 320;
+    localparam GFX_H     = 240;
     localparam NUM_SPRITES = 16;
     localparam SPR_W     = 16;
     localparam SPR_H     = 16;
@@ -87,20 +86,50 @@ module vgc_sprites (
     );
 
     // =========================================================================
-    // Sprite scanline buffer — dpram for synthesis (packed: {pri[1:0], color[3:0], valid})
+    // Sprite scanline buffers — EXPLICIT FF ARRAYS (not memory inference)
+    //
+    // History 2026-04-28/29: Three attempts to force yosys to map this as
+    // DP16KD BRAM all failed — the dpram module, ram_style="block" attribute,
+    // -nolutram synth flag, and inline 512-deep pattern all produced
+    // distributed LUT4-D cells with a cascade-write bug that silently dropped
+    // SPR_CLEAR writes, leaving stale sprite data in the buffer forever. The
+    // visible symptom was a phantom-sprite vertical bar at every previously
+    // written sprite-X position, persisting across cold_starts.
+    //
+    // Resolution: synthesize as raw FFs. ram_style="registers" hint plus an
+    // explicit per-FF write-decode pattern bypasses memory_libmap entirely.
+    //
+    // The buffers are ping-ponged. One bank is read by compositing while the
+    // other is cleared/filled for the next native VGA line. A single buffer
+    // cannot work reliably here: clear alone takes 320 cycles and hblank is
+    // only 160 cycles at 640x480, so the old design modified the buffer while
+    // the next visible line was already reading it. That matches the observed
+    // "solid 16-pixel gray bar" artifact when stale sprite pixels survive.
     // =========================================================================
     logic [8:0]  slb_a_addr;
     logic [6:0]  slb_a_din;
     logic        slb_a_we;
-    wire  [6:0]  slb_a_dout;
+    logic        slb_a_bank;
     logic [8:0]  slb_b_addr;
-    wire  [6:0]  slb_b_dout;
+    logic [6:0]  slb_b_dout;
+    logic        slb_display_bank;
 
-    dpram #(.WIDTH(7), .DEPTH(320)) scanline_buf (
-        .clk(clk),
-        .addr_a(slb_a_addr), .din_a(slb_a_din), .we_a(slb_a_we), .dout_a(slb_a_dout),
-        .addr_b(slb_b_addr), .dout_b(slb_b_dout)
-    );
+    (* ram_style = "registers" *)
+    reg [6:0] slb_mem [0:1][0:GFX_W-1];
+
+    initial begin
+        slb_display_bank = 1'b0;
+        slb_a_bank = 1'b1;
+        for (int bank = 0; bank < 2; bank++)
+            for (int i = 0; i < GFX_W; i++)
+                slb_mem[bank][i] = 7'd0;
+    end
+
+    always_ff @(posedge clk) begin
+        if (slb_a_we && slb_a_addr < GFX_W)
+            slb_mem[slb_a_bank][slb_a_addr] <= slb_a_din;
+        slb_b_dout <= (slb_b_addr < GFX_W) ? slb_mem[slb_display_bank][slb_b_addr] : 7'd0;
+    end
 
     // Unpack port B read for rendering
     wire [3:0] slb_rd_color = slb_b_dout[4:1];
@@ -131,8 +160,9 @@ module vgc_sprites (
     logic [7:0]  spr_next_scanline;
     logic [4:0]  spr_write_px;
 
-    wire [9:0]  spr_prep_v = v_count + 1;
-    wire [7:0]  spr_prep_y = ((spr_prep_v - V_BORDER) >> 1);
+    wire        visible_line_start = (h_count == 10'd0) && (v_count < V_ACTIVE);
+    wire [9:0]  spr_prep_v = (v_count == V_ACTIVE - 1) ? 10'd0 : (v_count + 10'd1);
+    wire [7:0]  spr_prep_y = spr_prep_v[8:1];  // 640x480 native → 320x240 sprite plane
 
     initial begin
         spr_eval_state = SPR_IDLE;
@@ -178,14 +208,22 @@ module vgc_sprites (
             spr_eval_state <= SPR_IDLE;
             spr_eval_idx <= 0;
             spr_clear_x <= 0;
+            slb_display_bank <= 1'b0;
+            slb_a_bank <= 1'b1;
         end else begin
-            case (spr_eval_state)
+            if (visible_line_start) begin
+                // Swap in the bank prepared during the previous visible line,
+                // then reuse the old display bank as the next prep target.
+                slb_display_bank <= ~slb_display_bank;
+                slb_a_bank <= slb_display_bank;
+                spr_eval_state <= SPR_CLEAR;
+                spr_clear_x <= 0;
+                spr_eval_idx <= 0;
+                spr_next_scanline <= spr_prep_y;
+            end else case (spr_eval_state)
                 SPR_IDLE: begin
-                    if (h_count == H_ACTIVE && v_count >= V_BORDER && v_count < V_BORDER + TEXT_H - 1) begin
-                        spr_eval_state <= SPR_CLEAR;
-                        spr_clear_x <= 0;
-                        spr_next_scanline <= spr_prep_y;
-                    end
+                    // Work is started at visible_line_start so preparation has
+                    // a whole native line (800 cycles), not just hblank.
                 end
                 SPR_CLEAR: begin
                     slb_a_addr <= spr_clear_x;

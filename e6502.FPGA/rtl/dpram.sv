@@ -21,6 +21,17 @@ module dpram #(
     output reg  [WIDTH-1:0]           dout_b
 );
 
+    // Force BRAM mapping. Without this, yosys's `memory_libmap` may
+    // pick distributed RAM (TRELLIS_DPR16X4) for small memories — for the
+    // SLB (320×7=2240 bits) yosys did exactly that, and the cascade-write
+    // logic for cell-banked distributed dual-port RAM dropped writes,
+    // making sprite scanline buffer effectively non-clearable. Symptom
+    // 2026-04-28: vertical sprite-bar persisted across cold_starts and
+    // accumulated old sprite-X positions. (* ram_style = "block" *) tells
+    // yosys to force DP16KD even for small memories. Cost: one DP16KD per
+    // small dpram instance (16Kbit each, mostly unused for SLB) — well
+    // worth correctness.
+    (* ram_style = "block" *)
     reg [WIDTH-1:0] mem [0:DEPTH-1];
 
     // POR init — output regs MUST start at 0. Without this, dout_a/dout_b
