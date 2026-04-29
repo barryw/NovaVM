@@ -10,10 +10,11 @@ them, you can build anything.''}{\textit{--- Overheard at a demo party, 1987}}
 
 The Virtual Graphics Controller --- VGC for short --- is the heart of the
 NovaVM's display system.  It manages three independent layers of visual output:
-an 80$\times$25 text screen, a 320$\times$200 pixel bitmap with 16 colours, and
-16 multicolour 16$\times$16 hardware sprites.  All three layers are composited
-at 60\,Hz into a single frame, with the rendering order determined by the
-active display mode.
+an 80$\times$50 text screen, a 320$\times$200 pixel bitmap with 16 colours, and
+16 multicolour 16$\times$16 hardware sprites.  Current FPGA builds output a
+720$\times$480 video signal with the 640$\times$400 Nova canvas centered inside
+it.  All layers are composited at 60\,Hz into a single frame, with the
+rendering order determined by the active display mode.
 
 From the programmer's perspective, the VGC is a collection of memory-mapped
 registers starting at \$A000.  The core registers at \$A000--\$A00F control
@@ -40,7 +41,7 @@ The VGC supports four display modes, selected by writing to \addr{A000}:
 \toprule
 \textbf{Mode} & \textbf{Name} & \textbf{Description} \\
 \midrule
-0 & Text only     & 80$\times$25 text screen.  No graphics bitmap is drawn.
+0 & Text only     & 80$\times$50 text screen.  No graphics bitmap is drawn.
                      This is the default mode at power-on. \\
 1 & Gfx over text & The graphics bitmap is drawn on top of the text layer.
                      Non-zero pixels in the bitmap obscure the text beneath. \\
@@ -762,8 +763,9 @@ P1 & Destination sprite number \\
 
 \cmdentry{14}{CmdSprPos}{Set sprite position}
 
-Positions a sprite at the given screen coordinates.  Coordinates can extend
-beyond the visible area for smooth entry/exit.
+Positions a sprite at the given screen coordinates.  Sprite X is an unsigned
+16-bit coordinate.  Sprite Y is an unsigned 8-bit coordinate over the
+240-line sprite plane.
 
 \begin{center}
 \small
@@ -772,8 +774,9 @@ beyond the visible area for smooth entry/exit.
 \textbf{Param} & \textbf{Meaning} \\
 \midrule
 P0       & Sprite number (0--15) \\
-P1, P2   & X position (16-bit LE) \\
-P3, P4   & Y position (16-bit LE) \\
+P1, P2   & X position (unsigned 16-bit LE) \\
+P3       & Y position (unsigned 8-bit) \\
+P4       & Reserved; write 0 \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -782,7 +785,7 @@ P3, P4   & Y position (16-bit LE) \\
 10 REM position sprite 2 at (160, 100)
 20 POKE $A011,2    : REM sprite 2
 30 POKE $A012,160  : POKE $A013,0 : REM X=160
-40 POKE $A014,100  : POKE $A015,0 : REM Y=100
+40 POKE $A014,100  : POKE $A015,0 : REM Y=100, P4 reserved
 50 POKE $A010,$14   : REM execute SPRPOS
 \end{lstlisting}
 
@@ -934,15 +937,16 @@ P4     & Flags: bit 0 = auto-increment address \\
 
 Memory space values:
 \begin{itemize}
-  \item \$00 = Screen RAM (2000 bytes, character codes)
-  \item \$01 = Colour RAM (2000 bytes, per-cell colour attributes)
-  \item \$02 = Graphics bitmap (64000 bytes, 320$\times$200 pixels)
-  \item \$03 = Sprite shape RAM (256 slots $\times$ 128 bytes = 32768 bytes)
+  \item \$01 = Character RAM (4000 bytes, character codes)
+  \item \$02 = Colour RAM (4000 bytes, per-cell colour attributes)
+  \item \$03 = Graphics bitmap (64000 bytes, 320$\times$200 pixels)
+  \item \$04 = Sprite shape RAM (256 slots $\times$ 128 bytes = 32768 bytes)
+  \item \$06 = Tile data RAM (32768 bytes)
 \end{itemize}
 
 \begin{lstlisting}
 10 REM read the character at screen position 0
-20 POKE $A011,0  : REM space = screen RAM
+20 POKE $A011,1  : REM space = character RAM
 30 POKE $A012,0  : POKE $A013,0 : REM address = 0
 40 POKE $A015,0  : REM no auto-increment
 50 POKE $A010,$19 : REM execute MEMREAD
@@ -977,7 +981,7 @@ P4     & Flags: bit 0 = auto-increment address \\
 
 \begin{lstlisting}
 10 REM write 'A' (65) to screen position 0
-20 POKE $A011,0   : REM space = screen RAM
+20 POKE $A011,1   : REM space = character RAM
 30 POKE $A012,0   : POKE $A013,0 : REM address = 0
 40 POKE $A014,65  : REM data = 'A'
 50 POKE $A015,0   : REM no auto-increment
@@ -1306,8 +1310,8 @@ The base address of sprite $N$ is:
 \midrule
 +0 & SprRegXLo       & R/W & X position low byte \\
 +1 & SprRegXHi       & R/W & X position high byte \\
-+2 & SprRegYLo       & R/W & Y position low byte \\
-+3 & SprRegYHi       & R/W & Y position high byte \\
++2 & SprRegYLo       & R/W & Y position (unsigned byte) \\
++3 & SprRegYHi       & R/W & Reserved; reads as 0 \\
 +4 & SprRegShape     & R/W & Shape slot index (0--255) \\
 +5 & SprRegFlags     & R/W & Flags (see below) \\
 +6 & SprRegPriority  & R/W & Draw priority (0--2) \\
@@ -1350,30 +1354,30 @@ For quick reference, here are the base addresses for all 16 sprites:
 \end{tabular}
 \end{center}
 
-\subsection*{Direct Register Access Example}
+\subsection*{Sprite Register Access}
+
+NovaVM exposes sprite registers for low-level code, but NovaBASIC programs
+should use the sprite commands and functions instead.  The FPGA buffers sprite
+position, shape, flags, priority, and transparency changes and publishes them at
+the frame boundary, so immediate writes do not tear visible sprites.
 
 \begin{lstlisting}
-10 REM position sprite 3 at (100, 50) via direct register access
-20 BASE = $A040 + 3*8
-30 POKE BASE+0, 100 : POKE BASE+1, 0  : REM X=100
-40 POKE BASE+2, 50  : POKE BASE+3, 0  : REM Y=50
-50 POKE BASE+5, $80                    : REM enable
+10 REM position sprite 3 at (100, 50)
+20 SPRITE 3,ON
+30 SPRITE 3,100,50
 \end{lstlisting}
 
 \begin{lstlisting}
 10 REM read sprite 5's current position
-20 BASE = $A040 + 5*8
-30 X = PEEK(BASE+0) + PEEK(BASE+1)*256
-40 Y = PEEK(BASE+2) + PEEK(BASE+3)*256
-50 PRINT "SPRITE 5 AT ";X;",";Y
+20 X = SPRITEX(5)
+30 Y = SPRITEY(5)
+40 PRINT "SPRITE 5 AT ";X;",";Y
 \end{lstlisting}
 
-\begin{tipbox}
-Direct register access is faster than using the command interface for
-positioning sprites in a tight game loop.  Updating the X and Y registers
-directly avoids the overhead of loading the parameter registers and issuing a
-command.
-\end{tipbox}
+\begin{notebox}
+Y high is reserved.  Sprite X is an unsigned 16-bit value; sprite Y is an
+unsigned 8-bit value over the 0--239 sprite plane.
+\end{notebox}
 
 \begin{lstlisting}
 10 REM enable sprite 0 with horizontal flip

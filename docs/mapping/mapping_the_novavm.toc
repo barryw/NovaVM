@@ -4,21 +4,23 @@
 \contentsline {section}{\numberline {1.3}USR() Function Vector (\$0A--\$0C)}{2}{section.1.3}%
 \contentsline {section}{\numberline {1.4}Terminal Settings (\$0D--\$10)}{2}{section.1.4}%
 \contentsline {section}{\numberline {1.5}Temporary Integer (\$11--\$12)}{3}{section.1.5}%
-\contentsline {section}{\numberline {1.6}Unallocated (\$13--\$5A)}{3}{section.1.6}%
-\contentsline {section}{\numberline {1.7}Interpreter Flags (\$5B--\$64)}{4}{section.1.7}%
-\contentsline {section}{\numberline {1.8}String Descriptor Stack (\$65--\$70)}{5}{section.1.8}%
-\contentsline {section}{\numberline {1.9}Utility Pointers and FAC Temporaries (\$71--\$78)}{5}{section.1.9}%
-\contentsline {section}{\numberline {1.10}Memory Management Pointers (\$79--\$86)}{6}{section.1.10}%
-\contentsline {section}{\numberline {1.11}Line and Data Pointers (\$87--\$9F)}{8}{section.1.11}%
-\contentsline {section}{\numberline {1.12}Garbage Collection and Array Workspace (\$A0--\$AB)}{10}{section.1.12}%
-\contentsline {section}{\numberline {1.13}Floating-Point Accumulator 1 (\$AC--\$B2)}{11}{section.1.13}%
-\contentsline {section}{\numberline {1.14}Floating-Point Accumulator 2 (\$B3--\$B9)}{12}{section.1.14}%
-\contentsline {section}{\numberline {1.15}BASIC Byte Fetch Subroutines (\$BA--\$D7)}{12}{section.1.15}%
-\contentsline {section}{\numberline {1.16}Pseudo-Random Number Generator (\$D8--\$DB)}{13}{section.1.16}%
-\contentsline {section}{\numberline {1.17}Interrupt Handler Vectors (\$DC--\$E1)}{14}{section.1.17}%
-\contentsline {section}{\numberline {1.18}HELP Scratch (\$E2)}{15}{section.1.18}%
-\contentsline {section}{\numberline {1.19}Unused (\$E3--\$EE)}{15}{section.1.19}%
-\contentsline {section}{\numberline {1.20}Decimal Conversion Buffer (\$EF--\$FF)}{15}{section.1.20}%
+\contentsline {section}{\numberline {1.6}Unallocated (\$13--\$1F)}{3}{section.1.6}%
+\contentsline {section}{\numberline {1.7}Nova Pseudo-Registers (\$20--\$2F)}{4}{section.1.7}%
+\contentsline {section}{\numberline {1.8}Unallocated (\$30--\$5A)}{4}{section.1.8}%
+\contentsline {section}{\numberline {1.9}Interpreter Flags (\$5B--\$64)}{4}{section.1.9}%
+\contentsline {section}{\numberline {1.10}String Descriptor Stack (\$65--\$70)}{6}{section.1.10}%
+\contentsline {section}{\numberline {1.11}Utility Pointers and FAC Temporaries (\$71--\$78)}{6}{section.1.11}%
+\contentsline {section}{\numberline {1.12}Memory Management Pointers (\$79--\$86)}{7}{section.1.12}%
+\contentsline {section}{\numberline {1.13}Line and Data Pointers (\$87--\$9F)}{8}{section.1.13}%
+\contentsline {section}{\numberline {1.14}Garbage Collection and Array Workspace (\$A0--\$AB)}{11}{section.1.14}%
+\contentsline {section}{\numberline {1.15}Floating-Point Accumulator 1 (\$AC--\$B2)}{12}{section.1.15}%
+\contentsline {section}{\numberline {1.16}Floating-Point Accumulator 2 (\$B3--\$B9)}{12}{section.1.16}%
+\contentsline {section}{\numberline {1.17}BASIC Byte Fetch Subroutines (\$BA--\$D7)}{13}{section.1.17}%
+\contentsline {section}{\numberline {1.18}Pseudo-Random Number Generator (\$D8--\$DB)}{14}{section.1.18}%
+\contentsline {section}{\numberline {1.19}Interrupt Handler Vectors (\$DC--\$E1)}{14}{section.1.19}%
+\contentsline {section}{\numberline {1.20}HELP Scratch (\$E2)}{15}{section.1.20}%
+\contentsline {section}{\numberline {1.21}Unused (\$E3--\$EE)}{15}{section.1.21}%
+\contentsline {section}{\numberline {1.22}Decimal Conversion Buffer (\$EF--\$FF)}{16}{section.1.22}%
 \contentsline {chapter}{\numberline {2}The Stack}{17}{chapter.2}%
 \contentsline {section}{\numberline {2.1}Stack Mechanics}{17}{section.2.1}%
 \contentsline {section}{\numberline {2.2}Stack Frame Formats}{18}{section.2.2}%

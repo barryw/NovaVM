@@ -16,111 +16,111 @@
   \item {\texttt  {\$005B}} --- Srchc / Temp3 \dotfill\ 4
   \item {\texttt  {\$005C}} --- Scnquo / Asrch \dotfill\ 4
   \item {\texttt  {\$005D}} --- Ibptr / Dimcnt / Tindx \dotfill\ 4
-  \item {\texttt  {\$005E}} --- Defdim \dotfill\ 4
-  \item {\texttt  {\$005F}} --- Dtypef \dotfill\ 4
-  \item {\texttt  {\$0060}} --- Oquote / Gclctd \dotfill\ 4
-  \item {\texttt  {\$0061}} --- Sufnxf \dotfill\ 4
-  \item {\texttt  {\$0062}} --- Imode \dotfill\ 4
+  \item {\texttt  {\$005E}} --- Defdim \dotfill\ 5
+  \item {\texttt  {\$005F}} --- Dtypef \dotfill\ 5
+  \item {\texttt  {\$0060}} --- Oquote / Gclctd \dotfill\ 5
+  \item {\texttt  {\$0061}} --- Sufnxf \dotfill\ 5
+  \item {\texttt  {\$0062}} --- Imode \dotfill\ 5
   \item {\texttt  {\$0063}} --- Cflag \dotfill\ 5
   \item {\texttt  {\$0064}} --- TabSiz \dotfill\ 5
-  \item {\texttt  {\$0065}} --- next\_s \dotfill\ 5
-  \item {\texttt  {\$0066}} --- last\_sl \dotfill\ 5
-  \item {\texttt  {\$0067}} --- last\_sh \dotfill\ 5
+  \item {\texttt  {\$0065}} --- next\_s \dotfill\ 6
+  \item {\texttt  {\$0066}} --- last\_sl \dotfill\ 6
+  \item {\texttt  {\$0067}} --- last\_sh \dotfill\ 6
   \item {\texttt  {\$0068--\$0070}} --- des\_sk (Descriptor Stack) \dotfill\ 
-		5
-  \item {\texttt  {\$0071}} --- ut1\_pl \dotfill\ 5
-  \item {\texttt  {\$0072}} --- ut1\_ph \dotfill\ 5
+		6
+  \item {\texttt  {\$0071}} --- ut1\_pl \dotfill\ 6
+  \item {\texttt  {\$0072}} --- ut1\_ph \dotfill\ 6
   \item {\texttt  {\$0073}} --- ut2\_pl \dotfill\ 6
   \item {\texttt  {\$0074}} --- ut2\_ph \dotfill\ 6
   \item {\texttt  {\$0075}} --- FACt\_1 \dotfill\ 6
   \item {\texttt  {\$0076}} --- FACt\_2 / dims\_l \dotfill\ 6
-  \item {\texttt  {\$0077}} --- FACt\_3 / dims\_h \dotfill\ 6
-  \item {\texttt  {\$0078}} --- TempB \dotfill\ 6
-  \item {\texttt  {\$0079}} --- Smeml \dotfill\ 6
-  \item {\texttt  {\$007A}} --- Smemh \dotfill\ 6
-  \item {\texttt  {\$007B}} --- Svarl \dotfill\ 6
+  \item {\texttt  {\$0077}} --- FACt\_3 / dims\_h \dotfill\ 7
+  \item {\texttt  {\$0078}} --- TempB \dotfill\ 7
+  \item {\texttt  {\$0079}} --- Smeml \dotfill\ 7
+  \item {\texttt  {\$007A}} --- Smemh \dotfill\ 7
+  \item {\texttt  {\$007B}} --- Svarl \dotfill\ 7
   \item {\texttt  {\$007C}} --- Svarh \dotfill\ 7
   \item {\texttt  {\$007D}} --- Sarryl \dotfill\ 7
   \item {\texttt  {\$007E}} --- Sarryh \dotfill\ 7
   \item {\texttt  {\$007F}} --- Earryl \dotfill\ 7
   \item {\texttt  {\$0080}} --- Earryh \dotfill\ 7
-  \item {\texttt  {\$0081}} --- Sstorl \dotfill\ 7
-  \item {\texttt  {\$0082}} --- Sstorh \dotfill\ 7
-  \item {\texttt  {\$0083}} --- Sutill \dotfill\ 7
-  \item {\texttt  {\$0084}} --- Sutilh \dotfill\ 7
-  \item {\texttt  {\$0085}} --- Ememl \dotfill\ 7
-  \item {\texttt  {\$0086}} --- Ememh \dotfill\ 7
+  \item {\texttt  {\$0081}} --- Sstorl \dotfill\ 8
+  \item {\texttt  {\$0082}} --- Sstorh \dotfill\ 8
+  \item {\texttt  {\$0083}} --- Sutill \dotfill\ 8
+  \item {\texttt  {\$0084}} --- Sutilh \dotfill\ 8
+  \item {\texttt  {\$0085}} --- Ememl \dotfill\ 8
+  \item {\texttt  {\$0086}} --- Ememh \dotfill\ 8
   \item {\texttt  {\$0087}} --- Clinel \dotfill\ 8
-  \item {\texttt  {\$0088}} --- Clineh \dotfill\ 8
-  \item {\texttt  {\$0089}} --- Blinel \dotfill\ 8
-  \item {\texttt  {\$008A}} --- Blineh \dotfill\ 8
-  \item {\texttt  {\$008B}} --- Cpntrl \dotfill\ 8
-  \item {\texttt  {\$008C}} --- Cpntrh \dotfill\ 8
-  \item {\texttt  {\$008D}} --- Dlinel \dotfill\ 8
+  \item {\texttt  {\$0088}} --- Clineh \dotfill\ 9
+  \item {\texttt  {\$0089}} --- Blinel \dotfill\ 9
+  \item {\texttt  {\$008A}} --- Blineh \dotfill\ 9
+  \item {\texttt  {\$008B}} --- Cpntrl \dotfill\ 9
+  \item {\texttt  {\$008C}} --- Cpntrh \dotfill\ 9
+  \item {\texttt  {\$008D}} --- Dlinel \dotfill\ 9
   \item {\texttt  {\$008E}} --- Dlineh \dotfill\ 9
   \item {\texttt  {\$008F}} --- Dptrl \dotfill\ 9
   \item {\texttt  {\$0090}} --- Dptrh \dotfill\ 9
   \item {\texttt  {\$0091}} --- Rdptrl \dotfill\ 9
   \item {\texttt  {\$0092}} --- Rdptrh \dotfill\ 9
-  \item {\texttt  {\$0093}} --- Varnm1 \dotfill\ 9
-  \item {\texttt  {\$0094}} --- Varnm2 \dotfill\ 9
-  \item {\texttt  {\$0095}} --- Cvaral \dotfill\ 9
-  \item {\texttt  {\$0096}} --- Cvarah \dotfill\ 9
-  \item {\texttt  {\$0097}} --- Frnxtl \dotfill\ 9
-  \item {\texttt  {\$0098}} --- Frnxth \dotfill\ 9
-  \item {\texttt  {\$0099}} --- prstk \dotfill\ 9
+  \item {\texttt  {\$0093}} --- Varnm1 \dotfill\ 10
+  \item {\texttt  {\$0094}} --- Varnm2 \dotfill\ 10
+  \item {\texttt  {\$0095}} --- Cvaral \dotfill\ 10
+  \item {\texttt  {\$0096}} --- Cvarah \dotfill\ 10
+  \item {\texttt  {\$0097}} --- Frnxtl \dotfill\ 10
+  \item {\texttt  {\$0098}} --- Frnxth \dotfill\ 10
+  \item {\texttt  {\$0099}} --- prstk \dotfill\ 10
   \item {\texttt  {\$009B}} --- comp\_f \dotfill\ 10
   \item {\texttt  {\$009C}} --- func\_l / garb\_l \dotfill\ 10
   \item {\texttt  {\$009D}} --- func\_h / garb\_h \dotfill\ 10
   \item {\texttt  {\$009E}} --- des\_2l \dotfill\ 10
-  \item {\texttt  {\$009F}} --- des\_2h \dotfill\ 10
-  \item {\texttt  {\$00A0}} --- g\_step \dotfill\ 10
-  \item {\texttt  {\$00A1}} --- Fnxjmp \dotfill\ 10
-  \item {\texttt  {\$00A2}} --- Fnxjpl / g\_indx \dotfill\ 10
-  \item {\texttt  {\$00A3}} --- FAC2\_r \dotfill\ 10
-  \item {\texttt  {\$00A4}} --- Adatal / Nbendl \dotfill\ 10
+  \item {\texttt  {\$009F}} --- des\_2h \dotfill\ 11
+  \item {\texttt  {\$00A0}} --- g\_step \dotfill\ 11
+  \item {\texttt  {\$00A1}} --- Fnxjmp \dotfill\ 11
+  \item {\texttt  {\$00A2}} --- Fnxjpl / g\_indx \dotfill\ 11
+  \item {\texttt  {\$00A3}} --- FAC2\_r \dotfill\ 11
+  \item {\texttt  {\$00A4}} --- Adatal / Nbendl \dotfill\ 11
   \item {\texttt  {\$00A5}} --- Adatah / Nbendh \dotfill\ 11
   \item {\texttt  {\$00A6}} --- Obendl \dotfill\ 11
   \item {\texttt  {\$00A7}} --- Obendh \dotfill\ 11
   \item {\texttt  {\$00A8}} --- numexp / numbit \dotfill\ 11
   \item {\texttt  {\$00A9}} --- expcnt \dotfill\ 11
   \item {\texttt  {\$00AA}} --- numdpf / Astrtl \dotfill\ 11
-  \item {\texttt  {\$00AB}} --- expneg / Astrth \dotfill\ 11
-  \item {\texttt  {\$00AC}} --- FAC1\_e \dotfill\ 11
-  \item {\texttt  {\$00AD}} --- FAC1\_1 \dotfill\ 11
-  \item {\texttt  {\$00AE}} --- FAC1\_2 \dotfill\ 11
-  \item {\texttt  {\$00AF}} --- FAC1\_3 \dotfill\ 11
+  \item {\texttt  {\$00AB}} --- expneg / Astrth \dotfill\ 12
+  \item {\texttt  {\$00AC}} --- FAC1\_e \dotfill\ 12
+  \item {\texttt  {\$00AD}} --- FAC1\_1 \dotfill\ 12
+  \item {\texttt  {\$00AE}} --- FAC1\_2 \dotfill\ 12
+  \item {\texttt  {\$00AF}} --- FAC1\_3 \dotfill\ 12
   \item {\texttt  {\$00B0}} --- FAC1\_s \dotfill\ 12
   \item {\texttt  {\$00B1}} --- negnum / numcon \dotfill\ 12
   \item {\texttt  {\$00B2}} --- FAC1\_o \dotfill\ 12
   \item {\texttt  {\$00B3}} --- FAC2\_e \dotfill\ 12
-  \item {\texttt  {\$00B4}} --- FAC2\_1 \dotfill\ 12
-  \item {\texttt  {\$00B5}} --- FAC2\_2 \dotfill\ 12
-  \item {\texttt  {\$00B6}} --- FAC2\_3 \dotfill\ 12
-  \item {\texttt  {\$00B7}} --- FAC2\_s \dotfill\ 12
-  \item {\texttt  {\$00B8}} --- FAC\_sc \dotfill\ 12
-  \item {\texttt  {\$00B9}} --- FAC1\_r \dotfill\ 12
+  \item {\texttt  {\$00B4}} --- FAC2\_1 \dotfill\ 13
+  \item {\texttt  {\$00B5}} --- FAC2\_2 \dotfill\ 13
+  \item {\texttt  {\$00B6}} --- FAC2\_3 \dotfill\ 13
+  \item {\texttt  {\$00B7}} --- FAC2\_s \dotfill\ 13
+  \item {\texttt  {\$00B8}} --- FAC\_sc \dotfill\ 13
+  \item {\texttt  {\$00B9}} --- FAC1\_r \dotfill\ 13
   \item {\texttt  {\$00BA}} --- csidx / Asptl \dotfill\ 13
   \item {\texttt  {\$00BB}} --- Aspth \dotfill\ 13
   \item {\texttt  {\$00BC--\$00C1}} --- LAB\_IGBY (Increment and Get BYte) \dotfill\ 
 		13
   \item {\texttt  {\$00C2--\$00C4}} --- LAB\_GBYT (Get BYTe) \dotfill\ 
 		13
-  \item {\texttt  {\$00C3}} --- Bpntrl \dotfill\ 13
-  \item {\texttt  {\$00C4}} --- Bpntrh \dotfill\ 13
-  \item {\texttt  {\$00D8}} --- Rbyte4 \dotfill\ 13
-  \item {\texttt  {\$00D9}} --- Rbyte1 \dotfill\ 13
+  \item {\texttt  {\$00C3}} --- Bpntrl \dotfill\ 14
+  \item {\texttt  {\$00C4}} --- Bpntrh \dotfill\ 14
+  \item {\texttt  {\$00D8}} --- Rbyte4 \dotfill\ 14
+  \item {\texttt  {\$00D9}} --- Rbyte1 \dotfill\ 14
   \item {\texttt  {\$00DA}} --- Rbyte2 \dotfill\ 14
   \item {\texttt  {\$00DB}} --- Rbyte3 \dotfill\ 14
   \item {\texttt  {\$00DC}} --- NmiBase \dotfill\ 14
-  \item {\texttt  {\$00DD}} --- NMI Address Low \dotfill\ 14
-  \item {\texttt  {\$00DE}} --- NMI Address High \dotfill\ 14
-  \item {\texttt  {\$00DF}} --- IrqBase \dotfill\ 14
-  \item {\texttt  {\$00E0}} --- IRQ Address Low \dotfill\ 14
-  \item {\texttt  {\$00E1}} --- IRQ Address High \dotfill\ 14
+  \item {\texttt  {\$00DD}} --- NMI Address Low \dotfill\ 15
+  \item {\texttt  {\$00DE}} --- NMI Address High \dotfill\ 15
+  \item {\texttt  {\$00DF}} --- IrqBase \dotfill\ 15
+  \item {\texttt  {\$00E0}} --- IRQ Address Low \dotfill\ 15
+  \item {\texttt  {\$00E1}} --- IRQ Address High \dotfill\ 15
   \item {\texttt  {\$00E2}} --- help\_len \dotfill\ 15
   \item {\texttt  {\$00EF--\$00FF}} --- Decss (Decimal String Buffer) \dotfill\ 
-		15
+		16
   \item {\texttt  {\$0100--\$01FF}} --- Hardware Stack \dotfill\ 17
   \item {\texttt  {\$0200}} --- VgcBase (low) \dotfill\ 21
   \item {\texttt{\$0200--\$027F}} --- System Vector Table \dotfill\ 21

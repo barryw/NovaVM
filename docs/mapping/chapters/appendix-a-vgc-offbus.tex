@@ -42,7 +42,7 @@ nibble (bits 3--0).  The upper nibble is ignored on write and reads as zero.
 Resolution                 & 320$\times$200 pixels \\
 Bits per pixel             & 4 (stored in low nibble of each byte) \\
 Total size                 & 64,000 bytes \\
-VGC MemRead/MemWrite space & \$02 (\texttt{MemSpaceGfx}) \\
+VGC MemRead/MemWrite space & \$03 (\texttt{MemSpaceGfx}) \\
 DMA space                  & 3 (\texttt{DmaSpaceVgcGfx}) \\
 \bottomrule
 \end{tabular}
@@ -95,7 +95,7 @@ reading individual pixel values or implementing custom rendering algorithms.
 
 \begin{lstlisting}
 10 REM read pixel at (100, 50)
-20 POKE $A011, 2               : REM P0 = space (MemSpaceGfx)
+20 POKE $A011, 3               : REM P0 = space (MemSpaceGfx)
 30 OFFSET = 50*320+100
 40 POKE $A012, OFFSET AND 255  : REM P1 = offset low byte
 50 POKE $A013, INT(OFFSET/256) : REM P2 = offset high byte
@@ -137,7 +137,7 @@ Bytes per row              & 8 (16 pixels $\times$ 4 bits $\div$ 8) \\
 Bytes per shape            & 128 (8 bytes/row $\times$ 16 rows) \\
 Bits per pixel             & 4 (packed: high nibble = even col, low nibble = odd col) \\
 Total size                 & 32,768 bytes (32\,KB) \\
-VGC MemRead/MemWrite space & \$03 (\texttt{MemSpaceSprite}) \\
+VGC MemRead/MemWrite space & \$04 (\texttt{MemSpaceSprite}) \\
 DMA space                  & 4 (\texttt{DmaSpaceVgcSprite}) \\
 \bottomrule
 \end{tabular}
@@ -171,7 +171,7 @@ to a different slot.
 \begin{lstlisting}
 10 REM define a simple arrow shape in slot 0
 20 REM sprites are 4-bit packed: 8 bytes/row, 128 bytes/shape
-30 POKE $A011, 3               : REM P0 = space (MemSpaceSprite)
+30 POKE $A011, 4               : REM P0 = space (MemSpaceSprite)
 40 FOR ROW = 0 TO 15
 50   FOR BYTECOL = 0 TO 7
 60     OFFSET = 0*128 + ROW*8 + BYTECOL

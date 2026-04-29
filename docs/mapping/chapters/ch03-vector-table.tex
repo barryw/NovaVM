@@ -65,28 +65,29 @@ triggers immediate execution of graphics primitives (plot, line, circle, fill)
 and sprite operations.  Parameters are loaded into \$A011--\$A01E before the
 command write.  See Chapter~\ref{addr:A000} for the complete command list.
 
-% ── CharRamBase ──────────────────────────────────────────────────────────────
-\mementry{0204}{CharRamBase (low)}{R/W}{\$00}
+% ── VramPortBase ─────────────────────────────────────────────────────────────
+\mementry{0204}{VramPortBase (low)}{R/W}{\$E0}
 
-\mementry{0205}{CharRamBase (high)}{R/W}{\$AA}
+\mementry{0205}{VramPortBase (high)}{R/W}{\$A0}
 
-Points to \$AA00, the start of the 2000-byte character RAM (80 columns
-$\times$ 25 rows).  Each byte holds an ASCII character code.
-See Chapter~\ref{addr:AA00} for screen memory details.
+Points to \$A0E0, the VDC-style VRAM port base. Character RAM, Color RAM,
+graphics bitmap memory, sprite shape RAM, and tile data RAM are selected by
+plane number through this port.
+See Chapter~\ref{sec:charram} for screen memory details.
 
 \begin{lstlisting}
-CB = DEEK($0204)
-POKE CB, ASC("H") : REM put 'H' at top-left
+VP = DEEK($0204)
+POKE VP, 1 : REM select character plane
 \end{lstlisting}
 
-% ── ColorRamBase ─────────────────────────────────────────────────────────────
-\mementry{0206}{ColorRamBase (low)}{R/W}{\$D0}
+% ── VramData ─────────────────────────────────────────────────────────────────
+\mementry{0206}{VramData (low)}{R/W}{\$E3}
 
-\mementry{0207}{ColorRamBase (high)}{R/W}{\$B1}
+\mementry{0207}{VramData (high)}{R/W}{\$A0}
 
-Points to \$B1D0, the start of the 2000-byte color RAM.  Each byte holds the
-foreground colour for the corresponding character position.
-See Chapter~\ref{addr:AA00}.
+Points to \$A0E3, the VRAM data register. This shortcut is useful for tight
+screen-fill loops after the caller has selected a plane and starting address
+through the VRAM port.
 
 % ── SidBase ──────────────────────────────────────────────────────────────────
 \mementry{0208}{SidBase (low)}{R/W}{\$00}
@@ -190,8 +191,8 @@ On a standard NovaVM, this produces:
 \begin{lstlisting}
 $0200 -> $A000
 $0202 -> $A010
-$0204 -> $AA00
-$0206 -> $B1D0
+$0204 -> $A0E0
+$0206 -> $A0E3
 $0208 -> $D400
 $020A -> $B9A0
 $020C -> $BA00
@@ -224,8 +225,8 @@ POKE VB+1, 6
 \midrule
 \$0200 & VgcBase      & \$A000 & VGC core registers \\
 \$0202 & RegCmdAddr   & \$A010 & VGC command register \\
-\$0204 & CharRamBase  & \$AA00 & Character RAM \\
-\$0206 & ColorRamBase & \$B1D0 & Color RAM \\
+\$0204 & VramPortBase & \$A0E0 & VRAM port base \\
+\$0206 & VramData     & \$A0E3 & VRAM data register \\
 \$0208 & SidBase      & \$D400 & SID chip 1 \\
 \$020A & FileIoBase   & \$B9A0 & File I/O controller \\
 \$020C & XmcBase      & \$BA00 & Expansion memory controller \\

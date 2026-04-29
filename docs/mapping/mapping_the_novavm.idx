@@ -13,107 +13,107 @@
 \indexentry{\$005B@{\texttt  {\$005B}} --- Srchc / Temp3}{4}
 \indexentry{\$005C@{\texttt  {\$005C}} --- Scnquo / Asrch}{4}
 \indexentry{\$005D@{\texttt  {\$005D}} --- Ibptr / Dimcnt / Tindx}{4}
-\indexentry{\$005E@{\texttt  {\$005E}} --- Defdim}{4}
-\indexentry{\$005F@{\texttt  {\$005F}} --- Dtypef}{4}
-\indexentry{\$0060@{\texttt  {\$0060}} --- Oquote / Gclctd}{4}
-\indexentry{\$0061@{\texttt  {\$0061}} --- Sufnxf}{4}
-\indexentry{\$0062@{\texttt  {\$0062}} --- Imode}{4}
+\indexentry{\$005E@{\texttt  {\$005E}} --- Defdim}{5}
+\indexentry{\$005F@{\texttt  {\$005F}} --- Dtypef}{5}
+\indexentry{\$0060@{\texttt  {\$0060}} --- Oquote / Gclctd}{5}
+\indexentry{\$0061@{\texttt  {\$0061}} --- Sufnxf}{5}
+\indexentry{\$0062@{\texttt  {\$0062}} --- Imode}{5}
 \indexentry{\$0063@{\texttt  {\$0063}} --- Cflag}{5}
 \indexentry{\$0064@{\texttt  {\$0064}} --- TabSiz}{5}
-\indexentry{\$0065@{\texttt  {\$0065}} --- next\_s}{5}
-\indexentry{\$0066@{\texttt  {\$0066}} --- last\_sl}{5}
-\indexentry{\$0067@{\texttt  {\$0067}} --- last\_sh}{5}
-\indexentry{\$0068@{\texttt  {\$0068--\$0070}} --- des\_sk (Descriptor Stack)}{5}
-\indexentry{\$0071@{\texttt  {\$0071}} --- ut1\_pl}{5}
-\indexentry{\$0072@{\texttt  {\$0072}} --- ut1\_ph}{5}
+\indexentry{\$0065@{\texttt  {\$0065}} --- next\_s}{6}
+\indexentry{\$0066@{\texttt  {\$0066}} --- last\_sl}{6}
+\indexentry{\$0067@{\texttt  {\$0067}} --- last\_sh}{6}
+\indexentry{\$0068@{\texttt  {\$0068--\$0070}} --- des\_sk (Descriptor Stack)}{6}
+\indexentry{\$0071@{\texttt  {\$0071}} --- ut1\_pl}{6}
+\indexentry{\$0072@{\texttt  {\$0072}} --- ut1\_ph}{6}
 \indexentry{\$0073@{\texttt  {\$0073}} --- ut2\_pl}{6}
 \indexentry{\$0074@{\texttt  {\$0074}} --- ut2\_ph}{6}
 \indexentry{\$0075@{\texttt  {\$0075}} --- FACt\_1}{6}
 \indexentry{\$0076@{\texttt  {\$0076}} --- FACt\_2 / dims\_l}{6}
-\indexentry{\$0077@{\texttt  {\$0077}} --- FACt\_3 / dims\_h}{6}
-\indexentry{\$0078@{\texttt  {\$0078}} --- TempB}{6}
-\indexentry{\$0079@{\texttt  {\$0079}} --- Smeml}{6}
-\indexentry{\$007A@{\texttt  {\$007A}} --- Smemh}{6}
-\indexentry{\$007B@{\texttt  {\$007B}} --- Svarl}{6}
+\indexentry{\$0077@{\texttt  {\$0077}} --- FACt\_3 / dims\_h}{7}
+\indexentry{\$0078@{\texttt  {\$0078}} --- TempB}{7}
+\indexentry{\$0079@{\texttt  {\$0079}} --- Smeml}{7}
+\indexentry{\$007A@{\texttt  {\$007A}} --- Smemh}{7}
+\indexentry{\$007B@{\texttt  {\$007B}} --- Svarl}{7}
 \indexentry{\$007C@{\texttt  {\$007C}} --- Svarh}{7}
 \indexentry{\$007D@{\texttt  {\$007D}} --- Sarryl}{7}
 \indexentry{\$007E@{\texttt  {\$007E}} --- Sarryh}{7}
 \indexentry{\$007F@{\texttt  {\$007F}} --- Earryl}{7}
 \indexentry{\$0080@{\texttt  {\$0080}} --- Earryh}{7}
-\indexentry{\$0081@{\texttt  {\$0081}} --- Sstorl}{7}
-\indexentry{\$0082@{\texttt  {\$0082}} --- Sstorh}{7}
-\indexentry{\$0083@{\texttt  {\$0083}} --- Sutill}{7}
-\indexentry{\$0084@{\texttt  {\$0084}} --- Sutilh}{7}
-\indexentry{\$0085@{\texttt  {\$0085}} --- Ememl}{7}
-\indexentry{\$0086@{\texttt  {\$0086}} --- Ememh}{7}
+\indexentry{\$0081@{\texttt  {\$0081}} --- Sstorl}{8}
+\indexentry{\$0082@{\texttt  {\$0082}} --- Sstorh}{8}
+\indexentry{\$0083@{\texttt  {\$0083}} --- Sutill}{8}
+\indexentry{\$0084@{\texttt  {\$0084}} --- Sutilh}{8}
+\indexentry{\$0085@{\texttt  {\$0085}} --- Ememl}{8}
+\indexentry{\$0086@{\texttt  {\$0086}} --- Ememh}{8}
 \indexentry{\$0087@{\texttt  {\$0087}} --- Clinel}{8}
-\indexentry{\$0088@{\texttt  {\$0088}} --- Clineh}{8}
-\indexentry{\$0089@{\texttt  {\$0089}} --- Blinel}{8}
-\indexentry{\$008A@{\texttt  {\$008A}} --- Blineh}{8}
-\indexentry{\$008B@{\texttt  {\$008B}} --- Cpntrl}{8}
-\indexentry{\$008C@{\texttt  {\$008C}} --- Cpntrh}{8}
-\indexentry{\$008D@{\texttt  {\$008D}} --- Dlinel}{8}
+\indexentry{\$0088@{\texttt  {\$0088}} --- Clineh}{9}
+\indexentry{\$0089@{\texttt  {\$0089}} --- Blinel}{9}
+\indexentry{\$008A@{\texttt  {\$008A}} --- Blineh}{9}
+\indexentry{\$008B@{\texttt  {\$008B}} --- Cpntrl}{9}
+\indexentry{\$008C@{\texttt  {\$008C}} --- Cpntrh}{9}
+\indexentry{\$008D@{\texttt  {\$008D}} --- Dlinel}{9}
 \indexentry{\$008E@{\texttt  {\$008E}} --- Dlineh}{9}
 \indexentry{\$008F@{\texttt  {\$008F}} --- Dptrl}{9}
 \indexentry{\$0090@{\texttt  {\$0090}} --- Dptrh}{9}
 \indexentry{\$0091@{\texttt  {\$0091}} --- Rdptrl}{9}
 \indexentry{\$0092@{\texttt  {\$0092}} --- Rdptrh}{9}
-\indexentry{\$0093@{\texttt  {\$0093}} --- Varnm1}{9}
-\indexentry{\$0094@{\texttt  {\$0094}} --- Varnm2}{9}
-\indexentry{\$0095@{\texttt  {\$0095}} --- Cvaral}{9}
-\indexentry{\$0096@{\texttt  {\$0096}} --- Cvarah}{9}
-\indexentry{\$0097@{\texttt  {\$0097}} --- Frnxtl}{9}
-\indexentry{\$0098@{\texttt  {\$0098}} --- Frnxth}{9}
-\indexentry{\$0099@{\texttt  {\$0099}} --- prstk}{9}
+\indexentry{\$0093@{\texttt  {\$0093}} --- Varnm1}{10}
+\indexentry{\$0094@{\texttt  {\$0094}} --- Varnm2}{10}
+\indexentry{\$0095@{\texttt  {\$0095}} --- Cvaral}{10}
+\indexentry{\$0096@{\texttt  {\$0096}} --- Cvarah}{10}
+\indexentry{\$0097@{\texttt  {\$0097}} --- Frnxtl}{10}
+\indexentry{\$0098@{\texttt  {\$0098}} --- Frnxth}{10}
+\indexentry{\$0099@{\texttt  {\$0099}} --- prstk}{10}
 \indexentry{\$009B@{\texttt  {\$009B}} --- comp\_f}{10}
 \indexentry{\$009C@{\texttt  {\$009C}} --- func\_l / garb\_l}{10}
 \indexentry{\$009D@{\texttt  {\$009D}} --- func\_h / garb\_h}{10}
 \indexentry{\$009E@{\texttt  {\$009E}} --- des\_2l}{10}
-\indexentry{\$009F@{\texttt  {\$009F}} --- des\_2h}{10}
-\indexentry{\$00A0@{\texttt  {\$00A0}} --- g\_step}{10}
-\indexentry{\$00A1@{\texttt  {\$00A1}} --- Fnxjmp}{10}
-\indexentry{\$00A2@{\texttt  {\$00A2}} --- Fnxjpl / g\_indx}{10}
-\indexentry{\$00A3@{\texttt  {\$00A3}} --- FAC2\_r}{10}
-\indexentry{\$00A4@{\texttt  {\$00A4}} --- Adatal / Nbendl}{10}
+\indexentry{\$009F@{\texttt  {\$009F}} --- des\_2h}{11}
+\indexentry{\$00A0@{\texttt  {\$00A0}} --- g\_step}{11}
+\indexentry{\$00A1@{\texttt  {\$00A1}} --- Fnxjmp}{11}
+\indexentry{\$00A2@{\texttt  {\$00A2}} --- Fnxjpl / g\_indx}{11}
+\indexentry{\$00A3@{\texttt  {\$00A3}} --- FAC2\_r}{11}
+\indexentry{\$00A4@{\texttt  {\$00A4}} --- Adatal / Nbendl}{11}
 \indexentry{\$00A5@{\texttt  {\$00A5}} --- Adatah / Nbendh}{11}
 \indexentry{\$00A6@{\texttt  {\$00A6}} --- Obendl}{11}
 \indexentry{\$00A7@{\texttt  {\$00A7}} --- Obendh}{11}
 \indexentry{\$00A8@{\texttt  {\$00A8}} --- numexp / numbit}{11}
 \indexentry{\$00A9@{\texttt  {\$00A9}} --- expcnt}{11}
 \indexentry{\$00AA@{\texttt  {\$00AA}} --- numdpf / Astrtl}{11}
-\indexentry{\$00AB@{\texttt  {\$00AB}} --- expneg / Astrth}{11}
-\indexentry{\$00AC@{\texttt  {\$00AC}} --- FAC1\_e}{11}
-\indexentry{\$00AD@{\texttt  {\$00AD}} --- FAC1\_1}{11}
-\indexentry{\$00AE@{\texttt  {\$00AE}} --- FAC1\_2}{11}
-\indexentry{\$00AF@{\texttt  {\$00AF}} --- FAC1\_3}{11}
+\indexentry{\$00AB@{\texttt  {\$00AB}} --- expneg / Astrth}{12}
+\indexentry{\$00AC@{\texttt  {\$00AC}} --- FAC1\_e}{12}
+\indexentry{\$00AD@{\texttt  {\$00AD}} --- FAC1\_1}{12}
+\indexentry{\$00AE@{\texttt  {\$00AE}} --- FAC1\_2}{12}
+\indexentry{\$00AF@{\texttt  {\$00AF}} --- FAC1\_3}{12}
 \indexentry{\$00B0@{\texttt  {\$00B0}} --- FAC1\_s}{12}
 \indexentry{\$00B1@{\texttt  {\$00B1}} --- negnum / numcon}{12}
 \indexentry{\$00B2@{\texttt  {\$00B2}} --- FAC1\_o}{12}
 \indexentry{\$00B3@{\texttt  {\$00B3}} --- FAC2\_e}{12}
-\indexentry{\$00B4@{\texttt  {\$00B4}} --- FAC2\_1}{12}
-\indexentry{\$00B5@{\texttt  {\$00B5}} --- FAC2\_2}{12}
-\indexentry{\$00B6@{\texttt  {\$00B6}} --- FAC2\_3}{12}
-\indexentry{\$00B7@{\texttt  {\$00B7}} --- FAC2\_s}{12}
-\indexentry{\$00B8@{\texttt  {\$00B8}} --- FAC\_sc}{12}
-\indexentry{\$00B9@{\texttt  {\$00B9}} --- FAC1\_r}{12}
+\indexentry{\$00B4@{\texttt  {\$00B4}} --- FAC2\_1}{13}
+\indexentry{\$00B5@{\texttt  {\$00B5}} --- FAC2\_2}{13}
+\indexentry{\$00B6@{\texttt  {\$00B6}} --- FAC2\_3}{13}
+\indexentry{\$00B7@{\texttt  {\$00B7}} --- FAC2\_s}{13}
+\indexentry{\$00B8@{\texttt  {\$00B8}} --- FAC\_sc}{13}
+\indexentry{\$00B9@{\texttt  {\$00B9}} --- FAC1\_r}{13}
 \indexentry{\$00BA@{\texttt  {\$00BA}} --- csidx / Asptl}{13}
 \indexentry{\$00BB@{\texttt  {\$00BB}} --- Aspth}{13}
 \indexentry{\$00BC@{\texttt  {\$00BC--\$00C1}} --- LAB\_IGBY (Increment and Get BYte)}{13}
 \indexentry{\$00C2@{\texttt  {\$00C2--\$00C4}} --- LAB\_GBYT (Get BYTe)}{13}
-\indexentry{\$00C3@{\texttt  {\$00C3}} --- Bpntrl}{13}
-\indexentry{\$00C4@{\texttt  {\$00C4}} --- Bpntrh}{13}
-\indexentry{\$00D8@{\texttt  {\$00D8}} --- Rbyte4}{13}
-\indexentry{\$00D9@{\texttt  {\$00D9}} --- Rbyte1}{13}
+\indexentry{\$00C3@{\texttt  {\$00C3}} --- Bpntrl}{14}
+\indexentry{\$00C4@{\texttt  {\$00C4}} --- Bpntrh}{14}
+\indexentry{\$00D8@{\texttt  {\$00D8}} --- Rbyte4}{14}
+\indexentry{\$00D9@{\texttt  {\$00D9}} --- Rbyte1}{14}
 \indexentry{\$00DA@{\texttt  {\$00DA}} --- Rbyte2}{14}
 \indexentry{\$00DB@{\texttt  {\$00DB}} --- Rbyte3}{14}
 \indexentry{\$00DC@{\texttt  {\$00DC}} --- NmiBase}{14}
-\indexentry{\$00DD@{\texttt  {\$00DD}} --- NMI Address Low}{14}
-\indexentry{\$00DE@{\texttt  {\$00DE}} --- NMI Address High}{14}
-\indexentry{\$00DF@{\texttt  {\$00DF}} --- IrqBase}{14}
-\indexentry{\$00E0@{\texttt  {\$00E0}} --- IRQ Address Low}{14}
-\indexentry{\$00E1@{\texttt  {\$00E1}} --- IRQ Address High}{14}
+\indexentry{\$00DD@{\texttt  {\$00DD}} --- NMI Address Low}{15}
+\indexentry{\$00DE@{\texttt  {\$00DE}} --- NMI Address High}{15}
+\indexentry{\$00DF@{\texttt  {\$00DF}} --- IrqBase}{15}
+\indexentry{\$00E0@{\texttt  {\$00E0}} --- IRQ Address Low}{15}
+\indexentry{\$00E1@{\texttt  {\$00E1}} --- IRQ Address High}{15}
 \indexentry{\$00E2@{\texttt  {\$00E2}} --- help\_len}{15}
-\indexentry{\$00EF@{\texttt  {\$00EF--\$00FF}} --- Decss (Decimal String Buffer)}{15}
+\indexentry{\$00EF@{\texttt  {\$00EF--\$00FF}} --- Decss (Decimal String Buffer)}{16}
 \indexentry{\$0100@{\texttt  {\$0100--\$01FF}} --- Hardware Stack}{17}
 \indexentry{\$0200@{\texttt{\$0200--\$027F}} --- System Vector Table}{21}
 \indexentry{\$0200@{\texttt  {\$0200}} --- VgcBase (low)}{21}

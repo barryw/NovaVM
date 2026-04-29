@@ -166,20 +166,65 @@ These locations are transient workspace.  Their contents are unpredictable
 between BASIC statements and should not be relied upon for storage.
 
 % ═══════════════════════════════════════════════════════════════════════════════
-\section{Unallocated (\$13--\$5A)}
+\section{Unallocated (\$13--\$1F)}
 % ═══════════════════════════════════════════════════════════════════════════════
 
-Addresses \$13 through \$5A --- a full 72 bytes --- are not assigned by
-EhBASIC.  This is the largest contiguous free region on the zero page and an
-excellent place to store variables, counters, or short machine-language
-routines that benefit from fast zero-page addressing.
+Addresses \$13 through \$1F are not assigned by EhBASIC or the Nova system
+ABI.  These thirteen bytes are available for short-lived machine-language
+scratch storage, provided your code understands which ROM routines it calls
+and what those routines may clobber.
 
 \begin{tipbox}
-If you are writing a machine-language game loop or interrupt handler, the
-\$13--\$5A block gives you plenty of room for sprite coordinates, frame
-counters, velocity tables, and other frequently-accessed state --- all at
-zero-page speed.
+If you need a stable calling convention between assembly, ROM routines, and
+future languages, prefer the Nova pseudo-registers at \$20--\$2F instead of
+inventing a private layout in this scratch area.
 \end{tipbox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Nova Pseudo-Registers (\$20--\$2F)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Nova reserves \$20 through \$2F as eight little-endian 16-bit pseudo-registers.
+They are a software ABI, not special hardware.  ROM routines, ca65 macros,
+and future language runtimes use these locations to pass operands and return
+results.  Hardware coprocessors still expose normal MMIO registers; ROM
+routines copy values between the pseudo-registers and the device registers.
+
+\begin{center}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Range} & \textbf{Name} & \textbf{Role} & \textbf{Notes} \\
+\midrule
+\$20--\$21 & \texttt{NVR0} & Operand/result & Primary 16-bit operand; simple ops return here. \\
+\$22--\$23 & \texttt{NVR1} & Operand        & Secondary 16-bit operand. \\
+\$24--\$25 & \texttt{NVR2} & Result/scratch & Low word of 32-bit results. \\
+\$26--\$27 & \texttt{NVR3} & Result/scratch & High word of 32-bit results. \\
+\$28--\$29 & \texttt{NVR4} & Scratch/arg    & Extended argument or temporary. \\
+\$2A--\$2B & \texttt{NVR5} & Scratch/arg    & Extended argument or temporary. \\
+\$2C--\$2D & \texttt{NVR6} & Scratch/arg    & Extended argument or temporary. \\
+\$2E--\$2F & \texttt{NVR7} & Status/scratch & Runtime/coproc status mirror or temporary. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The naming convention uses low and high byte aliases:
+\texttt{NVR0L=\$20}, \texttt{NVR0H=\$21}, through
+\texttt{NVR7L=\$2E}, \texttt{NVR7H=\$2F}.  Assembly programs should include
+the Nova symbol file instead of hard-coding these addresses.
+
+For the math coprocessor ABI, \texttt{NVR0} and \texttt{NVR1} are the primary
+operands.  A 16-bit result returns in \texttt{NVR0}.  A 32-bit result returns
+as \texttt{NVR2:NVR3}, low word first.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Unallocated (\$30--\$5A)}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Addresses \$30 through \$5A remain unallocated by EhBASIC and by the current
+Nova ABI.  This 43-byte block is the largest contiguous free region on the
+zero page and is the best place for private game-loop state such as sprite
+coordinates, frame counters, velocity tables, and indirect pointers.
 
 % ═══════════════════════════════════════════════════════════════════════════════
 \section{Interpreter Flags (\$5B--\$64)}
@@ -962,7 +1007,9 @@ The zero page is a tightly-packed workspace shared between EhBASIC and the
 \$03--\$09     & \textit{Free}                & User \\
 \$0A--\$0C     & USR() JMP vector             & EhBASIC \\
 \$0D--\$12     & Terminal settings \& temp int & EhBASIC \\
-\$13--\$5A     & \textit{Free (72 bytes)}     & User \\
+\$13--\$1F     & \textit{Free (13 bytes)}     & User \\
+\$20--\$2F     & Nova pseudo-registers        & Nova ABI \\
+\$30--\$5A     & \textit{Free (43 bytes)}     & User \\
 \$5B--\$64     & Interpreter flags            & EhBASIC \\
 \$65--\$70     & String descriptor stack       & EhBASIC \\
 \$71--\$78     & Utility pointers \& FAC temp  & EhBASIC \\

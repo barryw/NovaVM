@@ -897,11 +897,12 @@ Source memory space selector:
 \textbf{Value} & \textbf{Space} \\
 \midrule
 0 & CPU RAM (64\,KB) \\
-1 & VGC Character RAM (2000 bytes) \\
-2 & VGC Color RAM (2000 bytes) \\
-3 & VGC Graphics bitmap (32\,KB) \\
-4 & VGC Sprite data \\
+1 & VGC Character RAM (4000 bytes) \\
+2 & VGC Color RAM (4000 bytes) \\
+3 & VGC Graphics bitmap (64\,KB) \\
+4 & VGC Sprite data (32\,KB) \\
 5 & XRAM (512\,KB, 24-bit addressing) \\
+6 & VGC Tile data (32\,KB) \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -1008,8 +1009,8 @@ High byte of the bytes transferred count.
 50 POKE $BA68, 0 : POKE $BA69, 0 : POKE $BA6A, 0
 60 REM destination = XRAM $000000
 70 POKE $BA6B, 0 : POKE $BA6C, 0 : POKE $BA6D, 0
-80 REM length = 2000 bytes (80x25 screen)
-90 POKE $BA6E, $D0 : POKE $BA6F, $07 : POKE $BA70, 0
+80 REM length = 4000 bytes (80x50 screen)
+90 POKE $BA6E, $A0 : POKE $BA6F, $0F : POKE $BA70, 0
 100 POKE $BA71, 0     : REM copy mode (not fill)
 110 POKE $BA63, $01   : REM start transfer
 120 IF PEEK($BA64)=$02 THEN PRINT "SCREEN SAVED TO XRAM"
@@ -1023,10 +1024,10 @@ High byte of the bytes transferred count.
 20 POKE $BA67, 3      : REM destination = VGC graphics
 30 REM destination offset = 0
 40 POKE $BA6B, 0 : POKE $BA6C, 0 : POKE $BA6D, 0
-50 REM length = 32000 bytes (320x200 / 2 nybbles)
-60 POKE $BA6E, 0 : POKE $BA6F, $7D : POKE $BA70, 0
+50 REM length = 64000 bytes (320x200, one byte per pixel)
+60 POKE $BA6E, 0 : POKE $BA6F, $FA : POKE $BA70, 0
 70 POKE $BA71, 1      : REM fill mode
-80 POKE $BA72, $55    : REM fill value ($5 in both nybbles)
+80 POKE $BA72, $05    : REM fill value (color 5)
 90 POKE $BA63, $01    : REM start transfer
 100 IF PEEK($BA64)=$02 THEN PRINT "GRAPHICS CLEARED"
 \end{lstlisting}
