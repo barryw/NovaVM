@@ -30,6 +30,10 @@ module test_debug_bridge;
     wire [15:0] dbg_poke_addr;
     wire [7:0]  dbg_poke_data;
     wire        dbg_pause;
+    wire        dbg_vmem_we;
+    wire [2:0]  dbg_vmem_space;
+    wire [16:0] dbg_vmem_addr;
+    wire [7:0]  dbg_vmem_data;
     wire        dbg_rom_we;
     wire        dbg_rom_idx;
     wire [13:0] dbg_rom_addr;
@@ -67,6 +71,10 @@ module test_debug_bridge;
         .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr),
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
+        .dbg_vmem_we(dbg_vmem_we),
+        .dbg_vmem_space(dbg_vmem_space),
+        .dbg_vmem_addr(dbg_vmem_addr),
+        .dbg_vmem_data(dbg_vmem_data),
         .dbg_rom_we(dbg_rom_we), .dbg_rom_idx(dbg_rom_idx),
         .dbg_rom_addr(dbg_rom_addr), .dbg_rom_data(dbg_rom_data),
         .dbg_cpu_reset(dbg_cpu_reset),
@@ -213,6 +221,13 @@ module test_debug_bridge;
             ram_shadow[dbg_poke_addr] <= dbg_poke_data;
     end
 
+    logic [7:0] vgc_shadow [0:65535];
+    initial for (int i = 0; i < 65536; i++) vgc_shadow[i] = 8'hFF;
+    always_ff @(posedge clk) begin
+        if (dbg_vmem_we && dbg_vmem_space == 3'd3)
+            vgc_shadow[dbg_vmem_addr[15:0]] <= dbg_vmem_data;
+    end
+
     task automatic test_poke_block_ram();
         logic [7:0] ack;
         $display("");
@@ -240,6 +255,46 @@ module test_debug_bridge;
         check_eq8("ram[0x0506]", ram_shadow[16'h0506], 8'h11);
         check_eq8("ram[0x0507]", ram_shadow[16'h0507], 8'h22);
         check_eq8("ram[0x0508] untouched", ram_shadow[16'h0508], 8'hFF);
+    endtask
+
+    task automatic test_bulk_poke_vgc();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_POKE_VGC_BLK 4 bytes into gfx VRAM @ $0120");
+        send_byte(8'h10);   // CMD_POKE_VGC_BLK
+        send_byte(8'h03);   // space = gfx
+        send_byte(8'h01);   // addr_hi
+        send_byte(8'h20);   // addr_lo
+        send_byte(8'h04);   // count = 4
+        send_byte(8'h01);
+        send_byte(8'h02);
+        send_byte(8'h03);
+        send_byte(8'h04);
+        wait_tx(ack);
+        check_eq8("vgc block ack status", ack, 8'h00);
+        check_eq8("vgc_shadow[0x0120]", vgc_shadow[16'h0120], 8'h01);
+        check_eq8("vgc_shadow[0x0121]", vgc_shadow[16'h0121], 8'h02);
+        check_eq8("vgc_shadow[0x0122]", vgc_shadow[16'h0122], 8'h03);
+        check_eq8("vgc_shadow[0x0123]", vgc_shadow[16'h0123], 8'h04);
+    endtask
+
+    task automatic test_fill_vgc_block();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_FILL_VGC_BLK fills exactly 256 gfx bytes");
+        for (int i = 0; i < 65536; i++) vgc_shadow[i] = 8'hFF;
+        send_byte(8'h11);   // CMD_FILL_VGC_BLK
+        send_byte(8'h03);   // space = gfx
+        send_byte(8'h02);   // addr_hi
+        send_byte(8'h00);   // addr_lo
+        send_byte(8'h0A);   // value
+        wait_tx(ack);
+        check_eq8("vgc fill ack status", ack, 8'h00);
+        check_eq8("vgc fill first byte", vgc_shadow[16'h0200], 8'h0A);
+        check_eq8("vgc fill middle byte", vgc_shadow[16'h0280], 8'h0A);
+        check_eq8("vgc fill last byte", vgc_shadow[16'h02FF], 8'h0A);
+        check_eq8("vgc fill before untouched", vgc_shadow[16'h01FF], 8'hFF);
+        check_eq8("vgc fill after untouched", vgc_shadow[16'h0300], 8'hFF);
     endtask
 
     task automatic test_bulk_count_zero_means_256();
@@ -441,6 +496,8 @@ module test_debug_bridge;
         test_bulk_count_zero_means_256();
         test_bulk_poke_sdram();
         test_poke_block_ram();
+        test_bulk_poke_vgc();
+        test_fill_vgc_block();
         test_fio_event_emission();
         test_fio_event_queued_during_cmd();
         test_fio_event_no_retrigger_when_cleared();

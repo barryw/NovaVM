@@ -11,6 +11,7 @@
 #   BITSTREAM=/path/to/e6502.bit   Use an existing bitstream instead of synth.
 #   SYNTH=0                        Use latest bit_backups/*.bit if BITSTREAM unset.
 #   LABEL=boot_hardened            Label for beast-synth output.
+#   EXTRA_DEFINES='-D...'          Verilog defines passed to beast-synth.
 #   ESP_UPLOAD=ota|serial|skip     NovaHost upload method (default: ota).
 #   NOVAHOST=novahost.local        OTA target.
 #   SERIAL=/dev/cu.usbserial-...   Serial target when ESP_UPLOAD=serial.
@@ -25,6 +26,8 @@ BIT_BACKUPS="$FPGA_DIR/fpga/bit_backups"
 BITSTREAM="${BITSTREAM:-}"
 SYNTH="${SYNTH:-1}"
 LABEL="${LABEL:-stack_boot_hardened}"
+EXTRA_DEFINES="${EXTRA_DEFINES:--DVIDEO_720X480 -DGPDI_P_ONLY}"
+export EXTRA_DEFINES
 ESP_UPLOAD="${ESP_UPLOAD:-ota}"
 NOVAHOST="${NOVAHOST:-novahost.local}"
 SERIAL="${SERIAL:-/dev/cu.usbserial-D01457}"

@@ -112,12 +112,14 @@ Current boot asset names used by NovaHost:
 /roms/novabasic.bin
 /roms/extension.bin
 /assets/sid/f6581_curve.bin
+/assets/boot/novavm_logo.nvg
 ```
 
-Future boot artwork should be converted from host formats into a Nova-native
-display asset and stored under `/assets/boot/`. The initial source asset is
-`NovusVM-logo.png`; the target format should be directly displayable by the
-VGC before the configured personality/runtime starts.
+Boot artwork is converted from host formats into a Nova-native display asset
+under `/assets/boot/`. The initial source asset is `NovaVM-logo.png`; NovaHost
+loads `novavm_logo.nvg` into the VGC graphics plane while the CPU is held in
+reset, forces black background/border colors, then uses the VGC display-dimmer
+register for fade-in/fade-out before the configured personality/runtime starts.
 
 Suggested config files:
 

@@ -40,6 +40,10 @@ module top (
     input  logic [15:0] dbg_poke_addr,
     input  logic [7:0]  dbg_poke_data,
     input  logic        dbg_pause,        // halt CPU when high
+    input  logic        dbg_vmem_we,
+    input  logic [2:0]  dbg_vmem_space,
+    input  logic [16:0] dbg_vmem_addr,
+    input  logic [7:0]  dbg_vmem_data,
     // ROM-load port — write one byte at a time into either ROM bank.
     // idx=0 → basic_rom, idx=1 → ext_rom. Used by NovaHost to stream the
     // EhBASIC + extension binaries into BRAM at boot.
@@ -262,7 +266,7 @@ module top (
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
                         (mem_addr >= 16'hA0C0 && mem_addr <= 16'hA0DF) ||
-                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E4);
+                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E5);
 
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
@@ -421,6 +425,10 @@ module top (
     wire       dbg_poke_fio = dbg_poke_en &&
                               (dbg_poke_addr >= 16'hB9A0) &&
                               (dbg_poke_addr <= 16'hB9EF);
+    wire       dbg_poke_vgc = dbg_poke_en &&
+                              (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
+                               ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
+                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E5)));
 
     fio fio_inst (
         .clk       (clk),
@@ -517,7 +525,7 @@ module top (
             ram_a_addr = bm_ram_addr;
             ram_a_din  = bm_ram_wdata;
             ram_a_we   = 1'b1;
-        end else if (dbg_poke_en && dbg_poke_addr < ROM_BASE) begin
+        end else if (dbg_poke_en && !dbg_poke_vgc && dbg_poke_addr < ROM_BASE) begin
             // Debug poke
             ram_a_addr = dbg_poke_addr;
             ram_a_din  = dbg_poke_data;
@@ -1046,6 +1054,13 @@ module top (
         .blt_re         (bm_vgc_re),
         .dbg_addr       (dbg_peek_addr),
         .dbg_rdata      (vgc_dbg_rdata),
+        .dbg_we         (dbg_poke_vgc),
+        .dbg_waddr      (dbg_poke_addr),
+        .dbg_wdata      (dbg_poke_data),
+        .dbg_vmem_we    (dbg_vmem_we),
+        .dbg_vmem_space (dbg_vmem_space),
+        .dbg_vmem_addr  (dbg_vmem_addr),
+        .dbg_vmem_wdata (dbg_vmem_data),
         .vid_r          (vid_r),
         .vid_g          (vid_g),
         .vid_b          (vid_b),
@@ -1079,7 +1094,8 @@ module top (
     wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
-    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram;
+    wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim;
 
     // For debug reads, RAM port B serves as the read port.
     // ROM reads use the same brom_b/erom_b ports (address set combinationally).
@@ -1101,7 +1117,8 @@ module top (
     wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
-    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram;
+    wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim;
     wire [7:0] dbg_rom_read_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
                                                   : basic_rom[dbg_peek_addr - ROM_BASE];
     assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :

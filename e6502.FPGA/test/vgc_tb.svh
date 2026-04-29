@@ -65,6 +65,13 @@ logic        tb_blt_re     = 1'b0;
 
 logic [15:0] dbg_addr;
 wire  [7:0]  dbg_rdata;
+logic        dbg_we;
+logic [15:0] dbg_waddr;
+logic [7:0]  dbg_wdata;
+logic        dbg_vmem_we;
+logic [2:0]  dbg_vmem_space;
+logic [16:0] dbg_vmem_addr;
+logic [7:0]  dbg_vmem_wdata;
 
 wire  [3:0]  vid_r, vid_g, vid_b;
 wire         vid_hsync, vid_vsync, vid_de;
@@ -82,6 +89,9 @@ vgc dut (
     .blt_space(tb_blt_space), .blt_addr(tb_blt_addr), .blt_rdata(tb_blt_rdata),
     .blt_wdata(tb_blt_wdata), .blt_we(tb_blt_we), .blt_re(tb_blt_re),
     .dbg_addr(dbg_addr), .dbg_rdata(dbg_rdata),
+    .dbg_we(dbg_we), .dbg_waddr(dbg_waddr), .dbg_wdata(dbg_wdata),
+    .dbg_vmem_we(dbg_vmem_we), .dbg_vmem_space(dbg_vmem_space),
+    .dbg_vmem_addr(dbg_vmem_addr), .dbg_vmem_wdata(dbg_vmem_wdata),
     .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
     .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
     .irq_out(irq_out)
@@ -136,9 +146,37 @@ task automatic do_reset();
     key_valid  = 0;
     key_data   = 8'h00;
     dbg_addr   = 16'h0000;
+    dbg_we     = 0;
+    dbg_waddr  = 16'h0000;
+    dbg_wdata  = 8'h00;
+    dbg_vmem_we = 0;
+    dbg_vmem_space = 3'd0;
+    dbg_vmem_addr = 17'd0;
+    dbg_vmem_wdata = 8'h00;
     repeat(50) @(posedge clk);
     rst = 0;
     repeat(10) @(posedge clk);
+endtask
+
+task automatic dbg_write(input logic [15:0] addr, input logic [7:0] data);
+    @(posedge clk);
+    dbg_waddr <= addr;
+    dbg_wdata <= data;
+    dbg_we    <= 1;
+    @(posedge clk);
+    dbg_we    <= 0;
+    @(posedge clk);
+endtask
+
+task automatic dbg_vmem_write(input logic [7:0] space, input int addr, input logic [7:0] data);
+    @(posedge clk);
+    dbg_vmem_space <= space[2:0];
+    dbg_vmem_addr <= 17'(addr);
+    dbg_vmem_wdata <= data;
+    dbg_vmem_we <= 1;
+    @(posedge clk);
+    dbg_vmem_we <= 0;
+    @(posedge clk);
 endtask
 
 task automatic step(input int n);

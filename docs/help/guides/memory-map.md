@@ -21,6 +21,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | A040--A0BF | 128 B | Sprite Registers (16 sprites x 8 bytes) |
 | A0C0--A0DF | 32 B | Tile Engine registers |
 | A0E0--A0E4 | 5 B | VDC-style VRAM port (char/color/gfx/sprite/tile memory) |
+| A0E5 | 1 B | VGC display dimmer (0=black, 15=full brightness) |
 | A100--A13F | 64 B | Network Interface Controller (NIC) registers |
 | B9A0--B9EF | 80 B | File I/O Controller (FIO) registers |
 | BA00--BA3F | 64 B | Expansion Memory Controller (XMC) registers |

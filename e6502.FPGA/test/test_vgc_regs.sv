@@ -197,6 +197,34 @@ module test_vgc_regs;
         check_eq("irq_ctrl = 0xA5", int'(dut.irq_ctrl), 8'hA5);
     endtask
 
+    task automatic test_display_dim_register();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: display dim register at $A0E5 — 4-bit global output fade");
+        bus_write(16'hA0E5, 8'h0A); step(2);
+        check_eq("display_dim=10", int'(dut.display_dim), 10);
+        bus_read(16'hA0E5, rb); step(2);
+        check_eq("$A0E5 reads display_dim", int'(rb), 10);
+        bus_write(16'hA0E5, 8'hFF); step(2);
+        check_eq("display_dim masks to 4 bits (0xFF -> 15)",
+                 int'(dut.display_dim), 15);
+    endtask
+
+    task automatic test_debug_write_paths();
+        $display("");
+        $display("Test: debug write path can update VGC regs and VRAM while CPU is reset");
+        dbg_write(REG_MODE_A, 8'd3);
+        check_eq("debug write mode=3", int'(dut.mode), 3);
+        dbg_write(16'hA0E5, 8'd4);
+        check_eq("debug write display_dim=4", int'(dut.display_dim), 4);
+        dbg_vmem_write(VPLANE_GFX_A, 16'h1234, 8'h0B);
+        check_eq("debug vmem write gfx[0x1234]=0xB",
+                 int'(dut.gfx_inst.gfx_mem.mem[16'h1234]), 4'hB);
+        dbg_vmem_write(VPLANE_COLOR_A, 16'h0020, 8'h07);
+        check_eq("debug vmem write color[0x20]=7",
+                 int'(dut.text_inst.color_mem.mem[16'h0020]), 8'h07);
+    endtask
+
     // CMD_MEMREAD = $19. Params: regs[17]=space, regs[18]=addr_lo, regs[19]=addr_hi.
     // Result lands in regs[20] ($A014). Spaces match the VDC-style VRAM port:
     // 1=char, 2=color, 3=gfx, 4=sprite, 6=tile.
@@ -462,6 +490,8 @@ module test_vgc_regs;
         test_cursor_enable();
         test_collision_clear_on_write();
         test_irq_ctrl();
+        test_display_dim_register();
+        test_debug_write_paths();
         test_memread_char();
         test_memread_color();
         test_memread_gfx();

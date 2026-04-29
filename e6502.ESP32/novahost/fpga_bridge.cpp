@@ -19,6 +19,8 @@
 #define CMD_POKE_ROM_BLK 0x0D
 #define CMD_POKE_SDRAM_BLK 0x0E
 #define CMD_POKE_BLOCK   0x0F
+#define CMD_POKE_VGC_BLK 0x10
+#define CMD_FILL_VGC_BLK 0x11
 
 // =========================================================================
 // Low-level serial helpers
@@ -221,6 +223,35 @@ bool FpgaBridge::pokeBlock(uint16_t addr, const uint8_t* data, uint16_t count) {
     };
     _serial.write(header, 4);
     _serial.write(data, (count == 0) ? 256 : count);
+    return recvStatus();
+}
+
+bool FpgaBridge::pokeVgcBlock(uint8_t space, uint16_t start_addr,
+                              const uint8_t* data, uint16_t count) {
+    if (count > 256) return false;
+    drain();
+    uint8_t header[5] = {
+        CMD_POKE_VGC_BLK,
+        (uint8_t)(space & 0x07),
+        (uint8_t)(start_addr >> 8),
+        (uint8_t)(start_addr & 0xFF),
+        (uint8_t)(count & 0xFF)            // 256 encodes as 0
+    };
+    _serial.write(header, 5);
+    _serial.write(data, (count == 0) ? 256 : count);
+    return recvStatus();
+}
+
+bool FpgaBridge::fillVgcBlock(uint8_t space, uint16_t start_addr, uint8_t value) {
+    drain();
+    uint8_t header[5] = {
+        CMD_FILL_VGC_BLK,
+        (uint8_t)(space & 0x07),
+        (uint8_t)(start_addr >> 8),
+        (uint8_t)(start_addr & 0xFF),
+        value
+    };
+    _serial.write(header, 5);
     return recvStatus();
 }
 

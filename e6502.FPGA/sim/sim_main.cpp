@@ -156,6 +156,14 @@ static void poke_ram(uint16_t addr, uint8_t val) {
     top->dbg_poke_en=1; top->dbg_poke_addr=addr; top->dbg_poke_data=val;
     step_clock(); top->dbg_poke_en=0;
 }
+static void dbg_vram_write(uint8_t space, uint32_t addr, uint8_t val) {
+    top->dbg_vmem_space = space;
+    top->dbg_vmem_addr = addr;
+    top->dbg_vmem_data = val;
+    top->dbg_vmem_we = 1;
+    step_clock();
+    top->dbg_vmem_we = 0;
+}
 static uint8_t dbg_vram_read(uint8_t space, uint32_t addr) {
     top->dbg_vram_read_en = 1;
     top->dbg_vram_space = space;
@@ -452,6 +460,7 @@ int main(int argc, char **argv) {
     top=new Vtop;
     top->rst=1;top->irq_n=1;top->nmi_n=1;top->key_valid=0;top->key_data=0;
     top->dbg_peek_en=0;top->dbg_poke_en=0;top->dbg_pause=0;
+    top->dbg_vmem_we=0;top->dbg_vmem_space=0;top->dbg_vmem_addr=0;top->dbg_vmem_data=0;
     top->dbg_vram_read_en=0;top->dbg_vram_space=0;top->dbg_vram_addr=0;
     for (int i=0;i<100;i++) step_clock();
     top->rst=0;

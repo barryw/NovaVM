@@ -102,6 +102,15 @@ bool g_sd_mounted = false;
 static const size_t BOOT_ROM_LEN       = 16 * 1024;
 static const size_t SID_CURVE_ROM_LEN  = 8 * 1024;
 static const uint32_t SID_CURVE_BASE   = 0x800000;
+static const size_t BOOT_LOGO_GFX_LEN  = 320UL * 200UL;
+
+static const uint16_t VGC_MODE          = 0xA000;
+static const uint16_t VGC_BGCOL         = 0xA001;
+static const uint16_t VGC_BORDER        = 0xA00D;
+static const uint16_t VGC_CURSOR_ENABLE = 0xA00A;
+static const uint16_t VGC_DISPLAY_DIM   = 0xA0E5;
+static const uint8_t  VGC_SPACE_GFX     = 0x03;
+static const uint8_t  VGC_MODE_GFX_ONLY = 0x03;
 
 static const char* const BASIC_ROM_PATHS[] = {
     "/roms/novabasic.bin",
@@ -117,6 +126,14 @@ static const char* const EXTENSION_ROM_PATHS[] = {
 static const char* const SID_CURVE_PATHS[] = {
     "/assets/sid/f6581_curve.bin",
     "/assets/f6581_curve.bin"
+};
+
+static const char* const BOOT_LOGO_RLE_PATHS[] = {
+    "/assets/boot/novavm_logo.nvg"
+};
+
+static const char* const BOOT_LOGO_RAW_PATHS[] = {
+    "/assets/boot/novavm_logo.gfx"
 };
 
 // =========================================================================
@@ -272,6 +289,198 @@ bool streamSdramAsset(uint32_t base_addr, const char* label,
     }
 
     f.close();
+    return true;
+}
+
+bool holdFpgaResetForBoot(const char* label) {
+    for (int attempt = 0; attempt < 20; attempt++) {
+        fpgaBridge.drain();
+        if (fpgaBridge.resetHold()) {
+            if (attempt > 0)
+                logLn("FPGA bridge responded for %s on attempt %d", label, attempt + 1);
+            return true;
+        }
+        delay(200);
+    }
+
+    logLn("%s skipped: FPGA bridge never acked resetHold", label);
+    return false;
+}
+
+bool clearVgcGfx() {
+    for (uint32_t off = 0; off < BOOT_LOGO_GFX_LEN; off += 256) {
+        if (!fpgaBridge.fillVgcBlock(VGC_SPACE_GFX, (uint16_t)off, 0x00)) {
+            logLn("Boot splash clear failed at gfx offset %u", (unsigned)off);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool readByte(File& f, uint8_t& value) {
+    int b = f.read();
+    if (b < 0) return false;
+    value = (uint8_t)b;
+    return true;
+}
+
+bool readU16(File& f, uint16_t& value) {
+    uint8_t lo, hi;
+    if (!readByte(f, lo) || !readByte(f, hi)) return false;
+    value = (uint16_t)lo | ((uint16_t)hi << 8);
+    return true;
+}
+
+bool readU32(File& f, uint32_t& value) {
+    uint8_t b0, b1, b2, b3;
+    if (!readByte(f, b0) || !readByte(f, b1) ||
+        !readByte(f, b2) || !readByte(f, b3)) return false;
+    value = (uint32_t)b0 |
+            ((uint32_t)b1 << 8) |
+            ((uint32_t)b2 << 16) |
+            ((uint32_t)b3 << 24);
+    return true;
+}
+
+bool streamBootLogoRle(File& f, const char* path) {
+    uint8_t magic[4];
+    if (f.read(magic, sizeof(magic)) != sizeof(magic) ||
+        magic[0] != 'N' || magic[1] != 'V' ||
+        magic[2] != 'G' || magic[3] != '1') {
+        logLn("Boot splash invalid RLE header: %s", path);
+        return false;
+    }
+
+    uint16_t width = 0, height = 0;
+    uint32_t span_count = 0;
+    if (!readU16(f, width) || !readU16(f, height) || !readU32(f, span_count)) {
+        logLn("Boot splash truncated RLE header: %s", path);
+        return false;
+    }
+    if (width != 320 || height != 200) {
+        logLn("Boot splash wrong dimensions: %s is %ux%u", path, width, height);
+        return false;
+    }
+
+    uint8_t buf[256];
+    for (uint32_t span = 0; span < span_count; span++) {
+        uint16_t addr = 0;
+        uint8_t len = 0;
+        if (!readU16(f, addr) || !readByte(f, len) || len == 0) {
+            logLn("Boot splash bad span %u in %s", (unsigned)span, path);
+            return false;
+        }
+        if ((uint32_t)addr + len > BOOT_LOGO_GFX_LEN) {
+            logLn("Boot splash span out of range %u in %s", (unsigned)span, path);
+            return false;
+        }
+        if (f.read(buf, len) != len) {
+            logLn("Boot splash truncated span %u in %s", (unsigned)span, path);
+            return false;
+        }
+        if (!fpgaBridge.pokeVgcBlock(VGC_SPACE_GFX, addr, buf, len)) {
+            logLn("Boot splash VGC stream failed at span %u", (unsigned)span);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool streamBootLogoRaw(File& f, const char* path) {
+    size_t actual = f.size();
+    if (actual != BOOT_LOGO_GFX_LEN) {
+        logLn("Boot splash wrong raw size: %s is %u bytes, expected %u",
+              path, (unsigned)actual, (unsigned)BOOT_LOGO_GFX_LEN);
+        return false;
+    }
+
+    uint8_t buf[256];
+    for (size_t off = 0; off < BOOT_LOGO_GFX_LEN; ) {
+        size_t got = f.read(buf, sizeof(buf));
+        if (got != sizeof(buf)) {
+            logLn("Boot splash raw read failed at offset %u", (unsigned)off);
+            return false;
+        }
+        if (!fpgaBridge.pokeVgcBlock(VGC_SPACE_GFX, (uint16_t)off, buf, 0)) {
+            logLn("Boot splash raw stream failed at offset %u", (unsigned)off);
+            return false;
+        }
+        off += got;
+    }
+    return true;
+}
+
+bool setBootSplashVideoState(uint8_t dim) {
+    return fpgaBridge.poke(VGC_DISPLAY_DIM, dim) &&
+           fpgaBridge.poke(VGC_BGCOL, 0x00) &&
+           fpgaBridge.poke(VGC_BORDER, 0x00) &&
+           fpgaBridge.poke(VGC_CURSOR_ENABLE, 0x00) &&
+           fpgaBridge.poke(VGC_MODE, VGC_MODE_GFX_ONLY);
+}
+
+void restoreBootSplashVideoState() {
+    fpgaBridge.poke(VGC_MODE, 0x00);
+    fpgaBridge.poke(VGC_DISPLAY_DIM, 0x0F);
+}
+
+void fadeBootSplash(uint8_t from, uint8_t to, uint16_t duration_ms) {
+    int step = (to >= from) ? 1 : -1;
+    uint8_t steps = (from > to) ? (from - to) : (to - from);
+    uint16_t delay_ms = steps == 0 ? duration_ms : duration_ms / steps;
+
+    for (int value = from; ; value += step) {
+        fpgaBridge.poke(VGC_DISPLAY_DIM, (uint8_t)value);
+        if (value == to) break;
+        delay(delay_ms);
+    }
+}
+
+bool showBootSplash() {
+    if (!g_sd_mounted) {
+        logLn("Boot splash skipped: SD is not mounted");
+        return false;
+    }
+
+    const char* path = nullptr;
+    File f = openFirstAsset("boot splash RLE", BOOT_LOGO_RLE_PATHS,
+                            sizeof(BOOT_LOGO_RLE_PATHS) / sizeof(BOOT_LOGO_RLE_PATHS[0]),
+                            path);
+    bool rle = true;
+    if (!f) {
+        f = openFirstAsset("boot splash raw", BOOT_LOGO_RAW_PATHS,
+                           sizeof(BOOT_LOGO_RAW_PATHS) / sizeof(BOOT_LOGO_RAW_PATHS[0]),
+                           path);
+        rle = false;
+    }
+    if (!f) return false;
+
+    if (!holdFpgaResetForBoot("Boot splash")) {
+        f.close();
+        return false;
+    }
+
+    logLn("Boot splash: drawing %s", path);
+    unsigned long t0 = millis();
+    if (!setBootSplashVideoState(0) || !clearVgcGfx()) {
+        f.close();
+        restoreBootSplashVideoState();
+        return false;
+    }
+
+    bool ok = rle ? streamBootLogoRle(f, path) : streamBootLogoRaw(f, path);
+    f.close();
+    if (!ok) {
+        restoreBootSplashVideoState();
+        return false;
+    }
+
+    fadeBootSplash(0, 15, 1000);
+    delay(3000);
+    fadeBootSplash(15, 0, 1000);
+    restoreBootSplashVideoState();
+
+    logLn("Boot splash complete (took %lu ms)", millis() - t0);
     return true;
 }
 
@@ -499,6 +708,11 @@ void setup() {
     // are SD-resident. If SD is unavailable, the FPGA keeps using the
     // bitstream-initialized fallback ROM.
     mountSdCard();
+
+    // Optional SD-resident boot logo. CPU remains held in reset while NovaHost
+    // writes the VGC graphics plane, fades it in/out, then ROM loading below
+    // releases into the configured runtime.
+    showBootSplash();
 
     // Stream ROM/assets into FPGA. FPGA's debug_bridge boots with
     // dbg_cpu_reset=1, so the CPU stays held in reset until we've loaded

@@ -36,10 +36,11 @@ build/f6581_curve.bin: $(FPGA_ROM)/f6581_curve.hex
 	@$(HEX16TOBIN) $< $@
 
 sd-assets: ehbasic build/f6581_curve.bin
-	@mkdir -p $(SD_ASSETS)/roms $(SD_ASSETS)/assets/sid
+	@mkdir -p $(SD_ASSETS)/roms $(SD_ASSETS)/assets/sid $(SD_ASSETS)/assets/boot
 	@cp $(EHBASIC)/basic.bin $(SD_ASSETS)/roms/novabasic.bin
 	@cp $(EHBASIC)/extension.bin $(SD_ASSETS)/roms/extension.bin
 	@cp build/f6581_curve.bin $(SD_ASSETS)/assets/sid/f6581_curve.bin
+	@cp assets/boot/novavm_logo.nvg $(SD_ASSETS)/assets/boot/novavm_logo.nvg
 	@echo "SD assets staged under $(CURDIR)/$(SD_ASSETS)"
 	@find $(SD_ASSETS) -type f -print
 

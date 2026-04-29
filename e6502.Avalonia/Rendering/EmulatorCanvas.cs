@@ -448,6 +448,9 @@ public class EmulatorCanvas : Control
                         if (spriteFront != 0)
                             pixel = Palette[spriteFront & 0x0F];
 
+                        if (state.DisplayDim != 15)
+                            pixel = DimColor(pixel, state.DisplayDim);
+
                         ptr[rowBase + px] = pixel;
                     }
                 }
@@ -534,6 +537,16 @@ public class EmulatorCanvas : Control
         return palette;
     }
 
+    private static uint DimColor(uint bgra, byte dim)
+    {
+        if (dim == 0)
+            return 0xFF000000;
+        uint r = ((bgra >> 16) & 0xFF) * dim >> 4;
+        uint g = ((bgra >> 8) & 0xFF) * dim >> 4;
+        uint b = (bgra & 0xFF) * dim >> 4;
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+
     private struct RenderVideoState
     {
         public byte Mode;
@@ -541,6 +554,7 @@ public class EmulatorCanvas : Control
         public int ScrollY;
         public byte BgColor;
         public int FontIndex;
+        public byte DisplayDim;
 
         public static RenderVideoState FromVgc(VirtualGraphicsController vgc) =>
             new()
@@ -549,7 +563,8 @@ public class EmulatorCanvas : Control
                 ScrollX = vgc.GetScrollX(),
                 ScrollY = vgc.GetScrollY(),
                 BgColor = vgc.GetBgColor(),
-                FontIndex = vgc.GetFontIndex()
+                FontIndex = vgc.GetFontIndex(),
+                DisplayDim = vgc.GetDisplayDim()
             };
 
         public void Apply(byte registerIndex, byte value)

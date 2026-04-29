@@ -58,6 +58,14 @@ auto-increment if desired, then read or write \texttt{VramData}. Reads are
 BRAM-backed and behave like a real VDC port: the first read posts the address,
 and the following read returns the byte.
 
+\section{Display Dimmer}
+
+\memrange{A0E5}{A0E5}{Display Dimmer}{R/W}{---}
+
+\$A0E5 holds a 4-bit global output brightness. A value of 0 forces active
+video to black; 15 is full brightness. NovaHost uses this register for the
+SD-resident boot logo fade before releasing the CPU into the configured ROM.
+
 \section{Coordinate Math}
 \label{sec:screen-math}
 

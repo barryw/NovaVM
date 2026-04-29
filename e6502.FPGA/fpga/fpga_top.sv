@@ -519,6 +519,10 @@ module fpga_top (
     wire        brg_poke_en;
     wire [15:0] brg_poke_addr;
     wire [7:0]  brg_poke_data;
+    wire        brg_vmem_we;
+    wire [2:0]  brg_vmem_space;
+    wire [16:0] brg_vmem_addr;
+    wire [7:0]  brg_vmem_data;
     wire        brg_pause;
     wire        brg_rom_we;
     wire        brg_rom_idx;
@@ -552,6 +556,10 @@ module fpga_top (
         .dbg_poke_addr   (brg_poke_addr),
         .dbg_poke_data   (brg_poke_data),
         .dbg_pause       (brg_pause),
+        .dbg_vmem_we     (brg_vmem_we),
+        .dbg_vmem_space  (brg_vmem_space),
+        .dbg_vmem_addr   (brg_vmem_addr),
+        .dbg_vmem_data   (brg_vmem_data),
         .dbg_rom_we      (brg_rom_we),
         .dbg_rom_idx     (brg_rom_idx),
         .dbg_rom_addr    (brg_rom_addr),
@@ -610,6 +618,10 @@ module fpga_top (
         .dbg_poke_addr(brg_poke_addr),
         .dbg_poke_data(brg_poke_data),
         .dbg_pause    (brg_pause),
+        .dbg_vmem_we  (brg_vmem_we),
+        .dbg_vmem_space(brg_vmem_space),
+        .dbg_vmem_addr(brg_vmem_addr),
+        .dbg_vmem_data(brg_vmem_data),
         .dbg_rom_we   (brg_rom_we),
         .dbg_rom_idx  (brg_rom_idx),
         .dbg_rom_addr (brg_rom_addr),

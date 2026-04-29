@@ -408,6 +408,7 @@ VramAddrL               = $A0E1
 VramAddrH               = $A0E2
 VramData                = $A0E3
 VramCtrl                = $A0E4
+DisplayDim              = $A0E5
 VramPlaneChar           = $01
 VramPlaneColor          = $02
 VramPlaneGfx            = $03

@@ -63,6 +63,8 @@ module test_debug_peek;
         .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr),
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
+        .dbg_vmem_we(1'b0), .dbg_vmem_space(3'd0),
+        .dbg_vmem_addr(17'd0), .dbg_vmem_data(8'd0),
         .dbg_rom_we(dbg_rom_we), .dbg_rom_idx(dbg_rom_idx),
         .dbg_rom_addr(dbg_rom_addr), .dbg_rom_data(dbg_rom_data),
         .dbg_cpu_reset(dbg_cpu_reset),

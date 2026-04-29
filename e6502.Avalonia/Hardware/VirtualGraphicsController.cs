@@ -22,6 +22,7 @@ public interface IScreenInput
 ///   $A040-$A0BF  Sprite registers (8 bytes × 16 sprites)
 ///   $A0C0-$A0DF  Tile registers
 ///   $A0E0-$A0E4  VDC-style VRAM port for char/color/gfx/sprite/tile memory
+///   $A0E5        Display dimmer (0=black, 15=full brightness)
 ///
 /// Sprite shape data stored in 256 × 128-byte slots (32KB), accessible via
 /// memory space I/O and DMA. Each sprite has a shape index register pointing
@@ -116,6 +117,7 @@ public class VirtualGraphicsController : IBusDevice
     private ushort _vramAddr;
     private byte _vramCtrl;
     private byte _vramReadLatch;
+    private byte _displayDim;
 
     // Copper program (host-side, command driven) — 128 lists, vblank-synchronized
     private readonly List<CopperEvent>[] _copperEvents = new List<CopperEvent>[VgcConstants.CopperListCount];
@@ -167,6 +169,7 @@ public class VirtualGraphicsController : IBusDevice
         _vramAddr = 0;
         _vramCtrl = VgcConstants.VramCtrlAutoInc;
         _vramReadLatch = 0;
+        _displayDim = 15;
         for (int i = 0; i < VgcConstants.CopperListCount; i++)
         {
             if (_copperEvents[i] != null)
@@ -264,6 +267,9 @@ public class VirtualGraphicsController : IBusDevice
         if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
             return true;
 
+        if (address == VgcConstants.DisplayDim)
+            return true;
+
         return false;
     }
 
@@ -284,6 +290,9 @@ public class VirtualGraphicsController : IBusDevice
         // VDC-style VRAM port $A0E0-$A0E4
         if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
             return ReadVramRegister(address);
+
+        if (address == VgcConstants.DisplayDim)
+            return _displayDim;
 
         // Command parameter registers $A011-$A01E
         if (address >= VgcConstants.RegP0 && address <= VgcConstants.RegP13)
@@ -355,6 +364,12 @@ public class VirtualGraphicsController : IBusDevice
         if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
         {
             WriteVramRegister(address, data);
+            return;
+        }
+
+        if (address == VgcConstants.DisplayDim)
+        {
+            _displayDim = (byte)(data & 0x0F);
             return;
         }
 
@@ -564,6 +579,8 @@ public class VirtualGraphicsController : IBusDevice
 
     public bool IsCursorEnabled =>
         _regs[VgcConstants.RegCursorEnable - VgcConstants.VgcBase] != 0;
+
+    public byte GetDisplayDim() => _displayDim;
 
     public bool IsRasterIrqEnabled => (_irqCtrl & 0x01) != 0;
     public bool IsCopperEnabled => _copperEnabled;

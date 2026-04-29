@@ -527,6 +527,7 @@ public static class VgcConstants
     public const int VramAddrH         = 0xA0E2;
     public const int VramData          = 0xA0E3;
     public const int VramCtrl          = 0xA0E4;
+    public const int DisplayDim        = 0xA0E5;   // 0=black, 15=full brightness
 
     public const byte VramPlaneChar    = 0x01;
     public const byte VramPlaneColor   = 0x02;

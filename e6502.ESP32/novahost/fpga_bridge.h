@@ -69,6 +69,16 @@ public:
     // via the existing dbg_poke path.
     bool pokeBlock(uint16_t addr, const uint8_t* data, uint16_t count);
 
+    // Block-write up to 256 bytes directly into a VGC memory space. count=0
+    // means 256. Spaces match DMA/VGC IDs: 1=char, 2=color, 3=gfx,
+    // 4=sprite shapes, 6=tile data.
+    bool pokeVgcBlock(uint8_t space, uint16_t start_addr,
+                      const uint8_t* data, uint16_t count);
+
+    // Fill exactly 256 bytes in a VGC memory space. This is used at boot to
+    // clear the graphics plane without sending 64KB of zeroes over UART.
+    bool fillVgcBlock(uint8_t space, uint16_t start_addr, uint8_t value);
+
     // Bulk-load an arbitrary region of CPU RAM via 256-byte blocks.
     // Returns false on any block failure. Wraps pokeBlock.
     bool loadRam(uint16_t base_addr, const uint8_t* data, size_t len);

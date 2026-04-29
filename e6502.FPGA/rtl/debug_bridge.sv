@@ -37,6 +37,13 @@ module debug_bridge #(
     output logic [7:0]  dbg_poke_data,
     output logic        dbg_pause,
 
+    // Direct VGC memory write path — used by NovaHost while the CPU is held
+    // in reset to stream boot splash assets into the 320x200 graphics plane.
+    output logic        dbg_vmem_we,
+    output logic [2:0]  dbg_vmem_space,
+    output logic [16:0] dbg_vmem_addr,
+    output logic [7:0]  dbg_vmem_data,
+
     // ROM write port — single-cycle pulse writes one byte to a ROM bank.
     // dbg_rom_idx: 0=basic_rom, 1=ext_rom. dbg_rom_addr is the 14-bit offset
     // within the 16KB ROM.
@@ -104,6 +111,11 @@ module debug_bridge #(
                                          // Used by FIO LOAD to deliver up to 64KB
                                          // of file payload without per-byte CMD
                                          // overhead.
+    localparam CMD_POKE_VGC_BLK=8'h10;   // [space, addr_hi, addr_lo, count, ...data]
+                                         // count=0 means 256. Streams directly into
+                                         // VGC internal memory spaces.
+    localparam CMD_FILL_VGC_BLK=8'h11;   // [space, addr_hi, addr_lo, value]
+                                         // Fills exactly 256 bytes in a VGC space.
 
     // Async FPGA→ESP event marker bytes. Sent as a 2-byte sequence
     // (EVENT_MARKER, EVENT_TYPE_FIO) when fio_event pulses. EVENT_MARKER
@@ -142,7 +154,9 @@ module debug_bridge #(
         S_EVENT_TX_MARK_WAIT,// 18: wait for marker TX to complete
         S_EVENT_TX_TYPE, // 19: async event — transmit type byte
         S_EVENT_TX_TYPE_WAIT,// 20: wait for type TX to complete
-        S_RAM_BULK_WRITE // 21: stream incoming bytes into CPU RAM
+        S_RAM_BULK_WRITE,// 21: stream incoming bytes into CPU RAM
+        S_VGC_BULK_WRITE,// 22: stream incoming bytes into VGC memory
+        S_VGC_FILL_WRITE // 23: fill 256 bytes in VGC memory
     } state_t;
 
     state_t state;
@@ -178,6 +192,8 @@ module debug_bridge #(
     // SDRAM bulk-write state (port B)
     logic [24:0] sdram_bulk_addr;
     logic [3:0]  sdram_hold_cnt;
+    logic [2:0]  vgc_bulk_space;
+    logic [7:0]  vgc_fill_value;
 
     // Async FIO event latch — fio_event is a 1-clock pulse; stash it
     // until we can send the 2-byte marker sequence to the ESP.
@@ -274,6 +290,10 @@ module debug_bridge #(
             dbg_peek_en      <= 0;
             dbg_peek_addr    <= 0;
             dbg_poke_en      <= 0;
+            dbg_vmem_we      <= 0;
+            dbg_vmem_space   <= 0;
+            dbg_vmem_addr    <= 0;
+            dbg_vmem_data    <= 0;
             dbg_poke_addr    <= 0;
             dbg_poke_data    <= 0;
             key_inject_valid <= 0;
@@ -285,6 +305,8 @@ module debug_bridge #(
             sdram_b_din      <= 0;
             sdram_bulk_addr  <= 0;
             sdram_hold_cnt   <= 0;
+            vgc_bulk_space   <= 0;
+            vgc_fill_value   <= 0;
             event_pending    <= 0;
             rx_buf_valid     <= 0;
             rx_buf_data      <= 0;
@@ -293,6 +315,7 @@ module debug_bridge #(
             tx_start         <= 0;
             dbg_poke_en      <= 0;
             dbg_rom_we       <= 0;
+            dbg_vmem_we      <= 0;
             key_inject_valid <= 0;
 
             if (dbg_cpu_reset && !boot_claimed_by_host) begin
@@ -340,6 +363,8 @@ module debug_bridge #(
                             CMD_POKE_ROM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_SDRAM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_BLOCK:  begin recv_need <= 3'd3; state <= S_RECV; end
+                            CMD_POKE_VGC_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
+                            CMD_FILL_VGC_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
 
                             CMD_READ_SCREEN: begin
                                 // Direct text/color windows were removed. Host-side
@@ -490,6 +515,22 @@ module debug_bridge #(
                                     bulk_remaining <= (rx_buf_data == 0) ? 11'd256
                                                                          : {3'b0, rx_buf_data};
                                     state          <= S_RAM_BULK_WRITE;
+                                end
+
+                                CMD_POKE_VGC_BLK: begin
+                                    vgc_bulk_space <= param0[2:0];
+                                    bulk_addr      <= {param1, param2};
+                                    bulk_remaining <= (rx_buf_data == 0) ? 11'd256
+                                                                         : {3'b0, rx_buf_data};
+                                    state          <= S_VGC_BULK_WRITE;
+                                end
+
+                                CMD_FILL_VGC_BLK: begin
+                                    vgc_bulk_space <= param0[2:0];
+                                    bulk_addr      <= {param1, param2};
+                                    bulk_remaining <= 11'd256;
+                                    vgc_fill_value <= rx_buf_data;
+                                    state          <= S_VGC_FILL_WRITE;
                                 end
 
                                 default: begin
@@ -699,6 +740,47 @@ module debug_bridge #(
                             resp_total <= 1;
                             state      <= S_TX_BYTE;
                         end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // VGC_BULK_WRITE: stream incoming bytes directly into VGC
+                // memory. Used for boot-time graphics assets while CPU reset
+                // is held.
+                // ---------------------------------------------------------
+                S_VGC_BULK_WRITE: begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid    <= 0;          // consume
+                        dbg_vmem_space  <= vgc_bulk_space;
+                        dbg_vmem_addr   <= {1'b0, bulk_addr};
+                        dbg_vmem_data   <= rx_buf_data;
+                        dbg_vmem_we     <= 1;
+                        bulk_addr       <= bulk_addr + 1;
+                        bulk_remaining  <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
+                        end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // VGC_FILL_WRITE: fill exactly 256 sequential VGC bytes with
+                // one host command. This keeps boot clear-to-black fast even
+                // at the reliable 115200-baud debug link.
+                // ---------------------------------------------------------
+                S_VGC_FILL_WRITE: begin
+                    dbg_vmem_space <= vgc_bulk_space;
+                    dbg_vmem_addr  <= {1'b0, bulk_addr};
+                    dbg_vmem_data  <= vgc_fill_value;
+                    dbg_vmem_we    <= 1;
+                    bulk_addr      <= bulk_addr + 1;
+                    bulk_remaining <= bulk_remaining - 1;
+                    if (bulk_remaining == 1) begin
+                        resp_idx   <= 0;
+                        resp_total <= 1;
+                        state      <= S_TX_BYTE;
                     end
                 end
 
