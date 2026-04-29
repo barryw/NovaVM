@@ -59,6 +59,36 @@ Trade-offs considered:
 
 Sync stall is the simplest design that still beats software by 5–100×.
 
+## Software ABI
+
+Nova reserves `$20-$2F` in zero page as eight 16-bit pseudo-registers. These
+are a system ABI convention used by ROM routines, assembly macros, and future
+language runtimes. The math coprocessor does **not** snoop zero page directly;
+it remains a normal MMIO device. ROM routines copy operands from the pseudo
+registers to the math MMIO block, trigger the operation, and copy results back.
+
+```
+NVR0L = $20    NVR0H = $21
+NVR1L = $22    NVR1H = $23
+NVR2L = $24    NVR2H = $25
+NVR3L = $26    NVR3H = $27
+NVR4L = $28    NVR4H = $29
+NVR5L = $2A    NVR5H = $2B
+NVR6L = $2C    NVR6H = $2D
+NVR7L = $2E    NVR7H = $2F
+```
+
+Initial convention:
+- `NVR0` and `NVR1` are primary 16-bit operands.
+- `NVR0` receives the primary 16-bit result for simple operations.
+- `NVR2:NVR3` receives 32-bit results, low word first.
+- `NVR4-NVR6` are argument extension and scratch registers.
+- `NVR7` is syscall/coproc scratch or status mirror.
+
+This gives assembly code an "extended register" feel without forking the 6502
+ISA or toolchain. ca65 support should start as symbols/macros in `novavm.inc`,
+not as custom opcodes.
+
 ## MMIO layout
 
 Free address range in `$BA`: `$BA9C-$BAFF` (100 bytes unused after XMC,
@@ -275,9 +305,10 @@ reference tables.
 ### Integration tests
 
 `sim6502 --backend novavm --novavm-host novahost.local` runs real 6502
-assembly exercising every opcode at the real MMIO addresses. BASIC smoke
-test: issue MUL via `POKE` writes, read `PEEK`s of RES bytes, verify
-arithmetic result printed.
+assembly exercising every operation through the ROM ABI routines and, in a
+lower-level hardware test, at the real MMIO addresses. BASIC smoke tests should
+call BASIC/runtime wrappers once exposed; user-facing BASIC should not require
+raw MMIO writes.
 
 ## Future work (not in v1)
 
