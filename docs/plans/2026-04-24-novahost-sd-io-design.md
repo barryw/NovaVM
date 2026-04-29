@@ -126,8 +126,9 @@ minutes. `_ROM_BLK` precedent exists — generalize the block-write path.
 ## Drive model
 
 - **HDs**: ESP scans SD root for glob `hd*.ndi` at boot. Auto-mounts each
-  match to HD0, HD1, HD2... in sorted order. All use the same `.ndi`
-  format, capacity limit 64MB. Persistent across reboots.
+  match to HD0, HD1, HD2... in sorted order. All use the NDI v2 format
+  with 32-bit sector fields; the initial hard-drive target is 64MB.
+  Persistent across reboots.
 - **FDs**: Four user-mountable slots (FD0-FD3), via `MOUNT
   "FD0:","path/to/image"`. Argument is SD-relative path, `.ndi` extension
   implicit. Can be anywhere on SD including nested subdirs for
@@ -225,9 +226,9 @@ Current verbs (no changes needed): create, dir, info, validate, label,
 import, export, delete, mkdir, rmdir, tokenize, detokenize.
 
 Add:
-- `--size` accepts values up to 65536 (64 MB). Default floppy size stays
-  at 800 KB. Recommend `--hd` shorthand for 64MB: `ndi create hd0.ndi
-  --hd --label HOME`.
+- `--size` accepts values up to at least 65536 (64 MB). Default floppy
+  size stays at 800 KB. `--hd` is shorthand for 64MB:
+  `ndi create hd0.ndi --hd --label HOME`.
 - `autoboot` helper: `ndi set-autoboot image.ndi program.bas` — tokenizes
   `program.bas` and imports it as file `autoboot` in the image. Saves a
   common two-step dance.

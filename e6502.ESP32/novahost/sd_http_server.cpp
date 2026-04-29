@@ -1,318 +1,415 @@
 #include "sd_http_server.h"
-#include <SD.h>
+#include <string.h>
 
 extern void logLn(const char* fmt, ...);
+extern String g_sd_diag;
 
-// ---------------------------------------------------------------------------
-// Lifecycle
-// ---------------------------------------------------------------------------
 void SdHttpServer::begin() {
-    // GET handler covers both file-fetch and directory-listing depending
-    // on whether the URL ends in '/'.
-    _server.on("/sd/*", HTTP_GET, [this](AsyncWebServerRequest* req) {
-        String p = path_after_sd(req);
-        // Empty or trailing-slash → directory listing.
-        if (p.length() == 0 || p.endsWith("/")) {
-            handle_list(req, p);
-        } else {
-            handle_get(req, p);
-        }
-    });
-
-    // Same prefix for /sd (no trailing slash) — list root.
-    _server.on("/sd", HTTP_GET, [this](AsyncWebServerRequest* req) {
-        handle_list(req, "");
-    });
-
-    _server.on("/sd/*", HTTP_DELETE, [this](AsyncWebServerRequest* req) {
-        String p = path_after_sd(req);
-        handle_delete(req, p);
-    });
-
-    // PUT — three-callback form: route, file-upload (unused, multipart
-    // only), and body-stream callback. ESPAsyncWebServer hands us body
-    // chunks via the body callback.
-    _server.on("/sd/*", HTTP_PUT,
-        [this](AsyncWebServerRequest* req) {
-            // Final callback after all body chunks delivered.
-            bool ok = _upload.active;
-            handle_put_done();
-            if (ok) {
-                req->send(200, "application/json", "{\"ok\":true}");
-            } else {
-                String err = "{\"error\":\"";
-                err += _upload.last_err.length() ? _upload.last_err : String("write failed");
-                err += "\"}";
-                req->send(500, "application/json", err);
-            }
-        },
-        nullptr,
-        [this](AsyncWebServerRequest* req, uint8_t* data, size_t len,
-               size_t index, size_t total) {
-            if (index == 0) {
-                String p = path_after_sd(req);
-                handle_put_begin(req, p);
-            }
-            handle_put_chunk(data, len, index, total);
-        });
-
-    // Health check.
-    _server.on("/health", HTTP_GET, [](AsyncWebServerRequest* req) {
-        req->send(200, "application/json", "{\"ok\":true}");
-    });
-
-    // SD status — diagnoses mount/format issues remotely. The bootDiag
-    // field captures the SD.begin() outcome so failures are visible
-    // post-boot (TCP log server starts after SD mount, so log lines from
-    // the mount call would otherwise be invisible).
-    extern String g_sd_diag;
-    _server.on("/sd-status", HTTP_GET, [](AsyncWebServerRequest* req) {
-        uint8_t  ct        = SD.cardType();
-        uint64_t card_sz   = SD.cardSize();
-        uint64_t total_sz  = SD.totalBytes();
-        uint64_t used_sz   = SD.usedBytes();
-        const char* type_name =
-            ct == CARD_NONE ? "NONE" :
-            ct == CARD_MMC  ? "MMC"  :
-            ct == CARD_SD   ? "SDSC" :
-            ct == CARD_SDHC ? "SDHC" :
-            "UNKNOWN";
-        char buf[512];
-        snprintf(buf, sizeof(buf),
-            "{\"cardType\":\"%s\",\"cardTypeId\":%u,"
-            "\"cardSize\":%llu,\"totalBytes\":%llu,\"usedBytes\":%llu,"
-            "\"bootDiag\":\"%s\"}",
-            type_name, (unsigned)ct,
-            (unsigned long long)card_sz,
-            (unsigned long long)total_sz,
-            (unsigned long long)used_sz,
-            g_sd_diag.c_str());
-        req->send(200, "application/json", buf);
-    });
-
-    _server.onNotFound([](AsyncWebServerRequest* req) {
-        req->send(404, "application/json",
-                  "{\"error\":\"not found\"}");
-    });
-
     _server.begin();
     Serial.println("[sdhttp] HTTP file server up on port 80");
-    Serial.println("[sdhttp]   GET  /sd/        → list root");
-    Serial.println("[sdhttp]   GET  /sd/path    → fetch file");
-    Serial.println("[sdhttp]   PUT  /sd/path    → upload file");
-    Serial.println("[sdhttp]   DELETE /sd/path  → remove");
+    Serial.println("[sdhttp]   GET    /sd/       -> list root");
+    Serial.println("[sdhttp]   GET    /sd/path   -> fetch file");
+    Serial.println("[sdhttp]   PUT    /sd/path   -> upload whole file");
+    Serial.println("[sdhttp]   DELETE /sd/path   -> remove");
 }
 
-// ---------------------------------------------------------------------------
-// Path helpers
-// ---------------------------------------------------------------------------
-String SdHttpServer::path_after_sd(AsyncWebServerRequest* req) {
-    // URL is something like /sd/foo/bar.ndi → return "foo/bar.ndi".
-    // Or /sd/ or /sd → "".
-    String url = req->url();
-    if (url.startsWith("/sd/")) return url.substring(4);  // strip "/sd/"
-    if (url == "/sd")           return "";
-    return url;
+void SdHttpServer::loop() {
+    WiFiClient client = _server.available();
+    if (!client) return;
+
+    handle_client(client);
+    client.stop();
 }
 
-// Refuse writes/deletes against currently-mounted hd*.ndi / fd*.ndi
-// because the on-disk image is in a controlled state owned by the
-// dispatcher. Caller should UNMOUNT first.
-bool SdHttpServer::path_safe_for_write(const String& path) {
-    // Only files matching the auto-mount or active-mount pattern matter.
-    // Cheap check: any path ending in .ndi that names a slot we have
-    // mounted gets rejected.
-    if (!path.endsWith(".ndi") && !path.endsWith(".NDI")) return true;
+void SdHttpServer::handle_client(WiFiClient& client) {
+    char line[LINE_BUF_BYTES];
+    if (!read_line(client, line, sizeof(line))) return;
 
-    // Strip leading dirs — we only auto-mount at SD root, but FD mounts
-    // can come from anywhere. Match the full path against each mounted
-    // slot's source path (if we tracked it). For now, conservative
-    // check: any path containing "hd<N>.ndi" while that HD is mounted.
-    String lower = path;
-    lower.toLowerCase();
-    for (int s = 0; s < DeviceManager::NUM_SLOTS; s++) {
-        if (!_dm.is_mounted(s)) continue;
-        const char* prefix = DeviceManager::prefix_for_slot(s);
-        if (!prefix) continue;
-        String needle = String("/") + prefix + ".ndi";
-        // path comes in without leading slash from path_after_sd, so
-        // also try the un-prefixed form.
-        if (lower.endsWith(needle.substring(1)) || lower.endsWith(needle)) {
-            return false;
+    char method[8] = {0};
+    char url[256] = {0};
+    char* method_end = strchr(line, ' ');
+    if (!method_end) {
+        send_error(client, 400, "bad request");
+        return;
+    }
+    *method_end = 0;
+
+    char* url_start = method_end + 1;
+    while (*url_start == ' ') url_start++;
+    char* url_end = strchr(url_start, ' ');
+    if (url_end) *url_end = 0;
+    if (line[0] == 0 || url_start[0] == 0) {
+        send_error(client, 400, "bad request");
+        return;
+    }
+
+    strncpy(method, line, sizeof(method));
+    method[sizeof(method) - 1] = 0;
+    strncpy(url, url_start, sizeof(url));
+    url[sizeof(url) - 1] = 0;
+
+    uint32_t content_len = 0;
+    bool have_content_len = false;
+    while (read_line(client, line, sizeof(line))) {
+        if (line[0] == 0) break;
+        if (strncasecmp(line, "Content-Length:", 15) == 0) {
+            content_len = (uint32_t)strtoul(line + 15, nullptr, 10);
+            have_content_len = true;
         }
+    }
+
+    if (strcmp(method, "GET") == 0 && strcmp(url, "/health") == 0) {
+        send_json(client, 200, "{\"ok\":true}");
+        return;
+    }
+    if (strcmp(method, "GET") == 0 && strcmp(url, "/sd-status") == 0) {
+        handle_status(client);
+        return;
+    }
+
+    char path[256];
+    if (!path_after_sd(url, path, sizeof(path))) {
+        send_error(client, 404, "not found");
+        return;
+    }
+
+    if (strcmp(method, "GET") == 0) {
+        handle_get(client, path);
+    } else if (strcmp(method, "PUT") == 0) {
+        if (!have_content_len) {
+            send_error(client, 411, "content-length required");
+            return;
+        }
+        handle_put(client, path, content_len);
+    } else if (strcmp(method, "DELETE") == 0) {
+        handle_delete(client, path);
+    } else {
+        send_error(client, 405, "method not allowed");
+    }
+}
+
+bool SdHttpServer::read_line(WiFiClient& client, char* out, size_t out_len,
+                             uint32_t timeout_ms) {
+    size_t n = 0;
+    uint32_t deadline = millis() + timeout_ms;
+    while (millis() < deadline && client.connected()) {
+        while (client.available()) {
+            char c = (char)client.read();
+            if (c == '\r') continue;
+            if (c == '\n') {
+                out[n] = 0;
+                return true;
+            }
+            if (n + 1 < out_len) out[n++] = c;
+        }
+        delay(1);
+    }
+
+    out[n] = 0;
+    return n > 0;
+}
+
+bool SdHttpServer::read_body_to_file(WiFiClient& client, File& file,
+                                     uint32_t content_len) {
+    uint8_t buf[IO_BUF_BYTES];
+    uint32_t remaining = content_len;
+    uint32_t deadline = millis() + 10000;
+
+    while (remaining > 0) {
+        if (!client.connected() && !client.available()) return false;
+        if (!client.available()) {
+            if (millis() > deadline) return false;
+            delay(1);
+            continue;
+        }
+
+        size_t want = remaining > sizeof(buf) ? sizeof(buf) : remaining;
+        size_t got = client.read(buf, want);
+        if (got == 0) continue;
+        deadline = millis() + 10000;
+
+        size_t wrote = file.write(buf, got);
+        if (wrote != got) return false;
+        remaining -= (uint32_t)got;
+        yield();
+    }
+
+    return true;
+}
+
+bool SdHttpServer::write_all(WiFiClient& client, const uint8_t* data,
+                             size_t len) {
+    size_t off = 0;
+    uint32_t deadline = millis() + 10000;
+    while (off < len) {
+        if (!client.connected()) return false;
+        size_t wrote = client.write(data + off, len - off);
+        if (wrote == 0) {
+            if (millis() > deadline) return false;
+            delay(1);
+            continue;
+        }
+        deadline = millis() + 10000;
+        off += wrote;
+        yield();
     }
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// LIST
-// ---------------------------------------------------------------------------
-void SdHttpServer::send_json_listing(AsyncWebServerRequest* req,
-                                      const String& dir_path) {
-    String root = "/" + dir_path;
-    File dir = SD.open(root);
-    if (!dir || !dir.isDirectory()) {
-        char err[200];
-        snprintf(err, sizeof(err),
-                 "{\"error\":\"not a directory\","
-                  "\"path\":\"%s\","
-                  "\"open\":%d,"
-                  "\"isDir\":%d,"
-                  "\"exists\":%d,"
-                  "\"cardType\":%d}",
-                 root.c_str(),
-                 (int)(bool)dir,
-                 dir ? (int)dir.isDirectory() : -1,
-                 (int)SD.exists(root),
-                 (int)SD.cardType());
-        req->send(404, "application/json", err);
+void SdHttpServer::handle_get(WiFiClient& client, const char* path) {
+    if (!path_sane(path, true)) {
+        send_error(client, 400, "bad path");
         return;
     }
 
-    String json = "[";
+    char full[300];
+    snprintf(full, sizeof(full), "/%s", path);
+
+    File entry = SD.open(full);
+    if (!entry) {
+        send_error(client, 404, "not found");
+        return;
+    }
+
+    bool is_dir = entry.isDirectory();
+    entry.close();
+    if (is_dir) {
+        send_listing(client, path);
+    } else {
+        send_file(client, full);
+    }
+}
+
+void SdHttpServer::handle_put(WiFiClient& client, const char* path,
+                              uint32_t content_len) {
+    if (!path_sane(path, false)) {
+        send_error(client, 400, "bad path");
+        return;
+    }
+    if (!path_safe_for_write(path)) {
+        send_error(client, 409, "file is mounted; UNMOUNT first");
+        return;
+    }
+
+    char full[300];
+    snprintf(full, sizeof(full), "/%s", path);
+    if (!ensure_parent_dirs(full)) {
+        send_error(client, 500, "mkdir failed");
+        return;
+    }
+
+    File file = SD.open(full, FILE_WRITE, true);
+    if (!file) {
+        send_error(client, 500, "open failed");
+        return;
+    }
+
+    bool ok = read_body_to_file(client, file, content_len);
+    file.close();
+    if (!ok) {
+        send_error(client, 500, "write failed");
+        return;
+    }
+
+    logLn("[sdhttp] PUT %s (%u bytes)", full, (unsigned)content_len);
+    send_json(client, 200, "{\"ok\":true}");
+}
+
+void SdHttpServer::handle_delete(WiFiClient& client, const char* path) {
+    if (!path_sane(path, false)) {
+        send_error(client, 400, "bad path");
+        return;
+    }
+    if (!path_safe_for_write(path)) {
+        send_error(client, 409, "file is mounted; UNMOUNT first");
+        return;
+    }
+
+    char full[300];
+    snprintf(full, sizeof(full), "/%s", path);
+    File entry = SD.open(full);
+    if (!entry) {
+        send_error(client, 404, "not found");
+        return;
+    }
+
+    bool is_dir = entry.isDirectory();
+    entry.close();
+    bool ok = is_dir ? SD.rmdir(full) : SD.remove(full);
+    if (!ok) {
+        send_error(client, 500, "delete failed");
+        return;
+    }
+
+    logLn("[sdhttp] DELETE %s", full);
+    send_json(client, 200, "{\"ok\":true}");
+}
+
+void SdHttpServer::handle_status(WiFiClient& client) {
+    uint8_t ct = SD.cardType();
+    uint64_t card_sz = SD.cardSize();
+    uint64_t total_sz = SD.totalBytes();
+    uint64_t used_sz = SD.usedBytes();
+    const char* type_name =
+        ct == CARD_NONE ? "NONE" :
+        ct == CARD_MMC  ? "MMC"  :
+        ct == CARD_SD   ? "SDSC" :
+        ct == CARD_SDHC ? "SDHC" :
+        "UNKNOWN";
+
+    char body[512];
+    snprintf(body, sizeof(body),
+             "{\"cardType\":\"%s\",\"cardTypeId\":%u,"
+             "\"cardSize\":%llu,\"totalBytes\":%llu,\"usedBytes\":%llu,"
+             "\"bootDiag\":\"%s\"}",
+             type_name, (unsigned)ct,
+             (unsigned long long)card_sz,
+             (unsigned long long)total_sz,
+             (unsigned long long)used_sz,
+             g_sd_diag.c_str());
+    send_json(client, 200, body);
+}
+
+void SdHttpServer::send_listing(WiFiClient& client, const char* path) {
+    char full[300];
+    snprintf(full, sizeof(full), "/%s", path);
+
+    File dir = SD.open(full);
+    if (!dir || !dir.isDirectory()) {
+        if (dir) dir.close();
+        send_error(client, 404, "not a directory");
+        return;
+    }
+
+    send_headers(client, 200, "application/json");
+    client.print('[');
     bool first = true;
     File entry;
     while ((entry = dir.openNextFile())) {
-        if (!first) json += ",";
+        if (!first) client.print(',');
         first = false;
-        json += "{\"name\":\"";
-        json += entry.name();
-        json += "\",\"size\":";
-        json += String((uint32_t)entry.size());
-        json += ",\"dir\":";
-        json += entry.isDirectory() ? "true" : "false";
-        json += "}";
+        client.print("{\"name\":\"");
+        client.print(entry.name());
+        client.print("\",\"size\":");
+        client.print((uint32_t)entry.size());
+        client.print(",\"dir\":");
+        client.print(entry.isDirectory() ? "true" : "false");
+        client.print('}');
         entry.close();
     }
-    json += "]";
+    client.print(']');
     dir.close();
-    req->send(200, "application/json", json);
 }
 
-void SdHttpServer::handle_list(AsyncWebServerRequest* req,
-                                const String& path) {
-    send_json_listing(req, path);
+void SdHttpServer::send_file(WiFiClient& client, const char* path) {
+    File file = SD.open(path, FILE_READ);
+    if (!file) {
+        send_error(client, 404, "not found");
+        return;
+    }
+
+    send_headers(client, 200, "application/octet-stream",
+                 (int32_t)file.size());
+    uint8_t buf[IO_BUF_BYTES];
+    while (file.available()) {
+        size_t got = file.read(buf, sizeof(buf));
+        if (got == 0) break;
+        if (!write_all(client, buf, got)) break;
+        yield();
+    }
+    file.close();
 }
 
-// ---------------------------------------------------------------------------
-// GET
-// ---------------------------------------------------------------------------
-void SdHttpServer::handle_get(AsyncWebServerRequest* req,
-                               const String& path) {
-    String full = "/" + path;
-    if (!SD.exists(full)) {
-        req->send(404, "application/json",
-                  "{\"error\":\"not found\"}");
-        return;
-    }
-    // ESPAsyncWebServer streams files efficiently via the SD fs::FS.
-    AsyncWebServerResponse* resp =
-        req->beginResponse(SD, full, "application/octet-stream");
-    if (!resp) {
-        req->send(500, "application/json",
-                  "{\"error\":\"open failed\"}");
-        return;
-    }
-    req->send(resp);
+void SdHttpServer::send_json(WiFiClient& client, int code, const char* body) {
+    send_headers(client, code, "application/json", (int32_t)strlen(body));
+    client.print(body);
 }
 
-// ---------------------------------------------------------------------------
-// DELETE
-// ---------------------------------------------------------------------------
-void SdHttpServer::handle_delete(AsyncWebServerRequest* req,
-                                  const String& path) {
-    String full = "/" + path;
-    if (!SD.exists(full)) {
-        req->send(404, "application/json",
-                  "{\"error\":\"not found\"}");
-        return;
-    }
-    if (!path_safe_for_write(path)) {
-        req->send(409, "application/json",
-                  "{\"error\":\"file is mounted; UNMOUNT first\"}");
-        return;
-    }
-    File entry = SD.open(full);
-    bool is_dir = entry && entry.isDirectory();
-    if (entry) entry.close();
-
-    bool ok = is_dir ? SD.rmdir(full) : SD.remove(full);
-    if (!ok) {
-        req->send(500, "application/json",
-                  "{\"error\":\"delete failed\"}");
-        return;
-    }
-    req->send(200, "application/json", "{\"ok\":true}");
+void SdHttpServer::send_error(WiFiClient& client, int code,
+                              const char* message) {
+    char body[160];
+    snprintf(body, sizeof(body), "{\"error\":\"%s\"}", message);
+    send_json(client, code, body);
 }
 
-// ---------------------------------------------------------------------------
-// PUT — three-stage: begin (first chunk), chunk (each), done (after)
-// ---------------------------------------------------------------------------
-void SdHttpServer::handle_put_begin(AsyncWebServerRequest* req,
-                                     const String& path) {
-    if (_upload.active) {
-        // Stale upload — close to recover.
-        if (_upload.file) _upload.file.close();
-        _upload.active = false;
-    }
-
-    if (!path_safe_for_write(path)) {
-        logLn("[sdhttp] PUT refused: /%s is mounted\n", path.c_str());
-        req->send(409, "application/json",
-                  "{\"error\":\"file is mounted; UNMOUNT first\"}");
-        return;
-    }
-
-    String full = "/" + path;
-
-    // Make parent dirs if needed (one level of mkdir-p).
-    int last_slash = full.lastIndexOf('/');
-    if (last_slash > 0) {
-        String parent = full.substring(0, last_slash);
-        if (parent.length() > 0 && !SD.exists(parent)) {
-            SD.mkdir(parent);
-        }
-    }
-
-    // FS::open default for `create` is false — must pass true here so
-    // SD will create the file if it doesn't already exist.
-    _upload.file = SD.open(full, FILE_WRITE, true);
-    if (!_upload.file) {
-        char buf[160];
-        snprintf(buf, sizeof(buf),
-                 "open(W) failed path=%s exists=%d cardType=%d",
-                 full.c_str(),
-                 (int)SD.exists(full),
-                 (int)SD.cardType());
-        _upload.last_err = String(buf);
-        logLn("[sdhttp] PUT: %s", buf);
-        return;
-    }
-    _upload.active = true;
-    _upload.path   = full;
-    logLn("[sdhttp] PUT %s opened\n", full.c_str());
+void SdHttpServer::send_headers(WiFiClient& client, int code,
+                                const char* content_type,
+                                int32_t content_len) {
+    client.printf("HTTP/1.1 %d %s\r\n", code, reason_phrase(code));
+    client.printf("Content-Type: %s\r\n", content_type);
+    if (content_len >= 0) client.printf("Content-Length: %ld\r\n", (long)content_len);
+    client.print("Connection: close\r\n\r\n");
 }
 
-void SdHttpServer::handle_put_chunk(uint8_t* data, size_t len,
-                                     size_t index, size_t total) {
-    (void)index; (void)total;
-    if (!_upload.active || !_upload.file) return;
-    size_t wrote = _upload.file.write(data, len);
-    if (wrote != len) {
-        logLn("[sdhttp] PUT %s: short write %u/%u\n",
-                      _upload.path.c_str(), (unsigned)wrote, (unsigned)len);
-        _upload.file.close();
-        _upload.active = false;
-    }
+bool SdHttpServer::path_sane(const char* path, bool allow_empty) {
+    if (!path) return false;
+    if (!allow_empty && path[0] == 0) return false;
+    if (path[0] == '/') return false;
+    if (strstr(path, "..")) return false;
+    if (strchr(path, '\\')) return false;
+    return true;
 }
 
-void SdHttpServer::handle_put_done() {
-    if (_upload.active && _upload.file) {
-        size_t size = _upload.file.size();
-        _upload.file.close();
-        logLn("[sdhttp] PUT %s closed (%u bytes)\n",
-                      _upload.path.c_str(), (unsigned)size);
+bool SdHttpServer::path_safe_for_write(const char* path) {
+    String lower(path);
+    lower.toLowerCase();
+    if (!lower.endsWith(".ndi")) return true;
+
+    for (int s = 0; s < DeviceManager::NUM_SLOTS; s++) {
+        if (!_dm.is_mounted(s)) continue;
+        const char* prefix = DeviceManager::prefix_for_slot(s);
+        if (!prefix) continue;
+        String needle = String(prefix) + ".ndi";
+        if (lower.endsWith(needle)) return false;
     }
-    _upload.active = false;
-    _upload.path   = "";
+    return true;
+}
+
+bool SdHttpServer::ensure_parent_dirs(const char* full_path) {
+    char tmp[300];
+    strncpy(tmp, full_path, sizeof(tmp));
+    tmp[sizeof(tmp) - 1] = 0;
+
+    for (char* p = tmp + 1; *p; p++) {
+        if (*p != '/') continue;
+        *p = 0;
+        if (!SD.exists(tmp) && !SD.mkdir(tmp)) return false;
+        *p = '/';
+    }
+    return true;
+}
+
+const char* SdHttpServer::path_after_sd(const char* url, char* out,
+                                        size_t out_len) {
+    if (!url || out_len == 0) return nullptr;
+
+    const char* src = nullptr;
+    if (strcmp(url, "/sd") == 0) {
+        src = "";
+    } else if (strncmp(url, "/sd/", 4) == 0) {
+        src = url + 4;
+    } else {
+        return nullptr;
+    }
+
+    size_t n = 0;
+    while (src[n] && src[n] != '?' && n + 1 < out_len) {
+        out[n] = src[n];
+        n++;
+    }
+    out[n] = 0;
+    return out;
+}
+
+const char* SdHttpServer::reason_phrase(int code) {
+    switch (code) {
+        case 200: return "OK";
+        case 400: return "Bad Request";
+        case 404: return "Not Found";
+        case 405: return "Method Not Allowed";
+        case 409: return "Conflict";
+        case 411: return "Length Required";
+        case 500: return "Internal Server Error";
+        default:  return "OK";
+    }
 }

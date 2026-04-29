@@ -37,12 +37,12 @@ public:
 struct HeaderInfo {
     uint8_t  format_version;
     uint16_t sector_size;
-    uint16_t total_sectors;
+    uint32_t total_sectors;
     char     volume_label[33];           // 32 chars + null
-    uint16_t directory_start_sector;
-    uint16_t directory_sector_count;
-    uint16_t data_start_sector;
-    uint16_t free_sector_count;
+    uint32_t directory_start_sector;
+    uint32_t directory_sector_count;
+    uint32_t data_start_sector;
+    uint32_t free_sector_count;
 };
 
 // File / entry types — match the 6502 wire values.
@@ -68,10 +68,10 @@ struct DirEntry {
     uint8_t  flags;
     uint8_t  file_type;
     uint16_t parent_index;
-    uint16_t start_sector;
+    uint32_t start_sector;
     uint32_t size_bytes;
     char     filename[33];
-    uint16_t sector_count;
+    uint32_t sector_count;
 
     bool is_active()    const { return (flags & FL_ACTIVE)    != 0; }
     bool is_directory() const { return (flags & FL_DIRECTORY) != 0; }
@@ -178,9 +178,9 @@ private:
     // Directory helpers.
     int  dir_find_free_slot();
     void dir_write_entry(int slot, uint8_t flags, uint8_t type,
-                         uint16_t parent, uint16_t start_sector,
+                         uint16_t parent, uint32_t start_sector,
                          uint32_t size, const char* name,
-                         uint16_t sector_count);
+                         uint32_t sector_count);
     void dir_read_entry(int slot, DirEntry& out);
     void dir_clear_slot(int slot);
 };

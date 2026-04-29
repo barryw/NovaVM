@@ -7,16 +7,10 @@ if (args.Length < 1)
     return 1;
 }
 
-// Strip a leading --remote=<host> global flag if present. Remote verbs
-// (ls/put/get/rm) talk to NovaHost's HTTP file server; other verbs
-// remain local for now.
-string? remoteHost = null;
-if (args.Length > 0 && args[0].StartsWith("--remote=", StringComparison.Ordinal))
-{
-    remoteHost = args[0]["--remote=".Length..];
-    args = args[1..];
-    if (args.Length < 1) { PrintUsage(); return 1; }
-}
+// Remote verbs talk to NovaHost's HTTP file server. Accept --remote either
+// before or after the command so the future `nova` CLI shape is natural.
+string? remoteHost = ExtractRemoteHost(ref args, null);
+if (args.Length < 1) { PrintUsage(); return 1; }
 
 string verb = args[0].ToLowerInvariant();
 return verb switch
@@ -37,6 +31,11 @@ return verb switch
     "put"        => DoPut(args[1..], remoteHost),
     "get"        => DoGet(args[1..], remoteHost),
     "rm"         => DoRm(args[1..], remoteHost),
+    "device"     => DoDevice(args[1..], remoteHost),
+    "disk"       => DoDisk(args[1..], remoteHost),
+    "rom"        => DoRom(args[1..], remoteHost),
+    "soundfont"  => DoSoundfont(args[1..], remoteHost),
+    "asset"      => DoAsset(args[1..], remoteHost),
     _            => UnknownVerb(verb),
 };
 
@@ -45,15 +44,374 @@ return verb switch
 // Default endpoint base is http://<host>/sd/.
 // ===========================================================================
 
+static int DoDevice(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("Usage: nova device status --remote <host>");
+        return 1;
+    }
+
+    return args[0].ToLowerInvariant() switch
+    {
+        "status" => DoDeviceStatus(host),
+        _        => UnknownDeviceCommand(args[0]),
+    };
+}
+
+static int DoDeviceStatus(string? host)
+{
+    if (host is null)
+    {
+        Console.Error.WriteLine("Usage: nova device status --remote <host>");
+        return 1;
+    }
+
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    try
+    {
+        foreach (string endpoint in new[] { "health", "sd-status" })
+        {
+            string url = $"http://{host}/{endpoint}";
+            var resp = http.GetAsync(url).GetAwaiter().GetResult();
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+                return 1;
+            }
+
+            string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            Console.WriteLine($"{endpoint}: {body}");
+        }
+
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"device status: {ex.Message}");
+        return 1;
+    }
+}
+
+static int UnknownDeviceCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown device command: {command}");
+    Console.Error.WriteLine("Usage: nova device status --remote <host>");
+    return 1;
+}
+
+static int DoDisk(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintDiskUsage();
+        return 1;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    bool hard = TakeFlag(rest, "--hard", "--hd");
+    bool floppy = TakeFlag(rest, "--floppy", "--fd");
+    string? nameOpt = TakeOptionValue(rest, "--name", "-n");
+    string? pathOpt = TakeOptionValue(rest, "--path");
+
+    if (hard && floppy)
+    {
+        Console.Error.WriteLine("Choose either --hard or --floppy, not both.");
+        return 1;
+    }
+
+    return command switch
+    {
+        "list" or "ls"       => DoDiskList(rest, host, hard, floppy, pathOpt),
+        "upload" or "put"    => DoDiskUpload(rest, host, hard, floppy, nameOpt, pathOpt),
+        "download" or "get"  => DoDiskDownload(rest, host, hard, floppy, pathOpt),
+        "delete" or "rm"     => DoDiskDelete(rest, host, hard, floppy, pathOpt),
+        _                    => UnknownDiskCommand(command),
+    };
+}
+
+static int DoDiskList(List<string> args, string? host, bool hard, bool floppy, string? pathOpt)
+{
+    string dir = pathOpt is not null
+        ? NormalizeSdRelativePath(pathOpt)
+        : hard ? "disks/hard"
+        : floppy ? "disks/floppy"
+        : "disks";
+
+    return DoLs(new[] { dir }, host);
+}
+
+static int DoDiskUpload(List<string> args, string? host, bool hard, bool floppy, string? nameOpt, string? pathOpt)
+{
+    if (args.Count < 1)
+    {
+        PrintDiskUsage();
+        return 1;
+    }
+
+    string local = args[0];
+    if (!File.Exists(local))
+    {
+        Console.Error.WriteLine($"local file not found: {local}");
+        return 1;
+    }
+
+    if (!Path.GetExtension(local).Equals(".ndi", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("disk upload expects a .ndi image.");
+        return 1;
+    }
+
+    string remote = pathOpt is not null
+        ? NormalizeSdRelativePath(pathOpt)
+        : ResolveDiskUploadPath(local, nameOpt ?? (args.Count > 1 ? args[1] : Path.GetFileName(local)), hard, floppy);
+
+    return DoPut(new[] { local, remote }, host);
+}
+
+static int DoDiskDownload(List<string> args, string? host, bool hard, bool floppy, string? pathOpt)
+{
+    string? source = pathOpt ?? (args.Count > 0 ? args[0] : null);
+    if (source is null)
+    {
+        PrintDiskUsage();
+        return 1;
+    }
+
+    string remote = ResolveDiskReferencePath(source, hard, floppy);
+    string[] getArgs;
+    if (pathOpt is not null)
+        getArgs = args.Count > 0 ? new[] { remote, args[0] } : new[] { remote };
+    else
+        getArgs = args.Count > 1 ? new[] { remote, args[1] } : new[] { remote };
+
+    return DoGet(getArgs, host);
+}
+
+static int DoDiskDelete(List<string> args, string? host, bool hard, bool floppy, string? pathOpt)
+{
+    string? source = pathOpt ?? (args.Count > 0 ? args[0] : null);
+    if (source is null)
+    {
+        PrintDiskUsage();
+        return 1;
+    }
+
+    string remote = ResolveDiskReferencePath(source, hard, floppy);
+    return DoRm(new[] { remote }, host);
+}
+
+static int UnknownDiskCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown disk command: {command}");
+    PrintDiskUsage();
+    return 1;
+}
+
+static void PrintDiskUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova disk list --remote <host> [--hard|--floppy]");
+    Console.Error.WriteLine("  nova disk upload <file.ndi> --remote <host> [--hard|--floppy] [--name <name>]");
+    Console.Error.WriteLine("  nova disk download <name-or-path> --remote <host> [local-path] [--hard|--floppy]");
+    Console.Error.WriteLine("  nova disk delete <name-or-path> --remote <host> [--hard|--floppy]");
+}
+
+static int DoRom(string[] args, string? host) =>
+    DoManagedRemoteAsset(args, host, "rom", "roms", NormalizeRomUploadName);
+
+static int DoSoundfont(string[] args, string? host) =>
+    DoManagedRemoteAsset(args, host, "soundfont", "soundfonts", NormalizeSoundfontUploadName);
+
+static int DoAsset(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintAssetUsage();
+        return 1;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    string? type = TakeOptionValue(rest, "--type", "--kind", "-t");
+    string? nameOpt = TakeOptionValue(rest, "--name", "-n");
+    string? pathOpt = TakeOptionValue(rest, "--path");
+
+    if (command is "list" or "ls" && type is null)
+        return DoLs(new[] { "assets" }, host);
+
+    if (type is null && pathOpt is null && (command is "upload" or "put"))
+    {
+        Console.Error.WriteLine("asset upload needs --type <boot|fonts|sid|...> so the CLI can place it correctly.");
+        PrintAssetUsage();
+        return 1;
+    }
+
+    string baseDir = type is null ? "assets" : AssetDirectoryFor(type);
+    return DoManagedRemoteAssetCore(command, rest, host, "asset", baseDir, nameOpt, pathOpt, KeepUploadName);
+}
+
+static int DoManagedRemoteAsset(
+    string[] args,
+    string? host,
+    string kind,
+    string baseDir,
+    Func<string, string, (bool Ok, string Name, string? Error)> normalizeUploadName)
+{
+    host = ExtractRemoteHost(ref args, host);
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintManagedAssetUsage(kind);
+        return 1;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    string? nameOpt = TakeOptionValue(rest, "--name", "-n");
+    string? pathOpt = TakeOptionValue(rest, "--path");
+    return DoManagedRemoteAssetCore(command, rest, host, kind, baseDir, nameOpt, pathOpt, normalizeUploadName);
+}
+
+static int DoManagedRemoteAssetCore(
+    string command,
+    List<string> args,
+    string? host,
+    string kind,
+    string baseDir,
+    string? nameOpt,
+    string? pathOpt,
+    Func<string, string, (bool Ok, string Name, string? Error)> normalizeUploadName)
+{
+    return command switch
+    {
+        "list" or "ls"       => DoLs(new[] { baseDir }, host),
+        "upload" or "put"    => DoManagedUpload(args, host, kind, baseDir, nameOpt, pathOpt, normalizeUploadName),
+        "download" or "get"  => DoManagedDownload(args, host, kind, baseDir, pathOpt),
+        "delete" or "rm"     => DoManagedDelete(args, host, kind, baseDir, pathOpt),
+        _                    => UnknownManagedCommand(kind, command),
+    };
+}
+
+static int DoManagedUpload(
+    List<string> args,
+    string? host,
+    string kind,
+    string baseDir,
+    string? nameOpt,
+    string? pathOpt,
+    Func<string, string, (bool Ok, string Name, string? Error)> normalizeUploadName)
+{
+    if (args.Count < 1)
+    {
+        PrintManagedAssetUsage(kind);
+        return 1;
+    }
+
+    string local = args[0];
+    if (!File.Exists(local))
+    {
+        Console.Error.WriteLine($"local file not found: {local}");
+        return 1;
+    }
+
+    string remote;
+    if (pathOpt is not null)
+    {
+        remote = NormalizeSdRelativePath(pathOpt);
+    }
+    else
+    {
+        string requestedName = nameOpt ?? (args.Count > 1 ? args[1] : Path.GetFileName(local));
+        if (LooksExplicitRemotePath(requestedName))
+        {
+            remote = NormalizeSdRelativePath(requestedName);
+        }
+        else
+        {
+            var normalized = normalizeUploadName(local, requestedName);
+            if (!normalized.Ok)
+            {
+                Console.Error.WriteLine(normalized.Error);
+                return 1;
+            }
+
+            remote = JoinRemotePath(baseDir, normalized.Name);
+        }
+    }
+
+    return DoPut(new[] { local, remote }, host);
+}
+
+static int DoManagedDownload(List<string> args, string? host, string kind, string baseDir, string? pathOpt)
+{
+    string? source = pathOpt ?? (args.Count > 0 ? args[0] : null);
+    if (source is null)
+    {
+        PrintManagedAssetUsage(kind);
+        return 1;
+    }
+
+    string remote = ResolveManagedReferencePath(baseDir, source);
+    string[] getArgs;
+    if (pathOpt is not null)
+        getArgs = args.Count > 0 ? new[] { remote, args[0] } : new[] { remote };
+    else
+        getArgs = args.Count > 1 ? new[] { remote, args[1] } : new[] { remote };
+
+    return DoGet(getArgs, host);
+}
+
+static int DoManagedDelete(List<string> args, string? host, string kind, string baseDir, string? pathOpt)
+{
+    string? source = pathOpt ?? (args.Count > 0 ? args[0] : null);
+    if (source is null)
+    {
+        PrintManagedAssetUsage(kind);
+        return 1;
+    }
+
+    string remote = ResolveManagedReferencePath(baseDir, source);
+    return DoRm(new[] { remote }, host);
+}
+
+static int UnknownManagedCommand(string kind, string command)
+{
+    Console.Error.WriteLine($"Unknown {kind} command: {command}");
+    PrintManagedAssetUsage(kind);
+    return 1;
+}
+
+static void PrintManagedAssetUsage(string kind)
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine($"  nova {kind} list --remote <host>");
+    Console.Error.WriteLine($"  nova {kind} upload <file> --remote <host> [--name <name>]");
+    Console.Error.WriteLine($"  nova {kind} download <name-or-path> --remote <host> [local-path]");
+    Console.Error.WriteLine($"  nova {kind} delete <name-or-path> --remote <host>");
+}
+
+static void PrintAssetUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova asset list --remote <host> [--type <boot|fonts|sid|...>]");
+    Console.Error.WriteLine("  nova asset upload <file> --remote <host> --type <boot|fonts|sid|...> [--name <name>]");
+    Console.Error.WriteLine("  nova asset download <name-or-path> --remote <host> [--type <boot|fonts|sid|...>] [local-path]");
+    Console.Error.WriteLine("  nova asset delete <name-or-path> --remote <host> [--type <boot|fonts|sid|...>]");
+}
+
 static int DoLs(string[] args, string? host)
 {
     if (host is null) {
         Console.Error.WriteLine("Usage: ndi --remote=<host> ls [path]");
         return 1;
     }
-    string subdir = (args.Length > 0) ? args[0] : "";
+    string subdir = (args.Length > 0) ? NormalizeSdRelativePath(args[0]) : "";
     if (subdir.Length > 0 && !subdir.EndsWith('/')) subdir += "/";
-    string url = $"http://{host}/sd/{subdir}";
+    string url = SdUrl(host, subdir);
     using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     try {
         var resp = http.GetAsync(url).GetAwaiter().GetResult();
@@ -91,19 +449,17 @@ static int DoPut(string[] args, string? host)
         return 1;
     }
     string local  = args[0];
-    string remote = (args.Length > 1) ? args[1] : Path.GetFileName(local);
+    string remote = (args.Length > 1) ? NormalizeSdRelativePath(args[1]) : Path.GetFileName(local);
     if (!File.Exists(local)) {
         Console.Error.WriteLine($"local file not found: {local}");
         return 1;
     }
-    string url = $"http://{host}/sd/{remote}";
-    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+    string url = SdUrl(host, remote);
+    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
     try {
         using var fs = new FileStream(local, FileMode.Open, FileAccess.Read);
         var content = new StreamContent(fs);
-        // ESPAsyncWebServer treats application/x-www-form-urlencoded as form
-        // params and never delivers the body to the chunk callback — must
-        // mark the upload as opaque bytes for PUT to succeed.
+        // Mark the upload as opaque bytes so NovaHost stores the body exactly.
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
         if (!resp.IsSuccessStatusCode) {
@@ -125,10 +481,10 @@ static int DoGet(string[] args, string? host)
         Console.Error.WriteLine("Usage: ndi --remote=<host> get <remote-path> [local-path]");
         return 1;
     }
-    string remote = args[0];
+    string remote = NormalizeSdRelativePath(args[0]);
     string local  = (args.Length > 1) ? args[1] : Path.GetFileName(remote);
-    string url = $"http://{host}/sd/{remote}";
-    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+    string url = SdUrl(host, remote);
+    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
     try {
         using var resp = http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
                               .GetAwaiter().GetResult();
@@ -153,7 +509,8 @@ static int DoRm(string[] args, string? host)
         Console.Error.WriteLine("Usage: ndi --remote=<host> rm <remote-path>");
         return 1;
     }
-    string url = $"http://{host}/sd/{args[0]}";
+    string remote = NormalizeSdRelativePath(args[0]);
+    string url = SdUrl(host, remote);
     using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     try {
         var resp = http.DeleteAsync(url).GetAwaiter().GetResult();
@@ -212,14 +569,210 @@ static IEnumerable<Dictionary<string, string>> ParseJsonArray(string json)
     }
 }
 
+static string? ExtractRemoteHost(ref string[] args, string? fallback)
+{
+    string? host = fallback;
+    var filtered = new List<string>();
+
+    for (int i = 0; i < args.Length; i++)
+    {
+        string arg = args[i];
+        if (arg.StartsWith("--remote=", StringComparison.Ordinal))
+        {
+            string value = arg["--remote=".Length..];
+            if (!string.IsNullOrWhiteSpace(value))
+                host = value;
+            continue;
+        }
+
+        if (arg == "--remote")
+        {
+            if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+            {
+                host = args[++i];
+                continue;
+            }
+        }
+
+        filtered.Add(arg);
+    }
+
+    args = filtered.ToArray();
+    return host;
+}
+
+static string? TakeOptionValue(List<string> args, params string[] names)
+{
+    for (int i = 0; i < args.Count; i++)
+    {
+        foreach (string name in names)
+        {
+            if (args[i].StartsWith(name + "=", StringComparison.Ordinal))
+            {
+                string value = args[i][(name.Length + 1)..];
+                args.RemoveAt(i);
+                return value;
+            }
+
+            if (args[i] == name && i + 1 < args.Count)
+            {
+                string value = args[i + 1];
+                args.RemoveRange(i, 2);
+                return value;
+            }
+        }
+    }
+
+    return null;
+}
+
+static bool TakeFlag(List<string> args, params string[] names)
+{
+    for (int i = 0; i < args.Count; i++)
+    {
+        if (names.Contains(args[i], StringComparer.Ordinal))
+        {
+            args.RemoveAt(i);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static string NormalizeSdRelativePath(string path)
+{
+    string normalized = path.Replace('\\', '/').Trim();
+    while (normalized.StartsWith('/'))
+        normalized = normalized[1..];
+
+    return string.Join("/", normalized.Split('/', StringSplitOptions.RemoveEmptyEntries));
+}
+
+static string SdUrl(string host, string remotePath)
+{
+    string normalized = NormalizeSdRelativePath(remotePath);
+    string escaped = normalized.Length == 0
+        ? ""
+        : string.Join("/", normalized.Split('/').Select(Uri.EscapeDataString));
+    return $"http://{host}/sd/{escaped}";
+}
+
+static string JoinRemotePath(string directory, string filename)
+{
+    string dir = NormalizeSdRelativePath(directory).TrimEnd('/');
+    string name = NormalizeSdRelativePath(filename).Trim('/');
+    return dir.Length == 0 ? name : $"{dir}/{name}";
+}
+
+static bool LooksExplicitRemotePath(string path) =>
+    path.StartsWith('/') || path.Contains('/') || path.Contains('\\');
+
+static string ResolveDiskUploadPath(string localPath, string requestedName, bool hard, bool floppy)
+{
+    if (LooksExplicitRemotePath(requestedName))
+        return NormalizeSdRelativePath(requestedName);
+
+    var info = new FileInfo(localPath);
+    string dir = DiskDirectoryFor(requestedName, hard, floppy, info.Length);
+    return JoinRemotePath(dir, requestedName);
+}
+
+static string ResolveDiskReferencePath(string nameOrPath, bool hard, bool floppy)
+{
+    if (LooksExplicitRemotePath(nameOrPath))
+        return NormalizeSdRelativePath(nameOrPath);
+
+    string dir = DiskDirectoryFor(nameOrPath, hard, floppy, null);
+    return JoinRemotePath(dir, nameOrPath);
+}
+
+static string DiskDirectoryFor(string name, bool hard, bool floppy, long? sizeBytes)
+{
+    if (hard) return "disks/hard";
+    if (floppy) return "disks/floppy";
+
+    string filename = Path.GetFileName(name);
+    if (filename.StartsWith("hd", StringComparison.OrdinalIgnoreCase))
+        return "disks/hard";
+
+    if (sizeBytes is >= 16L * 1024 * 1024)
+        return "disks/hard";
+
+    return "disks/floppy";
+}
+
+static string ResolveManagedReferencePath(string baseDir, string nameOrPath)
+{
+    if (LooksExplicitRemotePath(nameOrPath))
+        return NormalizeSdRelativePath(nameOrPath);
+
+    return JoinRemotePath(baseDir, nameOrPath);
+}
+
+static string AssetDirectoryFor(string type)
+{
+    string normalized = NormalizeSdRelativePath(type).ToLowerInvariant();
+    return normalized switch
+    {
+        "boot"          => "assets/boot",
+        "font"          => "assets/fonts",
+        "fonts"         => "assets/fonts",
+        "sid"           => "assets/sid",
+        "sid-assets"    => "assets/sid",
+        "sid_assets"    => "assets/sid",
+        ""              => "assets",
+        _               => JoinRemotePath("assets", normalized),
+    };
+}
+
+static (bool Ok, string Name, string? Error) KeepUploadName(string localPath, string requestedName) =>
+    (true, requestedName, null);
+
+static (bool Ok, string Name, string? Error) NormalizeRomUploadName(string localPath, string requestedName)
+{
+    if (Path.GetExtension(requestedName).Length == 0)
+    {
+        string ext = Path.GetExtension(localPath);
+        if (ext.Length > 0)
+            requestedName += ext;
+    }
+
+    return (true, requestedName, null);
+}
+
+static (bool Ok, string Name, string? Error) NormalizeSoundfontUploadName(string localPath, string requestedName)
+{
+    string localExt = Path.GetExtension(localPath).ToLowerInvariant();
+    if (localExt == ".sf2")
+    {
+        return (false, requestedName,
+            "SF2 upload must convert to Nova-native .nsfb first; that converter is not implemented yet. Upload a .nsfb bank for now.");
+    }
+
+    if (localExt != ".nsfb")
+    {
+        return (false, requestedName,
+            "soundfont upload expects a Nova-native .nsfb bank for now.");
+    }
+
+    string requestedExt = Path.GetExtension(requestedName).ToLowerInvariant();
+    if (requestedExt.Length == 0)
+        requestedName += ".nsfb";
+    else if (requestedExt != ".nsfb")
+        return (false, requestedName, "soundfont upload target name must end in .nsfb.");
+
+    return (true, requestedName, null);
+}
+
 // ---------------------------------------------------------------------------
-// create <file.ndi> [--size <KB>] [--label <name>]
+// create <file.ndi> [--size <KB>|--hd] [--label <name>]
 // ---------------------------------------------------------------------------
 static int DoCreate(string[] args)
 {
     if (args.Length < 1)
     {
-        Console.Error.WriteLine("Usage: ndi create <file.ndi> [--size <KB>] [--label <name>]");
+        Console.Error.WriteLine("Usage: ndi create <file.ndi> [--size <KB>|--hd] [--label <name>]");
         return 1;
     }
 
@@ -231,6 +784,9 @@ static int DoCreate(string[] args)
     {
         switch (args[i])
         {
+            case "--hd":
+                sizeKB = 65536;
+                break;
             case "--size" when i + 1 < args.Length:
                 if (!int.TryParse(args[++i], out sizeKB) || sizeKB < 1)
                 {
@@ -309,7 +865,7 @@ static int DoDir(string[] args)
         }
 
         Console.WriteLine();
-        Console.WriteLine($"  {img.FreeSectors} sectors free  ({img.FreeSectors * 256 / 1024} KB)");
+        Console.WriteLine($"  {img.FreeSectors} sectors free  ({(long)img.FreeSectors * img.Header.SectorSize / 1024} KB)");
     }
     return 0;
 }
@@ -332,9 +888,9 @@ static int DoInfo(string[] args)
     using (img)
     {
         var h = img.Header;
-        int totalKB = h.TotalSectors * 256 / 1024;
-        int freeKB = img.FreeSectors * 256 / 1024;
-        int dirCapacity = h.DirectorySectorCount * NdiDirectory.EntriesPerSector;
+        long totalKB = (long)h.TotalSectors * h.SectorSize / 1024;
+        long freeKB = (long)img.FreeSectors * h.SectorSize / 1024;
+        int dirCapacity = checked((int)h.DirectorySectorCount) * NdiDirectory.EntriesPerSector;
 
         Console.WriteLine($"Image:            {args[0]}");
         Console.WriteLine($"Format version:   {h.FormatVersion}");
@@ -368,7 +924,7 @@ static int DoValidate(string[] args)
     using (img)
     {
         var h = img.Header;
-        int dataSectorCount = h.TotalSectors - h.DataStartSector;
+        int dataSectorCount = checked((int)(h.TotalSectors - h.DataStartSector));
 
         var entries = CollectAllEntries(img);
         var claimed = new bool[dataSectorCount];
@@ -378,20 +934,21 @@ static int DoValidate(string[] args)
         {
             if (e.IsDirectory) continue;
 
-            int start = e.StartSector;
-            int count = e.SectorCount;
+            uint start = e.StartSector;
+            uint count = e.SectorCount;
+            ulong end = (ulong)start + count;
 
-            if (start + count > dataSectorCount)
+            if (end > (uint)dataSectorCount)
             {
-                errors.Add($"  [{e.Index}] '{e.Filename}': sectors {start}..{start + count - 1} extend beyond image bounds");
+                errors.Add($"  [{e.Index}] '{e.Filename}': sectors {start}..{end - 1} extend beyond image bounds");
                 continue;
             }
 
-            for (int s = start; s < start + count; s++)
+            for (uint s = start; s < end; s++)
             {
-                if (claimed[s])
+                if (claimed[(int)s])
                     errors.Add($"  [{e.Index}] '{e.Filename}': sector {s} is double-allocated");
-                claimed[s] = true;
+                claimed[(int)s] = true;
             }
         }
 
@@ -441,20 +998,23 @@ static int DoLabel(string[] args)
     {
         using var fs = new FileStream(imagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
 
-        var headerBuf = new byte[256];
+        var headerBuf = new byte[NdiHeader.Size];
         fs.Seek(0, SeekOrigin.Begin);
         fs.ReadExactly(headerBuf);
 
-        if (headerBuf[0] != (byte)'N' || headerBuf[1] != (byte)'D' ||
-            headerBuf[2] != (byte)'I' || headerBuf[3] != 0x1A)
+        try
+        {
+            _ = NdiHeader.FromBytes(headerBuf);
+        }
+        catch (InvalidDataException)
         {
             Console.Error.WriteLine("Not a valid NDI image.");
             return 1;
         }
 
-        Array.Clear(headerBuf, 9, 32);
+        Array.Clear(headerBuf, NdiHeader.LabelOffset, NdiHeader.LabelLength);
         var labelBytes = Encoding.ASCII.GetBytes(newLabel);
-        Array.Copy(labelBytes, 0, headerBuf, 9, Math.Min(labelBytes.Length, 32));
+        Array.Copy(labelBytes, 0, headerBuf, NdiHeader.LabelOffset, Math.Min(labelBytes.Length, NdiHeader.LabelLength));
 
         fs.Seek(0, SeekOrigin.Begin);
         fs.Write(headerBuf);
@@ -1032,10 +1592,10 @@ static int UnknownVerb(string verb)
 
 static void PrintUsage()
 {
-    Console.Error.WriteLine("e6502 NDI -- Nova Disk Image tool");
+    Console.Error.WriteLine("e6502 NDI / Nova device management tool");
     Console.Error.WriteLine();
-    Console.Error.WriteLine("Commands:");
-    Console.Error.WriteLine("  create     <file.ndi> [--size <KB>] [--label <name>]");
+    Console.Error.WriteLine("Local NDI image commands:");
+    Console.Error.WriteLine("  create     <file.ndi> [--size <KB>|--hd] [--label <name>]");
     Console.Error.WriteLine("  dir        <file.ndi> [/path]");
     Console.Error.WriteLine("  info       <file.ndi>");
     Console.Error.WriteLine("  validate   <file.ndi>");
@@ -1047,4 +1607,17 @@ static void PrintUsage()
     Console.Error.WriteLine("  rmdir      <file.ndi> <path>");
     Console.Error.WriteLine("  tokenize   <input.txt> <output.bas> [--base <addr>] [--tokens <path>]");
     Console.Error.WriteLine("  detokenize <input.bas> [output.txt] [--tokens <path>]");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("Typed NovaHost SD commands:");
+    Console.Error.WriteLine("  device status --remote <host>");
+    Console.Error.WriteLine("  disk list|upload|download|delete ... --remote <host>");
+    Console.Error.WriteLine("  rom list|upload|download|delete ... --remote <host>");
+    Console.Error.WriteLine("  soundfont list|upload|download|delete ... --remote <host>");
+    Console.Error.WriteLine("  asset list|upload|download|delete ... --remote <host> --type <boot|fonts|sid|...>");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("Raw SD commands, kept for compatibility:");
+    Console.Error.WriteLine("  --remote <host> ls [path]");
+    Console.Error.WriteLine("  --remote <host> put <local-path> [remote-path]");
+    Console.Error.WriteLine("  --remote <host> get <remote-path> [local-path]");
+    Console.Error.WriteLine("  --remote <host> rm <remote-path>");
 }

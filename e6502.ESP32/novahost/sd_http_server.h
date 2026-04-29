@@ -1,28 +1,22 @@
-// SdHttpServer — minimal REST file server backed by SD_MMC.
+// SdHttpServer — small blocking REST file server backed by SD.
 //
-// Endpoints (all under /sd/...):
-//   GET  /sd/                     → JSON listing of SD root
-//   GET  /sd/<dir>/               → JSON listing of subdirectory
-//   GET  /sd/<path>               → file body (Content-Length set)
-//   PUT  /sd/<path>               → write file (body bytes); creates
-//                                   parent dirs as needed
-//   DELETE /sd/<path>             → remove file (or empty directory)
+// Endpoints:
+//   GET    /health       -> {"ok":true}
+//   GET    /sd-status    -> SD diagnostic JSON
+//   GET    /sd/          -> JSON listing
+//   GET    /sd/<path>    -> file body, or listing if path is a directory
+//   PUT    /sd/<path>    -> whole-file upload from request body
+//   DELETE /sd/<path>    -> remove file or empty directory
 //
-// Returns 200 on success, 404 for missing files, 409 for write-while-
-// mounted, 500 for I/O errors. Always JSON for list responses.
-//
-// Designed to be the remote backend for `e6502.NDI --remote=host ...`.
-// Treats files as opaque blobs — does NOT parse .ndi internally. The
-// CLI does the NDI manipulation locally, this server just stores bytes.
-//
-// Deps: ESPAsyncWebServer (lacamera fork) + AsyncTCP. Must call
-// `begin()` after WiFi is up.
+// This deliberately uses only WiFiServer. NovaHost needs whole-file SD
+// management, so a single-request loop is smaller and easier to reason about.
 
 #ifndef NOVAHOST_SD_HTTP_SERVER_H
 #define NOVAHOST_SD_HTTP_SERVER_H
 
 #include <Arduino.h>
-#include <ESPAsyncWebServer.h>
+#include <SD.h>
+#include <WiFi.h>
 #include "device_manager.h"
 
 class SdHttpServer {
@@ -31,37 +25,43 @@ public:
         : _dm(dm), _server(port) {}
 
     void begin();
+    void loop();
 
 private:
-    DeviceManager&   _dm;
-    AsyncWebServer   _server;
+    static constexpr size_t LINE_BUF_BYTES = 512;
+    static constexpr size_t IO_BUF_BYTES   = 1024;
 
-    // Active upload state. ESPAsyncWebServer body callbacks give us
-    // chunks of the PUT body across multiple invocations; we hold the
-    // open File between chunks here.
-    struct Upload {
-        bool   active;
-        File   file;
-        String path;
-        String last_err;
-    } _upload = { false, File(), "", "" };
+    DeviceManager& _dm;
+    WiFiServer     _server;
 
-    // Handlers — separate methods so they're easier to read + test.
-    void handle_list(AsyncWebServerRequest* req, const String& path);
-    void handle_get(AsyncWebServerRequest* req, const String& path);
-    void handle_delete(AsyncWebServerRequest* req, const String& path);
-    void handle_put_begin(AsyncWebServerRequest* req, const String& path);
-    void handle_put_chunk(uint8_t* data, size_t len, size_t index, size_t total);
-    void handle_put_done();
+    void handle_client(WiFiClient& client);
 
-    // Refuses writes/deletes that would clobber an actively mounted
-    // hd*.ndi or fd*.ndi. Returns true if path is safe to modify.
-    bool path_safe_for_write(const String& path);
+    bool read_line(WiFiClient& client, char* out, size_t out_len,
+                   uint32_t timeout_ms = 5000);
+    bool read_body_to_file(WiFiClient& client, File& file,
+                           uint32_t content_len);
+    bool write_all(WiFiClient& client, const uint8_t* data, size_t len);
 
-    // Helpers.
-    static String path_after_sd(AsyncWebServerRequest* req);
-    static void   send_json_listing(AsyncWebServerRequest* req,
-                                     const String& dir_path);
+    void handle_get(WiFiClient& client, const char* path);
+    void handle_put(WiFiClient& client, const char* path,
+                    uint32_t content_len);
+    void handle_delete(WiFiClient& client, const char* path);
+    void handle_status(WiFiClient& client);
+
+    void send_listing(WiFiClient& client, const char* path);
+    void send_file(WiFiClient& client, const char* path);
+    void send_json(WiFiClient& client, int code, const char* body);
+    void send_error(WiFiClient& client, int code, const char* message);
+    void send_headers(WiFiClient& client, int code, const char* content_type,
+                      int32_t content_len = -1);
+
+    bool path_sane(const char* path, bool allow_empty);
+    bool path_safe_for_write(const char* path);
+    bool ensure_parent_dirs(const char* full_path);
+
+    static const char* path_after_sd(const char* url, char* out,
+                                     size_t out_len);
+    static const char* reason_phrase(int code);
 };
 
 #endif

@@ -14,6 +14,7 @@ namespace ndi {
 // On-disk layout constants
 // ===========================================================================
 static constexpr int      SECTOR_SIZE      = 256;
+static constexpr uint8_t  FORMAT_VERSION   = 2;
 static constexpr int      ENTRY_SIZE       = 64;
 static constexpr int      ENTRIES_PER_SEC  = 4;
 static constexpr int      MAX_FILENAME_LEN = 32;
@@ -22,11 +23,10 @@ static constexpr int      MAX_FILENAME_LEN = 32;
 static constexpr int OFF_FLAGS      = 0x00;
 static constexpr int OFF_TYPE       = 0x01;
 static constexpr int OFF_PARENT     = 0x02;  // 2 bytes LE
-static constexpr int OFF_START_SEC  = 0x04;  // 2 bytes LE
-static constexpr int OFF_SIZE_LO    = 0x06;  // 2 bytes LE
-static constexpr int OFF_FILENAME   = 0x08;  // 32 bytes
-static constexpr int OFF_SECCOUNT   = 0x28;  // 2 bytes LE
-static constexpr int OFF_SIZE_HI    = 0x2A;  // 2 bytes LE
+static constexpr int OFF_START_SEC  = 0x04;  // 4 bytes LE
+static constexpr int OFF_SIZE       = 0x08;  // 4 bytes LE
+static constexpr int OFF_FILENAME   = 0x0C;  // 32 bytes
+static constexpr int OFF_SECCOUNT   = 0x2C;  // 4 bytes LE
 
 // ---------------------------------------------------------------------------
 // LE helpers
@@ -37,6 +37,18 @@ static inline uint16_t rd_u16(const uint8_t* p) {
 static inline void wr_u16(uint8_t* p, uint16_t v) {
     p[0] = (uint8_t)(v & 0xFF);
     p[1] = (uint8_t)(v >> 8);
+}
+static inline uint32_t rd_u32(const uint8_t* p) {
+    return (uint32_t)p[0] |
+           ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) |
+           ((uint32_t)p[3] << 24);
+}
+static inline void wr_u32(uint8_t* p, uint32_t v) {
+    p[0] = (uint8_t)(v & 0xFF);
+    p[1] = (uint8_t)((v >> 8) & 0xFF);
+    p[2] = (uint8_t)((v >> 16) & 0xFF);
+    p[3] = (uint8_t)(v >> 24);
 }
 
 // Case-insensitive name compare (bounded by either a null byte or
@@ -112,26 +124,30 @@ bool NdiImage::read_header() {
 
     _header.format_version         = buf[4];
     _header.sector_size            = rd_u16(&buf[5]);
-    _header.total_sectors          = rd_u16(&buf[7]);
+    _header.total_sectors          = rd_u32(&buf[0x08]);
 
-    // Volume label: bytes 9..40, null-padded ASCII.
+    // Volume label: bytes 0x0C..0x2B, null-padded ASCII.
     int n = 0;
     for (; n < 32; n++) {
-        char c = (char)buf[9 + n];
+        char c = (char)buf[0x0C + n];
         if (c == 0) break;
         _header.volume_label[n] = c;
     }
     _header.volume_label[n] = 0;
 
-    _header.directory_start_sector = rd_u16(&buf[0x29]);
-    _header.directory_sector_count = rd_u16(&buf[0x2B]);
-    _header.data_start_sector      = rd_u16(&buf[0x2D]);
-    _header.free_sector_count      = rd_u16(&buf[0x2F]);
+    _header.directory_start_sector = rd_u32(&buf[0x2C]);
+    _header.directory_sector_count = rd_u32(&buf[0x30]);
+    _header.data_start_sector      = rd_u32(&buf[0x34]);
+    _header.free_sector_count      = rd_u32(&buf[0x38]);
 
+    if (_header.format_version != FORMAT_VERSION) return false;
     if (_header.sector_size != SECTOR_SIZE) return false;
     if (_header.directory_start_sector < 1) return false;
     if (_header.data_start_sector <= _header.directory_start_sector) return false;
     if (_header.total_sectors < _header.data_start_sector) return false;
+    if (_header.total_sectors > 0x7FFFFFFFUL) return false;
+    if (_header.directory_start_sector > 0x7FFFFFFFUL) return false;
+    if (_header.directory_sector_count > 0x7FFFFFFFUL) return false;
 
     return true;
 }
@@ -140,9 +156,9 @@ bool NdiImage::read_header() {
 // BAM read
 // ===========================================================================
 bool NdiImage::read_bam() {
-    int bam_sectors      = _header.directory_start_sector - 1;
+    int bam_sectors      = (int)(_header.directory_start_sector - 1);
     if (bam_sectors < 1) return false;
-    _data_sector_count   = _header.total_sectors - _header.data_start_sector;
+    _data_sector_count   = (int)(_header.total_sectors - _header.data_start_sector);
     _bam_byte_count      = (_data_sector_count + 7) >> 3;
 
     int payload_size     = bam_sectors * SECTOR_SIZE;
@@ -175,7 +191,7 @@ bool NdiImage::read_bam() {
 // Directory read
 // ===========================================================================
 bool NdiImage::read_directory() {
-    int dir_bytes = _header.directory_sector_count * SECTOR_SIZE;
+    int dir_bytes = (int)_header.directory_sector_count * SECTOR_SIZE;
     _dir_data = (uint8_t*)malloc(dir_bytes);
     if (!_dir_data) return false;
 
@@ -183,7 +199,7 @@ bool NdiImage::read_directory() {
     if (!_stream->seek(offset)) return false;
     if (_stream->read(_dir_data, dir_bytes) != dir_bytes) return false;
 
-    _dir_entry_count = _header.directory_sector_count * ENTRIES_PER_SEC;
+    _dir_entry_count = (int)_header.directory_sector_count * ENTRIES_PER_SEC;
     return true;
 }
 
@@ -194,7 +210,7 @@ bool NdiImage::flush_metadata() {
     if (!_stream) return false;
 
     // Update free count in header.
-    _header.free_sector_count = (uint16_t)_free_count;
+    _header.free_sector_count = (uint32_t)_free_count;
 
     // ----- Header -----
     uint8_t hdr[SECTOR_SIZE];
@@ -202,22 +218,23 @@ bool NdiImage::flush_metadata() {
     hdr[0] = 'N'; hdr[1] = 'D'; hdr[2] = 'I'; hdr[3] = 0x1A;
     hdr[4] = _header.format_version;
     wr_u16(&hdr[5], _header.sector_size);
-    wr_u16(&hdr[7], _header.total_sectors);
+    // $07 is reserved to keep 32-bit fields aligned.
+    wr_u32(&hdr[0x08], _header.total_sectors);
     int label_n = 0;
     while (label_n < 32 && _header.volume_label[label_n] != 0) {
-        hdr[9 + label_n] = (uint8_t)_header.volume_label[label_n];
+        hdr[0x0C + label_n] = (uint8_t)_header.volume_label[label_n];
         label_n++;
     }
-    wr_u16(&hdr[0x29], _header.directory_start_sector);
-    wr_u16(&hdr[0x2B], _header.directory_sector_count);
-    wr_u16(&hdr[0x2D], _header.data_start_sector);
-    wr_u16(&hdr[0x2F], _header.free_sector_count);
+    wr_u32(&hdr[0x2C], _header.directory_start_sector);
+    wr_u32(&hdr[0x30], _header.directory_sector_count);
+    wr_u32(&hdr[0x34], _header.data_start_sector);
+    wr_u32(&hdr[0x38], _header.free_sector_count);
 
     if (!_stream->seek(0)) return false;
     if (_stream->write(hdr, SECTOR_SIZE) != SECTOR_SIZE) return false;
 
     // ----- BAM (padded to sector boundary) -----
-    int bam_sectors = _header.directory_start_sector - 1;
+    int bam_sectors = (int)(_header.directory_start_sector - 1);
     int bam_bytes_padded = bam_sectors * SECTOR_SIZE;
     uint8_t* padded = (uint8_t*)malloc(bam_bytes_padded);
     if (!padded) return false;
@@ -232,7 +249,7 @@ bool NdiImage::flush_metadata() {
     free(padded);
 
     // ----- Directory -----
-    int dir_bytes = _header.directory_sector_count * SECTOR_SIZE;
+    int dir_bytes = (int)_header.directory_sector_count * SECTOR_SIZE;
     if (!_stream->seek((uint64_t)_header.directory_start_sector * SECTOR_SIZE))
         return false;
     if (_stream->write(_dir_data, dir_bytes) != dir_bytes) return false;
@@ -291,10 +308,8 @@ void NdiImage::dir_read_entry(int slot, DirEntry& out) {
     out.flags        = _dir_data[o + OFF_FLAGS];
     out.file_type    = _dir_data[o + OFF_TYPE];
     out.parent_index = rd_u16(&_dir_data[o + OFF_PARENT]);
-    out.start_sector = rd_u16(&_dir_data[o + OFF_START_SEC]);
-    uint16_t size_lo = rd_u16(&_dir_data[o + OFF_SIZE_LO]);
-    uint16_t size_hi = rd_u16(&_dir_data[o + OFF_SIZE_HI]);
-    out.size_bytes   = (uint32_t)size_lo | ((uint32_t)size_hi << 16);
+    out.start_sector = rd_u32(&_dir_data[o + OFF_START_SEC]);
+    out.size_bytes   = rd_u32(&_dir_data[o + OFF_SIZE]);
     int n = 0;
     for (; n < MAX_FILENAME_LEN; n++) {
         char c = (char)_dir_data[o + OFF_FILENAME + n];
@@ -302,27 +317,26 @@ void NdiImage::dir_read_entry(int slot, DirEntry& out) {
         out.filename[n] = c;
     }
     out.filename[n]  = 0;
-    out.sector_count = rd_u16(&_dir_data[o + OFF_SECCOUNT]);
+    out.sector_count = rd_u32(&_dir_data[o + OFF_SECCOUNT]);
 }
 
 void NdiImage::dir_write_entry(int slot, uint8_t flags, uint8_t type,
-                                uint16_t parent, uint16_t start_sector,
+                                uint16_t parent, uint32_t start_sector,
                                 uint32_t size, const char* name,
-                                uint16_t sector_count) {
+                                uint32_t sector_count) {
     int o = slot * ENTRY_SIZE;
     _dir_data[o + OFF_FLAGS] = flags;
     _dir_data[o + OFF_TYPE]  = type;
     wr_u16(&_dir_data[o + OFF_PARENT],    parent);
-    wr_u16(&_dir_data[o + OFF_START_SEC], start_sector);
-    wr_u16(&_dir_data[o + OFF_SIZE_LO],   (uint16_t)(size & 0xFFFF));
+    wr_u32(&_dir_data[o + OFF_START_SEC], start_sector);
+    wr_u32(&_dir_data[o + OFF_SIZE],      size);
     memset(&_dir_data[o + OFF_FILENAME], 0, MAX_FILENAME_LEN);
     int n = 0;
     while (name[n] != 0 && n < MAX_FILENAME_LEN) {
         _dir_data[o + OFF_FILENAME + n] = (uint8_t)name[n];
         n++;
     }
-    wr_u16(&_dir_data[o + OFF_SECCOUNT], sector_count);
-    wr_u16(&_dir_data[o + OFF_SIZE_HI],  (uint16_t)((size >> 16) & 0xFFFF));
+    wr_u32(&_dir_data[o + OFF_SECCOUNT], sector_count);
 }
 
 void NdiImage::dir_clear_slot(int slot) {
@@ -383,7 +397,7 @@ int NdiImage::read_file_by_index(int index, uint8_t* buf, size_t buf_size) {
     if (e.is_directory())          return -1;
     if (buf_size < e.size_bytes)   return -1;
 
-    uint64_t offset = (uint64_t)(_header.data_start_sector + e.start_sector)
+    uint64_t offset = ((uint64_t)_header.data_start_sector + e.start_sector)
                       * SECTOR_SIZE;
     if (!_stream->seek(offset))    return -1;
     int n = _stream->read(buf, e.size_bytes);
@@ -416,7 +430,7 @@ int NdiImage::write_file(const char* name, FileType type, uint16_t parent,
     }
 
     // Write data sectors (zero-padded last sector).
-    uint64_t offset = (uint64_t)(_header.data_start_sector + start) * SECTOR_SIZE;
+    uint64_t offset = ((uint64_t)_header.data_start_sector + (uint32_t)start) * SECTOR_SIZE;
     if (!_stream->seek(offset)) {
         bam_free(start, sector_count);
         return -1;
@@ -443,7 +457,7 @@ int NdiImage::write_file(const char* name, FileType type, uint16_t parent,
     }
 
     dir_write_entry(slot, FL_ACTIVE, (uint8_t)type, parent,
-                    (uint16_t)start, size, name, (uint16_t)sector_count);
+                    (uint32_t)start, size, name, (uint32_t)sector_count);
 
     if (!flush_metadata()) return -1;
     return slot;
@@ -455,7 +469,7 @@ bool NdiImage::delete_file(const char* name, uint16_t parent_index) {
     DirEntry e;
     dir_read_entry(idx, e);
     if (e.is_directory()) return false;
-    bam_free(e.start_sector, e.sector_count);
+    bam_free((int)e.start_sector, (int)e.sector_count);
     dir_clear_slot(idx);
     return flush_metadata();
 }

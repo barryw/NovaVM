@@ -10,6 +10,12 @@
 
 **Design doc:** `docs/plans/2026-03-06-disk-io-system-design.md`
 
+**Current status note:** The implementation now uses NDI format version 2.
+Header and directory sector fields are 32-bit values so 64MB hard-disk images
+fit without overflow. Older code snippets in this historical implementation
+plan that show 16-bit sector fields are superseded by the design doc and
+current source.
+
 ---
 
 ## Phase 1: NDI Format Library (e6502.Storage)
@@ -445,7 +451,7 @@ public class NdiDirectoryTests
     [TestMethod]
     public void AddFile_RoundTrip()
     {
-        var dir = new NdiDirectory(48); // 48 sectors = 768 entries
+        var dir = new NdiDirectory(48); // 48 sectors = 192 entries
         int idx = dir.AddEntry("HELLO", NdiFileType.Bas, 0xFFFF, 10, 500);
         Assert.IsTrue(idx >= 0);
 

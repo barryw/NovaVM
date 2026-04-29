@@ -46,15 +46,16 @@ A `.ndi` file is a single binary container with a header, block allocation map, 
 | Offset | Size | Field |
 |--------|------|-------|
 | $00 | 4 | Magic: `NDI\x1A` |
-| $03 | 1 | Format version (1) |
-| $04 | 2 | Sector size (256, little-endian) |
-| $06 | 2 | Total sectors (little-endian) |
-| $08 | 32 | Volume label (padded with $00) |
-| $28 | 2 | Directory start sector |
-| $2A | 2 | Directory sector count |
-| $2C | 2 | Data start sector |
-| $2E | 2 | Free sector count |
-| $30 | 208 | Reserved (future use, zeroed) |
+| $04 | 1 | Format version (2) |
+| $05 | 2 | Sector size (256, little-endian) |
+| $07 | 1 | Reserved, zero |
+| $08 | 4 | Total sectors (little-endian) |
+| $0C | 32 | Volume label (padded with $00) |
+| $2C | 4 | Directory start sector |
+| $30 | 4 | Directory sector count |
+| $34 | 4 | Data start sector |
+| $38 | 4 | Free sector count |
+| $3C | 196 | Reserved (future use, zeroed) |
 
 ### Block Allocation Map (sectors 1--N)
 
@@ -67,11 +68,11 @@ One bit per data sector. 0=free, 1=used. For 800KB (3200 sectors), that's 400 by
 | $00 | 1 | Flags: bit 0=active, bit 1=directory, bit 7=locked |
 | $01 | 1 | File type (0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX) |
 | $02 | 2 | Parent directory entry index ($FFFF = root) |
-| $04 | 2 | Start sector |
-| $06 | 2 | Size in bytes (little-endian) |
-| $08 | 32 | Filename (null-padded, max 32 chars) |
-| $28 | 2 | Sector count (allocated) |
-| $2A | 6 | Reserved |
+| $04 | 4 | Start sector |
+| $08 | 4 | Size in bytes (little-endian) |
+| $0C | 32 | Filename (null-padded, max 32 chars) |
+| $2C | 4 | Sector count (allocated) |
+| $30 | 16 | Reserved |
 
 ### Storage
 
@@ -79,10 +80,10 @@ Files are stored as chains of 256-byte sectors. The last sector may be partially
 
 ### Image Sizes
 
-- **Default:** 800KB (3200 sectors, ~48 directory sectors = 768 entries)
+- **Default:** 800KB (3200 sectors, 48 directory sectors = 192 entries)
 - **1.44MB:** 5760 sectors
 - **Minimum:** 170KB
-- **Maximum:** 16MB (65535 sectors)
+- **Maximum:** 1TB theoretical with 32-bit sector numbers and 256-byte sectors; current tooling target is 64MB hard-disk images.
 - Configurable at creation time via FORMAT command or CLI tool.
 
 ## BASIC Commands
@@ -225,7 +226,7 @@ Auto-rebuilt during `dotnet build` like `novavm.inc`.
 New console project referencing `e6502.Storage`.
 
 ```
-ndi create <file.ndi> [--size <KB>] [--label <name>]
+ndi create <file.ndi> [--size <KB>|--hd] [--label <name>]
 ndi dir <file.ndi> [/path]
 ndi info <file.ndi>
 ndi validate <file.ndi>

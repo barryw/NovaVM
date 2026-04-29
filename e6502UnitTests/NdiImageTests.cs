@@ -21,8 +21,25 @@ public class NdiImageTests
 
             using var img = NdiImage.Open(path);
             Assert.AreEqual("TEST DISK", img.Header.VolumeLabel);
-            Assert.AreEqual(3200, img.Header.TotalSectors);
+            Assert.AreEqual(3200u, img.Header.TotalSectors);
             Assert.AreEqual(3149, img.FreeSectors);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public void Create_64MB_Image_RoundTripsHeader()
+    {
+        string path = TempPath();
+        try
+        {
+            NdiImage.CreateFormatted(path, "HD", 65536);
+
+            using var img = NdiImage.Open(path);
+            Assert.AreEqual("HD", img.Header.VolumeLabel);
+            Assert.AreEqual(262144u, img.Header.TotalSectors);
+            Assert.AreEqual(261967, img.FreeSectors);
+            Assert.AreEqual(64L * 1024 * 1024, new FileInfo(path).Length);
         }
         finally { File.Delete(path); }
     }

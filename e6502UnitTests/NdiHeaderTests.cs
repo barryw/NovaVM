@@ -28,7 +28,7 @@ public class NdiHeaderTests
     public void Create_800KB_HasCorrectSectorCount()
     {
         var header = NdiHeader.Create("MY DISK", 800);
-        Assert.AreEqual(3200, header.TotalSectors);
+        Assert.AreEqual(3200u, header.TotalSectors);
     }
 
     [TestMethod]
@@ -36,7 +36,19 @@ public class NdiHeaderTests
     {
         var header = NdiHeader.Create("TINY", 170);
         // 170 * 1024 / 256 = 680 sectors
-        Assert.AreEqual(680, header.TotalSectors);
+        Assert.AreEqual(680u, header.TotalSectors);
+    }
+
+    [TestMethod]
+    public void Create_64MB_UsesLongSectorFields()
+    {
+        var header = NdiHeader.Create("HARD DISK", 65536);
+
+        Assert.AreEqual(262144u, header.TotalSectors);
+        Assert.AreEqual(129u, header.DirectoryStartSector);
+        Assert.AreEqual(48u, header.DirectorySectorCount);
+        Assert.AreEqual(177u, header.DataStartSector);
+        Assert.AreEqual(261967u, header.FreeSectorCount);
     }
 
     [TestMethod]
@@ -76,10 +88,10 @@ public class NdiHeaderTests
         // Directory = 48 sectors
         // Data starts at 3 + 48 = 51
         // Free = 3200 - 51 = 3149
-        Assert.AreEqual(3, header.DirectoryStartSector);
-        Assert.AreEqual(48, header.DirectorySectorCount);
-        Assert.AreEqual(51, header.DataStartSector);
-        Assert.AreEqual(3149, header.FreeSectorCount);
+        Assert.AreEqual(3u, header.DirectoryStartSector);
+        Assert.AreEqual(48u, header.DirectorySectorCount);
+        Assert.AreEqual(51u, header.DataStartSector);
+        Assert.AreEqual(3149u, header.FreeSectorCount);
     }
 
     [TestMethod]
@@ -87,7 +99,7 @@ public class NdiHeaderTests
     {
         var header = NdiHeader.Create("DISK", 800);
         header.FreeSectorCount = 100;
-        Assert.AreEqual(100, header.FreeSectorCount);
+        Assert.AreEqual(100u, header.FreeSectorCount);
     }
 
     [TestMethod]

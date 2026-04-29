@@ -6,7 +6,7 @@ namespace e6502.Storage;
 /// File layout:
 ///   [Header: 1 sector] [BAM: N sectors] [Directory: 48 sectors] [Data: remaining sectors]
 ///
-/// BAM tracks data sectors only (indexed from 0, physical offset = DataStartSector * 256).
+/// BAM tracks data sectors only (indexed from 0, physical offset = DataStartSector * SectorSize).
 /// </summary>
 public sealed class NdiImage : IDisposable
 {
@@ -38,7 +38,7 @@ public sealed class NdiImage : IDisposable
     public static void CreateFormatted(string path, string label, int sizeKB)
     {
         var header = NdiHeader.Create(label, sizeKB);
-        int totalBytes = header.TotalSectors * 256;
+        long totalBytes = (long)header.TotalSectors * header.SectorSize;
 
         // Write a zeroed file of the correct total size.
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
@@ -49,19 +49,19 @@ public sealed class NdiImage : IDisposable
         fs.Write(header.ToBytes());
 
         // BAM: sectors 1..(DirectoryStartSector-1), all zeroed (all free).
-        int bamSectorCount = header.DirectoryStartSector - 1;
-        int dataSectorCount = header.TotalSectors - header.DataStartSector;
+        int bamSectorCount = checked((int)(header.DirectoryStartSector - 1));
+        int dataSectorCount = checked((int)(header.TotalSectors - header.DataStartSector));
         var bam = new NdiBam(dataSectorCount);
         byte[] bamBytes = bam.ToBytes();
         // Pad to full BAM sector coverage.
-        byte[] bamPadded = new byte[bamSectorCount * 256];
+        byte[] bamPadded = new byte[bamSectorCount * header.SectorSize];
         Array.Copy(bamBytes, bamPadded, Math.Min(bamBytes.Length, bamPadded.Length));
-        fs.Seek(256, SeekOrigin.Begin);
+        fs.Seek(header.SectorSize, SeekOrigin.Begin);
         fs.Write(bamPadded);
 
         // Directory: NdiDirectory writes itself (already zeroed, but write explicitly).
-        var directory = new NdiDirectory(header.DirectorySectorCount);
-        fs.Seek(header.DirectoryStartSector * 256L, SeekOrigin.Begin);
+        var directory = new NdiDirectory(checked((int)header.DirectorySectorCount));
+        fs.Seek(header.DirectoryStartSector * (long)header.SectorSize, SeekOrigin.Begin);
         fs.Write(directory.ToBytes());
     }
 
@@ -94,24 +94,25 @@ public sealed class NdiImage : IDisposable
     private static NdiImage OpenFromStream(Stream stream)
     {
         // Read header.
-        var headerBuf = new byte[256];
+        var headerBuf = new byte[NdiHeader.Size];
         stream.Seek(0, SeekOrigin.Begin);
         stream.ReadExactly(headerBuf);
         var header = NdiHeader.FromBytes(headerBuf);
 
         // Read BAM.
-        int bamSectorCount = header.DirectoryStartSector - 1;
-        int dataSectorCount = header.TotalSectors - header.DataStartSector;
-        byte[] bamBuf = new byte[bamSectorCount * 256];
-        stream.Seek(256, SeekOrigin.Begin);
+        int bamSectorCount = checked((int)(header.DirectoryStartSector - 1));
+        int dataSectorCount = checked((int)(header.TotalSectors - header.DataStartSector));
+        byte[] bamBuf = new byte[bamSectorCount * header.SectorSize];
+        stream.Seek(header.SectorSize, SeekOrigin.Begin);
         stream.ReadExactly(bamBuf);
         var bam = NdiBam.FromBytes(bamBuf, dataSectorCount);
 
         // Read directory.
-        byte[] dirBuf = new byte[header.DirectorySectorCount * 256];
-        stream.Seek(header.DirectoryStartSector * 256L, SeekOrigin.Begin);
+        int dirSectorCount = checked((int)header.DirectorySectorCount);
+        byte[] dirBuf = new byte[dirSectorCount * header.SectorSize];
+        stream.Seek(header.DirectoryStartSector * (long)header.SectorSize, SeekOrigin.Begin);
         stream.ReadExactly(dirBuf);
-        var directory = NdiDirectory.FromBytes(dirBuf, header.DirectorySectorCount);
+        var directory = NdiDirectory.FromBytes(dirBuf, dirSectorCount);
 
         return new NdiImage(header, bam, directory, stream);
     }
@@ -127,7 +128,8 @@ public sealed class NdiImage : IDisposable
     public void WriteFile(string name, NdiFileType type, ushort parentIndex, byte[] data)
     {
         ThrowIfDisposed();
-        int sectorCount = (data.Length + 255) / 256;
+        int sectorSize = _header.SectorSize;
+        int sectorCount = (data.Length + sectorSize - 1) / sectorSize;
         if (sectorCount == 0) sectorCount = 1;
 
         int startSector = _bam.AllocateContiguous(sectorCount);
@@ -135,15 +137,15 @@ public sealed class NdiImage : IDisposable
             throw new InvalidOperationException("Not enough contiguous free sectors.");
 
         // Write data sectors (padded to full sectors).
-        long physicalOffset = (long)(_header.DataStartSector + startSector) * 256;
+        long physicalOffset = ((long)_header.DataStartSector + startSector) * sectorSize;
         _stream.Seek(physicalOffset, SeekOrigin.Begin);
 
-        byte[] padded = new byte[sectorCount * 256];
+        byte[] padded = new byte[sectorCount * sectorSize];
         Array.Copy(data, padded, data.Length);
         _stream.Write(padded);
 
         _directory.AddEntry(name, type, parentIndex,
-            (ushort)startSector, data.Length, (ushort)sectorCount);
+            (uint)startSector, data.Length, (uint)sectorCount);
 
         Flush();
     }
@@ -163,7 +165,7 @@ public sealed class NdiImage : IDisposable
         if (entry.IsDirectory)
             throw new InvalidOperationException($"'{name}' is a directory, not a file.");
 
-        long physicalOffset = (long)(_header.DataStartSector + entry.StartSector) * 256;
+        long physicalOffset = ((long)_header.DataStartSector + entry.StartSector) * _header.SectorSize;
         _stream.Seek(physicalOffset, SeekOrigin.Begin);
 
         byte[] result = new byte[entry.SizeBytes];
@@ -185,7 +187,7 @@ public sealed class NdiImage : IDisposable
         if (entry.IsDirectory)
             throw new InvalidOperationException($"'{name}' is a directory. Use RemoveDirectory.");
 
-        _bam.Free(entry.StartSector, entry.SectorCount);
+        _bam.Free(checked((int)entry.StartSector), checked((int)entry.SectorCount));
         _directory.RemoveEntry(idx);
         Flush();
     }
@@ -244,9 +246,9 @@ public sealed class NdiImage : IDisposable
     private void Flush()
     {
         // Update free sector count in header before serializing.
-        _header.FreeSectorCount = (ushort)_bam.FreeCount;
+        _header.FreeSectorCount = (uint)_bam.FreeCount;
 
-        int bamSectorCount = _header.DirectoryStartSector - 1;
+        int bamSectorCount = checked((int)(_header.DirectoryStartSector - 1));
 
         // Header.
         _stream.Seek(0, SeekOrigin.Begin);
@@ -254,13 +256,13 @@ public sealed class NdiImage : IDisposable
 
         // BAM (padded to full sector coverage).
         byte[] bamBytes = _bam.ToBytes();
-        byte[] bamPadded = new byte[bamSectorCount * 256];
+        byte[] bamPadded = new byte[bamSectorCount * _header.SectorSize];
         Array.Copy(bamBytes, bamPadded, Math.Min(bamBytes.Length, bamPadded.Length));
-        _stream.Seek(256, SeekOrigin.Begin);
+        _stream.Seek(_header.SectorSize, SeekOrigin.Begin);
         _stream.Write(bamPadded);
 
         // Directory.
-        _stream.Seek(_header.DirectoryStartSector * 256L, SeekOrigin.Begin);
+        _stream.Seek(_header.DirectoryStartSector * (long)_header.SectorSize, SeekOrigin.Begin);
         _stream.Write(_directory.ToBytes());
 
         _stream.Flush();

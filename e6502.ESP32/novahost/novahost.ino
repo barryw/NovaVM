@@ -19,13 +19,8 @@
 #include "fio_event_reader.h"
 #include "fio_dispatcher.h"
 #include "sd_http_server.h"
-// Embedded EhBASIC + extension ROM binaries — auto-generated from
-// ehbasic/basic.bin and ehbasic/extension.bin by tools/bin2header.py.
-// NovaHost streams these into FPGA BRAM at boot, so ROM iteration costs
-// ~5s OTA instead of a 17-min bitstream rebuild.
-#include "ehbasic_rom.h"
-#include "extension_rom.h"
-#include "sid_curve_rom.h"
+// Boot ROMs and bulky assets live on the SD card. The FPGA bitstream still
+// carries fallback ROM init data, but NovaHost no longer embeds those blobs.
 
 // =========================================================================
 // Configuration
@@ -102,6 +97,183 @@ SdHttpServer    sdHttpServer(deviceManager);
 
 // SD mount diagnostic — captured at boot, exposed via /sd-status JSON.
 String g_sd_diag = "(boot in progress)";
+bool g_sd_mounted = false;
+
+static const size_t BOOT_ROM_LEN       = 16 * 1024;
+static const size_t SID_CURVE_ROM_LEN  = 8 * 1024;
+static const uint32_t SID_CURVE_BASE   = 0x800000;
+
+static const char* const BASIC_ROM_PATHS[] = {
+    "/roms/novabasic.bin",
+    "/roms/basic.bin",
+    "/roms/ehbasic.bin"
+};
+
+static const char* const EXTENSION_ROM_PATHS[] = {
+    "/roms/extension.bin",
+    "/roms/ext.bin"
+};
+
+static const char* const SID_CURVE_PATHS[] = {
+    "/assets/sid/f6581_curve.bin",
+    "/assets/f6581_curve.bin"
+};
+
+// =========================================================================
+// SD card setup and boot asset helpers
+// =========================================================================
+bool mountSdCard() {
+    // SD card mount via SPI mode. ULX3S routes SD to ESP32 GPIOs in a
+    // way that's incompatible with SDIO 1-bit/4-bit on this board (verified
+    // 2026-04-25). Pinout: SCK=GPIO14, MISO=GPIO2/sd_d[0],
+    // MOSI=GPIO15/sd_cmd, CS=GPIO13/sd_d[3].
+    logLn("SD: mounting via SPI (SCK=14 MISO=2 MOSI=15 CS=13)...");
+    SPI.begin(14, 2, 15, 13);
+    g_sd_mounted = SD.begin(13, SPI, 4000000);
+
+    char diag_buf[256];
+    if (!g_sd_mounted) {
+        snprintf(diag_buf, sizeof(diag_buf),
+                 "SD.begin()=false - check FAT32 format + card seating");
+        g_sd_diag = String(diag_buf);
+        logLn("SD: mount FAILED. %s", diag_buf);
+        return false;
+    }
+
+    uint8_t  ct = SD.cardType();
+    uint64_t sz = SD.cardSize();
+    const char* type_str = "UNKNOWN";
+    switch (ct) {
+        case CARD_NONE: type_str = "NONE"; break;
+        case CARD_MMC:  type_str = "MMC";  break;
+        case CARD_SD:   type_str = "SDSC"; break;
+        case CARD_SDHC: type_str = "SDHC"; break;
+    }
+
+    snprintf(diag_buf, sizeof(diag_buf),
+             "SD.begin()=true SPI type=%s size=%llu MB",
+             type_str,
+             (unsigned long long)(sz / (1024ULL * 1024ULL)));
+    g_sd_diag = String(diag_buf);
+    logLn("SD: mount OK - %s", diag_buf);
+
+    int hd_count = deviceManager.auto_mount_hds();
+    logLn("SD: auto-mounted %d hd*.ndi disk image(s)", hd_count);
+    char mount_buf[48];
+    snprintf(mount_buf, sizeof(mount_buf), " | hd_mounts=%d", hd_count);
+    g_sd_diag += String(mount_buf);
+    return true;
+}
+
+File openFirstAsset(const char* label, const char* const* paths,
+                    size_t path_count, const char*& chosen_path) {
+    for (size_t i = 0; i < path_count; i++) {
+        File f = SD.open(paths[i], FILE_READ);
+        if (f) {
+            chosen_path = paths[i];
+            return f;
+        }
+    }
+
+    chosen_path = nullptr;
+    logLn("Boot asset missing: %s", label);
+    return File();
+}
+
+bool bootAssetAvailable(const char* label, const char* const* paths,
+                        size_t path_count, size_t expected_len) {
+    const char* path = nullptr;
+    File f = openFirstAsset(label, paths, path_count, path);
+    if (!f) return false;
+
+    size_t actual = f.size();
+    f.close();
+    if (actual != expected_len) {
+        logLn("Boot asset wrong size: %s at %s is %u bytes, expected %u",
+              label, path, (unsigned)actual, (unsigned)expected_len);
+        return false;
+    }
+    return true;
+}
+
+bool streamRomAsset(uint8_t idx, const char* label, const char* const* paths,
+                    size_t path_count, size_t expected_len) {
+    const char* path = nullptr;
+    File f = openFirstAsset(label, paths, path_count, path);
+    if (!f) return false;
+
+    size_t actual = f.size();
+    if (actual != expected_len) {
+        logLn("Boot asset wrong size: %s at %s is %u bytes, expected %u",
+              label, path, (unsigned)actual, (unsigned)expected_len);
+        f.close();
+        return false;
+    }
+
+    logLn("Streaming %s from %s (%u bytes)", label, path, (unsigned)actual);
+    uint8_t buf[256];
+    for (size_t off = 0; off < expected_len; ) {
+        size_t want = (expected_len - off >= sizeof(buf))
+            ? sizeof(buf)
+            : expected_len - off;
+        size_t got = f.read(buf, want);
+        if (got != want) {
+            logLn("Boot asset read failed: %s at offset %u", label, (unsigned)off);
+            f.close();
+            return false;
+        }
+        uint16_t wire_count = (got == 256) ? 0 : (uint16_t)got;
+        if (!fpgaBridge.pokeRomBlock(idx, (uint16_t)off, buf, wire_count)) {
+            logLn("FPGA ROM stream failed: %s at offset %u", label, (unsigned)off);
+            f.close();
+            return false;
+        }
+        off += got;
+    }
+
+    f.close();
+    return true;
+}
+
+bool streamSdramAsset(uint32_t base_addr, const char* label,
+                      const char* const* paths, size_t path_count,
+                      size_t expected_len) {
+    const char* path = nullptr;
+    File f = openFirstAsset(label, paths, path_count, path);
+    if (!f) return false;
+
+    size_t actual = f.size();
+    if (actual != expected_len) {
+        logLn("Boot asset wrong size: %s at %s is %u bytes, expected %u",
+              label, path, (unsigned)actual, (unsigned)expected_len);
+        f.close();
+        return false;
+    }
+
+    logLn("Streaming %s from %s (%u bytes)", label, path, (unsigned)actual);
+    uint8_t buf[256];
+    for (size_t off = 0; off < expected_len; ) {
+        size_t want = (expected_len - off >= sizeof(buf))
+            ? sizeof(buf)
+            : expected_len - off;
+        size_t got = f.read(buf, want);
+        if (got != want) {
+            logLn("Boot asset read failed: %s at offset %u", label, (unsigned)off);
+            f.close();
+            return false;
+        }
+        uint16_t wire_count = (got == 256) ? 0 : (uint16_t)got;
+        if (!fpgaBridge.pokeSdramBlock(base_addr + off, buf, wire_count)) {
+            logLn("FPGA SDRAM stream failed: %s at offset %u", label, (unsigned)off);
+            f.close();
+            return false;
+        }
+        off += got;
+    }
+
+    f.close();
+    return true;
+}
 
 // =========================================================================
 // WiFi setup
@@ -171,71 +343,113 @@ void setupWiFi() {
 }
 
 // =========================================================================
-// Boot-time ROM load into FPGA BRAM via debug bridge
+// Boot-time ROM/assets load into FPGA via debug bridge
 // =========================================================================
 // At 115200 baud with bulk CMD_POKE_ROM_BLK (one ack per 256-byte block),
 // full 32 KB ROM load takes ~3 seconds.
 bool loadRomsToFPGA() {
-    logLn("Loading ROM into FPGA BRAM (ehbasic=%u bytes, extension=%u bytes)...",
-          (unsigned)EHBASIC_ROM_LEN, (unsigned)EXTENSION_ROM_LEN);
+    logLn("Loading boot assets from SD into FPGA...");
     unsigned long t0 = millis();
 
-    // Drain any stale bytes from a previous session.
-    fpgaBridge.drain();
+    if (!g_sd_mounted) {
+        logLn("Boot assets skipped: SD is not mounted; using bitstream ROM fallback");
+        fpgaBridge.resetRelease();
+        return false;
+    }
 
-    // The FPGA may still be configuring from flash when ESP32 setup() runs —
-    // retry resetHold several times before giving up. A single attempt is
-    // ~220 ms with the byte timeout, so 20 attempts gives the FPGA ~4 s to
-    // come up before we bail.
-    bool ack = false;
-    for (int attempt = 0; attempt < 20 && !ack; attempt++) {
+    bool haveBasic = bootAssetAvailable("basic ROM", BASIC_ROM_PATHS,
+                                        sizeof(BASIC_ROM_PATHS) / sizeof(BASIC_ROM_PATHS[0]),
+                                        BOOT_ROM_LEN);
+    bool haveExt = bootAssetAvailable("extension ROM", EXTENSION_ROM_PATHS,
+                                      sizeof(EXTENSION_ROM_PATHS) / sizeof(EXTENSION_ROM_PATHS[0]),
+                                      BOOT_ROM_LEN);
+
+    if (!haveBasic || !haveExt) {
+        logLn("Boot assets skipped: required ROM file(s) missing; using bitstream ROM fallback");
+        fpgaBridge.resetRelease();
+        return false;
+    }
+
+    const int LOAD_ATTEMPTS = 3;
+    bool romsLoaded = false;
+
+    for (int loadAttempt = 1; loadAttempt <= LOAD_ATTEMPTS; loadAttempt++) {
+        // Drain any stale bytes from a previous session.
         fpgaBridge.drain();
-        if (fpgaBridge.resetHold()) {
-            ack = true;
-            if (attempt > 0)
-                logLn("FPGA bridge responded on attempt %d", attempt + 1);
-        } else {
-            delay(200);
+
+        // The FPGA may still be configuring from flash when ESP32 setup() runs.
+        // If resetHold never acks, the hardened FPGA falls back to bitstream-
+        // initialized ROM and auto-releases reset on its own.
+        bool ack = false;
+        for (int attempt = 0; attempt < 20 && !ack; attempt++) {
+            fpgaBridge.drain();
+            if (fpgaBridge.resetHold()) {
+                ack = true;
+                if (attempt > 0)
+                    logLn("FPGA bridge responded on attempt %d", attempt + 1);
+            } else {
+                delay(200);
+            }
         }
-    }
-    if (!ack) {
-        logLn("ROM load FAILED: FPGA bridge never acked resetHold (wired up? bitstream loaded?)");
-        return false;
+        if (!ack) {
+            logLn("ROM load FAILED: FPGA bridge never acked resetHold (wired up? bitstream loaded?)");
+            return false;
+        }
+
+        if (!streamRomAsset(0, "basic ROM", BASIC_ROM_PATHS,
+                            sizeof(BASIC_ROM_PATHS) / sizeof(BASIC_ROM_PATHS[0]),
+                            BOOT_ROM_LEN)) {
+            logLn("ROM load attempt %d/%d FAILED: basic_rom streaming aborted",
+                  loadAttempt, LOAD_ATTEMPTS);
+            delay(250);
+            continue;
+        }
+
+        if (!streamRomAsset(1, "extension ROM", EXTENSION_ROM_PATHS,
+                            sizeof(EXTENSION_ROM_PATHS) / sizeof(EXTENSION_ROM_PATHS[0]),
+                            BOOT_ROM_LEN)) {
+            logLn("ROM load attempt %d/%d FAILED: ext_rom streaming aborted",
+                  loadAttempt, LOAD_ATTEMPTS);
+            delay(250);
+            continue;
+        }
+
+        romsLoaded = true;
+
+        // Stream the 6581 filter curve into SDRAM at the SID_CURVE_BASE offset
+        // hardcoded in rtl/sid/sid_curve_reader.sv (25'h0_8_00_00 = $800000).
+        // Done before resetRelease so sid_curve_reader (which is held in reset
+        // by dbg_cpu_reset) sees valid data on its first read.
+        // Not a hard dependency: only SID 6581 filter uses the curve. Log and
+        // continue so the CPU still boots.
+        if (!streamSdramAsset(SID_CURVE_BASE, "SID 6581 curve", SID_CURVE_PATHS,
+                              sizeof(SID_CURVE_PATHS) / sizeof(SID_CURVE_PATHS[0]),
+                              SID_CURVE_ROM_LEN)) {
+            logLn("WARN: SID curve not loaded; 6581 filter curve will be unavailable");
+        } else {
+            logLn("SID curve streamed (%u bytes @ SDRAM $%06X)",
+                  (unsigned)SID_CURVE_ROM_LEN, (unsigned)SID_CURVE_BASE);
+        }
+
+        if (!fpgaBridge.resetRelease()) {
+            logLn("ROM load attempt %d/%d FAILED: resetRelease did not ack",
+                  loadAttempt, LOAD_ATTEMPTS);
+            delay(250);
+            continue;
+        }
+
+        unsigned long dt = millis() - t0;
+        logLn("ROM load OK — CPU released (took %lu ms)", dt);
+        return true;
     }
 
-    if (!fpgaBridge.loadRom(0, EHBASIC_ROM, EHBASIC_ROM_LEN)) {
-        logLn("ROM load FAILED: basic_rom streaming aborted");
-        return false;
-    }
-
-    if (!fpgaBridge.loadRom(1, EXTENSION_ROM, EXTENSION_ROM_LEN)) {
-        logLn("ROM load FAILED: ext_rom streaming aborted");
-        return false;
-    }
-
-    // Stream the 6581 filter curve into SDRAM at the CURVE_BASE offset
-    // hardcoded in rtl/sid/sid_curve_reader.sv (25'h0_8_00_00 = $800000).
-    // Done before resetRelease so sid_curve_reader (which is held in reset
-    // by dbg_cpu_reset) sees valid data on its first read.
-    // Not a hard dependency: only SID 6581 filter uses the curve, and an
-    // older bitstream won't support CMD_POKE_SDRAM_BLK. Log and continue
-    // so the CPU still boots EhBASIC.
-    const uint32_t CURVE_BASE = 0x800000;
-    if (!fpgaBridge.loadSdram(CURVE_BASE, SID_CURVE_ROM, SID_CURVE_ROM_LEN)) {
-        logLn("WARN: SID curve streaming failed (old bitstream? SID 6581 filter will be silent)");
+    if (romsLoaded) {
+        logLn("ROM load FAILED after retries, but ROMs reached FPGA; attempting reset release for recovery");
+        fpgaBridge.resetRelease();
     } else {
-        logLn("SID curve streamed (%u bytes @ SDRAM $%06X)",
-              (unsigned)SID_CURVE_ROM_LEN, (unsigned)CURVE_BASE);
+        logLn("ROM load FAILED after retries before both ROMs completed; CPU remains held to avoid booting partial ROM");
     }
-
-    if (!fpgaBridge.resetRelease()) {
-        logLn("ROM load FAILED: resetRelease did not ack");
-        return false;
-    }
-
-    unsigned long dt = millis() - t0;
-    logLn("ROM load OK — CPU released (took %lu ms)", dt);
-    return true;
+    return false;
 }
 
 // =========================================================================
@@ -281,53 +495,16 @@ void setup() {
     // Give the FPGA debug bridge a moment to settle before we start poking it.
     delay(100);
 
-    // Stream ROM into FPGA BRAM. FPGA's debug_bridge boots with dbg_cpu_reset=1,
-    // so the CPU stays held in reset until we've loaded ROM + released. If the
-    // FPGA isn't wired up (or is running the old bitstream), this logs a
-    // failure and we continue — OTA still works via WiFi for recovery.
+    // SD must mount before boot asset streaming because ROMs and bulky data
+    // are SD-resident. If SD is unavailable, the FPGA keeps using the
+    // bitstream-initialized fallback ROM.
+    mountSdCard();
+
+    // Stream ROM/assets into FPGA. FPGA's debug_bridge boots with
+    // dbg_cpu_reset=1, so the CPU stays held in reset until we've loaded
+    // assets + released. If loading is skipped, resetRelease() falls back to
+    // the ROM contents initialized by the bitstream.
     loadRomsToFPGA();
-
-    // SD card mount via SPI mode. ULX3S routes SD to ESP32 GPIOs in a
-    // way that's incompatible with SDIO 1-bit/4-bit on this board (verified
-    // 2026-04-25 — SD_MMC.begin() returns false even with proper setPins,
-    // 1-bit mode, 400kHz init, fresh FAT32 format, and full power cycle;
-    // a parallel SD.begin() probe at the same time successfully reads the
-    // card as SDHC). Pinout (SCK=GPIO14, MISO=GPIO2/sd_d[0], MOSI=GPIO15/
-    // sd_cmd, CS=GPIO13/sd_d[3]) per emard/ulx3s_v20.lpf.
-    // Throughput tradeoff: SPI ~3-6 MB/s vs SDIO 25 MB/s — fine for BASIC
-    // file I/O. SD.h doesn't auto-format, so card MUST be FAT32 already.
-    logLn("SD: mounting via SPI (SCK=14 MISO=2 MOSI=15 CS=13)...");
-    SPI.begin(14, 2, 15, 13);
-    bool sd_ok = SD.begin(13, SPI, 4000000);  // 4 MHz init
-    char diag_buf[256];
-    if (!sd_ok) {
-        snprintf(diag_buf, sizeof(diag_buf),
-                 "SD.begin()=false — check FAT32 format + card seating");
-        g_sd_diag = String(diag_buf);
-        logLn("SD: mount FAILED. %s", diag_buf);
-    } else {
-        uint8_t  ct = SD.cardType();
-        uint64_t sz = SD.cardSize();
-        const char* type_str = "UNKNOWN";
-        switch (ct) {
-            case CARD_NONE: type_str = "NONE"; break;
-            case CARD_MMC:  type_str = "MMC";  break;
-            case CARD_SD:   type_str = "SDSC"; break;
-            case CARD_SDHC: type_str = "SDHC"; break;
-        }
-        snprintf(diag_buf, sizeof(diag_buf),
-                 "SD.begin()=true SPI type=%s size=%llu MB",
-                 type_str,
-                 (unsigned long long)(sz / (1024ULL * 1024ULL)));
-        g_sd_diag = String(diag_buf);
-        logLn("SD: mount OK — %s", diag_buf);
-
-        int hd_count = deviceManager.auto_mount_hds();
-        logLn("SD: auto-mounted %d hd*.ndi disk image(s)", hd_count);
-        char mount_buf[48];
-        snprintf(mount_buf, sizeof(mount_buf), " | hd_mounts=%d", hd_count);
-        g_sd_diag += String(mount_buf);
-    }
 
     // Wire the FIO event reader → dispatcher trampoline. Whenever the
     // FPGA emits 0xFE 0xE0 on the bridge, the reader fires the
@@ -337,8 +514,7 @@ void setup() {
     // WiFi + servers
     setupWiFi();
 
-    // SD HTTP file server — must come AFTER setupWiFi() since the
-    // AsyncWebServer needs the WiFi stack live.
+    // SD HTTP file server must start after WiFi is live.
     if (wifi_connected) {
         sdHttpServer.begin();
         logLn("SD HTTP server ready: http://%s/sd/",
@@ -362,6 +538,7 @@ void loop() {
         ArduinoOTA.handle();
         handleLogClients();
         debugServer.loop();
+        sdHttpServer.loop();
     }
 
     // Check WiFi reconnection

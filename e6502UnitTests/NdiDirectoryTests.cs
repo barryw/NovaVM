@@ -23,11 +23,24 @@ public class NdiDirectoryTests
         Assert.AreEqual("myfile.bas", entry.Filename);
         Assert.AreEqual(NdiFileType.Bas, entry.FileType);
         Assert.AreEqual((ushort)0xFFFF, entry.ParentIndex);
-        Assert.AreEqual((ushort)51, entry.StartSector);
+        Assert.AreEqual(51u, entry.StartSector);
         Assert.AreEqual(1024, entry.SizeBytes);
-        Assert.AreEqual((ushort)4, entry.SectorCount);
+        Assert.AreEqual(4u, entry.SectorCount);
         Assert.IsTrue(entry.IsActive);
         Assert.IsFalse(entry.IsDirectory);
+    }
+
+    [TestMethod]
+    public void AddFile_LongSectorFields_RoundTrip()
+    {
+        var dir = new NdiDirectory(DirSectorCount);
+        int idx = dir.AddEntry("huge.bin", NdiFileType.Bin, 0xFFFF,
+            startSector: 200000, sizeBytes: 1000, sectorCount: 70000);
+
+        var entry = dir.GetEntry(idx);
+
+        Assert.AreEqual(200000u, entry.StartSector);
+        Assert.AreEqual(70000u, entry.SectorCount);
     }
 
     [TestMethod]
@@ -122,7 +135,7 @@ public class NdiDirectoryTests
         var f1 = rootEntries.First(e => e.Filename == "file1.bas");
         Assert.AreEqual(NdiFileType.Bas, f1.FileType);
         Assert.AreEqual(512, f1.SizeBytes);
-        Assert.AreEqual((ushort)2, f1.SectorCount);
+        Assert.AreEqual(2u, f1.SectorCount);
 
         var f2 = rootEntries.First(e => e.Filename == "file2.gfx");
         Assert.AreEqual(NdiFileType.Gfx, f2.FileType);
