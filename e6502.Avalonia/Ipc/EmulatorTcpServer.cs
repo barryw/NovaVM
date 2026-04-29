@@ -896,7 +896,7 @@ public sealed class EmulatorTcpServer : IDisposable
         _bus.Write(VgcConstants.RegP1, (byte)(x & 0xFF));
         _bus.Write(VgcConstants.RegP2, (byte)((x >> 8) & 0xFF));
         _bus.Write(VgcConstants.RegP3, (byte)(y & 0xFF));
-        _bus.Write(VgcConstants.RegP4, (byte)((y >> 8) & 0xFF));
+        _bus.Write(VgcConstants.RegP4, 0);
         _bus.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
         return Ok();
     }

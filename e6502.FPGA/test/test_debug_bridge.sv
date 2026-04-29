@@ -54,7 +54,11 @@ module test_debug_bridge;
     // FIO event input — we pulse this to simulate a CPU write to $B9A0.
     logic       fio_event = 0;
 
-    debug_bridge dut (
+    localparam integer TEST_BOOT_AUTO_RELEASE_CYCLES = 16;
+
+    debug_bridge #(
+        .BOOT_AUTO_RELEASE_CYCLES(TEST_BOOT_AUTO_RELEASE_CYCLES)
+    ) dut (
         .clk(clk), .rst(rst),
         .rx_data(rx_data), .rx_valid(rx_valid),
         .tx_data(tx_data), .tx_start(tx_start), .tx_busy(tx_busy),
@@ -276,6 +280,25 @@ module test_debug_bridge;
         check("dbg_cpu_reset reasserted", dbg_cpu_reset === 1'b1);
     endtask
 
+    task automatic test_boot_auto_release_when_unclaimed();
+        $display("");
+        $display("Test: unclaimed boot auto-releases CPU reset");
+
+        rst      <= 1;
+        rx_data  <= 0;
+        rx_valid <= 0;
+        tx_busy  <= 0;
+        fio_event <= 0;
+        repeat(3) @(posedge clk);
+
+        rst <= 0;
+        repeat(2) @(posedge clk);
+        check("dbg_cpu_reset asserted after reset", dbg_cpu_reset === 1'b1);
+
+        repeat(TEST_BOOT_AUTO_RELEASE_CYCLES + 2) @(posedge clk);
+        check("dbg_cpu_reset auto-released", dbg_cpu_reset === 1'b0);
+    endtask
+
     // ------------------------------------------------------------------
     // SDRAM port B shadow — captures bytes the bridge writes via
     // sdram_b_we. Addresses are 25-bit byte addresses.
@@ -421,6 +444,7 @@ module test_debug_bridge;
         test_fio_event_emission();
         test_fio_event_queued_during_cmd();
         test_fio_event_no_retrigger_when_cleared();
+        test_boot_auto_release_when_unclaimed();
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

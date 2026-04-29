@@ -9,6 +9,7 @@ module fake_differential
   output [3:0] out_p, out_n
 );
     parameter C_ddr = 1'b0; // 0:SDR 1:DDR
+    parameter C_drive_n = 1'b1; // 0: leave N pins to paired/differential I/O
 
     wire [1:0] tmds[3:0];
     assign tmds[3] = in_clock;
@@ -30,9 +31,9 @@ module fake_differential
     // output SDR/DDR to fake differential
     generate
       genvar i;
-      if(C_ddr == 1'b1)
+      if(C_ddr == 1'b1 && C_drive_n == 1'b1)
         for(i = 0; i < 4; i++)
-        begin : DDR_output_mode
+        begin : DDR_output_mode_drive_n
           ODDRX1F
           ddr_p_instance
           (
@@ -52,11 +53,28 @@ module fake_differential
             .RST(0)
           );
         end
+      else if(C_ddr == 1'b1)
+        for(i = 0; i < 4; i++)
+        begin : DDR_p_only_output_mode
+          ODDRX1F
+          ddr_p_instance
+          (
+            .D0(R_tmds_p[i][0]),
+            .D1(R_tmds_p[i][1]),
+            .Q(out_p[i]),
+            .SCLK(clk_shift),
+            .RST(0)
+          );
+          assign out_n[i] = 1'bz;
+        end
       else
         for(i = 0; i < 4; i++)
         begin : SDR_output_mode
           assign out_p[i] = R_tmds_p[i][0];
-          assign out_n[i] = R_tmds_n[i][0];
+          if(C_drive_n == 1'b1)
+            assign out_n[i] = R_tmds_n[i][0];
+          else
+            assign out_n[i] = 1'bz;
         end
     endgenerate
 

@@ -33,8 +33,8 @@ is identified by a small integer that you pass as a parameter:
 | **ID** | **Space** | **Size** | **Notes** |
 | --- | --- | --- | --- |
 | 0 | CPU RAM | 64 KB | Full 6502 address space |
-| 1 | Character RAM | 2,000 bytes | 80x25 text cells |
-| 2 | Color RAM | 2,000 bytes | 80x25 color attributes |
+| 1 | Character RAM | 4,000 bytes | 80x50 text cells |
+| 2 | Color RAM | 4,000 bytes | 80x50 color attributes |
 | 3 | Graphics Bitmap | 64,000 bytes | 320x200 pixels, 4-bit color |
 | 4 | Sprite Shapes | 32,768 bytes | 256 shape slots x 128 bytes each |
 | 5 | Expansion RAM | up to 512 KB | Uses current XBANK |
@@ -49,13 +49,13 @@ Copies *length* bytes from offset *srcAddr* in *srcSpace* to
 offset *dstAddr* in *dstSpace*.
 
 ```basic
-10 REM Copy 2000 bytes from CPU RAM at $6000 to character RAM
-20 DMACOPY 0, 24576, 1, 0, 2000
+10 REM Copy 4000 bytes from CPU RAM at $6000 to character RAM
+20 DMACOPY 0, 24576, 1, 0, 4000
 ```
 
 Here space 0 is CPU RAM, `24576` is $6000 decimal, space 1 is
 character RAM, and the destination offset is 0 (top-left cell). After line 20
-executes, the 2000-byte buffer you prepared in CPU RAM has been written
+executes, the 4000-byte buffer you prepared in CPU RAM has been written
 directly into the text screen.
 
 ```basic
@@ -75,12 +75,12 @@ Fills *length* bytes starting at offset *dstAddr* in
 
 ```basic
 10 REM Clear character screen with space characters (ASCII 32)
-20 DMAFILL 1, 0, 2000, 32
+20 DMAFILL 1, 0, 4000, 32
 ```
 
 ```basic
 10 REM Fill color RAM with color 7 (white-on-black attribute)
-20 DMAFILL 2, 0, 2000, 7
+20 DMAFILL 2, 0, 4000, 7
 ```
 
 ### Status functions
@@ -194,8 +194,8 @@ zero-based.
 | **ID** | **Space** | **Size** | **Notes** |
 | --- | --- | --- | --- |
 | 0 | CPU RAM | 64 KB | Full 6502 address space. Offsets are absolute CPU addresses. Writes to ROM (C000--FFFF) are silently ignored. |
-| 1 | Character RAM | 2,000 bytes | 80x25 text cells, row-major. Offset 0 is top-left; offset 79 is top-right; offset 80 is the start of row 1. |
-| 2 | Color RAM | 2,000 bytes | One color attribute byte per text cell, same layout as character RAM. Low nibble = foreground, high nibble = background. |
+| 1 | Character RAM | 4,000 bytes | 80x50 text cells, row-major. Offset 0 is top-left; offset 79 is top-right; offset 80 is the start of row 1. |
+| 2 | Color RAM | 4,000 bytes | One color attribute byte per text cell, same layout as character RAM. Low nibble = foreground, high nibble = background. |
 | 3 | Graphics Bitmap | 64,000 bytes | 320x200 pixels, two 4-bit pixels packed per byte (low nibble = left pixel). Row stride is 160 bytes. |
 | 4 | Sprite Shapes | 32,768 bytes | 256 shape slots, 128 bytes each. Each slot holds a 16x16 pixel image, two pixels per byte. Sprites reference slots via shape index registers. |
 | 5 | Expansion RAM | up to 512 KB | The current XBANK setting is automatically applied as the high address byte. Set `XBANK` before any DMA or blitter operation that uses space 5. |
@@ -242,11 +242,11 @@ scrolling rainbow of color bars using only hardware accelerators -- no inner
 loops, no per-byte POKEs.
 
 ```basic
-10  REM -- DMA & Blitter Demo -- 20  REM Clear screen 30  DMAFILL 1, 0, 2000, 32 40  DMAFILL 2, 0, 2000, 0 50  REM Draw 25 horizontal color bars, one per row 60  FOR I = 0 TO 24 70    BLITFILL 2, I*80, 80, 80, 1, I MOD 16 80  NEXT I 90  REM Scroll colors up continuously 100 BLITCOPY 2, 80, 80, 2, 0, 80, 80, 24 110 BLITFILL 2, 24*80, 80, 80, 1, RND(1)*16 120 VSYNC 130 GOTO 100
+10  REM -- DMA & Blitter Demo -- 20  REM Clear screen 30  DMAFILL 1, 0, 4000, 32 40  DMAFILL 2, 0, 4000, 0 50  REM Draw 50 horizontal color bars, one per row 60  FOR I = 0 TO 49 70    BLITFILL 2, I*80, 80, 80, 1, I MOD 16 80  NEXT I 90  REM Scroll colors up continuously 100 BLITCOPY 2, 80, 80, 2, 0, 80, 80, 49 110 BLITFILL 2, 49*80, 80, 80, 1, RND(1)*16 120 VSYNC 130 GOTO 100
 ```
 
 Lines 30--40 clear both character and color RAM in two hardware calls.
-Lines 60--80 paint 25 horizontal bars of different colors by calling
+Lines 60--80 paint 50 horizontal bars of different colors by calling
 `BLITFILL` once per row. Lines 100--130 form an animation loop:
 `BLITCOPY` shifts the entire color layer up by one row, `BLITFILL`
 inserts a new random-color bar at the bottom, and `VSYNC` holds the
@@ -258,9 +258,9 @@ space) to see different characters fill the screen -- try 42
 (asterisk) or 64 (at-sign).
 - Replace space 2 on lines 70, 100, and 110 with space 1 to scroll
 character codes instead of colors.
-- Try `DMACOPY 1, 0, 2, 0, 2000` to mirror the character RAM
+- Try `DMACOPY 1, 0, 2, 0, 4000` to mirror the character RAM
 layout into color RAM and see the effect on the display.
 - Use space 5 (XRAM) as a destination: stash a full color-screen
-snapshot with `DMACOPY 2, 0, 5, 0, 2000` and restore it later.
+snapshot with `DMACOPY 2, 0, 5, 0, 4000` and restore it later.
 
 :::

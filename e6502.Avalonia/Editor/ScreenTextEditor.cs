@@ -209,11 +209,8 @@ public abstract class ScreenTextEditor
 
     protected void SaveScreen()
     {
-        for (int i = 0; i < VgcConstants.ScreenSize; i++)
-        {
-            _savedCharRam[i] = Bus.Read((ushort)(VgcConstants.CharRamBase + i));
-            _savedColorRam[i] = Bus.Read((ushort)(VgcConstants.ColorRamBase + i));
-        }
+        Bus.ReadVramBlock(VgcConstants.VramPlaneChar, 0, _savedCharRam);
+        Bus.ReadVramBlock(VgcConstants.VramPlaneColor, 0, _savedColorRam);
         _savedBgColor = Bus.Read(VgcConstants.RegBgCol);
         _savedCursorEnable = Bus.Read(VgcConstants.RegCursorEnable);
         _savedCursorX = Bus.Read(VgcConstants.RegCursorX);
@@ -222,11 +219,8 @@ public abstract class ScreenTextEditor
 
     protected void RestoreScreen()
     {
-        for (int i = 0; i < VgcConstants.ScreenSize; i++)
-        {
-            Bus.Write((ushort)(VgcConstants.CharRamBase + i), _savedCharRam[i]);
-            Bus.Write((ushort)(VgcConstants.ColorRamBase + i), _savedColorRam[i]);
-        }
+        Bus.WriteVramBlock(VgcConstants.VramPlaneChar, 0, _savedCharRam);
+        Bus.WriteVramBlock(VgcConstants.VramPlaneColor, 0, _savedColorRam);
         Bus.Write(VgcConstants.RegBgCol, _savedBgColor);
         Bus.Write(VgcConstants.RegCursorEnable, _savedCursorEnable);
         Bus.Write(VgcConstants.RegCursorX, _savedCursorX);
@@ -238,18 +232,17 @@ public abstract class ScreenTextEditor
     protected void WriteChar(int col, int row, byte ch, byte fg)
     {
         if (col < 0 || col >= ScreenCols || row < 0 || row >= ScreenRows) return;
-        int offset = row * ScreenCols + col;
-        Bus.Write((ushort)(VgcConstants.CharRamBase + offset), ch);
-        Bus.Write((ushort)(VgcConstants.ColorRamBase + offset), fg);
+        Bus.WriteTextCell(col, row, ch, fg);
     }
 
     protected void ClearScreen()
     {
-        for (int i = 0; i < VgcConstants.ScreenSize; i++)
-        {
-            Bus.Write((ushort)(VgcConstants.CharRamBase + i), (byte)' ');
-            Bus.Write((ushort)(VgcConstants.ColorRamBase + i), DefaultFg);
-        }
+        byte[] chars = new byte[VgcConstants.ScreenSize];
+        byte[] colors = new byte[VgcConstants.ScreenSize];
+        Array.Fill(chars, (byte)' ');
+        Array.Fill(colors, DefaultFg);
+        Bus.WriteVramBlock(VgcConstants.VramPlaneChar, 0, chars);
+        Bus.WriteVramBlock(VgcConstants.VramPlaneColor, 0, colors);
     }
 
     // ── Box border rendering ──────────────────────────────────────────────────
@@ -416,8 +409,7 @@ public abstract class ScreenTextEditor
             Bus.Write(VgcConstants.RegCursorEnable, 1);
 
             // Color the cursor cell
-            int offset = screenRow * ScreenCols + screenCol;
-            Bus.Write((ushort)(VgcConstants.ColorRamBase + offset), CursorFg);
+            Bus.WriteTextColor(screenCol, screenRow, CursorFg);
         }
         else
         {

@@ -11,7 +11,13 @@
 //   Byte 0: Status (0x00=OK, 0xFF=error)
 //   Byte 1+: Payload (variable length per command)
 
-module debug_bridge (
+module debug_bridge #(
+    // If NovaHost never claims the boot by sending CMD_RESET_HOLD, release
+    // CPU reset after this many clk cycles. The synthesis ROM BRAMs are now
+    // initialized from rom/*.hex, so this gives the board a standalone boot
+    // path after FPGA flash/power-cycle even when ESP is stale or absent.
+    parameter integer BOOT_AUTO_RELEASE_CYCLES = 50_000_000
+) (
     input  logic        clk,
     input  logic        rst,
 
@@ -111,10 +117,6 @@ module debug_bridge (
     // budget for a full clkref 16:1 cycle plus CAS pipeline.
     localparam int SDRAM_HOLD = 8;
 
-    localparam SCREEN_BASE = 16'hAA00;
-    localparam COLOR_BASE  = 16'hB1D0;
-    localparam BULK_SIZE   = 16'd2000;
-
     // =========================================================================
     // State machine
     // =========================================================================
@@ -189,6 +191,12 @@ module debug_bridge (
     logic        rx_buf_valid;
     logic [7:0]  rx_buf_data;
 
+    // Boot/reset ownership. NovaHost claims the boot path with RESET_HOLD and
+    // owns reset until RESET_REL. If it never claims reset, the bridge falls
+    // back to the bitstream-initialized ROM contents.
+    logic [31:0] boot_auto_release_cnt;
+    logic        boot_claimed_by_host;
+
     // Pause register
     logic paused;
     assign dbg_pause = paused;
@@ -244,8 +252,11 @@ module debug_bridge (
             dbg_rom_idx      <= 0;
             dbg_rom_addr     <= 0;
             dbg_rom_data     <= 0;
-            // Hold CPU reset until NovaHost has loaded ROM and releases it.
+            // Hold CPU reset briefly so NovaHost can stream fresh ROM. If it
+            // never claims the boot, auto-release and boot embedded ROM.
             dbg_cpu_reset    <= 1'b1;
+            boot_auto_release_cnt <= 0;
+            boot_claimed_by_host  <= 1'b0;
             resp_idx         <= 0;
             resp_total       <= 0;
             peek_latch       <= 0;
@@ -283,6 +294,14 @@ module debug_bridge (
             dbg_poke_en      <= 0;
             dbg_rom_we       <= 0;
             key_inject_valid <= 0;
+
+            if (dbg_cpu_reset && !boot_claimed_by_host) begin
+                if (boot_auto_release_cnt >= BOOT_AUTO_RELEASE_CYCLES - 1) begin
+                    dbg_cpu_reset <= 1'b0;
+                end else begin
+                    boot_auto_release_cnt <= boot_auto_release_cnt + 1'b1;
+                end
+            end
 
             // Latch any fio_event pulse — sticks until drained by the
             // S_EVENT_TX_MARK path below.
@@ -323,16 +342,20 @@ module debug_bridge (
                             CMD_POKE_BLOCK:  begin recv_need <= 3'd3; state <= S_RECV; end
 
                             CMD_READ_SCREEN: begin
-                                bulk_addr      <= SCREEN_BASE;
-                                bulk_remaining <= BULK_SIZE;
+                                // Direct text/color windows were removed. Host-side
+                                // screen readers must use the VGC VRAM port protocol.
+                                status_err     <= 1;
+                                bulk_remaining <= 0;
                                 resp_idx       <= 0;
-                                resp_total     <= 1;   // status byte only, then bulk
+                                resp_total     <= 1;
                                 state          <= S_TX_BYTE;
                             end
 
                             CMD_READ_COLOR: begin
-                                bulk_addr      <= COLOR_BASE;
-                                bulk_remaining <= BULK_SIZE;
+                                // Direct text/color windows were removed. Host-side
+                                // screen readers must use the VGC VRAM port protocol.
+                                status_err     <= 1;
+                                bulk_remaining <= 0;
                                 resp_idx       <= 0;
                                 resp_total     <= 1;
                                 state          <= S_TX_BYTE;
@@ -357,17 +380,21 @@ module debug_bridge (
                             end
 
                             CMD_RESET_HOLD: begin
-                                dbg_cpu_reset <= 1'b1;
-                                resp_idx      <= 0;
-                                resp_total    <= 1;
-                                state         <= S_TX_BYTE;
+                                dbg_cpu_reset          <= 1'b1;
+                                boot_claimed_by_host   <= 1'b1;
+                                boot_auto_release_cnt  <= 0;
+                                resp_idx               <= 0;
+                                resp_total             <= 1;
+                                state                  <= S_TX_BYTE;
                             end
 
                             CMD_RESET_REL: begin
-                                dbg_cpu_reset <= 1'b0;
-                                resp_idx      <= 0;
-                                resp_total    <= 1;
-                                state         <= S_TX_BYTE;
+                                dbg_cpu_reset          <= 1'b0;
+                                boot_claimed_by_host   <= 1'b0;
+                                boot_auto_release_cnt  <= 0;
+                                resp_idx               <= 0;
+                                resp_total             <= 1;
+                                state                  <= S_TX_BYTE;
                             end
 
                             default: begin

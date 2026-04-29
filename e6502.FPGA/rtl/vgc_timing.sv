@@ -1,4 +1,4 @@
-// VGC Timing (VESTA) — VGA timing generation for 640x480@60Hz
+// VGC Timing (VESTA) — VGA-like timing for 640x480 at ~60Hz
 // Generates all timing signals, counters, and derived coordinates
 // Pipeline delay registers match BRAM read latency (2 cycles)
 
@@ -56,13 +56,40 @@ module vgc_timing (
     // =========================================================================
     // Parameters
     // =========================================================================
-    localparam H_ACTIVE = 640, H_FRONT = 16, H_SYNC = 96, H_BACK = 48, H_TOTAL = 800;
+    // ULX3S gives us a 25.000 MHz pixel clock. Standard 640x480 VGA timings
+    // (800*525) produce 59.52 Hz at that clock, which HDMI sinks/captures may
+    // cadence-convert and show as motion judder. Keep the active image and
+    // sync pulse standard, but trim back porch to get 25e6/(794*525)=59.97Hz.
+`ifdef VIDEO_720X480
+    // Full-system CEA-style 720x480p timing at a 27 MHz pixel clock.
+    // The Nova canvas is 640x400 centered in 720x480 active video, leaving
+    // a 40-pixel border on all sides.
+    localparam H_ACTIVE = 720, H_FRONT = 16, H_SYNC = 62, H_BACK = 60, H_TOTAL = 858;
+    localparam V_ACTIVE = 480, V_FRONT = 9,  V_SYNC = 6,  V_BACK = 30, V_TOTAL = 525;
+    localparam NOVA_X0  = 40,  NOVA_Y0  = 40;
+    localparam NOVA_W   = 640, NOVA_H   = 400;
+`elsif VGC_TIMING_5994
+    // Diagnostic timing profile: 25e6/(796*524)=59.937Hz, much closer to
+    // VGA's 59.940Hz vertical cadence while keeping hsync near 31.47kHz.
+    localparam H_ACTIVE = 640, H_FRONT = 16, H_SYNC = 96, H_BACK = 44, H_TOTAL = 796;
+    localparam V_ACTIVE = 480, V_FRONT = 10, V_SYNC = 2,  V_BACK = 32, V_TOTAL = 524;
+    localparam NOVA_X0  = 0,   NOVA_Y0  = 40;
+    localparam NOVA_W   = 640, NOVA_H   = 400;
+`else
+    localparam H_ACTIVE = 640, H_FRONT = 16, H_SYNC = 96, H_BACK = 42, H_TOTAL = 794;
     localparam V_ACTIVE = 480, V_FRONT = 10, V_SYNC = 2,  V_BACK = 33, V_TOTAL = 525;
+    localparam NOVA_X0  = 0,   NOVA_Y0  = 40;
+    localparam NOVA_W   = 640, NOVA_H   = 400;
+`endif
 
-    localparam COLS     = 80,  ROWS    = 60;
+    localparam COLS     = 80,  ROWS    = 50;
     localparam CHAR_H   = 8;
-    localparam TEXT_H   = ROWS * CHAR_H;               // 480 pixels (1:1, no doubling)
-    localparam V_BORDER = (V_ACTIVE - TEXT_H) / 2;     // 0 lines (no border)
+    localparam TEXT_H   = ROWS * CHAR_H;               // 400 pixels (1:1, no doubling)
+    localparam V_BORDER = 0;                            // canvas origin already includes border
+    localparam [9:0] NOVA_X0_10 = NOVA_X0;
+    localparam [9:0] NOVA_Y0_10 = NOVA_Y0;
+    localparam [9:0] NOVA_X1_10 = NOVA_X0 + NOVA_W;
+    localparam [9:0] NOVA_Y1_10 = NOVA_Y0 + NOVA_H;
 
     // =========================================================================
     // POR initialization — pipeline regs start at 0. ECP5 trellis encodes
@@ -119,14 +146,19 @@ module vgc_timing (
     assign h_visible   = (h_count < H_ACTIVE);
     assign v_visible   = (v_count < V_ACTIVE);
     assign visible     = h_visible && v_visible;
-    // With V_BORDER=0 and TEXT_H=V_ACTIVE, the text area covers the entire
-    // visible region. Kept as a conditional so the generalized form still
-    // reads correctly if V_BORDER ever becomes non-zero again.
-    assign in_text_area = visible && (v_count < V_BORDER + TEXT_H);
+    wire canvas_h_visible = (h_count >= NOVA_X0_10) && (h_count < NOVA_X1_10);
+    wire canvas_v_visible = (v_count >= NOVA_Y0_10) && (v_count < NOVA_Y1_10);
+    wire canvas_visible   = visible && canvas_h_visible && canvas_v_visible;
+    wire [9:0] canvas_h_count = canvas_h_visible ? (h_count - NOVA_X0_10) : 10'd0;
+    wire [9:0] canvas_v_count = canvas_v_visible ? (v_count - NOVA_Y0_10) : 10'd0;
+
+    // Text/graphics cover only the centered Nova canvas. Physical visible
+    // pixels outside this window are border color in the compositor.
+    assign in_text_area = canvas_visible && (canvas_v_count < V_BORDER + TEXT_H);
 
     // Pre-compute gfx coordinates for tile engine (combinational)
-    assign pre_gfx_x = h_count[9:1];
-    assign pre_gfx_y = (v_count >> 1);                 // V_BORDER=0: no subtract
+    assign pre_gfx_x = canvas_h_count[9:1];
+    assign pre_gfx_y = (canvas_v_count >> 1);
 
     // =========================================================================
     // Pipeline delay registers — 2 cycles to match BRAM read latency.
@@ -160,18 +192,18 @@ module vgc_timing (
     logic [6:0] real_row_sum;
 
     always_comb begin
-        text_col   = h_count[9:3];
-        font_pixel = h_count[2:0];
-        text_line  = v_count - V_BORDER;            // 1:1 text (no pixel doubling)
+        text_col   = canvas_h_count[9:3];
+        font_pixel = canvas_h_count[2:0];
+        text_line  = canvas_v_count - V_BORDER;     // 1:1 text (no pixel doubling)
         text_row   = text_line[8:3];                // 6-bit, 0..63
         font_line  = text_line[2:0];
         real_row_sum = {1'b0, text_row} + {1'b0, scroll_offset};
         real_row   = (real_row_sum >= 7'(ROWS)) ? real_row_sum[5:0] - 6'(ROWS)
                                                 : real_row_sum[5:0];
 
-        // Graphics coordinates (320x240, pixel-doubled to 640x480)
-        gfx_x = h_count[9:1];
-        gfx_y = v_count[8:1];                       // halved v_count (0..239)
+        // Graphics coordinates (320x200, pixel-doubled to 640x400)
+        gfx_x = canvas_h_count[9:1];
+        gfx_y = canvas_v_count[8:1];                // halved canvas y (0..199)
     end
 
     // =========================================================================

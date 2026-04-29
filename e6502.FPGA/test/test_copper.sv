@@ -107,9 +107,9 @@ module test_copper;
             @(posedge clk);
     endtask
 
-    // Run one full frame (800 * 525 clocks)
+    // Run one full frame (794 * 525 clocks)
     task automatic run_frame();
-        run_clocks(800 * 525);
+        run_clocks(794 * 525);
     endtask
 
     // Assert with message

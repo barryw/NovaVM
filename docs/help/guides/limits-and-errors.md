@@ -52,8 +52,8 @@ wrapping to `$FFFF`.
 | `SPRITE n,...` invalid index | Sprite index *n* must be 0--15. The VGC command handlers check `n >= MaxSprites` and return immediately without error; no ROM-level error is raised. |
 | `SPRITEDATA n,row,...` | Row must be 0--15. The `CmdSprRow` handler checks both sprite index and row; an invalid row causes the command to be silently ignored. |
 | `SPRITESHAPE` | Tokenised and recognised by the ROM parser; writes the shape slot field in the sprite register block at `$A044 + n*8`. |
-| `SPRITESET n,field,value` | Field must be 0--7 and value must be 0--255 (both byte-range). The write is deferred until the next vblank to prevent mid-frame glitches. |
-| `SPRITEX(n)`/`SPRITEY(n)` | Combine the XLo/XHi (or YLo/YHi) register bytes of sprite *n* into a signed 16-bit result. Returns the actual current sprite position as set by `SPRITE n,x,y`, `SPRITESET`, or the copper. |
+| `SPRITESET n,field,value` | Field must be 0--7. Field 0 accepts an unsigned 16-bit X value; other fields accept byte values. Sprite attribute writes are buffered by hardware and published at the frame boundary. |
+| `SPRITEX(n)`/`SPRITEY(n)` | `SPRITEX` returns the unsigned 16-bit X register; `SPRITEY` returns the unsigned 8-bit Y register. Y high is reserved and reads as 0. |
 | `COLLISION(n)`/`BUMPED(n)` | The VGC updates `RegColSt` and `RegColBg` each frame; the ROM reads the appropriate register and clears it on read. A given bit is set if sprite *n* participated in a collision that frame. |
 | Default sprite priority | On reset all sprites default to priority 2 (in front of everything). This matches the `SpritePriInFront` constant. |
 | `CmdSprFlip` flags | Only bits 0--1 of the flags byte are used (`flags & 0x03`): bit 0 = horizontal flip, bit 1 = vertical flip. |

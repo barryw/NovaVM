@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using e6502.Avalonia.Hardware;
 using e6502.MCP;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -116,12 +117,12 @@ public class NovaHostHardwareTests
     // ── Screen ──
 
     [TestMethod]
-    public async Task ReadScreen_Returns25Lines()
+    public async Task ReadScreen_Returns50Lines()
     {
         var res = await SendAsync("read_screen");
         Assert.IsTrue(Ok(res));
         var lines = (JsonArray)res["lines"]!;
-        Assert.AreEqual(25, lines.Count);
+        Assert.AreEqual(VgcConstants.ScreenRows, lines.Count);
     }
 
     [TestMethod]

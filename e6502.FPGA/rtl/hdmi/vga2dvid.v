@@ -65,8 +65,11 @@ reg [9:0] shift_red; reg [9:0] shift_green; reg [9:0] shift_blue;
 parameter C_shift_clock_initial = 10'b0000011111;
 reg [9:0] shift_clock;
 reg R_shift_clock_off_sync;
+reg [1:0] R_shift_clock_off_sync_shift;
 reg [7:0] R_shift_clock_synchronizer;
 reg [6:0] R_sync_fail;  // counts sync fails, after too many, reinitialize shift_clock
+reg [1:0] resetn_shift_sync;
+wire resetn_shift = resetn_shift_sync[1];
 parameter c_red = 1'b0;
 parameter c_green = 1'b0;
 wire [1:0] c_blue;
@@ -85,7 +88,7 @@ wire [7:0] blue_d;
       R_shift_clock_off_sync <= 1'b0;
     // does 0 to 1 transition at bits 5 downto 4 happen at rising_edge of clk_pixel?
     // if shift_clock = C_shift_clock_initial then
-    if(shift_clock[5:4] == C_shift_clock_initial[5:4]) begin
+    else if(shift_clock[5:4] == C_shift_clock_initial[5:4]) begin
       // same as above line but simplified
       R_shift_clock_off_sync <= 1'b0;
     end
@@ -94,20 +97,32 @@ wire [7:0] blue_d;
     end
   end
 
+  always @(posedge clk_shift or negedge resetn) begin
+    if (!resetn)
+      resetn_shift_sync <= 2'b00;
+    else
+      resetn_shift_sync <= {resetn_shift_sync[0], 1'b1};
+  end
+
   // every N cycles of clk_shift: signal to skip 1 cycle in order to get in sync
   always @(posedge clk_shift) begin
-    if (!resetn)
-       R_shift_clock_synchronizer <=  1'b0;
-    if(R_shift_clock_off_sync == 1'b1) begin
-      if(R_shift_clock_synchronizer[(7)] == 1'b1) begin
-        R_shift_clock_synchronizer <= {8{1'b0}};
-      end
-      else begin
-        R_shift_clock_synchronizer <= R_shift_clock_synchronizer + 1;
-      end
+    if (!resetn_shift) begin
+       R_shift_clock_off_sync_shift <= 2'b00;
+       R_shift_clock_synchronizer <=  8'b0;
     end
     else begin
-      R_shift_clock_synchronizer <= {8{1'b0}};
+      R_shift_clock_off_sync_shift <= {R_shift_clock_off_sync_shift[0], R_shift_clock_off_sync};
+      if(R_shift_clock_off_sync_shift[1] == 1'b1) begin
+        if(R_shift_clock_synchronizer[(7)] == 1'b1) begin
+          R_shift_clock_synchronizer <= {8{1'b0}};
+        end
+        else begin
+          R_shift_clock_synchronizer <= R_shift_clock_synchronizer + 1;
+        end
+      end
+      else begin
+        R_shift_clock_synchronizer <= {8{1'b0}};
+      end
     end
   end
 
@@ -156,37 +171,41 @@ wire [7:0] blue_d;
   assign outp_blue = latched_blue;
 
   always @(posedge clk_shift) begin
-    if (!resetn)
+    if (!resetn_shift)
     begin
       shift_red <= 1'b0;
       shift_green <= 1'b0;
       shift_blue <= 1'b0;
       shift_clock <= C_shift_clock_initial;
-    end
-    //if shift_clock = "0000011111" then
-    if(shift_clock[5:4] == C_shift_clock_initial[5:4]) begin
-      // same as above line but simplified
-      shift_red <= latched_red;
-      shift_green <= latched_green;
-      shift_blue <= latched_blue;
+      R_sync_fail <= {7{1'b0}};
     end
     else begin
-      shift_red <= {2'b00,shift_red[9:2]};
-      shift_green <= {2'b00,shift_green[9:2]};
-      shift_blue <= {2'b00,shift_blue[9:2]};
-    end
-    if(R_shift_clock_synchronizer[(7)] == 1'b0) begin
-      shift_clock <= {shift_clock[1:0],shift_clock[9:2]};
-    end
-    else begin
-      // synchronization failed.
-      // after too many fails, reinitialize shift_clock
-      if(R_sync_fail[(6)] == 1'b1) begin
-        shift_clock <= C_shift_clock_initial;
+      //if shift_clock = "0000011111" then
+      if(shift_clock[5:4] == C_shift_clock_initial[5:4]) begin
+        // same as above line but simplified
+        shift_red <= latched_red;
+        shift_green <= latched_green;
+        shift_blue <= latched_blue;
+      end
+      else begin
+        shift_red <= {2'b00,shift_red[9:2]};
+        shift_green <= {2'b00,shift_green[9:2]};
+        shift_blue <= {2'b00,shift_blue[9:2]};
+      end
+      if(R_shift_clock_synchronizer[(7)] == 1'b0) begin
+        shift_clock <= {shift_clock[1:0],shift_clock[9:2]};
         R_sync_fail <= {7{1'b0}};
       end
       else begin
-        R_sync_fail <= R_sync_fail + 1;
+        // synchronization failed.
+        // after too many fails, reinitialize shift_clock
+        if(R_sync_fail[(6)] == 1'b1) begin
+          shift_clock <= C_shift_clock_initial;
+          R_sync_fail <= {7{1'b0}};
+        end
+        else begin
+          R_sync_fail <= R_sync_fail + 1;
+        end
       end
     end
   end

@@ -1,4 +1,5 @@
 using e6502.Avalonia.Rendering;
+using KDS.e6502;
 
 namespace e6502.Avalonia.Hardware;
 
@@ -13,21 +14,21 @@ public interface IScreenInput
 
 /// <summary>
 /// Virtual Graphics Controller for the Avalonia renderer.
-/// Manages text display (80x25), block graphics (320x200), and multicolor sprites
+/// Manages text display (80x50), block graphics (320x200), and multicolor sprites
 /// (16 sprites, 16x16 pixels, 4-bit color per pixel, 256 shape slots).
 ///
 /// Address ownership:
 ///   $A000-$A01F  VGC registers + command interface
 ///   $A040-$A0BF  Sprite registers (8 bytes × 16 sprites)
-///   $AA00-$B1CF  Character RAM (2000 bytes)
-///   $B1D0-$B99F  Color RAM (2000 bytes)
+///   $A0C0-$A0DF  Tile registers
+///   $A0E0-$A0E4  VDC-style VRAM port for char/color/gfx/sprite/tile memory
 ///
 /// Sprite shape data stored in 256 × 128-byte slots (32KB), accessible via
 /// memory space I/O and DMA. Each sprite has a shape index register pointing
 /// to its active shape slot. The copper can write sprite registers at scanline
 /// granularity for vertical sprite multiplexing.
 /// </summary>
-public class VirtualGraphicsController
+public class VirtualGraphicsController : IBusDevice
 {
     public readonly struct CopperEvent
     {
@@ -65,10 +66,10 @@ public class VirtualGraphicsController
     private readonly byte[] _spriteShapeIndex = new byte[VgcConstants.MaxSprites];
     private readonly byte[] _spriteTransColor = new byte[VgcConstants.MaxSprites];
 
-    // Screen RAM (2000 bytes, 80x25)
+    // Screen RAM (4000 bytes, 80x50)
     private readonly byte[] _screenRam = new byte[VgcConstants.ScreenSize];
 
-    // Color RAM (2000 bytes, 80x25)
+    // Color RAM (4000 bytes, 80x50)
     private readonly byte[] _colorRam = new byte[VgcConstants.ScreenSize];
 
     // Block graphics bitmap (320x200, NOT 6502-addressable)
@@ -111,6 +112,10 @@ public class VirtualGraphicsController
 
     // IRQ control register ($A01F)
     private byte _irqCtrl;
+    private byte _vramPlane;
+    private ushort _vramAddr;
+    private byte _vramCtrl;
+    private byte _vramReadLatch;
 
     // Copper program (host-side, command driven) — 128 lists, vblank-synchronized
     private readonly List<CopperEvent>[] _copperEvents = new List<CopperEvent>[VgcConstants.CopperListCount];
@@ -158,6 +163,10 @@ public class VirtualGraphicsController
         Array.Clear(_gfxBitmap);
         _gfxDrawColor = 1;
         _irqCtrl = 0;
+        _vramPlane = VgcConstants.VramPlaneChar;
+        _vramAddr = 0;
+        _vramCtrl = VgcConstants.VramCtrlAutoInc;
+        _vramReadLatch = 0;
         for (int i = 0; i < VgcConstants.CopperListCount; i++)
         {
             if (_copperEvents[i] != null)
@@ -185,8 +194,10 @@ public class VirtualGraphicsController
         // Color RAM initialized to 1 (white)
         Array.Fill(_colorRam, (byte)1);
 
-        // Default foreground color = 1
+        // Match FPGA reset defaults: white text, blue background, light-blue border.
         _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] = 1;
+        _regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] = 6;
+        _regs[VgcConstants.RegBorder - VgcConstants.VgcBase] = 14;
 
         // Tile engine reset
         ResetTileEngine();
@@ -249,12 +260,8 @@ public class VirtualGraphicsController
         if (address >= VgcConstants.TileRegBase && address <= VgcConstants.TileRegEnd)
             return true;
 
-        // Character RAM: $AA00-$B1CF
-        if (address >= VgcConstants.CharRamBase && address <= VgcConstants.CharRamEnd)
-            return true;
-
-        // Color RAM: $B1D0-$B99F
-        if (address >= VgcConstants.ColorRamBase && address <= VgcConstants.ColorRamEnd)
+        // VDC-style VRAM port: $A0E0-$A0E4
+        if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
             return true;
 
         return false;
@@ -266,14 +273,6 @@ public class VirtualGraphicsController
 
     public byte Read(ushort address)
     {
-        // Color RAM
-        if (address >= VgcConstants.ColorRamBase && address <= VgcConstants.ColorRamEnd)
-            return _colorRam[address - VgcConstants.ColorRamBase];
-
-        // Character RAM
-        if (address >= VgcConstants.CharRamBase && address <= VgcConstants.CharRamEnd)
-            return _screenRam[address - VgcConstants.CharRamBase];
-
         // Sprite registers $A040-$A0BF
         if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
             return ReadSpriteRegister(address);
@@ -281,6 +280,10 @@ public class VirtualGraphicsController
         // Tile registers $A0C0-$A0DF
         if (address >= VgcConstants.TileRegBase && address <= VgcConstants.TileRegEnd)
             return ReadTileRegister(address);
+
+        // VDC-style VRAM port $A0E0-$A0E4
+        if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
+            return ReadVramRegister(address);
 
         // Command parameter registers $A011-$A01E
         if (address >= VgcConstants.RegP0 && address <= VgcConstants.RegP13)
@@ -334,20 +337,6 @@ public class VirtualGraphicsController
 
     public void Write(ushort address, byte data)
     {
-        // Color RAM
-        if (address >= VgcConstants.ColorRamBase && address <= VgcConstants.ColorRamEnd)
-        {
-            _colorRam[address - VgcConstants.ColorRamBase] = data;
-            return;
-        }
-
-        // Character RAM
-        if (address >= VgcConstants.CharRamBase && address <= VgcConstants.CharRamEnd)
-        {
-            _screenRam[address - VgcConstants.CharRamBase] = data;
-            return;
-        }
-
         // Sprite registers $A040-$A0BF
         if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
         {
@@ -359,6 +348,13 @@ public class VirtualGraphicsController
         if (address >= VgcConstants.TileRegBase && address <= VgcConstants.TileRegEnd)
         {
             WriteTileRegister(address, data);
+            return;
+        }
+
+        // VDC-style VRAM port $A0E0-$A0E4
+        if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
+        {
+            WriteVramRegister(address, data);
             return;
         }
 
@@ -397,6 +393,10 @@ public class VirtualGraphicsController
                     _regs[address - VgcConstants.VgcBase] = data;
                     HandleCharOut(data);
                     return;
+                case VgcConstants.RegCursorY:
+                    _regs[address - VgcConstants.VgcBase] =
+                        (byte)Math.Min(data & 0x3F, VgcConstants.ScreenRows - 1);
+                    return;
                 default:
                     _regs[address - VgcConstants.VgcBase] = data;
                     return;
@@ -410,6 +410,109 @@ public class VirtualGraphicsController
 
     public byte Read(int address) => Read((ushort)address);
     public void Write(int address, byte data) => Write((ushort)address, data);
+
+    private byte ReadVramRegister(int address)
+    {
+        return address switch
+        {
+            VgcConstants.VramPlane => _vramPlane,
+            VgcConstants.VramAddrL => (byte)(_vramAddr & 0xFF),
+            VgcConstants.VramAddrH => (byte)(_vramAddr >> 8),
+            VgcConstants.VramCtrl => _vramCtrl,
+            VgcConstants.VramData => ReadVramData(),
+            _ => 0
+        };
+    }
+
+    private byte ReadVramData()
+    {
+        byte result = _vramReadLatch;
+        _vramReadLatch = TryReadVramPlane(_vramPlane, _vramAddr, out byte value) ? value : (byte)0;
+        if ((_vramCtrl & VgcConstants.VramCtrlAutoInc) != 0)
+            _vramAddr++;
+        return result;
+    }
+
+    private void WriteVramRegister(int address, byte data)
+    {
+        switch (address)
+        {
+            case VgcConstants.VramPlane:
+                _vramPlane = data;
+                break;
+            case VgcConstants.VramAddrL:
+                _vramAddr = (ushort)((_vramAddr & 0xFF00) | data);
+                break;
+            case VgcConstants.VramAddrH:
+                _vramAddr = (ushort)((_vramAddr & 0x00FF) | (data << 8));
+                break;
+            case VgcConstants.VramCtrl:
+                _vramCtrl = data;
+                break;
+            case VgcConstants.VramData:
+                TryWriteVramPlane(_vramPlane, _vramAddr, data);
+                if ((_vramCtrl & VgcConstants.VramCtrlAutoInc) != 0)
+                    _vramAddr++;
+                break;
+        }
+    }
+
+    private bool TryReadVramPlane(byte plane, int addr, out byte value)
+    {
+        switch (plane)
+        {
+            case VgcConstants.VramPlaneChar when (uint)addr < _screenRam.Length:
+                value = _screenRam[addr];
+                return true;
+            case VgcConstants.VramPlaneColor when (uint)addr < _colorRam.Length:
+                value = _colorRam[addr];
+                return true;
+            case VgcConstants.VramPlaneGfx when (uint)addr < _gfxBitmap.Length:
+                value = _gfxBitmap[addr];
+                return true;
+            case VgcConstants.VramPlaneSprite when (uint)addr < _spriteShapes.Length:
+                lock (_spriteShapeLock) value = _spriteShapes[addr];
+                return true;
+            case VgcConstants.VramPlaneTile when (uint)addr < _tileData.Length:
+                lock (_tileLock) value = _tileData[addr];
+                return true;
+            default:
+                value = 0;
+                return false;
+        }
+    }
+
+    private bool TryWriteVramPlane(byte plane, int addr, byte value)
+    {
+        switch (plane)
+        {
+            case VgcConstants.VramPlaneChar when (uint)addr < _screenRam.Length:
+                _screenRam[addr] = value;
+                return true;
+            case VgcConstants.VramPlaneColor when (uint)addr < _colorRam.Length:
+                _colorRam[addr] = value;
+                return true;
+            case VgcConstants.VramPlaneGfx when (uint)addr < _gfxBitmap.Length:
+                _gfxBitmap[addr] = value;
+                return true;
+            case VgcConstants.VramPlaneSprite when (uint)addr < _spriteShapes.Length:
+                lock (_spriteShapeLock)
+                {
+                    _spriteShapes[addr] = value;
+                    _spriteShapesDirty = true;
+                }
+                return true;
+            case VgcConstants.VramPlaneTile when (uint)addr < _tileData.Length:
+                lock (_tileLock)
+                {
+                    _tileData[addr] = value;
+                    _tileDirty = true;
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Screen editor integration
@@ -594,16 +697,16 @@ public class VirtualGraphicsController
         switch (field)
         {
             case VgcConstants.SprRegXLo:
-                _spriteX[sprite] = (short)((_spriteX[sprite] & ~0xFF) | data);
+                _spriteX[sprite] = (_spriteX[sprite] & 0xFF00) | data;
                 break;
             case VgcConstants.SprRegXHi:
-                _spriteX[sprite] = (short)((data << 8) | (_spriteX[sprite] & 0xFF));
+                _spriteX[sprite] = (data << 8) | (_spriteX[sprite] & 0xFF);
                 break;
             case VgcConstants.SprRegYLo:
-                _spriteY[sprite] = (short)((_spriteY[sprite] & ~0xFF) | data);
+                _spriteY[sprite] = data;
                 break;
             case VgcConstants.SprRegYHi:
-                _spriteY[sprite] = (short)((data << 8) | (_spriteY[sprite] & 0xFF));
+                // Reserved: sprite Y is an unsigned byte.
                 break;
             case VgcConstants.SprRegShape:
                 _spriteShapeIndex[sprite] = data;
@@ -635,7 +738,7 @@ public class VirtualGraphicsController
             VgcConstants.SprRegXLo => (byte)(_spriteX[sprite] & 0xFF),
             VgcConstants.SprRegXHi => (byte)((_spriteX[sprite] >> 8) & 0xFF),
             VgcConstants.SprRegYLo => (byte)(_spriteY[sprite] & 0xFF),
-            VgcConstants.SprRegYHi => (byte)((_spriteY[sprite] >> 8) & 0xFF),
+            VgcConstants.SprRegYHi => 0,
             VgcConstants.SprRegShape => _spriteShapeIndex[sprite],
             VgcConstants.SprRegFlags => (byte)((_spriteEnabled[sprite] ? VgcConstants.SprFlagEnable : 0)
                                              | (_spriteFlags[sprite] & VgcConstants.SprFlagFlipMask)),
@@ -860,8 +963,8 @@ public class VirtualGraphicsController
             case VgcConstants.CmdSprPos:
             {
                 if (p0 >= VgcConstants.MaxSprites) return;
-                _spriteX[p0] = (short)(_cmdRegs[2] | (_cmdRegs[3] << 8));
-                _spriteY[p0] = (short)(_cmdRegs[4] | (_cmdRegs[5] << 8));
+                _spriteX[p0] = _cmdRegs[2] | (_cmdRegs[3] << 8);
+                _spriteY[p0] = _cmdRegs[4];
                 break;
             }
             case VgcConstants.CmdSprEna:

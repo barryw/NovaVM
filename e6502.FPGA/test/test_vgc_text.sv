@@ -2,7 +2,7 @@
 // Goal: isolate the "7-row mirror" typing bug in Verilator before touching hardware.
 //
 // Strategy: drive the VGC directly (no CPU, no EhBASIC), poke REG_CHAROUT and
-// char RAM, then read char_mem.mem back through Verilator hierarchy. Any bug
+// VRAM port, then read char_mem.mem back through Verilator hierarchy. Any bug
 // the user sees on hardware should be reproducible here OR be provably above
 // the VGC (i.e. in ehbasic / screen editor).
 
@@ -16,29 +16,23 @@ module test_vgc_text;
     // Tests
     // -----------------------------------------------------------------------
 
-    // T1: direct char-RAM pokes round-trip via internal mem access and via dbg port.
+    // T1: VDC-style VRAM port writes and reads char RAM.
     task automatic test_char_ram_roundtrip();
         logic [7:0] rb;
         $display("");
-        $display("Test: char RAM poke round-trip");
+        $display("Test: char RAM VRAM-port round-trip");
         // Write 0x41 ('A') through 0x48 ('H') to the first 8 cells
         for (int i = 0; i < 8; i++)
-            bus_write(CHAR_RAM_BASE_A + 16'(i), 8'h41 + 8'(i));
+            vram_write(VPLANE_CHAR_A, i, 8'h41 + 8'(i));
         step(4);
         for (int i = 0; i < 8; i++)
             check_eq($sformatf("char_mem[%0d] via hierarchy", i),
                      peek_char(i), 8'h41 + i);
-        // Same 8 cells via debug port
+        // Same 8 cells via VDATA reads
         for (int i = 0; i < 8; i++) begin
-            @(posedge clk);
-            dbg_addr <= CHAR_RAM_BASE_A + 16'(i);
-            // dpram has 1-cycle read latency, dbg_rd_latch adds another.
-            @(posedge clk);
-            @(posedge clk);
-            rb = dbg_rdata;
-            check_eq($sformatf("dbg_rdata[%0d]", i), rb, 8'h41 + i);
+            vram_read(VPLANE_CHAR_A, i, rb);
+            check_eq($sformatf("vram_rdata[%0d]", i), rb, 8'h41 + i);
         end
-        dbg_addr <= 16'h0000;
     endtask
 
     // T2: writing to REG_CHAROUT with a fresh cursor places the char at

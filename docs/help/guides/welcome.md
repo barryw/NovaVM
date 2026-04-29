@@ -35,9 +35,9 @@ The number shown is the amount of free BASIC program memory. The cursor waits
 for your first command.
 
 ::: note
-Boot sets the screen background to color 6 (blue) and the foreground text
-color to color 1 (white). You can change these at any time with
-`COLOR fg,bg`.
+Boot sets the screen background to color 6 (blue), the foreground text to color
+1 (white), and the border to color 14 (light blue). You can change these at any
+time with `COLOR fg[,bg[,border]]`.
 :::
 
 ## Runtime Clock Model

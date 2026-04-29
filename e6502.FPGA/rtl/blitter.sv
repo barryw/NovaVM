@@ -45,7 +45,7 @@ module blitter (
 
     // Memory port C: VGC internal (char/color/gfx/sprite/tile)
     output logic [2:0]  vgc_space,
-    output logic [16:0] vgc_addr,     // 17-bit to reach gfx_mem 76800
+    output logic [16:0] vgc_addr,     // shared VGC-space address bus
     input  logic [7:0]  vgc_rdata,
     output logic [7:0]  vgc_wdata,
     output logic        vgc_we,
@@ -165,9 +165,9 @@ module blitter (
     function automatic logic [19:0] space_size(input logic [2:0] sp);
         case (sp)
             SPACE_CPU:    space_size = 20'(65536);
-            SPACE_CHAR:   space_size = 20'(4800);
-            SPACE_COLOR:  space_size = 20'(4800);
-            SPACE_GFX:    space_size = 20'(76800);
+            SPACE_CHAR:   space_size = 20'(4000);
+            SPACE_COLOR:  space_size = 20'(4000);
+            SPACE_GFX:    space_size = 20'(64000);
             SPACE_SPRITE: space_size = 20'(32768);
             SPACE_XRAM:   space_size = 20'(524288);
             SPACE_TILE:   space_size = 20'(32768);

@@ -63,5 +63,5 @@ When a PETSCII font is active, these key combinations produce graphic characters
 ## Tips
 
 - Use `CHR$()` with hex codes to place specific graphic characters: `PRINT CHR$($80)`
-- Graphic characters can also be POKEd directly into screen RAM at $AA00-$B1CF
+- Graphic characters can also be written through the VDC-style VRAM port at `$A0E0`--`$A0E4`
 - Return to the default font anytime with `FONT 0`

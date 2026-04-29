@@ -15,11 +15,19 @@ localparam logic [15:0] REG_CHAROUT_A   = 16'hA00E;
 localparam logic [15:0] REG_CHARIN_A    = 16'hA00F;
 localparam logic [15:0] REG_CMD_A       = 16'hA010;
 localparam logic [15:0] REG_PARAM0_A    = 16'hA011;
-localparam logic [15:0] CHAR_RAM_BASE_A = 16'hAA00;
-localparam logic [15:0] COLOR_RAM_BASE_A= 16'hB1D0;
+localparam logic [15:0] VREG_PLANE_A    = 16'hA0E0;
+localparam logic [15:0] VREG_ADDRL_A    = 16'hA0E1;
+localparam logic [15:0] VREG_ADDRH_A    = 16'hA0E2;
+localparam logic [15:0] VREG_DATA_A     = 16'hA0E3;
+localparam logic [15:0] VREG_CTRL_A     = 16'hA0E4;
+localparam logic [7:0]  VPLANE_CHAR_A   = 8'h01;
+localparam logic [7:0]  VPLANE_COLOR_A  = 8'h02;
+localparam logic [7:0]  VPLANE_GFX_A    = 8'h03;
+localparam logic [7:0]  VPLANE_SPRITE_A = 8'h04;
+localparam logic [7:0]  VPLANE_TILE_A   = 8'h06;
 
 localparam int COLS_TB = 80;
-localparam int ROWS_TB = 60;
+localparam int ROWS_TB = 50;
 
 // ---------------------------------------------------------------------------
 // Clock / reset
@@ -177,6 +185,25 @@ task automatic bus_read(input logic [15:0] addr, output logic [7:0] data);
     data = cpu_rdata;
 endtask
 
+task automatic vram_select(input logic [7:0] plane, input int addr, input logic autoinc);
+    bus_write(VREG_PLANE_A, plane);
+    bus_write(VREG_ADDRL_A, 8'(addr & 16'h00FF));
+    bus_write(VREG_ADDRH_A, 8'((addr >> 8) & 16'h00FF));
+    bus_write(VREG_CTRL_A, {7'b0, autoinc});
+endtask
+
+task automatic vram_write(input logic [7:0] plane, input int addr, input logic [7:0] data);
+    vram_select(plane, addr, 1'b0);
+    bus_write(VREG_DATA_A, data);
+endtask
+
+task automatic vram_read(input logic [7:0] plane, input int addr, output logic [7:0] data);
+    logic [7:0] dummy;
+    vram_select(plane, addr, 1'b0);
+    bus_read(VREG_DATA_A, dummy);
+    bus_read(VREG_DATA_A, data);
+endtask
+
 // Direct dpram peek via Verilator's hierarchical access — bypasses port
 // contention entirely. This is what we use for assertions about char RAM.
 function automatic logic [7:0] peek_char(input int addr);
@@ -206,14 +233,52 @@ function automatic int count_gfx_pixels(input int x0, input int y0,
     return n;
 endfunction
 
-// Sprite memory peek — spr_mem is 2048 bytes, addressed as
+// Sprite memory peek — sprite shape RAM is double-buffered. CPU/commands see
+// the pending bank immediately; PIXIE renders from the active bank. Addresses
+// are {sprite_idx[3:0], row[3:0], col_pair[2:0]}. Each byte packs two 4-bit
+// pixels: hi nibble = even column, lo nibble = odd column.
+function automatic logic [10:0] spr_byte_addr(input int spr_idx,
+                                               input int row,
+                                               input int col_pair);
+    spr_byte_addr = 11'((spr_idx * 16 + row) * 8 + col_pair);
+endfunction
+
+function automatic logic [7:0] peek_spr_pending_addr(input logic [10:0] addr);
+    if (dut.sprite_inst.pending_shape_bank)
+        peek_spr_pending_addr = dut.sprite_inst.spr_mem1.mem[addr];
+    else
+        peek_spr_pending_addr = dut.sprite_inst.spr_mem0.mem[addr];
+endfunction
+
+function automatic logic [7:0] peek_spr_active_addr(input logic [10:0] addr);
+    if (dut.sprite_inst.active_shape_bank)
+        peek_spr_active_addr = dut.sprite_inst.spr_mem1.mem[addr];
+    else
+        peek_spr_active_addr = dut.sprite_inst.spr_mem0.mem[addr];
+endfunction
+
+task automatic poke_spr_pending_addr(input logic [10:0] addr, input logic [7:0] val);
+    if (dut.sprite_inst.pending_shape_bank)
+        dut.sprite_inst.spr_mem1.mem[addr] = val;
+    else
+        dut.sprite_inst.spr_mem0.mem[addr] = val;
+endtask
+
+task automatic poke_spr_active_addr(input logic [10:0] addr, input logic [7:0] val);
+    if (dut.sprite_inst.active_shape_bank)
+        dut.sprite_inst.spr_mem1.mem[addr] = val;
+    else
+        dut.sprite_inst.spr_mem0.mem[addr] = val;
+endtask
+
+// Pending sprite memory peek — matches CPU/debug readback semantics.
+// spr_mem is 2048 bytes, addressed as
 // {sprite_idx[3:0], row[3:0], col_pair[2:0]}. Each byte packs two 4-bit
 // pixels: hi nibble = even column, lo nibble = odd column.
 function automatic logic [7:0] peek_spr_byte(input int spr_idx,
                                               input int row,
                                               input int col_pair);
-    peek_spr_byte = dut.sprite_inst.spr_mem.mem[
-        (spr_idx * 16 + row) * 8 + col_pair];
+    peek_spr_byte = peek_spr_pending_addr(spr_byte_addr(spr_idx, row, col_pair));
 endfunction
 
 // Read one sprite pixel (0..15 x, 0..15 y) as a 4-bit color.

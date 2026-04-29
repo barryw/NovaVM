@@ -466,31 +466,31 @@ public class AvaloniaCompositeBusTests
     }
 
     // -------------------------------------------------------------------------
-    // Screen RAM access through bus
+    // Screen RAM access through VDC-style VRAM port
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public void ScreenRam_DirectWrite_ReadBack()
+    public void ScreenRam_VramPortWrite_ReadBack()
     {
         var bus = MakeBus();
-        bus.Write((ushort)VgcConstants.CharRamBase, (byte)'Z');
-        Assert.AreEqual((byte)'Z', bus.Read((ushort)VgcConstants.CharRamBase));
+        bus.WriteVramByte(VgcConstants.VramPlaneChar, 0, (byte)'Z');
+        Assert.AreEqual((byte)'Z', bus.ReadVramByte(VgcConstants.VramPlaneChar, 0));
     }
 
     [TestMethod]
-    public void ScreenRam_DirectWrite_VisibleViaVgc()
+    public void ScreenRam_VramPortWrite_VisibleViaVgc()
     {
         var bus = MakeBus();
-        bus.Write((ushort)VgcConstants.CharRamBase, (byte)'Q');
+        bus.WriteVramByte(VgcConstants.VramPlaneChar, 0, (byte)'Q');
         Assert.AreEqual((byte)'Q', bus.Vgc.GetScreenChar(0, 0));
     }
 
     [TestMethod]
-    public void ColorRam_DirectWrite_ReadBack()
+    public void ColorRam_VramPortWrite_ReadBack()
     {
         var bus = MakeBus();
-        bus.Write((ushort)VgcConstants.ColorRamBase, 0x0A);
-        Assert.AreEqual(0x0A, bus.Read((ushort)VgcConstants.ColorRamBase));
+        bus.WriteVramByte(VgcConstants.VramPlaneColor, 0, 0x0A);
+        Assert.AreEqual(0x0A, bus.ReadVramByte(VgcConstants.VramPlaneColor, 0));
     }
 
     // -------------------------------------------------------------------------
@@ -554,11 +554,11 @@ public class AvaloniaCompositeBusTests
         int cmdReg = bus.Read(0x0202) | (bus.Read(0x0203) << 8);
         Assert.AreEqual(VgcConstants.RegCmd, cmdReg);
 
-        int charRam = bus.Read(0x0204) | (bus.Read(0x0205) << 8);
-        Assert.AreEqual(VgcConstants.CharRamBase, charRam);
+        int vramBase = bus.Read(0x0204) | (bus.Read(0x0205) << 8);
+        Assert.AreEqual(VgcConstants.VramRegBase, vramBase);
 
-        int colorRam = bus.Read(0x0206) | (bus.Read(0x0207) << 8);
-        Assert.AreEqual(VgcConstants.ColorRamBase, colorRam);
+        int vramData = bus.Read(0x0206) | (bus.Read(0x0207) << 8);
+        Assert.AreEqual(VgcConstants.VramData, vramData);
 
         int sidBase = bus.Read(0x0208) | (bus.Read(0x0209) << 8);
         Assert.AreEqual(VgcConstants.SidBase, sidBase);

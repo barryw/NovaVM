@@ -538,17 +538,18 @@ VGC memory spaces:
 
 | **Space** | **Contents** |
 | --- | --- |
-| 0 | Character RAM (2000 bytes) |
-| 1 | Color RAM (2000 bytes) |
-| 2 | Graphics bitmap (64000 bytes) |
-| 3 | Sprite shape RAM (2048 bytes) |
+| 1 | Character RAM (4000 bytes) |
+| 2 | Color RAM (4000 bytes) |
+| 3 | Graphics bitmap (64000 bytes) |
+| 4 | Sprite shape RAM (32768 bytes; 256 slots) |
+| 6 | Tile data RAM |
 
 ```basic
 10 MODE 1 : GCLS
 20 GCOLOR 10 : CIRCLE 160, 100, 80
-30 GSAVE "mycircle", 2, 0, 64000
+30 GSAVE "mycircle", 3, 0, 64000
 40 REM LATER...
-50 GLOAD "mycircle", 2, 0
+50 GLOAD "mycircle", 3, 0
 ```
 
 ## Music Engine Architecture

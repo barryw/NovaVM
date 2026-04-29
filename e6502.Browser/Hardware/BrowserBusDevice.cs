@@ -181,8 +181,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
         WriteWord(VgcConstants.VectorTableBase + 0x00, VgcConstants.VgcBase);
         WriteWord(VgcConstants.VectorTableBase + 0x02, VgcConstants.RegCmd);
-        WriteWord(VgcConstants.VectorTableBase + 0x04, VgcConstants.CharRamBase);
-        WriteWord(VgcConstants.VectorTableBase + 0x06, VgcConstants.ColorRamBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x04, VgcConstants.VramRegBase);
+        WriteWord(VgcConstants.VectorTableBase + 0x06, VgcConstants.VramData);
         WriteWord(VgcConstants.VectorTableBase + 0x08, VgcConstants.SidBase);
         WriteWord(VgcConstants.VectorTableBase + 0x0A, VgcConstants.FioBase);
         WriteWord(VgcConstants.VectorTableBase + 0x0C, VgcConstants.XmcBase);

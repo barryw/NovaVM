@@ -7,6 +7,6 @@ syntax: "SPRITEY(n)"
 see_also: [graphics-and-display]
 ---
 
-Current Y position of sprite *n* as a signed 16-bit value, read directly from the sprite registers.
+Current Y position of sprite *n* as an unsigned 8-bit value, read directly from the sprite registers.
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

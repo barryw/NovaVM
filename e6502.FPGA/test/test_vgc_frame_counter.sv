@@ -102,8 +102,8 @@ module test_vgc_frame_counter;
         @(posedge clk);
     endtask
 
-    // H_TOTAL at the VGA-mode VGC uses is 800 (640 + borders+sync).
-    // V_TOTAL is 525. Full frame = 800*525 = 420,000 pixel cycles.
+    // H_TOTAL at the VGA-like VGC mode is 794 (640 active + porch/sync).
+    // V_TOTAL is 525. Full frame = 794*525 = 416,850 pixel cycles.
     // That's too slow to simulate in real wall time, so we sample at the
     // RTL-internal frame_counter signal directly — this proves the tick
     // logic works without burning ~1M cycles.
@@ -130,11 +130,11 @@ module test_vgc_frame_counter;
         // We use the direct-signal probe for speed.
         fc_a = dut.frame_counter;
 
-        // Wait long enough for multiple vblanks. Full frame ~420k pixel
+        // Wait long enough for multiple vblanks. Full frame ~417k pixel
         // cycles. Run 5 frames so frame_counter crosses 0x04 — this
         // puts it past the gfx_color default (0x01) so the assertions
         // can't false-pass via a coincidental value match.
-        repeat(800 * 525 * 5) @(posedge clk);
+        repeat(794 * 525 * 5) @(posedge clk);
 
         fc_b = dut.frame_counter;
         $display("after ~5 frames frame_counter: 0x%02X", fc_b);

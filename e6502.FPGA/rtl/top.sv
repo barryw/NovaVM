@@ -81,6 +81,15 @@ module top (
     // value to FioCmd ($B9A0). fpga_top.sv routes this to the debug
     // bridge, which emits an async EVENT_FIO to the ESP32.
     output logic        fio_event
+`ifndef SYNTHESIS
+    ,
+    // Simulation-only VRAM peek path. Excluded from synthesis so the
+    // hardware map still exposes only the VGC VRAM port.
+    input  logic        dbg_vram_read_en,
+    input  logic [2:0]  dbg_vram_space,
+    input  logic [16:0] dbg_vram_addr,
+    output logic [7:0]  dbg_vram_rdata
+`endif
 );
 
     localparam ROM_BASE  = 16'hC000;
@@ -155,23 +164,25 @@ module top (
         .addr_b(ram_b_addr), .dout_b(ram_b_dout)
     );
 
-    // EhBASIC ROM: 16KB — runtime-loaded via dbg_rom_we (idx=0)
+    // EhBASIC ROM: 16KB. Initialized from the bitstream so the FPGA can
+    // self-boot if NovaHost is absent/stale; NovaHost may still overwrite it
+    // at boot via dbg_rom_we (idx=0) before releasing CPU reset.
     logic [13:0] brom_b_addr;
     logic [7:0]  brom_b_dout;
     wire         brom_we = dbg_rom_we && (dbg_rom_idx == 1'b0);
 
-    dpram #(.WIDTH(8), .DEPTH(16384)) basic_rom_inst (
+    dpram #(.WIDTH(8), .DEPTH(16384), .INIT_FILE("rom/ehbasic.hex")) basic_rom_inst (
         .clk(clk),
         .addr_a(dbg_rom_addr), .din_a(dbg_rom_data), .we_a(brom_we), .dout_a(),
         .addr_b(brom_b_addr), .dout_b(brom_b_dout)
     );
 
-    // Extension ROM: 16KB — runtime-loaded via dbg_rom_we (idx=1)
+    // Extension ROM: 16KB. Bitstream initialized, runtime-overwritable.
     logic [13:0] erom_b_addr;
     logic [7:0]  erom_b_dout;
     wire         erom_we = dbg_rom_we && (dbg_rom_idx == 1'b1);
 
-    dpram #(.WIDTH(8), .DEPTH(16384)) ext_rom_inst (
+    dpram #(.WIDTH(8), .DEPTH(16384), .INIT_FILE("rom/extension.hex")) ext_rom_inst (
         .clk(clk),
         .addr_a(dbg_rom_addr), .din_a(dbg_rom_data), .we_a(erom_we), .dout_a(),
         .addr_b(erom_b_addr), .dout_b(erom_b_dout)
@@ -248,7 +259,10 @@ module top (
     wire sid1_reg_sel = (mem_addr >= SID1_BASE && mem_addr <= SID1_END);
     wire sid2_reg_sel = (mem_addr >= SID2_BASE && mem_addr <= SID2_END);
     wire sid_cfg_sel  = (mem_addr == SID_CFG);
-    wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hB99F);
+    wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
+                        (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
+                        (mem_addr >= 16'hA0C0 && mem_addr <= 16'hA0DF) ||
+                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E4);
 
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
@@ -609,6 +623,7 @@ module top (
 
     localparam XRAM_SIZE = 524288;
     logic [7:0] xram [0:XRAM_SIZE-1];
+    wire xram_busy = 1'b0;
 
     initial begin
         for (int i = 0; i < 65536; i++)
@@ -758,6 +773,7 @@ module top (
     assign sdram_dinA  = 8'd0;
     assign sdram_weA   = 1'b0;
     assign sdram_oeA   = 1'b0;
+    assign fio_event   = 1'b0;
 
 `endif
 
@@ -780,7 +796,7 @@ module top (
     wire        blt_xram_we;
     wire        blt_xram_re;
     wire [2:0]  blt_vgc_space;
-    wire [16:0] blt_vgc_addr;     // 17-bit for gfx_mem 76800 reach
+    wire [16:0] blt_vgc_addr;     // shared VGC-space address bus
     wire [7:0]  blt_vgc_wdata;
     wire        blt_vgc_we;
     wire        blt_vgc_re;
@@ -1037,6 +1053,13 @@ module top (
         .vid_vsync      (vid_vsync),
         .vid_de         (vid_de),
         .irq_out        ()
+`ifndef SYNTHESIS
+        ,
+        .dbg_vram_read_en(dbg_vram_read_en),
+        .dbg_vram_space  (dbg_vram_space),
+        .dbg_vram_addr   (dbg_vram_addr),
+        .dbg_vram_rdata  (dbg_vram_rdata)
+`endif
     );
 
     // =========================================================================
@@ -1052,12 +1075,11 @@ module top (
     wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
     wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
     wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
-    wire dbg_vgc_char  = (dbg_peek_addr >= 16'hAA00 && dbg_peek_addr <= 16'hB1CF);
-    wire dbg_vgc_color = (dbg_peek_addr >= 16'hB1D0 && dbg_peek_addr <= 16'hB99F);
     wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F);
     wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
-    assign vgc_dbg_owns = dbg_vgc_char | dbg_vgc_color | dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr;
+    wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram;
 
     // For debug reads, RAM port B serves as the read port.
     // ROM reads use the same brom_b/erom_b ports (address set combinationally).
@@ -1075,12 +1097,11 @@ module top (
     wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
     wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
     wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
-    wire dbg_vgc_char  = (dbg_peek_addr >= 16'hAA00 && dbg_peek_addr <= 16'hB1CF);
-    wire dbg_vgc_color = (dbg_peek_addr >= 16'hB1D0 && dbg_peek_addr <= 16'hB99F);
     wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F);
     wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
-    assign vgc_dbg_owns = dbg_vgc_char | dbg_vgc_color | dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr;
+    wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram;
     wire [7:0] dbg_rom_read_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
                                                   : basic_rom[dbg_peek_addr - ROM_BASE];
     assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :

@@ -42,12 +42,6 @@ public static class VgcConstants
     public const int Sid2MirrorBase    = 0xD500;
     public const int Sid2MirrorEnd     = 0xD51C;
 
-    public const int CharRamBase       = 0xAA00;
-    public const int CharRamEnd        = 0xB1CF;   // AA00 + 2000 - 1
-
-    public const int ColorRamBase      = 0xB1D0;
-    public const int ColorRamEnd       = 0xB99F;   // B1D0 + 2000 - 1
-
     // -------------------------------------------------------------------------
     // File I/O coprocessor registers ($B9A0-$B9EF)
     // -------------------------------------------------------------------------
@@ -65,7 +59,7 @@ public static class VgcConstants
     public const int FioEndH           = 0xB9A7;   // end addr high (SAVE only)
     public const int FioSizeL          = 0xB9A8;   // loaded size low (set by host after LOAD)
     public const int FioSizeH          = 0xB9A9;   // loaded size high
-    public const int FioGSpace         = 0xB9AA;   // graphics space selector
+    public const int FioGSpace         = 0xB9AA;   // graphics plane selector (1/2/3/4/6)
     public const int FioGAddrL         = 0xB9AB;   // graphics offset low
     public const int FioGAddrH         = 0xB9AC;   // graphics offset high
     public const int FioGLenL          = 0xB9AD;   // graphics length low
@@ -468,8 +462,8 @@ public static class VgcConstants
     // -------------------------------------------------------------------------
 
     public const int ScreenCols        = 80;
-    public const int ScreenRows        = 25;
-    public const int ScreenSize        = ScreenCols * ScreenRows;  // 2000
+    public const int ScreenRows        = 50;
+    public const int ScreenSize        = ScreenCols * ScreenRows;  // 4000
 
     public const int GfxWidth          = 320;
     public const int GfxHeight         = 200;
@@ -501,7 +495,7 @@ public static class VgcConstants
     public const int SprRegXLo        = 0;
     public const int SprRegXHi        = 1;
     public const int SprRegYLo        = 2;
-    public const int SprRegYHi        = 3;
+    public const int SprRegYHi        = 3;  // reserved; Y is an unsigned byte
     public const int SprRegShape      = 4;
     public const int SprRegFlags      = 5;  // bit0=xFlip, bit1=yFlip, bit7=enable
     public const int SprRegPriority   = 6;
@@ -523,6 +517,23 @@ public static class VgcConstants
 
     public const int TileRegBase       = 0xA0C0;
     public const int TileRegEnd        = 0xA0DF;
+
+    // VDC-style VRAM port registers ($A0E0-$A0E4). This is the only CPU-visible
+    // path for text/color/gfx/sprite/tile memory; direct text/color windows are gone.
+    public const int VramRegBase       = 0xA0E0;
+    public const int VramRegEnd        = 0xA0E4;
+    public const int VramPlane         = 0xA0E0;
+    public const int VramAddrL         = 0xA0E1;
+    public const int VramAddrH         = 0xA0E2;
+    public const int VramData          = 0xA0E3;
+    public const int VramCtrl          = 0xA0E4;
+
+    public const byte VramPlaneChar    = 0x01;
+    public const byte VramPlaneColor   = 0x02;
+    public const byte VramPlaneGfx     = 0x03;
+    public const byte VramPlaneSprite  = 0x04;
+    public const byte VramPlaneTile    = 0x06;
+    public const byte VramCtrlAutoInc  = 0x01;
 
     // Configuration registers
     public const int TileConfig        = 0xA0C0;   // bit0: size (0=8x8, 1=16x16), bits 2-1: mirror mode (0-3)
@@ -619,7 +630,7 @@ public static class VgcConstants
     public const int RegBgCol          = 0xA001;
     public const int RegFgCol          = 0xA002;
     public const int RegCursorX        = 0xA003;   // 0-79
-    public const int RegCursorY        = 0xA004;   // 0-24
+    public const int RegCursorY        = 0xA004;   // 0-49
     public const int RegScrollX        = 0xA005;
     public const int RegScrollY        = 0xA006;
     public const int RegFont           = 0xA007;   // active font slot (0-7)
@@ -713,12 +724,13 @@ public static class VgcConstants
     public const int CopperListCount        = 128;
     public const int MaxCopperEntriesPerList = 256;
 
-    // Memory spaces for CmdMemRead/CmdMemWrite
-    public const byte MemSpaceScreen   = 0x00;     // 2000 bytes (text character RAM)
-    public const byte MemSpaceColor    = 0x01;     // 2000 bytes (color RAM)
-    public const byte MemSpaceGfx      = 0x02;     // 320*200 bytes (graphics bitmap)
-    public const byte MemSpaceSprite   = 0x03;     // 16*128 bytes (sprite shape RAM)
-    public const byte MemSpaceTile     = 0x04;     // tile definition data
+    // Memory spaces for CmdMemRead/CmdMemWrite. These intentionally match
+    // the VDC-style VRAM port and DMA/blitter plane IDs.
+    public const byte MemSpaceScreen   = VramPlaneChar;    // 4000 bytes (text character RAM)
+    public const byte MemSpaceColor    = VramPlaneColor;   // 4000 bytes (color RAM)
+    public const byte MemSpaceGfx      = VramPlaneGfx;     // 320*200 bytes (graphics bitmap)
+    public const byte MemSpaceSprite   = VramPlaneSprite;  // 256*128 bytes (sprite shape RAM)
+    public const byte MemSpaceTile     = VramPlaneTile;    // tile definition data
 
     // -------------------------------------------------------------------------
     // Help system registers ($A020-$A030)

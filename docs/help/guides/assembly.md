@@ -28,9 +28,9 @@ The full 64 KB address space is partitioned as follows:
 | `0280`--`9FFF` | 39 KB | BASIC RAM | R/W |
 | `A000`--`A01F` | 32 B | VGC Registers | R/W |
 | `A040`--`A0BF` | 128 B | Sprite Registers (16x8) | R/W |
+| `A0C0`--`A0DF` | 32 B | Tile Engine Registers | R/W |
+| `A0E0`--`A0E4` | 5 B | VDC-style VRAM Port | R/W |
 | `A100`--`A13F` | 64 B | Network Interface Controller (NIC) | R/W |
-| `AA00`--`B1CF` | 2000 B | Character RAM (80x25) | R/W |
-| `B1D0`--`B99F` | 2000 B | Color RAM (80x25) | R/W |
 | `B9A0`--`B9EF` | 80 B | File I/O Controller (FIO) | R/W |
 | `BA00`--`BA3F` | 64 B | Expansion Memory Controller (XMC) | R/W |
 | `BA40`--`BA4F` | 16 B | Timer Controller | R/W |
@@ -298,7 +298,7 @@ LDA \#150 : STA $A016
 LDA \#1B : STAA010
 ```
 
-Here P3/P4 = $A042 (sprite 0's YLo register). See
+Here P3 = $A042 (sprite 0's Y register). P4 is reserved and should be 0. See
 Chapter \refchap:graphics for the COPPER keyword syntax and sprite
 multiplexing patterns.
 
@@ -311,10 +311,10 @@ access to all 16 sprites. Each sprite occupies 8 bytes with a stride of 8:
 | --- | --- | --- |
 | +0 | X position, low byte | 1 byte |
 | +1 | X position, high byte | 1 byte |
-| +2 | Y position, low byte | 1 byte |
-| +3 | Y position, high byte | 1 byte |
+| +2 | Y position (unsigned byte) | 1 byte |
+| +3 | Reserved; reads as 0 | 1 byte |
 | +4 | Shape slot index (0--255) | 1 byte |
-| +5 | Flags (bit 0=hflip, bit 1=vflip, bit 2=enable) | 1 byte |
+| +5 | Flags (bit 0=hflip, bit 1=vflip, bit 7=enable) | 1 byte |
 | +6 | Priority (0=behind, 1=between, 2=front) | 1 byte |
 | +7 | TransColor (per-sprite transparent color index, 0--15; >15 = all opaque) | 1 byte |
 
@@ -324,11 +324,11 @@ starts at $A058. To position sprite 3 at X=200, Y=100 and enable it:
 ```
 ; Sprite 3 base = $A058
 LDA \#200 : STA $A058
-LDA \#00 : STAA059
+LDA \#00 : STA $A059
 LDA \#100 : STA $A05A
-LDA \#00 : STAA05B
-; Enable (bit 2 of flags)
-LDA \#04 : STAA05D
+LDA \#00 : STA $A05B
+; Enable (bit 7 of flags)
+LDA \#$80 : STA $A05D
 ```
 
 Writing directly to sprite registers is faster than going through the VGC
@@ -341,15 +341,15 @@ spaces. The pattern is: load parameters into registers, then write $01
 to the command register to start.
 
 ```basic
-10 REM -- DMA copy 2000 bytes from CPU $6000 to char RAM --
+10 REM -- DMA copy 4000 bytes from CPU $6000 to char RAM --
 20 POKE $BA63, 0   : REM source space = CPU RAM
 30 POKE $BA64, 1   : REM dest space = Char RAM
 40 POKE $BA65, 0   : POKE $BA66, $60 : POKE $BA67, 0
 50 REM source addr = $6000 (low, mid, high)
 60 POKE $BA68, 0   : POKE $BA69, 0  : POKE $BA6A, 0
 70 REM dest addr = 0 (start of char RAM)
-80 POKE $BA6B, $D0 : POKE $BA6C, $07 : POKE $BA6D, 0
-90 REM length = 2000 ($07D0)
+80 POKE $BA6B, $A0 : POKE $BA6C, $0F : POKE $BA6D, 0
+90 REM length = 4000 ($0FA0)
 100 POKE $BA6E, 0  : REM mode = copy (not fill)
 110 POKE $BA60, 1  : REM start!
 120 IF PEEK($BA61) = 1 THEN 120 : REM poll until not busy

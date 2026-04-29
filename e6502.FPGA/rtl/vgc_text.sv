@@ -7,13 +7,13 @@ module vgc_text (
     input  logic        rst,
 
     // --- char_ram port A (from top-level mux) ---
-    input  logic [12:0] char_a_addr,
+    input  logic [11:0] char_a_addr,
     input  logic [7:0]  char_a_din,
     input  logic        char_a_we,
     output logic [7:0]  char_a_dout,
 
     // --- color_ram port A (from top-level mux) ---
-    input  logic [12:0] color_a_addr,
+    input  logic [11:0] color_a_addr,
     input  logic [7:0]  color_a_din,
     input  logic        color_a_we,
     output logic [7:0]  color_a_dout,
@@ -46,19 +46,19 @@ module vgc_text (
     // Memory — dpram instances
     // =========================================================================
 
-    // --- char_ram (4800 bytes for 80x60 text) ---
-    logic [12:0] char_b_addr;
+    // --- char_ram (4000 bytes for 80x50 text) ---
+    logic [11:0] char_b_addr;
 
-    dpram #(.WIDTH(8), .DEPTH(4800), .INIT_FILE("rom/char_init.hex")) char_mem (
+    dpram #(.WIDTH(8), .DEPTH(4000), .INIT_FILE("rom/char_init.hex")) char_mem (
         .clk(clk),
         .addr_a(char_a_addr), .din_a(char_a_din), .we_a(char_a_we), .dout_a(char_a_dout),
         .addr_b(char_b_addr), .dout_b(char_b_dout)
     );
 
-    // --- color_ram (4800 bytes for 80x60 text) ---
-    logic [12:0] color_b_addr;
+    // --- color_ram (4000 bytes for 80x50 text) ---
+    logic [11:0] color_b_addr;
 
-    dpram #(.WIDTH(8), .DEPTH(4800), .INIT_FILE("rom/color_init.hex")) color_mem (
+    dpram #(.WIDTH(8), .DEPTH(4000), .INIT_FILE("rom/color_init.hex")) color_mem (
         .clk(clk),
         .addr_a(color_a_addr), .din_a(color_a_din), .we_a(color_a_we), .dout_a(color_a_dout),
         .addr_b(color_b_addr), .dout_b(color_b_dout)

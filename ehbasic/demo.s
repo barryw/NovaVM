@@ -16,7 +16,7 @@ MAX_FILES       = 40                ; max files per category
 ENTRY_SIZE      = 33                ; 32 chars + null terminator per entry
 VISIBLE_ROWS    = 11                ; visible file rows in browser list
 
-; Screen row assignments (80x25 text grid)
+; Screen row assignments (80x50 text grid)
 ROW_TABS        = 8                 ; category tabs
 ROW_DIVIDER     = 9                 ; divider line under tabs
 ROW_LIST_TOP    = 10                ; first visible file row
@@ -116,6 +116,10 @@ save_border:    .res 1
 
 ; Current playback file type (for stop_playback)
 play_type:      .res 1
+
+; Shadow for the bottom scrolling text row. Video memory is only reachable
+; through the VDC-style VRAM port, so we shift in RAM and stream one row out.
+scroll_line_buf:.res 80
 
 ; Zero page save area (preserved across keyboard visualizer call)
 ZP_SAVE_LEN     = 24
@@ -963,7 +967,7 @@ wait_vsync:
     rts
 
 ; =====================================================================
-; clear_text -- fill all 80x25 text cells with spaces
+; clear_text -- fill all 80x50 text cells with spaces
 ; Uses RegCursorX/Y and RegCharOut to write each cell.
 ; Clobbers: A, X, Y
 ; =====================================================================
@@ -980,7 +984,7 @@ clear_text:
     cpx #80
     bcc @ct_col
     iny
-    cpy #25
+    cpy #ScreenRows
     bcc @ct_row
     rts
 
@@ -1435,23 +1439,49 @@ init_scroll:
     stz zp_scroll_idx
     stz zp_scroll_idx+1
 
-    ; Fill ROW_SCROLL with spaces in COL_LGREEN directly via CharRam/ColorRam
-    ; (Using RegCharOut on row 24 triggers ScrollUp — avoid that)
-    SCROLL_INIT_ADDR = CharRamBase + ROW_SCROLL * 80
-    SCROLL_INIT_COL  = ColorRamBase + ROW_SCROLL * 80
+    ; Fill ROW_SCROLL through the VDC-style VRAM port.
+    SCROLL_ROW_OFF = ROW_SCROLL * 80
     ldx #79
 @is_fill:
     lda #' '
-    sta SCROLL_INIT_ADDR,x
-    lda #COL_LGREEN
-    sta SCROLL_INIT_COL,x
+    sta scroll_line_buf,x
     dex
     bpl @is_fill
+
+    lda #VramPlaneChar
+    sta VramPlane
+    lda #<SCROLL_ROW_OFF
+    sta VramAddrL
+    lda #>SCROLL_ROW_OFF
+    sta VramAddrH
+    lda #VramCtrlAutoInc
+    sta VramCtrl
+    ldx #80
+@is_char:
+    lda #' '
+    sta VramData
+    dex
+    bne @is_char
+
+    lda #VramPlaneColor
+    sta VramPlane
+    lda #<SCROLL_ROW_OFF
+    sta VramAddrL
+    lda #>SCROLL_ROW_OFF
+    sta VramAddrH
+    lda #VramCtrlAutoInc
+    sta VramCtrl
+    ldx #80
+@is_color:
+    lda #COL_LGREEN
+    sta VramData
+    dex
+    bne @is_color
     rts
 
 ; =====================================================================
 ; advance_scroll -- shift ROW_SCROLL left by one char, append next char
-; Called once per frame.  Directly accesses CharRam for speed.
+; Called once per frame.
 ; Clobbers: A, X, Y, zp_ptr
 ; =====================================================================
 advance_scroll:
@@ -1469,14 +1499,11 @@ advance_scroll:
     rts
 @as_do_scroll:
 
-    ; Row 24 starts at CharRamBase + 24*80 = CharRamBase + 1920
-    SCROLL_ROW_ADDR = CharRamBase + 1920
-
-    ; Shift bytes left: copy [offset+1] to [offset] for 79 iterations
+    ; Shift shadow bytes left: copy [offset+1] to [offset] for 79 iterations
     ldx #0
 @as_shift:
-    lda SCROLL_ROW_ADDR+1,x
-    sta SCROLL_ROW_ADDR,x
+    lda scroll_line_buf+1,x
+    sta scroll_line_buf,x
     inx
     cpx #79
     bcc @as_shift
@@ -1507,7 +1534,7 @@ advance_scroll:
     lda scroll_text
 @as_got_char:
     ; Write to column 79
-    sta SCROLL_ROW_ADDR+79
+    sta scroll_line_buf+79
 
     ; Increment 16-bit scroll index
     inc zp_scroll_idx
@@ -1527,6 +1554,22 @@ advance_scroll:
     stz zp_scroll_idx
     stz zp_scroll_idx+1
 @as_done:
+    ; Stream the updated row to character VRAM.
+    lda #VramPlaneChar
+    sta VramPlane
+    lda #<SCROLL_ROW_OFF
+    sta VramAddrL
+    lda #>SCROLL_ROW_OFF
+    sta VramAddrH
+    lda #VramCtrlAutoInc
+    sta VramCtrl
+    ldx #0
+@as_write:
+    lda scroll_line_buf,x
+    sta VramData
+    inx
+    cpx #80
+    bcc @as_write
     rts
 
 ; =====================================================================

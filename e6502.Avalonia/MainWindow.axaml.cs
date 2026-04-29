@@ -400,9 +400,7 @@ public partial class MainWindow : Window
     {
         for (int i = 0; i < text.Length && col + i < VgcConstants.ScreenCols; i++)
         {
-            int offset = row * VgcConstants.ScreenCols + col + i;
-            _bus.Write((ushort)(VgcConstants.CharRamBase + offset), (byte)text[i]);
-            _bus.Write((ushort)(VgcConstants.ColorRamBase + offset), fg);
+            _bus.WriteTextCell(col + i, row, (byte)text[i], fg);
         }
     }
 

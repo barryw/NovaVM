@@ -1,15 +1,12 @@
 // Debug-peek regression test.
 //
-// Reproduces the hardware bug where peek of VGC-owned addresses ($A000-$A01F
-// registers, $AA00-$B1CF char RAM, etc.) falls through to main RAM instead of
-// returning the VGC's state. All 587 existing sim tests miss this because they
-// either don't include top.sv, or they test top.sv's else-branch (non-SYNTHESIS)
-// of the debug-peek mux.
+// Reproduces the hardware bug where peek of VGC-owned register addresses
+// falls through to main RAM instead of returning the VGC's state. Text/color
+// RAM is no longer directly mapped; $AA00 is intentionally main RAM now.
 //
 // Scaffolding mirrors test_rom_load.sv — tiny program that prints 'H','I' via
 // REG_CHAROUT, then we pause the CPU and peek:
-//   - char RAM:   $AA00 → 'H'      (via vgc_dbg_rdata → dbg_rd_latch → char_a_dout)
-//   - char RAM:   $AA01 → 'I'
+//   - $AA00:      main RAM, not VGC text RAM
 //   - VGC reg:    $A003 → cursor_x after 2 printed chars
 //   - VGC reg:    $A001 → bg_color reset default
 //   - ROM:        $C000 → 0xA9      (LDA immediate opcode — control)
@@ -169,13 +166,9 @@ module test_debug_peek;
         dbg_pause = 1;
         repeat(10) @(posedge clk);
 
-        // === THE REGRESSION TEST ===
-        // Peek char RAM — should return what char_mem.mem holds
+        // $AA00 is not VGC-owned anymore; it should fall through to main RAM.
         do_peek(16'hAA00, peek_val);
-        check_eq8("peek \$AA00 returns 'H'", peek_val, 8'h48);
-
-        do_peek(16'hAA01, peek_val);
-        check_eq8("peek \$AA01 returns 'I'", peek_val, 8'h49);
+        check_eq8("peek \$AA00 returns main RAM", peek_val, 8'h00);
 
         // Peek VGC register — REG_CURSORX = $A003. After printing 2 chars cursor_x=2.
         do_peek(16'hA003, peek_val);

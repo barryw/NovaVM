@@ -1560,7 +1560,7 @@ xmc_dir_emit_next:
 ;   COPPER USE n
 ;   COPPER ADD x, y, reg, value
 ;     reg = MODE | BGCOL | SCROLLX | SCROLLY |
-;           SPRX(n) | SPRXH(n) | SPRY(n) | SPRYH(n) |
+;           SPRX(n) | SPRXH(n) | SPRY(n) |
 ;           SPRSHAPE(n) | SPRFLAGS(n) | SPRPRI(n) |
 ;           <8-bit numeric expression>
 ; =====================================================================

@@ -74,7 +74,7 @@ public class AvaloniaBlitterTests
             for (int col = 0; col < width; col++)
             {
                 int offset = 24 + row * VgcConstants.ScreenCols + col;
-                Assert.AreEqual(0x0E, bus.Read((ushort)(VgcConstants.ColorRamBase + offset)));
+                Assert.AreEqual(0x0E, bus.ReadVramByte(VgcConstants.VramPlaneColor, offset));
             }
         }
     }

@@ -133,24 +133,24 @@ at *ramaddr*. The destination must be within writable RAM
 
 ### Example: saving and restoring a character screen buffer
 
-The character screen RAM occupies `AA00`--`B1CF` (2000 bytes).
-You can snapshot it to XRAM bank 0 at offset 0 and restore it later:
+Text character memory is a VGC memory space, not a direct CPU address range.
+Use DMA or the VDC-style VRAM port to snapshot it. This example copies the
+4000-byte 80x50 character plane to XRAM bank 0 and restores it later:
 
 ```
 10 REM Save character screen to XRAM
 20 XBANK 0
-30 STASH 43520,0,2000
+30 DMACOPY 1,0,5,0,4000
 40 PRINT "SCREEN STASHED."
 50 REM ... do other things ...
 60 REM Restore character screen from XRAM
-70 FETCH 43520,0,2000
+70 DMACOPY 5,0,1,0,4000
 80 PRINT "SCREEN RESTORED."
 ```
 
 ::: note
-`AA00` = 43520 decimal. The color RAM at `B1D0` is an additional
-2000 bytes; stash it at offset 2000 in the same bank to capture the full display
-state including colors.
+Color RAM is VGC memory space 2 and is also 4000 bytes. Copy it to a second
+XRAM offset if you need a full text + color snapshot.
 :::
 
 ## Named Blocks

@@ -39,9 +39,9 @@ module test_dma;
     // Simulated memories
     logic [7:0] sim_ram [0:65535];
     logic [7:0] sim_xram [0:524287];
-    logic [7:0] sim_char [0:4799];
-    logic [7:0] sim_color [0:4799];
-    logic [3:0] sim_gfx [0:76799];
+    logic [7:0] sim_char [0:3999];
+    logic [7:0] sim_color [0:3999];
+    logic [3:0] sim_gfx [0:63999];
     logic [7:0] sim_sprite [0:32767];
 
     // Synchronous 1-cycle RAM/XRAM reads — matches real dpram behavior in
@@ -59,9 +59,9 @@ module test_dma;
     logic [7:0] dma_vgc_rdata;
     always_ff @(posedge clk) begin
         case (dma_vgc_space)
-            3'd1: dma_vgc_rdata <= sim_char[dma_vgc_addr[12:0]];
-            3'd2: dma_vgc_rdata <= sim_color[dma_vgc_addr[12:0]];
-            3'd3: dma_vgc_rdata <= {4'b0, sim_gfx[dma_vgc_addr]};
+            3'd1: dma_vgc_rdata <= sim_char[dma_vgc_addr[11:0]];
+            3'd2: dma_vgc_rdata <= sim_color[dma_vgc_addr[11:0]];
+            3'd3: dma_vgc_rdata <= {4'b0, sim_gfx[dma_vgc_addr[15:0]]};
             3'd4: dma_vgc_rdata <= sim_sprite[dma_vgc_addr[14:0]];
             default: dma_vgc_rdata <= 8'h00;
         endcase
@@ -71,9 +71,9 @@ module test_dma;
     always_ff @(posedge clk) begin
         if (dma_vgc_we) begin
             case (dma_vgc_space)
-                3'd1: sim_char[dma_vgc_addr[12:0]]   <= dma_vgc_wdata;
-                3'd2: sim_color[dma_vgc_addr[12:0]]   <= dma_vgc_wdata;
-                3'd3: sim_gfx[dma_vgc_addr]           <= dma_vgc_wdata[3:0];
+                3'd1: sim_char[dma_vgc_addr[11:0]]    <= dma_vgc_wdata;
+                3'd2: sim_color[dma_vgc_addr[11:0]]   <= dma_vgc_wdata;
+                3'd3: sim_gfx[dma_vgc_addr[15:0]]     <= dma_vgc_wdata[3:0];
                 3'd4: sim_sprite[dma_vgc_addr[14:0]]   <= dma_vgc_wdata;
                 default: ;
             endcase
@@ -180,8 +180,8 @@ module test_dma;
 
         for (int i = 0; i < 65536; i++) sim_ram[i] = 0;
         for (int i = 0; i < 524288; i++) sim_xram[i] = 0;
-        for (int i = 0; i < 4800; i++) begin sim_char[i] = 0; sim_color[i] = 0; end
-        for (int i = 0; i < 76800; i++) sim_gfx[i] = 0;
+        for (int i = 0; i < 4000; i++) begin sim_char[i] = 0; sim_color[i] = 0; end
+        for (int i = 0; i < 64000; i++) sim_gfx[i] = 0;
         for (int i = 0; i < 32768; i++) sim_sprite[i] = 0;
 
         repeat(50) @(posedge clk);

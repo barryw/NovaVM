@@ -4,11 +4,26 @@
 #        make clean    — remove build artifacts
 
 VERILATOR = verilator
-VFLAGS    = --cc --exe --build --timing --main \
+TRACE ?= 0
+TRACE_DEPTH ?= 5
+TRACE_MAX_ARRAY ?= 64
+TRACE_MAX_WIDTH ?= 4096
+
+ifeq ($(TRACE),1)
+TRACE_FLAGS = --prefix Vtrace_top --trace-fst --trace-structs --trace-params \
+              --trace-depth $(TRACE_DEPTH) \
+              --trace-max-array $(TRACE_MAX_ARRAY) \
+              --trace-max-width $(TRACE_MAX_WIDTH) \
+              trace_main.cpp
+else
+TRACE_FLAGS = --main
+endif
+
+VFLAGS    = --cc --exe --build --timing $(TRACE_FLAGS) \
             -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM \
             -Wno-CASEINCOMPLETE -Wno-PROCASSINIT -Wno-UNOPTFLAT -Wno-LATCH \
             -Wno-PINCONNECTEMPTY -Wno-SYNCASYNCNET -Wno-INITIALDLY -Wno-TIMESCALEMOD \
-            -Wno-CASEX -Wno-PINMISSING \
+            -Wno-CASEX -Wno-PINMISSING -Wno-UNSIGNED \
             -CFLAGS "-O2"
 
 RTL   = ../rtl

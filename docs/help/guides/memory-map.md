@@ -19,9 +19,9 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | 0280--9FFF | 39,680 B | BASIC Program RAM |
 | A000--A01F | 32 B | Virtual Graphics Controller (VGC) registers and command interface |
 | A040--A0BF | 128 B | Sprite Registers (16 sprites x 8 bytes) |
+| A0C0--A0DF | 32 B | Tile Engine registers |
+| A0E0--A0E4 | 5 B | VDC-style VRAM port (char/color/gfx/sprite/tile memory) |
 | A100--A13F | 64 B | Network Interface Controller (NIC) registers |
-| AA00--B1CF | 2,000 B | Character RAM (80x25 text cells) |
-| B1D0--B99F | 2,000 B | Color RAM (80x25 text cells) |
 | B9A0--B9EF | 80 B | File I/O Controller (FIO) registers |
 | BA00--BA3F | 64 B | Expansion Memory Controller (XMC) registers |
 | BA40--BA4F | 16 B | Timer Controller registers |
@@ -35,7 +35,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | D500--D51C | 29 B | SID chip 2 mirror (transparently routes to $D420) |
 
 ::: note
-The address range A020--A03F and A0C0--A0FF and A140--A9FF are not claimed by any
+The address range A020--A03F, A0E5--A0FF, and A140--A9FF are not claimed by any
 coprocessor and fall through to the underlying flat RAM.
 The range BAA0--BBFF is similarly unallocated RAM.
 SID registers at D400--D43C occupy space within the ROM address range
@@ -128,26 +128,27 @@ Parameters must be loaded into `RegP0`--`RegP13` before the write.
 | $11 | CmdSprRow | P0 = sprite (0--15), P1 = row (0--15), P2--P9 = 8 data bytes (two 4-bit pixels per byte). Define one sprite row. |
 | $12 | CmdSprClr | P0 = sprite (0--15). Clear all 128 bytes of sprite shape data to 0. |
 | $13 | CmdSprCopy | P0 = source sprite (0--15), P1 = destination sprite (0--15). Copy shape data. |
-| $14 | CmdSprPos | P0 = sprite (0--15), P1/P2 = x (16-bit), P3/P4 = y (16-bit). Set screen position. |
+| $14 | CmdSprPos | P0 = sprite (0--15), P1/P2 = x (unsigned 16-bit), P3 = y (unsigned 8-bit), P4 reserved. Set screen position. |
 | $15 | CmdSprEna | P0 = sprite (0--15). Enable sprite; increments `RegSpriteCount`. |
 | $16 | CmdSprDis | P0 = sprite (0--15). Disable sprite; decrements `RegSpriteCount`. |
 | $17 | CmdSprFlip | P0 = sprite (0--15), P1 = flags (0=none, 1=horizontal, 2=vertical, 3=both). |
 | $18 | CmdSprPri | P0 = sprite (0--15), P1 = priority (0=behind all, 1=between text/gfx, 2=in front). |
 
 ::: tip
-Sprite shape data is stored host-side and is not 6502-addressable.
-All sprite shape manipulation must go through the command register interface.
+Sprite shape data is accessed through the VDC-style VRAM port, DMA, blitter,
+or sprite commands rather than a direct CPU memory window.
 :::
 
 ### Memory I/O Commands (19--1A)
 
 | **Code** | **Name** | **Parameters and behavior** |
 | --- | --- | --- |
-| $19 | CmdMemRead | P0 = memory space (0--3), P1/P2 = address (16-bit), P4 bit 0 = auto-increment. Read byte from VGC memory; result in P3. |
-| $1A | CmdMemWrite | P0 = memory space (0--3), P1/P2 = address (16-bit), P3 = data byte, P4 bit 0 = auto-increment. Write byte to VGC memory. |
+| $19 | CmdMemRead | P0 = memory space, P1/P2 = address (16-bit), P4 bit 0 = auto-increment. Read byte from VGC memory; result in P3. |
+| $1A | CmdMemWrite | P0 = memory space, P1/P2 = address (16-bit), P3 = data byte, P4 bit 0 = auto-increment. Write byte to VGC memory. |
 
-Memory spaces: 0=character RAM (2000 B), 1=color RAM (2000 B),
-2=graphics bitmap (64000 B), 3=sprite shape RAM (32768 B; 256 slots).
+Memory spaces match the VDC-style VRAM port and DMA/blitter IDs:
+1=character RAM (4000 B), 2=color RAM (4000 B), 3=graphics bitmap
+(64000 B), 4=sprite shape RAM (32768 B; 256 slots), 6=tile data RAM.
 Auto-increment advances the address after each read or write.
 
 ### Copper Commands (1B--1E, 20--22)
@@ -289,8 +290,8 @@ the configured operation; poll `DmaStatus` for completion.
 | **ID** | **Space** |
 | --- | --- |
 | 0 | CPU RAM (64 KB) |
-| 1 | VGC Character RAM (2,000 bytes) |
-| 2 | VGC Color RAM (2,000 bytes) |
+| 1 | VGC Character RAM (4,000 bytes) |
+| 2 | VGC Color RAM (4,000 bytes) |
 | 3 | VGC Graphics Bitmap (64,000 bytes) |
 | 4 | VGC Sprite Shapes (32,768 bytes; 256 slots) |
 | 5 | Expansion RAM (uses current XBANK) |
@@ -417,7 +418,7 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $B9A7 | FioEndH | R/W | End address, high byte. |
 | $B9A8 | FioSizeL | RO | Loaded data size, low byte (written by host after `LOAD` or `DIR` read). |
 | $B9A9 | FioSizeH | RO | Loaded data size, high byte. |
-| $B9AA | FioGSpace | R/W | Graphics memory space for `GSAVE`/`GLOAD` (0=screen, 1=color, 2=gfx, 3=sprite). |
+| $B9AA | FioGSpace | R/W | Graphics memory space for `GSAVE`/`GLOAD` (1=screen, 2=color, 3=gfx, 4=sprite, 6=tile). |
 | $B9AB | FioGAddrL | R/W | Graphics offset, low byte. |
 | $B9AC | FioGAddrH | R/W | Graphics offset, high byte. |
 | $B9AD | FioGLenL | R/W | Graphics transfer length, low byte. |

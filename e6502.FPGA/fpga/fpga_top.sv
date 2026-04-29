@@ -1,6 +1,7 @@
 // FPGA top-level for ULX3S (ECP5-85F)
 // Wraps the simulation 'top' module with board-level I/O:
 //   - PLL: 25 MHz osc -> 25 MHz pixel clock + 125 MHz TMDS shift clock
+//     (or 720x480p: 27 MHz pixel + 135 MHz TMDS shift)
 //   - HDMI output via GPDI (vga2dvid + fake differential DDR)
 //   - UART keyboard input via FTDI serial
 //   - 4-bit R-2R DAC audio output
@@ -11,7 +12,9 @@ module fpga_top (
 
     // HDMI (GPDI)
     output logic [3:0]  gpdi_dp,
+`ifndef GPDI_P_ONLY
     output logic [3:0]  gpdi_dn,
+`endif
 
     // LEDs and buttons
     output logic [7:0]  leds,
@@ -45,12 +48,42 @@ module fpga_top (
 );
 
     // =========================================================================
-    // PLL: 25 MHz -> 25 MHz (pixel) + 125 MHz (TMDS shift, 5x DDR)
+    // PLL:
+    //   Normal: 25 MHz -> 25 MHz pixel + 125 MHz TMDS shift + SDRAM clocks
+    //   VIDEO_480P_TESTPATTERN/VIDEO_720X480:
+    //     25 MHz -> 27 MHz pixel + 135 MHz TMDS shift
     // =========================================================================
     wire [3:0] pll_clk;
+    wire       pll_video_locked;
     wire       pll_locked;
 
     ecp5pll #(
+`ifdef VIDEO_480P_TESTPATTERN
+`ifndef VIDEO_480P_PIXEL_PHASE
+`define VIDEO_480P_PIXEL_PHASE 0
+`endif
+        // Primary output must be the 5x clock so the simple PLL wrapper can
+        // hit exact CEA 480p rates from the 25 MHz ULX3S oscillator.
+        .in_hz  (25000000),
+`ifdef VIDEO_VGA640_TIMING
+        .out0_hz(125000000),  // 5x pixel clock for DDR TMDS
+        .out1_hz(25000000),   // VGA 640x480 diagnostic timing
+`else
+        .out0_hz(135000000),  // 5x pixel clock for DDR TMDS
+        .out1_hz(27000000),   // CEA 720x480p59.94 pixel clock
+`endif
+        .out1_deg(`VIDEO_480P_PIXEL_PHASE),
+        .out2_hz(0),
+        .out3_hz(0)
+`elsif VIDEO_720X480
+        // Full NovaVM build at CEA-style 720x480p. Keep the video PLL focused
+        // on exact 27/135 MHz; SDRAM stays on a separate 100/6.25 MHz PLL.
+        .in_hz  (25000000),
+        .out0_hz(135000000),  // 5x pixel clock for DDR TMDS
+        .out1_hz(27000000),   // CEA 720x480p pixel clock
+        .out2_hz(0),
+        .out3_hz(0)
+`else
         .in_hz  (25000000),
         .out0_hz(25000000),   // pixel clock
         .out1_hz(125000000),  // 5x pixel clock for DDR TMDS
@@ -62,10 +95,11 @@ module fpga_top (
                               // flipped to LOW by then, so doutA never latches
                               // (controller only latches port A when clkref is
                               // HIGH at q=7). Ratios verified in sim.
+`endif
     ) pll_inst (
         .clk_i      (clk25_mhz),
         .clk_o      (pll_clk),
-        .locked     (pll_locked),
+        .locked     (pll_video_locked),
         .reset      (1'b0),
         .standby    (1'b0),
         .phasesel   (2'b0),
@@ -74,10 +108,54 @@ module fpga_top (
         .phaseloadreg(1'b0)
     );
 
+`ifdef VIDEO_720X480
+    wire [3:0] pll_sdram_clk;
+    wire       pll_sdram_locked;
+
+    ecp5pll #(
+        .in_hz  (25000000),
+        .out0_hz(100000000),  // SDRAM clock
+        .out1_hz(6250000),    // SDRAM clkref — 16:1 ratio vs clk_sdram
+        .out2_hz(0),
+        .out3_hz(0)
+    ) pll_sdram_inst (
+        .clk_i      (clk25_mhz),
+        .clk_o      (pll_sdram_clk),
+        .locked     (pll_sdram_locked),
+        .reset      (1'b0),
+        .standby    (1'b0),
+        .phasesel   (2'b0),
+        .phasedir   (1'b0),
+        .phasestep  (1'b0),
+        .phaseloadreg(1'b0)
+    );
+
+    assign pll_locked = pll_video_locked & pll_sdram_locked;
+`else
+    assign pll_locked = pll_video_locked;
+`endif
+
+`ifdef VIDEO_480P_TESTPATTERN
+`ifdef VIDEO_VGA640_TIMING
+    wire clk_shift  = pll_clk[0];  // 125 MHz
+    wire clk_pixel  = pll_clk[1];  // 25 MHz
+`else
+    wire clk_shift  = pll_clk[0];  // 135 MHz
+    wire clk_pixel  = pll_clk[1];  // 27 MHz
+`endif
+    wire clk_sdram  = 1'b0;
+    wire clk_sdref  = 1'b0;
+`elsif VIDEO_720X480
+    wire clk_shift  = pll_clk[0];        // 135 MHz
+    wire clk_pixel  = pll_clk[1];        // 27 MHz
+    wire clk_sdram  = pll_sdram_clk[0];  // 100 MHz
+    wire clk_sdref  = pll_sdram_clk[1];  // 6.25 MHz — clkref for sdram.v (16:1)
+`else
     wire clk_pixel  = pll_clk[0];  // 25 MHz
     wire clk_shift  = pll_clk[1];  // 125 MHz
     wire clk_sdram  = pll_clk[2];  // 100 MHz
     wire clk_sdref  = pll_clk[3];  // 6.25 MHz — clkref for sdram.v (16:1)
+`endif
 
     // =========================================================================
     // Reset: hold reset until PLL locks, then release.
@@ -109,14 +187,282 @@ module fpga_top (
             rst_cnt <= rst_cnt - 1;
     end
 
+`ifdef VIDEO_480P_TESTPATTERN
+    // =========================================================================
+    // HDMI/DVI test pattern
+    // =========================================================================
+`ifdef VIDEO_VGA640_TIMING
+    localparam int CEA_H_ACTIVE = 640;
+    localparam int CEA_H_FRONT  = 16;
+    localparam int CEA_H_SYNC   = 96;
+    localparam int CEA_H_BACK   = 48;
+    localparam int CEA_H_TOTAL  = CEA_H_ACTIVE + CEA_H_FRONT + CEA_H_SYNC + CEA_H_BACK;
+
+    localparam int CEA_V_ACTIVE = 480;
+    localparam int CEA_V_FRONT  = 10;
+    localparam int CEA_V_SYNC   = 2;
+    localparam int CEA_V_BACK   = 33;
+    localparam int CEA_V_TOTAL  = CEA_V_ACTIVE + CEA_V_FRONT + CEA_V_SYNC + CEA_V_BACK;
+
+    localparam int NOVA_X0 = 0;
+    localparam int NOVA_X1 = 640;
+`else
+    localparam int CEA_H_ACTIVE = 720;
+    localparam int CEA_H_FRONT  = 16;
+    localparam int CEA_H_SYNC   = 62;
+    localparam int CEA_H_BACK   = 60;
+    localparam int CEA_H_TOTAL  = CEA_H_ACTIVE + CEA_H_FRONT + CEA_H_SYNC + CEA_H_BACK;
+
+    localparam int CEA_V_ACTIVE = 480;
+    localparam int CEA_V_FRONT  = 9;
+    localparam int CEA_V_SYNC   = 6;
+    localparam int CEA_V_BACK   = 30;
+    localparam int CEA_V_TOTAL  = CEA_V_ACTIVE + CEA_V_FRONT + CEA_V_SYNC + CEA_V_BACK;
+
+    localparam int NOVA_X0 = 40;
+    localparam int NOVA_X1 = 680;
+`endif
+
+    logic [9:0] test_h;
+    logic [9:0] test_v;
+    logic [9:0] test_bar_x;
+    logic       test_bar_dir;
+
+    always_ff @(posedge clk_pixel) begin
+        if (rst) begin
+            test_h       <= 10'd0;
+            test_v       <= 10'd0;
+            test_bar_x   <= 10'd40;
+            test_bar_dir <= 1'b0;
+        end else begin
+            if (test_h == CEA_H_TOTAL - 1) begin
+                test_h <= 10'd0;
+                if (test_v == CEA_V_TOTAL - 1) begin
+                    test_v <= 10'd0;
+                    if (!test_bar_dir) begin
+                        if (test_bar_x == NOVA_X1 - 17)
+                            test_bar_dir <= 1'b1;
+                        else
+                            test_bar_x <= test_bar_x + 10'd1;
+                    end else begin
+                        if (test_bar_x == NOVA_X0)
+                            test_bar_dir <= 1'b0;
+                        else
+                            test_bar_x <= test_bar_x - 10'd1;
+                    end
+                end else begin
+                    test_v <= test_v + 10'd1;
+                end
+            end else begin
+                test_h <= test_h + 10'd1;
+            end
+        end
+    end
+
+    wire test_active = (test_h < CEA_H_ACTIVE) && (test_v < CEA_V_ACTIVE);
+    wire test_hsync_pulse = (test_h >= CEA_H_ACTIVE + CEA_H_FRONT) &&
+                            (test_h <  CEA_H_ACTIVE + CEA_H_FRONT + CEA_H_SYNC);
+    wire test_vsync_pulse = (test_v >= CEA_V_ACTIVE + CEA_V_FRONT) &&
+                            (test_v <  CEA_V_ACTIVE + CEA_V_FRONT + CEA_V_SYNC);
+`ifdef VIDEO_VGA640_TIMING
+    // Match the known-good ULX3S reference project: active-low H, active-high V.
+    wire test_hsync  = ~test_hsync_pulse;
+    wire test_vsync  =  test_vsync_pulse;
+`else
+    // CEA 720x480p DTDs use negative H/V sync polarity: idle high, pulse low.
+    wire test_hsync  = ~test_hsync_pulse;
+    wire test_vsync  = ~test_vsync_pulse;
+`endif
+    wire test_canvas = test_active && (test_h >= NOVA_X0) && (test_h < NOVA_X1);
+    wire test_grid   = test_canvas && (((test_h - NOVA_X0) == 10'd0) ||
+                                       ((test_h - NOVA_X0) == 10'd319) ||
+                                       ((test_h - NOVA_X0) == 10'd639) ||
+                                       (test_v == 10'd0) ||
+                                       (test_v == 10'd239) ||
+                                       (test_v == 10'd479));
+    wire test_bar    = test_canvas &&
+                       (test_h >= test_bar_x) && (test_h < test_bar_x + 10'd16) &&
+                       (test_v >= 10'd208) && (test_v < 10'd272);
+
+    logic [23:0] test_rgb24;
+    always_comb begin
+        if (!test_active)
+            test_rgb24 = 24'h000000;
+        else if (!test_canvas)
+            test_rgb24 = 24'h103050;  // side border: visible but not eye-searing
+        else if (test_bar)
+            test_rgb24 = 24'hff4040;
+        else if (test_grid)
+            test_rgb24 = 24'hf0f0f0;
+        else
+            test_rgb24 = 24'h0010a0;
+    end
+
+    wire [1:0] tmds_red, tmds_green, tmds_blue, tmds_clock;
+`ifdef VIDEO_REF_HDMI
+    hdmi_device_ref #(
+        .DDR_ENABLED(1)
+    ) hdmi_ref_inst (
+        .pclk          (clk_pixel),
+        .tmds_clk      (clk_shift),
+        .in_vga_red    (test_rgb24[23:16]),
+        .in_vga_green  (test_rgb24[15:8]),
+        .in_vga_blue   (test_rgb24[7:0]),
+        .in_vga_blank  (~test_active),
+        .in_vga_vsync  (test_vsync),
+        .in_vga_hsync  (test_hsync),
+        .out_tmds_red  (tmds_red),
+        .out_tmds_green(tmds_green),
+        .out_tmds_blue (tmds_blue),
+        .out_tmds_clk  (tmds_clock)
+    );
+
+    ODDRX1F ref_ddr_clock (
+        .D0(tmds_clock[0]),
+        .D1(tmds_clock[1]),
+        .Q(gpdi_dp[3]),
+        .SCLK(clk_shift),
+        .RST(1'b0)
+    );
+    ODDRX1F ref_ddr_red (
+        .D0(tmds_red[0]),
+        .D1(tmds_red[1]),
+        .Q(gpdi_dp[2]),
+        .SCLK(clk_shift),
+        .RST(1'b0)
+    );
+    ODDRX1F ref_ddr_green (
+        .D0(tmds_green[0]),
+        .D1(tmds_green[1]),
+        .Q(gpdi_dp[1]),
+        .SCLK(clk_shift),
+        .RST(1'b0)
+    );
+    ODDRX1F ref_ddr_blue (
+        .D0(tmds_blue[0]),
+        .D1(tmds_blue[1]),
+        .Q(gpdi_dp[0]),
+        .SCLK(clk_shift),
+        .RST(1'b0)
+    );
+
+`ifndef GPDI_P_ONLY
+    ODDRX1F ref_ddr_clock_n (
+        .D0(~tmds_clock[0]),
+        .D1(~tmds_clock[1]),
+        .Q(gpdi_dn[3]),
+        .SCLK(clk_shift),
+        .RST(1'b0)
+    );
+    ODDRX1F ref_ddr_red_n (
+        .D0(~tmds_red[0]),
+        .D1(~tmds_red[1]),
+        .Q(gpdi_dn[2]),
+        .SCLK(clk_shift),
+        .RST(1'b0)
+    );
+    ODDRX1F ref_ddr_green_n (
+        .D0(~tmds_green[0]),
+        .D1(~tmds_green[1]),
+        .Q(gpdi_dn[1]),
+        .SCLK(clk_shift),
+        .RST(1'b0)
+    );
+    ODDRX1F ref_ddr_blue_n (
+        .D0(~tmds_blue[0]),
+        .D1(~tmds_blue[1]),
+        .Q(gpdi_dn[0]),
+        .SCLK(clk_shift),
+        .RST(1'b0)
+    );
+`endif
+`else
+`ifdef GPDI_P_ONLY
+    wire [3:0] gpdi_dn_unused;
+`endif
+
+    vga2dvid vga2dvid_inst (
+        .clk_pixel (clk_pixel),
+        .clk_shift (clk_shift),
+        .in_color  (test_rgb24),
+        .in_blank  (~test_active),
+        .in_hsync  (test_hsync),
+        .in_vsync  (test_vsync),
+        .resetn    (~rst),
+        .out_red   (tmds_red),
+        .out_green (tmds_green),
+        .out_blue  (tmds_blue),
+        .out_clock (tmds_clock)
+    );
+
+    fake_differential #(
+        .C_ddr(1),
+`ifdef GPDI_P_ONLY
+        .C_drive_n(0)
+`else
+        .C_drive_n(1)
+`endif
+    ) fake_diff_inst (
+        .clk_shift(clk_shift),
+        .in_clock (tmds_clock),
+        .in_red   (tmds_red),
+        .in_green (tmds_green),
+        .in_blue  (tmds_blue),
+        .out_p    (gpdi_dp),
+`ifdef GPDI_P_ONLY
+        .out_n    (gpdi_dn_unused)
+`else
+        .out_n    (gpdi_dn)
+`endif
+    );
+`endif
+
+    reg [24:0] heartbeat = 0;
+    always_ff @(posedge clk_pixel)
+        heartbeat <= heartbeat + 1;
+
+    assign leds[7]   = heartbeat[24];
+    assign leds[6]   = pll_locked;
+    assign leds[5]   = ~rst;
+    assign leds[4:0] = btn[4:0];
+
+    assign audio_l = 4'h8;
+    assign audio_r = 4'h8;
+
+    assign ftdi_rxd = 1'b1;
+    assign wifi_gpio0 = 1'b1;
+    assign wifi_rxd = 1'b1;
+
+    assign sdram_clk  = 1'b0;
+    assign sdram_cke  = 1'b0;
+    assign sdram_csn  = 1'b1;
+    assign sdram_wen  = 1'b1;
+    assign sdram_rasn = 1'b1;
+    assign sdram_casn = 1'b1;
+    assign sdram_ba   = 2'b00;
+    assign sdram_dqm  = 2'b11;
+    assign sdram_a    = 13'd0;
+    assign sdram_d    = 16'bzzzzzzzzzzzzzzzz;
+
+`ifdef SYNTHESIS
+    GSR GSR_INST (.GSR(1'b1));
+`endif
+
+`else
     // =========================================================================
     // UART receiver — keyboard input via FTDI serial (115200 8N1)
     // =========================================================================
+`ifdef VIDEO_720X480
+    localparam int UART_CLK_HZ = 27000000;
+`else
+    localparam int UART_CLK_HZ = 25000000;
+`endif
+
     wire [7:0] uart_data;
     wire       uart_valid;
 
     uart_rx #(
-        .CLK_HZ(25000000),
+        .CLK_HZ(UART_CLK_HZ),
         .BAUD  (9600)
     ) uart_inst (
         .clk  (clk_pixel),
@@ -140,7 +486,7 @@ module fpga_top (
     // ESP32 and FPGA. 3.125 Mbaud attempted and failed on this wiring; can
     // revisit with proper signal conditioning later.
     uart_rx #(
-        .CLK_HZ(25000000),
+        .CLK_HZ(UART_CLK_HZ),
         .BAUD  (115200)
     ) dbg_uart_rx (
         .clk  (clk_pixel),
@@ -151,7 +497,7 @@ module fpga_top (
     );
 
     uart_tx #(
-        .CLK_HZ(25000000),
+        .CLK_HZ(UART_CLK_HZ),
         .BAUD  (115200)
     ) dbg_uart_tx (
         .clk  (clk_pixel),
@@ -318,16 +664,27 @@ module fpga_top (
     wire [23:0] rgb24 = {vid_r, vid_r, vid_g, vid_g, vid_b, vid_b};
 
     // VGA timing — use VGC's own sync/DE signals (pipeline-aligned with pixel data)
-    // VGC outputs active-LOW hsync/vsync; vga2dvid expects active-HIGH hsync/vsync
+    // VGC outputs active-low sync. Preserve the established 640x480 polarity
+    // behavior, but emit negative-polarity CEA-style sync bits in 720x480 mode.
+`ifdef VIDEO_720X480
+    wire hdmi_hsync = vid_hsync;
+    wire hdmi_vsync = vid_vsync;
+`else
+    wire hdmi_hsync = ~vid_hsync;
+    wire hdmi_vsync = ~vid_vsync;
+`endif
     wire [1:0] tmds_red, tmds_green, tmds_blue, tmds_clock;
+`ifdef GPDI_P_ONLY
+    wire [3:0] gpdi_dn_unused;
+`endif
 
     vga2dvid vga2dvid_inst (
         .clk_pixel (clk_pixel),
         .clk_shift (clk_shift),
         .in_color  (rgb24),
         .in_blank  (~vid_de),
-        .in_hsync  (~vid_hsync),
-        .in_vsync  (~vid_vsync),
+        .in_hsync  (hdmi_hsync),
+        .in_vsync  (hdmi_vsync),
         .resetn    (~rst),
         .out_red   (tmds_red),
         .out_green (tmds_green),
@@ -336,14 +693,25 @@ module fpga_top (
     );
 
     // DDR output via fake_differential (drives both P and N pins)
-    fake_differential #(.C_ddr(1)) fake_diff_inst (
+    fake_differential #(
+        .C_ddr(1),
+`ifdef GPDI_P_ONLY
+        .C_drive_n(0)
+`else
+        .C_drive_n(1)
+`endif
+    ) fake_diff_inst (
         .clk_shift(clk_shift),
         .in_clock (tmds_clock),
         .in_red   (tmds_red),
         .in_green (tmds_green),
         .in_blue  (tmds_blue),
         .out_p    (gpdi_dp),
+`ifdef GPDI_P_ONLY
+        .out_n    (gpdi_dn_unused)
+`else
         .out_n    (gpdi_dn)
+`endif
     );
 
     // =========================================================================
@@ -460,6 +828,8 @@ module fpga_top (
     // Reference: Lattice "How to Use GSR/PUR/TSALL" technote.
 `ifdef SYNTHESIS
     GSR GSR_INST (.GSR(1'b1));
+`endif
+
 `endif
 
 endmodule

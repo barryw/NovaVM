@@ -401,12 +401,12 @@ public class TileEngineFunctionTests
             $"BLITFILL did not complete successfully. status={status:X2}");
 
         // Verify fill pattern: 3 cols x 2 rows at stride 80
-        Assert.AreEqual(7, bus.Read((ushort)(VgcConstants.ColorRamBase + 160)));
-        Assert.AreEqual(7, bus.Read((ushort)(VgcConstants.ColorRamBase + 161)));
-        Assert.AreEqual(7, bus.Read((ushort)(VgcConstants.ColorRamBase + 162)));
-        Assert.AreEqual(7, bus.Read((ushort)(VgcConstants.ColorRamBase + 240)));
-        Assert.AreEqual(7, bus.Read((ushort)(VgcConstants.ColorRamBase + 241)));
-        Assert.AreEqual(7, bus.Read((ushort)(VgcConstants.ColorRamBase + 242)));
+        Assert.AreEqual(7, bus.ReadVramByte(VgcConstants.VramPlaneColor, 160));
+        Assert.AreEqual(7, bus.ReadVramByte(VgcConstants.VramPlaneColor, 161));
+        Assert.AreEqual(7, bus.ReadVramByte(VgcConstants.VramPlaneColor, 162));
+        Assert.AreEqual(7, bus.ReadVramByte(VgcConstants.VramPlaneColor, 240));
+        Assert.AreEqual(7, bus.ReadVramByte(VgcConstants.VramPlaneColor, 241));
+        Assert.AreEqual(7, bus.ReadVramByte(VgcConstants.VramPlaneColor, 242));
     }
 
     [TestMethod]
@@ -453,7 +453,7 @@ public class TileEngineFunctionTests
         }
 
         Assert.AreEqual(VgcConstants.BltStatusOk, bus.Read((ushort)VgcConstants.BltStatus));
-        Assert.AreEqual(0x05, bus.Read((ushort)VgcConstants.ColorRamBase));
+        Assert.AreEqual(0x05, bus.ReadVramByte(VgcConstants.VramPlaneColor, 0));
 
         bus.Dispose();
     }

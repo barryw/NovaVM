@@ -36,16 +36,16 @@ module test_vgc_regs;
     task automatic test_color_registers();
         logic [7:0] rb;
         $display("");
-        $display("Test: BG/FG color registers — 4-bit (BORDER now no-op)");
+        $display("Test: BG/FG/BORDER color registers — 4-bit");
         for (int c = 0; c < 16; c++) begin
             bus_write(REG_BGCOL_A,  8'(c));   step(2);
             bus_write(REG_FGCOL_A,  8'(c));   step(2);
-            // $A00D writes accepted but ignored — border removed in 480-line mode
             bus_write(16'hA00D,      8'(c));   step(2);
             check_eq($sformatf("bg_color=%0d",     c), int'(dut.bg_color),     c);
             check_eq($sformatf("fg_color=%0d",     c), int'(dut.fg_color),     c);
+            check_eq($sformatf("border_color=%0d", c), int'(dut.border_color), c);
             bus_read(16'hA00D, rb); step(2);
-            check_eq($sformatf("$A00D reads 0 (c=%0d)", c), int'(rb), 0);
+            check_eq($sformatf("$A00D reads border color (c=%0d)", c), int'(rb), c);
         end
         // High nibble must be masked off
         bus_write(REG_BGCOL_A, 8'hF5); step(2);
@@ -53,9 +53,60 @@ module test_vgc_regs;
                  int'(dut.bg_color), 5);
     endtask
 
+    task automatic test_border_masks_sprites();
+        $display("");
+        $display("Test: border compositor masks sprite pixels outside Nova canvas");
+
+        force dut.visible_d2 = 1'b1;
+        force dut.in_text_area_d2 = 1'b0;
+        force dut.border_color = 4'd14;
+        force dut.mode = 3'd3;
+        force dut.spr_pixel_hit = 1'b1;
+        force dut.spr_pixel = 4'd2;
+        force dut.spr_pixel_pri = 2'd2;
+        #1;
+        check_eq("border pixel remains border color when sprite is behind it",
+                 int'(dut.pixel_color), 12'h08F);
+
+        force dut.in_text_area_d2 = 1'b1;
+        #1;
+        check_eq("canvas pixel still shows front-priority sprite",
+                 int'(dut.pixel_color), 12'h800);
+
+        release dut.visible_d2;
+        release dut.in_text_area_d2;
+        release dut.border_color;
+        release dut.mode;
+        release dut.spr_pixel_hit;
+        release dut.spr_pixel;
+        release dut.spr_pixel_pri;
+    endtask
+
+    task automatic test_sprite_scanline_read_prefetch();
+        $display("");
+        $display("Test: sprite scanline reader prefetches one physical pixel");
+
+        force dut.h_count_d2 = 10'd39;
+        #1;
+        check_eq("pixel before canvas prefetches sprite x=20",
+                 int'(dut.sprite_inst.slb_b_addr), 20);
+
+        force dut.h_count_d2 = 10'd40;
+        #1;
+        check_eq("first canvas pixel keeps sprite x=20",
+                 int'(dut.sprite_inst.slb_b_addr), 20);
+
+        force dut.h_count_d2 = 10'd41;
+        #1;
+        check_eq("second canvas pixel prefetches next sprite x=21",
+                 int'(dut.sprite_inst.slb_b_addr), 21);
+
+        release dut.h_count_d2;
+    endtask
+
     task automatic test_cursor_xy();
         $display("");
-        $display("Test: cursor_x (7-bit), cursor_y (5-bit)");
+        $display("Test: cursor_x (7-bit), cursor_y clamps to visible 50-row text area");
         // cursor_x range 0..127
         bus_write(REG_CURSORX_A, 8'd0);    step(2);
         check_eq("cursor_x=0",  int'(dut.cursor_x), 0);
@@ -68,12 +119,14 @@ module test_vgc_regs;
 
         bus_write(REG_CURSORY_A, 8'd0);    step(2);
         check_eq("cursor_y=0",  int'(dut.cursor_y), 0);
-        bus_write(REG_CURSORY_A, 8'd59);   step(2);
-        check_eq("cursor_y=59 (max valid row)", int'(dut.cursor_y), 59);
-        // top bits masked to 6 bits (ROWS=60 needs 6-bit field)
+        bus_write(REG_CURSORY_A, 8'd49);   step(2);
+        check_eq("cursor_y=49 (max valid row)", int'(dut.cursor_y), 49);
+        bus_write(REG_CURSORY_A, 8'd50);   step(2);
+        check_eq("cursor_y clamps 50 to 49", int'(dut.cursor_y), 49);
+        // Top bits masked to 6 bits, then clamped to the 50-row text area.
         bus_write(REG_CURSORY_A, 8'hFF);   step(2);
-        check_eq("cursor_y masks to 6 bits (0xFF → 63)",
-                 int'(dut.cursor_y), 63);
+        check_eq("cursor_y masks/clamps 0xFF to 49",
+                 int'(dut.cursor_y), 49);
     endtask
 
     task automatic test_scroll_registers();
@@ -145,14 +198,15 @@ module test_vgc_regs;
     endtask
 
     // CMD_MEMREAD = $19. Params: regs[17]=space, regs[18]=addr_lo, regs[19]=addr_hi.
-    // Result lands in regs[20] ($A014). Space 0=char, 1=color, 2=gfx, 3=sprite.
+    // Result lands in regs[20] ($A014). Spaces match the VDC-style VRAM port:
+    // 1=char, 2=color, 3=gfx, 4=sprite, 6=tile.
     task automatic test_memread_char();
         logic [7:0] rb;
         $display("");
-        $display("Test: CMD_MEMREAD (space 0 = char RAM)");
+        $display("Test: CMD_MEMREAD (space 1 = char RAM)");
         dut.text_inst.char_mem.mem[16'h0123] = 8'h5A;
         step(2);
-        write_param(0, 8'd0);           // space = char
+        write_param(0, VPLANE_CHAR_A);  // space = char
         write_param(1, 8'h23);          // addr_lo
         write_param(2, 8'h01);          // addr_hi → 0x0123
         write_cmd(8'h19);               // MemRead
@@ -164,10 +218,10 @@ module test_vgc_regs;
     task automatic test_memread_color();
         logic [7:0] rb;
         $display("");
-        $display("Test: CMD_MEMREAD (space 1 = color RAM)");
+        $display("Test: CMD_MEMREAD (space 2 = color RAM)");
         dut.text_inst.color_mem.mem[16'h0456] = 8'h3C;
         step(2);
-        write_param(0, 8'd1);           // space = color
+        write_param(0, VPLANE_COLOR_A); // space = color
         write_param(1, 8'h56);
         write_param(2, 8'h04);
         write_cmd(8'h19);
@@ -179,10 +233,10 @@ module test_vgc_regs;
     task automatic test_memread_gfx();
         logic [7:0] rb;
         $display("");
-        $display("Test: CMD_MEMREAD (space 2 = gfx RAM, 4-bit)");
+        $display("Test: CMD_MEMREAD (space 3 = gfx RAM, 4-bit)");
         dut.gfx_inst.gfx_mem.mem[16'h1234] = 4'hB;
         step(2);
-        write_param(0, 8'd2);
+        write_param(0, VPLANE_GFX_A);
         write_param(1, 8'h34);
         write_param(2, 8'h12);
         write_cmd(8'h19);
@@ -194,10 +248,10 @@ module test_vgc_regs;
     task automatic test_memread_sprite();
         logic [7:0] rb;
         $display("");
-        $display("Test: CMD_MEMREAD (space 3 = sprite RAM)");
-        dut.sprite_inst.spr_mem.mem[11'h1AB] = 8'hDE;
+        $display("Test: CMD_MEMREAD (space 4 = sprite RAM)");
+        poke_spr_pending_addr(11'h1AB, 8'hDE);
         step(2);
-        write_param(0, 8'd3);
+        write_param(0, VPLANE_SPRITE_A);
         write_param(1, 8'hAB);
         write_param(2, 8'h01);
         write_cmd(8'h19);
@@ -209,32 +263,32 @@ module test_vgc_regs;
     task automatic test_cpu_read_char_ram();
         logic [7:0] rb;
         $display("");
-        $display("Test: CPU bus reads from char RAM ($AA00-$B1CF)");
+        $display("Test: CPU bus reads char RAM through VDATA");
         // Plant known bytes
         dut.text_inst.char_mem.mem[0]    = 8'h41;
         dut.text_inst.char_mem.mem[79]   = 8'h42;
-        dut.text_inst.char_mem.mem[1999] = 8'h43;
+        dut.text_inst.char_mem.mem[3999] = 8'h43;
         step(2);
-        bus_read(16'hAA00, rb);                check_eq("read $AA00",        int'(rb), 8'h41);
-        bus_read(CHAR_RAM_BASE_A + 79, rb);    check_eq("read $AA00+79",     int'(rb), 8'h42);
-        bus_read(CHAR_RAM_BASE_A + 1999, rb);  check_eq("read last cell $B1CF", int'(rb), 8'h43);
+        vram_read(VPLANE_CHAR_A, 0, rb);       check_eq("read char[0]",       int'(rb), 8'h41);
+        vram_read(VPLANE_CHAR_A, 79, rb);      check_eq("read char[79]",      int'(rb), 8'h42);
+        vram_read(VPLANE_CHAR_A, 3999, rb);    check_eq("read char[3999]",    int'(rb), 8'h43);
     endtask
 
     task automatic test_cpu_read_color_ram();
         logic [7:0] rb;
         $display("");
-        $display("Test: CPU bus reads from color RAM ($B1D0-$B99F)");
+        $display("Test: CPU bus reads color RAM through VDATA");
         dut.text_inst.color_mem.mem[0]    = 8'hAA;
         dut.text_inst.color_mem.mem[500]  = 8'h55;
-        dut.text_inst.color_mem.mem[1999] = 8'h33;
+        dut.text_inst.color_mem.mem[3999] = 8'h33;
         step(2);
-        bus_read(COLOR_RAM_BASE_A, rb);         check_eq("color[0]",    int'(rb), 8'hAA);
-        bus_read(COLOR_RAM_BASE_A + 500, rb);   check_eq("color[500]",  int'(rb), 8'h55);
-        bus_read(COLOR_RAM_BASE_A + 1999, rb);  check_eq("color[1999]", int'(rb), 8'h33);
+        vram_read(VPLANE_COLOR_A, 0, rb);       check_eq("color[0]",    int'(rb), 8'hAA);
+        vram_read(VPLANE_COLOR_A, 500, rb);     check_eq("color[500]",  int'(rb), 8'h55);
+        vram_read(VPLANE_COLOR_A, 3999, rb);    check_eq("color[3999]", int'(rb), 8'h33);
     endtask
 
     // Sprite register readback — $A040-$A0BF was write-only before this test.
-    // Each sprite has 8 bytes: X lo, X hi, Y lo, Y hi, shape, flags, pri, trans.
+    // Each sprite has 8 bytes: X lo, X hi, Y lo, reserved, shape, flags, pri, trans.
     // Flags byte: bit 7 = enable, bit 1 = flip_v, bit 0 = flip_h.
     task automatic test_sprite_register_readback();
         logic [7:0] rb;
@@ -242,7 +296,8 @@ module test_vgc_regs;
         $display("");
         $display("Test: sprite register readback ($A040-$A0BF)");
 
-        // Sprite 0 — X=$1234, Y=$5678, shape=7, enable+flip_h, pri=2, trans=$A
+        // Sprite 0 — X=$1234, Y=$78, shape=7, enable+flip_h, pri=2, trans=$A.
+        // The former Y-high byte is reserved and must read back as zero.
         base = 16'hA040;
         bus_write(base + 0, 8'h34); step(2);
         bus_write(base + 1, 8'h12); step(2);
@@ -255,7 +310,7 @@ module test_vgc_regs;
         bus_read (base + 0, rb); check_eq("spr0 X lo  = 0x34", int'(rb), 8'h34);
         bus_read (base + 1, rb); check_eq("spr0 X hi  = 0x12", int'(rb), 8'h12);
         bus_read (base + 2, rb); check_eq("spr0 Y lo  = 0x78", int'(rb), 8'h78);
-        bus_read (base + 3, rb); check_eq("spr0 Y hi  = 0x56", int'(rb), 8'h56);
+        bus_read (base + 3, rb); check_eq("spr0 Y hi reserved = 0x00", int'(rb), 8'h00);
         bus_read (base + 4, rb); check_eq("spr0 shape = 0x07", int'(rb), 8'h07);
         bus_read (base + 5, rb); check_eq("spr0 flags = 0x81", int'(rb), 8'h81);
         bus_read (base + 6, rb); check_eq("spr0 pri   = 0x02", int'(rb), 8'h02);
@@ -269,7 +324,7 @@ module test_vgc_regs;
         bus_write(base + 5, 8'h82); step(2);  // enable+flip_v
         bus_read (base + 0, rb); check_eq("spr15 X lo  = 0xAB", int'(rb), 8'hAB);
         bus_read (base + 1, rb); check_eq("spr15 X hi  = 0xCD", int'(rb), 8'hCD);
-        bus_read (base + 3, rb); check_eq("spr15 Y hi  = 0xEF", int'(rb), 8'hEF);
+        bus_read (base + 3, rb); check_eq("spr15 Y hi reserved = 0x00", int'(rb), 8'h00);
         bus_read (base + 5, rb); check_eq("spr15 flags = 0x82", int'(rb), 8'h82);
 
         // Spr0 must be independent of spr15 writes
@@ -283,20 +338,20 @@ module test_vgc_regs;
         $display("Test: $A009 returns count of enabled sprites");
         // All disabled
         for (int i = 0; i < 16; i++)
-            dut.spr_enable[i] = 0;
+            dut.spr_next_enable[i] = 0;
         step(2);
         bus_read(16'hA009, rb);   check_eq("count=0 initially", int'(rb), 0);
 
         // Enable 3 sprites
-        dut.spr_enable[1] = 1;
-        dut.spr_enable[5] = 1;
-        dut.spr_enable[15] = 1;
+        dut.spr_next_enable[1] = 1;
+        dut.spr_next_enable[5] = 1;
+        dut.spr_next_enable[15] = 1;
         step(2);
         bus_read(16'hA009, rb);   check_eq("count=3 after enabling 3", int'(rb), 3);
 
         // Enable all 16
         for (int i = 0; i < 16; i++)
-            dut.spr_enable[i] = 1;
+            dut.spr_next_enable[i] = 1;
         step(2);
         bus_read(16'hA009, rb);   check_eq("count=16 (all enabled)", int'(rb), 16);
     endtask
@@ -352,7 +407,7 @@ module test_vgc_regs;
         logic [7:0] d;
         $display("");
         $display("Test: blitter-port read of sprite RAM");
-        dut.sprite_inst.spr_mem.mem[11'h200] = 8'h91;
+        poke_spr_pending_addr(11'h200, 8'h91);
         step(4);
         blt_read(3'd4, 16'h0200, d);
         check_eq("blt read sprite[0x200]", int'(d), 8'h91);
@@ -398,6 +453,8 @@ module test_vgc_regs;
 
         test_mode_register();
         test_color_registers();
+        test_border_masks_sprites();
+        test_sprite_scanline_read_prefetch();
         test_cursor_xy();
         test_scroll_registers();
         test_font_slot();

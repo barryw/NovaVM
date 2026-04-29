@@ -94,7 +94,7 @@ module test_copper_lists;
     endtask
 
     task automatic run_frame();
-        run_clocks(800 * 525);
+        run_clocks(794 * 525);
     endtask
 
     task automatic check(input string name, input logic condition);

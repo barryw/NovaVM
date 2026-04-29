@@ -71,16 +71,16 @@ public struct SpriteRenderState
         switch (field)
         {
             case VgcConstants.SprRegXLo:
-                _x[sprite] = (short)((_x[sprite] & ~0xFF) | value);
+                _x[sprite] = (_x[sprite] & 0xFF00) | value;
                 break;
             case VgcConstants.SprRegXHi:
-                _x[sprite] = (short)((value << 8) | (_x[sprite] & 0xFF));
+                _x[sprite] = (value << 8) | (_x[sprite] & 0xFF);
                 break;
             case VgcConstants.SprRegYLo:
-                _y[sprite] = (short)((_y[sprite] & ~0xFF) | value);
+                _y[sprite] = value;
                 break;
             case VgcConstants.SprRegYHi:
-                _y[sprite] = (short)((value << 8) | (_y[sprite] & 0xFF));
+                // Reserved: sprite Y is an unsigned byte.
                 break;
             case VgcConstants.SprRegShape:
                 _shapeIndex[sprite] = value;

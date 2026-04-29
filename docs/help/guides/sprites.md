@@ -17,7 +17,7 @@ SPRITE 0,ON
 SPRITE 0,100,80
 ```
 
-The first command enables sprite 0. The second sets its position to x=100, y=80. Coordinates use the graphics resolution (0-319 for x, 0-199 for y).
+The first command enables sprite 0. The second sets its position to x=100, y=80. Sprite coordinates use the full half-resolution video plane. In 720x480 output, X is 0-359 and Y is 0-239, including the border area; the centered 640x400 canvas starts at sprite coordinate 20,20.
 
 ## Defining Shapes
 

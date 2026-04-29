@@ -589,7 +589,7 @@ public class SpriteEditorView : UserControl
     private void UpdateGloadHint()
     {
         int offset = _selectedSprite * VgcConstants.SpriteShapeSize;
-        _gloadHint.Text = $"GLOAD \"name\",3,{offset},{VgcConstants.SpriteShapeSize}";
+        _gloadHint.Text = $"GLOAD \"name\",{VgcConstants.MemSpaceSprite},{offset},{VgcConstants.SpriteShapeSize}";
     }
 
     // -------------------------------------------------------------------------

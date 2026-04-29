@@ -39,9 +39,9 @@ module test_blitter;
     logic [7:0] sim_ram [0:65535];
     logic [7:0] sim_xram [0:524287];
     // VGC memory spaces (simplified for test)
-    logic [7:0] sim_char [0:4799];
-    logic [7:0] sim_color [0:4799];
-    logic [3:0] sim_gfx [0:76799];
+    logic [7:0] sim_char [0:3999];
+    logic [7:0] sim_color [0:3999];
+    logic [3:0] sim_gfx [0:63999];
     logic [7:0] sim_sprite [0:32767];
 
     // Synchronous 1-cycle RAM/XRAM reads — matches real dpram behavior in
@@ -59,9 +59,9 @@ module test_blitter;
     logic [7:0] blt_vgc_rdata;
     always_ff @(posedge clk) begin
         case (blt_vgc_space)
-            3'd1: blt_vgc_rdata <= sim_char[blt_vgc_addr[12:0]];
-            3'd2: blt_vgc_rdata <= sim_color[blt_vgc_addr[12:0]];
-            3'd3: blt_vgc_rdata <= {4'b0, sim_gfx[blt_vgc_addr]};
+            3'd1: blt_vgc_rdata <= sim_char[blt_vgc_addr[11:0]];
+            3'd2: blt_vgc_rdata <= sim_color[blt_vgc_addr[11:0]];
+            3'd3: blt_vgc_rdata <= {4'b0, sim_gfx[blt_vgc_addr[15:0]]};
             3'd4: blt_vgc_rdata <= sim_sprite[blt_vgc_addr[14:0]];
             default: blt_vgc_rdata <= 8'h00;
         endcase
@@ -71,9 +71,9 @@ module test_blitter;
     always_ff @(posedge clk) begin
         if (blt_vgc_we) begin
             case (blt_vgc_space)
-                3'd1: sim_char[blt_vgc_addr[12:0]]   <= blt_vgc_wdata;
-                3'd2: sim_color[blt_vgc_addr[12:0]]   <= blt_vgc_wdata;
-                3'd3: sim_gfx[blt_vgc_addr]           <= blt_vgc_wdata[3:0];
+                3'd1: sim_char[blt_vgc_addr[11:0]]    <= blt_vgc_wdata;
+                3'd2: sim_color[blt_vgc_addr[11:0]]   <= blt_vgc_wdata;
+                3'd3: sim_gfx[blt_vgc_addr[15:0]]     <= blt_vgc_wdata[3:0];
                 3'd4: sim_sprite[blt_vgc_addr[14:0]]   <= blt_vgc_wdata;
                 default: ;
             endcase
@@ -204,8 +204,8 @@ module test_blitter;
         cpu_addr = 0; cpu_wdata = 0;
 
         for (int i = 0; i < 65536; i++) sim_ram[i] = 0;
-        for (int i = 0; i < 4800; i++) begin sim_char[i] = 0; sim_color[i] = 0; end
-        for (int i = 0; i < 76800; i++) sim_gfx[i] = 0;
+        for (int i = 0; i < 4000; i++) begin sim_char[i] = 0; sim_color[i] = 0; end
+        for (int i = 0; i < 64000; i++) sim_gfx[i] = 0;
         for (int i = 0; i < 32768; i++) sim_sprite[i] = 0;
 
         repeat(50) @(posedge clk);
@@ -432,8 +432,8 @@ module test_blitter;
 
         // ----- Test 17: Range validation — src out of bounds -----
         $display("Test: Range validation");
-        // Char RAM is 4800 bytes (80×60). Try to read beyond it.
-        setup_copy(1, 4790, 2000, 0, 16'hA000, 20, 20, 1);
+        // Char RAM is 4000 bytes (80×50). Try to read beyond it.
+        setup_copy(1, 3990, 2000, 0, 16'hA000, 20, 20, 1);
         blt_start();
         wait_blt_done();
         check("src range: status error", dut.regs[1] == 8'h03);

@@ -1511,21 +1511,21 @@ public class EhBasicTokenizationTests
         Assert.AreEqual(VgcConstants.BltStatusOk, bltStatus,
             $"BLITCOPY did not complete successfully. status={bltStatus:X2} err={bltErr:X2}\n{screenAfterCopy}");
 
-        Assert.AreEqual(1, bus.Read((ushort)(VgcConstants.ColorRamBase + 0)));
-        Assert.AreEqual(2, bus.Read((ushort)(VgcConstants.ColorRamBase + 1)));
-        Assert.AreEqual(3, bus.Read((ushort)(VgcConstants.ColorRamBase + 2)));
-        Assert.AreEqual(4, bus.Read((ushort)(VgcConstants.ColorRamBase + 80)));
-        Assert.AreEqual(5, bus.Read((ushort)(VgcConstants.ColorRamBase + 81)));
-        Assert.AreEqual(6, bus.Read((ushort)(VgcConstants.ColorRamBase + 82)));
+        Assert.AreEqual(1, bus.ReadVramByte(VgcConstants.VramPlaneColor, 0));
+        Assert.AreEqual(2, bus.ReadVramByte(VgcConstants.VramPlaneColor, 1));
+        Assert.AreEqual(3, bus.ReadVramByte(VgcConstants.VramPlaneColor, 2));
+        Assert.AreEqual(4, bus.ReadVramByte(VgcConstants.VramPlaneColor, 80));
+        Assert.AreEqual(5, bus.ReadVramByte(VgcConstants.VramPlaneColor, 81));
+        Assert.AreEqual(6, bus.ReadVramByte(VgcConstants.VramPlaneColor, 82));
 
         EnterLine(editor, "BLITFILL 2,160,80,2,2,9");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
         RunCpuSteps(cpu, 500_000);
 
-        Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 160)));
-        Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 161)));
-        Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 240)));
-        Assert.AreEqual(9, bus.Read((ushort)(VgcConstants.ColorRamBase + 241)));
+        Assert.AreEqual(9, bus.ReadVramByte(VgcConstants.VramPlaneColor, 160));
+        Assert.AreEqual(9, bus.ReadVramByte(VgcConstants.VramPlaneColor, 161));
+        Assert.AreEqual(9, bus.ReadVramByte(VgcConstants.VramPlaneColor, 240));
+        Assert.AreEqual(9, bus.ReadVramByte(VgcConstants.VramPlaneColor, 241));
 
     }
 

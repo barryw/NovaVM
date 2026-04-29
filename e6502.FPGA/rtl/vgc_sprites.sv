@@ -13,17 +13,21 @@ module vgc_sprites (
     input  logic [10:0] spr_a_addr,
     input  logic [7:0]  spr_a_din,
     input  logic        spr_a_we,
+    input  logic        spr_a_re,
     output logic [7:0]  spr_a_dout,
 
     // --- Timing inputs ---
     input  logic [9:0]  h_count,
     input  logic [9:0]  v_count,
-    input  logic        in_text_area_d2,
-    input  logic [8:0]  gfx_x_d2,
+    input  logic        sprite_frame_commit,
+    input  logic        shape_publish_block,
+    output logic        shape_sync_busy,
+    input  logic        visible_d2,
+    input  logic [8:0]  sprite_x_d2,
 
     // --- Sprite attributes (packed: 16 entries per vector) ---
-    // Sprite X/Y are signed 16-bit so firmware can place sprites
-    // partly or fully off the left/top edges (negative coords).
+    // Sprite X is an unsigned 16-bit logical coordinate. Sprite Y uses the
+    // low byte of its packed register; the high byte is reserved/ignored.
     input  logic [16*16-1:0] spr_x_flat,
     input  logic [16*16-1:0] spr_y_flat,
     input  logic [15:0]      spr_enable_flat,
@@ -42,17 +46,21 @@ module vgc_sprites (
     output logic [7:0]  collision_bg_bits
 );
 
+`ifdef VIDEO_720X480
+    localparam H_ACTIVE  = 720;
+`else
     localparam H_ACTIVE  = 640;
+`endif
     localparam V_ACTIVE  = 480;
-    localparam GFX_W     = 320;
-    localparam GFX_H     = 240;
+    localparam SPR_PLANE_W = H_ACTIVE / 2;
+    localparam SPR_PLANE_H = V_ACTIVE / 2;
     localparam NUM_SPRITES = 16;
     localparam SPR_W     = 16;
     localparam SPR_H     = 16;
 
     // Unpack flat vectors into local arrays for readability
-    logic signed [15:0] spr_x [0:15];
-    logic signed [15:0] spr_y [0:15];
+    logic [15:0] spr_x [0:15];
+    logic [7:0]  spr_y [0:15];
     logic        spr_enable [0:15];
     logic        spr_flip_h [0:15];
     logic        spr_flip_v [0:15];
@@ -63,7 +71,7 @@ module vgc_sprites (
     always_comb begin
         for (int i = 0; i < 16; i++) begin
             spr_x[i]      = spr_x_flat[i*16 +: 16];
-            spr_y[i]      = spr_y_flat[i*16 +: 16];
+            spr_y[i]      = spr_y_flat[i*16 +: 8];
             spr_enable[i]  = spr_enable_flat[i];
             spr_flip_h[i]  = spr_flip_h_flat[i];
             spr_flip_v[i]  = spr_flip_v_flat[i];
@@ -74,16 +82,168 @@ module vgc_sprites (
     end
 
     // =========================================================================
-    // Memory — dpram instance
+    // Sprite shape memory — active/pending banks
     // =========================================================================
     logic [10:0] spr_b_addr;
     logic [7:0]  spr_b_dout;
 
-    dpram #(.WIDTH(8), .DEPTH(2048)) spr_mem (
+    logic        active_shape_bank;
+    wire         pending_shape_bank = ~active_shape_bank;
+    logic        shape_pending_dirty;
+
+    localparam SHCOPY_IDLE    = 2'd0;
+    localparam SHCOPY_READ    = 2'd1;
+    localparam SHCOPY_CAPTURE = 2'd2;
+    localparam SHCOPY_WRITE   = 2'd3;
+
+    logic [1:0]  shape_copy_state;
+    logic [10:0] shape_copy_addr;
+    logic [10:0] shape_copy_addr_latched;
+    logic [7:0]  shape_copy_data;
+    logic [2047:0] shape_copy_dirty;
+
+    logic [10:0] spr0_a_addr, spr1_a_addr;
+    logic [7:0]  spr0_a_din,  spr1_a_din;
+    logic        spr0_a_we,   spr1_a_we;
+    logic [7:0]  spr0_a_dout, spr1_a_dout;
+    logic [10:0] spr0_b_addr, spr1_b_addr;
+    logic [7:0]  spr0_b_dout, spr1_b_dout;
+
+    dpram #(.WIDTH(8), .DEPTH(2048)) spr_mem0 (
         .clk(clk),
-        .addr_a(spr_a_addr), .din_a(spr_a_din), .we_a(spr_a_we), .dout_a(spr_a_dout),
-        .addr_b(spr_b_addr), .dout_b(spr_b_dout)
+        .addr_a(spr0_a_addr), .din_a(spr0_a_din), .we_a(spr0_a_we), .dout_a(spr0_a_dout),
+        .addr_b(spr0_b_addr), .dout_b(spr0_b_dout)
     );
+
+    dpram #(.WIDTH(8), .DEPTH(2048)) spr_mem1 (
+        .clk(clk),
+        .addr_a(spr1_a_addr), .din_a(spr1_a_din), .we_a(spr1_a_we), .dout_a(spr1_a_dout),
+        .addr_b(spr1_b_addr), .dout_b(spr1_b_dout)
+    );
+
+    wire [7:0] active_shape_a_dout  = active_shape_bank ? spr1_a_dout : spr0_a_dout;
+    wire [7:0] active_shape_b_dout  = active_shape_bank ? spr1_b_dout : spr0_b_dout;
+
+    wire user_shape_access = spr_a_we || spr_a_re;
+    wire shape_publish_fire = sprite_frame_commit && shape_pending_dirty &&
+                              !shape_sync_busy && !shape_publish_block &&
+                              !user_shape_access;
+    wire spr_a_addr_synced = !shape_sync_busy || shape_copy_dirty[spr_a_addr] ||
+                             (spr_a_addr < shape_copy_addr);
+    wire spr_a_read_uses_pending = spr_a_addr_synced;
+    wire spr_a_read_bank = spr_a_read_uses_pending ? pending_shape_bank : active_shape_bank;
+    wire copy_write_fire = shape_sync_busy &&
+                           shape_copy_state == SHCOPY_WRITE &&
+                           !user_shape_access &&
+                           !shape_copy_dirty[shape_copy_addr_latched];
+
+    logic spr_a_read_bank_d;
+
+    assign spr_a_dout = spr_a_read_bank_d ? spr1_a_dout : spr0_a_dout;
+
+    always_comb begin
+        spr0_a_addr = 11'd0; spr0_a_din = 8'd0; spr0_a_we = 1'b0;
+        spr1_a_addr = 11'd0; spr1_a_din = 8'd0; spr1_a_we = 1'b0;
+        spr0_b_addr = active_shape_bank ? 11'd0 : spr_b_addr;
+        spr1_b_addr = active_shape_bank ? spr_b_addr : 11'd0;
+
+        if (user_shape_access) begin
+            // Read both banks so RMW paths can select the coherent source after
+            // one-cycle BRAM latency. Writes always target the pending bank.
+            spr0_a_addr = spr_a_addr;
+            spr1_a_addr = spr_a_addr;
+            if (spr_a_we) begin
+                if (pending_shape_bank) begin
+                    spr1_a_din = spr_a_din;
+                    spr1_a_we  = 1'b1;
+                end else begin
+                    spr0_a_din = spr_a_din;
+                    spr0_a_we  = 1'b1;
+                end
+            end
+        end else if (shape_sync_busy) begin
+            case (shape_copy_state)
+                SHCOPY_READ: begin
+                    if (active_shape_bank)
+                        spr1_a_addr = shape_copy_addr;
+                    else
+                        spr0_a_addr = shape_copy_addr;
+                end
+                SHCOPY_WRITE: begin
+                    if (pending_shape_bank) begin
+                        spr1_a_addr = shape_copy_addr_latched;
+                        spr1_a_din  = shape_copy_data;
+                        spr1_a_we   = copy_write_fire;
+                    end else begin
+                        spr0_a_addr = shape_copy_addr_latched;
+                        spr0_a_din  = shape_copy_data;
+                        spr0_a_we   = copy_write_fire;
+                    end
+                end
+                default: ;
+            endcase
+        end
+    end
+
+    assign spr_b_dout = active_shape_b_dout;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            active_shape_bank <= 1'b0;
+            shape_pending_dirty <= 1'b0;
+            shape_sync_busy <= 1'b0;
+            shape_copy_state <= SHCOPY_IDLE;
+            shape_copy_addr <= 11'd0;
+            shape_copy_addr_latched <= 11'd0;
+            shape_copy_data <= 8'd0;
+            shape_copy_dirty <= '0;
+            spr_a_read_bank_d <= 1'b0;
+        end else begin
+            if (spr_a_re)
+                spr_a_read_bank_d <= spr_a_read_bank;
+
+            if (shape_publish_fire) begin
+                active_shape_bank <= pending_shape_bank;
+                shape_pending_dirty <= spr_a_we;
+                shape_sync_busy <= 1'b1;
+                shape_copy_state <= SHCOPY_READ;
+                shape_copy_addr <= 11'd0;
+                shape_copy_addr_latched <= 11'd0;
+                shape_copy_dirty <= '0;
+            end else if (spr_a_we) begin
+                shape_pending_dirty <= 1'b1;
+            end
+
+            if (spr_a_we && shape_sync_busy)
+                shape_copy_dirty[spr_a_addr] <= 1'b1;
+
+            if (!shape_publish_fire && shape_sync_busy) begin
+                case (shape_copy_state)
+                    SHCOPY_READ: begin
+                        if (!user_shape_access)
+                            shape_copy_state <= SHCOPY_CAPTURE;
+                    end
+                    SHCOPY_CAPTURE: begin
+                        shape_copy_addr_latched <= shape_copy_addr;
+                        shape_copy_data <= active_shape_a_dout;
+                        shape_copy_state <= SHCOPY_WRITE;
+                    end
+                    SHCOPY_WRITE: begin
+                        if (!user_shape_access) begin
+                            if (shape_copy_addr == 11'd2047) begin
+                                shape_sync_busy <= 1'b0;
+                                shape_copy_state <= SHCOPY_IDLE;
+                            end else begin
+                                shape_copy_addr <= shape_copy_addr + 11'd1;
+                                shape_copy_state <= SHCOPY_READ;
+                            end
+                        end
+                    end
+                    default: shape_copy_state <= SHCOPY_READ;
+                endcase
+            end
+        end
+    end
 
     // =========================================================================
     // Sprite scanline buffers — EXPLICIT FF ARRAYS (not memory inference)
@@ -101,8 +261,8 @@ module vgc_sprites (
     //
     // The buffers are ping-ponged. One bank is read by compositing while the
     // other is cleared/filled for the next native VGA line. A single buffer
-    // cannot work reliably here: clear alone takes 320 cycles and hblank is
-    // only 160 cycles at 640x480, so the old design modified the buffer while
+    // cannot work reliably here: clear alone takes the full sprite-plane
+    // width (320 or 360 cycles), so the old design modified the buffer while
     // the next visible line was already reading it. That matches the observed
     // "solid 16-pixel gray bar" artifact when stale sprite pixels survive.
     // =========================================================================
@@ -115,20 +275,20 @@ module vgc_sprites (
     logic        slb_display_bank;
 
     (* ram_style = "registers" *)
-    reg [6:0] slb_mem [0:1][0:GFX_W-1];
+    reg [6:0] slb_mem [0:1][0:SPR_PLANE_W-1];
 
     initial begin
         slb_display_bank = 1'b0;
         slb_a_bank = 1'b1;
         for (int bank = 0; bank < 2; bank++)
-            for (int i = 0; i < GFX_W; i++)
+            for (int i = 0; i < SPR_PLANE_W; i++)
                 slb_mem[bank][i] = 7'd0;
     end
 
     always_ff @(posedge clk) begin
-        if (slb_a_we && slb_a_addr < GFX_W)
+        if (slb_a_we && slb_a_addr < SPR_PLANE_W)
             slb_mem[slb_a_bank][slb_a_addr] <= slb_a_din;
-        slb_b_dout <= (slb_b_addr < GFX_W) ? slb_mem[slb_display_bank][slb_b_addr] : 7'd0;
+        slb_b_dout <= (slb_b_addr < SPR_PLANE_W) ? slb_mem[slb_display_bank][slb_b_addr] : 7'd0;
     end
 
     // Unpack port B read for rendering
@@ -154,7 +314,7 @@ module vgc_sprites (
     logic        spr_eval_flip_h;
     logic        spr_eval_flip_v;
     logic [1:0]  spr_eval_pri_r;
-    logic signed [15:0] spr_eval_x_r;
+    logic [15:0] spr_eval_x_r;
     logic [3:0]  spr_eval_shape_r;
     logic [3:0]  spr_eval_trans_r;
     logic [7:0]  spr_next_scanline;
@@ -162,7 +322,7 @@ module vgc_sprites (
 
     wire        visible_line_start = (h_count == 10'd0) && (v_count < V_ACTIVE);
     wire [9:0]  spr_prep_v = (v_count == V_ACTIVE - 1) ? 10'd0 : (v_count + 10'd1);
-    wire [7:0]  spr_prep_y = spr_prep_v[8:1];  // 640x480 native → 320x240 sprite plane
+    wire [7:0]  spr_prep_y = spr_prep_v[8:1];  // 480 native lines -> 240 sprite rows
 
     initial begin
         spr_eval_state = SPR_IDLE;
@@ -173,24 +333,18 @@ module vgc_sprites (
     // =========================================================================
     // Scanline buffer read (port B, 1-cycle latency — address set in pipeline)
     // =========================================================================
-    // gfx_x_d2 is the pixel coordinate at pipeline stage d2.
-    // We need the read result available at d2, so drive address from gfx_x_d1
-    // (one stage earlier). gfx_x_d1 = gfx_x_d2 will be on next cycle.
-    // The render pipeline in vgc.sv provides gfx_x_d2; we derive d1 as d2's
-    // next value: simply use (h_count[9:1] - border offset) but the simplest
-    // correct approach is to drive slb_b_addr combinationally from gfx_x_d2
-    // and accept that the read data (slb_rd_*) corresponds to the *previous*
-    // cycle's address. The parent vgc.sv already accounts for dpram latency
-    // by using the d2 pipeline stage for the address and d3 for the data.
-    // So we just wire slb_b_addr = gfx_x_d2 and the outputs are read next cycle.
-    assign slb_b_addr = gfx_x_d2;
+    // sprite_x_d2 is the full active-video sprite coordinate at pipeline d2.
+    // We keep the same 1-cycle line-buffer read behavior as the old canvas
+    // path. The parent VGC pipeline already delays the active-video flags.
+    // So we just wire slb_b_addr = sprite_x_d2 and the outputs are read next cycle.
+    assign slb_b_addr = sprite_x_d2;
 
     always_comb begin
         spr_pixel     = 4'h0;
         spr_pixel_pri = 2'd0;
         spr_pixel_hit = 0;
         collision_bg_bits = 8'h00;
-        if (in_text_area_d2 && gfx_x_d2 < GFX_W) begin
+        if (visible_d2 && sprite_x_d2 < SPR_PLANE_W) begin
             if (slb_rd_valid) begin
                 spr_pixel     = slb_rd_color;
                 spr_pixel_pri = slb_rd_pri;
@@ -229,7 +383,7 @@ module vgc_sprites (
                     slb_a_addr <= spr_clear_x;
                     slb_a_din  <= 7'd0;
                     slb_a_we   <= 1;
-                    if (spr_clear_x >= 319) begin
+                    if (spr_clear_x >= SPR_PLANE_W - 1) begin
                         spr_eval_state <= SPR_CHECK;
                         spr_eval_idx <= 0;
                     end else
@@ -238,21 +392,25 @@ module vgc_sprites (
                 SPR_CHECK: begin
                     if (spr_eval_idx < 16) begin
                         if (spr_enable[spr_eval_idx]) begin
-                            // Signed compare: spr_y may be negative (partially
-                            // off-screen sprite sliding in from the top).
-                            if ($signed({8'b0, spr_next_scanline}) >= spr_y[spr_eval_idx] &&
-                                $signed({8'b0, spr_next_scanline}) <  spr_y[spr_eval_idx] + 16'sd16) begin
-                                spr_eval_y_line <= 8'($signed({8'b0, spr_next_scanline}) - spr_y[spr_eval_idx]);
-                                spr_eval_flip_h <= spr_flip_h[spr_eval_idx];
-                                spr_eval_flip_v <= spr_flip_v[spr_eval_idx];
-                                spr_eval_pri_r <= spr_pri[spr_eval_idx];
-                                spr_eval_x_r <= spr_x[spr_eval_idx];
-                                spr_eval_shape_r <= spr_shape[spr_eval_idx];
-                                spr_eval_trans_r <= spr_trans[spr_eval_idx];
-                                spr_read_byte <= 0;
-                                spr_eval_state <= SPR_READ;
-                            end else begin
-                                spr_eval_idx <= spr_eval_idx + 1;
+                            begin
+                                logic [8:0] scanline_y;
+                                logic [8:0] sprite_y;
+                                scanline_y = {1'b0, spr_next_scanline};
+                                sprite_y = {1'b0, spr_y[spr_eval_idx]};
+                                if (scanline_y >= sprite_y &&
+                                    scanline_y <  sprite_y + 9'd16) begin
+                                    spr_eval_y_line <= 8'(scanline_y - sprite_y);
+                                    spr_eval_flip_h <= spr_flip_h[spr_eval_idx];
+                                    spr_eval_flip_v <= spr_flip_v[spr_eval_idx];
+                                    spr_eval_pri_r <= spr_pri[spr_eval_idx];
+                                    spr_eval_x_r <= spr_x[spr_eval_idx];
+                                    spr_eval_shape_r <= spr_shape[spr_eval_idx];
+                                    spr_eval_trans_r <= spr_trans[spr_eval_idx];
+                                    spr_read_byte <= 0;
+                                    spr_eval_state <= SPR_READ;
+                                end else begin
+                                    spr_eval_idx <= spr_eval_idx + 1;
+                                end
                             end
                         end else begin
                             spr_eval_idx <= spr_eval_idx + 1;
@@ -285,9 +443,7 @@ module vgc_sprites (
                     begin
                         logic [3:0] fx;
                         logic [3:0] color;
-                        // Signed screen_x so spr_eval_x_r < 0 clips naturally —
-                        // the left-edge guard rejects negatives.
-                        logic signed [15:0] screen_x;
+                        logic [16:0] screen_x;
 
                         fx = spr_eval_flip_h ? (4'd15 - spr_write_px[3:0]) : spr_write_px[3:0];
                         if (fx[0])
@@ -295,8 +451,8 @@ module vgc_sprites (
                         else
                             color = spr_row_data[fx[3:1]][7:4];
 
-                        screen_x = spr_eval_x_r + {12'b0, spr_write_px[3:0]};
-                        if (screen_x >= 0 && screen_x < 16'sd320 && color != spr_eval_trans_r) begin
+                        screen_x = {1'b0, spr_eval_x_r} + {13'b0, spr_write_px[3:0]};
+                        if (screen_x < SPR_PLANE_W && color != spr_eval_trans_r) begin
                             slb_a_addr <= screen_x[8:0];
                             slb_a_din  <= {spr_eval_pri_r, color, 1'b1};
                             slb_a_we   <= 1;

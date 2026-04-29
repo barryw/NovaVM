@@ -23,10 +23,12 @@
 #include <fcntl.h>
 #include <errno.h>
 
-static const int H_TOTAL=800, V_TOTAL=525, FRAME_CLKS=H_TOTAL*V_TOTAL;
+static const int H_TOTAL=794, V_TOTAL=525, FRAME_CLKS=H_TOTAL*V_TOTAL;
 static const int V_BORDER=40, DISP_W=640, DISP_H=400, SCALE=2;
-static const int SCREEN_COLS=80, SCREEN_ROWS=25;
-static const int CHAR_RAM_BASE=0xAA00, CURSOR_X_REG=0xA003, CURSOR_Y_REG=0xA004;
+static const int SCREEN_COLS=80, SCREEN_ROWS=50;
+static const int CURSOR_X_REG=0xA003, CURSOR_Y_REG=0xA004;
+static const int VRAM_PLANE_CHAR=1, VRAM_PLANE_COLOR=2, VRAM_PLANE_GFX=3, VRAM_PLANE_SPRITE=4, VRAM_PLANE_TILE=6;
+static const int VRAM_DEBUG_MAX_BLOCK=4096;
 static const int DEFAULT_TCP_PORT=6503;
 
 static uint32_t framebuf[DISP_W * DISP_H];
@@ -38,7 +40,7 @@ static std::queue<uint8_t> key_queue;
 // by averaging samples. Pixel clock / 44100 ≈ 570 clocks per audio sample.
 static const int AUDIO_RATE = 44100;
 static const int AUDIO_BUFSIZE = 2048;  // SDL audio buffer size in samples
-static const int PIX_PER_SAMPLE = 25175000 / AUDIO_RATE;  // ~570
+static const int PIX_PER_SAMPLE = 25000000 / AUDIO_RATE;  // ~567
 
 // Ring buffer for audio output (stereo interleaved int16)
 static const int AUDIO_RING_SIZE = 16384;
@@ -154,12 +156,21 @@ static void poke_ram(uint16_t addr, uint8_t val) {
     top->dbg_poke_en=1; top->dbg_poke_addr=addr; top->dbg_poke_data=val;
     step_clock(); top->dbg_poke_en=0;
 }
+static uint8_t dbg_vram_read(uint8_t space, uint32_t addr) {
+    top->dbg_vram_read_en = 1;
+    top->dbg_vram_space = space;
+    top->dbg_vram_addr = addr;
+    top->eval();
+    uint8_t v = top->dbg_vram_rdata;
+    top->dbg_vram_read_en = 0;
+    return v;
+}
 
 static std::string read_screen_line(int row) {
     if (row<0||row>=SCREEN_ROWS) return "";
     std::string line; line.reserve(SCREEN_COLS);
     for (int c=0; c<SCREEN_COLS; c++) {
-        uint8_t ch=peek_ram(CHAR_RAM_BASE+row*SCREEN_COLS+c);
+        uint8_t ch=dbg_vram_read(VRAM_PLANE_CHAR,row*SCREEN_COLS+c);
         line += (ch>=0x20)?(char)ch:' ';
     }
     while (!line.empty()&&line.back()==' ') line.pop_back();
@@ -212,6 +223,27 @@ static std::string process_command(const std::string &json) {
         if (a<0) return "{\"ok\":false,\"error\":\"Missing 'address'\"}\n";
         if (v<0) return "{\"ok\":false,\"error\":\"Missing 'value'\"}\n";
         poke_ram((uint16_t)a,(uint8_t)v); return "{\"ok\":true}\n";
+    }
+    if (cmd=="read_vram") {
+        int space=jgi(json,"space"),addr=jgi(json,"address"),len=jgi(json,"length",1);
+        if (space<0) return "{\"ok\":false,\"error\":\"Missing 'space'\"}\n";
+        if (addr<0) return "{\"ok\":false,\"error\":\"Missing 'address'\"}\n";
+        if (len<1) return "{\"ok\":false,\"error\":\"Invalid 'length'\"}\n";
+        if (len>VRAM_DEBUG_MAX_BLOCK) return "{\"ok\":false,\"error\":\"length too large\"}\n";
+
+        std::ostringstream ss;
+        if (len==1) {
+            ss<<"{\"ok\":true,\"space\":"<<space<<",\"address\":"<<addr
+              <<",\"value\":"<<(int)dbg_vram_read((uint8_t)space,(uint32_t)addr)<<"}\n";
+        } else {
+            ss<<"{\"ok\":true,\"space\":"<<space<<",\"address\":"<<addr<<",\"data\":[";
+            for (int i=0;i<len;i++) {
+                if (i) ss<<",";
+                ss<<(int)dbg_vram_read((uint8_t)space,(uint32_t)(addr+i));
+            }
+            ss<<"]}\n";
+        }
+        return ss.str();
     }
     if (cmd=="type_text") { for (char c:jgs(json,"text")) key_queue.push((uint8_t)c); return "{\"ok\":true}\n"; }
     if (cmd=="send_key") {
@@ -420,6 +452,7 @@ int main(int argc, char **argv) {
     top=new Vtop;
     top->rst=1;top->irq_n=1;top->nmi_n=1;top->key_valid=0;top->key_data=0;
     top->dbg_peek_en=0;top->dbg_poke_en=0;top->dbg_pause=0;
+    top->dbg_vram_read_en=0;top->dbg_vram_space=0;top->dbg_vram_addr=0;
     for (int i=0;i<100;i++) step_clock();
     top->rst=0;
 

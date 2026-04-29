@@ -24,8 +24,8 @@ module test_vgc_scroll_wrap;
     logic clk = 0;
     always #20 clk = ~clk;
 
-    localparam int ROWS = 60;
-    localparam int V_BORDER = 0;           // no border in 80x60 @ 8x8 1:1
+    localparam int ROWS = 50;
+    localparam int V_BORDER = 40;          // 80x50 centered in 480 active lines
     localparam int CHAR_H_NATIVE = 8;      // 8x8 cells 1:1 (no pixel doubling)
 
     logic [9:0] h_count = 0;

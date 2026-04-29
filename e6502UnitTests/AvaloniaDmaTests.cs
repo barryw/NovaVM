@@ -25,9 +25,9 @@ public class AvaloniaDmaTests
             length: 3);
 
         AssertDmaOk(bus, expectedCount: 3);
-        Assert.AreEqual((byte)'N', bus.Read((ushort)(VgcConstants.CharRamBase + 100)));
-        Assert.AreEqual((byte)'O', bus.Read((ushort)(VgcConstants.CharRamBase + 101)));
-        Assert.AreEqual((byte)'V', bus.Read((ushort)(VgcConstants.CharRamBase + 102)));
+        Assert.AreEqual((byte)'N', bus.ReadVramByte(VgcConstants.VramPlaneChar, 100));
+        Assert.AreEqual((byte)'O', bus.ReadVramByte(VgcConstants.VramPlaneChar, 101));
+        Assert.AreEqual((byte)'V', bus.ReadVramByte(VgcConstants.VramPlaneChar, 102));
     }
 
     [TestMethod]
@@ -109,7 +109,7 @@ public class AvaloniaDmaTests
 
         AssertDmaOk(bus, expectedCount: 5);
         for (int i = 0; i < 5; i++)
-            Assert.AreEqual(0x0C, bus.Read((ushort)(VgcConstants.ColorRamBase + 32 + i)));
+            Assert.AreEqual(0x0C, bus.ReadVramByte(VgcConstants.VramPlaneColor, 32 + i));
     }
 
     [TestMethod]

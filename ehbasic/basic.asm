@@ -8847,7 +8847,7 @@ VCMD_SPRDEF   = $10            ; P0=sprite, P1=x, P2=y, P3=color
 VCMD_SPRROW   = $11            ; P0=sprite, P1=row, P2-P9=8 bytes
 VCMD_SPRCLR   = $12            ; P0=sprite (clears shape data)
 VCMD_SPRCOPY  = $13            ; P0=src, P1=dest
-VCMD_SPRPOS   = $14            ; P0=sprite, P1=x_low, P2=x_high, P3=y_low, P4=y_high
+VCMD_SPRPOS   = $14            ; P0=sprite, P1=x_low, P2=x_high, P3=y, P4 reserved
 VCMD_SPRENA   = $15            ; P0=sprite
 VCMD_SPRDIS   = $16            ; P0=sprite
 VCMD_SPRFLIP  = $17            ; P0=sprite, P1=flags
@@ -8874,7 +8874,7 @@ FIO_ENDL      = $B9A6          ; end addr low (SAVE only)
 FIO_ENDH      = $B9A7          ; end addr high (SAVE only)
 FIO_SIZEL     = $B9A8          ; loaded size low (set by host after LOAD)
 FIO_SIZEH     = $B9A9          ; loaded size high
-FIO_GSPACE    = $B9AA          ; graphics space selector (0=screen,1=color,2=gfx,3=sprite)
+FIO_GSPACE    = $B9AA          ; graphics space selector (1=screen,2=color,3=gfx,4=sprite,6=tile)
 FIO_GADDRL    = $B9AB          ; graphics offset low
 FIO_GADDRH    = $B9AC          ; graphics offset high
 FIO_GLENL     = $B9AD          ; graphics transfer length low
@@ -9136,7 +9136,7 @@ LAB_SPLASH
       STA   VGC_BGCOL
       LDA   #$01              ; white text
       STA   VGC_FGCOL
-      LDA   #$06              ; blue border
+      LDA   #$0E              ; light blue border
       STA   VGC_BORDER
       LDA   #$00              ; mode 0: text only
       STA   VGC_MODE
@@ -9180,7 +9180,7 @@ LAB_CLS
       STA   VGC_CHAROUT       ; write to CHAROUT register
       RTS
 
-; perform COLOR fg [,bg]
+; perform COLOR fg [,bg [,border]]
 
 LAB_COLOR
       JSR   LAB_GTBY          ; get fg color byte in X
@@ -9191,6 +9191,12 @@ LAB_COLOR
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; get bg color byte in X
       STX   VGC_BGCOL         ; store background color
+      JSR   LAB_GBYT          ; peek for optional border color
+      CMP   #','              ; second comma follows?
+      BNE   @done             ; no, fg/bg only
+      JSR   LAB_IGBY          ; skip comma
+      JSR   LAB_GTBY          ; get border color byte in X
+      STX   VGC_BORDER        ; store border color
 @done
       RTS
 
@@ -9221,6 +9227,7 @@ LAB_FONT
 ; perform GCLS — clear the graphics bitmap layer
 
 LAB_GCLS
+      JSR   LAB_VSYNC         ; BASIC hides visible VGC draw tearing
       LDA   #VCMD_GCLS        ; GCLS command
       STA   VGC_CMD            ; trigger
       RTS
@@ -9272,6 +9279,7 @@ LAB_VGC_XYXY
 
 LAB_PLOT
       JSR   LAB_VGC_XY
+      JSR   LAB_VSYNC         ; wait before visible graphics mutation
       LDA   #VCMD_PLOT        ; PLOT command
       STA   VGC_CMD            ; trigger
       RTS
@@ -9280,6 +9288,7 @@ LAB_PLOT
 
 LAB_UNPLOT
       JSR   LAB_VGC_XY
+      JSR   LAB_VSYNC
       LDA   #VCMD_UNPLOT      ; UNPLOT command
       STA   VGC_CMD
       RTS
@@ -9288,6 +9297,7 @@ LAB_UNPLOT
 
 LAB_GLINE
       JSR   LAB_VGC_XYXY
+      JSR   LAB_VSYNC
       LDA   #VCMD_LINE        ; LINE command
       STA   VGC_CMD
       RTS
@@ -9316,6 +9326,7 @@ LAB_CIRCLE
       LDA   FAC1_2
       STA   VGC_P7             ; ry high
 @circ_go
+      JSR   LAB_VSYNC
       LDA   #VCMD_CIRCLE      ; CIRCLE command
       STA   VGC_CMD
       RTS
@@ -9332,6 +9343,7 @@ LAB_GTEXT
       STX   VGC_P5             ; P5 = scale
       JSR   LAB_1C01          ; comma
       JSR   LAB_FIO_GETNAME   ; string → FIO_NAME/FIO_NAMELEN
+      JSR   LAB_VSYNC
       LDA   #VCMD_GTEXT
       STA   VGC_CMD
       RTS
@@ -9359,7 +9371,10 @@ LAB_TILESIZE
       CPX   #16
       BNE   @ts_s
       ORA   #TileCfgSize16
-@ts_s STA   TileConfig
+@ts_s PHA
+      JSR   LAB_VSYNC
+      PLA
+      STA   TileConfig
       RTS
 LAB_MIRROR
       JSR   LAB_GTBY
@@ -9370,10 +9385,14 @@ LAB_MIRROR
       LDA   TileConfig
       AND   #$F9
       ORA   Itempl
+      PHA
+      JSR   LAB_VSYNC
+      PLA
       STA   TileConfig
       RTS
 LAB_TTRANS
       JSR   LAB_GTBY
+      JSR   LAB_VSYNC
       STX   TileTransColor
       RTS
 LAB_TDEF
@@ -9390,6 +9409,7 @@ LAB_TDEF
       STA   TileAddrL
       LDA   Itemph
       STA   TileAddrH
+      JSR   LAB_VSYNC
       LDA   #TileCmdDef
       STA   TileCmd
       RTS
@@ -9397,6 +9417,7 @@ LAB_TDEF
       STA   TileP1
       JSR   LAB_1C01
       JSR   LAB_TWAD
+      JSR   LAB_VSYNC
       LDA   #TileCmdDefBulk
       STA   TileCmd
       RTS
@@ -9417,6 +9438,7 @@ LAB_TATTR
       JSR   LAB_1C01
       JSR   LAB_GTBY
       STX   TileP3
+      JSR   LAB_VSYNC
       PLA
       STA   TileCmd
       RTS
@@ -9424,6 +9446,7 @@ LAB_TFILL
       JSR   LAB_TB0C
       JSR   LAB_GTBY
       STX   TileP1
+      JSR   LAB_VSYNC
       LDA   #TileCmdFill
       STA   TileCmd
       RTS
@@ -9440,16 +9463,19 @@ LAB_TCOL
       STX   TileP1
       JSR   LAB_1C01
       JSR   LAB_TWAD
+      JSR   LAB_VSYNC
       PLA
       STA   TileCmd
       RTS
 LAB_TNTLOAD
       JSR   LAB_TB0C
       JSR   LAB_TWAD
+      JSR   LAB_VSYNC
       LDA   #TileCmdLoad
       STA   TileCmd
       RTS
 LAB_TCLS
+      JSR   LAB_VSYNC
       LDA   #TileCmdCls
       STA   TileCmd
       RTS
@@ -9487,12 +9513,17 @@ LAB_TBFILL
       RTS
 LAB_TSCROLL
       JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   TileScrollXL
       LDA   FAC1_2
-      STA   TileScrollXH
+      PHA
+      LDA   FAC1_3
+      PHA
       JSR   LAB_1C01
       JSR   LAB_GTWRD
+      JSR   LAB_VSYNC
+      PLA
+      STA   TileScrollXL
+      PLA
+      STA   TileScrollXH
       LDA   FAC1_3
       STA   TileScrollYL
       LDA   FAC1_2
@@ -9503,6 +9534,7 @@ LAB_TPAL
       STX   TilePalP0
       JSR   LAB_1C01
       JSR   LAB_TWAD
+      JSR   LAB_VSYNC
       LDA   #TileCmdPal
       STA   TileCmd
       RTS
@@ -9519,6 +9551,7 @@ LAB_TPALC
       JSR   LAB_1C01
       JSR   LAB_GTBY
       STX   TileP2
+      JSR   LAB_VSYNC
       LDA   #TileCmdPalC
       STA   TileCmd
       RTS
@@ -9542,6 +9575,7 @@ LAB_TLOAD
 
 LAB_RECT
       JSR   LAB_VGC_XYXY
+      JSR   LAB_VSYNC
       LDA   #VCMD_RECT        ; RECT command
       STA   VGC_CMD
       RTS
@@ -9550,6 +9584,7 @@ LAB_RECT
 
 LAB_FILLRECT
       JSR   LAB_VGC_XYXY
+      JSR   LAB_VSYNC
       LDA   #VCMD_FILL        ; FILL command
       STA   VGC_CMD
       RTS
@@ -9558,6 +9593,7 @@ LAB_FILLRECT
 
 LAB_PAINT
       JSR   LAB_VGC_XY
+      JSR   LAB_VSYNC
       LDA   #VCMD_PAINT       ; PAINT command
       STA   VGC_CMD
       RTS
@@ -9567,7 +9603,7 @@ LAB_PAINT
 ; Uses command-driven VGC interface:
 ;   SPRENA ($15): P0=sprite
 ;   SPRDIS ($16): P0=sprite
-;   SPRPOS ($14): P0=sprite, P1=x_low, P2=x_high, P3=y_low, P4=y_high
+;   SPRPOS ($14): P0=sprite, P1=x_low, P2=x_high, P3=y_low, P4 reserved
 
 LAB_SPRCMD
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
@@ -9581,17 +9617,16 @@ LAB_SPRCMD
       ; not ON/OFF — parse x, y position
       LDA   Itempl            ; get sprite number
       STA   VGC_P0             ; P0 = sprite index
-      JSR   LAB_GTSW          ; get signed x as 16-bit
+      JSR   LAB_GTWRD         ; get unsigned x as 16-bit
       LDA   FAC1_3
       STA   VGC_P1             ; P1 = x low
       LDA   FAC1_2
       STA   VGC_P2             ; P2 = x high
       JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTSW          ; get signed y as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P3             ; P3 = y low
-      LDA   FAC1_2
-      STA   VGC_P4             ; P4 = y high
+      JSR   LAB_GTBY          ; get unsigned y byte
+      STX   VGC_P3             ; P3 = y
+      LDA   #$00
+      STA   VGC_P4             ; P4 reserved
       LDA   #VCMD_SPRPOS      ; SPRPOS command
       STA   VGC_CMD            ; trigger
       RTS
@@ -9628,10 +9663,10 @@ LAB_SPRSHAPE
       STA   $A044,Y           ; write to shape register ($A044 + n*8)
       RTS
 
-; perform SPRITESET sprite, field, value — set sprite register with vblank sync
-; Fields 0 (X) and 2 (Y) accept a signed word and write both lo/hi bytes.
-; All other fields accept a byte value.
-; Waits for vblank before writing to avoid visual glitching.
+; perform SPRITESET sprite, field, value — set sprite register
+; Field 0 (X) accepts an unsigned word and writes lo+hi bytes.
+; Field 2 (Y) and all other fields accept a byte value.
+; Hardware vblank-buffers sprite attribute writes; software writes immediately.
 
 LAB_SPRCOLOR
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
@@ -9651,25 +9686,15 @@ LAB_SPRCOLOR
       LDA   Itemph            ; check field number
       CMP   #$00              ; field 0 = X position?
       BEQ   @word_val
-      CMP   #$02              ; field 2 = Y position?
-      BEQ   @word_val
       ; --- byte field: parse byte value ---
       JSR   LAB_GTBY          ; get value (0-255) in X
-      LDA   VGC_FRAME         ; wait for vblank
-@bwait
-      CMP   VGC_FRAME
-      BEQ   @bwait
       LDY   Itempl            ; Y = register offset
       TXA                     ; A = value
       STA   $A040,Y           ; write to sprite register
       RTS
 @word_val
-      ; --- word field (X or Y): parse signed word, write lo+hi ---
-      JSR   LAB_GTSW          ; get signed 16-bit value, lo in FAC1_3, hi in FAC1_2
-      LDA   VGC_FRAME         ; wait for vblank
-@wwait
-      CMP   VGC_FRAME
-      BEQ   @wwait
+      ; --- word field: parse unsigned word, write lo+hi ---
+      JSR   LAB_GTWRD         ; get unsigned 16-bit value, lo in FAC1_3, hi in FAC1_2
       LDY   Itempl            ; Y = register offset (points to lo byte)
       LDA   FAC1_3            ; low byte
       STA   $A040,Y           ; write lo
@@ -9832,7 +9857,7 @@ LAB_VSYNC
 
 ; --- VGC function handlers ---
 
-; perform SPRITEX(n) — return X position of sprite n as signed word
+; perform SPRITEX(n) — return X position of sprite n as unsigned word
 
 LAB_SPRITEX
       JSR   LAB_F2FX          ; convert FAC1 to integer, low byte in Itempl
@@ -9843,9 +9868,9 @@ LAB_SPRITEX
       TAX                     ; X = sprite * 8
       LDY   $A040,X           ; Y = X position low byte
       LDA   $A041,X           ; A = X position high byte
-      JMP   LAB_AYFC          ; return AY as signed integer
+      JMP   LAB_AYFC          ; return AY as numeric value
 
-; perform SPRITEY(n) — return Y position of sprite n as signed word
+; perform SPRITEY(n) — return Y position of sprite n as unsigned byte
 
 LAB_SPRITEY
       JSR   LAB_F2FX          ; convert FAC1 to integer, low byte in Itempl
@@ -9854,9 +9879,9 @@ LAB_SPRITEY
       ASL                     ; *4
       ASL                     ; *8
       TAX                     ; X = sprite * 8
-      LDY   $A042,X           ; Y = Y position low byte
-      LDA   $A043,X           ; A = Y position high byte
-      JMP   LAB_AYFC          ; return AY as signed integer
+      LDY   $A042,X           ; Y = Y position
+      LDA   #$00              ; high byte is reserved
+      JMP   LAB_AYFC          ; return AY as numeric value
 
 ; perform COLLISION(n) — return sprite-sprite collision register
 ; argument already consumed by preprocessor

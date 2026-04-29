@@ -18,12 +18,14 @@ YOSYS    = $(OSS_CAD_SUITE_BIN)/yosys
 NEXTPNR  = $(OSS_CAD_SUITE_BIN)/nextpnr-ecp5
 ECPPACK  = $(OSS_CAD_SUITE_BIN)/ecppack
 FPGALOAD = openFPGALoader
-SV = read_verilog -sv -DSYNTHESIS
-VL = read_verilog -DSYNTHESIS
+EXTRA_DEFINES ?=
+SV = read_verilog -sv -DSYNTHESIS $(EXTRA_DEFINES)
+VL = read_verilog -DSYNTHESIS $(EXTRA_DEFINES)
+BUILD_ARGS = $(BUILDDIR)/build_args.txt
 
 NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --timing-allow-fail
 
-.PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag diag-vgc diag-sprites
+.PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag diag-vgc diag-sprites FORCE
 
 all: ehbasic bitstream
 
@@ -45,14 +47,30 @@ RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
            $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv \
            $(RTLDIR)/sid/sid_curve_reader.sv
-RTL_HDMI = $(RTLDIR)/hdmi/vga2dvid.v $(RTLDIR)/hdmi/tmds_encoder.v $(RTLDIR)/hdmi/fake_differential.v
+RTL_HDMI = $(RTLDIR)/hdmi/vga2dvid.v $(RTLDIR)/hdmi/tmds_encoder.v \
+           $(RTLDIR)/hdmi/fake_differential.v $(RTLDIR)/hdmi/hdmi_device_ref.v
 RTL_SDRAM_V  = $(RTLDIR)/sdram/sdram.v
 RTL_SDRAM_SV = $(RTLDIR)/sdram/xram_sdram.sv
 
 # =========================================================================
 # Synthesis — rebuilds only when source files change (don't 'make clean'!)
 # =========================================================================
-$(BUILDDIR)/$(PROJ).json: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
+$(BUILD_ARGS): FORCE
+	@mkdir -p $(BUILDDIR)
+	@printf '%s\n' \
+		'DEVICE=$(DEVICE)' \
+		'PACKAGE=$(PACKAGE)' \
+		'PIN_DEF=$(PIN_DEF)' \
+		'NEXTPNR_FLAGS=$(NEXTPNR_FLAGS)' \
+		'EXTRA_DEFINES=$(EXTRA_DEFINES)' \
+		> $(BUILDDIR)/build_args.new
+	@if ! cmp -s $(BUILDDIR)/build_args.new $@; then \
+		mv $(BUILDDIR)/build_args.new $@; \
+	else \
+		rm -f $(BUILDDIR)/build_args.new; \
+	fi
+
+$(BUILDDIR)/$(PROJ).json: $(BUILD_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -74,7 +92,7 @@ diag-vgc: $(BUILDDIR)/post_synth_vgc.v
 
 diag-sprites: $(BUILDDIR)/post_synth_sprites.v
 
-$(BUILDDIR)/post_synth.v: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
+$(BUILDDIR)/post_synth.v: $(BUILD_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -88,7 +106,7 @@ $(BUILDDIR)/post_synth.v: $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI
 	@echo "  Verilog: $@"
 	@echo "  ILANG:   $(BUILDDIR)/post_synth.il"
 
-$(BUILDDIR)/post_synth_vgc.v: $(RTL_VGC)
+$(BUILDDIR)/post_synth_vgc.v: $(BUILD_ARGS) $(RTL_VGC)
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -101,7 +119,7 @@ $(BUILDDIR)/post_synth_vgc.v: $(RTL_VGC)
 	@echo "  Verilog: $@"
 	@echo "  ILANG:   $(BUILDDIR)/post_synth_vgc.il"
 
-$(BUILDDIR)/post_synth_sprites.v: $(DPRAM) $(RTLDIR)/vgc_sprites.sv
+$(BUILDDIR)/post_synth_sprites.v: $(BUILD_ARGS) $(DPRAM) $(RTLDIR)/vgc_sprites.sv
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -119,8 +137,8 @@ synth: ehbasic $(BUILDDIR)/$(PROJ).json
 # =========================================================================
 # Place & Route + Bitstream
 # =========================================================================
-$(BUILDDIR)/$(PROJ).config: $(BUILDDIR)/$(PROJ).json $(PIN_DEF)
-	$(NEXTPNR) $(NEXTPNR_FLAGS) --textcfg $@ --json $< --lpf $(PIN_DEF)
+$(BUILDDIR)/$(PROJ).config: $(BUILD_ARGS) $(BUILDDIR)/$(PROJ).json $(PIN_DEF)
+	$(NEXTPNR) $(NEXTPNR_FLAGS) --textcfg $@ --json $(BUILDDIR)/$(PROJ).json --lpf $(PIN_DEF)
 
 pnr: ehbasic $(BUILDDIR)/$(PROJ).config
 

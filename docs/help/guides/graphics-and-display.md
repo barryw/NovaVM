@@ -145,9 +145,10 @@ A sprite must be enabled before it becomes visible:
 ```
 
 `SPRITE n,ON` activates sprite `n`. `SPRITE n,x,y` sets its
-screen position. Positions are in the same coordinate space as the bitmap
-(X = 0--319, Y = 0--199). Sprites may be positioned partially or fully
-off-screen; they are simply clipped without error.
+screen position. Sprite positions use the full half-resolution video plane:
+X is an unsigned word and Y is an unsigned byte. In 720x480 output this is
+X = 0--359 and Y = 0--239, including the border area. The 640x400 canvas is
+X = 20--339 and Y = 20--219 in that sprite coordinate space.
 
 To hide a sprite, use `SPRITE n,OFF`. This makes the sprite invisible
 without erasing its shape data. You can re-enable it later with
@@ -298,9 +299,8 @@ indices.
 | 7 | Yellow | 15 | Light Grey |
 
 The background color defaults to 6 (blue), the text foreground to 1 (white),
-and the border to 6 (blue). Use `COLOR fg[,bg]` for text colors.
-The border color can be changed via `POKE 40973, c` where `c` is
-0--15 ($A00D is the border color register).
+and the border to 14 (light blue). Use `COLOR fg[,bg[,border]]` for text,
+background, and border colors.
 
 ## The Copper (Raster Effects)
 
@@ -347,8 +347,7 @@ The `COPPER` keyword provides direct access to the copper system:
 | COPPER ADD x, y, SCROLLY, value | Add event: set vertical scroll at position. |
 | COPPER ADD x, y, SPRX(n), value | Set sprite *n* X low byte at position. |
 | COPPER ADD x, y, SPRXH(n), value | Set sprite *n* X high byte at position. |
-| COPPER ADD x, y, SPRY(n), value | Set sprite *n* Y low byte at position. |
-| COPPER ADD x, y, SPRYH(n), value | Set sprite *n* Y high byte at position. |
+| COPPER ADD x, y, SPRY(n), value | Set sprite *n* Y position at position. |
 | COPPER ADD x, y, SPRSHAPE(n), value | Set sprite *n* shape slot at position. |
 | COPPER ADD x, y, SPRFLAGS(n), value | Set sprite *n* flags at position. |
 | COPPER ADD x, y, SPRPRI(n), value | Set sprite *n* priority at position. |
@@ -486,10 +485,10 @@ The register layout per sprite is:
 | --- | --- | --- |
 | +0 | XLo | X position, low byte |
 | +1 | XHi | X position, high byte |
-| +2 | YLo | Y position, low byte |
-| +3 | YHi | Y position, high byte |
+| +2 | YLo | Y position (unsigned byte) |
+| +3 | YHi | Reserved; reads as 0 |
 | +4 | Shape | Shape slot index (0--255) |
-| +5 | Flags | Bit 0: horizontal flip, Bit 1: vertical flip, Bit 2: enable |
+| +5 | Flags | Bit 0: horizontal flip, Bit 1: vertical flip, Bit 7: enable |
 | +6 | Priority | 0 = behind all, 1 = between layers, 2 = in front |
 | +7 | TransColor | Per-sprite transparent color index (0--15). Default 0 (black is transparent). Values >15 disable transparency (all 16 colors opaque). |
 
@@ -516,10 +515,10 @@ in Section \refsec:sprite-registers:
 | --- | --- |
 | 0 | X position, low byte |
 | 1 | X position, high byte |
-| 2 | Y position, low byte |
-| 3 | Y position, high byte |
+| 2 | Y position (unsigned byte) |
+| 3 | Reserved; reads as 0 |
 | 4 | Shape slot index (0--255) |
-| 5 | Flags (bit 0: H-flip, bit 1: V-flip, bit 2: enable) |
+| 5 | Flags (bit 0: H-flip, bit 1: V-flip, bit 7: enable) |
 | 6 | Priority (0=behind all, 1=between layers, 2=in front) |
 | 7 | Transparent color index (0--15; values >15 disable transparency) |
 
@@ -530,7 +529,9 @@ For example, to set sprite 3's transparent color to color index 5:
 ```
 
 ::: note
-`SPRITESET` waits for the next vblank before writing to the register.
+Sprite attribute writes are hardware-buffered and published at the next frame
+boundary, so BASIC code can write them immediately without manually waiting
+for vblank.
 This ensures the change takes effect at a frame boundary and avoids
 partial-frame artifacts when changing position or shape fields.
 :::
@@ -542,12 +543,11 @@ sprite `n` by reading directly from the sprite register block.
 
 | **Function** | **Returns** |
 | --- | --- |
-| SPRITEX(n) | Current X position of sprite `n` as a signed 16-bit value. |
-| SPRITEY(n) | Current Y position of sprite `n` as a signed 16-bit value. |
+| SPRITEX(n) | Current X position of sprite `n` as an unsigned 16-bit value. |
+| SPRITEY(n) | Current Y position of sprite `n` as an unsigned 8-bit value. |
 
-Both functions combine the low and high byte registers to produce a signed
-16-bit result, which correctly represents positions set by `SPRITE n,x,y`,
-`SPRITESET`, or the copper.
+`SPRITEX` combines the X low/high registers. `SPRITEY` returns the Y low
+byte; the Y high register is reserved.
 
 ```basic
 10 SPRITE 0, 160, 80

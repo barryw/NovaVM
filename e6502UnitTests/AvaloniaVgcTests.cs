@@ -23,6 +23,14 @@ public class AvaloniaVgcTests
         Assert.AreEqual(1, _vgc.Read(VgcConstants.RegFgCol));
 
     [TestMethod]
+    public void InitialBgColor_IsBlue() =>
+        Assert.AreEqual(6, _vgc.Read(VgcConstants.RegBgCol));
+
+    [TestMethod]
+    public void InitialBorderColor_IsLightBlue() =>
+        Assert.AreEqual(14, _vgc.Read(VgcConstants.RegBorder));
+
+    [TestMethod]
     public void InitialScreenRam_IsSpaces()
     {
         for (int row = 0; row < VgcConstants.ScreenRows; row++)
@@ -154,12 +162,12 @@ public class AvaloniaVgcTests
     }
 
     [TestMethod]
-    public void SprPos_DecodesSignedCoordinates()
+    public void SprPos_UsesUnsignedSpritePlaneCoordinates()
     {
         _vgc.Write(VgcConstants.RegP0, 0);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
 
-        // SPOS: sprite 0, x=-16 (0xFFF0), y=-8 (0xFFF8)
+        // SPOS: sprite 0, x=65520 (0xFFF0), y=248 (Y high ignored)
         _vgc.Write(VgcConstants.RegP0, 0);
         _vgc.Write(VgcConstants.RegP1, 0xF0); // x low
         _vgc.Write(VgcConstants.RegP2, 0xFF); // x high
@@ -168,8 +176,8 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
 
         var state = _vgc.GetSpriteState(0);
-        Assert.AreEqual(-16, state.x);
-        Assert.AreEqual(-8, state.y);
+        Assert.AreEqual(65520, state.x);
+        Assert.AreEqual(248, state.y);
     }
 
     [TestMethod]
@@ -231,7 +239,7 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegP3, 0x41); // 'A'
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemWrite);
 
-        Assert.AreEqual(0x41, _vgc.Read(VgcConstants.CharRamBase + 0x34));
+        Assert.AreEqual(0x41, _vgc.ReadVramByte(VgcConstants.VramPlaneChar, 0x34));
 
         _vgc.Write(VgcConstants.RegP3, 0x00);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemRead);
@@ -251,8 +259,8 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegP3, 0x32);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdMemWrite);
 
-        Assert.AreEqual(0x31, _vgc.Read(VgcConstants.CharRamBase + 0));
-        Assert.AreEqual(0x32, _vgc.Read(VgcConstants.CharRamBase + 1));
+        Assert.AreEqual(0x31, _vgc.ReadVramByte(VgcConstants.VramPlaneChar, 0));
+        Assert.AreEqual(0x32, _vgc.ReadVramByte(VgcConstants.VramPlaneChar, 1));
         Assert.AreEqual(0x02, _vgc.Read(VgcConstants.RegP1)); // addr low advanced twice
         Assert.AreEqual(0x00, _vgc.Read(VgcConstants.RegP2)); // addr high unchanged
     }
@@ -328,8 +336,8 @@ public class AvaloniaVgcTests
         Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.VgcBase));
 
     [TestMethod]
-    public void OwnsAddress_ColorRamEnd_True() =>
-        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.ColorRamEnd));
+    public void OwnsAddress_VramPortEnd_True() =>
+        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.VramRegEnd));
 
     [TestMethod]
     public void OwnsAddress_BelowRange_False() =>
@@ -670,15 +678,16 @@ public class AvaloniaVgcTests
     [TestMethod]
     public void SpriteReg_WritePosition_UpdatesSpriteState()
     {
-        // Write X=300 (0x012C), Y=-10 (0xFFF6) to sprite 0 via registers
+        // Write X=300 (0x012C), Y=246 (0xF6) to sprite 0 via registers.
+        // Y high is reserved and ignored.
         _vgc.Write(VgcConstants.SpriteRegBase + 0, 0x2C);  // XLo
         _vgc.Write(VgcConstants.SpriteRegBase + 1, 0x01);  // XHi
         _vgc.Write(VgcConstants.SpriteRegBase + 2, 0xF6);  // YLo
-        _vgc.Write(VgcConstants.SpriteRegBase + 3, 0xFF);  // YHi
+        _vgc.Write(VgcConstants.SpriteRegBase + 3, 0xFF);  // reserved
 
         var state = _vgc.GetSpriteState(0);
         Assert.AreEqual(300, state.x);
-        Assert.AreEqual(-10, state.y);
+        Assert.AreEqual(246, state.y);
     }
 
     [TestMethod]

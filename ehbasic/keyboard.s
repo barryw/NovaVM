@@ -244,7 +244,7 @@ clear_text:
     cpx #80
     bcc @ct_col
     iny
-    cpy #25
+    cpy #ScreenRows
     bcc @ct_row
     rts
 

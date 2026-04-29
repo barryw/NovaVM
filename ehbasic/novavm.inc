@@ -27,10 +27,6 @@ Sid2Base                = $D420
 Sid2End                 = $D43C
 Sid2MirrorBase          = $D500
 Sid2MirrorEnd           = $D51C
-CharRamBase             = $AA00
-CharRamEnd              = $B1CF
-ColorRamBase            = $B1D0
-ColorRamEnd             = $B99F
 
 ; --- File I/O coprocessor registers ($B9A0-$B9EF) ---
 FioBase                 = $B9A0
@@ -370,7 +366,7 @@ RomEnd                  = $FFFF
 
 ; --- Screen / graphics dimensions ---
 ScreenCols              = $50
-ScreenRows              = $19
+ScreenRows              = $32
 GfxWidth                = $0140
 GfxHeight               = $C8
 MaxSprites              = $10
@@ -405,6 +401,19 @@ ShapeSlotCount          = $0100
 ; --- Tile engine registers ($A0C0-$A0DF) ---
 TileRegBase             = $A0C0
 TileRegEnd              = $A0DF
+VramRegBase             = $A0E0
+VramRegEnd              = $A0E4
+VramPlane               = $A0E0
+VramAddrL               = $A0E1
+VramAddrH               = $A0E2
+VramData                = $A0E3
+VramCtrl                = $A0E4
+VramPlaneChar           = $01
+VramPlaneColor          = $02
+VramPlaneGfx            = $03
+VramPlaneSprite         = $04
+VramPlaneTile           = $06
+VramCtrlAutoInc         = $01
 TileConfig              = $A0C0
 TileTransColor          = $A0C1
 TileScrollXL            = $A0C2
@@ -543,11 +552,6 @@ CmdCopperUse            = $21
 CmdCopperListEnd        = $22
 CopperListCount         = $80
 MaxCopperEntriesPerList = $0100
-MemSpaceScreen          = $00
-MemSpaceColor           = $01
-MemSpaceGfx             = $02
-MemSpaceSprite          = $03
-MemSpaceTile            = $04
 
 ; --- Help system registers ($A020-$A030) ---
 RegHelp                 = $A020

@@ -19,7 +19,7 @@ VFLAGS    = --cc --exe --build -Wall \
             -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND \
             -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-CASEINCOMPLETE \
             -Wno-PROCASSINIT -Wno-CASEX -Wno-SYNCASYNCNET -Wno-UNOPTFLAT -Wno-LATCH \
-            -Wno-PINCONNECTEMPTY -Wno-IMPLICITSTATIC -Wno-SELRANGE \
+            -Wno-PINCONNECTEMPTY -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-UNSIGNED \
             --top-module top \
             -CFLAGS "-O2 -DSIM $(shell sdl2-config --cflags)" \
             -LDFLAGS "$(shell sdl2-config --libs)" \
