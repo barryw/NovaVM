@@ -941,6 +941,14 @@ LAB_OMER
 ; do error #X, then warm start
 
 LAB_XERR
+      LDA   AUTOBOOT_ACTIVE
+      BEQ   @show_error
+      LDA   #$00
+      STA   AUTOBOOT_ACTIVE
+      JSR   LAB_1463          ; discard broken autoboot program with NEW/CLEAR
+      JMP   LAB_1274          ; return to Ready without printing an error
+
+@show_error
       JSR   LAB_CRLF          ; print CR/LF
 
       LDA   LAB_BAER,X        ; get error message pointer low byte
@@ -965,6 +973,7 @@ LAB_1269
 LAB_1274
                               ; clear ON IRQ/NMI bytes
       LDA   #$00              ; clear A
+      STA   AUTOBOOT_ACTIVE   ; normal warm start means autoboot guard is done
       STA   IrqBase           ; clear enabled byte
       STA   NmiBase           ; clear enabled byte
       LDA   #<LAB_RMSG        ; point to "Ready" message low byte
@@ -8827,6 +8836,16 @@ VGC_P6        = $A017          ; parameter 6
 VGC_P7        = $A018          ; parameter 7
 VGC_P8        = $A019          ; parameter 8
 VGC_P9        = $A01A          ; parameter 9
+VGC_P10       = $A01B          ; parameter 10
+VGC_P11       = $A01C          ; parameter 11
+VGC_P12       = $A01D          ; parameter 12
+VGC_P13       = $A01E          ; parameter 13
+VGC_P14       = $A01F          ; parameter 14
+
+VGC_IRQ_ENABLE = $A0F0         ; enabled VGC IRQ source mask
+VGC_IRQ_STATUS = $A0F1         ; pending VGC IRQ source mask (write 1 to clear)
+VGC_IRQ_FORCE  = $A0F2         ; force enabled VGC IRQ sources
+VGC_IRQ_VALID  = $A0F3         ; implemented VGC IRQ source mask
 
 ; --- VGC graphics command codes ---
 
@@ -8883,7 +8902,8 @@ FIO_DIRTYPE   = $B9AF          ; dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID
 FIO_NAME      = $B9B0          ; filename buffer (64 bytes)
 
 META_BASE       = $BAB0          ; metadata string buffer (80 bytes)
-AUTOBOOT_SKIP = $B9F0          ; C# sets to $FF to skip autoboot
+AUTOBOOT_SKIP   = $B9F0        ; C# sets to $FF to skip autoboot
+AUTOBOOT_ACTIVE = $B9F1        ; suppress startup errors from broken AUTOBOOT
 
 FIO_CMD_SAVE  = $01            ; save program
 FIO_CMD_LOAD  = $02            ; load program
@@ -9132,11 +9152,11 @@ FioCmdTLoad    = $17
 ; draw a text-only cold-start splash screen
 
 LAB_SPLASH
-      LDA   #$06              ; blue background
+      LDA   #$00              ; black background
       STA   VGC_BGCOL
-      LDA   #$01              ; white text
+      LDA   #$0F              ; light grey text
       STA   VGC_FGCOL
-      LDA   #$0E              ; light blue border
+      LDA   #$0B              ; dark grey border
       STA   VGC_BORDER
       LDA   #$00              ; mode 0: text only
       STA   VGC_MODE
@@ -9146,7 +9166,7 @@ LAB_SPLASH
       LDA   #$21              ; centered x for "NovaBASIC v1.0"
       STA   VGC_CURSX
       STA   TPos
-      LDA   #$00
+      LDA   #$01              ; leave breathing room on the first row
       STA   VGC_CURSY
       LDA   #<LAB_BNR1
       LDY   #>LAB_BNR1
@@ -9155,7 +9175,7 @@ LAB_SPLASH
       LDA   #$1A              ; centered x for "Derived from EhBASIC 2.22p5"
       STA   VGC_CURSX
       STA   TPos
-      LDA   #$02              ; one empty row between lines
+      LDA   #$03              ; one empty row between lines
       STA   VGC_CURSY
       LDA   #<LAB_BNR2
       LDY   #>LAB_BNR2
@@ -9164,7 +9184,7 @@ LAB_SPLASH
       LDA   #$11              ; centered x for "xxxxx BASIC bytes free  xxxK expansion memory"
       STA   VGC_CURSX
       STA   TPos
-      LDA   #$04              ; one empty row between lines
+      LDA   #$05              ; one empty row between lines
       STA   VGC_CURSY
       RTS
 
@@ -11065,6 +11085,8 @@ LAB_XUNMAP
 ; ---- autoboot ----
 
 LAB_AUTOBOOT
+      LDA   #$00
+      STA   AUTOBOOT_ACTIVE
       LDA   AUTOBOOT_SKIP
       BNE   @ab_done              ; skip if flag set
 
@@ -11112,6 +11134,8 @@ LAB_AUTOBOOT
       LDA   Svarh
       STA   Sarryh
       STA   Earryh
+      LDA   #$01
+      STA   AUTOBOOT_ACTIVE
       ; Replace return address so LAB_1491 RTS enters the interpreter loop
       PLA                           ; discard JSR LAB_AUTOBOOT return low
       PLA                           ; discard JSR LAB_AUTOBOOT return high
@@ -11123,6 +11147,8 @@ LAB_AUTOBOOT
 
 @ab_bin
       ; .bin — jump to load address via indirect
+      LDA   #$01
+      STA   AUTOBOOT_ACTIVE
       LDA   FIO_SRCL
       STA   ut1_pl
       LDA   FIO_SRCH

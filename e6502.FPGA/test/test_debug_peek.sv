@@ -176,13 +176,13 @@ module test_debug_peek;
         do_peek(16'hA003, peek_val);
         check_eq8("peek \$A003 (cursor_x) == 2", peek_val, 8'h02);
 
-        // Peek VGC register — REG_BGCOL = $A001. Default 6 per vgc.sv rst block.
+        // Peek VGC register — REG_BGCOL = $A001. Default 0 per vgc.sv rst block.
         do_peek(16'hA001, peek_val);
-        check_eq8("peek \$A001 (bg_color) == 6", peek_val, 8'h06);
+        check_eq8("peek \$A001 (bg_color) == 0", peek_val, 8'h00);
 
-        // Peek VGC register — REG_FGCOL = $A002. Default 1.
+        // Peek VGC register — REG_FGCOL = $A002. Default 15.
         do_peek(16'hA002, peek_val);
-        check_eq8("peek \$A002 (fg_color) == 1", peek_val, 8'h01);
+        check_eq8("peek \$A002 (fg_color) == 15", peek_val, 8'h0F);
 
         // Control: peek ROM — should return first opcode byte 0xA9
         do_peek(16'hC000, peek_val);

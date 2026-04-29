@@ -55,6 +55,31 @@ by default).  The FIO automatically appends the appropriate file extension
 \end{tabular}
 \end{center}
 
+\section{Boot Runtime Flags}
+\label{sec:boot-runtime-flags}
+
+The bytes at \$B9F0--\$B9FF are reserved for boot coordination between the
+host and the active language ROM. They are not part of the FIO register bank,
+but they live adjacent to it so all runtimes can use the same convention.
+
+\begin{center}
+\small
+\begin{tabular}{@{}llcll@{}}
+\toprule
+\textbf{Address} & \textbf{Name} & \textbf{R/W} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\$B9F0 & AutobootSkip   & R/W & 0 & Non-zero disables startup autoboot \\
+\$B9F1 & AutobootActive & R/W & 0 & Runtime is entering an autoboot program \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Runtimes should set \texttt{AutobootActive} before entering an autobooted
+program and clear it on normal warm start. If the runtime's central error path
+sees this flag set, it should clear the flag, discard the failed autoboot, and
+fall back to its normal prompt without printing an error. This keeps missing or
+broken startup media from looking like a machine failure.
+
 
 % ═══════════════════════════════════════════════════════════════════════════════
 \section{Core Registers}

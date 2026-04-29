@@ -19,16 +19,16 @@ public class AvaloniaVgcTests
         Assert.AreEqual(0, _vgc.GetMode());
 
     [TestMethod]
-    public void InitialFgColor_IsOne() =>
-        Assert.AreEqual(1, _vgc.Read(VgcConstants.RegFgCol));
+    public void InitialFgColor_IsLightGrey() =>
+        Assert.AreEqual(15, _vgc.Read(VgcConstants.RegFgCol));
 
     [TestMethod]
-    public void InitialBgColor_IsBlue() =>
-        Assert.AreEqual(6, _vgc.Read(VgcConstants.RegBgCol));
+    public void InitialBgColor_IsBlack() =>
+        Assert.AreEqual(0, _vgc.Read(VgcConstants.RegBgCol));
 
     [TestMethod]
-    public void InitialBorderColor_IsLightBlue() =>
-        Assert.AreEqual(14, _vgc.Read(VgcConstants.RegBorder));
+    public void InitialBorderColor_IsDarkGrey() =>
+        Assert.AreEqual(11, _vgc.Read(VgcConstants.RegBorder));
 
     [TestMethod]
     public void InitialScreenRam_IsSpaces()
@@ -348,8 +348,8 @@ public class AvaloniaVgcTests
         Assert.IsFalse(_vgc.OwnsAddress(VgcConstants.FioBase));
 
     [TestMethod]
-    public void OwnsAddress_RegIrqCtrl_True() =>
-        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegIrqCtrl));
+    public void OwnsAddress_RegIrqEnable_True() =>
+        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegIrqEnable));
 
     [TestMethod]
     public void OwnsAddress_GapStart_False() =>
@@ -438,30 +438,43 @@ public class AvaloniaVgcTests
         Assert.AreEqual(before, _vgc.Read(VgcConstants.RegStatus));
     }
 
-    // -- Raster IRQ enable ----------------------------------------------------
+    // -- VGC IRQ block --------------------------------------------------------
 
     [TestMethod]
-    public void Vgc_RasterIrqEnable_DefaultOff()
+    public void Vgc_Irq_DefaultOff()
     {
         var vgc = new VirtualGraphicsController();
-        Assert.IsFalse(vgc.IsRasterIrqEnabled);
+        Assert.IsFalse(vgc.IrqPending);
+        Assert.AreEqual(0, vgc.Read(VgcConstants.RegIrqEnable));
+        Assert.AreEqual(0, vgc.Read(VgcConstants.RegIrqStatus));
     }
 
     [TestMethod]
-    public void Vgc_RasterIrqEnable_WriteToRegister()
+    public void Vgc_IrqEnable_ForceAndAck()
     {
         var vgc = new VirtualGraphicsController();
-        vgc.Write(VgcConstants.RegIrqCtrl, 0x01);
-        Assert.IsTrue(vgc.IsRasterIrqEnabled);
+        vgc.Write(VgcConstants.RegIrqEnable, 0xFF);
+        Assert.AreEqual(VgcConstants.IrqValidMask, vgc.Read(VgcConstants.RegIrqEnable));
+        Assert.AreEqual(VgcConstants.IrqValidMask, vgc.Read(VgcConstants.RegIrqValid));
+
+        vgc.Write(VgcConstants.RegIrqForce, VgcConstants.IrqCopper0);
+        Assert.AreEqual(VgcConstants.IrqCopper0, vgc.Read(VgcConstants.RegIrqStatus));
+        Assert.IsTrue(vgc.IrqPending);
+
+        vgc.Write(VgcConstants.RegIrqStatus, VgcConstants.IrqCopper0);
+        Assert.AreEqual(0, vgc.Read(VgcConstants.RegIrqStatus));
+        Assert.IsFalse(vgc.IrqPending);
     }
 
     [TestMethod]
-    public void Vgc_RasterIrqEnable_DisableClears()
+    public void Vgc_A01F_IsCommandParameterP14()
     {
         var vgc = new VirtualGraphicsController();
-        vgc.Write(VgcConstants.RegIrqCtrl, 0x01);
-        vgc.Write(VgcConstants.RegIrqCtrl, 0x00);
-        Assert.IsFalse(vgc.IsRasterIrqEnabled);
+        vgc.Write(VgcConstants.RegIrqEnable, VgcConstants.IrqVBlank);
+        vgc.Write(VgcConstants.RegP14, 0xA5);
+
+        Assert.AreEqual(0xA5, vgc.Read(VgcConstants.RegP14));
+        Assert.AreEqual(VgcConstants.IrqVBlank, vgc.Read(VgcConstants.RegIrqEnable));
     }
 
     [TestMethod]

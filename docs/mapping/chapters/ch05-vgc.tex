@@ -116,7 +116,7 @@ POKE $A001,6 : REM dark blue background
 
 % --- $A002 RegFgCol ----------------------------------------------------------
 
-\mementry{A002}{RegFgCol}{R/W}{1}
+\mementry{A002}{RegFgCol}{R/W}{15}
 
 Foreground/text colour (0--15).  Characters printed after changing this
 register will appear in the new colour.
@@ -262,7 +262,7 @@ register, just like \addr{A00B}.
 
 % --- $A00D RegBorder ---------------------------------------------------------
 
-\mementry{A00D}{RegBorder}{R/W}{0}
+\mementry{A00D}{RegBorder}{R/W}{11}
 
 Border (frame) colour (0--15).  The border is the area outside the active
 display area, if the host window is larger than the 320$\times$200 pixel
@@ -319,14 +319,14 @@ writing a command byte to the command register.
 \mementry{A010}{RegCmd}{W}{---}
 
 Command register.  Writing a command byte here executes the command
-immediately.  Parameters must be loaded into P0--P13 (\$A011--\$A01E)
+immediately.  Parameters must be loaded into P0--P14 (\$A011--\$A01F)
 \emph{before} writing the command byte.
 
-% --- $A011--$A01E RegP0--RegP13 ---------------------------------------------
+% --- $A011--$A01F RegP0--RegP14 ---------------------------------------------
 
-\memrange{A011}{A01E}{RegP0--RegP13 (Parameter Registers)}{R/W}{0}
+\memrange{A011}{A01F}{RegP0--RegP14 (Parameter Registers)}{R/W}{0}
 
-Fourteen parameter registers, addressed as \$A011 (P0) through \$A01E (P13).
+Fifteen parameter registers, addressed as \$A011 (P0) through \$A01F (P14).
 Each command uses a different subset of these registers; unused parameters are
 ignored.  Parameters are readable, so you can inspect the last-written values
 at any time.
@@ -351,6 +351,7 @@ at any time.
 \$A01C & P11 & +11 \\
 \$A01D & P12 & +12 \\
 \$A01E & P13 & +13 \\
+\$A01F & P14 & +14 \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -995,13 +996,15 @@ P4     & Flags: bit 0 = auto-increment address \\
 % ═══════════════════════════════════════════════════════════════════════════════
 
 The copper is a raster-synchronised coprocessor inspired by the Amiga's
-Copper.  It executes a list of register-write events keyed to specific
-scanline positions, allowing per-scanline colour changes, split-screen
-effects, and raster bars --- all without CPU intervention.
+Copper.  It executes a list of register-write or IRQ events keyed to
+specific raster positions, allowing per-scanline colour changes, split-screen
+effects, raster bars, and beam-position CPU notifications --- all without
+CPU polling.
 
-The VGC supports 128 copper lists, each holding up to 256 events.  One list
-is \emph{active} (being executed each frame) and one is the \emph{target}
-(being edited).  This double-buffering allows glitch-free list updates.
+FPGA builds support 8 copper lists, each holding up to 32 events.  Simulation
+builds may expose more lists for software compatibility.  One list is
+\emph{active} (being executed each frame) and one is the \emph{target} (being
+edited).  This double-buffering allows glitch-free list updates.
 
 % --- $1B CmdCopperAdd -------------------------------------------------------
 
@@ -1015,9 +1018,9 @@ Adds an event to the target copper list.
 \toprule
 \textbf{Param} & \textbf{Meaning} \\
 \midrule
-P0, P1 & Scanline (16-bit LE, 0--199) \\
-P2     & Column \\
-P3, P4 & Target register address (16-bit LE) \\
+P0, P1 & X position (16-bit LE, 0--319) \\
+P2     & Y position (0--199) \\
+P3, P4 & Target register or pseudo-register \\
 P5     & Value to write to the register \\
 \bottomrule
 \end{tabular}
@@ -1025,8 +1028,8 @@ P5     & Value to write to the register \\
 
 \begin{lstlisting}
 10 REM change background colour at scanline 100
-20 POKE $A011,100 : POKE $A012,0  : REM scanline 100
-30 POKE $A013,0                    : REM column 0
+20 POKE $A011,0   : POKE $A012,0  : REM x = 0
+30 POKE $A013,100                  : REM y = 100
 40 POKE $A014,$01 : POKE $A015,$A0 : REM target = $A001 (BgCol)
 50 POKE $A016,2                    : REM value = red
 60 POKE $A010,$1B                  : REM add event
@@ -1036,6 +1039,13 @@ P5     & Value to write to the register \\
 The BASIC command \texttt{COPPER} provides a higher-level interface to the
 copper system.
 \end{notebox}
+
+\begin{tipbox}
+Target pseudo-register \texttt{\$FE} raises VGC IRQ pending bits from P5
+instead of writing a display register.  This lets the copper request CPU
+attention at arbitrary beam positions without a fixed C64-style raster IRQ
+compare register.
+\end{tipbox}
 
 % --- $1C CmdCopperClear ------------------------------------------------------
 
@@ -1140,31 +1150,38 @@ POKE $A010,$22 : REM target = active list
 
 
 % ═══════════════════════════════════════════════════════════════════════════════
-\section{IRQ Control Register (\$A01F)}
+\section{VGC IRQ Block (\$A0F0--\$A0FF)}
 \label{sec:vgc-irq}
 % ═══════════════════════════════════════════════════════════════════════════════
 
-\mementry{A01F}{RegIrqCtrl}{R/W}{0}
+\mementry{A0F0}{RegIrqEnable}{R/W}{0}
 
-Controls raster-triggered interrupts from the VGC.
+Enabled IRQ source mask.  Bit 0 is vblank.  Bits 1--4 are copper/user event
+sources raised by copper pseudo-register \texttt{\$FE}.
 
-\bitfield{---}{---}{---}{---}{---}{---}{---}{RSTR}
+\mementry{A0F1}{RegIrqStatus}{R/W1C}{0}
 
-\begin{itemize}
-  \item \textbf{Bit 0 (RSTR)}: Raster IRQ enable.  When set, the VGC fires an
-        IRQ when the raster beam reaches the trigger scanline.  This allows
-        frame-synchronised processing and split-screen effects.
-\end{itemize}
+Pending IRQ source mask.  The CPU IRQ line is asserted while
+\texttt{RegIrqStatus \& RegIrqEnable} is non-zero.  Write one bits to clear
+handled sources.
+
+\mementry{A0F2}{RegIrqForce}{W}{---}
+
+Sets enabled pending bits for diagnostics and test programs.
+
+\mementry{A0F3}{RegIrqValid}{R}{\$1F}
+
+Returns the implemented IRQ source mask.
 
 \begin{lstlisting}
-POKE $A01F,1 : REM enable raster IRQ
-POKE $A01F,0 : REM disable raster IRQ
+POKE $A0F0,1 : REM enable vblank IRQ source
+POKE $A0F1,1 : REM acknowledge vblank IRQ source
 \end{lstlisting}
 
 \begin{tipbox}
-Combine the raster IRQ with the copper for advanced effects: use the IRQ
-handler to swap copper lists mid-frame, creating complex multi-zone colour
-schemes without burning CPU cycles in a polling loop.
+Nova does not provide a fixed C64-style raster-line compare register.  Use
+the copper for raster-position effects, and use copper IRQ events only when
+the CPU really needs to be notified.
 \end{tipbox}
 
 
@@ -1412,12 +1429,12 @@ output system for the NovaVM.  The table below summarises the register map:
 \midrule
 \$A000--\$A00F  & Core registers (mode, colour, cursor, I/O) & R/W \\
 \$A010          & Command register                           & W \\
-\$A011--\$A01E  & Parameter registers P0--P13                & R/W \\
-\$A01F          & IRQ control                                & R/W \\
+\$A011--\$A01F  & Parameter registers P0--P14                & R/W \\
 \$A020--\$A030  & Help system                                & R/W \\
 \$A031--\$A03E  & Compiler controller                        & R/W \\
 \$A03F          & ROM swap                                   & W \\
 \$A040--\$A0BF  & Sprite registers (16 $\times$ 8 bytes)     & R/W \\
+\$A0F0--\$A0FF  & VGC IRQ block                              & R/W \\
 \bottomrule
 \end{tabular}
 \end{center}

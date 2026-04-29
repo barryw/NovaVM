@@ -130,6 +130,49 @@ Suggested config files:
 
 `boot.json` can eventually hold default ROM/personality and boot behavior. `mounts.json` can map slots like `hd0`, `hd1`, `fd0` to image paths.
 
+First-pass staged `boot.json` shape:
+
+```json
+{
+  "vm": {
+    "defaultRuntime": "novabasic",
+    "bootSplash": {
+      "enabled": true,
+      "asset": "/assets/boot/novavm_logo.nvg",
+      "fadeInMs": 1000,
+      "holdMs": 3000,
+      "fadeOutMs": 1000,
+      "background": 0,
+      "border": 0
+    }
+  },
+  "languages": {
+    "novabasic": {
+      "rom": "/roms/novabasic.bin",
+      "extensionRom": "/roms/extension.bin",
+      "autoboot": true,
+      "theme": {
+        "background": 0,
+        "foreground": 15,
+        "border": 11
+      },
+      "banner": {
+        "startRow": 1
+      }
+    }
+  },
+  "mounts": {
+    "fd0": "",
+    "hd0": ""
+  }
+}
+```
+
+NovaHost now stages `/config/boot.json` onto the SD asset tree, but firmware
+does not consume it yet. The next step is adding a small ESP-side config loader
+that treats missing or malformed JSON as non-fatal and falls back to these
+compiled defaults.
+
 ## Soundfont Strategy
 
 ### Do Not Load Raw SF2 In Hardware

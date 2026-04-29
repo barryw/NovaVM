@@ -166,7 +166,7 @@ public partial class MainWindow : Window
 
                     if (_bus.SidPlayer.HasPendingCall)
                         _bus.SidPlayer.ExecutePendingCalls(_cpu);
-                    if (_bus.Timer.IrqPending || _bus.Nic.IrqPending || _bus.ConsumeRasterIrqPending())
+                    if (_bus.Timer.IrqPending || _bus.Nic.IrqPending || _bus.VgcIrqPending)
                         _cpu.IrqWaiting = true;
 
                     cycleBudget -= cycles;
@@ -447,8 +447,8 @@ public partial class MainWindow : Window
         App.DetachFromVisualParent(_canvas);
         Content = null;
         Content = _canvas;
-        Width = 640;
-        Height = 400;
+        Width = EmulatorCanvas.NativeWidth;
+        Height = EmulatorCanvas.NativeHeight;
         _canvas.Focus();
         if (OperatingSystem.IsMacOS())
             SetMacAspectRatio();

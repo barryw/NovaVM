@@ -73,11 +73,12 @@ and sprite pixels --- references this palette via a 4-bit value (0--15).
   \item \textbf{Transparency:} Colour index~0 (black) serves as the transparent
         colour for sprites.  Sprite pixels with value~0 allow the background to
         show through.
-  \item \textbf{Default colours:} At power-on, the text foreground is~1 (white)
-        and the background is~0 (black).
+  \item \textbf{Default colours:} At power-on, the text foreground is~15
+        (light grey), the background is~0 (black), and the border is~11
+        (dark grey).
   \item \textbf{Boot screen:} The EhBASIC cold-start routine sets the
-        background to~6 (blue) and the foreground to~1 (white), mimicking the
-        classic Commodore~64 appearance.
+        same Nova dark theme and starts the banner on row~1 to leave breathing
+        room on 80$\times$50 displays.
   \item \textbf{Colour RAM:} In text mode, each character cell has an associated
         byte in colour RAM.  The low nibble sets the foreground colour and the
         high nibble sets the background colour for that cell.

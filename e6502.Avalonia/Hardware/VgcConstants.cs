@@ -465,8 +465,19 @@ public static class VgcConstants
     public const int ScreenRows        = 50;
     public const int ScreenSize        = ScreenCols * ScreenRows;  // 4000
 
+    public const int VideoWidth        = 720;
+    public const int VideoHeight       = 480;
+    public const int CanvasOffsetX     = 40;
+    public const int CanvasOffsetY     = 40;
+    public const int CanvasWidth       = 640;
+    public const int CanvasHeight      = 400;
+
     public const int GfxWidth          = 320;
     public const int GfxHeight         = 200;
+    public const int SpritePlaneWidth  = VideoWidth / 2;       // 360
+    public const int SpritePlaneHeight = VideoHeight / 2;      // 240
+    public const int SpriteCanvasX     = CanvasOffsetX / 2;    // 20
+    public const int SpriteCanvasY     = CanvasOffsetY / 2;    // 20
 
     public const int MaxSprites        = 16;
     public const int SpritePixelSize   = 16;       // 16x16 pixels
@@ -645,7 +656,7 @@ public static class VgcConstants
     public const int RegCharIn         = 0xA00F;   // character input
 
     // -------------------------------------------------------------------------
-    // Command register and parameters ($A010-$A01E)
+    // Command register and parameters ($A010-$A01F)
     // -------------------------------------------------------------------------
 
     public const int RegCmd            = 0xA010;   // write triggers execution
@@ -663,12 +674,22 @@ public static class VgcConstants
     public const int RegP11            = 0xA01C;
     public const int RegP12            = 0xA01D;
     public const int RegP13            = 0xA01E;
+    public const int RegP14            = 0xA01F;
 
     // -------------------------------------------------------------------------
-    // IRQ control register ($A01F)
+    // VGC IRQ block ($A0F0-$A0FF)
     // -------------------------------------------------------------------------
 
-    public const int RegIrqCtrl        = 0xA01F;   // bit 0 = raster IRQ enable
+    public const int VgcIrqBase        = 0xA0F0;
+    public const int VgcIrqEnd         = 0xA0FF;
+    public const int RegIrqEnable      = 0xA0F0;
+    public const int RegIrqStatus      = 0xA0F1;
+    public const int RegIrqForce       = 0xA0F2;
+    public const int RegIrqValid       = 0xA0F3;
+    public const byte IrqValidMask     = 0x1F;
+    public const byte IrqVBlank        = 0x01;
+    public const byte IrqCopper0       = 0x02;
+    public const byte CopperRegIrq     = 0xFE;
 
     // -------------------------------------------------------------------------
     // Graphics commands

@@ -298,8 +298,8 @@ indices.
 | 6 | Blue | 14 | Light Blue |
 | 7 | Yellow | 15 | Light Grey |
 
-The background color defaults to 6 (blue), the text foreground to 1 (white),
-and the border to 14 (light blue). Use `COLOR fg[,bg[,border]]` for text,
+The background color defaults to 0 (black), the text foreground to 15 (light grey),
+and the border to 11 (dark grey). Use `COLOR fg[,bg[,border]]` for text,
 background, and border colors.
 
 ## The Copper (Raster Effects)

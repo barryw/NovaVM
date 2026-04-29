@@ -6,6 +6,7 @@
 #   2. Synthesize on beast and pull back a timestamped bitstream.
 #   3. Flash FPGA config flash.
 #   4. Upload/reboot NovaHost so it streams matching ROMs into the new FPGA.
+#   5. Sync SD-resident runtime assets and reload ROMs from SD.
 #
 # Common overrides:
 #   BITSTREAM=/path/to/e6502.bit   Use an existing bitstream instead of synth.
@@ -16,6 +17,10 @@
 #   NOVAHOST=novahost.local        OTA target.
 #   SERIAL=/dev/cu.usbserial-...   Serial target when ESP_UPLOAD=serial.
 #   SERIAL_VIA_PASSTHRU=1          Load FPGA passthru SRAM image for serial ESP upload.
+#   SD_SYNC=1|0                    Upload staged SD assets after ESP upload.
+#   SD_SYNC_HOST=novahost.local     HTTP host for SD asset sync.
+#   SD_SYNC_TIMEOUT=45             Seconds to wait for SD HTTP server.
+#   ROM_RELOAD=1|0                 Reload ROMs from SD after SD sync.
 
 set -euo pipefail
 
@@ -32,6 +37,10 @@ ESP_UPLOAD="${ESP_UPLOAD:-ota}"
 NOVAHOST="${NOVAHOST:-novahost.local}"
 SERIAL="${SERIAL:-/dev/cu.usbserial-D01457}"
 SERIAL_VIA_PASSTHRU="${SERIAL_VIA_PASSTHRU:-1}"
+SD_SYNC="${SD_SYNC:-1}"
+SD_SYNC_HOST="${SD_SYNC_HOST:-$NOVAHOST}"
+SD_SYNC_TIMEOUT="${SD_SYNC_TIMEOUT:-45}"
+ROM_RELOAD="${ROM_RELOAD:-1}"
 
 latest_bitstream() {
     find "$BIT_BACKUPS" -type f -name 'e6502.*.bit' -print0 |
@@ -39,21 +48,61 @@ latest_bitstream() {
         head -n 1
 }
 
-echo "=== [1/4] refreshing ROM hex"
+wait_for_sd_http() {
+    local host="$1"
+    local deadline=$((SECONDS + SD_SYNC_TIMEOUT))
+
+    echo "Waiting for NovaHost SD HTTP at http://$host/sd-status"
+    until curl -fsS --max-time 2 "http://$host/sd-status" >/dev/null; do
+        if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "error: NovaHost SD HTTP did not become ready within ${SD_SYNC_TIMEOUT}s" >&2
+            return 1
+        fi
+        sleep 1
+    done
+}
+
+sync_sd_assets() {
+    local host="$1"
+    local sd_root="$REPO_ROOT/e6502.ESP32/novahost/build/sd"
+
+    echo "=== [5/5] syncing SD assets to NovaHost"
+    make --no-print-directory -C "$REPO_ROOT/e6502.ESP32/novahost" sd-assets
+    wait_for_sd_http "$host"
+
+    while IFS= read -r -d '' src; do
+        local rel="${src#$sd_root/}"
+        echo "PUT /sd/$rel"
+        curl -fsS --max-time 30 -X PUT --data-binary "@$src" "http://$host/sd/$rel" >/dev/null
+    done < <(find "$sd_root" -type f -print0)
+}
+
+reload_rom_from_sd() {
+    local host="$1"
+
+    if [ "$ROM_RELOAD" != "1" ]; then
+        return 0
+    fi
+
+    echo "=== [5b/5] reloading ROMs from SD"
+    printf '{"command":"reload_rom"}\n' | nc -w 15 "$host" 6503
+}
+
+echo "=== [1/5] refreshing ROM hex"
 make --no-print-directory -C "$FPGA_DIR" hex
 
 if [ -z "$BITSTREAM" ]; then
     if [ "$SYNTH" = "0" ]; then
-        echo "=== [2/4] selecting latest existing bitstream"
+        echo "=== [2/5] selecting latest existing bitstream"
         BITSTREAM="$(latest_bitstream)"
     else
-        echo "=== [2/4] synthesizing FPGA on beast"
+        echo "=== [2/5] synthesizing FPGA on beast"
         synth_log="$(mktemp "${TMPDIR:-/tmp}/e6502-beast-synth.XXXXXX")"
         "$REPO_ROOT/tools/beast-synth.sh" bitstream "$LABEL" | tee "$synth_log"
         BITSTREAM="$(awk '/^bitstream:/ {print $2}' "$synth_log" | tail -n 1)"
     fi
 else
-    echo "=== [2/4] using provided bitstream"
+    echo "=== [2/5] using provided bitstream"
 fi
 
 if [ -z "$BITSTREAM" ] || [ ! -f "$BITSTREAM" ]; then
@@ -63,17 +112,17 @@ fi
 
 echo "bitstream: $BITSTREAM"
 
-echo "=== [3/4] flashing FPGA config flash"
+echo "=== [3/5] flashing FPGA config flash"
 openFPGALoader --board ulx3s -f "$BITSTREAM"
 
-echo "=== [4/4] uploading NovaHost ($ESP_UPLOAD)"
+echo "=== [4/5] uploading NovaHost ($ESP_UPLOAD)"
 case "$ESP_UPLOAD" in
     ota)
         make --no-print-directory -C "$REPO_ROOT/e6502.ESP32/novahost" NOVAHOST="$NOVAHOST" upload
         ;;
     serial)
         if [ "$SERIAL_VIA_PASSTHRU" = "1" ]; then
-            echo "=== [4a/4] loading ESP serial passthru into FPGA SRAM"
+            echo "=== [4a/5] loading ESP serial passthru into FPGA SRAM"
             (
                 cd "$FPGA_DIR/fpga"
                 mkdir -p build
@@ -87,7 +136,7 @@ case "$ESP_UPLOAD" in
         fi
         make --no-print-directory -C "$REPO_ROOT/e6502.ESP32/novahost" SERIAL="$SERIAL" serial
         if [ "$SERIAL_VIA_PASSTHRU" = "1" ]; then
-            echo "=== [4b/4] reloading FPGA from config flash"
+            echo "=== [4b/5] reloading FPGA from config flash"
             openFPGALoader --board ulx3s -r
         fi
         ;;
@@ -99,5 +148,12 @@ case "$ESP_UPLOAD" in
         exit 1
         ;;
 esac
+
+if [ "$SD_SYNC" = "1" ]; then
+    sync_sd_assets "$SD_SYNC_HOST"
+    reload_rom_from_sd "$SD_SYNC_HOST"
+else
+    echo "SD asset sync skipped"
+fi
 
 echo "ULX3S stack deploy complete"

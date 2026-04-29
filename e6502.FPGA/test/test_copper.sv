@@ -4,6 +4,7 @@
 `timescale 1ns/1ps
 
 module test_copper;
+    localparam int V_BORDER_TB = 40;
 
     // Clock
     logic clk = 0;
@@ -21,6 +22,8 @@ module test_copper;
     logic [7:0]  key_data;
     wire  [3:0]  vid_r, vid_g, vid_b;
     wire         vid_hsync, vid_vsync, vid_de;
+    wire         irq_out;
+    wire         vgc_rdy;
 
     // Tile DMA (unused in copper tests)
     wire  [15:0] tile_dma_addr;
@@ -39,7 +42,9 @@ module test_copper;
         .blt_space(3'd0), .blt_addr(16'd0), .blt_rdata(),
         .blt_wdata(8'd0), .blt_we(1'b0), .blt_re(1'b0),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
-        .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de)
+        .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
+        .irq_out(irq_out),
+        .rdy_out(vgc_rdy)
     );
 
     // Test counters
@@ -62,7 +67,7 @@ module test_copper;
         cpu_ce <= 0;
     endtask
 
-    // Write a VGC parameter register (P0-P13 at $A011-$A01E)
+    // Write a VGC parameter register (P0-P14 at $A011-$A01F)
     task automatic write_param(input int idx, input logic [7:0] data);
         write_reg(16'hA011 + idx, data);
     endtask
@@ -148,7 +153,7 @@ module test_copper;
 
         // ----- Test 1: Initial state -----
         $display("Test: Initial state");
-        check("bg_color starts as 6 (blue)", dut.bg_color == 4'd6);
+        check("bg_color starts as 0 (black)", dut.bg_color == 4'd0);
         check("copper disabled by default", dut.copper_enabled == 0);
 
         // ----- Test 2: Add copper entry and enable -----
@@ -171,12 +176,12 @@ module test_copper;
         write_reg(16'hA001, 8'd6);
         run_clocks(2);
         run_to_scanline(0);  // start of new frame
-        // V_BORDER=0 now (no border). Gfx line N maps to scanlines N*2..N*2+1.
-        run_to_scanline(50*2 - 1);  // just before gfx line 50
+        // Gfx line N maps to physical scanlines V_BORDER + N*2..N*2+1.
+        run_to_scanline(V_BORDER_TB + 50*2 - 1);  // just before gfx line 50
         check("bg_color still 6 before trigger", dut.bg_color == 4'd6);
 
         // Now cross the trigger line
-        run_to_scanline(50*2 + 1);
+        run_to_scanline(V_BORDER_TB + 50*2 + 1);
         check("bg_color changed to 2 after trigger", dut.bg_color == 4'd2);
 
         // ----- Test 5: Copper disable -----
@@ -215,14 +220,31 @@ module test_copper;
         run_to_scanline(480);
         run_to_scanline(0);
 
-        run_to_scanline(10*2 + 1);
+        run_to_scanline(V_BORDER_TB + 10*2 + 1);
         check("bg=5 (green) after line 10", dut.bg_color == 4'd5);
 
-        run_to_scanline(100*2 + 1);
+        run_to_scanline(V_BORDER_TB + 100*2 + 1);
         check("bg=2 (red) after line 100", dut.bg_color == 4'd2);
 
-        run_to_scanline(150*2 + 1);
+        run_to_scanline(V_BORDER_TB + 150*2 + 1);
         check("bg=7 (yellow) after line 150", dut.bg_color == 4'd7);
+
+        // ----- Test 8: Copper can raise VGC IRQ event sources -----
+        $display("Test: Copper IRQ event");
+        copper_clear();
+        write_reg(16'hA0F0, 8'h02); // enable COPPER0 source
+        write_reg(16'hA0F1, 8'hFF); // clear any stale pending bits
+        copper_add(0, 20, 8'hFE, 8'h02);
+        copper_enable();
+        run_to_scanline(480);
+        run_to_scanline(0);
+        check("irq not pending before copper IRQ event", dut.irq_pending == 8'h00 && !irq_out);
+        run_to_scanline(V_BORDER_TB + 20*2 + 2);
+        check("copper IRQ event sets pending source", dut.irq_pending == 8'h02);
+        check("irq_out asserts for enabled copper IRQ source", irq_out);
+        write_reg(16'hA0F1, 8'h02);
+        run_clocks(2);
+        check("ack clears copper IRQ source", dut.irq_pending == 8'h00 && !irq_out);
 
         // ---------------------------------------------------------------
         // Summary

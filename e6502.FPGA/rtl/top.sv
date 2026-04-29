@@ -266,7 +266,8 @@ module top (
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
                         (mem_addr >= 16'hA0C0 && mem_addr <= 16'hA0DF) ||
-                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E5);
+                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E5) ||
+                        (mem_addr >= 16'hA0F0 && mem_addr <= 16'hA0FF);
 
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
@@ -428,7 +429,8 @@ module top (
     wire       dbg_poke_vgc = dbg_poke_en &&
                               (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                                ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E5)));
+                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E5)) ||
+                               ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
 
     fio fio_inst (
         .clk       (clk),
@@ -1005,6 +1007,9 @@ module top (
     wire [15:0] cpu_dbg_pc;
     wire  [7:0] cpu_dbg_a, cpu_dbg_x, cpu_dbg_y, cpu_dbg_s, cpu_dbg_flags;
 
+    wire vgc_rdy;
+    wire vgc_irq;
+
     cpu cpu_inst (
         .clk    (clk),
         .reset  (rst | dbg_cpu_reset),
@@ -1012,9 +1017,9 @@ module top (
         .DI     (cpu_din),
         .DO     (cpu_dout),
         .WE     (cpu_we),
-        .IRQ    (~irq_n),
+        .IRQ    (~irq_n | vgc_irq),
         .NMI    (~nmi_n),
-        .RDY    (blt_rdy & dma_rdy & ~dbg_pause & cpu_active),
+        .RDY    (blt_rdy & dma_rdy & vgc_rdy & ~dbg_pause & cpu_active),
         .dbg_pc    (cpu_dbg_pc),
         .dbg_a     (cpu_dbg_a),
         .dbg_x     (cpu_dbg_x),
@@ -1067,7 +1072,8 @@ module top (
         .vid_hsync      (vid_hsync),
         .vid_vsync      (vid_vsync),
         .vid_de         (vid_de),
-        .irq_out        ()
+        .irq_out        (vgc_irq),
+        .rdy_out        (vgc_rdy)
 `ifndef SYNTHESIS
         ,
         .dbg_vram_read_en(dbg_vram_read_en),
@@ -1090,7 +1096,8 @@ module top (
     wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
     wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
     wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
-    wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F);
+    wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F) ||
+                         (dbg_peek_addr >= 16'hA0F0 && dbg_peek_addr <= 16'hA0FF);
     wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
@@ -1113,7 +1120,8 @@ module top (
     wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
     wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
     wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
-    wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F);
+    wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F) ||
+                         (dbg_peek_addr >= 16'hA0F0 && dbg_peek_addr <= 16'hA0FF);
     wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);

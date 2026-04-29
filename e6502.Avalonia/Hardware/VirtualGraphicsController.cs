@@ -48,8 +48,8 @@ public class VirtualGraphicsController : IBusDevice
     // Core registers $A000-$A00F (16 bytes)
     private readonly byte[] _regs = new byte[16];
 
-    // Command registers $A010-$A01E (15 bytes: [0]=cmd, [1..14]=P0..P13)
-    private readonly byte[] _cmdRegs = new byte[15];
+    // Command registers $A010-$A01F (16 bytes: [0]=cmd, [1..15]=P0..P14)
+    private readonly byte[] _cmdRegs = new byte[16];
 
     // Sprite shape data: 16 sprites x 128 bytes each (4-bit color, 16x16 pixels)
     // Accessed from CPU thread (bus writes/commands) and UI thread (renderer, sprite editor).
@@ -111,8 +111,8 @@ public class VirtualGraphicsController : IBusDevice
     // Tile command parameter registers (local copy)
     private readonly byte[] _tileRegs = new byte[VgcConstants.TileRegEnd - VgcConstants.TileRegBase + 1];
 
-    // IRQ control register ($A01F)
-    private byte _irqCtrl;
+    private byte _irqEnable;
+    private byte _irqStatus;
     private byte _vramPlane;
     private ushort _vramAddr;
     private byte _vramCtrl;
@@ -164,7 +164,8 @@ public class VirtualGraphicsController : IBusDevice
         Array.Clear(_spriteTransColor);
         Array.Clear(_gfxBitmap);
         _gfxDrawColor = 1;
-        _irqCtrl = 0;
+        _irqEnable = 0;
+        _irqStatus = 0;
         _vramPlane = VgcConstants.VramPlaneChar;
         _vramAddr = 0;
         _vramCtrl = VgcConstants.VramCtrlAutoInc;
@@ -194,13 +195,13 @@ public class VirtualGraphicsController : IBusDevice
         // Screen RAM initialized to spaces
         Array.Fill(_screenRam, (byte)0x20);
 
-        // Color RAM initialized to 1 (white)
-        Array.Fill(_colorRam, (byte)1);
+        // Color RAM initialized to the default light-grey foreground.
+        Array.Fill(_colorRam, (byte)15);
 
-        // Match FPGA reset defaults: white text, blue background, light-blue border.
-        _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] = 1;
-        _regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] = 6;
-        _regs[VgcConstants.RegBorder - VgcConstants.VgcBase] = 14;
+        // Match FPGA reset defaults: light-grey text, black background, dark-grey border.
+        _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] = 15;
+        _regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] = 0;
+        _regs[VgcConstants.RegBorder - VgcConstants.VgcBase] = 11;
 
         // Tile engine reset
         ResetTileEngine();
@@ -251,7 +252,7 @@ public class VirtualGraphicsController : IBusDevice
 
     public bool OwnsAddress(ushort address)
     {
-        // VGC registers + command: $A000-$A01E
+        // VGC registers + command: $A000-$A01F
         if (address >= VgcConstants.VgcBase && address <= VgcConstants.VgcRegsEnd)
             return true;
 
@@ -268,6 +269,9 @@ public class VirtualGraphicsController : IBusDevice
             return true;
 
         if (address == VgcConstants.DisplayDim)
+            return true;
+
+        if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
             return true;
 
         return false;
@@ -294,17 +298,16 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.DisplayDim)
             return _displayDim;
 
-        // Command parameter registers $A011-$A01E
-        if (address >= VgcConstants.RegP0 && address <= VgcConstants.RegP13)
+        if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
+            return ReadIrqRegister(address);
+
+        // Command parameter registers $A011-$A01F
+        if (address >= VgcConstants.RegP0 && address <= VgcConstants.RegP14)
             return _cmdRegs[address - VgcConstants.RegCmd];
 
         // Command register $A010
         if (address == VgcConstants.RegCmd)
             return _cmdRegs[0];
-
-        // IRQ control register $A01F
-        if (address == VgcConstants.RegIrqCtrl)
-            return _irqCtrl;
 
         // Core registers $A000-$A00F
         if (address >= VgcConstants.VgcBase && address < VgcConstants.VgcBase + 16)
@@ -373,10 +376,9 @@ public class VirtualGraphicsController : IBusDevice
             return;
         }
 
-        // IRQ control register $A01F
-        if (address == VgcConstants.RegIrqCtrl)
+        if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
         {
-            _irqCtrl = data;
+            WriteIrqRegister(address, data);
             return;
         }
 
@@ -388,8 +390,8 @@ public class VirtualGraphicsController : IBusDevice
             return;
         }
 
-        // Command parameter registers $A011-$A01E
-        if (address >= VgcConstants.RegP0 && address <= VgcConstants.RegP13)
+        // Command parameter registers $A011-$A01F
+        if (address >= VgcConstants.RegP0 && address <= VgcConstants.RegP14)
         {
             _cmdRegs[address - VgcConstants.RegCmd] = data;
             return;
@@ -582,7 +584,7 @@ public class VirtualGraphicsController : IBusDevice
 
     public byte GetDisplayDim() => _displayDim;
 
-    public bool IsRasterIrqEnabled => (_irqCtrl & 0x01) != 0;
+    public bool IrqPending => (_irqStatus & _irqEnable) != 0;
     public bool IsCopperEnabled => _copperEnabled;
 
     public ReadOnlySpan<CopperEvent> GetCopperProgram() => _copperPrograms[_copperActiveList];
@@ -820,6 +822,43 @@ public class VirtualGraphicsController : IBusDevice
                 return byPos != 0 ? byPos : a.RegisterIndex.CompareTo(b.RegisterIndex);
             });
             _copperListDirty[i] = false;
+        }
+    }
+
+    public void RaiseVBlankIrq() => RaiseIrqSource(VgcConstants.IrqVBlank);
+
+    public void RaiseCopperIrq(byte sourceMask) =>
+        RaiseIrqSource((byte)(sourceMask & VgcConstants.IrqValidMask));
+
+    private void RaiseIrqSource(byte sourceMask)
+    {
+        byte enabled = (byte)(sourceMask & _irqEnable & VgcConstants.IrqValidMask);
+        if (enabled != 0)
+            _irqStatus |= enabled;
+    }
+
+    private byte ReadIrqRegister(ushort address) =>
+        address switch
+        {
+            VgcConstants.RegIrqEnable => _irqEnable,
+            VgcConstants.RegIrqStatus => _irqStatus,
+            VgcConstants.RegIrqValid => VgcConstants.IrqValidMask,
+            _ => 0
+        };
+
+    private void WriteIrqRegister(ushort address, byte data)
+    {
+        switch (address)
+        {
+            case VgcConstants.RegIrqEnable:
+                _irqEnable = (byte)(data & VgcConstants.IrqValidMask);
+                break;
+            case VgcConstants.RegIrqStatus:
+                _irqStatus = (byte)(_irqStatus & ~(data & VgcConstants.IrqValidMask));
+                break;
+            case VgcConstants.RegIrqForce:
+                RaiseIrqSource(data);
+                break;
         }
     }
 
@@ -1182,6 +1221,12 @@ public class VirtualGraphicsController : IBusDevice
     {
         registerIndex = 0;
 
+        if (registerSpecifier == VgcConstants.CopperRegIrq)
+        {
+            registerIndex = VgcConstants.CopperRegIrq;
+            return true;
+        }
+
         // Direct index: 0-15 for VGC core registers
         if ((uint)registerSpecifier < 16)
         {
@@ -1209,6 +1254,8 @@ public class VirtualGraphicsController : IBusDevice
     private static bool IsCopperWritableRegister(byte registerIndex) =>
         registerIndex == VgcConstants.RegMode - VgcConstants.VgcBase ||
         registerIndex == VgcConstants.RegBgCol - VgcConstants.VgcBase ||
+        registerIndex == VgcConstants.RegFgCol - VgcConstants.VgcBase ||
+        registerIndex == VgcConstants.RegBorder - VgcConstants.VgcBase ||
         registerIndex == VgcConstants.RegScrollX - VgcConstants.VgcBase ||
         registerIndex == VgcConstants.RegScrollY - VgcConstants.VgcBase ||
         IsCopperSpriteRegister(registerIndex);

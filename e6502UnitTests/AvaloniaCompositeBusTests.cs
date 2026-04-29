@@ -83,15 +83,18 @@ public class AvaloniaCompositeBusTests
     }
 
     [TestMethod]
-    public void AdvanceCycles_RasterIrq_LatchesOncePerFrame()
+    public void AdvanceCycles_VgcVBlankIrq_LatchesStatusUntilAck()
     {
         var bus = MakeBus();
-        bus.Write((ushort)VgcConstants.RegIrqCtrl, 0x01);
+        bus.Write((ushort)VgcConstants.RegIrqEnable, VgcConstants.IrqVBlank);
 
         bus.AdvanceCycles(bus.CpuHz / bus.FrameRateHz);
 
-        Assert.IsTrue(bus.ConsumeRasterIrqPending());
-        Assert.IsFalse(bus.ConsumeRasterIrqPending());
+        Assert.IsTrue(bus.VgcIrqPending);
+        Assert.AreEqual(VgcConstants.IrqVBlank, bus.Read((ushort)VgcConstants.RegIrqStatus));
+
+        bus.Write((ushort)VgcConstants.RegIrqStatus, VgcConstants.IrqVBlank);
+        Assert.IsFalse(bus.VgcIrqPending);
     }
 
     [TestMethod]

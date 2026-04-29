@@ -31,7 +31,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly int _frameRateHz;
     private long _frameNumeratorAccumulator;
     private long _totalFrames;
-    private bool _rasterIrqPending;
     private long _lastMusicWallTick;
     private double _musicFrameAccum;
     private readonly byte[] _basicRom;
@@ -50,6 +49,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public int CpuHz => _cpuHz;
     public int FrameRateHz => _frameRateHz;
     public long TotalFrames => _totalFrames;
+    public bool VgcIrqPending => _vgc.IrqPending;
 
     public CompositeBusDevice(
         int cpuHz = VgcConstants.DefaultCpuHz,
@@ -312,6 +312,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _frameNumeratorAccumulator -= _cpuHz;
             _totalFrames++;
             _vgc.IncrementFrameCounter();
+            _vgc.RaiseVBlankIrq();
 
             long now = Stopwatch.GetTimestamp();
             if (_lastMusicWallTick == 0) _lastMusicWallTick = now;
@@ -334,17 +335,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                     }
                 }
             }
-
-            if (_vgc.IsRasterIrqEnabled)
-                _rasterIrqPending = true;
         }
-    }
-
-    public bool ConsumeRasterIrqPending()
-    {
-        if (!_rasterIrqPending) return false;
-        _rasterIrqPending = false;
-        return true;
     }
 
     private void SniffSidNotes()

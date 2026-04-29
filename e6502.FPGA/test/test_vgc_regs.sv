@@ -190,11 +190,30 @@ module test_vgc_regs;
                  int'(dut.collision_bg), 0);
     endtask
 
-    task automatic test_irq_ctrl();
+    task automatic test_irq_block();
+        logic [7:0] rb;
         $display("");
-        $display("Test: irq_ctrl at $A01F — full 8 bits");
-        bus_write(16'hA01F, 8'hA5); step(2);
-        check_eq("irq_ctrl = 0xA5", int'(dut.irq_ctrl), 8'hA5);
+        $display("Test: flexible VGC IRQ block — enable, force, status W1C");
+
+        bus_write(VIRQ_ENABLE_A, 8'hFF); step(2);
+        check_eq("irq_enable masks to valid sources", int'(dut.irq_enable), 8'h1F);
+        bus_read(VIRQ_VALID_A, rb); step(2);
+        check_eq("$A0F3 reads valid IRQ source mask", int'(rb), 8'h1F);
+
+        bus_write(VIRQ_FORCE_A, 8'h02); step(2);
+        check_eq("force sets pending copper source", int'(dut.irq_pending), 8'h02);
+        check("irq_out asserts while enabled pending source exists", irq_out);
+        bus_read(VIRQ_STATUS_A, rb); step(2);
+        check_eq("$A0F1 reads pending source mask", int'(rb), 8'h02);
+
+        bus_write(VIRQ_STATUS_A, 8'h02); step(2);
+        check_eq("status write-one-clears pending bit", int'(dut.irq_pending), 8'h00);
+        check("irq_out deasserts after ack", !irq_out);
+
+        bus_write(REG_P14_A, 8'h03); step(2);
+        check_eq("$A01F is command parameter P14, not IRQ enable", int'(dut.irq_enable), 8'h1F);
+        bus_read(REG_P14_A, rb); step(2);
+        check_eq("$A01F reads back P14", int'(rb), 8'h03);
     endtask
 
     task automatic test_display_dim_register();
@@ -457,7 +476,7 @@ module test_vgc_regs;
         bus_write(16'hA00A,       8'd1);   step(2);
         // $A00D write accepted but no-op — border removed, nothing to assert
         bus_write(16'hA00D,       8'd11);  step(2);
-        bus_write(16'hA01F,       8'hC3);  step(2);
+        bus_write(VIRQ_ENABLE_A,  8'h13);  step(2);
 
         check_eq("mode stable",         int'(dut.mode),          2);
         check_eq("bg_color stable",     int'(dut.bg_color),      3);
@@ -469,7 +488,7 @@ module test_vgc_regs;
         check_eq("font_slot stable",    int'(dut.font_slot),     1);
         check_eq("gfx_color stable",    int'(dut.gfx_color),     9);
         check_eq("cursor_enable stable", int'(dut.cursor_enable), 1);
-        check_eq("irq_ctrl stable",     int'(dut.irq_ctrl),      8'hC3);
+        check_eq("irq_enable stable",   int'(dut.irq_enable),    8'h13);
     endtask
 
     // -----------------------------------------------------------------------
@@ -489,7 +508,7 @@ module test_vgc_regs;
         test_gfx_color();
         test_cursor_enable();
         test_collision_clear_on_write();
-        test_irq_ctrl();
+        test_irq_block();
         test_display_dim_register();
         test_debug_write_paths();
         test_memread_char();

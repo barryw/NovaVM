@@ -18,12 +18,15 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | 0200--027F | 128 B | System Vectors (IRQ/NMI handlers, BASIC vectors) |
 | 0280--9FFF | 39,680 B | BASIC Program RAM |
 | A000--A01F | 32 B | Virtual Graphics Controller (VGC) registers and command interface |
+| A03F | 1 B | ROM swap/control register |
 | A040--A0BF | 128 B | Sprite Registers (16 sprites x 8 bytes) |
 | A0C0--A0DF | 32 B | Tile Engine registers |
 | A0E0--A0E4 | 5 B | VDC-style VRAM port (char/color/gfx/sprite/tile memory) |
 | A0E5 | 1 B | VGC display dimmer (0=black, 15=full brightness) |
+| A0F0--A0FF | 16 B | VGC IRQ block |
 | A100--A13F | 64 B | Network Interface Controller (NIC) registers |
 | B9A0--B9EF | 80 B | File I/O Controller (FIO) registers |
+| B9F0--B9FF | 16 B | Boot/runtime coordination flags |
 | BA00--BA3F | 64 B | Expansion Memory Controller (XMC) registers |
 | BA40--BA4F | 16 B | Timer Controller registers |
 | BA50--BA56 | 7 B | Music Status and Voice Note Readback (6 voices) |
@@ -36,28 +39,42 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | D500--D51C | 29 B | SID chip 2 mirror (transparently routes to $D420) |
 
 ::: note
-The address range A020--A03F, A0E5--A0FF, and A140--A9FF are not claimed by any
-coprocessor and fall through to the underlying flat RAM.
-The range BAA0--BBFF is similarly unallocated RAM.
+The address range A020--A03E is reserved for language/host services. Unlisted
+addresses in A0E6--A0EF and A140--A9FF are not claimed by any coprocessor and
+fall through to the underlying flat RAM.
+The range BAA0--BBFF is similarly unallocated RAM, except for documented
+system buffers such as the file metadata buffer.
 SID registers at D400--D43C occupy space within the ROM address range
 but are intercepted on write by the SID chip emulators.
 :::
 
+## Boot Runtime Flags
+
+The range B9F0--B9FF is reserved for runtime boot coordination between the host
+and language ROMs. Language implementations should preserve these bytes unless
+they explicitly implement the same boot ABI.
+
+| **Address** | **Name** | **Access** | **Description** |
+| --- | --- | --- | --- |
+| $B9F0 | AutobootSkip | R/W | Non-zero disables the language's startup autoboot attempt. |
+| $B9F1 | AutobootActive | R/W | Non-zero while a startup autoboot program is being entered; runtimes use this to suppress broken-autoboot errors and fall back to `Ready`. |
+
 ## VGC Register Map
 
-The Virtual Graphics Controller occupies A000--A01F.
+The Virtual Graphics Controller occupies A000--A01F, with extension registers
+at A0E0--A0FF.
 Registers A000--A00F are the core status and display registers.
-Registers A010--A01E are the command register and its 14 parameter slots;
+Registers A010--A01F are the command register and its 15 parameter slots;
 writing to $A010 both stores the command byte and triggers immediate execution.
-Register $A01F is the IRQ control register.
+The VGC IRQ block lives at A0F0--A0FF.
 
 ### Core Registers (A000--A00F)
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
 | $A000 | RegMode | R/W | Display mode: 0=text only, 1=graphics over text, 2=text over graphics, 3=graphics and sprites only (no text). |
-| $A001 | RegBgCol | R/W | Background color index (0--15). |
-| $A002 | RegFgCol | R/W | Default foreground color index (0--15); reset value is 1 (white). |
+| $A001 | RegBgCol | R/W | Background color index (0--15); reset value is 0 (black). |
+| $A002 | RegFgCol | R/W | Default foreground color index (0--15); reset value is 15 (light grey). |
 | $A003 | RegCursorX | R/W | Text cursor column (0--79). |
 | $A004 | RegCursorY | R/W | Text cursor row (0--24). |
 | $A005 | RegScrollX | R/W | Horizontal scroll offset (used by copper raster effects). |
@@ -68,17 +85,25 @@ Register $A01F is the IRQ control register.
 | $A00A | RegCursorEnable | R/W | Non-zero enables the cursor blink. |
 | $A00B | RegColSt | RO | Sprite-to-sprite collision bitmask; reading clears the register. |
 | $A00C | RegColBg | RO | Sprite-to-background collision bitmask; reading clears the register. |
-| $A00D | RegBorder | R/W | Border color index (0--15). |
+| $A00D | RegBorder | R/W | Border color index (0--15); reset value is 11 (dark grey). |
 | $A00E | RegCharOut | R/W | Character output port; writing outputs a character to the text screen. |
 | $A00F | RegCharIn | R/W | Character input port; reading dequeues the next keypress byte. |
 
-### IRQ Control ($A01F)
+### IRQ Control (A0F0--A0FF)
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
-| $A01F | RegIrqCtrl | R/W | Bit 0: raster IRQ enable. When set, the VGC fires an IRQ once per video frame. |
+| $A0F0 | RegIrqEnable | R/W | Enabled IRQ source mask. Bit 0=vblank, bit 1=copper event 0, bits 2--4=copper/user events 1--3. |
+| $A0F1 | RegIrqStatus | R/W1C | Pending IRQ source mask. Write `1` bits to acknowledge/clear pending sources. |
+| $A0F2 | RegIrqForce | WO | Set enabled pending bits for diagnostics/tests. |
+| $A0F3 | RegIrqValid | RO | Valid implemented source mask (`$1F`). |
 
-### Command Register and Parameters (A010--A01E)
+The CPU IRQ line is asserted while `(RegIrqStatus & RegIrqEnable) != 0`.
+Use `$A0F1` to acknowledge handled sources before returning from an IRQ handler.
+The VGC does not expose a fixed C64-style raster-line IRQ register; use copper
+events for beam-position IRQs.
+
+### Command Register and Parameters (A010--A01F)
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
@@ -97,6 +122,7 @@ Register $A01F is the IRQ control register.
 | $A01C | RegP11 | R/W | Parameter 11. |
 | $A01D | RegP12 | R/W | Parameter 12. |
 | $A01E | RegP13 | R/W | Parameter 13. |
+| $A01F | RegP14 | R/W | Parameter 14. |
 
 Multi-byte parameters (coordinates, sprite positions) are packed
 little-endian across consecutive parameter registers.
@@ -105,7 +131,7 @@ For example, a 16-bit x-coordinate uses P0 (low byte) and P1 (high byte).
 ## VGC Command Codes
 
 All commands are invoked by writing the command byte to `RegCmd` ($A010).
-Parameters must be loaded into `RegP0`--`RegP13` before the write.
+Parameters must be loaded into `RegP0`--`RegP14` before the write.
 
 ### Graphics Commands (01--09)
 
@@ -154,13 +180,14 @@ Auto-increment advances the address after each read or write.
 
 ### Copper Commands (1B--1E, 20--22)
 
-The copper triggers register writes at specific raster positions each frame.
-The VGC stores 128 independent copper lists (0--127), each holding up to 256
-events. All copper state changes take effect at vblank.
+The copper triggers register writes or IRQ events at specific raster positions
+each frame. FPGA builds store 8 independent copper lists (0--7), each holding
+up to 32 events; simulation builds may expose more lists for software
+compatibility. Active-list swaps take effect at vblank.
 
 | **Code** | **Name** | **Parameters and behavior** |
 | --- | --- | --- |
-| $1B | CmdCopperAdd | P0/P1 = X (16-bit), P2 = Y, P3/P4 = register (0--15, A000--A00F, or A040--A0BF for sprite registers), P5 = value. Adds to the target list. Replaces existing event at same position/register. Max 256 events per list. |
+| $1B | CmdCopperAdd | P0/P1 = X (16-bit), P2 = Y, P3/P4 = register (0--15, A000--A00F, A040--A0BF for sprite registers, or `$FE` for IRQ event), P5 = value. Adds to the target list. Replaces existing event at same position/register. Max 32 events per list on FPGA. |
 | $1C | CmdCopperClear | No parameters. Remove all events from the target list. |
 | $1D | CmdCopperEnable | No parameters. Start executing the active copper list each frame. |
 | $1E | CmdCopperDisable | No parameters. Stop executing copper. |

@@ -15,6 +15,11 @@ localparam logic [15:0] REG_CHAROUT_A   = 16'hA00E;
 localparam logic [15:0] REG_CHARIN_A    = 16'hA00F;
 localparam logic [15:0] REG_CMD_A       = 16'hA010;
 localparam logic [15:0] REG_PARAM0_A    = 16'hA011;
+localparam logic [15:0] REG_P14_A        = 16'hA01F;
+localparam logic [15:0] VIRQ_ENABLE_A    = 16'hA0F0;
+localparam logic [15:0] VIRQ_STATUS_A    = 16'hA0F1;
+localparam logic [15:0] VIRQ_FORCE_A     = 16'hA0F2;
+localparam logic [15:0] VIRQ_VALID_A     = 16'hA0F3;
 localparam logic [15:0] VREG_PLANE_A    = 16'hA0E0;
 localparam logic [15:0] VREG_ADDRL_A    = 16'hA0E1;
 localparam logic [15:0] VREG_ADDRH_A    = 16'hA0E2;
@@ -76,6 +81,7 @@ logic [7:0]  dbg_vmem_wdata;
 wire  [3:0]  vid_r, vid_g, vid_b;
 wire         vid_hsync, vid_vsync, vid_de;
 wire         irq_out;
+wire         vgc_rdy;
 
 vgc dut (
     .clk(clk), .rst(rst),
@@ -94,7 +100,8 @@ vgc dut (
     .dbg_vmem_addr(dbg_vmem_addr), .dbg_vmem_wdata(dbg_vmem_wdata),
     .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
     .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
-    .irq_out(irq_out)
+    .irq_out(irq_out),
+    .rdy_out(vgc_rdy)
 );
 
 // ---------------------------------------------------------------------------
@@ -361,6 +368,22 @@ task automatic type_char(input logic [7:0] ch);
     bus_write(REG_CHAROUT_A, ch);
     // Allow 2 cycles for cmd_char_we to fire and the dpram write to commit.
     step(3);
+    wait_vgc_ready();
+endtask
+
+task automatic wait_vgc_ready();
+    int timeout;
+    if (!vgc_rdy) begin
+        timeout = 0;
+        while (!vgc_rdy && timeout < 600000) begin
+            @(posedge clk);
+            timeout++;
+        end
+        check("VGC released RDY after vblank-safe scroll", vgc_rdy);
+        // The scroll-clear FSM writes the last cell on the cycle before RDY
+        // rises; give the dpram one edge to commit before tests inspect RAM.
+        @(posedge clk);
+    end
 endtask
 
 task automatic type_string(input string s);

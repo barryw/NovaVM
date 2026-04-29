@@ -367,6 +367,12 @@ RomEnd                  = $FFFF
 ; --- Screen / graphics dimensions ---
 ScreenCols              = $50
 ScreenRows              = $32
+VideoWidth              = $02D0
+VideoHeight             = $01E0
+CanvasOffsetX           = $28
+CanvasOffsetY           = $28
+CanvasWidth             = $0280
+CanvasHeight            = $0190
 GfxWidth                = $0140
 GfxHeight               = $C8
 MaxSprites              = $10
@@ -495,7 +501,7 @@ RegBorder               = $A00D
 RegCharOut              = $A00E
 RegCharIn               = $A00F
 
-; --- Command register and parameters ($A010-$A01E) ---
+; --- Command register and parameters ($A010-$A01F) ---
 RegCmd                  = $A010
 RegP0                   = $A011
 RegP1                   = $A012
@@ -511,9 +517,19 @@ RegP10                  = $A01B
 RegP11                  = $A01C
 RegP12                  = $A01D
 RegP13                  = $A01E
+RegP14                  = $A01F
 
-; --- IRQ control register ($A01F) ---
-RegIrqCtrl              = $A01F
+; --- VGC IRQ block ($A0F0-$A0FF) ---
+VgcIrqBase              = $A0F0
+VgcIrqEnd               = $A0FF
+RegIrqEnable            = $A0F0
+RegIrqStatus            = $A0F1
+RegIrqForce             = $A0F2
+RegIrqValid             = $A0F3
+IrqValidMask            = $1F
+IrqVBlank               = $01
+IrqCopper0              = $02
+CopperRegIrq            = $FE
 
 ; --- Graphics commands ---
 CmdPlot                 = $01
@@ -592,7 +608,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E85B
-V_OUTP                  = $E85E
-V_LOAD                  = $E861
-V_SAVE                  = $E864
+V_INPT                  = $E86E
+V_OUTP                  = $E871
+V_LOAD                  = $E874
+V_SAVE                  = $E877

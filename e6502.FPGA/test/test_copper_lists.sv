@@ -17,6 +17,7 @@ module test_copper_lists;
     logic        cpu_re;
     wire  [3:0]  vid_r, vid_g, vid_b;
     wire         vid_hsync, vid_vsync, vid_de;
+    wire         vgc_rdy;
 
     wire  [15:0] tile_dma_addr;
     wire         tile_dma_active;
@@ -33,7 +34,9 @@ module test_copper_lists;
         .blt_space(3'd0), .blt_addr(16'd0), .blt_rdata(),
         .blt_wdata(8'd0), .blt_we(1'b0), .blt_re(1'b0),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
-        .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de)
+        .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
+        .irq_out(),
+        .rdy_out(vgc_rdy)
     );
 
     int pass_count = 0;

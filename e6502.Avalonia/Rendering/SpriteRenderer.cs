@@ -101,7 +101,7 @@ public static class SpriteRenderer
                 if (color == sprites.GetTransColor(i)) continue;
 
                 int screenX = sprites.GetX(i) + col;
-                if ((uint)screenX >= VgcConstants.GfxWidth) continue;
+                if ((uint)screenX >= (uint)target.Length) continue;
 
                 target[screenX] = color;
                 spriteMask[screenX] |= (ushort)(1 << i);
@@ -167,9 +167,11 @@ public static class SpriteRenderer
             // Sprite-background collision
             foreach (var (px, py) in pixelSets[i]!)
             {
-                if (px >= 0 && px < VgcConstants.GfxWidth &&
-                    py >= 0 && py < VgcConstants.GfxHeight &&
-                    vgc.GetGfxPixelColor(px, py) != 0)
+                int gfxX = px - VgcConstants.SpriteCanvasX;
+                int gfxY = py - VgcConstants.SpriteCanvasY;
+                if (gfxX >= 0 && gfxX < VgcConstants.GfxWidth &&
+                    gfxY >= 0 && gfxY < VgcConstants.GfxHeight &&
+                    vgc.GetGfxPixelColor(gfxX, gfxY) != 0)
                 {
                     spriteToBg |= (ushort)(1 << i);
                     break;

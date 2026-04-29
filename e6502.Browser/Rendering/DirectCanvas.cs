@@ -82,7 +82,7 @@ public static partial class DirectCanvas
 
                 if (_bus.SidPlayer.HasPendingCall)
                     _bus.SidPlayer.ExecutePendingCalls(_cpu);
-                if (_bus.Timer.IrqPending || _bus.Nic.IrqPending || _bus.ConsumeRasterIrqPending())
+                if (_bus.Timer.IrqPending || _bus.Nic.IrqPending || _bus.VgcIrqPending)
                     _cpu.IrqWaiting = true;
 
                 remaining -= cycles;

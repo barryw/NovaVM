@@ -61,7 +61,8 @@ module vgc (
     output logic        vid_hsync,
     output logic        vid_vsync,
     output logic        vid_de,
-    output logic        irq_out     // raster IRQ (active high)
+    output logic        irq_out,    // raster IRQ (active high)
+    output logic        rdy_out     // low while VGC is holding CPU for vblank-safe text scroll
 `ifndef SYNTHESIS
     ,
     // Simulation-only VRAM peek path. This is intentionally not a
@@ -108,6 +109,8 @@ module vgc (
     // Address map
     localparam VGC_BASE       = 16'hA000;
     localparam VGC_REGS_END   = 16'hA01F;
+    localparam VGC_IRQ_BASE   = 16'hA0F0;
+    localparam VGC_IRQ_END    = 16'hA0FF;
     localparam SPR_REG_BASE   = 16'hA040;
     localparam SPR_REG_END    = 16'hA0BF;
     localparam VRAM_REG_BASE  = 16'hA0E0;
@@ -124,6 +127,16 @@ module vgc (
     localparam REG_CHAROUT = 14;
     localparam REG_CHARIN  = 15;
     localparam REG_CMD     = 16;
+
+    // Flexible VGC IRQ block at $A0F0-$A0FF. Copper can raise any enabled
+    // source by writing COPPER_REG_IRQ with the desired source mask.
+    localparam IRQ_ENABLE  = 4'h0;       // R/W: enabled source mask
+    localparam IRQ_STATUS  = 4'h1;       // R/W1C: pending source mask
+    localparam IRQ_FORCE   = 4'h2;       // W: set enabled pending bits
+    localparam IRQ_VALID   = 8'h1F;
+    localparam IRQ_VBLANK  = 8'h01;
+    localparam IRQ_COPPER0 = 8'h02;
+    localparam COPPER_REG_IRQ = 8'hFE;
 
     // VDC-style VRAM port registers at $A0E0-$A0E4
     localparam VR_PLANE = 0;
@@ -580,10 +593,18 @@ module vgc (
     logic [2:0]  font_slot;
     logic [7:0]  collision_ss;
     logic [7:0]  collision_bg;
-    logic [7:0]  irq_ctrl;
-    logic        irq_raster_pending;
+    logic [7:0]  irq_enable;
+    logic [7:0]  irq_pending;
     logic        scroll_pending;
+    logic        scroll_clearing;
     logic [6:0]  scroll_col;
+
+    assign rdy_out = !scroll_pending;
+    wire [7:0] irq_event_mask =
+        ((vblank_start && irq_enable[0]) ? IRQ_VBLANK : 8'h00) |
+        ((copper_fire && copper_fire_reg == COPPER_REG_IRQ)
+            ? (copper_fire_val & IRQ_VALID & irq_enable)
+            : 8'h00);
 
     // Gtext / FIO name buffer
     localparam FIO_NAME_LEN = 16'hB9A3;
@@ -662,17 +683,17 @@ module vgc (
     initial begin
         for (int i = 0; i < 32; i++) regs[i] = 0;
         cursor_x = 0; cursor_y = 0;
-        border_color = 4'd14; fg_color = 4'd1; bg_color = 4'd6;
+        border_color = 4'd11; fg_color = 4'd15; bg_color = 4'd0;
         display_dim = 4'd15;
         gfx_color = 4'd1; mode = 0; cursor_enable = 1;
         vram_plane = SPACE_CHAR; vram_addr = 0; vram_ctrl = 8'h01;
         vram_cpu_read_pending = 0; vram_cpu_read_space = SPACE_CHAR; vram_cpu_read_latch = 0;
         frame_counter = 0;
         scroll_x = 0; scroll_y = 0;
-        scroll_offset = 0; scroll_pending = 0; scroll_col = 0;
+        scroll_offset = 0; scroll_pending = 0; scroll_clearing = 0; scroll_col = 0;
         key_fifo_rd = 0; cmd_busy = 0;
         font_slot = 0; collision_ss = 0; collision_bg = 0;
-        irq_ctrl = 0; irq_raster_pending = 0;
+        irq_enable = 0; irq_pending = 0;
         sprrow_count = 0; sprcopy_phase = 0;
         memread_pending = 2'd0;
         vgc_tile_addr = 0; vgc_tile_wdata = 0; vgc_tile_we = 0; vgc_tile_re = 0;
@@ -716,6 +737,7 @@ module vgc (
 
     // READ-side decoders — combinational on live cpu_addr.
     wire vgc_reg_sel   = (cpu_addr >= VGC_BASE && cpu_addr <= VGC_REGS_END);
+    wire vgc_irq_sel   = (cpu_addr >= VGC_IRQ_BASE && cpu_addr <= VGC_IRQ_END);
     wire spr_reg_sel   = (cpu_addr >= SPR_REG_BASE && cpu_addr <= SPR_REG_END);
     wire vram_reg_sel  = (cpu_addr >= VRAM_REG_BASE && cpu_addr <= VRAM_REG_END);
     wire dim_reg_sel   = (cpu_addr == DIM_REG_ADDR);
@@ -724,6 +746,7 @@ module vgc (
     wire tile_reg_sel  = (cpu_addr >= 16'hA0C0 && cpu_addr <= 16'hA0DF);
     wire [7:0]  tile_rdata;
     wire [4:0]  reg_offset   = cpu_addr[4:0];
+    wire [3:0]  irq_offset   = cpu_addr[3:0];
     wire [2:0]  vram_reg_off = cpu_addr[2:0];
     // Sprite register map starts at $A040 and spans $A040-$A0BF.
     // Offsets from the base are 0..127 = sprite (4 bits) << 3 | field (3 bits).
@@ -742,12 +765,14 @@ module vgc (
     // direct memory-window subtractors used to live here; removing the
     // direct window leaves only narrow register decodes on the CPU path.
     wire vgc_reg_sel_w   = (r_cpu_addr_w >= VGC_BASE && r_cpu_addr_w <= VGC_REGS_END);
+    wire vgc_irq_sel_w   = (r_cpu_addr_w >= VGC_IRQ_BASE && r_cpu_addr_w <= VGC_IRQ_END);
     wire spr_reg_sel_w   = (r_cpu_addr_w >= SPR_REG_BASE && r_cpu_addr_w <= SPR_REG_END);
     wire vram_reg_sel_w  = (r_cpu_addr_w >= VRAM_REG_BASE && r_cpu_addr_w <= VRAM_REG_END);
     wire dim_reg_sel_w   = (r_cpu_addr_w == DIM_REG_ADDR);
     wire fio_name_sel_w  = (r_cpu_addr_w >= FIO_NAME && r_cpu_addr_w <= 16'hB9EF);
     wire fio_len_sel_w   = (r_cpu_addr_w == FIO_NAME_LEN);
     wire [4:0]  reg_offset_w   = r_cpu_addr_w[4:0];
+    wire [3:0]  irq_offset_w   = r_cpu_addr_w[3:0];
     wire [2:0]  vram_reg_off_w = r_cpu_addr_w[2:0];
     wire [6:0]  spr_offset_w   = r_cpu_addr_w[6:0] - 7'h40;
     wire [3:0]  spr_index_w    = spr_offset_w[6:3];
@@ -823,8 +848,15 @@ module vgc (
                 REG_BORDER:  cpu_rdata = {4'b0, border_color};
                 REG_CHARIN:  cpu_rdata = char_in_reg;
                 REG_CMD:     cpu_rdata = {7'b0, cmd_busy || artist_busy};
-                5'd31:       cpu_rdata = irq_ctrl;
                 default:     cpu_rdata = regs[reg_offset];
+            endcase
+        end
+        else if (vgc_irq_sel) begin
+            case (irq_offset)
+                IRQ_ENABLE: cpu_rdata = irq_enable;
+                IRQ_STATUS: cpu_rdata = irq_pending;
+                4'h3:       cpu_rdata = IRQ_VALID;
+                default:    cpu_rdata = 8'h00;
             endcase
         end
         else if (vram_reg_sel) begin
@@ -860,11 +892,13 @@ module vgc (
     // Debug read port. Video/color memory is no longer directly mapped; debug
     // can inspect registers and the VDC-style VRAM port state only.
     wire dbg_vgc_sel   = (dbg_addr >= VGC_BASE && dbg_addr <= VGC_REGS_END);
+    wire dbg_irq_sel   = (dbg_addr >= VGC_IRQ_BASE && dbg_addr <= VGC_IRQ_END);
     wire dbg_tile_sel  = (dbg_addr >= 16'hA0C0 && dbg_addr <= 16'hA0DF);
     wire dbg_spr_sel   = (dbg_addr >= SPR_REG_BASE && dbg_addr <= SPR_REG_END);
     wire dbg_vram_sel  = (dbg_addr >= VRAM_REG_BASE && dbg_addr <= VRAM_REG_END);
     wire dbg_dim_sel   = (dbg_addr == DIM_REG_ADDR);
     wire dbg_write_vgc_sel  = dbg_we && (dbg_waddr >= VGC_BASE && dbg_waddr <= VGC_REGS_END);
+    wire dbg_write_irq_sel  = dbg_we && (dbg_waddr >= VGC_IRQ_BASE && dbg_waddr <= VGC_IRQ_END);
     wire dbg_write_spr_sel  = dbg_we && (dbg_waddr >= SPR_REG_BASE && dbg_waddr <= SPR_REG_END);
     wire dbg_write_vram_sel = dbg_we && (dbg_waddr >= VRAM_REG_BASE && dbg_waddr <= VRAM_REG_END);
     wire dbg_write_dim_sel  = dbg_we && (dbg_waddr == DIM_REG_ADDR);
@@ -895,6 +929,14 @@ module vgc (
                 REG_BORDER:  dbg_rdata = {4'b0, border_color};
                 REG_CHARIN:  dbg_rdata = char_in_reg;
                 default:     dbg_rdata = regs[dbg_addr[4:0]];
+            endcase
+        end
+        else if (dbg_irq_sel) begin
+            case (dbg_addr[3:0])
+                IRQ_ENABLE: dbg_rdata = irq_enable;
+                IRQ_STATUS: dbg_rdata = irq_pending;
+                4'h3:       dbg_rdata = IRQ_VALID;
+                default:    dbg_rdata = 8'h00;
             endcase
         end
         else if (dbg_vram_sel) begin
@@ -929,17 +971,17 @@ module vgc (
     always_ff @(posedge clk) begin
         if (rst) begin
             cursor_x <= 0; cursor_y <= 0; mode <= 0;
-            border_color <= 4'd14; fg_color <= 4'd1; bg_color <= 4'd6;
+            border_color <= 4'd11; fg_color <= 4'd15; bg_color <= 4'd0;
             gfx_color <= 4'd1; display_dim <= 4'd15;
             cursor_enable <= 1; font_slot <= 0;
             frame_counter <= 0;
             vram_plane <= SPACE_CHAR; vram_addr <= 16'd0; vram_ctrl <= 8'h01;
-            scroll_offset <= 0; scroll_pending <= 0; scroll_col <= 0;
+            scroll_offset <= 0; scroll_pending <= 0; scroll_clearing <= 0; scroll_col <= 0;
             scroll_x <= 0; scroll_y <= 0;
             cmd_busy <= 0;
             key_fifo_rd <= 0;
             collision_ss <= 0; collision_bg <= 0;
-            irq_ctrl <= 0; irq_raster_pending <= 0;
+            irq_enable <= 0; irq_pending <= 0;
             copper_enabled <= 0; copper_count <= 0;
             copper_target_list <= 0; copper_pending_list <= 0;
             copper_loading <= 0;
@@ -969,6 +1011,7 @@ module vgc (
             cmd_spr_we <= 0;
             cmd_spr_re <= 0;
             artist_cmd_valid <= 0;
+            irq_pending <= irq_pending | irq_event_mask;
 
             if (vram_data_read && vram_ctrl[0])
                 vram_addr <= vram_addr + 16'd1;
@@ -1000,18 +1043,29 @@ module vgc (
                         && !charin_sel_prev
                         && !key_fifo_empty;
 
-            // Scroll state machine
+            // Text scroll state machine. CHAROUT requests a scroll immediately
+            // but the visible row-map changes only during vblank. While this
+            // is pending, rdy_out stalls the 6502 so no language runtime needs
+            // its own WAITVBLANK before printing.
             if (scroll_pending) begin
-                cmd_char_addr <= screen_addr(scroll_col, ROWS - 1);
-                cmd_char_din <= 8'h20;
-                cmd_char_we <= 1;
-                cmd_color_addr <= screen_addr(scroll_col, ROWS - 1);
-                cmd_color_din <= {4'b0, fg_color};
-                cmd_color_we <= 1;
-                if (scroll_col == COLS - 1) begin
-                    scroll_pending <= 0; scroll_col <= 0;
-                end else
-                    scroll_col <= scroll_col + 1;
+                if (!scroll_clearing) begin
+                    if (vblank_start) begin
+                        scroll_offset <= (scroll_offset >= ROWS - 1) ? 6'd0 : scroll_offset + 1;
+                        scroll_clearing <= 1;
+                        scroll_col <= 0;
+                    end
+                end else begin
+                    cmd_char_addr <= screen_addr(scroll_col, ROWS - 1);
+                    cmd_char_din <= 8'h20;
+                    cmd_char_we <= 1;
+                    cmd_color_addr <= screen_addr(scroll_col, ROWS - 1);
+                    cmd_color_din <= {4'b0, fg_color};
+                    cmd_color_we <= 1;
+                    if (scroll_col == COLS - 1) begin
+                        scroll_pending <= 0; scroll_clearing <= 0; scroll_col <= 0;
+                    end else
+                        scroll_col <= scroll_col + 1;
+                end
             end
 
             // Clear VGC tile command strobes
@@ -1181,6 +1235,7 @@ module vgc (
                     8'd1: bg_color     <= copper_fire_val[3:0];
                     8'd2: fg_color     <= copper_fire_val[3:0];
                     8'd13: border_color <= copper_fire_val[3:0];
+                    COPPER_REG_IRQ: ; // irq_event_mask latches enabled source bits
                     default: regs[copper_fire_reg[4:0]] <= copper_fire_val;
                 endcase
             end
@@ -1209,7 +1264,6 @@ module vgc (
                         5'd11:       collision_ss <= 0;
                         5'd12:       collision_bg <= 0;
                         REG_BORDER:  border_color <= r_cpu_wdata_w[3:0];
-                        5'd31:       irq_ctrl <= r_cpu_wdata_w;
                         REG_CHAROUT: begin
                             case (r_cpu_wdata_w)
                                 8'h08: begin
@@ -1220,14 +1274,14 @@ module vgc (
                                 end
                                 8'h0A: begin
                                     if (cursor_y >= ROWS - 1) begin
-                                        scroll_offset <= (scroll_offset >= ROWS - 1) ? 6'd0 : scroll_offset + 1;
-                                        scroll_pending <= 1; scroll_col <= 0;
+                                        scroll_pending <= 1; scroll_clearing <= 0; scroll_col <= 0;
                                     end else
                                         cursor_y <= cursor_y + 1;
                                 end
                                 8'h0C: begin
                                     cursor_x <= 0; cursor_y <= 0;
                                     scroll_offset <= 0;
+                                    scroll_pending <= 0; scroll_clearing <= 0; scroll_col <= 0;
                                     cmd_cx <= 0; cmd_cy <= 0;
                                     cmd_busy <= 1; cmd_op <= CMD_TXTCLS;
                                 end
@@ -1244,8 +1298,7 @@ module vgc (
                                         if (cursor_x >= COLS - 1) begin
                                             cursor_x <= 0;
                                             if (cursor_y >= ROWS - 1) begin
-                                                scroll_offset <= (scroll_offset >= ROWS - 1) ? 6'd0 : scroll_offset + 1;
-                                                scroll_pending <= 1; scroll_col <= 0;
+                                                scroll_pending <= 1; scroll_clearing <= 0; scroll_col <= 0;
                                             end else
                                                 cursor_y <= cursor_y + 1;
                                         end else
@@ -1349,14 +1402,14 @@ module vgc (
                                         // a subset of state, so sprites stayed enabled and
                                         // GTEXT bitmaps in gfx_mem persisted across RESETs.
                                         cursor_x <= 0; cursor_y <= 0; mode <= 0;
-                                        border_color <= 4'd14; fg_color <= 4'd1; bg_color <= 4'd6;
+                                        border_color <= 4'd11; fg_color <= 4'd15; bg_color <= 4'd0;
                                         gfx_color <= 4'd1; display_dim <= 4'd15;
                                         cursor_enable <= 1; font_slot <= 0;
-                                        scroll_offset <= 0; scroll_pending <= 0; scroll_col <= 0;
+                                        scroll_offset <= 0; scroll_pending <= 0; scroll_clearing <= 0; scroll_col <= 0;
                                         scroll_x <= 0; scroll_y <= 0;
                                         key_fifo_rd <= 0;
                                         collision_ss <= 0; collision_bg <= 0;
-                                        irq_ctrl <= 0; irq_raster_pending <= 0;
+                                        irq_enable <= 0; irq_pending <= 0;
                                         copper_enabled <= 0; copper_count <= 0;
                                         copper_target_list <= 0; copper_active_list <= 0;
                                         copper_pending_list <= 0; copper_loading <= 0;
@@ -1566,6 +1619,18 @@ module vgc (
                         3'd7: spr_next_trans[spr_index_w]    <= r_cpu_wdata_w[3:0];
                     endcase
                 end
+
+                if (vgc_irq_sel_w) begin
+                    case (irq_offset_w)
+                        IRQ_ENABLE: irq_enable <= r_cpu_wdata_w & IRQ_VALID;
+                        IRQ_STATUS: irq_pending <= (irq_pending | irq_event_mask) &
+                                                   ~(r_cpu_wdata_w & IRQ_VALID);
+                        IRQ_FORCE:  irq_pending <= irq_pending |
+                                                   (r_cpu_wdata_w & IRQ_VALID & irq_enable) |
+                                                   irq_event_mask;
+                        default: ;
+                    endcase
+                end
             end
 
             // Debug writes are independent of the 6502 bus. NovaHost uses
@@ -1588,7 +1653,18 @@ module vgc (
                     5'd11:       collision_ss <= 0;
                     5'd12:       collision_bg <= 0;
                     REG_BORDER:  border_color <= dbg_wdata[3:0];
-                    5'd31:       irq_ctrl <= dbg_wdata;
+                    default: ;
+                endcase
+            end
+
+            if (dbg_write_irq_sel) begin
+                case (dbg_waddr[3:0])
+                    IRQ_ENABLE: irq_enable <= dbg_wdata & IRQ_VALID;
+                    IRQ_STATUS: irq_pending <= (irq_pending | irq_event_mask) &
+                                               ~(dbg_wdata & IRQ_VALID);
+                    IRQ_FORCE:  irq_pending <= irq_pending |
+                                               (dbg_wdata & IRQ_VALID & irq_enable) |
+                                               irq_event_mask;
                     default: ;
                 endcase
             end
@@ -2017,8 +2093,7 @@ module vgc (
     end
     wire cursor_here = cursor_enable && in_text_area_d2 && (text_col_d2 == cursor_x) && (text_row_d2 == cursor_y);
 
-    // Raster IRQ
-    assign irq_out = irq_ctrl[0] && (v_count == {3'b0, irq_ctrl[7:1]} * 2 + V_BORDER);
+    assign irq_out = |(irq_pending & irq_enable);
 
 `ifdef VGC_HW_MOTION_DIAG
     // Hardware-only motion diagnostic. This bypasses the CPU, BASIC, sprite

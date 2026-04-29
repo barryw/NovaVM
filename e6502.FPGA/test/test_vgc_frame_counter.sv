@@ -46,6 +46,7 @@ module test_vgc_frame_counter;
     wire [3:0] vid_r, vid_g, vid_b;
     wire vid_hsync, vid_vsync, vid_de;
     wire irq_out;
+    wire vgc_rdy;
 
     vgc dut (
         .clk(clk), .rst(rst),
@@ -61,7 +62,8 @@ module test_vgc_frame_counter;
         .dbg_addr(dbg_addr), .dbg_rdata(dbg_rdata),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
-        .irq_out(irq_out)
+        .irq_out(irq_out),
+        .rdy_out(vgc_rdy)
     );
 
     int pass_count = 0;

@@ -255,28 +255,29 @@ public class AvaloniaSpriteRendererTests
     [TestMethod]
     public void DetectCollisions_SpriteBgOverlap_SetsBits()
     {
-        // Enable sprite 0 at (5,5)
+        // Enable sprite 0 at the top-left visible canvas pixel. Sprite
+        // coordinates include the 20px logical border on each side.
         _vgc.Write(VgcConstants.RegP0, 0);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
         _vgc.Write(VgcConstants.RegP0, 0);
-        _vgc.Write(VgcConstants.RegP1, 5);
+        _vgc.Write(VgcConstants.RegP1, VgcConstants.SpriteCanvasX);
         _vgc.Write(VgcConstants.RegP2, 0);
-        _vgc.Write(VgcConstants.RegP3, 5);
+        _vgc.Write(VgcConstants.RegP3, VgcConstants.SpriteCanvasY);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
 
-        // Give sprite a pixel at row 0, col 0 (screen position 5,5)
+        // Give sprite a pixel at row 0, col 0 (graphics position 0,0)
         _vgc.Write(VgcConstants.RegP0, 0);
         _vgc.Write(VgcConstants.RegP1, 0);
         _vgc.Write(VgcConstants.RegP2, 0x20);
         for (int i = 3; i <= 9; i++) _vgc.Write((ushort)(VgcConstants.RegP0 + i), 0);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprRow);
 
-        // Plot a gfx pixel at (5,5)
+        // Plot a gfx pixel at (0,0)
         _vgc.Write(VgcConstants.RegP0, 3); // color
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdGcolor);
-        _vgc.Write(VgcConstants.RegP0, 5);
+        _vgc.Write(VgcConstants.RegP0, 0);
         _vgc.Write(VgcConstants.RegP1, 0);
-        _vgc.Write(VgcConstants.RegP2, 5);
+        _vgc.Write(VgcConstants.RegP2, 0);
         _vgc.Write(VgcConstants.RegP3, 0);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdPlot);
 
@@ -316,6 +317,36 @@ public class AvaloniaSpriteRendererTests
         var (_, sb) = SpriteRenderer.DetectCollisions(_vgc);
 
         Assert.AreEqual(0, sb, "No background collision expected");
+    }
+
+    [TestMethod]
+    public void RasterizeScanline_UsesFullSpritePlane()
+    {
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, VgcConstants.SpriteCanvasX);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, VgcConstants.SpriteCanvasY);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0x70);
+        for (int i = 3; i <= 9; i++) _vgc.Write((ushort)(VgcConstants.RegP0 + i), 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprRow);
+
+        var sprites = SpriteRenderState.FromVgc(_vgc);
+        var shapeRam = _vgc.GetSpriteShapeRam();
+        var behind = new byte[VgcConstants.SpritePlaneWidth];
+        var between = new byte[VgcConstants.SpritePlaneWidth];
+        var front = new byte[VgcConstants.SpritePlaneWidth];
+        var mask = new ushort[VgcConstants.SpritePlaneWidth];
+
+        SpriteRenderer.RasterizeScanline(VgcConstants.SpriteCanvasY, sprites, shapeRam, behind, between, front, mask);
+
+        Assert.AreEqual(7, front[VgcConstants.SpriteCanvasX]);
+        Assert.AreNotEqual(0, mask[VgcConstants.SpriteCanvasX]);
     }
 
     [TestMethod]

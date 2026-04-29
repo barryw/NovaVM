@@ -13,8 +13,8 @@ namespace e6502.Avalonia.Rendering;
 
 public class EmulatorCanvas : Control
 {
-    public const int NativeWidth = 640;
-    public const int NativeHeight = 400;
+    public const int NativeWidth = VgcConstants.VideoWidth;
+    public const int NativeHeight = VgcConstants.VideoHeight;
 
     private readonly WriteableBitmap _framebuffer;
     private readonly VirtualGraphicsController _vgc;
@@ -23,10 +23,10 @@ public class EmulatorCanvas : Control
     private readonly object _renderLock = new();
     private bool _cursorVisible = true;
     private static readonly uint[] Palette = BuildPalette();
-    private readonly byte[] _lineBehind = new byte[VgcConstants.GfxWidth];
-    private readonly byte[] _lineBetween = new byte[VgcConstants.GfxWidth];
-    private readonly byte[] _lineFront = new byte[VgcConstants.GfxWidth];
-    private readonly ushort[] _spriteMask = new ushort[VgcConstants.GfxWidth];
+    private readonly byte[] _lineBehind = new byte[VgcConstants.SpritePlaneWidth];
+    private readonly byte[] _lineBetween = new byte[VgcConstants.SpritePlaneWidth];
+    private readonly byte[] _lineFront = new byte[VgcConstants.SpritePlaneWidth];
+    private readonly ushort[] _spriteMask = new ushort[VgcConstants.SpritePlaneWidth];
     private readonly byte[] _shapeRamSnapshot = new byte[VgcConstants.ShapeRamSize];
     private bool _shapeRamInitialized;
     private readonly uint[] _tileLine = new uint[VgcConstants.GfxWidth];
@@ -313,6 +313,17 @@ public class EmulatorCanvas : Control
         int copperIndex = 0;
 
         var state = RenderVideoState.FromVgc(_vgc);
+        uint borderPixel = Palette[state.BorderColor & 0x0F];
+        if (state.DisplayDim != 15)
+            borderPixel = DimColor(borderPixel, state.DisplayDim);
+
+        for (int py = 0; py < NativeHeight; py++)
+        {
+            int rowBase = py * stride;
+            for (int px = 0; px < NativeWidth; px++)
+                ptr[rowBase + px] = borderPixel;
+        }
+
         var sprites = SpriteRenderState.FromVgc(_vgc);
         if (_vgc.SnapshotSpriteShapes(_shapeRamSnapshot) || !_shapeRamInitialized)
             _shapeRamInitialized = true;
@@ -342,8 +353,11 @@ public class EmulatorCanvas : Control
                 }
             }
 
-            // Rasterize sprites for this scanline
-            SpriteRenderer.RasterizeScanline(y, sprites, shapeRam,
+            // Rasterize sprites for this scanline. Sprite coordinates cover the
+            // full 360x240 half-resolution active video plane; the 320x200
+            // Nova canvas starts at sprite coordinate 20,20.
+            int spritePlaneY = y + VgcConstants.SpriteCanvasY;
+            SpriteRenderer.RasterizeScanline(spritePlaneY, sprites, shapeRam,
                 _lineBehind, _lineBetween, _lineFront, _spriteMask);
 
             // Rasterize tiles for this scanline (Mode 4 only)
@@ -351,7 +365,9 @@ public class EmulatorCanvas : Control
                 TileRenderer.RasterizeScanline(y, tiles!, _tileLine, _tileOpaque);
 
             // Accumulate collision data
-            SpriteRenderer.AccumulateCollisions(_spriteMask, _vgc,
+            SpriteRenderer.AccumulateCollisions(
+                _spriteMask.AsSpan(VgcConstants.SpriteCanvasX, VgcConstants.GfxWidth),
+                _vgc,
                 state.ScrollX, state.ScrollY, y, ref colSS, ref colSB);
 
             // Sprite-tile collision: any sprite pixel overlapping a non-transparent tile pixel
@@ -359,8 +375,9 @@ public class EmulatorCanvas : Control
             {
                 for (int cx = 0; cx < VgcConstants.GfxWidth; cx++)
                 {
-                    if (_spriteMask[cx] != 0 && _tileOpaque[cx] != 0)
-                        colTile |= _spriteMask[cx];
+                    ushort spriteMask = _spriteMask[cx + VgcConstants.SpriteCanvasX];
+                    if (spriteMask != 0 && _tileOpaque[cx] != 0)
+                        colTile |= spriteMask;
                 }
             }
 
@@ -372,15 +389,18 @@ public class EmulatorCanvas : Control
                     int position = y * VgcConstants.GfxWidth + x;
                     while (copperIndex < copperProgram.Length && copperProgram[copperIndex].Position == position)
                     {
-                        if (!SpriteRenderState.IsSpriteRegister(copperProgram[copperIndex].RegisterIndex))
+                        if (copperProgram[copperIndex].RegisterIndex == VgcConstants.CopperRegIrq)
+                            _vgc.RaiseCopperIrq(copperProgram[copperIndex].Value);
+                        else if (!SpriteRenderState.IsSpriteRegister(copperProgram[copperIndex].RegisterIndex))
                             state.Apply(copperProgram[copperIndex].RegisterIndex, copperProgram[copperIndex].Value);
                         copperIndex++;
                     }
                 }
 
-                byte spriteBehind = _lineBehind[x];
-                byte spriteBetween = _lineBetween[x];
-                byte spriteFront = _lineFront[x];
+                int spritePlaneX = x + VgcConstants.SpriteCanvasX;
+                byte spriteBehind = _lineBehind[spritePlaneX];
+                byte spriteBetween = _lineBetween[spritePlaneX];
+                byte spriteFront = _lineFront[spritePlaneX];
 
                 int sampleGfxX = Wrap320(x + state.ScrollX);
                 int sampleGfxY = Wrap200(y + state.ScrollY);
@@ -389,11 +409,13 @@ public class EmulatorCanvas : Control
 
                 for (int dy = 0; dy < 2; dy++)
                 {
-                    int py = y * 2 + dy;
+                    int canvasPy = y * 2 + dy;
+                    int py = VgcConstants.CanvasOffsetY + canvasPy;
                     int rowBase = py * stride;
                     for (int dx = 0; dx < 2; dx++)
                     {
-                        int px = x * 2 + dx;
+                        int canvasPx = x * 2 + dx;
+                        int px = VgcConstants.CanvasOffsetX + canvasPx;
                         uint pixel = Palette[state.BgColor & 0x0F];
 
                         if (spriteBehind != 0)
@@ -402,7 +424,7 @@ public class EmulatorCanvas : Control
                         bool textOpaque = false;
                         uint textPixel = 0;
                         if (state.Mode != 3)
-                            textOpaque = TrySampleTextPixel(px, py, state, cursorX, cursorY, cursorEnabled, out textPixel);
+                            textOpaque = TrySampleTextPixel(canvasPx, canvasPy, state, cursorX, cursorY, cursorEnabled, out textPixel);
 
                         if (tileMode)
                         {
@@ -518,14 +540,14 @@ public class EmulatorCanvas : Control
 
     private static int Wrap640(int value)
     {
-        if (value >= NativeWidth) value -= NativeWidth;
+        if (value >= VgcConstants.CanvasWidth) value -= VgcConstants.CanvasWidth;
         return value;
     }
 
     private static int Wrap400(int value)
     {
-        if (value >= NativeHeight) value -= NativeHeight;
-        if (value >= NativeHeight) value -= NativeHeight;
+        if (value >= VgcConstants.CanvasHeight) value -= VgcConstants.CanvasHeight;
+        if (value >= VgcConstants.CanvasHeight) value -= VgcConstants.CanvasHeight;
         return value;
     }
 
@@ -553,6 +575,7 @@ public class EmulatorCanvas : Control
         public int ScrollX;
         public int ScrollY;
         public byte BgColor;
+        public byte BorderColor;
         public int FontIndex;
         public byte DisplayDim;
 
@@ -563,6 +586,7 @@ public class EmulatorCanvas : Control
                 ScrollX = vgc.GetScrollX(),
                 ScrollY = vgc.GetScrollY(),
                 BgColor = vgc.GetBgColor(),
+                BorderColor = vgc.GetBorderColor(),
                 FontIndex = vgc.GetFontIndex(),
                 DisplayDim = vgc.GetDisplayDim()
             };
@@ -576,6 +600,9 @@ public class EmulatorCanvas : Control
                     break;
                 case VgcConstants.RegBgCol - VgcConstants.VgcBase:
                     BgColor = (byte)(value & 0x0F);
+                    break;
+                case VgcConstants.RegBorder - VgcConstants.VgcBase:
+                    BorderColor = (byte)(value & 0x0F);
                     break;
                 case VgcConstants.RegScrollX - VgcConstants.VgcBase:
                     ScrollX = value;

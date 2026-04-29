@@ -28,7 +28,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly int _frameRateHz;
     private long _frameNumeratorAccumulator;
     private long _totalFrames;
-    private bool _rasterIrqPending;
     private long _lastMusicWallTick;
     private double _musicFrameAccum;
     private readonly byte[] _basicRom;
@@ -55,6 +54,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public int CpuHz => _cpuHz;
     public int FrameRateHz => _frameRateHz;
     public long TotalFrames => _totalFrames;
+    public bool VgcIrqPending => _vgc.IrqPending;
 
     public string? CurrentProgramName { get; set; }
     public Help.HelpTopic? CurrentProgramHelp { get; set; }
@@ -352,6 +352,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _frameNumeratorAccumulator -= _cpuHz;
             _totalFrames++;
             _vgc.IncrementFrameCounter();
+            _vgc.RaiseVBlankIrq();
 
             // Gate music/audio ticks to wall-clock time so catch-up bursts
             // don't cause music to play faster than real-time.
@@ -378,17 +379,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                     }
                 }
             }
-
-            if (_vgc.IsRasterIrqEnabled)
-                _rasterIrqPending = true;
         }
-    }
-
-    public bool ConsumeRasterIrqPending()
-    {
-        if (!_rasterIrqPending) return false;
-        _rasterIrqPending = false;
-        return true;
     }
 
 

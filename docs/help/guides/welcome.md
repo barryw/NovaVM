@@ -22,8 +22,8 @@ number at the front, press Return, and it is stored in the program. You type
 `RUN` and it executes from the lowest line number. Simple, immediate, and
 still deeply satisfying.
 
-When NovaBASIC boots, the screen clears to a blue background with white text and
-you see:
+When NovaBASIC boots, the screen clears to a black background with light-grey
+text and a dark-grey border. You see:
 
 ```
 NovaBASIC v1.0
@@ -35,9 +35,9 @@ The number shown is the amount of free BASIC program memory. The cursor waits
 for your first command.
 
 ::: note
-Boot sets the screen background to color 6 (blue), the foreground text to color
-1 (white), and the border to color 14 (light blue). You can change these at any
-time with `COLOR fg[,bg[,border]]`.
+Boot sets the screen background to color 0 (black), the foreground text to color
+15 (light grey), and the border to color 11 (dark grey). You can change these at
+any time with `COLOR fg[,bg[,border]]`.
 :::
 
 ## Runtime Clock Model
