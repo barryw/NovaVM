@@ -404,6 +404,26 @@ int NdiImage::read_file_by_index(int index, uint8_t* buf, size_t buf_size) {
     return (n == (int)e.size_bytes) ? n : -1;
 }
 
+int NdiImage::read_file_chunk_by_index(int index, uint32_t file_offset,
+                                       uint8_t* buf, size_t len) {
+    DirEntry e;
+    if (!get_entry(index, e))      return -1;
+    if (!e.is_active())            return -1;
+    if (e.is_directory())          return -1;
+    if (!buf && len > 0)           return -1;
+    if (file_offset > e.size_bytes) return -1;
+
+    uint32_t remaining = e.size_bytes - file_offset;
+    if (len > remaining) len = remaining;
+    if (len == 0) return 0;
+
+    uint64_t offset = ((uint64_t)_header.data_start_sector + e.start_sector)
+                      * SECTOR_SIZE + file_offset;
+    if (!_stream->seek(offset))    return -1;
+    int n = _stream->read(buf, len);
+    return (n == (int)len) ? n : -1;
+}
+
 int NdiImage::read_file(const char* name, uint16_t parent_index,
                          uint8_t* buf, size_t buf_size) {
     int idx = find_entry(name, parent_index);
@@ -414,8 +434,8 @@ int NdiImage::read_file(const char* name, uint16_t parent_index,
 // ===========================================================================
 // Public write
 // ===========================================================================
-int NdiImage::write_file(const char* name, FileType type, uint16_t parent,
-                          const uint8_t* data, uint32_t size) {
+int NdiImage::create_file(const char* name, FileType type, uint16_t parent,
+                           uint32_t size) {
     if (!_stream || !name) return -1;
     int sector_count = (int)((size + SECTOR_SIZE - 1) / SECTOR_SIZE);
     if (sector_count == 0) sector_count = 1;
@@ -429,37 +449,67 @@ int NdiImage::write_file(const char* name, FileType type, uint16_t parent,
         return -1;
     }
 
-    // Write data sectors (zero-padded last sector).
-    uint64_t offset = ((uint64_t)_header.data_start_sector + (uint32_t)start) * SECTOR_SIZE;
-    if (!_stream->seek(offset)) {
-        bam_free(start, sector_count);
-        return -1;
-    }
-    if ((int)size > 0) {
-        if (_stream->write(data, size) != (int)size) {
-            bam_free(start, sector_count);
-            return -1;
-        }
-    }
-    // Pad last sector if needed.
-    int pad = sector_count * SECTOR_SIZE - (int)size;
-    if (pad > 0) {
-        uint8_t zero[SECTOR_SIZE];
-        memset(zero, 0, SECTOR_SIZE);
-        while (pad > 0) {
-            int chunk = pad > SECTOR_SIZE ? SECTOR_SIZE : pad;
-            if (_stream->write(zero, chunk) != chunk) {
-                bam_free(start, sector_count);
-                return -1;
-            }
-            pad -= chunk;
-        }
-    }
-
     dir_write_entry(slot, FL_ACTIVE, (uint8_t)type, parent,
                     (uint32_t)start, size, name, (uint32_t)sector_count);
 
     if (!flush_metadata()) return -1;
+    return slot;
+}
+
+bool NdiImage::write_file_chunk_by_index(int index, uint32_t file_offset,
+                                         const uint8_t* data, size_t len) {
+    DirEntry e;
+    if (!get_entry(index, e))       return false;
+    if (!e.is_active())             return false;
+    if (e.is_directory())           return false;
+    if (!data && len > 0)           return false;
+    if (file_offset > e.size_bytes) return false;
+    if (len > e.size_bytes - file_offset) return false;
+    if (len == 0) return true;
+
+    uint64_t offset = ((uint64_t)_header.data_start_sector + e.start_sector)
+                      * SECTOR_SIZE + file_offset;
+    if (!_stream->seek(offset)) return false;
+    return _stream->write(data, len) == (int)len;
+}
+
+bool NdiImage::zero_file_tail_by_index(int index) {
+    DirEntry e;
+    if (!get_entry(index, e)) return false;
+    if (!e.is_active())      return false;
+    if (e.is_directory())    return false;
+
+    uint32_t allocated_bytes = e.sector_count * SECTOR_SIZE;
+    if (allocated_bytes <= e.size_bytes) return true;
+
+    uint32_t pad = allocated_bytes - e.size_bytes;
+    uint64_t offset = ((uint64_t)_header.data_start_sector + e.start_sector)
+                      * SECTOR_SIZE + e.size_bytes;
+    if (!_stream->seek(offset)) return false;
+
+    uint8_t zero[SECTOR_SIZE];
+    memset(zero, 0, SECTOR_SIZE);
+    while (pad > 0) {
+        uint32_t chunk = pad > SECTOR_SIZE ? SECTOR_SIZE : pad;
+        if (_stream->write(zero, chunk) != (int)chunk) return false;
+        pad -= chunk;
+    }
+    _stream->flush();
+    return true;
+}
+
+int NdiImage::write_file(const char* name, FileType type, uint16_t parent,
+                          const uint8_t* data, uint32_t size) {
+    int slot = create_file(name, type, parent, size);
+    if (slot < 0) return -1;
+    if (size > 0 && !write_file_chunk_by_index(slot, 0, data, size)) {
+        delete_file(name, parent);
+        return -1;
+    }
+    if (!zero_file_tail_by_index(slot)) {
+        delete_file(name, parent);
+        return -1;
+    }
     return slot;
 }
 

@@ -81,11 +81,9 @@ public class BasicRegressionTests
     [TestMethod]
     public void XramStash256ByteRoundtripRestoresAllBytes()
     {
-        // Mirrors tests/integration/xram.6502 stash-fetch-roundtrip — fails
-        // on FPGA HW (blitter → XRAM back-pressure drops writes when
-        // xram_busy=1). This test verifies the Avalonia software path:
-        // if it passes, the BASIC / extension ROM / blitter-simulation
-        // chain is correct and the HW failure is purely RTL.
+        // Mirrors tests/integration/xram.6502 stash-fetch-roundtrip. STASH and
+        // FETCH are now routed through the shared DMA-backed XRAM runtime, so
+        // this catches regressions in the BASIC / extension ROM / DMA path.
         using var bus = new CompositeBusDevice(enableSound: false);
         var cpu = new Cpu(bus);
         cpu.Boot();

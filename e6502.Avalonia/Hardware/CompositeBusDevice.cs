@@ -89,6 +89,9 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (autoboot != null)
             _deviceManager.DefaultDevice = autoboot.Value.Device.Prefix;
 
+        _xmc = new VirtualExpansionMemoryController(
+            addr => _ram[addr],
+            (addr, data) => _ram[addr] = data);
         _fio = new FileIoController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data,
@@ -101,14 +104,15 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             midiPlayback: _midiPlayback,
             deviceManager: _deviceManager,
             wts: _wts,
-            vgc: _vgc);
+            vgc: _vgc,
+            xramRead: addr => _xmc.TryReadLinear(addr, out byte value) ? value : (byte)0,
+            xramWrite: (addr, value) => _xmc.TryWriteLinear(addr, value),
+            xramCapacity: () => _xmc.CapacityBytes,
+            xramRefreshStats: () => _xmc.RefreshStatsRegisters());
         _fio.ProgramLoaded += name => LoadProgramHelp(name);
         _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
         _vgc.SetBusMemory(_ram);
 
-        _xmc = new VirtualExpansionMemoryController(
-            addr => _ram[addr],
-            (addr, data) => _ram[addr] = data);
         _nic = new VirtualNetworkController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data);

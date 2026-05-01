@@ -123,6 +123,11 @@ public:
     // the entry). Returns bytes read or -1 on error.
     int read_file_by_index(int index, uint8_t* buf, size_t buf_size);
 
+    // Reads a slice of a file by index. `file_offset` is relative to the
+    // file start; returns bytes read, 0 at EOF, or -1 on error.
+    int read_file_chunk_by_index(int index, uint32_t file_offset,
+                                 uint8_t* buf, size_t len);
+
     // Convenience: find by (name,parent) then read into buf.
     int read_file(const char* name, uint16_t parent_index,
                   uint8_t* buf, size_t buf_size);
@@ -132,6 +137,19 @@ public:
     // (no contig space or directory full).
     int write_file(const char* name, FileType type, uint16_t parent_index,
                    const uint8_t* data, uint32_t size);
+
+    // Creates an empty file entry and allocates its sectors so callers can
+    // stream payload chunks into it. Use write_file_chunk_by_index() to fill
+    // the data and zero_file_tail_by_index() after the final chunk.
+    int create_file(const char* name, FileType type, uint16_t parent_index,
+                    uint32_t size);
+
+    // Writes a slice of an existing streamed file by index.
+    bool write_file_chunk_by_index(int index, uint32_t file_offset,
+                                   const uint8_t* data, size_t len);
+
+    // Clears unused bytes in the final allocated sector of a streamed file.
+    bool zero_file_tail_by_index(int index);
 
     // Marks a file inactive and frees its sectors. Returns false if
     // the file doesn't exist or is a directory.

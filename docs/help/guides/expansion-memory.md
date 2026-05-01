@@ -131,6 +131,22 @@ Copies *length* bytes from XRAM at *xramoffset* back to CPU RAM starting
 at *ramaddr*. The destination must be within writable RAM
 (`0000`--`BFFF`).
 
+### Direct file streaming: `XLOAD` and `XSAVE`
+
+```
+XLOAD "STORY.Z3",0
+XSAVE "SNAPSHOT",0,4096
+```
+
+`XLOAD` streams a file directly into XRAM without staging it through CPU RAM.
+`XSAVE` streams a range of XRAM directly back to disk. Both commands use the
+active `XBANK` plus a 16-bit *offset* as the starting address. `XLOAD` accepts
+an optional *length*; if omitted or zero, the entire file is loaded, which is
+useful for assets larger than a single 64 KB bank.
+
+Filenames without an extension use `.xram`. Explicit extensions are honored, so
+Z-machine story files such as `ZORK1.Z3` can be loaded directly into XRAM.
+
 ### Example: saving and restoring a character screen buffer
 
 Text character memory is a VGC memory space, not a direct CPU address range.

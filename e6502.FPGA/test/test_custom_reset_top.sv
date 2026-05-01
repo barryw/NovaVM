@@ -74,7 +74,7 @@ module test_custom_reset_top;
         .dbg_cpu_reset(dbg_cpu_reset),
         .dbg_system_reset(dbg_system_reset),
         .dbg_cpu_resume(dbg_cpu_resume),
-        .brg_sdram_b_we(1'b0), .brg_sdram_b_addr(25'd0),
+        .brg_sdram_b_we(1'b0), .brg_sdram_b_oe(1'b0), .brg_sdram_b_addr(25'd0),
         .brg_sdram_b_din(8'd0),
         .dbg_cpu_pc(dbg_cpu_pc),
         .dbg_cpu_a(dbg_cpu_a), .dbg_cpu_x(dbg_cpu_x),

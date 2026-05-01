@@ -15,6 +15,10 @@ public sealed partial class FileIoController
     private readonly Func<byte, int, byte>? _vgcRead;
     private readonly Action<byte, int, byte>? _vgcWrite;
     private readonly Func<byte, int>? _vgcSpaceLength;
+    private readonly Func<int, byte>? _xramRead;
+    private readonly Func<int, byte, bool>? _xramWrite;
+    private readonly Func<int>? _xramCapacity;
+    private readonly Action? _xramRefreshStats;
     private readonly SidPlayer? _sidPlayer;
     private readonly MusicEngine? _musicEngine;
     private readonly MidiPlayback? _midiPlayback;
@@ -40,13 +44,21 @@ public sealed partial class FileIoController
         MidiPlayback? midiPlayback = null,
         DeviceManager? deviceManager = null,
         WavetableSynth? wts = null,
-        VirtualGraphicsController? vgc = null)
+        VirtualGraphicsController? vgc = null,
+        Func<int, byte>? xramRead = null,
+        Func<int, byte, bool>? xramWrite = null,
+        Func<int>? xramCapacity = null,
+        Action? xramRefreshStats = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
         _vgcRead = vgcRead;
         _vgcWrite = vgcWrite;
         _vgcSpaceLength = vgcSpaceLength;
+        _xramRead = xramRead;
+        _xramWrite = xramWrite;
+        _xramCapacity = xramCapacity;
+        _xramRefreshStats = xramRefreshStats;
         _sidPlayer = sidPlayer;
         _musicEngine = musicEngine;
         _midiPlayback = midiPlayback;
@@ -108,6 +120,12 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdGLoad:
                 DoGLoad();
+                break;
+            case VgcConstants.FioCmdXLoad:
+                DoXLoad();
+                break;
+            case VgcConstants.FioCmdXSave:
+                DoXSave();
                 break;
             case VgcConstants.FioCmdSidPlay:
                 DoSidPlay();
@@ -839,6 +857,107 @@ public sealed partial class FileIoController
         catch (FileNotFoundException)
         {
             SetError(VgcConstants.FioErrNotFound);
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // XRAM file I/O (.xram by default, explicit filename extensions honored)
+    // -------------------------------------------------------------------------
+
+    private void DoXLoad()
+    {
+        try
+        {
+            if (_xramWrite is null || _xramCapacity is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            string? filename = ReadFilename();
+            if (filename is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            int xaddr = GetFioXramAddress();
+            int reqLen = GetFioTransferLength();
+
+            byte[]? data = LoadDataFile(filename, ".xram", out bool notFound);
+            if (data is null)
+            {
+                SetError(notFound ? VgcConstants.FioErrNotFound : VgcConstants.FioErrIo);
+                return;
+            }
+
+            int len = reqLen > 0 ? Math.Min(reqLen, data.Length) : data.Length;
+            if (!XramRangeOk(xaddr, len))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            for (int i = 0; i < len; i++)
+            {
+                if (!_xramWrite(xaddr + i, data[i]))
+                {
+                    SetError(VgcConstants.FioErrIo);
+                    return;
+                }
+            }
+
+            _xramRefreshStats?.Invoke();
+            SetTransferSize(len);
+            SetOk();
+        }
+        catch (FileNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoXSave()
+    {
+        try
+        {
+            if (_xramRead is null || _xramCapacity is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            string? filename = ReadFilename();
+            if (filename is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            int xaddr = GetFioXramAddress();
+            int len = GetFioTransferLength();
+            if (len <= 0 || !XramRangeOk(xaddr, len))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            byte[] data = new byte[len];
+            for (int i = 0; i < len; i++)
+                data[i] = _xramRead(xaddr + i);
+
+            SaveDataFile(filename, ".xram", data);
+
+            SetTransferSize(len);
+            SetOk();
         }
         catch
         {
@@ -1805,16 +1924,110 @@ public sealed partial class FileIoController
         return Path.Combine(_saveDir, filename);
     }
 
+    private int GetFioXramAddress()
+    {
+        int lo = _regs[VgcConstants.FioGAddrL - VgcConstants.FioBase];
+        int mid = _regs[VgcConstants.FioGAddrH - VgcConstants.FioBase];
+        int hi = _regs[VgcConstants.FioGSpace - VgcConstants.FioBase];
+        return lo | (mid << 8) | (hi << 16);
+    }
+
+    private int GetFioTransferLength() =>
+        _regs[VgcConstants.FioGLenL - VgcConstants.FioBase]
+        | (_regs[VgcConstants.FioGLenH - VgcConstants.FioBase] << 8);
+
+    private bool XramRangeOk(int address, int length)
+    {
+        int capacity = _xramCapacity?.Invoke() ?? 0;
+        if (capacity <= 0 || address < 0 || length < 0)
+            return false;
+
+        long end = (long)address + length;
+        return end <= capacity && (length == 0 || address < capacity);
+    }
+
+    private void SetTransferSize(int length)
+    {
+        _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(length & 0xFF);
+        _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((length >> 8) & 0xFF);
+    }
+
+    private byte[]? LoadDataFile(string filename, string defaultExtension, out bool notFound)
+    {
+        notFound = false;
+        var resolved = ResolveDevice(filename);
+        if (resolved is not null)
+        {
+            var (device, name, savedDir) = resolved.Value;
+            try
+            {
+                var (baseName, extension) = SplitDataFilename(name, defaultExtension);
+                if (!device.FileExists(baseName, extension))
+                {
+                    notFound = true;
+                    return null;
+                }
+                return device.Load(baseName, extension);
+            }
+            finally
+            {
+                RestoreDir(device, savedDir);
+            }
+        }
+
+        string path = GetFullPath(filename, defaultExtension);
+        if (!File.Exists(path))
+        {
+            notFound = true;
+            return null;
+        }
+        return File.ReadAllBytes(path);
+    }
+
+    private void SaveDataFile(string filename, string defaultExtension, byte[] data)
+    {
+        var resolved = ResolveDevice(filename);
+        if (resolved is not null)
+        {
+            var (device, name, savedDir) = resolved.Value;
+            try
+            {
+                var (baseName, extension) = SplitDataFilename(name, defaultExtension);
+                device.Save(baseName, data, extension);
+            }
+            finally
+            {
+                RestoreDir(device, savedDir);
+            }
+            return;
+        }
+
+        Directory.CreateDirectory(_saveDir);
+        string path = GetFullPath(filename, defaultExtension);
+        File.WriteAllBytes(path, data);
+    }
+
+    private static (string BaseName, string Extension) SplitDataFilename(string name, string defaultExtension)
+    {
+        string extension = Path.GetExtension(name);
+        if (string.IsNullOrEmpty(extension))
+            return (name, defaultExtension);
+
+        return (name[..^extension.Length], extension);
+    }
+
     private void SetOk()
     {
         _regs[VgcConstants.FioStatus - VgcConstants.FioBase] = VgcConstants.FioStatusOk;
         _regs[VgcConstants.FioErrCode - VgcConstants.FioBase] = VgcConstants.FioErrNone;
+        _regs[VgcConstants.FioCmd - VgcConstants.FioBase] = 0;
     }
 
     private void SetError(byte errCode)
     {
         _regs[VgcConstants.FioStatus - VgcConstants.FioBase] = VgcConstants.FioStatusError;
         _regs[VgcConstants.FioErrCode - VgcConstants.FioBase] = errCode;
+        _regs[VgcConstants.FioCmd - VgcConstants.FioBase] = 0;
     }
 
     [GeneratedRegex(@"^[A-Za-z0-9_.\-/:]+$")]

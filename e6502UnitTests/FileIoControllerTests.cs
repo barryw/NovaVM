@@ -91,6 +91,27 @@ public class FileIoControllerTests
             });
     }
 
+    private static FileIoController MakeControllerWithXram(string saveDir, byte[] xram)
+    {
+        var memory = new byte[65536];
+
+        return new FileIoController(
+            address => memory[address],
+            (address, data) => memory[address] = data,
+            saveDir,
+            xramRead: address => xram[address],
+            xramWrite: (address, value) =>
+            {
+                if ((uint)address >= xram.Length)
+                    return false;
+
+                xram[address] = value;
+                return true;
+            },
+            xramCapacity: () => xram.Length,
+            xramRefreshStats: () => { });
+    }
+
     [TestMethod]
     public void Delete_RemovesExistingFile()
     {
@@ -393,6 +414,74 @@ public class FileIoControllerTests
             Assert.AreEqual(fileData.Length, ReadSize(fio));
             for (int i = 0; i < fileData.Length; i++)
                 Assert.AreEqual(fileData[i], screen[0x10 + i]);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XSave_WritesXramDataToDefaultXramFile()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var xram = new byte[1024];
+            for (int i = 0; i < 16; i++)
+                xram[0x40 + i] = (byte)(0x80 + i);
+
+            var fio = MakeControllerWithXram(dir, xram);
+            SetFilename(fio, "snapshot");
+            fio.Write((ushort)VgcConstants.FioGSpace, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x40);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenL, 16);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXSave);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(16, ReadSize(fio));
+
+            byte[] data = File.ReadAllBytes(Path.Combine(dir, "snapshot.xram"));
+            Assert.AreEqual(16, data.Length);
+            for (int i = 0; i < 16; i++)
+                Assert.AreEqual((byte)(0x80 + i), data[i]);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XLoad_HonorsExplicitExtensionAndOptionalLength()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            File.WriteAllBytes(Path.Combine(dir, "story.z3"), [0x11, 0x22, 0x33, 0x44, 0x55]);
+            var xram = new byte[1024];
+
+            var fio = MakeControllerWithXram(dir, xram);
+            SetFilename(fio, "story.z3");
+            fio.Write((ushort)VgcConstants.FioGSpace, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x20);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenL, 3);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXLoad);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(3, ReadSize(fio));
+            Assert.AreEqual((byte)0x11, xram[0x20]);
+            Assert.AreEqual((byte)0x22, xram[0x21]);
+            Assert.AreEqual((byte)0x33, xram[0x22]);
+            Assert.AreEqual((byte)0x00, xram[0x23]);
         }
         finally
         {

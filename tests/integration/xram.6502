@@ -19,6 +19,35 @@ suites {
       assert(peekbyte($20FF) == 255, "byte 255 restored")
     }
 
+    test("stash-fetch-crosses-bank-boundary", "STASH/FETCH preserve bytes across a 64K XRAM boundary") {
+      basic("10 XBANK 0")
+      basic("20 POKE $2000,$5A:POKE $2001,$A5")
+      basic("30 STASH $2000,$FFFF,2")
+      basic("40 POKE $2000,0:POKE $2001,0")
+      basic("50 FETCH $2000,$FFFF,2")
+      run()
+      assert(peekbyte($2000) == $5A, "byte at $00FFFF restored")
+      assert(peekbyte($2001) == $A5, "byte at $010000 restored")
+    }
+
+    test("xpoke-xpeek-bank-one", "XBANK selects the flat 24-bit high byte for byte access") {
+      basic("10 XBANK 1")
+      basic("20 XPOKE 0,$7E")
+      basic("30 PRINT XPEEK(0)")
+      run()
+      assert(screen_contains("126"), "bank 1 XPEEK returned $7E")
+    }
+
+    test("xmap-rounds-low-byte", "XMAP uses a page-aligned XRAM window base") {
+      basic("10 XBANK 0")
+      basic("20 XPOKE $0102,$77")
+      basic("30 XMAP 0,$0101")
+      basic("40 PRINT PEEK($BC02)")
+      basic("50 XUNMAP 0")
+      run()
+      assert(screen_contains("119"), "window offset $BC02 reads XRAM $0102")
+    }
+
     test("stash-fetch-pattern", "Non-sequential data pattern preserved") {
       basic("5 XALLOC 2")
       basic("10 FOR I=0 TO 99:POKE $2000+I,I*2:NEXT")
@@ -107,6 +136,37 @@ suites {
       basic("70 POKE $0100,$AA")
       run()
       assert(peekbyte($0100) == $AA, "XMEM after STASH ran without error")
+    }
+
+    test("xsave-xload-roundtrip", "XSAVE and XLOAD stream data directly between files and XRAM") {
+      basic("10 XRESET:XBANK 0")
+      basic("20 FOR I=0 TO 15:POKE $2000+I,65+I:NEXT")
+      basic("30 STASH $2000,0,16")
+      basic("40 A$=CHR$(88)+CHR$(76)+CHR$(68)+CHR$(49)")
+      basic("50 XSAVE A$,0,16")
+      basic("60 XRESET")
+      basic("70 XLOAD A$,256")
+      basic("80 FETCH $2100,256,16")
+      basic("90 PRINT PEEK($2100);PEEK($210F)")
+      run()
+      assert(peekbyte($2100) == 65, "first byte restored through XLOAD")
+      assert(peekbyte($210F) == 80, "last byte restored through XLOAD")
+    }
+
+    test("xload-length-limit", "XLOAD optional length limits bytes streamed into XRAM") {
+      basic("10 XRESET:XBANK 0")
+      basic("20 FOR I=0 TO 7:POKE $2000+I,10+I:NEXT")
+      basic("30 STASH $2000,512,8")
+      basic("40 A$=CHR$(88)+CHR$(76)+CHR$(69)+CHR$(78)")
+      basic("50 XSAVE A$,512,8")
+      basic("60 XRESET")
+      basic("70 XLOAD A$,1024,4")
+      basic("80 FETCH $2100,1024,8")
+      basic("90 PRINT PEEK($2100);PEEK($2103);PEEK($2104)")
+      run()
+      assert(peekbyte($2100) == 10, "first loaded byte")
+      assert(peekbyte($2103) == 13, "fourth loaded byte")
+      assert(peekbyte($2104) == 0, "fifth byte left untouched")
     }
   }
 }

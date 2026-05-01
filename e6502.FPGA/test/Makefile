@@ -42,7 +42,7 @@ SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.s
         $(RTL)/sid/sid_curve_reader.sv
 CPU   = $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_bridge test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_bridge test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -218,6 +218,16 @@ test_key_inject: test_key_inject.sv $(ROM_LOAD_RTL)
 # because EhBASIC places live ROM at those addresses. Replaces the old
 # test_sid_readback which tested the (now removed) SID-over-ROM intercept.
 test_rom_over_sid: test_rom_over_sid.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
+# Top-level XMC mapped-window decode regression. Verifies the synthesis path
+# keeps WnAL readable/writable but ignores it for 256-byte window translation.
+test_xmc_window_decode_top: test_xmc_window_decode_top.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
+# Top-level MMIO bus-cycle regression. Runs real CPU indirect/indexed/RMW
+# writes into FIO, VGC, XMC, DMA, and blitter registers.
+test_mmio_bus_cycles_top: test_mmio_bus_cycles_top.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
 # Regression for VGC $A008 frame counter. Before the fix $A008 was mapped

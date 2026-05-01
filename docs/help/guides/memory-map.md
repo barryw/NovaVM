@@ -455,11 +455,11 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $B9A7 | FioEndH | R/W | End address, high byte. |
 | $B9A8 | FioSizeL | RO | Loaded data size, low byte (written by host after `LOAD` or `DIR` read). |
 | $B9A9 | FioSizeH | RO | Loaded data size, high byte. |
-| $B9AA | FioGSpace | R/W | Graphics memory space for `GSAVE`/`GLOAD` (1=screen, 2=color, 3=gfx, 4=sprite, 6=tile). |
-| $B9AB | FioGAddrL | R/W | Graphics offset, low byte. |
-| $B9AC | FioGAddrH | R/W | Graphics offset, high byte. |
-| $B9AD | FioGLenL | R/W | Graphics transfer length, low byte. |
-| $B9AE | FioGLenH | R/W | Graphics transfer length, high byte. |
+| $B9AA | FioGSpace | R/W | Graphics memory space for `GSAVE`/`GLOAD`; XRAM address high byte for `XLOAD`/`XSAVE`. |
+| $B9AB | FioGAddrL | R/W | Graphics/XRAM offset, low byte. |
+| $B9AC | FioGAddrH | R/W | Graphics/XRAM offset, high byte. |
+| $B9AD | FioGLenL | R/W | Graphics/XRAM transfer length, low byte. |
+| $B9AE | FioGLenH | R/W | Graphics/XRAM transfer length, high byte. |
 | $B9AF | FioDirType | RO | Directory entry type: 0=PRG, 1=SID. |
 | B9B0--B9EF | FioName | R/W | Filename buffer (64 bytes ASCII, not null-terminated). |
 
@@ -484,6 +484,8 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $0F | FioCmdMStop | Stop music playback. |
 | $10 | FioCmdMTempo | Set tempo. FioSrcL/H=BPM (16-bit). |
 | $11 | FioCmdMLoop | Set loop. FioSrcL=0 (off) or 1 (on). |
+| $18 | FioCmdXLoad | Load a file directly into XRAM. FioGSpace/GAddrL/GAddrH=24-bit destination, FioGLenL/H=max length or 0 for full file. |
+| $19 | FioCmdXSave | Save XRAM directly to a file. FioGSpace/GAddrL/GAddrH=24-bit source, FioGLenL/H=length. |
 
 ### FIO Status Codes
 

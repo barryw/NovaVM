@@ -87,12 +87,15 @@ module debug_bridge #(
     output logic        key_inject_valid,
     output logic [7:0]  key_inject_data,
 
-    // SDRAM port B write (used during CPU-reset to preload tables like the
-    // 6581 filter curve — see CMD_POKE_SDRAM_BLK below). Only drives weB/dinB
-    // while actively writing; top.sv muxes these against sid_curve_reader.
+    // SDRAM port B debug path (used during CPU-reset to preload tables like the
+    // 6581 filter curve, and by NovaHost FIO XLOAD/XSAVE to stream XRAM).
+    // Only drives while actively reading/writing; top.sv muxes these against
+    // sid_curve_reader.
     output logic        sdram_b_we,
+    output logic        sdram_b_oe,
     output logic [24:0] sdram_b_addr,
     output logic [7:0]  sdram_b_din,
+    input  logic [7:0]  sdram_b_dout,
 
     // File I/O event — pulses one clock when the CPU writes a non-zero
     // value to FioCmd ($B9A0). Bridge latches the pulse and emits an
@@ -144,6 +147,9 @@ module debug_bridge #(
     localparam CMD_TRACE_READ  = 8'h17;  // [count] count=0 returns all buffered records
     localparam CMD_SYS_RESET_HOLD = 8'h18; // assert CPU + custom-chip reset
     localparam CMD_SYS_RESET_REL  = 8'h19; // release CPU + custom-chip reset
+    localparam CMD_READ_SDRAM_BLK = 8'h1A; // [addr_hi, addr_mid, addr_lo, count]
+                                           // count=0 means 256. Streams bytes
+                                           // from SDRAM port B back to the host.
 
     localparam [5:0] CPU_STATE_DECODE = 6'd12;
     localparam int TRACE_DEPTH = 64;
@@ -197,7 +203,9 @@ module debug_bridge #(
         S_VGC_BULK_WAIT, // 25: wait for VGC memory read latency
         S_STEP_WAIT,     // 26: run one instruction then pause
         S_TRACE_TX,      // 27: transmit one trace byte
-        S_TRACE_TX_WAIT  // 28: wait for trace byte TX completion
+        S_TRACE_TX_WAIT, // 28: wait for trace byte TX completion
+        S_SDRAM_READ,    // 29: issue SDRAM port B read
+        S_SDRAM_READ_WAIT// 30: wait for SDRAM read data
     } state_t;
 
     state_t state;
@@ -456,6 +464,7 @@ module debug_bridge #(
             tx_data          <= 0;
             tx_start         <= 0;
             sdram_b_we       <= 0;
+            sdram_b_oe       <= 0;
             sdram_b_addr     <= 0;
             sdram_b_din      <= 0;
             sdram_bulk_addr  <= 0;
@@ -529,6 +538,7 @@ module debug_bridge #(
                             CMD_POKE_ROM:    begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_ROM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_SDRAM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
+                            CMD_READ_SDRAM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_BLOCK:  begin recv_need <= 3'd3; state <= S_RECV; end
                             CMD_POKE_VGC_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_FILL_VGC_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
@@ -718,6 +728,15 @@ module debug_bridge #(
                                     state           <= S_SDRAM_RECV;
                                 end
 
+                                CMD_READ_SDRAM_BLK: begin
+                                    sdram_bulk_addr <= {1'b0, param0, param1, param2};
+                                    bulk_remaining  <= (rx_buf_data == 0) ? 11'd256
+                                                                          : {3'b0, rx_buf_data};
+                                    resp_idx        <= 0;
+                                    resp_total      <= 1;  // status, then bulk
+                                    state           <= S_TX_BYTE;
+                                end
+
                                 CMD_POKE_BLOCK: begin
                                     // param0=addr_hi, param1=addr_lo,
                                     // rx_buf_data=count (=0 means 256).
@@ -888,8 +907,9 @@ module debug_bridge #(
                             state <= S_TRACE_TX;
                         end else if (bulk_remaining > 0) begin
                             // Switch to bulk read mode
-                            state <= (cmd == CMD_READ_VGC_BLK) ? S_VGC_BULK_READ
-                                                               : S_BULK_PEEK;
+                            state <= (cmd == CMD_READ_VGC_BLK)   ? S_VGC_BULK_READ :
+                                     (cmd == CMD_READ_SDRAM_BLK) ? S_SDRAM_READ :
+                                                                  S_BULK_PEEK;
                         end else begin
                             state <= S_IDLE;
                         end
@@ -940,8 +960,9 @@ module debug_bridge #(
                         if (bulk_remaining == 1) begin
                             state <= S_IDLE;
                         end else begin
-                            state <= (cmd == CMD_READ_VGC_BLK) ? S_VGC_BULK_READ
-                                                               : S_BULK_PEEK;
+                            state <= (cmd == CMD_READ_VGC_BLK)   ? S_VGC_BULK_READ :
+                                     (cmd == CMD_READ_SDRAM_BLK) ? S_SDRAM_READ :
+                                                                  S_BULK_PEEK;
                         end
                     end
                 end
@@ -1155,6 +1176,28 @@ module debug_bridge #(
                         end else begin
                             state <= S_SDRAM_RECV;
                         end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // SDRAM_READ: drive port B read long enough for the SDRAM
+                // controller to see the request and produce doutB.
+                // ---------------------------------------------------------
+                S_SDRAM_READ: begin
+                    sdram_b_addr   <= sdram_bulk_addr;
+                    sdram_b_oe     <= 1;
+                    sdram_hold_cnt <= SDRAM_HOLD - 1;
+                    state          <= S_SDRAM_READ_WAIT;
+                end
+
+                S_SDRAM_READ_WAIT: begin
+                    if (sdram_hold_cnt != 0) begin
+                        sdram_hold_cnt <= sdram_hold_cnt - 1;
+                    end else begin
+                        peek_latch      <= sdram_b_dout;
+                        sdram_b_oe      <= 0;
+                        sdram_bulk_addr <= sdram_bulk_addr + 25'd1;
+                        state           <= S_BULK_TX;
                     end
                 end
 

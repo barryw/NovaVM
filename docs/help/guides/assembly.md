@@ -183,45 +183,92 @@ Avoid file I/O, heavy computation, or anything that re-enters the interpreter in
 an unexpected state. Long handlers can cause instability.
 :::
 
-## XMC Assembly Helpers
+## XRAM Assembly Runtime
 
-The NovaBASIC ROM exports a set of labelled helper routines for accessing the XMC
-from assembly code. Using these helpers instead of writing to XMC registers directly
-keeps your code clean and gives you error detection for free.
+NovaVM provides a reusable ca65 XRAM runtime in `ehbasic/xram.inc` and
+`ehbasic/xram.s`. BASIC keeps its `XBANK` plus 16-bit offset model, but assembly
+code should use the runtime's flat 24-bit address registers:
+`XRAM_ADDRL`, `XRAM_ADDRM`, and `XRAM_ADDRH`.
 
-All helpers follow the same convention: on return, **carry clear** means
-success and **carry set** means an error occurred, with the XMC error code
-in the accumulator.
+Those symbols are aliases over the Nova pseudo-register ABI:
+
+| **Symbol** | **Pseudo-register** |
+| --- | --- |
+| `XRAM_ADDRL/M/H` | `NVR0L`, `NVR0H`, `NVR1L` |
+| `XRAM_DATA` | `NVR1H` |
+| `XRAM_RAML/H` | `NVR2L/H` |
+| `XRAM_LENL/H` | `NVR3L/H` |
+
+All routines return `A=0` on success and `A=1` on error. They also update
+`XMC_STATUS` and `XMC_ERRCODE`. BASIC commands use wrapper entry points that
+copy their XMC MMIO arguments into the same pseudo-register layout.
 
 | **Label** | **Purpose** |
 | --- | --- |
-| `LAB_XM_SETADDR` | Set the 24-bit XRAM address: A = low byte, X = mid byte, Y = high byte. |
-| `LAB_XM_STATUS` | Read status snapshot: A = status register, X = error code. |
-| `LAB_XM_GETBYTE` | Read byte at current XADDR: A = value on success. |
-| `LAB_XM_PUTBYTE` | Write byte at current XADDR: A = value to write. |
-| `LAB_XM_STASH` | Bulk copy RAM to XRAM (preload XMC_RAML/H, XMC_LENL/H). |
-| `LAB_XM_FETCH` | Bulk copy XRAM to RAM (preload XMC_RAML/H, XMC_LENL/H). |
-| `LAB_XM_FILL` | Fill XRAM range with a byte value (preload XMC_DATA, XMC_LENL/H). |
-| `LAB_XM_ALLOC` | Allocate a block: preload XMC_LENL/H; XADDR and handle returned in registers. |
+| `xram_read8` | Read the byte at `XRAM_ADDRL/M/H` into `XRAM_DATA`. |
+| `xram_write8` | Write `XRAM_DATA` to `XRAM_ADDRL/M/H`. |
+| `xram_copy_from_ram` | DMA copy from CPU RAM `XRAM_RAML/H` to XRAM `XRAM_ADDRL/M/H`. |
+| `xram_copy_to_ram` | DMA copy from XRAM `XRAM_ADDRL/M/H` to CPU RAM `XRAM_RAML/H`. |
+| `xram_fill` | DMA fill `XRAM_LENL/H` bytes at `XRAM_ADDRL/M/H` with `XRAM_DATA`. |
+| `xram_xload` | Stream a file directly into XRAM. |
+| `xram_xsave` | Stream XRAM directly to a file. |
+| `xram_wait_dma` | Wait for a DMA transfer and translate DMA errors into XMC status. |
 
 ### Example: reading one byte from XRAM in assembly
 
 ```
 ; Set 24-bit address 0x010000 (bank 1, offset 0)
-LDA \#$00
-LDX \#$00
-LDY \#$01
-JSR LAB_XM_SETADDR
-JSR LAB_XM_GETBYTE
-BCS error
-; A now holds the byte value
+STZ XRAM_ADDRL
+STZ XRAM_ADDRM
+LDA #$01
+STA XRAM_ADDRH
+JSR xram_read8
+BNE error
+LDA XRAM_DATA
 ```
 
 ::: note
-The ROM helper labels are defined in the NovaBASIC assembly source
-(`ehbasic/basic.asm`). If you assemble custom ROM extensions or overlays,
-link against the same symbol file to pick up these addresses.
+Bulk copies use the DMA controller with XRAM as space 5. Use `XRAM_LENL/H`
+for the length and `XRAM_RAML/H` for the CPU RAM endpoint.
 :::
+
+### Direct XRAM file streaming from assembly
+
+Assembly programs should call the shared `xram_xload` and `xram_xsave` routines
+instead of writing the raw FIO registers directly:
+
+| **Symbol** | **Meaning for `xram_xload`/`xram_xsave`** |
+| --- | --- |
+| `XRAM_ADDRL/M/H` | Flat 24-bit XRAM source/destination |
+| `XRAM_LENL/H` | Transfer length; zero means full file for `xram_xload` |
+| `XRAM_NAMELEN` | Filename length, 1--63 bytes |
+| `XRAM_NAMEPTR_L/H` | Pointer to filename bytes in CPU RAM |
+
+On success, `A=0` and `XRAM_LENL/H` contains the actual transferred byte count.
+On error, `A=1` and both FIO and XMC status/error registers are updated.
+
+```
+story_name:
+  .byte "ZORK1.Z3"
+story_name_end:
+
+  lda #<story_name
+  sta XRAM_NAMEPTR_L
+  lda #>story_name
+  sta XRAM_NAMEPTR_H
+  lda #(story_name_end - story_name)
+  sta XRAM_NAMELEN
+
+  stz XRAM_ADDRL
+  stz XRAM_ADDRM
+  stz XRAM_ADDRH
+  stz XRAM_LENL
+  stz XRAM_LENH
+  jsr xram_xload
+  bne load_error
+```
+
+Filenames without an extension use `.xram`; explicit extensions are honored.
 
 ## VGC Register-Level Programming
 

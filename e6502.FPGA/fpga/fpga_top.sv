@@ -544,6 +544,7 @@ module fpga_top (
     wire        brg_key_valid;
     wire [7:0]  brg_key_data;
     wire        brg_sdram_b_we;
+    wire        brg_sdram_b_oe;
     wire [24:0] brg_sdram_b_addr;
     wire [7:0]  brg_sdram_b_din;
 
@@ -599,8 +600,10 @@ module fpga_top (
         .key_inject_valid(brg_key_valid),
         .key_inject_data (brg_key_data),
         .sdram_b_we      (brg_sdram_b_we),
+        .sdram_b_oe      (brg_sdram_b_oe),
         .sdram_b_addr    (brg_sdram_b_addr),
         .sdram_b_din     (brg_sdram_b_din),
+        .sdram_b_dout    (core_sdram_doutB),
         .fio_event       (core_fio_event)
     );
 
@@ -657,6 +660,7 @@ module fpga_top (
         .dbg_system_reset(brg_system_reset),
         .dbg_cpu_resume(brg_cpu_resume),
         .brg_sdram_b_we  (brg_sdram_b_we),
+        .brg_sdram_b_oe  (brg_sdram_b_oe),
         .brg_sdram_b_addr(brg_sdram_b_addr),
         .brg_sdram_b_din (brg_sdram_b_din),
         .dbg_cpu_pc   (brg_cpu_pc),

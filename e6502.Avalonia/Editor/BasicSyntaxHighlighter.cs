@@ -21,6 +21,7 @@ public sealed class BasicSyntaxHighlighter : ISyntaxHighlighter
         "RETURN", "RESTORE", "RENUM",
         "PRINT", "GOSUB", "INPUT", "WHILE", "WEND",
         "MUSIC", "MOUNT", "MKDIR", "RMDIR",
+        "XLOAD", "XSAVE",
         "COLOR", "SLEEP",
         "THEN", "ELSE", "STEP", "NEXT", "GOTO", "READ",
         "LOAD", "SAVE", "POKE", "PEEK", "CALL",

@@ -67,8 +67,10 @@ module test_debug_bridge;
     wire [7:0]  key_inject_data;
 
     wire        sdram_b_we;
+    wire        sdram_b_oe;
     wire [24:0] sdram_b_addr;
     wire [7:0]  sdram_b_din;
+    logic [7:0] sdram_b_dout;
 
     // FIO event input — we pulse this to simulate a CPU write to $B9A0.
     logic       fio_event = 0;
@@ -116,8 +118,10 @@ module test_debug_bridge;
         .key_inject_valid(key_inject_valid),
         .key_inject_data(key_inject_data),
         .sdram_b_we(sdram_b_we),
+        .sdram_b_oe(sdram_b_oe),
         .sdram_b_addr(sdram_b_addr),
         .sdram_b_din(sdram_b_din),
+        .sdram_b_dout(sdram_b_dout),
         .fio_event(fio_event)
     );
 
@@ -667,6 +671,10 @@ module test_debug_bridge;
     logic [7:0] sdram_prev_we;
     logic [24:0] sdram_prev_addr;
 
+    always_comb begin
+        sdram_b_dout = sdram_shadow[sdram_b_addr[7:0]];
+    end
+
     always_ff @(posedge clk) begin
         // Capture on the rising edge of weB (first cycle of the 8-cycle
         // hold) so each byte is stored exactly once.
@@ -704,6 +712,27 @@ module test_debug_bridge;
         // Boundaries untouched.
         check_eq8("sdram_shadow[0x000F] untouched", sdram_shadow[15], 8'hFF);
         check_eq8("sdram_shadow[0x0018] untouched", sdram_shadow[24], 8'hFF);
+    endtask
+
+    task automatic test_bulk_read_sdram();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_READ_SDRAM_BLK — 8 bytes from addr 0x000020");
+        for (int i = 0; i < 256; i++) sdram_shadow[i] = 8'h00;
+        for (int i = 0; i < 8; i++) sdram_shadow[32 + i] = 8'h90 + 8'(i);
+
+        send_byte(8'h1A);   // CMD_READ_SDRAM_BLK
+        send_byte(8'h00);   // addr_hi
+        send_byte(8'h00);   // addr_mid
+        send_byte(8'h20);   // addr_lo -> 0x000020
+        send_byte(8'h08);   // count = 8
+
+        wait_tx(b);
+        check_eq8("sdram read status", b, 8'h00);
+        for (int i = 0; i < 8; i++) begin
+            wait_tx(b);
+            check_eq8($sformatf("sdram read byte %0d", i), b, 8'h90 + 8'(i));
+        end
     endtask
 
     // ------------------------------------------------------------------
@@ -802,6 +831,7 @@ module test_debug_bridge;
         test_cmd_peek_block_latency();
         test_bulk_count_zero_means_256();
         test_bulk_poke_sdram();
+        test_bulk_read_sdram();
         test_poke_block_ram();
         test_bulk_poke_vgc();
         test_fill_vgc_block();

@@ -7,6 +7,36 @@
 ; --- Zero page communication ---
 ExtCmdId        = $E4           ; command ID (set by RAM trampoline)
 
+; --- Nova zero-page pseudo-registers ($20-$2F) ---
+NVR0L           = $20
+NVR0H           = $21
+NVR1L           = $22
+NVR1H           = $23
+NVR2L           = $24
+NVR2H           = $25
+NVR3L           = $26
+NVR3H           = $27
+NVR4L           = $28
+NVR4H           = $29
+NVR5L           = $2A
+NVR5H           = $2B
+NVR6L           = $2C
+NVR6H           = $2D
+NVR7L           = $2E
+NVR7H           = $2F
+
+; Short-lived extension helper scratch. Keep NVR4-NVR6 for XMC metadata state.
+ext_ptrL        = NVR0L
+ext_ptrH        = NVR0H
+ext_u16h        = NVR0L
+ext_u16l        = NVR0H
+ext_dig0        = NVR1L
+ext_dig1        = NVR1H
+ext_dig2        = NVR2L
+ext_dig3        = NVR2H
+ext_dig4        = NVR3L
+ext_firstdig    = NVR3H
+
 ; --- Hardware registers ---
 VGC_CHAROUT     = $A00E         ; write character to screen
 VGC_CHARIN      = $A00F         ; read character (0 = none)
@@ -67,12 +97,14 @@ EXT_CMD_DMAFILL = $09
 EXT_CMD_BLTFILL = $0A
 EXT_CMD_XMCCMD  = $0B
 EXT_CMD_COPPER  = $0C           ; COPPER subcommand parser
+EXT_CMD_XLOAD   = $0D
+EXT_CMD_XSAVE   = $0E
 
 ; --- XMC command codes (written to $BA00 before calling processor) ---
 XMC_CMD_GET     = $01           ; GetByte: read XRAM[XA] → DATA
 XMC_CMD_PUT     = $02           ; PutByte: write DATA → XRAM[XA]
-XMC_CMD_STASH   = $03           ; Stash: RAM → XRAM via blitter
-XMC_CMD_FETCH   = $04           ; Fetch: XRAM → RAM via blitter
+XMC_CMD_STASH   = $03           ; Stash: RAM → XRAM via DMA
+XMC_CMD_FETCH   = $04           ; Fetch: XRAM → RAM via DMA
 XMC_CMD_FILL    = $05           ; Fill: fill XRAM with DATA
 XMC_CMD_RSTUS   = $08           ; ResetUsage: clear page tracking
 XMC_CMD_REL     = $09           ; Release: mark pages free
@@ -187,6 +219,8 @@ ExtTable:
       .word EXT_BLTFILL-1     ; cmd A: BLITFILL epilogue
       .word EXT_XMCCMD-1      ; cmd B: XMC command processor
       .word EXT_COPPER-1      ; cmd C: COPPER subcommand parser
+      .word EXT_XLOAD-1       ; cmd D: XLOAD file -> XRAM
+      .word EXT_XSAVE-1       ; cmd E: XSAVE XRAM -> file
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -283,12 +317,12 @@ EXT_DIR:
       ASL
       TAX
       LDA   @tab_dtype,X
-      STA   $FE               ; ZP temp low
+      STA   ext_ptrL
       LDA   @tab_dtype+1,X
-      STA   $FF               ; ZP temp high
+      STA   ext_ptrH
       LDY   #$00
 @dir_tloop:
-      LDA   ($FE),Y
+      LDA   (ext_ptrL),Y
       BEQ   @dir_tname
       STA   VGC_CHAROUT
       INY
@@ -327,82 +361,81 @@ EXT_DIR:
 ; =====================================================================
 ; ext_print_u16 — print 16-bit unsigned in A(high) X(low),
 ;                 right-justified in a 5-character field.
-; Uses ZP $F0-$F6 as scratch.
 ; =====================================================================
 ext_print_u16:
-      STA   $F0               ; value high
-      STX   $F1               ; value low
-      ; Extract 5 decimal digits into $F2(10000s)..$F6(1s)
+      STA   ext_u16h
+      STX   ext_u16l
+      ; Extract 5 decimal digits into ext_dig0(10000s)..ext_dig4(1s)
       LDX   #$00
 @d10k:
       SEC
-      LDA   $F1
+      LDA   ext_u16l
       SBC   #<10000
       PHA
-      LDA   $F0
+      LDA   ext_u16h
       SBC   #>10000
       BCC   @d10kd
-      STA   $F0
+      STA   ext_u16h
       PLA
-      STA   $F1
+      STA   ext_u16l
       INX
       BCS   @d10k             ; always branches (just subtracted successfully)
 @d10kd:
       PLA
-      STX   $F2               ; 10000s digit
+      STX   ext_dig0          ; 10000s digit
       LDX   #$00
 @d1k:
       SEC
-      LDA   $F1
+      LDA   ext_u16l
       SBC   #<1000
       PHA
-      LDA   $F0
+      LDA   ext_u16h
       SBC   #>1000
       BCC   @d1kd
-      STA   $F0
+      STA   ext_u16h
       PLA
-      STA   $F1
+      STA   ext_u16l
       INX
       BCS   @d1k
 @d1kd:
       PLA
-      STX   $F3               ; 1000s digit
+      STX   ext_dig1          ; 1000s digit
       LDX   #$00
 @d100:
       SEC
-      LDA   $F1
+      LDA   ext_u16l
       SBC   #100
       BCC   @d100d
-      STA   $F1
+      STA   ext_u16l
       INX
       BNE   @d100             ; always branches (100s digit max 9)
 @d100d:
-      STX   $F4               ; 100s digit
+      STX   ext_dig2          ; 100s digit
       LDX   #$00
 @d10:
-      LDA   $F1
+      LDA   ext_u16l
       CMP   #10
       BCC   @d10d
       SBC   #10
-      STA   $F1
+      STA   ext_u16l
       INX
       BNE   @d10              ; always branches
 @d10d:
-      STX   $F5               ; 10s digit
-      LDA   $F1
-      STA   $F6               ; 1s digit
+      STX   ext_dig3          ; 10s digit
+      LDA   ext_u16l
+      STA   ext_dig4          ; 1s digit
       ; Find first non-zero digit (index in X), always print at least ones
       LDX   #$00
 @findnz:
       CPX   #$04
       BCS   @print            ; always print last digit
-      LDA   $F2,X
+      LDA   ext_dig0,X
       BNE   @print
       INX
       BNE   @findnz           ; always branches
 @print:
       ; Print X leading spaces
-      STX   $F0               ; first significant digit index
+      STX   ext_firstdig      ; first significant digit index
       LDY   #$00
       CPX   #$00
       BEQ   @digits
@@ -410,12 +443,12 @@ ext_print_u16:
       LDA   #' '
       STA   VGC_CHAROUT
       INY
-      CPY   $F0
+      CPY   ext_firstdig
       BCC   @spc
 @digits:
-      LDX   $F0
+      LDX   ext_firstdig
 @dloop:
-      LDA   $F2,X
+      LDA   ext_dig0,X
       ORA   #'0'
       STA   VGC_CHAROUT
       INX
@@ -461,17 +494,17 @@ EXT_XMEM:
       .byte " BANKS, ",0
       ; print "<banks*64>" as KB
       LDA   XMC_BANKS
-      STA   $F0
+      STA   ext_u16l
       LDA   #$00
-      STA   $F1
+      STA   ext_u16h
       LDY   #$06
 @xm_kb:
-      ASL   $F0
-      ROL   $F1
+      ASL   ext_u16l
+      ROL   ext_u16h
       DEY
       BNE   @xm_kb
-      LDA   $F1
-      LDX   $F0
+      LDA   ext_u16h
+      LDX   ext_u16l
       JSR   ext_print_u16
       JSR   ext_print_str
       .byte " KB XRAM, BANK ",0
@@ -726,34 +759,83 @@ ext_hw_chk:
 @ok:  LDA   #$00
       RTS
 
+      .include "xram.s"
+
+; =====================================================================
+; XLOAD/XSAVE handlers — bridge BASIC's FIO-style arguments into the
+; shared XRAM pseudo-register ABI, then call the assembly-facing runtime.
+; Filename is already in FIO_NAME/FIO_NAMELEN.
+; Returns: A=0 success, A=FIO_ERRCODE on error.
+; =====================================================================
+EXT_XLOAD:
+      JSR   ext_xfio_load_args
+      JSR   xram_xload
+      BEQ   @ok
+      LDA   FIO_ERRCODE
+      BNE   @ret
+      LDA   #FIO_ERR_IO
+@ret: RTS
+@ok:  LDA   #$00
+      RTS
+
+EXT_XSAVE:
+      JSR   ext_xfio_load_args
+      JSR   xram_xsave
+      BEQ   @ok
+      LDA   FIO_ERRCODE
+      BNE   @ret
+      LDA   #FIO_ERR_IO
+@ret: RTS
+@ok:  LDA   #$00
+      RTS
+
+ext_xfio_load_args:
+      LDA   FIO_GADDRL
+      STA   XRAM_ADDRL
+      LDA   FIO_GADDRH
+      STA   XRAM_ADDRM
+      LDA   FIO_GSPACE
+      STA   XRAM_ADDRH
+      LDA   FIO_GLENL
+      STA   XRAM_LENL
+      LDA   FIO_GLENH
+      STA   XRAM_LENH
+      LDA   FIO_NAMELEN
+      STA   XRAM_NAMELEN
+      LDA   #<FIO_NAME
+      STA   XRAM_NAMEPTR_L
+      LDA   #>FIO_NAME
+      STA   XRAM_NAMEPTR_H
+      RTS
+
 ; =====================================================================
 ; ext_print_str — print inline null-terminated string
 ; String data follows the JSR instruction. Returns to byte after null.
 ; =====================================================================
 ext_print_str:
       PLA                     ; low byte of return addr (points to string-1)
-      STA   $FC
+      STA   ext_ptrL
       PLA                     ; high byte
-      STA   $FD
+      STA   ext_ptrH
       LDY   #$01              ; skip past low byte of return addr
 @ps_loop:
-      LDA   ($FC),Y
+      LDA   (ext_ptrL),Y
       BEQ   @ps_done
       STA   VGC_CHAROUT
       INY
       BNE   @ps_loop
 @ps_done:
-      ; fix return address: $FC/$FD + Y = address of null byte
-      ; RTS needs addr-1 on stack, and Y points to null, so push $FC+Y-1...
-      ; Actually: $FC = retaddr_low, $FD = retaddr_high (from PLA)
+      ; fix return address: ext_ptr + Y = address of null byte
+      ; RTS needs addr-1 on stack, and Y points to null, so push ext_ptr+Y.
+      ; Actually: ext_ptr = retaddr (from PLA)
       ; The string starts at retaddr+1. Null is at retaddr+Y.
       ; We need to return to retaddr+Y+1, so push retaddr+Y (RTS adds 1)
       TYA
       CLC
-      ADC   $FC
+      ADC   ext_ptrL
       TAX                     ; low byte
       LDA   #$00
-      ADC   $FD               ; high byte with carry
+      ADC   ext_ptrH          ; high byte with carry
       PHA                     ; push high
       TXA
       PHA                     ; push low
@@ -834,187 +916,38 @@ xmc_ok:
       STA   XMC_ERRCODE
       RTS
 
-; --- Helper: map window 3 to XRAM page at XMC_XAH:XMC_XAM ---
-xmc_map_win3:
-      LDA   #$00
-      STA   WIN3_LO
-      LDA   XMC_XAM
-      STA   WIN3_MI
-      LDA   XMC_XAH
-      STA   WIN3_HI
-      RTS
-
 ; =====================================================================
 ; GetByte — read XRAM[XA] into XMC_DATA
 ; =====================================================================
 xmc_getbyte:
-      JSR   xmc_map_win3
-      LDX   XMC_XAL
-      LDA   WIN3_BASE,X
-      STA   XMC_DATA
-      JMP   xmc_ok
+      JMP   xram_xmc_read8
 
 ; =====================================================================
 ; PutByte — write XMC_DATA to XRAM[XA]
 ; =====================================================================
 xmc_putbyte:
-      JSR   xmc_map_win3
-      LDX   XMC_XAL
-      LDA   XMC_DATA
-      STA   WIN3_BASE,X
-      JMP   xmc_ok
+      JMP   xram_xmc_write8
 
 ; =====================================================================
-; Stash — copy RAM → XRAM using blitter
+; Stash — copy RAM → XRAM using the shared DMA-backed XRAM runtime
 ; XMC_RAML/H = source, XMC_XAL/M/H = dest, XMC_LENL/H = count
 ; =====================================================================
 xmc_stash:
-      ; Source = CPU RAM (space 0)
-      LDA   #$00
-      STA   BLT_SRCSPACE
-      STA   BLT_SRCH
-      LDA   XMC_RAML
-      STA   BLT_SRCL
-      LDA   XMC_RAMH
-      STA   BLT_SRCM
-      ; Destination = XRAM (space 5)
-      LDA   #$05
-      STA   BLT_DSTSPACE
-      LDA   XMC_XAL
-      STA   BLT_DSTL
-      LDA   XMC_XAM
-      STA   BLT_DSTM
-      LDA   XMC_XAH
-      STA   BLT_DSTH
-      ; Set up 1D transfer: width=len, height=1, stride=width
-      LDA   XMC_LENL
-      STA   BLT_WIDTHL
-      STA   BLT_SRCSTRL
-      STA   BLT_DSTSTRL
-      LDA   XMC_LENH
-      STA   BLT_WIDTHH
-      STA   BLT_SRCSTRH
-      STA   BLT_DSTRH
-      LDA   #$01
-      STA   BLT_HEIGHTL
-      LDA   #$00
-      STA   BLT_HEIGHTH
-      STA   BLT_MODE_REG         ; mode = 0 (copy)
-      STA   BLT_CKEY
-      ; Start — blitter stalls CPU via RDY, so it's done when we return
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
-      ; Check blitter status → XMC status
-      LDA   BLT_STATUS_REG
-      CMP   #HW_OK
-      BEQ   @stash_ok
-      LDA   #$03                 ; XMC error
-      STA   XMC_STATUS
-      LDA   #$01
-      STA   XMC_ERRCODE
-      RTS
-@stash_ok:
-      JMP   xmc_ok
+      JMP   xram_xmc_copy_from_ram
 
 ; =====================================================================
-; Fetch — copy XRAM → RAM using blitter
+; Fetch — copy XRAM → RAM using the shared DMA-backed XRAM runtime
 ; XMC_XAL/M/H = source, XMC_RAML/H = dest, XMC_LENL/H = count
 ; =====================================================================
 xmc_fetch:
-      ; Source = XRAM (space 5)
-      LDA   #$05
-      STA   BLT_SRCSPACE
-      LDA   XMC_XAL
-      STA   BLT_SRCL
-      LDA   XMC_XAM
-      STA   BLT_SRCM
-      LDA   XMC_XAH
-      STA   BLT_SRCH
-      ; Destination = CPU RAM (space 0)
-      LDA   #$00
-      STA   BLT_DSTSPACE
-      STA   BLT_DSTH
-      LDA   XMC_RAML
-      STA   BLT_DSTL
-      LDA   XMC_RAMH
-      STA   BLT_DSTM
-      ; 1D transfer
-      LDA   XMC_LENL
-      STA   BLT_WIDTHL
-      STA   BLT_SRCSTRL
-      STA   BLT_DSTSTRL
-      LDA   XMC_LENH
-      STA   BLT_WIDTHH
-      STA   BLT_SRCSTRH
-      STA   BLT_DSTRH
-      LDA   #$01
-      STA   BLT_HEIGHTL
-      LDA   #$00
-      STA   BLT_HEIGHTH
-      STA   BLT_MODE_REG
-      STA   BLT_CKEY
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
-      LDA   BLT_STATUS_REG
-      CMP   #HW_OK
-      BEQ   @fetch_ok
-      LDA   #$03
-      STA   XMC_STATUS
-      LDA   #$01
-      STA   XMC_ERRCODE
-      RTS
-@fetch_ok:
-      JMP   xmc_ok
+      JMP   xram_xmc_copy_to_ram
 
 ; =====================================================================
-; Fill — fill XRAM with XMC_DATA using blitter
+; Fill — fill XRAM with XMC_DATA using the shared DMA-backed XRAM runtime
 ; XMC_XAL/M/H = start, XMC_LENL/H = count, XMC_DATA = fill byte
 ; =====================================================================
 xmc_fill:
-      ; Destination = XRAM (space 5)
-      LDA   #$05
-      STA   BLT_DSTSPACE
-      LDA   XMC_XAL
-      STA   BLT_DSTL
-      LDA   XMC_XAM
-      STA   BLT_DSTM
-      LDA   XMC_XAH
-      STA   BLT_DSTH
-      ; 1D fill
-      LDA   XMC_LENL
-      STA   BLT_WIDTHL
-      STA   BLT_DSTSTRL
-      LDA   XMC_LENH
-      STA   BLT_WIDTHH
-      STA   BLT_DSTRH
-      LDA   #$01
-      STA   BLT_HEIGHTL
-      LDA   #$00
-      STA   BLT_HEIGHTH
-      LDA   XMC_DATA
-      STA   BLT_FILLVAL
-      LDA   #BLT_MODE_FILL
-      STA   BLT_MODE_REG
-      LDA   #$00
-      STA   BLT_SRCSPACE
-      STA   BLT_SRCL
-      STA   BLT_SRCM
-      STA   BLT_SRCH
-      STA   BLT_SRCSTRL
-      STA   BLT_SRCSTRH
-      STA   BLT_CKEY
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
-      LDA   BLT_STATUS_REG
-      CMP   #HW_OK
-      BEQ   @fill_ok
-      LDA   #$03
-      STA   XMC_STATUS
-      LDA   #$01
-      STA   XMC_ERRCODE
-      RTS
-@fill_ok:
-      JMP   xmc_ok
+      JMP   xram_xmc_fill
 
 ; =====================================================================
 ; XRAM metadata layout (bump allocator + directory)
@@ -1057,12 +990,12 @@ XMC_ERR_NAME    = $04
 XMC_ERR_NF      = $05
 XMC_ERR_EOD     = $06
 
-; --- Zero page scratch for XMC ---
-xmc_eidx        = $E5           ; directory entry index (0-31)
-xmc_npgL        = $E6           ; pages needed low
-xmc_npgH        = $E7           ; pages needed high
-xmc_dircur      = $E8           ; directory cursor for NDirOpen/Read
-xmc_tmp         = $E9           ; scratch
+; --- Nova pseudo-register scratch for XMC metadata ---
+xmc_eidx        = NVR4L         ; directory entry index (0-31)
+xmc_dircur      = NVR4H         ; directory cursor for NDirOpen/Read
+xmc_npgL        = NVR5L         ; pages needed low
+xmc_npgH        = NVR5H         ; pages needed high
+xmc_tmp         = NVR6L         ; scratch
 
 ; --- Helper: set XMC error status ---
 xmc_err:
@@ -1076,6 +1009,11 @@ xmc_err:
 
 ; --- Helper: map window 3 to XRAM page N (A=mid, X=high) ---
 xmc_map_w3_ax:
+      PHA
+      LDA   XMC_WINCTL
+      ORA   #XRAM_WIN3_ENABLE
+      STA   XMC_WINCTL
+      PLA
       STX   WIN3_HI
       STA   WIN3_MI
       LDA   #$00
@@ -1119,34 +1057,40 @@ xmc_init_check:
       CMP   #MAGIC_VAL
       BEQ   @init_done
       ; First use — initialize metadata
-      ; Clear all of pages 0-4 (1280 bytes) via blitter fill
-      LDA   #$05
-      STA   BLT_DSTSPACE
-      LDA   #$00
-      STA   BLT_DSTL
-      STA   BLT_DSTM
-      STA   BLT_DSTH
-      STA   BLT_SRCSPACE
-      STA   BLT_SRCL
-      STA   BLT_SRCM
-      STA   BLT_SRCH
-      STA   BLT_SRCSTRL
-      STA   BLT_SRCSTRH
-      STA   BLT_CKEY
-      STA   BLT_HEIGHTH
-      STA   BLT_FILLVAL
+      ; Clear all of pages 0-4 (1280 bytes) via the shared DMA XRAM fill.
+      LDA   XMC_XAL
+      PHA
+      LDA   XMC_XAM
+      PHA
+      LDA   XMC_XAH
+      PHA
+      LDA   XMC_LENL
+      PHA
+      LDA   XMC_LENH
+      PHA
+      LDA   XMC_DATA
+      PHA
+      STZ   XMC_XAL
+      STZ   XMC_XAM
+      STZ   XMC_XAH
       LDA   #<1280
-      STA   BLT_WIDTHL
-      STA   BLT_DSTSTRL
+      STA   XMC_LENL
       LDA   #>1280
-      STA   BLT_WIDTHH
-      STA   BLT_DSTRH
-      LDA   #$01
-      STA   BLT_HEIGHTL
-      LDA   #BLT_MODE_FILL
-      STA   BLT_MODE_REG
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
+      STA   XMC_LENH
+      STZ   XMC_DATA
+      JSR   xram_xmc_fill
+      PLA
+      STA   XMC_DATA
+      PLA
+      STA   XMC_LENH
+      PLA
+      STA   XMC_LENL
+      PLA
+      STA   XMC_XAH
+      PLA
+      STA   XMC_XAM
+      PLA
+      STA   XMC_XAL
       ; Set control block defaults
       JSR   xmc_map_ctrl
       LDA   #DATA_START_LO

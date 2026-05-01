@@ -59,6 +59,23 @@ Itempl            = $11       ; temporary integer low byte
 Itemph            = Itempl+1  ; temporary integer high byte
 ; end bulk initialize from StrTab at LAB_GMEM
 
+NVR0L             = $20       ; Nova pseudo-register 0 low byte
+NVR0H             = $21       ; Nova pseudo-register 0 high byte
+NVR1L             = $22       ; Nova pseudo-register 1 low byte
+NVR1H             = $23       ; Nova pseudo-register 1 high byte
+NVR2L             = $24       ; Nova pseudo-register 2 low byte
+NVR2H             = $25       ; Nova pseudo-register 2 high byte
+NVR3L             = $26       ; Nova pseudo-register 3 low byte
+NVR3H             = $27       ; Nova pseudo-register 3 high byte
+NVR4L             = $28       ; Nova pseudo-register 4 low byte
+NVR4H             = $29       ; Nova pseudo-register 4 high byte
+NVR5L             = $2A       ; Nova pseudo-register 5 low byte
+NVR5H             = $2B       ; Nova pseudo-register 5 high byte
+NVR6L             = $2C       ; Nova pseudo-register 6 low byte
+NVR6H             = $2D       ; Nova pseudo-register 6 high byte
+NVR7L             = $2E       ; Nova pseudo-register 7 low byte
+NVR7H             = $2F       ; Nova pseudo-register 7 high byte
+
 nums_1            = Itempl    ; number to bin/hex string convert MSB
 nums_2            = nums_1+1  ; number to bin/hex string convert
 nums_3            = nums_1+2  ; number to bin/hex string convert LSB
@@ -298,8 +315,8 @@ IrqBase           = $DF       ; IRQ handler enabled/setup/triggered flags
 help_len          = $E2       ; scratch byte for HELP command keyword length
 ;                 = $E3       ; unused
 ExtCmdId          = $E4       ; extension ROM command ID (set by trampoline)
-CwrdPtr           = $E5       ; LAB_CWRD pointer low byte
-;                              ; $E6 = CwrdPtr high byte (used by LAB_CWRD)
+;                 = $E5       ; unused
+;                 = $E6       ; unused
 ;                 = $E7       ; unused
 ;                 = $E8       ; unused
 ;                 = $E9       ; unused
@@ -311,6 +328,9 @@ CwrdPtr           = $E5       ; LAB_CWRD pointer low byte
 
 Decss             = $EF       ; number to decimal string start
 Decssp1           = Decss+1   ; number to decimal string start
+
+CwrdPtr           = NVR7L     ; LAB_CWRD pointer low byte
+;                              ; NVR7H = CwrdPtr high byte
 
 ;                 = $FF       ; decimal string end
 
@@ -507,7 +527,10 @@ XTK_DMAERR        = $27              ; DMAERR — numeric function (no args)
 XTK_DMACOUNT      = $28              ; DMACOUNT — numeric function (no args)
 XTK_MIDPLAY       = $29              ; MIDPLAY "filename" — play MIDI file
 XTK_MIDSTOP       = $2A              ; MIDSTOP — stop MIDI playback
-                                      ; $2B-$3F reserved
+                                      ; $2B-$30 directory/metadata tokens
+XTK_XLOAD         = $31              ; XLOAD "filename",offset[,length]
+XTK_XSAVE         = $32              ; XSAVE "filename",offset,length
+                                      ; $33-$3F reserved
 XTK_BLITCOPY      = $40              ; BLITCOPY srcSpace,srcAddr,srcStride,dstSpace,dstAddr,dstStride,width,height
 XTK_BLITFILL      = $41              ; BLITFILL dstSpace,dstAddr,dstStride,width,height,value
 XTK_BLITSTATUS    = $42              ; BLITSTATUS — numeric function (no args)
@@ -2007,8 +2030,10 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_DIRSIZ     ($2E) — function only
       .word LAB_15D9-1        ; XTK_DIRTYP     ($2F) — function only
       .word LAB_15D9-1        ; XTK_META       ($30) — function only
-      ; $31-$3F: reserved (15 entries)
-      .repeat $0F
+      ; $31-$3F: XRAM file streaming, then reserved
+      .word LAB_XLOAD-1       ; XTK_XLOAD      ($31)
+      .word LAB_XSAVE-1       ; XTK_XSAVE      ($32)
+      .repeat $0D
       .word LAB_15D9-1
       .endrepeat
       .word LAB_BLITCOPY-1    ; XTK_BLITCOPY   ($40)
@@ -4695,6 +4720,16 @@ LAB_1E12
 LAB_1E14
       JMP   LAB_2831          ; convert FAC1 floating-to-fixed and return
 
+; evaluate unsigned 16-bit expression (0..65535)
+
+LAB_EVUW
+      LDA   FAC1_s            ; get FAC1 sign (b7)
+      BMI   LAB_1E12          ; do function call error if -ve
+      LDA   FAC1_e            ; get FAC1 exponent
+      CMP   #$91              ; exponent $91 means integer part >= 65536
+      BCS   LAB_FCER
+      JMP   LAB_F2FX          ; convert and leave low/high in FAC1_3/FAC1_2
+
 ; find or make array
 
 LAB_1E17
@@ -5976,7 +6011,7 @@ LAB_SGBY
 
 LAB_GTWRD
       JSR   LAB_EVNM          ; evaluate expression and check is numeric
-      JSR   LAB_EVPI          ; convert to unsigned integer (0-65535)
+      JSR   LAB_EVUW          ; convert to unsigned integer (0-65535)
       JMP   LAB_GBYT          ; scan memory and return
 
 ; get word (16-bit signed) parameter
@@ -8689,8 +8724,9 @@ TAB_XTKSTR
       .word @s_midplay, @s_midstop
       ; $2B-$30: directory/metadata tokens
       .word @s_diropen, @s_dirnext, @s_dirnam, @s_dirsiz, @s_dirtyp, @s_meta
-      ; $31-$3F: reserved (15 entries)
-      .repeat $0F
+      ; $31-$3F: XRAM file streaming, then reserved
+      .word @s_xload, @s_xsave
+      .repeat $0D
       .word @s_reserved_ext
       .endrepeat
       .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
@@ -8759,6 +8795,8 @@ TAB_XTKSTR
 @s_reserved_ext: .byte $FF,0       ; placeholder — reserved extension id
 @s_midplay: .byte "MIDPLAY",0
 @s_midstop: .byte "MIDSTOP",0
+@s_xload:  .byte "XLOAD",0
+@s_xsave:  .byte "XSAVE",0
 @s_blitcopy: .byte "BLITCOPY",0
 @s_blitfill: .byte "BLITFILL",0
 @s_blitstatus: .byte "BLITSTATUS",0
@@ -8973,6 +9011,8 @@ FIO_CMD_MPRI   = $12           ; set SFX voice steal priority
 FIO_CMD_MIDPLAY = $13          ; load .mid and start playback
 FIO_CMD_MIDSTOP = $14          ; stop MIDI playback
 FIO_CMD_SFLOAD  = $15          ; load soundfont (.sf2)
+FIO_CMD_XLOAD   = $18          ; load file directly into XRAM
+FIO_CMD_XSAVE   = $19          ; save XRAM range directly to file
 
 ; --- Extension ROM command IDs (dispatched via EXT_vec trampoline) ---
 EXT_CMD_NCC     = $00          ; NCC confirmation dialog
@@ -8988,6 +9028,8 @@ EXT_CMD_DMAFILL = $09          ; DMAFILL epilogue (zero src, start, check)
 EXT_CMD_BLTFILL = $0A          ; BLITFILL epilogue (zero src, start, check)
 ; EXT_CMD_XMCCMD ($0B) defined locally near LAB_XMCCMD callsite
 EXT_CMD_COPPER  = $0C          ; COPPER subcommand parser (full handler)
+EXT_CMD_XLOAD   = $0D          ; XLOAD file -> XRAM via shared XRAM runtime
+EXT_CMD_XSAVE   = $0E          ; XSAVE XRAM -> file via shared XRAM runtime
 FIO_CMD_CD      = $20              ; change directory
 FIO_CMD_MKDIR   = $21              ; make directory
 FIO_CMD_RMDIR   = $22              ; remove directory
@@ -10181,7 +10223,63 @@ LAB_GLOAD
       STA   FIO_GLENH
 @gl_go
       LDA   #FIO_CMD_GLOAD
-      BRA   LAB_FIO_EXEC      ; issue command, check status, return
+      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+
+; parse 16-bit XRAM offset into FIO flat-address registers
+; BASIC supplies the high byte through current XBANK.
+
+LAB_XFIO_SETOFF
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   FIO_GADDRL
+      LDA   FAC1_2
+      STA   FIO_GADDRH
+      LDA   XMC_BANK
+      STA   FIO_GSPACE
+      RTS
+
+; perform XLOAD "filename", offset [,length]
+
+LAB_XLOAD
+      JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_XFIO_SETOFF   ; XRAM destination offset + bank
+      STZ   FIO_GLENL         ; default: load full file
+      STZ   FIO_GLENH
+      JSR   LAB_GBYT          ; optional comma,length
+      CMP   #','
+      BNE   @xl_go
+      JSR   LAB_1C01
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   FIO_GLENL
+      LDA   FAC1_2
+      STA   FIO_GLENH
+@xl_go
+      LDA   #EXT_CMD_XLOAD
+      BRA   LAB_XFIO_EXEC     ; issue command through shared XRAM runtime
+
+; perform XSAVE "filename", offset, length
+
+LAB_XSAVE
+      JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_XFIO_SETOFF   ; XRAM source offset + bank
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD
+      LDA   FAC1_3
+      STA   FIO_GLENL
+      LDA   FAC1_2
+      STA   FIO_GLENH
+      LDA   #EXT_CMD_XSAVE
+      BRA   LAB_XFIO_EXEC     ; issue command through shared XRAM runtime
+
+LAB_XFIO_EXEC
+      JSR   EXT_vec
+      BNE   @xerr
+      RTS
+@xerr
+      JMP   LAB_FIO_ERRHND
 
 ; perform SIDPLAY "filename" [, song]
 
@@ -11136,18 +11234,18 @@ LAB_XDEL
 
 LAB_XMAP
       JSR   LAB_GTBY          ; window 0..3
-      STX   TempB
+      STX   NVR6L             ; preserve window index across expression parse
       JSR   LAB_XMC_GETWINBIT
       BCC   @xmap_wok
       JMP   LAB_FCER
 @xmap_wok
-      STA   Temp3             ; save bit mask
+      STA   NVR6H             ; preserve bit mask across expression parse
       JSR   LAB_1C01
       JSR   LAB_GTWRD         ; offset within current bank
-      LDX   TempB
+      LDX   NVR6L
       JSR   LAB_XMC_SETWINADDR
       LDA   XMC_WINCTL
-      ORA   Temp3
+      ORA   NVR6H
       STA   XMC_WINCTL
       RTS
 

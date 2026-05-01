@@ -56,10 +56,10 @@ module top (
     input  logic        dbg_cpu_reset,     // ESP32-driven soft reset, ORs with rst
     input  logic        dbg_system_reset,  // ESP32-driven custom-chip reset, ORs with rst
     input  logic        dbg_cpu_resume,    // one-cycle pulse; releases CPU STP halt
-    // Debug-bridge SDRAM port B write path — NovaHost streams preload data
-    // (6581 filter curve) here while dbg_cpu_reset is asserted. sid_curve_reader
-    // is held in reset during this window so there's no port B contention.
+    // Debug-bridge SDRAM port B path. NovaHost uses this for boot preload and
+    // direct XRAM file streaming.
     input  logic        brg_sdram_b_we,
+    input  logic        brg_sdram_b_oe,
     input  logic [24:0] brg_sdram_b_addr,
     input  logic [7:0]  brg_sdram_b_din,
     output logic [15:0] dbg_cpu_pc,
@@ -137,6 +137,11 @@ module top (
     wire [7:0]  cpu_dout;
     wire        cpu_we;
     logic [7:0] cpu_din;
+    wire [15:0] cpu_dbg_pc;
+    wire  [7:0] cpu_dbg_a, cpu_dbg_x, cpu_dbg_y, cpu_dbg_s, cpu_dbg_flags;
+    wire  [5:0] cpu_dbg_state;
+    wire  [7:0] cpu_dbg_ir;
+    wire        cpu_dbg_waiting, cpu_dbg_stopped;
     wire        vgc_sys_reset_req;
 
     // A VGC SYSRESET command is a machine reset, not just a custom-chip
@@ -279,9 +284,22 @@ module top (
     wire [1:0]  xmc_page    = mem_addr[9:8];
     wire [7:0]  xmc_offset  = mem_addr[7:0];
 
-    wire [18:0] xmc_addr_raw = {xmc_regs[6'h1A + {xmc_page, 1'b0} + xmc_page],
-                                xmc_regs[6'h19 + {xmc_page, 1'b0} + xmc_page],
-                                xmc_offset};
+    // Each 256-byte XMC window is page-aligned. The low base register is
+    // writable/readable for software symmetry, but address translation uses
+    // the CPU address low byte as the window offset.
+    logic [7:0] xmc_win_mid;
+    logic [7:0] xmc_win_high;
+
+    always_comb begin
+        unique case (xmc_page)
+            2'd0: begin xmc_win_mid = xmc_regs[6'h19]; xmc_win_high = xmc_regs[6'h1A]; end
+            2'd1: begin xmc_win_mid = xmc_regs[6'h1C]; xmc_win_high = xmc_regs[6'h1D]; end
+            2'd2: begin xmc_win_mid = xmc_regs[6'h1F]; xmc_win_high = xmc_regs[6'h20]; end
+            2'd3: begin xmc_win_mid = xmc_regs[6'h22]; xmc_win_high = xmc_regs[6'h23]; end
+        endcase
+    end
+
+    wire [18:0] xmc_addr_raw = {xmc_win_high[2:0], xmc_win_mid, xmc_offset};
     // Full 19-bit XMC address maps directly into the 512 KB SDRAM region.
     wire [18:0] xmc_addr = xmc_addr_raw;
     wire xmc_win_enabled = xmc_regs[XMC_WINCTL_REG][xmc_page];
@@ -333,15 +351,30 @@ module top (
     assign brom_b_addr = dbg_rom_read ? dbg_peek_addr[13:0] : mem_addr[13:0];
     assign erom_b_addr = dbg_rom_read ? dbg_peek_addr[13:0] : mem_addr[13:0];
 
-    // XRAM: drive the xram_sdram wrapper. The wrapper is edge-triggered —
+    // XRAM: drive the xram_sdram wrapper. The wrapper is edge-triggered:
     // req_re / req_we must be asserted for exactly one pixel clock per
-    // transaction. An arming latch fires once per XMC access and re-arms
-    // when the window deasserts.
-    logic xmc_armed;
+    // transaction. Some 6502 addressing modes keep the same XMC address on the
+    // bus for multiple CPU states (for example ($zp),Y store does a read cycle
+    // before the write). Track the fulfilled CPU bus cycle by state/address/WE
+    // so each real CPU cycle fires once, even when the address stays in-window.
+    logic xmc_cycle_done;
+    logic xmc_pending;
+    logic [5:0] xmc_last_state;
+    logic [15:0] xmc_last_addr;
+    logic xmc_last_we;
+
     wire  xmc_access     = xmc_win_sel && xmc_win_enabled;
-    wire  xmc_fire       = xmc_access && xmc_armed && !xram_busy;
+    wire  xmc_cpu_access = xmc_access && cpu_active;
+    wire  xmc_same_cycle =
+        xmc_cycle_done &&
+        (xmc_last_state == cpu_dbg_state) &&
+        (xmc_last_addr  == mem_addr) &&
+        (xmc_last_we    == cpu_we);
+    wire  xmc_new_cycle  = xmc_cpu_access && !xmc_same_cycle && !xmc_pending;
+    wire  xmc_need_fire  = xmc_pending || xmc_new_cycle;
+    wire  xmc_fire       = xmc_need_fire && !xram_busy;
     wire  xmc_cpu_read   = xmc_fire && !cpu_we;
-    wire  xmc_cpu_write  = xmc_fire &&  cpu_we && cpu_active;
+    wire  xmc_cpu_write  = xmc_fire &&  cpu_we;
 
     // Bus-master XRAM write (blitter or DMA). Previously used a `bm_xram_armed`
     // single-shot latch that cleared on fire and re-armed only when `bm_xram_we`
@@ -361,16 +394,33 @@ module top (
 
     always_ff @(posedge clk) begin
         if (custom_rst) begin
-            xmc_armed      <= 1'b1;
+            xmc_cycle_done <= 1'b0;
+            xmc_pending    <= 1'b0;
+            xmc_last_state <= 6'd0;
+            xmc_last_addr  <= 16'd0;
+            xmc_last_we    <= 1'b0;
         end else begin
-            if (!xmc_access)       xmc_armed      <= 1'b1;
-            else if (xmc_fire)     xmc_armed      <= 1'b0;
+            if (!xmc_access) begin
+                xmc_cycle_done <= 1'b0;
+                xmc_pending    <= 1'b0;
+            end else begin
+                if (xmc_new_cycle && xram_busy)
+                    xmc_pending <= 1'b1;
+
+                if (xmc_fire) begin
+                    xmc_cycle_done <= 1'b1;
+                    xmc_pending    <= 1'b0;
+                    xmc_last_state <= cpu_dbg_state;
+                    xmc_last_addr  <= mem_addr;
+                    xmc_last_we    <= cpu_we;
+                end
+            end
         end
     end
 
     // CPU-side stall: hold cpu_ce low any time a CPU XMC access is
-    // outstanding (armed but not fired, or fired and still busy).
-    assign xram_stall = xmc_access && (xmc_armed || xram_busy);
+    // outstanding (needed but not fired, or fired and still busy).
+    assign xram_stall = xmc_access && (xram_busy || xmc_need_fire);
 
     // Bus-master read fire gate — same shape as bm_xram_fire. Separate so
     // a read during write-busy doesn't accidentally convert to a write.
@@ -698,10 +748,22 @@ module top (
     wire [1:0]  xmc_page    = cpu_addr[9:8];
     wire [7:0]  xmc_offset  = cpu_addr[7:0];
 
-    wire [18:0] xmc_addr_raw = {xmc_regs[6'h1A + {xmc_page, 1'b0} + xmc_page],
-                                xmc_regs[6'h19 + {xmc_page, 1'b0} + xmc_page],
-                                xmc_offset};
-    wire [18:0] xmc_addr = xmc_addr_raw[18:0] & (XRAM_SIZE - 1);
+    // Keep the simulation-only memory model aligned with the synthesized
+    // SDRAM-backed path: windows are page-aligned and ignore WnAL.
+    logic [7:0] xmc_win_mid;
+    logic [7:0] xmc_win_high;
+
+    always_comb begin
+        unique case (xmc_page)
+            2'd0: begin xmc_win_mid = xmc_regs[6'h19]; xmc_win_high = xmc_regs[6'h1A]; end
+            2'd1: begin xmc_win_mid = xmc_regs[6'h1C]; xmc_win_high = xmc_regs[6'h1D]; end
+            2'd2: begin xmc_win_mid = xmc_regs[6'h1F]; xmc_win_high = xmc_regs[6'h20]; end
+            2'd3: begin xmc_win_mid = xmc_regs[6'h22]; xmc_win_high = xmc_regs[6'h23]; end
+        endcase
+    end
+
+    wire [18:0] xmc_addr_raw = {xmc_win_high[2:0], xmc_win_mid, xmc_offset};
+    wire [18:0] xmc_addr = xmc_addr_raw & (XRAM_SIZE - 1);
     wire xmc_win_enabled = xmc_regs[XMC_WINCTL_REG][xmc_page];
 
     // =========================================================================
@@ -1029,23 +1091,19 @@ module top (
         .sdram_doutB (sdram_doutB)
     );
 
-    // Port B arbitration: bridge writes win while the CPU is held in reset.
-    // Curve reader owns the port otherwise (it is held in reset during
-    // preload, so its signals are idle).
-    assign sdram_addrB = brg_sdram_b_we ? brg_sdram_b_addr : curve_addrB;
-    assign sdram_weB   = brg_sdram_b_we ? 1'b1             : curve_weB;
-    assign sdram_dinB  = brg_sdram_b_we ? brg_sdram_b_din  : curve_dinB;
-    assign sdram_oeB   = brg_sdram_b_we ? 1'b0             : curve_oeB;
+    // Port B arbitration: bridge transfers win while active. The SID curve
+    // reader is held in reset during boot preload, and direct XRAM streaming
+    // uses short bridge-owned bursts while BASIC waits for FIO completion.
+    wire brg_sdram_b_active = brg_sdram_b_we | brg_sdram_b_oe;
+    assign sdram_addrB = brg_sdram_b_active ? brg_sdram_b_addr : curve_addrB;
+    assign sdram_weB   = brg_sdram_b_we     ? 1'b1             : curve_weB;
+    assign sdram_dinB  = brg_sdram_b_we     ? brg_sdram_b_din  : curve_dinB;
+    assign sdram_oeB   = brg_sdram_b_oe     ? 1'b1             :
+                         brg_sdram_b_we     ? 1'b0             : curve_oeB;
 
     // =========================================================================
     // CPU
     // =========================================================================
-    wire [15:0] cpu_dbg_pc;
-    wire  [7:0] cpu_dbg_a, cpu_dbg_x, cpu_dbg_y, cpu_dbg_s, cpu_dbg_flags;
-    wire  [5:0] cpu_dbg_state;
-    wire  [7:0] cpu_dbg_ir;
-    wire        cpu_dbg_waiting, cpu_dbg_stopped;
-
     wire vgc_rdy;
     wire vgc_irq;
     wire cpu_irq = ~irq_n | vgc_irq;

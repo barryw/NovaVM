@@ -86,8 +86,12 @@ public:
     // Block-write up to 256 bytes into SDRAM via debug-bridge port B.
     // addr is a 24-bit byte address (covers the 16 MB used by curve+XRAM).
     // count=0 means 256. Caller must hold the CPU in reset during the
-    // entire sequence so sid_curve_reader doesn't race the writes.
+    // entire sequence for boot-time preloads.
     bool pokeSdramBlock(uint32_t addr, const uint8_t* data, uint16_t count);
+
+    // Block-read up to 256 bytes from SDRAM via debug-bridge port B.
+    // count=0 means 256.
+    bool readSdramBlock(uint32_t addr, uint8_t count, uint8_t* buf);
 
     // Block-write up to 256 bytes into CPU RAM. count=0 means 256.
     // Used by FIO LOAD to push file payload from SD into CPU RAM.

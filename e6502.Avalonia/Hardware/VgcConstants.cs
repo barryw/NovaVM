@@ -59,11 +59,11 @@ public static class VgcConstants
     public const int FioEndH           = 0xB9A7;   // end addr high (SAVE only)
     public const int FioSizeL          = 0xB9A8;   // loaded size low (set by host after LOAD)
     public const int FioSizeH          = 0xB9A9;   // loaded size high
-    public const int FioGSpace         = 0xB9AA;   // graphics plane selector (1/2/3/4/6)
-    public const int FioGAddrL         = 0xB9AB;   // graphics offset low
-    public const int FioGAddrH         = 0xB9AC;   // graphics offset high
-    public const int FioGLenL          = 0xB9AD;   // graphics length low
-    public const int FioGLenH          = 0xB9AE;   // graphics length high
+    public const int FioGSpace         = 0xB9AA;   // graphics plane selector; XLOAD/XSAVE XRAM high byte
+    public const int FioGAddrL         = 0xB9AB;   // graphics/XRAM offset low
+    public const int FioGAddrH         = 0xB9AC;   // graphics/XRAM offset high
+    public const int FioGLenL          = 0xB9AD;   // graphics/XRAM transfer length low
+    public const int FioGLenH          = 0xB9AE;   // graphics/XRAM transfer length high
     public const int FioDirType        = 0xB9AF;   // dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID
     public const int FioName           = 0xB9B0;   // filename buffer (64 bytes ASCII)
     public const int FioNameEnd        = 0xB9EF;
@@ -88,6 +88,9 @@ public static class VgcConstants
     public const byte FioCmdMusicPri   = 0x12;
     public const byte FioCmdMidPlay    = 0x13;
     public const byte FioCmdMidStop    = 0x14;
+    public const byte FioCmdSfLoad     = 0x15;
+    public const byte FioCmdXLoad      = 0x18;     // disk -> XRAM
+    public const byte FioCmdXSave      = 0x19;     // XRAM -> disk
 
     public const byte FioCmdCd         = 0x20;
     public const byte FioCmdMkdir      = 0x21;
@@ -167,9 +170,6 @@ public static class VgcConstants
     // WTS commands (write to WtsCommand)
     public const byte WtsCmdAllNotesOff  = 0x01;
     public const byte WtsCmdResetEffects = 0x02;
-
-    // FileIO command for soundfont loading
-    public const byte FioCmdSfLoad       = 0x15;
 
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;

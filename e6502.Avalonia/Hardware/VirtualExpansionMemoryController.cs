@@ -50,6 +50,7 @@ public sealed class VirtualExpansionMemoryController
         int banks = Math.Clamp(sizeBytes / BankSize, 1, 255);
         _regs[RegIndex(VgcConstants.XmcBanks)] = (byte)banks;
         _regs[RegIndex(VgcConstants.XmcBank)] = 0;
+        _regs[RegIndex(VgcConstants.XmcWinCtl)] = 0x0F;
 
         RefreshStats();
         SetStatus(VgcConstants.XmcStatusIdle, VgcConstants.XmcErrNone);

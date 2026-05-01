@@ -4,6 +4,20 @@
 
 extern void logLn(const char* fmt, ...);
 
+namespace {
+ndi::FileType file_type_for_name(const char* name) {
+    const char* ext = strrchr(name, '.');
+    if (!ext) return ndi::FT_BAS;
+    if      (strcasecmp(ext, ".bas")  == 0) return ndi::FT_BAS;
+    else if (strcasecmp(ext, ".sid")  == 0) return ndi::FT_SID;
+    else if (strcasecmp(ext, ".bin")  == 0) return ndi::FT_BIN;
+    else if (strcasecmp(ext, ".xram") == 0) return ndi::FT_BIN;
+    else if (strcasecmp(ext, ".mid")  == 0) return ndi::FT_MID;
+    else if (strcasecmp(ext, ".gfx")  == 0) return ndi::FT_GFX;
+    return ndi::FT_BIN;
+}
+}
+
 void FioDispatcher::handle_event() {
     // Read the entire 80-byte register bank in one shot.
     if (!_bridge.peekBlock(BANK_BASE, 80, _bank)) {
@@ -22,6 +36,8 @@ void FioDispatcher::handle_event() {
     switch (c) {
         case CMD_LOAD:     handle_load();     break;
         case CMD_SAVE:     handle_save();     break;
+        case CMD_XLOAD:    handle_xload();    break;
+        case CMD_XSAVE:    handle_xsave();    break;
         case CMD_DIR_OPEN: handle_dir_open(); break;
         case CMD_DIR_READ: handle_dir_read(); break;
         case CMD_DELETE:   handle_delete();   break;
@@ -50,14 +66,14 @@ void FioDispatcher::copy_filename(char* out) {
 
 void FioDispatcher::respond_ok() {
     _bridge.poke(BANK_BASE + OFF_ERRCODE, ERR_NONE);
-    _bridge.poke(BANK_BASE + OFF_STATUS,  ST_OK);
     _bridge.poke(BANK_BASE + OFF_CMD,     0);   // unblock Nova busy-wait
+    _bridge.poke(BANK_BASE + OFF_STATUS,  ST_OK);
 }
 
 void FioDispatcher::respond_err(uint8_t err_code) {
     _bridge.poke(BANK_BASE + OFF_ERRCODE, err_code);
-    _bridge.poke(BANK_BASE + OFF_STATUS,  ST_ERR);
     _bridge.poke(BANK_BASE + OFF_CMD,     0);
+    _bridge.poke(BANK_BASE + OFF_STATUS,  ST_ERR);
 }
 
 void FioDispatcher::write_size(uint32_t size) {
@@ -151,17 +167,7 @@ void FioDispatcher::handle_save() {
         off += chunk;
     }
 
-    // Pick file type from extension.
-    ndi::FileType ftype = ndi::FT_BAS;
-    const char* ext = strrchr(scratch, '.');
-    if (ext) {
-        if      (strcasecmp(ext, ".bas") == 0) ftype = ndi::FT_BAS;
-        else if (strcasecmp(ext, ".sid") == 0) ftype = ndi::FT_SID;
-        else if (strcasecmp(ext, ".bin") == 0) ftype = ndi::FT_BIN;
-        else if (strcasecmp(ext, ".mid") == 0) ftype = ndi::FT_MID;
-        else if (strcasecmp(ext, ".gfx") == 0) ftype = ndi::FT_GFX;
-        else                                    ftype = ndi::FT_BIN;
-    }
+    ndi::FileType ftype = file_type_for_name(scratch);
 
     // If a file with the same name already exists, delete it first
     // (mirrors Avalonia behavior — SAVE overwrites).
@@ -175,6 +181,135 @@ void FioDispatcher::handle_save() {
     }
     logLn("[fio] SAVE %s ($%04X-$%04X, %u bytes) OK\n",
                   scratch, s, e, (unsigned)size);
+    respond_ok();
+}
+
+// ---------------------------------------------------------------------------
+// XLOAD / XSAVE — direct file <-> XRAM streaming through SDRAM.
+// ---------------------------------------------------------------------------
+void FioDispatcher::handle_xload() {
+    char name[64];
+    copy_filename(name);
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+
+    int idx = img->find_entry(scratch, parent);
+    if (idx < 0) {
+        logLn("[fio] XLOAD: '%s' not found in dev=%s\n",
+              scratch, DeviceManager::prefix_for_slot(slot));
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    ndi::DirEntry e;
+    if (!img->get_entry(idx, e) || e.is_directory()) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t dest = xram_addr();
+    uint32_t requested = transfer_len();
+    uint32_t total = (requested == 0 || requested > e.size_bytes)
+        ? e.size_bytes
+        : requested;
+
+    if (dest > XRAM_BYTES || total > XRAM_BYTES || dest > XRAM_BYTES - total) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t remaining = total - off;
+        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+        int got = img->read_file_chunk_by_index(idx, off, _transfer_buf, chunk);
+        if (got != (int)chunk) {
+            respond_err(ERR_IO);
+            return;
+        }
+        uint16_t wire_count = (chunk == 256) ? 0 : chunk;
+        if (!_bridge.pokeSdramBlock(dest + off, _transfer_buf, wire_count)) {
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+
+    write_size(total);
+    logLn("[fio] XLOAD %s -> XRAM $%06X (%u bytes) OK\n",
+          scratch, (unsigned)dest, (unsigned)total);
+    respond_ok();
+}
+
+void FioDispatcher::handle_xsave() {
+    char name[64];
+    copy_filename(name);
+
+    uint32_t src_addr = xram_addr();
+    uint32_t total = transfer_len();
+    if (total == 0 ||
+        src_addr > XRAM_BYTES ||
+        total > XRAM_BYTES ||
+        src_addr > XRAM_BYTES - total) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+
+    int existing = img->find_entry(scratch, parent);
+    if (existing >= 0) img->delete_file(scratch, parent);
+
+    int new_idx = img->create_file(scratch, file_type_for_name(scratch),
+                                   parent, total);
+    if (new_idx < 0) {
+        respond_err(ERR_FULL);
+        return;
+    }
+
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t remaining = total - off;
+        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+        uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
+        if (!_bridge.readSdramBlock(src_addr + off, wire_count, _transfer_buf)) {
+            img->delete_file(scratch, parent);
+            respond_err(ERR_IO);
+            return;
+        }
+        if (!img->write_file_chunk_by_index(new_idx, off, _transfer_buf, chunk)) {
+            img->delete_file(scratch, parent);
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+
+    if (!img->zero_file_tail_by_index(new_idx)) {
+        img->delete_file(scratch, parent);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    write_size(total);
+    logLn("[fio] XSAVE %s <- XRAM $%06X (%u bytes) OK\n",
+          scratch, (unsigned)src_addr, (unsigned)total);
     respond_ok();
 }
 

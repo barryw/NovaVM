@@ -46,6 +46,11 @@ private:
     static constexpr int OFF_END_HI    = 0x07;
     static constexpr int OFF_SIZE_LO   = 0x08;
     static constexpr int OFF_SIZE_HI   = 0x09;
+    static constexpr int OFF_GSPACE    = 0x0A;
+    static constexpr int OFF_GADDR_LO  = 0x0B;
+    static constexpr int OFF_GADDR_HI  = 0x0C;
+    static constexpr int OFF_GLEN_LO   = 0x0D;
+    static constexpr int OFF_GLEN_HI   = 0x0E;
     static constexpr int OFF_DIRTYPE   = 0x0F;
     static constexpr int OFF_NAME      = 0x10;   // 64-byte filename buffer
 
@@ -69,6 +74,8 @@ private:
     static constexpr uint8_t CMD_DIR_OPEN = 0x03;
     static constexpr uint8_t CMD_DIR_READ = 0x04;
     static constexpr uint8_t CMD_DELETE   = 0x05;
+    static constexpr uint8_t CMD_XLOAD    = 0x18;
+    static constexpr uint8_t CMD_XSAVE    = 0x19;
     static constexpr uint8_t CMD_CD       = 0x20;
     static constexpr uint8_t CMD_MKDIR    = 0x21;
     static constexpr uint8_t CMD_RMDIR    = 0x22;
@@ -81,6 +88,7 @@ private:
     // Shared LOAD/SAVE transfer buffer. Keeping this as one member instead of
     // two function-local static buffers saves 16KB of ESP32 global RAM.
     static constexpr int TRANSFER_BUF_BYTES = 16384;
+    static constexpr uint32_t XRAM_BYTES = 512UL * 1024UL;
     uint8_t _transfer_buf[TRANSFER_BUF_BYTES];
 
     // Fast accessors.
@@ -90,6 +98,11 @@ private:
                                        ((uint16_t)_bank[OFF_SRC_HI] << 8); }
     uint16_t end()     const { return _bank[OFF_END_LO] |
                                        ((uint16_t)_bank[OFF_END_HI] << 8); }
+    uint32_t xram_addr() const { return ((uint32_t)_bank[OFF_GSPACE] << 16) |
+                                        ((uint32_t)_bank[OFF_GADDR_HI] << 8) |
+                                         (uint32_t)_bank[OFF_GADDR_LO]; }
+    uint16_t transfer_len() const { return _bank[OFF_GLEN_LO] |
+                                           ((uint16_t)_bank[OFF_GLEN_HI] << 8); }
 
     // Returns a null-terminated copy of the filename in `out` (size 64).
     void copy_filename(char* out);
@@ -105,6 +118,8 @@ private:
     // ---- Command handlers ----
     void handle_load();
     void handle_save();
+    void handle_xload();
+    void handle_xsave();
     void handle_dir_open();
     void handle_dir_read();
     void handle_delete();

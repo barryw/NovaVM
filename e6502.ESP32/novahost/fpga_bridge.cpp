@@ -27,6 +27,7 @@
 #define CMD_TRACE_READ   0x17
 #define CMD_SYS_RESET_HOLD 0x18
 #define CMD_SYS_RESET_REL  0x19
+#define CMD_READ_SDRAM_BLK 0x1A
 
 #define VGC_SPACE_CHAR  0x01
 #define VGC_SPACE_COLOR 0x02
@@ -310,6 +311,21 @@ bool FpgaBridge::pokeSdramBlock(uint32_t addr, const uint8_t* data, uint16_t cou
     _serial.write(header, 5);
     _serial.write(data, (count == 0) ? 256 : count);
     return recvStatus();
+}
+
+bool FpgaBridge::readSdramBlock(uint32_t addr, uint8_t count, uint8_t* buf) {
+    drain();
+    uint8_t header[5] = {
+        CMD_READ_SDRAM_BLK,
+        (uint8_t)((addr >> 16) & 0xFF),
+        (uint8_t)((addr >>  8) & 0xFF),
+        (uint8_t)( addr        & 0xFF),
+        count
+    };
+    _serial.write(header, 5);
+    if (!recvStatus()) return false;
+    int n = (count == 0) ? 256 : count;
+    return recvBytes(buf, n);
 }
 
 bool FpgaBridge::loadSdram(uint32_t base_addr, const uint8_t* data, size_t len) {
