@@ -10,8 +10,13 @@ module tile_engine (
     input  logic        clk,
     input  logic        rst,
 
-    // CPU bus (snooped from main bus)
+    // CPU bus. Plain reads use the live address for immediate register
+    // readback; writes and read side effects use separately sliced addresses
+    // so command dispatch is not on the RAM->CPU->peripheral same-cycle
+    // timing path.
     input  logic [15:0] cpu_addr,
+    input  logic [15:0] cpu_raddr,
+    input  logic [15:0] cpu_waddr,
     input  logic [7:0]  cpu_wdata,
     input  logic        cpu_we,
     output logic [7:0]  cpu_rdata,
@@ -21,6 +26,7 @@ module tile_engine (
     output logic [15:0] dma_addr,
     input  logic [7:0]  dma_data,
     output logic        dma_active,
+    output logic        reset_busy,
 
     // Blitter access port (tile_data only)
     input  logic [14:0] blt_tile_addr,
@@ -85,6 +91,14 @@ module tile_engine (
     localparam TCMD_BUFSET   = 8'h11;
     localparam TCMD_BUFRANGE = 8'h12;
     localparam TCMD_BUFPUT   = 8'h13;
+
+    // Reset scrubber phases. The BRAM arrays do not clear from a reset pin, so
+    // reset serializes writes through port A until tile-visible state is clean.
+    localparam TCLR_IDLE = 3'd0;
+    localparam TCLR_TILE = 3'd1;
+    localparam TCLR_NT   = 3'd2;
+    localparam TCLR_ATTR = 3'd3;
+    localparam TCLR_PAL  = 3'd4;
 
     // Mirror modes
     localparam MIRROR_H      = 2'd0;  // horizontal: NT0=NT1, NT2=NT3
@@ -194,7 +208,11 @@ module tile_engine (
     // Address decode
     // =========================================================================
     wire tile_reg_sel = (cpu_addr >= TILE_REG_BASE && cpu_addr <= TILE_REG_END);
+    wire tile_reg_sel_r = (cpu_raddr >= TILE_REG_BASE && cpu_raddr <= TILE_REG_END);
+    wire tile_reg_sel_w = (cpu_waddr >= TILE_REG_BASE && cpu_waddr <= TILE_REG_END);
     wire [4:0] reg_off = cpu_addr[4:0];
+    wire [4:0] reg_off_r = cpu_raddr[4:0];
+    wire [4:0] reg_off_w = cpu_waddr[4:0];
 
     // =========================================================================
     // Read mux
@@ -257,7 +275,11 @@ module tile_engine (
     logic [7:0]  dma_fill_val;  // tile value for fill
     logic [11:0] dma_fill_addr; // current write address for fill/cls
 
-    assign dma_active = (dma_state != DMA_IDLE);
+    logic [2:0]  reset_clear_phase;
+    logic [14:0] reset_clear_addr;
+
+    assign reset_busy = (reset_clear_phase != TCLR_IDLE);
+    assign dma_active = (dma_state != DMA_IDLE) || reset_busy;
 
     initial begin
         dma_state = DMA_IDLE;
@@ -267,7 +289,32 @@ module tile_engine (
         dma_pal_r = 0; dma_pal_g = 0;
         dma_pal_sub = 0; dma_pal_cidx = 0;
         dma_fill_val = 0; dma_fill_addr = 0;
+        reset_clear_phase = TCLR_TILE;
+        reset_clear_addr = 0;
     end
+
+    function automatic logic [11:0] reset_palette(input logic [7:0] idx);
+        case (idx[3:0])
+            4'h0: reset_palette = 12'h000;
+            4'h1: reset_palette = 12'hFFF;
+            4'h2: reset_palette = 12'h800;
+            4'h3: reset_palette = 12'hAFE;
+            4'h4: reset_palette = 12'hC4C;
+            4'h5: reset_palette = 12'h0C5;
+            4'h6: reset_palette = 12'h00A;
+            4'h7: reset_palette = 12'hEE7;
+            4'h8: reset_palette = 12'hD85;
+            4'h9: reset_palette = 12'h640;
+            4'hA: reset_palette = 12'hF77;
+            4'hB: reset_palette = 12'h333;
+            4'hC: reset_palette = 12'h777;
+            4'hD: reset_palette = 12'h8F6;
+            4'hE: reset_palette = 12'h08F;
+            default: reset_palette = 12'hBBB;
+        endcase
+        if (idx[7:4] != 4'h0)
+            reset_palette = 12'h000;
+    endfunction
 
     // =========================================================================
     // Mirror resolution
@@ -314,6 +361,31 @@ module tile_engine (
         pr_din_a  = 12'd0;
         pr_we_a   = 1'b0;
 
+        if (reset_busy) begin
+            case (reset_clear_phase)
+                TCLR_TILE: begin
+                    td_addr_a = reset_clear_addr;
+                    td_din_a  = 8'h00;
+                    td_we_a   = 1'b1;
+                end
+                TCLR_NT: begin
+                    nt_addr_a = reset_clear_addr[11:0];
+                    nt_din_a  = 8'h00;
+                    nt_we_a   = 1'b1;
+                end
+                TCLR_ATTR: begin
+                    at_addr_a = reset_clear_addr[11:0];
+                    at_din_a  = 8'h00;
+                    at_we_a   = 1'b1;
+                end
+                TCLR_PAL: begin
+                    pr_addr_a = reset_clear_addr[7:0];
+                    pr_din_a  = reset_palette(reset_clear_addr[7:0]);
+                    pr_we_a   = 1'b1;
+                end
+                default: ;
+            endcase
+        end else begin
         case (dma_state)
             DMA_TILE_DEF: begin
                 if (dma_data_valid) begin
@@ -448,13 +520,19 @@ module tile_engine (
                 end
             end
         endcase
+        end
     end
 
     // Blitter read: td_dout_a is available 1 cycle after address is presented
     always_ff @(posedge clk) begin
-        blt_tile_rd_pending <= blt_tile_re && !blt_tile_we && (dma_state == DMA_IDLE);
-        if (blt_tile_rd_pending)
+        if (rst) begin
+            blt_tile_rd_pending <= 0;
+            blt_tile_rd_latch <= 0;
+        end else begin
+            blt_tile_rd_pending <= blt_tile_re && !blt_tile_we && (dma_state == DMA_IDLE) && !reset_busy;
+            if (blt_tile_rd_pending)
             blt_tile_rd_latch <= td_dout_a;
+        end
     end
 
     assign blt_tile_rdata = blt_tile_rd_pending ? td_dout_a : blt_tile_rd_latch;
@@ -469,16 +547,73 @@ module tile_engine (
         cmd_pal_we <= 0;
 
         if (rst) begin
+            for (int i = 0; i < 32; i++)
+                tregs[i] <= 8'h00;
+            for (int i = 0; i < NT_ROWS; i++)
+                col_buffer[i] <= 8'h00;
             tile_size16 <= 0; mirror_mode <= 0; trans_color <= 0;
             scroll_x <= 0; scroll_y <= 0; status_reg <= 0;
+            peek_val <= 0; peek_attr <= 0;
             collision_bits <= 0; dma_state <= DMA_IDLE;
+            dma_addr <= 0;
+            dma_src <= 0; dma_count <= 0; dma_dst <= 0;
+            dma_nt <= 0; dma_col_row <= 0; dma_col_idx <= 0;
             dma_data_valid <= 0;
+            dma_pal_phase <= 0; dma_pal_r <= 0; dma_pal_g <= 0;
+            dma_pal_sub <= 0; dma_pal_cidx <= 0;
+            dma_fill_val <= 0; dma_fill_addr <= 0;
+            cmd_nt_addr <= 0; cmd_at_addr <= 0;
+            cmd_nt_din <= 0; cmd_at_din <= 0;
+            cmd_pal_addr_reg <= 0; cmd_pal_din <= 0;
+            reset_clear_phase <= TCLR_TILE;
+            reset_clear_addr <= 0;
+        end else if (reset_busy) begin
+            dma_state <= DMA_IDLE;
+            dma_data_valid <= 0;
+            case (reset_clear_phase)
+                TCLR_TILE: begin
+                    if (reset_clear_addr == 15'd32767) begin
+                        reset_clear_addr <= 0;
+                        reset_clear_phase <= TCLR_NT;
+                    end else begin
+                        reset_clear_addr <= reset_clear_addr + 15'd1;
+                    end
+                end
+                TCLR_NT: begin
+                    if (reset_clear_addr == 15'd4095) begin
+                        reset_clear_addr <= 0;
+                        reset_clear_phase <= TCLR_ATTR;
+                    end else begin
+                        reset_clear_addr <= reset_clear_addr + 15'd1;
+                    end
+                end
+                TCLR_ATTR: begin
+                    if (reset_clear_addr == 15'd4095) begin
+                        reset_clear_addr <= 0;
+                        reset_clear_phase <= TCLR_PAL;
+                    end else begin
+                        reset_clear_addr <= reset_clear_addr + 15'd1;
+                    end
+                end
+                TCLR_PAL: begin
+                    if (reset_clear_addr == 15'd255) begin
+                        reset_clear_addr <= 0;
+                        reset_clear_phase <= TCLR_IDLE;
+                    end else begin
+                        reset_clear_addr <= reset_clear_addr + 15'd1;
+                    end
+                end
+                default: begin
+                    reset_clear_addr <= 0;
+                    reset_clear_phase <= TCLR_IDLE;
+                end
+            endcase
         end else begin
 
             // Clear collision on read
-            if (cpu_re && tile_reg_sel) begin
-                if (reg_off == TR_COLL)  collision_bits[7:0]  <= 0;
-                if (reg_off == TR_COLH)  collision_bits[15:8] <= 0;
+            if (cpu_re && tile_reg_sel_r) begin
+                if (reg_off_r == TR_COLL)  collision_bits[7:0]  <= 0;
+                if (reg_off_r == TR_COLH)  collision_bits[15:8] <= 0;
             end
 
             // DMA state machine
@@ -655,10 +790,10 @@ module tile_engine (
             endcase
 
             // CPU register writes
-            if (cpu_we && tile_reg_sel) begin
-                tregs[reg_off] <= cpu_wdata;
+            if (cpu_we && tile_reg_sel_w) begin
+                tregs[reg_off_w] <= cpu_wdata;
 
-                case (reg_off)
+                case (reg_off_w)
                     TR_CONFIG: begin
                         tile_size16 <= cpu_wdata[0];
                         mirror_mode <= cpu_wdata[2:1];
@@ -880,7 +1015,20 @@ module tile_engine (
     wire [3:0]  pix_in_y = tile_size16 ? local_y[3:0] : {1'b0, local_y[2:0]};
 
     wire [1:0]  cur_nt = resolve_nt({1'b0, nt_col}, {1'b0, nt_row});
-    wire [11:0] nt_lookup_addr = 12'(cur_nt * NT_SIZE) + 12'(tile_row * NT_COLS + tile_col);
+
+    // Keep the pixel path out of MULT18X18D. NT_SIZE is 1000 and NT_COLS is
+    // 40, so both address components are cheap constant shift/add operations.
+    logic [11:0] nt_base;
+    always_comb begin
+        case (cur_nt)
+            2'd0: nt_base = 12'd0;
+            2'd1: nt_base = 12'd1000;
+            2'd2: nt_base = 12'd2000;
+            default: nt_base = 12'd3000;
+        endcase
+    end
+    wire [11:0] tile_row_offset = {2'b0, tile_row, 5'b0} + {4'b0, tile_row, 3'b0};
+    wire [11:0] nt_lookup_addr = nt_base + tile_row_offset + {6'b0, tile_col};
 
     // Present nametable + attr addresses to port B (same address)
     assign nt_addr_b = nt_lookup_addr;
@@ -894,12 +1042,21 @@ module tile_engine (
     logic [3:0] s1_tile_w = 0, s1_tile_h = 0;
 
     always_ff @(posedge clk) begin
-        s1_pix_in_x    <= pix_in_x;
-        s1_pix_in_y    <= pix_in_y;
-        s1_pixel_valid <= pixel_valid;
-        s1_tile_size16 <= tile_size16;
-        s1_tile_w      <= tile_w;
-        s1_tile_h      <= tile_h;
+        if (rst) begin
+            s1_pix_in_x    <= 0;
+            s1_pix_in_y    <= 0;
+            s1_pixel_valid <= 0;
+            s1_tile_size16 <= 0;
+            s1_tile_w      <= 0;
+            s1_tile_h      <= 0;
+        end else begin
+            s1_pix_in_x    <= pix_in_x;
+            s1_pix_in_y    <= pix_in_y;
+            s1_pixel_valid <= pixel_valid;
+            s1_tile_size16 <= tile_size16;
+            s1_tile_w      <= tile_w;
+            s1_tile_h      <= tile_h;
+        end
     end
 
     // Stage 1: nt_dout_b and at_dout_b are now valid
@@ -925,10 +1082,17 @@ module tile_engine (
     logic [1:0] s2_tile_pri = 0;
 
     always_ff @(posedge clk) begin
-        s2_pixel_valid   <= s1_pixel_valid;
-        s2_sub_pal       <= s1_cur_attr[3:0];
-        s2_sample_x_lsb <= s1_sample_x[0];
-        s2_tile_pri      <= s1_cur_attr[5] ? 2'd2 : 2'd1;
+        if (rst) begin
+            s2_pixel_valid  <= 0;
+            s2_sub_pal      <= 0;
+            s2_sample_x_lsb <= 0;
+            s2_tile_pri     <= 0;
+        end else begin
+            s2_pixel_valid  <= s1_pixel_valid;
+            s2_sub_pal      <= s1_cur_attr[3:0];
+            s2_sample_x_lsb <= s1_sample_x[0];
+            s2_tile_pri     <= s1_cur_attr[5] ? 2'd2 : 2'd1;
+        end
     end
 
     // Stage 2: td_dout_b is now valid
@@ -945,10 +1109,17 @@ module tile_engine (
     logic [3:0] s3_trans_color = 0;
 
     always_ff @(posedge clk) begin
-        s3_pixel_valid <= s2_pixel_valid;
-        s3_color_idx   <= s2_color_idx;
-        s3_tile_pri    <= s2_tile_pri;
-        s3_trans_color <= trans_color;
+        if (rst) begin
+            s3_pixel_valid <= 0;
+            s3_color_idx   <= 0;
+            s3_tile_pri    <= 0;
+            s3_trans_color <= 0;
+        end else begin
+            s3_pixel_valid <= s2_pixel_valid;
+            s3_color_idx   <= s2_color_idx;
+            s3_tile_pri    <= s2_tile_pri;
+            s3_trans_color <= trans_color;
+        end
     end
 
     // Stage 3: pr_dout_b is now valid — output pixel

@@ -25,7 +25,7 @@ module test_gtext;
     wire         tile_dma_active;
 
     vgc dut (
-        .clk(clk), .rst(rst),
+        .clk(clk), .rst(rst), .video_rst(rst),
         .cpu_ce(cpu_ce),
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
@@ -38,7 +38,8 @@ module test_gtext;
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
         .irq_out(),
-        .rdy_out(vgc_rdy)
+        .rdy_out(vgc_rdy),
+        .sys_reset_req()
     );
 
     int pass_count = 0;
@@ -117,6 +118,7 @@ module test_gtext;
 
         repeat(50) @(posedge clk);
         rst = 0;
+        while (!vgc_rdy) @(posedge clk);
         repeat(10) @(posedge clk);
 
         // ----- Test 1: Empty string does nothing -----
@@ -321,6 +323,35 @@ module test_gtext;
                     end
             if (!found)
                 check("found at least one pixel", 0);
+        end
+
+        // ----- Test 8: Reverse text draws foreground and background -----
+        $display("Test: Reverse draw color");
+
+        write_cmd(8'h07); wait_cmd_done();
+        write_reg(16'hA001, 8'd1); // bg color becomes reverse foreground
+        write_reg(16'hA0E6, 8'h01);
+        write_param(0, 5);
+        write_cmd(8'h08);
+
+        set_fio_string("X");
+        write_param(0, 0); write_param(1, 0);
+        write_param(2, 0); write_param(3, 0);
+        write_param(4, 0); write_param(5, 1);
+        write_cmd(8'h0A);
+        wait_cmd_done();
+
+        begin
+            int fg_seen, bg_seen;
+            fg_seen = 0; bg_seen = 0;
+            for (int r = 0; r < 8; r++) begin
+                for (int c = 0; c < 8; c++) begin
+                    if (gfx_pixel(c, r) == 4'd1) fg_seen++;
+                    if (gfx_pixel(c, r) == 4'd5) bg_seen++;
+                end
+            end
+            check("reverse gtext has swapped foreground", fg_seen > 0);
+            check("reverse gtext fills background", bg_seen > 0);
         end
 
         // ---------------------------------------------------------------

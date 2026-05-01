@@ -34,6 +34,10 @@ module vgc_copper (
     localparam V_ACTIVE = 480;
     localparam GFX_W    = 320;
 
+    function automatic logic [16:0] gfx_addr_xy(input logic [8:0] x, input logic [7:0] y);
+        gfx_addr_xy = {1'b0, y, 8'b0} + {3'b0, y, 6'b0} + {8'b0, x};
+    endfunction
+
     // Unpack flat vectors into local arrays
     logic [16:0] copper_pos [0:31];
     logic [7:0]  copper_reg [0:31];
@@ -50,7 +54,7 @@ module vgc_copper (
     // =========================================================================
     // Copper execution — beam position compare + register writeback
     // =========================================================================
-    wire [16:0] beam_pos = {8'b0, gfx_y} * GFX_W + {7'b0, gfx_x};
+    wire [16:0] beam_pos = gfx_addr_xy(gfx_x, gfx_y);
 
     always_ff @(posedge clk) begin
         if (rst) begin

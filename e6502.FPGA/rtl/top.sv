@@ -41,9 +41,11 @@ module top (
     input  logic [7:0]  dbg_poke_data,
     input  logic        dbg_pause,        // halt CPU when high
     input  logic        dbg_vmem_we,
+    input  logic        dbg_vmem_re,
     input  logic [2:0]  dbg_vmem_space,
     input  logic [16:0] dbg_vmem_addr,
     input  logic [7:0]  dbg_vmem_data,
+    output logic [7:0]  dbg_vmem_rdata,
     // ROM-load port — write one byte at a time into either ROM bank.
     // idx=0 → basic_rom, idx=1 → ext_rom. Used by NovaHost to stream the
     // EhBASIC + extension binaries into BRAM at boot.
@@ -52,6 +54,8 @@ module top (
     input  logic [13:0] dbg_rom_addr,
     input  logic [7:0]  dbg_rom_data,
     input  logic        dbg_cpu_reset,     // ESP32-driven soft reset, ORs with rst
+    input  logic        dbg_system_reset,  // ESP32-driven custom-chip reset, ORs with rst
+    input  logic        dbg_cpu_resume,    // one-cycle pulse; releases CPU STP halt
     // Debug-bridge SDRAM port B write path — NovaHost streams preload data
     // (6581 filter curve) here while dbg_cpu_reset is asserted. sid_curve_reader
     // is held in reset during this window so there's no port B contention.
@@ -64,6 +68,17 @@ module top (
     output logic [7:0]  dbg_cpu_y,
     output logic [7:0]  dbg_cpu_sp,
     output logic [7:0]  dbg_cpu_flags,
+    output logic [5:0]  dbg_cpu_state,
+    output logic [7:0]  dbg_cpu_ir,
+    output logic [15:0] dbg_cpu_addr,
+    output logic [7:0]  dbg_cpu_din,
+    output logic [7:0]  dbg_cpu_dout,
+    output logic        dbg_cpu_we,
+    output logic        dbg_cpu_rdy,
+    output logic        dbg_cpu_irq,
+    output logic        dbg_cpu_nmi,
+    output logic        dbg_cpu_waiting,
+    output logic        dbg_cpu_stopped,
 
     // SDRAM port A — driven by the XRAM-over-SDRAM wrapper. fpga_top
     // connects these to sdram.v's port A; in sim the test harness
@@ -122,6 +137,26 @@ module top (
     wire [7:0]  cpu_dout;
     wire        cpu_we;
     logic [7:0] cpu_din;
+    wire        vgc_sys_reset_req;
+
+    // A VGC SYSRESET command is a machine reset, not just a custom-chip
+    // scrub request. Latch it long enough that the CPU and every custom
+    // block see a clean reset pulse before execution restarts at $FFFC.
+    localparam int VGC_SYS_RESET_HOLD_CYCLES = 8;
+    logic [$clog2(VGC_SYS_RESET_HOLD_CYCLES+1)-1:0] vgc_sys_reset_hold = '0;
+    wire        vgc_sys_reset_active = vgc_sys_reset_req | (vgc_sys_reset_hold != '0);
+    wire        custom_rst = rst | dbg_system_reset | vgc_sys_reset_active;
+    wire        cpu_reset = rst | dbg_cpu_reset | dbg_system_reset | vgc_sys_reset_active;
+
+    always_ff @(posedge clk) begin
+        if (rst || dbg_system_reset) begin
+            vgc_sys_reset_hold <= '0;
+        end else if (vgc_sys_reset_req) begin
+            vgc_sys_reset_hold <= VGC_SYS_RESET_HOLD_CYCLES[$bits(vgc_sys_reset_hold)-1:0];
+        end else if (vgc_sys_reset_hold != '0) begin
+            vgc_sys_reset_hold <= vgc_sys_reset_hold - 1'b1;
+        end
+    end
 
     // =========================================================================
     // 64KB main memory — dpram for BRAM inference
@@ -139,7 +174,7 @@ module top (
     // past the access before its data is ready.
     wire xram_stall;
     always_ff @(posedge clk) begin
-        if (rst)            cpu_ce <= 0;
+        if (cpu_reset)      cpu_ce <= 0;
         else if (xram_stall) cpu_ce <= 0;
         else                cpu_ce <= ~cpu_ce;
     end
@@ -205,7 +240,7 @@ module top (
 
     xram_sdram xram_sdram_inst (
         .clk      (clk),
-        .rst      (rst),
+        .rst      (custom_rst),
         .req_addr (xram_a_addr),
         .req_din  (xram_a_din),
         .req_we   (xram_a_we),
@@ -260,18 +295,15 @@ module top (
     wire dma_reg_sel = (mem_addr >= 16'hBA63 && mem_addr <= 16'hBA75);
     wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B);
     wire fio_reg_sel = (mem_addr >= 16'hB9A0 && mem_addr <= 16'hB9EF);
-    wire sid1_reg_sel = (mem_addr >= SID1_BASE && mem_addr <= SID1_END);
-    wire sid2_reg_sel = (mem_addr >= SID2_BASE && mem_addr <= SID2_END);
-    wire sid_cfg_sel  = (mem_addr == SID_CFG);
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
                         (mem_addr >= 16'hA0C0 && mem_addr <= 16'hA0DF) ||
-                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E5) ||
+                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E7) ||
                         (mem_addr >= 16'hA0F0 && mem_addr <= 16'hA0FF);
 
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
-    logic r_dma_reg_sel, r_blt_reg_sel, r_sid1_reg_sel, r_sid2_reg_sel, r_sid_cfg_sel;
+    logic r_dma_reg_sel, r_blt_reg_sel;
     logic r_cpu_in_rom, r_ext_rom_active;
     logic r_vgc_read_sel;
     logic r_fio_reg_sel;
@@ -285,9 +317,6 @@ module top (
         r_xmc_reg_sel     <= xmc_reg_sel;
         r_dma_reg_sel     <= dma_reg_sel;
         r_blt_reg_sel     <= blt_reg_sel;
-        r_sid1_reg_sel    <= sid1_reg_sel;
-        r_sid2_reg_sel    <= sid2_reg_sel;
-        r_sid_cfg_sel     <= sid_cfg_sel;
         r_cpu_in_rom      <= cpu_in_rom;
         r_ext_rom_active  <= ext_rom_active;
         r_vgc_read_sel    <= vgc_read_sel;
@@ -331,7 +360,7 @@ module top (
     wire  bm_xram_fire = bm_xram_we && !xram_busy;
 
     always_ff @(posedge clk) begin
-        if (rst) begin
+        if (custom_rst) begin
             xmc_armed      <= 1'b1;
         end else begin
             if (!xmc_access)       xmc_armed      <= 1'b1;
@@ -377,21 +406,6 @@ module top (
     always_ff @(posedge clk)
         r_xmc_reg_data <= xmc_regs[xmc_reg_off];
 
-    // Registered SID read data (SID dout is combinational on cpu_addr[4:0]).
-    // sid1/sid2 dout MUST be cpu_ce-gated for the same reason as r_vgc_cpu_rdata
-    // (see below): during cpu_ce=0 Arlet has advanced cpu_addr past the SID
-    // target, so an unconditional capture would overwrite the correct value
-    // before Arlet samples DI on its next cpu_ce=1 edge. r_sid_cfg_reg reads a
-    // register (not cpu_addr-combinational) so it is safe unconditional.
-    logic [7:0] r_sid1_dout, r_sid2_dout, r_sid_cfg_reg;
-    always_ff @(posedge clk) begin
-        if (cpu_ce) begin
-            r_sid1_dout   <= sid1_dout;
-            r_sid2_dout   <= sid2_dout;
-        end
-        r_sid_cfg_reg <= sid_cfg_reg;
-    end
-
     // Registered blitter register read. blt_cpu_rdata is combinational on
     // cpu_addr (blitter.sv uses cpu_addr directly for blt_sel + reg_off), so
     // this capture also needs cpu_ce gating — same bug class as r_vgc_cpu_rdata.
@@ -423,18 +437,19 @@ module top (
     // (different offset calculation), NOT in main RAM.
     // ==========================================================================
     wire [7:0] fio_cpu_rdata;
+    wire [7:0] fio_dbg_rdata;
     wire       dbg_poke_fio = dbg_poke_en &&
                               (dbg_poke_addr >= 16'hB9A0) &&
                               (dbg_poke_addr <= 16'hB9EF);
     wire       dbg_poke_vgc = dbg_poke_en &&
                               (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                                ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E5)) ||
+                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E7)) ||
                                ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
 
     fio fio_inst (
         .clk       (clk),
-        .rst       (rst),
+        .rst       (custom_rst),
         .cpu_ce    (cpu_ce),
         .cpu_addr  (cpu_addr),
         .cpu_wdata (cpu_dout),
@@ -443,6 +458,8 @@ module top (
         .dbg_we    (dbg_poke_fio),
         .dbg_addr  (dbg_poke_addr[6:0] - 7'h20),   // $B9A0[6:0]=$20
         .dbg_wdata (dbg_poke_data),
+        .dbg_raddr (dbg_peek_addr[6:0] - 7'h20),
+        .dbg_rdata (fio_dbg_rdata),
         .fio_event (fio_event)
     );
 
@@ -527,13 +544,14 @@ module top (
             ram_a_addr = bm_ram_addr;
             ram_a_din  = bm_ram_wdata;
             ram_a_we   = 1'b1;
-        end else if (dbg_poke_en && !dbg_poke_vgc && dbg_poke_addr < ROM_BASE) begin
+        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_fio && dbg_poke_addr < ROM_BASE) begin
             // Debug poke
             ram_a_addr = dbg_poke_addr;
             ram_a_din  = dbg_poke_data;
             ram_a_we   = 1'b1;
         end else if (cpu_we && cpu_active && cpu_addr < ROM_BASE &&
-                     !xmc_win_sel && !xmc_reg_sel) begin
+                     !xmc_win_sel && !xmc_reg_sel && !vgc_read_sel &&
+                     !fio_reg_sel && !dma_reg_sel && !blt_reg_sel) begin
             // CPU write to RAM
             ram_a_we = 1'b1;
         end
@@ -577,6 +595,12 @@ module top (
     // Memory writes — non-RAM (XMC regs, ROM bank switching)
     // =========================================================================
     always_ff @(posedge clk) begin
+        if (custom_rst) begin
+            for (int i = 0; i < 64; i++) xmc_regs[i] <= 8'h00;
+            xmc_regs[XMC_BANKS_REG] <= 8'd8;
+            xmc_regs[XMC_WINCTL_REG] <= 8'h0F;
+            ext_rom_active <= 0;
+        end else begin
         if (cpu_we && cpu_active) begin
             if (xmc_reg_sel) begin
                 if (xmc_reg_off != XMC_BANKS_REG)
@@ -592,9 +616,7 @@ module top (
                 ext_rom_active <= 0;
         end
 
-        // Reset restores BASIC ROM
-        if (rst)
-            ext_rom_active <= 0;
+        end
     end
 
     // =========================================================================
@@ -634,6 +656,11 @@ module top (
     localparam XRAM_SIZE = 524288;
     logic [7:0] xram [0:XRAM_SIZE-1];
     wire xram_busy = 1'b0;
+    wire dbg_poke_vgc = dbg_poke_en &&
+                        (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
+                         ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
+                         ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E7)) ||
+                         ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
 
     initial begin
         for (int i = 0; i < 65536; i++)
@@ -686,6 +713,11 @@ module top (
     wire sid1_reg_sel = (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
     wire sid2_reg_sel = (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
     wire sid_cfg_sel  = (cpu_addr == SID_CFG);
+    wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
+                        (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
+                        (cpu_addr >= 16'hA0C0 && cpu_addr <= 16'hA0DF) ||
+                        (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0E7) ||
+                        (cpu_addr >= 16'hA0F0 && cpu_addr <= 16'hA0FF);
 
     always_ff @(posedge clk) begin
         if (xmc_win_sel && xmc_win_enabled)
@@ -704,6 +736,8 @@ module top (
             cpu_din <= sid2_dout;
         else if (sid_cfg_sel)
             cpu_din <= sid_cfg_reg;
+        else if (vgc_read_sel)
+            cpu_din <= vgc_cpu_rdata;
         else if (cpu_in_rom)
             cpu_din <= ext_rom_active ? ext_rom[cpu_addr - ROM_BASE]
                                      : basic_rom[cpu_addr - ROM_BASE];
@@ -715,13 +749,19 @@ module top (
     // Memory writes
     // =========================================================================
     always_ff @(posedge clk) begin
+        if (custom_rst) begin
+            for (int i = 0; i < 64; i++) xmc_regs[i] <= 8'h00;
+            xmc_regs[XMC_BANKS_REG] <= 8'd8;
+            xmc_regs[XMC_WINCTL_REG] <= 8'h0F;
+            ext_rom_active <= 0;
+        end else begin
         if (cpu_we) begin
             if (xmc_win_sel && xmc_win_enabled)
                 xram[xmc_addr] <= cpu_dout;
             else if (xmc_reg_sel) begin
                 if (xmc_reg_off != XMC_BANKS_REG)
                     xmc_regs[xmc_reg_off] <= cpu_dout;
-            end else if (cpu_addr < ROM_BASE)
+            end else if (cpu_addr < ROM_BASE && !vgc_read_sel)
                 ram[cpu_addr] <= cpu_dout;
         end
 
@@ -747,8 +787,7 @@ module top (
                 ext_rom_active <= 0;
         end
 
-        if (rst)
-            ext_rom_active <= 0;
+        end
     end
 
     // =========================================================================
@@ -850,7 +889,7 @@ module top (
 
     blitter blt_inst (
         .clk        (clk),
-        .rst        (rst),
+        .rst        (custom_rst),
         .cpu_addr   (cpu_addr),
         .cpu_wdata  (cpu_dout),
         .cpu_we     (cpu_we & cpu_active),
@@ -877,7 +916,7 @@ module top (
 
     dma dma_inst (
         .clk        (clk),
-        .rst        (rst),
+        .rst        (custom_rst),
         .cpu_addr   (cpu_addr),
         .cpu_wdata  (cpu_dout),
         .cpu_we     (cpu_we & cpu_active),
@@ -910,7 +949,7 @@ module top (
     logic [4:0] sid_clk_div;
     logic       sid_ce_1m;
     always_ff @(posedge clk) begin
-        if (rst) begin
+        if (custom_rst) begin
             sid_clk_div <= 0;
             sid_ce_1m   <= 0;
         end else begin
@@ -922,7 +961,7 @@ module top (
     // SID config register ($D440): bit 0 = SID1 mode, bit 1 = SID2 mode
     logic [7:0] sid_cfg_reg;
     always_ff @(posedge clk) begin
-        if (rst)
+        if (custom_rst)
             sid_cfg_reg <= 8'h00;
         else if (cpu_we && cpu_active && cpu_addr == SID_CFG)
             sid_cfg_reg <= cpu_dout;
@@ -931,9 +970,6 @@ module top (
     // Chip select and address decode
     wire sid1_cs = cpu_we && cpu_active && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
     wire sid2_cs = cpu_we && cpu_active && (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
-    wire sid1_rd = !cpu_we && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
-    wire sid2_rd = !cpu_we && (cpu_addr >= SID2_BASE && cpu_addr <= SID2_END);
-
     wire [7:0] sid1_dout, sid2_dout;
 
     // SID filter curve pulled from SDRAM (Phase 2.5 Step 3). One reader
@@ -943,7 +979,7 @@ module top (
 
     sid_chip sid1_inst (
         .clk        (clk),
-        .rst        (rst),
+        .rst        (custom_rst),
         .ce_1m      (sid_ce_1m),
         .mode       (sid_cfg_reg[0]),
         .cs         (sid1_cs),
@@ -958,7 +994,7 @@ module top (
 
     sid_chip sid2_inst (
         .clk        (clk),
-        .rst        (rst),
+        .rst        (custom_rst),
         .ce_1m      (sid_ce_1m),
         .mode       (sid_cfg_reg[1]),
         .cs         (sid2_cs),
@@ -981,7 +1017,7 @@ module top (
 
     sid_curve_reader curve_reader_inst (
         .clk         (clk),
-        .rst         (rst | dbg_cpu_reset),
+        .rst         (custom_rst | dbg_cpu_reset),
         .sid1_Fc     (sid1_filter_fc),
         .sid1_f0     (sid1_filter_f0),
         .sid2_Fc     (sid2_filter_fc),
@@ -1006,26 +1042,37 @@ module top (
     // =========================================================================
     wire [15:0] cpu_dbg_pc;
     wire  [7:0] cpu_dbg_a, cpu_dbg_x, cpu_dbg_y, cpu_dbg_s, cpu_dbg_flags;
+    wire  [5:0] cpu_dbg_state;
+    wire  [7:0] cpu_dbg_ir;
+    wire        cpu_dbg_waiting, cpu_dbg_stopped;
 
     wire vgc_rdy;
     wire vgc_irq;
+    wire cpu_irq = ~irq_n | vgc_irq;
+    wire cpu_nmi = ~nmi_n;
+    wire cpu_rdy = blt_rdy & dma_rdy & vgc_rdy & ~dbg_pause & cpu_active;
 
     cpu cpu_inst (
         .clk    (clk),
-        .reset  (rst | dbg_cpu_reset),
+        .reset  (cpu_reset),
         .AB     (cpu_addr),
         .DI     (cpu_din),
         .DO     (cpu_dout),
         .WE     (cpu_we),
-        .IRQ    (~irq_n | vgc_irq),
-        .NMI    (~nmi_n),
-        .RDY    (blt_rdy & dma_rdy & vgc_rdy & ~dbg_pause & cpu_active),
+        .IRQ    (cpu_irq),
+        .NMI    (cpu_nmi),
+        .RDY    (cpu_rdy),
+        .dbg_resume (dbg_cpu_resume),
+        .dbg_waiting(cpu_dbg_waiting),
+        .dbg_stopped(cpu_dbg_stopped),
         .dbg_pc    (cpu_dbg_pc),
         .dbg_a     (cpu_dbg_a),
         .dbg_x     (cpu_dbg_x),
         .dbg_y     (cpu_dbg_y),
         .dbg_s     (cpu_dbg_s),
-        .dbg_flags (cpu_dbg_flags)
+        .dbg_flags (cpu_dbg_flags),
+        .dbg_state (cpu_dbg_state),
+        .dbg_ir    (cpu_dbg_ir)
     );
 
     // =========================================================================
@@ -1039,7 +1086,8 @@ module top (
 
     vgc vgc_inst (
         .clk            (clk),
-        .rst            (rst),
+        .rst            (custom_rst),
+        .video_rst      (rst),
         .cpu_ce         (cpu_active),
         .cpu_addr       (cpu_addr),
         .cpu_wdata      (cpu_dout),
@@ -1063,9 +1111,11 @@ module top (
         .dbg_waddr      (dbg_poke_addr),
         .dbg_wdata      (dbg_poke_data),
         .dbg_vmem_we    (dbg_vmem_we),
+        .dbg_vmem_re    (dbg_vmem_re),
         .dbg_vmem_space (dbg_vmem_space),
         .dbg_vmem_addr  (dbg_vmem_addr),
         .dbg_vmem_wdata (dbg_vmem_data),
+        .dbg_vmem_rdata (dbg_vmem_rdata),
         .vid_r          (vid_r),
         .vid_g          (vid_g),
         .vid_b          (vid_b),
@@ -1073,7 +1123,8 @@ module top (
         .vid_vsync      (vid_vsync),
         .vid_de         (vid_de),
         .irq_out        (vgc_irq),
-        .rdy_out        (vgc_rdy)
+        .rdy_out        (vgc_rdy),
+        .sys_reset_req  (vgc_sys_reset_req)
 `ifndef SYNTHESIS
         ,
         .dbg_vram_read_en(dbg_vram_read_en),
@@ -1088,57 +1139,60 @@ module top (
     // =========================================================================
 
 `ifdef SYNTHESIS
-    // On FPGA: debug peek routed through VGC, SID, ROM dprams, or main RAM dpram
+    // On FPGA: debug peek mirrors the CPU-visible memory map.
     // Compute VGC ownership here in top.sv — cross-module ref failed (ea510bd
     // class), output port also failed to drive through synth. Duplicating the
     // small range-decode here is reliable.
     wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
-    wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
-    wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
-    wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
     wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F) ||
                          (dbg_peek_addr >= 16'hA0F0 && dbg_peek_addr <= 16'hA0FF);
     wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
     wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
-    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim;
+    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0E7);
+    wire dbg_fio       = (dbg_peek_addr >= 16'hB9A0 && dbg_peek_addr <= 16'hB9EF);
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
 
     // For debug reads, RAM port B serves as the read port.
     // ROM reads use the same brom_b/erom_b ports (address set combinationally).
-    // This is acceptable since debug is not used on real FPGA hardware.
-    assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns ? vgc_dbg_rdata :
-                                          dbg_sid1     ? sid1_dout     :
-                                          dbg_sid2     ? sid2_dout     :
-                                          dbg_sidcfg   ? sid_cfg_reg   :
-                                          dbg_in_rom   ? (ext_rom_active ? erom_b_dout : brom_b_dout) :
-                                                          ram_b_dout) : 8'h00;
+    // SID overlaps ROM and is write-only in the CPU-visible map, so debug reads
+    // fall through to ROM/RAM instead of sampling live SID register shadows.
+    wire [7:0] dbg_peek_data_mux = dbg_peek_en ? (vgc_dbg_owns ? vgc_dbg_rdata :
+                                                  dbg_fio      ? fio_dbg_rdata :
+                                                  dbg_in_rom   ? (ext_rom_active ? erom_b_dout : brom_b_dout) :
+                                                                  ram_b_dout) : 8'h00;
+
+    // Keep debug peeks off the main timing path. The bridge already waits for
+    // BRAM read latency before sampling, so this register is protocol-neutral.
+    always_ff @(posedge clk) begin
+        dbg_peek_data <= dbg_peek_data_mux;
+    end
 `else
     // Simulation: full debug with combinational reads — ownership decoded
     // directly in top.sv (symmetric with synthesis path)
     wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
-    wire dbg_sid1   = (dbg_peek_addr >= SID1_BASE && dbg_peek_addr <= SID1_END);
-    wire dbg_sid2   = (dbg_peek_addr >= SID2_BASE && dbg_peek_addr <= SID2_END);
-    wire dbg_sidcfg = (dbg_peek_addr == SID_CFG);
     wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F) ||
                          (dbg_peek_addr >= 16'hA0F0 && dbg_peek_addr <= 16'hA0FF);
     wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
     wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
-    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim;
+    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0E7);
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
     wire [7:0] dbg_rom_read_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
                                                   : basic_rom[dbg_peek_addr - ROM_BASE];
-    assign dbg_peek_data = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :
-                                          dbg_sid1         ? sid1_dout     :
-                                          dbg_sid2         ? sid2_dout     :
-                                          dbg_sidcfg       ? sid_cfg_reg   :
-                                          dbg_in_rom       ? dbg_rom_read_data :
-                                                             ram[dbg_peek_addr]) : 8'h00;
+    wire [7:0] dbg_peek_data_mux = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :
+                                                  dbg_in_rom       ? dbg_rom_read_data :
+                                                                     ram[dbg_peek_addr]) : 8'h00;
+
+    always_ff @(posedge clk) begin
+        dbg_peek_data <= dbg_peek_data_mux;
+    end
 
     // Poke: write to main RAM on clock edge (ROM-protected)
     always_ff @(posedge clk) begin
-        if (dbg_poke_en && dbg_poke_addr < ROM_BASE)
+        if (dbg_poke_en && !dbg_poke_vgc && dbg_poke_addr < ROM_BASE)
             ram[dbg_poke_addr] <= dbg_poke_data;
     end
 `endif
@@ -1151,5 +1205,16 @@ module top (
     assign dbg_cpu_y     = cpu_dbg_y;
     assign dbg_cpu_sp    = cpu_dbg_s;
     assign dbg_cpu_flags = cpu_dbg_flags;
+    assign dbg_cpu_state = cpu_dbg_state;
+    assign dbg_cpu_ir    = cpu_dbg_ir;
+    assign dbg_cpu_addr  = cpu_addr;
+    assign dbg_cpu_din   = cpu_din;
+    assign dbg_cpu_dout  = cpu_dout;
+    assign dbg_cpu_we    = cpu_we;
+    assign dbg_cpu_rdy   = cpu_rdy;
+    assign dbg_cpu_irq   = cpu_irq;
+    assign dbg_cpu_nmi   = cpu_nmi;
+    assign dbg_cpu_waiting = cpu_dbg_waiting;
+    assign dbg_cpu_stopped = cpu_dbg_stopped;
 
 endmodule

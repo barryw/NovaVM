@@ -3,10 +3,15 @@
 
 extern void logLn(const char* fmt, ...);
 extern String g_sd_diag;
+extern bool g_sd_mounted;
+extern const char* novaBootPhaseName();
+extern bool novaFpgaBridgeAvailable();
 
 void SdHttpServer::begin() {
     _server.begin();
-    Serial.println("[sdhttp] HTTP file server up on port 80");
+    Serial.println("[sdhttp] HTTP server up on port 80");
+    Serial.println("[sdhttp]   GET    /health   -> NovaHost liveness");
+    Serial.println("[sdhttp]   GET    /sd-status -> SD/boot diagnostic JSON");
     Serial.println("[sdhttp]   GET    /sd/       -> list root");
     Serial.println("[sdhttp]   GET    /sd/path   -> fetch file");
     Serial.println("[sdhttp]   PUT    /sd/path   -> upload whole file");
@@ -59,11 +64,22 @@ void SdHttpServer::handle_client(WiFiClient& client) {
     }
 
     if (strcmp(method, "GET") == 0 && strcmp(url, "/health") == 0) {
-        send_json(client, 200, "{\"ok\":true}");
+        char body[192];
+        snprintf(body, sizeof(body),
+                 "{\"ok\":true,\"bootPhase\":\"%s\",\"sdMounted\":%s,"
+                 "\"fpgaBridgeAvailable\":%s}",
+                 novaBootPhaseName(),
+                 g_sd_mounted ? "true" : "false",
+                 novaFpgaBridgeAvailable() ? "true" : "false");
+        send_json(client, 200, body);
         return;
     }
     if (strcmp(method, "GET") == 0 && strcmp(url, "/sd-status") == 0) {
         handle_status(client);
+        return;
+    }
+    if (strcmp(method, "POST") == 0 && strcmp(url, "/reboot") == 0) {
+        handle_reboot(client);
         return;
     }
 
@@ -157,6 +173,10 @@ bool SdHttpServer::write_all(WiFiClient& client, const uint8_t* data,
 }
 
 void SdHttpServer::handle_get(WiFiClient& client, const char* path) {
+    if (!g_sd_mounted) {
+        send_error(client, 503, "sd not mounted");
+        return;
+    }
     if (!path_sane(path, true)) {
         send_error(client, 400, "bad path");
         return;
@@ -182,6 +202,10 @@ void SdHttpServer::handle_get(WiFiClient& client, const char* path) {
 
 void SdHttpServer::handle_put(WiFiClient& client, const char* path,
                               uint32_t content_len) {
+    if (!g_sd_mounted) {
+        send_error(client, 503, "sd not mounted");
+        return;
+    }
     if (!path_sane(path, false)) {
         send_error(client, 400, "bad path");
         return;
@@ -216,6 +240,10 @@ void SdHttpServer::handle_put(WiFiClient& client, const char* path,
 }
 
 void SdHttpServer::handle_delete(WiFiClient& client, const char* path) {
+    if (!g_sd_mounted) {
+        send_error(client, 503, "sd not mounted");
+        return;
+    }
     if (!path_sane(path, false)) {
         send_error(client, 400, "bad path");
         return;
@@ -246,10 +274,10 @@ void SdHttpServer::handle_delete(WiFiClient& client, const char* path) {
 }
 
 void SdHttpServer::handle_status(WiFiClient& client) {
-    uint8_t ct = SD.cardType();
-    uint64_t card_sz = SD.cardSize();
-    uint64_t total_sz = SD.totalBytes();
-    uint64_t used_sz = SD.usedBytes();
+    uint8_t ct = g_sd_mounted ? SD.cardType() : CARD_NONE;
+    uint64_t card_sz = g_sd_mounted ? SD.cardSize() : 0;
+    uint64_t total_sz = g_sd_mounted ? SD.totalBytes() : 0;
+    uint64_t used_sz = g_sd_mounted ? SD.usedBytes() : 0;
     const char* type_name =
         ct == CARD_NONE ? "NONE" :
         ct == CARD_MMC  ? "MMC"  :
@@ -257,17 +285,27 @@ void SdHttpServer::handle_status(WiFiClient& client) {
         ct == CARD_SDHC ? "SDHC" :
         "UNKNOWN";
 
-    char body[512];
-    snprintf(body, sizeof(body),
-             "{\"cardType\":\"%s\",\"cardTypeId\":%u,"
-             "\"cardSize\":%llu,\"totalBytes\":%llu,\"usedBytes\":%llu,"
-             "\"bootDiag\":\"%s\"}",
-             type_name, (unsigned)ct,
-             (unsigned long long)card_sz,
-             (unsigned long long)total_sz,
-             (unsigned long long)used_sz,
-             g_sd_diag.c_str());
-    send_json(client, 200, body);
+    send_headers(client, 200, "application/json");
+    client.print("{\"cardType\":");
+    write_json_string(client, type_name);
+    client.printf(",\"cardTypeId\":%u,\"mounted\":%s,\"bootPhase\":",
+                  (unsigned)ct,
+                  g_sd_mounted ? "true" : "false");
+    write_json_string(client, novaBootPhaseName());
+    client.printf(",\"cardSize\":%llu,\"totalBytes\":%llu,\"usedBytes\":%llu,"
+                  "\"bootDiag\":",
+                  (unsigned long long)card_sz,
+                  (unsigned long long)total_sz,
+                  (unsigned long long)used_sz);
+    write_json_string(client, g_sd_diag.c_str());
+    client.print('}');
+}
+
+void SdHttpServer::handle_reboot(WiFiClient& client) {
+    send_json(client, 200, "{\"ok\":true,\"rebooting\":true}");
+    client.flush();
+    delay(100);
+    ESP.restart();
 }
 
 void SdHttpServer::send_listing(WiFiClient& client, const char* path) {
@@ -288,9 +326,9 @@ void SdHttpServer::send_listing(WiFiClient& client, const char* path) {
     while ((entry = dir.openNextFile())) {
         if (!first) client.print(',');
         first = false;
-        client.print("{\"name\":\"");
-        client.print(entry.name());
-        client.print("\",\"size\":");
+        client.print("{\"name\":");
+        write_json_string(client, entry.name());
+        client.print(",\"size\":");
         client.print((uint32_t)entry.size());
         client.print(",\"dir\":");
         client.print(entry.isDirectory() ? "true" : "false");
@@ -339,6 +377,34 @@ void SdHttpServer::send_headers(WiFiClient& client, int code,
     client.printf("Content-Type: %s\r\n", content_type);
     if (content_len >= 0) client.printf("Content-Length: %ld\r\n", (long)content_len);
     client.print("Connection: close\r\n\r\n");
+}
+
+void SdHttpServer::write_json_string(WiFiClient& client, const char* value) {
+    static const char hex[] = "0123456789ABCDEF";
+    client.print('"');
+    if (value) {
+        for (const unsigned char* p = (const unsigned char*)value; *p; p++) {
+            switch (*p) {
+                case '"':  client.print("\\\""); break;
+                case '\\': client.print("\\\\"); break;
+                case '\b': client.print("\\b");  break;
+                case '\f': client.print("\\f");  break;
+                case '\n': client.print("\\n");  break;
+                case '\r': client.print("\\r");  break;
+                case '\t': client.print("\\t");  break;
+                default:
+                    if (*p < 0x20) {
+                        client.print("\\u00");
+                        client.write(hex[*p >> 4]);
+                        client.write(hex[*p & 0x0F]);
+                    } else {
+                        client.write(*p);
+                    }
+                    break;
+            }
+        }
+    }
+    client.print('"');
 }
 
 bool SdHttpServer::path_sane(const char* path, bool allow_empty) {
@@ -409,6 +475,7 @@ const char* SdHttpServer::reason_phrase(int code) {
         case 405: return "Method Not Allowed";
         case 409: return "Conflict";
         case 411: return "Length Required";
+        case 503: return "Service Unavailable";
         case 500: return "Internal Server Error";
         default:  return "OK";
     }

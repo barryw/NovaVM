@@ -225,6 +225,12 @@ public static class BlockGraphics
     public static void Text(byte[] bmp, int startX, int startY, int scale,
         BitmapFont font, int fontSlot, byte[] charCodes, int charCount, byte color)
     {
+        Text(bmp, startX, startY, scale, font, fontSlot, charCodes, charCount, color, null);
+    }
+
+    public static void Text(byte[] bmp, int startX, int startY, int scale,
+        BitmapFont font, int fontSlot, byte[] charCodes, int charCount, byte color, byte? backgroundColor)
+    {
         if (scale < 1) scale = 1;
         int penX = startX;
         int glyphAdvance = BitmapFont.GlyphWidth * scale;
@@ -235,15 +241,16 @@ public static class BlockGraphics
             for (int row = 0; row < BitmapFont.GlyphHeight; row++)
             {
                 byte rowBits = font.GetRow(fontSlot, ch, row);
-                if (rowBits == 0) continue;
                 for (int col = 0; col < BitmapFont.GlyphWidth; col++)
                 {
-                    if ((rowBits & (0x80 >> col)) == 0) continue;
+                    bool set = (rowBits & (0x80 >> col)) != 0;
+                    if (!set && backgroundColor is null) continue;
                     int px = penX + col * scale;
                     int py = startY + row * scale;
+                    byte pixelColor = set ? color : backgroundColor!.Value;
                     for (int sy = 0; sy < scale; sy++)
                         for (int sx = 0; sx < scale; sx++)
-                            Plot(bmp, px + sx, py + sy, color);
+                            Plot(bmp, px + sx, py + sy, pixelColor);
                 }
             }
             penX += glyphAdvance;

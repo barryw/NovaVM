@@ -240,21 +240,32 @@ module sid_chip (
 
     // Time-multiplex table lookups across 3 voices
     always_ff @(posedge clk) begin
-        if (~&tbl_state) tbl_state <= tbl_state + 1'd1;
-        if (ce_1m) tbl_state <= 0;
-
-        case (tbl_state)
-            1, 3, 5: f_acc_t <= acc_t[tbl_state[2:1]];
-        endcase
-
-        case (tbl_state)
-            3, 5, 7: begin
-                _st_out[tbl_state[2:1] - 1] <= f__st_out;
-                p_t_out[tbl_state[2:1] - 1] <= f_p_t_out;
-                ps__out[tbl_state[2:1] - 1] <= f_ps__out;
-                pst_out[tbl_state[2:1] - 1] <= f_pst_out;
+        if (rst) begin
+            tbl_state <= 0;
+            f_acc_t <= 0;
+            for (int i = 0; i < 6; i++) begin
+                _st_out[i] <= 0;
+                p_t_out[i] <= 0;
+                ps__out[i] <= 0;
+                pst_out[i] <= 0;
             end
-        endcase
+        end else begin
+            if (~&tbl_state) tbl_state <= tbl_state + 1'd1;
+            if (ce_1m) tbl_state <= 0;
+
+            case (tbl_state)
+                1, 3, 5: f_acc_t <= acc_t[tbl_state[2:1]];
+            endcase
+
+            case (tbl_state)
+                3, 5, 7: begin
+                    _st_out[tbl_state[2:1] - 1] <= f__st_out;
+                    p_t_out[tbl_state[2:1] - 1] <= f_p_t_out;
+                    ps__out[tbl_state[2:1] - 1] <= f_ps__out;
+                    pst_out[tbl_state[2:1] - 1] <= f_pst_out;
+                end
+            endcase
+        end
     end
 
     // =========================================================================
@@ -283,7 +294,9 @@ module sid_chip (
 
     // Latch audio on correct state
     always_ff @(posedge clk) begin
-        if (tbl_state == 6)
+        if (rst)
+            audio_out <= 18'sd0;
+        else if (tbl_state == 6)
             audio_out <= filter_audio;
     end
 

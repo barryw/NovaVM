@@ -67,7 +67,7 @@ module dma (
 
     localparam SPACE_CPU = 3'd0, SPACE_CHAR = 3'd1, SPACE_COLOR = 3'd2;
     localparam SPACE_GFX = 3'd3, SPACE_SPRITE = 3'd4, SPACE_XRAM = 3'd5;
-    localparam SPACE_MAX = SPACE_XRAM;
+    localparam SPACE_TILE = 3'd6, SPACE_TEXTATTR = 3'd7;
 
     localparam [23:0] ROM_BASE = 24'h00C000;
 
@@ -137,6 +137,8 @@ module dma (
             SPACE_GFX:    space_size = 20'(64000);
             SPACE_SPRITE: space_size = 20'(32768);
             SPACE_XRAM:   space_size = 20'(524288);
+            SPACE_TILE:   space_size = 20'(32768);
+            SPACE_TEXTATTR: space_size = 20'(4000);
             default:      space_size = 0;
         endcase
     endfunction
@@ -233,9 +235,21 @@ module dma (
     // =========================================================================
     always_ff @(posedge clk) begin
         if (rst) begin
+            for (int i = 0; i < 19; i++)
+                regs[i] <= 8'h00;
             state <= S_IDLE;
             regs[R_STATUS] <= ST_IDLE;
             regs[R_ERRCODE] <= ERR_NONE;
+            fill_mode <= 0;
+            src_space <= 0;
+            dst_space <= 0;
+            src_base <= 0;
+            dst_base <= 0;
+            length <= 0;
+            fill_value <= 0;
+            idx <= 0;
+            moved <= 0;
+            read_byte <= 0;
             read_valid <= 0;
         end else begin
 
@@ -247,11 +261,11 @@ module dma (
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADARGS;
                         state <= S_DONE;
-                    end else if (!fill_mode && src_space > SPACE_MAX) begin
+                    end else if (!fill_mode && space_size(src_space) == 0) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADSPACE;
                         state <= S_DONE;
-                    end else if (dst_space > SPACE_MAX) begin
+                    end else if (space_size(dst_space) == 0) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADSPACE;
                         state <= S_DONE;

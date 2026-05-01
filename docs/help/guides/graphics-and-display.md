@@ -300,7 +300,9 @@ indices.
 
 The background color defaults to 0 (black), the text foreground to 15 (light grey),
 and the border to 11 (dark grey). Use `COLOR fg[,bg[,border]]` for text,
-background, and border colors.
+background, and border colors. Text cells store both foreground and background
+in Color RAM; `REVERSE` swaps them for subsequent output, and `FLASH` marks
+subsequent text cells as blinking.
 
 ## The Copper (Raster Effects)
 

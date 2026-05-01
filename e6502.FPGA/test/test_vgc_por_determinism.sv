@@ -37,6 +37,7 @@ module test_vgc_por_determinism;
         bit hsync_glitch;
         bit vsync_glitch;
         bit any_x;
+        bit reset_blank_nonblack;
 
         // Drive idle inputs.
         cpu_ce    = 0;
@@ -50,6 +51,7 @@ module test_vgc_por_determinism;
         hsync_glitch = 0;
         vsync_glitch = 0;
         any_x = 0;
+        reset_blank_nonblack = 0;
 
         // Assert rst. With --x-assign unique, every uninitialized reg in the
         // VGC starts at some non-zero value. The fix at vgc.sv output and
@@ -88,8 +90,13 @@ module test_vgc_por_determinism;
         // a phantom sync pulse — exactly the boot-artifact bug.
         for (int i = 0; i < 200; i++) begin
             @(posedge clk);
+            if (dut.reset_display_blank && vid_de &&
+                (vid_r !== 4'h0 || vid_g !== 4'h0 || vid_b !== 4'h0))
+                reset_blank_nonblack = 1;
             if (vid_hsync === 1'b0) hsync_glitch = 1;
         end
+        report("reset scrub displays black pixels only",
+               !reset_blank_nonblack);
         report("no phantom hsync pulse in first 200 cycles after rst-release",
                !hsync_glitch);
 
@@ -101,6 +108,74 @@ module test_vgc_por_determinism;
         end
         report("no phantom vsync pulse in first 200 cycles after rst-release",
                !vsync_glitch);
+
+        // Let the timing/compositor pipeline fill with live, non-idle values,
+        // then assert rst again. This models a BASIC/bridge cold_start after
+        // graphics tests have touched the VGC while the HDMI sink remains
+        // connected. All delayed timing state must clear on the first reset
+        // clock, not only on FPGA power-on initialization.
+        repeat (257) @(posedge clk);
+        rst = 1;
+        @(posedge clk);
+        report("runtime rst clears h_count_d1",
+               dut.timing_inst.h_count_d1 === 10'd0);
+        report("runtime rst clears h_count_d2",
+               dut.timing_inst.h_count_d2 === 10'd0);
+        report("runtime rst clears visible_d1",
+               dut.timing_inst.visible_d1 === 1'b0);
+        report("runtime rst clears visible_d2",
+               dut.timing_inst.visible_d2 === 1'b0);
+        report("runtime rst clears in_text_area_d1",
+               dut.timing_inst.in_text_area_d1 === 1'b0);
+        report("runtime rst clears in_text_area_d2",
+               dut.timing_inst.in_text_area_d2 === 1'b0);
+        report("runtime rst drives vid_hsync idle",
+               vid_hsync === 1'b1);
+        report("runtime rst drives vid_vsync idle",
+               vid_vsync === 1'b1);
+        report("runtime rst drives vid_de blank",
+               vid_de === 1'b0);
+
+        repeat (10) @(posedge clk);
+        hsync_glitch = 0;
+        vsync_glitch = 0;
+        reset_blank_nonblack = 0;
+        @(posedge clk);
+        rst = 0;
+        for (int i = 0; i < 200; i++) begin
+            @(posedge clk);
+            if (dut.reset_display_blank && vid_de &&
+                (vid_r !== 4'h0 || vid_g !== 4'h0 || vid_b !== 4'h0))
+                reset_blank_nonblack = 1;
+            if (vid_hsync === 1'b0) hsync_glitch = 1;
+            if (vid_vsync === 1'b0) vsync_glitch = 1;
+        end
+        report("runtime reset scrub displays black pixels only",
+               !reset_blank_nonblack);
+        report("no phantom hsync pulse after runtime rst-release",
+               !hsync_glitch);
+        report("no phantom vsync pulse after runtime rst-release",
+               !vsync_glitch);
+
+        // Scrubbers complete at arbitrary pixel positions. The display blank
+        // latch must stay asserted until the next frame boundary so hardware
+        // never emits a half-reset/half-live frame.
+        force dut.reset_clear_phase = 3'd0;
+        force dut.tile_reset_busy = 1'b0;
+        force dut.h_count = 10'd123;
+        force dut.v_count = 10'd45;
+        @(posedge clk); #1;
+        report("runtime reset blank holds after scrub idle mid-frame",
+               dut.reset_display_blank === 1'b1);
+        force dut.h_count = 10'd0;
+        force dut.v_count = 10'd0;
+        @(posedge clk); #1;
+        report("runtime reset blank releases at frame start",
+               dut.reset_display_blank === 1'b0);
+        release dut.h_count;
+        release dut.v_count;
+        release dut.tile_reset_busy;
+        release dut.reset_clear_phase;
 
         // None of the output signals should ever be X.
         if (^vid_hsync === 1'bx) any_x = 1;

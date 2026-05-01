@@ -315,6 +315,7 @@ public static class VgcConstants
     public const byte DmaSpaceVgcGfx   = 0x03;
     public const byte DmaSpaceVgcSprite = 0x04;
     public const byte DmaSpaceXram     = 0x05;
+    public const byte DmaSpaceVgcTextAttr = 0x07;
 
     // -------------------------------------------------------------------------
     // Blitter controller registers ($BA83-$BAA2)
@@ -539,13 +540,22 @@ public static class VgcConstants
     public const int VramData          = 0xA0E3;
     public const int VramCtrl          = 0xA0E4;
     public const int DisplayDim        = 0xA0E5;   // 0=black, 15=full brightness
+    public const int RegTextFlags      = 0xA0E6;   // bit0=reverse, bit1=explicit reverse attr, bit2=flash
+    public const int RegTextReverseAttr = 0xA0E7;  // packed bg/fg used when bit1 is set
 
     public const byte VramPlaneChar    = 0x01;
     public const byte VramPlaneColor   = 0x02;
     public const byte VramPlaneGfx     = 0x03;
     public const byte VramPlaneSprite  = 0x04;
     public const byte VramPlaneTile    = 0x06;
+    public const byte VramPlaneTextAttr = 0x07;
     public const byte VramCtrlAutoInc  = 0x01;
+
+    public const byte TextFlagReverse         = 0x01;
+    public const byte TextFlagReverseExplicit = 0x02;
+    public const byte TextFlagFlash           = 0x04;
+
+    public const byte TextAttrFlash           = 0x01;
 
     // Configuration registers
     public const int TileConfig        = 0xA0C0;   // bit0: size (0=8x8, 1=16x16), bits 2-1: mirror mode (0-3)
@@ -753,6 +763,7 @@ public static class VgcConstants
     public const byte MemSpaceGfx      = VramPlaneGfx;     // 320*200 bytes (graphics bitmap)
     public const byte MemSpaceSprite   = VramPlaneSprite;  // 256*128 bytes (sprite shape RAM)
     public const byte MemSpaceTile     = VramPlaneTile;    // tile definition data
+    public const byte MemSpaceTextAttr = VramPlaneTextAttr; // 4000 bytes (text style attributes)
 
     // -------------------------------------------------------------------------
     // Help system registers ($A020-$A030)

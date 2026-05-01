@@ -24,6 +24,12 @@ module vgc_gfx (
 
     localparam GFX_W = 320;
 
+    // 320 = 256 + 64. Use shift/add addressing so scanout never infers a
+    // multiplier or long generic constant-multiply path.
+    function automatic logic [16:0] gfx_addr_xy(input logic [8:0] x, input logic [7:0] y);
+        gfx_addr_xy = {1'b0, y, 8'b0} + {3'b0, y, 6'b0} + {8'b0, x};
+    endfunction
+
     // =========================================================================
     // Memory — dpram instance
     // =========================================================================
@@ -41,7 +47,7 @@ module vgc_gfx (
     // Port B address generation. POR determinism via declaration init.
     // =========================================================================
     always_ff @(posedge clk) begin
-        gfx_b_addr <= {9'b0, gfx_y} * GFX_W + {8'b0, gfx_x};
+        gfx_b_addr <= gfx_addr_xy(gfx_x, gfx_y);
     end
 
 endmodule

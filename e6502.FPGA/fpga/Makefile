@@ -18,12 +18,22 @@ YOSYS    = $(OSS_CAD_SUITE_BIN)/yosys
 NEXTPNR  = $(OSS_CAD_SUITE_BIN)/nextpnr-ecp5
 ECPPACK  = $(OSS_CAD_SUITE_BIN)/ecppack
 FPGALOAD = openFPGALoader
-EXTRA_DEFINES ?=
+# Production ULX3S build defaults:
+# - VIDEO_720X480 gives the 720x480 HDMI timing + 640x400 Nova canvas.
+# - GPDI_P_ONLY uses ECP5 LVCMOS33D on the positive GPDI pins and lets the
+#   IO buffer generate the complementary pins. Without this, nextpnr rejects
+#   gpdi_dn[*] because the LPF's LVCMOS33D pins must be constrained to the
+#   A side of a pseudo-differential pair.
+EXTRA_DEFINES ?= -DVIDEO_720X480 -DGPDI_P_ONLY
 SV = read_verilog -sv -DSYNTHESIS $(EXTRA_DEFINES)
 VL = read_verilog -DSYNTHESIS $(EXTRA_DEFINES)
 BUILD_ARGS = $(BUILDDIR)/build_args.txt
 
-NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --timing-allow-fail
+NEXTPNR_SEED ?= 1
+NEXTPNR_THREADS ?=
+NEXTPNR_REPORT = $(BUILDDIR)/nextpnr-report.json
+NEXTPNR_THREAD_FLAGS = $(if $(strip $(NEXTPNR_THREADS)),--threads $(NEXTPNR_THREADS),)
+NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed $(NEXTPNR_SEED) $(NEXTPNR_THREAD_FLAGS) --report $(NEXTPNR_REPORT) --timing-allow-fail
 
 .PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag diag-vgc diag-sprites FORCE
 
@@ -62,6 +72,7 @@ $(BUILD_ARGS): FORCE
 		'PACKAGE=$(PACKAGE)' \
 		'PIN_DEF=$(PIN_DEF)' \
 		'NEXTPNR_FLAGS=$(NEXTPNR_FLAGS)' \
+		'NEXTPNR_SEED=$(NEXTPNR_SEED)' \
 		'EXTRA_DEFINES=$(EXTRA_DEFINES)' \
 		> $(BUILDDIR)/build_args.new
 	@if ! cmp -s $(BUILDDIR)/build_args.new $@; then \
@@ -77,9 +88,7 @@ $(BUILDDIR)/$(PROJ).json: $(BUILD_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_S
 		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_SDRAM_SV); \
 		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM_V); \
 		synth_ecp5 -top fpga_top; \
-		write_json $@; \
-		write_verilog $(BUILDDIR)/post_synth.v; \
-		write_rtlil $(BUILDDIR)/post_synth.il"
+		write_json $@"
 
 # =========================================================================
 # Diagnostic — run yosys only (no nextpnr/ecppack) to dump post-synth

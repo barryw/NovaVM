@@ -78,6 +78,7 @@ module blitter (
 
     localparam SPACE_CPU = 3'd0, SPACE_CHAR = 3'd1, SPACE_COLOR = 3'd2;
     localparam SPACE_GFX = 3'd3, SPACE_SPRITE = 3'd4, SPACE_XRAM = 3'd5, SPACE_TILE = 3'd6;
+    localparam SPACE_TEXTATTR = 3'd7;
 
     localparam ROM_BASE = 24'hC000;
 
@@ -92,15 +93,16 @@ module blitter (
     logic [7:0] regs [0:24];
 
     typedef enum logic [3:0] {
-        S_IDLE,
-        S_VALIDATE,
-        S_READ,             // issue read (dpram latches addr at posedge)
-        S_READ_WAIT,        // dpram dout settles; capture read_byte
-        S_WRITE,
-        S_ROWBUF_READ,      // buffered mode: issue read into buffer
-        S_ROWBUF_READ_WAIT, // dpram dout settles; capture row_buf[buf_idx]
-        S_ROWBUF_WRITE,     // buffered mode: write row from buffer
-        S_DONE
+        S_IDLE              = 4'd0,
+        S_VALIDATE          = 4'd1,
+        S_READ              = 4'd2, // issue read (dpram latches addr at posedge)
+        S_READ_WAIT         = 4'd3, // dpram dout settles; capture read_byte
+        S_WRITE             = 4'd4,
+        S_ROWBUF_READ       = 4'd5, // buffered mode: issue read into buffer
+        S_ROWBUF_READ_WAIT  = 4'd6, // dpram dout settles; capture row_buf[buf_idx]
+        S_ROWBUF_WRITE      = 4'd7, // buffered mode: write row from buffer
+        S_DONE              = 4'd8,
+        S_ROWBUF_WRITE_LOAD = 4'd9  // latch row_buf[buf_idx] before driving memory ports
     } state_t;
 
     state_t state;
@@ -171,6 +173,7 @@ module blitter (
             SPACE_SPRITE: space_size = 20'(32768);
             SPACE_XRAM:   space_size = 20'(524288);
             SPACE_TILE:   space_size = 20'(32768);
+            SPACE_TEXTATTR: space_size = 20'(4000);
             default:      space_size = 0;
         endcase
     endfunction
@@ -248,22 +251,22 @@ module blitter (
 
         // Write data setup (for S_WRITE and S_ROWBUF_WRITE)
         if ((state == S_WRITE && read_valid && !(colorkey_mode && read_byte == color_key)) ||
-            (state == S_ROWBUF_WRITE && !(colorkey_mode && row_buf[buf_idx] == color_key))) begin
+            (state == S_ROWBUF_WRITE && read_valid && !(colorkey_mode && read_byte == color_key))) begin
             case (dst_space)
                 SPACE_CPU: begin
                     ram_addr = dst_addr[15:0];
-                    ram_wdata = (state == S_ROWBUF_WRITE) ? row_buf[buf_idx] : read_byte;
+                    ram_wdata = read_byte;
                     ram_we = 1;
                 end
                 SPACE_XRAM: begin
                     xram_addr = dst_addr[18:0];
-                    xram_wdata = (state == S_ROWBUF_WRITE) ? row_buf[buf_idx] : read_byte;
+                    xram_wdata = read_byte;
                     xram_we = 1;
                 end
                 default: begin
                     vgc_space = dst_space;
                     vgc_addr = dst_addr[16:0];
-                    vgc_wdata = (state == S_ROWBUF_WRITE) ? row_buf[buf_idx] : read_byte;
+                    vgc_wdata = read_byte;
                     vgc_we = 1;
                 end
             endcase
@@ -278,10 +281,32 @@ module blitter (
     // =========================================================================
     always_ff @(posedge clk) begin
         if (rst) begin
+            for (int i = 0; i < 25; i++)
+                regs[i] <= 8'h00;
             state <= S_IDLE;
             regs[R_STATUS] <= ST_IDLE;
             regs[R_ERRCODE] <= ERR_NONE;
+            fill_mode <= 0;
+            colorkey_mode <= 0;
+            use_row_buffer <= 0;
+            src_space <= 0;
+            dst_space <= 0;
+            src_base <= 0;
+            dst_base <= 0;
+            width <= 0;
+            height <= 0;
+            src_stride <= 0;
+            dst_stride <= 0;
+            fill_value <= 0;
+            color_key <= 0;
+            row <= 0;
+            col <= 0;
+            wrote_count <= 0;
+            read_byte <= 0;
             read_valid <= 0;
+            buf_idx <= 0;
+            src_row_off <= 0;
+            dst_row_off <= 0;
         end else begin
 
             case (state)
@@ -292,11 +317,11 @@ module blitter (
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADARGS;
                         state <= S_DONE;
-                    end else if (!fill_mode && src_space > SPACE_TILE) begin
+                    end else if (!fill_mode && space_size(src_space) == 0) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADSPACE;
                         state <= S_DONE;
-                    end else if (dst_space > SPACE_TILE) begin
+                    end else if (space_size(dst_space) == 0) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADSPACE;
                         state <= S_DONE;
@@ -409,13 +434,23 @@ module blitter (
                         if (col + 1 >= width) begin
                             col <= 0;
                             buf_idx <= 0;
-                            state <= S_ROWBUF_WRITE;
+                            read_valid <= 0;
+                            state <= S_ROWBUF_WRITE_LOAD;
                         end else begin
                             col <= col + 1;
                             buf_idx <= buf_idx + 1;
                             state <= S_ROWBUF_READ;
                         end
                     end
+                end
+
+                S_ROWBUF_WRITE_LOAD: begin
+                    // Register row-buffer output before it drives the shared
+                    // VGC memory port. This breaks the row_buf→VGC mux→sprite
+                    // bank critical path; same-space blits pay one cycle/byte.
+                    read_byte <= row_buf[buf_idx];
+                    read_valid <= 1;
+                    state <= S_ROWBUF_WRITE;
                 end
 
                 S_ROWBUF_WRITE: begin
@@ -426,7 +461,7 @@ module blitter (
                         // stall — hold the row-buffer write steady until ready
                     end else begin
                     // Write one byte per clock from row buffer
-                    if (!(colorkey_mode && row_buf[buf_idx] == color_key))
+                    if (!(colorkey_mode && read_byte == color_key))
                         wrote_count <= wrote_count + 1;
 
                     if (col + 1 >= width) begin
@@ -436,7 +471,7 @@ module blitter (
                             regs[R_STATUS] <= ST_OK;
                             regs[R_ERRCODE] <= ERR_NONE;
                             {regs[R_COUNTH], regs[R_COUNTM], regs[R_COUNTL]}
-                                <= wrote_count + (!(colorkey_mode && row_buf[buf_idx] == color_key) ? 24'd1 : 24'd0);
+                                <= wrote_count + (!(colorkey_mode && read_byte == color_key) ? 24'd1 : 24'd0);
                             state <= S_DONE;
                         end else begin
                             row <= row + 1;
@@ -447,6 +482,8 @@ module blitter (
                     end else begin
                         col <= col + 1;
                         buf_idx <= buf_idx + 1;
+                        read_valid <= 0;
+                        state <= S_ROWBUF_WRITE_LOAD;
                     end
                     end  // end of (!xram_busy) block
                 end

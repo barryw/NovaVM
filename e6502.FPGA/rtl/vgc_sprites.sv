@@ -101,6 +101,8 @@ module vgc_sprites (
     logic [10:0] shape_copy_addr_latched;
     logic [7:0]  shape_copy_data;
     logic [2047:0] shape_copy_dirty;
+    logic        shape_reset_clearing;
+    logic [10:0] shape_reset_addr;
 
     logic [10:0] spr0_a_addr, spr1_a_addr;
     logic [7:0]  spr0_a_din,  spr1_a_din;
@@ -147,7 +149,14 @@ module vgc_sprites (
         spr0_b_addr = active_shape_bank ? 11'd0 : spr_b_addr;
         spr1_b_addr = active_shape_bank ? spr_b_addr : 11'd0;
 
-        if (user_shape_access) begin
+        if (shape_reset_clearing) begin
+            spr0_a_addr = shape_reset_addr;
+            spr0_a_din  = 8'd0;
+            spr0_a_we   = 1'b1;
+            spr1_a_addr = shape_reset_addr;
+            spr1_a_din  = 8'd0;
+            spr1_a_we   = 1'b1;
+        end else if (user_shape_access) begin
             // Read both banks so RMW paths can select the coherent source after
             // one-cycle BRAM latency. Writes always target the pending bank.
             spr0_a_addr = spr_a_addr;
@@ -198,11 +207,22 @@ module vgc_sprites (
             shape_copy_data <= 8'd0;
             shape_copy_dirty <= '0;
             spr_a_read_bank_d <= 1'b0;
+            shape_reset_clearing <= 1'b1;
+            shape_reset_addr <= 11'd0;
         end else begin
-            if (spr_a_re)
+            if (shape_reset_clearing) begin
+                shape_pending_dirty <= 1'b0;
+                shape_sync_busy <= 1'b0;
+                shape_copy_state <= SHCOPY_IDLE;
+                shape_copy_dirty <= '0;
+                if (shape_reset_addr == 11'd2047)
+                    shape_reset_clearing <= 1'b0;
+                else
+                    shape_reset_addr <= shape_reset_addr + 11'd1;
+            end else if (spr_a_re)
                 spr_a_read_bank_d <= spr_a_read_bank;
 
-            if (shape_publish_fire) begin
+            if (!shape_reset_clearing && shape_publish_fire) begin
                 active_shape_bank <= pending_shape_bank;
                 shape_pending_dirty <= spr_a_we;
                 shape_sync_busy <= 1'b1;
@@ -210,14 +230,14 @@ module vgc_sprites (
                 shape_copy_addr <= 11'd0;
                 shape_copy_addr_latched <= 11'd0;
                 shape_copy_dirty <= '0;
-            end else if (spr_a_we) begin
+            end else if (!shape_reset_clearing && spr_a_we) begin
                 shape_pending_dirty <= 1'b1;
             end
 
-            if (spr_a_we && shape_sync_busy)
+            if (!shape_reset_clearing && spr_a_we && shape_sync_busy)
                 shape_copy_dirty[spr_a_addr] <= 1'b1;
 
-            if (!shape_publish_fire && shape_sync_busy) begin
+            if (!shape_reset_clearing && !shape_publish_fire && shape_sync_busy) begin
                 case (shape_copy_state)
                     SHCOPY_READ: begin
                         if (!user_shape_access)
@@ -306,7 +326,7 @@ module vgc_sprites (
     localparam SPR_WRITE  = 3'd6;
 
     logic [2:0]  spr_eval_state;
-    logic [3:0]  spr_eval_idx;
+    logic [4:0]  spr_eval_idx;
     logic [8:0]  spr_clear_x;
     logic [2:0]  spr_read_byte;
     logic [7:0]  spr_row_data [0:7];
@@ -319,6 +339,7 @@ module vgc_sprites (
     logic [3:0]  spr_eval_trans_r;
     logic [7:0]  spr_next_scanline;
     logic [4:0]  spr_write_px;
+    logic        scanline_output_valid;
 
     wire        visible_line_start = (h_count == 10'd0) && (v_count < V_ACTIVE);
     wire [9:0]  spr_prep_v = (v_count == V_ACTIVE - 1) ? 10'd0 : (v_count + 10'd1);
@@ -328,6 +349,7 @@ module vgc_sprites (
         spr_eval_state = SPR_IDLE;
         spr_eval_idx = 0;
         spr_clear_x = 0;
+        scanline_output_valid = 1'b0;
     end
 
     // =========================================================================
@@ -344,7 +366,7 @@ module vgc_sprites (
         spr_pixel_pri = 2'd0;
         spr_pixel_hit = 0;
         collision_bg_bits = 8'h00;
-        if (visible_d2 && sprite_x_d2 < SPR_PLANE_W) begin
+        if (scanline_output_valid && visible_d2 && sprite_x_d2 < SPR_PLANE_W) begin
             if (slb_rd_valid) begin
                 spr_pixel     = slb_rd_color;
                 spr_pixel_pri = slb_rd_pri;
@@ -364,6 +386,7 @@ module vgc_sprites (
             spr_clear_x <= 0;
             slb_display_bank <= 1'b0;
             slb_a_bank <= 1'b1;
+            scanline_output_valid <= 1'b0;
         end else begin
             if (visible_line_start) begin
                 // Swap in the bank prepared during the previous visible line,
@@ -465,6 +488,7 @@ module vgc_sprites (
                         spr_write_px <= spr_write_px + 1;
                 end
                 SPR_DONE: begin
+                    scanline_output_valid <= 1'b1;
                     spr_eval_state <= SPR_IDLE;
                 end
                 default: spr_eval_state <= SPR_IDLE;

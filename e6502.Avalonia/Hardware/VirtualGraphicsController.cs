@@ -73,6 +73,9 @@ public class VirtualGraphicsController : IBusDevice
     // Color RAM (4000 bytes, 80x50)
     private readonly byte[] _colorRam = new byte[VgcConstants.ScreenSize];
 
+    // Text style attribute RAM (4000 bytes, 80x50)
+    private readonly byte[] _textAttrRam = new byte[VgcConstants.ScreenSize];
+
     // Block graphics bitmap (320x200, NOT 6502-addressable)
     private readonly byte[] _gfxBitmap = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
 
@@ -118,6 +121,8 @@ public class VirtualGraphicsController : IBusDevice
     private byte _vramCtrl;
     private byte _vramReadLatch;
     private byte _displayDim;
+    private byte _textFlags;
+    private byte _textReverseAttr;
 
     // Copper program (host-side, command driven) — 128 lists, vblank-synchronized
     private readonly List<CopperEvent>[] _copperEvents = new List<CopperEvent>[VgcConstants.CopperListCount];
@@ -195,13 +200,16 @@ public class VirtualGraphicsController : IBusDevice
         // Screen RAM initialized to spaces
         Array.Fill(_screenRam, (byte)0x20);
 
-        // Color RAM initialized to the default light-grey foreground.
-        Array.Fill(_colorRam, (byte)15);
+        // Color RAM packs background in the high nibble and foreground in the low nibble.
+        Array.Fill(_colorRam, (byte)0x0F);
+        Array.Clear(_textAttrRam);
 
         // Match FPGA reset defaults: light-grey text, black background, dark-grey border.
         _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] = 15;
         _regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] = 0;
         _regs[VgcConstants.RegBorder - VgcConstants.VgcBase] = 11;
+        _textFlags = 0;
+        _textReverseAttr = 0xF0;
 
         // Tile engine reset
         ResetTileEngine();
@@ -271,6 +279,9 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.DisplayDim)
             return true;
 
+        if (address == VgcConstants.RegTextFlags || address == VgcConstants.RegTextReverseAttr)
+            return true;
+
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
             return true;
 
@@ -297,6 +308,12 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.DisplayDim)
             return _displayDim;
+
+        if (address == VgcConstants.RegTextFlags)
+            return _textFlags;
+
+        if (address == VgcConstants.RegTextReverseAttr)
+            return _textReverseAttr;
 
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
             return ReadIrqRegister(address);
@@ -373,6 +390,18 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.DisplayDim)
         {
             _displayDim = (byte)(data & 0x0F);
+            return;
+        }
+
+        if (address == VgcConstants.RegTextFlags)
+        {
+            _textFlags = data;
+            return;
+        }
+
+        if (address == VgcConstants.RegTextReverseAttr)
+        {
+            _textReverseAttr = data;
             return;
         }
 
@@ -493,6 +522,9 @@ public class VirtualGraphicsController : IBusDevice
             case VgcConstants.VramPlaneTile when (uint)addr < _tileData.Length:
                 lock (_tileLock) value = _tileData[addr];
                 return true;
+            case VgcConstants.VramPlaneTextAttr when (uint)addr < _textAttrRam.Length:
+                value = _textAttrRam[addr];
+                return true;
             default:
                 value = 0;
                 return false;
@@ -526,6 +558,9 @@ public class VirtualGraphicsController : IBusDevice
                     _tileDirty = true;
                 }
                 return true;
+            case VgcConstants.VramPlaneTextAttr when (uint)addr < _textAttrRam.Length:
+                _textAttrRam[addr] = value;
+                return true;
             default:
                 return false;
         }
@@ -554,6 +589,9 @@ public class VirtualGraphicsController : IBusDevice
 
     public byte GetScreenColor(int col, int row) =>
         _colorRam[row * VgcConstants.ScreenCols + col];
+
+    public byte GetScreenTextAttr(int col, int row) =>
+        _textAttrRam[row * VgcConstants.ScreenCols + col];
 
     public byte GetMode() =>
         _regs[VgcConstants.RegMode - VgcConstants.VgcBase];
@@ -896,6 +934,26 @@ public class VirtualGraphicsController : IBusDevice
 
     private byte EffectiveDrawColor => _gfxDrawColor;
 
+    private bool TryGetReverseGtextColors(byte normalColor, out byte fg, out byte bg)
+    {
+        fg = normalColor;
+        bg = 0;
+
+        if ((_textFlags & VgcConstants.TextFlagReverse) == 0)
+            return false;
+
+        if ((_textFlags & VgcConstants.TextFlagReverseExplicit) != 0)
+        {
+            fg = (byte)(_textReverseAttr & 0x0F);
+            bg = (byte)((_textReverseAttr >> 4) & 0x0F);
+            return true;
+        }
+
+        fg = (byte)(_regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] & 0x0F);
+        bg = (byte)(normalColor & 0x0F);
+        return true;
+    }
+
     private void ExecuteGfxCommand(byte cmd)
     {
         // 16-bit parameters from command registers
@@ -945,7 +1003,10 @@ public class VirtualGraphicsController : IBusDevice
                     int nameLen = _busMemory[VgcConstants.FioNameLen];
                     var chars = new byte[nameLen];
                     Array.Copy(_busMemory, VgcConstants.FioName, chars, 0, nameLen);
-                    BlockGraphics.Text(_gfxBitmap, p0, p1, scale, _bitmapFont, fontSlot, chars, nameLen, color);
+                    if (TryGetReverseGtextColors(color, out byte fg, out byte bg))
+                        BlockGraphics.Text(_gfxBitmap, p0, p1, scale, _bitmapFont, fontSlot, chars, nameLen, fg, bg);
+                    else
+                        BlockGraphics.Text(_gfxBitmap, p0, p1, scale, _bitmapFont, fontSlot, chars, nameLen, color);
                 }
                 break;
         }
@@ -1094,6 +1155,7 @@ public class VirtualGraphicsController : IBusDevice
             VgcConstants.MemSpaceGfx => _gfxBitmap.Length,
             VgcConstants.MemSpaceSprite => _spriteShapes.Length,
             VgcConstants.MemSpaceTile => _tileData.Length,
+            VgcConstants.MemSpaceTextAttr => _textAttrRam.Length,
             _ => 0
         };
 
@@ -1107,6 +1169,9 @@ public class VirtualGraphicsController : IBusDevice
                 return true;
             case VgcConstants.MemSpaceColor when (uint)addr < _colorRam.Length:
                 value = _colorRam[addr];
+                return true;
+            case VgcConstants.MemSpaceTextAttr when (uint)addr < _textAttrRam.Length:
+                value = _textAttrRam[addr];
                 return true;
             case VgcConstants.MemSpaceGfx when (uint)addr < _gfxBitmap.Length:
                 value = _gfxBitmap[addr];
@@ -1131,6 +1196,9 @@ public class VirtualGraphicsController : IBusDevice
                 return true;
             case VgcConstants.MemSpaceColor when (uint)addr < _colorRam.Length:
                 _colorRam[addr] = value;
+                return true;
+            case VgcConstants.MemSpaceTextAttr when (uint)addr < _textAttrRam.Length:
+                _textAttrRam[addr] = value;
                 return true;
             case VgcConstants.MemSpaceGfx when (uint)addr < _gfxBitmap.Length:
                 _gfxBitmap[addr] = value;
@@ -1713,6 +1781,31 @@ public class VirtualGraphicsController : IBusDevice
     // Character output
     // -------------------------------------------------------------------------
 
+    private byte CurrentTextColorAttr()
+    {
+        byte fg = (byte)(_regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] & 0x0F);
+        byte bg = (byte)(_regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] & 0x0F);
+
+        if ((_textFlags & VgcConstants.TextFlagReverse) == 0)
+            return PackTextColor(bg, fg);
+
+        if ((_textFlags & VgcConstants.TextFlagReverseExplicit) != 0)
+            return (byte)(_textReverseAttr & 0xFF);
+
+        return PackTextColor(fg, bg);
+    }
+
+    private byte CurrentTextStyleAttr()
+    {
+        byte attr = 0;
+        if ((_textFlags & VgcConstants.TextFlagFlash) != 0)
+            attr |= VgcConstants.TextAttrFlash;
+        return attr;
+    }
+
+    private static byte PackTextColor(byte bg, byte fg) =>
+        (byte)(((bg & 0x0F) << 4) | (fg & 0x0F));
+
     protected virtual void HandleCharOut(byte data)
     {
         int cx = Math.Min((int)_regs[VgcConstants.RegCursorX - VgcConstants.VgcBase], VgcConstants.ScreenCols - 1);
@@ -1737,8 +1830,8 @@ public class VirtualGraphicsController : IBusDevice
 
             case 0x0C: // FF -- form feed: clear screen, home cursor
                 Array.Fill(_screenRam, (byte)0x20);
-                byte fgCol = _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase];
-                Array.Fill(_colorRam, fgCol);
+                Array.Fill(_colorRam, CurrentTextColorAttr());
+                Array.Fill(_textAttrRam, CurrentTextStyleAttr());
                 cx = 0;
                 cy = 0;
                 break;
@@ -1765,7 +1858,8 @@ public class VirtualGraphicsController : IBusDevice
 
                     int idx = cy * VgcConstants.ScreenCols + cx;
                     _screenRam[idx] = ch;
-                    _colorRam[idx] = _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase];
+                    _colorRam[idx] = CurrentTextColorAttr();
+                    _textAttrRam[idx] = CurrentTextStyleAttr();
                     cx++;
                     if (cx >= VgcConstants.ScreenCols)
                     {
@@ -1795,10 +1889,14 @@ public class VirtualGraphicsController : IBusDevice
         Array.Copy(_colorRam, VgcConstants.ScreenCols, _colorRam, 0,
             VgcConstants.ScreenCols * (VgcConstants.ScreenRows - 1));
 
+        // Shift text attribute RAM rows 1-24 up to rows 0-23
+        Array.Copy(_textAttrRam, VgcConstants.ScreenCols, _textAttrRam, 0,
+            VgcConstants.ScreenCols * (VgcConstants.ScreenRows - 1));
+
         // Clear last row to spaces; color RAM to current fg color
         int lastRowStart = (VgcConstants.ScreenRows - 1) * VgcConstants.ScreenCols;
         Array.Fill(_screenRam, (byte)0x20, lastRowStart, VgcConstants.ScreenCols);
-        byte fgCol = _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase];
-        Array.Fill(_colorRam, fgCol, lastRowStart, VgcConstants.ScreenCols);
+        Array.Fill(_colorRam, CurrentTextColorAttr(), lastRowStart, VgcConstants.ScreenCols);
+        Array.Fill(_textAttrRam, CurrentTextStyleAttr(), lastRowStart, VgcConstants.ScreenCols);
     }
 }

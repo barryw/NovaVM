@@ -39,7 +39,10 @@ module artist (
     // GTEXT parameters
     input  logic [64*8-1:0] gt_char_flat,  // character buffer (packed)
     input  logic [5:0]  gt_char_len,       // string length
-    input  logic [7:0]  gt_scale_in        // scale factor
+    input  logic [7:0]  gt_scale_in,       // scale factor
+    input  logic        gt_reverse,
+    input  logic [3:0]  gt_reverse_fg,
+    input  logic [3:0]  gt_reverse_bg
 );
 
     // =========================================================================
@@ -47,6 +50,12 @@ module artist (
     // =========================================================================
     localparam GFX_W = 320;
     localparam GFX_H = 200;
+
+    // 320 = 256 + 64. Keep framebuffer addressing out of DSPs and off the
+    // clk_pixel critical path.
+    function automatic logic [16:0] gfx_addr_xy(input logic [8:0] px, input logic [7:0] py);
+        gfx_addr_xy = {1'b0, py, 8'b0} + {3'b0, py, 6'b0} + {8'b0, px};
+    endfunction
 
     // Extract character from packed flat vector
     function automatic logic [7:0] gt_char(input logic [5:0] idx);
@@ -119,6 +128,10 @@ module artist (
     logic [7:0]  gt_cur_char;
     logic [7:0]  gt_font_byte;
     logic [1:0]  gt_font_pending;
+    logic [15:0] gt_draw_x;
+    logic [15:0] gt_draw_y;
+    logic        gt_reverse_active;
+    logic [3:0]  gt_bg_color;
 
     // =========================================================================
     // Initialization
@@ -130,6 +143,8 @@ module artist (
         octant_count = 0;
         paint_phase = 0;
         gt_font_pending = 0;
+        gt_reverse_active = 0;
+        gt_bg_color = 0;
         paint_init = 0;
     end
 
@@ -149,6 +164,8 @@ module artist (
             gfx_re <= 0;
             font_re <= 0;
             fs_a_we <= 0;
+            gt_reverse_active <= 0;
+            gt_bg_color <= 0;
         end else begin
             // Default: no writes this cycle
             gfx_we <= 0;
@@ -169,7 +186,7 @@ module artist (
                 case (op)
                     CMD_LINE: begin
                         if (x >= 0 && x < GFX_W && y >= 0 && y < GFX_H) begin
-                            gfx_addr <= y * GFX_W + x;
+                            gfx_addr <= gfx_addr_xy(9'(x), 8'(y));
                             gfx_wdata <= color;
                             gfx_we <= 1;
                         end
@@ -196,7 +213,7 @@ module artist (
                         if (cx < GFX_W && cy < GFX_H) begin
                             if (cy == y[7:0] || cy == y2[7:0] ||
                                 cx == x[8:0] || cx == x2[8:0]) begin
-                                gfx_addr <= {9'b0, cy} * GFX_W + {8'b0, cx};
+                                gfx_addr <= gfx_addr_xy(cx, cy);
                                 gfx_wdata <= color;
                                 gfx_we <= 1;
                             end
@@ -213,7 +230,7 @@ module artist (
 
                     CMD_FILL: begin
                         if (cx < GFX_W && cy < GFX_H) begin
-                            gfx_addr <= {9'b0, cy} * GFX_W + {8'b0, cx};
+                            gfx_addr <= gfx_addr_xy(cx, cy);
                             gfx_wdata <= color;
                             gfx_we <= 1;
                         end
@@ -228,7 +245,7 @@ module artist (
                     end
 
                     CMD_GCLS: begin
-                        gfx_addr <= {9'b0, cy} * GFX_W + {8'b0, cx};
+                        gfx_addr <= gfx_addr_xy(cx, cy);
                         gfx_wdata <= 4'h0;
                         gfx_we <= 1;
                         if (cx == GFX_W - 1) begin
@@ -246,56 +263,56 @@ module artist (
                             case (octant_count)
                                 3'd0: begin
                                     if (x+dx >= 0 && x+dx < GFX_W && y+dy >= 0 && y+dy < GFX_H) begin
-                                        gfx_addr <= (y+dy) * GFX_W + (x+dx);
+                                        gfx_addr <= gfx_addr_xy(9'(x+dx), 8'(y+dy));
                                         gfx_wdata <= color; gfx_we <= 1;
                                     end
                                     octant_count <= 3'd1;
                                 end
                                 3'd1: begin
                                     if (x-dx >= 0 && x-dx < GFX_W && y+dy >= 0 && y+dy < GFX_H) begin
-                                        gfx_addr <= (y+dy) * GFX_W + (x-dx);
+                                        gfx_addr <= gfx_addr_xy(9'(x-dx), 8'(y+dy));
                                         gfx_wdata <= color; gfx_we <= 1;
                                     end
                                     octant_count <= 3'd2;
                                 end
                                 3'd2: begin
                                     if (x+dx >= 0 && x+dx < GFX_W && y-dy >= 0 && y-dy < GFX_H) begin
-                                        gfx_addr <= (y-dy) * GFX_W + (x+dx);
+                                        gfx_addr <= gfx_addr_xy(9'(x+dx), 8'(y-dy));
                                         gfx_wdata <= color; gfx_we <= 1;
                                     end
                                     octant_count <= 3'd3;
                                 end
                                 3'd3: begin
                                     if (x-dx >= 0 && x-dx < GFX_W && y-dy >= 0 && y-dy < GFX_H) begin
-                                        gfx_addr <= (y-dy) * GFX_W + (x-dx);
+                                        gfx_addr <= gfx_addr_xy(9'(x-dx), 8'(y-dy));
                                         gfx_wdata <= color; gfx_we <= 1;
                                     end
                                     octant_count <= 3'd4;
                                 end
                                 3'd4: begin
                                     if (x+dy >= 0 && x+dy < GFX_W && y+dx >= 0 && y+dx < GFX_H) begin
-                                        gfx_addr <= (y+dx) * GFX_W + (x+dy);
+                                        gfx_addr <= gfx_addr_xy(9'(x+dy), 8'(y+dx));
                                         gfx_wdata <= color; gfx_we <= 1;
                                     end
                                     octant_count <= 3'd5;
                                 end
                                 3'd5: begin
                                     if (x-dy >= 0 && x-dy < GFX_W && y+dx >= 0 && y+dx < GFX_H) begin
-                                        gfx_addr <= (y+dx) * GFX_W + (x-dy);
+                                        gfx_addr <= gfx_addr_xy(9'(x-dy), 8'(y+dx));
                                         gfx_wdata <= color; gfx_we <= 1;
                                     end
                                     octant_count <= 3'd6;
                                 end
                                 3'd6: begin
                                     if (x+dy >= 0 && x+dy < GFX_W && y-dx >= 0 && y-dx < GFX_H) begin
-                                        gfx_addr <= (y-dx) * GFX_W + (x+dy);
+                                        gfx_addr <= gfx_addr_xy(9'(x+dy), 8'(y-dx));
                                         gfx_wdata <= color; gfx_we <= 1;
                                     end
                                     octant_count <= 3'd7;
                                 end
                                 3'd7: begin
                                     if (x-dy >= 0 && x-dy < GFX_W && y-dx >= 0 && y-dx < GFX_H) begin
-                                        gfx_addr <= (y-dx) * GFX_W + (x-dy);
+                                        gfx_addr <= gfx_addr_xy(9'(x-dy), 8'(y-dx));
                                         gfx_wdata <= color; gfx_we <= 1;
                                     end
                                     octant_count <= 3'd0;
@@ -339,7 +356,7 @@ module artist (
                                     cx <= fs_b_dout[8:0];
                                     cy <= fs_b_dout[16:9];
                                     if (fs_b_dout[8:0] < GFX_W && fs_b_dout[16:9] < GFX_H) begin
-                                        gfx_raddr <= {9'b0, fs_b_dout[16:9]} * GFX_W + {8'b0, fs_b_dout[8:0]};
+                                        gfx_raddr <= gfx_addr_xy(fs_b_dout[8:0], fs_b_dout[16:9]);
                                         gfx_re <= 1;
                                         paint_phase <= 3'd3;
                                     end else begin
@@ -354,7 +371,7 @@ module artist (
                                 end
                                 3'd4: begin // Check pixel, write + latch neighbors
                                     if (gfx_rdata == fill_target && fill_target != color) begin
-                                        gfx_addr <= {9'b0, cy} * GFX_W + {8'b0, cx};
+                                        gfx_addr <= gfx_addr_xy(cx, cy);
                                         gfx_wdata <= color;
                                         gfx_we <= 1;
                                         // Latch 4 neighbors for serialized push
@@ -390,27 +407,30 @@ module artist (
                         if (gt_font_pending != 2'd0) begin
                             // Waiting for font ROM read
                         end else if (gt_char_idx < gt_len) begin
-                            if (gt_font_byte[3'd7 - gt_font_col]) begin
-                                if ((16'(gt_pen_x) + 16'(gt_font_col) * 16'(gt_scale) + 16'(gt_scale_x)) < GFX_W &&
-                                    (16'(gt_start_y) + 16'(gt_font_row) * 16'(gt_scale) + 16'(gt_scale_y)) < GFX_H) begin
-                                    gfx_addr <= (17'(gt_start_y) + 17'(gt_font_row) * 17'(gt_scale) + 17'(gt_scale_y)) * GFX_W +
-                                                (17'(gt_pen_x) + 17'(gt_font_col) * 17'(gt_scale) + 17'(gt_scale_x));
-                                    gfx_wdata <= color;
+                            if (gt_font_byte[3'd7 - gt_font_col] || gt_reverse_active) begin
+                                if (gt_draw_x < GFX_W && gt_draw_y < GFX_H) begin
+                                    gfx_addr <= gfx_addr_xy(gt_draw_x[8:0], gt_draw_y[7:0]);
+                                    gfx_wdata <= gt_font_byte[3'd7 - gt_font_col] ? color : gt_bg_color;
                                     gfx_we <= 1;
                                 end
                             end
-                            if (gt_scale_x + 8'd1 < gt_scale)
+                            if (gt_scale_x + 8'd1 < gt_scale) begin
                                 gt_scale_x <= gt_scale_x + 1;
-                            else begin
+                                gt_draw_x <= gt_draw_x + 1;
+                            end else begin
                                 gt_scale_x <= 0;
-                                if (gt_font_col < 7)
+                                if (gt_font_col < 7) begin
                                     gt_font_col <= gt_font_col + 1;
-                                else begin
+                                    gt_draw_x <= gt_draw_x + 1;
+                                end else begin
                                     gt_font_col <= 0;
-                                    if (gt_scale_y + 8'd1 < gt_scale)
+                                    gt_draw_x <= gt_pen_x;
+                                    if (gt_scale_y + 8'd1 < gt_scale) begin
                                         gt_scale_y <= gt_scale_y + 1;
-                                    else begin
+                                        gt_draw_y <= gt_draw_y + 1;
+                                    end else begin
                                         gt_scale_y <= 0;
+                                        gt_draw_y <= gt_draw_y + 1;
                                         if (gt_font_row < 7) begin
                                             gt_font_row <= gt_font_row + 1;
                                             font_addr <= {gt_cur_char, gt_font_row + 3'd1};
@@ -419,7 +439,9 @@ module artist (
                                         end else begin
                                             gt_font_row <= 0;
                                             gt_char_idx <= gt_char_idx + 1;
-                                            gt_pen_x <= gt_pen_x + 16'(8) * 16'(gt_scale);
+                                            gt_pen_x <= gt_pen_x + (16'(gt_scale) << 3);
+                                            gt_draw_x <= gt_pen_x + (16'(gt_scale) << 3);
+                                            gt_draw_y <= {8'b0, gt_start_y};
                                             if (gt_char_idx + 1 < gt_len) begin
                                                 gt_cur_char <= gt_char(gt_char_idx + 1);
                                                 font_addr <= {gt_char(gt_char_idx + 1), 3'b000};
@@ -444,7 +466,7 @@ module artist (
                 case (cmd_code)
                     CMD_PLOT: begin
                         if (cmd_x0 < GFX_W && cmd_y0 < GFX_H) begin
-                            gfx_addr <= {8'b0, cmd_y0} * GFX_W + {8'b0, cmd_x0};
+                            gfx_addr <= gfx_addr_xy(cmd_x0, cmd_y0);
                             gfx_wdata <= cmd_color;
                             gfx_we <= 1;
                         end
@@ -453,7 +475,7 @@ module artist (
 
                     CMD_UNPLOT: begin
                         if (cmd_x0 < GFX_W && cmd_y0 < GFX_H) begin
-                            gfx_addr <= {8'b0, cmd_y0} * GFX_W + {8'b0, cmd_x0};
+                            gfx_addr <= gfx_addr_xy(cmd_x0, cmd_y0);
                             gfx_wdata <= 4'h0;
                             gfx_we <= 1;
                         end
@@ -519,7 +541,7 @@ module artist (
                         y <= {2'b0, cmd_y0};
                         if (cmd_x0 < GFX_W && cmd_y0 < GFX_H) begin
                             // Issue first read to get fill_target
-                            gfx_raddr <= {8'b0, cmd_y0} * GFX_W + {8'b0, cmd_x0};
+                            gfx_raddr <= gfx_addr_xy(cmd_x0, cmd_y0);
                             gfx_re <= 1;
                             fs_a_addr <= 9'd0;
                             fs_a_din <= {cmd_y0, cmd_x0};
@@ -533,6 +555,9 @@ module artist (
 
                     CMD_GTEXT: begin
                         if (gt_char_len > 0) begin
+                            color <= gt_reverse ? gt_reverse_fg : cmd_color;
+                            gt_reverse_active <= gt_reverse;
+                            gt_bg_color <= gt_reverse_bg;
                             gt_pen_x <= cmd_x0;
                             gt_start_y <= cmd_y0;
                             gt_scale <= (gt_scale_in < 1) ? 8'd1 : gt_scale_in;
@@ -543,6 +568,8 @@ module artist (
                             gt_scale_x <= 0;
                             gt_scale_y <= 0;
                             gt_cur_char <= gt_char(0);
+                            gt_draw_x <= {7'b0, cmd_x0};
+                            gt_draw_y <= {8'b0, cmd_y0};
                             font_addr <= {gt_char(0), 3'b000};
                             font_re <= 1;
                             gt_font_pending <= 2'd1;

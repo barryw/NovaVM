@@ -520,17 +520,27 @@ module fpga_top (
     wire [15:0] brg_poke_addr;
     wire [7:0]  brg_poke_data;
     wire        brg_vmem_we;
+    wire        brg_vmem_re;
     wire [2:0]  brg_vmem_space;
     wire [16:0] brg_vmem_addr;
     wire [7:0]  brg_vmem_data;
+    wire [7:0]  brg_vmem_rdata;
     wire        brg_pause;
     wire        brg_rom_we;
     wire        brg_rom_idx;
     wire [13:0] brg_rom_addr;
     wire [7:0]  brg_rom_data;
     wire        brg_cpu_reset;
+    wire        brg_system_reset;
+    wire        brg_cpu_resume;
     wire [15:0] brg_cpu_pc;
     wire [7:0]  brg_cpu_a, brg_cpu_x, brg_cpu_y, brg_cpu_sp, brg_cpu_flags;
+    wire [5:0]  brg_cpu_state;
+    wire [7:0]  brg_cpu_ir;
+    wire [15:0] brg_cpu_addr;
+    wire [7:0]  brg_cpu_din, brg_cpu_dout;
+    wire        brg_cpu_we, brg_cpu_rdy, brg_cpu_irq, brg_cpu_nmi;
+    wire        brg_cpu_waiting, brg_cpu_stopped;
     wire        brg_key_valid;
     wire [7:0]  brg_key_data;
     wire        brg_sdram_b_we;
@@ -557,20 +567,35 @@ module fpga_top (
         .dbg_poke_data   (brg_poke_data),
         .dbg_pause       (brg_pause),
         .dbg_vmem_we     (brg_vmem_we),
+        .dbg_vmem_re     (brg_vmem_re),
         .dbg_vmem_space  (brg_vmem_space),
         .dbg_vmem_addr   (brg_vmem_addr),
         .dbg_vmem_data   (brg_vmem_data),
+        .dbg_vmem_rdata  (brg_vmem_rdata),
         .dbg_rom_we      (brg_rom_we),
         .dbg_rom_idx     (brg_rom_idx),
         .dbg_rom_addr    (brg_rom_addr),
         .dbg_rom_data    (brg_rom_data),
         .dbg_cpu_reset   (brg_cpu_reset),
+        .dbg_system_reset(brg_system_reset),
+        .dbg_cpu_resume  (brg_cpu_resume),
         .dbg_cpu_pc      (brg_cpu_pc),
         .dbg_cpu_a       (brg_cpu_a),
         .dbg_cpu_x       (brg_cpu_x),
         .dbg_cpu_y       (brg_cpu_y),
         .dbg_cpu_sp      (brg_cpu_sp),
         .dbg_cpu_flags   (brg_cpu_flags),
+        .dbg_cpu_state   (brg_cpu_state),
+        .dbg_cpu_ir      (brg_cpu_ir),
+        .dbg_cpu_addr    (brg_cpu_addr),
+        .dbg_cpu_din     (brg_cpu_din),
+        .dbg_cpu_dout    (brg_cpu_dout),
+        .dbg_cpu_we      (brg_cpu_we),
+        .dbg_cpu_rdy     (brg_cpu_rdy),
+        .dbg_cpu_irq     (brg_cpu_irq),
+        .dbg_cpu_nmi     (brg_cpu_nmi),
+        .dbg_cpu_waiting (brg_cpu_waiting),
+        .dbg_cpu_stopped (brg_cpu_stopped),
         .key_inject_valid(brg_key_valid),
         .key_inject_data (brg_key_data),
         .sdram_b_we      (brg_sdram_b_we),
@@ -619,14 +644,18 @@ module fpga_top (
         .dbg_poke_data(brg_poke_data),
         .dbg_pause    (brg_pause),
         .dbg_vmem_we  (brg_vmem_we),
+        .dbg_vmem_re  (brg_vmem_re),
         .dbg_vmem_space(brg_vmem_space),
         .dbg_vmem_addr(brg_vmem_addr),
         .dbg_vmem_data(brg_vmem_data),
+        .dbg_vmem_rdata(brg_vmem_rdata),
         .dbg_rom_we   (brg_rom_we),
         .dbg_rom_idx  (brg_rom_idx),
         .dbg_rom_addr (brg_rom_addr),
         .dbg_rom_data (brg_rom_data),
         .dbg_cpu_reset(brg_cpu_reset),
+        .dbg_system_reset(brg_system_reset),
+        .dbg_cpu_resume(brg_cpu_resume),
         .brg_sdram_b_we  (brg_sdram_b_we),
         .brg_sdram_b_addr(brg_sdram_b_addr),
         .brg_sdram_b_din (brg_sdram_b_din),
@@ -636,6 +665,17 @@ module fpga_top (
         .dbg_cpu_y    (brg_cpu_y),
         .dbg_cpu_sp   (brg_cpu_sp),
         .dbg_cpu_flags(brg_cpu_flags),
+        .dbg_cpu_state(brg_cpu_state),
+        .dbg_cpu_ir   (brg_cpu_ir),
+        .dbg_cpu_addr (brg_cpu_addr),
+        .dbg_cpu_din  (brg_cpu_din),
+        .dbg_cpu_dout (brg_cpu_dout),
+        .dbg_cpu_we   (brg_cpu_we),
+        .dbg_cpu_rdy  (brg_cpu_rdy),
+        .dbg_cpu_irq  (brg_cpu_irq),
+        .dbg_cpu_nmi  (brg_cpu_nmi),
+        .dbg_cpu_waiting(brg_cpu_waiting),
+        .dbg_cpu_stopped(brg_cpu_stopped),
 
         // SDRAM port A — xram_sdram wrapper (XRAM BRAM replacement)
         .sdram_addrA(core_sdram_addrA),

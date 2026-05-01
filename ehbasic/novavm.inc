@@ -253,6 +253,7 @@ DmaSpaceVgcColor        = $02
 DmaSpaceVgcGfx          = $03
 DmaSpaceVgcSprite       = $04
 DmaSpaceXram            = $05
+DmaSpaceVgcTextAttr     = $07
 
 ; --- Blitter controller registers ($BA83-$BAA2) ---
 BltBase                 = $BA83
@@ -415,12 +416,19 @@ VramAddrH               = $A0E2
 VramData                = $A0E3
 VramCtrl                = $A0E4
 DisplayDim              = $A0E5
+RegTextFlags            = $A0E6
+RegTextReverseAttr      = $A0E7
 VramPlaneChar           = $01
 VramPlaneColor          = $02
 VramPlaneGfx            = $03
 VramPlaneSprite         = $04
 VramPlaneTile           = $06
+VramPlaneTextAttr       = $07
 VramCtrlAutoInc         = $01
+TextFlagReverse         = $01
+TextFlagReverseExplicit = $02
+TextFlagFlash           = $04
+TextAttrFlash           = $01
 TileConfig              = $A0C0
 TileTransColor          = $A0C1
 TileScrollXL            = $A0C2
@@ -608,7 +616,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E86E
-V_OUTP                  = $E871
-V_LOAD                  = $E874
-V_SAVE                  = $E877
+V_INPT                  = $E8BB
+V_OUTP                  = $E8BE
+V_LOAD                  = $E8C1
+V_SAVE                  = $E8C4

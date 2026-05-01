@@ -31,14 +31,18 @@ module test_debug_bridge;
     wire [7:0]  dbg_poke_data;
     wire        dbg_pause;
     wire        dbg_vmem_we;
+    wire        dbg_vmem_re;
     wire [2:0]  dbg_vmem_space;
     wire [16:0] dbg_vmem_addr;
     wire [7:0]  dbg_vmem_data;
+    logic [7:0] dbg_vmem_rdata;
     wire        dbg_rom_we;
     wire        dbg_rom_idx;
     wire [13:0] dbg_rom_addr;
     wire [7:0]  dbg_rom_data;
     wire        dbg_cpu_reset;
+    wire        dbg_system_reset;
+    wire        dbg_cpu_resume;
 
     // CPU state (stubbed)
     logic [15:0] dbg_cpu_pc    = 16'h1234;
@@ -47,6 +51,17 @@ module test_debug_bridge;
     logic [7:0]  dbg_cpu_y     = 8'hCC;
     logic [7:0]  dbg_cpu_sp    = 8'hFF;
     logic [7:0]  dbg_cpu_flags = 8'h20;
+    logic [5:0]  dbg_cpu_state = 6'd12;  // DECODE
+    logic [7:0]  dbg_cpu_ir    = 8'hEA;
+    logic [15:0] dbg_cpu_addr  = 16'h1234;
+    logic [7:0]  dbg_cpu_din   = 8'hEA;
+    logic [7:0]  dbg_cpu_dout  = 8'h00;
+    logic        dbg_cpu_we    = 1'b0;
+    logic        dbg_cpu_rdy   = 1'b0;
+    logic        dbg_cpu_irq   = 1'b0;
+    logic        dbg_cpu_nmi   = 1'b0;
+    logic        dbg_cpu_waiting = 1'b0;
+    logic        dbg_cpu_stopped = 1'b0;
 
     wire        key_inject_valid;
     wire [7:0]  key_inject_data;
@@ -57,6 +72,7 @@ module test_debug_bridge;
 
     // FIO event input — we pulse this to simulate a CPU write to $B9A0.
     logic       fio_event = 0;
+    int         resume_pulses = 0;
 
     localparam integer TEST_BOOT_AUTO_RELEASE_CYCLES = 16;
 
@@ -72,16 +88,31 @@ module test_debug_bridge;
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
         .dbg_vmem_we(dbg_vmem_we),
+        .dbg_vmem_re(dbg_vmem_re),
         .dbg_vmem_space(dbg_vmem_space),
         .dbg_vmem_addr(dbg_vmem_addr),
         .dbg_vmem_data(dbg_vmem_data),
+        .dbg_vmem_rdata(dbg_vmem_rdata),
         .dbg_rom_we(dbg_rom_we), .dbg_rom_idx(dbg_rom_idx),
         .dbg_rom_addr(dbg_rom_addr), .dbg_rom_data(dbg_rom_data),
         .dbg_cpu_reset(dbg_cpu_reset),
+        .dbg_system_reset(dbg_system_reset),
+        .dbg_cpu_resume(dbg_cpu_resume),
         .dbg_cpu_pc(dbg_cpu_pc),
         .dbg_cpu_a(dbg_cpu_a), .dbg_cpu_x(dbg_cpu_x),
         .dbg_cpu_y(dbg_cpu_y), .dbg_cpu_sp(dbg_cpu_sp),
         .dbg_cpu_flags(dbg_cpu_flags),
+        .dbg_cpu_state(dbg_cpu_state),
+        .dbg_cpu_ir(dbg_cpu_ir),
+        .dbg_cpu_addr(dbg_cpu_addr),
+        .dbg_cpu_din(dbg_cpu_din),
+        .dbg_cpu_dout(dbg_cpu_dout),
+        .dbg_cpu_we(dbg_cpu_we),
+        .dbg_cpu_rdy(dbg_cpu_rdy),
+        .dbg_cpu_irq(dbg_cpu_irq),
+        .dbg_cpu_nmi(dbg_cpu_nmi),
+        .dbg_cpu_waiting(dbg_cpu_waiting),
+        .dbg_cpu_stopped(dbg_cpu_stopped),
         .key_inject_valid(key_inject_valid),
         .key_inject_data(key_inject_data),
         .sdram_b_we(sdram_b_we),
@@ -105,6 +136,29 @@ module test_debug_bridge;
     always_ff @(posedge clk) begin
         if (dbg_rom_we)
             rom_shadow[dbg_rom_idx][dbg_rom_addr] <= dbg_rom_data;
+    end
+
+    always_ff @(posedge clk) begin
+        if (dbg_cpu_resume)
+            resume_pulses <= resume_pulses + 1;
+    end
+
+    // Model top.sv's hardware debug-peek read latency: BRAM output is
+    // registered, then top.sv registers dbg_peek_data before the bridge
+    // samples it. This catches stale/previous-value CMD_PEEK regressions.
+    logic [7:0] peek_shadow [0:65535];
+    logic [7:0] peek_stage;
+    initial for (int i = 0; i < 65536; i++) peek_shadow[i] = 8'h00;
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            peek_stage    <= 8'h00;
+            dbg_peek_data <= 8'h00;
+        end else if (dbg_peek_en) begin
+            peek_stage    <= peek_shadow[dbg_peek_addr];
+            dbg_peek_data <= peek_stage;
+        end else begin
+            dbg_peek_data <= 8'h00;
+        end
     end
 
     // ------------------------------------------------------------------
@@ -212,6 +266,46 @@ module test_debug_bridge;
                       rom_shadow[0][14'h0040 + i], 8'hE0 + 8'(i));
     endtask
 
+    task automatic test_cmd_peek_latency();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_PEEK waits through registered top-level read latency");
+        peek_shadow[16'h2000] = 8'h0F;
+        peek_shadow[16'h2001] = 8'hA5;
+
+        send_byte(8'h01);   // CMD_PEEK
+        send_byte(8'h20);   // addr_hi
+        send_byte(8'h00);   // addr_lo
+        wait_tx(b); check_eq8("peek $2000 status", b, 8'h00);
+        wait_tx(b); check_eq8("peek $2000 data", b, 8'h0F);
+
+        send_byte(8'h01);   // CMD_PEEK
+        send_byte(8'h20);   // addr_hi
+        send_byte(8'h01);   // addr_lo
+        wait_tx(b); check_eq8("peek $2001 status", b, 8'h00);
+        wait_tx(b); check_eq8("peek $2001 data", b, 8'hA5);
+    endtask
+
+    task automatic test_cmd_peek_block_latency();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_PEEK_BLOCK returns unshifted bytes with registered latency");
+        peek_shadow[16'h2100] = 8'h11;
+        peek_shadow[16'h2101] = 8'h22;
+        peek_shadow[16'h2102] = 8'h33;
+        peek_shadow[16'h2103] = 8'h44;
+
+        send_byte(8'h09);   // CMD_PEEK_BLOCK
+        send_byte(8'h21);   // addr_hi
+        send_byte(8'h00);   // addr_lo
+        send_byte(8'h04);   // count = 4
+        wait_tx(b); check_eq8("peek_block status", b, 8'h00);
+        wait_tx(b); check_eq8("peek_block byte 0", b, 8'h11);
+        wait_tx(b); check_eq8("peek_block byte 1", b, 8'h22);
+        wait_tx(b); check_eq8("peek_block byte 2", b, 8'h33);
+        wait_tx(b); check_eq8("peek_block byte 3", b, 8'h44);
+    endtask
+
     // RAM-shadow capture for CMD_POKE_BLOCK validation. Mirrors the
     // dbg_poke writes that targeted CPU RAM (addr < ROM_BASE).
     logic [7:0] ram_shadow [0:65535];
@@ -226,6 +320,8 @@ module test_debug_bridge;
     always_ff @(posedge clk) begin
         if (dbg_vmem_we && dbg_vmem_space == 3'd3)
             vgc_shadow[dbg_vmem_addr[15:0]] <= dbg_vmem_data;
+        if (dbg_vmem_re)
+            dbg_vmem_rdata <= vgc_shadow[dbg_vmem_addr[15:0]];
     end
 
     task automatic test_poke_block_ram();
@@ -297,6 +393,27 @@ module test_debug_bridge;
         check_eq8("vgc fill after untouched", vgc_shadow[16'h0300], 8'hFF);
     endtask
 
+    task automatic test_bulk_read_vgc();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_READ_VGC_BLK reads 4 bytes from gfx VRAM @ $0120");
+        vgc_shadow[16'h0120] = 8'h91;
+        vgc_shadow[16'h0121] = 8'h92;
+        vgc_shadow[16'h0122] = 8'h93;
+        vgc_shadow[16'h0123] = 8'h94;
+
+        send_byte(8'h12);   // CMD_READ_VGC_BLK
+        send_byte(8'h03);   // space = gfx
+        send_byte(8'h01);   // addr_hi
+        send_byte(8'h20);   // addr_lo
+        send_byte(8'h04);   // count = 4
+        wait_tx(b); check_eq8("vgc read status", b, 8'h00);
+        wait_tx(b); check_eq8("vgc read byte 0", b, 8'h91);
+        wait_tx(b); check_eq8("vgc read byte 1", b, 8'h92);
+        wait_tx(b); check_eq8("vgc read byte 2", b, 8'h93);
+        wait_tx(b); check_eq8("vgc read byte 3", b, 8'h94);
+    endtask
+
     task automatic test_bulk_count_zero_means_256();
         logic [7:0] ack;
         $display("");
@@ -321,6 +438,7 @@ module test_debug_bridge;
         $display("Test: CMD_RESET_HOLD / CMD_RESET_REL");
         // On reset, bridge boots with dbg_cpu_reset=1 (CPU held)
         check("dbg_cpu_reset asserted at boot", dbg_cpu_reset === 1'b1);
+        check("dbg_system_reset not asserted for CPU-only boot hold", dbg_system_reset === 1'b0);
 
         send_byte(8'h0C);   // CMD_RESET_REL
         wait_tx(ack);
@@ -333,6 +451,193 @@ module test_debug_bridge;
         check_eq8("ack status (hold)", ack, 8'h00);
         @(posedge clk);
         check("dbg_cpu_reset reasserted", dbg_cpu_reset === 1'b1);
+
+        send_byte(8'h0C);   // leave subsequent protocol tests runnable
+        wait_tx(ack);
+        check_eq8("ack status (final release)", ack, 8'h00);
+    endtask
+
+    task automatic test_system_reset_hold_release();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_SYS_RESET_HOLD / CMD_SYS_RESET_REL");
+
+        send_byte(8'h18);   // CMD_SYS_RESET_HOLD
+        wait_tx(ack);
+        check_eq8("ack status (system hold)", ack, 8'h00);
+        @(posedge clk);
+        check("system hold asserts CPU reset", dbg_cpu_reset === 1'b1);
+        check("system hold asserts custom reset", dbg_system_reset === 1'b1);
+
+        send_byte(8'h19);   // CMD_SYS_RESET_REL
+        wait_tx(ack);
+        check_eq8("ack status (system release)", ack, 8'h00);
+        @(posedge clk);
+        check("system release deasserts CPU reset", dbg_cpu_reset === 1'b0);
+        check("system release deasserts custom reset", dbg_system_reset === 1'b0);
+    endtask
+
+    task automatic test_cpu_state_wait_stop_status();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_CPU_STATE reports WAI/STP status bits");
+
+        dbg_cpu_waiting <= 1'b1;
+        dbg_cpu_stopped <= 1'b0;
+        send_byte(8'h06);   // CMD_CPU_STATE
+        wait_tx(b); check_eq8("cpu state status", b, 8'h00);
+        wait_tx(b); check_eq8("pc hi", b, 8'h12);
+        wait_tx(b); check_eq8("pc lo", b, 8'h34);
+        wait_tx(b); check_eq8("a", b, 8'hAA);
+        wait_tx(b); check_eq8("x", b, 8'hBB);
+        wait_tx(b); check_eq8("y", b, 8'hCC);
+        wait_tx(b); check_eq8("sp", b, 8'hFF);
+        wait_tx(b); check_eq8("flags", b, 8'h20);
+        wait_tx(b); check_eq8("waiting status bit", b, 8'b0000_0001);
+
+        dbg_cpu_waiting <= 1'b0;
+        dbg_cpu_stopped <= 1'b1;
+        send_byte(8'h06);   // CMD_CPU_STATE
+        wait_tx(b); check_eq8("cpu state status 2", b, 8'h00);
+        for (int i = 0; i < 7; i++)
+            wait_tx(b);
+        wait_tx(b); check_eq8("stopped status bit", b, 8'b0000_0010);
+
+        dbg_cpu_waiting <= 1'b0;
+        dbg_cpu_stopped <= 1'b0;
+    endtask
+
+    task automatic test_resume_pulses_cpu_resume();
+        logic [7:0] ack;
+        int before_count;
+        $display("");
+        $display("Test: CMD_RESUME pulses dbg_cpu_resume");
+
+        before_count = resume_pulses;
+        send_byte(8'h08);   // CMD_RESUME
+        wait_tx(ack);
+        check_eq8("resume ack", ack, 8'h00);
+        repeat(2) @(posedge clk);
+        check("dbg_cpu_resume pulsed", resume_pulses == before_count + 1);
+    endtask
+
+    task automatic test_breakpoint_set_hit_list_clear();
+        logic [7:0] b;
+        $display("");
+        $display("Test: PC breakpoint set/list/hit/clear");
+
+        send_byte(8'h13);   // CMD_BREAK_SET
+        send_byte(8'h00);   // slot 0
+        send_byte(8'hC0);   // addr hi
+        send_byte(8'h00);   // addr lo
+        send_byte(8'h01);   // enable
+        wait_tx(b); check_eq8("break_set ack", b, 8'h00);
+
+        dbg_cpu_pc    <= 16'hC000;
+        dbg_cpu_state <= 6'd12; // DECODE
+        dbg_cpu_rdy   <= 1'b1;
+        @(posedge clk);
+        dbg_cpu_rdy   <= 1'b0;
+        @(posedge clk);
+        check("breakpoint paused CPU", dbg_pause === 1'b1);
+
+        send_byte(8'h15);   // CMD_BREAK_LIST
+        wait_tx(b); check_eq8("break_list status", b, 8'h00);
+        wait_tx(b); check("break_list flags show paused/hit", b[2] && b[0]);
+        wait_tx(b); check_eq8("break_list hit slot", b, 8'h00);
+        wait_tx(b); check_eq8("slot0 enabled", b, 8'h01);
+        wait_tx(b); check_eq8("slot0 addr hi", b, 8'hC0);
+        wait_tx(b); check_eq8("slot0 addr lo", b, 8'h00);
+        for (int i = 0; i < 9; i++) wait_tx(b);
+
+        send_byte(8'h14);   // CMD_BREAK_CLR
+        send_byte(8'h00);   // slot 0
+        wait_tx(b); check_eq8("break_clear ack", b, 8'h00);
+    endtask
+
+    task automatic test_single_step_runs_to_next_decode();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_STEP runs one instruction and returns CPU state");
+
+        dbg_cpu_pc    <= 16'hC100;
+        dbg_cpu_state <= 6'd12; // DECODE
+        dbg_cpu_ir    <= 8'hEA; // NOP
+        dbg_cpu_a     <= 8'h42;
+        dbg_cpu_sp    <= 8'hFE;
+
+        send_byte(8'h07);   // CMD_PAUSE
+        wait_tx(b); check_eq8("pause ack before step", b, 8'h00);
+        check("paused before step", dbg_pause === 1'b1);
+
+        send_byte(8'h16);   // CMD_STEP
+        repeat(4) @(posedge clk);
+        check("step released pause", dbg_pause === 1'b0);
+
+        dbg_cpu_rdy   <= 1'b1;
+        dbg_cpu_state <= 6'd13; // FETCH/non-DECODE
+        dbg_cpu_pc    <= 16'hC101;
+        @(posedge clk);
+        dbg_cpu_state <= 6'd12; // next DECODE boundary
+        @(posedge clk);
+        dbg_cpu_rdy   <= 1'b0;
+
+        wait_tx(b); check_eq8("step status", b, 8'h00);
+        wait_tx(b); check_eq8("step pc hi", b, 8'hC1);
+        wait_tx(b); check_eq8("step pc lo", b, 8'h01);
+        wait_tx(b); check_eq8("step a", b, 8'h42);
+        wait_tx(b); // x
+        wait_tx(b); // y
+        wait_tx(b); check_eq8("step sp", b, 8'hFE);
+        wait_tx(b); // flags
+        wait_tx(b); check("step status byte says paused", b[2]);
+        check("paused after step", dbg_pause === 1'b1);
+    endtask
+
+    task automatic test_trace_read_last_records();
+        logic [7:0] b;
+        logic [7:0] rec [0:35];
+        $display("");
+        $display("Test: CMD_TRACE_READ returns last CPU records oldest-to-newest");
+
+        for (int i = 0; i < 3; i++) begin
+            dbg_cpu_pc    <= 16'h8000 + 16'(i);
+            dbg_cpu_addr  <= 16'h2000 + 16'(i);
+            dbg_cpu_din   <= 8'hA0 + 8'(i);
+            dbg_cpu_dout  <= 8'hB0 + 8'(i);
+            dbg_cpu_a     <= 8'h10 + 8'(i);
+            dbg_cpu_sp    <= 8'hF0 - 8'(i);
+            dbg_cpu_flags <= 8'h20 + 8'(i);
+            dbg_cpu_state <= 6'd12;
+            dbg_cpu_ir    <= 8'hEA + 8'(i);
+            dbg_cpu_we    <= i[0];
+            dbg_cpu_irq   <= (i == 1);
+            dbg_cpu_nmi   <= (i == 2);
+            dbg_cpu_rdy   <= 1'b1;
+            @(posedge clk);
+            dbg_cpu_rdy   <= 1'b0;
+            @(posedge clk);
+        end
+
+        send_byte(8'h17);   // CMD_TRACE_READ
+        send_byte(8'h03);   // last 3 records
+        wait_tx(b); check_eq8("trace status", b, 8'h00);
+        for (int i = 0; i < 36; i++) begin
+            wait_tx(b);
+            rec[i] = b;
+        end
+
+        check_eq8("trace rec0 pc hi", rec[0], 8'h80);
+        check_eq8("trace rec0 pc lo", rec[1], 8'h00);
+        check_eq8("trace rec0 addr hi", rec[2], 8'h20);
+        check_eq8("trace rec0 addr lo", rec[3], 8'h00);
+        check_eq8("trace rec0 din", rec[4], 8'hA0);
+        check_eq8("trace rec1 irq bit", rec[23] & 8'h04, 8'h04);
+        check_eq8("trace rec2 nmi bit", rec[35] & 8'h08, 8'h08);
+
+        dbg_cpu_we  <= 1'b0;
+        dbg_cpu_irq <= 1'b0;
+        dbg_cpu_nmi <= 1'b0;
     endtask
 
     task automatic test_boot_auto_release_when_unclaimed();
@@ -484,20 +789,28 @@ module test_debug_bridge;
         rx_data  = 0;
         rx_valid = 0;
         tx_busy  = 0;
-        dbg_peek_data = 8'h00;
         repeat(10) @(posedge clk);
         rst = 0;
         repeat(5) @(posedge clk);
 
         test_reset_hold_release();
+        test_system_reset_hold_release();
         test_single_poke_rom();
         test_single_poke_rom_idx1();
         test_bulk_poke_rom();
+        test_cmd_peek_latency();
+        test_cmd_peek_block_latency();
         test_bulk_count_zero_means_256();
         test_bulk_poke_sdram();
         test_poke_block_ram();
         test_bulk_poke_vgc();
         test_fill_vgc_block();
+        test_bulk_read_vgc();
+        test_cpu_state_wait_stop_status();
+        test_resume_pulses_cpu_resume();
+        test_breakpoint_set_hit_list_clear();
+        test_single_step_runs_to_next_decode();
+        test_trace_read_last_records();
         test_fio_event_emission();
         test_fio_event_queued_during_cmd();
         test_fio_event_no_retrigger_when_cleared();

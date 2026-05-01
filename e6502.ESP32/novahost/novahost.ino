@@ -99,6 +99,43 @@ SdHttpServer    sdHttpServer(deviceManager);
 String g_sd_diag = "(boot in progress)";
 bool g_sd_mounted = false;
 
+enum NovaBootPhase : uint8_t {
+    BOOT_PHASE_POWER_ON = 0,
+    BOOT_PHASE_INFRA_READY,
+    BOOT_PHASE_SD_MOUNT,
+    BOOT_PHASE_SPLASH,
+    BOOT_PHASE_ROM_LOAD,
+    BOOT_PHASE_READY,
+    BOOT_PHASE_DEGRADED,
+    BOOT_PHASE_FAILED
+};
+
+volatile uint8_t g_boot_phase = BOOT_PHASE_POWER_ON;
+volatile bool g_fpga_bridge_owned_by_boot = false;
+TaskHandle_t g_boot_task = nullptr;
+
+const char* bootPhaseName(uint8_t phase) {
+    switch (phase) {
+        case BOOT_PHASE_POWER_ON:    return "power_on";
+        case BOOT_PHASE_INFRA_READY: return "infra_ready";
+        case BOOT_PHASE_SD_MOUNT:    return "sd_mount";
+        case BOOT_PHASE_SPLASH:      return "splash";
+        case BOOT_PHASE_ROM_LOAD:    return "rom_load";
+        case BOOT_PHASE_READY:       return "ready";
+        case BOOT_PHASE_DEGRADED:    return "degraded";
+        case BOOT_PHASE_FAILED:      return "failed";
+        default:                     return "unknown";
+    }
+}
+
+const char* novaBootPhaseName() {
+    return bootPhaseName(g_boot_phase);
+}
+
+bool novaFpgaBridgeAvailable() {
+    return !g_fpga_bridge_owned_by_boot;
+}
+
 static const size_t BOOT_ROM_LEN       = 16 * 1024;
 static const size_t SID_CURVE_ROM_LEN  = 8 * 1024;
 static const uint32_t SID_CURVE_BASE   = 0x800000;
@@ -478,6 +515,8 @@ bool showBootSplash() {
     fadeBootSplash(0, 15, 1000);
     delay(3000);
     fadeBootSplash(15, 0, 1000);
+    if (!clearVgcGfx())
+        logLn("WARN: boot splash graphics clear failed after fade-out");
     restoreBootSplashVideoState();
 
     logLn("Boot splash complete (took %lu ms)", millis() - t0);
@@ -688,6 +727,59 @@ void handleLogClients() {
 // =========================================================================
 // Setup
 // =========================================================================
+void runBootSequence() {
+    g_fpga_bridge_owned_by_boot = true;
+
+    g_boot_phase = BOOT_PHASE_SD_MOUNT;
+    bool sd_ok = mountSdCard();
+
+    if (sd_ok) {
+        // Optional SD-resident boot logo. CPU remains held in reset while
+        // NovaHost writes the VGC graphics plane, fades it in/out, then ROM
+        // loading below releases into the configured runtime.
+        g_boot_phase = BOOT_PHASE_SPLASH;
+        showBootSplash();
+    } else {
+        logLn("Boot splash skipped: SD is not mounted");
+    }
+
+    // Stream ROM/assets into FPGA. FPGA's debug_bridge boots with
+    // dbg_cpu_reset=1, so the CPU stays held in reset until we've loaded
+    // assets + released. If loading is skipped, resetRelease() falls back to
+    // the ROM contents initialized by the bitstream.
+    g_boot_phase = BOOT_PHASE_ROM_LOAD;
+    bool rom_ok = loadRomsToFPGA();
+
+    g_fpga_bridge_owned_by_boot = false;
+    g_boot_phase = rom_ok ? BOOT_PHASE_READY : BOOT_PHASE_DEGRADED;
+    logLn("NovaHost boot sequence finished: %s", novaBootPhaseName());
+}
+
+void bootTaskMain(void*) {
+    runBootSequence();
+    g_boot_task = nullptr;
+    vTaskDelete(nullptr);
+}
+
+void startBootTask() {
+    g_fpga_bridge_owned_by_boot = true;
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        bootTaskMain,
+        "nova-boot",
+        12288,
+        nullptr,
+        1,
+        &g_boot_task,
+        ARDUINO_RUNNING_CORE);
+
+    if (ok != pdPASS) {
+        g_boot_task = nullptr;
+        g_fpga_bridge_owned_by_boot = false;
+        g_boot_phase = BOOT_PHASE_FAILED;
+        logLn("NovaHost boot sequence FAILED: could not create boot task");
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     Serial.println("\n=== NovaHost v0.3 ===");
@@ -704,48 +796,37 @@ void setup() {
     // Give the FPGA debug bridge a moment to settle before we start poking it.
     delay(100);
 
-    // SD must mount before boot asset streaming because ROMs and bulky data
-    // are SD-resident. If SD is unavailable, the FPGA keeps using the
-    // bitstream-initialized fallback ROM.
-    mountSdCard();
-
-    // Optional SD-resident boot logo. CPU remains held in reset while NovaHost
-    // writes the VGC graphics plane, fades it in/out, then ROM loading below
-    // releases into the configured runtime.
-    showBootSplash();
-
-    // Stream ROM/assets into FPGA. FPGA's debug_bridge boots with
-    // dbg_cpu_reset=1, so the CPU stays held in reset until we've loaded
-    // assets + released. If loading is skipped, resetRelease() falls back to
-    // the ROM contents initialized by the bitstream.
-    loadRomsToFPGA();
-
     // Wire the FIO event reader → dispatcher trampoline. Whenever the
     // FPGA emits 0xFE 0xE0 on the bridge, the reader fires the
     // dispatcher to drain registers + execute the file op.
     fioEventReader.onEvent(FioDispatcher::onFioEventStatic, &fioDispatcher);
 
-    // WiFi + servers
+    // Critical infrastructure comes first. The board should be reachable over
+    // WiFi even if SD mounting, FPGA bridge handshaking, splash drawing, or ROM
+    // loading fails later.
     setupWiFi();
 
-    // SD HTTP file server must start after WiFi is live.
     if (wifi_connected) {
         sdHttpServer.begin();
-        logLn("SD HTTP server ready: http://%s/sd/",
+        logLn("HTTP server ready: http://%s/",
               WiFi.localIP().toString().c_str());
     }
 
-    logLn("NovaHost ready.");
+    g_boot_phase = BOOT_PHASE_INFRA_READY;
+    logLn("NovaHost infrastructure ready; starting SD/FPGA boot task.");
+    startBootTask();
 }
 
 // =========================================================================
 // Main loop
 // =========================================================================
 void loop() {
-    // Drain async FIO events from the FPGA before anything else.
-    // poll() consumes serial bytes, dispatches 0xFE 0xE0 sequences to
-    // the FioDispatcher, and drops anything else with a log.
-    fioEventReader.poll();
+    // Drain async FIO events only after the boot task is done with the bridge.
+    // The boot task streams ROM/assets over the same UART, so polling during
+    // boot would corrupt that protocol.
+    if (novaFpgaBridgeAvailable()) {
+        fioEventReader.poll();
+    }
 
     // Accept new log viewer connections
     if (wifi_connected) {

@@ -64,7 +64,7 @@ public class NovaHostHardwareTests
         var x = res["x"]!.GetValue<int>();
         var y = res["y"]!.GetValue<int>();
         Assert.IsTrue(x is >= 0 and < 80, $"cursor x out of range: {x}");
-        Assert.IsTrue(y is >= 0 and < 25, $"cursor y out of range: {y}");
+        Assert.IsTrue(y is >= 0 and < VgcConstants.ScreenRows, $"cursor y out of range: {y}");
     }
 
     [TestMethod]
@@ -93,6 +93,9 @@ public class NovaHostHardwareTests
     {
         // Use zero page address that's not used by BASIC vectors
         const int addr = 0x0050;
+        var pause = await SendAsync("dbg_pause");
+        Assert.IsTrue(Ok(pause), $"dbg_pause failed: {pause}");
+
         var orig = (await SendAsync("peek", ("address", addr)))["value"]!.GetValue<int>();
         try
         {
@@ -104,6 +107,7 @@ public class NovaHostHardwareTests
         finally
         {
             await SendAsync("poke", ("address", addr), ("value", orig));
+            await SendAsync("dbg_resume");
         }
     }
 

@@ -10,7 +10,7 @@ basic.bin basic.sym: basic.o ehbasic.cfg
 	ld65 -C ehbasic.cfg -vm -m basic.map -Ln basic.sym -o basic.bin basic.o
 
 basic.o: basic.asm min_mon.asm
-	ca65 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm
+	ca65 --cpu 65c02 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm
 
 # Extension ROM build
 extension.bin: extension.o extension.cfg

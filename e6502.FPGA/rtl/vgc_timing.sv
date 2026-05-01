@@ -90,6 +90,8 @@ module vgc_timing (
     localparam [9:0] NOVA_Y0_10 = NOVA_Y0;
     localparam [9:0] NOVA_X1_10 = NOVA_X0 + NOVA_W;
     localparam [9:0] NOVA_Y1_10 = NOVA_Y0 + NOVA_H;
+    localparam [9:0] NOVA_X_LAST_10 = NOVA_W - 1;
+    localparam [9:0] NOVA_Y_LAST_10 = NOVA_H - 1;
 
     // =========================================================================
     // POR initialization — pipeline regs start at 0. ECP5 trellis encodes
@@ -149,8 +151,15 @@ module vgc_timing (
     wire canvas_h_visible = (h_count >= NOVA_X0_10) && (h_count < NOVA_X1_10);
     wire canvas_v_visible = (v_count >= NOVA_Y0_10) && (v_count < NOVA_Y1_10);
     wire canvas_visible   = visible && canvas_h_visible && canvas_v_visible;
-    wire [9:0] canvas_h_count = canvas_h_visible ? (h_count - NOVA_X0_10) : 10'd0;
-    wire [9:0] canvas_v_count = canvas_v_visible ? (v_count - NOVA_Y0_10) : 10'd0;
+    // Clamp fetch coordinates outside the canvas. The compositor is delayed
+    // two cycles, so wrapping the fetch address to column 0 immediately after
+    // the right edge leaks the first cell's color into the final pixels.
+    wire [9:0] canvas_h_count = (h_count < NOVA_X0_10) ? 10'd0 :
+                                (h_count < NOVA_X1_10) ? (h_count - NOVA_X0_10) :
+                                                          NOVA_X_LAST_10;
+    wire [9:0] canvas_v_count = (v_count < NOVA_Y0_10) ? 10'd0 :
+                                (v_count < NOVA_Y1_10) ? (v_count - NOVA_Y0_10) :
+                                                          NOVA_Y_LAST_10;
 
     // Text/graphics cover only the centered Nova canvas. Physical visible
     // pixels outside this window are border color in the compositor.
@@ -163,23 +172,27 @@ module vgc_timing (
     // =========================================================================
     // Pipeline delay registers — 2 cycles to match BRAM read latency.
     //
-    // POR determinism comes from declaration `= 0` initializers on the port
-    // declarations above. ECP5 trellis encodes these as FF init values in the
-    // bitstream — POR delivers a known state without needing a synchronous-
-    // reset mux on every register (which would cost ~3.5 MHz of clk_pixel
-    // margin). Diagnosed 2026-04-26: same bitstream produced different
-    // visual artifacts across reflashes (50px black bar / 1-char shift /
-    // clean) because uninit regs fed garbage to vid_hsync/de during the
-    // ~10µs rst window, causing HDMI sink to lock onto wrong horizontal
-    // phase. Init values fix this without rst muxes.
+    // These registers need both POR init and runtime reset. POR init makes
+    // first power-up deterministic; runtime reset keeps the delayed DE/sync
+    // pipeline aligned with h_count/v_count whenever the debug bridge or VM
+    // issues a system reset after graphics/video activity.
     // =========================================================================
     always_ff @(posedge clk) begin
-        h_count_d1 <= h_count;       h_count_d2 <= h_count_d1;
-        v_count_d1 <= v_count;       v_count_d2 <= v_count_d1;
-        visible_d1 <= visible;       visible_d2 <= visible_d1;
-        in_text_area_d1 <= in_text_area;  in_text_area_d2 <= in_text_area_d1;
-        h_sync_area_d1 <= h_sync_area;   h_sync_area_d2 <= h_sync_area_d1;
-        v_sync_area_d1 <= v_sync_area;   v_sync_area_d2 <= v_sync_area_d1;
+        if (rst) begin
+            h_count_d1 <= 0;          h_count_d2 <= 0;
+            v_count_d1 <= 0;          v_count_d2 <= 0;
+            visible_d1 <= 0;          visible_d2 <= 0;
+            in_text_area_d1 <= 0;     in_text_area_d2 <= 0;
+            h_sync_area_d1 <= 0;      h_sync_area_d2 <= 0;
+            v_sync_area_d1 <= 0;      v_sync_area_d2 <= 0;
+        end else begin
+            h_count_d1 <= h_count;       h_count_d2 <= h_count_d1;
+            v_count_d1 <= v_count;       v_count_d2 <= v_count_d1;
+            visible_d1 <= visible;       visible_d2 <= visible_d1;
+            in_text_area_d1 <= in_text_area;  in_text_area_d2 <= in_text_area_d1;
+            h_sync_area_d1 <= h_sync_area;   h_sync_area_d2 <= h_sync_area_d1;
+            v_sync_area_d1 <= v_sync_area;   v_sync_area_d2 <= v_sync_area_d1;
+        end
     end
 
     // =========================================================================
@@ -207,15 +220,25 @@ module vgc_timing (
     end
 
     // =========================================================================
-    // Delayed coordinate signals — POR determinism via port `= 0` init above.
+    // Delayed coordinate signals — reset with the timing pipeline so text,
+    // graphics, sprites, and tiles all restart from the same pixel phase.
     // =========================================================================
     always_ff @(posedge clk) begin
-        text_col_d1 <= text_col;      text_col_d2 <= text_col_d1;
-        text_row_d1 <= text_row;      text_row_d2 <= text_row_d1;
-        font_pixel_d1 <= font_pixel;  font_pixel_d2 <= font_pixel_d1;
-        gfx_x_d1 <= gfx_x;           gfx_x_d2 <= gfx_x_d1;
-        gfx_y_d1 <= gfx_y;           gfx_y_d2 <= gfx_y_d1;
-        font_line_d1 <= font_line;
+        if (rst) begin
+            text_col_d1 <= 0;         text_col_d2 <= 0;
+            text_row_d1 <= 0;         text_row_d2 <= 0;
+            font_pixel_d1 <= 0;       font_pixel_d2 <= 0;
+            gfx_x_d1 <= 0;            gfx_x_d2 <= 0;
+            gfx_y_d1 <= 0;            gfx_y_d2 <= 0;
+            font_line_d1 <= 0;
+        end else begin
+            text_col_d1 <= text_col;      text_col_d2 <= text_col_d1;
+            text_row_d1 <= text_row;      text_row_d2 <= text_row_d1;
+            font_pixel_d1 <= font_pixel;  font_pixel_d2 <= font_pixel_d1;
+            gfx_x_d1 <= gfx_x;           gfx_x_d2 <= gfx_x_d1;
+            gfx_y_d1 <= gfx_y;           gfx_y_d2 <= gfx_y_d1;
+            font_line_d1 <= font_line;
+        end
     end
 
 endmodule

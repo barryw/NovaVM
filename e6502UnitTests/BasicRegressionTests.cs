@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
+using e6502.Avalonia.Rendering;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -117,6 +118,165 @@ public class BasicRegressionTests
         }
     }
 
+    [TestMethod]
+    public void ReverseFlashCommands_PrintExpectedAvaloniaTextAttributes()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        foreach (string line in new[]
+        {
+            "10 CLS",
+            "20 COLOR 2,4",
+            "30 LOCATE 0,0",
+            "40 REVERSE:PRINT \"R\";",
+            "50 REVERSEOFF:PRINT \"N\";",
+            "60 REVERSE 1,6:PRINT \"E\";",
+            "70 REVERSEOFF:FLASH:PRINT \"F\";",
+            "80 FLASHOFF:PRINT \"S\";",
+            "90 END",
+            "RUN",
+        })
+        {
+            foreach (char ch in line)
+                editor.QueueInput((byte)ch);
+            editor.QueueInput(0x0D);
+            RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+        }
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Reverse/flash program should run without syntax errors.\n{screen}");
+        Assert.IsTrue(screen.StartsWith("RNEFS", StringComparison.Ordinal),
+            $"Expected styled output at the top-left of the Avalonia text layer.\n{screen}");
+
+        AssertTextCell(bus.Vgc, 0, 'R', color: 0x24, attr: 0x00); // default reverse swaps fg/bg
+        AssertTextCell(bus.Vgc, 1, 'N', color: 0x42, attr: 0x00); // normal fg/bg
+        AssertTextCell(bus.Vgc, 2, 'E', color: 0x61, attr: 0x00); // explicit reverse fg/bg
+        AssertTextCell(bus.Vgc, 3, 'F', color: 0x42, attr: VgcConstants.TextAttrFlash);
+        AssertTextCell(bus.Vgc, 4, 'S', color: 0x42, attr: 0x00);
+
+        Assert.AreEqual(0x00, bus.Read((ushort)VgcConstants.RegTextFlags),
+            "REVERSEOFF/FLASHOFF should leave subsequent BASIC output normal.");
+    }
+
+    [TestMethod]
+    public void TextReverseCommand_RendersMockInfocomStatusLineInAvaloniaEmulator()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 CLS",
+            "20 COLOR 15,0",
+            "30 LOCATE 0,0",
+            "40 REVERSE",
+            "50 FOR I=1 TO 80:PRINT \" \";:NEXT",
+            "60 LOCATE 0,0",
+            "70 PRINT \"WEST OF HOUSE\";",
+            "80 LOCATE 55,0",
+            "90 PRINT \"SCORE: 0 MOVES: 1\";",
+            "100 REVERSEOFF",
+            "110 END",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Mock Infocom status line program should run without syntax errors.\n{screen}");
+        Assert.IsTrue(screen.StartsWith("WEST OF HOUSE", StringComparison.Ordinal),
+            $"Expected status location at the top-left of the Avalonia text layer.\n{screen}");
+        Assert.IsTrue(screen.Split('\n')[0].Contains("SCORE: 0 MOVES: 1", StringComparison.Ordinal),
+            $"Expected score/moves field on status row 0.\n{screen}");
+
+        AssertTextCell(bus.Vgc, 0, 'W', color: 0xF0, attr: 0x00);
+        AssertTextCell(bus.Vgc, 12, 'E', color: 0xF0, attr: 0x00);
+        AssertTextCell(bus.Vgc, 13, ' ', color: 0xF0, attr: 0x00);
+        AssertTextCell(bus.Vgc, 55, 'S', color: 0xF0, attr: 0x00);
+        AssertTextCell(bus.Vgc, 79, ' ', color: 0xF0, attr: 0x00);
+        Assert.AreEqual(0x00, bus.Read((ushort)VgcConstants.RegTextFlags),
+            "REVERSEOFF should leave later output normal.");
+    }
+
+    [TestMethod]
+    public void TextFlashCommand_ExecutesInAvaloniaEmulator()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 CLS",
+            "20 COLOR 2,4",
+            "30 LOCATE 0,0",
+            "40 FLASH:PRINT \"F\";",
+            "50 FLASHOFF:PRINT \"S\";",
+            "60 END",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Text flash program should run without syntax errors.\n{screen}");
+        Assert.IsTrue(screen.StartsWith("FS", StringComparison.Ordinal),
+            $"Expected text flash output at the top-left of the Avalonia text layer.\n{screen}");
+
+        AssertTextCell(bus.Vgc, 0, 'F', color: 0x42, attr: VgcConstants.TextAttrFlash);
+        AssertTextCell(bus.Vgc, 1, 'S', color: 0x42, attr: 0x00);
+    }
+
+    [TestMethod]
+    public void GtextReverseCommand_ExecutesInAvaloniaEmulator()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        bus.Vgc.SetFont(SinglePixelAFont());
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 GCLS",
+            "20 GCOLOR 5",
+            "30 REVERSE 2,6",
+            "40 GTEXT 0,0,0,1,\"A\"",
+            "50 REVERSEOFF",
+            "60 END",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"GTEXT reverse program should run without syntax errors.\n{screen}");
+
+        Assert.AreEqual(2, bus.Vgc.GetGfxPixelColor(0, 0),
+            "GTEXT reverse should draw set glyph pixels with the explicit reverse foreground.");
+        Assert.AreEqual(6, bus.Vgc.GetGfxPixelColor(1, 0),
+            "GTEXT reverse should fill unset glyph pixels with the explicit reverse background.");
+        Assert.AreEqual(6, bus.Vgc.GetGfxPixelColor(7, 7),
+            "GTEXT reverse should fill the whole glyph cell background.");
+        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(8, 0),
+            "GTEXT reverse should not draw outside the glyph cell.");
+        Assert.AreEqual(0x00, bus.Read((ushort)VgcConstants.RegTextFlags),
+            "REVERSEOFF should leave later text/graphics output normal.");
+    }
+
     private static string RunProgram(string[] lines)
     {
         using var bus = new CompositeBusDevice(enableSound: false);
@@ -136,6 +296,17 @@ public class BasicRegressionTests
         }
 
         return SnapshotScreen(bus.Vgc);
+    }
+
+    private static void EnterProgramLines(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string[] lines)
+    {
+        foreach (string line in lines)
+        {
+            foreach (char ch in line)
+                editor.QueueInput((byte)ch);
+            editor.QueueInput(0x0D);
+            RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+        }
     }
 
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
@@ -180,5 +351,19 @@ public class BasicRegressionTests
             sb.Append('\n');
         }
         return sb.ToString();
+    }
+
+    private static void AssertTextCell(VirtualGraphicsController vgc, int col, char ch, byte color, byte attr)
+    {
+        Assert.AreEqual((byte)ch, vgc.GetScreenChar(col, 0), $"Unexpected char at text cell {col},0.");
+        Assert.AreEqual(color, vgc.GetScreenColor(col, 0), $"Unexpected color attr at text cell {col},0.");
+        Assert.AreEqual(attr, vgc.GetScreenTextAttr(col, 0), $"Unexpected text attr at text cell {col},0.");
+    }
+
+    private static BitmapFont SinglePixelAFont()
+    {
+        var fontData = new byte[BitmapFont.FontDataSize];
+        fontData[(byte)'A' * BitmapFont.GlyphHeight] = 0x80;
+        return new BitmapFont(fontData);
     }
 }

@@ -315,6 +315,81 @@ public class AvaloniaVgcTests
         Assert.AreEqual(1, _vgc.GetCursorX());
     }
 
+    [TestMethod]
+    public void CharOut_WritesPackedTextColor()
+    {
+        _vgc.Write(VgcConstants.RegBgCol, 4);
+        _vgc.Write(VgcConstants.RegFgCol, 2);
+
+        _vgc.Write(VgcConstants.RegCharOut, (byte)'A');
+
+        Assert.AreEqual(0x42, _vgc.GetScreenColor(0, 0));
+    }
+
+    [TestMethod]
+    public void CharOut_ReverseSwapsTextColors()
+    {
+        _vgc.Write(VgcConstants.RegBgCol, 4);
+        _vgc.Write(VgcConstants.RegFgCol, 2);
+        _vgc.Write(VgcConstants.RegTextFlags, VgcConstants.TextFlagReverse);
+
+        _vgc.Write(VgcConstants.RegCharOut, (byte)'A');
+
+        Assert.AreEqual(0x24, _vgc.GetScreenColor(0, 0));
+    }
+
+    [TestMethod]
+    public void CharOut_ExplicitReverseUsesReverseAttribute()
+    {
+        _vgc.Write(VgcConstants.RegTextReverseAttr, 0xA3);
+        _vgc.Write(VgcConstants.RegTextFlags,
+            VgcConstants.TextFlagReverse | VgcConstants.TextFlagReverseExplicit);
+
+        _vgc.Write(VgcConstants.RegCharOut, (byte)'A');
+
+        Assert.AreEqual(0xA3, _vgc.GetScreenColor(0, 0));
+    }
+
+    [TestMethod]
+    public void CharOut_FlashStoresTextAttributePerCell()
+    {
+        _vgc.Write(VgcConstants.RegTextFlags, VgcConstants.TextFlagFlash);
+        _vgc.Write(VgcConstants.RegCharOut, (byte)'A');
+        _vgc.Write(VgcConstants.RegTextFlags, 0);
+        _vgc.Write(VgcConstants.RegCharOut, (byte)'B');
+
+        Assert.AreEqual(VgcConstants.TextAttrFlash, _vgc.GetScreenTextAttr(0, 0));
+        Assert.AreEqual(0, _vgc.GetScreenTextAttr(1, 0));
+    }
+
+    [TestMethod]
+    public void Gtext_ReverseDrawsBackgroundAndSwappedForeground()
+    {
+        var fontData = new byte[BitmapFont.FontDataSize];
+        fontData[(byte)'A' * BitmapFont.GlyphHeight] = 0x80;
+        _vgc.SetFont(new BitmapFont(fontData));
+
+        var memory = new byte[0x10000];
+        memory[VgcConstants.FioNameLen] = 1;
+        memory[VgcConstants.FioName] = (byte)'A';
+        _vgc.SetBusMemory(memory);
+
+        _vgc.Write(VgcConstants.RegBgCol, 1);
+        _vgc.Write(VgcConstants.RegTextFlags, VgcConstants.TextFlagReverse);
+        _vgc.Write(VgcConstants.RegP0, 5);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdGcolor);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, 0);
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdGtext);
+
+        Assert.AreEqual(1, _vgc.GetGfxPixelColor(0, 0));
+        Assert.AreEqual(5, _vgc.GetGfxPixelColor(1, 0));
+    }
+
     // -- Collision registers still clear on read ------------------------------
 
     [TestMethod]
@@ -350,6 +425,10 @@ public class AvaloniaVgcTests
     [TestMethod]
     public void OwnsAddress_RegIrqEnable_True() =>
         Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegIrqEnable));
+
+    [TestMethod]
+    public void OwnsAddress_RegTextFlags_True() =>
+        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegTextFlags));
 
     [TestMethod]
     public void OwnsAddress_GapStart_False() =>

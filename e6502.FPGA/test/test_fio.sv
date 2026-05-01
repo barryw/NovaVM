@@ -24,6 +24,7 @@ module test_fio;
     logic        dbg_we = 0;
     logic [6:0]  dbg_addr = 0;
     logic [7:0]  dbg_wdata = 0;
+    wire  [7:0]  dbg_rdata;
 
     wire         fio_event;
 
@@ -33,6 +34,7 @@ module test_fio;
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata), .cpu_we(cpu_we),
         .cpu_rdata(cpu_rdata),
         .dbg_we(dbg_we), .dbg_addr(dbg_addr), .dbg_wdata(dbg_wdata),
+        .dbg_raddr(dbg_addr), .dbg_rdata(dbg_rdata),
         .fio_event(fio_event)
     );
 
@@ -200,6 +202,9 @@ module test_fio;
         // Verify the dbg write landed
         cpu_read(16'hB9A1, d);
         check_eq("dbg write FioStatus=2 visible to CPU", int'(d), 8'h02);
+        dbg_addr = 7'h01;
+        repeat(1) @(posedge clk);
+        check_eq("dbg read FioStatus=2", int'(dbg_rdata), 8'h02);
 
         // Dbg write to FioCmd offset 0 should NOT fire event even though
         // it's the cmd register.
@@ -217,6 +222,9 @@ module test_fio;
         check("no event on dbg write to FioCmd", !saw);
         cpu_read(16'hB9A0, d);
         check_eq("dbg FioCmd=0x99 visible to CPU", int'(d), 8'h99);
+        dbg_addr = 7'h00;
+        repeat(1) @(posedge clk);
+        check_eq("dbg read FioCmd=0x99", int'(dbg_rdata), 8'h99);
 
         // ── Reset clears all registers ──
         rst = 1;

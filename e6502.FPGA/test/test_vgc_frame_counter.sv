@@ -49,7 +49,7 @@ module test_vgc_frame_counter;
     wire vgc_rdy;
 
     vgc dut (
-        .clk(clk), .rst(rst),
+        .clk(clk), .rst(rst), .video_rst(rst),
         .cpu_ce(cpu_ce),
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata), .cpu_rdata(cpu_rdata),
         .cpu_we(cpu_we), .cpu_re(cpu_re),
@@ -63,7 +63,8 @@ module test_vgc_frame_counter;
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
         .irq_out(irq_out),
-        .rdy_out(vgc_rdy)
+        .rdy_out(vgc_rdy),
+        .sys_reset_req()
     );
 
     int pass_count = 0;
@@ -118,6 +119,7 @@ module test_vgc_frame_counter;
         rst = 1;
         repeat(20) @(posedge clk);
         rst = 0;
+        while (!vgc_rdy) @(posedge clk);
         repeat(20) @(posedge clk);
 
         // Sample initial value via CPU read.

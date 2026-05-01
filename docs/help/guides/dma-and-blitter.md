@@ -187,7 +187,7 @@ result.
 
 ## Memory Spaces Reference
 
-The table below summarises all six space IDs accepted by both the DMA
+The table below summarises the space IDs accepted by both the DMA
 controller and the blitter. Address offsets within each space are always
 zero-based.
 
@@ -199,6 +199,8 @@ zero-based.
 | 3 | Graphics Bitmap | 64,000 bytes | 320x200 pixels, two 4-bit pixels packed per byte (low nibble = left pixel). Row stride is 160 bytes. |
 | 4 | Sprite Shapes | 32,768 bytes | 256 shape slots, 128 bytes each. Each slot holds a 16x16 pixel image, two pixels per byte. Sprites reference slots via shape index registers. |
 | 5 | Expansion RAM | up to 512 KB | The current XBANK setting is automatically applied as the high address byte. Set `XBANK` before any DMA or blitter operation that uses space 5. |
+| 6 | Tile Data RAM | 32,768 bytes | Tile definition data. |
+| 7 | Text Attribute RAM | 4,000 bytes | One style byte per text cell, same layout as Character RAM. Bit 0 = flash. |
 
 ::: note
 When space 5 (XRAM) is the source or destination, the DMA and blitter

@@ -109,6 +109,7 @@ module test_blitter;
     int pass_count = 0;
     int fail_count = 0;
     int test_num = 0;
+    logic all_regs_zero;
 
     // ---------------------------------------------------------------
     // Register address helpers
@@ -216,6 +217,27 @@ module test_blitter;
         $display("Test: Initial state");
         check("status is idle (0)", dut.regs[1] == 0);
         check("RDY is high", blt_rdy == 1);
+
+        // ----- Test: Reset clears programmer-visible state -----
+        $display("Test: Reset clears registers");
+        blt_reg(3, 8'h05);
+        blt_reg(4, 8'h02);
+        blt_reg(5, 8'h34);
+        blt_reg(6, 8'h12);
+        blt_reg(11, 8'h08);
+        blt_reg(13, 8'h04);
+        blt_reg(19, 8'h03);
+        blt_reg(20, 8'hAA);
+        rst = 1;
+        repeat(2) @(posedge clk);
+        rst = 0;
+        repeat(5) @(posedge clk);
+        all_regs_zero = 1;
+        for (int i = 0; i < 25; i++)
+            all_regs_zero &= (dut.regs[i] == 8'h00);
+        check("all blitter regs reset to zero/idle", all_regs_zero);
+        check("blitter state reset idle", dut.state == 0);
+        check("blitter RDY after reset", blt_rdy == 1);
 
         // ----- Test 2: Fill — RAM -----
         $display("Test: Fill RAM");
@@ -341,16 +363,16 @@ module test_blitter;
         check("zero height: status error", dut.regs[1] == 8'h03);
         check("zero height: errcode badargs", dut.regs[2] == 8'h04);
 
-        // ----- Test 11: Error — bad space -----
-        $display("Test: Error bad space");
-        blt_reg(4, 7);                  // DstSpace = 7 (invalid)
+        // ----- Test 11: Error — text attribute range overflow -----
+        $display("Test: Error text attribute range overflow");
+        blt_reg(4, 7);                  // DstSpace = text attribute RAM
         blt_reg(11, 1); blt_reg(12, 0);
         blt_reg(13, 1); blt_reg(14, 0);
         blt_reg(19, 8'h01);             // fill
         blt_start();
         wait_blt_done();
-        check("bad space: status error", dut.regs[1] == 8'h03);
-        check("bad space: errcode", dut.regs[2] == 8'h02);
+        check("text attr range: status error", dut.regs[1] == 8'h03);
+        check("text attr range: errcode", dut.regs[2] == 8'h03);
 
         // ----- Test 12: Copy with stride — 2D rectangle -----
         $display("Test: 2D stride copy");

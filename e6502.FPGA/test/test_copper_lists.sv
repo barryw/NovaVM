@@ -23,7 +23,7 @@ module test_copper_lists;
     wire         tile_dma_active;
 
     vgc dut (
-        .clk(clk), .rst(rst),
+        .clk(clk), .rst(rst), .video_rst(rst),
         .cpu_ce(cpu_ce),
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
@@ -36,7 +36,8 @@ module test_copper_lists;
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
         .irq_out(),
-        .rdy_out(vgc_rdy)
+        .rdy_out(vgc_rdy),
+        .sys_reset_req()
     );
 
     int pass_count = 0;
@@ -100,6 +101,21 @@ module test_copper_lists;
         run_clocks(794 * 525);
     endtask
 
+    task automatic wait_reset_done();
+        int timeout;
+        timeout = 0;
+        repeat(4) @(posedge clk);
+        while (!(dut.vgc_reset_pending || !vgc_rdy) && timeout < 1000000) begin
+            @(posedge clk);
+            timeout++;
+        end
+        while ((dut.vgc_reset_pending || !vgc_rdy) && timeout < 2000000) begin
+            @(posedge clk);
+            timeout++;
+        end
+        check("reset transaction completed", vgc_rdy && !dut.vgc_reset_pending);
+    endtask
+
     task automatic check(input string name, input logic condition);
         test_num++;
         if (condition) begin
@@ -120,6 +136,7 @@ module test_copper_lists;
         cpu_addr = 0; cpu_wdata = 0;
         run_clocks(50);
         rst = 0;
+        while (!vgc_rdy) @(posedge clk);
         run_clocks(10);
 
         // ----- Test 1: Initial multi-list state -----
@@ -254,7 +271,7 @@ module test_copper_lists;
         // ----- Test 11: SysReset clears multi-list state -----
         $display("Test: SysReset");
         write_cmd(8'h1F);
-        run_clocks(5);
+        wait_reset_done();
         check("target reset to 0", dut.copper_target_list == 0);
         check("active reset to 0", dut.copper_active_list == 0);
         check("pending reset to 0", dut.copper_pending_list == 0);

@@ -23,8 +23,18 @@
 #include <fcntl.h>
 #include <errno.h>
 
-static const int H_TOTAL=794, V_TOTAL=525, FRAME_CLKS=H_TOTAL*V_TOTAL;
-static const int V_BORDER=40, DISP_W=640, DISP_H=400, SCALE=2;
+#if defined(VIDEO_720X480)
+static const int H_ACTIVE=720, H_TOTAL=858;
+static const int V_ACTIVE=480, V_TOTAL=525;
+#elif defined(VGC_TIMING_5994)
+static const int H_ACTIVE=640, H_TOTAL=796;
+static const int V_ACTIVE=480, V_TOTAL=524;
+#else
+static const int H_ACTIVE=640, H_TOTAL=794;
+static const int V_ACTIVE=480, V_TOTAL=525;
+#endif
+static const int FRAME_CLKS=H_TOTAL*V_TOTAL;
+static const int DISP_W=H_ACTIVE, DISP_H=V_ACTIVE, SCALE=2;
 static const int SCREEN_COLS=80, SCREEN_ROWS=50;
 static const int CURSOR_X_REG=0xA003, CURSOR_Y_REG=0xA004;
 static const int VRAM_PLANE_CHAR=1, VRAM_PLANE_COLOR=2, VRAM_PLANE_GFX=3, VRAM_PLANE_SPRITE=4, VRAM_PLANE_TILE=6;
@@ -34,6 +44,39 @@ static const int DEFAULT_TCP_PORT=6503;
 static uint32_t framebuf[DISP_W * DISP_H];
 static Vtop *top = nullptr;
 static std::queue<uint8_t> key_queue;
+
+static const int CPU_STATE_DECODE = 12;
+static const int SIM_BREAKPOINTS = 4;
+static const int SIM_TRACE_DEPTH = 64;
+static const int SIM_TRACE_RECORD_BYTES = 12;
+
+struct SimBreakpoint {
+    bool enabled = false;
+    uint16_t address = 0;
+};
+
+struct SimTraceRecord {
+    uint16_t pc = 0;
+    uint16_t addr = 0;
+    uint8_t din = 0;
+    uint8_t dout = 0;
+    uint8_t a = 0;
+    uint8_t sp = 0;
+    uint8_t flags = 0;
+    uint8_t state = 0;
+    uint8_t ir = 0;
+    uint8_t ctrl = 0;
+};
+
+static SimBreakpoint sim_breakpoints[SIM_BREAKPOINTS];
+static bool sim_bp_hit_latched = false;
+static int sim_bp_hit_slot = 0;
+static bool sim_bp_suppress = false;
+static uint16_t sim_bp_suppress_pc = 0;
+static bool sim_step_active = false;
+static SimTraceRecord sim_trace[SIM_TRACE_DEPTH];
+static int sim_trace_wr = 0;
+static int sim_trace_count = 0;
 
 // ── Audio ──
 // SID outputs signed 18-bit audio at ~1 MHz. We downsample to 44100 Hz
@@ -146,11 +189,65 @@ static int jgi(const std::string &j, const std::string &k, int d=-1) {
 }
 
 // ── Sim helpers ──
-static void step_clock() { top->clk=0; top->eval(); top->clk=1; top->eval(); }
+static bool sim_decode_boundary() {
+    return top && top->dbg_cpu_rdy && ((int)top->dbg_cpu_state == CPU_STATE_DECODE);
+}
+
+static int sim_matching_breakpoint() {
+    if (!sim_decode_boundary()) return -1;
+    uint16_t pc = (uint16_t)top->dbg_cpu_pc;
+    for (int i=0; i<SIM_BREAKPOINTS; i++) {
+        if (sim_breakpoints[i].enabled && sim_breakpoints[i].address == pc)
+            return i;
+    }
+    return -1;
+}
+
+static void sim_after_posedge() {
+    if (!top) return;
+
+    if (top->dbg_cpu_rdy && !top->rst) {
+        SimTraceRecord &r = sim_trace[sim_trace_wr];
+        r.pc = (uint16_t)top->dbg_cpu_pc;
+        r.addr = (uint16_t)top->dbg_cpu_addr;
+        r.din = (uint8_t)top->dbg_cpu_din;
+        r.dout = (uint8_t)top->dbg_cpu_dout;
+        r.a = (uint8_t)top->dbg_cpu_a;
+        r.sp = (uint8_t)top->dbg_cpu_sp;
+        r.flags = (uint8_t)top->dbg_cpu_flags;
+        r.state = (uint8_t)(top->dbg_cpu_state & 0x3F);
+        r.ir = (uint8_t)top->dbg_cpu_ir;
+        r.ctrl = (top->dbg_cpu_rdy ? 0x01 : 0)
+               | (top->dbg_cpu_we  ? 0x02 : 0)
+               | (top->dbg_cpu_irq ? 0x04 : 0)
+               | (top->dbg_cpu_nmi ? 0x08 : 0);
+        sim_trace_wr = (sim_trace_wr + 1) % SIM_TRACE_DEPTH;
+        if (sim_trace_count < SIM_TRACE_DEPTH) sim_trace_count++;
+    }
+
+    if (!sim_decode_boundary()) return;
+
+    if (sim_bp_suppress && top->dbg_cpu_pc != sim_bp_suppress_pc)
+        sim_bp_suppress = false;
+
+    int slot = sim_matching_breakpoint();
+    if (slot >= 0 && !sim_bp_suppress) {
+        sim_bp_hit_latched = true;
+        sim_bp_hit_slot = slot;
+        top->dbg_pause = 1;
+    }
+}
+
+static void step_clock() {
+    top->clk=0; top->eval();
+    top->clk=1; top->eval();
+    sim_after_posedge();
+}
 
 static uint8_t peek_ram(uint16_t addr) {
     top->dbg_peek_en=1; top->dbg_peek_addr=addr; top->eval();
-    uint8_t v=top->dbg_peek_data; top->dbg_peek_en=0; return v;
+    step_clock();
+    uint8_t v=top->dbg_peek_data; top->dbg_peek_en=0; top->eval(); return v;
 }
 static void poke_ram(uint16_t addr, uint8_t val) {
     top->dbg_poke_en=1; top->dbg_poke_addr=addr; top->dbg_poke_data=val;
@@ -205,6 +302,105 @@ static int screen_find_row(const std::string &text) {
     return -1;
 }
 
+static uint8_t sim_status_byte() {
+    return (top->dbg_cpu_waiting ? 0x01 : 0)
+         | (top->dbg_cpu_stopped ? 0x02 : 0)
+         | (top->dbg_pause ? 0x04 : 0)
+         | (sim_bp_hit_latched ? 0x08 : 0)
+         | (sim_step_active ? 0x10 : 0);
+}
+
+static std::string sim_cpu_state_json() {
+    char buf[768];
+    uint8_t status = sim_status_byte();
+    snprintf(buf,sizeof(buf),"{\"ok\":true,\"a\":%d,\"x\":%d,\"y\":%d,\"sp\":%d,\"pc\":%d,"
+        "\"nf\":%d,\"vf\":%d,\"df\":%d,\"if\":%d,\"zf\":%d,\"cf\":%d,"
+        "\"waiting\":%s,\"stopped\":%s,\"paused\":%s,"
+        "\"breakpoint_hit\":%s,\"step_active\":%s,\"status\":%d,"
+        "\"state\":%d,\"ir\":%d,\"addr\":%d,\"din\":%d,\"dout\":%d,\"we\":%s,\"rdy\":%s,\"irq\":%s,\"nmi\":%s}\n",
+        top->dbg_cpu_a,top->dbg_cpu_x,top->dbg_cpu_y,top->dbg_cpu_sp,top->dbg_cpu_pc,
+        (top->dbg_cpu_flags>>7)&1,(top->dbg_cpu_flags>>6)&1,(top->dbg_cpu_flags>>3)&1,
+        (top->dbg_cpu_flags>>2)&1,(top->dbg_cpu_flags>>1)&1,(top->dbg_cpu_flags>>0)&1,
+        top->dbg_cpu_waiting ? "true" : "false",
+        top->dbg_cpu_stopped ? "true" : "false",
+        top->dbg_pause ? "true" : "false",
+        sim_bp_hit_latched ? "true" : "false",
+        sim_step_active ? "true" : "false",
+        status,
+        top->dbg_cpu_state,top->dbg_cpu_ir,top->dbg_cpu_addr,top->dbg_cpu_din,top->dbg_cpu_dout,
+        top->dbg_cpu_we ? "true" : "false",
+        top->dbg_cpu_rdy ? "true" : "false",
+        top->dbg_cpu_irq ? "true" : "false",
+        top->dbg_cpu_nmi ? "true" : "false");
+    return buf;
+}
+
+static int sim_choose_breakpoint_slot(uint16_t addr) {
+    for (int i=0; i<SIM_BREAKPOINTS; i++)
+        if (sim_breakpoints[i].enabled && sim_breakpoints[i].address == addr)
+            return i;
+    for (int i=0; i<SIM_BREAKPOINTS; i++)
+        if (!sim_breakpoints[i].enabled)
+            return i;
+    return -1;
+}
+
+static std::string sim_break_list_json() {
+    int current = sim_matching_breakpoint();
+    std::ostringstream ss;
+    ss<<"{\"ok\":true,\"flags\":"<<(int)((top->dbg_pause ? 0x01 : 0)
+        | (current >= 0 ? 0x02 : 0)
+        | (sim_bp_hit_latched ? 0x04 : 0)
+        | (sim_bp_suppress ? 0x08 : 0))
+      <<",\"paused\":"<<(top->dbg_pause ? "true" : "false")
+      <<",\"current_match\":"<<(current >= 0 ? "true" : "false")
+      <<",\"breakpoint_hit\":"<<(sim_bp_hit_latched ? "true" : "false")
+      <<",\"suppress\":"<<(sim_bp_suppress ? "true" : "false")
+      <<",\"hit_slot\":"<<sim_bp_hit_slot
+      <<",\"breakpoints\":[";
+    for (int i=0; i<SIM_BREAKPOINTS; i++) {
+        if (i) ss<<",";
+        ss<<"{\"slot\":"<<i
+          <<",\"enabled\":"<<(sim_breakpoints[i].enabled ? "true" : "false")
+          <<",\"address\":"<<sim_breakpoints[i].address<<"}";
+    }
+    ss<<"]}\n";
+    return ss.str();
+}
+
+static std::string sim_trace_json(int requested) {
+    if (requested <= 0 || requested > SIM_TRACE_DEPTH)
+        requested = SIM_TRACE_DEPTH;
+    if (requested > sim_trace_count)
+        requested = sim_trace_count;
+
+    int start = (sim_trace_wr - requested + SIM_TRACE_DEPTH) % SIM_TRACE_DEPTH;
+    std::ostringstream ss;
+    ss<<"{\"ok\":true,\"record_bytes\":"<<SIM_TRACE_RECORD_BYTES<<",\"records\":[";
+    for (int i=0; i<requested; i++) {
+        int idx = (start + i) % SIM_TRACE_DEPTH;
+        const SimTraceRecord &r = sim_trace[idx];
+        if (i) ss<<",";
+        ss<<"{\"pc\":"<<r.pc
+          <<",\"addr\":"<<r.addr
+          <<",\"din\":"<<(int)r.din
+          <<",\"dout\":"<<(int)r.dout
+          <<",\"a\":"<<(int)r.a
+          <<",\"sp\":"<<(int)r.sp
+          <<",\"flags\":"<<(int)r.flags
+          <<",\"state\":"<<(int)r.state
+          <<",\"ir\":"<<(int)r.ir
+          <<",\"ctrl\":"<<(int)r.ctrl
+          <<",\"rdy\":"<<((r.ctrl & 0x01) ? "true" : "false")
+          <<",\"we\":"<<((r.ctrl & 0x02) ? "true" : "false")
+          <<",\"irq\":"<<((r.ctrl & 0x04) ? "true" : "false")
+          <<",\"nmi\":"<<((r.ctrl & 0x08) ? "true" : "false")
+          <<"}";
+    }
+    ss<<"]}\n";
+    return ss.str();
+}
+
 // ── Pending async operation ──
 struct PendingOp {
     enum Type { NONE, WAIT_READY, WATCH } type = NONE;
@@ -225,6 +421,21 @@ static std::string process_command(const std::string &json) {
         int a=jgi(json,"address"); if (a<0) return "{\"ok\":false,\"error\":\"Missing 'address'\"}\n";
         snprintf(buf,sizeof(buf),"{\"ok\":true,\"address\":%d,\"value\":%d}\n",a,peek_ram((uint16_t)a));
         return buf;
+    }
+    if (cmd=="peek_block") {
+        int a=jgi(json,"address"), count=jgi(json,"count");
+        if (a<0) return "{\"ok\":false,\"error\":\"Missing 'address'\"}\n";
+        if (count<0) return "{\"ok\":false,\"error\":\"Missing 'count'\"}\n";
+        if (count>256) return "{\"ok\":false,\"error\":\"'count' must be 0..256\"}\n";
+        int n = (count == 0) ? 256 : count;
+        std::ostringstream ss;
+        ss<<"{\"ok\":true,\"address\":"<<a<<",\"count\":"<<n<<",\"values\":[";
+        for (int i=0;i<n;i++) {
+            if (i) ss<<",";
+            ss<<(int)peek_ram((uint16_t)(a+i));
+        }
+        ss<<"]}\n";
+        return ss.str();
     }
     if (cmd=="poke") {
         int a=jgi(json,"address"),v=jgi(json,"value");
@@ -251,6 +462,20 @@ static std::string process_command(const std::string &json) {
             }
             ss<<"]}\n";
         }
+        return ss.str();
+    }
+    if (cmd=="fill_vram") {
+        int space=jgi(json,"space"),addr=jgi(json,"address"),value=jgi(json,"value"),len=jgi(json,"length",256);
+        if (space<0) return "{\"ok\":false,\"error\":\"Missing 'space'\"}\n";
+        if (addr<0) return "{\"ok\":false,\"error\":\"Missing 'address'\"}\n";
+        if (value<0) return "{\"ok\":false,\"error\":\"Missing 'value'\"}\n";
+        if (value>255) return "{\"ok\":false,\"error\":\"value must be 0..255\"}\n";
+        if (len<1) return "{\"ok\":false,\"error\":\"Invalid 'length'\"}\n";
+        if (len>65536) return "{\"ok\":false,\"error\":\"length too large\"}\n";
+        for (int i=0;i<len;i++)
+            dbg_vram_write((uint8_t)space,(uint32_t)(addr+i),(uint8_t)value);
+        std::ostringstream ss;
+        ss<<"{\"ok\":true,\"space\":"<<space<<",\"address\":"<<addr<<",\"length\":"<<len<<"}\n";
         return ss.str();
     }
     if (cmd=="type_text") { for (char c:jgs(json,"text")) key_queue.push((uint8_t)c); return "{\"ok\":true}\n"; }
@@ -284,27 +509,120 @@ static std::string process_command(const std::string &json) {
         return buf;
     }
     if (cmd=="cold_start") {
-        top->rst=1; key_queue=std::queue<uint8_t>();
+        top->rst=1; top->dbg_system_reset=1; key_queue=std::queue<uint8_t>();
         for (int i=0;i<100;i++) step_clock();
-        top->rst=0; top->dbg_pause=0;
-        // Run enough frames for EhBASIC to fully initialize and display "Ready"
-        for (int f=0;f<30;f++)
+        top->rst=0; top->dbg_system_reset=0; top->dbg_pause=0; top->dbg_cpu_resume=0;
+        // Run enough frames for EhBASIC to fully initialize and display "Ready".
+        // Keep this under sim6502's per-command socket timeout.
+        for (int f=0;f<15;f++)
             for (int i=0;i<FRAME_CLKS;i++) step_clock();
         return "{\"ok\":true}\n";
     }
     if (cmd=="dbg_state") {
-        snprintf(buf,sizeof(buf),"{\"ok\":true,\"a\":%d,\"x\":%d,\"y\":%d,\"sp\":%d,\"pc\":%d,"
-            "\"nf\":%d,\"vf\":%d,\"df\":%d,\"if\":%d,\"zf\":%d,\"cf\":%d,\"paused\":false}\n",
-            top->dbg_cpu_a,top->dbg_cpu_x,top->dbg_cpu_y,top->dbg_cpu_sp,top->dbg_cpu_pc,
-            (top->dbg_cpu_flags>>7)&1,(top->dbg_cpu_flags>>6)&1,(top->dbg_cpu_flags>>3)&1,
-            (top->dbg_cpu_flags>>2)&1,(top->dbg_cpu_flags>>1)&1,(top->dbg_cpu_flags>>0)&1);
-        return buf;
+        return sim_cpu_state_json();
     }
     if (cmd=="dbg_pause") { top->dbg_pause=1; return process_command("{\"command\":\"dbg_state\"}"); }
-    if (cmd=="dbg_resume") { top->dbg_pause=0; return "{\"ok\":true}\n"; }
+    if (cmd=="dbg_resume") {
+        top->dbg_pause=0;
+        sim_bp_hit_latched=false;
+        sim_bp_suppress=true;
+        sim_bp_suppress_pc=(uint16_t)top->dbg_cpu_pc;
+        top->dbg_cpu_resume=1;
+        step_clock();
+        top->dbg_cpu_resume=0;
+        return "{\"ok\":true}\n";
+    }
+    if (cmd=="dbg_step") {
+        top->dbg_pause=0;
+        sim_bp_hit_latched=false;
+        sim_bp_suppress=true;
+        sim_bp_suppress_pc=(uint16_t)top->dbg_cpu_pc;
+        sim_step_active=true;
+        top->dbg_cpu_resume=1;
+        step_clock();
+        top->dbg_cpu_resume=0;
+
+        bool left_decode = !sim_decode_boundary();
+        bool done = false;
+        for (int i=0; i<1000000; i++) {
+            step_clock();
+            if (!sim_decode_boundary()) {
+                left_decode = true;
+            } else if (left_decode) {
+                done = true;
+                break;
+            }
+        }
+
+        top->dbg_pause=1;
+        sim_step_active=false;
+        if (!done) return "{\"ok\":false,\"error\":\"dbg_step timeout\"}\n";
+        return sim_cpu_state_json();
+    }
+    if (cmd=="dbg_break_set") {
+        int a=jgi(json,"address"), slot=jgi(json,"slot",-1), enabled=jgi(json,"enabled",1);
+        if (a<0) return "{\"ok\":false,\"error\":\"Missing 'address'\"}\n";
+        if (slot > 3) return "{\"ok\":false,\"error\":\"'slot' must be 0..3\"}\n";
+        if (slot < 0) slot = sim_choose_breakpoint_slot((uint16_t)a);
+        if (slot < 0) return "{\"ok\":false,\"error\":\"No free breakpoint slots\"}\n";
+        sim_breakpoints[slot].address = (uint16_t)a;
+        sim_breakpoints[slot].enabled = enabled != 0;
+        sim_bp_suppress = false;
+        snprintf(buf,sizeof(buf),"{\"ok\":true,\"slot\":%d,\"address\":%d,\"enabled\":%s}\n",
+            slot,a,enabled != 0 ? "true" : "false");
+        return buf;
+    }
+    if (cmd=="dbg_break_clear") {
+        int slot=jgi(json,"slot",-1), addr=jgi(json,"address",-1);
+        bool removed=false;
+        if (slot >= 0) {
+            if (slot > 3) return "{\"ok\":false,\"error\":\"'slot' must be 0..3\"}\n";
+            removed = sim_breakpoints[slot].enabled;
+            sim_breakpoints[slot].enabled = false;
+        } else if (addr >= 0) {
+            for (int i=0; i<SIM_BREAKPOINTS; i++) {
+                if (sim_breakpoints[i].enabled && sim_breakpoints[i].address == (uint16_t)addr) {
+                    sim_breakpoints[i].enabled = false;
+                    removed = true;
+                }
+            }
+        } else {
+            return "{\"ok\":false,\"error\":\"Missing 'slot' or 'address'\"}\n";
+        }
+        snprintf(buf,sizeof(buf),"{\"ok\":true,\"removed\":%s}\n",removed ? "true" : "false");
+        return buf;
+    }
+    if (cmd=="dbg_break_clear_all") {
+        for (int i=0; i<SIM_BREAKPOINTS; i++) sim_breakpoints[i].enabled = false;
+        sim_bp_hit_latched=false;
+        sim_bp_suppress=false;
+        return "{\"ok\":true}\n";
+    }
+    if (cmd=="dbg_break_list") {
+        return sim_break_list_json();
+    }
+    if (cmd=="dbg_trace") {
+        int count=jgi(json,"count",SIM_TRACE_DEPTH);
+        if (count < 1 || count > SIM_TRACE_DEPTH) return "{\"ok\":false,\"error\":\"'count' must be 1..64\"}\n";
+        return sim_trace_json(count);
+    }
+    if (cmd=="dbg_read_memory") {
+        int a=jgi(json,"address"), len=jgi(json,"length");
+        if (a<0||len<0) return "{\"ok\":false,\"error\":\"Need address, length\"}\n";
+        if (len<1||len>4096) return "{\"ok\":false,\"error\":\"length must be 1..4096\"}\n";
+        static const char hex[]="0123456789ABCDEF";
+        std::string out; out.reserve((size_t)len*2);
+        for (int i=0;i<len;i++) {
+            uint8_t v=peek_ram((uint16_t)(a+i));
+            out.push_back(hex[v>>4]); out.push_back(hex[v&0x0F]);
+        }
+        std::ostringstream ss;
+        ss<<"{\"ok\":true,\"address\":"<<a<<",\"length\":"<<len<<",\"hex\":\""<<out<<"\"}\n";
+        return ss.str();
+    }
     if (cmd=="run_cycles") {
         int cy=jgi(json,"cycles"); if (cy<0) return "{\"ok\":false,\"error\":\"Missing 'cycles'\"}\n";
-        top->dbg_pause=0; for (int i=0;i<cy;i++) step_clock(); top->dbg_pause=1;
+        top->dbg_pause=0; top->dbg_cpu_resume=0; for (int i=0;i<cy;i++) step_clock(); top->dbg_pause=1;
         snprintf(buf,sizeof(buf),"{\"ok\":true,\"cycles_executed\":%d,\"a\":%d,\"x\":%d,\"y\":%d,"
             "\"sp\":%d,\"pc\":%d,\"paused\":true}\n",cy,
             top->dbg_cpu_a,top->dbg_cpu_x,top->dbg_cpu_y,top->dbg_cpu_sp,top->dbg_cpu_pc);
@@ -459,8 +777,10 @@ int main(int argc, char **argv) {
 
     top=new Vtop;
     top->rst=1;top->irq_n=1;top->nmi_n=1;top->key_valid=0;top->key_data=0;
-    top->dbg_peek_en=0;top->dbg_poke_en=0;top->dbg_pause=0;
-    top->dbg_vmem_we=0;top->dbg_vmem_space=0;top->dbg_vmem_addr=0;top->dbg_vmem_data=0;
+    top->dbg_peek_en=0;top->dbg_poke_en=0;top->dbg_pause=0;top->dbg_cpu_resume=0;
+    top->dbg_vmem_we=0;top->dbg_vmem_re=0;top->dbg_vmem_space=0;top->dbg_vmem_addr=0;top->dbg_vmem_data=0;
+    top->dbg_rom_we=0;top->dbg_rom_idx=0;top->dbg_rom_addr=0;top->dbg_rom_data=0;
+    top->dbg_cpu_reset=0;top->dbg_system_reset=0;top->brg_sdram_b_we=0;top->brg_sdram_b_addr=0;top->brg_sdram_b_din=0;
     top->dbg_vram_read_en=0;top->dbg_vram_space=0;top->dbg_vram_addr=0;
     for (int i=0;i<100;i++) step_clock();
     top->rst=0;
@@ -480,10 +800,9 @@ int main(int argc, char **argv) {
             step_clock();
             audio_push_sample(top->audio_l, top->audio_r);
             if (top->vid_de) {
-                int dy=v_pos-V_BORDER;
-                if (h_pos<DISP_W&&dy>=0&&dy<DISP_H) {
+                if (h_pos<DISP_W&&v_pos<DISP_H) {
                     uint8_t r=top->vid_r,g=top->vid_g,b=top->vid_b;
-                    framebuf[dy*DISP_W+h_pos]=0xFF000000|((uint32_t)(r|(r<<4))<<16)|((uint32_t)(g|(g<<4))<<8)|(uint32_t)(b|(b<<4));
+                    framebuf[v_pos*DISP_W+h_pos]=0xFF000000|((uint32_t)(r|(r<<4))<<16)|((uint32_t)(g|(g<<4))<<8)|(uint32_t)(b|(b<<4));
                 }
                 h_pos++;
             }

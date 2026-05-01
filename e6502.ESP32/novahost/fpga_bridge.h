@@ -19,7 +19,7 @@ public:
     // Key injection
     bool sendKey(uint8_t key);
 
-    // Bulk screen/color read (buf must hold 2000 bytes)
+    // Bulk screen/color read (buf must hold 4000 bytes: 80x50)
     bool readScreen(uint8_t* buf);
     bool readColor(uint8_t* buf);
 
@@ -27,8 +27,32 @@ public:
     struct CpuState {
         uint16_t pc;
         uint8_t a, x, y, sp, flags;
+        uint8_t status;
+        bool waiting;
+        bool stopped;
+        bool paused;
+        bool breakpointHit;
+        bool stepActive;
     };
     bool cpuState(CpuState& st);
+    bool step(CpuState& st);
+
+    struct Breakpoint {
+        bool enabled;
+        uint16_t address;
+    };
+    struct BreakpointState {
+        uint8_t flags;
+        uint8_t hitSlot;
+        Breakpoint slots[4];
+    };
+    bool breakSet(uint8_t slot, uint16_t addr, bool enabled);
+    bool breakClear(uint8_t slot);
+    bool breakList(BreakpointState& state);
+
+    static constexpr uint8_t TRACE_RECORD_BYTES = 12;
+    static constexpr uint8_t TRACE_RECORDS = 64;
+    bool traceRead(uint8_t count, uint8_t* buf, uint16_t& bytesRead);
 
     // Execution control
     bool pause();
@@ -39,6 +63,8 @@ public:
     // so the CPU starts fresh from the freshly-written reset vector.
     bool resetHold();
     bool resetRelease();
+    bool systemResetHold();
+    bool systemResetRelease();
 
     // Block read (count=0 means 256)
     bool peekBlock(uint16_t addr, uint8_t count, uint8_t* buf);
@@ -79,6 +105,11 @@ public:
     // clear the graphics plane without sending 64KB of zeroes over UART.
     bool fillVgcBlock(uint8_t space, uint16_t start_addr, uint8_t value);
 
+    // Block-read up to 256 bytes directly from a VGC memory space. count=0
+    // means 256. Debug-only; this does not expose VRAM in the CPU address map.
+    bool readVgcBlock(uint8_t space, uint16_t start_addr,
+                      uint8_t count, uint8_t* buf);
+
     // Bulk-load an arbitrary region of CPU RAM via 256-byte blocks.
     // Returns false on any block failure. Wraps pokeBlock.
     bool loadRam(uint16_t base_addr, const uint8_t* data, size_t len);
@@ -92,6 +123,7 @@ public:
 private:
     HardwareSerial& _serial;
     static const unsigned long BYTE_TIMEOUT_MS = 200;
+    static const unsigned long BULK_TIMEOUT_MS = 500;
 
     bool recvStatus();
     bool recvBytes(uint8_t* buf, int count);

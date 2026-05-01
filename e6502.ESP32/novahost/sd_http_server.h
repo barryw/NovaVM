@@ -1,8 +1,9 @@
 // SdHttpServer — small blocking REST file server backed by SD.
 //
 // Endpoints:
-//   GET    /health       -> {"ok":true}
+//   GET    /health       -> NovaHost liveness, independent of SD/FPGA state
 //   GET    /sd-status    -> SD diagnostic JSON
+//   POST   /reboot       -> reboot NovaHost after responding
 //   GET    /sd/          -> JSON listing
 //   GET    /sd/<path>    -> file body, or listing if path is a directory
 //   PUT    /sd/<path>    -> whole-file upload from request body
@@ -47,6 +48,7 @@ private:
                     uint32_t content_len);
     void handle_delete(WiFiClient& client, const char* path);
     void handle_status(WiFiClient& client);
+    void handle_reboot(WiFiClient& client);
 
     void send_listing(WiFiClient& client, const char* path);
     void send_file(WiFiClient& client, const char* path);
@@ -54,6 +56,7 @@ private:
     void send_error(WiFiClient& client, int code, const char* message);
     void send_headers(WiFiClient& client, int code, const char* content_type,
                       int32_t content_len = -1);
+    void write_json_string(WiFiClient& client, const char* value);
 
     bool path_sane(const char* path, bool allow_empty);
     bool path_safe_for_write(const char* path);

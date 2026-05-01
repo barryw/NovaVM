@@ -17,6 +17,10 @@ public:
     void loop();
 
 private:
+    static constexpr int SCREEN_COLS = 80;
+    static constexpr int SCREEN_ROWS = 50;
+    static constexpr int SCREEN_BYTES = SCREEN_COLS * SCREEN_ROWS;
+
     FpgaBridge& _bridge;
     WiFiServer  _server;
     WiFiClient  _client;
@@ -33,7 +37,7 @@ private:
     uint8_t       _asyncValue;       // watch: expected value
 
     // Shared screen buffer
-    uint8_t _screenBuf[2000];
+    uint8_t _screenBuf[SCREEN_BYTES];
 
     // Command dispatch
     void handleCommand(const String& json);
@@ -41,7 +45,10 @@ private:
 
     // Command handlers
     void cmdPeek(const String& json);
+    void cmdPeekBlock(const String& json);
     void cmdPoke(const String& json);
+    void cmdReadVram(const String& json);
+    void cmdFillVram(const String& json);
     void cmdSendKey(const String& json);
     void cmdTypeText(const String& json);
     void cmdReadScreen();
@@ -50,6 +57,12 @@ private:
     void cmdDbgState();
     void cmdDbgPause();
     void cmdDbgResume();
+    void cmdDbgStep();
+    void cmdDbgBreakSet(const String& json);
+    void cmdDbgBreakClear(const String& json);
+    void cmdDbgBreakClearAll();
+    void cmdDbgBreakList();
+    void cmdDbgTrace(const String& json);
     void cmdColdStart();
     void cmdWaitReady(const String& json);
     void cmdWatch(const String& json);
@@ -64,6 +77,7 @@ private:
     // JSON extraction
     static String extractString(const String& json, const char* key);
     static int    extractInt(const String& json, const char* key, int defaultVal = -1);
+    static const char* jsonPayload(const String& json);
 
     // Screen helpers
     int  findTextOnScreen(const char* text);

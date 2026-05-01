@@ -118,6 +118,58 @@ suites {
       assert(screen_line(3, "88888"), "text at row 3")
     }
 
+    test("reverse-infocom-status-line", "REVERSE draws a mock Infocom status line on row 0") {
+      basic("10 CLS")
+      basic("20 COLOR 15,0")
+      basic("30 LOCATE 0,0")
+      basic("40 REVERSE")
+      basic("50 FOR I=1 TO 80:PRINT CHR$(32);:NEXT")
+      basic("60 LOCATE 0,0")
+      basic("70 FOR I=0 TO 12:READ C:PRINT CHR$(C);:NEXT")
+      basic("80 LOCATE 55,0")
+      basic("90 FOR I=0 TO 16:READ C:PRINT CHR$(C);:NEXT")
+      basic("100 REVERSEOFF")
+      basic("105 POKE $0101,VPEEK(2,0)")
+      basic("106 POKE $0102,VPEEK(2,55)")
+      basic("107 POKE $0103,VPEEK(2,79)")
+      basic("120 DATA 87,69,83,84,32,79,70,32,72,79,85,83,69")
+      basic("130 DATA 83,67,79,82,69,58,32,48,32,77,79,86,69,83,58,32,49")
+      run()
+      assert(screen_line(0, "WEST OF HOUSE"), "location shown on inverse row 0")
+      assert(screen_line(0, "SCORE: 0 MOVES: 1"), "score/moves shown on inverse row 0")
+      assert(peekbyte($0101) == $F0, "left status cell has inverse color attr")
+      assert(peekbyte($0102) == $F0, "right status cell has inverse color attr")
+      assert(peekbyte($0103) == $F0, "status row filler remains inverse")
+      assert(peekbyte($A0E6) == $00, "REVERSEOFF cleared text flags")
+    }
+
+    test("flash-text-attribute", "FLASH marks only text printed while active") {
+      basic("10 CLS")
+      basic("20 COLOR 2,4")
+      basic("30 LOCATE 0,0")
+      basic("40 FLASH:PRINT CHR$(70);")
+      basic("50 FLASHOFF:PRINT CHR$(83);")
+      basic("60 POKE $0101,VPEEK(7,0)")
+      basic("70 POKE $0102,VPEEK(7,1)")
+      run()
+      assert(screen_line(0, "FS"), "flash test text visible")
+      assert(peekbyte($0101) == $01, "F cell has flash attribute")
+      assert(peekbyte($0102) == $00, "S cell does not flash")
+      assert(peekbyte($A0E6) == $00, "FLASHOFF cleared text flags")
+    }
+
+    test("vpeek-vpoke-text-memory", "VPEEK/VPOKE abstract direct text/color memory access") {
+      basic("10 CLS")
+      basic("20 VPOKE 1,0,65")
+      basic("30 VPOKE 2,0,$E1")
+      basic("40 POKE $0101,VPEEK(1,0)")
+      basic("50 POKE $0102,VPEEK(2,0)")
+      run()
+      assert(screen_line(0, "A"), "VPOKE wrote character RAM")
+      assert(peekbyte($0101) == 65, "VPEEK read character RAM")
+      assert(peekbyte($0102) == $E1, "VPEEK read color RAM")
+    }
+
     test("bitset-sets-bits", "BITSET sets memory bits") {
       basic("10 POKE $2000,$00")
       basic("20 BITSET $2000,$0F")

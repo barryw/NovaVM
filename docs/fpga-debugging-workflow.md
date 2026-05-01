@@ -65,6 +65,78 @@ answer the question.
    For BASIC-visible behavior, prefer typing real BASIC commands through the
    bridge instead of poking registers. That tests the same path users exercise.
 
+   The standard live-board BASIC integration command is:
+
+   ```bash
+   tools/run-basic-integration.sh
+   ```
+
+   It defaults to the static NovaHost address `192.168.1.65`, checks HTTP,
+   checks the debug bridge, verifies the SD card, reloads ROMs from SD, cold
+   starts BASIC, applies a per-suite timeout, and writes a timestamped log under
+   `/tmp`. To run a subset:
+
+   ```bash
+   tools/run-basic-integration.sh text sprites sd
+   ```
+
+   Use the static IP for normal hardware testing. mDNS (`novahost.local`) is
+   convenient when it works, but it is not reliable enough for the standard test
+   path. Override host/timeout behavior only when needed:
+
+   ```bash
+   NOVAHOST=192.168.1.65 SUITE_TIMEOUT=240 tools/run-basic-integration.sh
+   ```
+
+   On failure, the runner captures a hardware snapshot under `/tmp`. The
+   snapshot freezes the CPU briefly, records boot status, CPU registers/PC,
+   a ROM-symbol lookup for PC, screen text, zero page, stack page, nearby
+   instruction bytes, VGC IRQ state, breakpoint state, the last CPU trace
+   records, and an HDMI frame, then resumes the CPU so later suites can
+   continue.
+
+   To capture one manually:
+
+   ```bash
+   tools/snapshot-novavm-state.py
+   tools/snapshot-novavm-state.py --label hung-math --resume
+   ```
+
+   The hardware debug bridge also exposes interactive commands on TCP port
+   `6503`:
+
+   ```json
+   {"command":"dbg_break_set","address":49152,"enabled":1}
+   {"command":"dbg_break_set","slot":0,"address":49152,"enabled":1}
+   {"command":"dbg_break_list"}
+   {"command":"dbg_break_clear","address":49152}
+   {"command":"dbg_break_clear","slot":0}
+   {"command":"dbg_break_clear_all"}
+   {"command":"dbg_step"}
+   {"command":"dbg_trace","count":64}
+   ```
+
+   Trace records are oldest-to-newest and include PC, address bus, data
+   in/out, A, SP, flags, CPU micro-state, opcode, RDY, WE, IRQ, and NMI.
+
+6. **Real HDMI frame capture**
+
+   Use this when memory/debug reads are not enough and the question is what the
+   monitor or capture device actually sees.
+
+   ```bash
+   tools/capture-hdmi-frame.sh
+   tools/capture-hdmi-frame.sh screenshots/hardware/current.png
+   tools/capture-hdmi-frame.sh --list
+   ```
+
+   The default input is AVFoundation device `0:none`, which is the Cam Link 4K
+   on the current Mac. Override it if device ordering changes:
+
+   ```bash
+   HDMI_DEVICE='1:none' tools/capture-hdmi-frame.sh
+   ```
+
 ## What GTKWave Is Good For
 
 GTKWave is the right tool when you need causality:

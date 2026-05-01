@@ -189,6 +189,29 @@ suites {
       assert(peekbyte($A010) == 0, "VGC idle after scaled GTEXT")
     }
 
+    test("gtext-reverse-colors", "REVERSE renders an Infocom-style GTEXT status line") {
+      basic("10 MODE 3")
+      basic("20 GCLS")
+      basic("30 A$=CHR$(87)")
+      basic("40 FOR I=2 TO 40:READ C:A$=A$+CHR$(C):NEXT")
+      basic("50 REVERSE 0,15")
+      basic("60 GTEXT 0,0,0,1,A$")
+      basic("70 REVERSEOFF")
+      basic("80 POKE $0101,VPEEK(3,0)")
+      basic("90 POKE $0102,VPEEK(3,2)")
+      basic("100 POKE $0103,VPEEK(3,32)")
+      basic("110 POKE $0104,VPEEK(3,2560)")
+      basic("120 DATA 69,83,84,32,79,70,32,72,79,85,83,69")
+      basic("130 DATA 32,32,32,32,32,32,32,32,32,32,32,32")
+      basic("140 DATA 83,67,79,82,69,58,48,32,77,79,86,69,83,58,49")
+      run()
+      assert(peekbyte($0101) == 0, "status glyph pixels use reverse foreground")
+      assert(peekbyte($0102) == 15, "status glyph blanks use reverse background")
+      assert(peekbyte($0103) == 15, "status spaces fill the inverse status bar")
+      assert(peekbyte($0104) == 0, "graphics below status bar stays clear")
+      assert(peekbyte($A0E6) == $00, "REVERSEOFF cleared text flags")
+    }
+
     test("mode-boundary-coords", "Drawing at screen boundaries") {
       basic("10 MODE 3")
       basic("20 GCOLOR 1")

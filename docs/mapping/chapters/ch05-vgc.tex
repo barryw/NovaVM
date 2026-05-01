@@ -103,8 +103,8 @@ The BASIC command \texttt{MODE n} writes to this register.
 \mementry{A001}{RegBgCol}{R/W}{0}
 
 Background colour (0--15).  This colour fills the entire screen behind all
-layers.  It is also the ``paper'' colour for the text layer --- character cells
-that are not covered by text are drawn in this colour.
+layers.  For newly printed text, it is packed into the high nibble of the
+cell's Color RAM byte.
 
 \begin{lstlisting}
 POKE $A001,6 : REM dark blue background
@@ -119,7 +119,8 @@ POKE $A001,6 : REM dark blue background
 \mementry{A002}{RegFgCol}{R/W}{15}
 
 Foreground/text colour (0--15).  Characters printed after changing this
-register will appear in the new colour.
+register will appear in the new colour.  For newly printed text, it is packed
+into the low nibble of the cell's Color RAM byte.
 
 \begin{lstlisting}
 POKE $A002,7 : REM white text
@@ -282,12 +283,37 @@ had been PRINTed.  Control codes (carriage return, backspace, etc.)\ are
 interpreted.
 
 This is how BASIC's \texttt{PRINT} statement works internally --- every
-character ultimately arrives here.
+character ultimately arrives here.  The VGC writes the current packed colour
+attribute and text style flags beside the character cell.
 
 \begin{lstlisting}
 10 POKE $A00E,72  : REM 'H'
 20 POKE $A00E,73  : REM 'I'
 30 POKE $A00E,13  : REM carriage return
+\end{lstlisting}
+
+% --- $A0E6 RegTextFlags ------------------------------------------------------
+
+\mementry{A0E6}{RegTextFlags}{R/W}{0}
+
+Text output flags used by \addr{A00E} and BASIC \texttt{PRINT}. Bit~0 enables
+reverse text. Bit~1 makes reverse text use \addr{A0E7} instead of the default
+foreground/background swap. Bit~2 marks newly printed cells as flashing.
+
+\begin{lstlisting}
+POKE $A0E6,1 : REM reverse output
+POKE $A0E6,0 : REM normal output
+\end{lstlisting}
+
+% --- $A0E7 RegTextReverseAttr ------------------------------------------------
+
+\mementry{A0E7}{RegTextReverseAttr}{R/W}{F0}
+
+Packed reverse text colours used when \addr{A0E6} bit~1 is set. The high
+nibble is background and the low nibble is foreground.
+
+\begin{lstlisting}
+POKE $A0E7,$A3 : POKE $A0E6,3 : REM bg=10, fg=3
 \end{lstlisting}
 
 % --- $A00F RegCharIn ---------------------------------------------------------

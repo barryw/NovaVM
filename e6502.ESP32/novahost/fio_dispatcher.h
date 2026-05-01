@@ -78,6 +78,11 @@ private:
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
 
+    // Shared LOAD/SAVE transfer buffer. Keeping this as one member instead of
+    // two function-local static buffers saves 16KB of ESP32 global RAM.
+    static constexpr int TRANSFER_BUF_BYTES = 16384;
+    uint8_t _transfer_buf[TRANSFER_BUF_BYTES];
+
     // Fast accessors.
     uint8_t  cmd()     const { return _bank[OFF_CMD]; }
     uint8_t  namelen() const { return _bank[OFF_NAMELEN]; }

@@ -89,6 +89,13 @@ The VGC IRQ block lives at A0F0--A0FF.
 | $A00E | RegCharOut | R/W | Character output port; writing outputs a character to the text screen. |
 | $A00F | RegCharIn | R/W | Character input port; reading dequeues the next keypress byte. |
 
+### Text Style Registers (A0E6--A0E7)
+
+| **Address** | **Name** | **Access** | **Description** |
+| --- | --- | --- | --- |
+| $A0E6 | RegTextFlags | R/W | Text output flags: bit 0=reverse, bit 1=use explicit reverse attribute, bit 2=flash. |
+| $A0E7 | RegTextReverseAttr | R/W | Packed reverse color attribute used when bit 1 is set: high nibble=background, low nibble=foreground. |
+
 ### IRQ Control (A0F0--A0FF)
 
 | **Address** | **Name** | **Access** | **Description** |
@@ -199,7 +206,7 @@ compatibility. Active-list swaps take effect at vblank.
 
 | **Code** | **Name** | **Parameters and behavior** |
 | --- | --- | --- |
-| $1F | CmdSysReset | No parameters. Resets the VGC, stops both SID chips, stops the music engine, and resets the NIC. This is the command invoked by the BASIC `RESET` statement. |
+| $1F | CmdSysReset | No parameters. Performs a full machine reset: CPU reset plus all custom-chip state, including VGC registers/video memory, sprites, tiles, DMA, blitter, SID chips, and host-facing devices. This is the command invoked by the BASIC `RESET` statement. |
 
 Copper-writable registers: RegMode (A000), RegBgCol (A001),
 RegScrollX (A005), RegScrollY (A006), and sprite registers
@@ -297,7 +304,7 @@ the configured operation; poll `DmaStatus` for completion.
 | $BA61 | DmaStatus | RO | Status: 00=idle,01=busy, 02=ok,03=error. |
 | $BA62 | DmaErrCode | RO | Error detail code (see Appendix \refchap:limits). |
 | $BA63 | DmaSrcSpace | R/W | Source memory space (0--5). |
-| $BA64 | DmaDstSpace | R/W | Destination memory space (0--5). |
+| $BA64 | DmaDstSpace | R/W | Destination memory space. |
 | $BA65 | DmaSrcL | R/W | Source address low byte. |
 | $BA66 | DmaSrcM | R/W | Source address mid byte. |
 | $BA67 | DmaSrcH | R/W | Source address high byte. |
@@ -323,6 +330,8 @@ the configured operation; poll `DmaStatus` for completion.
 | 3 | VGC Graphics Bitmap (64,000 bytes) |
 | 4 | VGC Sprite Shapes (32,768 bytes; 256 slots) |
 | 5 | Expansion RAM (uses current XBANK) |
+| 6 | VGC Tile Data (32,768 bytes) |
+| 7 | VGC Text Attribute RAM (4,000 bytes) |
 
 ## Blitter Controller Register Map
 

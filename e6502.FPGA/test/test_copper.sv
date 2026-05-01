@@ -31,7 +31,7 @@ module test_copper;
 
     // Instantiate VGC
     vgc dut (
-        .clk(clk), .rst(rst),
+        .clk(clk), .rst(rst), .video_rst(rst),
         .cpu_ce(cpu_ce),
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
@@ -44,7 +44,8 @@ module test_copper;
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
         .irq_out(irq_out),
-        .rdy_out(vgc_rdy)
+        .rdy_out(vgc_rdy),
+        .sys_reset_req()
     );
 
     // Test counters
@@ -149,6 +150,7 @@ module test_copper;
 
         run_clocks(50);
         rst = 0;
+        while (!vgc_rdy) @(posedge clk);
         run_clocks(10);
 
         // ----- Test 1: Initial state -----

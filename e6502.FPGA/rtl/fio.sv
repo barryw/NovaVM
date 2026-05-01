@@ -42,6 +42,8 @@ module fio (
     input  logic        dbg_we,
     input  logic [6:0]  dbg_addr,    // offset 0..79 within the bank
     input  logic [7:0]  dbg_wdata,
+    input  logic [6:0]  dbg_raddr,
+    output logic [7:0]  dbg_rdata,
 
     // One-clock pulse when the CPU writes a non-zero value to FioCmd.
     output logic        fio_event
@@ -62,6 +64,7 @@ module fio (
     // byte; out-of-range returns zero so top.sv can OR into its cpu_din
     // mux without disturbing other peripherals.
     assign cpu_rdata = sel ? bank[cpu_off] : 8'h00;
+    assign dbg_rdata = (dbg_raddr < SIZE) ? bank[dbg_raddr] : 8'h00;
 
     // Event pulse: one clock high when the CPU writes a non-zero value
     // to FioCmd ($B9A0). Debug-bridge writes never pulse.

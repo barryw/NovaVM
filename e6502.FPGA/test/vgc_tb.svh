@@ -25,11 +25,14 @@ localparam logic [15:0] VREG_ADDRL_A    = 16'hA0E1;
 localparam logic [15:0] VREG_ADDRH_A    = 16'hA0E2;
 localparam logic [15:0] VREG_DATA_A     = 16'hA0E3;
 localparam logic [15:0] VREG_CTRL_A     = 16'hA0E4;
+localparam logic [15:0] REG_TEXTFLAGS_A = 16'hA0E6;
+localparam logic [15:0] REG_TEXTREV_A   = 16'hA0E7;
 localparam logic [7:0]  VPLANE_CHAR_A   = 8'h01;
 localparam logic [7:0]  VPLANE_COLOR_A  = 8'h02;
 localparam logic [7:0]  VPLANE_GFX_A    = 8'h03;
 localparam logic [7:0]  VPLANE_SPRITE_A = 8'h04;
 localparam logic [7:0]  VPLANE_TILE_A   = 8'h06;
+localparam logic [7:0]  VPLANE_TEXTATTR_A = 8'h07;
 
 localparam int COLS_TB = 80;
 localparam int ROWS_TB = 50;
@@ -74,17 +77,20 @@ logic        dbg_we;
 logic [15:0] dbg_waddr;
 logic [7:0]  dbg_wdata;
 logic        dbg_vmem_we;
+logic        dbg_vmem_re;
 logic [2:0]  dbg_vmem_space;
 logic [16:0] dbg_vmem_addr;
 logic [7:0]  dbg_vmem_wdata;
+wire  [7:0]  dbg_vmem_rdata;
 
 wire  [3:0]  vid_r, vid_g, vid_b;
 wire         vid_hsync, vid_vsync, vid_de;
 wire         irq_out;
 wire         vgc_rdy;
+wire         vgc_sys_reset_req;
 
 vgc dut (
-    .clk(clk), .rst(rst),
+    .clk(clk), .rst(rst), .video_rst(rst),
     .cpu_ce(cpu_ce),
     .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
     .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
@@ -96,12 +102,15 @@ vgc dut (
     .blt_wdata(tb_blt_wdata), .blt_we(tb_blt_we), .blt_re(tb_blt_re),
     .dbg_addr(dbg_addr), .dbg_rdata(dbg_rdata),
     .dbg_we(dbg_we), .dbg_waddr(dbg_waddr), .dbg_wdata(dbg_wdata),
-    .dbg_vmem_we(dbg_vmem_we), .dbg_vmem_space(dbg_vmem_space),
+    .dbg_vmem_we(dbg_vmem_we), .dbg_vmem_re(dbg_vmem_re),
+    .dbg_vmem_space(dbg_vmem_space),
     .dbg_vmem_addr(dbg_vmem_addr), .dbg_vmem_wdata(dbg_vmem_wdata),
+    .dbg_vmem_rdata(dbg_vmem_rdata),
     .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
     .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
     .irq_out(irq_out),
-    .rdy_out(vgc_rdy)
+    .rdy_out(vgc_rdy),
+    .sys_reset_req(vgc_sys_reset_req)
 );
 
 // ---------------------------------------------------------------------------
@@ -157,11 +166,19 @@ task automatic do_reset();
     dbg_waddr  = 16'h0000;
     dbg_wdata  = 8'h00;
     dbg_vmem_we = 0;
+    dbg_vmem_re = 0;
     dbg_vmem_space = 3'd0;
     dbg_vmem_addr = 17'd0;
     dbg_vmem_wdata = 8'h00;
     repeat(50) @(posedge clk);
     rst = 0;
+    begin
+        int timeout = 0;
+        while (!vgc_rdy && timeout < 100000) begin
+            @(posedge clk);
+            timeout++;
+        end
+    end
     repeat(10) @(posedge clk);
 endtask
 
@@ -257,6 +274,10 @@ endfunction
 
 function automatic logic [7:0] peek_color(input int addr);
     peek_color = dut.text_inst.color_mem.mem[addr];
+endfunction
+
+function automatic logic [7:0] peek_text_attr(input int addr);
+    peek_text_attr = dut.text_inst.attr_mem.mem[addr];
 endfunction
 
 function automatic logic [7:0] peek_char_cell(input int col, input int row);

@@ -429,6 +429,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             VgcConstants.DmaSpaceVgcColor => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceColor),
             VgcConstants.DmaSpaceVgcGfx => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceGfx),
             VgcConstants.DmaSpaceVgcSprite => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceSprite),
+            VgcConstants.DmaSpaceVgcTile => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceTile),
+            VgcConstants.DmaSpaceVgcTextAttr => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceTextAttr),
             VgcConstants.DmaSpaceXram => _xmc.CapacityBytes,
             _ => 0
         };
@@ -452,6 +454,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                     ? (true, color)
                     : (false, (byte)0);
 
+            case VgcConstants.DmaSpaceVgcTextAttr:
+                return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceTextAttr, address, out byte attr)
+                    ? (true, attr)
+                    : (false, (byte)0);
+
             case VgcConstants.DmaSpaceVgcGfx:
                 return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, address, out byte gfx)
                     ? (true, gfx)
@@ -460,6 +467,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             case VgcConstants.DmaSpaceVgcSprite:
                 return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceSprite, address, out byte sprite)
                     ? (true, sprite)
+                    : (false, (byte)0);
+
+            case VgcConstants.DmaSpaceVgcTile:
+                return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceTile, address, out byte tile)
+                    ? (true, tile)
                     : (false, (byte)0);
 
             case VgcConstants.DmaSpaceXram:
@@ -485,11 +497,17 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             case VgcConstants.DmaSpaceVgcColor:
                 return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceColor, address, value);
 
+            case VgcConstants.DmaSpaceVgcTextAttr:
+                return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceTextAttr, address, value);
+
             case VgcConstants.DmaSpaceVgcGfx:
                 return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, address, value);
 
             case VgcConstants.DmaSpaceVgcSprite:
                 return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceSprite, address, value);
+
+            case VgcConstants.DmaSpaceVgcTile:
+                return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceTile, address, value);
 
             case VgcConstants.DmaSpaceXram:
                 return _xmc.TryWriteLinear(address, value);

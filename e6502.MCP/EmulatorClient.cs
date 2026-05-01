@@ -6,6 +6,8 @@ namespace e6502.MCP;
 
 public sealed class EmulatorClient : IDisposable
 {
+    private static readonly UTF8Encoding Utf8NoBom = new(false);
+
     private readonly string _host;
     private readonly int _port;
     private readonly SemaphoreSlim _sem = new(1, 1);
@@ -27,8 +29,8 @@ public sealed class EmulatorClient : IDisposable
         _tcp = new TcpClient();
         await _tcp.ConnectAsync(_host, _port);
         var stream = _tcp.GetStream();
-        _reader = new StreamReader(stream, Encoding.UTF8);
-        _writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
+        _reader = new StreamReader(stream, Utf8NoBom, detectEncodingFromByteOrderMarks: false);
+        _writer = new StreamWriter(stream, Utf8NoBom) { AutoFlush = true, NewLine = "\n" };
     }
 
     public async Task<JsonNode> SendAsync(JsonObject request)

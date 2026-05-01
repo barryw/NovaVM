@@ -21,6 +21,7 @@ module test_vgc_gfx;
     localparam logic [7:0] CMD_GCLS   = 8'h07;
     localparam logic [7:0] CMD_GCOLOR = 8'h08;
     localparam logic [7:0] CMD_PAINT  = 8'h09;
+    localparam logic [7:0] CMD_SYSRESET = 8'h1F;
 
     // -----------------------------------------------------------------------
     // Convenience helpers — pack 16-bit coordinates into the VGC param regs.
@@ -359,6 +360,121 @@ module test_vgc_gfx;
         check_eq("OOB: screen still empty", count_gfx_pixels(0, 0, 319, 199), 0);
     endtask
 
+    task automatic wait_reset_clear_done();
+        int timeout;
+        timeout = 0;
+        repeat(4) @(posedge clk);
+        while (!(dut.vgc_reset_pending || !vgc_rdy) && timeout < 1000000) begin
+            @(posedge clk);
+            timeout++;
+        end
+        while ((dut.vgc_reset_pending || !vgc_rdy) && timeout < 2000000) begin
+            @(posedge clk);
+            timeout++;
+        end
+        check("reset scrubber released RDY", vgc_rdy && !dut.vgc_reset_pending);
+        repeat(4) @(posedge clk);
+    endtask
+
+    task automatic test_sysreset_clears_vgc_state();
+        logic [7:0] b;
+        $display("");
+        $display("Test: SYSRESET clears VGC registers and BRAM-backed state");
+
+        bus_write(REG_MODE_A, 8'd3);
+        bus_write(REG_FGCOL_A, 8'd4);
+        vram_write(VPLANE_CHAR_A, 0, 8'h58);
+        vram_write(VPLANE_COLOR_A, 0, 8'h04);
+        vram_write(VPLANE_GFX_A, 1234, 8'h0F);
+        vram_write(VPLANE_SPRITE_A, 0, 8'hFF);
+
+        write_cmd(CMD_SYSRESET);
+        wait_reset_clear_done();
+
+        check_eq("SYSRESET: mode reset to text", int'(dut.mode), 0);
+        check_eq("SYSRESET: char[0] cleared to space", int'(peek_char(0)), 8'h20);
+        check_eq("SYSRESET: color[0] reset to fg", int'(peek_color(0)), 8'h0F);
+        check_eq("SYSRESET: gfx pixel cleared", int'(dut.gfx_inst.gfx_mem.mem[1234]), 0);
+        check_eq("SYSRESET: pending sprite byte cleared", int'(peek_spr_pending_addr(11'd0)), 0);
+        check_eq("SYSRESET: active sprite byte cleared", int'(peek_spr_active_addr(11'd0)), 0);
+
+        vram_read(VPLANE_GFX_A, 1234, b);
+        check_eq("SYSRESET: VRAM read sees cleared gfx", int'(b), 0);
+    endtask
+
+    task automatic test_sysreset_clears_all_stale_vmem();
+        int bad_gfx;
+        int bad_char;
+        int bad_color;
+        int bad_sprite;
+        int bad_tile;
+        int bad_nt;
+        int bad_attr;
+
+        $display("");
+        $display("Test: SYSRESET removes stale data from every VGC memory plane");
+
+        for (int i = 0; i < 4000; i++) begin
+            dut.text_inst.char_mem.mem[i] = 8'h53;
+            dut.text_inst.color_mem.mem[i] = 8'h06;
+        end
+
+        for (int i = 0; i < 64000; i++)
+            dut.gfx_inst.gfx_mem.mem[i] = 4'hD;
+
+        for (int i = 0; i < 2048; i++) begin
+            dut.sprite_inst.spr_mem0.mem[i] = 8'hA5;
+            dut.sprite_inst.spr_mem1.mem[i] = 8'h5A;
+        end
+
+        for (int i = 0; i < 32768; i++)
+            dut.tile_inst.tile_data_ram.mem[i] = 8'hC3;
+
+        for (int i = 0; i < 4096; i++) begin
+            dut.tile_inst.nametable_ram.mem[i] = 8'h77;
+            dut.tile_inst.attr_table_ram.mem[i] = 8'h88;
+        end
+
+        write_cmd(CMD_SYSRESET);
+        wait_reset_clear_done();
+
+        bad_char = 0;
+        bad_color = 0;
+        for (int i = 0; i < 4000; i++) begin
+            if (dut.text_inst.char_mem.mem[i] != 8'h20) bad_char++;
+            if (dut.text_inst.color_mem.mem[i] != 8'h0F) bad_color++;
+        end
+
+        bad_gfx = 0;
+        for (int i = 0; i < 64000; i++)
+            if (dut.gfx_inst.gfx_mem.mem[i] != 4'h0) bad_gfx++;
+
+        bad_sprite = 0;
+        for (int i = 0; i < 2048; i++) begin
+            if (dut.sprite_inst.spr_mem0.mem[i] != 8'h00) bad_sprite++;
+            if (dut.sprite_inst.spr_mem1.mem[i] != 8'h00) bad_sprite++;
+        end
+
+        bad_tile = 0;
+        for (int i = 0; i < 32768; i++)
+            if (dut.tile_inst.tile_data_ram.mem[i] != 8'h00) bad_tile++;
+
+        bad_nt = 0;
+        bad_attr = 0;
+        for (int i = 0; i < 4096; i++) begin
+            if (dut.tile_inst.nametable_ram.mem[i] != 8'h00) bad_nt++;
+            if (dut.tile_inst.attr_table_ram.mem[i] != 8'h00) bad_attr++;
+        end
+
+        check_eq("SYSRESET: no stale text chars remain", bad_char, 0);
+        check_eq("SYSRESET: no stale text colors remain", bad_color, 0);
+        check_eq("SYSRESET: no stale bitmap pixels remain", bad_gfx, 0);
+        check_eq("SYSRESET: no stale sprite shape bytes remain", bad_sprite, 0);
+        check_eq("SYSRESET: no stale tile pattern bytes remain", bad_tile, 0);
+        check_eq("SYSRESET: no stale tile map bytes remain", bad_nt, 0);
+        check_eq("SYSRESET: no stale tile attr bytes remain", bad_attr, 0);
+    endtask
+
     // -----------------------------------------------------------------------
     // Runner
     // -----------------------------------------------------------------------
@@ -379,6 +495,8 @@ module test_vgc_gfx;
         test_paint_flood_fill();
         test_gcls_full_coverage();
         test_out_of_bounds_plot();
+        test_sysreset_clears_vgc_state();
+        test_sysreset_clears_all_stale_vmem();
 
         summary();
         $finish;

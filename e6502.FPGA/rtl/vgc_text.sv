@@ -18,6 +18,12 @@ module vgc_text (
     input  logic        color_a_we,
     output logic [7:0]  color_a_dout,
 
+    // --- text attribute RAM port A (from top-level mux) ---
+    input  logic [11:0] attr_a_addr,
+    input  logic [7:0]  attr_a_din,
+    input  logic        attr_a_we,
+    output logic [7:0]  attr_a_dout,
+
     // --- font_rom port A (from top-level mux) ---
     // 13-bit addr covers 8192 bytes (4 slots × 2048-byte glyph tables).
     input  logic [12:0] font_a_addr,
@@ -37,10 +43,17 @@ module vgc_text (
     // --- Rendering outputs ---
     output logic [7:0]  char_b_dout,
     output logic [7:0]  color_b_dout,
+    output logic [7:0]  attr_b_dout,
     output logic [7:0]  font_b_dout
 );
 
     localparam COLS = 80;
+
+    // 80 = 64 + 16. This is on the per-pixel text scanout path, so keep it
+    // as a fixed shift/add instead of a generic constant multiply.
+    function automatic logic [11:0] text_addr(input logic [5:0] row, input logic [6:0] col);
+        text_addr = {row, 6'b0} + {2'b0, row, 4'b0} + {5'b0, col};
+    endfunction
 
     // =========================================================================
     // Memory — dpram instances
@@ -62,6 +75,15 @@ module vgc_text (
         .clk(clk),
         .addr_a(color_a_addr), .din_a(color_a_din), .we_a(color_a_we), .dout_a(color_a_dout),
         .addr_b(color_b_addr), .dout_b(color_b_dout)
+    );
+
+    // --- text attribute RAM (4000 bytes for 80x50 text) ---
+    logic [11:0] attr_b_addr;
+
+    dpram #(.WIDTH(8), .DEPTH(4000)) attr_mem (
+        .clk(clk),
+        .addr_a(attr_a_addr), .din_a(attr_a_din), .we_a(attr_a_we), .dout_a(attr_a_dout),
+        .addr_b(attr_b_addr), .dout_b(attr_b_dout)
     );
 
     // --- font_rom (8192 bytes = 4 × 2048-byte glyph tables) ---
@@ -86,8 +108,9 @@ module vgc_text (
     //   Cycle N+2: font_b_dout valid → compositing uses font_pixel_d2(N+2) = font_pixel(N)
     // Total 2-cycle pipeline matches the d2 delay on output signals.
     // =========================================================================
-    assign char_b_addr  = real_row * COLS + {6'b0, text_col};
-    assign color_b_addr = real_row * COLS + {6'b0, text_col};
+    assign char_b_addr  = text_addr(real_row, text_col);
+    assign color_b_addr = text_addr(real_row, text_col);
+    assign attr_b_addr  = text_addr(real_row, text_col);
     assign font_b_addr  = {font_slot, char_b_dout, font_line};  // 2+8+3 = 13
 
 endmodule

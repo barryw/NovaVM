@@ -103,6 +103,7 @@ public:
 
     const HeaderInfo& header() const { return _header; }
     int free_sectors() const         { return _free_count; }
+    int directory_entry_count() const { return _dir_entry_count; }
 
     // ------- Lookup -------
     // Returns the entry index, or -1 if not found / not active.

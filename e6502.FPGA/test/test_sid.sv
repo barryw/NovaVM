@@ -75,7 +75,29 @@ module test_sid;
         check("Voice 1 vol written", dout, 8'h07);
         cs = 0;
 
-        // ── Test 4: OSC3 and ENV3 readable ──
+        // ── Test 4: Short reset clears registers and voice internals ──
+        write_reg(5'h00, 8'h34);
+        write_reg(5'h01, 8'h12);
+        write_reg(5'h04, 8'h21);
+        write_reg(5'h15, 8'h07);
+        write_reg(5'h16, 8'h55);
+        repeat(200) @(posedge clk);
+        rst = 1;
+        repeat(2) @(posedge clk);
+        rst = 0;
+        repeat(5) @(posedge clk);
+        cs = 1; we = 0; addr = 5'h00;
+        @(posedge clk);
+        check("Freq lo reset", dout, 8'h00);
+        addr = 5'h1D;
+        @(posedge clk);
+        check("Voice 1 vol reset default", dout, 8'h0F);
+        cs = 0;
+        check("Filter Fc reset", filter_fc_out, 0);
+        check("Voice oscillator reset", uut.v1.oscillator, 0);
+        check("Audio latch reset", audio_out, 0);
+
+        // ── Test 5: OSC3 and ENV3 readable ──
         cs = 1; we = 0; addr = 5'h1B;
         @(posedge clk);
         // Just check it doesn't hang — value depends on oscillator state
@@ -87,7 +109,7 @@ module test_sid;
         check("ENV3 readable", 1, 1);  // just verifying no hang
         cs = 0;
 
-        // ── Test 5: Set up a tone and verify audio is non-zero ──
+        // ── Test 6: Set up a tone and verify audio is non-zero ──
         mode = 0;  // 6581 mode
         write_reg(5'h00, 8'h00);  // freq lo = 0
         write_reg(5'h01, 8'h10);  // freq hi = $10 (medium pitch)
@@ -102,12 +124,12 @@ module test_sid;
         // Check audio output is non-zero (voice is playing)
         check("Audio non-zero (6581)", audio_out != 0, 1);
 
-        // ── Test 6: Switch to 8580 mode ──
+        // ── Test 7: Switch to 8580 mode ──
         mode = 1;
         repeat(50000) @(posedge clk);
         check("Audio non-zero (8580)", audio_out != 0, 1);
 
-        // ── Test 7: Gate off should eventually silence ──
+        // ── Test 8: Gate off should eventually silence ──
         write_reg(5'h04, 8'h20);  // gate off, sawtooth still selected
         repeat(200000) @(posedge clk);  // let release complete
 

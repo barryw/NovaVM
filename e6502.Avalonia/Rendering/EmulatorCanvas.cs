@@ -493,34 +493,27 @@ public class EmulatorCanvas : Control
         bool cursorEnabled,
         out uint pixel)
     {
-        int srcPx = Wrap640(px + (state.ScrollX << 1));
-        int srcPy = Wrap400(py + (state.ScrollY << 1));
-
-        int col = srcPx / BitmapFont.GlyphWidth;
-        int row = srcPy / (BitmapFont.GlyphHeight * 2);
-
-        byte ch = _vgc.GetScreenChar(col, row);
-        byte fgColor = _vgc.GetScreenColor(col, row);
-
-        uint fg = Palette[fgColor & 0x0F];
-        uint bg = Palette[state.BgColor & 0x0F];
-
-        bool isCursor = cursorEnabled && col == cursorX && row == cursorY;
-        if (isCursor)
-            (fg, bg) = (bg, fg);
-
-        int glyphX = srcPx % BitmapFont.GlyphWidth;
-        int glyphY = (srcPy % (BitmapFont.GlyphHeight * 2)) / 2;
-        byte rowBits = _font.GetRow(state.FontIndex, ch, glyphY);
-        bool set = (rowBits & (0x80 >> glyphX)) != 0;
-
-        if (state.Mode == 2 && !set && !isCursor)
+        if (!TextPixelRenderer.TrySample(
+            _vgc,
+            _font,
+            px,
+            py,
+            state.Mode,
+            state.ScrollX,
+            state.ScrollY,
+            state.BgColor,
+            state.FontIndex,
+            state.FlashVisible,
+            cursorX,
+            cursorY,
+            cursorEnabled,
+            out byte colorIndex))
         {
             pixel = 0;
             return false;
         }
 
-        pixel = set ? fg : bg;
+        pixel = Palette[colorIndex & 0x0F];
         return true;
     }
 
@@ -578,6 +571,7 @@ public class EmulatorCanvas : Control
         public byte BorderColor;
         public int FontIndex;
         public byte DisplayDim;
+        public bool FlashVisible;
 
         public static RenderVideoState FromVgc(VirtualGraphicsController vgc) =>
             new()
@@ -588,7 +582,8 @@ public class EmulatorCanvas : Control
                 BgColor = vgc.GetBgColor(),
                 BorderColor = vgc.GetBorderColor(),
                 FontIndex = vgc.GetFontIndex(),
-                DisplayDim = vgc.GetDisplayDim()
+                DisplayDim = vgc.GetDisplayDim(),
+                FlashVisible = ((Environment.TickCount64 / 500) & 1) == 0
             };
 
         public void Apply(byte registerIndex, byte value)

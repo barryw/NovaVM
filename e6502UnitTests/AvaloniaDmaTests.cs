@@ -113,6 +113,29 @@ public class AvaloniaDmaTests
     }
 
     [TestMethod]
+    public void Dma_FillMode_WritesTextAttributeRam()
+    {
+        var bus = MakeBus();
+
+        StartDma(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceVgcTextAttr,
+            srcAddr: 0,
+            dstAddr: VgcConstants.ScreenCols + 2,
+            length: 4,
+            mode: VgcConstants.DmaModeFill,
+            fillValue: VgcConstants.TextAttrFlash);
+
+        AssertDmaOk(bus, expectedCount: 4);
+        for (int i = 0; i < 4; i++)
+            Assert.AreEqual(VgcConstants.TextAttrFlash, bus.Vgc.GetScreenTextAttr(2 + i, 1));
+
+        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(1, 1));
+        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(6, 1));
+    }
+
+    [TestMethod]
     public void Dma_StartTransitionsToBusyUntilCyclesAdvance()
     {
         var bus = MakeBus();

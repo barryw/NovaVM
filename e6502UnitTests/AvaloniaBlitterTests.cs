@@ -80,6 +80,34 @@ public class AvaloniaBlitterTests
     }
 
     [TestMethod]
+    public void Blitter_FillMode_WritesTextAttributeRamRect()
+    {
+        var bus = MakeBus();
+
+        StartBlit(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceVgcTextAttr,
+            srcAddr: 0,
+            dstAddr: VgcConstants.ScreenCols + 3,
+            width: 3,
+            height: 2,
+            srcStride: 3,
+            dstStride: VgcConstants.ScreenCols,
+            mode: VgcConstants.BltModeFill,
+            fillValue: VgcConstants.TextAttrFlash);
+
+        AssertBlitOk(bus, expectedCount: 6);
+        for (int row = 1; row <= 2; row++)
+            for (int col = 3; col <= 5; col++)
+                Assert.AreEqual(VgcConstants.TextAttrFlash, bus.Vgc.GetScreenTextAttr(col, row));
+
+        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(2, 1));
+        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(6, 1));
+        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(3, 3));
+    }
+
+    [TestMethod]
     public void Blitter_ColorKeyMode_SkipsMatchingSourceBytes()
     {
         var bus = MakeBus();

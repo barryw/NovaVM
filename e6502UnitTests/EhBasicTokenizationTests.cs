@@ -42,6 +42,45 @@ public class EhBasicTokenizationTests
     }
 
     [TestMethod]
+    public void AvaloniaRomDirectResetDoesNotSyntaxError()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "RESET");
+        RunUntilScreenContains(cpu, bus, "Ready", 80_000_000);
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Direct RESET fell into BASIC syntax error path.\n{screen}");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomResetTokenizesAsExtendedStatement()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "10 RESET");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        string line10Hex = DumpLineHex(bus, 10);
+        Assert.IsTrue(line10Hex.Contains("01 18", StringComparison.Ordinal),
+            $"RESET should tokenize as extended token $01 $18.\n{line10Hex}");
+    }
+
+    [TestMethod]
     public void AvaloniaRomListsLongMusicLinesWithoutCorruption()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
@@ -259,6 +298,14 @@ public class EhBasicTokenizationTests
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
         EnterLine(editor, "60 XFREE");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "70 REVERSE 1,0:PRINT \"REV\":REVERSEOFF");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "80 FLASH:PRINT \"BLINK\":FLASHOFF");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "90 VPOKE 1,0,65");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "100 X=VPEEK(2,0)");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
         EnterLine(editor, "LIST");
         RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
 
@@ -270,6 +317,21 @@ public class EhBasicTokenizationTests
         Assert.IsTrue(screen.Contains("40 COPPER CLEAR", StringComparison.Ordinal), $"COPPER line corrupted.\n{screen}");
         Assert.IsTrue(screen.Contains("50 X=XPEEK(49152)", StringComparison.Ordinal), $"XPEEK line corrupted.\n{screen}");
         Assert.IsTrue(screen.Contains("60 XFREE", StringComparison.Ordinal), $"XFREE line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("70 REVERSE 1,0:PRINT \"REV\":REVERSEOFF", StringComparison.Ordinal), $"REVERSE line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("80 FLASH:PRINT \"BLINK\":FLASHOFF", StringComparison.Ordinal), $"FLASH line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("90 VPOKE 1,0,65", StringComparison.Ordinal), $"VPOKE line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("100 X=VPEEK(2,0)", StringComparison.Ordinal), $"VPEEK line corrupted.\n{screen}");
+
+        string line70Hex = DumpLineHex(bus, 70);
+        string line80Hex = DumpLineHex(bus, 80);
+        string line90Hex = DumpLineHex(bus, 90);
+        string line100Hex = DumpLineHex(bus, 100);
+        Assert.IsTrue(line70Hex.Contains("01 6B", StringComparison.Ordinal), $"REVERSE token missing.\n{line70Hex}");
+        Assert.IsTrue(line70Hex.Contains("01 6C", StringComparison.Ordinal), $"REVERSEOFF token missing.\n{line70Hex}");
+        Assert.IsTrue(line80Hex.Contains("01 6D", StringComparison.Ordinal), $"FLASH token missing.\n{line80Hex}");
+        Assert.IsTrue(line80Hex.Contains("01 6E", StringComparison.Ordinal), $"FLASHOFF token missing.\n{line80Hex}");
+        Assert.IsTrue(line90Hex.Contains("01 6F", StringComparison.Ordinal), $"VPOKE token missing.\n{line90Hex}");
+        Assert.IsTrue(line100Hex.Contains("01 70", StringComparison.Ordinal), $"VPEEK token missing.\n{line100Hex}");
     }
 
     [TestMethod]
@@ -382,7 +444,7 @@ public class EhBasicTokenizationTests
 
         // Use debugger to break at LAB_SNER (syntax error handler)
         var debugger = new e6502.Avalonia.Debugging.DebuggerService(cpu, bus);
-        const ushort LAB_SNER = 0xCDBD;
+        ushort LAB_SNER = BasicSymbol("LAB_SNER");
         debugger.AddBreakpoint(LAB_SNER, null);
 
         // RUN with cycle-driven device ticking to match runtime scheduling.
@@ -1555,9 +1617,10 @@ public class EhBasicTokenizationTests
         string hex30 = DumpLineHex(bus, 30);
         string hex40 = DumpLineHex(bus, 40);
 
-        // Break at syntax error handler
-        const ushort LAB_SNER = 0xCDBD;
-        const ushort LAB_15D9 = 0xC59A;
+        // Break at syntax error handlers. Resolve from the linker symbol map so
+        // harmless ROM layout shifts do not turn valid code into false failures.
+        ushort LAB_SNER = BasicSymbol("LAB_SNER");
+        ushort LAB_15D9 = BasicSymbol("LAB_15D9");
 
         EnterLine(editor, "RUN");
         for (int i = 0; i < 100_000_000; i++)
@@ -1618,5 +1681,21 @@ public class EhBasicTokenizationTests
             4 => $"{ident[rng.Next(ident.Length)]}=MNOTE({rng.Next(1, 3)})",
             _ => $"MUSIC {rng.Next(1, 3)},\"T{rng.Next(60, 140)}O{rng.Next(2, 6)}L8CDEFGAB\""
         };
+    }
+
+    private static ushort BasicSymbol(string name)
+    {
+        string path = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "ehbasic", "basic.sym"));
+
+        foreach (string line in File.ReadLines(path))
+        {
+            string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3 && parts[2] == "." + name)
+                return Convert.ToUInt16(parts[1], 16);
+        }
+
+        Assert.Fail($"Could not find BASIC symbol '{name}' in {path}");
+        return 0;
     }
 }

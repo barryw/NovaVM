@@ -19,6 +19,7 @@ module test_tile_engine;
     wire  [15:0] dma_addr;
     wire  [7:0]  dma_data;
     wire         dma_active;
+    wire         reset_busy;
 
     // Blitter access port
     logic [14:0] blt_tile_addr;
@@ -42,9 +43,11 @@ module test_tile_engine;
 
     tile_engine dut (
         .clk(clk), .rst(rst),
-        .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
+        .cpu_addr(cpu_addr), .cpu_raddr(cpu_addr),
+        .cpu_waddr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
         .dma_addr(dma_addr), .dma_data(dma_data), .dma_active(dma_active),
+        .reset_busy(reset_busy),
         .blt_tile_addr(blt_tile_addr), .blt_tile_wdata(blt_tile_wdata),
         .blt_tile_we(blt_tile_we), .blt_tile_re(blt_tile_re),
         .blt_tile_rdata(blt_tile_rdata),
@@ -143,6 +146,7 @@ module test_tile_engine;
 
         repeat(50) @(posedge clk);
         rst = 0;
+        wait_dma_done();
         repeat(10) @(posedge clk);
 
         // ----- Test 1: Initial state -----
@@ -459,6 +463,29 @@ module test_tile_engine;
         @(posedge clk); // wait for BRAM latency
         @(posedge clk);
         check("blitter read returns 0xAB", blt_tile_rdata == 8'hAB);
+
+        // ----- Test 19: Reset clears registers and BRAM-backed tile state -----
+        $display("Test: Reset clears tile engine");
+        rst = 1;
+        repeat(2) @(posedge clk);
+        rst = 0;
+        wait_dma_done();
+        repeat(5) @(posedge clk);
+
+        check("reset tile_size16", dut.tile_size16 == 0);
+        check("reset mirror_mode", dut.mirror_mode == 0);
+        check("reset trans_color", dut.trans_color == 0);
+        check("reset scroll_x", dut.scroll_x == 0);
+        check("reset scroll_y", dut.scroll_y == 0);
+        check("reset tregs[8]", dut.tregs[8] == 0);
+        check("reset col_buffer[5]", dut.col_buffer[5] == 0);
+        check("reset tile_data[100]", dut.tile_data_ram.mem[100] == 0);
+        check("reset nametable[3]", dut.nametable_ram.mem[3] == 0);
+        check("reset attr_table[125]", dut.attr_table_ram.mem[125] == 0);
+        check("reset pal[0] black", dut.pal_ram_inst.mem[0] == 12'h000);
+        check("reset pal[15] light gray", dut.pal_ram_inst.mem[15] == 12'hBBB);
+        check("reset pal[37] zero", dut.pal_ram_inst.mem[37] == 12'h000);
+        check("reset scrub idle", reset_busy == 0);
 
         // ---------------------------------------------------------------
         $display("");

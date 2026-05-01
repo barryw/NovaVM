@@ -59,6 +59,7 @@ module test_vgc_regs;
 
         force dut.visible_d2 = 1'b1;
         force dut.in_text_area_d2 = 1'b0;
+        force dut.reset_display_blank = 1'b0;
         force dut.border_color = 4'd14;
         force dut.mode = 3'd3;
         force dut.spr_pixel_hit = 1'b1;
@@ -75,6 +76,7 @@ module test_vgc_regs;
 
         release dut.visible_d2;
         release dut.in_text_area_d2;
+        release dut.reset_display_blank;
         release dut.border_color;
         release dut.mode;
         release dut.spr_pixel_hit;

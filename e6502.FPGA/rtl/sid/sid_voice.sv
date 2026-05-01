@@ -66,10 +66,15 @@ reg         osc_msb_in_prv;
 always @(posedge clock) begin
 	reg test_delay;
 
-	if(ce_1m) begin
+	if (reset) begin
+		osc_msb_in_prv <= 1'b0;
+		test_delay     <= 1'b0;
+		oscillator     <= 24'd0;
+	end
+	else if(ce_1m) begin
 		osc_msb_in_prv <= osc_msb_in;
 		test_delay <= mode & test_ctrl;
-		oscillator <= (reset || test_ctrl || test_delay || (sync_ctrl && ~osc_msb_in && osc_msb_in_prv)) ? 24'd0 : (oscillator + freq);
+		oscillator <= (test_ctrl || test_delay || (sync_ctrl && ~osc_msb_in && osc_msb_in_prv)) ? 24'd0 : (oscillator + freq);
 	end
 end
 
@@ -86,6 +91,8 @@ always @(posedge clock) begin
 	reg [22:0] lfsr_noise;
 
 	if (reset) begin
+		clk        <= 0;
+		clk_d      <= 0;
 		saw_tri    <= 0;
 		pulse      <= 0;
 		noise      <= 0;
@@ -161,7 +168,12 @@ sid_dac #(.BITS (12)) waveform_dac
 );
 
 reg [11:0] norm_dac;
-always @(posedge clock) norm_dac <= mode ? norm : norm_6581;
+always @(posedge clock) begin
+	if (reset)
+		norm_dac <= 12'd0;
+	else
+		norm_dac <= mode ? norm : norm_6581;
+end
 
 wire [7:0] env_6581;
 sid_dac #(.BITS (8)) envelope_dac
@@ -172,7 +184,12 @@ sid_dac #(.BITS (8)) envelope_dac
 
 // for OSC3 readback
 reg [7:0] wave_out;
-always @(posedge clock) if(ce_1m) wave_out <= norm[11:4] | comb;
+always @(posedge clock) begin
+	if (reset)
+		wave_out <= 8'd0;
+	else if(ce_1m)
+		wave_out <= norm[11:4] | comb;
+end
 
 // DAC with floating input simulation
 reg signed [21:0] dca_out;
@@ -181,7 +198,13 @@ always @(posedge clock) begin
 	reg signed  [8:0] env_dac;
 	reg signed [12:0] dac_out;
 
-	if(ce_1m) begin
+	if (reset) begin
+		keep_cnt <= 24'd0;
+		env_dac  <= 9'sd0;
+		dac_out  <= 13'sd0;
+		dca_out  <= 22'sd0;
+	end
+	else if(ce_1m) begin
 		if(control[7:4]) begin
 			keep_cnt <= mode ? WF_0_TTL_6581 : WF_0_TTL_8580;
 			dac_out  <= 13'({1'b0, norm_dac | {comb, 4'b0}}) - (mode ? WAVEFORM_DC_8580 : WAVEFORM_DC_6581);

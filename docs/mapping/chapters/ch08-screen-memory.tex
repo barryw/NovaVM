@@ -8,14 +8,15 @@ there, the world will see.''}{\textit{--- An anonymous systems programmer}}
 
 \section*{Introduction}
 
-NovaVM's text layer is an 80$\times$50 display. Character RAM and Color RAM
-are each 4000 bytes: one byte per visible cell. Character RAM holds the
-character code; Color RAM holds the foreground colour nibble for the matching
-cell.
+NovaVM's text layer is an 80$\times$50 display. Character RAM, Color RAM,
+and Text Attribute RAM are each 4000 bytes: one byte per visible cell.
+Character RAM holds the character code. Color RAM holds a packed colour
+attribute: the low nibble is foreground and the high nibble is background.
+Text Attribute RAM holds per-cell style flags such as flash.
 
 These memories are no longer mapped directly into the 6502 address space.
 The old \$AA00 and \$B1D0 windows are ordinary RAM now. All CPU access to
-character and colour memory goes through the VDC-style VRAM port at
+character, colour, and text attribute memory goes through the VDC-style VRAM port at
 \$A0E0--\$A0E4. DMA and the blitter use the same memory-space IDs.
 
 \begin{center}
@@ -29,6 +30,7 @@ character and colour memory goes through the VDC-style VRAM port at
 3 & Graphics bitmap & 64000 bytes \\
 4 & Sprite shape RAM & 32768 bytes \\
 6 & Tile data RAM & 32768 bytes \\
+7 & Text Attribute RAM & 4000 bytes \\
 \bottomrule
 \end{tabular}
 \end{center}

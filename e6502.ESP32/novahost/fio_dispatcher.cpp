@@ -4,11 +4,6 @@
 
 extern void logLn(const char* fmt, ...);
 
-// Maximum LOAD payload we'll buffer in RAM at once. ESP32 has plenty of
-// heap but we keep this conservative — most BASIC programs are <8KB.
-// For larger files, the LOAD streams in chunks via loadRam().
-static constexpr int LOAD_BUF_BYTES = 16384;
-
 void FioDispatcher::handle_event() {
     // Read the entire 80-byte register bank in one shot.
     if (!_bridge.peekBlock(BANK_BASE, 80, _bank)) {
@@ -98,20 +93,19 @@ void FioDispatcher::handle_load() {
 
     ndi::DirEntry e;
     img->get_entry(idx, e);
-    if (e.size_bytes > LOAD_BUF_BYTES) {
+    if (e.size_bytes > TRANSFER_BUF_BYTES) {
         // Future: stream in chunks. For now, hard cap.
         logLn("[fio] LOAD %s: %u bytes exceeds %d cap\n",
-                      scratch, (unsigned)e.size_bytes, LOAD_BUF_BYTES);
+                      scratch, (unsigned)e.size_bytes, TRANSFER_BUF_BYTES);
         respond_err(ERR_IO);
         return;
     }
 
-    static uint8_t buf[LOAD_BUF_BYTES];
-    int got = img->read_file_by_index(idx, buf, sizeof(buf));
+    int got = img->read_file_by_index(idx, _transfer_buf, sizeof(_transfer_buf));
     if (got < 0) { respond_err(ERR_IO); return; }
 
     uint16_t dest = src();
-    if (!_bridge.loadRam(dest, buf, (size_t)got)) {
+    if (!_bridge.loadRam(dest, _transfer_buf, (size_t)got)) {
         respond_err(ERR_IO);
         return;
     }
@@ -132,7 +126,7 @@ void FioDispatcher::handle_save() {
     uint16_t e = end();
     if (e < s) { respond_err(ERR_IO); return; }
     uint32_t size = (uint32_t)(e - s + 1);
-    if (size > LOAD_BUF_BYTES) { respond_err(ERR_IO); return; }
+    if (size > TRANSFER_BUF_BYTES) { respond_err(ERR_IO); return; }
 
     char scratch[64];
     int slot;
@@ -145,13 +139,12 @@ void FioDispatcher::handle_save() {
     if (!img) { respond_err(ERR_NO_MOUNT); return; }
 
     // Read the source range from CPU RAM via 256-byte peek blocks.
-    static uint8_t buf[LOAD_BUF_BYTES];
     uint32_t off = 0;
     while (off < size) {
         uint16_t chunk = (size - off >= 256) ? 256 : (uint16_t)(size - off);
         // peekBlock count param: 0 means 256 in protocol.
         uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
-        if (!_bridge.peekBlock((uint16_t)(s + off), wire_count, buf + off)) {
+        if (!_bridge.peekBlock((uint16_t)(s + off), wire_count, _transfer_buf + off)) {
             respond_err(ERR_IO);
             return;
         }
@@ -175,7 +168,7 @@ void FioDispatcher::handle_save() {
     int existing = img->find_entry(scratch, parent);
     if (existing >= 0) img->delete_file(scratch, parent);
 
-    int new_idx = img->write_file(scratch, ftype, parent, buf, size);
+    int new_idx = img->write_file(scratch, ftype, parent, _transfer_buf, size);
     if (new_idx < 0) {
         respond_err(ERR_FULL);
         return;
@@ -236,7 +229,7 @@ void FioDispatcher::handle_dir_read() {
 
     // Walk forward until we find the next active entry whose parent
     // matches. Returns ERR_NOT_FOUND when iteration is exhausted.
-    while (_dir_iter.next_index < 192) {        // 48 sectors × 4 entries
+    while (_dir_iter.next_index < img->directory_entry_count()) {
         ndi::DirEntry e;
         if (!img->get_entry(_dir_iter.next_index, e)) break;
         _dir_iter.next_index++;

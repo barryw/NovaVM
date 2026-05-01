@@ -58,6 +58,42 @@ module test_vgc_text;
         check_eq("cursor_x after two chars", dut.cursor_x,   2);
     endtask
 
+    task automatic test_regcharout_text_attributes();
+        $display("");
+        $display("Test: REG_CHAROUT writes packed colors and text attrs");
+        type_char(8'h0C);
+        wait_cmd_done();
+        step(4);
+
+        bus_write(REG_BGCOL_A, 8'd4);
+        bus_write(REG_FGCOL_A, 8'd2);
+        step(2);
+        type_char(8'h41);
+        check_eq("normal color attr bg=4 fg=2", peek_color(0), 8'h42);
+        check_eq("normal text attr clear", peek_text_attr(0), 8'h00);
+
+        bus_write(REG_TEXTFLAGS_A, 8'h01);
+        step(2);
+        type_char(8'h42);
+        check_eq("reverse default swaps bg/fg", peek_color(1), 8'h24);
+
+        bus_write(REG_TEXTREV_A, 8'hA3);
+        bus_write(REG_TEXTFLAGS_A, 8'h03);
+        step(2);
+        type_char(8'h43);
+        check_eq("explicit reverse attr", peek_color(2), 8'hA3);
+
+        bus_write(REG_TEXTFLAGS_A, 8'h04);
+        step(2);
+        type_char(8'h44);
+        check_eq("flash attr recorded", peek_text_attr(3), 8'h01);
+
+        bus_write(REG_TEXTFLAGS_A, 8'h00);
+        step(2);
+        type_char(8'h45);
+        check_eq("flashoff clears future attrs", peek_text_attr(4), 8'h00);
+    endtask
+
     // T3: typing a full row advances cursor_y to the next row and the next
     // char lands at the start of that row (col 0, row 1).
     task automatic test_row_wrap();
@@ -322,6 +358,7 @@ module test_vgc_text;
 
         test_char_ram_roundtrip();
         test_regcharout_basic();
+        test_regcharout_text_attributes();
         test_row_wrap();
         test_newline_no_scroll();
         test_newline_at_bottom_scrolls();

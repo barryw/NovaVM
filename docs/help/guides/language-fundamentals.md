@@ -177,9 +177,10 @@ to break out.
 
 ### RESET
 
-`RESET` performs a full hardware reset: it stops both SID chips, halts the
-music engine, resets the NIC, clears the VGC, and restarts the BASIC interpreter
-from cold start. All variables and the current program are lost.
+`RESET` performs a full hardware reset: it restarts the CPU, returns all
+custom chips to their initial state, clears display/video state, stops audio,
+and restarts the BASIC interpreter from cold start. All variables and the
+current program are lost.
 
 ```basic
 10 PRINT "RESETTING IN 3..."

@@ -48,9 +48,16 @@ module test_rom_load;
     logic [13:0] dbg_rom_addr;
     logic [7:0]  dbg_rom_data;
     logic        dbg_cpu_reset;
+    logic        dbg_cpu_resume = 1'b0;
 
     wire  [15:0] dbg_cpu_pc;
     wire  [7:0]  dbg_cpu_a, dbg_cpu_x, dbg_cpu_y, dbg_cpu_sp, dbg_cpu_flags;
+    wire  [5:0]  dbg_cpu_state;
+    wire  [7:0]  dbg_cpu_ir;
+    wire  [15:0] dbg_cpu_addr;
+    wire  [7:0]  dbg_cpu_din, dbg_cpu_dout;
+    wire         dbg_cpu_we, dbg_cpu_rdy, dbg_cpu_irq, dbg_cpu_nmi;
+    wire         dbg_cpu_waiting, dbg_cpu_stopped;
 
     top dut (
         .clk(clk), .rst(rst),
@@ -64,16 +71,29 @@ module test_rom_load;
         .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr),
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
-        .dbg_vmem_we(1'b0), .dbg_vmem_space(3'd0),
-        .dbg_vmem_addr(17'd0), .dbg_vmem_data(8'd0),
+        .dbg_vmem_we(1'b0), .dbg_vmem_re(1'b0), .dbg_vmem_space(3'd0),
+        .dbg_vmem_addr(17'd0), .dbg_vmem_data(8'd0), .dbg_vmem_rdata(),
         .dbg_rom_we(dbg_rom_we), .dbg_rom_idx(dbg_rom_idx),
         .dbg_rom_addr(dbg_rom_addr), .dbg_rom_data(dbg_rom_data),
         .dbg_cpu_reset(dbg_cpu_reset),
+        .dbg_system_reset(1'b0),
+        .dbg_cpu_resume(dbg_cpu_resume),
         .brg_sdram_b_we(1'b0), .brg_sdram_b_addr(25'd0), .brg_sdram_b_din(8'd0),
         .dbg_cpu_pc(dbg_cpu_pc),
         .dbg_cpu_a(dbg_cpu_a), .dbg_cpu_x(dbg_cpu_x),
         .dbg_cpu_y(dbg_cpu_y), .dbg_cpu_sp(dbg_cpu_sp),
-        .dbg_cpu_flags(dbg_cpu_flags)
+        .dbg_cpu_flags(dbg_cpu_flags),
+        .dbg_cpu_state(dbg_cpu_state),
+        .dbg_cpu_ir(dbg_cpu_ir),
+        .dbg_cpu_addr(dbg_cpu_addr),
+        .dbg_cpu_din(dbg_cpu_din),
+        .dbg_cpu_dout(dbg_cpu_dout),
+        .dbg_cpu_we(dbg_cpu_we),
+        .dbg_cpu_rdy(dbg_cpu_rdy),
+        .dbg_cpu_irq(dbg_cpu_irq),
+        .dbg_cpu_nmi(dbg_cpu_nmi),
+        .dbg_cpu_waiting(dbg_cpu_waiting),
+        .dbg_cpu_stopped(dbg_cpu_stopped)
     );
 
     // -----------------------------------------------------------------------

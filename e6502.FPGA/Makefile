@@ -15,13 +15,17 @@ EXT_HEX  = rom/extension.hex
 OBJ_DIR  = obj_dir
 
 VERILATOR = verilator
+# Match the production FPGA video profile by default so the SDL simulator is
+# a faithful staging view of the active HDMI frame.
+EXTRA_DEFINES ?= -DVIDEO_720X480
 VFLAGS    = --cc --exe --build -Wall \
+            $(EXTRA_DEFINES) \
             -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND \
             -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-CASEINCOMPLETE \
             -Wno-PROCASSINIT -Wno-CASEX -Wno-SYNCASYNCNET -Wno-UNOPTFLAT -Wno-LATCH \
             -Wno-PINCONNECTEMPTY -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-UNSIGNED \
             --top-module top \
-            -CFLAGS "-O2 -DSIM $(shell sdl2-config --cflags)" \
+            -CFLAGS "-O2 -DSIM $(EXTRA_DEFINES) $(shell sdl2-config --cflags)" \
             -LDFLAGS "$(shell sdl2-config --libs)" \
             --Mdir $(OBJ_DIR) -o ../$(PROJ)
 

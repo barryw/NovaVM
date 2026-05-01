@@ -102,6 +102,7 @@ module test_dma;
     int pass_count = 0;
     int fail_count = 0;
     int test_num = 0;
+    logic all_regs_zero;
 
     localparam DMA = 16'hBA63;
 
@@ -192,6 +193,25 @@ module test_dma;
         $display("Test: Initial state");
         check("status is idle (0)", dut.regs[1] == 0);
         check("RDY is high", dma_rdy == 1);
+
+        // ----- Test: Reset clears programmer-visible state -----
+        $display("Test: Reset clears registers");
+        dma_reg(3, 8'h05);
+        dma_reg(4, 8'h03);
+        dma_reg(5, 8'h34);
+        dma_reg(6, 8'h12);
+        dma_reg(14, 8'h01);
+        dma_reg(15, 8'hAA);
+        rst = 1;
+        repeat(2) @(posedge clk);
+        rst = 0;
+        repeat(5) @(posedge clk);
+        all_regs_zero = 1;
+        for (int i = 0; i < 19; i++)
+            all_regs_zero &= (dut.regs[i] == 8'h00);
+        check("all DMA regs reset to zero/idle", all_regs_zero);
+        check("DMA state reset idle", dut.state == 0);
+        check("DMA RDY after reset", dma_rdy == 1);
 
         // ----- Test: DMAFILL CPU RAM 256 bytes -----
         $display("Test: Fill CPU RAM 256 bytes @ 0xAA");
@@ -327,13 +347,13 @@ module test_dma;
         check("zero-len status = error", dut.regs[1] == 8'h03);
         check("zero-len errcode = badargs", dut.regs[2] == 8'h04);
 
-        // ----- Test: Error — bad space -----
-        $display("Test: Error bad space");
-        setup_fill(7, 16'h2000, 10, 8'h00);  // space 7 invalid (max 5)
+        // ----- Test: Error — text attribute range overflow -----
+        $display("Test: Error text attribute range overflow");
+        setup_fill(7, 16'h2000, 10, 8'h00);  // text attr space is 4000 bytes
         dma_start();
         repeat(10) @(posedge clk);
-        check("bad-space status = error", dut.regs[1] == 8'h03);
-        check("bad-space errcode = badspace", dut.regs[2] == 8'h02);
+        check("text-attr-range status = error", dut.regs[1] == 8'h03);
+        check("text-attr-range errcode = range", dut.regs[2] == 8'h03);
 
         // ----- Test: Error — range overflow -----
         $display("Test: Error range overflow");

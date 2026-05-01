@@ -638,15 +638,18 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
-    [McpServerTool, Description("Set a breakpoint at a memory address. Optionally add a condition (e.g., register='A', op='==', value=1).")]
+    [McpServerTool, Description("Set a breakpoint at a memory address. Slot is optional on FPGA; conditions are Avalonia-only.")]
     public static async Task<string> DbgBreakSet(
         EmulatorClient client,
         [Description("Memory address to break at (0-65535)")] int address,
+        [Description("Breakpoint slot 0-3 for FPGA backends (optional)")] int? slot = null,
+        [Description("Enable the breakpoint (default true)")] bool enabled = true,
         [Description("Register to test: A, X, Y, SP (optional)")] string? register = null,
         [Description("Comparison operator: ==, !=, <, >, <=, >= (optional)")] string? op = null,
         [Description("Value to compare against (0-255, optional)")] int? value = null)
     {
-        var req = new JsonObject { ["command"] = "dbg_break_set", ["address"] = address };
+        var req = new JsonObject { ["command"] = "dbg_break_set", ["address"] = address, ["enabled"] = enabled };
+        if (slot is not null) req["slot"] = slot.Value;
         if (register is not null) req["register"] = register;
         if (op is not null) req["op"] = op;
         if (value is not null) req["value"] = value;
@@ -654,12 +657,16 @@ public static class EmulatorTools
         return result.ToJsonString();
     }
 
-    [McpServerTool, Description("Remove a breakpoint at the specified address.")]
+    [McpServerTool, Description("Remove a breakpoint by address, or by FPGA slot when provided.")]
     public static async Task<string> DbgBreakClear(
         EmulatorClient client,
-        [Description("Memory address of breakpoint to remove")] int address)
+        [Description("Memory address of breakpoint to remove (optional if slot is provided)")] int? address = null,
+        [Description("Breakpoint slot 0-3 for FPGA backends (optional)")] int? slot = null)
     {
-        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_break_clear", ["address"] = address });
+        var req = new JsonObject { ["command"] = "dbg_break_clear" };
+        if (address is not null) req["address"] = address.Value;
+        if (slot is not null) req["slot"] = slot.Value;
+        var result = await client.SendAsync(req);
         return result.ToJsonString();
     }
 
@@ -674,6 +681,15 @@ public static class EmulatorTools
     public static async Task<string> DbgBreakList(EmulatorClient client)
     {
         var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_break_list" });
+        return result.ToJsonString();
+    }
+
+    [McpServerTool, Description("Read the FPGA/Verilator CPU trace ring. Returns recent bus/register records.")]
+    public static async Task<string> DbgTrace(
+        EmulatorClient client,
+        [Description("Number of recent trace records to read (1-64)")] int count = 64)
+    {
+        var result = await client.SendAsync(new JsonObject { ["command"] = "dbg_trace", ["count"] = count });
         return result.ToJsonString();
     }
 
