@@ -24,7 +24,7 @@ internal static class TextPixelRenderer
         int srcPy = Wrap400(py + (scrollY << 1));
 
         int col = srcPx / BitmapFont.GlyphWidth;
-        int row = srcPy / (BitmapFont.GlyphHeight * 2);
+        int row = srcPy / BitmapFont.GlyphHeight;
 
         byte ch = vgc.GetScreenChar(col, row);
         byte colorAttr = vgc.GetScreenColor(col, row);
@@ -38,7 +38,7 @@ internal static class TextPixelRenderer
             (fgColor, cellBgColor) = (cellBgColor, fgColor);
 
         int glyphX = srcPx % BitmapFont.GlyphWidth;
-        int glyphY = (srcPy % (BitmapFont.GlyphHeight * 2)) / 2;
+        int glyphY = srcPy % BitmapFont.GlyphHeight;
         byte rowBits = font.GetRow(fontIndex, ch, glyphY);
         bool set = (rowBits & (0x80 >> glyphX)) != 0;
         if ((textAttr & VgcConstants.TextAttrFlash) != 0 && !flashVisible)

@@ -61,6 +61,18 @@ public class AvaloniaTextRenderingTests
         Assert.IsFalse(opaque);
     }
 
+    [TestMethod]
+    public void TextPixelRenderer_SamplesAllFiftyRows()
+    {
+        var vgc = new VirtualGraphicsController();
+        var font = SinglePixelAFont();
+        WriteTextCell(vgc, 24 * VgcConstants.ScreenCols, (byte)'A', colorAttr: 0x12, textAttr: 0);
+        WriteTextCell(vgc, 49 * VgcConstants.ScreenCols, (byte)'A', colorAttr: 0x34, textAttr: 0);
+
+        Assert.IsTrue(TrySample(vgc, font, x: 0, y: 49 * BitmapFont.GlyphHeight, flashVisible: true, out byte row49));
+        Assert.AreEqual(4, row49);
+    }
+
     private static BitmapFont SinglePixelAFont()
     {
         var fontData = new byte[BitmapFont.FontDataSize];

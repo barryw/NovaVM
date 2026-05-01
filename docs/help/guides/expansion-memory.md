@@ -45,13 +45,24 @@ XRAM is divided into **banks**, each 64 KB in size. With the default 512 KB
 configuration there are **8 banks** (numbered 0 through 7). One bank is always
 *active*; raw-offset commands operate within that bank.
 
+BASIC deliberately keeps this banked model: you select `XBANK n`, then pass a
+16-bit offset to XRAM commands. Assembly programs should use the shared XRAM
+runtime instead, where the same location is expressed as a flat 24-bit address:
+
+```
+flat address = bank * 65536 + offset
+```
+
+For example, `XBANK 3: XPOKE $2000,42` writes the same byte an assembly program
+would address as `$032000`.
+
 ### Checking memory status: `XMEM`
 
 Type `XMEM` at the prompt to print a status summary:
 
 ```
 XMEM
-8 BANKS, 512 KB XRAM, BANK 0, USED 0, FREE 2048 PAGES
+8 BANKS, 512 KB XRAM, BANK 0, USED 5, FREE 2043 PAGES, NAMED 0
 ```
 
 The output shows total bank count, total XRAM capacity, the currently active bank,
@@ -147,6 +158,29 @@ useful for assets larger than a single 64 KB bank.
 Filenames without an extension use `.xram`. Explicit extensions are honored, so
 Z-machine story files such as `ZORK1.Z3` can be loaded directly into XRAM.
 
+Because `XLOAD` and `XSAVE` stream directly between files and XRAM, they are the
+right path for assets that are too large or too inconvenient to stage through
+normal BASIC RAM.
+
+### BASIC XRAM command summary
+
+| **Command** | **Purpose** |
+| --- | --- |
+| `XMEM` | Print XRAM capacity, active bank, used pages, and free pages. |
+| `XBANK n` | Select the active 64 KB bank for raw BASIC XRAM commands. |
+| `XPOKE offset,value` | Write one byte in the active bank. |
+| `XPEEK(offset)` | Read one byte in the active bank. |
+| `STASH ramaddr,offset,length` | DMA copy CPU RAM to XRAM in the active bank. |
+| `FETCH ramaddr,offset,length` | DMA copy XRAM in the active bank to CPU RAM. |
+| `XLOAD "name",offset[,length]` | Stream a file directly into XRAM. |
+| `XSAVE "name",offset,length` | Stream XRAM directly to a file. |
+| `STASH "name",ramaddr,length` | Store a named block. |
+| `FETCH "name",ramaddr` | Fetch a named block. |
+| `XDIR` | List named blocks. |
+| `XDEL "name"` | Delete a named block. |
+| `XMAP window,offset` | Map a 256-byte XRAM page into `$BC00-$BFFF`. |
+| `XUNMAP window` | Unmap a mapped XRAM window. |
+
 ### Example: saving and restoring a character screen buffer
 
 Text character memory is a VGC memory space, not a direct CPU address range.
@@ -237,13 +271,12 @@ lower-level commands are available.
 
 ### `XALLOC length`
 
-Allocates *length* bytes in XRAM and returns a numeric handle (1--255). The
-handle identifies the allocated region. You are responsible for recording it; the
-XMC does not associate a name.
+Allocates *length* bytes in XRAM using the low-level allocator. This is mostly
+useful for diagnostics and tooling that inspect XMC registers directly; ordinary
+BASIC programs should usually use named `STASH`/`FETCH` blocks or raw offsets.
 
 ```
-H = XALLOC(4096)
-PRINT "HANDLE: ";H
+XALLOC 4096
 ```
 
 ### `XFREE offset,length`

@@ -16,7 +16,7 @@ basic.o: basic.asm min_mon.asm
 extension.bin: extension.o extension.cfg
 	ld65 -C extension.cfg -o extension.bin extension.o
 
-extension.o: extension.s xram.inc xram.s
+extension.o: extension.s lib/xram.inc lib/xram.s lib/xmc.s xram.inc xram.s
 	ca65 --cpu 65c02 extension.s -o extension.o
 
 # Token table extraction

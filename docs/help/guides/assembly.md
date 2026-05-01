@@ -112,20 +112,20 @@ POKE 40974,65
 REM prints the letter A
 ```
 
-## The CALL and USR Interface
+## The SYS and USR Interface
 
 NovaBASIC provides two ways to execute machine code from within a BASIC program.
 
-### `CALL addr`
+### `SYS addr`
 
-Performs a `JSR` to *addr*. Execution resumes in BASIC after the
-machine-code routine executes an `RTS`. There is no parameter passing;
-`CALL` is a simple subroutine jump. You are responsible for preserving
+Jumps to *addr* after pushing a BASIC return address on the stack. Execution
+resumes in BASIC after the machine-code routine executes an `RTS`. There is no
+parameter passing; `SYS` is a simple subroutine entry. You are responsible for preserving
 CPU registers if the routine will return to BASIC in a clean state.
 
 ```
-10 CALL 49152
-REM jumps to machine code at $C000
+10 SYS 36864
+REM jumps to machine code at $9000
 ```
 
 ### `USR(x)`
@@ -185,10 +185,17 @@ an unexpected state. Long handlers can cause instability.
 
 ## XRAM Assembly Runtime
 
-NovaVM provides a reusable ca65 XRAM runtime in `ehbasic/xram.inc` and
-`ehbasic/xram.s`. BASIC keeps its `XBANK` plus 16-bit offset model, but assembly
+NovaVM provides a reusable ca65 XRAM runtime in `ehbasic/lib/xram.inc` and
+`ehbasic/lib/xram.s`. BASIC keeps its `XBANK` plus 16-bit offset model, but assembly
 code should use the runtime's flat 24-bit address registers:
 `XRAM_ADDRL`, `XRAM_ADDRM`, and `XRAM_ADDRH`.
+
+For standalone assembly programs, link `ehbasic/lib/xram.s` into the program or
+include it once after your own code. Do not copy the XMC, DMA, or FIO register
+sequences into each project; the runtime is the reusable boundary for byte
+access, DMA-backed bulk copies, fills, and direct `XLOAD`/`XSAVE` streaming.
+If a runtime needs BASIC's named-block allocator and XMC register command
+contract, link `ehbasic/lib/xmc.s` as well.
 
 Those symbols are aliases over the Nova pseudo-register ABI:
 
@@ -213,6 +220,19 @@ copy their XMC MMIO arguments into the same pseudo-register layout.
 | `xram_xload` | Stream a file directly into XRAM. |
 | `xram_xsave` | Stream XRAM directly to a file. |
 | `xram_wait_dma` | Wait for a DMA transfer and translate DMA errors into XMC status. |
+| `xmc_process` | Optional `lib/xmc.s` entry point for the XMC register command contract. |
+
+## VTEXT Assembly Runtime
+
+`ehbasic/lib/vtext.inc` and `ehbasic/lib/vtext.s` provide reusable VGC text
+regions for assembly programs and language runtimes. A caller defines a
+rectangle, local cursor, packed color, text attributes, and wrap/scroll flags;
+VTEXT handles clear, line clear, character output, and blitter-backed region
+scrolls across the character, color, and text-attribute planes.
+
+This is the right layer for fixed status rows, editor panes, REPL regions, and
+Ozmoo story windows. The library does not know about Z-machine windows; Ozmoo
+maps story-file windows onto VTEXT regions.
 
 ### Example: reading one byte from XRAM in assembly
 
@@ -269,6 +289,8 @@ story_name_end:
 ```
 
 Filenames without an extension use `.xram`; explicit extensions are honored.
+See `docs/assembly/xram.md` for the full assembly ABI, build pattern, and
+fixture-backed integration tests.
 
 ## VGC Register-Level Programming
 

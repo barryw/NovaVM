@@ -21,7 +21,7 @@ Understanding their constraints prevents unexpected function-call errors.
 | LAB_GTWRD | Converts the FAC to an unsigned 16-bit integer. Accepts values 0--65535. Negative values or values above 65535 raise a function-call error. |
 
 ::: warning
-Commands that accept addresses (`POKE`, `DOKE`, `CALL`, `WAIT`, `STASH`, `FETCH`...)
+Commands that accept addresses (`POKE`, `DOKE`, `SYS`, `WAIT`, `STASH`, `FETCH`...)
 route through `LAB_GTWRD`.
 Passing a value such as `-1` will raise an error rather than
 wrapping to `$FFFF`.

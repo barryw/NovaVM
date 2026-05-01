@@ -1,5 +1,7 @@
 # XMC / XRAM Programmer Notes
 
+For the reusable assembly-facing runtime ABI, see `docs/assembly/xram.md`.
+
 ## Registers
 - Base: `$BA00`
 - Key registers: `XMC_CMD`, `XMC_STATUS`, `XMC_ERRCODE`, `XMC_XAL/XAM/XAH`, `XMC_RAML/RAMH`, `XMC_LENL/LENH`, `XMC_DATA`, `XMC_BANK`
@@ -19,7 +21,7 @@
 
 ## Shared XRAM Runtime
 
-Assembly code should use `ehbasic/xram.inc` and `ehbasic/xram.s` instead of
+Assembly code should use `ehbasic/lib/xram.inc` and `ehbasic/lib/xram.s` instead of
 duplicating XMC/DMA register setup. BASIC still exposes banked 64K offsets with
 `XBANK`, but the shared runtime takes a flat 24-bit address in
 `XRAM_ADDRL/M/H`.

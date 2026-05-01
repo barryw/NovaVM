@@ -36,6 +36,8 @@ DEFAULT_SUITES=(
     blitter
     dma
     xram
+    xram_asm
+    vtext_asm
     sid
     copper
     tiles
