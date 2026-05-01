@@ -1,7 +1,7 @@
 Modules list:
 -------------
 basic.o:
-    CODE              Offs=000000  Size=003FC6  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=003ECD  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
     BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
     DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
@@ -20,7 +20,7 @@ DATA                  000000  000000  000000  00001
 NULL                  000000  000000  000000  00001
 RODATA                000000  000000  000000  00001
 ZEROPAGE              000080  000080  000000  00001
-CODE                  00C000  00FFC5  003FC6  00001
+CODE                  00C000  00FECC  003ECD  00001
 MONITOR               00FFD7  00FFF5  00001F  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 
@@ -29,6 +29,19 @@ Exports list by name:
 ---------------------
 __ZP_FILEOFFS__           000000  EA    __ZP_LAST__               000080  LA    
 __ZP_SIZE__               00001F  EA    __ZP_START__              000080  LA    
+fio_check                 00EDB7  LA    fio_copy_name             00EDD7  LA    
+fio_exec                  00EDC4  LA    fio_issue                 00EDB3  LA    
+fio_set_io_error          00EDCA  LA    sprite_command            00E9BC  LA    
+sprite_disable            00E9CA  LA    sprite_enable             00E9C5  LA    
+sprite_get_x              00E9FB  LA    sprite_get_y              00EA0C  LA    
+sprite_pos                00E9C0  LA    sprite_reg_offset         00E9D4  LA    
+sprite_row                00E9CF  LA    sprite_set_reg16          00E9EC  LA    
+sprite_set_reg8           00E9E1  LA    sprite_set_shape          00E9DF  LA    
+vgc_cmd                   00E968  LA    vgc_flash_off             00E9B3  LA    
+vgc_flash_on              00E9AA  LA    vgc_mem_read              00E97D  LA    
+vgc_mem_write             00E980  LA    vgc_reverse_default       00E988  LA    
+vgc_reverse_explicit      00E993  LA    vgc_reverse_off           00E9A1  LA    
+vgc_vsync                 00E974  LA    vgc_wait_cmd              00E96C  LA    
 
 
 
@@ -36,6 +49,19 @@ Exports list by value:
 ----------------------
 __ZP_FILEOFFS__           000000  EA    __ZP_SIZE__               00001F  EA    
 __ZP_LAST__               000080  LA    __ZP_START__              000080  LA    
+vgc_cmd                   00E968  LA    vgc_wait_cmd              00E96C  LA    
+vgc_vsync                 00E974  LA    vgc_mem_read              00E97D  LA    
+vgc_mem_write             00E980  LA    vgc_reverse_default       00E988  LA    
+vgc_reverse_explicit      00E993  LA    vgc_reverse_off           00E9A1  LA    
+vgc_flash_on              00E9AA  LA    vgc_flash_off             00E9B3  LA    
+sprite_command            00E9BC  LA    sprite_pos                00E9C0  LA    
+sprite_enable             00E9C5  LA    sprite_disable            00E9CA  LA    
+sprite_row                00E9CF  LA    sprite_reg_offset         00E9D4  LA    
+sprite_set_shape          00E9DF  LA    sprite_set_reg8           00E9E1  LA    
+sprite_set_reg16          00E9EC  LA    sprite_get_x              00E9FB  LA    
+sprite_get_y              00EA0C  LA    fio_issue                 00EDB3  LA    
+fio_check                 00EDB7  LA    fio_exec                  00EDC4  LA    
+fio_set_io_error          00EDCA  LA    fio_copy_name             00EDD7  LA    
 
 
 
@@ -45,4 +71,30 @@ __ZP_FILEOFFS__ ([linker generated]):
 __ZP_LAST__ ([linker generated]):
 __ZP_SIZE__ ([linker generated]):
 __ZP_START__ ([linker generated]):
+fio_check (basic.o):
+fio_copy_name (basic.o):
+fio_exec (basic.o):
+fio_issue (basic.o):
+fio_set_io_error (basic.o):
+sprite_command (basic.o):
+sprite_disable (basic.o):
+sprite_enable (basic.o):
+sprite_get_x (basic.o):
+sprite_get_y (basic.o):
+sprite_pos (basic.o):
+sprite_reg_offset (basic.o):
+sprite_row (basic.o):
+sprite_set_reg16 (basic.o):
+sprite_set_reg8 (basic.o):
+sprite_set_shape (basic.o):
+vgc_cmd (basic.o):
+vgc_flash_off (basic.o):
+vgc_flash_on (basic.o):
+vgc_mem_read (basic.o):
+vgc_mem_write (basic.o):
+vgc_reverse_default (basic.o):
+vgc_reverse_explicit (basic.o):
+vgc_reverse_off (basic.o):
+vgc_vsync (basic.o):
+vgc_wait_cmd (basic.o):
 

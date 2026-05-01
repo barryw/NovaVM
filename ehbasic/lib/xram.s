@@ -5,7 +5,10 @@
 ; use XRAM as a flat 24-bit address space.
 
 .include "xram.inc"
+.include "dma.s"
+.include "fio.s"
 
+.ifndef XRAM_IMPLEMENTATION_INCLUDED
 XRAM_IMPLEMENTATION_INCLUDED = 1
 
       .segment "CODE"
@@ -121,73 +124,28 @@ xram_xmc_fill:
 ; On success, XRAM_LENL/H is updated with FIO_SIZEL/H, the actual byte count.
 ; ---------------------------------------------------------------------
 xram_xload:
-      JSR   xram_prepare_fio_file
+      JSR   fio_prepare_xram_transfer
       BNE   @done
       LDA   #FIO_CMD_XLOAD
-      JSR   xram_run_fio
+      JSR   fio_run
       BNE   @done
       JSR   xram_store_fio_size
       JMP   xram_set_ok
 @done:
-      RTS
+      JMP   xram_map_fio_error
 
 xram_xsave:
-      JSR   xram_prepare_fio_file
+      JSR   fio_prepare_xram_transfer
       BNE   @done
       LDA   #FIO_CMD_XSAVE
-      JSR   xram_run_fio
+      JSR   fio_run
       BNE   @done
       JSR   xram_store_fio_size
       JMP   xram_set_ok
 @done:
-      RTS
+      JMP   xram_map_fio_error
 
-xram_prepare_fio_file:
-      LDA   XRAM_NAMELEN
-      BEQ   @bad
-      CMP   #$40              ; FIO filename limit is 63 bytes
-      BCS   @bad
-      STA   FIO_NAMELEN
-      TAX
-      LDY   #$00
-@copy_name:
-      LDA   (XRAM_NAMEPTR_L),Y
-      STA   FIO_NAME,Y
-      INY
-      DEX
-      BNE   @copy_name
-
-      LDA   XRAM_ADDRL
-      STA   FIO_GADDRL
-      LDA   XRAM_ADDRM
-      STA   FIO_GADDRH
-      LDA   XRAM_ADDRH
-      STA   FIO_GSPACE
-      LDA   XRAM_LENL
-      STA   FIO_GLENL
-      LDA   XRAM_LENH
-      STA   FIO_GLENH
-      LDA   #$00
-      RTS
-@bad:
-      LDA   #FIO_STATUS_ERROR
-      STA   FIO_STATUS
-      LDA   #FIO_ERR_IO
-      STA   FIO_ERRCODE
-      LDA   #XRAM_XMC_ERR_BADARGS
-      JMP   xram_set_error
-
-xram_run_fio:
-      PHA
-      STZ   FIO_STATUS
-      STZ   FIO_ERRCODE
-      PLA
-      STA   FIO_CMD
-@wait_status:
-      LDA   FIO_STATUS
-      BEQ   @wait_status
-      CMP   #FIO_OK
-      BEQ   @ok
+xram_map_fio_error:
       LDA   FIO_ERRCODE
       CMP   #FIO_ERR_NOTFOUND
       BEQ   @not_found
@@ -196,9 +154,6 @@ xram_run_fio:
 @not_found:
       LDA   #XRAM_XMC_ERR_NOTFOUND
       JMP   xram_set_error
-@ok:
-      LDA   #$00
-      RTS
 
 xram_store_fio_size:
       LDA   FIO_SIZEL
@@ -277,10 +232,8 @@ xram_copy_from_ram:
       STA   DMA_DSTH
 
       JSR   xram_set_dma_len16
-      STZ   DMA_MODE_REG
-      LDA   #DMA_CMD_START
-      STA   DMA_CMD_REG
-      JMP   xram_wait_dma
+      JSR   dma_start_copy
+      JMP   xram_dma_result
 
 xram_copy_to_ram:
       LDA   #DMA_SPACE_XRAM
@@ -301,10 +254,8 @@ xram_copy_to_ram:
       STA   DMA_DSTM
 
       JSR   xram_set_dma_len16
-      STZ   DMA_MODE_REG
-      LDA   #DMA_CMD_START
-      STA   DMA_CMD_REG
-      JMP   xram_wait_dma
+      JSR   dma_start_copy
+      JMP   xram_dma_result
 
 xram_fill:
       LDA   #DMA_SPACE_CPU
@@ -325,11 +276,8 @@ xram_fill:
       JSR   xram_set_dma_len16
       LDA   XRAM_DATA
       STA   DMA_FILLVALUE
-      LDA   #DMA_MODE_FILL
-      STA   DMA_MODE_REG
-      LDA   #DMA_CMD_START
-      STA   DMA_CMD_REG
-      JMP   xram_wait_dma
+      JSR   dma_start_fill
+      JMP   xram_dma_result
 
 xram_set_dma_len16:
       LDA   XRAM_LENL
@@ -340,11 +288,10 @@ xram_set_dma_len16:
       RTS
 
 xram_wait_dma:
-@loop:
-      LDA   DMA_STATUS_REG
-      CMP   #DMA_STATUS_BUSY
-      BEQ   @loop
-      CMP   #DMA_STATUS_OK
+      JSR   dma_wait
+
+xram_dma_result:
+      CMP   #DMA_RESULT_OK
       BEQ   @ok
 
       LDA   DMA_ERRCODE_REG
@@ -357,3 +304,5 @@ xram_wait_dma:
       JMP   xram_set_error
 @ok:
       JMP   xram_set_ok
+
+.endif

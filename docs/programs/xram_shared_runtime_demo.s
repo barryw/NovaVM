@@ -11,7 +11,6 @@
 
 .include "lib/xram.inc"
 
-VGC_CHAROUT = $A00E
 BUFFER      = $2300
 RESTORED    = $2310
 MSG_LEN     = message_end - message

@@ -9,14 +9,14 @@ all: basic.bin extension.bin keyboard.bin demo.bin tokens.json
 basic.bin basic.sym: basic.o ehbasic.cfg
 	ld65 -C ehbasic.cfg -vm -m basic.map -Ln basic.sym -o basic.bin basic.o
 
-basic.o: basic.asm min_mon.asm
+basic.o: basic.asm min_mon.asm lib/nova.inc lib/fio.inc lib/fio.s lib/vgc.inc lib/vgc.s lib/sprite.inc lib/sprite.s
 	ca65 --cpu 65c02 -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm
 
 # Extension ROM build
 extension.bin: extension.o extension.cfg
 	ld65 -C extension.cfg -o extension.bin extension.o
 
-extension.o: extension.s lib/xram.inc lib/xram.s lib/xmc.s xram.inc xram.s
+extension.o: extension.s lib/nova.inc lib/fio.inc lib/fio.s lib/dma.inc lib/dma.s lib/blitter.inc lib/blitter.s lib/copper.inc lib/copper.s lib/tile.inc lib/tile.s lib/xram.inc lib/xram.s lib/xmc.s xram.inc xram.s
 	ca65 --cpu 65c02 extension.s -o extension.o
 
 # Token table extraction

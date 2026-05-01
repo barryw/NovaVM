@@ -7,23 +7,7 @@
 ; --- Zero page communication ---
 ExtCmdId        = $E4           ; command ID (set by RAM trampoline)
 
-; --- Nova zero-page pseudo-registers ($20-$2F) ---
-NVR0L           = $20
-NVR0H           = $21
-NVR1L           = $22
-NVR1H           = $23
-NVR2L           = $24
-NVR2H           = $25
-NVR3L           = $26
-NVR3H           = $27
-NVR4L           = $28
-NVR4H           = $29
-NVR5L           = $2A
-NVR5H           = $2B
-NVR6L           = $2C
-NVR6H           = $2D
-NVR7L           = $2E
-NVR7H           = $2F
+      .include "lib/nova.inc"
 
 ; Short-lived extension helper scratch. Keep NVR4-NVR6 for XMC metadata state.
 ext_ptrL        = NVR0L
@@ -37,116 +21,11 @@ ext_dig3        = NVR2H
 ext_dig4        = NVR3L
 ext_firstdig    = NVR3H
 
-; --- Hardware registers ---
-VGC_CHAROUT     = $A00E         ; write character to screen
-VGC_CHARIN      = $A00F         ; read character (0 = none)
-REG_ROMSWAP     = $A03F         ; ROM bank switch register
-FIO_CMD         = $B9A0         ; FileIO command register
-FIO_STATUS      = $B9A1         ; FileIO status (0=idle, 2=ok, 3=error)
-FIO_ERRCODE     = $B9A2         ; FileIO error code
-
-; --- FileIO registers ---
-FIO_NAMELEN     = $B9A3         ; filename length
-FIO_SIZEL       = $B9A8         ; dir entry size low
-FIO_SIZEH       = $B9A9         ; dir entry size high
-FIO_DIRTYPE     = $B9AF         ; dir entry type (0=BAS,1=SID,2=BIN,3=MID,4=GFX,5=DIR)
-FIO_NAME        = $B9B0         ; filename buffer (64 bytes)
-
-; --- XMC registers ---
-XMC_CMD         = $BA00         ; command register
-XMC_STATUS      = $BA01         ; status
-XMC_ERRCODE     = $BA02         ; error code
-XMC_BANK        = $BA0C         ; current bank
-XMC_BANKS       = $BA0D         ; total banks
-XMC_USEDL       = $BA0E         ; used pages low
-XMC_USEDH       = $BA0F         ; used pages high
-XMC_FREEL       = $BA10         ; free pages low
-XMC_FREEH       = $BA11         ; free pages high
-XMC_NAMELEN     = $BA12         ; name length
-XMC_DIRCOUNTL   = $BA14         ; named block count low
-XMC_DIRCOUNTH   = $BA15         ; named block count high
-XMC_LENL        = $BA09         ; block length low
-XMC_LENH        = $BA0A         ; block length high
-XMC_NAME        = $BA24         ; name buffer
-XMC_CMD_STATS   = $07           ; refresh stats
-XMC_CMD_NDIRO   = $0E           ; named dir open
-XMC_CMD_NDIRR   = $0F           ; named dir read
-XMC_OK          = $02           ; success status
-
-; --- Constants ---
-FIO_CMD_SFLOAD  = $15           ; soundfont load command
-FIO_CMD_DIROPEN = $03           ; open directory listing
-FIO_CMD_DIRREAD = $04           ; read next directory entry
-FIO_CMD_PWD     = $26           ; print working directory
-FIO_CMD_TSAVE   = $16           ; save tile state
-FIO_CMD_TLOAD   = $17           ; load tile state
-FIO_OK          = $02           ; status: success
-ROMSWAP_NCCEDIT = $03           ; NCC editor event
-
-; --- Extension command IDs ---
-EXT_CMD_NCC     = $00
-EXT_CMD_SFLOAD  = $01
-EXT_CMD_DIR     = $02
-EXT_CMD_PWD     = $03
-EXT_CMD_XMEM    = $04
-EXT_CMD_XDIR    = $05
-EXT_CMD_TSAVE   = $06
-EXT_CMD_TLOAD   = $07
-EXT_CMD_HELP    = $08
-EXT_CMD_DMAFILL = $09
-EXT_CMD_BLTFILL = $0A
-EXT_CMD_XMCCMD  = $0B
-EXT_CMD_COPPER  = $0C           ; COPPER subcommand parser
-EXT_CMD_XLOAD   = $0D
-EXT_CMD_XSAVE   = $0E
-
-; --- XMC command codes (written to $BA00 before calling processor) ---
-XMC_CMD_GET     = $01           ; GetByte: read XRAM[XA] → DATA
-XMC_CMD_PUT     = $02           ; PutByte: write DATA → XRAM[XA]
-XMC_CMD_STASH   = $03           ; Stash: RAM → XRAM via DMA
-XMC_CMD_FETCH   = $04           ; Fetch: XRAM → RAM via DMA
-XMC_CMD_FILL    = $05           ; Fill: fill XRAM with DATA
-XMC_CMD_RSTUS   = $08           ; ResetUsage: clear page tracking
-XMC_CMD_REL     = $09           ; Release: mark pages free
-XMC_CMD_ALLOC   = $0A           ; Alloc: find free pages
-XMC_CMD_NSTSH   = $0B           ; Named stash
-XMC_CMD_NFETC   = $0C           ; Named fetch
-XMC_CMD_NDEL    = $0D           ; Named delete
-; XMC_CMD_NDIRO ($0E) and XMC_CMD_NDIRR ($0F) already defined above
-
-; --- Additional XMC register addresses ---
-XMC_XAL         = $BA04         ; XRAM address low
-XMC_XAM         = $BA05         ; XRAM address mid
-XMC_XAH         = $BA06         ; XRAM address high
-XMC_RAML        = $BA07         ; CPU RAM address low
-XMC_RAMH        = $BA08         ; CPU RAM address high
-XMC_DATA        = $BA0B         ; data port byte
-XMC_HANDLE      = $BA13         ; block handle
-
-; --- Blitter register addresses ---
-BLT_DSTSPACE    = $BA87
-BLT_DSTL        = $BA8B
-BLT_DSTM        = $BA8C
-BLT_DSTH        = $BA8D
-BLT_WIDTHL      = $BA8E
-BLT_WIDTHH      = $BA8F
-BLT_HEIGHTL     = $BA90
-BLT_HEIGHTH     = $BA91
-BLT_DSTSTRL     = $BA94
-BLT_DSTRH       = $BA95
-BLT_FILLVAL     = $BA97
-
-; --- Window 3 registers (used for single-byte XRAM access) ---
-WIN3_LO         = $BA21         ; window 3 base address low (ignored)
-WIN3_MI         = $BA22         ; window 3 base address mid
-WIN3_HI         = $BA23         ; window 3 base address high
-WIN3_BASE       = $BF00         ; window 3 data area ($BF00-$BFFF)
-
 ; --- RAM addresses ---
 EXT_RESET_VEC   = $0233         ; reset recovery routine in RAM
-EXT_GTBY_VEC    = $0236         ; bridge: extension → BASIC LAB_GTBY → extension
-EXT_GTWRD_VEC   = $0244         ; bridge: extension → BASIC LAB_GTWRD → extension
-EXT_SNERR_VEC   = $0252         ; bridge: extension → BASIC LAB_15D9 syntax err
+EXT_GTBY_VEC    = $023B         ; bridge: extension → BASIC LAB_GTBY → extension
+EXT_GTWRD_VEC   = $0249         ; bridge: extension → BASIC LAB_GTWRD → extension
+EXT_SNERR_VEC   = $0257         ; bridge: extension → BASIC LAB_15D9 syntax err
 
 ; --- BASIC ZP routines (RAM-resident, callable from extension ROM) ---
 LAB_IGBY        = $BC           ; advance + skip-spaces + return byte (A)
@@ -166,23 +45,7 @@ TK_CLEAR_VAL    = $A2
 TK_GMODE_VAL    = $B5
 TK_OFF_VAL      = $CB
 
-; --- VGC command + parameter registers ---
-VGC_CMD         = $A010
-VGC_P0          = $A011
-VGC_P1          = $A012
-VGC_P2          = $A013
-VGC_P3          = $A014
-VGC_P4          = $A015
-VGC_P5          = $A016
-
-; --- VGC copper command codes (from basic.asm:8856-8863) ---
-VCMD_COPPERADD  = $1B
-VCMD_COPPERCLR  = $1C
-VCMD_COPPERENA  = $1D
-VCMD_COPPERDIS  = $1E
-VCMD_COPPERLIST = $20
-VCMD_COPPERUSE  = $21
-VCMD_COPPEREND  = $22
+; VGC register and command constants live in lib/nova.inc.
 
       .segment "CODE"
       .org    $C000
@@ -217,6 +80,26 @@ ExtTable:
       .word EXT_COPPER-1      ; cmd C: COPPER subcommand parser
       .word EXT_XLOAD-1       ; cmd D: XLOAD file -> XRAM
       .word EXT_XSAVE-1       ; cmd E: XSAVE XRAM -> file
+      .word EXT_DMACOPY-1     ; cmd F: DMACOPY epilogue
+      .word EXT_BLITCOPY-1    ; cmd 10: BLITCOPY epilogue
+      .word EXT_TILESIZE-1    ; cmd 11: TILESIZE
+      .word EXT_TMIRROR-1     ; cmd 12: TMIRROR
+      .word EXT_TTRANS-1      ; cmd 13: TTRANS
+      .word EXT_TDEF-1        ; cmd 14: TDEF
+      .word EXT_TPUT-1        ; cmd 15: TPUT
+      .word EXT_TATTR-1       ; cmd 16: TATTR
+      .word EXT_TFILL-1       ; cmd 17: TFILL
+      .word EXT_TROW-1        ; cmd 18: TROW
+      .word EXT_TCOL-1        ; cmd 19: TCOL
+      .word EXT_TNTLOAD-1     ; cmd 1A: TNTLOAD
+      .word EXT_TCLS-1        ; cmd 1B: TCLS
+      .word EXT_TBUF-1        ; cmd 1C: TBUF
+      .word EXT_TBSET-1       ; cmd 1D: TBSET
+      .word EXT_TBPUT-1       ; cmd 1E: TBPUT
+      .word EXT_TBFILL-1      ; cmd 1F: TBFILL
+      .word EXT_TSCROLL-1     ; cmd 20: TSCROLL
+      .word EXT_TPAL-1        ; cmd 21: TPAL
+      .word EXT_TPALC-1       ; cmd 22: TPALC
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -225,9 +108,7 @@ ExtTable:
 ; =====================================================================
 EXT_SFLOAD:
       LDA   #FIO_CMD_SFLOAD
-      STA   FIO_CMD           ; trigger soundfont load
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec          ; trigger soundfont load
       BEQ   @ok
       LDA   FIO_ERRCODE       ; nonzero error code
       RTS
@@ -298,9 +179,7 @@ EXT_NCC:
 ; =====================================================================
 EXT_DIR:
       LDA   #FIO_CMD_DIROPEN
-      STA   FIO_CMD           ; trigger DirOpen
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec          ; trigger DirOpen
       BNE   @dir_done         ; no files or error
       JSR   ext_crlf          ; blank line
 @dir_loop:
@@ -337,9 +216,7 @@ EXT_DIR:
       JSR   ext_crlf
       ; advance to next entry
       LDA   #FIO_CMD_DIRREAD
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BEQ   @dir_loop
 @dir_done:
       LDA   #$00
@@ -457,9 +334,7 @@ ext_print_u16:
 ; =====================================================================
 EXT_PWD:
       LDA   #FIO_CMD_PWD
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BNE   @pwd_done
       LDY   #$00
 @pwd_lp:
@@ -570,9 +445,7 @@ EXT_XDIR:
 ; =====================================================================
 EXT_TSAVE:
       LDA   #FIO_CMD_TSAVE
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BEQ   @tsave_ok
       LDA   FIO_ERRCODE
       RTS
@@ -587,9 +460,7 @@ EXT_TSAVE:
 ; =====================================================================
 EXT_TLOAD:
       LDA   #FIO_CMD_TLOAD
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BEQ   @tload_ok
       LDA   FIO_ERRCODE
       RTS
@@ -605,8 +476,6 @@ EXT_TLOAD:
 Bpntrl_ext      = $C3           ; BASIC execute pointer low
 Bpntrh_ext      = $C4           ; BASIC execute pointer high
 help_len_ext    = $E2           ; help keyword length scratch
-REG_HELP        = $A020         ; help command register
-HELP_BUF        = $A021         ; help buffer (16 bytes)
 TKX_PREFIX_EXT  = $01           ; extended token prefix
 
 EXT_HELP:
@@ -686,48 +555,25 @@ EXT_HELP:
 ; DMAFILL epilogue — zero source fields, set fill mode, start, check
 ; Returns: A=0 success, A=1 error
 ; =====================================================================
-DMA_CMD_REG   = $BA63
-DMA_STATUS_REG = $BA64
-DMA_SRCSPACE  = $BA66
-DMA_SRCL      = $BA68
-DMA_SRCM      = $BA69
-DMA_SRCH      = $BA6A
-DMA_MODE_REG  = $BA71
-DMA_CMD_START = $01
-DMA_MODE_FILL = $01
-HW_BUSY       = $01
-HW_OK         = $02
-
 EXT_DMAFILL:
-      LDA   #DMA_MODE_FILL
-      STA   DMA_MODE_REG
       LDA   #$00
       STA   DMA_SRCSPACE
       STA   DMA_SRCL
       STA   DMA_SRCM
       STA   DMA_SRCH
-      LDA   #DMA_CMD_START
-      STA   DMA_CMD_REG
-      LDA   DMA_STATUS_REG
-      JMP   ext_hw_chk
+      JMP   dma_start_fill
+
+; =====================================================================
+; DMACOPY epilogue — start copy and return shared DMA status.
+; Returns: A=0 success, A=1 error
+; =====================================================================
+EXT_DMACOPY:
+      JMP   dma_start_copy
 
 ; =====================================================================
 ; BLITFILL epilogue — zero source fields, set fill mode, start, check
 ; Returns: A=0 success, A=1 error
 ; =====================================================================
-BLT_CMD_REG   = $BA83
-BLT_STATUS_REG = $BA84
-BLT_SRCSPACE  = $BA86
-BLT_SRCL      = $BA88
-BLT_SRCM      = $BA89
-BLT_SRCH      = $BA8A
-BLT_SRCSTRL   = $BA92
-BLT_SRCSTRH   = $BA93
-BLT_MODE_REG  = $BA96
-BLT_CKEY      = $BA98
-BLT_MODE_FILL = $01
-BLT_CMD_START = $01
-
 EXT_BLTFILL:
       LDA   #$00
       STA   BLT_SRCSPACE
@@ -737,24 +583,18 @@ EXT_BLTFILL:
       STA   BLT_SRCSTRL
       STA   BLT_SRCSTRH
       STA   BLT_CKEY
-      LDA   #BLT_MODE_FILL
-      STA   BLT_MODE_REG
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
-      LDA   BLT_STATUS_REG
-      ; fall through to ext_hw_chk
+      JMP   blitter_start_fill
 
-; shared: check hardware status (A=status). Returns A=0 ok, A=1 error.
-ext_hw_chk:
-      CMP   #HW_BUSY
-      BEQ   @ok
-      CMP   #HW_OK
-      BEQ   @ok
-      LDA   #$01
-      RTS
-@ok:  LDA   #$00
-      RTS
+; =====================================================================
+; BLITCOPY epilogue — start copy and return shared blitter status.
+; Returns: A=0 success, A=1 error
+; =====================================================================
+EXT_BLITCOPY:
+      JMP   blitter_start_copy
 
+      .include "lib/blitter.s"
+      .include "lib/copper.s"
+      .include "lib/tile.s"
       .include "lib/xram.s"
       .include "lib/xmc.s"
 
@@ -864,6 +704,195 @@ EXT_XMCCMD:
       RTS
 
 ; =====================================================================
+; Tile engine command handlers.
+; BASIC stubs dispatch here; these parsers use BASIC's RAM-resident scanner
+; bridges, then issue commands through lib/tile.s.
+; =====================================================================
+
+ext_vsync:
+      LDA   VGC_FRAME
+@wait:
+      CMP   VGC_FRAME
+      BEQ   @wait
+      RTS
+
+ext_tile_b0c:
+      JSR   EXT_GTBY_VEC      ; byte -> TileP0, then consume comma
+      STX   TileP0
+      JMP   ext_comma
+
+ext_tile_wad:
+      JSR   EXT_GTWRD_VEC     ; word -> TileAddrL/H
+      LDA   FAC1_3
+      STA   TileAddrL
+      LDA   FAC1_2
+      STA   TileAddrH
+      RTS
+
+EXT_TILESIZE:
+      JSR   EXT_GTBY_VEC
+      JSR   ext_vsync
+      JMP   tile_set_size
+
+EXT_TMIRROR:
+      JSR   EXT_GTBY_VEC
+      JSR   ext_vsync
+      JMP   tile_set_mirror
+
+EXT_TTRANS:
+      JSR   EXT_GTBY_VEC
+      JSR   ext_vsync
+      JMP   tile_set_trans_color
+
+EXT_TDEF:
+      JSR   ext_tile_b0c
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   NVR7L
+      LDA   FAC1_2
+      STA   NVR7H
+      JSR   LAB_GBYT
+      CMP   #','
+      BEQ   @td_bulk
+      LDA   NVR7L
+      STA   TileAddrL
+      LDA   NVR7H
+      STA   TileAddrH
+      JSR   ext_vsync
+      JMP   tile_def
+@td_bulk:
+      LDA   NVR7L
+      STA   TileP1
+      JSR   ext_comma
+      JSR   ext_tile_wad
+      JSR   ext_vsync
+      JMP   tile_def_bulk
+
+EXT_TPUT:
+      LDA   #TileCmdPut
+      .byte $2C
+EXT_TATTR:
+      LDA   #TileCmdAttr
+      PHA
+      JSR   EXT_GTBY_VEC
+      STX   TileP0
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TileP1
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TileP2
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TileP3
+      JSR   ext_vsync
+      PLA
+      JMP   tile_cmd
+
+EXT_TFILL:
+      JSR   ext_tile_b0c
+      JSR   EXT_GTBY_VEC
+      STX   TileP1
+      JSR   ext_vsync
+      JMP   tile_fill
+
+EXT_TROW:
+      LDA   #TileCmdRow
+      .byte $2C
+EXT_TCOL:
+      LDA   #TileCmdCol
+      PHA
+      JSR   EXT_GTBY_VEC
+      STX   TileP0
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TileP1
+      JSR   ext_comma
+      JSR   ext_tile_wad
+      JSR   ext_vsync
+      PLA
+      JMP   tile_cmd
+
+EXT_TNTLOAD:
+      JSR   ext_tile_b0c
+      JSR   ext_tile_wad
+      JSR   ext_vsync
+      JMP   tile_load
+
+EXT_TCLS:
+      JSR   ext_vsync
+      JMP   tile_cls
+
+EXT_TBUF:
+      JSR   EXT_GTBY_VEC
+      STX   TileP0
+      JMP   tile_buf_fill
+
+EXT_TBSET:
+      LDA   #TileCmdBufSet
+      .byte $2C
+EXT_TBPUT:
+      LDA   #TileCmdBufPut
+      PHA
+      JSR   EXT_GTBY_VEC
+      STX   TileP0
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TileP1
+      PLA
+      JMP   tile_cmd
+
+EXT_TBFILL:
+      JSR   EXT_GTBY_VEC
+      STX   TileP0
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TileP1
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TileP2
+      JMP   tile_buf_range
+
+EXT_TSCROLL:
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   NVR0L
+      LDA   FAC1_2
+      STA   NVR0H
+      JSR   ext_comma
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   NVR1L
+      LDA   FAC1_2
+      STA   NVR1H
+      JSR   ext_vsync
+      JMP   tile_set_scroll
+
+EXT_TPAL:
+      JSR   EXT_GTBY_VEC
+      STX   TilePalP0
+      JSR   ext_comma
+      JSR   ext_tile_wad
+      JSR   ext_vsync
+      JMP   tile_pal
+
+EXT_TPALC:
+      JSR   EXT_GTBY_VEC
+      STX   TilePalP0
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TilePalP1
+      JSR   ext_comma
+      JSR   ext_tile_b0c
+      JSR   EXT_GTBY_VEC
+      STX   TileP1
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   TileP2
+      JSR   ext_vsync
+      JMP   tile_palc
+
+; =====================================================================
 ; EXT_COPPER — COPPER subcommand parser.
 ; Relocated from BASIC ROM (LAB_COPPER) to free ~390 bytes there.
 ; Original handler lived in basic.asm and used LAB_GBYT / LAB_IGBY ZP
@@ -901,26 +930,17 @@ EXT_COPPER:
 ; --- COPPER CLEAR ---
 @c_clear:
       JSR   LAB_IGBY          ; consume CLEAR token
-      LDA   #VCMD_COPPERCLR
-      STA   VGC_CMD
-      LDA   #$00
-      RTS
+      JMP   copper_clear
 
 ; --- COPPER ON ---
 @c_on:
       JSR   LAB_IGBY          ; consume ON token
-      LDA   #VCMD_COPPERENA
-      STA   VGC_CMD
-      LDA   #$00
-      RTS
+      JMP   copper_on
 
 ; --- COPPER OFF ---
 @c_off:
       JSR   LAB_IGBY          ; consume OFF token
-      LDA   #VCMD_COPPERDIS
-      STA   VGC_CMD
-      LDA   #$00
-      RTS
+      JMP   copper_off
 
 ; --- COPPER LIST n / COPPER LIST END ---
 @c_list:
@@ -930,16 +950,10 @@ EXT_COPPER:
       BEQ   @c_list_end
       JSR   EXT_GTBY_VEC      ; bridge: parse 8-bit expr → X
       STX   VGC_P0
-      LDA   #VCMD_COPPERLIST
-      STA   VGC_CMD
-      LDA   #$00
-      RTS
+      JMP   copper_list
 @c_list_end:
       JSR   LAB_IGBY          ; consume END token
-      LDA   #VCMD_COPPEREND
-      STA   VGC_CMD
-      LDA   #$00
-      RTS
+      JMP   copper_list_end
 
 ; --- COPPER USE n ---
 @c_use:
@@ -947,10 +961,7 @@ EXT_COPPER:
       JSR   ext_skipx         ; USE
       JSR   EXT_GTBY_VEC      ; list index → X
       STX   VGC_P0
-      LDA   #VCMD_COPPERUSE
-      STA   VGC_CMD
-      LDA   #$00
-      RTS
+      JMP   copper_use
 
 ; --- COPPER ADD x, y, reg, value ---
 @c_add:
@@ -981,12 +992,12 @@ EXT_COPPER:
 @c_bgcol:
       LDX   #5
       JSR   ext_skipx         ; BGCOL
-      LDA   #$01
+      LDA   #COPPER_REG_BGCOL
       JMP   @c_store_idx
 
 @c_mode:
       JSR   LAB_IGBY          ; consume MODE token
-      LDA   #$00
+      LDA   #COPPER_REG_MODE
       JMP   @c_store_idx
 
 @c_s_dispatch:
@@ -1010,18 +1021,16 @@ EXT_COPPER:
 
 @c_scrollx:
       JSR   LAB_IGBY          ; consume X
-      LDA   #$05
+      LDA   #COPPER_REG_SCROLLX
       JMP   @c_store_idx
 
 @c_scrolly:
       JSR   LAB_IGBY          ; consume Y
-      LDA   #$06
+      LDA   #COPPER_REG_SCROLLY
       JMP   @c_store_idx
 
 @c_store_idx:
-      STA   VGC_P3
-      LDA   #$00
-      STA   VGC_P4
+      JSR   copper_set_reg_index
       JMP   @c_store_val
 
       ; --- Sprite register names: SPR + field + (n) ---
@@ -1046,11 +1055,11 @@ EXT_COPPER:
       JSR   LAB_GBYT          ; peek H or (
       CMP   #'H'
       BEQ   @cs_xh
-      LDA   #$00
+      LDA   #VGC_SPR_XL_OFF
       JMP   @c_spr_idx
 @cs_xh:
       JSR   LAB_IGBY          ; consume H
-      LDA   #$01
+      LDA   #VGC_SPR_XH_OFF
       JMP   @c_spr_idx
 
 @cs_y:
@@ -1058,63 +1067,51 @@ EXT_COPPER:
       JSR   LAB_GBYT          ; peek H or (
       CMP   #'H'
       BEQ   @cs_yh
-      LDA   #$02
+      LDA   #VGC_SPR_YL_OFF
       JMP   @c_spr_idx
 @cs_yh:
       JSR   LAB_IGBY          ; consume H
-      LDA   #$03
+      LDA   #VGC_SPR_YH_OFF
       JMP   @c_spr_idx
 
 @cs_shape:
       LDX   #5
       JSR   ext_skipx         ; SHAPE
-      LDA   #$04
+      LDA   #VGC_SPR_SHAPE_OFF
       JMP   @c_spr_idx
 
 @cs_flags:
       LDX   #5
       JSR   ext_skipx         ; FLAGS
-      LDA   #$05
+      LDA   #VGC_SPR_FLAGS_OFF
       JMP   @c_spr_idx
 
 @cs_pri:
       LDX   #3
       JSR   ext_skipx         ; PRI
-      LDA   #$06
+      LDA   #VGC_SPR_PRI_OFF
       ; fall through
 
-      ; A = field offset, parse (n) and compute $A040 + n*8 + A
+      ; A = field offset, parse (n) and compute VGC_SPR_BASE + n*8 + A
 @c_spr_idx:
       PHA                     ; save field offset
       JSR   LAB_IGBY          ; consume '('
       JSR   EXT_GTBY_VEC      ; sprite index → X
-      CPX   #$10
+      CPX   #VGC_MAX_SPRITES
       BCC   @cs_idx_ok
       JMP   EXT_SNERR_VEC
 @cs_idx_ok:
+      STX   VGC_P3            ; temporary sprite index
       JSR   LAB_IGBY          ; consume ')'
-      TXA                     ; A = sprite index
-      ASL                     ; *2
-      ASL                     ; *4
-      ASL                     ; *8
-      STA   VGC_P3            ; temp = n*8
       PLA                     ; A = field offset
-      CLC
-      ADC   VGC_P3
-      ADC   #$40              ; +$40 (low byte of $A040)
-      STA   VGC_P3
-      LDA   #$A0              ; high byte of $A040
-      ADC   #$00              ; add carry
-      STA   VGC_P4
+      LDX   VGC_P3
+      JSR   copper_set_sprite_reg
 
 @c_store_val:
       JSR   ext_comma         ; comma
       JSR   EXT_GTBY_VEC      ; value → X
       STX   VGC_P5
-      LDA   #VCMD_COPPERADD
-      STA   VGC_CMD
-      LDA   #$00
-      RTS
+      JMP   copper_add
 
 ; --- Local helpers used only by EXT_COPPER ---
 

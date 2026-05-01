@@ -59,22 +59,7 @@ Itempl            = $11       ; temporary integer low byte
 Itemph            = Itempl+1  ; temporary integer high byte
 ; end bulk initialize from StrTab at LAB_GMEM
 
-NVR0L             = $20       ; Nova pseudo-register 0 low byte
-NVR0H             = $21       ; Nova pseudo-register 0 high byte
-NVR1L             = $22       ; Nova pseudo-register 1 low byte
-NVR1H             = $23       ; Nova pseudo-register 1 high byte
-NVR2L             = $24       ; Nova pseudo-register 2 low byte
-NVR2H             = $25       ; Nova pseudo-register 2 high byte
-NVR3L             = $26       ; Nova pseudo-register 3 low byte
-NVR3H             = $27       ; Nova pseudo-register 3 high byte
-NVR4L             = $28       ; Nova pseudo-register 4 low byte
-NVR4H             = $29       ; Nova pseudo-register 4 high byte
-NVR5L             = $2A       ; Nova pseudo-register 5 low byte
-NVR5H             = $2B       ; Nova pseudo-register 5 high byte
-NVR6L             = $2C       ; Nova pseudo-register 6 low byte
-NVR6H             = $2D       ; Nova pseudo-register 6 high byte
-NVR7L             = $2E       ; Nova pseudo-register 7 low byte
-NVR7H             = $2F       ; Nova pseudo-register 7 high byte
+      .include "lib/nova.inc"
 
 nums_1            = Itempl    ; number to bin/hex string convert MSB
 nums_2            = nums_1+1  ; number to bin/hex string convert
@@ -625,9 +610,9 @@ EXT_vec           = VEC_SV+$16
                               ; extension ROM call trampoline in RAM ($0221)
                               ; Followed by EXT_RESET_CODE ($022E, 8 bytes) and
                               ; the Extension→BASIC bridge trampolines:
-                              ;   EXT_GTBY  ($0236, 14 bytes) — parse byte expr
-                              ;   EXT_GTWRD ($0244, 14 bytes) — parse 16-bit expr
-                              ;   EXT_SNERR ($0252,  8 bytes) — syntax error
+                              ;   EXT_GTBY  ($023B, 14 bytes) — parse byte expr
+                              ;   EXT_GTWRD ($0249, 14 bytes) — parse 16-bit expr
+                              ;   EXT_SNERR ($0257,  8 bytes) — syntax error
 Ibuffs            = VEC_SV+$54
                               ; start of input buffer after IRQ/NMI/ext code
 Ibuffe            = Ibuffs+$A0; end of input buffer (160 bytes, ends at $02FA)
@@ -1452,7 +1437,25 @@ LAB_XCRNCHD
       CMP   #'A'
       BCC   @matched
       CMP   #'Z'+1
-      BCC   @try_next
+      BCS   @matched
+      ; Allow compact COPPER subcommands (COPPERADD, COPPERON, etc.)
+      ; while still rejecting unrelated keyword prefixes.
+      TAY
+      LDA   Tindx
+      CMP   #(XTK_COPPER-1)
+      BNE   @try_next
+      TYA
+      CMP   #'A'
+      BEQ   @matched
+      CMP   #'C'
+      BEQ   @matched
+      CMP   #'L'
+      BEQ   @matched
+      CMP   #'O'
+      BEQ   @matched
+      CMP   #'U'
+      BEQ   @matched
+      BRA   @try_next
 
 @matched
       LDY   csidx
@@ -3954,9 +3957,7 @@ LAB_1BEE
 @xtk_dirnext
       JSR   LAB_IGBY          ; consume token
       LDA   #FIO_CMD_DIRREAD
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BNE   @ret_false
       LDY   #$FF              ; true = $FFFF (-1)
       .byte $2C               ; BIT abs — skip next 2 bytes
@@ -4066,12 +4067,7 @@ LAB_1BEE
       STA   VGC_P2
       STZ   VGC_P4
       JSR   LAB_1BFB
-      LDA   #VCMD_MEMREAD
-      STA   VGC_CMD
-@vpeek_wait
-      LDA   VGC_CMD
-      AND   #$01
-      BNE   @vpeek_wait
+      JSR   vgc_mem_read
       LDY   VGC_P3
       BRA   @ret_0ay
 
@@ -6259,11 +6255,11 @@ SysExit
 
 LAB_CURS_ON
       LDA   #$01
-      STA   $A00A             ; VGC cursor enable register
+      STA   VGC_CURSEN        ; VGC cursor enable register
       RTS
 
 LAB_CURS_OFF_CR
-      STZ   $A00A             ; VGC cursor enable register
+      STZ   VGC_CURSEN        ; VGC cursor enable register
       JMP   LAB_1866          ; do CR/LF exit to BASIC
 
 ; perform WAIT
@@ -8700,7 +8696,7 @@ LAB_TWOPI
 
 ;; ========================================
 ;; NCC — activate the NCC editor
-;; Prints confirmation, waits for Y/N, writes RomSwapNccEdit to $A03F
+;; Prints confirmation, waits for Y/N, writes ROMSWAP_NCCEDIT to REG_ROMSWAP
 ;; ========================================
 LAB_NCC
       LDA   #EXT_CMD_NCC
@@ -8880,359 +8876,7 @@ PG2_TABS
 ;     .word xxxx              ; save vector           -     monitor to set this
 PG2_TABE
 
-; --- VGC I/O register addresses ---
-
-VGC_MODE      = $A000
-VGC_BGCOL     = $A001
-VGC_FGCOL     = $A002
-VGC_CURSX     = $A003
-VGC_CURSY     = $A004
-VGC_FONT      = $A007          ; font register
-VGC_FRAME     = $A008          ; frame counter (read-only, incremented by host)
-VGC_COLLST    = $A00B          ; sprite-sprite collision (read-only)
-VGC_COLLBG    = $A00C          ; sprite-background collision (read-only)
-VGC_BORDER    = $A00D          ; border color
-VGC_CHAROUT   = $A00E
-VGC_VPLANE    = $A0E0
-VGC_VADDRL    = $A0E1
-VGC_VADDRH    = $A0E2
-VGC_VDATA     = $A0E3
-VGC_VCTRL     = $A0E4
-VGC_TXTFLAGS  = $A0E6          ; bit0 reverse, bit1 reverse attr, bit2 flash
-VGC_TXTREVATTR = $A0E7         ; packed bg/fg reverse colors
-VTXT_REV      = $01
-VTXT_REVEX    = $02
-VTXT_FLASH    = $04
-
-; --- VGC unified command register and parameters ---
-
-VGC_CMD       = $A010          ; command register (write triggers execution)
-VGC_P0        = $A011          ; parameter 0
-VGC_P1        = $A012          ; parameter 1
-VGC_P2        = $A013          ; parameter 2
-VGC_P3        = $A014          ; parameter 3
-VGC_P4        = $A015          ; parameter 4
-VGC_P5        = $A016          ; parameter 5
-VGC_P6        = $A017          ; parameter 6
-VGC_P7        = $A018          ; parameter 7
-VGC_P8        = $A019          ; parameter 8
-VGC_P9        = $A01A          ; parameter 9
-VGC_P10       = $A01B          ; parameter 10
-VGC_P11       = $A01C          ; parameter 11
-VGC_P12       = $A01D          ; parameter 12
-VGC_P13       = $A01E          ; parameter 13
-VGC_P14       = $A01F          ; parameter 14
-
-VGC_IRQ_ENABLE = $A0F0         ; enabled VGC IRQ source mask
-VGC_IRQ_STATUS = $A0F1         ; pending VGC IRQ source mask (write 1 to clear)
-VGC_IRQ_FORCE  = $A0F2         ; force enabled VGC IRQ sources
-VGC_IRQ_VALID  = $A0F3         ; implemented VGC IRQ source mask
-
-; --- VGC graphics command codes ---
-
-VCMD_PLOT     = $01
-VCMD_UNPLOT   = $02
-VCMD_LINE     = $03
-VCMD_CIRCLE   = $04
-VCMD_RECT     = $05
-VCMD_FILL     = $06
-VCMD_GCLS     = $07
-VCMD_GCOLOR   = $08
-VCMD_PAINT    = $09
-VCMD_GTEXT    = $0A
-
-; --- VGC sprite command codes ---
-
-VCMD_SPRDEF   = $10            ; P0=sprite, P1=x, P2=y, P3=color
-VCMD_SPRROW   = $11            ; P0=sprite, P1=row, P2-P9=8 bytes
-VCMD_SPRCLR   = $12            ; P0=sprite (clears shape data)
-VCMD_SPRCOPY  = $13            ; P0=src, P1=dest
-VCMD_SPRPOS   = $14            ; P0=sprite, P1=x_low, P2=x_high, P3=y, P4 reserved
-VCMD_SPRENA   = $15            ; P0=sprite
-VCMD_SPRDIS   = $16            ; P0=sprite
-VCMD_SPRFLIP  = $17            ; P0=sprite, P1=flags
-VCMD_SPRPRI   = $18            ; P0=sprite, P1=priority
-VCMD_MEMREAD  = $19            ; P0=space, P1/P2=addr, result in P3
-VCMD_MEMWRITE = $1A            ; P0=space, P1/P2=addr, P3=value
-
-VCMD_COPPERADD = $1B           ; P0/P1=x, P2=y, P3=reg, P4=0, P5=value
-VCMD_COPPERCLR = $1C           ; no params
-VCMD_COPPERENA = $1D           ; no params
-VCMD_COPPERDIS = $1E           ; no params
-VCMD_SYSRESET  = $1F           ; full system reset (VGC+SID+music)
-VCMD_COPPERLIST = $20          ; P0=list index (0-127)
-VCMD_COPPERUSE = $21           ; P0=list index (0-127)
-VCMD_COPPEREND = $22           ; reset target to active list
-
-; --- File I/O coprocessor registers ---
-
-FIO_CMD       = $B9A0          ; command register (write triggers)
-FIO_STATUS    = $B9A1          ; status: 0=idle, 2=ok, 3=error
-FIO_ERRCODE   = $B9A2          ; error: 0=none, 1=not found, 2=io error
-FIO_NAMELEN   = $B9A3          ; filename length (1-63)
-FIO_SRCL      = $B9A4          ; source/dest addr low
-FIO_SRCH      = $B9A5          ; source/dest addr high
-FIO_ENDL      = $B9A6          ; end addr low (SAVE only)
-FIO_ENDH      = $B9A7          ; end addr high (SAVE only)
-FIO_SIZEL     = $B9A8          ; loaded size low (set by host after LOAD)
-FIO_SIZEH     = $B9A9          ; loaded size high
-FIO_GSPACE    = $B9AA          ; graphics space selector (1=screen,2=color,3=gfx,4=sprite,6=tile)
-FIO_GADDRL    = $B9AB          ; graphics offset low
-FIO_GADDRH    = $B9AC          ; graphics offset high
-FIO_GLENL     = $B9AD          ; graphics transfer length low
-FIO_GLENH     = $B9AE          ; graphics transfer length high
-FIO_DIRTYPE   = $B9AF          ; dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID
-FIO_NAME      = $B9B0          ; filename buffer (64 bytes)
-
-META_BASE       = $BAB0          ; metadata string buffer (80 bytes)
-AUTOBOOT_SKIP   = $B9F0        ; C# sets to $FF to skip autoboot
-AUTOBOOT_ACTIVE = $B9F1        ; suppress startup errors from broken AUTOBOOT
-
-FIO_CMD_SAVE  = $01            ; save program
-FIO_CMD_LOAD  = $02            ; load program
-FIO_OK        = $02            ; status: success
-FIO_ERR       = $03            ; status: error
-FIO_CMD_DIROPEN = $03          ; enumerate *.bas files, populate first entry
-FIO_CMD_DIRREAD = $04          ; advance to next entry
-FIO_CMD_DELETE = $05           ; delete a single *.bas file by name
-FIO_CMD_GSAVE = $06            ; save VGC memory block to *.gfx
-FIO_CMD_GLOAD = $07            ; load *.gfx into VGC memory block
-FIO_CMD_SIDPLAY = $08          ; load .sid and start playback
-FIO_CMD_SIDSTOP = $09          ; stop SID playback
-FIO_CMD_INSTRUMENT = $0A       ; define instrument preset
-FIO_CMD_SOUND  = $0B           ; play SFX (note, duration, instrument)
-FIO_CMD_VOLUME = $0C           ; set master volume
-FIO_CMD_MSEQ   = $0D           ; set voice MML sequence
-FIO_CMD_MPLAY  = $0E           ; start music playback
-FIO_CMD_MSTOP  = $0F           ; stop music playback
-FIO_CMD_MTEMPO = $10           ; set music tempo (BPM)
-FIO_CMD_MLOOP  = $11           ; set music loop on/off
-FIO_CMD_MPRI   = $12           ; set SFX voice steal priority
-FIO_CMD_MIDPLAY = $13          ; load .mid and start playback
-FIO_CMD_MIDSTOP = $14          ; stop MIDI playback
-FIO_CMD_SFLOAD  = $15          ; load soundfont (.sf2)
-FIO_CMD_XLOAD   = $18          ; load file directly into XRAM
-FIO_CMD_XSAVE   = $19          ; save XRAM range directly to file
-
-; --- Extension ROM command IDs (dispatched via EXT_vec trampoline) ---
-EXT_CMD_NCC     = $00          ; NCC confirmation dialog
-EXT_CMD_SFLOAD  = $01          ; soundfont load
-EXT_CMD_DIR     = $02          ; DIR listing loop
-EXT_CMD_PWD     = $03          ; PWD print working directory
-EXT_CMD_XMEM    = $04          ; XMEM status display
-EXT_CMD_XDIR    = $05          ; XDIR listing loop
-EXT_CMD_TSAVE   = $06          ; TSAVE tile file save
-EXT_CMD_TLOAD   = $07          ; TLOAD tile file load
-EXT_CMD_HELP    = $08          ; HELP command
-EXT_CMD_DMAFILL = $09          ; DMAFILL epilogue (zero src, start, check)
-EXT_CMD_BLTFILL = $0A          ; BLITFILL epilogue (zero src, start, check)
-; EXT_CMD_XMCCMD ($0B) defined locally near LAB_XMCCMD callsite
-EXT_CMD_COPPER  = $0C          ; COPPER subcommand parser (full handler)
-EXT_CMD_XLOAD   = $0D          ; XLOAD file -> XRAM via shared XRAM runtime
-EXT_CMD_XSAVE   = $0E          ; XSAVE XRAM -> file via shared XRAM runtime
-FIO_CMD_CD      = $20              ; change directory
-FIO_CMD_MKDIR   = $21              ; make directory
-FIO_CMD_RMDIR   = $22              ; remove directory
-FIO_CMD_FORMAT  = $23              ; format disk image
-FIO_CMD_MOUNT   = $24              ; mount disk image
-FIO_CMD_UNMOUNT = $25              ; unmount device
-FIO_CMD_PWD     = $26              ; print working directory
-MUSIC_STATUS   = $BA50         ; bit 0=SFX playing, bit 1=music playing
-MUSIC_NOTE1    = $BA51         ; voice 1 current MIDI note (0=silent)
-MUSIC_NOTE2    = $BA52         ; voice 2 current MIDI note
-MUSIC_NOTE3    = $BA53         ; voice 3 current MIDI note
-MUSIC_NOTE4    = $BA54         ; voice 4 current MIDI note (SID2)
-MUSIC_NOTE5    = $BA55         ; voice 5 current MIDI note (SID2)
-MUSIC_NOTE6    = $BA56         ; voice 6 current MIDI note (SID2)
-FIO_ERR_EOD   = $03            ; end of directory
-
-; --- XMC expansion memory controller registers ---
-
-XMC_CMD       = $BA00          ; command register (write triggers)
-XMC_STATUS    = $BA01          ; status: 0=idle, 2=ok, 3=error
-XMC_ERRCODE   = $BA02          ; error: 0=none
-XMC_CFG       = $BA03          ; config flags (reserved)
-XMC_XAL       = $BA04          ; expansion addr low
-XMC_XAM       = $BA05          ; expansion addr mid
-XMC_XAH       = $BA06          ; expansion addr high
-XMC_RAML      = $BA07          ; cpu addr low
-XMC_RAMH      = $BA08          ; cpu addr high
-XMC_LENL      = $BA09          ; transfer length low
-XMC_LENH      = $BA0A          ; transfer length high
-XMC_DATA      = $BA0B          ; data port
-XMC_BANK      = $BA0C          ; current 64KB bank
-XMC_BANKS     = $BA0D          ; total banks
-XMC_USEDL     = $BA0E          ; used pages low (future allocator)
-XMC_USEDH     = $BA0F          ; used pages high
-XMC_FREEL     = $BA10          ; free pages low
-XMC_FREEH     = $BA11          ; free pages high
-XMC_NAMELEN   = $BA12          ; name length (0-27)
-XMC_HANDLE    = $BA13          ; block handle
-XMC_DIRCOUNTL = $BA14          ; named block count low
-XMC_DIRCOUNTH = $BA15          ; named block count high
-XMC_WINCTL    = $BA16          ; mapped window enable bits
-XMC_W0AL      = $BA18          ; window 0 xaddr low
-XMC_W0AM      = $BA19          ; window 0 xaddr mid
-XMC_W0AH      = $BA1A          ; window 0 xaddr high
-XMC_W1AL      = $BA1B          ; window 1 xaddr low
-XMC_W1AM      = $BA1C          ; window 1 xaddr mid
-XMC_W1AH      = $BA1D          ; window 1 xaddr high
-XMC_W2AL      = $BA1E          ; window 2 xaddr low
-XMC_W2AM      = $BA1F          ; window 2 xaddr mid
-XMC_W2AH      = $BA20          ; window 2 xaddr high
-XMC_W3AL      = $BA21          ; window 3 xaddr low
-XMC_W3AM      = $BA22          ; window 3 xaddr mid
-XMC_W3AH      = $BA23          ; window 3 xaddr high
-XMC_NAME      = $BA24          ; name buffer start
-XMC_NAME_MAX  = 28             ; bytes in name buffer
-
-XMC_CMD_GET   = $01            ; read byte at XADDR into XMC_DATA
-XMC_CMD_PUT   = $02            ; write XMC_DATA to XADDR
-XMC_CMD_STASH = $03            ; copy RAM -> XRAM
-XMC_CMD_FETCH = $04            ; copy XRAM -> RAM
-XMC_CMD_FILL  = $05            ; fill XRAM with XMC_DATA
-XMC_CMD_STATS = $07            ; refresh stats
-XMC_CMD_RSTUS = $08            ; clear usage tracking metadata
-XMC_CMD_REL   = $09            ; mark range as free in usage tracking
-XMC_CMD_ALLOC = $0A            ; allocate block (len -> xaddr/handle)
-XMC_CMD_NSTSH = $0B            ; named stash RAM->XRAM
-XMC_CMD_NFETC = $0C            ; named fetch XRAM->RAM
-XMC_CMD_NDEL  = $0D            ; named delete
-XMC_CMD_NDIRO = $0E            ; named dir open
-XMC_CMD_NDIRR = $0F            ; named dir read
-XMC_OK        = $02            ; command success status
-XMC_ERR_NF    = $03            ; not found
-XMC_ERR_EOD   = $06            ; end of directory
-
-; --- NIC network interface controller registers ---
-
-NIC_CMD        = $A100          ; command register (write triggers)
-NIC_STATUS     = $A101          ; global status
-NIC_SLOT       = $A102          ; active slot ID (0-3)
-NIC_RPORTL     = $A108          ; remote port low
-NIC_RPORTH     = $A109          ; remote port high
-NIC_LPORTL     = $A10A          ; local port low (for listen)
-NIC_LPORTH     = $A10B          ; local port high
-NIC_DMAL       = $A110          ; DMA RAM address low
-NIC_DMAH       = $A111          ; DMA RAM address high
-NIC_DMALEN     = $A112          ; DMA length
-NIC_MSGLEN     = $A113          ; received message length (read-only)
-NIC_SLOTST0    = $A118          ; slot 0 status
-NIC_NAMEBUF    = $A120          ; hostname buffer (32 bytes, null-terminated)
-
-NIC_CMD_CONNECT    = $01
-NIC_CMD_DISCONNECT = $02
-NIC_CMD_SEND       = $03
-NIC_CMD_RECV       = $04
-NIC_CMD_LISTEN     = $05
-NIC_CMD_ACCEPT     = $06
-
-NIC_ST_CONNECTED   = $01
-NIC_ST_DATAREADY   = $02
-NIC_ST_ERROR       = $08
-
-; --- Unified DMA controller registers ---
-
-DMA_CMD       = $BA63          ; write triggers transfer
-DMA_STATUS    = $BA64          ; 1=busy, 2=ok, 3=error
-DMA_ERRCODE   = $BA65          ; DMA error code
-DMA_SRCSPACE  = $BA66          ; source space id
-DMA_DSTSPACE  = $BA67          ; destination space id
-DMA_SRCL      = $BA68          ; source addr low
-DMA_SRCM      = $BA69          ; source addr mid
-DMA_SRCH      = $BA6A          ; source addr high
-DMA_DSTL      = $BA6B          ; destination addr low
-DMA_DSTM      = $BA6C          ; destination addr mid
-DMA_DSTH      = $BA6D          ; destination addr high
-DMA_LENL      = $BA6E          ; length low
-DMA_LENM      = $BA6F          ; length mid
-DMA_LENH      = $BA70          ; length high
-DMA_MODE      = $BA71          ; mode flags
-DMA_FILL      = $BA72          ; fill byte (when mode bit0 set)
-DMA_CNTL      = $BA73          ; transferred count low
-DMA_CNTM      = $BA74          ; transferred count mid
-DMA_CNTH      = $BA75          ; transferred count high
-
-DMA_CMD_START = $01
-DMA_BUSY      = $01
-DMA_OK        = $02
-DMA_MODE_FILL = $01
-DMA_SPACE_XRAM = $05
-
-; --- Blitter controller registers ---
-
-BLT_CMD       = $BA83          ; write triggers blit
-BLT_STATUS    = $BA84          ; 1=busy, 2=ok, 3=error
-BLT_ERRCODE   = $BA85          ; blitter error code
-BLT_SRCSPACE  = $BA86          ; source space id
-BLT_DSTSPACE  = $BA87          ; destination space id
-BLT_SRCL      = $BA88          ; source addr low
-BLT_SRCM      = $BA89          ; source addr mid
-BLT_SRCH      = $BA8A          ; source addr high
-BLT_DSTL      = $BA8B          ; destination addr low
-BLT_DSTM      = $BA8C          ; destination addr mid
-BLT_DSTH      = $BA8D          ; destination addr high
-BLT_WIDTHL    = $BA8E          ; width low
-BLT_WIDTHH    = $BA8F          ; width high
-BLT_HEIGHTL   = $BA90          ; height low
-BLT_HEIGHTH   = $BA91          ; height high
-BLT_SRCSTRL   = $BA92          ; source stride low
-BLT_SRCSTRH   = $BA93          ; source stride high
-BLT_DSTSTRL   = $BA94          ; destination stride low
-BLT_DSTSTRH   = $BA95          ; destination stride high
-BLT_MODE      = $BA96          ; mode flags
-BLT_FILL      = $BA97          ; fill byte (when mode bit0 set)
-BLT_CKEY      = $BA98          ; color key (when mode bit1 set)
-BLT_CNTL      = $BA99          ; written count low
-BLT_CNTM      = $BA9A          ; written count mid
-BLT_CNTH      = $BA9B          ; written count high
-
-BLT_CMD_START = $01
-BLT_BUSY      = $01
-BLT_OK        = $02
-BLT_MODE_FILL = $01
-BLT_SPACE_XRAM = $05
-
-; --- Tile engine registers ---
-
-TileConfig     = $A0C0
-TileTransColor = $A0C1
-TileScrollXL   = $A0C2
-TileScrollXH   = $A0C3
-TileScrollYL   = $A0C4
-TileScrollYH   = $A0C5
-TileCmd        = $A0C7
-TileP0         = $A0C8
-TileP1         = $A0C9
-TileP2         = $A0CA
-TileP3         = $A0CB
-TileAddrL      = $A0CC
-TileAddrH      = $A0CD
-TilePalP0      = $A0CE
-TilePalP1      = $A0CF
-TileColL       = $A0D0
-TileColH       = $A0D1
-TilePeekVal    = $A0D2
-TilePeekAttr   = $A0D3
-TileCfgSize16  = $01
-TileCmdDef     = $01
-TileCmdDefBulk = $02
-TileCmdPut     = $03
-TileCmdAttr    = $04
-TileCmdFill    = $05
-TileCmdRow     = $06
-TileCmdCol     = $07
-TileCmdLoad    = $08
-TileCmdPal     = $0A
-TileCmdPalC    = $0B
-TileCmdPeek    = $0C
-TileCmdCls     = $0F
-TileCmdBufFill = $10
-TileCmdBufSet  = $11
-TileCmdBufRange = $12
-TileCmdBufPut  = $13
-FioCmdTSave    = $16
-FioCmdTLoad    = $17
+; --- Nova hardware constants live in lib/nova.inc ---
 
 ; --- VGC command handlers ---
 
@@ -9277,6 +8921,15 @@ LAB_BNR1
       .byte "NovaBASIC v1.0",$00
 LAB_BNR2
       .byte "Derived from EhBASIC 2.22p5",$00
+
+VGC_NO_EXEC       = 1
+VGC_NO_PRIMITIVES = 1
+SPRITE_NO_EXTRA   = 1
+      .include "lib/vgc.s"
+      .include "lib/sprite.s"
+
+LAB_VGC_CMD_RTS = vgc_cmd
+LAB_VSYNC       = vgc_vsync
 
 ; perform CLS — clear screen, no arguments
 
@@ -9327,42 +8980,24 @@ LAB_REVERSE
       STA   TempB
       PLA
       ORA   TempB
-      STA   VGC_TXTREVATTR
-      LDA   VGC_TXTFLAGS
-      AND   #$FC              ; clear reverse bits, preserve flash/future bits
-      ORA   #(VTXT_REV | VTXT_REVEX)
-      STA   VGC_TXTFLAGS
-      RTS
+      JMP   vgc_reverse_explicit
 @swap
-      LDA   VGC_TXTFLAGS
-      AND   #$FC              ; clear explicit attr; default is fg/bg swap
-      ORA   #VTXT_REV
-      STA   VGC_TXTFLAGS
-      RTS
+      JMP   vgc_reverse_default
 
 ; perform REVERSEOFF
 
 LAB_REVERSEOFF
-      LDA   VGC_TXTFLAGS
-      AND   #$FC              ; clear reverse and explicit reverse bits
-      STA   VGC_TXTFLAGS
-      RTS
+      JMP   vgc_reverse_off
 
 ; perform FLASH
 
 LAB_FLASH
-      LDA   VGC_TXTFLAGS
-      ORA   #VTXT_FLASH
-      STA   VGC_TXTFLAGS
-      RTS
+      JMP   vgc_flash_on
 
 ; perform FLASHOFF
 
 LAB_FLASHOFF
-      LDA   VGC_TXTFLAGS
-      AND   #$FB              ; clear flash bit
-      STA   VGC_TXTFLAGS
-      RTS
+      JMP   vgc_flash_off
 
 ; perform VPOKE plane,addr,value — write a byte to VGC memory
 
@@ -9379,13 +9014,7 @@ LAB_VPOKE
       JSR   LAB_GTBY
       STX   VGC_P3
       STZ   VGC_P4
-      LDA   #VCMD_MEMWRITE
-      STA   VGC_CMD
-@vpoke_wait
-      LDA   VGC_CMD
-      AND   #$01
-      BNE   @vpoke_wait
-      RTS
+      JMP   vgc_mem_write
 
 ; perform LOCATE x, y
 
@@ -9408,19 +9037,15 @@ LAB_GMODE
 
 LAB_FONT
       JSR   LAB_GTBY          ; get font index byte (0-7) in X
-      STX   VGC_FONT          ; write to $A007
+      STX   VGC_FONT          ; select active font
       RTS
 
 ; perform GCLS — clear the graphics bitmap layer
 
-LAB_VGC_CMD_RTS
-      STA   VGC_CMD
-      RTS
-
 LAB_GCLS
       JSR   LAB_VSYNC         ; BASIC hides visible VGC draw tearing
       LDA   #VCMD_GCLS        ; GCLS command
-      BRA   LAB_VGC_CMD_RTS   ; trigger and return
+      JMP   LAB_VGC_CMD_RTS
 
 ; perform GCOLOR c — set graphics draw color (0-15)
 
@@ -9429,7 +9054,7 @@ LAB_GCOLOR
       STX   VGC_P0             ; color in P0
       STZ   VGC_P1             ; high byte = 0
       LDA   #VCMD_GCOLOR      ; GCOLOR command
-      BRA   LAB_VGC_CMD_RTS   ; trigger and return
+      JMP   LAB_VGC_CMD_RTS
 
 ; shared: load x(word),y(byte) into VGC_P0-P3
 
@@ -9467,7 +9092,7 @@ LAB_PLOT
       JSR   LAB_VGC_XY
       JSR   LAB_VSYNC         ; wait before visible graphics mutation
       LDA   #VCMD_PLOT        ; PLOT command
-      BRA   LAB_VGC_CMD_RTS   ; trigger and return
+      JMP   LAB_VGC_CMD_RTS
 
 ; perform UNPLOT x, y
 
@@ -9475,7 +9100,7 @@ LAB_UNPLOT
       JSR   LAB_VGC_XY
       JSR   LAB_VSYNC
       LDA   #VCMD_UNPLOT      ; UNPLOT command
-      BRA   LAB_VGC_CMD_RTS
+      JMP   LAB_VGC_CMD_RTS
 
 ; perform LINE x0, y0, x1, y1
 
@@ -9483,7 +9108,7 @@ LAB_GLINE
       JSR   LAB_VGC_XYXY
       JSR   LAB_VSYNC
       LDA   #VCMD_LINE        ; LINE command
-      BRA   LAB_VGC_CMD_RTS
+      JMP   LAB_VGC_CMD_RTS
 
 ; perform CIRCLE cx, cy, rx [, ry]
 ; 3 args = circle (rx=ry), 4 args = ellipse
@@ -9528,213 +9153,64 @@ LAB_GTEXT
       LDA   #VCMD_GTEXT
       JMP   LAB_VGC_CMD_RTS
 
-; ── Tile engine shared ────────────────────────────────────────
-
-LAB_TB0C
-      JSR   LAB_GTBY          ; byte → TileP0, comma
-      STX   TileP0
-      JMP   LAB_1C01
-LAB_TWAD
-      JSR   LAB_GTWRD         ; word → TileAddrL/H
-      LDA   FAC1_3
-      STA   TileAddrL
-      LDA   FAC1_2
-      STA   TileAddrH
-      RTS
-
 ; ── Tile engine BASIC commands ────────────────────────────────
+; Full tile command parsing lives in the extension ROM and dispatches through
+; the shared tile library.
 
 LAB_TILESIZE
-      JSR   LAB_GTBY
-      LDA   TileConfig
-      AND   #$FE
-      CPX   #16
-      BNE   @ts_s
-      ORA   #TileCfgSize16
-@ts_s PHA
-      JSR   LAB_VSYNC
-      PLA
-      STA   TileConfig
-      RTS
+      LDA   #EXT_CMD_TILESIZE
+      JMP   EXT_vec
 LAB_MIRROR
-      JSR   LAB_GTBY
-      TXA
-      AND   #$03
-      ASL
-      STA   Itempl
-      LDA   TileConfig
-      AND   #$F9
-      ORA   Itempl
-      PHA
-      JSR   LAB_VSYNC
-      PLA
-      STA   TileConfig
-      RTS
+      LDA   #EXT_CMD_TMIRROR
+      JMP   EXT_vec
 LAB_TTRANS
-      JSR   LAB_GTBY
-      JSR   LAB_VSYNC
-      STX   TileTransColor
-      RTS
+      LDA   #EXT_CMD_TTRANS
+      JMP   EXT_vec
 LAB_TDEF
-      JSR   LAB_TB0C
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   Itempl
-      LDA   FAC1_2
-      STA   Itemph
-      JSR   LAB_GBYT
-      CMP   #','
-      BEQ   @td3
-      LDA   Itempl
-      STA   TileAddrL
-      LDA   Itemph
-      STA   TileAddrH
-      JSR   LAB_VSYNC
-      LDA   #TileCmdDef
-      STA   TileCmd
-      RTS
-@td3  LDA   Itempl
-      STA   TileP1
-      JSR   LAB_1C01
-      JSR   LAB_TWAD
-      JSR   LAB_VSYNC
-      LDA   #TileCmdDefBulk
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TDEF
+      JMP   EXT_vec
 LAB_TPUT
-      LDA   #TileCmdPut
-      .byte $2C
+      LDA   #EXT_CMD_TPUT
+      JMP   EXT_vec
 LAB_TATTR
-      LDA   #TileCmdAttr
-      PHA
-      JSR   LAB_GTBY
-      STX   TileP0
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP1
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP2
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP3
-      JSR   LAB_VSYNC
-      PLA
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TATTR
+      JMP   EXT_vec
 LAB_TFILL
-      JSR   LAB_TB0C
-      JSR   LAB_GTBY
-      STX   TileP1
-      JSR   LAB_VSYNC
-      LDA   #TileCmdFill
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TFILL
+      JMP   EXT_vec
 LAB_TROW
-      LDA   #TileCmdRow
-      .byte $2C
+      LDA   #EXT_CMD_TROW
+      JMP   EXT_vec
 LAB_TCOL
-      LDA   #TileCmdCol
-      PHA
-      JSR   LAB_GTBY
-      STX   TileP0
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP1
-      JSR   LAB_1C01
-      JSR   LAB_TWAD
-      JSR   LAB_VSYNC
-      PLA
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TCOL
+      JMP   EXT_vec
 LAB_TNTLOAD
-      JSR   LAB_TB0C
-      JSR   LAB_TWAD
-      JSR   LAB_VSYNC
-      LDA   #TileCmdLoad
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TNTLOAD
+      JMP   EXT_vec
 LAB_TCLS
-      JSR   LAB_VSYNC
-      LDA   #TileCmdCls
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TCLS
+      JMP   EXT_vec
 LAB_TBUF
-      JSR   LAB_GTBY
-      STX   TileP0
-      LDA   #TileCmdBufFill
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TBUF
+      JMP   EXT_vec
 LAB_TBSET
-      LDA   #TileCmdBufSet
-      .byte $2C
+      LDA   #EXT_CMD_TBSET
+      JMP   EXT_vec
 LAB_TBPUT
-      LDA   #TileCmdBufPut
-      PHA
-      JSR   LAB_GTBY
-      STX   TileP0
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP1
-      PLA
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TBPUT
+      JMP   EXT_vec
 LAB_TBFILL
-      JSR   LAB_GTBY
-      STX   TileP0
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP1
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP2
-      LDA   #TileCmdBufRange
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TBFILL
+      JMP   EXT_vec
 LAB_TSCROLL
-      JSR   LAB_GTWRD
-      LDA   FAC1_2
-      PHA
-      LDA   FAC1_3
-      PHA
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      JSR   LAB_VSYNC
-      PLA
-      STA   TileScrollXL
-      PLA
-      STA   TileScrollXH
-      LDA   FAC1_3
-      STA   TileScrollYL
-      LDA   FAC1_2
-      STA   TileScrollYH
-      RTS
+      LDA   #EXT_CMD_TSCROLL
+      JMP   EXT_vec
 LAB_TPAL
-      JSR   LAB_GTBY
-      STX   TilePalP0
-      JSR   LAB_1C01
-      JSR   LAB_TWAD
-      JSR   LAB_VSYNC
-      LDA   #TileCmdPal
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TPAL
+      JMP   EXT_vec
 LAB_TPALC
-      JSR   LAB_GTBY
-      STX   TilePalP0
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TilePalP1
-      JSR   LAB_1C01
-      JSR   LAB_TB0C
-      JSR   LAB_GTBY
-      STX   TileP1
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP2
-      JSR   LAB_VSYNC
-      LDA   #TileCmdPalC
-      STA   TileCmd
-      RTS
+      LDA   #EXT_CMD_TPALC
+      JMP   EXT_vec
 LAB_TSAVE
       LDA   #FioCmdTSave
       .byte $2C
@@ -9743,9 +9219,7 @@ LAB_TLOAD
       PHA
       JSR   LAB_FIO_GETNAME
       PLA
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BEQ   @tfio_ok
       JMP   LAB_FIO_ERRHND
 @tfio_ok
@@ -9803,38 +9277,31 @@ LAB_SPRCMD
       JSR   LAB_GTBY          ; get unsigned y byte
       STX   VGC_P3             ; P3 = y
       STZ   VGC_P4             ; P4 reserved
-      LDA   #VCMD_SPRPOS      ; SPRPOS command
-      JMP   LAB_VGC_CMD_RTS   ; trigger and return
+      JMP   sprite_pos         ; trigger and return
 
 @spr_on
       JSR   LAB_IGBY          ; consume the ON token
       LDA   Itempl            ; get sprite number
       STA   VGC_P0             ; P0 = sprite index
-      LDA   #VCMD_SPRENA      ; SPRENA command
-      JMP   LAB_VGC_CMD_RTS   ; trigger and return
+      JMP   sprite_enable      ; trigger and return
 
 @spr_off
       JSR   LAB_IGBY          ; consume the OFF token
       LDA   Itempl            ; get sprite number
       STA   VGC_P0             ; P0 = sprite index
-      LDA   #VCMD_SPRDIS      ; SPRDIS command
-      JMP   LAB_VGC_CMD_RTS   ; trigger and return
+      JMP   sprite_disable     ; trigger and return
 
 ; perform SPRITESHAPE n, shape
-; Writes shape index to sprite register $A044 + n*8
+; Writes shape index to sprite register VGC_SPR_SHAPE + n*8
 
 LAB_SPRSHAPE
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
-      TXA
-      ASL                     ; *2
-      ASL                     ; *4
-      ASL                     ; *8
-      TAY                     ; Y = sprite * 8
+      STX   Itempl
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GTBY          ; get shape index in X
       TXA
-      STA   $A044,Y           ; write to shape register ($A044 + n*8)
-      RTS
+      LDX   Itempl
+      JMP   sprite_set_shape
 
 ; perform SPRITESET sprite, field, value — set sprite register
 ; Field 0 (X) accepts an unsigned word and writes lo+hi bytes.
@@ -9843,38 +9310,29 @@ LAB_SPRSHAPE
 
 LAB_SPRCOLOR
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
-      TXA
-      ASL                     ; *2
-      ASL                     ; *4
-      ASL                     ; *8
-      STA   Itempl            ; save base offset (sprite * 8)
+      STX   Itempl            ; save sprite number
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GTBY          ; get field (0-7) in X
       STX   Itemph            ; save field number
-      TXA
-      CLC
-      ADC   Itempl            ; base + field = register offset
-      STA   Itempl            ; save register offset
       JSR   LAB_1C01          ; require comma
       LDA   Itemph            ; check field number
-      CMP   #$00              ; field 0 = X position?
       BEQ   @word_val
       ; --- byte field: parse byte value ---
       JSR   LAB_GTBY          ; get value (0-255) in X
-      LDY   Itempl            ; Y = register offset
       TXA                     ; A = value
-      STA   $A040,Y           ; write to sprite register
-      RTS
+      LDX   Itempl            ; X = sprite number
+      LDY   Itemph            ; Y = field
+      JMP   sprite_set_reg8
 @word_val
       ; --- word field: parse unsigned word, write lo+hi ---
       JSR   LAB_GTWRD         ; get unsigned 16-bit value, lo in FAC1_3, hi in FAC1_2
-      LDY   Itempl            ; Y = register offset (points to lo byte)
-      LDA   FAC1_3            ; low byte
-      STA   $A040,Y           ; write lo
-      INY
-      LDA   FAC1_2            ; high byte
-      STA   $A040,Y           ; write hi
-      RTS
+      LDA   FAC1_3
+      STA   NVR0L
+      LDA   FAC1_2
+      STA   NVR0H
+      LDX   Itempl            ; X = sprite number
+      LDY   Itemph            ; Y = field
+      JMP   sprite_set_reg16
 
 ; perform SPRITEDATA sprite, row, b1, b2 [, b3 [, b4 [, b5 [, b6 [, b7 [, b8]]]]]]
 ; Uses CmdSprRow ($11): P0=sprite, P1=row, P2-P9=8 bytes of row data.
@@ -9941,16 +9399,13 @@ LAB_SPRDATA
       JSR   LAB_GTBY          ; b8 → X
       STX   VGC_P9
 @sd_done
-      LDA   #VCMD_SPRROW      ; CmdSprRow command
-      JMP   LAB_VGC_CMD_RTS   ; trigger and return
+      JMP   sprite_row         ; trigger and return
 
 ; perform SOUND note, duration [, instrument]
 ; SOUND 60, 10          — MIDI note 60, 10 frames, default instrument 0
 ; SOUND 60, 10, 3       — MIDI note 60, 10 frames, instrument 3
 
-LAB_FIO_CMD_RTS
-      STA   FIO_CMD
-      RTS
+LAB_FIO_CMD_RTS = fio_issue
 
 LAB_SOUND
       JSR   LAB_GTBY          ; midi note → X
@@ -10011,19 +9466,13 @@ LAB_ENVELOPE
       LDA   #FIO_CMD_INSTRUMENT
       BRA   LAB_FIO_CMD_RTS
 
+FIO_NO_STREAMING = 1
+      .include "lib/fio.s"
+
 ; WAVE is deprecated — use INSTRUMENT instead
 
 LAB_WAVE
       JMP   LAB_15D9          ; syntax error
-
-; perform VSYNC — wait for next frame (vblank sync)
-
-LAB_VSYNC
-      LDA   VGC_FRAME         ; read current frame counter
-@wait
-      CMP   VGC_FRAME         ; has it changed?
-      BEQ   @wait             ; no — spin until next frame
-      RTS
 
 ; --- VGC function handlers ---
 
@@ -10031,25 +9480,16 @@ LAB_VSYNC
 
 LAB_SPRITEX
       JSR   LAB_F2FX          ; convert FAC1 to integer, low byte in Itempl
-      LDA   Itempl            ; get sprite number
-      ASL                     ; *2
-      ASL                     ; *4
-      ASL                     ; *8
-      TAX                     ; X = sprite * 8
-      LDY   $A040,X           ; Y = X position low byte
-      LDA   $A041,X           ; A = X position high byte
+      LDX   Itempl            ; get sprite number
+      JSR   sprite_get_x      ; Y = X low byte, A = X high byte
       JMP   LAB_AYFC          ; return AY as numeric value
 
 ; perform SPRITEY(n) — return Y position of sprite n as unsigned byte
 
 LAB_SPRITEY
       JSR   LAB_F2FX          ; convert FAC1 to integer, low byte in Itempl
-      LDA   Itempl            ; get sprite number
-      ASL                     ; *2
-      ASL                     ; *4
-      ASL                     ; *8
-      TAX                     ; X = sprite * 8
-      LDY   $A042,X           ; Y = Y position
+      LDX   Itempl            ; get sprite number
+      JSR   sprite_get_y      ; Y = Y position
       JMP   LAB_RET_0AY       ; return AY as numeric value
 
 ; perform COLLISION(n) — return sprite-sprite collision register
@@ -10103,10 +9543,7 @@ LAB_FSAVE
       STA   FIO_ENDH
 @sv_go
       LDA   #FIO_CMD_SAVE
-      STA   FIO_CMD
-      ; check status
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BEQ   @sv_ok
       JMP   LAB_FIO_ERRIO
 @sv_ok
@@ -10125,10 +9562,7 @@ LAB_FLOAD
       LDA   Smemh
       STA   FIO_SRCH
       LDA   #FIO_CMD_LOAD
-      STA   FIO_CMD
-      ; check status
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BNE   @ld_chk_err
       ; check file type — host sets FIO_DIRTYPE after load
       LDA   FIO_DIRTYPE
@@ -10189,9 +9623,7 @@ LAB_GSAVE
       LDA   FAC1_2
       STA   FIO_GLENH
       LDA   #FIO_CMD_GSAVE
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BEQ   @gs_ok
       JMP   LAB_FIO_ERRIO
 @gs_ok
@@ -10323,9 +9755,7 @@ LAB_MIDSTOP
 ; common: issue FIO command in A, check status, error on fail
 
 LAB_FIO_EXEC
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BNE   @fio_chk_err
       RTS
 @fio_chk_err
@@ -10365,7 +9795,7 @@ LAB_MUSIC
       LDX   #3
       JSR   LAB_SKIPX          ; LAY
       LDA   #FIO_CMD_MPLAY
-      STA   FIO_CMD
+      JSR   fio_issue
       CLI                     ; enable interrupts for music
       RTS
 
@@ -10461,9 +9891,7 @@ LAB_MUSIC
       LDA   ut1_ph
       STA   FIO_ENDH          ; string pointer high
       LDA   #FIO_CMD_MSEQ
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BNE   @m_seq_err
       RTS
 @m_seq_err
@@ -10627,15 +10055,8 @@ LAB_DMACOPY
       LDA   #>DMA_LENL
       JSR   LAB_CWRD
       STZ   DMA_LENH
-      ; mode = copy
-      STZ   DMA_MODE
-      ; start
-      LDA   #DMA_CMD_START
-      STA   DMA_CMD
-      LDA   DMA_STATUS
-      CMP   #DMA_BUSY
-      BEQ   @dmac_ok
-      CMP   #DMA_OK
+      LDA   #EXT_CMD_DMACOPY
+      JSR   EXT_vec
       BEQ   @dmac_ok
       JMP   LAB_FCER
 @dmac_ok
@@ -10727,17 +10148,9 @@ LAB_BLITCOPY
       LDX   #<BLT_HEIGHTL
       LDA   #>BLT_HEIGHTL
       JSR   LAB_CWRD
-      ; mode = copy
-      STZ   BLT_MODE
       STZ   BLT_FILL
-      STZ   BLT_CKEY
-      ; start
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD
-      LDA   BLT_STATUS
-      CMP   #BLT_BUSY
-      BEQ   @bltc_ok
-      CMP   #BLT_OK
+      LDA   #EXT_CMD_BLITCOPY
+      JSR   EXT_vec
       BEQ   @bltc_ok
       JMP   LAB_FCER
 @bltc_ok
@@ -10898,18 +10311,13 @@ LAB_SFLOAD
 LAB_FIO_GETNAME
       JSR   LAB_EVEX
       JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
-      TAX                     ; save length in X
-      BEQ   @fio_bad_name
-      CPX   #64               ; max 63 chars
-      BCS   @fio_bad_name
-      STX   FIO_NAMELEN
-      LDY   #$00
-@fio_cp_name
-      LDA   (ut1_pl),Y
-      STA   FIO_NAME,Y
-      INY
-      DEX
-      BNE   @fio_cp_name
+      STA   FIO_ARG_NAMELEN
+      LDA   ut1_pl
+      STA   FIO_ARG_NAMEPTR_L
+      LDA   ut1_ph
+      STA   FIO_ARG_NAMEPTR_H
+      JSR   fio_copy_name
+      BNE   @fio_bad_name
       RTS
 @fio_bad_name
       BRA   LAB_FIO_ERRIO
@@ -10936,7 +10344,7 @@ LAB_PRHEX
 ; shared LOAD error dispatch — checks FIO_ERRCODE
 LAB_FIO_ERRHND
       LDA   FIO_ERRCODE
-      CMP   #$01              ; not found?
+      CMP   #FIO_ERR_NOTFOUND ; not found?
       BEQ   LAB_FIO_ERRFNF
       ; fall through to I/O error
 
@@ -10979,8 +10387,6 @@ LAB_DIR
       JMP   EXT_vec            ; extension ROM handles listing
 
 ; --- XMC expansion memory handlers ---
-
-EXT_CMD_XMCCMD = $0B             ; XMC command processor in extension ROM
 
 LAB_XMC_CHKOK
       LDA   #EXT_CMD_XMCCMD     ; extension ROM processes cmd & returns A=0/1
@@ -11289,9 +10695,7 @@ LAB_AUTOBOOT
 
       ; Issue LOAD command
       LDA   #FIO_CMD_LOAD
-      STA   FIO_CMD
-      LDA   FIO_STATUS
-      CMP   #FIO_OK
+      JSR   fio_exec
       BNE   @ab_done              ; no autoboot file found
 
       ; Check file type

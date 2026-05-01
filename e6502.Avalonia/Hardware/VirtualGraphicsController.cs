@@ -324,7 +324,7 @@ public class VirtualGraphicsController : IBusDevice
 
         // Command register $A010
         if (address == VgcConstants.RegCmd)
-            return _cmdRegs[0];
+            return 0; // RTL exposes command busy/status here, not the last command byte.
 
         // Core registers $A000-$A00F
         if (address >= VgcConstants.VgcBase && address < VgcConstants.VgcBase + 16)

@@ -5,23 +5,26 @@ suites {
   suite("VGC Graphics") {
 
     test("mode-register", "MODE sets display mode register") {
-      basic("10 MODE 0")
+      basic("10 MODE 0:POKE $0100,PEEK($A000)")
       run()
-      assert(peekbyte($A000) == 0, "mode 0 set")
+      assert(peekbyte($0100) == 0, "mode 0 set")
 
-      basic("10 MODE 3")
+      basic("10 MODE 3:POKE $0100,PEEK($A000):MODE 0")
       run()
-      assert(peekbyte($A000) == 3, "mode 3 set")
+      assert(peekbyte($0100) == 3, "mode 3 set")
+      assert(peekbyte($A000) == 0, "mode restored")
     }
 
     test("mode-switch-all", "All four display modes") {
-      basic("10 MODE 1")
+      basic("10 MODE 1:POKE $0100,PEEK($A000):MODE 0")
       run()
-      assert(peekbyte($A000) == 1, "mode 1")
+      assert(peekbyte($0100) == 1, "mode 1")
+      assert(peekbyte($A000) == 0, "mode restored")
 
-      basic("10 MODE 2")
+      basic("10 MODE 2:POKE $0100,PEEK($A000):MODE 0")
       run()
-      assert(peekbyte($A000) == 2, "mode 2")
+      assert(peekbyte($0100) == 2, "mode 2")
+      assert(peekbyte($A000) == 0, "mode restored")
     }
 
     ; -------------------------------------------------------------------------
@@ -37,70 +40,84 @@ suites {
     test("gcolor-sets-draw-color", "GCOLOR sets drawing color") {
       basic("10 MODE 3")
       basic("20 POKE $0100,$FF")
-      basic("30 GCOLOR 5:POKE $0100,$AA")
+      basic("30 GCOLOR 5:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "GCOLOR ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after GCOLOR")
+      $A000 = $00
     }
 
     test("plot-completes", "PLOT executes without error") {
       basic("10 MODE 3")
       basic("20 GCOLOR 7")
       basic("30 POKE $0100,$FF")
-      basic("40 PLOT 100,50:POKE $0100,$AA")
+      basic("40 PLOT 100,50:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "PLOT ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after PLOT")
+      $A000 = $00
     }
 
     test("line-completes", "LINE draws without error") {
       basic("10 MODE 3")
       basic("20 GCOLOR 4")
       basic("30 POKE $0100,$FF")
-      basic("40 LINE 0,0,319,199:POKE $0100,$AA")
+      basic("40 LINE 0,0,319,199:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "LINE ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after LINE")
+      $A000 = $00
     }
 
     test("rect-completes", "RECT draws rectangle outline") {
       basic("10 MODE 3")
       basic("20 GCOLOR 2")
       basic("30 POKE $0100,$FF")
-      basic("40 RECT 10,10,50,50:POKE $0100,$AA")
+      basic("40 RECT 10,10,50,50:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "RECT ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after RECT")
+      $A000 = $00
     }
 
     test("fill-completes", "FILL draws solid rectangle") {
       basic("10 MODE 3")
       basic("20 GCOLOR 3")
       basic("30 POKE $0100,$FF")
-      basic("40 FILL 10,10,50,50:POKE $0100,$AA")
+      basic("40 FILL 10,10,50,50:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "FILL ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after FILL")
+      $A000 = $00
     }
 
     test("circle-completes", "CIRCLE draws without error") {
       basic("10 MODE 3")
       basic("20 GCOLOR 6")
       basic("30 POKE $0100,$FF")
-      basic("40 CIRCLE 160,100,50:POKE $0100,$AA")
+      basic("40 CIRCLE 160,100,50:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "CIRCLE ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after CIRCLE")
+      $A000 = $00
     }
 
     test("ellipse-completes", "CIRCLE with two radii draws ellipse") {
       basic("10 MODE 3")
       basic("20 GCOLOR 1")
       basic("30 POKE $0100,$FF")
-      basic("40 CIRCLE 160,100,80,40:POKE $0100,$AA")
+      basic("40 CIRCLE 160,100,80,40:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "CIRCLE+radii ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after CIRCLE")
+      $A000 = $00
     }
 
     test("gcls-clears", "GCLS clears graphics layer") {
@@ -108,10 +125,12 @@ suites {
       basic("20 GCOLOR 5")
       basic("30 FILL 0,0,319,199")
       basic("40 POKE $0100,$FF")
-      basic("50 GCLS:POKE $0100,$AA")
+      basic("50 GCLS:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "GCLS ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after GCLS")
+      $A000 = $00
     }
 
     test("paint-completes", "PAINT flood-fills from seed") {
@@ -120,10 +139,12 @@ suites {
       basic("30 RECT 10,10,50,50")
       basic("40 GCOLOR 5")
       basic("50 POKE $0100,$FF")
-      basic("60 PAINT 30,30:POKE $0100,$AA")
+      basic("60 PAINT 30,30:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "PAINT ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after PAINT")
+      $A000 = $00
     }
 
     test("bgcolor-register", "Background color via POKE") {
@@ -137,10 +158,12 @@ suites {
       basic("20 GCOLOR 1:FILL 0,0,319,199")
       basic("30 GCOLOR 7:LINE 0,0,319,199:LINE 319,0,0,199")
       basic("40 CIRCLE 160,100,80:RECT 60,40,260,160")
-      basic("50 POKE $0100,$AA")
+      basic("50 POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "all primitives ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after multi-primitive")
+      $A000 = $00
     }
 
     test("unplot-completes", "UNPLOT clears a pixel") {
@@ -148,10 +171,12 @@ suites {
       basic("20 GCOLOR 5")
       basic("30 PLOT 100,50")
       basic("40 POKE $0100,$FF")
-      basic("50 UNPLOT 100,50:POKE $0100,$AA")
+      basic("50 UNPLOT 100,50:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "UNPLOT ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after UNPLOT")
+      $A000 = $00
     }
 
     test("plot-unplot-roundtrip", "PLOT then UNPLOT sequence") {
@@ -159,10 +184,12 @@ suites {
       basic("20 GCOLOR 7")
       basic("30 FOR I=0 TO 9:PLOT I*10,50:NEXT")
       basic("40 FOR I=0 TO 9:UNPLOT I*10,50:NEXT")
-      basic("50 POKE $0100,$AA")
+      basic("50 POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "plot/unplot cycle ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after round-trip")
+      $A000 = $00
     }
 
     test("gtext-draws-text", "GTEXT draws text on graphics layer") {
@@ -172,10 +199,12 @@ suites {
       basic("20 GCOLOR 7")
       basic("30 A$=CHR$(72)+CHR$(73)")
       basic("40 POKE $0100,$FF")
-      basic("50 GTEXT 10,10,0,1,A$:POKE $0100,$AA")
+      basic("50 GTEXT 10,10,0,1,A$:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "GTEXT ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after GTEXT")
+      $A000 = $00
     }
 
     test("gtext-scaled", "GTEXT with larger scale") {
@@ -183,10 +212,12 @@ suites {
       basic("20 GCOLOR 3")
       basic("30 A$=CHR$(65)")
       basic("40 POKE $0100,$FF")
-      basic("50 GTEXT 50,50,0,4,A$:POKE $0100,$AA")
+      basic("50 GTEXT 50,50,0,4,A$:POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "GTEXT scaled ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after scaled GTEXT")
+      $A000 = $00
     }
 
     test("gtext-reverse-colors", "REVERSE renders an Infocom-style GTEXT status line") {
@@ -201,25 +232,30 @@ suites {
       basic("90 POKE $0102,VPEEK(3,2)")
       basic("100 POKE $0103,VPEEK(3,32)")
       basic("110 POKE $0104,VPEEK(3,2560)")
+      basic("115 MODE 0")
       basic("120 DATA 69,83,84,32,79,70,32,72,79,85,83,69")
       basic("130 DATA 32,32,32,32,32,32,32,32,32,32,32,32")
       basic("140 DATA 83,67,79,82,69,58,48,32,77,79,86,69,83,58,49")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0101) == 0, "status glyph pixels use reverse foreground")
       assert(peekbyte($0102) == 15, "status glyph blanks use reverse background")
       assert(peekbyte($0103) == 15, "status spaces fill the inverse status bar")
       assert(peekbyte($0104) == 0, "graphics below status bar stays clear")
       assert(peekbyte($A0E6) == $00, "REVERSEOFF cleared text flags")
+      $A000 = $00
     }
 
     test("mode-boundary-coords", "Drawing at screen boundaries") {
       basic("10 MODE 3")
       basic("20 GCOLOR 1")
       basic("30 PLOT 0,0:PLOT 319,0:PLOT 0,199:PLOT 319,199")
-      basic("40 POKE $0100,$AA")
+      basic("40 POKE $0100,$AA:MODE 0")
+      basic("900 MODE 0")
       run()
       assert(peekbyte($0100) == $AA, "boundary PLOTs ran without error")
       assert(peekbyte($A010) == 0, "VGC idle after boundary plots")
+      $A000 = $00
     }
 
     test("fgcolor-register", "Foreground color register via POKE") {

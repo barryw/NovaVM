@@ -24,6 +24,7 @@ public sealed class EmulatorTcpServer : IDisposable
     private TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private Task? _acceptTask;
+    private DateTime _lastInputQueuedUtc = DateTime.MinValue;
 
     public int Port { get; private set; }
 
@@ -248,6 +249,7 @@ public sealed class EmulatorTcpServer : IDisposable
         foreach (char c in text)
         {
             _editor.QueueInput((byte)c);
+            _lastInputQueuedUtc = DateTime.UtcNow;
             if (delayMs > 0)
                 Thread.Sleep(delayMs);
         }
@@ -274,6 +276,7 @@ public sealed class EmulatorTcpServer : IDisposable
         if (code == 0) return Error($"Unknown key: {key}");
 
         _editor.QueueInput(code);
+        _lastInputQueuedUtc = DateTime.UtcNow;
         return Ok();
     }
 
@@ -350,12 +353,23 @@ public sealed class EmulatorTcpServer : IDisposable
 
         int timeoutMs = req["timeout_ms"]?.GetValue<int>() ?? 5000;
         int pollMs = req["poll_ms"]?.GetValue<int>() ?? 50;
+        int settleMs = req["settle_ms"]?.GetValue<int>() ?? 150;
 
         var vgc = _bus.Vgc;
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
 
         while (DateTime.UtcNow < deadline)
         {
+            if (string.Equals(text, "Ready", StringComparison.OrdinalIgnoreCase))
+            {
+                var settledAt = _lastInputQueuedUtc.AddMilliseconds(settleMs);
+                if (_editor.HasQueuedInput || DateTime.UtcNow < settledAt)
+                {
+                    Thread.Sleep(pollMs);
+                    continue;
+                }
+            }
+
             for (int row = 0; row < VgcConstants.ScreenRows; row++)
             {
                 var sb = new StringBuilder(VgcConstants.ScreenCols);

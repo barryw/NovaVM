@@ -13,32 +13,16 @@
 
 .setcpu "6502"
 
-VGC_MODE    = $A000
-VGC_BGCOL   = $A001
-VGC_FRAME   = $A008
-VGC_CURSOR  = $A00A
-VGC_CMD     = $A010
-VGC_P0      = $A011
-VGC_P1      = $A012
-VGC_P2      = $A013
-VGC_P3      = $A014
-VGC_P4      = $A015
-VGC_P5      = $A016
-VGC_P6      = $A017
-VGC_P7      = $A018
-VGC_P8      = $A019
-VGC_P9      = $A01A
+.include "nova.inc"
 
-CMD_SPRROW  = $11
-
-SPR0_XLO    = $A040
-SPR0_XHI    = $A041
-SPR0_YLO    = $A042
-SPR0_YHI    = $A043
-SPR0_SHAPE  = $A044
-SPR0_FLAGS  = $A045
-SPR0_PRI    = $A046
-SPR0_TRANS  = $A047
+SPR0_XLO    = VGC_SPR_XL
+SPR0_XHI    = VGC_SPR_XH
+SPR0_YLO    = VGC_SPR_YL
+SPR0_YHI    = VGC_SPR_YH
+SPR0_SHAPE  = VGC_SPR_SHAPE
+SPR0_FLAGS  = VGC_SPR_FLAGS
+SPR0_PRI    = VGC_SPR_PRI
+SPR0_TRANS  = VGC_SPR_TRANS
 
 SPR_Y       = 112
 SPR_X_MAX   = 304
@@ -47,7 +31,7 @@ SPR_X_MAX   = 304
 
 start:
         lda #$00
-        sta VGC_CURSOR
+        sta VGC_CURSEN
         lda #$03
         sta VGC_MODE
         lda #$06
@@ -70,10 +54,10 @@ row_loop:
         sta VGC_P7
         sta VGC_P8
         sta VGC_P9
-        lda #CMD_SPRROW
+        lda #VCMD_SPRROW
         sta VGC_CMD
         inx
-        cpx #$10
+        cpx #VGC_MAX_SPRITES
         bne row_loop
 
         jsr wait_cmd
@@ -89,9 +73,9 @@ row_loop:
 
         lda #SPR_Y
         sta SPR0_YLO
-        lda #$02
+        lda #VGC_SPR_PRI_FRONT
         sta SPR0_PRI
-        lda #$80
+        lda #VGC_SPR_FLAG_ENABLE
         sta SPR0_FLAGS
         lda #$01
         sta xdir

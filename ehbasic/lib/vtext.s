@@ -5,6 +5,10 @@
 ; only clips, clears, writes, and scrolls rectangular text areas.
 
 .include "vtext.inc"
+.include "blitter.s"
+
+.ifndef VTEXT_IMPLEMENTATION_INCLUDED
+VTEXT_IMPLEMENTATION_INCLUDED = 1
 
       .segment "CODE"
 
@@ -505,11 +509,8 @@ vtext_blt_fill_plane:
       STA   BLT_DSTSTRH
       LDA   VTEXT_TMP
       STA   BLT_FILLVALUE
-      LDA   #BLT_MODE_FILL
-      STA   BLT_MODE_REG
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
-      JMP   vtext_wait_blitter
+      JSR   blitter_start_fill
+      JMP   vtext_blitter_result
 
 vtext_blt_copy_up_plane:
       STA   BLT_SRCSPACE
@@ -539,19 +540,17 @@ vtext_blt_copy_up_plane:
       LDA   #>VTEXT_SCREEN_COLS
       STA   BLT_SRCSTRH
       STA   BLT_DSTSTRH
-      STZ   BLT_MODE_REG
-      STZ   BLT_CKEY
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
-      JMP   vtext_wait_blitter
+      JSR   blitter_start_copy
+      JMP   vtext_blitter_result
 
 vtext_wait_blitter:
-@loop:
-      LDA   BLT_STATUS_REG
-      CMP   #BLT_STATUS_BUSY
-      BEQ   @loop
-      CMP   #BLT_STATUS_OK
+      JSR   blitter_wait
+
+vtext_blitter_result:
+      CMP   #BLITTER_RESULT_OK
       BEQ   @ok
       JMP   vtext_err
 @ok:
       JMP   vtext_ok
+
+.endif

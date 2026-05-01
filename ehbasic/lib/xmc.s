@@ -145,12 +145,6 @@ DIR_OFF_PGSH    = 31
 DATA_START_LO   = $00
 DATA_START_MI   = $05
 DATA_START_HI   = $00
-XMC_ERR_RANGE   = $01
-XMC_ERR_BADARGS = $02
-XMC_ERR_NOSPACE = $03
-XMC_ERR_NAME    = $04
-XMC_ERR_NF      = $05
-XMC_ERR_EOD     = $06
 
 ; --- Nova pseudo-register scratch for XMC metadata ---
 xmc_eidx        = NVR4L         ; directory entry index (0-31)

@@ -21,8 +21,8 @@ EXT_SNERR   = EXT_GTWRD+$0E   ; bridge: extension → BASIC LAB_15D9 (syntax err
 
 IO_AREA     = $F000           ; set I/O area for this monitor
 
-ACIAsimwr   = $A00E           ; VGC CHAROUT
-ACIAsimrd   = $A00F           ; VGC CHARIN
+ACIAsimwr   = VGC_CHAROUT
+ACIAsimrd   = VGC_CHARIN
 
 ; --- Data block copied to RAM at boot (vectors + interrupt + extension code) ---
 ; This block is stored in ROM (CODE segment) and copied to VEC_IN at init.
@@ -61,12 +61,12 @@ NMI_CODE
 
 EXT_CODE
       STA   ExtCmdId          ; save command ID to ZP
-      LDA   #$04              ; RomSwapExtension
-      STA   $A03F             ; swap to extension ROM
+      LDA   #ROMSWAP_EXTENSION
+      STA   REG_ROMSWAP       ; swap to extension ROM
       JSR   $C000             ; call extension entry point
       PHA                     ; save handler return value
-      LDA   #$02              ; RomSwapBasic
-      STA   $A03F             ; swap back to BASIC ROM
+      LDA   #ROMSWAP_BASIC
+      STA   REG_ROMSWAP       ; swap back to BASIC ROM
       PLA                     ; restore handler return value
       RTS
 
@@ -75,11 +75,11 @@ EXT_CODE
 ; handler jumps here. Swaps back to BASIC ROM and continues reset.
 
 EXT_RESET_CODE
-      LDA   #$02              ; RomSwapBasic
-      STA   $A03F             ; swap to BASIC ROM
+      LDA   #ROMSWAP_BASIC
+      STA   REG_ROMSWAP       ; swap to BASIC ROM
       JMP   $FFD7             ; jump to BASIC reset handler (RES_vec)
 
-; Extension → BASIC bridges (run from RAM at $0236, $0244, $0252).
+; Extension → BASIC bridges (run from RAM at $023B, $0249, $0257).
 ; Extension ROM handlers JSR these to invoke BASIC parser helpers
 ; (numeric expression eval, syntax error) without losing access to
 ; the active ROM bank. Each trampoline maps BASIC, calls the helper,
@@ -88,24 +88,24 @@ EXT_RESET_CODE
 ; never returns — jumps into BASIC's standard syntax-error path.
 
 EXT_GTBY_CODE
-      LDA   #$02              ; RomSwapBasic
-      STA   $A03F             ; swap to BASIC ROM
+      LDA   #ROMSWAP_BASIC
+      STA   REG_ROMSWAP       ; swap to BASIC ROM
       JSR   LAB_GTBY          ; parse byte expression → X
-      LDA   #$04              ; RomSwapExtension
-      STA   $A03F             ; swap back
+      LDA   #ROMSWAP_EXTENSION
+      STA   REG_ROMSWAP       ; swap back
       RTS                     ; X holds parsed byte
 
 EXT_GTWRD_CODE
-      LDA   #$02
-      STA   $A03F
+      LDA   #ROMSWAP_BASIC
+      STA   REG_ROMSWAP
       JSR   LAB_GTWRD         ; parse 16-bit expression → FAC1_3 (lo), FAC1_2 (hi)
-      LDA   #$04
-      STA   $A03F
+      LDA   #ROMSWAP_EXTENSION
+      STA   REG_ROMSWAP
       RTS
 
 EXT_SNERR_CODE
-      LDA   #$02              ; RomSwapBasic
-      STA   $A03F             ; swap to BASIC ROM
+      LDA   #ROMSWAP_BASIC
+      STA   REG_ROMSWAP       ; swap to BASIC ROM
       JMP   LAB_15D9          ; jump to BASIC syntax-error path (no return)
 
 END_CODE
