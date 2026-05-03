@@ -31,6 +31,15 @@ public class RomSwapTests
     }
 
     [TestMethod]
+    public void WriteRomSwapPrimary_SelectsPrimaryRuntimeRom()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapPrimary);
+        Assert.AreEqual(CompositeBusDevice.ActiveRom.Basic, bus.CurrentRom);
+    }
+
+    [TestMethod]
     public void RomSwap_FiresEvent()
     {
         using var bus = new CompositeBusDevice(enableSound: false);

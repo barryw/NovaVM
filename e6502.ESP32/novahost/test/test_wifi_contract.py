@@ -9,6 +9,7 @@ public management contract that has to remain stable across refactors:
 - GET /wifi redacts the password and exposes only passwordSet.
 - Host-status bits drive the FPGA WiFi LED as:
   off = unconfigured, flashing = configured but disconnected, solid = connected.
+- Runtime-replacing autoboots can load a 16K ROM from a floppy image before HD.
 """
 
 from pathlib import Path
@@ -220,6 +221,75 @@ def test_fio_sd_dispatch_contract() -> None:
         check(name, ok)
 
 
+def test_runtime_autoboot_contract() -> None:
+    nova_inc = read("ehbasic/lib/nova.inc")
+    fio = read("ehbasic/lib/fio.s")
+    constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
+    controller = read("e6502.Avalonia/Hardware/FileIoController.cs")
+    composite = read("e6502.Avalonia/Hardware/CompositeBusDevice.cs")
+    storage_dm = read("e6502.Storage/DeviceManager.cs")
+    dispatcher_h = read("e6502.ESP32/novahost/fio_dispatcher.h")
+    dispatcher = read("e6502.ESP32/novahost/fio_dispatcher.cpp")
+    esp_dm_h = read("e6502.ESP32/novahost/device_manager.h")
+    esp_dm = read("e6502.ESP32/novahost/device_manager.cpp")
+    novahost = read("e6502.ESP32/novahost/novahost.ino")
+    unit_dm = read("e6502UnitTests/DeviceManagerTests.cs")
+    unit_fio = read("e6502UnitTests/FileIoControllerTests.cs")
+    unit_rom = read("e6502UnitTests/RomSwapTests.cs")
+    ozmoo_make = read("examples/ozmoo/Makefile")
+    ozmoo_auto = read("examples/ozmoo/src/autoboot.s")
+    ozmoo_runtime = read("examples/ozmoo/src/runtime.s")
+
+    checks = {
+        "BASIC exposes primary runtime ROM swap label": "ROMSWAP_PRIMARY" in nova_inc
+        and "ROMSWAP_PRIMARY   = ROMSWAP_BASIC" in nova_inc,
+        "BASIC exposes LOADRUNTIME command ID": "FIO_CMD_LOADRUNTIME = $28" in nova_inc,
+        "shared FIO exports runtime loader": ".export fio_load_runtime" in fio
+        and "LDA   #FIO_CMD_LOADRUNTIME" in fio,
+        "emulator command constants match": "FioCmdLoadRuntime = 0x28" in constants
+        and "RomSwapPrimary  = RomSwapBasic" in constants
+        and "RomSize           = 0x4000" in constants,
+        "emulator FIO handles runtime loading": "case VgcConstants.FioCmdLoadRuntime:" in controller
+        and "DoLoadRuntime();" in controller
+        and "data.Length != VgcConstants.RomSize" in controller,
+        "emulator can replace the primary runtime ROM": "loadRuntimeRom: LoadPrimaryRuntimeRom" in composite
+        and "Array.Copy(data, _basicRom, VgcConstants.RomSize)" in composite,
+        "shared storage selects boot device FD-before-HD": 'SlotOrder = ["FD0", "FD1", "FD2", "FD3", "HD0", "HD1"]' in storage_dm
+        and "SelectBootDevice()" in storage_dm,
+        "ESP dispatcher defines runtime command": "CMD_LOADRUNTIME = 0x28" in dispatcher_h
+        and "RUNTIME_ROM_BYTES = 16 * 1024" in dispatcher_h,
+        "ESP dispatcher handles runtime command": "case CMD_LOADRUNTIME: handle_load_runtime(); break;" in dispatcher
+        and "handle_load_runtime()" in dispatcher
+        and "_bridge.loadRom(0" in dispatcher,
+        "ESP load mirrors BAS-before-BIN resolution": "find_load_entry" in dispatcher
+        and '"%s.bas"' in dispatcher
+        and '"%s.bin"' in dispatcher,
+        "ESP auto-mounts floppies and chooses boot slot": "auto_mount_fds()" in esp_dm_h
+        and "select_boot_slot() const" in esp_dm_h
+        and "int DeviceManager::auto_mount_fds()" in esp_dm
+        and "int DeviceManager::select_boot_slot() const" in esp_dm
+        and "FD0, FD1, FD2, FD3, HD0, HD1" in esp_dm,
+        "NovaHost mounts FD before HD and sets default boot slot": "auto_mount_fds();" in novahost
+        and "auto_mount_hds();" in novahost
+        and "set_default_slot(boot_slot)" in novahost,
+        "unit tests cover boot order": "FindAutoboot_PrefersInsertedFloppyOverHardDrive" in unit_dm
+        and "SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists" in unit_dm,
+        "unit tests cover runtime load command": "LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime" in unit_fio,
+        "unit tests cover primary ROM swap alias": "WriteRomSwapPrimary_SelectsPrimaryRuntimeRom" in unit_rom,
+        "Ozmoo example builds launcher plus runtime": "AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin" in ozmoo_make
+        and "RUNTIME := $(BUILD_DIR)/ozmoo.bin" in ozmoo_make
+        and "IMAGE ?= $(DIST_DIR)/fd0.ndi" in ozmoo_make
+        and "--runtime" in ozmoo_make,
+        "Ozmoo launcher replaces BASIC runtime": "fio_load_runtime" in ozmoo_auto
+        and "STA REG_ROMSWAP" in ozmoo_auto
+        and "JMP ($FFFC)" in ozmoo_auto,
+        "Ozmoo runtime loads story into XRAM": "JMP xram_xload" in ozmoo_runtime
+        and '.byte "story.bin"' in ozmoo_runtime,
+    }
+    for name, ok in checks.items():
+        check(name, ok)
+
+
 def main() -> int:
     tests = [
         ("serial commands", test_serial_commands),
@@ -228,6 +298,7 @@ def main() -> int:
         ("host-status LED contract", test_host_status_led_contract),
         ("FIO clear-error contract", test_fio_clear_error_contract),
         ("FIO SD dispatch contract", test_fio_sd_dispatch_contract),
+        ("runtime autoboot contract", test_runtime_autoboot_contract),
     ]
     failed = 0
     for name, fn in tests:

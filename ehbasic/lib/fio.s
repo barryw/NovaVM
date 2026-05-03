@@ -28,6 +28,7 @@ FIO_IMPLEMENTATION_INCLUDED = 1
       .export fio_mkdir
       .export fio_rmdir
       .export fio_pwd
+      .export fio_load_runtime
 .ifndef FIO_NO_STREAMING
       .export fio_run
       .export fio_prepare_xram_transfer
@@ -227,6 +228,18 @@ fio_rmdir:
 ; @summary Read the current directory into FIO.NAME/FIO.NAMELEN.
 fio_pwd:
       LDA   #FIO_CMD_PWD
+      JMP   fio_exec
+
+; Load a 16K runtime ROM image into the primary $C000 bank.
+; This routine is meant for RAM-resident launchers. The host overwrites the
+; primary ROM bank while the command is in progress.
+; @label FIO.LOAD_RUNTIME
+; @kind routine
+; @symbol fio_load_runtime
+; @summary Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.
+; @requires FIO_NAME FIO_NAMELEN
+fio_load_runtime:
+      LDA   #FIO_CMD_LOADRUNTIME
       JMP   fio_exec
 
 .ifndef FIO_NO_STREAMING

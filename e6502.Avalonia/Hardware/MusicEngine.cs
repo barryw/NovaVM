@@ -109,7 +109,7 @@ public sealed class MusicEngine
     private bool _loop;
     private int _elapsedFrames;
     private int _musicTotalFrames;
-    private int[] _stealPriority = { 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 }; // steal voice[0] last
+    private int[] _stealPriority = DefaultStealPriority(); // steal voice[0] last
 
     // Per-voice sequencer state
     private readonly VoiceState[] _voices = new VoiceState[VoiceCount];
@@ -125,7 +125,43 @@ public sealed class MusicEngine
         _wts = bus.Wts;
         _frameRateHz = bus.FrameRateHz;
 
-        // Default instrument 0: pulse, A=0, D=9, S=0, R=6
+        for (int i = 0; i < VoiceCount; i++)
+            _voices[i] = new VoiceState();
+
+        Reset();
+    }
+
+    public void Reset()
+    {
+        _sfxVoice = -1;
+        _sfxFrames = 0;
+        _sfxCompleted = false;
+        _musicPlaying = false;
+        _midiMode = false;
+        _bpm = 120;
+        _loop = false;
+        _elapsedFrames = 0;
+        _musicTotalFrames = 0;
+        _stealPriority = DefaultStealPriority();
+        ResetDefaultInstruments();
+
+        for (int i = 0; i < VoiceCount; i++)
+        {
+            _voices[i].Events = new List<MmlEvent>();
+            _voices[i].Reset(_bpm, _frameRateHz);
+            _voices[i].CurrentInstrument = GetInstrument(0);
+            _voices[i].CurrentMidi = -1;
+            _voices[i].CurrentSidFreq = 0;
+            _voices[i].PulseWidth = 2048;
+            _voices[i].WtsInstrumentId = 0;
+        }
+    }
+
+    private static int[] DefaultStealPriority() =>
+        [13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
+
+    private void ResetDefaultInstruments()
+    {
         _instruments[0] = new SidInstrument
         {
             Waveform = 0x40, // pulse
@@ -138,9 +174,6 @@ public sealed class MusicEngine
 
         for (int i = 1; i < InstrumentSlots; i++)
             _instruments[i] = _instruments[0]; // default copy
-
-        for (int i = 0; i < VoiceCount; i++)
-            _voices[i] = new VoiceState();
     }
 
     // -------------------------------------------------------------------------

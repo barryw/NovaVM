@@ -36,6 +36,7 @@ public sealed class WavetableSynth : IDisposable
             _voices[i] = new WtsVoice();
             _latchPitchBendHi[i] = 0x80;
         }
+        Reset();
 
         if (enableAudio)
         {
@@ -47,6 +48,30 @@ public sealed class WavetableSynth : IDisposable
             {
                 _renderer = null;
             }
+        }
+    }
+
+    public void Reset()
+    {
+        lock (_lock)
+        {
+            _bank = null;
+            for (int i = 0; i < VoiceCount; i++)
+                _voices[i].Reset();
+
+            Array.Clear(_latchVelocity);
+            Array.Clear(_latchInstrument);
+            Array.Clear(_latchPitchBendLo);
+            Array.Clear(_latchPitchBendHi);
+            Array.Fill(_latchPitchBendHi, (byte)0x80);
+            _enumBank = 0;
+            _enumProgram = 0;
+            Array.Clear(_enumName);
+            ReverbLevel = 80;
+            ChorusLevel = 40;
+            MasterVolume = 255;
+            _reverb.Reset();
+            _chorus.Reset();
         }
     }
 
@@ -574,5 +599,26 @@ public sealed class WavetableSynth : IDisposable
         public EnvStage EnvStage = EnvStage.Off;
         public float AttackRate, DecayRate, SustainLevel, ReleaseRate;
         public int HoldSamples;
+
+        public void Reset()
+        {
+            Phase = 0;
+            Note = 0;
+            Velocity = 0;
+            InstrumentIndex = 0;
+            Volume = 255;
+            Pan = 128;
+            PitchBend = 0x8000;
+            Region = null;
+            Active = false;
+            Releasing = false;
+            EnvLevel = 0f;
+            EnvStage = EnvStage.Off;
+            AttackRate = 0f;
+            DecayRate = 0f;
+            SustainLevel = 0f;
+            ReleaseRate = 0f;
+            HoldSamples = 0;
+        }
     }
 }

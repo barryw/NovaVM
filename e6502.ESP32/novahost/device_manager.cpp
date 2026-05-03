@@ -252,8 +252,35 @@ bool DeviceManager::resolve_path(const char* path, int& out_slot,
 }
 
 // ---------------------------------------------------------------------------
-// Auto-mount HDs
+// Auto-mount FD/HD images
 // ---------------------------------------------------------------------------
+int DeviceManager::auto_mount_fds() {
+    int mounted = 0;
+    File root = SD.open("/");
+    if (!root || !root.isDirectory()) return 0;
+
+    File entry;
+    while ((entry = root.openNextFile())) {
+        const char* name = entry.name();
+        // Match fd<N>.ndi where N is a single digit.
+        if (strncasecmp(name, "fd", 2) == 0) {
+            const char* p = name + 2;
+            if (isdigit((unsigned char)*p)) {
+                int n = *p - '0';
+                p++;
+                if (strcasecmp(p, ".ndi") == 0 && n >= 0 && n < NUM_FD) {
+                    char path[64];
+                    snprintf(path, sizeof(path), "/%s", name);
+                    if (mount(FD0 + n, path)) mounted++;
+                }
+            }
+        }
+        entry.close();
+    }
+    root.close();
+    return mounted;
+}
+
 int DeviceManager::auto_mount_hds() {
     int mounted = 0;
     File root = SD.open("/");
@@ -279,4 +306,29 @@ int DeviceManager::auto_mount_hds() {
     }
     root.close();
     return mounted;
+}
+
+int DeviceManager::select_boot_slot() const {
+    static const int boot_order[] = { FD0, FD1, FD2, FD3, HD0, HD1 };
+    static const char* const autoboot_names[] = {
+        "AUTOBOOT.bas",
+        "AUTOBOOT.bin"
+    };
+
+    for (int slot : boot_order) {
+        if (!is_mounted(slot)) continue;
+        ndi::NdiImage* img = _images[slot];
+        if (!img) continue;
+        for (const char* name : autoboot_names) {
+            if (img->find_entry(name, ndi::ROOT_PARENT) >= 0)
+                return slot;
+        }
+    }
+
+    for (int slot = FD0; slot <= FD3; slot++)
+        if (is_mounted(slot)) return slot;
+    for (int slot = HD0; slot <= HD1; slot++)
+        if (is_mounted(slot)) return slot;
+
+    return _default_slot;
 }

@@ -34,6 +34,15 @@ public sealed class ChorusEffect
         _lfoPhaseR = MathF.PI * 0.5f; // 90-degree offset for stereo
     }
 
+    public void Reset()
+    {
+        Array.Clear(_bufferL);
+        Array.Clear(_bufferR);
+        _writeIndex = 0;
+        _lfoPhaseL = 0f;
+        _lfoPhaseR = MathF.PI * 0.5f;
+    }
+
     public void Process(float[] left, float[] right)
     {
         int len = Math.Min(left.Length, right.Length);

@@ -118,6 +118,19 @@ public sealed class SidPlayer
         _bus.Sid2.Flush();
     }
 
+    public void Reset()
+    {
+        Stop();
+        _playAddress = 0;
+        _initAddress = 0;
+        _song = 0;
+        _elapsedFrames = 0;
+        _consecutiveHangs = 0;
+        Array.Clear(_sidZeroPage);
+        Array.Clear(_savedStack);
+        Array.Clear(_savedProtected);
+    }
+
     /// <summary>
     /// Execute pending init/play calls via virtual JSR.
     /// Saves and restores CPU state and zero page so the SID routines

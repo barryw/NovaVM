@@ -1,0 +1,9 @@
+; Nova Ozmoo object-table helpers.
+
+.ifndef NOVA_OZMOO_ZOBJECT_INC_INCLUDED
+NOVA_OZMOO_ZOBJECT_INC_INCLUDED = 1
+
+ZOBJECT_ERR_NONE        = $00
+ZOBJECT_ERR_UNSUPPORTED = $02
+
+.endif

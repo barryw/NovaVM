@@ -6,6 +6,10 @@
 .ifndef NOVA_INC_INCLUDED
 NOVA_INC_INCLUDED = 1
 
+; Nova pseudo-register mailbox. These bytes are available to callers and
+; runtime helpers as ephemeral argument/scratch storage only. A routine may
+; clobber them unless its documentation explicitly says otherwise; persistent
+; library state must be allocated in a linker segment such as BSS/ZEROPAGE.
 .ifndef NVR0L
 NVR0L             = $20
 .endif
@@ -219,6 +223,13 @@ ROMSWAP_NCC       = $01
 .endif
 .ifndef ROMSWAP_BASIC
 ROMSWAP_BASIC     = $02
+.endif
+.ifndef ROMSWAP_PRIMARY
+; @label ROMSWAP.PRIMARY
+; @kind const
+; @symbol ROMSWAP_PRIMARY
+; @summary Select the primary runtime ROM bank at $C000. At cold boot this is NovaBASIC; a RAM launcher may replace it with another runtime first.
+ROMSWAP_PRIMARY   = ROMSWAP_BASIC
 .endif
 .ifndef ROMSWAP_NCCEDIT
 ROMSWAP_NCCEDIT   = $03
@@ -907,6 +918,13 @@ FIO_CMD_PWD       = $26
 .endif
 .ifndef FIO_CMD_CLEARERR
 FIO_CMD_CLEARERR  = $27
+.endif
+.ifndef FIO_CMD_LOADRUNTIME
+; @label FIO.CMD_LOADRUNTIME
+; @kind const
+; @symbol FIO_CMD_LOADRUNTIME
+; @summary Host command that streams a 16K file into the primary runtime ROM bank. Callers must execute from RAM while issuing it.
+FIO_CMD_LOADRUNTIME = $28
 .endif
 
 .ifndef FIO_OK

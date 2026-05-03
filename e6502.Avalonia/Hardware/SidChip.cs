@@ -38,11 +38,6 @@ public sealed class SidChip : IDisposable
         for (int i = 0; i < 3; i++)
             _channels[i] = new SidChannel();
 
-        // Per-voice volume defaults to max (backward compatible)
-        _registers[0x1D] = 0x0F;
-        _registers[0x1E] = 0x0F;
-        _registers[0x1F] = 0x0F;
-
         _channels[0].SyncTarget = _channels[1];
         _channels[1].SyncTarget = _channels[2];
         _channels[2].SyncTarget = _channels[0];
@@ -51,6 +46,7 @@ public sealed class SidChip : IDisposable
         _channels[2].SyncSource = _channels[1];
 
         _cyclesPerSample = (float)(CpuClockRate / SampleRate);
+        Reset();
 
         if (enableAudio)
         {
@@ -73,6 +69,24 @@ public sealed class SidChip : IDisposable
 
     public void Write(ushort address, byte data) =>
         _registers[address - BaseAddress] = data;
+
+    public void Reset()
+    {
+        lock (_lock)
+        {
+            Array.Clear(_registers);
+            _registers[0x1D] = 0x0F;
+            _registers[0x1E] = 0x0F;
+            _registers[0x1F] = 0x0F;
+
+            for (int i = 0; i < 3; i++)
+                _channels[i].Reset();
+
+            _prevBandPass = 0;
+            _prevLowPass = 0;
+            _cycleAccumulator = 0;
+        }
+    }
 
     /// <summary>
     /// Legacy method — no longer generates samples. Audio is now rendered on-demand
@@ -407,6 +421,23 @@ public sealed class SidChip : IDisposable
                     accumulatorCycles -= accumulatorCyclesNow;
                 }
             }
+        }
+
+        public void Reset()
+        {
+            Frequency = 0;
+            Ad = 0;
+            Sr = 0;
+            Pulse = 0;
+            Waveform = 0;
+            VoiceVolume = 0x0F;
+            DoSync = false;
+            _state = AdsrState.Release;
+            _accumulator = 0;
+            _noiseGenerator = 0x7FFFF8;
+            _adsrCounter = 0;
+            _adsrExpCounter = 0;
+            _volumeLevel = 0;
         }
 
         public void ResetAccumulator() => _accumulator = 0;

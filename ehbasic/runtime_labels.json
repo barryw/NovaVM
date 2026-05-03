@@ -72,7 +72,7 @@
       "symbol": "audio_instrument",
       "abi": "pseudo-register",
       "summary": "Define an instrument envelope and waveform.",
-      "address": "$ED9F"
+      "address": "$EDA4"
     },
     {
       "label": "AUDIO.INST_ID",
@@ -105,7 +105,7 @@
       "symbol": "audio_midplay",
       "abi": "pseudo-register",
       "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDB2"
+      "address": "$EDB7"
     },
     {
       "label": "AUDIO.MIDSTOP",
@@ -123,7 +123,7 @@
       "symbol": "audio_midstop",
       "abi": "none",
       "summary": "Stop MIDI file playback.",
-      "address": "$EDB7"
+      "address": "$EDBC"
     },
     {
       "label": "AUDIO.MUSIC_LOOP",
@@ -143,7 +143,7 @@
       "symbol": "audio_music_loop",
       "abi": "pseudo-register",
       "summary": "Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.",
-      "address": "$EDD9"
+      "address": "$EDDE"
     },
     {
       "label": "AUDIO.MUSIC_NOTE",
@@ -166,7 +166,7 @@
       "symbol": "audio_music_note",
       "abi": "register",
       "summary": "Return the current MIDI note for a music voice.",
-      "address": "$EDF7"
+      "address": "$EDFC"
     },
     {
       "label": "AUDIO.MUSIC_PLAY",
@@ -184,7 +184,7 @@
       "symbol": "audio_music_play",
       "abi": "none",
       "summary": "Start queued music playback.",
-      "address": "$EDC6"
+      "address": "$EDCB"
     },
     {
       "label": "AUDIO.MUSIC_PLAYING",
@@ -202,7 +202,7 @@
       "symbol": "audio_music_playing",
       "abi": "none",
       "summary": "Return nonzero if music is playing.",
-      "address": "$EDED"
+      "address": "$EDF2"
     },
     {
       "label": "AUDIO.MUSIC_PRIORITY",
@@ -222,7 +222,7 @@
       "symbol": "audio_music_priority",
       "abi": "pseudo-register",
       "summary": "Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.",
-      "address": "$EDDE"
+      "address": "$EDE3"
     },
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
@@ -245,7 +245,7 @@
       "symbol": "audio_music_sequence",
       "abi": "pseudo-register",
       "summary": "Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.",
-      "address": "$EDC1"
+      "address": "$EDC6"
     },
     {
       "label": "AUDIO.MUSIC_STOP",
@@ -263,7 +263,7 @@
       "symbol": "audio_music_stop",
       "abi": "none",
       "summary": "Stop music playback.",
-      "address": "$EDCF"
+      "address": "$EDD4"
     },
     {
       "label": "AUDIO.MUSIC_TEMPO",
@@ -284,7 +284,7 @@
       "symbol": "audio_music_tempo",
       "abi": "pseudo-register",
       "summary": "Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.",
-      "address": "$EDD4"
+      "address": "$EDD9"
     },
     {
       "label": "AUDIO.NOTE",
@@ -327,7 +327,7 @@
       "symbol": "audio_play_sound",
       "abi": "register",
       "summary": "Play a one-shot note using A/X/Y register arguments.",
-      "address": "$ED82"
+      "address": "$ED87"
     },
     {
       "label": "AUDIO.RELEASE",
@@ -366,7 +366,7 @@
       "symbol": "audio_set_volume",
       "abi": "register",
       "summary": "Set master or per-voice volume using A/X register arguments.",
-      "address": "$ED8D"
+      "address": "$ED92"
     },
     {
       "label": "AUDIO.SFLOAD",
@@ -387,7 +387,7 @@
       "symbol": "audio_sfload",
       "abi": "pseudo-register",
       "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDBC"
+      "address": "$EDC1"
     },
     {
       "label": "AUDIO.SFX_PLAYING",
@@ -405,7 +405,7 @@
       "symbol": "audio_sfx_playing",
       "abi": "none",
       "summary": "Return nonzero if a sound effect is playing.",
-      "address": "$EDE7"
+      "address": "$EDEC"
     },
     {
       "label": "AUDIO.SIDPLAY",
@@ -427,7 +427,7 @@
       "symbol": "audio_sidplay",
       "abi": "pseudo-register",
       "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.",
-      "address": "$EDA4"
+      "address": "$EDA9"
     },
     {
       "label": "AUDIO.SIDSTOP",
@@ -445,7 +445,7 @@
       "symbol": "audio_sidstop",
       "abi": "none",
       "summary": "Stop SID file playback.",
-      "address": "$EDAD"
+      "address": "$EDB2"
     },
     {
       "label": "AUDIO.SOUND",
@@ -467,7 +467,7 @@
       "symbol": "audio_sound",
       "abi": "pseudo-register",
       "summary": "Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.",
-      "address": "$ED95"
+      "address": "$ED9A"
     },
     {
       "label": "AUDIO.STATUS",
@@ -485,7 +485,7 @@
       "symbol": "audio_status",
       "abi": "none",
       "summary": "Return raw music status bits.",
-      "address": "$EDE3"
+      "address": "$EDE8"
     },
     {
       "label": "AUDIO.STRH",
@@ -566,7 +566,7 @@
       "symbol": "audio_volume",
       "abi": "pseudo-register",
       "summary": "Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.",
-      "address": "$ED9A"
+      "address": "$ED9F"
     },
     {
       "label": "AUDIO.VOLUME_LEVEL",
@@ -1041,7 +1041,7 @@
     {
       "label": "FIO.CD",
       "source": "lib/fio.s",
-      "line": 197,
+      "line": 198,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1056,7 +1056,7 @@
     {
       "label": "FIO.CHECK",
       "source": "lib/fio.s",
-      "line": 47,
+      "line": 48,
       "inputs": [],
       "outputs": [
         {
@@ -1073,7 +1073,7 @@
     {
       "label": "FIO.CLEAR_ERROR",
       "source": "lib/fio.s",
-      "line": 81,
+      "line": 82,
       "inputs": [],
       "outputs": [
         {
@@ -1088,9 +1088,21 @@
       "address": "$ED0F"
     },
     {
+      "label": "FIO.CMD_LOADRUNTIME",
+      "source": "lib/nova.inc",
+      "line": 923,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_CMD_LOADRUNTIME",
+      "summary": "Host command that streams a 16K file into the primary runtime ROM bank. Callers must execute from RAM while issuing it.",
+      "address": "$28"
+    },
+    {
       "label": "FIO.COPY_NAME",
       "source": "lib/fio.s",
-      "line": 111,
+      "line": 112,
       "inputs": [],
       "outputs": [
         {
@@ -1111,7 +1123,7 @@
     {
       "label": "FIO.DELETE",
       "source": "lib/fio.s",
-      "line": 170,
+      "line": 171,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1126,7 +1138,7 @@
     {
       "label": "FIO.DIR_OPEN",
       "source": "lib/fio.s",
-      "line": 154,
+      "line": 155,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1138,7 +1150,7 @@
     {
       "label": "FIO.DIR_READ",
       "source": "lib/fio.s",
-      "line": 162,
+      "line": 163,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1150,7 +1162,7 @@
     {
       "label": "FIO.EXEC",
       "source": "lib/fio.s",
-      "line": 63,
+      "line": 64,
       "inputs": [
         {
           "name": "A",
@@ -1172,7 +1184,7 @@
     {
       "label": "FIO.GLOAD",
       "source": "lib/fio.s",
-      "line": 188,
+      "line": 189,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1192,7 +1204,7 @@
     {
       "label": "FIO.GSAVE",
       "source": "lib/fio.s",
-      "line": 179,
+      "line": 180,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1212,7 +1224,7 @@
     {
       "label": "FIO.ISSUE",
       "source": "lib/fio.s",
-      "line": 37,
+      "line": 38,
       "inputs": [
         {
           "name": "A",
@@ -1229,7 +1241,7 @@
     {
       "label": "FIO.LOAD",
       "source": "lib/fio.s",
-      "line": 145,
+      "line": 146,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1244,9 +1256,24 @@
       "address": "$ED50"
     },
     {
+      "label": "FIO.LOAD_RUNTIME",
+      "source": "lib/fio.s",
+      "line": 236,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "fio_load_runtime",
+      "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
+      "address": "$ED82"
+    },
+    {
       "label": "FIO.MKDIR",
       "source": "lib/fio.s",
-      "line": 206,
+      "line": 207,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1261,7 +1288,7 @@
     {
       "label": "FIO.NAME",
       "source": "lib/nova.inc",
-      "line": 786,
+      "line": 797,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1273,7 +1300,7 @@
     {
       "label": "FIO.NAMELEN",
       "source": "lib/nova.inc",
-      "line": 743,
+      "line": 754,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1285,7 +1312,7 @@
     {
       "label": "FIO.PREPARE_XRAM_TRANSFER",
       "source": "lib/fio.s",
-      "line": 242,
+      "line": 255,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1305,7 +1332,7 @@
     {
       "label": "FIO.PWD",
       "source": "lib/fio.s",
-      "line": 224,
+      "line": 225,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1317,7 +1344,7 @@
     {
       "label": "FIO.RMDIR",
       "source": "lib/fio.s",
-      "line": 215,
+      "line": 216,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1332,7 +1359,7 @@
     {
       "label": "FIO.RUN",
       "source": "lib/fio.s",
-      "line": 234,
+      "line": 247,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1343,7 +1370,7 @@
     {
       "label": "FIO.SAVE",
       "source": "lib/fio.s",
-      "line": 136,
+      "line": 137,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1362,7 +1389,7 @@
     {
       "label": "FIO.SET_IO_ERROR",
       "source": "lib/fio.s",
-      "line": 97,
+      "line": 98,
       "inputs": [],
       "outputs": [
         {
@@ -1438,7 +1465,7 @@
       "kind": "routine",
       "symbol": "nic_command",
       "summary": "Issue a raw NIC command.",
-      "address": "$EE03"
+      "address": "$EE08"
     },
     {
       "label": "NIC.CONNECT",
@@ -1455,7 +1482,7 @@
       "kind": "routine",
       "symbol": "nic_connect",
       "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
-      "address": "$EE07"
+      "address": "$EE0C"
     },
     {
       "label": "NIC.COPY_NAME",
@@ -1476,7 +1503,7 @@
       "kind": "routine",
       "symbol": "nic_copy_name",
       "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
-      "address": "$EE2D"
+      "address": "$EE32"
     },
     {
       "label": "NIC.DISCONNECT",
@@ -1490,7 +1517,7 @@
       "kind": "routine",
       "symbol": "nic_disconnect",
       "summary": "Disconnect NIC_SLOT.",
-      "address": "$EE0B"
+      "address": "$EE10"
     },
     {
       "label": "NIC.LENGTH",
@@ -1507,7 +1534,7 @@
       "kind": "routine",
       "symbol": "nic_length",
       "summary": "Read the most recent NIC message length.",
-      "address": "$EE29"
+      "address": "$EE2E"
     },
     {
       "label": "NIC.LISTEN",
@@ -1540,7 +1567,7 @@
       "kind": "routine",
       "symbol": "nic_ready",
       "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
-      "address": "$EE1F"
+      "address": "$EE24"
     },
     {
       "label": "NIC.RECV",
@@ -1556,7 +1583,7 @@
       "kind": "routine",
       "symbol": "nic_recv",
       "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
-      "address": "$EE13"
+      "address": "$EE18"
     },
     {
       "label": "NIC.SEND",
@@ -1573,7 +1600,7 @@
       "kind": "routine",
       "symbol": "nic_send",
       "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
-      "address": "$EE0F"
+      "address": "$EE14"
     },
     {
       "label": "NIC.STATUS",
@@ -1595,7 +1622,19 @@
       "kind": "routine",
       "symbol": "nic_status",
       "summary": "Read clamped NIC slot status.",
-      "address": "$EE17"
+      "address": "$EE1C"
+    },
+    {
+      "label": "ROMSWAP.PRIMARY",
+      "source": "lib/nova.inc",
+      "line": 228,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "ROMSWAP_PRIMARY",
+      "summary": "Select the primary runtime ROM bank at $C000. At cold boot this is NovaBASIC; a RAM launcher may replace it with another runtime first.",
+      "address": "$02"
     },
     {
       "label": "SPRITE.BACKGROUND_STATUS",
@@ -1868,7 +1907,7 @@
     {
       "label": "SYS.REGA",
       "source": "lib/nova.inc",
-      "line": 60,
+      "line": 64,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1880,7 +1919,7 @@
     {
       "label": "SYS.REGX",
       "source": "lib/nova.inc",
-      "line": 67,
+      "line": 71,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1892,7 +1931,7 @@
     {
       "label": "SYS.REGY",
       "source": "lib/nova.inc",
-      "line": 74,
+      "line": 78,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2619,7 +2658,7 @@
     {
       "label": "XMC.ALLOC",
       "source": "lib/xmc.s",
-      "line": 262,
+      "line": 267,
       "inputs": [],
       "outputs": [
         {
@@ -2646,7 +2685,7 @@
     {
       "label": "XMC.COMMAND_STATUS",
       "source": "lib/xmc.s",
-      "line": 183,
+      "line": 188,
       "inputs": [],
       "outputs": [
         {
@@ -2664,7 +2703,7 @@
     {
       "label": "XMC.DIR_OPEN",
       "source": "lib/xmc.s",
-      "line": 301,
+      "line": 306,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2675,7 +2714,7 @@
     {
       "label": "XMC.DIR_READ",
       "source": "lib/xmc.s",
-      "line": 309,
+      "line": 314,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2686,7 +2725,7 @@
     {
       "label": "XMC.FETCH_RAW",
       "source": "lib/xmc.s",
-      "line": 236,
+      "line": 241,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2705,7 +2744,7 @@
     {
       "label": "XMC.MAP_WINDOW",
       "source": "lib/xmc.s",
-      "line": 385,
+      "line": 390,
       "inputs": [
         {
           "name": "X",
@@ -2725,7 +2764,7 @@
     {
       "label": "XMC.NAMED_DELETE",
       "source": "lib/xmc.s",
-      "line": 292,
+      "line": 297,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2739,7 +2778,7 @@
     {
       "label": "XMC.NAMED_FETCH",
       "source": "lib/xmc.s",
-      "line": 283,
+      "line": 288,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2755,7 +2794,7 @@
     {
       "label": "XMC.NAMED_STASH",
       "source": "lib/xmc.s",
-      "line": 274,
+      "line": 279,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2786,7 +2825,7 @@
     {
       "label": "XMC.PUT_BYTE",
       "source": "lib/xmc.s",
-      "line": 218,
+      "line": 223,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2802,7 +2841,7 @@
     {
       "label": "XMC.RELEASE",
       "source": "lib/xmc.s",
-      "line": 245,
+      "line": 250,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2819,7 +2858,7 @@
     {
       "label": "XMC.RESET_USAGE",
       "source": "lib/xmc.s",
-      "line": 254,
+      "line": 259,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2830,7 +2869,7 @@
     {
       "label": "XMC.SELECT_BANK",
       "source": "lib/xmc.s",
-      "line": 204,
+      "line": 209,
       "inputs": [
         {
           "name": "X",
@@ -2851,7 +2890,7 @@
     {
       "label": "XMC.SET_WINDOW_ADDR",
       "source": "lib/xmc.s",
-      "line": 340,
+      "line": 345,
       "inputs": [
         {
           "name": "X",
@@ -2871,7 +2910,7 @@
     {
       "label": "XMC.STASH_RAW",
       "source": "lib/xmc.s",
-      "line": 227,
+      "line": 232,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2890,7 +2929,7 @@
     {
       "label": "XMC.UNMAP_WINDOW",
       "source": "lib/xmc.s",
-      "line": 403,
+      "line": 408,
       "inputs": [
         {
           "name": "X",
@@ -2906,7 +2945,7 @@
     {
       "label": "XMC.WINDOW_BIT",
       "source": "lib/xmc.s",
-      "line": 317,
+      "line": 322,
       "inputs": [
         {
           "name": "X",

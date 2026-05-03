@@ -47,14 +47,41 @@ public sealed class VirtualBlitterController
         _canWriteRange = canWriteRange;
         _postTransferWrite = postTransferWrite;
 
-        SetStatus(VgcConstants.BltStatusIdle, VgcConstants.BltErrNone);
-        SetCount(0);
+        Reset();
     }
 
     public bool OwnsAddress(ushort address) =>
         address >= VgcConstants.BltBase && address <= VgcConstants.BltEnd;
 
     public byte Read(ushort address) => _regs[RegIndex(address)];
+
+    public void Reset()
+    {
+        Array.Clear(_regs);
+        _busy = false;
+        _fillMode = false;
+        _colorKeyMode = false;
+        _useRowBuffer = false;
+        _srcSpace = 0;
+        _dstSpace = 0;
+        _fillValue = 0;
+        _colorKey = 0;
+        _srcBase = 0;
+        _dstBase = 0;
+        _srcStride = 0;
+        _dstStride = 0;
+        _width = 0;
+        _height = 0;
+        _row = 0;
+        _col = 0;
+        _rowBufferReadCol = 0;
+        _rowBufferedReady = false;
+        _rowBuffer = null;
+        _wroteCount = 0;
+        _opCredit = 0;
+        SetCount(0);
+        SetStatus(VgcConstants.BltStatusIdle, VgcConstants.BltErrNone);
+    }
 
     public void Write(ushort address, byte data)
     {

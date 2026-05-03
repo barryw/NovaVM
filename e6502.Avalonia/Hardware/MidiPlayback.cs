@@ -59,6 +59,7 @@ public sealed class MidiPlayback
     {
         _engine = engine;
         _frameRateHz = frameRateHz;
+        Reset();
     }
 
     /// <summary>
@@ -90,6 +91,20 @@ public sealed class MidiPlayback
     {
         _playing = false;
         _timeline = null;
+        _engine.ExitMidiMode();
+    }
+
+    public void Reset()
+    {
+        _playing = false;
+        _timeline = null;
+        _timelineIndex = 0;
+        _midiTickAccum = 0;
+        _midiTicksPerFrame = 0;
+        _ppqn = 0;
+        _activeVoiceCount = 0;
+        RoutingMode = MidiRoutingMode.Auto;
+        Array.Clear(_heldForDisplay);
         _engine.ExitMidiMode();
     }
 

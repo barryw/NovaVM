@@ -40,7 +40,7 @@ Define an instrument envelope and waveform.
 
 - Kind: `routine`
 - Symbol: `audio_instrument`
-- Address: `$ED9F`
+- Address: `$EDA4`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -68,7 +68,7 @@ Play the MIDI file named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_midplay`
-- Address: `$EDB2`
+- Address: `$EDB7`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -84,7 +84,7 @@ Stop MIDI file playback.
 
 - Kind: `routine`
 - Symbol: `audio_midstop`
-- Address: `$EDB7`
+- Address: `$EDBC`
 - ABI: `none`
 
 Outputs:
@@ -96,7 +96,7 @@ Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.
 
 - Kind: `routine`
 - Symbol: `audio_music_loop`
-- Address: `$EDD9`
+- Address: `$EDDE`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -111,7 +111,7 @@ Return the current MIDI note for a music voice.
 
 - Kind: `routine`
 - Symbol: `audio_music_note`
-- Address: `$EDF7`
+- Address: `$EDFC`
 - ABI: `register`
 
 Inputs:
@@ -126,7 +126,7 @@ Start queued music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_play`
-- Address: `$EDC6`
+- Address: `$EDCB`
 - ABI: `none`
 
 Outputs:
@@ -138,7 +138,7 @@ Return nonzero if music is playing.
 
 - Kind: `routine`
 - Symbol: `audio_music_playing`
-- Address: `$EDED`
+- Address: `$EDF2`
 - ABI: `none`
 
 Outputs:
@@ -150,7 +150,7 @@ Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.
 
 - Kind: `routine`
 - Symbol: `audio_music_priority`
-- Address: `$EDDE`
+- Address: `$EDE3`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -165,7 +165,7 @@ Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.
 
 - Kind: `routine`
 - Symbol: `audio_music_sequence`
-- Address: `$EDC1`
+- Address: `$EDC6`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -183,7 +183,7 @@ Stop music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_stop`
-- Address: `$EDCF`
+- Address: `$EDD4`
 - ABI: `none`
 
 Outputs:
@@ -195,7 +195,7 @@ Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.
 
 - Kind: `routine`
 - Symbol: `audio_music_tempo`
-- Address: `$EDD4`
+- Address: `$EDD9`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -219,7 +219,7 @@ Play a one-shot note using A/X/Y register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_play_sound`
-- Address: `$ED82`
+- Address: `$ED87`
 - ABI: `register`
 
 Inputs:
@@ -244,7 +244,7 @@ Set master or per-voice volume using A/X register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_set_volume`
-- Address: `$ED8D`
+- Address: `$ED92`
 - ABI: `register`
 
 Inputs:
@@ -260,7 +260,7 @@ Load the soundfont named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_sfload`
-- Address: `$EDBC`
+- Address: `$EDC1`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -276,7 +276,7 @@ Return nonzero if a sound effect is playing.
 
 - Kind: `routine`
 - Symbol: `audio_sfx_playing`
-- Address: `$EDE7`
+- Address: `$EDEC`
 - ABI: `none`
 
 Outputs:
@@ -288,7 +288,7 @@ Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-b
 
 - Kind: `routine`
 - Symbol: `audio_sidplay`
-- Address: `$EDA4`
+- Address: `$EDA9`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -305,7 +305,7 @@ Stop SID file playback.
 
 - Kind: `routine`
 - Symbol: `audio_sidstop`
-- Address: `$EDAD`
+- Address: `$EDB2`
 - ABI: `none`
 
 Outputs:
@@ -317,7 +317,7 @@ Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
 
 - Kind: `routine`
 - Symbol: `audio_sound`
-- Address: `$ED95`
+- Address: `$ED9A`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -334,7 +334,7 @@ Return raw music status bits.
 
 - Kind: `routine`
 - Symbol: `audio_status`
-- Address: `$EDE3`
+- Address: `$EDE8`
 - ABI: `none`
 
 Outputs:
@@ -386,7 +386,7 @@ Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
 
 - Kind: `routine`
 - Symbol: `audio_volume`
-- Address: `$ED9A`
+- Address: `$ED9F`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -758,6 +758,14 @@ Clear the host-visible FIO status and error latch.
 Outputs:
 - `A`: 0 on success.
 
+## FIO.CMD_LOADRUNTIME
+
+Host command that streams a 16K file into the primary runtime ROM bank. Callers must execute from RAM while issuing it.
+
+- Kind: `const`
+- Symbol: `FIO_CMD_LOADRUNTIME`
+- Address: `$28`
+
 ## FIO.COPY_NAME
 
 Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.
@@ -874,6 +882,18 @@ Requires:
 - `FIO_NAMELEN`
 - `FIO_SRCL`
 - `FIO_SRCH`
+
+## FIO.LOAD_RUNTIME
+
+Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.
+
+- Kind: `routine`
+- Symbol: `fio_load_runtime`
+- Address: `$ED82`
+
+Requires:
+- `FIO_NAME`
+- `FIO_NAMELEN`
 
 ## FIO.MKDIR
 
@@ -1011,7 +1031,7 @@ Issue a raw NIC command.
 
 - Kind: `routine`
 - Symbol: `nic_command`
-- Address: `$EE03`
+- Address: `$EE08`
 
 Inputs:
 - `A`: NIC command byte.
@@ -1022,7 +1042,7 @@ Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.
 
 - Kind: `routine`
 - Symbol: `nic_connect`
-- Address: `$EE07`
+- Address: `$EE0C`
 
 Requires:
 - `NIC_SLOT`
@@ -1036,7 +1056,7 @@ Copy a pointer-based host name to NIC_NAMEBUF and append NUL.
 
 - Kind: `routine`
 - Symbol: `nic_copy_name`
-- Address: `$EE2D`
+- Address: `$EE32`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid length.
@@ -1052,7 +1072,7 @@ Disconnect NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_disconnect`
-- Address: `$EE0B`
+- Address: `$EE10`
 
 Requires:
 - `NIC_SLOT`
@@ -1063,7 +1083,7 @@ Read the most recent NIC message length.
 
 - Kind: `routine`
 - Symbol: `nic_length`
-- Address: `$EE29`
+- Address: `$EE2E`
 
 Outputs:
 - `A`: Message length byte.
@@ -1081,7 +1101,7 @@ Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.
 
 - Kind: `routine`
 - Symbol: `nic_ready`
-- Address: `$EE1F`
+- Address: `$EE24`
 
 Inputs:
 - `X`: Slot number.
@@ -1095,7 +1115,7 @@ Receive data for NIC_SLOT into NIC_DMAL/H.
 
 - Kind: `routine`
 - Symbol: `nic_recv`
-- Address: `$EE13`
+- Address: `$EE18`
 
 Requires:
 - `NIC_SLOT`
@@ -1108,7 +1128,7 @@ Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_send`
-- Address: `$EE0F`
+- Address: `$EE14`
 
 Requires:
 - `NIC_SLOT`
@@ -1122,13 +1142,21 @@ Read clamped NIC slot status.
 
 - Kind: `routine`
 - Symbol: `nic_status`
-- Address: `$EE17`
+- Address: `$EE1C`
 
 Inputs:
 - `X`: Slot number.
 
 Outputs:
 - `A`: Slot status byte.
+
+## ROMSWAP.PRIMARY
+
+Select the primary runtime ROM bank at $C000. At cold boot this is NovaBASIC; a RAM launcher may replace it with another runtime first.
+
+- Kind: `const`
+- Symbol: `ROMSWAP_PRIMARY`
+- Address: `$02`
 
 ## SPRITE.BACKGROUND_STATUS
 

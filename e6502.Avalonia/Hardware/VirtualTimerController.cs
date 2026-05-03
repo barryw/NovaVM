@@ -11,6 +11,14 @@ public sealed class VirtualTimerController
     public bool OwnsAddress(ushort address) =>
         address >= VgcConstants.TimerBase && address <= VgcConstants.TimerEnd;
 
+    public void Reset()
+    {
+        Array.Clear(_regs);
+        _counter = 0;
+        _cycleAccumulator = 0;
+        IrqPending = false;
+    }
+
     public byte Read(ushort address)
     {
         if (address == VgcConstants.TimerStatus)

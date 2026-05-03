@@ -24,6 +24,7 @@ public sealed partial class FileIoController
     private readonly MidiPlayback? _midiPlayback;
     private readonly WavetableSynth? _wts;
     private readonly VirtualGraphicsController? _vgc;
+    private readonly Action<byte[]>? _loadRuntimeRom;
     private readonly string _saveDir;
     private readonly DeviceManager? _deviceManager;
     private List<FileInfo>? _dirFiles;
@@ -48,7 +49,8 @@ public sealed partial class FileIoController
         Func<int, byte>? xramRead = null,
         Func<int, byte, bool>? xramWrite = null,
         Func<int>? xramCapacity = null,
-        Action? xramRefreshStats = null)
+        Action? xramRefreshStats = null,
+        Action<byte[]>? loadRuntimeRom = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
@@ -64,6 +66,7 @@ public sealed partial class FileIoController
         _midiPlayback = midiPlayback;
         _wts = wts;
         _vgc = vgc;
+        _loadRuntimeRom = loadRuntimeRom;
         _deviceManager = deviceManager;
         _saveDir = saveDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -87,6 +90,16 @@ public sealed partial class FileIoController
 
     public byte Read(ushort address) =>
         _regs[address - VgcConstants.FioBase];
+
+    public void Reset()
+    {
+        Array.Clear(_regs);
+        _dirFiles = null;
+        _dirEntries = null;
+        _dirDevice = null;
+        _dirIndex = 0;
+        _dirFiltered = false;
+    }
 
     public void Write(ushort address, byte data)
     {
@@ -189,6 +202,9 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdClearErr:
                 SetOk();
+                break;
+            case VgcConstants.FioCmdLoadRuntime:
+                DoLoadRuntime();
                 break;
             case VgcConstants.FioCmdSfLoad:
                 DoSfLoad();
@@ -461,6 +477,45 @@ public sealed partial class FileIoController
         catch (FileNotFoundException)
         {
             SetError(VgcConstants.FioErrNotFound);
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoLoadRuntime()
+    {
+        if (_loadRuntimeRom is null)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        try
+        {
+            string? filename = ReadFilename();
+            if (filename is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            byte[]? data = LoadDataFile(filename, ".bin", out bool notFound);
+            if (data is null)
+            {
+                SetError(notFound ? VgcConstants.FioErrNotFound : VgcConstants.FioErrIo);
+                return;
+            }
+            if (data.Length != VgcConstants.RomSize)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            _loadRuntimeRom(data);
+            SetTransferSize(data.Length);
+            SetOk();
         }
         catch
         {

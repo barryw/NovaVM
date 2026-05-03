@@ -315,6 +315,20 @@ module test_custom_reset_top;
                   {4'h0, dut.vgc_inst.gfx_inst.gfx_mem.mem[1234]}, 8'h0F);
         check_eq8("tile RAM mutated before system reset",
                   dut.vgc_inst.tile_inst.tile_data_ram.mem[100], 8'hAB);
+        dut.vgc_inst.copper_enabled = 1'b1;
+        dut.vgc_inst.copper_count = 9'd1;
+        dut.vgc_inst.copper_pos[0] = 17'd123;
+        dut.vgc_inst.copper_reg[0] = 8'h01;
+        dut.vgc_inst.copper_val[0] = 8'h07;
+        dut.vgc_inst.copper_target_list = 7'd2;
+        dut.vgc_inst.copper_active_list = 7'd2;
+        dut.vgc_inst.copper_pending_list = 7'd3;
+        dut.vgc_inst.copper_list_count[2] = 9'd1;
+        dut.vgc_inst.copper_list_pos[64] = 17'd456;
+        dut.vgc_inst.copper_list_reg[64] = 8'h02;
+        dut.vgc_inst.copper_list_val[64] = 8'h08;
+        dut.vgc_inst.sprite_inst.slb_mem[0][0] = 7'h7F;
+        dut.vgc_inst.sprite_inst.slb_mem[1][0] = 7'h7F;
 
         dbg_system_reset = 1;
         repeat(8) @(posedge clk);
@@ -349,6 +363,24 @@ module test_custom_reset_top;
                   dut.vgc_inst.sprite_inst.spr_mem0.mem[0], 8'h00);
         check_eq8("sprite shape RAM bank 1 reset",
                   dut.vgc_inst.sprite_inst.spr_mem1.mem[0], 8'h00);
+        check_eq8("sprite scanline bank 0 reset",
+                  {1'b0, dut.vgc_inst.sprite_inst.slb_mem[0][0]}, 8'h00);
+        check_eq8("sprite scanline bank 1 reset",
+                  {1'b0, dut.vgc_inst.sprite_inst.slb_mem[1][0]}, 8'h00);
+        check("copper active state reset",
+              dut.vgc_inst.copper_enabled == 0 &&
+              dut.vgc_inst.copper_count == 0 &&
+              dut.vgc_inst.copper_active_list == 0 &&
+              dut.vgc_inst.copper_pending_list == 0);
+        check("copper active entries reset",
+              dut.vgc_inst.copper_pos[0] == 0 &&
+              dut.vgc_inst.copper_reg[0] == 0 &&
+              dut.vgc_inst.copper_val[0] == 0);
+        check("copper stored lists reset",
+              dut.vgc_inst.copper_list_count[2] == 0 &&
+              dut.vgc_inst.copper_list_pos[64] == 0 &&
+              dut.vgc_inst.copper_list_reg[64] == 0 &&
+              dut.vgc_inst.copper_list_val[64] == 0);
         check_eq8("tile RAM reset",
                   dut.vgc_inst.tile_inst.tile_data_ram.mem[100], 8'h00);
 

@@ -788,14 +788,23 @@ module vgc (
         frame_counter = 0;
         scroll_x = 0; scroll_y = 0;
         scroll_offset = 0; scroll_pending = 0; scroll_clearing = 0; scroll_col = 0;
-        key_fifo_rd = 0; cmd_busy = 0;
+        key_fifo_rd = 0; charin_sel_prev = 0; cmd_busy = 0; cmd_op = 0;
         font_slot = 0; collision_ss = 0; collision_bg = 0;
         irq_enable = 0; irq_pending = 0;
-        sprrow_count = 0; sprcopy_phase = 0;
-        memread_pending = 2'd0;
+        sprrow_count = 0; sprrow_spr = 0; sprrow_row = 0;
+        for (int i = 0; i < 8; i++) sprrow_data[i] = 0;
+        sprcopy_phase = 0; sprcopy_data = 0; sprdef_wait = 0;
+        memread_pending = 2'd0; memread_space = SPACE_CHAR;
+        memcmd_pending = 1'b0; memcmd_code = 0; memcmd_delay = 0;
         vgc_tile_addr = 0; vgc_tile_wdata = 0; vgc_tile_we = 0; vgc_tile_re = 0;
+        cmd_x = 0; cmd_y = 0; cmd_x2 = 0; cmd_y2 = 0; cmd_cx = 0; cmd_cy = 0;
+        cmd_char_addr = 0; cmd_char_din = 0; cmd_char_we = 0;
+        cmd_color_addr = 0; cmd_color_din = 0; cmd_color_we = 0;
         cmd_attr_addr = 0; cmd_attr_din = 0; cmd_attr_we = 0;
-        artist_cmd_valid = 0;
+        cmd_gfx_addr = 0; cmd_gfx_din = 0; cmd_gfx_we = 0; cmd_gfx_re = 0;
+        cmd_spr_addr = 0; cmd_spr_din = 0; cmd_spr_we = 0; cmd_spr_re = 0;
+        artist_cmd_valid = 0; artist_cmd_code = 0;
+        vgc_cmd_reset_req = 0; sys_reset_req = 0;
     end
 
     function automatic logic [7:0] pack_text_color(input logic [3:0] bg, input logic [3:0] fg);
@@ -1137,29 +1146,62 @@ module vgc (
             collision_ss <= 0; collision_bg <= 0;
             irq_enable <= 0; irq_pending <= 0;
             copper_enabled <= 0; copper_count <= 0;
-            copper_target_list <= 0; copper_pending_list <= 0;
-            copper_loading <= 0;
-            sprrow_count <= 0; sprcopy_phase <= 0; sprdef_wait <= 0;
+            copper_target_list <= 0; copper_active_list <= 0; copper_pending_list <= 0;
+            copper_loading <= 0; copper_load_idx <= 0; copper_load_src <= 0;
+            sprrow_count <= 0; sprrow_spr <= 0; sprrow_row <= 0;
+            sprcopy_phase <= 0; sprcopy_data <= 0; sprdef_wait <= 0;
+            charin_sel_prev <= 1'b0;
             memread_pending <= 2'd0;
+            memread_space <= SPACE_CHAR;
             memcmd_pending <= 1'b0;
             memcmd_code <= 8'h00;
             memcmd_delay <= 3'd0;
+            cmd_op <= 8'h00;
+            cmd_x <= 0; cmd_y <= 0; cmd_x2 <= 0; cmd_y2 <= 0;
+            cmd_cx <= 0; cmd_cy <= 0;
+            cmd_char_addr <= 12'd0;
+            cmd_char_din <= 8'h00;
             cmd_char_we <= 0;
+            cmd_color_addr <= 12'd0;
+            cmd_color_din <= 8'h00;
             cmd_color_we <= 0;
             cmd_attr_addr <= 12'd0;
             cmd_attr_din <= 8'h00;
             cmd_attr_we <= 0;
+            cmd_gfx_addr <= 17'd0;
+            cmd_gfx_din <= 4'h0;
             cmd_gfx_we <= 0;
             cmd_gfx_re <= 0;
+            cmd_spr_addr <= 11'd0;
+            cmd_spr_din <= 8'h00;
             cmd_spr_we <= 0;
             cmd_spr_re <= 0;
+            vgc_tile_addr <= 15'd0; vgc_tile_wdata <= 8'h00;
             vgc_tile_we <= 0; vgc_tile_re <= 0;
             artist_cmd_valid <= 0;
+            artist_cmd_code <= 8'h00;
             vgc_cmd_reset_req <= 1'b0;
             sys_reset_req <= 1'b0;
             reset_clear_phase <= RCLR_TEXT;
             reset_clear_addr <= 17'd0;
             for (int i = 0; i < 32; i++) regs[i] <= 0;
+            for (int i = 0; i < COPPER_MAX; i++) begin
+                copper_pos[i] <= 0;
+                copper_reg[i] <= 0;
+                copper_val[i] <= 0;
+            end
+            for (int i = 0; i < COPPER_LISTS * COPPER_MAX; i++) begin
+                copper_list_pos[i] <= 0;
+                copper_list_reg[i] <= 0;
+                copper_list_val[i] <= 0;
+            end
+            for (int i = 0; i < COPPER_LISTS; i++)
+                copper_list_count[i] <= 0;
+            for (int i = 0; i < 64; i++)
+                fio_name[i] <= 0;
+            fio_name_len <= 0;
+            for (int i = 0; i < 8; i++)
+                sprrow_data[i] <= 8'h00;
             for (int i = 0; i < 16; i++) begin
                 spr_x[i] <= 0; spr_y[i] <= 0; spr_enable[i] <= 0;
                 spr_flip_h[i] <= 0; spr_flip_v[i] <= 0;
@@ -2032,6 +2074,7 @@ module vgc (
         if (vgc_module_rst) begin
             blt_rd_pending <= 0;
             blt_rd_space <= 0;
+            blt_rd_latch <= 0;
         end else begin
             blt_rd_pending <= 0;
             if (blt_re) begin

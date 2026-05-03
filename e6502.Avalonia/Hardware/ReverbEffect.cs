@@ -36,6 +36,21 @@ public sealed class ReverbEffect
         }
     }
 
+    public void Reset()
+    {
+        for (int i = 0; i < _combsL.Length; i++)
+        {
+            _combsL[i].Reset();
+            _combsR[i].Reset();
+        }
+
+        for (int i = 0; i < _allpassL.Length; i++)
+        {
+            _allpassL[i].Reset();
+            _allpassR[i].Reset();
+        }
+    }
+
     public void Process(float[] left, float[] right)
     {
         int len = Math.Min(left.Length, right.Length);
@@ -81,6 +96,13 @@ public sealed class ReverbEffect
             _buffer = new float[length];
         }
 
+        public void Reset()
+        {
+            Array.Clear(_buffer);
+            _index = 0;
+            _filterState = 0;
+        }
+
         public float Tick(float input)
         {
             float output = _buffer[_index];
@@ -99,6 +121,12 @@ public sealed class ReverbEffect
         public AllpassFilter(int length)
         {
             _buffer = new float[length];
+        }
+
+        public void Reset()
+        {
+            Array.Clear(_buffer);
+            _index = 0;
         }
 
         public float Tick(float input)

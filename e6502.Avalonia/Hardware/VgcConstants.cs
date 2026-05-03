@@ -100,6 +100,7 @@ public static class VgcConstants
     public const byte FioCmdUnmount    = 0x25;
     public const byte FioCmdPwd        = 0x26;
     public const byte FioCmdClearErr   = 0x27;
+    public const byte FioCmdLoadRuntime = 0x28;    // disk -> primary runtime ROM bank
 
     public const byte FioDirTypeDir    = 0x05;
     public const byte FioErrDiskFull   = 0x04;
@@ -458,6 +459,7 @@ public static class VgcConstants
     public const int AutobootSkip      = 0xB9F0;
     public const int RomBase           = 0xC000;
     public const int RomEnd            = 0xFFFF;
+    public const int RomSize           = 0x4000;
 
     // -------------------------------------------------------------------------
     // Screen / graphics dimensions
@@ -783,6 +785,7 @@ public static class VgcConstants
     public const byte RomSwapBasic    = 0x02;   // switch to BASIC ROM
     public const byte RomSwapNccEdit  = 0x03;   // activate NCC editor (from BASIC NCC command)
     public const byte RomSwapExtension = 0x04;  // switch to extension ROM
+    public const byte RomSwapPrimary  = RomSwapBasic; // switch to the active primary runtime ROM
 
     // -------------------------------------------------------------------------
     // Compiler Controller registers ($A031-$A03E)

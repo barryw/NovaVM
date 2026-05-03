@@ -10,6 +10,28 @@
 .ifndef VTEXT_IMPLEMENTATION_INCLUDED
 VTEXT_IMPLEMENTATION_INCLUDED = 1
 
+      .segment "BSS"
+
+VTEXT_LEFT:       .res 1
+VTEXT_TOP:        .res 1
+VTEXT_WIDTH:      .res 1
+VTEXT_HEIGHT:     .res 1
+VTEXT_CURX:       .res 1
+VTEXT_CURY:       .res 1
+VTEXT_COLOR:      .res 1
+VTEXT_ATTR:       .res 1
+VTEXT_CHAR:       .res 1
+VTEXT_FLAGS:      .res 1
+VTEXT_TABLEL:     .res 1
+VTEXT_TABLEH:     .res 1
+VTEXT_REGION_ID:  .res 1
+
+      .segment "ZEROPAGE"
+
+VTEXT_ADDRL:      .res 1
+VTEXT_ADDRH:      .res 1
+VTEXT_TMP:        .res 1
+
       .segment "CODE"
 
       .export vtext_define_region

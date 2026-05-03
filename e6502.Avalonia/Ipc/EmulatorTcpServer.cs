@@ -131,7 +131,7 @@ public sealed class EmulatorTcpServer : IDisposable
                 "read_line" => CmdReadLine(req),
                 "get_cursor" => CmdGetCursor(),
                 "wait_ready" => CmdWaitReady(req),
-                "cold_start" => CmdColdStart(),
+                "cold_start" => CmdColdStart(req),
                 "warm_start" => CmdWarmStart(),
                 "peek" => CmdPeek(req),
                 "poke" => CmdPoke(req),
@@ -402,19 +402,21 @@ public sealed class EmulatorTcpServer : IDisposable
         return timeout.ToJsonString();
     }
 
-    private string CmdColdStart()
+    private string CmdColdStart(JsonNode req)
     {
         bool wasPaused = _debugger.IsPaused;
         if (!wasPaused) _debugger.Pause();
         Thread.Sleep(5); // let CPU thread reach the pause gate
 
-        _bus.Vgc.Reset();
-        _bus.Music.MusicStop();
-        _bus.SidPlayer.Stop();
+        _bus.ResetCustomChips();
         _editor.ClearInputQueue();
         _cpu.Boot();
 
         if (!wasPaused) _debugger.Resume();
+
+        if (req["wait_ready"]?.GetValue<int>() == 0)
+            return Ok();
+
         return Ok();
     }
 

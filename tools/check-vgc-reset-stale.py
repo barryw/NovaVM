@@ -29,6 +29,7 @@ class Plane:
 PLANES = (
     Plane("text chars", 1, 4000, 0x01, False),
     Plane("text colors", 2, 4000, 0x06, False),
+    Plane("text attrs", 7, 4000, 0x80, True),
     Plane("graphics bitmap", 3, 64000, 0x0D, True),
     Plane("sprite shapes", 4, 2048, 0xA5, True),
     Plane("tile patterns", 6, 32768, 0xC3, True),
@@ -127,7 +128,7 @@ def main() -> int:
             print(f"  dirtied {plane.name}")
 
         print("Issuing cold_start reset...")
-        client.command("cold_start")
+        client.command("cold_start", wait_ready=0)
         time.sleep(args.settle)
 
         print("Scanning for stale data...")

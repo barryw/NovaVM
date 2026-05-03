@@ -8,9 +8,9 @@ Story files are intentionally not committed. Place a legally owned story file
 at `STORY.BIN` inside the project directory, then build with:
 
 ```sh
-make -C ozmoo ndi PROJECT=zork-i
+make -C examples/ozmoo ndi PROJECT=zork-i
 ```
 
-The packer imports the local story as `STORY.BIN` in the generated `.ndi`.
+The packer imports the local story as `story.bin` in the generated `.ndi`.
 The runtime should identify the story by its Z-machine header, not by a special
 NDI file type or filename extension.

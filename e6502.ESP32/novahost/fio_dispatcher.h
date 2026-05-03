@@ -93,6 +93,7 @@ private:
     static constexpr uint8_t CMD_UNMOUNT  = 0x25;
     static constexpr uint8_t CMD_PWD      = 0x26;
     static constexpr uint8_t CMD_CLEARERR = 0x27;
+    static constexpr uint8_t CMD_LOADRUNTIME = 0x28;
 
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
@@ -100,6 +101,7 @@ private:
     // Shared LOAD/SAVE transfer buffer. Keeping this as one member instead of
     // two function-local static buffers saves 16KB of ESP32 global RAM.
     static constexpr int TRANSFER_BUF_BYTES = 16384;
+    static constexpr int RUNTIME_ROM_BYTES = 16 * 1024;
     static constexpr uint32_t XRAM_BYTES = 512UL * 1024UL;
     uint8_t _transfer_buf[TRANSFER_BUF_BYTES];
 
@@ -147,6 +149,7 @@ private:
     void handle_unmount();
     void handle_pwd();
     void handle_clear_error();
+    void handle_load_runtime();
     void handle_unsupported_sd_command(const char* name);
 
     // Directory-iterator state for DIR_OPEN/DIR_READ. Single iterator

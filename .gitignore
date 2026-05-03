@@ -268,3 +268,8 @@ e6502.FPGA/fpga/.claude/
 # NovaHost host-side test binaries
 e6502.ESP32/novahost/test/test_ndi
 e6502.ESP32/novahost/test/*.dSYM/
+
+# Example build outputs and local story files
+examples/ozmoo/build/
+examples/ozmoo/dist/
+examples/ozmoo/projects/*/STORY.BIN

@@ -188,6 +188,79 @@ public class DeviceManagerTests
         }
     }
 
+    [TestMethod]
+    public void FindAutoboot_PrefersInsertedFloppyOverHardDrive()
+    {
+        string hd0 = MakeTempDir();
+        string hd1 = MakeTempDir();
+        string disks = MakeTempDir();
+        DeviceManager? dm = null;
+        try
+        {
+            File.WriteAllBytes(Path.Combine(hd0, "AUTOBOOT.bas"), [0x01, 0x02]);
+
+            string fd0Path = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(fd0Path, "BOOTFD", 800);
+            using (var img = NdiImage.Open(fd0Path))
+                img.WriteFile("AUTOBOOT.bin", NdiFileType.Bin, 0xFFFF, [0x00, 0x72, 0x60]);
+
+            dm = new DeviceManager(hd0, hd1, disks);
+            dm.AutoMount();
+
+            var result = dm.FindAutoboot();
+
+            Assert.IsNotNull(result, "FindAutoboot should return a match");
+            Assert.AreEqual("FD0", result!.Value.Device.Prefix);
+            Assert.AreEqual("AUTOBOOT", result.Value.Filename);
+            Assert.AreEqual(".bin", result.Value.Extension);
+        }
+        finally
+        {
+            try
+            {
+                if (dm?.GetDevice("FD0") is NdiFloppyDevice fd0 && fd0.IsMounted)
+                    fd0.Unmount();
+            }
+            catch { }
+
+            Directory.Delete(hd0, recursive: true);
+            Directory.Delete(hd1, recursive: true);
+            try { Directory.Delete(disks, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists()
+    {
+        string hd0 = MakeTempDir();
+        string hd1 = MakeTempDir();
+        string disks = MakeTempDir();
+        DeviceManager? dm = null;
+        try
+        {
+            string fd0Path = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(fd0Path, "BOOTFD", 800);
+
+            dm = new DeviceManager(hd0, hd1, disks);
+            dm.AutoMount();
+
+            Assert.AreEqual("FD0", dm.SelectBootDevice());
+        }
+        finally
+        {
+            try
+            {
+                if (dm?.GetDevice("FD0") is NdiFloppyDevice fd0 && fd0.IsMounted)
+                    fd0.Unmount();
+            }
+            catch { }
+
+            Directory.Delete(hd0, recursive: true);
+            Directory.Delete(hd1, recursive: true);
+            try { Directory.Delete(disks, recursive: true); } catch { }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // 7. DefaultDevice can be changed and affects ResolveFilename
     // -------------------------------------------------------------------------

@@ -5,11 +5,11 @@
 ; window semantics.
 ;
 ; Calling convention:
-;   Region:      VTEXT_LEFT/TOP/WIDTH/HEIGHT
-;   Cursor:      VTEXT_CURX/CURY, relative to the current region
+;   Region:      VTEXT_LEFT/TOP/WIDTH/HEIGHT state bytes
+;   Cursor:      VTEXT_CURX/CURY state bytes, relative to the current region
 ;   Cell attrs:  VTEXT_COLOR (packed bg/fg), VTEXT_ATTR (style bits)
-;   Character:   VTEXT_CHAR
-;   Flags:       VTEXT_FLAGS (wrap/scroll)
+;   Character:   VTEXT_CHAR input byte
+;   Flags:       VTEXT_FLAGS state byte (wrap/scroll)
 ;
 ; Routines return A=0 on success and A=1 on error. X/Y are scratch unless a
 ; routine explicitly documents otherwise.
@@ -37,28 +37,24 @@ VTEXT_ATTR_FLASH = VTXT_ATTR_FLASH
 VTEXT_OK = $00
 VTEXT_ERR = $01
 
-; Assembly-facing pseudo-register ABI.
-VTEXT_LEFT      = NVR0L
-VTEXT_TOP       = NVR0H
-VTEXT_WIDTH     = NVR1L
-VTEXT_HEIGHT    = NVR1H
-VTEXT_CURX      = NVR2L
-VTEXT_CURY      = NVR2H
-VTEXT_COLOR     = NVR3L
-VTEXT_ATTR      = NVR3H
-VTEXT_CHAR      = NVR4L
-VTEXT_FLAGS     = NVR4H
+; Assembly-facing state ABI. These are linker-owned storage symbols defined by
+; vtext.s, not shared NVR pseudo-registers. NVR remains caller scratch/mailbox.
+.global VTEXT_LEFT
+.global VTEXT_TOP
+.global VTEXT_WIDTH
+.global VTEXT_HEIGHT
+.global VTEXT_CURX
+.global VTEXT_CURY
+.global VTEXT_COLOR
+.global VTEXT_ATTR
+.global VTEXT_CHAR
+.global VTEXT_FLAGS
 
-; Optional region-table ABI. Callers own the table storage and set
-; VTEXT_TABLEL/H plus VTEXT_REGION_ID before define/select/store.
-VTEXT_TABLEL    = NVR5L
-VTEXT_TABLEH    = NVR5H
-VTEXT_REGION_ID = NVR6L
-
-; Internal scratch used by vtext.s.
-VTEXT_ADDRL     = NVR6H
-VTEXT_ADDRH     = NVR7L
-VTEXT_TMP       = NVR7H
+; Optional region-table ABI. Callers own the table storage and set these state
+; bytes before define/select/store.
+.global VTEXT_TABLEL
+.global VTEXT_TABLEH
+.global VTEXT_REGION_ID
 
 VTEXT_REGION_LEFT = 0
 VTEXT_REGION_TOP = 1

@@ -30,6 +30,39 @@ uint32_t vgc_space_bytes(uint8_t space) {
         default:   return 0;
     }
 }
+
+bool has_extension(const char* name) {
+    return name && strrchr(name, '.') != nullptr;
+}
+
+int find_load_entry(ndi::NdiImage* img, const char* name, uint16_t parent,
+                    ndi::DirEntry& entry, bool& is_bin) {
+    if (!img || !name) return -1;
+
+    if (has_extension(name)) {
+        int idx = img->find_entry(name, parent);
+        if (idx < 0 || !img->get_entry(idx, entry)) return -1;
+        is_bin = entry.file_type == ndi::FT_BIN;
+        return idx;
+    }
+
+    char candidate[64];
+    snprintf(candidate, sizeof(candidate), "%s.bas", name);
+    int idx = img->find_entry(candidate, parent);
+    if (idx >= 0 && img->get_entry(idx, entry)) {
+        is_bin = false;
+        return idx;
+    }
+
+    snprintf(candidate, sizeof(candidate), "%s.bin", name);
+    idx = img->find_entry(candidate, parent);
+    if (idx >= 0 && img->get_entry(idx, entry)) {
+        is_bin = true;
+        return idx;
+    }
+
+    return -1;
+}
 }
 
 void FioDispatcher::handle_event() {
@@ -80,6 +113,7 @@ void FioDispatcher::handle_event() {
         case CMD_UNMOUNT:  handle_unmount();  break;
         case CMD_PWD:      handle_pwd();      break;
         case CMD_CLEARERR: handle_clear_error(); break;
+        case CMD_LOADRUNTIME: handle_load_runtime(); break;
         default:
             logLn("[fio] unknown cmd 0x%02X\n", (unsigned)c);
             respond_err(ERR_IO);
@@ -137,6 +171,69 @@ void FioDispatcher::handle_clear_error() {
     respond_ok();
 }
 
+void FioDispatcher::handle_load_runtime() {
+    char name[64];
+    copy_filename(name);
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        logLn("[fio] LOADRUNTIME resolve failed: %s\n", name);
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+
+    int idx = img->find_entry(scratch, parent);
+    if (idx < 0 && !has_extension(scratch)) {
+        char candidate[64];
+        snprintf(candidate, sizeof(candidate), "%s.bin", scratch);
+        idx = img->find_entry(candidate, parent);
+        if (idx >= 0) {
+            strncpy(scratch, candidate, sizeof(scratch) - 1);
+            scratch[sizeof(scratch) - 1] = 0;
+        }
+    }
+    if (idx < 0) {
+        logLn("[fio] LOADRUNTIME: '%s' not found in dev=%s\n",
+              scratch, DeviceManager::prefix_for_slot(slot));
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    ndi::DirEntry e;
+    img->get_entry(idx, e);
+    if (e.size_bytes != RUNTIME_ROM_BYTES) {
+        logLn("[fio] LOADRUNTIME %s: %u bytes, expected %u\n",
+              scratch, (unsigned)e.size_bytes, (unsigned)RUNTIME_ROM_BYTES);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    int got = img->read_file_by_index(idx, _transfer_buf, sizeof(_transfer_buf));
+    if (got != RUNTIME_ROM_BYTES) {
+        logLn("[fio] LOADRUNTIME %s: read %d bytes, expected %u\n",
+              scratch, got, (unsigned)RUNTIME_ROM_BYTES);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    // The caller must be running from RAM: this overwrites the primary ROM bank
+    // currently used for NovaBASIC so the launcher can jump into another runtime.
+    if (!_bridge.loadRom(0, _transfer_buf, (size_t)got)) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    write_size((uint32_t)got);
+    logLn("[fio] LOADRUNTIME %s -> primary ROM bank (%d bytes) OK\n",
+          scratch, got);
+    respond_ok();
+}
+
 void FioDispatcher::handle_unsupported_sd_command(const char* name) {
     logLn("[fio] %s is not implemented on ESP SD host\n", name ? name : "command");
     respond_err(ERR_IO);
@@ -160,7 +257,9 @@ void FioDispatcher::handle_load() {
     auto* img = _dm.image(slot);
     if (!img) { respond_err(ERR_NO_MOUNT); return; }
 
-    int idx = img->find_entry(scratch, parent);
+    ndi::DirEntry e;
+    bool is_bin = false;
+    int idx = find_load_entry(img, scratch, parent, e, is_bin);
     if (idx < 0) {
         logLn("[fio] LOAD: '%s' not found in dev=%s\n",
                       scratch, DeviceManager::prefix_for_slot(slot));
@@ -168,12 +267,14 @@ void FioDispatcher::handle_load() {
         return;
     }
 
-    ndi::DirEntry e;
-    img->get_entry(idx, e);
     if (e.size_bytes > TRANSFER_BUF_BYTES) {
         // Future: stream in chunks. For now, hard cap.
         logLn("[fio] LOAD %s: %u bytes exceeds %d cap\n",
                       scratch, (unsigned)e.size_bytes, TRANSFER_BUF_BYTES);
+        respond_err(ERR_IO);
+        return;
+    }
+    if (e.size_bytes < 2) {
         respond_err(ERR_IO);
         return;
     }
@@ -182,13 +283,21 @@ void FioDispatcher::handle_load() {
     if (got < 0) { respond_err(ERR_IO); return; }
 
     uint16_t dest = src();
-    if (!_bridge.loadRam(dest, _transfer_buf, (size_t)got)) {
+    if (is_bin) {
+        dest = (uint16_t)_transfer_buf[0] | ((uint16_t)_transfer_buf[1] << 8);
+        _bridge.poke(BANK_BASE + OFF_SRC_LO, (uint8_t)(dest & 0xFF));
+        _bridge.poke(BANK_BASE + OFF_SRC_HI, (uint8_t)(dest >> 8));
+    }
+
+    int payload_bytes = got - 2;
+    if (!_bridge.loadRam(dest, _transfer_buf + 2, (size_t)payload_bytes)) {
         respond_err(ERR_IO);
         return;
     }
-    write_size((uint32_t)got);
-    logLn("[fio] LOAD %s → $%04X (%d bytes) OK\n",
-                  scratch, dest, got);
+    write_size((uint32_t)payload_bytes);
+    _bridge.poke(BANK_BASE + OFF_DIRTYPE, is_bin ? ndi::FT_BIN : ndi::FT_BAS);
+    logLn("[fio] LOAD %s → $%04X (%d bytes payload) OK\n",
+                  scratch, dest, payload_bytes);
     respond_ok();
 }
 

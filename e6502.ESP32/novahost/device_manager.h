@@ -72,8 +72,16 @@ public:
     bool resolve_path(const char* path, int& out_slot,
                       uint16_t& out_parent, char* scratch);
 
+    // Auto-mount all fd*.ndi files at SD root. Returns count mounted.
+    int auto_mount_fds();
+
     // Auto-mount all hd*.ndi files at SD root. Returns count mounted.
     int auto_mount_hds();
+
+    // Return the slot that should receive unprefixed boot loads. Prefer the
+    // first mounted device with AUTOBOOT on FD0..FD3, then HD0..HD1. If no
+    // autoboot exists, prefer the first inserted floppy, then the first HD.
+    int select_boot_slot() const;
 
 private:
     File         _files[NUM_SLOTS];

@@ -117,6 +117,27 @@ public sealed class DeviceManager
     }
 
     /// <summary>
+    /// Returns the device prefix that should receive unprefixed boot loads.
+    /// Prefer mounted devices with AUTOBOOT in floppy-before-HD order. If no
+    /// autoboot file exists, prefer the first inserted floppy, then the first HD.
+    /// </summary>
+    public string SelectBootDevice()
+    {
+        var autoboot = FindAutoboot();
+        if (autoboot is not null)
+            return autoboot.Value.Device.Prefix;
+
+        foreach (string slot in SlotOrder)
+        {
+            var dev = _devices[slot];
+            if (dev.IsMounted)
+                return dev.Prefix;
+        }
+
+        return DefaultDevice;
+    }
+
+    /// <summary>
     /// Mounts a named image: looks in disksDir for imageName.ndi and mounts it on the given prefix.
     /// </summary>
     public void MountDevice(string prefix, string imageName)

@@ -341,10 +341,16 @@ bool mountSdCard() {
     g_sd_diag = String(diag_buf);
     logLn("SD: mount OK - %s", diag_buf);
 
+    int fd_count = deviceManager.auto_mount_fds();
     int hd_count = deviceManager.auto_mount_hds();
-    logLn("SD: auto-mounted %d hd*.ndi disk image(s)", hd_count);
-    char mount_buf[48];
-    snprintf(mount_buf, sizeof(mount_buf), " | hd_mounts=%d", hd_count);
+    int boot_slot = deviceManager.select_boot_slot();
+    deviceManager.set_default_slot(boot_slot);
+    const char* boot_prefix = DeviceManager::prefix_for_slot(boot_slot);
+    logLn("SD: auto-mounted %d fd*.ndi and %d hd*.ndi disk image(s); boot default=%s",
+          fd_count, hd_count, boot_prefix ? boot_prefix : "?");
+    char mount_buf[80];
+    snprintf(mount_buf, sizeof(mount_buf), " | fd_mounts=%d hd_mounts=%d boot=%s",
+             fd_count, hd_count, boot_prefix ? boot_prefix : "?");
     g_sd_diag += String(mount_buf);
     return true;
 }
@@ -994,8 +1000,19 @@ bool loadRomsToFPGA() {
                   (unsigned)SID_CURVE_ROM_LEN, (unsigned)SID_CURVE_BASE);
         }
 
-        if (!fpgaBridge.resetRelease()) {
-            logLn("ROM load attempt %d/%d FAILED: resetRelease did not ack",
+        // ROM/SDRAM streaming happens under CPU-only reset so bridge-owned
+        // SDRAM writes remain available. Right before releasing the CPU, pulse
+        // full system reset so every custom chip returns to its power-on state.
+        bool released = false;
+        if (fpgaBridge.systemResetHold()) {
+            delay(10);
+            released = fpgaBridge.systemResetRelease();
+        } else {
+            released = fpgaBridge.resetRelease();
+        }
+
+        if (!released) {
+            logLn("ROM load attempt %d/%d FAILED: reset release did not ack",
                   loadAttempt, LOAD_ATTEMPTS);
             delay(250);
             continue;

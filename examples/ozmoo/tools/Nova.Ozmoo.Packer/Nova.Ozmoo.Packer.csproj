@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../e6502.Storage/e6502.Storage.csproj" />
+    <ProjectReference Include="../../../../e6502.Storage/e6502.Storage.csproj" />
   </ItemGroup>
 </Project>
-

@@ -77,17 +77,32 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _musicEngine = new MusicEngine(this);
         _midiPlayback = new MidiPlayback(_musicEngine, _frameRateHz);
 
-        string hd0 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-programs");
-        string hd1 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-data");
-        string disks = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "e6502-disks");
-        _deviceManager = new DeviceManager(hd0, hd1, disks);
-        _deviceManager.AutoMount();
+        string? storageRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string hd0;
+        string hd1;
+        string disks;
+        if (!string.IsNullOrWhiteSpace(storageRoot))
+        {
+            hd0 = Path.Combine(storageRoot, "hd0");
+            hd1 = Path.Combine(storageRoot, "hd1");
+            disks = Path.Combine(storageRoot, "disks");
+        }
+        else
+        {
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            hd0 = Path.Combine(userProfile, "e6502-programs");
+            hd1 = Path.Combine(userProfile, "e6502-data");
+            disks = Path.Combine(userProfile, "e6502-disks");
+        }
 
-        // If a mounted device has an autoboot file, make it the default device
-        // so the ROM's LOAD "AUTOBOOT" finds it without a prefix.
-        var autoboot = _deviceManager.FindAutoboot();
-        if (autoboot != null)
-            _deviceManager.DefaultDevice = autoboot.Value.Device.Prefix;
+        _deviceManager = new DeviceManager(hd0, hd1, disks);
+        bool autoMountStorage = Environment.GetEnvironmentVariable("NOVA_NO_AUTOMOUNT") != "1";
+        if (autoMountStorage)
+            _deviceManager.AutoMount();
+
+        // Make unprefixed boot loads follow the same FD-before-HD policy as
+        // NovaHost. BASIC still owns the AUTOBOOT load/run decision.
+        _deviceManager.DefaultDevice = _deviceManager.SelectBootDevice();
 
         _xmc = new VirtualExpansionMemoryController(
             addr => _ram[addr],
@@ -108,7 +123,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             xramRead: addr => _xmc.TryReadLinear(addr, out byte value) ? value : (byte)0,
             xramWrite: (addr, value) => _xmc.TryWriteLinear(addr, value),
             xramCapacity: () => _xmc.CapacityBytes,
-            xramRefreshStats: () => _xmc.RefreshStatsRegisters());
+            xramRefreshStats: () => _xmc.RefreshStatsRegisters(),
+            loadRuntimeRom: LoadPrimaryRuntimeRom);
         _fio.ProgramLoaded += name => LoadProgramHelp(name);
         _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
         _vgc.SetBusMemory(_ram);
@@ -164,12 +180,60 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public byte ReadRam(ushort address) => _ram[address];
     public void WriteRam(ushort address, byte data) => _ram[address] = data;
 
+    private void LoadPrimaryRuntimeRom(byte[] data)
+    {
+        if (data.Length != VgcConstants.RomSize)
+            throw new ArgumentException("Runtime ROM must be exactly 16K.", nameof(data));
+
+        Array.Copy(data, _basicRom, VgcConstants.RomSize);
+        if (CurrentRom == ActiveRom.Basic)
+            Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
+    }
+
     public void Dispose()
     {
         _nic.Dispose();
         _sid.Dispose();
         _sid2.Dispose();
         _wts.Dispose();
+    }
+
+    public void ResetCustomChips()
+    {
+        _vgc.Reset();
+        _timer.Reset();
+        _dma.Reset();
+        _blitter.Reset();
+        _fio.Reset();
+        _xmc.Reset();
+        _nic.ResetAll();
+        _compiler.Reset();
+        _midiPlayback.Reset();
+        _sidPlayer.Reset();
+        _musicEngine.Reset();
+        _wts.Reset();
+        _sid.Reset();
+        _sid2.Reset();
+
+        _frameNumeratorAccumulator = 0;
+        _totalFrames = 0;
+        _lastMusicWallTick = 0;
+        _musicFrameAccum = 0;
+        CurrentProgramName = null;
+        CurrentProgramHelp = null;
+
+        if (CurrentRom != ActiveRom.Basic)
+        {
+            Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
+            CurrentRom = ActiveRom.Basic;
+            RomSwapRequested?.Invoke(this, EventArgs.Empty);
+        }
+        else
+        {
+            Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
+        }
+
+        InitVectorTable();
     }
 
     private void InitVectorTable()
@@ -312,19 +376,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _vgc.Write(address, data);
             if (_vgc.SysResetRequested)
             {
-                _vgc.SysResetRequested = false;
-                _midiPlayback.Stop();
-                _musicEngine.MusicReset();
-                _wts.AllNotesOff();
-                _sid.Write(0xD404, 0x00); // gate off voice 1
-                _sid.Write(0xD40B, 0x00); // gate off voice 2
-                _sid.Write(0xD412, 0x00); // gate off voice 3
-                _sid.Write(0xD418, 0x00); // silence master volume
-                _sid2.Write(0xD424, 0x00); // gate off voice 4
-                _sid2.Write(0xD42B, 0x00); // gate off voice 5
-                _sid2.Write(0xD432, 0x00); // gate off voice 6
-                _sid2.Write(0xD438, 0x00); // silence SID2 volume
-                _nic.ResetAll();
+                ResetCustomChips();
             }
             return;
         }

@@ -18,6 +18,7 @@ public sealed class CompilerController
         _readXram = readXram;
         _writeCpuRam = writeCpuRam;
         _activeList = _errors;
+        Reset();
     }
 
     public bool OwnsAddress(ushort address) =>
@@ -28,6 +29,16 @@ public sealed class CompilerController
         if (address == VgcConstants.CmpErrMsg)
             return ReadNextErrorMsgByte();
         return _regs[address - VgcConstants.CmpBase];
+    }
+
+    public void Reset()
+    {
+        Array.Clear(_regs);
+        _errors.Clear();
+        _warnings.Clear();
+        _activeList = _errors;
+        _errMsgPos = 0;
+        SetStatus(VgcConstants.CmpStatusIdle);
     }
 
     public void Write(ushort address, byte data)

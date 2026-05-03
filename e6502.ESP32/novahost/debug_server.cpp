@@ -112,7 +112,7 @@ void DebugServer::handleCommand(const String& json) {
     else if (cmd == "dbg_break_clear_all") cmdDbgBreakClearAll();
     else if (cmd == "dbg_break_list")  cmdDbgBreakList();
     else if (cmd == "dbg_trace")       cmdDbgTrace(json);
-    else if (cmd == "cold_start")  cmdColdStart();
+    else if (cmd == "cold_start")  cmdColdStart(json);
     else if (cmd == "wait_ready")  cmdWaitReady(json);
     else if (cmd == "watch")       cmdWatch(json);
     else if (cmd == "run_cycles")  cmdRunCycles(json);
@@ -632,7 +632,7 @@ void DebugServer::cmdReloadRom() {
 // Command handlers — Priority 2 (ESP32-side logic)
 // =========================================================================
 
-void DebugServer::cmdColdStart() {
+void DebugServer::cmdColdStart(const String& json) {
     // A cold start is a system reset, not Ctrl-C. Keep the CPU held while the
     // custom chips reset, then release and let hardware scrub VGC state before
     // the reset vector runs.
@@ -649,13 +649,21 @@ void DebugServer::cmdColdStart() {
     _bridge.resume();
     _paused = false;
 
+    if (extractInt(json, "wait_ready", 1) == 0) {
+        respondOk();
+        return;
+    }
+
     // Wait for "Ready" prompt. Do not report success unless the VM actually
     // reached the prompt; otherwise test runners race ahead and hide reset
     // failures behind later transport timeouts.
+    String waitText = extractString(json, "text");
+    if (waitText.length() == 0)
+        waitText = "Ready";
     unsigned long deadline = millis() + 10000;
     while (millis() < deadline) {
         if (_bridge.readScreen(_screenBuf)) {
-            if (findTextOnScreen("Ready") >= 0) {
+            if (findTextOnScreen(waitText.c_str()) >= 0) {
                 respondOk();
                 return;
             }

@@ -1,7 +1,7 @@
 Modules list:
 -------------
 basic.o:
-    CODE              Offs=000000  Size=003C95  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=003C9A  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
     BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
     DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
@@ -20,7 +20,7 @@ DATA                  000000  000000  000000  00001
 NULL                  000000  000000  000000  00001
 RODATA                000000  000000  000000  00001
 ZEROPAGE              000080  000080  000000  00001
-CODE                  00C000  00FC94  003C95  00001
+CODE                  00C000  00FC99  003C9A  00001
 MONITOR               00FFD7  00FFF5  00001F  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 
@@ -29,45 +29,45 @@ Exports list by name:
 ---------------------
 __ZP_FILEOFFS__           000000  EA    __ZP_LAST__               000080  LA    
 __ZP_SIZE__               00001F  EA    __ZP_START__              000080  LA    
-audio_instrument          00ED9F  LA    audio_midplay             00EDB2  LA    
-audio_midstop             00EDB7  LA    audio_music_loop          00EDD9  LA    
-audio_music_note          00EDF7  LA    audio_music_play          00EDC6  LA    
-audio_music_playing       00EDED  LA    audio_music_priority      00EDDE  LA    
-audio_music_sequence      00EDC1  LA    audio_music_stop          00EDCF  LA    
-audio_music_tempo         00EDD4  LA    audio_play_sound          00ED82  LA    
-audio_set_volume          00ED8D  LA    audio_sfload              00EDBC  LA    
-audio_sfx_playing         00EDE7  LA    audio_sidplay             00EDA4  LA    
-audio_sidstop             00EDAD  LA    audio_sound               00ED95  LA    
-audio_status              00EDE3  LA    audio_volume              00ED9A  LA    
+audio_instrument          00EDA4  LA    audio_midplay             00EDB7  LA    
+audio_midstop             00EDBC  LA    audio_music_loop          00EDDE  LA    
+audio_music_note          00EDFC  LA    audio_music_play          00EDCB  LA    
+audio_music_playing       00EDF2  LA    audio_music_priority      00EDE3  LA    
+audio_music_sequence      00EDC6  LA    audio_music_stop          00EDD4  LA    
+audio_music_tempo         00EDD9  LA    audio_play_sound          00ED87  LA    
+audio_set_volume          00ED92  LA    audio_sfload              00EDC1  LA    
+audio_sfx_playing         00EDEC  LA    audio_sidplay             00EDA9  LA    
+audio_sidstop             00EDB2  LA    audio_sound               00ED9A  LA    
+audio_status              00EDE8  LA    audio_volume              00ED9F  LA    
 fio_cd                    00ED6E  LA    fio_check                 00ECEF  LA    
 fio_clear_error           00ED0F  LA    fio_copy_name             00ED2E  LA    
 fio_delete                00ED5F  LA    fio_dir_open              00ED55  LA    
 fio_dir_read              00ED5A  LA    fio_exec                  00ECFC  LA    
 fio_gload                 00ED69  LA    fio_gsave                 00ED64  LA    
 fio_issue                 00ECEB  LA    fio_load                  00ED50  LA    
-fio_mkdir                 00ED73  LA    fio_pwd                   00ED7D  LA    
-fio_rmdir                 00ED78  LA    fio_save                  00ED4B  LA    
-fio_set_io_error          00ED21  LA    nic_command               00EE03  LA    
-nic_connect               00EE07  LA    nic_copy_name             00EE2D  LA    
-nic_disconnect            00EE0B  LA    nic_length                00EE29  LA    
-nic_ready                 00EE1F  LA    nic_recv                  00EE13  LA    
-nic_send                  00EE0F  LA    nic_status                00EE17  LA    
-sprite_background_collision_status 00E986  LA    sprite_collision_status   00E982  LA    
-sprite_command            00E928  LA    sprite_disable            00E936  LA    
-sprite_enable             00E931  LA    sprite_get_x              00E967  LA    
-sprite_get_y              00E978  LA    sprite_pos                00E92C  LA    
-sprite_reg_offset         00E940  LA    sprite_row                00E93B  LA    
-sprite_set_reg16          00E958  LA    sprite_set_reg8           00E94D  LA    
-sprite_set_shape          00E94B  LA    vgc_cls                   00E8C2  LA    
-vgc_cmd                   00E8AD  LA    vgc_flash_off             00E91F  LA    
-vgc_flash_on              00E916  LA    vgc_locate                00E8D4  LA    
-vgc_mem_read              00E8E9  LA    vgc_mem_write             00E8EC  LA    
-vgc_reverse_default       00E8F4  LA    vgc_reverse_explicit      00E8FF  LA    
-vgc_reverse_off           00E90D  LA    vgc_set_bg                00E8CC  LA    
-vgc_set_border            00E8D0  LA    vgc_set_fg                00E8C8  LA    
-vgc_set_font              00E8E5  LA    vgc_set_mode              00E8E1  LA    
-vgc_vsync                 00E8B9  LA    vgc_wait_cmd              00E8B1  LA    
-
+fio_load_runtime          00ED82  LA    fio_mkdir                 00ED73  LA    
+fio_pwd                   00ED7D  LA    fio_rmdir                 00ED78  LA    
+fio_save                  00ED4B  LA    fio_set_io_error          00ED21  LA    
+nic_command               00EE08  LA    nic_connect               00EE0C  LA    
+nic_copy_name             00EE32  LA    nic_disconnect            00EE10  LA    
+nic_length                00EE2E  LA    nic_ready                 00EE24  LA    
+nic_recv                  00EE18  LA    nic_send                  00EE14  LA    
+nic_status                00EE1C  LA    sprite_background_collision_status 00E986  LA    
+sprite_collision_status   00E982  LA    sprite_command            00E928  LA    
+sprite_disable            00E936  LA    sprite_enable             00E931  LA    
+sprite_get_x              00E967  LA    sprite_get_y              00E978  LA    
+sprite_pos                00E92C  LA    sprite_reg_offset         00E940  LA    
+sprite_row                00E93B  LA    sprite_set_reg16          00E958  LA    
+sprite_set_reg8           00E94D  LA    sprite_set_shape          00E94B  LA    
+vgc_cls                   00E8C2  LA    vgc_cmd                   00E8AD  LA    
+vgc_flash_off             00E91F  LA    vgc_flash_on              00E916  LA    
+vgc_locate                00E8D4  LA    vgc_mem_read              00E8E9  LA    
+vgc_mem_write             00E8EC  LA    vgc_reverse_default       00E8F4  LA    
+vgc_reverse_explicit      00E8FF  LA    vgc_reverse_off           00E90D  LA    
+vgc_set_bg                00E8CC  LA    vgc_set_border            00E8D0  LA    
+vgc_set_fg                00E8C8  LA    vgc_set_font              00E8E5  LA    
+vgc_set_mode              00E8E1  LA    vgc_vsync                 00E8B9  LA    
+vgc_wait_cmd              00E8B1  LA    
 
 
 Exports list by value:
@@ -97,22 +97,22 @@ fio_dir_open              00ED55  LA    fio_dir_read              00ED5A  LA
 fio_delete                00ED5F  LA    fio_gsave                 00ED64  LA    
 fio_gload                 00ED69  LA    fio_cd                    00ED6E  LA    
 fio_mkdir                 00ED73  LA    fio_rmdir                 00ED78  LA    
-fio_pwd                   00ED7D  LA    audio_play_sound          00ED82  LA    
-audio_set_volume          00ED8D  LA    audio_sound               00ED95  LA    
-audio_volume              00ED9A  LA    audio_instrument          00ED9F  LA    
-audio_sidplay             00EDA4  LA    audio_sidstop             00EDAD  LA    
-audio_midplay             00EDB2  LA    audio_midstop             00EDB7  LA    
-audio_sfload              00EDBC  LA    audio_music_sequence      00EDC1  LA    
-audio_music_play          00EDC6  LA    audio_music_stop          00EDCF  LA    
-audio_music_tempo         00EDD4  LA    audio_music_loop          00EDD9  LA    
-audio_music_priority      00EDDE  LA    audio_status              00EDE3  LA    
-audio_sfx_playing         00EDE7  LA    audio_music_playing       00EDED  LA    
-audio_music_note          00EDF7  LA    nic_command               00EE03  LA    
-nic_connect               00EE07  LA    nic_disconnect            00EE0B  LA    
-nic_send                  00EE0F  LA    nic_recv                  00EE13  LA    
-nic_status                00EE17  LA    nic_ready                 00EE1F  LA    
-nic_length                00EE29  LA    nic_copy_name             00EE2D  LA    
-
+fio_pwd                   00ED7D  LA    fio_load_runtime          00ED82  LA    
+audio_play_sound          00ED87  LA    audio_set_volume          00ED92  LA    
+audio_sound               00ED9A  LA    audio_volume              00ED9F  LA    
+audio_instrument          00EDA4  LA    audio_sidplay             00EDA9  LA    
+audio_sidstop             00EDB2  LA    audio_midplay             00EDB7  LA    
+audio_midstop             00EDBC  LA    audio_sfload              00EDC1  LA    
+audio_music_sequence      00EDC6  LA    audio_music_play          00EDCB  LA    
+audio_music_stop          00EDD4  LA    audio_music_tempo         00EDD9  LA    
+audio_music_loop          00EDDE  LA    audio_music_priority      00EDE3  LA    
+audio_status              00EDE8  LA    audio_sfx_playing         00EDEC  LA    
+audio_music_playing       00EDF2  LA    audio_music_note          00EDFC  LA    
+nic_command               00EE08  LA    nic_connect               00EE0C  LA    
+nic_disconnect            00EE10  LA    nic_send                  00EE14  LA    
+nic_recv                  00EE18  LA    nic_status                00EE1C  LA    
+nic_ready                 00EE24  LA    nic_length                00EE2E  LA    
+nic_copy_name             00EE32  LA    
 
 
 Imports list:
@@ -153,6 +153,7 @@ fio_gload (basic.o):
 fio_gsave (basic.o):
 fio_issue (basic.o):
 fio_load (basic.o):
+fio_load_runtime (basic.o):
 fio_mkdir (basic.o):
 fio_pwd (basic.o):
 fio_rmdir (basic.o):

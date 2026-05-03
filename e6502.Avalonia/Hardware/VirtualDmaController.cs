@@ -37,14 +37,31 @@ public sealed class VirtualDmaController
         _canWriteRange = canWriteRange;
         _postTransferWrite = postTransferWrite;
 
-        SetStatus(VgcConstants.DmaStatusIdle, VgcConstants.DmaErrNone);
-        SetCount(0);
+        Reset();
     }
 
     public bool OwnsAddress(ushort address) =>
         address >= VgcConstants.DmaBase && address <= VgcConstants.DmaEnd;
 
     public byte Read(ushort address) => _regs[RegIndex(address)];
+
+    public void Reset()
+    {
+        Array.Clear(_regs);
+        _busy = false;
+        _fillMode = false;
+        _srcSpace = 0;
+        _dstSpace = 0;
+        _fillValue = 0;
+        _srcAddr = 0;
+        _dstAddr = 0;
+        _length = 0;
+        _index = 0;
+        _moved = 0;
+        _byteCredit = 0;
+        SetCount(0);
+        SetStatus(VgcConstants.DmaStatusIdle, VgcConstants.DmaErrNone);
+    }
 
     public void Write(ushort address, byte data)
     {

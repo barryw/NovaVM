@@ -9,7 +9,8 @@ ExtCmdId        = $E4           ; command ID (set by RAM trampoline)
 
       .include "lib/nova.inc"
 
-; Short-lived extension helper scratch. Keep NVR4-NVR6 for XMC metadata state.
+; Short-lived extension helper scratch. Library-owned persistent state lives in
+; its own linker storage, not in the NVR mailbox.
 ext_ptrL        = NVR0L
 ext_ptrH        = NVR0H
 ext_u16h        = NVR0L
@@ -56,7 +57,6 @@ TK_OFF_VAL      = $CB
 ; VGC register and command constants live in lib/nova.inc.
 
       .segment "CODE"
-      .org    $C000
 
 ; =====================================================================
 ; Extension entry point — called via JSR $C000 from RAM trampoline

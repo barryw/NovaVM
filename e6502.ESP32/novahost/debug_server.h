@@ -63,7 +63,7 @@ private:
     void cmdDbgBreakClearAll();
     void cmdDbgBreakList();
     void cmdDbgTrace(const String& json);
-    void cmdColdStart();
+    void cmdColdStart(const String& json);
     void cmdWaitReady(const String& json);
     void cmdWatch(const String& json);
     void cmdRunCycles(const String& json);

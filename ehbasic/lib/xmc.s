@@ -6,8 +6,6 @@
 
 .include "xram.inc"
 
-      .segment "CODE"
-
 .ifndef XRAM_IMPLEMENTATION_INCLUDED
       .import xram_xmc_read8
       .import xram_xmc_write8
@@ -34,6 +32,8 @@
       .export xmc_set_window_addr_current_bank
       .export xmc_map_window
       .export xmc_unmap_window
+
+      .segment "CODE"
 
 ; ---------------------------------------------------------------------
 ; XMC command processor and named-block metadata
@@ -168,13 +168,18 @@ DATA_START_LO   = $00
 DATA_START_MI   = $05
 DATA_START_HI   = $00
 
-; --- Nova pseudo-register scratch for XMC metadata ---
-xmc_eidx        = NVR4L         ; directory entry index (0-31)
-xmc_dircur      = NVR4H         ; directory cursor for NDirOpen/Read
-xmc_npgL        = NVR5L         ; pages needed low
-xmc_npgH        = NVR5H         ; pages needed high
-xmc_tmp         = NVR6L         ; scratch
-xmc_tmp2        = NVR6H         ; scratch
+      .segment "BSS"
+
+; Private XMC metadata state. These are deliberately not NVR aliases; NVR is
+; reserved for transient caller arguments and scratch.
+xmc_eidx:       .res 1          ; directory entry index (0-31)
+xmc_dircur:     .res 1          ; directory cursor for NDirOpen/Read
+xmc_npgL:       .res 1          ; pages needed low
+xmc_npgH:       .res 1          ; pages needed high
+xmc_tmp:        .res 1          ; scratch
+xmc_tmp2:       .res 1          ; scratch
+
+      .segment "CODE"
 
 ; ---------------------------------------------------------------------
 ; Assembly-facing convenience wrappers

@@ -80,6 +80,7 @@ FioCmdMount             = $24
 FioCmdUnmount           = $25
 FioCmdPwd               = $26
 FioCmdClearErr          = $27
+FioCmdLoadRuntime       = $28
 FioDirTypeDir           = $05
 FioErrDiskFull          = $04
 FioErrNotMounted        = $05
@@ -367,6 +368,7 @@ NicMaxQueueDepth        = $10
 AutobootSkip            = $B9F0
 RomBase                 = $C000
 RomEnd                  = $FFFF
+RomSize                 = $4000
 
 ; --- Screen / graphics dimensions ---
 ScreenCols              = $50

@@ -529,6 +529,74 @@ public class AvaloniaCompositeBusTests
     }
 
     // -------------------------------------------------------------------------
+    // Machine reset
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void SysReset_ReturnsAllCustomChipsToInitialState()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+
+        bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceScreen, 0, (byte)'X');
+        bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceColor, 0, 0x61);
+        bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceTextAttr, 0, VgcConstants.TextAttrFlash);
+        bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, 0, 0x0D);
+        bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceSprite, 0, 0xA5);
+        bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceTile, 0, 0xC3);
+        bus.Write((ushort)VgcConstants.RegFgCol, 0x02);
+        bus.Write((ushort)VgcConstants.RegCmd, VgcConstants.CmdCopperEnable);
+
+        bus.Write((ushort)VgcConstants.DmaCmd, 0xFF);
+        bus.Write((ushort)VgcConstants.BltCmd, 0xFF);
+        bus.Write((ushort)VgcConstants.TimerDivL, 0x01);
+        bus.Write((ushort)VgcConstants.TimerCtrl, 0x01);
+        bus.Timer.Tick();
+        bus.Write((ushort)VgcConstants.FioNameLen, 4);
+        bus.Write((ushort)VgcConstants.FioCmd, 0xFF);
+        bus.Write((ushort)VgcConstants.XmcAddrL, 0x00);
+        bus.Write((ushort)VgcConstants.XmcAddrM, 0x20);
+        bus.Write((ushort)VgcConstants.XmcData, 0xAA);
+        bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdPutByte);
+        bus.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdCompile);
+        bus.Sid.Write((ushort)(VgcConstants.SidBase + 0x18), 0x0F);
+        bus.Sid2.Write((ushort)(VgcConstants.Sid2Base + 0x18), 0x0F);
+        bus.Write((ushort)VgcConstants.WtsReverbLevel, 1);
+        bus.Write((ushort)(VgcConstants.WtsVoiceBase + VgcConstants.WtsVoiceVolume), 7);
+        bus.Write((ushort)VgcConstants.NicSlot, 3);
+        bus.Write((ushort)VgcConstants.RegRomSwap, VgcConstants.RomSwapNcc);
+
+        bus.Write((ushort)VgcConstants.RegCmd, VgcConstants.CmdSysReset);
+
+        Assert.AreEqual((byte)' ', bus.Vgc.GetScreenChar(0, 0));
+        Assert.AreEqual(0x0F, bus.ReadVramByte(VgcConstants.VramPlaneColor, 0));
+        Assert.AreEqual(0x00, bus.Vgc.GetScreenTextAttr(0, 0));
+        Assert.AreEqual(0x00, bus.ReadVramByte(VgcConstants.VramPlaneGfx, 0));
+        Assert.AreEqual(0x00, bus.ReadVramByte(VgcConstants.VramPlaneSprite, 0));
+        Assert.AreEqual(0x00, bus.ReadVramByte(VgcConstants.VramPlaneTile, 0));
+        Assert.AreEqual(15, bus.Read((ushort)VgcConstants.RegFgCol));
+        Assert.IsFalse(bus.Vgc.IsCopperEnabled);
+
+        Assert.AreEqual(VgcConstants.DmaStatusIdle, bus.Read((ushort)VgcConstants.DmaStatus));
+        Assert.AreEqual(VgcConstants.BltStatusIdle, bus.Read((ushort)VgcConstants.BltStatus));
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.TimerCtrl));
+        Assert.IsFalse(bus.Timer.IrqPending);
+        Assert.AreEqual(VgcConstants.FioStatusIdle, bus.Read((ushort)VgcConstants.FioStatus));
+        Assert.AreEqual(VgcConstants.FioErrNone, bus.Read((ushort)VgcConstants.FioErrCode));
+        Assert.AreEqual(VgcConstants.XmcStatusIdle, bus.Read((ushort)VgcConstants.XmcStatus));
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.XmcPagesUsedL));
+        Assert.AreEqual(0x0F, bus.Read((ushort)VgcConstants.XmcWinCtl));
+        Assert.AreEqual(VgcConstants.CmpStatusIdle, bus.Read((ushort)VgcConstants.CmpStatus));
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.NicSlot));
+        Assert.AreEqual(0, bus.Sid.Read((ushort)(VgcConstants.SidBase + 0x18)));
+        Assert.AreEqual(0, bus.Sid2.Read((ushort)(VgcConstants.Sid2Base + 0x18)));
+        Assert.AreEqual(0x0F, bus.Sid.Read((ushort)(VgcConstants.SidBase + 0x1D)));
+        Assert.AreEqual(80, bus.Read((ushort)VgcConstants.WtsReverbLevel));
+        Assert.AreEqual(255, bus.Read((ushort)(VgcConstants.WtsVoiceBase + VgcConstants.WtsVoiceVolume)));
+        Assert.AreEqual(CompositeBusDevice.ActiveRom.Basic, bus.CurrentRom);
+        Assert.AreEqual(0L, bus.TotalFrames);
+    }
+
+    // -------------------------------------------------------------------------
     // CharIn clears after read
     // -------------------------------------------------------------------------
 

@@ -113,6 +113,40 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            byte[] runtime = new byte[VgcConstants.RomSize];
+            runtime[0] = 0xA9;
+            runtime[^1] = 0x42;
+            File.WriteAllBytes(Path.Combine(dir, "runtime.bin"), runtime);
+
+            byte[]? loaded = null;
+            var memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                saveDir: dir,
+                loadRuntimeRom: data => loaded = (byte[])data.Clone());
+
+            SetFilename(fio, "runtime");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdLoadRuntime);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrNone, fio.Read((ushort)VgcConstants.FioErrCode));
+            Assert.AreEqual(VgcConstants.RomSize, ReadSize(fio));
+            CollectionAssert.AreEqual(runtime, loaded);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void ClearErr_ClearsLatchedFileIoError()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");

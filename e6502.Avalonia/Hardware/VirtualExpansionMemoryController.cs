@@ -47,7 +47,16 @@ public sealed class VirtualExpansionMemoryController
         _xram = new byte[sizeBytes];
         _usedPages = new bool[sizeBytes / PageSize];
 
-        int banks = Math.Clamp(sizeBytes / BankSize, 1, 255);
+        Reset();
+    }
+
+    public void Reset()
+    {
+        Array.Clear(_regs);
+        _nextHandle = 1;
+        ResetUsage();
+
+        int banks = Math.Clamp(_xram.Length / BankSize, 1, 255);
         _regs[RegIndex(VgcConstants.XmcBanks)] = (byte)banks;
         _regs[RegIndex(VgcConstants.XmcBank)] = 0;
         _regs[RegIndex(VgcConstants.XmcWinCtl)] = 0x0F;

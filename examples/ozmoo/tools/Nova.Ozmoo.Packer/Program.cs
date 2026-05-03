@@ -15,6 +15,12 @@ if (!File.Exists(options.AutobootPath))
     return 1;
 }
 
+if (!File.Exists(options.RuntimePath))
+{
+    Console.Error.WriteLine($"Runtime ROM not found: {options.RuntimePath}");
+    return 1;
+}
+
 if (options.StoryPath is not null && !File.Exists(options.StoryPath))
 {
     Console.Error.WriteLine($"Story file not found: {options.StoryPath}");
@@ -31,6 +37,15 @@ using var image = NdiImage.Open(options.OutputPath);
 var autoboot = File.ReadAllBytes(options.AutobootPath);
 image.WriteFile("AUTOBOOT.bin", NdiFileType.Bin, 0xFFFF, autoboot);
 Console.WriteLine($"Imported AUTOBOOT.bin ({autoboot.Length} bytes)");
+
+var runtime = File.ReadAllBytes(options.RuntimePath);
+if (runtime.Length != 16 * 1024)
+{
+    Console.Error.WriteLine($"Runtime ROM must be exactly 16384 bytes: {options.RuntimePath} is {runtime.Length}");
+    return 1;
+}
+image.WriteFile(options.RuntimeName, NdiFileType.Bin, 0xFFFF, runtime);
+Console.WriteLine($"Imported {options.RuntimeName} ({runtime.Length} bytes)");
 
 if (options.StoryPath is not null)
 {
@@ -54,6 +69,8 @@ return 0;
 internal sealed record Options(
     string OutputPath,
     string AutobootPath,
+    string RuntimePath,
+    string RuntimeName,
     string? StoryPath,
     string StoryName,
     string Label,
@@ -61,10 +78,12 @@ internal sealed record Options(
 {
     public static Options? Parse(string[] args)
     {
-        string output = "dist/ozmoo.ndi";
+        string output = "dist/fd0.ndi";
         string autoboot = "build/AUTOBOOT.bin";
+        string runtime = "build/ozmoo.bin";
+        string runtimeName = "ozmoo.bin";
         string? story = null;
-        string storyName = "STORY.BIN";
+        string storyName = "story.bin";
         string label = "OZMOO";
         int sizeKb = 1440;
 
@@ -80,6 +99,14 @@ internal sealed record Options(
                     break;
                 case "--autoboot" when value is not null:
                     autoboot = value;
+                    i++;
+                    break;
+                case "--runtime" when value is not null:
+                    runtime = value;
+                    i++;
+                    break;
+                case "--runtime-name" when value is not null:
+                    runtimeName = value;
                     i++;
                     break;
                 case "--story" when value is not null:
@@ -106,20 +133,24 @@ internal sealed record Options(
             }
         }
 
-        if (string.IsNullOrWhiteSpace(output) || string.IsNullOrWhiteSpace(autoboot))
+        if (string.IsNullOrWhiteSpace(output) ||
+            string.IsNullOrWhiteSpace(autoboot) ||
+            string.IsNullOrWhiteSpace(runtime))
+            return null;
+        if (string.IsNullOrWhiteSpace(runtimeName) || runtimeName.Length > 32)
             return null;
         if (string.IsNullOrWhiteSpace(storyName) || storyName.Length > 32)
             return null;
         if (sizeKb <= 0)
             return null;
 
-        return new Options(output, autoboot, story, storyName.ToUpperInvariant(), label, sizeKb);
+        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb);
     }
 
     public static void PrintUsage()
     {
         Console.Error.WriteLine("Nova.Ozmoo.Packer");
-        Console.Error.WriteLine("  --output <ozmoo.ndi> --autoboot <AUTOBOOT.bin> [--story <story-file>] [--story-name STORY.BIN] [--label OZMOO] [--size-kb 1440]");
+        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <ozmoo.bin> [--runtime-name ozmoo.bin] [--story <story-file>] [--story-name story.bin] [--label OZMOO] [--size-kb 1440]");
     }
 }
 

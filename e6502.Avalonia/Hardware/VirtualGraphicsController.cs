@@ -237,6 +237,7 @@ public class VirtualGraphicsController : IBusDevice
         _tilePeekVal = 0;
         _tilePeekAttr = 0;
         _tileCollision = 0;
+        SysResetRequested = false;
 
         // Initialize sub-palette 0 to the standard VGC palette
         InitDefaultTilePalette();

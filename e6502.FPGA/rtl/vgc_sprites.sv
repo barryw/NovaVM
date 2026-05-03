@@ -349,7 +349,22 @@ module vgc_sprites (
         spr_eval_state = SPR_IDLE;
         spr_eval_idx = 0;
         spr_clear_x = 0;
+        spr_read_byte = 0;
+        spr_eval_y_line = 0;
+        spr_eval_flip_h = 0;
+        spr_eval_flip_v = 0;
+        spr_eval_pri_r = 0;
+        spr_eval_x_r = 0;
+        spr_eval_shape_r = 0;
+        spr_eval_trans_r = 0;
+        spr_next_scanline = 0;
+        spr_write_px = 0;
+        slb_a_addr = 0;
+        slb_a_din = 7'd0;
+        slb_a_we = 0;
         scanline_output_valid = 1'b0;
+        for (int i = 0; i < 8; i++)
+            spr_row_data[i] = 8'h00;
     end
 
     // =========================================================================
@@ -384,9 +399,27 @@ module vgc_sprites (
             spr_eval_state <= SPR_IDLE;
             spr_eval_idx <= 0;
             spr_clear_x <= 0;
+            spr_read_byte <= 0;
+            spr_eval_y_line <= 0;
+            spr_eval_flip_h <= 0;
+            spr_eval_flip_v <= 0;
+            spr_eval_pri_r <= 0;
+            spr_eval_x_r <= 0;
+            spr_eval_shape_r <= 0;
+            spr_eval_trans_r <= 0;
+            spr_next_scanline <= 0;
+            spr_write_px <= 0;
+            slb_a_addr <= 0;
+            slb_a_din <= 7'd0;
+            slb_a_we <= 0;
             slb_display_bank <= 1'b0;
             slb_a_bank <= 1'b1;
             scanline_output_valid <= 1'b0;
+            for (int bank = 0; bank < 2; bank++)
+                for (int i = 0; i < SPR_PLANE_W; i++)
+                    slb_mem[bank][i] <= 7'd0;
+            for (int i = 0; i < 8; i++)
+                spr_row_data[i] <= 8'h00;
         end else begin
             if (visible_line_start) begin
                 // Swap in the bank prepared during the previous visible line,
