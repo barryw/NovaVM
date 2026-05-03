@@ -79,6 +79,7 @@ FioCmdFormat            = $23
 FioCmdMount             = $24
 FioCmdUnmount           = $25
 FioCmdPwd               = $26
+FioCmdClearErr          = $27
 FioDirTypeDir           = $05
 FioErrDiskFull          = $04
 FioErrNotMounted        = $05
@@ -618,7 +619,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E8E4
-V_OUTP                  = $E8E7
-V_LOAD                  = $E8EA
-V_SAVE                  = $E8ED
+V_INPT                  = $E829
+V_OUTP                  = $E82C
+V_LOAD                  = $E82F
+V_SAVE                  = $E832

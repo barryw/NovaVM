@@ -99,6 +99,7 @@ public static class VgcConstants
     public const byte FioCmdMount      = 0x24;
     public const byte FioCmdUnmount    = 0x25;
     public const byte FioCmdPwd        = 0x26;
+    public const byte FioCmdClearErr   = 0x27;
 
     public const byte FioDirTypeDir    = 0x05;
     public const byte FioErrDiskFull   = 0x04;

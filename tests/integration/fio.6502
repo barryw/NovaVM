@@ -1,0 +1,17 @@
+; FIO control integration tests.
+; Run: tools/run-basic-integration.sh fio
+
+suites {
+  suite("FIO Control") {
+
+    test("fioclr-clears-status", "FIOCLR clears the FIO status and error registers") {
+      basic("10 POKE $0100,$FF")
+      basic("20 POKE $B9A1,3")
+      basic("30 POKE $B9A2,2")
+      basic("40 FIOCLR")
+      basic("50 IF PEEK($B9A1)=2 AND PEEK($B9A2)=0 THEN POKE $0100,$AA")
+      run()
+      assert(peekbyte($0100) == $AA, "FIOCLR cleared FIO status/error")
+    }
+  }
+}

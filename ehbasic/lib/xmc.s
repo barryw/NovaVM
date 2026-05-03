@@ -17,6 +17,23 @@
 .endif
 
       .export xmc_process
+      .export xmc_command_status
+      .export xmc_select_bank
+      .export xmc_put_byte
+      .export xmc_stash_raw
+      .export xmc_fetch_raw
+      .export xmc_release
+      .export xmc_reset_usage
+      .export xmc_alloc_block
+      .export xmc_named_stash
+      .export xmc_named_fetch
+      .export xmc_named_delete
+      .export xmc_dir_open
+      .export xmc_dir_read
+      .export xmc_window_bit
+      .export xmc_set_window_addr_current_bank
+      .export xmc_map_window
+      .export xmc_unmap_window
 
 ; ---------------------------------------------------------------------
 ; XMC command processor and named-block metadata
@@ -33,6 +50,11 @@ TOTAL_PAGES     = 2048
 ; Reads XMC_CMD ($BA00) and executes the requested operation.
 ; Sets XMC_STATUS and XMC_ERRCODE on completion.
 ; =====================================================================
+; @label XMC.PROCESS
+; @kind routine
+; @symbol xmc_process
+; @summary Process XMC_CMD and update XMC_STATUS/XMC_ERRCODE.
+; @requires XMC_CMD
 xmc_process:
       LDA   XMC_CMD
       ; Build index: cmd * 2 for word table lookup
@@ -152,6 +174,250 @@ xmc_dircur      = NVR4H         ; directory cursor for NDirOpen/Read
 xmc_npgL        = NVR5L         ; pages needed low
 xmc_npgH        = NVR5H         ; pages needed high
 xmc_tmp         = NVR6L         ; scratch
+xmc_tmp2        = NVR6H         ; scratch
+
+; ---------------------------------------------------------------------
+; Assembly-facing convenience wrappers
+; ---------------------------------------------------------------------
+
+; @label XMC.COMMAND_STATUS
+; @kind routine
+; @symbol xmc_command_status
+; @summary Process XMC_CMD and return A=0 on XMC_OK, A=1 otherwise.
+; @requires XMC_CMD
+; @out A: 0 on success, 1 on error.
+xmc_command_status:
+      JSR   xmc_process
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BEQ   @ok
+      LDA   #$01
+      RTS
+@ok:
+      LDA   #$00
+      RTS
+
+xmc_run_cmd:
+      STA   XMC_CMD
+      JMP   xmc_command_status
+
+; @label XMC.SELECT_BANK
+; @kind routine
+; @symbol xmc_select_bank
+; @summary Select the current 64KB XRAM bank.
+; @in X: Bank index, 0..XMC_BANKS-1.
+; @out A: 0 on success, 1 if the bank is out of range.
+xmc_select_bank:
+      CPX   XMC_BANKS
+      BCC   @ok
+      JMP   xmc_window_bad
+@ok:
+      STX   XMC_BANK
+      JMP   xmc_ok
+
+; @label XMC.PUT_BYTE
+; @kind routine
+; @symbol xmc_put_byte
+; @summary Write XMC_DATA to XMC_XAL/M/H.
+; @requires XMC_XAL XMC_XAM XMC_XAH XMC_DATA
+xmc_put_byte:
+      LDA   #XMC_CMD_PUT
+      JMP   xmc_run_cmd
+
+; @label XMC.STASH_RAW
+; @kind routine
+; @symbol xmc_stash_raw
+; @summary Copy RAM to XRAM using XMC_RAML/H, XMC_XAL/M/H, and XMC_LENL/H.
+; @requires XMC_RAML XMC_RAMH XMC_XAL XMC_XAM XMC_XAH XMC_LENL XMC_LENH
+xmc_stash_raw:
+      LDA   #XMC_CMD_STASH
+      JMP   xmc_run_cmd
+
+; @label XMC.FETCH_RAW
+; @kind routine
+; @symbol xmc_fetch_raw
+; @summary Copy XRAM to RAM using XMC_XAL/M/H, XMC_RAML/H, and XMC_LENL/H.
+; @requires XMC_XAL XMC_XAM XMC_XAH XMC_RAML XMC_RAMH XMC_LENL XMC_LENH
+xmc_fetch_raw:
+      LDA   #XMC_CMD_FETCH
+      JMP   xmc_run_cmd
+
+; @label XMC.RELEASE
+; @kind routine
+; @symbol xmc_release
+; @summary Release an XMC allocation range.
+; @requires XMC_XAL XMC_XAM XMC_XAH XMC_LENL XMC_LENH
+xmc_release:
+      LDA   #XMC_CMD_REL
+      JMP   xmc_run_cmd
+
+; @label XMC.RESET_USAGE
+; @kind routine
+; @symbol xmc_reset_usage
+; @summary Reset XRAM usage and named allocation metadata.
+xmc_reset_usage:
+      LDA   #XMC_CMD_RSTUS
+      JMP   xmc_run_cmd
+
+; @label XMC.ALLOC
+; @kind routine
+; @symbol xmc_alloc_block
+; @summary Allocate an XRAM block using XMC_LENL/H.
+; @requires XMC_LENL XMC_LENH
+; @out XMC_XAL: Allocated address low byte.
+; @out XMC_XAM: Allocated address middle byte.
+; @out XMC_XAH: Allocated address high byte.
+xmc_alloc_block:
+      LDA   #XMC_CMD_ALLOC
+      JMP   xmc_run_cmd
+
+; @label XMC.NAMED_STASH
+; @kind routine
+; @symbol xmc_named_stash
+; @summary Allocate/update a named XRAM block and copy RAM into it.
+; @requires XMC_NAME XMC_NAMELEN XMC_RAML XMC_RAMH XMC_LENL XMC_LENH
+xmc_named_stash:
+      LDA   #XMC_CMD_NSTSH
+      JMP   xmc_run_cmd
+
+; @label XMC.NAMED_FETCH
+; @kind routine
+; @symbol xmc_named_fetch
+; @summary Fetch a named XRAM block into RAM.
+; @requires XMC_NAME XMC_NAMELEN XMC_RAML XMC_RAMH
+xmc_named_fetch:
+      LDA   #XMC_CMD_NFETC
+      JMP   xmc_run_cmd
+
+; @label XMC.NAMED_DELETE
+; @kind routine
+; @symbol xmc_named_delete
+; @summary Delete a named XRAM block.
+; @requires XMC_NAME XMC_NAMELEN
+xmc_named_delete:
+      LDA   #XMC_CMD_NDEL
+      JMP   xmc_run_cmd
+
+; @label XMC.DIR_OPEN
+; @kind routine
+; @symbol xmc_dir_open
+; @summary Open the named XRAM block directory.
+xmc_dir_open:
+      LDA   #XMC_CMD_NDIRO
+      JMP   xmc_run_cmd
+
+; @label XMC.DIR_READ
+; @kind routine
+; @symbol xmc_dir_read
+; @summary Read the next named XRAM block directory entry.
+xmc_dir_read:
+      LDA   #XMC_CMD_NDIRR
+      JMP   xmc_run_cmd
+
+; @label XMC.WINDOW_BIT
+; @kind routine
+; @symbol xmc_window_bit
+; @summary Convert window index 0..3 to its XMC_WINCTL bit mask.
+; @in X: Window index, 0..3.
+; @out A: Window bit mask.
+; @out C: Clear on success, set on invalid index.
+xmc_window_bit:
+      CPX   #$04
+      BCS   @bad
+      LDA   #$01
+@shl:
+      DEX
+      BMI   @ok
+      ASL
+      BNE   @shl
+@ok:
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+; @label XMC.SET_WINDOW_ADDR
+; @kind routine
+; @symbol xmc_set_window_addr_current_bank
+; @summary Set a mapped window base from XMC_XAL/M and the selected XMC bank.
+; @in X: Window index, 0..3.
+; @requires XMC_XAL XMC_XAM XMC_BANK
+xmc_set_window_addr_current_bank:
+      CPX   #$00
+      BNE   @set1
+      LDA   XMC_XAL
+      STA   XMC_W0AL
+      LDA   XMC_XAM
+      STA   XMC_W0AM
+      LDA   XMC_BANK
+      STA   XMC_W0AH
+      RTS
+@set1:
+      CPX   #$01
+      BNE   @set2
+      LDA   XMC_XAL
+      STA   XMC_W1AL
+      LDA   XMC_XAM
+      STA   XMC_W1AM
+      LDA   XMC_BANK
+      STA   XMC_W1AH
+      RTS
+@set2:
+      CPX   #$02
+      BNE   @set3
+      LDA   XMC_XAL
+      STA   XMC_W2AL
+      LDA   XMC_XAM
+      STA   XMC_W2AM
+      LDA   XMC_BANK
+      STA   XMC_W2AH
+      RTS
+@set3:
+      LDA   XMC_XAL
+      STA   XMC_W3AL
+      LDA   XMC_XAM
+      STA   XMC_W3AM
+      LDA   XMC_BANK
+      STA   XMC_W3AH
+      RTS
+
+; @label XMC.MAP_WINDOW
+; @kind routine
+; @symbol xmc_map_window
+; @summary Map window X to XMC_XAL/M in the selected XMC bank.
+; @in X: Window index, 0..3.
+; @requires XMC_XAL XMC_XAM XMC_BANK
+xmc_map_window:
+      STX   xmc_tmp
+      JSR   xmc_window_bit
+      BCS   xmc_window_bad
+      STA   xmc_tmp2
+      LDX   xmc_tmp
+      JSR   xmc_set_window_addr_current_bank
+      LDA   XMC_WINCTL
+      ORA   xmc_tmp2
+      STA   XMC_WINCTL
+      JMP   xmc_ok
+
+; @label XMC.UNMAP_WINDOW
+; @kind routine
+; @symbol xmc_unmap_window
+; @summary Disable a mapped XRAM window.
+; @in X: Window index, 0..3.
+xmc_unmap_window:
+      JSR   xmc_window_bit
+      BCS   xmc_window_bad
+      EOR   #$FF
+      AND   XMC_WINCTL
+      STA   XMC_WINCTL
+      JMP   xmc_ok
+
+xmc_window_bad:
+      LDA   #XMC_ERR_RANGE
+      JSR   xmc_err
+      LDA   #$01
+      RTS
 
 ; --- Helper: set XMC error status ---
 xmc_err:

@@ -1,4 +1,5 @@
 #include "sd_http_server.h"
+#include <ArduinoJson.h>
 #include <string.h>
 
 extern void logLn(const char* fmt, ...);
@@ -6,11 +7,19 @@ extern String g_sd_diag;
 extern bool g_sd_mounted;
 extern const char* novaBootPhaseName();
 extern bool novaFpgaBridgeAvailable();
+extern uint8_t novaHostStatusFlags();
+extern void novaWifiStateChanged();
 
 void SdHttpServer::begin() {
+    if (_started) return;
+    _started = true;
     _server.begin();
     Serial.println("[sdhttp] HTTP server up on port 80");
     Serial.println("[sdhttp]   GET    /health   -> NovaHost liveness");
+    Serial.println("[sdhttp]   GET    /wifi    -> WiFi status/config");
+    Serial.println("[sdhttp]   PUT    /wifi    -> update WiFi config JSON");
+    Serial.println("[sdhttp]   POST   /wifi/connect|disconnect|reconnect|forget");
+    Serial.println("[sdhttp]   GET    /wifi/scan -> nearby WiFi networks");
     Serial.println("[sdhttp]   GET    /sd-status -> SD/boot diagnostic JSON");
     Serial.println("[sdhttp]   GET    /sd/       -> list root");
     Serial.println("[sdhttp]   GET    /sd/path   -> fetch file");
@@ -64,13 +73,17 @@ void SdHttpServer::handle_client(WiFiClient& client) {
     }
 
     if (strcmp(method, "GET") == 0 && strcmp(url, "/health") == 0) {
-        char body[192];
+        uint8_t host_status_flags = novaHostStatusFlags();
+        char body[256];
         snprintf(body, sizeof(body),
                  "{\"ok\":true,\"bootPhase\":\"%s\",\"sdMounted\":%s,"
-                 "\"fpgaBridgeAvailable\":%s}",
+                 "\"fpgaBridgeAvailable\":%s,"
+                 "\"hostStatusFlags\":%u,\"hostStatusHex\":\"0x%02X\"}",
                  novaBootPhaseName(),
                  g_sd_mounted ? "true" : "false",
-                 novaFpgaBridgeAvailable() ? "true" : "false");
+                 novaFpgaBridgeAvailable() ? "true" : "false",
+                 (unsigned)host_status_flags,
+                 (unsigned)host_status_flags);
         send_json(client, 200, body);
         return;
     }
@@ -80,6 +93,11 @@ void SdHttpServer::handle_client(WiFiClient& client) {
     }
     if (strcmp(method, "POST") == 0 && strcmp(url, "/reboot") == 0) {
         handle_reboot(client);
+        return;
+    }
+    if (strncmp(url, "/wifi", 5) == 0 &&
+        (url[5] == 0 || url[5] == '/')) {
+        handle_wifi(client, method, url, have_content_len, content_len);
         return;
     }
 
@@ -153,6 +171,32 @@ bool SdHttpServer::read_body_to_file(WiFiClient& client, File& file,
     return true;
 }
 
+bool SdHttpServer::read_body_to_string(WiFiClient& client, String& out,
+                                       uint32_t content_len) {
+    if (content_len > JSON_BUF_BYTES)
+        return false;
+
+    out = "";
+    out.reserve(content_len + 1);
+    uint32_t remaining = content_len;
+    uint32_t deadline = millis() + 5000;
+
+    while (remaining > 0) {
+        if (!client.connected() && !client.available()) return false;
+        if (!client.available()) {
+            if (millis() > deadline) return false;
+            delay(1);
+            continue;
+        }
+
+        out += (char)client.read();
+        remaining--;
+        deadline = millis() + 5000;
+    }
+
+    return true;
+}
+
 bool SdHttpServer::write_all(WiFiClient& client, const uint8_t* data,
                              size_t len) {
     size_t off = 0;
@@ -170,6 +214,200 @@ bool SdHttpServer::write_all(WiFiClient& client, const uint8_t* data,
         yield();
     }
     return true;
+}
+
+void SdHttpServer::handle_wifi(WiFiClient& client, const char* method,
+                               const char* url, bool have_content_len,
+                               uint32_t content_len) {
+    if (strcmp(method, "GET") == 0 && strcmp(url, "/wifi") == 0) {
+        handle_wifi_status(client);
+        return;
+    }
+    if (strcmp(method, "GET") == 0 && strcmp(url, "/wifi/scan") == 0) {
+        handle_wifi_scan(client);
+        return;
+    }
+    if (strcmp(method, "PUT") == 0 && strcmp(url, "/wifi") == 0) {
+        if (!have_content_len) {
+            send_error(client, 411, "content-length required");
+            return;
+        }
+        handle_wifi_put(client, content_len);
+        return;
+    }
+    if (strcmp(method, "POST") == 0 && strncmp(url, "/wifi/", 6) == 0) {
+        handle_wifi_action(client, url + 6);
+        return;
+    }
+
+    send_error(client, 404, "not found");
+}
+
+void SdHttpServer::handle_wifi_status(WiFiClient& client) {
+    NovaWifiManager::Status st = _wifi.status();
+
+    send_headers(client, 200, "application/json");
+    client.print("{\"configured\":");
+    client.print(st.configured ? "true" : "false");
+    client.print(",\"connected\":");
+    client.print(st.connected ? "true" : "false");
+    client.print(",\"wantConnected\":");
+    client.print(st.wantConnected ? "true" : "false");
+    client.print(",\"ssid\":");
+    write_json_string(client, st.ssid.c_str());
+    client.print(",\"passwordSet\":");
+    client.print(st.passwordSet ? "true" : "false");
+    client.print(",\"useStatic\":");
+    client.print(st.useStatic ? "true" : "false");
+    client.print(",\"staticIp\":");
+    write_json_string(client, st.staticIp.c_str());
+    client.print(",\"gateway\":");
+    write_json_string(client, st.gateway.c_str());
+    client.print(",\"subnet\":");
+    write_json_string(client, st.subnet.c_str());
+    client.print(",\"dns\":");
+    write_json_string(client, st.dns.c_str());
+    client.print(",\"localIp\":");
+    write_json_string(client, st.localIp.c_str());
+    client.print(",\"localGateway\":");
+    write_json_string(client, st.localGateway.c_str());
+    client.print(",\"localSubnet\":");
+    write_json_string(client, st.localSubnet.c_str());
+    client.print(",\"localDns\":");
+    write_json_string(client, st.localDns.c_str());
+    client.print(",\"mac\":");
+    write_json_string(client, st.mac.c_str());
+    client.printf(",\"rssi\":%ld,\"wifiStatus\":", (long)st.rssi);
+    write_json_string(client, NovaWifiManager::statusName(st.wifiStatus));
+    client.print(",\"lastError\":");
+    write_json_string(client, st.lastError.c_str());
+    client.print('}');
+}
+
+void SdHttpServer::handle_wifi_scan(WiFiClient& client) {
+    int count = WiFi.scanNetworks();
+
+    send_headers(client, 200, "application/json");
+    client.print('[');
+    for (int i = 0; i < count; i++) {
+        if (i > 0) client.print(',');
+        client.print("{\"ssid\":");
+        write_json_string(client, WiFi.SSID(i).c_str());
+        client.printf(",\"rssi\":%ld,\"channel\":%d,\"encrypted\":%s}",
+                      (long)WiFi.RSSI(i),
+                      WiFi.channel(i),
+                      WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "false" : "true");
+    }
+    client.print(']');
+    WiFi.scanDelete();
+}
+
+void SdHttpServer::handle_wifi_put(WiFiClient& client, uint32_t content_len) {
+    String body;
+    if (!read_body_to_string(client, body, content_len)) {
+        send_error(client, 400, "bad body");
+        return;
+    }
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, body);
+    if (err) {
+        send_error(client, 400, "bad json");
+        return;
+    }
+
+    NovaWifiManager::Config cfg = _wifi.config();
+    JsonVariantConst v;
+
+    v = doc["ssid"];
+    if (!v.isNull()) {
+        const char* s = v.as<const char*>();
+        cfg.ssid = s ? String(s) : String();
+    }
+
+    v = doc["password"];
+    if (!v.isNull()) {
+        const char* s = v.as<const char*>();
+        cfg.password = s ? String(s) : String();
+    }
+
+    v = doc["dhcp"];
+    if (!v.isNull())
+        cfg.useStatic = !v.as<bool>();
+
+    v = doc["useStatic"];
+    if (!v.isNull())
+        cfg.useStatic = v.as<bool>();
+
+    v = doc["staticIp"];
+    if (!v.isNull()) {
+        const char* s = v.as<const char*>();
+        cfg.staticIp = s ? String(s) : String();
+    }
+
+    v = doc["gateway"];
+    if (!v.isNull()) {
+        const char* s = v.as<const char*>();
+        cfg.gateway = s ? String(s) : String();
+    }
+
+    v = doc["subnet"];
+    if (!v.isNull()) {
+        const char* s = v.as<const char*>();
+        cfg.subnet = s ? String(s) : String();
+    }
+
+    v = doc["dns"];
+    if (!v.isNull()) {
+        const char* s = v.as<const char*>();
+        cfg.dns = s ? String(s) : String();
+    }
+
+    String save_error;
+    if (!_wifi.saveConfig(cfg, &save_error)) {
+        send_error(client, 400, save_error.c_str());
+        return;
+    }
+
+    novaWifiStateChanged();
+    send_json(client, 200, "{\"ok\":true}");
+}
+
+void SdHttpServer::handle_wifi_action(WiFiClient& client, const char* action) {
+    if (strcmp(action, "connect") == 0) {
+        send_json(client, 202, "{\"ok\":true,\"accepted\":true}");
+        client.flush();
+        delay(100);
+        _wifi.connect();
+        novaWifiStateChanged();
+        return;
+    }
+    if (strcmp(action, "disconnect") == 0) {
+        send_json(client, 202, "{\"ok\":true,\"accepted\":true}");
+        client.flush();
+        delay(100);
+        _wifi.disconnect();
+        novaWifiStateChanged();
+        return;
+    }
+    if (strcmp(action, "reconnect") == 0) {
+        send_json(client, 202, "{\"ok\":true,\"accepted\":true}");
+        client.flush();
+        delay(100);
+        _wifi.reconnect();
+        novaWifiStateChanged();
+        return;
+    }
+    if (strcmp(action, "forget") == 0) {
+        send_json(client, 202, "{\"ok\":true,\"accepted\":true}");
+        client.flush();
+        delay(100);
+        _wifi.forget();
+        novaWifiStateChanged();
+        return;
+    }
+
+    send_error(client, 404, "not found");
 }
 
 void SdHttpServer::handle_get(WiFiClient& client, const char* path) {

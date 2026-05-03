@@ -1,5 +1,5 @@
 // DebugServer — JSON command protocol matching sim_main.cpp
-// Test suites connect to novahost.local:6503 and speak the same
+// Test suites connect to 192.168.1.65:6503 and speak the same
 // line-delimited JSON as the Verilator simulator.
 
 #include "debug_server.h"

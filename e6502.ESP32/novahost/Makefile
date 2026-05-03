@@ -8,13 +8,13 @@
 #   make sd-assets — build SD card asset tree under build/sd/
 #
 # Env overrides:
-#   NOVAHOST   — OTA hostname/IP (default: novahost.local; static IP is safer)
+#   NOVAHOST   — OTA target IP (default: 192.168.1.65)
 #   OTA_PORT   — ArduinoOTA port (default: 3232)
 #   ESPOTA     — path to espota.py; auto-detected from Arduino15 if unset
 #   SERIAL     — USB serial port for fallback flashing
 #   FQBN       — Arduino board FQBN; default keeps OTA and minimizes SPIFFS
 
-NOVAHOST ?= novahost.local
+NOVAHOST ?= 192.168.1.65
 OTA_PORT ?= 3232
 SERIAL   ?= /dev/cu.usbserial-D01457
 FQBN     ?= esp32:esp32:lolin32:PartitionScheme=min_spiffs

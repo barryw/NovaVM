@@ -4,7 +4,7 @@ type: command
 category: Sound
 keywords: [sidstop, sound]
 syntax: "SIDSTOP"
-see_also: [sound-and-music]
+see_also: [sidplay, sound-and-music]
 ---
 
 Stop SID file playback.

@@ -55,6 +55,42 @@ NVR7L             = $2E
 NVR7H             = $2F
 .endif
 
+; BASIC SYS register bridge. SYS addr[,A[,X[,Y]]] loads A/X/Y from these
+; bytes before jumping and stores A/X/Y back here when the routine returns.
+; @label SYS.REGA
+; @kind u8
+; @symbol SYS_REGA
+; @summary Returned A register from the most recent SYS call.
+.ifndef SYS_REGA
+SYS_REGA          = $E7
+.endif
+; @label SYS.REGX
+; @kind u8
+; @symbol SYS_REGX
+; @summary Returned X register from the most recent SYS call.
+.ifndef SYS_REGX
+SYS_REGX          = $E8
+.endif
+; @label SYS.REGY
+; @kind u8
+; @symbol SYS_REGY
+; @summary Returned Y register from the most recent SYS call.
+.ifndef SYS_REGY
+SYS_REGY          = $E9
+.endif
+
+; Extension ROM argument mailbox used by small BASIC stubs that parse
+; BASIC-owned data before calling an extension handler.
+.ifndef EXT_ARG_LEN
+EXT_ARG_LEN       = $EA
+.endif
+.ifndef EXT_ARG_PTRL
+EXT_ARG_PTRL      = $EB
+.endif
+.ifndef EXT_ARG_PTRH
+EXT_ARG_PTRH      = $EC
+.endif
+
 .ifndef NOVA_SCREEN_COLS
 NOVA_SCREEN_COLS  = 80
 .endif
@@ -460,6 +496,12 @@ NIC_STATUS        = $A101
 .ifndef NIC_SLOT
 NIC_SLOT          = $A102
 .endif
+.ifndef NIC_IRQCTRL
+NIC_IRQCTRL       = $A103
+.endif
+.ifndef NIC_IRQSTATUS
+NIC_IRQSTATUS     = $A104
+.endif
 .ifndef NIC_RPORTL
 NIC_RPORTL        = $A108
 .endif
@@ -499,6 +541,9 @@ NIC_SLOTST3       = $A11B
 .ifndef NIC_NAMEBUF
 NIC_NAMEBUF       = $A120
 .endif
+.ifndef NIC_NAMEEND
+NIC_NAMEEND       = $A13F
+.endif
 
 .ifndef NIC_CMD_CONNECT
 NIC_CMD_CONNECT   = $01
@@ -529,6 +574,27 @@ NIC_ST_SENDREADY  = $04
 .endif
 .ifndef NIC_ST_ERROR
 NIC_ST_ERROR      = $08
+.endif
+.ifndef NIC_ST_REMOTE_CLOSED
+NIC_ST_REMOTE_CLOSED = $10
+.endif
+.ifndef NIC_STATUS_READY
+NIC_STATUS_READY  = $01
+.endif
+.ifndef NIC_STATUS_ANYDATA
+NIC_STATUS_ANYDATA = $02
+.endif
+.ifndef NIC_STATUS_ANYERROR
+NIC_STATUS_ANYERROR = $80
+.endif
+.ifndef NIC_MAX_SLOTS
+NIC_MAX_SLOTS     = $04
+.endif
+.ifndef NIC_MAX_MSGSIZE
+NIC_MAX_MSGSIZE   = $0100
+.endif
+.ifndef NIC_MAX_QUEUE
+NIC_MAX_QUEUE     = $10
 .endif
 
 ; ---------------------------------------------------------------------
@@ -674,6 +740,10 @@ FIO_STATUS        = $B9A1
 .ifndef FIO_ERRCODE
 FIO_ERRCODE       = $B9A2
 .endif
+; @label FIO.NAMELEN
+; @kind u8
+; @symbol FIO_NAMELEN
+; @summary Length of the filename in FIO.NAME, 1..63 bytes.
 .ifndef FIO_NAMELEN
 FIO_NAMELEN       = $B9A3
 .endif
@@ -713,8 +783,15 @@ FIO_GLENH         = $B9AE
 .ifndef FIO_DIRTYPE
 FIO_DIRTYPE       = $B9AF
 .endif
+; @label FIO.NAME
+; @kind buffer
+; @symbol FIO_NAME
+; @summary Filename buffer used by file-backed runtime routines.
 .ifndef FIO_NAME
 FIO_NAME          = $B9B0
+.endif
+.ifndef FIO_NAMEEND
+FIO_NAMEEND       = $B9EF
 .endif
 .ifndef META_BASE
 META_BASE         = $BAB0
@@ -828,15 +905,27 @@ FIO_CMD_UNMOUNT   = $25
 .ifndef FIO_CMD_PWD
 FIO_CMD_PWD       = $26
 .endif
+.ifndef FIO_CMD_CLEARERR
+FIO_CMD_CLEARERR  = $27
+.endif
 
 .ifndef FIO_OK
 FIO_OK            = $02
+.endif
+.ifndef FIO_STATUS_IDLE
+FIO_STATUS_IDLE   = $00
+.endif
+.ifndef FIO_STATUS_OK
+FIO_STATUS_OK     = FIO_OK
 .endif
 .ifndef FIO_ERR
 FIO_ERR           = $03
 .endif
 .ifndef FIO_STATUS_ERROR
 FIO_STATUS_ERROR  = $03
+.endif
+.ifndef FIO_ERR_NONE
+FIO_ERR_NONE      = $00
 .endif
 .ifndef FIO_ERR_NOTFOUND
 FIO_ERR_NOTFOUND  = $01
@@ -846,6 +935,24 @@ FIO_ERR_IO        = $02
 .endif
 .ifndef FIO_ERR_EOD
 FIO_ERR_EOD       = $03
+.endif
+.ifndef FIO_ERR_DISKFULL
+FIO_ERR_DISKFULL  = $04
+.endif
+.ifndef FIO_ERR_NOTMOUNTED
+FIO_ERR_NOTMOUNTED = $05
+.endif
+.ifndef FIO_TYPE_SID
+FIO_TYPE_SID      = $01
+.endif
+.ifndef FIO_TYPE_BIN
+FIO_TYPE_BIN      = $02
+.endif
+.ifndef FIO_TYPE_MID
+FIO_TYPE_MID      = $03
+.endif
+.ifndef FIO_TYPE_DIR
+FIO_TYPE_DIR      = $05
 .endif
 
 ; Extension ROM command IDs used by the BASIC-to-extension trampoline.
@@ -954,6 +1061,30 @@ EXT_CMD_TPAL      = $21
 .ifndef EXT_CMD_TPALC
 EXT_CMD_TPALC     = $22
 .endif
+.ifndef EXT_CMD_ADDR
+EXT_CMD_ADDR      = $23
+.endif
+.ifndef EXT_CMD_XBANK
+EXT_CMD_XBANK     = $24
+.endif
+.ifndef EXT_CMD_XPOKE
+EXT_CMD_XPOKE     = $25
+.endif
+.ifndef EXT_CMD_XFREE
+EXT_CMD_XFREE     = $26
+.endif
+.ifndef EXT_CMD_XRESET
+EXT_CMD_XRESET    = $27
+.endif
+.ifndef EXT_CMD_XALLOC
+EXT_CMD_XALLOC    = $28
+.endif
+.ifndef EXT_CMD_XMAP
+EXT_CMD_XMAP      = $29
+.endif
+.ifndef EXT_CMD_XUNMAP
+EXT_CMD_XUNMAP    = $2A
+.endif
 
 ; Music/SFX status registers.
 .ifndef MUSIC_STATUS
@@ -1000,6 +1131,131 @@ MUSIC_NOTE13      = $BA5D
 .endif
 .ifndef MUSIC_NOTE14
 MUSIC_NOTE14      = $BA5E
+.endif
+.ifndef MUSIC_ELAPSEDL
+MUSIC_ELAPSEDL    = $BA5F
+.endif
+.ifndef MUSIC_ELAPSEDH
+MUSIC_ELAPSEDH    = $BA60
+.endif
+.ifndef MUSIC_TOTALL
+MUSIC_TOTALL      = $BA61
+.endif
+.ifndef MUSIC_TOTALH
+MUSIC_TOTALH      = $BA62
+.endif
+
+; SID register windows. CPU reads in this range still fetch ROM bytes on Nova;
+; these names are for writes and emulator/host-side register shadow APIs.
+.ifndef SID_BASE
+SID_BASE          = $D400
+.endif
+.ifndef SID_END
+SID_END           = $D41C
+.endif
+.ifndef SID2_BASE
+SID2_BASE         = $D420
+.endif
+.ifndef SID2_END
+SID2_END          = $D43C
+.endif
+.ifndef SID2_MIRROR_BASE
+SID2_MIRROR_BASE  = $D500
+.endif
+.ifndef SID2_MIRROR_END
+SID2_MIRROR_END   = $D51C
+.endif
+
+; Wavetable synthesizer registers.
+.ifndef WTS_BASE
+WTS_BASE          = $A140
+.endif
+.ifndef WTS_VOICE_BASE
+WTS_VOICE_BASE    = $A140
+.endif
+.ifndef WTS_VOICE_STRIDE
+WTS_VOICE_STRIDE  = $08
+.endif
+.ifndef WTS_VOICE_END
+WTS_VOICE_END     = $A17F
+.endif
+.ifndef WTS_VOICE_NOTE
+WTS_VOICE_NOTE    = $00
+.endif
+.ifndef WTS_VOICE_VELOCITY
+WTS_VOICE_VELOCITY = $01
+.endif
+.ifndef WTS_VOICE_INSTRUMENT
+WTS_VOICE_INSTRUMENT = $02
+.endif
+.ifndef WTS_VOICE_VOLUME
+WTS_VOICE_VOLUME  = $03
+.endif
+.ifndef WTS_VOICE_PANNING
+WTS_VOICE_PANNING = $04
+.endif
+.ifndef WTS_VOICE_PITCH_BEND_LO
+WTS_VOICE_PITCH_BEND_LO = $05
+.endif
+.ifndef WTS_VOICE_PITCH_BEND_HI
+WTS_VOICE_PITCH_BEND_HI = $06
+.endif
+.ifndef WTS_VOICE_STATUS
+WTS_VOICE_STATUS  = $07
+.endif
+.ifndef WTS_GLOBAL_BASE
+WTS_GLOBAL_BASE   = $A180
+.endif
+.ifndef WTS_REVERB_LEVEL
+WTS_REVERB_LEVEL  = $A180
+.endif
+.ifndef WTS_CHORUS_LEVEL
+WTS_CHORUS_LEVEL  = $A181
+.endif
+.ifndef WTS_MASTER_VOLUME
+WTS_MASTER_VOLUME = $A182
+.endif
+.ifndef WTS_SOUNDFONT_STATUS
+WTS_SOUNDFONT_STATUS = $A183
+.endif
+.ifndef WTS_INSTRUMENT_COUNT
+WTS_INSTRUMENT_COUNT = $A184
+.endif
+.ifndef WTS_COMMAND
+WTS_COMMAND       = $A185
+.endif
+.ifndef WTS_COMMAND_ARG
+WTS_COMMAND_ARG   = $A186
+.endif
+.ifndef WTS_ACTIVE_VOICES
+WTS_ACTIVE_VOICES = $A187
+.endif
+.ifndef WTS_ENUM_BASE
+WTS_ENUM_BASE     = $A1A0
+.endif
+.ifndef WTS_ENUM_INDEX
+WTS_ENUM_INDEX    = $A1A0
+.endif
+.ifndef WTS_ENUM_BANK
+WTS_ENUM_BANK     = $A1A1
+.endif
+.ifndef WTS_ENUM_PROGRAM
+WTS_ENUM_PROGRAM  = $A1A2
+.endif
+.ifndef WTS_ENUM_NAME
+WTS_ENUM_NAME     = $A1A3
+.endif
+.ifndef WTS_ENUM_END
+WTS_ENUM_END      = $A1DF
+.endif
+.ifndef WTS_END
+WTS_END           = $A1DF
+.endif
+.ifndef WTS_CMD_ALL_NOTES_OFF
+WTS_CMD_ALL_NOTES_OFF = $01
+.endif
+.ifndef WTS_CMD_RESET_EFFECTS
+WTS_CMD_RESET_EFFECTS = $02
 .endif
 
 ; ---------------------------------------------------------------------

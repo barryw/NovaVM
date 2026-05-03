@@ -76,7 +76,7 @@ wrapping to `$FFFF`.
 | MML loops | Non-nesting. Maximum practical depth limited by string expansion. |
 | Copper events | Maximum 256 events per list; 128 lists available. Events at duplicate position/register replace existing values. |
 | `WAVE` | Deprecated. Raises a syntax error. Use `INSTRUMENT` instead. |
-| `SIDPLAY` | Loads `.sid` files from ` /e6502-programs`. Song number is 1-based (default 1). |
+| File-backed SID/MIDI playback | `SIDPLAY`, `SIDSTOP`, `MIDPLAY`, `MIDSTOP`, and `SFLOAD` use the shared FIO status/error contract. On unsupported hosts they report the FIO unsupported/error status instead of silently succeeding. |
 
 ## XRAM Limits and Failure Modes
 
@@ -114,7 +114,7 @@ wrapping to `$FFFF`.
 
 | **Feature** | **Limit and edge behavior** |
 | --- | --- |
-| Connection slots | 4 slots (0--3). Each slot is independent and may be a client or server. |
+| Connection slots | 4 slots (0--3). Each slot is an independent outbound client connection. |
 | Message size | Maximum 256 bytes per message. Messages are length-prefixed on the wire (1 byte: 00 = 256,01--$FF = 1--255). |
 | Receive queue | Up to 16 messages per slot. If the queue overflows, new messages are dropped and the slot error flag is set. |
 | Hostname length | Maximum 31 characters (32-byte buffer, null-terminated). |
@@ -123,7 +123,6 @@ wrapping to `$FFFF`.
 | `NRECV$(slot)` | Returns a string of up to 255 characters. If no message is queued, returns an empty string. |
 | `NSTATUS(slot)` | Returns the slot status byte. Bit 4 (RemoteClosed) indicates the remote peer has disconnected; the slot should be closed with `NCLOSE`. |
 | `NREADY(slot)` | Returns -1 (true) if at least one message is in the receive queue, 0 (false) otherwise. |
-| `NLISTEN` binding | TCP server binds to 127.0.0.1 (localhost). External connections require the remote end to connect to the host machine's loopback address. |
 
 ## Status and Error Code Quick Reference
 

@@ -300,11 +300,11 @@ IrqBase           = $DF       ; IRQ handler enabled/setup/triggered flags
 help_len          = $E2       ; scratch byte for HELP command keyword length
 ;                 = $E3       ; unused
 ExtCmdId          = $E4       ; extension ROM command ID (set by trampoline)
-;                 = $E5       ; unused
-;                 = $E6       ; unused
-;                 = $E7       ; unused
-;                 = $E8       ; unused
-;                 = $E9       ; unused
+SysAddrL          = $E5       ; SYS target address low byte
+SysAddrH          = $E6       ; SYS target address high byte
+SysRegA           = $E7       ; SYS A register argument/return
+SysRegX           = $E8       ; SYS X register argument/return
+SysRegY           = $E9       ; SYS Y register argument/return
 ;                 = $EA       ; unused
 ;                 = $EB       ; unused
 ;                 = $EC       ; unused
@@ -313,9 +313,6 @@ ExtCmdId          = $E4       ; extension ROM command ID (set by trampoline)
 
 Decss             = $EF       ; number to decimal string start
 Decssp1           = Decss+1   ; number to decimal string start
-
-CwrdPtr           = NVR7L     ; LAB_CWRD pointer low byte
-;                              ; NVR7H = CwrdPtr high byte
 
 ;                 = $FF       ; decimal string end
 
@@ -565,6 +562,8 @@ XTK_FLASH          = $6D              ; FLASH — flashing text output
 XTK_FLASHOFF       = $6E              ; FLASHOFF — non-flashing text output
 XTK_VPOKE          = $6F              ; VPOKE plane,addr,value — write VGC memory
 XTK_VPEEK          = $70              ; VPEEK(plane,addr) — read VGC memory
+XTK_FIOCLR         = $71              ; FIOCLR — clear FIO error/status latch
+XTK_ADDR           = $72              ; ADDR("label") — runtime label address
 XTK_DIROPEN        = $2B              ; DIROPEN "pattern"
 XTK_DIRNEXT        = $2C              ; DIRNEXT — numeric function
 XTK_DIRNAM         = $2D              ; DIRNAM$ — string function
@@ -2009,8 +2008,8 @@ TAB_XTKCMD
       .word LAB_RESET-1       ; XTK_RESET  ($18)
       .word LAB_NOPEN-1       ; XTK_NOPEN   ($19)
       .word LAB_NCLOSE-1      ; XTK_NCLOSE  ($1A)
-      .word LAB_NLISTEN-1     ; XTK_NLISTEN ($1B)
-      .word LAB_NACCEPT-1     ; XTK_NACCEPT ($1C)
+      .word LAB_15D9-1        ; XTK_NLISTEN ($1B) — server API stays out of BASIC
+      .word LAB_15D9-1        ; XTK_NACCEPT ($1C) — server API stays out of BASIC
       .word LAB_NSEND-1       ; XTK_NSEND   ($1D)
       .word LAB_15D9-1        ; XTK_NRECV   ($1E) — function only
       .word LAB_15D9-1        ; XTK_NSTATUS ($1F) — function only
@@ -2027,7 +2026,7 @@ TAB_XTKCMD
       .word LAB_MIDPLAY-1     ; XTK_MIDPLAY  ($29)
       .word LAB_MIDSTOP-1     ; XTK_MIDSTOP  ($2A)
       ; $2B-$30: directory/metadata tokens
-      .word LAB_DIROPEN-1     ; XTK_DIROPEN    ($2B)
+      .word LAB_15D9-1        ; XTK_DIROPEN    ($2B) — DIR remains public
       .word LAB_15D9-1        ; XTK_DIRNEXT    ($2C) — function only
       .word LAB_15D9-1        ; XTK_DIRNAM     ($2D) — function only
       .word LAB_15D9-1        ; XTK_DIRSIZ     ($2E) — function only
@@ -2046,14 +2045,14 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_BLITCOUNT  ($44) — function only
       .word LAB_BITTGL-1      ; XTK_BITTGL     ($45) — toggle bits
       .word LAB_HELP-1        ; XTK_HELP       ($46)
-      .word LAB_NCC-1         ; XTK_NCC        ($47)
+      .word LAB_15D9-1        ; XTK_NCC        ($47) — editor launcher is not BASIC
       .word LAB_FONT-1        ; XTK_FONT       ($48)
       .word LAB_CD-1          ; XTK_CD         ($49)
       .word LAB_MKDIR-1       ; XTK_MKDIR      ($4A)
       .word LAB_RMDIR-1       ; XTK_RMDIR      ($4B)
-      .word LAB_FORMAT-1      ; XTK_FORMAT     ($4C)
-      .word LAB_MOUNT-1       ; XTK_MOUNT      ($4D)
-      .word LAB_UNMOUNT-1     ; XTK_UNMOUNT    ($4E)
+      .word LAB_15D9-1        ; XTK_FORMAT     ($4C) — host/admin only
+      .word LAB_15D9-1        ; XTK_MOUNT      ($4D) — host/admin only
+      .word LAB_15D9-1        ; XTK_UNMOUNT    ($4E) — host/admin only
       .word LAB_PWD-1         ; XTK_PWD        ($4F)
       .word LAB_SFLOAD-1      ; XTK_SFLOAD     ($50)
       .word LAB_GTEXT-1       ; XTK_GTEXT      ($51)
@@ -2064,30 +2063,32 @@ TAB_XTKCMD
       .word LAB_TPUT-1        ; XTK_TPUT       ($56)
       .word LAB_TATTR-1       ; XTK_TATTR      ($57)
       .word LAB_TFILL-1       ; XTK_TFILL      ($58)
-      .word LAB_TROW-1        ; XTK_TROW       ($59)
-      .word LAB_TCOL-1        ; XTK_TCOL       ($5A)
-      .word LAB_TNTLOAD-1     ; XTK_TNTLOAD    ($5B)
+      .word LAB_15D9-1        ; XTK_TROW       ($59) — tile bulk helper removed
+      .word LAB_15D9-1        ; XTK_TCOL       ($5A) — tile bulk helper removed
+      .word LAB_15D9-1        ; XTK_TNTLOAD    ($5B) — tile bulk helper removed
       .word LAB_TCLS-1        ; XTK_TCLS       ($5C)
       .word LAB_15D9-1        ; XTK_TSCROLLX   ($5D) — function only
       .word LAB_15D9-1        ; XTK_TSCROLLY   ($5E) — function only
       .word LAB_TSCROLL-1     ; XTK_TSCROLL    ($5F)
       .word LAB_TPALC-1       ; XTK_TPALC      ($60)
       .word LAB_TPAL-1        ; XTK_TPAL       ($61)
-      .word LAB_TSAVE-1       ; XTK_TSAVE      ($62)
-      .word LAB_TLOAD-1       ; XTK_TLOAD      ($63)
+      .word LAB_15D9-1        ; XTK_TSAVE      ($62) — unsupported on ESP
+      .word LAB_15D9-1        ; XTK_TLOAD      ($63) — unsupported on ESP
       .word LAB_15D9-1        ; XTK_TPEEK      ($64) — function only
       .word LAB_15D9-1        ; XTK_TPEEKATTR  ($65) — function only
       .word LAB_15D9-1        ; XTK_TILECOL    ($66) — function only
-      .word LAB_TBUF-1        ; XTK_TBUF       ($67)
-      .word LAB_TBSET-1       ; XTK_TBSET      ($68)
-      .word LAB_TBFILL-1      ; XTK_TBFILL     ($69)
-      .word LAB_TBPUT-1       ; XTK_TBPUT      ($6A)
+      .word LAB_15D9-1        ; XTK_TBUF       ($67) — tile bulk helper removed
+      .word LAB_15D9-1        ; XTK_TBSET      ($68) — tile bulk helper removed
+      .word LAB_15D9-1        ; XTK_TBFILL     ($69) — tile bulk helper removed
+      .word LAB_15D9-1        ; XTK_TBPUT      ($6A) — tile bulk helper removed
       .word LAB_REVERSE-1     ; XTK_REVERSE    ($6B)
       .word LAB_REVERSEOFF-1  ; XTK_REVERSEOFF ($6C)
       .word LAB_FLASH-1       ; XTK_FLASH      ($6D)
       .word LAB_FLASHOFF-1    ; XTK_FLASHOFF   ($6E)
       .word LAB_VPOKE-1       ; XTK_VPOKE      ($6F)
       .word LAB_15D9-1        ; XTK_VPEEK      ($70) — function only
+      .word LAB_FIOCLR-1      ; XTK_FIOCLR     ($71)
+      .word LAB_15D9-1        ; XTK_ADDR       ($72) — function only
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -3789,23 +3790,21 @@ LAB_1BEE
 
 @func_ids
       .byte XTK_PLAYING, XTK_MNOTE, XTK_XPEEK
-      .byte XTK_NRECV, XTK_NSTATUS, XTK_NREADY, XTK_NLEN
+      .byte XTK_NRECV, XTK_NSTATUS, XTK_NREADY
       .byte XTK_DMASTATUS, XTK_DMAERR, XTK_DMACOUNT
       .byte XTK_BLITSTATUS, XTK_BLITERR, XTK_BLITCOUNT
-      .byte XTK_DIRNEXT, XTK_DIRSIZ, XTK_DIRTYP, XTK_DIRNAM, XTK_META
       .byte XTK_TPEEK, XTK_TPEEKATTR
       .byte XTK_TILECOL, XTK_TSCROLLX, XTK_TSCROLLY
-      .byte XTK_VPEEK
+      .byte XTK_VPEEK, XTK_ADDR
 @FUNC_TBL_SZ = * - @func_ids
 @func_addrs
       .word @xtk_playing-1, @xtk_mnote-1, @xtk_xpeek-1
-      .word @xtk_nrecv-1, @xtk_nstatus-1, @xtk_nready-1, @xtk_nlen-1
+      .word @xtk_nrecv-1, @xtk_nstatus-1, @xtk_nready-1
       .word @xtk_dmastatus-1, @xtk_dmaerr-1, @xtk_dmacount-1
       .word @xtk_blitstatus-1, @xtk_bliterr-1, @xtk_blitcount-1
-      .word @xtk_dirnext-1, @xtk_dirsiz-1, @xtk_dirtyp-1, @xtk_dirnam-1, @xtk_meta-1
       .word @xtk_tpeek-1, @xtk_tpeekattr-1
       .word @xtk_tilecol-1, @xtk_tscrollx-1, @xtk_tscrolly-1
-      .word @xtk_vpeek-1
+      .word @xtk_vpeek-1, @xtk_addr-1
 
 @xtk_xpeek
       ; '(' was consumed during tokenization as part of keyword
@@ -3831,13 +3830,8 @@ LAB_1BEE
 
 @xtk_playing
       JSR   LAB_IGBY          ; consume PLAYING token, advance past it
-      LDA   MUSIC_STATUS      ; read status register
-      AND   #$02              ; isolate music playing bit
-      BEQ   @play_off
-      LDY   #$01              ; music is playing
-      .byte $2C               ; BIT abs — skip next 2 bytes
-@play_off
-      LDY   #$00              ; music not playing
+      JSR   audio_music_playing
+      TAY
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 @xtk_mnote
@@ -3847,15 +3841,10 @@ LAB_1BEE
       JSR   LAB_EVNM          ; evaluate voice expression (numeric)
       JSR   LAB_1BFB          ; scan for ')' and advance
       JSR   LAB_F2FX          ; convert FAC1 to integer
-      LDY   Itempl            ; voice number (1-14)
-      DEY                     ; make 0-based
-      CPY   #$0E
-      BCS   @mnote_bad        ; out of range
-      LDA   MUSIC_NOTE1,Y     ; read note register
+      LDX   Itempl            ; voice number (1-14)
+      JSR   audio_music_note
       TAY
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
-@mnote_bad
-      JMP   @ret_zero         ; return 0
 
 ; NRECV$(slot) — receive message as BASIC string
 @xtk_nrecv
@@ -3871,9 +3860,8 @@ LAB_1BEE
       STA   NIC_DMAL
       LDA   str_ph
       STA   NIC_DMAH
-      LDA   #NIC_CMD_RECV
-      STA   NIC_CMD
-      LDA   NIC_MSGLEN
+      JSR   nic_recv
+      JSR   nic_length
       STA   str_ln            ; actual received length (0=empty)
       JMP   LAB_RTST          ; push descriptor, return
 
@@ -3883,10 +3871,7 @@ LAB_1BEE
       JSR   LAB_EVNM          ; evaluate numeric expression (slot)
       JSR   LAB_1BFB          ; scan for ')'
       JSR   LAB_EVBY          ; convert to byte → X
-      TXA
-      AND   #$03              ; clamp 0-3
-      TAX
-      LDA   NIC_SLOTST0,X    ; read slot status
+      JSR   nic_status
       TAY
       JMP   @ret_0ay          ; return AY as FAC1
 
@@ -3897,23 +3882,13 @@ LAB_1BEE
       JSR   LAB_EVNM          ; evaluate numeric expression (slot)
       JSR   LAB_1BFB          ; scan for ')'
       JSR   LAB_EVBY          ; convert to byte → X
-      TXA
-      AND   #$03
-      TAX
-      LDA   NIC_SLOTST0,X
-      AND   #NIC_ST_DATAREADY
+      JSR   nic_ready
       BEQ   @nready_no
       LDY   #$FF              ; true = $FFFF (-1)
       LDA   #$FF
       JMP   LAB_AYFC
 @nready_no
       JMP   @ret_zero         ; return 0
-
-; NLEN — return last received message length (no args)
-@xtk_nlen
-      JSR   LAB_IGBY          ; consume token
-      LDY   NIC_MSGLEN
-      JMP   @ret_0ay
 
 ; DMASTATUS — return DMA status register (no args)
 @xtk_dmastatus
@@ -3952,72 +3927,6 @@ LAB_1BEE
       LDY   BLT_CNTL
       LDA   BLT_CNTM
       JMP   LAB_AYFC
-
-; DIRNEXT — issue DIRREAD, return -1 (true) if entry ready, 0 (false)
-@xtk_dirnext
-      JSR   LAB_IGBY          ; consume token
-      LDA   #FIO_CMD_DIRREAD
-      JSR   fio_exec
-      BNE   @ret_false
-      LDY   #$FF              ; true = $FFFF (-1)
-      .byte $2C               ; BIT abs — skip next 2 bytes
-@ret_false
-      LDY   #$00
-      BRA   @ret_0ay
-
-; DIRSIZ — return current directory entry size as 16-bit unsigned
-@xtk_dirsiz
-      JSR   LAB_IGBY          ; consume token
-      LDY   FIO_SIZEL
-      LDA   FIO_SIZEH
-      JMP   LAB_AYFC
-
-; DIRTYP — return current directory entry type byte
-@xtk_dirtyp
-      JSR   LAB_IGBY          ; consume token
-      LDY   FIO_DIRTYPE
-      BRA   @ret_0ay
-
-; DIRNAM$ — return current directory entry filename as string
-@xtk_dirnam
-      JSR   LAB_IGBY          ; consume token
-      LDA   FIO_NAMELEN
-      BEQ   @ret_empty
-      JSR   LAB_MSSP          ; allocate A bytes of string space
-      LDY   #$00
-@dnam_cp
-      CPY   FIO_NAMELEN
-      BCS   @str_done
-      LDA   FIO_NAME,Y
-      STA   (str_pl),Y
-      INY
-      BNE   @dnam_cp
-@str_done
-      STY   str_ln
-      JMP   LAB_RTST
-@ret_empty
-      LDA   #$00
-      JSR   LAB_MSSP
-      STA   str_ln
-      JMP   LAB_RTST
-
-; META$(n) — return metadata string at offset n
-@xtk_meta
-      JSR   LAB_IGBY          ; consume extension token id
-      JSR   LAB_EVNM          ; evaluate numeric expression (the offset)
-      JSR   LAB_1BFB          ; scan for ')' and advance
-      JSR   LAB_EVBY          ; convert FAC1 to byte in X
-      LDA   #32               ; max 32 chars
-      JSR   LAB_MSSP          ; allocate string space
-      LDY   #$00
-@meta_cp
-      LDA   META_BASE,X
-      BEQ   @str_done
-      STA   (str_pl),Y
-      INX
-      INY
-      CPY   #32
-      BCC   @meta_cp
 
 ; shared return helpers for no-arg functions
 @ret_zero
@@ -4070,6 +3979,23 @@ LAB_1BEE
       JSR   vgc_mem_read
       LDY   VGC_P3
       BRA   @ret_0ay
+
+; ADDR("label") — resolve generated runtime labels in extension ROM.
+@xtk_addr
+      JSR   LAB_IGBY          ; consume token, advance to string argument
+      JSR   LAB_EVEX          ; evaluate string expression
+      JSR   LAB_EVST          ; pop string: A=len, X/Y=ptr
+      STA   EXT_ARG_LEN
+      STX   EXT_ARG_PTRL
+      STY   EXT_ARG_PTRH
+      JSR   LAB_1BFB          ; scan for ')' and advance
+      LDA   #EXT_CMD_ADDR
+      JSR   EXT_vec
+      CPX   #$00
+      BEQ   @addr_ok
+      JMP   LAB_FCER
+@addr_ok
+      JMP   LAB_AYFC          ; extension returns A=high, Y=low
 
 ; TILECOL — returns 16-bit collision bitmask
 @xtk_tilecol
@@ -6238,16 +6164,48 @@ LAB_SYS
       JSR   LAB_EVNM          ; evaluate expression and check is numeric,
                               ; else do type mismatch
       JSR   LAB_F2FX          ; convert floating-to-fixed
+      LDA   Itempl
+      STA   SysAddrL
+      LDA   Itemph
+      STA   SysAddrH
+      STZ   SysRegA
+      STZ   SysRegX
+      STZ   SysRegY
+      JSR   LAB_GBYT          ; optional register args: SYS addr[,A[,X[,Y]]]
+      CMP   #','
+      BNE   @call
+      JSR   LAB_1C01          ; consume comma
+      JSR   LAB_GTBY          ; A register argument
+      STX   SysRegA
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @call
+      JSR   LAB_1C01
+      JSR   LAB_GTBY          ; X register argument
+      STX   SysRegX
+      JSR   LAB_GBYT
+      CMP   #','
+      BNE   @call
+      JSR   LAB_1C01
+      JSR   LAB_GTBY          ; Y register argument
+      STX   SysRegY
+@call
       LDA   #>SysExit         ; set return address high byte
       PHA                     ; put on stack
       LDA   #<SysExit-1       ; set return address low byte
       PHA                     ; put on stack
-      JMP   (Itempl)          ; do indirect jump to user routine
+      LDY   SysRegY
+      LDX   SysRegX
+      LDA   SysRegA
+      JMP   (SysAddrL)        ; do indirect jump to user routine
 
 ; if the called routine exits correctly then it will return to here. this will then get
 ; the next byte for the interpreter and return
 
 SysExit
+      STA   SysRegA
+      STX   SysRegX
+      STY   SysRegY
       JMP   LAB_GBYT          ; scan memory and return
 
 ; cursor helpers — placed after all #<label-1 forward refs to avoid
@@ -8694,18 +8652,10 @@ LAB_TWOPI
       LDY   #>LAB_2C7C        ; set (2*pi) pointer high byte
       JMP   LAB_UFAC          ; unpack memory (AY) into FAC1 and return
 
-;; ========================================
-;; NCC — activate the NCC editor
-;; Prints confirmation, waits for Y/N, writes ROMSWAP_NCCEDIT to REG_ROMSWAP
-;; ========================================
-LAB_NCC
-      LDA   #EXT_CMD_NCC
-      JMP   EXT_vec            ; extension ROM handles confirmation dialog
-
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 112
+XTK_COUNT = 114
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8713,13 +8663,13 @@ TAB_XTKSTR
       .word @s_xalloc, @s_xdir, @s_xdel, @s_xmap, @s_xunmap
       .word @s_gsave, @s_gload, @s_sidplay, @s_sidstop
       .word @s_music, @s_playing, @s_mnote, @s_copper, @s_reset
-      .word @s_nopen, @s_nclose, @s_nlisten, @s_naccept, @s_nsend
-      .word @s_nrecv, @s_nstatus, @s_reserved20, @s_nready, @s_nlen
+      .word @s_nopen, @s_nclose, @s_reserved_ext, @s_reserved_ext, @s_nsend
+      .word @s_nrecv, @s_nstatus, @s_reserved20, @s_nready, @s_reserved_ext
       .word @s_dmacopy, @s_dmafill, @s_dmastatus, @s_reserved26, @s_dmaerr, @s_dmacount
       ; $29-$2A: MIDI commands
       .word @s_midplay, @s_midstop
       ; $2B-$30: directory/metadata tokens
-      .word @s_diropen, @s_dirnext, @s_dirnam, @s_dirsiz, @s_dirtyp, @s_meta
+      .word @s_reserved_ext, @s_reserved_ext, @s_reserved_ext, @s_reserved_ext, @s_reserved_ext, @s_reserved_ext
       ; $31-$3F: XRAM file streaming, then reserved
       .word @s_xload, @s_xsave
       .repeat $0D
@@ -8728,25 +8678,25 @@ TAB_XTKSTR
       .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
       .word @s_bittgl
       .word @s_help
-      .word @s_ncc
+      .word @s_reserved_ext
       .word @s_font
       .word @s_cd
       .word @s_mkdir
       .word @s_rmdir
-      .word @s_format
-      .word @s_mount
-      .word @s_unmount
+      .word @s_reserved_ext
+      .word @s_reserved_ext
+      .word @s_reserved_ext
       .word @s_pwd
       .word @s_sfload
       .word @s_gtext
       .word @s_tilesize, @s_mirror, @s_ttrans, @s_tdef, @s_tput
-      .word @s_tattr, @s_tfill, @s_trow, @s_tcol, @s_tntload
+      .word @s_tattr, @s_tfill, @s_reserved_ext, @s_reserved_ext, @s_reserved_ext
       .word @s_tcls, @s_tscrollx, @s_tscrolly, @s_tscroll
       .word @s_tpalc, @s_tpal
-      .word @s_tsave, @s_tload, @s_tpeek, @s_tpeekattr, @s_tilecol
-      .word @s_tbuf, @s_tbset, @s_tbfill, @s_tbput
+      .word @s_reserved_ext, @s_reserved_ext, @s_tpeek, @s_tpeekattr, @s_tilecol
+      .word @s_reserved_ext, @s_reserved_ext, @s_reserved_ext, @s_reserved_ext
       .word @s_reverse, @s_reverseoff, @s_flash, @s_flashoff
-      .word @s_vpoke, @s_vpeek
+      .word @s_vpoke, @s_vpeek, @s_fioclr, @s_addr
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8774,14 +8724,11 @@ TAB_XTKSTR
 @s_reset:  .byte "RESET",0
 @s_nopen:   .byte "NOPEN",0
 @s_nclose:  .byte "NCLOSE",0
-@s_nlisten: .byte "NLISTEN",0
-@s_naccept: .byte "NACCEPT",0
 @s_nsend:   .byte "NSEND",0
 @s_nrecv:   .byte "NRECV$(",0
 @s_nstatus: .byte "NSTATUS(",0
 @s_reserved20 = @s_reserved_ext   ; placeholder — token $20 (space) is unusable
 @s_nready:  .byte "NREADY(",0
-@s_nlen:    .byte "NLEN",0
 @s_dmacopy: .byte "DMACOPY",0
 @s_dmafill: .byte "DMAFILL",0
 @s_dmastatus: .byte "DMASTATUS",0
@@ -8800,14 +8747,10 @@ TAB_XTKSTR
 @s_blitcount: .byte "BLITCOUNT",0
 @s_bittgl: .byte "BITTGL",0
 @s_help:   .byte "HELP",0
-@s_ncc:    .byte "NCC",0
 @s_font:   .byte "FONT",0
 @s_cd:     .byte "CD",0
 @s_mkdir:  .byte "MKDIR",0
 @s_rmdir:  .byte "RMDIR",0
-@s_format: .byte "FORMAT",0
-@s_mount:  .byte "MOUNT",0
-@s_unmount: .byte "UNMOUNT",0
 @s_pwd:    .byte "PWD",0
 @s_sfload: .byte "SFLOAD",0
 @s_gtext:  .byte "GTEXT",0
@@ -8818,36 +8761,23 @@ TAB_XTKSTR
 @s_tput:    .byte "TPUT",0
 @s_tattr:   .byte "TATTR",0
 @s_tfill:   .byte "TFILL",0
-@s_trow:    .byte "TROW",0
-@s_tcol:    .byte "TCOL",0
-@s_tntload: .byte "TNTLOAD",0
 @s_tcls:    .byte "TCLS",0
 @s_tscroll: .byte "TSCROLL",0
 @s_tpal:    .byte "TPAL",0
 @s_tpalc:   .byte "TPALC",0
-@s_tsave:   .byte "TSAVE",0
-@s_tload:   .byte "TLOAD",0
 @s_tpeek:   .byte "TPEEK(",0
 @s_tpeekattr: .byte "TPATTR(",0
 @s_tilecol: .byte "TILECOL",0
 @s_tscrollx: .byte "TSCROLLX",0
 @s_tscrolly: .byte "TSCROLLY",0
-@s_tbuf:    .byte "TBUF",0
-@s_tbset:   .byte "TBSET",0
-@s_tbfill:  .byte "TBFILL",0
-@s_tbput:   .byte "TBPUT",0
 @s_reverse: .byte "REVERSE",0
 @s_reverseoff: .byte "REVERSEOFF",0
 @s_flash:   .byte "FLASH",0
 @s_flashoff: .byte "FLASHOFF",0
 @s_vpoke:   .byte "VPOKE",0
 @s_vpeek:   .byte "VPEEK(",0
-@s_diropen: .byte "DIROPEN",0
-@s_dirnext: .byte "DIRNEXT",0
-@s_dirnam:  .byte "DIRNAM$",0
-@s_dirsiz:  .byte "DIRSIZ",0
-@s_dirtyp:  .byte "DIRTYP",0
-@s_meta:    .byte "META$(",0
+@s_fioclr:  .byte "FIOCLR",0
+@s_addr:    .byte "ADDR(",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -8934,27 +8864,25 @@ LAB_VSYNC       = vgc_vsync
 ; perform CLS — clear screen, no arguments
 
 LAB_CLS
-      LDA   #$0C              ; form feed character
-      STA   VGC_CHAROUT       ; write to CHAROUT register
-      RTS
+      JMP   vgc_cls
 
 ; perform COLOR fg [,bg [,border]]
 
 LAB_COLOR
       JSR   LAB_GTBY          ; get fg color byte in X
-      STX   VGC_FGCOL         ; store foreground color
+      JSR   vgc_set_fg        ; store foreground color
       JSR   LAB_GBYT          ; peek at current byte
       CMP   #','              ; comma follows?
       BNE   @done             ; no, just fg was given
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; get bg color byte in X
-      STX   VGC_BGCOL         ; store background color
+      JSR   vgc_set_bg        ; store background color
       JSR   LAB_GBYT          ; peek for optional border color
       CMP   #','              ; second comma follows?
       BNE   @done             ; no, fg/bg only
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; get border color byte in X
-      STX   VGC_BORDER        ; store border color
+      JSR   vgc_set_border    ; store border color
 @done
       RTS
 
@@ -9020,25 +8948,23 @@ LAB_VPOKE
 
 LAB_LOCATE
       JSR   LAB_GTBY          ; get x in X
-      STX   VGC_CURSX         ; store cursor X
+      STX   VGC_P0            ; store cursor X
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GTBY          ; get y in X
-      STX   VGC_CURSY         ; store cursor Y
-      RTS
+      STX   VGC_P1            ; store cursor Y
+      JMP   vgc_locate
 
 ; perform MODE n
 
 LAB_GMODE
       JSR   LAB_GTBY          ; get mode byte in X
-      STX   VGC_MODE          ; store graphics mode
-      RTS
+      JMP   vgc_set_mode
 
 ; perform FONT n — select active font slot (0-7)
 
 LAB_FONT
       JSR   LAB_GTBY          ; get font index byte (0-7) in X
-      STX   VGC_FONT          ; select active font
-      RTS
+      JMP   vgc_set_font
 
 ; perform GCLS — clear the graphics bitmap layer
 
@@ -9178,29 +9104,8 @@ LAB_TATTR
 LAB_TFILL
       LDA   #EXT_CMD_TFILL
       JMP   EXT_vec
-LAB_TROW
-      LDA   #EXT_CMD_TROW
-      JMP   EXT_vec
-LAB_TCOL
-      LDA   #EXT_CMD_TCOL
-      JMP   EXT_vec
-LAB_TNTLOAD
-      LDA   #EXT_CMD_TNTLOAD
-      JMP   EXT_vec
 LAB_TCLS
       LDA   #EXT_CMD_TCLS
-      JMP   EXT_vec
-LAB_TBUF
-      LDA   #EXT_CMD_TBUF
-      JMP   EXT_vec
-LAB_TBSET
-      LDA   #EXT_CMD_TBSET
-      JMP   EXT_vec
-LAB_TBPUT
-      LDA   #EXT_CMD_TBPUT
-      JMP   EXT_vec
-LAB_TBFILL
-      LDA   #EXT_CMD_TBFILL
       JMP   EXT_vec
 LAB_TSCROLL
       LDA   #EXT_CMD_TSCROLL
@@ -9211,19 +9116,6 @@ LAB_TPAL
 LAB_TPALC
       LDA   #EXT_CMD_TPALC
       JMP   EXT_vec
-LAB_TSAVE
-      LDA   #FioCmdTSave
-      .byte $2C
-LAB_TLOAD
-      LDA   #FioCmdTLoad
-      PHA
-      JSR   LAB_FIO_GETNAME
-      PLA
-      JSR   fio_exec
-      BEQ   @tfio_ok
-      JMP   LAB_FIO_ERRHND
-@tfio_ok
-      RTS
 
 ; perform RECT x0, y0, x1, y1
 
@@ -9405,41 +9297,37 @@ LAB_SPRDATA
 ; SOUND 60, 10          — MIDI note 60, 10 frames, default instrument 0
 ; SOUND 60, 10, 3       — MIDI note 60, 10 frames, instrument 3
 
-LAB_FIO_CMD_RTS = fio_issue
-
 LAB_SOUND
       JSR   LAB_GTBY          ; midi note → X
-      STX   FIO_SRCL          ; note
+      STX   AUDIO_NOTE
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; duration → X
-      STX   FIO_SRCH          ; duration
-      STZ   FIO_ENDL          ; default instrument = 0
+      STX   AUDIO_DURATION
+      STZ   AUDIO_INSTRUMENT  ; default instrument = 0
       JSR   LAB_GBYT          ; peek next token
       CMP   #','
       BNE   @snd_go
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; instrument id → X
-      STX   FIO_ENDL
+      STX   AUDIO_INSTRUMENT
 @snd_go
-      LDA   #FIO_CMD_SOUND
-      BRA   LAB_FIO_CMD_RTS
+      JMP   audio_sound
 
 ; perform VOLUME level (0-15)               — set master volume
 ; perform VOLUME level, voice (0-255, 1-6)  — set per-voice volume
 
 LAB_VOLUME
       JSR   LAB_GTBY          ; level → X
-      STX   FIO_SRCL
-      STZ   FIO_SRCH          ; default voice = 0 (master)
+      STX   AUDIO_VOLUME
+      STZ   AUDIO_VOICE       ; default voice = 0 (master)
       JSR   LAB_GBYT          ; peek next token
       CMP   #','
       BNE   @vol_go
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; voice → X
-      STX   FIO_SRCH
+      STX   AUDIO_VOICE
 @vol_go
-      LDA   #FIO_CMD_VOLUME
-      BRA   LAB_FIO_CMD_RTS
+      JMP   audio_volume
 
 ; perform INSTRUMENT id, waveform, a, d, s, r
 ; Waveform: $10=TRI, $20=SAW, $40=PULSE, $80=NOISE
@@ -9447,27 +9335,32 @@ LAB_VOLUME
 
 LAB_ENVELOPE
       JSR   LAB_GTBY          ; id → X
-      STX   FIO_SRCL
+      STX   AUDIO_INST_ID
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; waveform → X
-      STX   FIO_SRCH
+      STX   AUDIO_WAVEFORM
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; attack → X
-      STX   FIO_ENDL
+      STX   AUDIO_ATTACK
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; decay → X
-      STX   FIO_ENDH
+      STX   AUDIO_DECAY
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; sustain → X
-      STX   FIO_SIZEL
+      STX   AUDIO_SUSTAIN
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; release → X
-      STX   FIO_SIZEH
-      LDA   #FIO_CMD_INSTRUMENT
-      BRA   LAB_FIO_CMD_RTS
+      STX   AUDIO_RELEASE
+      JMP   audio_instrument
 
 FIO_NO_STREAMING = 1
-      .include "lib/fio.s"
+; Primary ROM is tight. NIC server entry points are library concerns, so omit
+; those helper shims from the BASIC ROM build.
+NIC_SERVER_COMMANDS = 0
+      .include "lib/audio.s"
+      .include "lib/nic.s"
+
+LAB_FIO_CMD_RTS = fio_issue
 
 ; WAVE is deprecated — use INSTRUMENT instead
 
@@ -9496,13 +9389,15 @@ LAB_SPRITEY
 ; argument already consumed by preprocessor
 
 LAB_COLLISION
-      LDY   VGC_COLLST        ; read collision register
+      JSR   sprite_collision_status
+      TAY
       JMP   LAB_RET_0AY
 
 ; perform BUMPED(n) — return sprite-background collision register
 
 LAB_BUMPED
-      LDY   VGC_COLLBG
+      JSR   sprite_background_collision_status
+      TAY
       JMP   LAB_RET_0AY
 
 ; --- File I/O command handlers ---
@@ -9542,8 +9437,7 @@ LAB_FSAVE
       ADC   FAC1_2
       STA   FIO_ENDH
 @sv_go
-      LDA   #FIO_CMD_SAVE
-      JSR   fio_exec
+      JSR   fio_save
       BEQ   @sv_ok
       JMP   LAB_FIO_ERRIO
 @sv_ok
@@ -9561,8 +9455,7 @@ LAB_FLOAD
       STA   FIO_SRCL
       LDA   Smemh
       STA   FIO_SRCH
-      LDA   #FIO_CMD_LOAD
-      JSR   fio_exec
+      JSR   fio_load
       BNE   @ld_chk_err
       ; check file type — host sets FIO_DIRTYPE after load
       LDA   FIO_DIRTYPE
@@ -9622,8 +9515,7 @@ LAB_GSAVE
       STA   FIO_GLENL
       LDA   FAC1_2
       STA   FIO_GLENH
-      LDA   #FIO_CMD_GSAVE
-      JSR   fio_exec
+      JSR   fio_gsave
       BEQ   @gs_ok
       JMP   LAB_FIO_ERRIO
 @gs_ok
@@ -9654,8 +9546,11 @@ LAB_GLOAD
       LDA   FAC1_2
       STA   FIO_GLENH
 @gl_go
-      LDA   #FIO_CMD_GLOAD
-      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+      JSR   fio_gload
+      BEQ   @gl_ok
+      JMP   LAB_FIO_ERRHND
+@gl_ok
+      RTS
 
 ; parse 16-bit XRAM offset into FIO flat-address registers
 ; BASIC supplies the high byte through current XBANK.
@@ -9713,6 +9608,14 @@ LAB_XFIO_EXEC
 @xerr
       JMP   LAB_FIO_ERRHND
 
+; common: call extension command in A and raise Function Call Error on A!=0
+LAB_EXT_FCER
+      JSR   EXT_vec
+      BNE   @ext_bad
+      RTS
+@ext_bad
+      JMP   LAB_FCER
+
 ; perform SIDPLAY "filename" [, song]
 
 LAB_SIDPLAY
@@ -9723,34 +9626,35 @@ LAB_SIDPLAY
       CMP   #','
       BNE   @sp_go
       JSR   LAB_1C01          ; consume comma
-      JSR   LAB_GTBY          ; evaluate song number → X
+      JSR   LAB_GTBY          ; evaluate song number -> X
       STX   FIO_SRCL
 @sp_go
-      LDA   #FIO_CMD_SIDPLAY
-      JSR   LAB_FIO_EXEC      ; issue command and check status
-      CLI                     ; enable interrupts so timer IRQ can fire
+      JSR   audio_sidplay
+      BNE   @sp_err
       RTS
+@sp_err
+      JMP   LAB_FIO_ERRHND
 
 ; perform SIDSTOP
 
 LAB_SIDSTOP
-      LDA   #FIO_CMD_SIDSTOP
-      JMP   LAB_FIO_CMD_RTS
+      JMP   audio_sidstop
 
 ; perform MIDPLAY "filename"
-; MIDPLAY "song"  — auto-select 6 busiest MIDI channels
 
 LAB_MIDPLAY
       JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
-      STZ   FIO_SRCL            ; no explicit mapping (auto-select)
-      LDA   #FIO_CMD_MIDPLAY
-      BRA   LAB_FIO_EXEC       ; issue command, check status, return
+      STZ   FIO_SRCL          ; no explicit mapping; auto-select channels
+      JSR   audio_midplay
+      BNE   @mp_err
+      RTS
+@mp_err
+      JMP   LAB_FIO_ERRHND
 
 ; perform MIDSTOP
 
 LAB_MIDSTOP
-      LDA   #FIO_CMD_MIDSTOP
-      JMP   LAB_FIO_CMD_RTS
+      JMP   audio_midstop
 
 ; common: issue FIO command in A, check status, error on fail
 
@@ -9794,16 +9698,12 @@ LAB_MUSIC
       ; else PLAY — consume remaining "LAY" (3 chars, P already consumed)
       LDX   #3
       JSR   LAB_SKIPX          ; LAY
-      LDA   #FIO_CMD_MPLAY
-      JSR   fio_issue
-      CLI                     ; enable interrupts for music
-      RTS
+      JMP   audio_music_play
 
 ; --- MUSIC STOP (TK_STOP is a single token byte) ---
 @m_stop_tok
       JSR   LAB_IGBY          ; consume TK_STOP token
-      LDA   #FIO_CMD_MSTOP
-      JMP   LAB_FIO_CMD_RTS
+      JMP   audio_music_stop
 
 ; --- MUSIC TEMPO bpm ---
 @m_tempo
@@ -9814,8 +9714,7 @@ LAB_MUSIC
       STA   FIO_SRCL
       LDA   FAC1_2
       STA   FIO_SRCH
-      LDA   #FIO_CMD_MTEMPO
-      JMP   LAB_FIO_CMD_RTS
+      JMP   audio_music_tempo
 
 ; --- MUSIC LOOP ON|OFF (TK_LOOP is a single token byte) ---
 @m_loop_tok
@@ -9835,8 +9734,7 @@ LAB_MUSIC
       JSR   LAB_IGBY          ; consume OFF token
       STZ   FIO_SRCL
 @m_loop_go
-      LDA   #FIO_CMD_MLOOP
-      JMP   LAB_FIO_CMD_RTS
+      JMP   audio_music_loop
 
 ; --- MUSIC PRIORITY v1[,v2[,v3[,v4[,v5[,v6]]]]] ---
 @m_priority
@@ -9871,27 +9769,25 @@ LAB_MUSIC
       JSR   LAB_IGBY          ; skip comma
       BRA   @m_pri_nxt
 @m_pri_go
-      LDA   #FIO_CMD_MPRI
-      JMP   LAB_FIO_CMD_RTS
+      JMP   audio_music_priority
 
 ; --- MUSIC voice, "mml" ---
 ; Pass string via pointer (ut1_pl/ph) so MML strings can exceed 63 bytes.
 ; FIO_SRCL = voice, FIO_ENDL/ENDH = string pointer, FIO_NAMELEN = length.
 @m_seq
       JSR   LAB_GTBY          ; voice number (1-14) → X
-      STX   FIO_SRCL          ; store voice
+      STX   AUDIO_VOICE       ; store voice
       JSR   LAB_1C01          ; comma
       JSR   LAB_EVEX          ; evaluate expression
       JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
       TAX
       BEQ   @m_seq_err        ; empty string = error
-      STX   FIO_NAMELEN       ; string length (1-255)
+      STX   AUDIO_STRLEN      ; string length (1-255)
       LDA   ut1_pl
-      STA   FIO_ENDL          ; string pointer low
+      STA   AUDIO_STRL        ; string pointer low
       LDA   ut1_ph
-      STA   FIO_ENDH          ; string pointer high
-      LDA   #FIO_CMD_MSEQ
-      JSR   fio_exec
+      STA   AUDIO_STRH        ; string pointer high
+      JSR   audio_music_sequence
       BNE   @m_seq_err
       RTS
 @m_seq_err
@@ -9923,28 +9819,20 @@ LAB_NOPEN
       JSR   LAB_1C01          ; comma
       JSR   LAB_EVEX          ; evaluate string expression
       JSR   LAB_EVST          ; pop: A=len, ut1_pl/ph=ptr
-      TAX                     ; len → X
-      BEQ   @nopen_err        ; empty hostname = error
-      CPX   #32
-      BCS   @nopen_err        ; too long
-      LDY   #$00
-@nopen_cp
-      LDA   (ut1_pl),Y
-      STA   NIC_NAMEBUF,Y
-      INY
-      DEX
-      BNE   @nopen_cp
-      LDA   #$00
-      STA   NIC_NAMEBUF,Y     ; null-terminate
+      STA   NIC_ARG_NAMELEN
+      LDA   ut1_pl
+      STA   NIC_ARG_NAMEPTR_L
+      LDA   ut1_ph
+      STA   NIC_ARG_NAMEPTR_H
+      JSR   nic_copy_name
+      BNE   @nopen_err
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; port → FAC1_3/FAC1_2
       LDA   FAC1_3
       STA   NIC_RPORTL
       LDA   FAC1_2
       STA   NIC_RPORTH
-      LDA   #NIC_CMD_CONNECT
-      STA   NIC_CMD
-      RTS
+      JMP   nic_connect
 @nopen_err
       JMP   LAB_FCER          ; function call error
 
@@ -9952,31 +9840,7 @@ LAB_NOPEN
 LAB_NCLOSE
       JSR   LAB_GTBY          ; slot → X
       STX   NIC_SLOT
-      LDA   #NIC_CMD_DISCONNECT
-      STA   NIC_CMD
-      RTS
-
-; NLISTEN slot,port — listen for incoming connections
-LAB_NLISTEN
-      JSR   LAB_GTBY          ; slot → X
-      STX   NIC_SLOT
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTWRD         ; port → FAC1_3/FAC1_2
-      LDA   FAC1_3
-      STA   NIC_LPORTL
-      LDA   FAC1_2
-      STA   NIC_LPORTH
-      LDA   #NIC_CMD_LISTEN
-      STA   NIC_CMD
-      RTS
-
-; NACCEPT slot — accept pending connection
-LAB_NACCEPT
-      JSR   LAB_GTBY          ; slot → X
-      STX   NIC_SLOT
-      LDA   #NIC_CMD_ACCEPT
-      STA   NIC_CMD
-      RTS
+      JMP   nic_disconnect
 
 ; NSEND slot,A$ — send string via NIC
 LAB_NSEND
@@ -9993,300 +9857,77 @@ LAB_NSEND
       LDA   ut1_ph
       STA   NIC_DMAH
       STX   NIC_DMALEN        ; length
-      LDA   #NIC_CMD_SEND
-      STA   NIC_CMD
-      RTS
+      JMP   nic_send
 @nsend_err
       JMP   LAB_FCER
-
-; LAB_CWRD: parse comma + 16-bit word, store L/H to address in X:A
-; Entry: X = target address low, A = target address high
-; Stores parsed low byte at (ptr), high byte at (ptr)+1
-LAB_CWRD
-      STX   CwrdPtr
-      STA   CwrdPtr+1
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDY   #$00
-      LDA   FAC1_3
-      STA   (CwrdPtr),Y
-      INY
-      LDA   FAC1_2
-      STA   (CwrdPtr),Y
-      RTS
 
 ; DMACOPY srcSpace,srcAddr,dstSpace,dstAddr,len
 ; Address arguments are 16-bit offsets. For XRAM space (5), current XBANK
 ; is used as the high address byte.
 LAB_DMACOPY
-      ; src space
-      JSR   LAB_GTBY
-      STX   DMA_SRCSPACE
-      STX   Itempl
-      ; src addr
-      LDX   #<DMA_SRCL
-      LDA   #>DMA_SRCL
-      JSR   LAB_CWRD
-      STZ   DMA_SRCH
-      LDY   Itempl
-      CPY   #DMA_SPACE_XRAM
-      BNE   @dmac_srcok
-      LDA   XMC_BANK
-      STA   DMA_SRCH
-@dmac_srcok
-      ; dst space
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   DMA_DSTSPACE
-      STX   Itempl
-      ; dst addr
-      LDX   #<DMA_DSTL
-      LDA   #>DMA_DSTL
-      JSR   LAB_CWRD
-      STZ   DMA_DSTH
-      LDY   Itempl
-      CPY   #DMA_SPACE_XRAM
-      BNE   @dmac_dstok
-      LDA   XMC_BANK
-      STA   DMA_DSTH
-@dmac_dstok
-      ; len
-      LDX   #<DMA_LENL
-      LDA   #>DMA_LENL
-      JSR   LAB_CWRD
-      STZ   DMA_LENH
       LDA   #EXT_CMD_DMACOPY
-      JSR   EXT_vec
-      BEQ   @dmac_ok
-      JMP   LAB_FCER
-@dmac_ok
-      RTS
+      JMP   LAB_EXT_FCER
 
 ; DMAFILL dstSpace,dstAddr,len,value
 ; Address argument is a 16-bit offset. For XRAM space (5), current XBANK
 ; is used as the high address byte.
 LAB_DMAFILL
-      ; dst space
-      JSR   LAB_GTBY
-      STX   DMA_DSTSPACE
-      STX   Itempl
-      ; dst addr
-      LDX   #<DMA_DSTL
-      LDA   #>DMA_DSTL
-      JSR   LAB_CWRD
-      STZ   DMA_DSTH
-      LDY   Itempl
-      CPY   #DMA_SPACE_XRAM
-      BNE   @dmaf_dstok
-      LDA   XMC_BANK
-      STA   DMA_DSTH
-@dmaf_dstok
-      ; len
-      LDX   #<DMA_LENL
-      LDA   #>DMA_LENL
-      JSR   LAB_CWRD
-      STZ   DMA_LENH
-      ; fill value
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   DMA_FILL
       LDA   #EXT_CMD_DMAFILL
-      JSR   EXT_vec
-      BEQ   @dmaf_ok
-      JMP   LAB_FCER
-@dmaf_ok
-      RTS
+      JMP   LAB_EXT_FCER
 
 ; BLITCOPY srcSpace,srcAddr,srcStride,dstSpace,dstAddr,dstStride,width,height
 ; Address arguments are 16-bit offsets. For XRAM space (5), current XBANK
 ; is used as the high address byte.
 LAB_BLITCOPY
-      ; src space
-      JSR   LAB_GTBY
-      STX   BLT_SRCSPACE
-      STX   Itempl
-      ; src addr
-      LDX   #<BLT_SRCL
-      LDA   #>BLT_SRCL
-      JSR   LAB_CWRD
-      STZ   BLT_SRCH
-      LDY   Itempl
-      CPY   #BLT_SPACE_XRAM
-      BNE   @bltc_srcok
-      LDA   XMC_BANK
-      STA   BLT_SRCH
-@bltc_srcok
-      ; src stride
-      LDX   #<BLT_SRCSTRL
-      LDA   #>BLT_SRCSTRL
-      JSR   LAB_CWRD
-      ; dst space
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   BLT_DSTSPACE
-      STX   Itempl
-      ; dst addr
-      LDX   #<BLT_DSTL
-      LDA   #>BLT_DSTL
-      JSR   LAB_CWRD
-      STZ   BLT_DSTH
-      LDY   Itempl
-      CPY   #BLT_SPACE_XRAM
-      BNE   @bltc_dstok
-      LDA   XMC_BANK
-      STA   BLT_DSTH
-@bltc_dstok
-      ; dst stride
-      LDX   #<BLT_DSTSTRL
-      LDA   #>BLT_DSTSTRL
-      JSR   LAB_CWRD
-      ; width
-      LDX   #<BLT_WIDTHL
-      LDA   #>BLT_WIDTHL
-      JSR   LAB_CWRD
-      ; height
-      LDX   #<BLT_HEIGHTL
-      LDA   #>BLT_HEIGHTL
-      JSR   LAB_CWRD
-      STZ   BLT_FILL
       LDA   #EXT_CMD_BLITCOPY
-      JSR   EXT_vec
-      BEQ   @bltc_ok
-      JMP   LAB_FCER
-@bltc_ok
-      RTS
+      JMP   LAB_EXT_FCER
 
 ; BLITFILL dstSpace,dstAddr,dstStride,width,height,value
 ; Address argument is a 16-bit offset. For XRAM space (5), current XBANK
 ; is used as the high address byte.
 LAB_BLITFILL
-      ; dst space
-      JSR   LAB_GTBY
-      STX   BLT_DSTSPACE
-      STX   Itempl
-      ; dst addr
-      LDX   #<BLT_DSTL
-      LDA   #>BLT_DSTL
-      JSR   LAB_CWRD
-      STZ   BLT_DSTH
-      LDY   Itempl
-      CPY   #BLT_SPACE_XRAM
-      BNE   @bltf_dstok
-      LDA   XMC_BANK
-      STA   BLT_DSTH
-@bltf_dstok
-      ; dst stride
-      LDX   #<BLT_DSTSTRL
-      LDA   #>BLT_DSTSTRL
-      JSR   LAB_CWRD
-      ; width
-      LDX   #<BLT_WIDTHL
-      LDA   #>BLT_WIDTHL
-      JSR   LAB_CWRD
-      ; height
-      LDX   #<BLT_HEIGHTL
-      LDA   #>BLT_HEIGHTL
-      JSR   LAB_CWRD
-      ; fill value
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   BLT_FILL
       LDA   #EXT_CMD_BLTFILL
-      JSR   EXT_vec
-      BEQ   @bltf_ok
-      JMP   LAB_FCER
-@bltf_ok
-      RTS
+      JMP   LAB_EXT_FCER
 
 ; perform DEL "filename"
 
 LAB_FDEL
       JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
-      ; trigger DELETE
-      LDA   #FIO_CMD_DELETE
-      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+      JSR   fio_delete
+      BEQ   @fd_ok
+      JMP   LAB_FIO_ERRHND
+@fd_ok
+      RTS
 
 ; perform CD "path"
 
 LAB_CD
       JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
-      LDA   #FIO_CMD_CD
-      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+      JSR   fio_cd
+      BEQ   @cd_ok
+      JMP   LAB_FIO_ERRHND
+@cd_ok
+      RTS
 
 ; perform MKDIR "path"
 
 LAB_MKDIR
       JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
-      LDA   #FIO_CMD_MKDIR
-      JMP   LAB_FIO_EXEC      ; issue command, check status, return
+      JSR   fio_mkdir
+      BEQ   @md_ok
+      JMP   LAB_FIO_ERRHND
+@md_ok
+      RTS
 
 ; perform RMDIR "path"
 
 LAB_RMDIR
       JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
-      LDA   #FIO_CMD_RMDIR
-      JMP   LAB_FIO_EXEC      ; issue command, check status, return
-
-; perform UNMOUNT "dev:"
-
-LAB_UNMOUNT
-      JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
-      LDA   #FIO_CMD_UNMOUNT
-      JMP   LAB_FIO_EXEC      ; issue command, check status, return
-
-; perform FORMAT "dev:",size
-
-LAB_FORMAT
-      JSR   LAB_FIO_GETNAME   ; device prefix string into FIO_NAME
-      JSR   LAB_1C01          ; expect comma
-      JSR   LAB_GTWRD         ; get 16-bit word -> FAC1_2:FAC1_3
-      LDA   FAC1_3
-      STA   FIO_SRCL          ; size KB low
-      LDA   FAC1_2
-      STA   FIO_SRCH          ; size KB high
-      LDA   #FIO_CMD_FORMAT
-      JMP   LAB_FIO_EXEC      ; issue command, check status, return
-
-; perform MOUNT "dev:","image"
-
-LAB_MOUNT
-      JSR   LAB_FIO_GETNAME   ; device prefix → FIO_NAME, FIO_NAMELEN
-      JSR   LAB_1C01          ; expect comma
-      ; FIO_SRCL = offset where second string starts (after first + null)
-      LDA   FIO_NAMELEN
-      INA                     ; +1 for null separator
-      STA   FIO_SRCL          ; offset of second string
-      ; Write null separator between first and second strings
-      LDY   FIO_NAMELEN
-      LDA   #$00
-      STA   FIO_NAME,Y
-      ; evaluate second string arg (image name)
-      JSR   LAB_EVEX
-      JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
-      TAX                     ; save length in X
-      BEQ   @mnt_bad
-      ; total must fit in 63 bytes
-      CLC
-      TXA
-      ADC   FIO_SRCL
-      CMP   #64
-      BCS   @mnt_bad
-      STA   FIO_NAMELEN       ; total length (both strings + null)
-      ; copy second string: read with Y (indirect), write with absolute,X
-      STX   FIO_SRCH          ; save second string length
-      LDY   #$00              ; source index
-      LDX   FIO_SRCL          ; dest index into FIO_NAME
-@mnt_cp
-      LDA   (ut1_pl),Y
-      STA   FIO_NAME,X
-      INX
-      INY
-      CPY   FIO_SRCH
-      BNE   @mnt_cp
-      LDA   #FIO_CMD_MOUNT
-      JMP   LAB_FIO_EXEC      ; issue command, check status, return
-@mnt_bad
-      BRA   LAB_FIO_ERRIO
+      JSR   fio_rmdir
+      BEQ   @rd_ok
+      JMP   LAB_FIO_ERRHND
+@rd_ok
+      RTS
 
 ; perform PWD — print working directory
 
@@ -10303,7 +9944,14 @@ LAB_SFLOAD
       BNE   @sf_err            ; nonzero A = error
       RTS
 @sf_err
-      BRA   LAB_FIO_ERRHND    ; display error from FIO_ERRCODE
+      JMP   LAB_FIO_ERRHND
+
+; perform FIOCLR — clear FIO error/status latch
+
+LAB_FIOCLR
+      JSR   fio_clear_error
+      BNE   LAB_FIO_ERRHND
+      RTS
 
 ; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
 ; on invalid/empty/too-long name, jumps directly to LAB_FIO_ERRIO
@@ -10362,13 +10010,6 @@ LAB_FIO_ERRMSG
 
 ERR_FIO     .byte $0D,$0A,"I/O Error",$00
 ERR_FNF     .byte $0D,$0A,"File not found",$00
-
-; perform DIROPEN "pattern" — open directory with filter
-
-LAB_DIROPEN
-      JSR   LAB_FIO_GETNAME   ; parse string, copy to FIO_NAME
-      LDA   #FIO_CMD_DIROPEN
-      JMP   LAB_FIO_CMD_RTS
 
 ; perform DIR — list saved programs
 
@@ -10429,67 +10070,6 @@ LAB_XMC_GETNAME
       SEC
       RTS
 
-; compute mapped window bitmask from X=0..3
-; out: A = bit, carry clear on success, set on invalid
-
-LAB_XMC_GETWINBIT
-      CPX   #$04
-      BCS   @xw_bad
-      LDA   #$01
-@xw_shl
-      DEX
-      BMI   @xw_ok
-      ASL
-      BNE   @xw_shl
-@xw_ok
-      CLC
-      RTS
-@xw_bad
-      SEC
-      RTS
-
-; set mapped window base from FAC1_3/FAC1_2 + current XMC_BANK
-; in: X window index 0..3
-
-LAB_XMC_SETWINADDR
-      CPX   #$00
-      BNE   @xw_set1
-      LDA   FAC1_3
-      STA   XMC_W0AL
-      LDA   FAC1_2
-      STA   XMC_W0AM
-      LDA   XMC_BANK
-      STA   XMC_W0AH
-      RTS
-@xw_set1
-      CPX   #$01
-      BNE   @xw_set2
-      LDA   FAC1_3
-      STA   XMC_W1AL
-      LDA   FAC1_2
-      STA   XMC_W1AM
-      LDA   XMC_BANK
-      STA   XMC_W1AH
-      RTS
-@xw_set2
-      CPX   #$02
-      BNE   @xw_set3
-      LDA   FAC1_3
-      STA   XMC_W2AL
-      LDA   FAC1_2
-      STA   XMC_W2AM
-      LDA   XMC_BANK
-      STA   XMC_W2AH
-      RTS
-@xw_set3
-      LDA   FAC1_3
-      STA   XMC_W3AL
-      LDA   FAC1_2
-      STA   XMC_W3AM
-      LDA   XMC_BANK
-      STA   XMC_W3AH
-      RTS
-
 ; perform XMEM
 
 LAB_XMEM
@@ -10499,24 +10079,14 @@ LAB_XMEM
 ; perform XBANK n
 
 LAB_XBANK
-      JSR   LAB_GTBY
-      CPX   XMC_BANKS
-      BCS   @xb_bad
-      STX   XMC_BANK
-      RTS
-@xb_bad
-      JMP   LAB_FCER
+      LDA   #EXT_CMD_XBANK
+      JMP   LAB_EXT_FCER
 
 ; perform XPOKE offset, value   (offset is within current XBANK)
 
 LAB_XPOKE
-      JSR   LAB_XMC_SETOFF
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   XMC_DATA
-      LDA   #XMC_CMD_PUT
-      STA   XMC_CMD
-      JMP   LAB_XMC_CHKOK
+      LDA   #EXT_CMD_XPOKE
+      JMP   LAB_EXT_FCER
 
 ; Parse word from BASIC and store in XMC_RAML/RAMH
 
@@ -10597,27 +10167,20 @@ LAB_XFETCH
 ; perform XFREE xOffset, len   (uses current XBANK)
 
 LAB_XFREE
-      JSR   LAB_XMC_SETOFF
-      JSR   LAB_1C01
-      JSR   LAB_XMC_GETLEN
-      LDA   #XMC_CMD_REL
-      STA   XMC_CMD
-      JMP   LAB_XMC_CHKOK
+      LDA   #EXT_CMD_XFREE
+      JMP   LAB_EXT_FCER
 
 ; perform XRESET   (clear XRAM usage counters)
 
 LAB_XRESET
-      LDA   #XMC_CMD_RSTUS
-      STA   XMC_CMD
-      JMP   LAB_XMC_CHKOK
+      LDA   #EXT_CMD_XRESET
+      JMP   LAB_EXT_FCER
 
 ; perform XALLOC len
 
 LAB_XALLOC
-      JSR   LAB_XMC_GETLEN
-      LDA   #XMC_CMD_ALLOC
-      STA   XMC_CMD
-      JMP   LAB_XMC_CHKOK
+      LDA   #EXT_CMD_XALLOC
+      JMP   LAB_EXT_FCER
 
 ; perform XDIR
 
@@ -10639,34 +10202,14 @@ LAB_XDEL
 ; perform XMAP window, offset
 
 LAB_XMAP
-      JSR   LAB_GTBY          ; window 0..3
-      STX   NVR6L             ; preserve window index across expression parse
-      JSR   LAB_XMC_GETWINBIT
-      BCC   @xmap_wok
-      JMP   LAB_FCER
-@xmap_wok
-      STA   NVR6H             ; preserve bit mask across expression parse
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD         ; offset within current bank
-      LDX   NVR6L
-      JSR   LAB_XMC_SETWINADDR
-      LDA   XMC_WINCTL
-      ORA   NVR6H
-      STA   XMC_WINCTL
-      RTS
+      LDA   #EXT_CMD_XMAP
+      JMP   LAB_EXT_FCER
 
 ; perform XUNMAP window
 
 LAB_XUNMAP
-      JSR   LAB_GTBY
-      JSR   LAB_XMC_GETWINBIT
-      BCC   @xunmap_wok
-      JMP   LAB_FCER
-@xunmap_wok
-      EOR   #$FF
-      AND   XMC_WINCTL
-      STA   XMC_WINCTL
-      RTS
+      LDA   #EXT_CMD_XUNMAP
+      JMP   LAB_EXT_FCER
 
 ; ---- autoboot ----
 
@@ -10694,8 +10237,7 @@ LAB_AUTOBOOT
       STA   FIO_SRCH
 
       ; Issue LOAD command
-      LDA   #FIO_CMD_LOAD
-      JSR   fio_exec
+      JSR   fio_load
       BNE   @ab_done              ; no autoboot file found
 
       ; Check file type

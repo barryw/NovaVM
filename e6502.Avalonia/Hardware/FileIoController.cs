@@ -187,6 +187,9 @@ public sealed partial class FileIoController
             case VgcConstants.FioCmdPwd:
                 DoPwd();
                 break;
+            case VgcConstants.FioCmdClearErr:
+                SetOk();
+                break;
             case VgcConstants.FioCmdSfLoad:
                 DoSfLoad();
                 break;

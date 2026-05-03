@@ -6,7 +6,7 @@
 
 .setcpu "65c02"
 
-.include "lib/vtext.inc"
+.include "vtext.inc"
 
 RESULT_BASE     = $2240
 REGION_TABLE    = $2400
@@ -278,4 +278,4 @@ story_text:
         .byte "LINE99",$0A
         .byte "LINE100",0
 
-.include "lib/vtext.s"
+.include "vtext.s"

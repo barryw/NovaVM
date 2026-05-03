@@ -81,6 +81,112 @@ public class EhBasicTokenizationTests
     }
 
     [TestMethod]
+    public void AvaloniaRomSysCanPassAndCaptureRegisters()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        ushort p = 0x5000;
+        byte[] routine =
+        [
+            0x8D, 0x00, 0x60, // STA $6000
+            0x8E, 0x01, 0x60, // STX $6001
+            0x8C, 0x02, 0x60, // STY $6002
+            0xA9, 0xAA,       // LDA #$AA
+            0xA2, 0xBB,       // LDX #$BB
+            0xA0, 0xCC,       // LDY #$CC
+            0x60,             // RTS
+        ];
+        for (int i = 0; i < routine.Length; i++)
+            bus.Write((ushort)(p + i), routine[i]);
+
+        EnterLine(editor, "SYS 20480,17,34,51");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        Assert.AreEqual(17, bus.Read(0x6000), "SYS did not load A from the BASIC argument.");
+        Assert.AreEqual(34, bus.Read(0x6001), "SYS did not load X from the BASIC argument.");
+        Assert.AreEqual(51, bus.Read(0x6002), "SYS did not load Y from the BASIC argument.");
+        Assert.AreEqual(0xAA, bus.Read(0x00E7), "SYS did not capture returned A.");
+        Assert.AreEqual(0xBB, bus.Read(0x00E8), "SYS did not capture returned X.");
+        Assert.AreEqual(0xCC, bus.Read(0x00E9), "SYS did not capture returned Y.");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomAddrResolvesRuntimeLabels()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "DOKE 24576,ADDR(\"sys.rega\")");
+        RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Function Call Error", StringComparison.Ordinal),
+            $"ADDR rejected a known runtime label.\n{screen}");
+        Assert.AreEqual(0xE7, bus.Read(0x6000), "ADDR(\"SYS.REGA\") low byte mismatch.");
+        Assert.AreEqual(0x00, bus.Read(0x6001), "ADDR(\"SYS.REGA\") high byte mismatch.");
+
+        EnterLine(editor, "DOKE 24578,ADDR(\"vgc.cls\")");
+        RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
+        ushort vgcCls = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
+        Assert.IsTrue(vgcCls >= 0xC000 && vgcCls < 0xFFD7,
+            $"ADDR(\"VGC.CLS\") should resolve inside primary ROM, got ${vgcCls:X4}.");
+
+        EnterLine(editor, "DOKE 24580,ADDR(\"fio.clear_error\")");
+        RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
+        ushort fioClear = (ushort)(bus.Read(0x6004) | (bus.Read(0x6005) << 8));
+        Assert.IsTrue(fioClear >= 0xC000 && fioClear < 0xFFD7,
+            $"ADDR(\"FIO.CLEAR_ERROR\") should resolve inside primary ROM, got ${fioClear:X4}.");
+
+        EnterLine(editor, "10 A=ADDR(\"sys.regx\")");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        string line10Hex = DumpLineHex(bus, 10);
+        Assert.IsTrue(line10Hex.Contains("01 72", StringComparison.Ordinal),
+            $"ADDR should tokenize as extended token $01 $72.\n{line10Hex}");
+
+        EnterLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
+        screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("10 A=ADDR(\"sys.regx\")", StringComparison.Ordinal),
+            $"ADDR did not LIST back correctly.\n{screen}");
+    }
+
+    [TestMethod]
+    public void RuntimeAbiDocsIncludeSharedLibraryLabels()
+    {
+        string path = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "ehbasic", "runtime_labels.json"));
+        string json = File.ReadAllText(path);
+
+        foreach (string label in new[]
+        {
+            "\"DMA.COPY\"",
+            "\"BLITTER.COPY\"",
+            "\"XMC.MAP_WINDOW\"",
+            "\"XRAM.READ8\"",
+            "\"TILE.SET_SIZE\"",
+            "\"COPPER.ADD\"",
+            "\"NIC.CONNECT\"",
+            "\"VGC.CLS\"",
+            "\"FIO.GLOAD\"",
+        })
+        {
+            Assert.IsTrue(json.Contains(label, StringComparison.Ordinal),
+                $"Generated runtime ABI docs are missing {label}.");
+        }
+    }
+
+    [TestMethod]
     public void AvaloniaRomListsLongMusicLinesWithoutCorruption()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
@@ -264,14 +370,17 @@ public class EhBasicTokenizationTests
 
         EnterLine(editor, "10 REM A MODE COLOR MUSIC COPPER XFREE PLAYING MNOTE( XPEEK(");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "20 REM NOPEN NCLOSE NLISTEN NACCEPT NSEND NRECV$( NSTATUS( NREADY( NLEN");
+        EnterLine(editor, "20 REM SIDPLAY SIDSTOP MIDPLAY MIDSTOP SFLOAD");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "30 REM NOPEN NCLOSE NSEND NRECV$( NSTATUS( NREADY(");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
         EnterLine(editor, "LIST");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
 
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsTrue(screen.Contains("10 REM A MODE COLOR MUSIC COPPER XFREE PLAYING MNOTE( XPEEK(", StringComparison.Ordinal), $"Expected REM line 10 missing or truncated.\n{screen}");
-        Assert.IsTrue(screen.Contains("20 REM NOPEN NCLOSE NLISTEN NACCEPT NSEND NRECV$( NSTATUS( NREADY( NLEN", StringComparison.Ordinal), $"Expected REM line 20 missing or truncated.\n{screen}");
+        Assert.IsTrue(screen.Contains("20 REM SIDPLAY SIDSTOP MIDPLAY MIDSTOP SFLOAD", StringComparison.Ordinal), $"Expected REM line 20 missing or truncated.\n{screen}");
+        Assert.IsTrue(screen.Contains("30 REM NOPEN NCLOSE NSEND NRECV$( NSTATUS( NREADY(", StringComparison.Ordinal), $"Expected REM line 30 missing or truncated.\n{screen}");
         Assert.IsFalse(screen.Contains("BUMPED(", StringComparison.Ordinal), $"LIST misdecoded token as BUMPED.\n{screen}");
     }
 
@@ -1303,7 +1412,7 @@ public class EhBasicTokenizationTests
     }
 
     [TestMethod]
-    public void AvaloniaRomEchoServerRunsWithoutSyntaxError()
+    public void AvaloniaRomNicClientProgramListsWithoutCorruption()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
         var cpu = new Cpu(bus);
@@ -1313,12 +1422,18 @@ public class EhBasicTokenizationTests
 
         RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
-        // Enter the full echo_server.bas program
-        string path = Path.GetFullPath(
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "programs", "echo_server.bas"));
-        string[] lines = File.ReadAllLines(path)
-            .Where(l => !string.IsNullOrWhiteSpace(l))
-            .ToArray();
+        string[] lines =
+        [
+            "10 REM === NIC CLIENT TOKEN SMOKE ===",
+            "20 NOPEN 0,\"127.0.0.1\",8080",
+            "30 NSEND 0,\"PING\"",
+            "40 IF NOT NREADY(0) THEN 80",
+            "50 A$=NRECV$(0)",
+            "60 L=LEN(A$)",
+            "70 PRINT L",
+            "80 S=NSTATUS(0)",
+            "90 NCLOSE 0",
+        ];
         foreach (string line in lines)
         {
             EnterLine(editor, line.TrimEnd());
@@ -1326,37 +1441,33 @@ public class EhBasicTokenizationTests
         }
 
         // Dump hex of critical lines
-        string hex70 = DumpLineHex(bus, 70);
-        string hex100 = DumpLineHex(bus, 100);
-        string hex150 = DumpLineHex(bus, 150);
-        string hex160 = DumpLineHex(bus, 160);
+        string hex20 = DumpLineHex(bus, 20);
+        string hex40 = DumpLineHex(bus, 40);
+        string hex50 = DumpLineHex(bus, 50);
+        string hex80 = DumpLineHex(bus, 80);
 
         // LIST to verify
         EnterLine(editor, "LIST");
         RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
         string listScreen = SnapshotScreen(bus.Vgc);
 
-        Console.WriteLine($"Line 70: {hex70}");
-        Console.WriteLine($"Line 100: {hex100}");
-        Console.WriteLine($"Line 150: {hex150}");
-        Console.WriteLine($"Line 160: {hex160}");
+        Console.WriteLine($"Line 20: {hex20}");
+        Console.WriteLine($"Line 40: {hex40}");
+        Console.WriteLine($"Line 50: {hex50}");
+        Console.WriteLine($"Line 80: {hex80}");
         Console.WriteLine("LIST output:");
         Console.WriteLine(listScreen);
 
-        // RUN with cycle-driven device ticking to match runtime scheduling.
-        EnterLine(editor, "RUN");
-        for (int i = 0; i < 20_000_000; i++)
-        {
-            int cycles = cpu.ClocksForNext();
-            cpu.ExecuteNext();
-            bus.AdvanceCycles(cycles);
-        }
-
-        string screen = SnapshotScreen(bus.Vgc);
-        Console.WriteLine("Screen after RUN:");
-        Console.WriteLine(screen);
-        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
-            $"Syntax error running echo_server.\nLine 70: {hex70}\nLine 100: {hex100}\nLine 150: {hex150}\nLine 160: {hex160}\nLIST:\n{listScreen}\nRUN:\n{screen}");
+        Assert.IsFalse(listScreen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"LIST produced syntax error.\nLine 20: {hex20}\nLine 40: {hex40}\nLine 50: {hex50}\nLine 80: {hex80}\nLIST:\n{listScreen}");
+        Assert.IsTrue(listScreen.Contains("20 NOPEN 0,\"127.0.0.1\",8080", StringComparison.Ordinal),
+            $"NOPEN line corrupted.\n{listScreen}");
+        Assert.IsTrue(listScreen.Contains("30 NSEND 0,\"PING\"", StringComparison.Ordinal),
+            $"NSEND line corrupted.\n{listScreen}");
+        Assert.IsTrue(listScreen.Contains("50 A$=NRECV$(0)", StringComparison.Ordinal),
+            $"NRECV$ line corrupted.\n{listScreen}");
+        Assert.IsTrue(listScreen.Contains("80 S=NSTATUS(0)", StringComparison.Ordinal),
+            $"NSTATUS line corrupted.\n{listScreen}");
     }
 
     [TestMethod]
@@ -1374,19 +1485,13 @@ public class EhBasicTokenizationTests
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
         EnterLine(editor, "20 NCLOSE 0");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "30 NLISTEN 1,8080");
+        EnterLine(editor, "30 NSEND 0,\"HELLO\"");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "40 NACCEPT 1");
+        EnterLine(editor, "40 A$=NRECV$(0)");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "50 NSEND 0,\"HELLO\"");
+        EnterLine(editor, "50 S=NSTATUS(0)");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "60 A$=NRECV$(0)");
-        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "70 S=NSTATUS(0)");
-        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "80 R=NREADY(0)");
-        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "90 L=NLEN");
+        EnterLine(editor, "60 R=NREADY(0)");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
 
         EnterLine(editor, "LIST");
@@ -1399,20 +1504,60 @@ public class EhBasicTokenizationTests
             $"NOPEN line corrupted.\n{screen}");
         Assert.IsTrue(screen.Contains("20 NCLOSE 0", StringComparison.Ordinal),
             $"NCLOSE line corrupted.\n{screen}");
-        Assert.IsTrue(screen.Contains("30 NLISTEN 1,8080", StringComparison.Ordinal),
-            $"NLISTEN line corrupted.\n{screen}");
-        Assert.IsTrue(screen.Contains("40 NACCEPT 1", StringComparison.Ordinal),
-            $"NACCEPT line corrupted.\n{screen}");
-        Assert.IsTrue(screen.Contains("50 NSEND 0,\"HELLO\"", StringComparison.Ordinal),
+        Assert.IsTrue(screen.Contains("30 NSEND 0,\"HELLO\"", StringComparison.Ordinal),
             $"NSEND line corrupted.\n{screen}");
-        Assert.IsTrue(screen.Contains("60 A$=NRECV$(0)", StringComparison.Ordinal),
+        Assert.IsTrue(screen.Contains("40 A$=NRECV$(0)", StringComparison.Ordinal),
             $"NRECV$ line corrupted.\n{screen}");
-        Assert.IsTrue(screen.Contains("70 S=NSTATUS(0)", StringComparison.Ordinal),
+        Assert.IsTrue(screen.Contains("50 S=NSTATUS(0)", StringComparison.Ordinal),
             $"NSTATUS line corrupted.\n{screen}");
-        Assert.IsTrue(screen.Contains("80 R=NREADY(0)", StringComparison.Ordinal),
+        Assert.IsTrue(screen.Contains("60 R=NREADY(0)", StringComparison.Ordinal),
             $"NREADY line corrupted.\n{screen}");
-        Assert.IsTrue(screen.Contains("90 L=NLEN", StringComparison.Ordinal),
-            $"NLEN line corrupted.\n{screen}");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomListsAudioFileKeywordsWithoutCorruption()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "10 SIDPLAY \"commando\",2");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "20 SIDSTOP");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "30 MIDPLAY \"theme\"");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "40 MIDSTOP");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "50 SFLOAD \"piano.sf2\"");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        EnterLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        string line10Hex = DumpLineHex(bus, 10);
+        string line30Hex = DumpLineHex(bus, 30);
+        string line50Hex = DumpLineHex(bus, 50);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"LIST produced syntax error.\n{screen}");
+        Assert.IsTrue(screen.Contains("10 SIDPLAY \"commando\",2", StringComparison.Ordinal),
+            $"SIDPLAY line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("20 SIDSTOP", StringComparison.Ordinal),
+            $"SIDSTOP line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("30 MIDPLAY \"theme\"", StringComparison.Ordinal),
+            $"MIDPLAY line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("40 MIDSTOP", StringComparison.Ordinal),
+            $"MIDSTOP line corrupted.\n{screen}");
+        Assert.IsTrue(screen.Contains("50 SFLOAD \"piano.sf2\"", StringComparison.Ordinal),
+            $"SFLOAD line corrupted.\n{screen}");
+        Assert.IsTrue(line10Hex.Contains("01 12", StringComparison.Ordinal), $"SIDPLAY token missing.\n{line10Hex}");
+        Assert.IsTrue(line30Hex.Contains("01 29", StringComparison.Ordinal), $"MIDPLAY token missing.\n{line30Hex}");
+        Assert.IsTrue(line50Hex.Contains("01 50", StringComparison.Ordinal), $"SFLOAD token missing.\n{line50Hex}");
     }
 
     [TestMethod]
@@ -1668,7 +1813,7 @@ public class EhBasicTokenizationTests
 
     private static string BuildRandomStressLine(Random rng, int i)
     {
-        string[] kw = ["MODE", "COLOR", "GCLS", "GCOLOR", "LINE", "MUSIC", "PLAYING", "MNOTE(", "COPPER", "XFREE", "XPEEK(", "SIDPLAY", "SIDSTOP", "IF", "THEN", "GOTO", "FOR", "NEXT", "REM", "DATA", "NOPEN", "NCLOSE", "NLISTEN", "NACCEPT", "NSEND", "NRECV$(", "NSTATUS(", "NREADY(", "NLEN", "DMACOPY", "DMAFILL", "DMASTATUS", "DMAERR", "DMACOUNT", "BLITCOPY", "BLITFILL", "BLITSTATUS", "BLITERR", "BLITCOUNT"];
+        string[] kw = ["MODE", "COLOR", "GCLS", "GCOLOR", "LINE", "MUSIC", "PLAYING", "MNOTE(", "SIDPLAY", "SIDSTOP", "MIDPLAY", "MIDSTOP", "SFLOAD", "COPPER", "XFREE", "XPEEK(", "IF", "THEN", "GOTO", "FOR", "NEXT", "REM", "DATA", "NOPEN", "NCLOSE", "NSEND", "NRECV$(", "NSTATUS(", "NREADY(", "DMACOPY", "DMAFILL", "DMASTATUS", "DMAERR", "DMACOUNT", "BLITCOPY", "BLITFILL", "BLITSTATUS", "BLITERR", "BLITCOUNT"];
         string[] ident = ["A", "B", "C", "I", "N1", "N2", "T", "X", "Y", "P"];
 
         int kind = i % 6;

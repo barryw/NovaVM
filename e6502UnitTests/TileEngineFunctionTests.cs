@@ -9,7 +9,7 @@ namespace e6502UnitTests;
 
 /// <summary>
 /// Tests for tile engine BASIC functions (TILECOL, TSCROLLX, TSCROLLY),
-/// renamed keywords (TILESIZE, TMIRROR, TTRANS, TNTLOAD, TSCROLL),
+/// renamed keywords (TILESIZE, TMIRROR, TTRANS, TSCROLL),
 /// and regression tests for DMAFILL/BLITFILL extension ROM migration.
 /// </summary>
 [TestClass]
@@ -40,9 +40,6 @@ public class TileEngineFunctionTests
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
         EnterLine(editor, "40 TSCROLL 100,50");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-        EnterLine(editor, "50 TNTLOAD 0,8192");
-        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
-
         EnterLine(editor, "LIST");
         RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
 
@@ -57,8 +54,6 @@ public class TileEngineFunctionTests
             $"TTRANS line corrupted.\n{screen}");
         Assert.IsTrue(screen.Contains("40 TSCROLL 100,50", StringComparison.Ordinal),
             $"TSCROLL line corrupted.\n{screen}");
-        Assert.IsTrue(screen.Contains("50 TNTLOAD 0,8192", StringComparison.Ordinal),
-            $"TNTLOAD line corrupted.\n{screen}");
     }
 
     [TestMethod]

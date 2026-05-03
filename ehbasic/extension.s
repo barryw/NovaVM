@@ -21,6 +21,14 @@ ext_dig3        = NVR2H
 ext_dig4        = NVR3L
 ext_firstdig    = NVR3H
 
+addr_entryL     = ext_ptrL
+addr_entryH     = ext_ptrH
+addr_nameL      = ext_dig0
+addr_nameH      = ext_dig1
+addr_len        = ext_dig2
+addr_ch         = ext_dig3
+addr_hash       = ext_dig4
+
 ; --- RAM addresses ---
 EXT_RESET_VEC   = $0233         ; reset recovery routine in RAM
 EXT_GTBY_VEC    = $023B         ; bridge: extension → BASIC LAB_GTBY → extension
@@ -74,14 +82,14 @@ ExtTable:
       .word EXT_TSAVE-1       ; cmd 6: TSAVE tile file
       .word EXT_TLOAD-1       ; cmd 7: TLOAD tile file
       .word EXT_HELP-1        ; cmd 8: HELP command
-      .word EXT_DMAFILL-1     ; cmd 9: DMAFILL epilogue
-      .word EXT_BLTFILL-1     ; cmd A: BLITFILL epilogue
+      .word EXT_DMAFILL-1     ; cmd 9: DMAFILL
+      .word EXT_BLTFILL-1     ; cmd A: BLITFILL
       .word EXT_XMCCMD-1      ; cmd B: XMC command processor
       .word EXT_COPPER-1      ; cmd C: COPPER subcommand parser
       .word EXT_XLOAD-1       ; cmd D: XLOAD file -> XRAM
       .word EXT_XSAVE-1       ; cmd E: XSAVE XRAM -> file
-      .word EXT_DMACOPY-1     ; cmd F: DMACOPY epilogue
-      .word EXT_BLITCOPY-1    ; cmd 10: BLITCOPY epilogue
+      .word EXT_DMACOPY-1     ; cmd F: DMACOPY
+      .word EXT_BLITCOPY-1    ; cmd 10: BLITCOPY
       .word EXT_TILESIZE-1    ; cmd 11: TILESIZE
       .word EXT_TMIRROR-1     ; cmd 12: TMIRROR
       .word EXT_TTRANS-1      ; cmd 13: TTRANS
@@ -100,6 +108,14 @@ ExtTable:
       .word EXT_TSCROLL-1     ; cmd 20: TSCROLL
       .word EXT_TPAL-1        ; cmd 21: TPAL
       .word EXT_TPALC-1       ; cmd 22: TPALC
+      .word EXT_ADDR-1        ; cmd 23: ADDR("label") lookup
+      .word EXT_XBANK-1       ; cmd 24: XBANK
+      .word EXT_XPOKE-1       ; cmd 25: XPOKE
+      .word EXT_XFREE-1       ; cmd 26: XFREE
+      .word EXT_XRESET-1      ; cmd 27: XRESET
+      .word EXT_XALLOC-1      ; cmd 28: XALLOC
+      .word EXT_XMAP-1        ; cmd 29: XMAP
+      .word EXT_XUNMAP-1      ; cmd 2A: XUNMAP
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -107,13 +123,127 @@ ExtTable:
 ; Returns: A=0 success, A=errcode on error.
 ; =====================================================================
 EXT_SFLOAD:
-      LDA   #FIO_CMD_SFLOAD
-      JSR   fio_exec          ; trigger soundfont load
+      JSR   audio_sfload      ; trigger soundfont load
       BEQ   @ok
       LDA   FIO_ERRCODE       ; nonzero error code
       RTS
 @ok:
       LDA   #$00
+      RTS
+
+; =====================================================================
+; ADDR("label") lookup — label string pointer/length are supplied by BASIC
+; in EXT_ARG_PTRL/H and EXT_ARG_LEN. Returns X=0, A=high, Y=low on success;
+; X=1 on miss so BASIC can raise Function Call error.
+; =====================================================================
+EXT_ADDR:
+      LDA   EXT_ARG_LEN
+      BEQ   @not_found
+      JSR   ext_label_hash
+      AND   #(RUNTIME_LABEL_BUCKET_COUNT-1)
+      ASL
+      TAX
+      LDA   RuntimeLabelBuckets,X
+      STA   addr_entryL
+      LDA   RuntimeLabelBuckets+1,X
+      STA   addr_entryH
+
+@entry_loop:
+      LDY   #$00
+      LDA   (addr_entryL),Y
+      BEQ   @not_found
+      STA   addr_len
+      CMP   EXT_ARG_LEN
+      BNE   @next_entry
+
+      CLC
+      LDA   addr_entryL
+      ADC   #$03              ; skip len + 16-bit value
+      STA   addr_nameL
+      LDA   addr_entryH
+      ADC   #$00
+      STA   addr_nameH
+
+      LDX   #$00
+@cmp_loop:
+      CPX   addr_len
+      BEQ   @found
+      TXA
+      TAY
+      LDA   (EXT_ARG_PTRL),Y
+      JSR   ext_upper
+      STA   addr_ch
+      LDA   (addr_nameL),Y
+      CMP   addr_ch
+      BNE   @next_entry
+      INX
+      BRA   @cmp_loop
+
+@found:
+      LDY   #$01
+      LDA   (addr_entryL),Y   ; value low
+      STA   addr_ch
+      INY
+      LDA   (addr_entryL),Y   ; value high
+      LDY   addr_ch
+      LDX   #$00
+      RTS
+
+@next_entry:
+      CLC
+      LDA   addr_entryL
+      ADC   addr_len
+      STA   addr_entryL
+      BCC   @add_entry_header
+      INC   addr_entryH
+@add_entry_header:
+      CLC
+      LDA   addr_entryL
+      ADC   #$03
+      STA   addr_entryL
+      BCC   @entry_loop
+      INC   addr_entryH
+      BRA   @entry_loop
+
+@not_found:
+      LDX   #$01
+      LDY   #$00
+      TYA
+      RTS
+
+ext_label_hash:
+      STZ   addr_hash
+      LDY   #$00
+@hash_loop:
+      CPY   EXT_ARG_LEN
+      BEQ   @hash_done
+      LDA   (EXT_ARG_PTRL),Y
+      JSR   ext_upper
+      STA   addr_ch
+      LDA   addr_hash
+      ASL
+      ASL
+      ASL
+      ASL
+      ASL
+      CLC
+      ADC   addr_hash
+      CLC
+      ADC   addr_ch
+      STA   addr_hash
+      INY
+      BRA   @hash_loop
+@hash_done:
+      LDA   addr_hash
+      RTS
+
+ext_upper:
+      CMP   #'a'
+      BCC   @upper_done
+      CMP   #'z'+1
+      BCS   @upper_done
+      AND   #$DF
+@upper_done:
       RTS
 
 ; =====================================================================
@@ -178,8 +308,7 @@ EXT_NCC:
 ; FIO_NAMELEN already set (0 = no filter, >0 = pattern in FIO_NAME).
 ; =====================================================================
 EXT_DIR:
-      LDA   #FIO_CMD_DIROPEN
-      JSR   fio_exec          ; trigger DirOpen
+      JSR   fio_dir_open      ; trigger DirOpen
       BNE   @dir_done         ; no files or error
       JSR   ext_crlf          ; blank line
 @dir_loop:
@@ -215,8 +344,7 @@ EXT_DIR:
 @dir_nl:
       JSR   ext_crlf
       ; advance to next entry
-      LDA   #FIO_CMD_DIRREAD
-      JSR   fio_exec
+      JSR   fio_dir_read
       BEQ   @dir_loop
 @dir_done:
       LDA   #$00
@@ -333,8 +461,7 @@ ext_print_u16:
 ; PWD handler — print working directory
 ; =====================================================================
 EXT_PWD:
-      LDA   #FIO_CMD_PWD
-      JSR   fio_exec
+      JSR   fio_pwd
       BNE   @pwd_done
       LDY   #$00
 @pwd_lp:
@@ -406,11 +533,7 @@ EXT_XMEM:
 ; XDIR handler — list named XRAM blocks
 ; =====================================================================
 EXT_XDIR:
-      LDA   #XMC_CMD_NDIRO
-      STA   XMC_CMD
-      JSR   xmc_process
-      LDA   XMC_STATUS
-      CMP   #XMC_OK
+      JSR   xmc_dir_open
       BNE   @xdir_done
 @xdir_loop:
       LDA   XMC_LENH
@@ -428,11 +551,7 @@ EXT_XDIR:
       BNE   @xdir_name
 @xdir_nl:
       JSR   ext_crlf
-      LDA   #XMC_CMD_NDIRR
-      STA   XMC_CMD
-      JSR   xmc_process
-      LDA   XMC_STATUS
-      CMP   #XMC_OK
+      JSR   xmc_dir_read
       BEQ   @xdir_loop
 @xdir_done:
       LDA   #$00
@@ -552,49 +671,155 @@ EXT_HELP:
       RTS
 
 ; =====================================================================
-; DMAFILL epilogue — zero source fields, set fill mode, start, check
-; Returns: A=0 success, A=1 error
+; DMA / blitter BASIC parsers.
+; These live in extension ROM because they are shared operation setup, not
+; BASIC core syntax. Returns A=0 success, A=1 error.
 ; =====================================================================
-EXT_DMAFILL:
-      LDA   #$00
-      STA   DMA_SRCSPACE
-      STA   DMA_SRCL
-      STA   DMA_SRCM
+
+; ext_cword — parse comma + 16-bit word, store L/H to address in X:A.
+ext_cword:
+      STX   ext_ptrL
+      STA   ext_ptrH
+      JSR   ext_comma
+      JSR   EXT_GTWRD_VEC
+      LDY   #$00
+      LDA   FAC1_3
+      STA   (ext_ptrL),Y
+      INY
+      LDA   FAC1_2
+      STA   (ext_ptrL),Y
+      RTS
+
+ext_dma_src_bank:
+      STZ   DMA_SRCH
+      LDA   DMA_SRCSPACE
+      CMP   #DMA_SPACE_XRAM
+      BNE   @done
+      LDA   XMC_BANK
       STA   DMA_SRCH
-      JMP   dma_start_fill
+@done:
+      RTS
 
-; =====================================================================
-; DMACOPY epilogue — start copy and return shared DMA status.
-; Returns: A=0 success, A=1 error
-; =====================================================================
-EXT_DMACOPY:
-      JMP   dma_start_copy
+ext_dma_dst_bank:
+      STZ   DMA_DSTH
+      LDA   DMA_DSTSPACE
+      CMP   #DMA_SPACE_XRAM
+      BNE   @done
+      LDA   XMC_BANK
+      STA   DMA_DSTH
+@done:
+      RTS
 
-; =====================================================================
-; BLITFILL epilogue — zero source fields, set fill mode, start, check
-; Returns: A=0 success, A=1 error
-; =====================================================================
-EXT_BLTFILL:
-      LDA   #$00
-      STA   BLT_SRCSPACE
-      STA   BLT_SRCL
-      STA   BLT_SRCM
+ext_blt_src_bank:
+      STZ   BLT_SRCH
+      LDA   BLT_SRCSPACE
+      CMP   #BLT_SPACE_XRAM
+      BNE   @done
+      LDA   XMC_BANK
       STA   BLT_SRCH
-      STA   BLT_SRCSTRL
-      STA   BLT_SRCSTRH
-      STA   BLT_CKEY
-      JMP   blitter_start_fill
+@done:
+      RTS
 
-; =====================================================================
-; BLITCOPY epilogue — start copy and return shared blitter status.
-; Returns: A=0 success, A=1 error
-; =====================================================================
+ext_blt_dst_bank:
+      STZ   BLT_DSTH
+      LDA   BLT_DSTSPACE
+      CMP   #BLT_SPACE_XRAM
+      BNE   @done
+      LDA   XMC_BANK
+      STA   BLT_DSTH
+@done:
+      RTS
+
+EXT_DMACOPY:
+      JSR   EXT_GTBY_VEC
+      STX   DMA_SRCSPACE
+      LDX   #<DMA_SRCL
+      LDA   #>DMA_SRCL
+      JSR   ext_cword
+      JSR   ext_dma_src_bank
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   DMA_DSTSPACE
+      LDX   #<DMA_DSTL
+      LDA   #>DMA_DSTL
+      JSR   ext_cword
+      JSR   ext_dma_dst_bank
+      LDX   #<DMA_LENL
+      LDA   #>DMA_LENL
+      JSR   ext_cword
+      STZ   DMA_LENH
+      JMP   dma_copy
+
+EXT_DMAFILL:
+      JSR   EXT_GTBY_VEC
+      STX   DMA_DSTSPACE
+      LDX   #<DMA_DSTL
+      LDA   #>DMA_DSTL
+      JSR   ext_cword
+      JSR   ext_dma_dst_bank
+      LDX   #<DMA_LENL
+      LDA   #>DMA_LENL
+      JSR   ext_cword
+      STZ   DMA_LENH
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   DMA_FILLVALUE
+      JMP   dma_fill
+
 EXT_BLITCOPY:
-      JMP   blitter_start_copy
+      JSR   EXT_GTBY_VEC
+      STX   BLT_SRCSPACE
+      LDX   #<BLT_SRCL
+      LDA   #>BLT_SRCL
+      JSR   ext_cword
+      JSR   ext_blt_src_bank
+      LDX   #<BLT_SRCSTRL
+      LDA   #>BLT_SRCSTRL
+      JSR   ext_cword
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   BLT_DSTSPACE
+      LDX   #<BLT_DSTL
+      LDA   #>BLT_DSTL
+      JSR   ext_cword
+      JSR   ext_blt_dst_bank
+      LDX   #<BLT_DSTSTRL
+      LDA   #>BLT_DSTSTRL
+      JSR   ext_cword
+      LDX   #<BLT_WIDTHL
+      LDA   #>BLT_WIDTHL
+      JSR   ext_cword
+      LDX   #<BLT_HEIGHTL
+      LDA   #>BLT_HEIGHTL
+      JSR   ext_cword
+      STZ   BLT_FILLVALUE
+      JMP   blitter_copy
+
+EXT_BLTFILL:
+      JSR   EXT_GTBY_VEC
+      STX   BLT_DSTSPACE
+      LDX   #<BLT_DSTL
+      LDA   #>BLT_DSTL
+      JSR   ext_cword
+      JSR   ext_blt_dst_bank
+      LDX   #<BLT_DSTSTRL
+      LDA   #>BLT_DSTSTRL
+      JSR   ext_cword
+      LDX   #<BLT_WIDTHL
+      LDA   #>BLT_WIDTHL
+      JSR   ext_cword
+      LDX   #<BLT_HEIGHTL
+      LDA   #>BLT_HEIGHTL
+      JSR   ext_cword
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   BLT_FILLVALUE
+      JMP   blitter_fill
 
       .include "lib/blitter.s"
       .include "lib/copper.s"
       .include "lib/tile.s"
+      .include "lib/audio.s"
       .include "lib/xram.s"
       .include "lib/xmc.s"
 
@@ -693,15 +918,61 @@ ext_crlf:
 ; Called via EXT_vec. Returns A=0 ok, A=1 error (for BNE in CHKOK).
 ; =====================================================================
 EXT_XMCCMD:
-      JSR   xmc_process
-      LDA   XMC_STATUS
-      CMP   #XMC_OK
-      BEQ   @xmc_ret_ok
-      LDA   #$01
+      JMP   xmc_command_status
+
+ext_xmc_setoff:
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   XMC_XAL
+      LDA   FAC1_2
+      STA   XMC_XAM
+      LDA   XMC_BANK
+      STA   XMC_XAH
       RTS
-@xmc_ret_ok:
-      LDA   #$00
+
+ext_xmc_getlen:
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   XMC_LENL
+      LDA   FAC1_2
+      STA   XMC_LENH
       RTS
+
+EXT_XBANK:
+      JSR   EXT_GTBY_VEC
+      JMP   xmc_select_bank
+
+EXT_XPOKE:
+      JSR   ext_xmc_setoff
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   XMC_DATA
+      JMP   xmc_put_byte
+
+EXT_XFREE:
+      JSR   ext_xmc_setoff
+      JSR   ext_comma
+      JSR   ext_xmc_getlen
+      JMP   xmc_release
+
+EXT_XRESET:
+      JMP   xmc_reset_usage
+
+EXT_XALLOC:
+      JSR   ext_xmc_getlen
+      JMP   xmc_alloc_block
+
+EXT_XMAP:
+      JSR   EXT_GTBY_VEC
+      STX   ext_firstdig
+      JSR   ext_comma
+      JSR   ext_xmc_setoff
+      LDX   ext_firstdig
+      JMP   xmc_map_window
+
+EXT_XUNMAP:
+      JSR   EXT_GTBY_VEC
+      JMP   xmc_unmap_window
 
 ; =====================================================================
 ; Tile engine command handlers.
@@ -1132,6 +1403,8 @@ ext_comma:
       RTS
 @no_comma:
       JMP   EXT_SNERR_VEC
+
+      .include "runtime_labels.inc"
 
 ; =====================================================================
 ; Reset handler — if RESET fires while extension ROM is active,

@@ -2,7 +2,7 @@
 ; Run: sim6502 -s tests/integration/fileio.6502 --backend novavm
 ; Note: File commands require string args — use CHR$-built strings
 ; Save directory: ~/e6502-programs
-; GSAVE/GLOAD spaces: 0=screen, 1=color, 2=gfx, 3=sprite, 4=tile
+; GSAVE/GLOAD spaces: 1=screen, 2=color, 3=gfx, 4=sprite, 6=tile, 7=text attrs
 ; Known issue: PEEK after GLOAD may not reflect restored VGC memory via CPU bus.
 ;              GSAVE/GLOAD operate on VGC internal spaces; CPU PEEK reads through
 ;              the bus which may not see GLOAD writes. Verify via screen output instead.
@@ -25,7 +25,7 @@ suites {
       basic("10 POKE $0100,$FF")
       basic("20 FOR I=0 TO 9:POKE $AA00+I,65+I:NEXT")
       basic("30 A$=CHR$(84)+CHR$(83)+CHR$(84)")
-      basic("40 GSAVE A$,0,0,10")
+      basic("40 GSAVE A$,1,0,10")
       basic("50 POKE $0100,$AA")
       run()
       assert(peekbyte($0100) == $AA, "GSAVE ran without error")
@@ -35,8 +35,8 @@ suites {
       ; First save, then load
       basic("10 POKE $0100,$FF")
       basic("20 A$=CHR$(71)+CHR$(76)+CHR$(68)")
-      basic("30 GSAVE A$,0,0,10")
-      basic("40 GLOAD A$,0,0,10")
+      basic("30 GSAVE A$,1,0,10")
+      basic("40 GLOAD A$,1,0,10")
       basic("50 POKE $0100,$AA")
       run()
       assert(peekbyte($0100) == $AA, "GLOAD ran without error")
@@ -49,9 +49,9 @@ suites {
       basic("10 POKE $0100,$FF")
       basic("20 FOR I=0 TO 9:POKE $AA00+I,65+I:NEXT")
       basic("30 A$=CHR$(82)+CHR$(78)+CHR$(68)")
-      basic("40 GSAVE A$,0,0,10")
+      basic("40 GSAVE A$,1,0,10")
       basic("50 FOR I=0 TO 9:POKE $AA00+I,0:NEXT")
-      basic("60 GLOAD A$,0,0,10")
+      basic("60 GLOAD A$,1,0,10")
       basic("70 PRINT PEEK($AA00)")
       basic("80 POKE $0100,$AA")
       run()
@@ -66,7 +66,7 @@ suites {
       basic("10 POKE $0100,$FF")
       basic("20 POKE $AA00,$42")
       basic("30 A$=CHR$(68)+CHR$(69)+CHR$(76)+CHR$(84)")
-      basic("40 GSAVE A$,0,0,1")
+      basic("40 GSAVE A$,1,0,1")
       basic("50 DEL A$")
       basic("60 POKE $0100,$AA")
       run()
@@ -77,7 +77,7 @@ suites {
       basic("10 POKE $0100,$FF")
       basic("20 FOR I=0 TO 9:POKE $B1D0+I,I+1:NEXT")
       basic("30 A$=CHR$(67)+CHR$(76)+CHR$(82)")
-      basic("40 GSAVE A$,1,0,10")
+      basic("40 GSAVE A$,2,0,10")
       basic("50 POKE $0100,$AA")
       run()
       assert(peekbyte($0100) == $AA, "color GSAVE ran without error")

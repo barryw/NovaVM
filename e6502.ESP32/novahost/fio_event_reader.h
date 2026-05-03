@@ -33,6 +33,11 @@ public:
     // Returns the number of bytes processed.
     int poll();
 
+    void consume(uint8_t value);
+    static void onDrainByteStatic(void* user, uint8_t value) {
+        static_cast<FioEventReader*>(user)->consume(value);
+    }
+
     // Like poll() but bounded to a small window — used by FpgaBridge
     // before/after CMDs so events aren't lost when the bridge would
     // otherwise drain stale bytes. Stops once the buffer is empty.

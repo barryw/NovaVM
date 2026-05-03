@@ -12,6 +12,11 @@ confirms the v3.1.x EN/GPIO0 routing:
 - `wifi_rxd`:   K3
 - `wifi_txd`:   K4
 
+The eight FPGA-controlled user LEDs are active-high. Upstream ULX3S
+constraints map `led[0]..led[7]` to FPGA pins `B2,C2,C1,D2,D1,E2,E1,H3`;
+the schematic routes `LED0..LED7` through 549 ohm resistors to the LEDs, with
+the other side tied to GND. Drive `1` to light a user LED.
+
 Do **not** use the older v2.x/v3.0.x ESP reset mapping:
 
 - `wifi_en`:    F1
@@ -26,7 +31,7 @@ received", verify EN reset actually reaches the ESP32:
 
 ```bash
 # Load a bitstream that permanently holds wifi_en low, then check:
-ping novahost.local
+ping 192.168.1.65
 # If ESP32 keeps responding, the FPGA is driving the wrong pin.
 # Swap the LPF to the v3.1.x mapping above and rebuild.
 ```
@@ -59,6 +64,6 @@ arduino-cli upload --fqbn esp32:esp32:lolin32 --port /dev/cu.usbserial-D01457 \
 After one serial upload, use OTA for subsequent updates:
 
 ```bash
-arduino-cli upload --fqbn esp32:esp32:lolin32 --port novahost.local \
+arduino-cli upload --fqbn esp32:esp32:lolin32 --port 192.168.1.65 \
     ../../e6502.ESP32/novahost
 ```

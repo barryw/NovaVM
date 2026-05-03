@@ -9,15 +9,12 @@ category: Networking
 -- Robert Metcalfe
 
 NovaBASIC includes a built-in Network Interface Controller (NIC) that gives your
-programs full TCP networking from ordinary BASIC lines. You can open outbound
-connections to remote servers, listen for incoming connections, send and receive
-text messages, and build complete client/server applications -- all without
-touching a single hardware register.
+programs TCP client networking from ordinary BASIC lines. You can open outbound
+connections to remote servers, send and receive text messages, and close the
+connection -- all without touching a single hardware register.
 
 The NIC provides four independent connection **slots** numbered 0 through 3.
-Each slot can operate as either a client (connecting out to a remote host) or a
-server (listening for incoming connections). Slots are fully independent: you can
-have a client on slot 0 and a server on slot 1 at the same time. Messages are
+Each slot can connect to a remote host independently. Messages are
 automatically framed so that each `NSEND` call corresponds to exactly one
 `NRECV$` call on the other end.
 
@@ -32,8 +29,6 @@ manually prefix or parse message lengths.
 Key characteristics of the NIC:
 
 - **Four independent slots** (0--3), each with its own connection state.
-- **Client or server per slot** -- a slot is committed to one role
-per connection but can switch role after being closed.
 - **Message queuing** -- up to 16 incoming messages may be queued per
 slot before the sender is blocked at the hardware level.
 - **Maximum message size** of 256 bytes per send/receive.
@@ -98,12 +93,6 @@ in a tight polling loop:
 40 IF NOT NREADY(0) THEN 40
 ```
 
-### Length of last received message: `NLEN`
-
-After a successful `NRECV$` call, `NLEN` returns the byte length of the
-message that was just dequeued. This is convenient when you need to know the
-exact payload size without calling `LEN` on the returned string.
-
 ### Closing a connection: `NCLOSE slot`
 
 ```basic
@@ -138,83 +127,6 @@ spin tightly until data arrives. For interactive programs you can add a
 `VSYNC` inside the loop to yield to the display system and keep the
 screen responsive while waiting.
 :::
-
-## Running a Server
-
-A server slot listens for incoming TCP connections on a local port. The workflow
-is slightly different from the client case because you must first bind the port,
-then wait for and accept a connection, before the slot behaves like a normal
-send/receive channel.
-
-### Binding a port: `NLISTEN slot, port`
-
-```basic
-NLISTEN 0, 8080
-```
-
-Begins listening for incoming connections on *port* (bound to
-`127.0.0.1`) using *slot*. The command returns immediately; the NIC
-starts accepting the OS-level TCP listen in the background. A client connecting
-to this port will be queued until you call `NACCEPT`.
-
-### Accepting a connection: `NACCEPT slot`
-
-```basic
-NACCEPT 0
-```
-
-Promotes a pending incoming connection on *slot* from the listen queue to
-an active connected state. You must poll `NREADY(slot)` before calling
-`NACCEPT` -- `NREADY` returns `-1` when a client is waiting to
-be accepted. After `NACCEPT` returns, the slot is fully connected and you
-can use `NSEND` and `NRECV$` normally.
-
-::: note
-`NREADY` serves double duty on a listening slot: before `NACCEPT` it
-signals a pending connection, and after `NACCEPT` it signals a pending
-message. The meaning is determined by the slot's current state.
-:::
-
-### Server loop pattern
-
-A typical server follows this sequence:
-
-1. `NLISTEN` to bind the port.
-2. Poll `NREADY` waiting for a client to connect.
-3. `NACCEPT` to bring the connection live.
-4. Inner loop: poll `NREADY`, call `NRECV$`, process, `NSEND`
-reply. Exit when the connection drops.
-5. `NCLOSE` the slot.
-6. Go back to step 2 to accept the next client.
-
-### Echo server example
-
-```basic
-10 REM -- Echo Server --
-20 NLISTEN 0, 8080
-30 PRINT "Listening on port 8080..."
-40 IF NOT NREADY(0) THEN 40
-50 NACCEPT 0
-60 PRINT "Client connected!"
-70 REM Main receive/echo loop
-80 IF (NSTATUS(0) AND 1) = 0 THEN 200
-90 IF NOT NREADY(0) THEN 80
-100 A$ = NRECV$(0)
-110 L = NLEN
-120 PRINT "Received ("; L; " bytes): "; A$
-130 NSEND 0, A$
-140 GOTO 80
-200 PRINT "Client disconnected."
-210 NCLOSE 0
-220 GOTO 30
-```
-
-Line 20 binds port 8080. Lines 30--40 wait for a client. Line 50 accepts it.
-The inner loop at lines 80--140 checks that the connection is still alive (bit 0
-of `NSTATUS`), polls for incoming data, reads each message, prints the
-length and content, and echoes it straight back. When the connection drops,
-execution falls through to line 200, the slot is closed, and the server loops
-back to listen for the next client.
 
 ## Status and Error Handling
 
@@ -253,14 +165,13 @@ There are two ways the remote end can disappear:
 graceful close. Bit 3 (*Error*) may be set; bit 0 clears.
 
 In either case, when bit 0 drops to zero the connection is gone. Check
-`(NSTATUS(slot) AND 1) = 0` as your primary disconnection test, as shown
-in the echo server example above.
+`(NSTATUS(slot) AND 1) = 0` as your primary disconnection test.
 
 ### Cleaning up after disconnection
 
 Regardless of which party initiated the close, always call `NCLOSE slot`
 once you detect a disconnection. This returns the slot to the idle state and
-allows `NLISTEN` or `NOPEN` to be called on it again.
+allows `NOPEN` to be called on it again.
 
 ::: warning
 Always check `NSTATUS` before calling `NSEND`. If bit 0 (*Connected*)
@@ -272,30 +183,7 @@ connection state at the top of every send/receive loop.
 ## Try It Now
 
 ::: tryit
-Type and run the echo server program from Section \refsec:nic-server:
-
-```basic
-10 REM -- Echo Server --
-20 NLISTEN 0, 8080
-30 PRINT "Listening on port 8080..."
-40 IF NOT NREADY(0) THEN 40
-50 NACCEPT 0
-60 PRINT "Client connected!"
-70 REM Main receive/echo loop
-80 IF (NSTATUS(0) AND 1) = 0 THEN 200
-90 IF NOT NREADY(0) THEN 80
-100 A$ = NRECV$(0)
-110 L = NLEN
-120 PRINT "Received ("; L; " bytes): "; A$
-130 NSEND 0, A$
-140 GOTO 80
-200 PRINT "Client disconnected."
-210 NCLOSE 0
-220 GOTO 30
-```
-
-The server will print `LISTENING ON PORT 8080...` and wait. To test it,
-open a second emulator instance and enter the client program below, then type
+Start a TCP echo server on another machine, then enter this client and type
 `RUN`:
 
 ```basic
@@ -309,16 +197,10 @@ open a second emulator instance and enter the client program below, then type
 ```
 
 The server window should print the message and its byte length. The client
-window should print `ECHO: HELLO FROM CLIENT!`. After the client closes
-the connection the server will print `CLIENT DISCONNECTED.` and return
-to listening -- ready for the next client.
+window should print `ECHO: HELLO FROM CLIENT!`.
 
 **Experiments to try:**
 
-- Modify the echo server to prefix every reply with `"ECHO: "` before
-sending it back.
-- Change the server to count messages received and print the count alongside
-each one.
 - Open slot 1 in the client program with a second `NOPEN` call and send a
 different message on each slot simultaneously to observe independent
 operation.

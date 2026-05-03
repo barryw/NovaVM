@@ -9,6 +9,7 @@ DeviceManager::DeviceManager()
         _streams[i] = nullptr;
         _images[i]  = nullptr;
         _current_dirs[i] = ndi::ROOT_PARENT;
+        strcpy(_current_paths[i], "/");
     }
 }
 
@@ -42,6 +43,7 @@ bool DeviceManager::mount(int slot, const char* sd_path) {
     }
 
     _current_dirs[slot] = ndi::ROOT_PARENT;
+    strcpy(_current_paths[slot], "/");
     Serial.printf("[dm] %s ← %s (label=%s, total=%u, free=%d)\n",
                   prefix_for_slot(slot), sd_path,
                   _images[slot]->header().volume_label,
@@ -56,6 +58,7 @@ void DeviceManager::unmount(int slot) {
     if (_streams[slot]) { delete _streams[slot]; _streams[slot] = nullptr; }
     if (_files[slot])   { _files[slot].close(); }
     _current_dirs[slot] = ndi::ROOT_PARENT;
+    strcpy(_current_paths[slot], "/");
 }
 
 bool DeviceManager::is_mounted(int slot) const {
@@ -71,6 +74,11 @@ ndi::NdiImage* DeviceManager::image(int slot) {
 uint16_t DeviceManager::current_dir(int slot) const {
     if (slot < 0 || slot >= NUM_SLOTS) return ndi::ROOT_PARENT;
     return _current_dirs[slot];
+}
+
+const char* DeviceManager::current_path(int slot) const {
+    if (slot < 0 || slot >= NUM_SLOTS) return "/";
+    return _current_paths[slot];
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +168,7 @@ bool DeviceManager::cd(int slot, const char* path) {
 
     if (!path || path[0] == 0 || (path[0] == '/' && path[1] == 0)) {
         _current_dirs[slot] = ndi::ROOT_PARENT;
+        strcpy(_current_paths[slot], "/");
         return true;
     }
 
@@ -170,6 +179,13 @@ bool DeviceManager::cd(int slot, const char* path) {
     bool absolute = (buf[0] == '/');
     char* p = absolute ? buf + 1 : buf;
     uint16_t parent = absolute ? ndi::ROOT_PARENT : _current_dirs[slot];
+    char next_path[64];
+    if (absolute) {
+        strcpy(next_path, "/");
+    } else {
+        strncpy(next_path, _current_paths[slot], sizeof(next_path) - 1);
+        next_path[sizeof(next_path) - 1] = 0;
+    }
 
     while (*p) {
         char* slash = strchr(p, '/');
@@ -180,10 +196,18 @@ bool DeviceManager::cd(int slot, const char* path) {
             ndi::DirEntry e;
             if (!img->get_entry(idx, e) || !e.is_directory()) return false;
             parent = (uint16_t)idx;
+
+            size_t used = strlen(next_path);
+            size_t seg_len = strlen(p);
+            size_t need = used + (used > 1 ? 1 : 0) + seg_len;
+            if (need >= sizeof(next_path)) return false;
+            if (used > 1) strcat(next_path, "/");
+            strcat(next_path, p);
         }
         p = slash ? (slash + 1) : (p + strlen(p));
     }
     _current_dirs[slot] = parent;
+    strcpy(_current_paths[slot], next_path);
     return true;
 }
 

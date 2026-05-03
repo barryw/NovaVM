@@ -3,6 +3,8 @@
 #include <string.h>
 
 extern void logLn(const char* fmt, ...);
+extern void novaHostFioActivityStarted();
+extern void novaHostFioActivityFinished(bool ok);
 
 namespace {
 ndi::FileType file_type_for_name(const char* name) {
@@ -16,18 +18,40 @@ ndi::FileType file_type_for_name(const char* name) {
     else if (strcasecmp(ext, ".gfx")  == 0) return ndi::FT_GFX;
     return ndi::FT_BIN;
 }
+
+uint32_t vgc_space_bytes(uint8_t space) {
+    switch (space) {
+        case 0x01: return 4000;   // char RAM
+        case 0x02: return 4000;   // color RAM
+        case 0x03: return 64000;  // bitmap graphics
+        case 0x04: return 32768;  // sprite shapes
+        case 0x06: return 32768;  // tile data
+        case 0x07: return 4000;   // text attributes
+        default:   return 0;
+    }
+}
 }
 
 void FioDispatcher::handle_event() {
+    if (_handling) {
+        return;
+    }
+    _handling = true;
+    novaHostFioActivityStarted();
+
     // Read the entire 80-byte register bank in one shot.
     if (!_bridge.peekBlock(BANK_BASE, 80, _bank)) {
         Serial.println("[fio] peekBlock failed — bank read aborted");
+        novaHostFioActivityFinished(false);
+        _handling = false;
         return;
     }
 
     uint8_t c = cmd();
     if (c == 0) {
         // Spurious event: bank shows no pending cmd. Drop.
+        novaHostFioActivityFinished(true);
+        _handling = false;
         return;
     }
     logLn("[fio] cmd=0x%02X namelen=%u\n",
@@ -36,20 +60,45 @@ void FioDispatcher::handle_event() {
     switch (c) {
         case CMD_LOAD:     handle_load();     break;
         case CMD_SAVE:     handle_save();     break;
+        case CMD_GLOAD:    handle_gload();    break;
+        case CMD_GSAVE:    handle_gsave();    break;
         case CMD_XLOAD:    handle_xload();    break;
         case CMD_XSAVE:    handle_xsave();    break;
         case CMD_DIR_OPEN: handle_dir_open(); break;
         case CMD_DIR_READ: handle_dir_read(); break;
         case CMD_DELETE:   handle_delete();   break;
+        case CMD_SIDPLAY:  handle_unsupported_sd_command("SIDPLAY"); break;
+        case CMD_MIDPLAY:  handle_unsupported_sd_command("MIDPLAY"); break;
+        case CMD_SFLOAD:   handle_unsupported_sd_command("SFLOAD");  break;
+        case CMD_TSAVE:    handle_unsupported_sd_command("TSAVE");   break;
+        case CMD_TLOAD:    handle_unsupported_sd_command("TLOAD");   break;
         case CMD_CD:       handle_cd();       break;
         case CMD_MKDIR:    handle_mkdir();    break;
         case CMD_RMDIR:    handle_rmdir();    break;
+        case CMD_FORMAT:   handle_unsupported_sd_command("FORMAT");  break;
         case CMD_MOUNT:    handle_mount();    break;
         case CMD_UNMOUNT:  handle_unmount();  break;
+        case CMD_PWD:      handle_pwd();      break;
+        case CMD_CLEARERR: handle_clear_error(); break;
         default:
             logLn("[fio] unknown cmd 0x%02X\n", (unsigned)c);
             respond_err(ERR_IO);
             break;
+    }
+    _handling = false;
+}
+
+void FioDispatcher::poll_pending() {
+    if (_handling) {
+        return;
+    }
+
+    uint8_t pending = 0;
+    if (!_bridge.peek(BANK_BASE + OFF_CMD, pending)) {
+        return;
+    }
+    if (pending != 0) {
+        handle_event();
     }
 }
 
@@ -68,17 +117,29 @@ void FioDispatcher::respond_ok() {
     _bridge.poke(BANK_BASE + OFF_ERRCODE, ERR_NONE);
     _bridge.poke(BANK_BASE + OFF_CMD,     0);   // unblock Nova busy-wait
     _bridge.poke(BANK_BASE + OFF_STATUS,  ST_OK);
+    novaHostFioActivityFinished(true);
 }
 
 void FioDispatcher::respond_err(uint8_t err_code) {
     _bridge.poke(BANK_BASE + OFF_ERRCODE, err_code);
     _bridge.poke(BANK_BASE + OFF_CMD,     0);
     _bridge.poke(BANK_BASE + OFF_STATUS,  ST_ERR);
+    novaHostFioActivityFinished(false);
 }
 
 void FioDispatcher::write_size(uint32_t size) {
     _bridge.poke(BANK_BASE + OFF_SIZE_LO, (uint8_t)(size & 0xFF));
     _bridge.poke(BANK_BASE + OFF_SIZE_HI, (uint8_t)((size >> 8) & 0xFF));
+}
+
+void FioDispatcher::handle_clear_error() {
+    logLn("[fio] CLEARERR\n");
+    respond_ok();
+}
+
+void FioDispatcher::handle_unsupported_sd_command(const char* name) {
+    logLn("[fio] %s is not implemented on ESP SD host\n", name ? name : "command");
+    respond_err(ERR_IO);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +242,144 @@ void FioDispatcher::handle_save() {
     }
     logLn("[fio] SAVE %s ($%04X-$%04X, %u bytes) OK\n",
                   scratch, s, e, (unsigned)size);
+    respond_ok();
+}
+
+// ---------------------------------------------------------------------------
+// GLOAD / GSAVE — direct file <-> VGC memory streaming.
+// ---------------------------------------------------------------------------
+void FioDispatcher::handle_gload() {
+    char name[64];
+    copy_filename(name);
+
+    uint8_t space = gspace();
+    uint16_t dest = gaddr();
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+
+    int idx = img->find_entry(scratch, parent);
+    if (idx < 0) {
+        logLn("[fio] GLOAD: '%s' not found in dev=%s\n",
+              scratch, DeviceManager::prefix_for_slot(slot));
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    ndi::DirEntry e;
+    if (!img->get_entry(idx, e) || e.is_directory()) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t requested = transfer_len();
+    uint32_t total = (requested == 0 || requested > e.size_bytes)
+        ? e.size_bytes
+        : requested;
+    uint32_t space_size = vgc_space_bytes(space);
+    if (space_size == 0 ||
+        dest > space_size ||
+        total > space_size ||
+        dest > space_size - total) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t remaining = total - off;
+        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+        int got = img->read_file_chunk_by_index(idx, off, _transfer_buf, chunk);
+        if (got != (int)chunk) {
+            respond_err(ERR_IO);
+            return;
+        }
+        uint16_t wire_count = (chunk == 256) ? 0 : chunk;
+        if (!_bridge.pokeVgcBlock(space, (uint16_t)(dest + off),
+                                  _transfer_buf, wire_count)) {
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+
+    write_size(total);
+    logLn("[fio] GLOAD %s -> VGC space %u:$%04X (%u bytes) OK\n",
+          scratch, (unsigned)space, (unsigned)dest, (unsigned)total);
+    respond_ok();
+}
+
+void FioDispatcher::handle_gsave() {
+    char name[64];
+    copy_filename(name);
+
+    uint8_t space = gspace();
+    uint16_t src_addr = gaddr();
+    uint32_t total = transfer_len();
+    uint32_t space_size = vgc_space_bytes(space);
+    if (total == 0 ||
+        space_size == 0 ||
+        src_addr > space_size ||
+        total > space_size ||
+        src_addr > space_size - total) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+
+    int existing = img->find_entry(scratch, parent);
+    if (existing >= 0) img->delete_file(scratch, parent);
+
+    int new_idx = img->create_file(scratch, ndi::FT_GFX, parent, total);
+    if (new_idx < 0) {
+        respond_err(ERR_FULL);
+        return;
+    }
+
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t remaining = total - off;
+        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+        uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
+        if (!_bridge.readVgcBlock(space, (uint16_t)(src_addr + off),
+                                  wire_count, _transfer_buf)) {
+            img->delete_file(scratch, parent);
+            respond_err(ERR_IO);
+            return;
+        }
+        if (!img->write_file_chunk_by_index(new_idx, off, _transfer_buf, chunk)) {
+            img->delete_file(scratch, parent);
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+
+    if (!img->zero_file_tail_by_index(new_idx)) {
+        img->delete_file(scratch, parent);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    write_size(total);
+    logLn("[fio] GSAVE %s <- VGC space %u:$%04X (%u bytes) OK\n",
+          scratch, (unsigned)space, (unsigned)src_addr, (unsigned)total);
     respond_ok();
 }
 
@@ -514,5 +713,40 @@ void FioDispatcher::handle_unmount() {
     int slot = DeviceManager::slot_for_prefix(name);
     if (slot < 0) { respond_err(ERR_IO); return; }
     _dm.unmount(slot);
+    respond_ok();
+}
+
+void FioDispatcher::handle_pwd() {
+    int slot = _dm.default_slot();
+    if (!_dm.is_mounted(slot)) {
+        respond_err(ERR_NO_MOUNT);
+        return;
+    }
+
+    const char* prefix = DeviceManager::prefix_for_slot(slot);
+    const char* path = _dm.current_path(slot);
+    if (!prefix || !path) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    char pwd[64];
+    snprintf(pwd, sizeof(pwd), "%s:%s", prefix, path);
+    int len = (int)strlen(pwd);
+    if (len > 63) len = 63;
+
+    bool ok = _bridge.poke(BANK_BASE + OFF_NAMELEN, (uint8_t)len);
+    for (int i = 0; i < len && ok; i++) {
+        ok = _bridge.poke(BANK_BASE + OFF_NAME + i, (uint8_t)pwd[i]);
+    }
+    if (ok && len < 64) {
+        ok = _bridge.poke(BANK_BASE + OFF_NAME + len, 0);
+    }
+    if (!ok) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    logLn("[fio] PWD %s\n", pwd);
     respond_ok();
 }

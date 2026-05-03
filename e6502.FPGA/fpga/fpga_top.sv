@@ -547,6 +547,7 @@ module fpga_top (
     wire        brg_sdram_b_oe;
     wire [24:0] brg_sdram_b_addr;
     wire [7:0]  brg_sdram_b_din;
+    wire [7:0]  brg_host_status;
 
     // File I/O event — pulsed by core's fio.sv on CPU write to $B9A0.
     // Bridge latches it and emits an async EVENT_FIO sequence to the ESP.
@@ -604,7 +605,8 @@ module fpga_top (
         .sdram_b_addr    (brg_sdram_b_addr),
         .sdram_b_din     (brg_sdram_b_din),
         .sdram_b_dout    (core_sdram_doutB),
-        .fio_event       (core_fio_event)
+        .fio_event       (core_fio_event),
+        .host_status     (brg_host_status)
     );
 
     // Key input: debug bridge overrides UART keyboard
@@ -835,29 +837,87 @@ module fpga_top (
     );
 
     // =========================================================================
-    // LEDs — useful debug indicators
+    // LEDs — board/runtime status. btn[6] toggles between the default
+    // user panel and an operator panel with lower-level board/debug signals.
+    //
+    // User panel:
+    //   7 heartbeat, 6 WiFi off/configured flash/connected solid,
+    //   5 NovaHost ready/degraded flash, 4 SD mounted,
+    //   3 FIO drive LED, 2 CPU running, 1 CPU paused, 0 NovaHost seen.
+    // Operator panel:
+    //   7 heartbeat, 6 PLL locked, 5 top reset released, 4 CPU reset released,
+    //   3 system reset asserted, 2 ESP debug UART seen, 1 FTDI UART seen,
+    //   0 CPU paused.
     // =========================================================================
     reg [23:0] heartbeat = 0;  // POR init for clean LED phase from boot
     always_ff @(posedge clk_pixel)
         heartbeat <= heartbeat + 1;
 
-    reg [7:0] last_uart_byte;
-    reg       uart_ever_received;
+    reg [1:0]  btn6_sync = 2'b00;
+    reg        btn6_stable = 1'b0;
+    reg [19:0] btn6_debounce = 20'd0;
+    reg        led_operator_mode = 1'b0;
+    reg        dbg_uart_ever_received = 1'b0;
+    reg        ftdi_uart_ever_received = 1'b0;
+
     always_ff @(posedge clk_pixel) begin
         if (rst) begin
-            last_uart_byte <= 0;
-            uart_ever_received <= 0;
-        end else if (uart_valid) begin
-            last_uart_byte <= uart_data;
-            uart_ever_received <= 1;
+            btn6_sync <= 2'b00;
+            btn6_stable <= 1'b0;
+            btn6_debounce <= 20'd0;
+            led_operator_mode <= 1'b0;
+            dbg_uart_ever_received <= 1'b0;
+            ftdi_uart_ever_received <= 1'b0;
+        end else begin
+            btn6_sync <= {btn6_sync[0], btn[6]};
+            if (btn6_sync[1] == btn6_stable) begin
+                btn6_debounce <= 20'd0;
+            end else if (&btn6_debounce) begin
+                btn6_stable <= btn6_sync[1];
+                btn6_debounce <= 20'd0;
+                if (!btn6_stable && btn6_sync[1])
+                    led_operator_mode <= ~led_operator_mode;
+            end else begin
+                btn6_debounce <= btn6_debounce + 20'd1;
+            end
+
+            if (dbg_rx_valid)
+                dbg_uart_ever_received <= 1'b1;
+            if (uart_valid)
+                ftdi_uart_ever_received <= 1'b1;
         end
     end
 
-    assign leds[7]   = heartbeat[23];
-    assign leds[6]   = pll_locked;
-    assign leds[5]   = ~rst;
-    assign leds[4]   = uart_ever_received;
-    assign leds[3:0] = last_uart_byte[3:0];
+    wire status_flash = heartbeat[23];
+    wire fio_led = brg_host_status[2] ? status_flash : brg_host_status[1];
+    wire boot_led = brg_host_status[5] ? status_flash : brg_host_status[4];
+    wire wifi_led = brg_host_status[0] ? 1'b1 :
+                    (brg_host_status[6] ? status_flash : 1'b0);
+    wire cpu_running_led = ~rst & ~brg_cpu_reset & ~brg_system_reset & ~brg_pause;
+
+    wire [7:0] user_leds = {
+        heartbeat[23],
+        wifi_led,
+        boot_led,
+        brg_host_status[3],
+        fio_led,
+        cpu_running_led,
+        brg_pause,
+        brg_host_status[7]
+    };
+
+    wire [7:0] operator_leds = {
+        heartbeat[23],
+        pll_locked,
+        ~rst,
+        ~brg_cpu_reset,
+        brg_system_reset,
+        dbg_uart_ever_received,
+        ftdi_uart_ever_received,
+        brg_pause
+    };
+
+    assign leds = led_operator_mode ? operator_leds : user_leds;
 
     // =========================================================================
     // FTDI TX — unused for now, drive idle high

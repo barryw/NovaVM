@@ -29,10 +29,12 @@ public:
 
     // Drain registers, dispatch command. Called by event reader.
     void handle_event();
+    void poll_pending();
 
 private:
     FpgaBridge&    _bridge;
     DeviceManager& _dm;
+    bool           _handling = false;
 
     // Register-bank wire offsets relative to $B9A0.
     static constexpr uint16_t BANK_BASE = 0xB9A0;
@@ -74,13 +76,23 @@ private:
     static constexpr uint8_t CMD_DIR_OPEN = 0x03;
     static constexpr uint8_t CMD_DIR_READ = 0x04;
     static constexpr uint8_t CMD_DELETE   = 0x05;
+    static constexpr uint8_t CMD_GSAVE    = 0x06;
+    static constexpr uint8_t CMD_GLOAD    = 0x07;
+    static constexpr uint8_t CMD_SIDPLAY  = 0x08;
+    static constexpr uint8_t CMD_MIDPLAY  = 0x13;
+    static constexpr uint8_t CMD_SFLOAD   = 0x15;
+    static constexpr uint8_t CMD_TSAVE    = 0x16;
+    static constexpr uint8_t CMD_TLOAD    = 0x17;
     static constexpr uint8_t CMD_XLOAD    = 0x18;
     static constexpr uint8_t CMD_XSAVE    = 0x19;
     static constexpr uint8_t CMD_CD       = 0x20;
     static constexpr uint8_t CMD_MKDIR    = 0x21;
     static constexpr uint8_t CMD_RMDIR    = 0x22;
+    static constexpr uint8_t CMD_FORMAT   = 0x23;
     static constexpr uint8_t CMD_MOUNT    = 0x24;
     static constexpr uint8_t CMD_UNMOUNT  = 0x25;
+    static constexpr uint8_t CMD_PWD      = 0x26;
+    static constexpr uint8_t CMD_CLEARERR = 0x27;
 
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
@@ -101,6 +113,9 @@ private:
     uint32_t xram_addr() const { return ((uint32_t)_bank[OFF_GSPACE] << 16) |
                                         ((uint32_t)_bank[OFF_GADDR_HI] << 8) |
                                          (uint32_t)_bank[OFF_GADDR_LO]; }
+    uint8_t  gspace() const { return _bank[OFF_GSPACE]; }
+    uint16_t gaddr() const { return _bank[OFF_GADDR_LO] |
+                                    ((uint16_t)_bank[OFF_GADDR_HI] << 8); }
     uint16_t transfer_len() const { return _bank[OFF_GLEN_LO] |
                                            ((uint16_t)_bank[OFF_GLEN_HI] << 8); }
 
@@ -118,6 +133,8 @@ private:
     // ---- Command handlers ----
     void handle_load();
     void handle_save();
+    void handle_gload();
+    void handle_gsave();
     void handle_xload();
     void handle_xsave();
     void handle_dir_open();
@@ -128,6 +145,9 @@ private:
     void handle_rmdir();
     void handle_mount();
     void handle_unmount();
+    void handle_pwd();
+    void handle_clear_error();
+    void handle_unsupported_sd_command(const char* name);
 
     // Directory-iterator state for DIR_OPEN/DIR_READ. Single iterator
     // across all sessions — Nova only opens one at a time in practice.

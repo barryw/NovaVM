@@ -113,6 +113,33 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void ClearErr_ClearsLatchedFileIoError()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var fio = MakeController(dir);
+            SetFilename(fio, "does-not-exist");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDelete);
+
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrNotFound, fio.Read((ushort)VgcConstants.FioErrCode));
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdClearErr);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrNone, fio.Read((ushort)VgcConstants.FioErrCode));
+            Assert.AreEqual(0, fio.Read((ushort)VgcConstants.FioCmd));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
     public void Delete_RemovesExistingFile()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");

@@ -14,6 +14,7 @@ test_ndi: test_ndi.cpp ../ndi_image.cpp ../ndi_image.h
 
 test: $(TARGETS)
 	./test_ndi
+	python3 test_wifi_contract.py
 
 clean:
 	rm -f $(TARGETS)

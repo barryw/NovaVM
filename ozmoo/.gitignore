@@ -1,0 +1,8 @@
+/build/
+/dist/
+/*.ndi
+/projects/*/STORY.BIN
+/projects/*/*.z3
+/projects/*/*.z4
+/projects/*/*.z5
+/projects/*/*.z8

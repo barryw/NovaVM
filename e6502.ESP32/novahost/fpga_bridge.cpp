@@ -28,6 +28,7 @@
 #define CMD_SYS_RESET_HOLD 0x18
 #define CMD_SYS_RESET_REL  0x19
 #define CMD_READ_SDRAM_BLK 0x1A
+#define CMD_HOST_STATUS    0x1B
 
 #define VGC_SPACE_CHAR  0x01
 #define VGC_SPACE_COLOR 0x02
@@ -38,7 +39,13 @@
 // =========================================================================
 
 void FpgaBridge::drain() {
-    while (_serial.available()) _serial.read();
+    while (_serial.available()) {
+        int b = _serial.read();
+        if (b < 0) break;
+        if (_drainHandler) {
+            _drainHandler(_drainUser, (uint8_t)b);
+        }
+    }
 }
 
 int FpgaBridge::recvByte() {
@@ -219,6 +226,13 @@ bool FpgaBridge::pause() {
 bool FpgaBridge::resume() {
     drain();
     _serial.write(CMD_RESUME);
+    return recvStatus();
+}
+
+bool FpgaBridge::hostStatus(uint8_t flags) {
+    drain();
+    uint8_t buf[2] = { CMD_HOST_STATUS, flags };
+    _serial.write(buf, 2);
     return recvStatus();
 }
 

@@ -42,6 +42,7 @@ DEFAULT_SUITES=(
     copper
     tiles
     math
+    fio
     fileio
     sd
 )

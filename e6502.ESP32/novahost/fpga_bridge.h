@@ -12,6 +12,12 @@ class FpgaBridge {
 public:
     FpgaBridge(HardwareSerial& serial) : _serial(serial) {}
 
+    using DrainByteHandler = void (*)(void* user, uint8_t value);
+    void onDrainByte(DrainByteHandler handler, void* user) {
+        _drainHandler = handler;
+        _drainUser = user;
+    }
+
     // Single-byte memory read/write
     bool peek(uint16_t addr, uint8_t& value);
     bool poke(uint16_t addr, uint8_t value);
@@ -57,6 +63,9 @@ public:
     // Execution control
     bool pause();
     bool resume();
+
+    // Latch NovaHost status flags into the FPGA for board LEDs.
+    bool hostStatus(uint8_t flags);
 
     // CPU soft-reset (separate from pause — resets 6502 state, not just halts).
     // Call resetHold() before loading a ROM, resetRelease() once load is done
@@ -126,6 +135,8 @@ public:
 
 private:
     HardwareSerial& _serial;
+    DrainByteHandler _drainHandler = nullptr;
+    void* _drainUser = nullptr;
     static const unsigned long BYTE_TIMEOUT_MS = 200;
     static const unsigned long BULK_TIMEOUT_MS = 500;
 

@@ -261,9 +261,8 @@ advanced use only and may conflict with the music engine.
 
 ### Timer Controller (BA40--BA4F)
 
-The timer controller provides periodic interrupt generation. It is used
-internally by `SIDPLAY` but can also be configured from assembly for
-custom timing.
+The timer controller provides periodic interrupt generation. It can be
+configured from assembly for custom timing.
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |

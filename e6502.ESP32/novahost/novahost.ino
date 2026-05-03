@@ -3,7 +3,7 @@
 // Provides: WiFi, debug bridge (TCP:6503 ↔ FPGA binary protocol)
 //
 // Debug logs streamed over WiFi: connect with `nc <ip> 23`
-// Test connection: connect with test suite to novahost.local:6503
+// Test connection: connect with test suite to 192.168.1.65:6503
 // Board: ESP32 on ULX3S (select WEMOS LOLIN32 in Arduino IDE)
 
 #include <WiFi.h>
@@ -13,12 +13,14 @@
 #include <HardwareSerial.h>
 #include <SD.h>
 #include <SPI.h>
+#include <ctype.h>
 #include "fpga_bridge.h"
 #include "debug_server.h"
 #include "device_manager.h"
 #include "fio_event_reader.h"
 #include "fio_dispatcher.h"
 #include "sd_http_server.h"
+#include "nova_wifi.h"
 // Boot ROMs and bulky assets live on the SD card. The FPGA bitstream still
 // carries fallback ROM init data, but NovaHost no longer embeds those blobs.
 
@@ -26,8 +28,14 @@
 // Configuration
 // =========================================================================
 
-// WiFi credentials — kept in wifi_config.h (gitignored)
+// Optional first-boot WiFi defaults. Runtime config is stored in NVS and can
+// be managed over USB serial or REST once WiFi is reachable.
+#if __has_include("wifi_config.h")
 #include "wifi_config.h"
+#else
+static const char* WIFI_SSID = "";
+static const char* WIFI_PASSWORD = "";
+#endif
 
 // FPGA UART — uses ESP32 Serial2.
 // ULX3S v3.1.x: GPIO26/GPIO27 route to FPGA pins L1/N3.
@@ -88,12 +96,13 @@ void logLn(const char* fmt, ...) {
 bool wifi_connected = false;
 FpgaBridge fpgaBridge(FPGA_SERIAL);
 DebugServer debugServer(fpgaBridge);
+NovaWifiManager novaWifi;
 
 // File I/O subsystem — SD card, mount manager, dispatcher, event reader.
 DeviceManager   deviceManager;
 FioDispatcher   fioDispatcher(fpgaBridge, deviceManager);
 FioEventReader  fioEventReader(FPGA_SERIAL);
-SdHttpServer    sdHttpServer(deviceManager);
+SdHttpServer    sdHttpServer(deviceManager, novaWifi);
 
 // SD mount diagnostic — captured at boot, exposed via /sd-status JSON.
 String g_sd_diag = "(boot in progress)";
@@ -113,6 +122,20 @@ enum NovaBootPhase : uint8_t {
 volatile uint8_t g_boot_phase = BOOT_PHASE_POWER_ON;
 volatile bool g_fpga_bridge_owned_by_boot = false;
 TaskHandle_t g_boot_task = nullptr;
+
+static constexpr uint8_t HOST_STATUS_WIFI_CONNECTED = 0x01;
+static constexpr uint8_t HOST_STATUS_FIO_ACTIVE     = 0x02;
+static constexpr uint8_t HOST_STATUS_FIO_ERROR      = 0x04;
+static constexpr uint8_t HOST_STATUS_SD_MOUNTED     = 0x08;
+static constexpr uint8_t HOST_STATUS_BOOT_READY     = 0x10;
+static constexpr uint8_t HOST_STATUS_BOOT_DEGRADED  = 0x20;
+static constexpr uint8_t HOST_STATUS_WIFI_CONFIGURED = 0x40;
+static constexpr uint8_t HOST_STATUS_HOST_SEEN      = 0x80;
+
+volatile uint8_t g_host_status_flags = HOST_STATUS_HOST_SEEN;
+uint8_t g_last_host_status_flags = 0;
+bool g_host_status_sent = false;
+bool g_network_services_started = false;
 
 const char* bootPhaseName(uint8_t phase) {
     switch (phase) {
@@ -134,6 +157,113 @@ const char* novaBootPhaseName() {
 
 bool novaFpgaBridgeAvailable() {
     return !g_fpga_bridge_owned_by_boot;
+}
+
+uint8_t novaHostStatusFlags() {
+    return (uint8_t)g_host_status_flags;
+}
+
+void publishHostStatusToFpga(bool force = false) {
+    uint8_t flags = (uint8_t)g_host_status_flags;
+    if (!force && g_host_status_sent && flags == g_last_host_status_flags)
+        return;
+
+    if (fpgaBridge.hostStatus(flags)) {
+        g_last_host_status_flags = flags;
+        g_host_status_sent = true;
+    } else {
+        logLn("WARN: FPGA host-status LED update failed (flags=0x%02X)",
+              (unsigned)flags);
+    }
+}
+
+void setHostStatusMask(uint8_t set_mask, uint8_t clear_mask,
+                       bool publish = true) {
+    uint8_t current = (uint8_t)g_host_status_flags;
+    uint8_t next = (current & (uint8_t)~clear_mask) | set_mask;
+    if (next == current)
+        return;
+
+    g_host_status_flags = next;
+    if (publish && novaFpgaBridgeAvailable())
+        publishHostStatusToFpga(false);
+}
+
+void setHostStatusBit(uint8_t bit, bool enabled, bool publish = true) {
+    setHostStatusMask(enabled ? bit : 0, enabled ? 0 : bit, publish);
+}
+
+NovaWifiManager::Config makeDefaultWifiConfig() {
+    NovaWifiManager::Config cfg;
+    cfg.ssid = WIFI_SSID ? String(WIFI_SSID) : String();
+    cfg.password = WIFI_PASSWORD ? String(WIFI_PASSWORD) : String();
+#ifdef WIFI_STATIC_IP
+    cfg.useStatic = true;
+    cfg.staticIp = WIFI_STATIC_IP;
+    cfg.gateway = WIFI_GATEWAY;
+    cfg.subnet = WIFI_SUBNET;
+    cfg.dns = WIFI_DNS;
+#endif
+    return cfg;
+}
+
+void startNetworkServicesIfNeeded() {
+    if (!novaWifi.connected() || g_network_services_started)
+        return;
+
+    if (MDNS.begin("novahost")) {
+        MDNS.addService("telnet", "tcp", LOG_PORT);
+        MDNS.addService("e6502-debug", "tcp", 6503);
+        logLn("mDNS service registered; use static IP %s",
+              WiFi.localIP().toString().c_str());
+    }
+
+    logServer.begin();
+    logLn("Debug log server on port %d", LOG_PORT);
+    logLn("Connect with: nc %s %d",
+          WiFi.localIP().toString().c_str(), LOG_PORT);
+
+    debugServer.begin();
+
+    ArduinoOTA.setHostname("novahost");
+    ArduinoOTA.onStart([]() {
+        logLn("OTA: upload starting (%s)",
+              ArduinoOTA.getCommand() == U_FLASH ? "flash" : "filesystem");
+    });
+    ArduinoOTA.onEnd([]() { logLn("OTA: upload complete, rebooting"); });
+    ArduinoOTA.onError([](ota_error_t err) { logLn("OTA: error %u", err); });
+    ArduinoOTA.begin();
+    logLn("OTA enabled on %s:3232", WiFi.localIP().toString().c_str());
+
+    sdHttpServer.begin();
+    logLn("HTTP server ready: http://%s/",
+          WiFi.localIP().toString().c_str());
+
+    g_network_services_started = true;
+}
+
+void novaWifiStateChanged() {
+    wifi_connected = novaWifi.connected();
+
+    uint8_t set_mask = 0;
+    if (novaWifi.configured())
+        set_mask |= HOST_STATUS_WIFI_CONFIGURED;
+    if (novaWifi.connected())
+        set_mask |= HOST_STATUS_WIFI_CONNECTED;
+
+    setHostStatusMask(set_mask,
+                      HOST_STATUS_WIFI_CONFIGURED |
+                      HOST_STATUS_WIFI_CONNECTED);
+    startNetworkServicesIfNeeded();
+}
+
+void novaHostFioActivityStarted() {
+    setHostStatusMask(HOST_STATUS_FIO_ACTIVE, HOST_STATUS_FIO_ERROR);
+}
+
+void novaHostFioActivityFinished(bool ok) {
+    setHostStatusMask(ok ? 0 : HOST_STATUS_FIO_ERROR,
+                      HOST_STATUS_FIO_ACTIVE);
 }
 
 static const size_t BOOT_ROM_LEN       = 16 * 1024;
@@ -527,66 +657,251 @@ bool showBootSplash() {
 // WiFi setup
 // =========================================================================
 void setupWiFi() {
-    logLn("Connecting to WiFi: %s", WIFI_SSID);
-    WiFi.mode(WIFI_STA);
+    novaWifi.begin(makeDefaultWifiConfig());
+    novaWifiStateChanged();
 
-#ifdef WIFI_STATIC_IP
-    // Pin a static IP so deploy tooling (OTA, test harness, debug bridge)
-    // doesn't depend on mDNS. Must be called before WiFi.begin().
-    IPAddress ip, gw, sn, dns;
-    if (ip.fromString(WIFI_STATIC_IP) &&
-        gw.fromString(WIFI_GATEWAY) &&
-        sn.fromString(WIFI_SUBNET) &&
-        dns.fromString(WIFI_DNS)) {
-        WiFi.config(ip, gw, sn, dns);
-        Serial.printf("Static IP requested: %s (gw %s, mask %s, dns %s)\n",
-                      WIFI_STATIC_IP, WIFI_GATEWAY, WIFI_SUBNET, WIFI_DNS);
-    } else {
-        Serial.println("Invalid static-IP config — falling back to DHCP");
-    }
-#endif
-
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-        delay(500);
-        Serial.print(".");
-        attempts++;
+    if (!novaWifi.configured()) {
+        logLn("WiFi is not configured. Use USB serial: wifi set ssid ...");
+        return;
     }
 
-    if (WiFi.status() == WL_CONNECTED) {
-        wifi_connected = true;
-        logLn("");
+    NovaWifiManager::Config cfg = novaWifi.config();
+    logLn("Connecting to WiFi: %s", cfg.ssid.c_str());
+    bool ok = novaWifi.connect();
+    novaWifiStateChanged();
+
+    if (ok) {
         logLn("WiFi connected!");
         logLn("IP address: %s", WiFi.localIP().toString().c_str());
+    } else {
+        NovaWifiManager::Status st = novaWifi.status();
+        logLn("WiFi connection failed: %s", st.lastError.c_str());
+    }
+}
 
-        // mDNS: access as novahost.local
-        if (MDNS.begin("novahost")) {
-            MDNS.addService("telnet", "tcp", LOG_PORT);
-            MDNS.addService("e6502-debug", "tcp", 6503);
-            logLn("mDNS: novahost.local");
+String serialCommandLine;
+
+int splitSerialArgs(const String& line, String* args, int maxArgs) {
+    int count = 0;
+    String current;
+    bool inQuote = false;
+    char quoteChar = 0;
+
+    for (size_t i = 0; i < line.length(); i++) {
+        char c = line[i];
+        if (inQuote) {
+            if (c == quoteChar) {
+                inQuote = false;
+            } else {
+                current += c;
+            }
+            continue;
         }
 
-        // Start servers
-        logServer.begin();
-        logLn("Debug log server on port %d", LOG_PORT);
-        logLn("Connect with: nc %s %d", WiFi.localIP().toString().c_str(), LOG_PORT);
+        if (c == '"' || c == '\'') {
+            inQuote = true;
+            quoteChar = c;
+            continue;
+        }
 
-        debugServer.begin();
+        if (isspace((unsigned char)c)) {
+            if (current.length() > 0 && count < maxArgs) {
+                args[count++] = current;
+                current = "";
+            }
+            continue;
+        }
 
-        // OTA firmware update — push via `arduino-cli upload --port novahost.local`
-        ArduinoOTA.setHostname("novahost");
-        ArduinoOTA.onStart([]() {
-            logLn("OTA: upload starting (%s)",
-                  ArduinoOTA.getCommand() == U_FLASH ? "flash" : "filesystem");
-        });
-        ArduinoOTA.onEnd([]() { logLn("OTA: upload complete, rebooting"); });
-        ArduinoOTA.onError([](ota_error_t err) { logLn("OTA: error %u", err); });
-        ArduinoOTA.begin();
-        logLn("OTA enabled on novahost.local:3232");
-    } else {
-        Serial.println("\nWiFi connection failed — running without network");
+        current += c;
+    }
+
+    if (current.length() > 0 && count < maxArgs)
+        args[count++] = current;
+    return count;
+}
+
+void printWifiHelp() {
+    Serial.println("WiFi commands:");
+    Serial.println("  wifi status");
+    Serial.println("  wifi scan");
+    Serial.println("  wifi set ssid \"Network Name\"");
+    Serial.println("  wifi set password \"secret\"");
+    Serial.println("  wifi set dhcp on");
+    Serial.println("  wifi set static <ip> <gateway> <subnet> <dns>");
+    Serial.println("  wifi connect");
+    Serial.println("  wifi disconnect");
+    Serial.println("  wifi reconnect");
+    Serial.println("  wifi forget");
+}
+
+void printWifiStatusSerial() {
+    NovaWifiManager::Status st = novaWifi.status();
+    Serial.printf("configured: %s\n", st.configured ? "yes" : "no");
+    Serial.printf("connected: %s\n", st.connected ? "yes" : "no");
+    Serial.printf("wantConnected: %s\n", st.wantConnected ? "yes" : "no");
+    Serial.printf("ssid: %s\n", st.ssid.c_str());
+    Serial.printf("passwordSet: %s\n", st.passwordSet ? "yes" : "no");
+    Serial.printf("mode: %s\n", st.useStatic ? "static" : "dhcp");
+    if (st.useStatic) {
+        Serial.printf("staticIp: %s\n", st.staticIp.c_str());
+        Serial.printf("gateway: %s\n", st.gateway.c_str());
+        Serial.printf("subnet: %s\n", st.subnet.c_str());
+        Serial.printf("dns: %s\n", st.dns.c_str());
+    }
+    Serial.printf("localIp: %s\n", st.localIp.c_str());
+    Serial.printf("rssi: %ld\n", (long)st.rssi);
+    Serial.printf("wifiStatus: %s\n",
+                  NovaWifiManager::statusName(st.wifiStatus));
+    if (st.lastError.length() > 0)
+        Serial.printf("lastError: %s\n", st.lastError.c_str());
+}
+
+void scanWifiSerial() {
+    Serial.println("Scanning...");
+    int count = WiFi.scanNetworks();
+    for (int i = 0; i < count; i++) {
+        Serial.printf("%2d  %4ld dBm  ch %2d  %s  %s\n",
+                      i + 1,
+                      (long)WiFi.RSSI(i),
+                      WiFi.channel(i),
+                      WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "open" : "secure",
+                      WiFi.SSID(i).c_str());
+    }
+    if (count <= 0)
+        Serial.println("No networks found.");
+    WiFi.scanDelete();
+}
+
+void saveWifiConfigSerial(const NovaWifiManager::Config& cfg) {
+    String error;
+    if (!novaWifi.saveConfig(cfg, &error)) {
+        Serial.printf("ERROR: %s\n", error.c_str());
+        return;
+    }
+    novaWifiStateChanged();
+    Serial.println("OK");
+}
+
+void handleWifiSerialCommand(String* args, int argc) {
+    if (argc < 2 || args[1] == "help" || args[1] == "?") {
+        printWifiHelp();
+        return;
+    }
+
+    String sub = args[1];
+    sub.toLowerCase();
+
+    if (sub == "status" || sub == "show") {
+        printWifiStatusSerial();
+        return;
+    }
+    if (sub == "scan") {
+        scanWifiSerial();
+        return;
+    }
+    if (sub == "connect") {
+        bool ok = novaWifi.connect();
+        novaWifiStateChanged();
+        Serial.println(ok ? "OK connected" : "ERROR connect failed");
+        printWifiStatusSerial();
+        return;
+    }
+    if (sub == "disconnect") {
+        novaWifi.disconnect();
+        novaWifiStateChanged();
+        Serial.println("OK disconnected");
+        return;
+    }
+    if (sub == "reconnect") {
+        bool ok = novaWifi.reconnect();
+        novaWifiStateChanged();
+        Serial.println(ok ? "OK connected" : "ERROR reconnect failed");
+        printWifiStatusSerial();
+        return;
+    }
+    if (sub == "forget") {
+        novaWifi.forget();
+        novaWifiStateChanged();
+        Serial.println("OK forgotten");
+        return;
+    }
+    if (sub == "set") {
+        if (argc < 4) {
+            printWifiHelp();
+            return;
+        }
+
+        NovaWifiManager::Config cfg = novaWifi.config();
+        String key = args[2];
+        key.toLowerCase();
+
+        if (key == "ssid") {
+            cfg.ssid = args[3];
+            saveWifiConfigSerial(cfg);
+            return;
+        }
+        if (key == "password") {
+            cfg.password = args[3];
+            saveWifiConfigSerial(cfg);
+            return;
+        }
+        if (key == "dhcp") {
+            String value = args[3];
+            value.toLowerCase();
+            cfg.useStatic = !(value == "on" || value == "true" || value == "1");
+            saveWifiConfigSerial(cfg);
+            return;
+        }
+        if (key == "static" && argc >= 7) {
+            cfg.useStatic = true;
+            cfg.staticIp = args[3];
+            cfg.gateway = args[4];
+            cfg.subnet = args[5];
+            cfg.dns = args[6];
+            saveWifiConfigSerial(cfg);
+            return;
+        }
+    }
+
+    Serial.println("Unknown command.");
+    printWifiHelp();
+}
+
+void handleSerialCommand(String line) {
+    line.trim();
+    if (line.length() == 0)
+        return;
+
+    String args[10];
+    int argc = splitSerialArgs(line, args, 10);
+    if (argc == 0)
+        return;
+
+    args[0].toLowerCase();
+    if (args[0] == "help" || args[0] == "?") {
+        printWifiHelp();
+        return;
+    }
+    if (args[0] == "wifi") {
+        handleWifiSerialCommand(args, argc);
+        return;
+    }
+
+    Serial.println("Unknown command. Type: help");
+}
+
+void pollSerialConsole() {
+    while (Serial.available()) {
+        char c = (char)Serial.read();
+        if (c == '\r' || c == '\n') {
+            if (serialCommandLine.length() > 0) {
+                handleSerialCommand(serialCommandLine);
+                serialCommandLine = "";
+            }
+            continue;
+        }
+        if ((unsigned char)c >= 0x20 && serialCommandLine.length() < 240)
+            serialCommandLine += c;
     }
 }
 
@@ -732,6 +1047,8 @@ void runBootSequence() {
 
     g_boot_phase = BOOT_PHASE_SD_MOUNT;
     bool sd_ok = mountSdCard();
+    setHostStatusBit(HOST_STATUS_SD_MOUNTED, sd_ok, false);
+    publishHostStatusToFpga(true);
 
     if (sd_ok) {
         // Optional SD-resident boot logo. CPU remains held in reset while
@@ -752,6 +1069,10 @@ void runBootSequence() {
 
     g_fpga_bridge_owned_by_boot = false;
     g_boot_phase = rom_ok ? BOOT_PHASE_READY : BOOT_PHASE_DEGRADED;
+    setHostStatusMask(rom_ok ? HOST_STATUS_BOOT_READY : HOST_STATUS_BOOT_DEGRADED,
+                      rom_ok ? HOST_STATUS_BOOT_DEGRADED : HOST_STATUS_BOOT_READY,
+                      false);
+    publishHostStatusToFpga(true);
     logLn("NovaHost boot sequence finished: %s", novaBootPhaseName());
 }
 
@@ -800,17 +1121,13 @@ void setup() {
     // FPGA emits 0xFE 0xE0 on the bridge, the reader fires the
     // dispatcher to drain registers + execute the file op.
     fioEventReader.onEvent(FioDispatcher::onFioEventStatic, &fioDispatcher);
+    fpgaBridge.onDrainByte(FioEventReader::onDrainByteStatic, &fioEventReader);
 
     // Critical infrastructure comes first. The board should be reachable over
     // WiFi even if SD mounting, FPGA bridge handshaking, splash drawing, or ROM
     // loading fails later.
     setupWiFi();
-
-    if (wifi_connected) {
-        sdHttpServer.begin();
-        logLn("HTTP server ready: http://%s/",
-              WiFi.localIP().toString().c_str());
-    }
+    publishHostStatusToFpga(true);
 
     g_boot_phase = BOOT_PHASE_INFRA_READY;
     logLn("NovaHost infrastructure ready; starting SD/FPGA boot task.");
@@ -821,26 +1138,53 @@ void setup() {
 // Main loop
 // =========================================================================
 void loop() {
+    pollSerialConsole();
+
     // Drain async FIO events only after the boot task is done with the bridge.
     // The boot task streams ROM/assets over the same UART, so polling during
     // boot would corrupt that protocol.
     if (novaFpgaBridgeAvailable()) {
         fioEventReader.poll();
+        static unsigned long lastFioPoll = 0;
+        if (millis() - lastFioPoll >= 5) {
+            lastFioPoll = millis();
+            fioDispatcher.poll_pending();
+        }
+    }
+
+    // The FPGA host-status latch resets whenever the bitstream is reloaded
+    // from flash. Force a lightweight refresh so LEDs recover even if the ESP
+    // flags themselves have not changed.
+    static unsigned long lastHostStatusRefresh = 0;
+    if (novaFpgaBridgeAvailable() && millis() - lastHostStatusRefresh > 1000) {
+        lastHostStatusRefresh = millis();
+        publishHostStatusToFpga(true);
+    }
+
+    // Track WiFi state changes and mirror them onto the FPGA user LEDs.
+    static unsigned long lastWifiCheck = 0;
+    novaWifi.loop();
+    if (millis() - lastWifiCheck > 10000) {
+        lastWifiCheck = millis();
+        bool now_connected = novaWifi.connected();
+        if (now_connected != wifi_connected) {
+            novaWifiStateChanged();
+            if (now_connected) {
+                logLn("WiFi reconnected: %s",
+                      WiFi.localIP().toString().c_str());
+            } else {
+                logLn("WiFi lost");
+            }
+        } else {
+            novaWifiStateChanged();
+        }
     }
 
     // Accept new log viewer connections
-    if (wifi_connected) {
+    if (novaWifi.connected() && g_network_services_started) {
         ArduinoOTA.handle();
         handleLogClients();
         debugServer.loop();
         sdHttpServer.loop();
-    }
-
-    // Check WiFi reconnection
-    static unsigned long lastWifiCheck = 0;
-    if (wifi_connected && WiFi.status() != WL_CONNECTED && millis() - lastWifiCheck > 10000) {
-        lastWifiCheck = millis();
-        logLn("WiFi lost — reconnecting...");
-        WiFi.reconnect();
     }
 }

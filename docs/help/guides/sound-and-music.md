@@ -469,61 +469,20 @@ cutoff 200 with high resonance, sweeping upward through the melody.
 Whitespace, tabs, newlines, and pipe characters (`|`) are ignored and
 can be used freely to format MML strings for readability.
 
-## SID File Playback
+## File Playback
 
-NovaBASIC can load and play standard `.sid` files -- the native
-music format of the Commodore 64 scene:
-
-| **Command** | **Description** |
-| --- | --- |
-| SIDPLAY "filename" [, song] | Load and play a `.sid` file. The optional `song` parameter selects which sub-tune to play (default 1). |
-| SIDSTOP | Stop SID file playback. |
+File-backed playback is available as convenience BASIC commands:
 
 ```basic
-10 SIDPLAY "commando"
-20 FOR I = 1 TO 600 : VSYNC : NEXT I
-30 SIDSTOP
+10 SIDPLAY "commando",1
+20 MIDPLAY "theme"
+30 SFLOAD "piano.sf2"
 ```
 
-SID files are loaded from the ` /e6502-programs`
-directory. The `.sid` extension is added automatically. The SID
-player injects an IRQ trampoline into CPU RAM that calls the file's init
-and play routines at 60 Hz.
-
-::: warning
-SID playback takes over the SID chip directly. `SOUND` and `MUSIC`
-commands will not produce audible output while a SID file is playing. Call
-`SIDSTOP` before using other sound commands.
-:::
-
-## MIDI File Playback
-
-NovaBASIC can load and play standard MIDI files (`.mid`), automatically
-mapping General MIDI instruments and velocity to the SID sound engine:
-
-| **Command** | **Description** |
-| --- | --- |
-| MIDPLAY "filename" | Load and play a `.mid` file. Auto-selects the 6 busiest channels. |
-| MIDSTOP | Stop MIDI playback. |
-
-```basic
-10 MIDPLAY "entertainer"
-20 FOR I = 1 TO 1800 : VSYNC : NEXT I
-30 MIDSTOP
-```
-
-MIDI files are loaded from the `~/e6502-programs` directory. The `.mid`
-extension is added automatically.
-
-The MIDI engine maps General MIDI program numbers to eight SID instrument
-buckets (pulse piano, saw strings, triangle flute, noise drums, etc.) and
-converts MIDI note velocity to per-voice volume (0--15).
-
-::: warning
-MIDI playback uses the MusicEngine (voices 1--6). `SOUND` and `MUSIC`
-commands will conflict while a MIDI file is playing. Call `MIDSTOP` before
-using other music commands.
-:::
+`SIDPLAY "name"[,song]` plays a SID file, defaulting to song 1.
+`SIDSTOP` stops SID playback. `MIDPLAY "name"` plays a MIDI file through the
+music engine, and `MIDSTOP` stops it. `SFLOAD "name"` loads a new soundfont for
+MIDI playback.
 
 ## Graphics File I/O
 

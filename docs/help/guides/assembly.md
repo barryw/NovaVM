@@ -116,17 +116,42 @@ REM prints the letter A
 
 NovaBASIC provides two ways to execute machine code from within a BASIC program.
 
-### `SYS addr`
+### `SYS addr[,a[,x[,y]]]`
 
 Jumps to *addr* after pushing a BASIC return address on the stack. Execution
-resumes in BASIC after the machine-code routine executes an `RTS`. There is no
-parameter passing; `SYS` is a simple subroutine entry. You are responsible for preserving
-CPU registers if the routine will return to BASIC in a clean state.
+resumes in BASIC after the machine-code routine executes an `RTS`.
+
+The optional byte arguments initialize the 6502 `A`, `X`, and `Y` registers
+before the jump:
 
 ```
 10 SYS 36864
 REM jumps to machine code at $9000
+
+20 SYS 36864,60,10,1
+REM jumps with A=60, X=10, Y=1
 ```
+
+When the routine returns, NovaBASIC stores the returned registers in the SYS
+mailbox bytes `SYS_REGA`, `SYS_REGX`, and `SYS_REGY` from `ehbasic/lib/nova.inc`.
+These are intended as the stable bridge for small BASIC-to-assembly calls.
+
+Use `ADDR("LABEL")` when BASIC code needs one of the generated runtime labels
+instead of a hard-coded address:
+
+```
+10 SYS ADDR("AUDIO.SIDPLAY")
+20 PRINT ADDR("SYS.REGA")
+```
+
+The lookup table lives in the extension ROM and is generated from the same
+`@label` comments as the assembly reference. `ADDR()` only exposes labels with
+resolved ROM, RAM, or MMIO addresses; extension-only and link-time library
+labels remain documented for assembly callers but are not valid `SYS` targets.
+
+Runtime labels are documented from `@label` comments in the assembly sources.
+See `docs/assembly/runtime-labels.md` for the generated routine and
+pseudo-register ABI reference.
 
 ### `USR(x)`
 
@@ -518,8 +543,6 @@ cleared automatically when you read `TimerStatus`.
 
 ::: note
 Disable the timer (`POKE $BA40, 0`) before changing the divisor.
-The `SIDPLAY` command uses the timer internally; starting SID playback
-will reconfigure the timer divisor.
 :::
 
 ## Timer from Assembly

@@ -2,7 +2,7 @@
 ; Run: sim6502 -s tests/integration/tiles.6502 --backend novavm
 ; Note: TSCROLL x,y sets scroll. TSCROLLX/TSCROLLY are functions that return values.
 ; Syntax: TPUT nt,x,y,tile  |  TFILL nt,tile  |  TATTR nt,x,y,attr
-;         TROW nt,y,addr     |  TCOL nt,x,addr |  TDEF tile,addr
+;         TDEF tile,addr
 ;
 ; Assertion pattern: POKE-sentinel ($0100) to verify BASIC ran the
 ; tested command without error, plus peekbyte($A010)==0 for VGC idle.
@@ -152,31 +152,6 @@ suites {
       basic("60 POKE $0100,$AA")
       run()
       assert(peekbyte($0100) == $AA, "TATTR ran without error")
-      assert(peekbyte($A010) == 0, "VGC idle")
-    }
-
-    test("trow-fills-row", "TROW fills a row from address") {
-      basic("10 MODE 4")
-      basic("20 TILESIZE 8")
-      ; Set up tile indices in RAM
-      basic("30 FOR I=0 TO 39:POKE $2000+I,I+1:NEXT")
-      basic("40 POKE $0100,$FF")
-      basic("50 TROW 0,0,$2000")
-      basic("60 POKE $0100,$AA")
-      run()
-      assert(peekbyte($0100) == $AA, "TROW ran without error")
-      assert(peekbyte($A010) == 0, "VGC idle")
-    }
-
-    test("tcol-fills-column", "TCOL fills a column from address") {
-      basic("10 MODE 4")
-      basic("20 TILESIZE 8")
-      basic("30 FOR I=0 TO 24:POKE $2000+I,I+1:NEXT")
-      basic("40 POKE $0100,$FF")
-      basic("50 TCOL 0,0,$2000")
-      basic("60 POKE $0100,$AA")
-      run()
-      assert(peekbyte($0100) == $AA, "TCOL ran without error")
       assert(peekbyte($A010) == 0, "VGC idle")
     }
 

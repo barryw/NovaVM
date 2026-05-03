@@ -71,6 +71,7 @@ module test_debug_bridge;
     wire [24:0] sdram_b_addr;
     wire [7:0]  sdram_b_din;
     logic [7:0] sdram_b_dout;
+    wire [7:0]  host_status;
 
     // FIO event input — we pulse this to simulate a CPU write to $B9A0.
     logic       fio_event = 0;
@@ -122,7 +123,8 @@ module test_debug_bridge;
         .sdram_b_addr(sdram_b_addr),
         .sdram_b_din(sdram_b_din),
         .sdram_b_dout(sdram_b_dout),
-        .fio_event(fio_event)
+        .fio_event(fio_event),
+        .host_status(host_status)
     );
 
     // ------------------------------------------------------------------
@@ -663,6 +665,24 @@ module test_debug_bridge;
         check("dbg_cpu_reset auto-released", dbg_cpu_reset === 1'b0);
     endtask
 
+    task automatic test_host_status_latch();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_HOST_STATUS latches NovaHost LED flags");
+
+        send_byte(8'h1B);   // CMD_HOST_STATUS
+        send_byte(8'b1010_1111);
+        wait_tx(ack);
+        check_eq8("host_status ack", ack, 8'h00);
+        check_eq8("host_status flags", host_status, 8'b1010_1111);
+
+        send_byte(8'h1B);
+        send_byte(8'b1000_0000);
+        wait_tx(ack);
+        check_eq8("host_status ack 2", ack, 8'h00);
+        check_eq8("host_status flags updated", host_status, 8'b1000_0000);
+    endtask
+
     // ------------------------------------------------------------------
     // SDRAM port B shadow — captures bytes the bridge writes via
     // sdram_b_we. Addresses are 25-bit byte addresses.
@@ -841,6 +861,7 @@ module test_debug_bridge;
         test_breakpoint_set_hit_list_clear();
         test_single_step_runs_to_next_decode();
         test_trace_read_last_records();
+        test_host_status_latch();
         test_fio_event_emission();
         test_fio_event_queued_during_cmd();
         test_fio_event_no_retrigger_when_cleared();

@@ -15,15 +15,14 @@
 #   EXTRA_DEFINES='-D...'          Verilog defines passed to beast-synth.
 #   ESP_UPLOAD=ota|ota-cli|serial|skip
 #                                  NovaHost upload method (default: direct OTA).
-#   NOVAHOST=novahost.local        OTA/HTTP/debug target. Use the static IP to
-#                                  avoid mDNS/discovery flakiness.
+#   NOVAHOST=192.168.1.65         OTA/HTTP/debug target.
 #   OTA_PORT=3232                  ArduinoOTA port for direct OTA.
 #   ESPOTA=/path/to/espota.py      Override espota.py path if auto-detect fails.
 #   SERIAL=/dev/cu.usbserial-...   Serial target when ESP_UPLOAD=serial.
 #   SERIAL_VIA_PASSTHRU=1          Load FPGA passthru SRAM image for serial ESP upload.
 #   SERIAL_REBOOT_AFTER_FPGA=1     Reboot ESP after FPGA exits passthru.
 #   SD_SYNC=1|0                    Upload staged SD assets after ESP upload.
-#   SD_SYNC_HOST=novahost.local     HTTP host for SD asset sync.
+#   SD_SYNC_HOST=192.168.1.65      HTTP host for SD asset sync.
 #   SD_SYNC_TIMEOUT=45             Seconds to wait for SD HTTP server.
 #   SD_SYNC_RETRIES=8              Per-file HTTP PUT retry count.
 #   ROM_RELOAD=1|0                 Reload ROMs from SD after SD sync.
@@ -44,7 +43,7 @@ EXTRA_DEFINES="${EXTRA_DEFINES:--DVIDEO_720X480 -DGPDI_P_ONLY}"
 export EXTRA_DEFINES
 FQBN="${FQBN:-esp32:esp32:lolin32:PartitionScheme=min_spiffs}"
 ESP_UPLOAD="${ESP_UPLOAD:-ota}"
-NOVAHOST="${NOVAHOST:-novahost.local}"
+NOVAHOST="${NOVAHOST:-192.168.1.65}"
 OTA_PORT="${OTA_PORT:-3232}"
 ESPOTA="${ESPOTA:-}"
 ESP_BUILD_PATH="${ESP_BUILD_PATH:-$ESP_DIR/build/ota-direct}"

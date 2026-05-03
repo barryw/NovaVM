@@ -9,7 +9,7 @@ import socket
 import sys
 import time
 
-HOST = "novahost.local"
+HOST = "192.168.1.65"
 PORT = 6503
 
 

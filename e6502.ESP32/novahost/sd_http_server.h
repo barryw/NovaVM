@@ -2,6 +2,10 @@
 //
 // Endpoints:
 //   GET    /health       -> NovaHost liveness, independent of SD/FPGA state
+//   GET    /wifi         -> WiFi status/config without password disclosure
+//   GET    /wifi/scan    -> nearby WiFi networks
+//   PUT    /wifi         -> update WiFi config JSON
+//   POST   /wifi/connect|disconnect|reconnect|forget
 //   GET    /sd-status    -> SD diagnostic JSON
 //   POST   /reboot       -> reboot NovaHost after responding
 //   GET    /sd/          -> JSON listing
@@ -19,11 +23,12 @@
 #include <SD.h>
 #include <WiFi.h>
 #include "device_manager.h"
+#include "nova_wifi.h"
 
 class SdHttpServer {
 public:
-    SdHttpServer(DeviceManager& dm, uint16_t port = 80)
-        : _dm(dm), _server(port) {}
+    SdHttpServer(DeviceManager& dm, NovaWifiManager& wifi, uint16_t port = 80)
+        : _dm(dm), _wifi(wifi), _server(port) {}
 
     void begin();
     void loop();
@@ -31,9 +36,12 @@ public:
 private:
     static constexpr size_t LINE_BUF_BYTES = 512;
     static constexpr size_t IO_BUF_BYTES   = 1024;
+    static constexpr size_t JSON_BUF_BYTES = 1024;
 
     DeviceManager& _dm;
+    NovaWifiManager& _wifi;
     WiFiServer     _server;
+    bool           _started = false;
 
     void handle_client(WiFiClient& client);
 
@@ -41,7 +49,16 @@ private:
                    uint32_t timeout_ms = 5000);
     bool read_body_to_file(WiFiClient& client, File& file,
                            uint32_t content_len);
+    bool read_body_to_string(WiFiClient& client, String& out,
+                             uint32_t content_len);
     bool write_all(WiFiClient& client, const uint8_t* data, size_t len);
+
+    void handle_wifi(WiFiClient& client, const char* method, const char* url,
+                     bool have_content_len, uint32_t content_len);
+    void handle_wifi_status(WiFiClient& client);
+    void handle_wifi_scan(WiFiClient& client);
+    void handle_wifi_put(WiFiClient& client, uint32_t content_len);
+    void handle_wifi_action(WiFiClient& client, const char* action);
 
     void handle_get(WiFiClient& client, const char* path);
     void handle_put(WiFiClient& client, const char* path,

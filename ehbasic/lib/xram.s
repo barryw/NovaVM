@@ -34,6 +34,10 @@ XRAM_IMPLEMENTATION_INCLUDED = 1
 ; ---------------------------------------------------------------------
 ; Status helpers
 ; ---------------------------------------------------------------------
+; @label XRAM.SET_OK
+; @kind routine
+; @symbol xram_set_ok
+; @summary Set XMC-compatible XRAM status to OK and return A=0.
 xram_set_ok:
       LDA   #XMC_OK
       STA   XMC_STATUS
@@ -42,6 +46,12 @@ xram_set_ok:
       RTS
 
 ; Input: A = XMC-compatible error code.
+; @label XRAM.SET_ERROR
+; @kind routine
+; @symbol xram_set_error
+; @summary Set XMC-compatible XRAM error status.
+; @in A: XMC-compatible error code.
+; @out A: 1.
 xram_set_error:
       PHA
       LDA   #XMC_STATUS_ERROR
@@ -77,6 +87,11 @@ xram_xmc_load_len:
       STA   XRAM_LENH
       RTS
 
+; @label XRAM.XMC_READ8
+; @kind routine
+; @symbol xram_xmc_read8
+; @summary Read one byte from XMC_XAL/M/H into XMC_DATA.
+; @requires XMC_XAL XMC_XAM XMC_XAH
 xram_xmc_read8:
       JSR   xram_xmc_load_addr
       JSR   xram_read8
@@ -87,24 +102,44 @@ xram_xmc_read8:
 @done:
       RTS
 
+; @label XRAM.XMC_WRITE8
+; @kind routine
+; @symbol xram_xmc_write8
+; @summary Write XMC_DATA to XMC_XAL/M/H.
+; @requires XMC_XAL XMC_XAM XMC_XAH XMC_DATA
 xram_xmc_write8:
       JSR   xram_xmc_load_addr
       LDA   XMC_DATA
       STA   XRAM_DATA
       JMP   xram_write8
 
+; @label XRAM.XMC_COPY_FROM_RAM
+; @kind routine
+; @symbol xram_xmc_copy_from_ram
+; @summary Copy RAM to XRAM using the XMC register ABI.
+; @requires XMC_RAML XMC_RAMH XMC_XAL XMC_XAM XMC_XAH XMC_LENL XMC_LENH
 xram_xmc_copy_from_ram:
       JSR   xram_xmc_load_addr
       JSR   xram_xmc_load_ram
       JSR   xram_xmc_load_len
       JMP   xram_copy_from_ram
 
+; @label XRAM.XMC_COPY_TO_RAM
+; @kind routine
+; @symbol xram_xmc_copy_to_ram
+; @summary Copy XRAM to RAM using the XMC register ABI.
+; @requires XMC_XAL XMC_XAM XMC_XAH XMC_RAML XMC_RAMH XMC_LENL XMC_LENH
 xram_xmc_copy_to_ram:
       JSR   xram_xmc_load_addr
       JSR   xram_xmc_load_ram
       JSR   xram_xmc_load_len
       JMP   xram_copy_to_ram
 
+; @label XRAM.XMC_FILL
+; @kind routine
+; @symbol xram_xmc_fill
+; @summary Fill XRAM using the XMC register ABI.
+; @requires XMC_XAL XMC_XAM XMC_XAH XMC_LENL XMC_LENH XMC_DATA
 xram_xmc_fill:
       JSR   xram_xmc_load_addr
       JSR   xram_xmc_load_len
@@ -123,6 +158,11 @@ xram_xmc_fill:
 ;
 ; On success, XRAM_LENL/H is updated with FIO_SIZEL/H, the actual byte count.
 ; ---------------------------------------------------------------------
+; @label XRAM.XLOAD
+; @kind routine
+; @symbol xram_xload
+; @summary Stream a file directly into XRAM using the XRAM pseudo-register ABI.
+; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_LENL XRAM_LENH XRAM_NAMELEN XRAM_NAMEPTR_L XRAM_NAMEPTR_H
 xram_xload:
       JSR   fio_prepare_xram_transfer
       BNE   @done
@@ -134,6 +174,11 @@ xram_xload:
 @done:
       JMP   xram_map_fio_error
 
+; @label XRAM.XSAVE
+; @kind routine
+; @symbol xram_xsave
+; @summary Stream XRAM directly to a file using the XRAM pseudo-register ABI.
+; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_LENL XRAM_LENH XRAM_NAMELEN XRAM_NAMEPTR_L XRAM_NAMEPTR_H
 xram_xsave:
       JSR   fio_prepare_xram_transfer
       BNE   @done
@@ -164,6 +209,11 @@ xram_store_fio_size:
 
 ; Validate a single-byte flat XRAM address. This prevents hardware-window
 ; users from accidentally wrapping high addresses back into the 512KB device.
+; @label XRAM.ADDR_IN_RANGE
+; @kind routine
+; @symbol xram_addr_is_in_range
+; @summary Validate XRAM_ADDRH is inside the 512KB XRAM device.
+; @requires XRAM_ADDRH
 xram_addr_is_in_range:
       LDA   XRAM_ADDRH
       CMP   #XRAM_CAPACITY_HIGH
@@ -177,6 +227,11 @@ xram_addr_is_in_range:
 ; ---------------------------------------------------------------------
 ; Windowed byte access
 ; ---------------------------------------------------------------------
+; @label XRAM.MAP_WINDOW3
+; @kind routine
+; @symbol xram_map_window3
+; @summary Map XRAM window 3 to XRAM_ADDRM/H.
+; @requires XRAM_ADDRM XRAM_ADDRH
 xram_map_window3:
       LDA   XMC_WINCTL
       ORA   #XRAM_WIN3_ENABLE
@@ -188,6 +243,12 @@ xram_map_window3:
       STA   WIN3_HI
       RTS
 
+; @label XRAM.READ8
+; @kind routine
+; @symbol xram_read8
+; @summary Read one byte from XRAM_ADDRL/M/H into XRAM_DATA.
+; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH
+; @out XRAM_DATA: Byte read from XRAM.
 xram_read8:
       JSR   xram_addr_is_in_range
       BNE   @done
@@ -199,6 +260,11 @@ xram_read8:
 @done:
       RTS
 
+; @label XRAM.WRITE8
+; @kind routine
+; @symbol xram_write8
+; @summary Write XRAM_DATA to XRAM_ADDRL/M/H.
+; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_DATA
 xram_write8:
       JSR   xram_addr_is_in_range
       BNE   @done
@@ -213,6 +279,11 @@ xram_write8:
 ; ---------------------------------------------------------------------
 ; DMA bulk transfers
 ; ---------------------------------------------------------------------
+; @label XRAM.COPY_FROM_RAM
+; @kind routine
+; @symbol xram_copy_from_ram
+; @summary Copy CPU RAM to XRAM using the XRAM pseudo-register ABI.
+; @requires XRAM_RAML XRAM_RAMH XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_LENL XRAM_LENH
 xram_copy_from_ram:
       LDA   #DMA_SPACE_CPU
       STA   DMA_SRCSPACE
@@ -235,6 +306,11 @@ xram_copy_from_ram:
       JSR   dma_start_copy
       JMP   xram_dma_result
 
+; @label XRAM.COPY_TO_RAM
+; @kind routine
+; @symbol xram_copy_to_ram
+; @summary Copy XRAM to CPU RAM using the XRAM pseudo-register ABI.
+; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_RAML XRAM_RAMH XRAM_LENL XRAM_LENH
 xram_copy_to_ram:
       LDA   #DMA_SPACE_XRAM
       STA   DMA_SRCSPACE
@@ -257,6 +333,11 @@ xram_copy_to_ram:
       JSR   dma_start_copy
       JMP   xram_dma_result
 
+; @label XRAM.FILL
+; @kind routine
+; @symbol xram_fill
+; @summary Fill XRAM using XRAM_ADDRL/M/H, XRAM_LENL/H, and XRAM_DATA.
+; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_LENL XRAM_LENH XRAM_DATA
 xram_fill:
       LDA   #DMA_SPACE_CPU
       STA   DMA_SRCSPACE
@@ -287,6 +368,10 @@ xram_set_dma_len16:
       STZ   DMA_LENH
       RTS
 
+; @label XRAM.WAIT_DMA
+; @kind routine
+; @symbol xram_wait_dma
+; @summary Wait for the shared DMA controller and map the result to XRAM status.
 xram_wait_dma:
       JSR   dma_wait
 

@@ -1,0 +1,3353 @@
+{
+  "version": 1,
+  "labels": [
+    {
+      "label": "AUDIO.ATTACK",
+      "source": "lib/audio.inc",
+      "line": 77,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_ATTACK",
+      "summary": "Attack nibble for AUDIO.INSTRUMENT_SET.",
+      "address": "$B9A6"
+    },
+    {
+      "label": "AUDIO.DECAY",
+      "source": "lib/audio.inc",
+      "line": 82,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_DECAY",
+      "summary": "Decay nibble for AUDIO.INSTRUMENT_SET.",
+      "address": "$B9A7"
+    },
+    {
+      "label": "AUDIO.DURATION",
+      "source": "lib/audio.inc",
+      "line": 45,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_DURATION",
+      "summary": "Duration in 60 Hz frames for AUDIO.SOUND.",
+      "address": "$B9A5"
+    },
+    {
+      "label": "AUDIO.INSTRUMENT",
+      "source": "lib/audio.inc",
+      "line": 50,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_INSTRUMENT",
+      "summary": "Instrument slot for AUDIO.SOUND.",
+      "address": "$B9A6"
+    },
+    {
+      "label": "AUDIO.INSTRUMENT_SET",
+      "source": "lib/audio.s",
+      "line": 93,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "AUDIO.INST_ID",
+        "AUDIO.WAVEFORM",
+        "AUDIO.ATTACK",
+        "AUDIO.DECAY",
+        "AUDIO.SUSTAIN",
+        "AUDIO.RELEASE"
+      ],
+      "kind": "routine",
+      "symbol": "audio_instrument",
+      "abi": "pseudo-register",
+      "summary": "Define an instrument envelope and waveform.",
+      "address": "$ED9F"
+    },
+    {
+      "label": "AUDIO.INST_ID",
+      "source": "lib/audio.inc",
+      "line": 67,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_INST_ID",
+      "summary": "Instrument slot to define for AUDIO.INSTRUMENT_SET.",
+      "address": "$B9A4"
+    },
+    {
+      "label": "AUDIO.MIDPLAY",
+      "source": "lib/audio.s",
+      "line": 130,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "FIO.NAME",
+        "FIO.NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "audio_midplay",
+      "abi": "pseudo-register",
+      "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN.",
+      "address": "$EDB2"
+    },
+    {
+      "label": "AUDIO.MIDSTOP",
+      "source": "lib/audio.s",
+      "line": 141,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_midstop",
+      "abi": "none",
+      "summary": "Stop MIDI file playback.",
+      "address": "$EDB7"
+    },
+    {
+      "label": "AUDIO.MUSIC_LOOP",
+      "source": "lib/audio.s",
+      "line": 209,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "AUDIO.NOTE"
+      ],
+      "kind": "routine",
+      "symbol": "audio_music_loop",
+      "abi": "pseudo-register",
+      "summary": "Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.",
+      "address": "$EDD9"
+    },
+    {
+      "label": "AUDIO.MUSIC_NOTE",
+      "source": "lib/audio.s",
+      "line": 266,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Voice number, 1..14"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Current MIDI note, or 0 if out of range or silent"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_music_note",
+      "abi": "register",
+      "summary": "Return the current MIDI note for a music voice.",
+      "address": "$EDF7"
+    },
+    {
+      "label": "AUDIO.MUSIC_PLAY",
+      "source": "lib/audio.s",
+      "line": 174,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_music_play",
+      "abi": "none",
+      "summary": "Start queued music playback.",
+      "address": "$EDC6"
+    },
+    {
+      "label": "AUDIO.MUSIC_PLAYING",
+      "source": "lib/audio.s",
+      "line": 252,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "1 if playing, 0 if idle"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_music_playing",
+      "abi": "none",
+      "summary": "Return nonzero if music is playing.",
+      "address": "$EDED"
+    },
+    {
+      "label": "AUDIO.MUSIC_PRIORITY",
+      "source": "lib/audio.s",
+      "line": 220,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "AUDIO.NOTE"
+      ],
+      "kind": "routine",
+      "symbol": "audio_music_priority",
+      "abi": "pseudo-register",
+      "summary": "Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.",
+      "address": "$EDDE"
+    },
+    {
+      "label": "AUDIO.MUSIC_SEQUENCE",
+      "source": "lib/audio.s",
+      "line": 163,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "AUDIO.VOICE",
+        "AUDIO.STRL",
+        "AUDIO.STRH",
+        "AUDIO.STRLEN"
+      ],
+      "kind": "routine",
+      "symbol": "audio_music_sequence",
+      "abi": "pseudo-register",
+      "summary": "Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.",
+      "address": "$EDC1"
+    },
+    {
+      "label": "AUDIO.MUSIC_STOP",
+      "source": "lib/audio.s",
+      "line": 188,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_music_stop",
+      "abi": "none",
+      "summary": "Stop music playback.",
+      "address": "$EDCF"
+    },
+    {
+      "label": "AUDIO.MUSIC_TEMPO",
+      "source": "lib/audio.s",
+      "line": 198,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "AUDIO.NOTE",
+        "AUDIO.DURATION"
+      ],
+      "kind": "routine",
+      "symbol": "audio_music_tempo",
+      "abi": "pseudo-register",
+      "summary": "Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.",
+      "address": "$EDD4"
+    },
+    {
+      "label": "AUDIO.NOTE",
+      "source": "lib/audio.inc",
+      "line": 40,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_NOTE",
+      "summary": "MIDI note for AUDIO.SOUND.",
+      "address": "$B9A4"
+    },
+    {
+      "label": "AUDIO.PLAY_SOUND",
+      "source": "lib/audio.s",
+      "line": 43,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "MIDI note"
+        },
+        {
+          "name": "X",
+          "description": "Duration in 60 Hz frames"
+        },
+        {
+          "name": "Y",
+          "description": "Instrument slot"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_play_sound",
+      "abi": "register",
+      "summary": "Play a one-shot note using A/X/Y register arguments.",
+      "address": "$ED82"
+    },
+    {
+      "label": "AUDIO.RELEASE",
+      "source": "lib/audio.inc",
+      "line": 92,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_RELEASE",
+      "summary": "Release nibble for AUDIO.INSTRUMENT_SET.",
+      "address": "$B9A9"
+    },
+    {
+      "label": "AUDIO.SET_VOLUME",
+      "source": "lib/audio.s",
+      "line": 58,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Volume level"
+        },
+        {
+          "name": "X",
+          "description": "Voice selector, 0=master"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_set_volume",
+      "abi": "register",
+      "summary": "Set master or per-voice volume using A/X register arguments.",
+      "address": "$ED8D"
+    },
+    {
+      "label": "AUDIO.SFLOAD",
+      "source": "lib/audio.s",
+      "line": 151,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "FIO.NAME",
+        "FIO.NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "audio_sfload",
+      "abi": "pseudo-register",
+      "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN.",
+      "address": "$EDBC"
+    },
+    {
+      "label": "AUDIO.SFX_PLAYING",
+      "source": "lib/audio.s",
+      "line": 241,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "1 if playing, 0 if idle"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_sfx_playing",
+      "abi": "none",
+      "summary": "Return nonzero if a sound effect is playing.",
+      "address": "$EDE7"
+    },
+    {
+      "label": "AUDIO.SIDPLAY",
+      "source": "lib/audio.s",
+      "line": 105,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "FIO.NAME",
+        "FIO.NAMELEN",
+        "AUDIO.NOTE"
+      ],
+      "kind": "routine",
+      "symbol": "audio_sidplay",
+      "abi": "pseudo-register",
+      "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.",
+      "address": "$EDA4"
+    },
+    {
+      "label": "AUDIO.SIDSTOP",
+      "source": "lib/audio.s",
+      "line": 120,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_sidstop",
+      "abi": "none",
+      "summary": "Stop SID file playback.",
+      "address": "$EDAD"
+    },
+    {
+      "label": "AUDIO.SOUND",
+      "source": "lib/audio.s",
+      "line": 71,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "AUDIO.NOTE",
+        "AUDIO.DURATION",
+        "AUDIO.INSTRUMENT"
+      ],
+      "kind": "routine",
+      "symbol": "audio_sound",
+      "abi": "pseudo-register",
+      "summary": "Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.",
+      "address": "$ED95"
+    },
+    {
+      "label": "AUDIO.STATUS",
+      "source": "lib/audio.s",
+      "line": 231,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Raw MUSIC_STATUS byte"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_status",
+      "abi": "none",
+      "summary": "Return raw music status bits.",
+      "address": "$EDE3"
+    },
+    {
+      "label": "AUDIO.STRH",
+      "source": "lib/audio.inc",
+      "line": 103,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_STRH",
+      "summary": "High byte of MML string pointer for AUDIO.MUSIC_SEQUENCE.",
+      "address": "$B9A7"
+    },
+    {
+      "label": "AUDIO.STRL",
+      "source": "lib/audio.inc",
+      "line": 98,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_STRL",
+      "summary": "Low byte of MML string pointer for AUDIO.MUSIC_SEQUENCE.",
+      "address": "$B9A6"
+    },
+    {
+      "label": "AUDIO.STRLEN",
+      "source": "lib/audio.inc",
+      "line": 108,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_STRLEN",
+      "summary": "MML string length for AUDIO.MUSIC_SEQUENCE.",
+      "address": "$B9A3"
+    },
+    {
+      "label": "AUDIO.SUSTAIN",
+      "source": "lib/audio.inc",
+      "line": 87,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_SUSTAIN",
+      "summary": "Sustain nibble for AUDIO.INSTRUMENT_SET.",
+      "address": "$B9A8"
+    },
+    {
+      "label": "AUDIO.VOICE",
+      "source": "lib/audio.inc",
+      "line": 61,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_VOICE",
+      "summary": "Voice selector. Use 0 for master volume or 1..14 for music voices.",
+      "address": "$B9A5"
+    },
+    {
+      "label": "AUDIO.VOLUME",
+      "source": "lib/audio.s",
+      "line": 82,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "AUDIO.VOLUME_LEVEL",
+        "AUDIO.VOICE"
+      ],
+      "kind": "routine",
+      "symbol": "audio_volume",
+      "abi": "pseudo-register",
+      "summary": "Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.",
+      "address": "$ED9A"
+    },
+    {
+      "label": "AUDIO.VOLUME_LEVEL",
+      "source": "lib/audio.inc",
+      "line": 56,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_VOLUME",
+      "summary": "Volume level for AUDIO.VOLUME.",
+      "address": "$B9A4"
+    },
+    {
+      "label": "AUDIO.WAVEFORM",
+      "source": "lib/audio.inc",
+      "line": 72,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_WAVEFORM",
+      "summary": "SID waveform/control byte for AUDIO.INSTRUMENT_SET.",
+      "address": "$B9A5"
+    },
+    {
+      "label": "BLITTER.COPY",
+      "source": "lib/blitter.s",
+      "line": 20,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "BLT_SRCSPACE",
+        "BLT_DSTSPACE",
+        "BLT_SRCL",
+        "BLT_SRCM",
+        "BLT_SRCH",
+        "BLT_DSTL",
+        "BLT_DSTM",
+        "BLT_DSTH",
+        "BLT_WIDTHL",
+        "BLT_WIDTHH",
+        "BLT_HEIGHTL",
+        "BLT_HEIGHTH",
+        "BLT_SRCSTRL",
+        "BLT_SRCSTRH",
+        "BLT_DSTSTRL",
+        "BLT_DSTSTRH"
+      ],
+      "kind": "routine",
+      "symbol": "blitter_copy",
+      "summary": "Start a rectangular blitter copy using the BLT controller registers."
+    },
+    {
+      "label": "BLITTER.FILL",
+      "source": "lib/blitter.s",
+      "line": 29,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "BLT_DSTSPACE",
+        "BLT_DSTL",
+        "BLT_DSTM",
+        "BLT_DSTH",
+        "BLT_WIDTHL",
+        "BLT_WIDTHH",
+        "BLT_HEIGHTL",
+        "BLT_HEIGHTH",
+        "BLT_DSTSTRL",
+        "BLT_DSTSTRH",
+        "BLT_FILLVALUE"
+      ],
+      "kind": "routine",
+      "symbol": "blitter_fill",
+      "summary": "Start a rectangular blitter fill using destination, size, stride, and fill registers."
+    },
+    {
+      "label": "BLITTER.START_COPY",
+      "source": "lib/blitter.s",
+      "line": 45,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "blitter_start_copy",
+      "summary": "Low-level blitter copy start. Call BLITTER.COPY for the public wrapper."
+    },
+    {
+      "label": "BLITTER.START_FILL",
+      "source": "lib/blitter.s",
+      "line": 57,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "blitter_start_fill",
+      "summary": "Low-level blitter fill start. Call BLITTER.FILL for the public wrapper."
+    },
+    {
+      "label": "BLITTER.WAIT",
+      "source": "lib/blitter.s",
+      "line": 69,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "blitter_wait",
+      "summary": "Wait for the blitter controller to leave BUSY and return shared status."
+    },
+    {
+      "label": "COPPER.ADD",
+      "source": "lib/copper.s",
+      "line": 86,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3",
+        "VGC_P4",
+        "VGC_P5"
+      ],
+      "kind": "routine",
+      "symbol": "copper_add",
+      "summary": "Add a copper operation using VGC.P0..VGC.P5."
+    },
+    {
+      "label": "COPPER.CLEAR",
+      "source": "lib/copper.s",
+      "line": 36,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "copper_clear",
+      "summary": "Clear the active copper list."
+    },
+    {
+      "label": "COPPER.COMMAND",
+      "source": "lib/copper.s",
+      "line": 26,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Copper VGC command byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "copper_command",
+      "summary": "Issue a raw copper VGC command."
+    },
+    {
+      "label": "COPPER.LIST",
+      "source": "lib/copper.s",
+      "line": 60,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0"
+      ],
+      "kind": "routine",
+      "symbol": "copper_list",
+      "summary": "Select a copper list using VGC.P0."
+    },
+    {
+      "label": "COPPER.LIST_END",
+      "source": "lib/copper.s",
+      "line": 69,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "copper_list_end",
+      "summary": "Finish the current copper list."
+    },
+    {
+      "label": "COPPER.OFF",
+      "source": "lib/copper.s",
+      "line": 52,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "copper_off",
+      "summary": "Disable copper execution."
+    },
+    {
+      "label": "COPPER.ON",
+      "source": "lib/copper.s",
+      "line": 44,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "copper_on",
+      "summary": "Enable copper execution."
+    },
+    {
+      "label": "COPPER.SET_REG_INDEX",
+      "source": "lib/copper.s",
+      "line": 96,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "VGC register index."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "copper_set_reg_index",
+      "summary": "Set VGC.P3/P4 to a direct VGC register index."
+    },
+    {
+      "label": "COPPER.SET_SPRITE_REG",
+      "source": "lib/copper.s",
+      "line": 109,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Sprite index."
+        },
+        {
+          "name": "A",
+          "description": "Sprite field offset."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "copper_set_sprite_reg",
+      "summary": "Set VGC.P3/P4 to a sprite attribute register address."
+    },
+    {
+      "label": "COPPER.USE",
+      "source": "lib/copper.s",
+      "line": 77,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0"
+      ],
+      "kind": "routine",
+      "symbol": "copper_use",
+      "summary": "Activate a copper list using VGC.P0."
+    },
+    {
+      "label": "DMA.COPY",
+      "source": "lib/dma.s",
+      "line": 20,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "DMA_SRCSPACE",
+        "DMA_DSTSPACE",
+        "DMA_SRCL",
+        "DMA_SRCM",
+        "DMA_SRCH",
+        "DMA_DSTL",
+        "DMA_DSTM",
+        "DMA_DSTH",
+        "DMA_LENL",
+        "DMA_LENM",
+        "DMA_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "dma_copy",
+      "summary": "Start a DMA copy using the DMA controller registers."
+    },
+    {
+      "label": "DMA.FILL",
+      "source": "lib/dma.s",
+      "line": 29,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "DMA_DSTSPACE",
+        "DMA_DSTL",
+        "DMA_DSTM",
+        "DMA_DSTH",
+        "DMA_LENL",
+        "DMA_LENM",
+        "DMA_LENH",
+        "DMA_FILLVALUE"
+      ],
+      "kind": "routine",
+      "symbol": "dma_fill",
+      "summary": "Start a DMA fill using the destination and length registers."
+    },
+    {
+      "label": "DMA.START_COPY",
+      "source": "lib/dma.s",
+      "line": 42,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "dma_start_copy",
+      "summary": "Low-level DMA copy start. Call DMA.COPY for the stable public wrapper."
+    },
+    {
+      "label": "DMA.START_FILL",
+      "source": "lib/dma.s",
+      "line": 53,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "dma_start_fill",
+      "summary": "Low-level DMA fill start. Call DMA.FILL for the stable public wrapper."
+    },
+    {
+      "label": "DMA.WAIT",
+      "source": "lib/dma.s",
+      "line": 65,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "dma_wait",
+      "summary": "Wait for the DMA controller to leave BUSY and return shared status."
+    },
+    {
+      "label": "FIO.ARG_ADDRH",
+      "source": "lib/fio.inc",
+      "line": 34,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "FIO_ARG_ADDRH",
+      "summary": "High byte of XRAM address argument for FIO.PREPARE_XRAM_TRANSFER.",
+      "address": "$22"
+    },
+    {
+      "label": "FIO.ARG_ADDRL",
+      "source": "lib/fio.inc",
+      "line": 24,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "FIO_ARG_ADDRL",
+      "summary": "Low byte of XRAM address argument for FIO.PREPARE_XRAM_TRANSFER.",
+      "address": "$20"
+    },
+    {
+      "label": "FIO.ARG_ADDRM",
+      "source": "lib/fio.inc",
+      "line": 29,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "FIO_ARG_ADDRM",
+      "summary": "Middle byte of XRAM address argument for FIO.PREPARE_XRAM_TRANSFER.",
+      "address": "$21"
+    },
+    {
+      "label": "FIO.ARG_LENH",
+      "source": "lib/fio.inc",
+      "line": 44,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "FIO_ARG_LENH",
+      "summary": "High byte of transfer length for FIO.PREPARE_XRAM_TRANSFER.",
+      "address": "$27"
+    },
+    {
+      "label": "FIO.ARG_LENL",
+      "source": "lib/fio.inc",
+      "line": 39,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "FIO_ARG_LENL",
+      "summary": "Low byte of transfer length for FIO.PREPARE_XRAM_TRANSFER.",
+      "address": "$26"
+    },
+    {
+      "label": "FIO.ARG_NAMELEN",
+      "source": "lib/fio.inc",
+      "line": 49,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "FIO_ARG_NAMELEN",
+      "summary": "Filename length for FIO.COPY_NAME.",
+      "address": "$28"
+    },
+    {
+      "label": "FIO.ARG_NAMEPTR_H",
+      "source": "lib/fio.inc",
+      "line": 59,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "FIO_ARG_NAMEPTR_H",
+      "summary": "High byte of filename pointer for FIO.COPY_NAME.",
+      "address": "$2A"
+    },
+    {
+      "label": "FIO.ARG_NAMEPTR_L",
+      "source": "lib/fio.inc",
+      "line": 54,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "FIO_ARG_NAMEPTR_L",
+      "summary": "Low byte of filename pointer for FIO.COPY_NAME.",
+      "address": "$29"
+    },
+    {
+      "label": "FIO.CD",
+      "source": "lib/fio.s",
+      "line": 197,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "fio_cd",
+      "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
+      "address": "$ED6E"
+    },
+    {
+      "label": "FIO.CHECK",
+      "source": "lib/fio.s",
+      "line": 47,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_check",
+      "summary": "Convert the current FIO status register to the shared A=0/1 result.",
+      "address": "$ECEF"
+    },
+    {
+      "label": "FIO.CLEAR_ERROR",
+      "source": "lib/fio.s",
+      "line": 81,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_clear_error",
+      "summary": "Clear the host-visible FIO status and error latch.",
+      "address": "$ED0F"
+    },
+    {
+      "label": "FIO.COPY_NAME",
+      "source": "lib/fio.s",
+      "line": 111,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on invalid name."
+        }
+      ],
+      "requires": [
+        "FIO_ARG_NAMELEN",
+        "FIO_ARG_NAMEPTR_L",
+        "FIO_ARG_NAMEPTR_H"
+      ],
+      "kind": "routine",
+      "symbol": "fio_copy_name",
+      "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
+      "address": "$ED2E"
+    },
+    {
+      "label": "FIO.DELETE",
+      "source": "lib/fio.s",
+      "line": 170,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "fio_delete",
+      "summary": "Delete the file named by FIO.NAME/FIO.NAMELEN.",
+      "address": "$ED5F"
+    },
+    {
+      "label": "FIO.DIR_OPEN",
+      "source": "lib/fio.s",
+      "line": 154,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_dir_open",
+      "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
+      "address": "$ED55"
+    },
+    {
+      "label": "FIO.DIR_READ",
+      "source": "lib/fio.s",
+      "line": 162,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_dir_read",
+      "summary": "Read the next directory entry into the FIO directory result registers.",
+      "address": "$ED5A"
+    },
+    {
+      "label": "FIO.EXEC",
+      "source": "lib/fio.s",
+      "line": 63,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "FIO command byte."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_exec",
+      "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
+      "address": "$ECFC"
+    },
+    {
+      "label": "FIO.GLOAD",
+      "source": "lib/fio.s",
+      "line": 188,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN",
+        "FIO_GSPACE",
+        "FIO_GADDRL",
+        "FIO_GADDRH",
+        "FIO_GLENL",
+        "FIO_GLENH"
+      ],
+      "kind": "routine",
+      "symbol": "fio_gload",
+      "summary": "Load VGC/graphics memory using FIO graphics registers.",
+      "address": "$ED69"
+    },
+    {
+      "label": "FIO.GSAVE",
+      "source": "lib/fio.s",
+      "line": 179,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN",
+        "FIO_GSPACE",
+        "FIO_GADDRL",
+        "FIO_GADDRH",
+        "FIO_GLENL",
+        "FIO_GLENH"
+      ],
+      "kind": "routine",
+      "symbol": "fio_gsave",
+      "summary": "Save VGC/graphics memory using FIO graphics registers.",
+      "address": "$ED64"
+    },
+    {
+      "label": "FIO.ISSUE",
+      "source": "lib/fio.s",
+      "line": 37,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "FIO command byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_issue",
+      "summary": "Issue a raw FIO command without waiting for completion.",
+      "address": "$ECEB"
+    },
+    {
+      "label": "FIO.LOAD",
+      "source": "lib/fio.s",
+      "line": 145,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN",
+        "FIO_SRCL",
+        "FIO_SRCH"
+      ],
+      "kind": "routine",
+      "symbol": "fio_load",
+      "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
+      "address": "$ED50"
+    },
+    {
+      "label": "FIO.MKDIR",
+      "source": "lib/fio.s",
+      "line": 206,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "fio_mkdir",
+      "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
+      "address": "$ED73"
+    },
+    {
+      "label": "FIO.NAME",
+      "source": "lib/nova.inc",
+      "line": 786,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "buffer",
+      "symbol": "FIO_NAME",
+      "summary": "Filename buffer used by file-backed runtime routines.",
+      "address": "$B9B0"
+    },
+    {
+      "label": "FIO.NAMELEN",
+      "source": "lib/nova.inc",
+      "line": 743,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "FIO_NAMELEN",
+      "summary": "Length of the filename in FIO.NAME, 1..63 bytes.",
+      "address": "$B9A3"
+    },
+    {
+      "label": "FIO.PREPARE_XRAM_TRANSFER",
+      "source": "lib/fio.s",
+      "line": 242,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_ARG_NAMELEN",
+        "FIO_ARG_NAMEPTR_L",
+        "FIO_ARG_NAMEPTR_H",
+        "FIO_ARG_ADDRL",
+        "FIO_ARG_ADDRM",
+        "FIO_ARG_ADDRH",
+        "FIO_ARG_LENL",
+        "FIO_ARG_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "fio_prepare_xram_transfer",
+      "summary": "Copy pointer filename and XRAM transfer arguments into FIO registers."
+    },
+    {
+      "label": "FIO.PWD",
+      "source": "lib/fio.s",
+      "line": 224,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_pwd",
+      "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
+      "address": "$ED7D"
+    },
+    {
+      "label": "FIO.RMDIR",
+      "source": "lib/fio.s",
+      "line": 215,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "fio_rmdir",
+      "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
+      "address": "$ED78"
+    },
+    {
+      "label": "FIO.RUN",
+      "source": "lib/fio.s",
+      "line": 234,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_run",
+      "summary": "Compatibility alias for FIO.EXEC."
+    },
+    {
+      "label": "FIO.SAVE",
+      "source": "lib/fio.s",
+      "line": 136,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN",
+        "FIO_SRCL",
+        "FIO_SRCH",
+        "FIO_ENDL",
+        "FIO_ENDH"
+      ],
+      "kind": "routine",
+      "symbol": "fio_save",
+      "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
+      "address": "$ED4B"
+    },
+    {
+      "label": "FIO.SET_IO_ERROR",
+      "source": "lib/fio.s",
+      "line": 97,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_set_io_error",
+      "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
+      "address": "$ED21"
+    },
+    {
+      "label": "NIC.ACCEPT",
+      "source": "lib/nic.s",
+      "line": 65,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nic_accept",
+      "summary": "Accept a pending connection for NIC_SLOT."
+    },
+    {
+      "label": "NIC.ARG_NAMELEN",
+      "source": "lib/nic.inc",
+      "line": 34,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "NIC_ARG_NAMELEN",
+      "summary": "Hostname length for NIC.COPY_NAME.",
+      "address": "$20"
+    },
+    {
+      "label": "NIC.ARG_NAMEPTR_H",
+      "source": "lib/nic.inc",
+      "line": 44,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "NIC_ARG_NAMEPTR_H",
+      "summary": "High byte of hostname pointer for NIC.COPY_NAME.",
+      "address": "$22"
+    },
+    {
+      "label": "NIC.ARG_NAMEPTR_L",
+      "source": "lib/nic.inc",
+      "line": 39,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "NIC_ARG_NAMEPTR_L",
+      "summary": "Low byte of hostname pointer for NIC.COPY_NAME.",
+      "address": "$21"
+    },
+    {
+      "label": "NIC.COMMAND",
+      "source": "lib/nic.s",
+      "line": 29,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "NIC command byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nic_command",
+      "summary": "Issue a raw NIC command.",
+      "address": "$EE03"
+    },
+    {
+      "label": "NIC.CONNECT",
+      "source": "lib/nic.s",
+      "line": 38,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "NIC_SLOT",
+        "NIC_NAMEBUF",
+        "NIC_RPORTL",
+        "NIC_RPORTH"
+      ],
+      "kind": "routine",
+      "symbol": "nic_connect",
+      "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
+      "address": "$EE07"
+    },
+    {
+      "label": "NIC.COPY_NAME",
+      "source": "lib/nic.s",
+      "line": 132,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on invalid length."
+        }
+      ],
+      "requires": [
+        "NIC_ARG_NAMELEN",
+        "NIC_ARG_NAMEPTR_L",
+        "NIC_ARG_NAMEPTR_H"
+      ],
+      "kind": "routine",
+      "symbol": "nic_copy_name",
+      "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
+      "address": "$EE2D"
+    },
+    {
+      "label": "NIC.DISCONNECT",
+      "source": "lib/nic.s",
+      "line": 47,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "NIC_SLOT"
+      ],
+      "kind": "routine",
+      "symbol": "nic_disconnect",
+      "summary": "Disconnect NIC_SLOT.",
+      "address": "$EE0B"
+    },
+    {
+      "label": "NIC.LENGTH",
+      "source": "lib/nic.s",
+      "line": 121,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Message length byte."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nic_length",
+      "summary": "Read the most recent NIC message length.",
+      "address": "$EE29"
+    },
+    {
+      "label": "NIC.LISTEN",
+      "source": "lib/nic.s",
+      "line": 57,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nic_listen",
+      "summary": "Listen on NIC_SLOT using NIC_LPORTL/H."
+    },
+    {
+      "label": "NIC.READY",
+      "source": "lib/nic.s",
+      "line": 107,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Slot number."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "1 when ready, 0 otherwise."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nic_ready",
+      "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
+      "address": "$EE1F"
+    },
+    {
+      "label": "NIC.RECV",
+      "source": "lib/nic.s",
+      "line": 83,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "NIC_SLOT",
+        "NIC_DMAL",
+        "NIC_DMAH"
+      ],
+      "kind": "routine",
+      "symbol": "nic_recv",
+      "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
+      "address": "$EE13"
+    },
+    {
+      "label": "NIC.SEND",
+      "source": "lib/nic.s",
+      "line": 74,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "NIC_SLOT",
+        "NIC_DMAL",
+        "NIC_DMAH",
+        "NIC_DMALEN"
+      ],
+      "kind": "routine",
+      "symbol": "nic_send",
+      "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
+      "address": "$EE0F"
+    },
+    {
+      "label": "NIC.STATUS",
+      "source": "lib/nic.s",
+      "line": 93,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Slot number."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Slot status byte."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nic_status",
+      "summary": "Read clamped NIC slot status.",
+      "address": "$EE17"
+    },
+    {
+      "label": "SPRITE.BACKGROUND_STATUS",
+      "source": "lib/sprite.s",
+      "line": 206,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Background collision status byte."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_background_collision_status",
+      "summary": "Read the sprite-background collision status register.",
+      "address": "$E986"
+    },
+    {
+      "label": "SPRITE.COLLISION_STATUS",
+      "source": "lib/sprite.s",
+      "line": 197,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Collision status byte."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_collision_status",
+      "summary": "Read the sprite-sprite collision status register.",
+      "address": "$E982"
+    },
+    {
+      "label": "SPRITE.COMMAND",
+      "source": "lib/sprite.s",
+      "line": 34,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "VGC sprite command byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_command",
+      "summary": "Issue a raw sprite VGC command without waiting for completion.",
+      "address": "$E928"
+    },
+    {
+      "label": "SPRITE.DISABLE",
+      "source": "lib/sprite.s",
+      "line": 62,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0"
+      ],
+      "kind": "routine",
+      "symbol": "sprite_disable",
+      "summary": "Disable the sprite in VGC.P0.",
+      "address": "$E936"
+    },
+    {
+      "label": "SPRITE.ENABLE",
+      "source": "lib/sprite.s",
+      "line": 53,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0"
+      ],
+      "kind": "routine",
+      "symbol": "sprite_enable",
+      "summary": "Enable the sprite in VGC.P0.",
+      "address": "$E931"
+    },
+    {
+      "label": "SPRITE.GET_X",
+      "source": "lib/sprite.s",
+      "line": 166,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Sprite index."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "X high byte."
+        },
+        {
+          "name": "Y",
+          "description": "X low byte."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_get_x",
+      "summary": "Read a sprite's 16-bit X coordinate.",
+      "address": "$E967"
+    },
+    {
+      "label": "SPRITE.GET_Y",
+      "source": "lib/sprite.s",
+      "line": 184,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Sprite index."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Y",
+          "description": "Y coordinate byte."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_get_y",
+      "summary": "Read a sprite's Y coordinate.",
+      "address": "$E978"
+    },
+    {
+      "label": "SPRITE.POS",
+      "source": "lib/sprite.s",
+      "line": 44,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3"
+      ],
+      "kind": "routine",
+      "symbol": "sprite_pos",
+      "summary": "Move a sprite using VGC.P0=sprite, VGC.P1/P2=x, VGC.P3=y.",
+      "address": "$E92C"
+    },
+    {
+      "label": "SPRITE.REG_OFFSET",
+      "source": "lib/sprite.s",
+      "line": 101,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Sprite index."
+        },
+        {
+          "name": "Y",
+          "description": "Sprite field offset."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Y",
+          "description": "VGC_SPR_BASE-relative byte offset."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_reg_offset",
+      "summary": "Compute the VGC sprite attribute block offset for a sprite field.",
+      "address": "$E940"
+    },
+    {
+      "label": "SPRITE.ROW",
+      "source": "lib/sprite.s",
+      "line": 71,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3",
+        "VGC_P4",
+        "VGC_P5",
+        "VGC_P6",
+        "VGC_P7",
+        "VGC_P8",
+        "VGC_P9"
+      ],
+      "kind": "routine",
+      "symbol": "sprite_row",
+      "summary": "Write one sprite bitmap row using VGC.P0..VGC.P9.",
+      "address": "$E93B"
+    },
+    {
+      "label": "SPRITE.SET_REG16",
+      "source": "lib/sprite.s",
+      "line": 148,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Sprite index."
+        },
+        {
+          "name": "Y",
+          "description": "Sprite field offset."
+        },
+        {
+          "name": "NVR0L",
+          "description": "Low byte."
+        },
+        {
+          "name": "NVR0H",
+          "description": "High byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_set_reg16",
+      "summary": "Write one 16-bit sprite attribute field.",
+      "address": "$E958"
+    },
+    {
+      "label": "SPRITE.SET_REG8",
+      "source": "lib/sprite.s",
+      "line": 132,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Sprite index."
+        },
+        {
+          "name": "Y",
+          "description": "Sprite field offset."
+        },
+        {
+          "name": "A",
+          "description": "Field value."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_set_reg8",
+      "summary": "Write one 8-bit sprite attribute field.",
+      "address": "$E94D"
+    },
+    {
+      "label": "SPRITE.SET_SHAPE",
+      "source": "lib/sprite.s",
+      "line": 120,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Sprite index."
+        },
+        {
+          "name": "A",
+          "description": "Shape index."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_set_shape",
+      "summary": "Set a sprite's shape index.",
+      "address": "$E94B"
+    },
+    {
+      "label": "SYS.REGA",
+      "source": "lib/nova.inc",
+      "line": 60,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "SYS_REGA",
+      "summary": "Returned A register from the most recent SYS call.",
+      "address": "$E7"
+    },
+    {
+      "label": "SYS.REGX",
+      "source": "lib/nova.inc",
+      "line": 67,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "SYS_REGX",
+      "summary": "Returned X register from the most recent SYS call.",
+      "address": "$E8"
+    },
+    {
+      "label": "SYS.REGY",
+      "source": "lib/nova.inc",
+      "line": 74,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "SYS_REGY",
+      "summary": "Returned Y register from the most recent SYS call.",
+      "address": "$E9"
+    },
+    {
+      "label": "TILE.ATTR",
+      "source": "lib/tile.s",
+      "line": 131,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_attr",
+      "summary": "Set a tile attribute using TileP0..TileP3."
+    },
+    {
+      "label": "TILE.BUF_FILL",
+      "source": "lib/tile.s",
+      "line": 179,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_buf_fill",
+      "summary": "Fill the tile command buffer."
+    },
+    {
+      "label": "TILE.BUF_PUT",
+      "source": "lib/tile.s",
+      "line": 195,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_buf_put",
+      "summary": "Put a tile command buffer entry."
+    },
+    {
+      "label": "TILE.BUF_RANGE",
+      "source": "lib/tile.s",
+      "line": 203,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_buf_range",
+      "summary": "Apply a range of tile command buffer entries."
+    },
+    {
+      "label": "TILE.BUF_SET",
+      "source": "lib/tile.s",
+      "line": 187,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_buf_set",
+      "summary": "Set a tile command buffer entry."
+    },
+    {
+      "label": "TILE.CLS",
+      "source": "lib/tile.s",
+      "line": 171,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_cls",
+      "summary": "Clear tile memory."
+    },
+    {
+      "label": "TILE.COL",
+      "source": "lib/tile.s",
+      "line": 155,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_col",
+      "summary": "Copy a column of tile data from TileAddrL/H."
+    },
+    {
+      "label": "TILE.COMMAND",
+      "source": "lib/tile.s",
+      "line": 35,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Tile command byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_cmd",
+      "summary": "Issue a raw tile engine command."
+    },
+    {
+      "label": "TILE.DEF",
+      "source": "lib/tile.s",
+      "line": 107,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_def",
+      "summary": "Define one tile from TileP0 and TileAddrL/H."
+    },
+    {
+      "label": "TILE.DEF_BULK",
+      "source": "lib/tile.s",
+      "line": 115,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_def_bulk",
+      "summary": "Define a run of tiles from TileP0/TileP1 and TileAddrL/H."
+    },
+    {
+      "label": "TILE.FILL",
+      "source": "lib/tile.s",
+      "line": 139,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_fill",
+      "summary": "Fill tile memory using TileP0/TileP1."
+    },
+    {
+      "label": "TILE.LOAD",
+      "source": "lib/tile.s",
+      "line": 163,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_load",
+      "summary": "Load tile data from TileAddrL/H."
+    },
+    {
+      "label": "TILE.PALETTE",
+      "source": "lib/tile.s",
+      "line": 211,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_pal",
+      "summary": "Load tile palette data."
+    },
+    {
+      "label": "TILE.PALETTE_COLOR",
+      "source": "lib/tile.s",
+      "line": 219,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_palc",
+      "summary": "Set one tile palette colour."
+    },
+    {
+      "label": "TILE.PUT",
+      "source": "lib/tile.s",
+      "line": 123,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_put",
+      "summary": "Put a tile using TileP0..TileP3."
+    },
+    {
+      "label": "TILE.ROW",
+      "source": "lib/tile.s",
+      "line": 147,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_row",
+      "summary": "Copy a row of tile data from TileAddrL/H."
+    },
+    {
+      "label": "TILE.SET_MIRROR",
+      "source": "lib/tile.s",
+      "line": 61,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Mirror mode."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_set_mirror",
+      "summary": "Set tile mirror mode from the low two bits of X."
+    },
+    {
+      "label": "TILE.SET_SCROLL",
+      "source": "lib/tile.s",
+      "line": 88,
+      "inputs": [
+        {
+          "name": "NVR0L",
+          "description": "Scroll X low byte."
+        },
+        {
+          "name": "NVR0H",
+          "description": "Scroll X high byte."
+        },
+        {
+          "name": "NVR1L",
+          "description": "Scroll Y low byte."
+        },
+        {
+          "name": "NVR1H",
+          "description": "Scroll Y high byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_set_scroll",
+      "summary": "Set tile scroll position."
+    },
+    {
+      "label": "TILE.SET_SIZE",
+      "source": "lib/tile.s",
+      "line": 45,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "16 selects 16x16; any other value selects 8x8."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_set_size",
+      "summary": "Select 8x8 or 16x16 tile size."
+    },
+    {
+      "label": "TILE.SET_TRANS_COLOR",
+      "source": "lib/tile.s",
+      "line": 78,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Transparent colour byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "tile_set_trans_color",
+      "summary": "Set the tile transparent colour."
+    },
+    {
+      "label": "VGC.CIRCLE",
+      "source": "lib/vgc.s",
+      "line": 281,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3",
+        "VGC_P4",
+        "VGC_P5",
+        "VGC_P6",
+        "VGC_P7"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_circle",
+      "summary": "Issue the VGC circle/ellipse command using VGC.P0..VGC.P7."
+    },
+    {
+      "label": "VGC.CLS",
+      "source": "lib/vgc.s",
+      "line": 93,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_cls",
+      "summary": "Clear the text screen through the VGC character output register.",
+      "address": "$E8C2"
+    },
+    {
+      "label": "VGC.COMMAND",
+      "source": "lib/vgc.s",
+      "line": 47,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "VGC command byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_cmd",
+      "summary": "Issue a raw VGC command without waiting for completion.",
+      "address": "$E8AD"
+    },
+    {
+      "label": "VGC.EXEC",
+      "source": "lib/vgc.s",
+      "line": 70,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "VGC command byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_exec",
+      "summary": "Issue a raw VGC command and wait for completion."
+    },
+    {
+      "label": "VGC.FILL",
+      "source": "lib/vgc.s",
+      "line": 308,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3",
+        "VGC_P4",
+        "VGC_P5",
+        "VGC_P6",
+        "VGC_P7"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_fill",
+      "summary": "Issue the VGC filled rectangle command using VGC.P0..VGC.P7."
+    },
+    {
+      "label": "VGC.FLASH_OFF",
+      "source": "lib/vgc.s",
+      "line": 226,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_flash_off",
+      "summary": "Disable flashing text.",
+      "address": "$E91F"
+    },
+    {
+      "label": "VGC.FLASH_ON",
+      "source": "lib/vgc.s",
+      "line": 216,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_flash_on",
+      "summary": "Enable flashing text.",
+      "address": "$E916"
+    },
+    {
+      "label": "VGC.GCLS",
+      "source": "lib/vgc.s",
+      "line": 237,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_gcls",
+      "summary": "Issue the VGC graphics clear command."
+    },
+    {
+      "label": "VGC.GCOLOR",
+      "source": "lib/vgc.s",
+      "line": 245,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_gcolor",
+      "summary": "Issue the VGC graphics colour command using VGC.P0/P1."
+    },
+    {
+      "label": "VGC.GTEXT",
+      "source": "lib/vgc.s",
+      "line": 290,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3",
+        "VGC_P4",
+        "VGC_P5",
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_gtext",
+      "summary": "Issue the VGC graphics text command using VGC.P0..VGC.P5 and FIO.NAME."
+    },
+    {
+      "label": "VGC.LINE",
+      "source": "lib/vgc.s",
+      "line": 272,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3",
+        "VGC_P4",
+        "VGC_P5",
+        "VGC_P6",
+        "VGC_P7"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_line",
+      "summary": "Issue the VGC line command using VGC.P0..VGC.P7."
+    },
+    {
+      "label": "VGC.LOCATE",
+      "source": "lib/vgc.s",
+      "line": 129,
+      "inputs": [
+        {
+          "name": "VGC_P0",
+          "description": "Cursor X column."
+        },
+        {
+          "name": "VGC_P1",
+          "description": "Cursor Y row."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_locate",
+      "summary": "Set the text cursor position from VGC.P0/VGC.P1.",
+      "address": "$E8D4"
+    },
+    {
+      "label": "VGC.MEM_READ",
+      "source": "lib/vgc.s",
+      "line": 160,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VGC_P3",
+          "description": "Read byte."
+        }
+      ],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P4"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_mem_read",
+      "summary": "Read one byte from VGC memory using VGC.P0..VGC.P4.",
+      "address": "$E8E9"
+    },
+    {
+      "label": "VGC.MEM_WRITE",
+      "source": "lib/vgc.s",
+      "line": 170,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3",
+        "VGC_P4"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_mem_write",
+      "summary": "Write one byte to VGC memory using VGC.P0..VGC.P4.",
+      "address": "$E8EC"
+    },
+    {
+      "label": "VGC.PAINT",
+      "source": "lib/vgc.s",
+      "line": 317,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_paint",
+      "summary": "Issue the VGC paint command using VGC.P0..VGC.P3."
+    },
+    {
+      "label": "VGC.PLOT",
+      "source": "lib/vgc.s",
+      "line": 254,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_plot",
+      "summary": "Issue the VGC plot command using VGC.P0..VGC.P3."
+    },
+    {
+      "label": "VGC.RECT",
+      "source": "lib/vgc.s",
+      "line": 299,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3",
+        "VGC_P4",
+        "VGC_P5",
+        "VGC_P6",
+        "VGC_P7"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_rect",
+      "summary": "Issue the VGC rectangle command using VGC.P0..VGC.P7."
+    },
+    {
+      "label": "VGC.REVERSE",
+      "source": "lib/vgc.s",
+      "line": 181,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_reverse_default",
+      "summary": "Enable reverse text using the current foreground/background colours.",
+      "address": "$E8F4"
+    },
+    {
+      "label": "VGC.REVERSE_EXPLICIT",
+      "source": "lib/vgc.s",
+      "line": 193,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Packed reverse attribute, low nibble foreground and high nibble background."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_reverse_explicit",
+      "summary": "Enable reverse text with explicit packed foreground/background colours.",
+      "address": "$E8FF"
+    },
+    {
+      "label": "VGC.REVERSE_OFF",
+      "source": "lib/vgc.s",
+      "line": 206,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_reverse_off",
+      "summary": "Disable reverse text.",
+      "address": "$E90D"
+    },
+    {
+      "label": "VGC.SET_BG",
+      "source": "lib/vgc.s",
+      "line": 111,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Background colour byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_set_bg",
+      "summary": "Set the current text background colour.",
+      "address": "$E8CC"
+    },
+    {
+      "label": "VGC.SET_BORDER",
+      "source": "lib/vgc.s",
+      "line": 120,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Border colour byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_set_border",
+      "summary": "Set the VGC border colour.",
+      "address": "$E8D0"
+    },
+    {
+      "label": "VGC.SET_FG",
+      "source": "lib/vgc.s",
+      "line": 102,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Foreground colour byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_set_fg",
+      "summary": "Set the current text foreground colour.",
+      "address": "$E8C8"
+    },
+    {
+      "label": "VGC.SET_FONT",
+      "source": "lib/vgc.s",
+      "line": 151,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Font slot, 0..7."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_set_font",
+      "summary": "Select the active text font slot.",
+      "address": "$E8E5"
+    },
+    {
+      "label": "VGC.SET_MODE",
+      "source": "lib/vgc.s",
+      "line": 142,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Mode byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_set_mode",
+      "summary": "Set the active VGC graphics/text mode.",
+      "address": "$E8E1"
+    },
+    {
+      "label": "VGC.UNPLOT",
+      "source": "lib/vgc.s",
+      "line": 263,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1",
+        "VGC_P2",
+        "VGC_P3"
+      ],
+      "kind": "routine",
+      "symbol": "vgc_unplot",
+      "summary": "Issue the VGC unplot command using VGC.P0..VGC.P3."
+    },
+    {
+      "label": "VGC.VSYNC",
+      "source": "lib/vgc.s",
+      "line": 81,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Last observed frame counter value."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_vsync",
+      "summary": "Wait until the VGC frame counter advances.",
+      "address": "$E8B9"
+    },
+    {
+      "label": "VGC.WAIT_COMMAND",
+      "source": "lib/vgc.s",
+      "line": 57,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_wait_cmd",
+      "summary": "Wait for the active VGC command to complete.",
+      "address": "$E8B1"
+    },
+    {
+      "label": "XMC.ALLOC",
+      "source": "lib/xmc.s",
+      "line": 262,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "XMC_XAL",
+          "description": "Allocated address low byte."
+        },
+        {
+          "name": "XMC_XAM",
+          "description": "Allocated address middle byte."
+        },
+        {
+          "name": "XMC_XAH",
+          "description": "Allocated address high byte."
+        }
+      ],
+      "requires": [
+        "XMC_LENL",
+        "XMC_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_alloc_block",
+      "summary": "Allocate an XRAM block using XMC_LENL/H."
+    },
+    {
+      "label": "XMC.COMMAND_STATUS",
+      "source": "lib/xmc.s",
+      "line": 183,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "XMC_CMD"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_command_status",
+      "summary": "Process XMC_CMD and return A=0 on XMC_OK, A=1 otherwise."
+    },
+    {
+      "label": "XMC.DIR_OPEN",
+      "source": "lib/xmc.s",
+      "line": 301,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xmc_dir_open",
+      "summary": "Open the named XRAM block directory."
+    },
+    {
+      "label": "XMC.DIR_READ",
+      "source": "lib/xmc.s",
+      "line": 309,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xmc_dir_read",
+      "summary": "Read the next named XRAM block directory entry."
+    },
+    {
+      "label": "XMC.FETCH_RAW",
+      "source": "lib/xmc.s",
+      "line": 236,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH",
+        "XMC_RAML",
+        "XMC_RAMH",
+        "XMC_LENL",
+        "XMC_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_fetch_raw",
+      "summary": "Copy XRAM to RAM using XMC_XAL/M/H, XMC_RAML/H, and XMC_LENL/H."
+    },
+    {
+      "label": "XMC.MAP_WINDOW",
+      "source": "lib/xmc.s",
+      "line": 385,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Window index, 0..3."
+        }
+      ],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_BANK"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_map_window",
+      "summary": "Map window X to XMC_XAL/M in the selected XMC bank."
+    },
+    {
+      "label": "XMC.NAMED_DELETE",
+      "source": "lib/xmc.s",
+      "line": 292,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_NAME",
+        "XMC_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_named_delete",
+      "summary": "Delete a named XRAM block."
+    },
+    {
+      "label": "XMC.NAMED_FETCH",
+      "source": "lib/xmc.s",
+      "line": 283,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_NAME",
+        "XMC_NAMELEN",
+        "XMC_RAML",
+        "XMC_RAMH"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_named_fetch",
+      "summary": "Fetch a named XRAM block into RAM."
+    },
+    {
+      "label": "XMC.NAMED_STASH",
+      "source": "lib/xmc.s",
+      "line": 274,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_NAME",
+        "XMC_NAMELEN",
+        "XMC_RAML",
+        "XMC_RAMH",
+        "XMC_LENL",
+        "XMC_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_named_stash",
+      "summary": "Allocate/update a named XRAM block and copy RAM into it."
+    },
+    {
+      "label": "XMC.PROCESS",
+      "source": "lib/xmc.s",
+      "line": 53,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_CMD"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_process",
+      "summary": "Process XMC_CMD and update XMC_STATUS/XMC_ERRCODE."
+    },
+    {
+      "label": "XMC.PUT_BYTE",
+      "source": "lib/xmc.s",
+      "line": 218,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH",
+        "XMC_DATA"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_put_byte",
+      "summary": "Write XMC_DATA to XMC_XAL/M/H."
+    },
+    {
+      "label": "XMC.RELEASE",
+      "source": "lib/xmc.s",
+      "line": 245,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH",
+        "XMC_LENL",
+        "XMC_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_release",
+      "summary": "Release an XMC allocation range."
+    },
+    {
+      "label": "XMC.RESET_USAGE",
+      "source": "lib/xmc.s",
+      "line": 254,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xmc_reset_usage",
+      "summary": "Reset XRAM usage and named allocation metadata."
+    },
+    {
+      "label": "XMC.SELECT_BANK",
+      "source": "lib/xmc.s",
+      "line": 204,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Bank index, 0..XMC_BANKS-1."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 if the bank is out of range."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xmc_select_bank",
+      "summary": "Select the current 64KB XRAM bank."
+    },
+    {
+      "label": "XMC.SET_WINDOW_ADDR",
+      "source": "lib/xmc.s",
+      "line": 340,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Window index, 0..3."
+        }
+      ],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_BANK"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_set_window_addr_current_bank",
+      "summary": "Set a mapped window base from XMC_XAL/M and the selected XMC bank."
+    },
+    {
+      "label": "XMC.STASH_RAW",
+      "source": "lib/xmc.s",
+      "line": 227,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_RAML",
+        "XMC_RAMH",
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH",
+        "XMC_LENL",
+        "XMC_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xmc_stash_raw",
+      "summary": "Copy RAM to XRAM using XMC_RAML/H, XMC_XAL/M/H, and XMC_LENL/H."
+    },
+    {
+      "label": "XMC.UNMAP_WINDOW",
+      "source": "lib/xmc.s",
+      "line": 403,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Window index, 0..3."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xmc_unmap_window",
+      "summary": "Disable a mapped XRAM window."
+    },
+    {
+      "label": "XMC.WINDOW_BIT",
+      "source": "lib/xmc.s",
+      "line": 317,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Window index, 0..3."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Window bit mask."
+        },
+        {
+          "name": "C",
+          "description": "Clear on success, set on invalid index."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xmc_window_bit",
+      "summary": "Convert window index 0..3 to its XMC_WINCTL bit mask."
+    },
+    {
+      "label": "XRAM.ADDRH",
+      "source": "lib/xram.inc",
+      "line": 31,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_ADDRH",
+      "summary": "High byte of flat 24-bit XRAM address.",
+      "address": "$22"
+    },
+    {
+      "label": "XRAM.ADDRL",
+      "source": "lib/xram.inc",
+      "line": 21,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_ADDRL",
+      "summary": "Low byte of flat 24-bit XRAM address.",
+      "address": "$20"
+    },
+    {
+      "label": "XRAM.ADDRM",
+      "source": "lib/xram.inc",
+      "line": 26,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_ADDRM",
+      "summary": "Middle byte of flat 24-bit XRAM address.",
+      "address": "$21"
+    },
+    {
+      "label": "XRAM.ADDR_IN_RANGE",
+      "source": "lib/xram.s",
+      "line": 212,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XRAM_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "xram_addr_is_in_range",
+      "summary": "Validate XRAM_ADDRH is inside the 512KB XRAM device."
+    },
+    {
+      "label": "XRAM.COPY_FROM_RAM",
+      "source": "lib/xram.s",
+      "line": 282,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XRAM_RAML",
+        "XRAM_RAMH",
+        "XRAM_ADDRL",
+        "XRAM_ADDRM",
+        "XRAM_ADDRH",
+        "XRAM_LENL",
+        "XRAM_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xram_copy_from_ram",
+      "summary": "Copy CPU RAM to XRAM using the XRAM pseudo-register ABI."
+    },
+    {
+      "label": "XRAM.COPY_TO_RAM",
+      "source": "lib/xram.s",
+      "line": 309,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XRAM_ADDRL",
+        "XRAM_ADDRM",
+        "XRAM_ADDRH",
+        "XRAM_RAML",
+        "XRAM_RAMH",
+        "XRAM_LENL",
+        "XRAM_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xram_copy_to_ram",
+      "summary": "Copy XRAM to CPU RAM using the XRAM pseudo-register ABI."
+    },
+    {
+      "label": "XRAM.DATA",
+      "source": "lib/xram.inc",
+      "line": 36,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_DATA",
+      "summary": "Byte value used by XRAM read, write, and fill routines.",
+      "address": "$23"
+    },
+    {
+      "label": "XRAM.FILL",
+      "source": "lib/xram.s",
+      "line": 336,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XRAM_ADDRL",
+        "XRAM_ADDRM",
+        "XRAM_ADDRH",
+        "XRAM_LENL",
+        "XRAM_LENH",
+        "XRAM_DATA"
+      ],
+      "kind": "routine",
+      "symbol": "xram_fill",
+      "summary": "Fill XRAM using XRAM_ADDRL/M/H, XRAM_LENL/H, and XRAM_DATA."
+    },
+    {
+      "label": "XRAM.LENH",
+      "source": "lib/xram.inc",
+      "line": 56,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_LENH",
+      "summary": "High byte of XRAM transfer length.",
+      "address": "$27"
+    },
+    {
+      "label": "XRAM.LENL",
+      "source": "lib/xram.inc",
+      "line": 51,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_LENL",
+      "summary": "Low byte of XRAM transfer length.",
+      "address": "$26"
+    },
+    {
+      "label": "XRAM.MAP_WINDOW3",
+      "source": "lib/xram.s",
+      "line": 230,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XRAM_ADDRM",
+        "XRAM_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "xram_map_window3",
+      "summary": "Map XRAM window 3 to XRAM_ADDRM/H."
+    },
+    {
+      "label": "XRAM.NAMELEN",
+      "source": "lib/xram.inc",
+      "line": 61,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_NAMELEN",
+      "summary": "Filename length for XRAM file streaming routines.",
+      "address": "$28"
+    },
+    {
+      "label": "XRAM.NAMEPTR_H",
+      "source": "lib/xram.inc",
+      "line": 71,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_NAMEPTR_H",
+      "summary": "High byte of filename pointer for XRAM file streaming routines.",
+      "address": "$2A"
+    },
+    {
+      "label": "XRAM.NAMEPTR_L",
+      "source": "lib/xram.inc",
+      "line": 66,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_NAMEPTR_L",
+      "summary": "Low byte of filename pointer for XRAM file streaming routines.",
+      "address": "$29"
+    },
+    {
+      "label": "XRAM.RAMH",
+      "source": "lib/xram.inc",
+      "line": 46,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_RAMH",
+      "summary": "High byte of CPU RAM address for XRAM copy routines.",
+      "address": "$25"
+    },
+    {
+      "label": "XRAM.RAML",
+      "source": "lib/xram.inc",
+      "line": 41,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "XRAM_RAML",
+      "summary": "Low byte of CPU RAM address for XRAM copy routines.",
+      "address": "$24"
+    },
+    {
+      "label": "XRAM.READ8",
+      "source": "lib/xram.s",
+      "line": 246,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "XRAM_DATA",
+          "description": "Byte read from XRAM."
+        }
+      ],
+      "requires": [
+        "XRAM_ADDRL",
+        "XRAM_ADDRM",
+        "XRAM_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "xram_read8",
+      "summary": "Read one byte from XRAM_ADDRL/M/H into XRAM_DATA."
+    },
+    {
+      "label": "XRAM.SET_ERROR",
+      "source": "lib/xram.s",
+      "line": 49,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "XMC-compatible error code."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "1."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xram_set_error",
+      "summary": "Set XMC-compatible XRAM error status."
+    },
+    {
+      "label": "XRAM.SET_OK",
+      "source": "lib/xram.s",
+      "line": 37,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xram_set_ok",
+      "summary": "Set XMC-compatible XRAM status to OK and return A=0."
+    },
+    {
+      "label": "XRAM.WAIT_DMA",
+      "source": "lib/xram.s",
+      "line": 371,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "xram_wait_dma",
+      "summary": "Wait for the shared DMA controller and map the result to XRAM status."
+    },
+    {
+      "label": "XRAM.WRITE8",
+      "source": "lib/xram.s",
+      "line": 263,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XRAM_ADDRL",
+        "XRAM_ADDRM",
+        "XRAM_ADDRH",
+        "XRAM_DATA"
+      ],
+      "kind": "routine",
+      "symbol": "xram_write8",
+      "summary": "Write XRAM_DATA to XRAM_ADDRL/M/H."
+    },
+    {
+      "label": "XRAM.XLOAD",
+      "source": "lib/xram.s",
+      "line": 161,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XRAM_ADDRL",
+        "XRAM_ADDRM",
+        "XRAM_ADDRH",
+        "XRAM_LENL",
+        "XRAM_LENH",
+        "XRAM_NAMELEN",
+        "XRAM_NAMEPTR_L",
+        "XRAM_NAMEPTR_H"
+      ],
+      "kind": "routine",
+      "symbol": "xram_xload",
+      "summary": "Stream a file directly into XRAM using the XRAM pseudo-register ABI."
+    },
+    {
+      "label": "XRAM.XMC_COPY_FROM_RAM",
+      "source": "lib/xram.s",
+      "line": 116,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_RAML",
+        "XMC_RAMH",
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH",
+        "XMC_LENL",
+        "XMC_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xram_xmc_copy_from_ram",
+      "summary": "Copy RAM to XRAM using the XMC register ABI."
+    },
+    {
+      "label": "XRAM.XMC_COPY_TO_RAM",
+      "source": "lib/xram.s",
+      "line": 127,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH",
+        "XMC_RAML",
+        "XMC_RAMH",
+        "XMC_LENL",
+        "XMC_LENH"
+      ],
+      "kind": "routine",
+      "symbol": "xram_xmc_copy_to_ram",
+      "summary": "Copy XRAM to RAM using the XMC register ABI."
+    },
+    {
+      "label": "XRAM.XMC_FILL",
+      "source": "lib/xram.s",
+      "line": 138,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH",
+        "XMC_LENL",
+        "XMC_LENH",
+        "XMC_DATA"
+      ],
+      "kind": "routine",
+      "symbol": "xram_xmc_fill",
+      "summary": "Fill XRAM using the XMC register ABI."
+    },
+    {
+      "label": "XRAM.XMC_READ8",
+      "source": "lib/xram.s",
+      "line": 90,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH"
+      ],
+      "kind": "routine",
+      "symbol": "xram_xmc_read8",
+      "summary": "Read one byte from XMC_XAL/M/H into XMC_DATA."
+    },
+    {
+      "label": "XRAM.XMC_WRITE8",
+      "source": "lib/xram.s",
+      "line": 105,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XMC_XAL",
+        "XMC_XAM",
+        "XMC_XAH",
+        "XMC_DATA"
+      ],
+      "kind": "routine",
+      "symbol": "xram_xmc_write8",
+      "summary": "Write XMC_DATA to XMC_XAL/M/H."
+    },
+    {
+      "label": "XRAM.XSAVE",
+      "source": "lib/xram.s",
+      "line": 177,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "XRAM_ADDRL",
+        "XRAM_ADDRM",
+        "XRAM_ADDRH",
+        "XRAM_LENL",
+        "XRAM_LENH",
+        "XRAM_NAMELEN",
+        "XRAM_NAMEPTR_L",
+        "XRAM_NAMEPTR_H"
+      ],
+      "kind": "routine",
+      "symbol": "xram_xsave",
+      "summary": "Stream XRAM directly to a file using the XRAM pseudo-register ABI."
+    }
+  ]
+}

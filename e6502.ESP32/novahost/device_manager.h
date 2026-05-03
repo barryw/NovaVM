@@ -49,6 +49,7 @@ public:
     //   "/a/b/c"   → absolute from root
     // Returns true on success, false if any segment isn't a directory.
     uint16_t current_dir(int slot) const;
+    const char* current_path(int slot) const;
     bool     cd(int slot, const char* path);
 
     // Default device for un-prefixed paths (e.g. "myfile" with no
@@ -79,6 +80,7 @@ private:
     SdStream*    _streams[NUM_SLOTS];
     ndi::NdiImage* _images[NUM_SLOTS];
     uint16_t     _current_dirs[NUM_SLOTS];
+    char         _current_paths[NUM_SLOTS][64];
     int          _default_slot;
 
     // Helper: walk a "/-separated path under the given slot, returning

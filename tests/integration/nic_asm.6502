@@ -1,0 +1,275 @@
+; NIC assembly integration tests.
+; Run: sim6502 -s tests/integration/nic_asm.6502 --backend novavm
+;
+; The fixture is built from tests/integration/asm/nic_runtime.s and installed
+; after pause() so the NovaVM runner cold-starts before each test.
+
+suites {
+  suite("NIC Assembly Runtime") {
+    test("asm-nic-entrypoints", "Assembly ABI can copy names, query status, and issue NIC commands") {
+      pause()
+      $7000 = $4C
+      $7001 = $03
+      $7002 = $70
+      $7003 = $48
+      $7004 = $DA
+      $7005 = $5A
+      $7006 = $20
+      $7007 = $0D
+      $7008 = $70
+      $7009 = $7A
+      $700A = $FA
+      $700B = $68
+      $700C = $60
+      $700D = $20
+      $700E = $90
+      $700F = $70
+      $7010 = $A9
+      $7011 = $09
+      $7012 = $85
+      $7013 = $20
+      $7014 = $A9
+      $7015 = $9D
+      $7016 = $85
+      $7017 = $21
+      $7018 = $A9
+      $7019 = $70
+      $701A = $85
+      $701B = $22
+      $701C = $20
+      $701D = $D8
+      $701E = $70
+      $701F = $8D
+      $7020 = $80
+      $7021 = $22
+      $7022 = $AD
+      $7023 = $20
+      $7024 = $A1
+      $7025 = $8D
+      $7026 = $81
+      $7027 = $22
+      $7028 = $AD
+      $7029 = $29
+      $702A = $A1
+      $702B = $8D
+      $702C = $82
+      $702D = $22
+      $702E = $64
+      $702F = $20
+      $7030 = $20
+      $7031 = $D8
+      $7032 = $70
+      $7033 = $8D
+      $7034 = $83
+      $7035 = $22
+      $7036 = $A2
+      $7037 = $00
+      $7038 = $20
+      $7039 = $C2
+      $703A = $70
+      $703B = $8D
+      $703C = $84
+      $703D = $22
+      $703E = $A2
+      $703F = $00
+      $7040 = $20
+      $7041 = $CA
+      $7042 = $70
+      $7043 = $8D
+      $7044 = $85
+      $7045 = $22
+      $7046 = $9C
+      $7047 = $02
+      $7048 = $A1
+      $7049 = $20
+      $704A = $AE
+      $704B = $70
+      $704C = $AD
+      $704D = $00
+      $704E = $A1
+      $704F = $8D
+      $7050 = $86
+      $7051 = $22
+      $7052 = $A9
+      $7053 = $4F
+      $7054 = $8D
+      $7055 = $A0
+      $7056 = $22
+      $7057 = $A9
+      $7058 = $4B
+      $7059 = $8D
+      $705A = $A1
+      $705B = $22
+      $705C = $A9
+      $705D = $0A
+      $705E = $8D
+      $705F = $A2
+      $7060 = $22
+      $7061 = $A9
+      $7062 = $A0
+      $7063 = $8D
+      $7064 = $10
+      $7065 = $A1
+      $7066 = $A9
+      $7067 = $22
+      $7068 = $8D
+      $7069 = $11
+      $706A = $A1
+      $706B = $A9
+      $706C = $03
+      $706D = $8D
+      $706E = $12
+      $706F = $A1
+      $7070 = $9C
+      $7071 = $02
+      $7072 = $A1
+      $7073 = $20
+      $7074 = $BA
+      $7075 = $70
+      $7076 = $AD
+      $7077 = $00
+      $7078 = $A1
+      $7079 = $8D
+      $707A = $87
+      $707B = $22
+      $707C = $A2
+      $707D = $00
+      $707E = $20
+      $707F = $C2
+      $7080 = $70
+      $7081 = $8D
+      $7082 = $88
+      $7083 = $22
+      $7084 = $20
+      $7085 = $D4
+      $7086 = $70
+      $7087 = $8D
+      $7088 = $89
+      $7089 = $22
+      $708A = $A9
+      $708B = $AA
+      $708C = $8D
+      $708D = $8F
+      $708E = $22
+      $708F = $60
+      $7090 = $A2
+      $7091 = $00
+      $7092 = $A9
+      $7093 = $00
+      $7094 = $9D
+      $7095 = $80
+      $7096 = $22
+      $7097 = $E8
+      $7098 = $E0
+      $7099 = $20
+      $709A = $D0
+      $709B = $F8
+      $709C = $60
+      $709D = $6E
+      $709E = $6F
+      $709F = $76
+      $70A0 = $61
+      $70A1 = $2E
+      $70A2 = $74
+      $70A3 = $65
+      $70A4 = $73
+      $70A5 = $74
+      $70A6 = $8D
+      $70A7 = $00
+      $70A8 = $A1
+      $70A9 = $60
+      $70AA = $A9
+      $70AB = $01
+      $70AC = $80
+      $70AD = $F8
+      $70AE = $A9
+      $70AF = $02
+      $70B0 = $80
+      $70B1 = $F4
+      $70B2 = $A9
+      $70B3 = $05
+      $70B4 = $80
+      $70B5 = $F0
+      $70B6 = $A9
+      $70B7 = $06
+      $70B8 = $80
+      $70B9 = $EC
+      $70BA = $A9
+      $70BB = $03
+      $70BC = $80
+      $70BD = $E8
+      $70BE = $A9
+      $70BF = $04
+      $70C0 = $80
+      $70C1 = $E4
+      $70C2 = $8A
+      $70C3 = $29
+      $70C4 = $03
+      $70C5 = $AA
+      $70C6 = $BD
+      $70C7 = $18
+      $70C8 = $A1
+      $70C9 = $60
+      $70CA = $20
+      $70CB = $C2
+      $70CC = $70
+      $70CD = $29
+      $70CE = $02
+      $70CF = $F0
+      $70D0 = $02
+      $70D1 = $A9
+      $70D2 = $01
+      $70D3 = $60
+      $70D4 = $AD
+      $70D5 = $13
+      $70D6 = $A1
+      $70D7 = $60
+      $70D8 = $A5
+      $70D9 = $20
+      $70DA = $F0
+      $70DB = $18
+      $70DC = $C9
+      $70DD = $20
+      $70DE = $B0
+      $70DF = $14
+      $70E0 = $AA
+      $70E1 = $A0
+      $70E2 = $00
+      $70E3 = $B1
+      $70E4 = $21
+      $70E5 = $99
+      $70E6 = $20
+      $70E7 = $A1
+      $70E8 = $C8
+      $70E9 = $CA
+      $70EA = $D0
+      $70EB = $F7
+      $70EC = $A9
+      $70ED = $00
+      $70EE = $99
+      $70EF = $20
+      $70F0 = $A1
+      $70F1 = $A9
+      $70F2 = $00
+      $70F3 = $60
+      $70F4 = $A9
+      $70F5 = $01
+      $70F6 = $60
+      resume()
+      wait_ready()
+      basic("10 SYS 28672")
+      run()
+      assert(peekbyte($2280) == 0, "nic_copy_name accepted a valid host name")
+      assert(peekbyte($2281) == 110, "nic_copy_name copied first host byte")
+      assert(peekbyte($2282) == 0, "nic_copy_name NUL-terminated the host name")
+      assert(peekbyte($2283) == 1, "nic_copy_name rejected empty names")
+      assert((peekbyte($2284) & $04) == $04, "nic_status reports send-ready on an idle slot")
+      assert(peekbyte($2285) == 0, "nic_ready reports no pending data on an idle slot")
+      assert(peekbyte($2286) == 2, "nic_disconnect issued command 2")
+      assert(peekbyte($2287) == 3, "nic_send issued command 3")
+      assert((peekbyte($2288) & $08) == $08, "nic_send on an unconnected slot reports an error")
+      assert(peekbyte($2289) == 0, "nic_length reports zero before a receive")
+      assert(peekbyte($228F) == $AA, "assembly NIC fixture reached completion")
+    }
+  }
+}

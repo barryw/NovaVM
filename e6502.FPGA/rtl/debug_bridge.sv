@@ -3,9 +3,8 @@
 // sends responses via UART TX.
 //
 // Binary protocol (ESP32 → FPGA):
-//   Byte 0: Command (0x01-0x09)
-//   Byte 1-2: Address big-endian (PEEK/POKE/PEEK_BLOCK)
-//   Byte 3: Data (POKE) / Count (PEEK_BLOCK) / Key (SEND_KEY)
+//   Byte 0: Command
+//   Byte 1+: Command-specific payload bytes
 //
 // Response (FPGA → ESP32):
 //   Byte 0: Status (0x00=OK, 0xFF=error)
@@ -101,7 +100,12 @@ module debug_bridge #(
     // value to FioCmd ($B9A0). Bridge latches the pulse and emits an
     // async 2-byte EVENT_FIO sequence (0xFE 0xE0) to the ESP32 the
     // next time it enters S_IDLE with no RX pending.
-    input  logic        fio_event
+    input  logic        fio_event,
+
+    // Host status bits latched from NovaHost and exposed by fpga_top on
+    // ULX3S LEDs. bit0=WiFi connected, bit1=FIO active, bit2=FIO error,
+    // bit3=SD mounted, bit4=boot ready, bit5=boot degraded, bit7=host seen.
+    output logic [7:0]  host_status
 );
 
     // =========================================================================
@@ -150,6 +154,7 @@ module debug_bridge #(
     localparam CMD_READ_SDRAM_BLK = 8'h1A; // [addr_hi, addr_mid, addr_lo, count]
                                            // count=0 means 256. Streams bytes
                                            // from SDRAM port B back to the host.
+    localparam CMD_HOST_STATUS    = 8'h1B; // [flags] host-status LED bits
 
     localparam [5:0] CPU_STATE_DECODE = 6'd12;
     localparam int TRACE_DEPTH = 64;
@@ -474,6 +479,7 @@ module debug_bridge #(
             event_pending    <= 0;
             rx_buf_valid     <= 0;
             rx_buf_data      <= 0;
+            host_status      <= 0;
         end else begin
             // Default: clear single-cycle pulses
             tx_start         <= 0;
@@ -546,6 +552,7 @@ module debug_bridge #(
                             CMD_BREAK_SET:   begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_BREAK_CLR:   begin recv_need <= 3'd1; state <= S_RECV; end
                             CMD_TRACE_READ:  begin recv_need <= 3'd1; state <= S_RECV; end
+                            CMD_HOST_STATUS: begin recv_need <= 3'd1; state <= S_RECV; end
                             CMD_SYS_RESET_HOLD: begin
                                 dbg_cpu_reset          <= 1'b1;
                                 dbg_system_reset       <= 1'b1;
@@ -807,6 +814,14 @@ module debug_bridge #(
                                     resp_total     <= 1;  // status, then trace bytes
                                     bulk_remaining <= 0;
                                     state          <= S_TX_BYTE;
+                                end
+
+                                CMD_HOST_STATUS: begin
+                                    host_status     <= rx_buf_data;
+                                    resp_idx        <= 0;
+                                    resp_total      <= 1;
+                                    bulk_remaining  <= 0;
+                                    state           <= S_TX_BYTE;
                                 end
 
                                 default: begin
