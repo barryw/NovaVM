@@ -20,6 +20,8 @@ void SdHttpServer::begin() {
     Serial.println("[sdhttp]   PUT    /wifi    -> update WiFi config JSON");
     Serial.println("[sdhttp]   POST   /wifi/connect|disconnect|reconnect|forget");
     Serial.println("[sdhttp]   GET    /wifi/scan -> nearby WiFi networks");
+    Serial.println("[sdhttp]   GET    /drives  -> drive mount status");
+    Serial.println("[sdhttp]   POST   /drives/slot/mount|unmount");
     Serial.println("[sdhttp]   GET    /sd-status -> SD/boot diagnostic JSON");
     Serial.println("[sdhttp]   GET    /sd/       -> list root");
     Serial.println("[sdhttp]   GET    /sd/path   -> fetch file");
@@ -98,6 +100,11 @@ void SdHttpServer::handle_client(WiFiClient& client) {
     if (strncmp(url, "/wifi", 5) == 0 &&
         (url[5] == 0 || url[5] == '/')) {
         handle_wifi(client, method, url, have_content_len, content_len);
+        return;
+    }
+    if (strncmp(url, "/drives", 7) == 0 &&
+        (url[7] == 0 || url[7] == '/')) {
+        handle_drives(client, method, url, have_content_len, content_len);
         return;
     }
 
@@ -410,6 +417,145 @@ void SdHttpServer::handle_wifi_action(WiFiClient& client, const char* action) {
     send_error(client, 404, "not found");
 }
 
+void SdHttpServer::handle_drives(WiFiClient& client, const char* method,
+                                 const char* url, bool have_content_len,
+                                 uint32_t content_len) {
+    if (strcmp(method, "GET") == 0 && strcmp(url, "/drives") == 0) {
+        handle_drives_list(client);
+        return;
+    }
+
+    char slot_name[8];
+    char action[16];
+    if (!parse_drive_action(url, slot_name, sizeof(slot_name),
+                            action, sizeof(action))) {
+        send_error(client, 404, "not found");
+        return;
+    }
+
+    int slot = DeviceManager::slot_for_prefix(slot_name);
+    if (slot < 0) {
+        send_error(client, 400, "bad slot");
+        return;
+    }
+
+    if (strcmp(method, "POST") != 0) {
+        send_error(client, 405, "method not allowed");
+        return;
+    }
+    if (strcmp(action, "mount") == 0) {
+        handle_drive_mount(client, slot, have_content_len, content_len);
+        return;
+    }
+    if (strcmp(action, "unmount") == 0) {
+        handle_drive_unmount(client, slot);
+        return;
+    }
+
+    send_error(client, 404, "not found");
+}
+
+void SdHttpServer::handle_drives_list(WiFiClient& client) {
+    send_headers(client, 200, "application/json");
+    client.print('[');
+    for (int slot = 0; slot < DeviceManager::NUM_SLOTS; slot++) {
+        if (slot > 0) client.print(',');
+        client.print("{\"slot\":");
+        write_json_string(client, DeviceManager::prefix_for_slot(slot));
+        client.print(",\"mounted\":");
+        client.print(_dm.is_mounted(slot) ? "true" : "false");
+        client.print(",\"currentPath\":");
+        write_json_string(client, _dm.current_path(slot));
+        client.print('}');
+    }
+    client.print(']');
+}
+
+void SdHttpServer::handle_drive_mount(WiFiClient& client, int slot,
+                                      bool have_content_len,
+                                      uint32_t content_len) {
+    if (!g_sd_mounted) {
+        send_error(client, 503, "sd not mounted");
+        return;
+    }
+
+    const char* prefix = DeviceManager::prefix_for_slot(slot);
+    char sd_path[300];
+    snprintf(sd_path, sizeof(sd_path), "/%s.ndi", prefix);
+
+    if (have_content_len && content_len > 0) {
+        String body;
+        if (!read_body_to_string(client, body, content_len)) {
+            send_error(client, 400, "bad body");
+            return;
+        }
+
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err) {
+            send_error(client, 400, "bad json");
+            return;
+        }
+
+        JsonVariantConst v = doc["path"];
+        if (!v.isNull()) {
+            const char* path = v.as<const char*>();
+            if (!path || path[0] == 0) {
+                send_error(client, 400, "bad path");
+                return;
+            }
+            if (path[0] == '/') {
+                strncpy(sd_path, path, sizeof(sd_path));
+                sd_path[sizeof(sd_path) - 1] = 0;
+            } else {
+                snprintf(sd_path, sizeof(sd_path), "/%s", path);
+            }
+        }
+    }
+
+    if (!path_sane(sd_path + 1, false)) {
+        send_error(client, 400, "bad path");
+        return;
+    }
+    String lower(sd_path);
+    lower.toLowerCase();
+    if (!lower.endsWith(".ndi")) {
+        send_error(client, 400, "path must end in .ndi");
+        return;
+    }
+
+    File entry = SD.open(sd_path, FILE_READ);
+    if (!entry) {
+        send_error(client, 404, "not found");
+        return;
+    }
+    entry.close();
+
+    if (!_dm.mount(slot, sd_path)) {
+        send_error(client, 500, "mount failed");
+        return;
+    }
+
+    logLn("[sdhttp] MOUNT %s -> %s", prefix, sd_path);
+    send_headers(client, 200, "application/json");
+    client.print("{\"ok\":true,\"slot\":");
+    write_json_string(client, prefix);
+    client.print(",\"mounted\":true,\"path\":");
+    write_json_string(client, sd_path);
+    client.print('}');
+}
+
+void SdHttpServer::handle_drive_unmount(WiFiClient& client, int slot) {
+    const char* prefix = DeviceManager::prefix_for_slot(slot);
+    _dm.unmount(slot);
+
+    logLn("[sdhttp] UNMOUNT %s", prefix);
+    send_headers(client, 200, "application/json");
+    client.print("{\"ok\":true,\"slot\":");
+    write_json_string(client, prefix);
+    client.print(",\"mounted\":false}");
+}
+
 void SdHttpServer::handle_get(WiFiClient& client, const char* path) {
     if (!g_sd_mounted) {
         send_error(client, 503, "sd not mounted");
@@ -703,6 +849,34 @@ const char* SdHttpServer::path_after_sd(const char* url, char* out,
     }
     out[n] = 0;
     return out;
+}
+
+bool SdHttpServer::parse_drive_action(const char* url, char* slot,
+                                      size_t slot_len, char* action,
+                                      size_t action_len) {
+    if (!url || strncmp(url, "/drives/", 8) != 0 ||
+        slot_len == 0 || action_len == 0) {
+        return false;
+    }
+
+    const char* p = url + 8;
+    size_t n = 0;
+    while (p[n] && p[n] != '/' && p[n] != '?' && n + 1 < slot_len) {
+        slot[n] = p[n];
+        n++;
+    }
+    slot[n] = 0;
+    if (n == 0 || p[n] != '/') return false;
+
+    p += n + 1;
+    n = 0;
+    while (p[n] && p[n] != '/' && p[n] != '?' && n + 1 < action_len) {
+        action[n] = p[n];
+        n++;
+    }
+    action[n] = 0;
+    if (n == 0) return false;
+    return p[n] == 0 || p[n] == '?';
 }
 
 const char* SdHttpServer::reason_phrase(int code) {

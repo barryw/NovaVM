@@ -44,15 +44,16 @@ module test_xram_sdram;
     wire        sdram_we_a;
     wire        sdram_oe_a;
     wire [7:0]  sdram_dout_a;
+    wire        sdram_done_a;
 
     xram_sdram dut (
-        .clk(clk_pixel), .rst(rst),
+        .clk(clk_pixel), .sdram_clk(clk_sdram), .rst(rst),
         .req_addr(req_addr), .req_din(req_din),
         .req_we(req_we), .req_re(req_re),
         .req_dout(req_dout), .busy(busy),
         .sdram_addr(sdram_addr_a), .sdram_din(sdram_din_a),
         .sdram_we(sdram_we_a), .sdram_oe(sdram_oe_a),
-        .sdram_dout(sdram_dout_a)
+        .sdram_dout(sdram_dout_a), .sdram_done(sdram_done_a)
     );
 
     // -----------------------------------------------------------------
@@ -83,9 +84,9 @@ module test_xram_sdram;
         .we_out (we_out),
         // Port A driven by xram_sdram wrapper
         .addrA(sdram_addr_a), .weA(sdram_we_a), .dinA(sdram_din_a),
-        .oeA(sdram_oe_a), .doutA(sdram_dout_a),
+        .oeA(sdram_oe_a), .doutA(sdram_dout_a), .doneA(sdram_done_a),
         // Port B idle
-        .addrB(25'd0), .weB(1'b0), .dinB(8'd0), .oeB(1'b0), .doutB()
+        .addrB(25'd0), .weB(1'b0), .dinB(8'd0), .oeB(1'b0), .doutB(), .doneB()
     );
 
     // -----------------------------------------------------------------

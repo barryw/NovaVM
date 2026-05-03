@@ -55,6 +55,7 @@ module test_xmc_window_decode_top;
     wire        sdram_weA;
     wire        sdram_oeA;
     logic [7:0] sdram_doutA = 8'h00;
+    logic       sdram_doneA = 1'b0;
 
     top dut (
         .clk(clk), .rst(rst),
@@ -92,9 +93,10 @@ module test_xmc_window_decode_top;
         .dbg_cpu_nmi(dbg_cpu_nmi),
         .dbg_cpu_waiting(dbg_cpu_waiting),
         .dbg_cpu_stopped(dbg_cpu_stopped),
+        .sdram_clk(clk),
         .sdram_addrA(sdram_addrA), .sdram_dinA(sdram_dinA),
         .sdram_weA(sdram_weA), .sdram_oeA(sdram_oeA),
-        .sdram_doutA(sdram_doutA),
+        .sdram_doutA(sdram_doutA), .sdram_doneA(sdram_doneA),
         .sdram_addrB(), .sdram_dinB(), .sdram_weB(), .sdram_oeB(),
         .sdram_doutB(8'h00),
         .fio_event()
@@ -175,10 +177,13 @@ module test_xmc_window_decode_top;
     end
 
     always_ff @(posedge clk) begin
+        sdram_doneA <= 1'b0;
         if (sdram_weA)
             sdram_mem[sdram_addrA[18:0]] <= sdram_dinA;
         if (sdram_oeA)
             sdram_doutA <= sdram_mem[sdram_addrA[18:0]];
+        if (sdram_weA || sdram_oeA)
+            sdram_doneA <= 1'b1;
     end
 
     always_ff @(posedge clk) begin

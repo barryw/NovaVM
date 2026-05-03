@@ -477,37 +477,69 @@ module fpga_top (
     // =========================================================================
     wire [7:0] dbg_rx_data;
     wire       dbg_rx_valid;
+    wire       dbg_rx_ready;
     wire [7:0] dbg_tx_data;
     wire       dbg_tx_start;
     wire       dbg_tx_busy;
     wire       dbg_tx_out;
+    wire [7:0] dbg_uart_rx_data;
+    wire       dbg_uart_rx_valid;
+    wire       dbg_uart_rx_ready;
+    wire       dbg_uart_rx_overrun;
+    wire       dbg_uart_rx_frame_error;
+    wire       dbg_uart_tx_ready;
+    wire       dbg_uart_tx_busy;
+    wire       dbg_uart_fifo_overflow;
 
-    // Debug UART runs at 115200 — known-reliable on flying wires between
-    // ESP32 and FPGA. 3.125 Mbaud attempted and failed on this wiring; can
-    // revisit with proper signal conditioning later.
-    uart_rx #(
+    // Debug UART runs at 115200. RX is a Nova-owned ready/valid UART with
+    // explicit framing/overrun reporting, followed by a narrow byte FIFO.
+    // One Nova protocol block is at most 256 payload bytes plus a 5-byte
+    // header, so a 512-byte FIFO covers a full packet with headroom without
+    // dragging in a generic AXI-stream FIFO.
+    debug_uart_rx #(
         .CLK_HZ(UART_CLK_HZ),
         .BAUD  (115200)
     ) dbg_uart_rx (
-        .clk  (clk_pixel),
-        .rst  (rst),
-        .rx   (wifi_txd),
-        .data (dbg_rx_data),
-        .valid(dbg_rx_valid)
+        .clk           (clk_pixel),
+        .rst           (rst),
+        .rx            (wifi_txd),
+        .data          (dbg_uart_rx_data),
+        .valid         (dbg_uart_rx_valid),
+        .ready         (dbg_uart_rx_ready),
+        .busy          (),
+        .overrun_error (dbg_uart_rx_overrun),
+        .frame_error   (dbg_uart_rx_frame_error)
     );
 
-    uart_tx #(
+    debug_byte_fifo #(
+        .ADDR_WIDTH(9)
+    ) dbg_uart_rx_fifo (
+        .clk      (clk_pixel),
+        .rst      (rst),
+        .s_data   (dbg_uart_rx_data),
+        .s_valid  (dbg_uart_rx_valid),
+        .s_ready  (dbg_uart_rx_ready),
+        .m_data   (dbg_rx_data),
+        .m_valid  (dbg_rx_valid),
+        .m_ready  (dbg_rx_ready),
+        .overflow (dbg_uart_fifo_overflow),
+        .fill     ()
+    );
+
+    debug_uart_tx #(
         .CLK_HZ(UART_CLK_HZ),
         .BAUD  (115200)
     ) dbg_uart_tx (
-        .clk  (clk_pixel),
-        .rst  (rst),
-        .data (dbg_tx_data),
-        .start(dbg_tx_start),
-        .tx   (dbg_tx_out),
-        .busy (dbg_tx_busy)
+        .clk   (clk_pixel),
+        .rst   (rst),
+        .data  (dbg_tx_data),
+        .valid (dbg_tx_start),
+        .ready (dbg_uart_tx_ready),
+        .tx    (dbg_tx_out),
+        .busy  (dbg_uart_tx_busy)
     );
 
+    assign dbg_tx_busy = dbg_uart_tx_busy || !dbg_uart_tx_ready;
     assign wifi_rxd = dbg_tx_out;
 
     // =========================================================================
@@ -547,6 +579,8 @@ module fpga_top (
     wire        brg_sdram_b_oe;
     wire [24:0] brg_sdram_b_addr;
     wire [7:0]  brg_sdram_b_din;
+    wire [7:0]  brg_sdram_b_dout;
+    wire        brg_sdram_b_done_toggle;
     wire [7:0]  brg_host_status;
 
     // File I/O event — pulsed by core's fio.sv on CPU write to $B9A0.
@@ -558,6 +592,7 @@ module fpga_top (
         .rst             (rst),
         .rx_data         (dbg_rx_data),
         .rx_valid        (dbg_rx_valid),
+        .rx_ready        (dbg_rx_ready),
         .tx_data         (dbg_tx_data),
         .tx_start        (dbg_tx_start),
         .tx_busy         (dbg_tx_busy),
@@ -604,7 +639,8 @@ module fpga_top (
         .sdram_b_oe      (brg_sdram_b_oe),
         .sdram_b_addr    (brg_sdram_b_addr),
         .sdram_b_din     (brg_sdram_b_din),
-        .sdram_b_dout    (core_sdram_doutB),
+        .sdram_b_dout    (brg_sdram_b_dout),
+        .sdram_b_done_toggle(brg_sdram_b_done_toggle),
         .fio_event       (core_fio_event),
         .host_status     (brg_host_status)
     );
@@ -661,10 +697,10 @@ module fpga_top (
         .dbg_cpu_reset(brg_cpu_reset),
         .dbg_system_reset(brg_system_reset),
         .dbg_cpu_resume(brg_cpu_resume),
-        .brg_sdram_b_we  (brg_sdram_b_we),
-        .brg_sdram_b_oe  (brg_sdram_b_oe),
-        .brg_sdram_b_addr(brg_sdram_b_addr),
-        .brg_sdram_b_din (brg_sdram_b_din),
+        .brg_sdram_b_we  (1'b0),
+        .brg_sdram_b_oe  (1'b0),
+        .brg_sdram_b_addr(25'd0),
+        .brg_sdram_b_din (8'd0),
         .dbg_cpu_pc   (brg_cpu_pc),
         .dbg_cpu_a    (brg_cpu_a),
         .dbg_cpu_x    (brg_cpu_x),
@@ -684,11 +720,13 @@ module fpga_top (
         .dbg_cpu_stopped(brg_cpu_stopped),
 
         // SDRAM port A — xram_sdram wrapper (XRAM BRAM replacement)
+        .sdram_clk  (clk_sdram),
         .sdram_addrA(core_sdram_addrA),
         .sdram_dinA (core_sdram_dinA),
         .sdram_weA  (core_sdram_weA),
         .sdram_oeA  (core_sdram_oeA),
         .sdram_doutA(core_sdram_doutA),
+        .sdram_doneA(core_sdram_doneA),
 
         // SDRAM port B — sid_curve_reader (f6581_curve lookup)
         .sdram_addrB(core_sdram_addrB),
@@ -706,6 +744,7 @@ module fpga_top (
     wire        core_sdram_weA;
     wire        core_sdram_oeA;
     wire [7:0]  core_sdram_doutA;
+    wire        core_sdram_doneA;
 
     // SDRAM port B wires from core
     wire [24:0] core_sdram_addrB;
@@ -713,6 +752,38 @@ module fpga_top (
     wire        core_sdram_weB;
     wire        core_sdram_oeB;
     wire [7:0]  core_sdram_doutB;
+    wire        core_sdram_doneB;
+
+    wire        dbg_sdram_b_we;
+    wire        dbg_sdram_b_oe;
+    wire [24:0] dbg_sdram_b_addr;
+    wire [7:0]  dbg_sdram_b_din;
+    wire        dbg_sdram_b_busy;
+
+    debug_sdram_port_b_cdc dbg_sdram_port_b_cdc (
+        .clk        (clk_pixel),
+        .sdram_clk  (clk_sdram),
+        .rst        (rst),
+        .req_we     (brg_sdram_b_we),
+        .req_oe     (brg_sdram_b_oe),
+        .req_addr   (brg_sdram_b_addr),
+        .req_din    (brg_sdram_b_din),
+        .req_dout   (brg_sdram_b_dout),
+        .done_toggle(brg_sdram_b_done_toggle),
+        .sdram_we   (dbg_sdram_b_we),
+        .sdram_oe   (dbg_sdram_b_oe),
+        .sdram_addr (dbg_sdram_b_addr),
+        .sdram_din  (dbg_sdram_b_din),
+        .sdram_dout (core_sdram_doutB),
+        .sdram_done (core_sdram_doneB),
+        .sdram_busy (dbg_sdram_b_busy)
+    );
+
+    wire        dbg_sdram_b_active = dbg_sdram_b_busy | dbg_sdram_b_we | dbg_sdram_b_oe;
+    wire [24:0] mux_sdram_addrB = dbg_sdram_b_active ? dbg_sdram_b_addr : core_sdram_addrB;
+    wire [7:0]  mux_sdram_dinB  = dbg_sdram_b_active ? dbg_sdram_b_din  : core_sdram_dinB;
+    wire        mux_sdram_weB   = dbg_sdram_b_active ? dbg_sdram_b_we   : core_sdram_weB;
+    wire        mux_sdram_oeB   = dbg_sdram_b_active ? dbg_sdram_b_oe   : core_sdram_oeB;
 
     // =========================================================================
     // HDMI output — VGA signals through TMDS encoder to GPDI
@@ -829,11 +900,11 @@ module fpga_top (
         // Port A — CPU / XMC via xram_sdram wrapper inside top core
         .addrA(core_sdram_addrA), .weA(core_sdram_weA),
         .dinA(core_sdram_dinA),  .oeA(core_sdram_oeA),
-        .doutA(core_sdram_doutA),
-        // Port B — SID filter curve via sid_curve_reader (Phase 2.5 Step 3)
-        .addrB(core_sdram_addrB), .weB(core_sdram_weB),
-        .dinB(core_sdram_dinB),   .oeB(core_sdram_oeB),
-        .doutB(core_sdram_doutB)
+        .doutA(core_sdram_doutA), .doneA(core_sdram_doneA),
+        // Port B — debug bridge has priority over the SID filter curve reader.
+        .addrB(mux_sdram_addrB), .weB(mux_sdram_weB),
+        .dinB(mux_sdram_dinB),   .oeB(mux_sdram_oeB),
+        .doutB(core_sdram_doutB), .doneB(core_sdram_doneB)
     );
 
     // =========================================================================

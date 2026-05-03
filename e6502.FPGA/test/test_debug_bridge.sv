@@ -18,6 +18,7 @@ module test_debug_bridge;
     // UART-facing signals (we drive rx, ignore tx except for ack observation)
     logic [7:0] rx_data;
     logic       rx_valid;
+    wire        rx_ready;
     wire  [7:0] tx_data;
     wire        tx_start;
     logic       tx_busy;
@@ -71,6 +72,7 @@ module test_debug_bridge;
     wire [24:0] sdram_b_addr;
     wire [7:0]  sdram_b_din;
     logic [7:0] sdram_b_dout;
+    logic       sdram_b_done_toggle;
     wire [7:0]  host_status;
 
     // FIO event input — we pulse this to simulate a CPU write to $B9A0.
@@ -84,6 +86,7 @@ module test_debug_bridge;
     ) dut (
         .clk(clk), .rst(rst),
         .rx_data(rx_data), .rx_valid(rx_valid),
+        .rx_ready(rx_ready),
         .tx_data(tx_data), .tx_start(tx_start), .tx_busy(tx_busy),
         .dbg_peek_en(dbg_peek_en), .dbg_peek_addr(dbg_peek_addr),
         .dbg_peek_data(dbg_peek_data),
@@ -123,6 +126,7 @@ module test_debug_bridge;
         .sdram_b_addr(sdram_b_addr),
         .sdram_b_din(sdram_b_din),
         .sdram_b_dout(sdram_b_dout),
+        .sdram_b_done_toggle(sdram_b_done_toggle),
         .fio_event(fio_event),
         .host_status(host_status)
     );
@@ -197,10 +201,11 @@ module test_debug_bridge;
     endtask
 
     // ------------------------------------------------------------------
-    // Inject a single byte into the bridge (rx_valid one-cycle pulse)
+    // Inject a single byte into the bridge, respecting ready/valid
+    // backpressure.
     // ------------------------------------------------------------------
     task automatic send_byte(input logic [7:0] b);
-        @(posedge clk);
+        while (!rx_ready) @(posedge clk);
         rx_data  <= b;
         rx_valid <= 1;
         @(posedge clk);
@@ -689,20 +694,32 @@ module test_debug_bridge;
     // ------------------------------------------------------------------
     logic [7:0] sdram_shadow [0:255];
     logic [7:0] sdram_prev_we;
+    logic [7:0] sdram_prev_oe;
     logic [24:0] sdram_prev_addr;
+
+    initial begin
+        sdram_b_done_toggle = 1'b0;
+        sdram_prev_we = 1'b0;
+        sdram_prev_oe = 1'b0;
+        sdram_prev_addr = 25'd0;
+    end
 
     always_comb begin
         sdram_b_dout = sdram_shadow[sdram_b_addr[7:0]];
     end
 
     always_ff @(posedge clk) begin
-        // Capture on the rising edge of weB (first cycle of the 8-cycle
-        // hold) so each byte is stored exactly once.
+        // Capture on the first cycle of each bridge-owned port-B transfer,
+        // then toggle done to match fpga_top's SDRAM-domain completion bridge.
         if (sdram_b_we && !sdram_prev_we) begin
             if (sdram_b_addr < 25'd256)
                 sdram_shadow[sdram_b_addr[7:0]] <= sdram_b_din;
+            sdram_b_done_toggle <= ~sdram_b_done_toggle;
         end
+        if (sdram_b_oe && !sdram_prev_oe)
+            sdram_b_done_toggle <= ~sdram_b_done_toggle;
         sdram_prev_we   <= sdram_b_we;
+        sdram_prev_oe   <= sdram_b_oe;
         sdram_prev_addr <= sdram_b_addr;
     end
 

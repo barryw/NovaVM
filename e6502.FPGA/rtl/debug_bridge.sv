@@ -23,6 +23,7 @@ module debug_bridge #(
     // UART interface
     input  logic [7:0]  rx_data,
     input  logic        rx_valid,
+    output logic        rx_ready,
     output logic [7:0]  tx_data,
     output logic        tx_start,
     input  logic        tx_busy,
@@ -95,6 +96,7 @@ module debug_bridge #(
     output logic [24:0] sdram_b_addr,
     output logic [7:0]  sdram_b_din,
     input  logic [7:0]  sdram_b_dout,
+    input  logic        sdram_b_done_toggle,
 
     // File I/O event — pulses one clock when the CPU writes a non-zero
     // value to FioCmd ($B9A0). Bridge latches the pulse and emits an
@@ -172,9 +174,11 @@ module debug_bridge #(
     localparam EVENT_MARKER    = 8'hFE;
     localparam EVENT_TYPE_FIO  = 8'hE0;
 
-    // SDRAM port B write pulse width — matches sid_curve_reader's HOLD_CYCLES
-    // budget for a full clkref 16:1 cycle plus CAS pipeline.
-    localparam int SDRAM_HOLD = 8;
+    // SDRAM port-B fallback timeout. The bridge keeps we/oe asserted until
+    // the SDRAM controller reports doneB. The completion arrives as a toggle
+    // already generated in the SDRAM clock domain; sampling a raw one-cycle
+    // SDRAM pulse in this clock domain is not reliable.
+    localparam int SDRAM_TIMEOUT = 8'hFF;
 
     // =========================================================================
     // State machine
@@ -245,7 +249,10 @@ module debug_bridge #(
 
     // SDRAM bulk-write state (port B)
     logic [24:0] sdram_bulk_addr;
-    logic [3:0]  sdram_hold_cnt;
+    logic [7:0]  sdram_hold_cnt;
+    (* async_reg = "true" *) logic [2:0] sdram_done_sync;
+    logic        sdram_done_armed_level;
+    wire         sdram_done_seen = (sdram_done_sync[2] != sdram_done_armed_level);
     logic [2:0]  vgc_bulk_space;
     logic [7:0]  vgc_fill_value;
 
@@ -253,13 +260,14 @@ module debug_bridge #(
     // until we can send the 2-byte marker sequence to the ESP.
     logic event_pending;
 
-    // 1-byte RX buffer — the UART RX module has no FIFO, so if an
-    // incoming byte arrives while the state machine is in a non-RX
-    // state (e.g. emitting an async event or waiting on TX), the pulse
-    // would be lost. Buffer any rx_valid pulse and present it to the
-    // state machine via rx_buf_valid until consumed.
+    // 1-byte RX staging register between the ready/valid source and the
+    // command state machine. External FIFOing owns burst absorption; this
+    // register gives the parser a stable byte until the current state
+    // consumes it.
     logic        rx_buf_valid;
     logic [7:0]  rx_buf_data;
+
+    assign rx_ready = !rx_buf_valid;
 
     // Boot/reset ownership. NovaHost claims the boot path with RESET_HOLD and
     // owns reset until RESET_REL. If it never claims reset, the bridge falls
@@ -474,6 +482,8 @@ module debug_bridge #(
             sdram_b_din      <= 0;
             sdram_bulk_addr  <= 0;
             sdram_hold_cnt   <= 0;
+            sdram_done_sync  <= 3'b000;
+            sdram_done_armed_level <= 1'b0;
             vgc_bulk_space   <= 0;
             vgc_fill_value   <= 0;
             event_pending    <= 0;
@@ -489,6 +499,7 @@ module debug_bridge #(
             dbg_vmem_re      <= 0;
             dbg_cpu_resume   <= 1'b0;
             key_inject_valid <= 0;
+            sdram_done_sync  <= {sdram_done_sync[1:0], sdram_b_done_toggle};
 
             if (dbg_cpu_reset && !boot_claimed_by_host) begin
                 if (boot_auto_release_cnt >= BOOT_AUTO_RELEASE_CYCLES - 1) begin
@@ -504,7 +515,7 @@ module debug_bridge #(
 
             // RX buffer: latch any incoming byte if buffer is empty.
             // Consumed by state machine via `rx_buf_valid <= 0`.
-            if (rx_valid && !rx_buf_valid) begin
+            if (rx_valid && rx_ready) begin
                 rx_buf_valid <= 1;
                 rx_buf_data  <= rx_data;
             end
@@ -1103,7 +1114,8 @@ module debug_bridge #(
                         sdram_b_addr   <= sdram_bulk_addr;
                         sdram_b_din    <= rx_buf_data;
                         sdram_b_we     <= 1;
-                        sdram_hold_cnt <= SDRAM_HOLD - 1;
+                        sdram_hold_cnt <= 8'd0;
+                        sdram_done_armed_level <= sdram_done_sync[2];
                         state          <= S_SDRAM_HOLD;
                     end
                 end
@@ -1178,9 +1190,7 @@ module debug_bridge #(
                 // advance address, decrement count, loop or ack.
                 // ---------------------------------------------------------
                 S_SDRAM_HOLD: begin
-                    if (sdram_hold_cnt != 0) begin
-                        sdram_hold_cnt <= sdram_hold_cnt - 1;
-                    end else begin
+                    if (sdram_done_seen || sdram_hold_cnt == SDRAM_TIMEOUT) begin
                         sdram_b_we      <= 0;
                         sdram_bulk_addr <= sdram_bulk_addr + 25'd1;
                         bulk_remaining  <= bulk_remaining - 1;
@@ -1191,6 +1201,8 @@ module debug_bridge #(
                         end else begin
                             state <= S_SDRAM_RECV;
                         end
+                    end else begin
+                        sdram_hold_cnt <= sdram_hold_cnt + 8'd1;
                     end
                 end
 
@@ -1201,18 +1213,19 @@ module debug_bridge #(
                 S_SDRAM_READ: begin
                     sdram_b_addr   <= sdram_bulk_addr;
                     sdram_b_oe     <= 1;
-                    sdram_hold_cnt <= SDRAM_HOLD - 1;
+                    sdram_hold_cnt <= 8'd0;
+                    sdram_done_armed_level <= sdram_done_sync[2];
                     state          <= S_SDRAM_READ_WAIT;
                 end
 
                 S_SDRAM_READ_WAIT: begin
-                    if (sdram_hold_cnt != 0) begin
-                        sdram_hold_cnt <= sdram_hold_cnt - 1;
-                    end else begin
+                    if (sdram_done_seen || sdram_hold_cnt == SDRAM_TIMEOUT) begin
                         peek_latch      <= sdram_b_dout;
                         sdram_b_oe      <= 0;
                         sdram_bulk_addr <= sdram_bulk_addr + 25'd1;
                         state           <= S_BULK_TX;
+                    end else begin
+                        sdram_hold_cnt <= sdram_hold_cnt + 8'd1;
                     end
                 end
 

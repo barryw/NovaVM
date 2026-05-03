@@ -6,6 +6,9 @@
 //   GET    /wifi/scan    -> nearby WiFi networks
 //   PUT    /wifi         -> update WiFi config JSON
 //   POST   /wifi/connect|disconnect|reconnect|forget
+//   GET    /drives      -> JSON slot mount status
+//   POST   /drives/<slot>/mount   -> mount slot, optional {"path":"/file.ndi"}
+//   POST   /drives/<slot>/unmount -> unmount slot
 //   GET    /sd-status    -> SD diagnostic JSON
 //   POST   /reboot       -> reboot NovaHost after responding
 //   GET    /sd/          -> JSON listing
@@ -60,6 +63,13 @@ private:
     void handle_wifi_put(WiFiClient& client, uint32_t content_len);
     void handle_wifi_action(WiFiClient& client, const char* action);
 
+    void handle_drives(WiFiClient& client, const char* method, const char* url,
+                       bool have_content_len, uint32_t content_len);
+    void handle_drives_list(WiFiClient& client);
+    void handle_drive_mount(WiFiClient& client, int slot,
+                            bool have_content_len, uint32_t content_len);
+    void handle_drive_unmount(WiFiClient& client, int slot);
+
     void handle_get(WiFiClient& client, const char* path);
     void handle_put(WiFiClient& client, const char* path,
                     uint32_t content_len);
@@ -81,6 +91,9 @@ private:
 
     static const char* path_after_sd(const char* url, char* out,
                                      size_t out_len);
+    static bool parse_drive_action(const char* url, char* slot,
+                                   size_t slot_len, char* action,
+                                   size_t action_len);
     static const char* reason_phrase(int code);
 };
 

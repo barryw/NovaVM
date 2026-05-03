@@ -83,11 +83,13 @@ module top (
     // SDRAM port A — driven by the XRAM-over-SDRAM wrapper. fpga_top
     // connects these to sdram.v's port A; in sim the test harness
     // instantiates its own sdram + mock chip.
+    input  logic        sdram_clk,
     output logic [24:0] sdram_addrA,
     output logic [7:0]  sdram_dinA,
     output logic        sdram_weA,
     output logic        sdram_oeA,
     input  logic [7:0]  sdram_doutA,
+    input  logic        sdram_doneA,
 
     // SDRAM port B — driven by the SID curve reader (Phase 2.5 Step 3).
     output logic [24:0] sdram_addrB,
@@ -244,19 +246,21 @@ module top (
     logic        xram_busy;
 
     xram_sdram xram_sdram_inst (
-        .clk      (clk),
-        .rst      (custom_rst),
-        .req_addr (xram_a_addr),
-        .req_din  (xram_a_din),
-        .req_we   (xram_a_we),
-        .req_re   (xram_a_re),
-        .req_dout (xram_a_dout),
-        .busy     (xram_busy),
-        .sdram_addr(sdram_addrA),
-        .sdram_din (sdram_dinA),
-        .sdram_we  (sdram_weA),
-        .sdram_oe  (sdram_oeA),
-        .sdram_dout(sdram_doutA)
+        .clk        (clk),
+        .sdram_clk  (sdram_clk),
+        .rst        (custom_rst),
+        .req_addr   (xram_a_addr),
+        .req_din    (xram_a_din),
+        .req_we     (xram_a_we),
+        .req_re     (xram_a_re),
+        .req_dout   (xram_a_dout),
+        .busy       (xram_busy),
+        .sdram_addr (sdram_addrA),
+        .sdram_din  (sdram_dinA),
+        .sdram_we   (sdram_weA),
+        .sdram_oe   (sdram_oeA),
+        .sdram_dout (sdram_doutA),
+        .sdram_done (sdram_doneA)
     );
 
     logic ext_rom_active;

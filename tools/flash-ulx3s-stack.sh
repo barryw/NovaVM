@@ -19,6 +19,8 @@
 #   OTA_PORT=3232                  ArduinoOTA port for direct OTA.
 #   ESPOTA=/path/to/espota.py      Override espota.py path if auto-detect fails.
 #   SERIAL=/dev/cu.usbserial-...   Serial target when ESP_UPLOAD=serial.
+#   FPGA_FTDI_SERIAL=D01457        FTDI serial used by openFPGALoader.
+#   OPENFPGALOADER_EXTRA_ARGS='...' Extra arguments passed to openFPGALoader.
 #   SERIAL_VIA_PASSTHRU=1          Load FPGA passthru SRAM image for serial ESP upload.
 #   SERIAL_REBOOT_AFTER_FPGA=1     Reboot ESP after FPGA exits passthru.
 #   SD_SYNC=1|0                    Upload staged SD assets after ESP upload.
@@ -26,6 +28,7 @@
 #   SD_SYNC_TIMEOUT=45             Seconds to wait for SD HTTP server.
 #   SD_SYNC_RETRIES=8              Per-file HTTP PUT retry count.
 #   ROM_RELOAD=1|0                 Reload ROMs from SD after SD sync.
+#   FPGA_WRITE_FLASH=1|0           Write FPGA config flash; 0 loads SRAM only.
 #   ALLOW_TIMING_FAIL=1            Flash even if nextpnr timing report fails.
 #   TIMING_MARGIN_MHZ=0.0          Extra fmax headroom required before flashing.
 
@@ -48,6 +51,9 @@ OTA_PORT="${OTA_PORT:-3232}"
 ESPOTA="${ESPOTA:-}"
 ESP_BUILD_PATH="${ESP_BUILD_PATH:-$ESP_DIR/build/ota-direct}"
 SERIAL="${SERIAL:-/dev/cu.usbserial-D01457}"
+FPGA_FTDI_SERIAL="${FPGA_FTDI_SERIAL:-${SERIAL##*/}}"
+FPGA_FTDI_SERIAL="${FPGA_FTDI_SERIAL#cu.usbserial-}"
+OPENFPGALOADER_EXTRA_ARGS="${OPENFPGALOADER_EXTRA_ARGS:-}"
 SERIAL_VIA_PASSTHRU="${SERIAL_VIA_PASSTHRU:-1}"
 SERIAL_REBOOT_AFTER_FPGA="${SERIAL_REBOOT_AFTER_FPGA:-1}"
 SD_SYNC="${SD_SYNC:-1}"
@@ -55,6 +61,7 @@ SD_SYNC_HOST="${SD_SYNC_HOST:-$NOVAHOST}"
 SD_SYNC_TIMEOUT="${SD_SYNC_TIMEOUT:-45}"
 SD_SYNC_RETRIES="${SD_SYNC_RETRIES:-8}"
 ROM_RELOAD="${ROM_RELOAD:-1}"
+FPGA_WRITE_FLASH="${FPGA_WRITE_FLASH:-1}"
 ALLOW_TIMING_FAIL="${ALLOW_TIMING_FAIL:-0}"
 TIMING_MARGIN_MHZ="${TIMING_MARGIN_MHZ:-0.0}"
 
@@ -83,6 +90,22 @@ bitstreams = sorted(
 if bitstreams:
     print(bitstreams[0])
 PY
+}
+
+openfpga_loader() {
+    local args=(--board ulx3s)
+
+    if [ -n "$FPGA_FTDI_SERIAL" ]; then
+        args+=(--ftdi-serial "$FPGA_FTDI_SERIAL")
+    fi
+
+    if [ -n "$OPENFPGALOADER_EXTRA_ARGS" ]; then
+        # shellcheck disable=SC2206
+        local extra_args=( $OPENFPGALOADER_EXTRA_ARGS )
+        args+=("${extra_args[@]}")
+    fi
+
+    openFPGALoader "${args[@]}" "$@"
 }
 
 wait_for_sd_http() {
@@ -321,8 +344,13 @@ fi
 echo "bitstream: $BITSTREAM"
 check_timing_before_flash "$BITSTREAM" "$TIMING_REPORT"
 
-echo "=== [3/5] flashing FPGA config flash"
-openFPGALoader --board ulx3s -f "$BITSTREAM"
+if [ "$FPGA_WRITE_FLASH" = "1" ]; then
+    echo "=== [3/5] flashing FPGA config flash"
+    openfpga_loader -f "$BITSTREAM"
+else
+    echo "=== [3/5] loading FPGA SRAM"
+    openfpga_loader "$BITSTREAM"
+fi
 
 echo "=== [4/5] uploading NovaHost ($ESP_UPLOAD)"
 case "$ESP_UPLOAD" in
@@ -343,13 +371,13 @@ case "$ESP_UPLOAD" in
                 /opt/homebrew/oss-cad-suite/bin/nextpnr-ecp5 --85k --package CABGA381 \
                     --textcfg build/passthru.config --json build/passthru.json --lpf passthru.lpf -q
                 /opt/homebrew/oss-cad-suite/bin/ecppack build/passthru.config build/passthru.bit
-                openFPGALoader --board ulx3s build/passthru.bit
+                openfpga_loader build/passthru.bit
             )
         fi
         make --no-print-directory -C "$REPO_ROOT/e6502.ESP32/novahost" SERIAL="$SERIAL" serial
         if [ "$SERIAL_VIA_PASSTHRU" = "1" ]; then
             echo "=== [4b/5] reloading FPGA from config flash"
-            openFPGALoader --board ulx3s -r
+            openfpga_loader -r
             if [ "$SERIAL_REBOOT_AFTER_FPGA" = "1" ]; then
                 request_esp_reboot "$SD_SYNC_HOST"
             fi

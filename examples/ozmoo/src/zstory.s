@@ -44,6 +44,8 @@ zstory_serial:         .res 6
 .export zstory_read_header_word
 .export zstory_read8
 .export zstory_read16
+.export zstory_write8
+.export zstory_write16
 
 ; Load the default story file into flat XRAM at $000000.
 ; Returns A=0 on success, A=1 on FIO/XRAM error.
@@ -243,6 +245,38 @@ zstory_read16:
 @done:
         RTS
 
+; Write XRAM_DATA to zstory_addr_l/m/h.
+zstory_write8:
+        JSR zstory_addr_is_dynamic
+        BNE @readonly
+        LDA zstory_addr_l
+        STA XRAM_ADDRL
+        LDA zstory_addr_m
+        STA XRAM_ADDRM
+        LDA zstory_addr_h
+        STA XRAM_ADDRH
+        JMP xram_write8
+@readonly:
+        LDA #ZSTORY_ERR_READONLY
+        RTS
+
+; Write zstory_word_hi/lo to zstory_addr_l/m/h as a big-endian word.
+; The address is advanced by two bytes.
+zstory_write16:
+        LDA zstory_word_hi
+        STA XRAM_DATA
+        JSR zstory_write8
+        BNE @done
+        JSR zstory_inc_addr
+        LDA zstory_word_lo
+        STA XRAM_DATA
+        JSR zstory_write8
+        BNE @done
+        JSR zstory_inc_addr
+        LDA #ZSTORY_ERR_NONE
+@done:
+        RTS
+
 zstory_inc_addr:
         INC zstory_addr_l
         BNE @done
@@ -250,6 +284,23 @@ zstory_inc_addr:
         BNE @done
         INC zstory_addr_h
 @done:
+        RTS
+
+zstory_addr_is_dynamic:
+        LDA zstory_addr_h
+        BNE @readonly
+        LDA zstory_addr_m
+        CMP zstory_static_hi
+        BCC @ok
+        BNE @readonly
+        LDA zstory_addr_l
+        CMP zstory_static_lo
+        BCC @ok
+@readonly:
+        LDA #ZSTORY_ERR_READONLY
+        RTS
+@ok:
+        LDA #ZSTORY_ERR_NONE
         RTS
 
 zstory_store_release:

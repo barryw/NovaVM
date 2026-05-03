@@ -6,7 +6,9 @@
 ;
 ; Calling convention:
 ;   Region:      VTEXT_LEFT/TOP/WIDTH/HEIGHT state bytes
-;   Cursor:      VTEXT_CURX/CURY state bytes, relative to the current region
+;   Cursor:      VTEXT_CURX/CURY state bytes, relative to the current region.
+;                vtext_set_cursor and character output mirror this to the
+;                absolute VGC visible cursor registers.
 ;   Cell attrs:  VTEXT_COLOR (packed bg/fg), VTEXT_ATTR (style bits)
 ;   Character:   VTEXT_CHAR input byte
 ;   Flags:       VTEXT_FLAGS state byte (wrap/scroll)

@@ -103,8 +103,9 @@ module test_fio_top;
         .dbg_cpu_nmi(dbg_cpu_nmi),
         .dbg_cpu_waiting(dbg_cpu_waiting),
         .dbg_cpu_stopped(dbg_cpu_stopped),
+        .sdram_clk(clk),
         .sdram_addrA(), .sdram_dinA(), .sdram_weA(), .sdram_oeA(),
-        .sdram_doutA(8'h00),
+        .sdram_doutA(8'h00), .sdram_doneA(1'b0),
         .sdram_addrB(), .sdram_dinB(), .sdram_weB(), .sdram_oeB(),
         .sdram_doutB(8'h00),
         .fio_event(fio_event)

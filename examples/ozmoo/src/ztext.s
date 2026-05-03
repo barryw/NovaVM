@@ -19,6 +19,7 @@ ztext_tmp:             .res 1
 ztext_escape_count:    .res 1
 ztext_escape_value:    .res 1
 ztext_abbrev_command:  .res 1
+ztext_abbrev_index:    .res 1
 ztext_abbrev_offset:   .res 1
 
 .segment "CODE"
@@ -169,8 +170,7 @@ ztext_emit_zchar:
 @a2_not_escape:
         CMP #$07
         BNE @plain
-        LDA #$0D
-        JSR print_char
+        JSR newline
         STZ ztext_alphabet
         RTS
 
@@ -224,7 +224,7 @@ ztext_accumulate_escape:
 
 ; A = abbreviation zchar index, ztext_abbrev_command = 1..3.
 ztext_print_abbreviation:
-        PHA
+        STA ztext_abbrev_index
         LDA zstory_addr_l
         PHA
         LDA zstory_addr_m
@@ -256,7 +256,7 @@ ztext_print_abbreviation:
         LDA ztext_abbrev_command
         PHA
 
-        PLA
+        LDA ztext_abbrev_command
         DEC
         ASL
         ASL
@@ -264,7 +264,7 @@ ztext_print_abbreviation:
         ASL
         ASL
         STA ztext_abbrev_offset
-        PLA
+        LDA ztext_abbrev_index
         CLC
         ADC ztext_abbrev_offset
         ASL
@@ -288,7 +288,9 @@ ztext_print_abbreviation:
         LDA zstory_word_hi
         ROL
         STA zstory_addr_m
-        STZ zstory_addr_h
+        LDA #$00
+        ROL
+        STA zstory_addr_h
         LDA #ZTEXT_UNLIMITED
         STA ztext_word_limit
         STZ ztext_done
@@ -300,6 +302,8 @@ ztext_print_abbreviation:
         JSR ztext_print_packed
 
 @restore:
+        PLA
+        STA ztext_abbrev_command
         PLA
         STA ztext_escape_value
         PLA

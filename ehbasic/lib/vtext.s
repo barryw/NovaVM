@@ -39,6 +39,7 @@ VTEXT_TMP:        .res 1
       .export vtext_store_region
       .export vtext_validate_region
       .export vtext_set_cursor
+      .export vtext_sync_cursor
       .export vtext_home
       .export vtext_put_char
       .export vtext_newline
@@ -189,6 +190,17 @@ vtext_validate_region:
 @bad:
       JMP   vtext_err
 
+vtext_sync_cursor:
+      LDA   VTEXT_LEFT
+      CLC
+      ADC   VTEXT_CURX
+      STA   VGC_CURSX
+      LDA   VTEXT_TOP
+      CLC
+      ADC   VTEXT_CURY
+      STA   VGC_CURSY
+      RTS
+
 vtext_set_cursor:
       JSR   vtext_validate_region
       BNE   @done
@@ -198,6 +210,7 @@ vtext_set_cursor:
       LDA   VTEXT_CURY
       CMP   VTEXT_HEIGHT
       BCS   @bad
+      JSR   vtext_sync_cursor
       JMP   vtext_ok
 @bad:
       JMP   vtext_err
@@ -207,7 +220,7 @@ vtext_set_cursor:
 vtext_home:
       STZ   VTEXT_CURX
       STZ   VTEXT_CURY
-      JMP   vtext_ok
+      JMP   vtext_set_cursor
 
 ; ---------------------------------------------------------------------
 ; Addressing and VRAM writes
@@ -315,6 +328,7 @@ vtext_put_char:
       JMP   vtext_advance_char
 @cr:
       STZ   VTEXT_CURX
+      JMP   vtext_set_cursor
 @ok:
       JMP   vtext_ok
 @lf:
@@ -323,13 +337,13 @@ vtext_put_char:
       LDA   VTEXT_CURX
       BEQ   @ok
       DEC   VTEXT_CURX
-      JMP   vtext_ok
+      JMP   vtext_set_cursor
 @ff:
       JSR   vtext_clear_region
       BNE   @done
       STZ   VTEXT_CURX
       STZ   VTEXT_CURY
-      JMP   vtext_ok
+      JMP   vtext_set_cursor
 @done:
       RTS
 
@@ -346,12 +360,12 @@ vtext_advance_char:
       SEC
       SBC   #$01
       STA   VTEXT_CURX
-      JMP   vtext_ok
+      JMP   vtext_set_cursor
 @wrap:
       STZ   VTEXT_CURX
       JMP   vtext_advance_line
 @ok:
-      JMP   vtext_ok
+      JMP   vtext_set_cursor
 
 vtext_newline:
       JSR   vtext_validate_region
@@ -378,7 +392,7 @@ vtext_advance_line:
       SBC   #$01
       STA   VTEXT_CURY
 @ok:
-      JMP   vtext_ok
+      JMP   vtext_set_cursor
 @done:
       RTS
 

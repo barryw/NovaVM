@@ -6,6 +6,10 @@ extern void logLn(const char* fmt, ...);
 extern void novaHostFioActivityStarted();
 extern void novaHostFioActivityFinished(bool ok);
 
+#ifndef NOVAHOST_XLOAD_VERIFY
+#define NOVAHOST_XLOAD_VERIFY 0
+#endif
+
 namespace {
 ndi::FileType file_type_for_name(const char* name) {
     const char* ext = strrchr(name, '.');
@@ -544,10 +548,36 @@ void FioDispatcher::handle_xload() {
             return;
         }
         uint16_t wire_count = (chunk == 256) ? 0 : chunk;
-        if (!_bridge.pokeSdramBlock(dest + off, _transfer_buf, wire_count)) {
+#if NOVAHOST_XLOAD_VERIFY
+        bool verified = false;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            if (!_bridge.pokeSdramBlock(dest + off, _transfer_buf, wire_count)) {
+                continue;
+            }
+            if (!_bridge.readSdramBlock(dest + off, (uint8_t)wire_count, _transfer_buf + 256)) {
+                continue;
+            }
+            if (memcmp(_transfer_buf, _transfer_buf + 256, chunk) == 0) {
+                verified = true;
+                break;
+            }
+            logLn("[fio] XLOAD verify mismatch at XRAM $%06X, retry %d\n",
+                  (unsigned)(dest + off), attempt + 1);
+        }
+        if (!verified) {
+            logLn("[fio] XLOAD verify failed at XRAM $%06X\n",
+                  (unsigned)(dest + off));
             respond_err(ERR_IO);
             return;
         }
+#else
+        if (!_bridge.pokeSdramBlock(dest + off, _transfer_buf, wire_count)) {
+            logLn("[fio] XLOAD write failed at XRAM $%06X\n",
+                  (unsigned)(dest + off));
+            respond_err(ERR_IO);
+            return;
+        }
+#endif
         off += chunk;
     }
 

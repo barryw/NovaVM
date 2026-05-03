@@ -46,6 +46,8 @@ private:
     // Command handlers
     void cmdPeek(const String& json);
     void cmdPeekBlock(const String& json);
+    void cmdReadSdram(const String& json);
+    void cmdWriteSdram(const String& json);
     void cmdPoke(const String& json);
     void cmdReadVram(const String& json);
     void cmdFillVram(const String& json);

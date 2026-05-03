@@ -95,6 +95,8 @@ void DebugServer::handleCommand(const String& json) {
 
     if      (cmd == "peek")        cmdPeek(json);
     else if (cmd == "peek_block")  cmdPeekBlock(json);
+    else if (cmd == "read_sdram")  cmdReadSdram(json);
+    else if (cmd == "write_sdram") cmdWriteSdram(json);
     else if (cmd == "poke")        cmdPoke(json);
     else if (cmd == "read_vram")   cmdReadVram(json);
     else if (cmd == "fill_vram")   cmdFillVram(json);
@@ -170,6 +172,81 @@ void DebugServer::cmdPeekBlock(const String& json) {
     }
     resp += "]}";
     respond(resp.c_str());
+}
+
+void DebugServer::cmdReadSdram(const String& json) {
+    int addr = extractInt(json, "address");
+    int count = extractInt(json, "count");
+    if (count < 0) count = extractInt(json, "length");
+    if (addr < 0) { respondError("Missing 'address'"); return; }
+    if (count < 0) { respondError("Missing 'count'"); return; }
+    if (addr > 0xFFFFFF) { respondError("'address' must be 0..16777215"); return; }
+    if (count > 256) { respondError("'count' must be 0..256"); return; }
+
+    uint8_t wireCount = (count == 256) ? 0 : (uint8_t)count;
+    int actualCount = (wireCount == 0) ? 256 : wireCount;
+    uint8_t buf[256];
+    if (!_bridge.readSdramBlock((uint32_t)addr, wireCount, buf)) {
+        respondError("FPGA read_sdram failed");
+        return;
+    }
+
+    String resp;
+    resp.reserve(80 + actualCount * 4);
+    resp = "{\"ok\":true,\"address\":";
+    resp += String(addr);
+    resp += ",\"count\":";
+    resp += String(actualCount);
+    resp += ",\"values\":[";
+    for (int i = 0; i < actualCount; i++) {
+        if (i > 0) resp += ',';
+        resp += String(buf[i]);
+    }
+    resp += "]}";
+    respond(resp.c_str());
+}
+
+void DebugServer::cmdWriteSdram(const String& json) {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, jsonPayload(json));
+    if (err) { respondError("Invalid JSON"); return; }
+
+    int addr = doc["address"] | -1;
+    JsonVariantConst values = doc["values"];
+    if (addr < 0) { respondError("Missing 'address'"); return; }
+    if (addr > 0xFFFFFF) { respondError("'address' must be 0..16777215"); return; }
+    if (!values.is<JsonArrayConst>()) { respondError("Missing 'values' array"); return; }
+
+    JsonArrayConst arr = values.as<JsonArrayConst>();
+    size_t count = arr.size();
+    if (count < 1 || count > 256) {
+        respondError("'values' must contain 1..256 bytes");
+        return;
+    }
+
+    uint8_t buf[256];
+    size_t i = 0;
+    for (JsonVariantConst v : arr) {
+        if (!v.is<int>()) { respondError("'values' entries must be integers"); return; }
+        int value = v.as<int>();
+        if (value < 0 || value > 255) {
+            respondError("'values' entries must be 0..255");
+            return;
+        }
+        buf[i++] = (uint8_t)value;
+    }
+
+    uint16_t wireCount = (count == 256) ? 0 : (uint16_t)count;
+    if (!_bridge.pokeSdramBlock((uint32_t)addr, buf, wireCount)) {
+        respondError("FPGA write_sdram failed");
+        return;
+    }
+
+    char resp[96];
+    snprintf(resp, sizeof(resp),
+             "{\"ok\":true,\"address\":%d,\"count\":%u}",
+             addr, (unsigned)count);
+    respond(resp);
 }
 
 void DebugServer::cmdPoke(const String& json) {

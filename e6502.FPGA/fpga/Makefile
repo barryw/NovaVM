@@ -52,7 +52,10 @@ RTL_VGC = $(DPRAM) $(RTLDIR)/vgc.sv $(RTLDIR)/vgc_timing.sv $(RTLDIR)/vgc_text.s
           $(RTLDIR)/vgc_gfx.sv $(RTLDIR)/artist.sv $(RTLDIR)/vgc_sprites.sv \
           $(RTLDIR)/vgc_copper.sv $(RTLDIR)/tile_engine.sv $(RTLDIR)/blitter.sv \
           $(RTLDIR)/dma.sv $(RTLDIR)/fio.sv $(RTLDIR)/thirdparty/sfifo.v
-RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv fpga_top.sv uart_rx.sv uart_tx.sv
+RTL_UART = $(RTLDIR)/debug_uart_rx.sv \
+           $(RTLDIR)/debug_uart_tx.sv \
+           $(RTLDIR)/debug_byte_fifo.sv
+RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv fpga_top.sv uart_rx.sv uart_tx.sv $(RTL_UART)
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
            $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv \
@@ -60,7 +63,7 @@ RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/si
 RTL_HDMI = $(RTLDIR)/hdmi/vga2dvid.v $(RTLDIR)/hdmi/tmds_encoder.v \
            $(RTLDIR)/hdmi/fake_differential.v $(RTLDIR)/hdmi/hdmi_device_ref.v
 RTL_SDRAM_V  = $(RTLDIR)/sdram/sdram.v
-RTL_SDRAM_SV = $(RTLDIR)/sdram/xram_sdram.sv
+RTL_SDRAM_SV = $(RTLDIR)/sdram/xram_sdram.sv $(RTLDIR)/sdram/debug_sdram_port_b_cdc.sv
 
 # =========================================================================
 # Synthesis — rebuilds only when source files change (don't 'make clean'!)

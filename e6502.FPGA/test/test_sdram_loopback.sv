@@ -61,6 +61,7 @@ module test_sdram_loopback;
     logic        oeA = 0, oeB = 0;
     logic [7:0]  dinA = 0, dinB = 0;
     wire  [7:0]  doutA, doutB;
+    wire         doneA, doneB;
 
     sdram dut (
         .sd_data_in (sd_data_bus),
@@ -78,8 +79,8 @@ module test_sdram_loopback;
         .clkref (clkref),
         .we_out (we_out),
 
-        .addrA(addrA), .weA(weA), .dinA(dinA), .oeA(oeA), .doutA(doutA),
-        .addrB(addrB), .weB(weB), .dinB(dinB), .oeB(oeB), .doutB(doutB)
+        .addrA(addrA), .weA(weA), .dinA(dinA), .oeA(oeA), .doutA(doutA), .doneA(doneA),
+        .addrB(addrB), .weB(weB), .dinB(dinB), .oeB(oeB), .doutB(doutB), .doneB(doneB)
     );
 
     // -----------------------------------------------------------------

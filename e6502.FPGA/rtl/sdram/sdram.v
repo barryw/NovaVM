@@ -45,12 +45,14 @@ module sdram
 	input      [7:0] dinA,       // data input from chipset/cpu
 	input            oeA,        // cpu requests data
 	output reg [7:0] doutA,      // data output to cpu
+	output reg       doneA,      // one clk pulse when port A transfer completed
 
 	input     [24:0] addrB,      // 25 bit byte address
 	input            weB,        // cpu/chipset requests write
 	input      [7:0] dinB,       // data input from chipset/cpu
 	input            oeB,        // ppu requests data
-	output reg [7:0] doutB       // data output to ppu
+	output reg [7:0] doutB,      // data output to ppu
+	output reg       doneB       // one clk pulse when port B transfer completed
 );
 
 // no burst configured
@@ -118,23 +120,55 @@ localparam CMD_LOAD_MODE       = 4'b0000;
 
 wire [3:0] sd_cmd;   // current command sent to sd ram
 
-// clkref high - CPU
-// clkref low  - PPU
-wire        oe = clkref ? oeA : oeB;
-assign        we_out = clkref ? weA : weB;
-wire [24:0] addr = clkref ? addrA : addrB;
-wire  [7:0] din = clkref ? dinA : dinB;
+// clkref high - port A
+// clkref low  - port B
+wire        req_we   = clkref ? weA   : weB;
+wire        req_oe   = clkref ? oeA   : oeB;
+wire [24:0] req_addr = clkref ? addrA : addrB;
+wire  [7:0] req_din  = clkref ? dinA  : dinB;
 
-reg addr0;
-always @(posedge clk)
-	if((q == 1) && oe) addr0 <= addr[0];
+reg        cycle_port_a;
+reg        cycle_we;
+reg        cycle_oe;
+reg [24:0] cycle_addr;
+reg  [7:0] cycle_din;
 
-wire [7:0] dout = addr0?sd_data_in[7:0]:sd_data_in[15:8];
+wire [7:0] dout = cycle_addr[0]?sd_data_in[7:0]:sd_data_in[15:8];
+assign     we_out = (q == STATE_CMD_CONT) && cycle_we;
 
 always @(posedge clk) begin
-	if(q == STATE_CMD_READ) begin
-		if(oeA &&  clkref) doutA <= dout;
-		if(oeB && !clkref) doutB <= dout;
+	doneA <= 1'b0;
+	doneB <= 1'b0;
+	if(init || (reset != 0)) begin
+		cycle_port_a <= 1'b0;
+		cycle_we     <= 1'b0;
+		cycle_oe     <= 1'b0;
+		cycle_addr   <= 25'd0;
+		cycle_din    <= 8'd0;
+	end else begin
+		if(q == STATE_CMD_START) begin
+			cycle_port_a <= clkref;
+			cycle_we     <= req_we;
+			cycle_oe     <= !req_we && req_oe;
+			cycle_addr   <= req_addr;
+			cycle_din    <= req_din;
+		end
+		if(q == STATE_CMD_READ && cycle_oe) begin
+			if(cycle_port_a) begin
+				doutA <= dout;
+				doneA <= 1'b1;
+			end
+			else begin
+				doutB <= dout;
+				doneB <= 1'b1;
+			end
+			cycle_oe <= 1'b0;
+		end
+		if(q == STATE_CMD_CONT && cycle_we) begin
+			if(cycle_port_a) doneA <= 1'b1;
+			else             doneB <= 1'b1;
+			cycle_we <= 1'b0;
+		end
 	end
 end
 
@@ -144,26 +178,27 @@ wire [3:0] reset_cmd =
 	CMD_INHIBIT;
 
 wire [3:0] run_cmd =
-	((we_out || oe) && (q == STATE_CMD_START))?CMD_ACTIVE:
-	( we_out        && (q == STATE_CMD_CONT ))?CMD_WRITE:
-	(!we_out &&  oe && (q == STATE_CMD_CONT ))?CMD_READ:
-	(!we_out && !oe && (q == STATE_CMD_START))?CMD_AUTO_REFRESH:
+	((req_we || req_oe) && (q == STATE_CMD_START))?CMD_ACTIVE:
+	( cycle_we          && (q == STATE_CMD_CONT ))?CMD_WRITE:
+	( cycle_oe          && (q == STATE_CMD_CONT ))?CMD_READ:
+	(!(req_we || req_oe) && (q == STATE_CMD_START))?CMD_AUTO_REFRESH:
 	CMD_INHIBIT;
 
 assign sd_cmd = (reset != 0)?reset_cmd:run_cmd;
 
 wire [12:0] reset_addr = (reset == 13)?13'b0010000000000:MODE;
 
-wire [12:0] run_addr = 
-	(q == STATE_CMD_START)?addr[21:9]:{ 4'b0010, addr[24], addr[8:1]};
+wire [12:0] run_addr =
+	(q == STATE_CMD_START)?req_addr[21:9]:{ 4'b0010, cycle_addr[24], cycle_addr[8:1]};
 
-assign sd_data_out = we_out?{ din, din }:16'b0;
+assign sd_data_out = we_out?{ cycle_din, cycle_din }:16'b0;
 //register SDRAM output signals
 assign sd_addr = (reset != 0)?reset_addr:run_addr;
 
-assign sd_ba = (reset != 0)?2'b00:addr[23:22];
+assign sd_ba = (reset != 0)?2'b00:
+	(q == STATE_CMD_START)?req_addr[23:22]:cycle_addr[23:22];
 
-assign sd_dqm = we_out?{ addr[0], ~addr[0] }:2'b00;
+assign sd_dqm = we_out?{ cycle_addr[0], ~cycle_addr[0] }:2'b00;
 
 // drive control signals according to current command
 assign sd_cs  = sd_cmd[3];

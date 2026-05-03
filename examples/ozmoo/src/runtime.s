@@ -12,9 +12,11 @@
 .include "zstory.inc"
 .include "ztext.inc"
 .include "zobject.inc"
+.include "zvm.inc"
 .include "zstory.s"
 .include "ztext.s"
 .include "zobject.s"
+.include "zvm.s"
 
 .segment "ZEROPAGE"
 msg_ptr:        .res 2
@@ -76,7 +78,9 @@ reset:
         BRA halt
 
 @header_ok:
-        JSR print_header
+        JSR init_game_screen
+        JSR zvm_run_until_read
+        BRA halt
 
 halt:
         WAI
@@ -103,6 +107,32 @@ setup_text_region:
         LDA #(VTEXT_FLAG_WRAP | VTEXT_FLAG_SCROLL)
         STA VTEXT_FLAGS
         RTS
+
+setup_story_region:
+        LDA #$00
+        STA VTEXT_LEFT
+        LDA #$01
+        STA VTEXT_TOP
+        LDA #80
+        STA VTEXT_WIDTH
+        LDA #49
+        STA VTEXT_HEIGHT
+        LDA #$0F
+        STA VTEXT_COLOR
+        STZ VTEXT_ATTR
+        LDA #(VTEXT_FLAG_WRAP | VTEXT_FLAG_SCROLL)
+        STA VTEXT_FLAGS
+        RTS
+
+init_game_screen:
+        JSR setup_text_region
+        STZ VTEXT_CURX
+        STZ VTEXT_CURY
+        JSR vtext_clear_region
+        JSR setup_story_region
+        STZ VTEXT_CURX
+        STZ VTEXT_CURY
+        JMP vtext_set_cursor
 
 print_header:
         JSR setup_text_region
@@ -219,8 +249,23 @@ print_text:
         RTS
 
 print_char:
+        PHA
+        LDA zvm_stream_flags
+        AND #ZVM_STREAM_3_ACTIVE
+        BEQ @screen
+        PLA
+        PHA
+        JSR zvm_stream3_put_char
+@screen:
+        LDA zvm_stream_flags
+        AND #ZVM_STREAM_SCREEN_OFF
+        BNE @done
+        PLA
         STA VTEXT_CHAR
         JMP vtext_put_char
+@done:
+        PLA
+        RTS
 
 newline:
         LDA #$0D

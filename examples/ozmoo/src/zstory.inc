@@ -10,6 +10,7 @@ NOVA_OZMOO_ZSTORY_INC_INCLUDED = 1
 ZSTORY_ERR_NONE        = $00
 ZSTORY_ERR_IO          = $01
 ZSTORY_ERR_UNSUPPORTED = $02
+ZSTORY_ERR_READONLY    = $03
 
 ZHEADER_VERSION        = $00
 ZHEADER_RELEASE        = $02
@@ -24,5 +25,14 @@ ZHEADER_SERIAL         = $12
 ZHEADER_ABBREVIATIONS  = $18
 ZHEADER_FILE_LENGTH    = $1A
 ZHEADER_CHECKSUM       = $1C
+
+.global zstory_addr_l
+.global zstory_addr_m
+.global zstory_addr_h
+.global zstory_word_hi
+.global zstory_word_lo
+.global zstory_version
+.global zstory_globals_hi
+.global zstory_globals_lo
 
 .endif
