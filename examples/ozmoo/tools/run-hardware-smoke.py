@@ -54,6 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--turn-delay", type=float, default=1.25)
     parser.add_argument("--prompt-timeout", type=float, default=30.0)
     parser.add_argument("--script", action="append", type=Path, required=True)
+    parser.add_argument("--expect-more", action="store_true")
     return parser.parse_args()
 
 
@@ -86,17 +87,20 @@ def is_ready_prompt(lines: list[str], cursor_x: int, cursor_y: int) -> bool:
     return cursor_x == 1 and len(line) > 0 and line[0] == ">" and all(ch == " " for ch in line[1:])
 
 
-def wait_ready_prompt(client: DebugClient, timeout: float) -> tuple[list[str], int, int]:
+def wait_ready_prompt(client: DebugClient, timeout: float) -> tuple[list[str], int, int, int]:
     deadline = time.monotonic() + timeout
     last: tuple[list[str], int, int] | None = None
+    more_prompts = 0
     while time.monotonic() < deadline:
         last = read_screen(client)
         if any("[ MORE ]" in line for line in last[0]):
+            more_prompts += 1
             client.command("send_key", key="ENTER")
             time.sleep(0.3)
             continue
         if is_ready_prompt(*last):
-            return last
+            lines, cursor_x, cursor_y = last
+            return lines, cursor_x, cursor_y, more_prompts
         time.sleep(0.2)
     if last is None:
         raise TimeoutError("timed out before first screen read")
@@ -134,13 +138,16 @@ def main() -> int:
     args = parse_args()
     client = DebugClient(args.host, args.port, args.timeout)
 
-    wait_ready_prompt(client, args.prompt_timeout)
+    total_more_prompts = 0
+    _, _, _, seen_more = wait_ready_prompt(client, args.prompt_timeout)
+    total_more_prompts += seen_more
     for script in args.script:
         print(f"== {script} ==")
         for command, expected in load_script(script):
             print(f"> {command}", flush=True)
             send_line(client, command, args.key_delay)
-            lines, cursor_x, cursor_y = wait_ready_prompt(client, args.prompt_timeout)
+            lines, cursor_x, cursor_y, seen_more = wait_ready_prompt(client, args.prompt_timeout)
+            total_more_prompts += seen_more
             transcript = extract_command_transcript(lines, command)
             for marker in expected:
                 if marker not in transcript and normalize_whitespace(marker) not in normalize_whitespace(transcript):
@@ -149,8 +156,13 @@ def main() -> int:
             print(f"ok cursor={cursor_x},{cursor_y}")
             time.sleep(args.turn_delay)
 
+    if args.expect_more and total_more_prompts == 0:
+        lines, _, _ = read_screen(client)
+        print(visible(lines), file=sys.stderr)
+        raise RuntimeError("expected at least one [ MORE ] prompt")
+
     lines, _, _ = read_screen(client)
-    print("Hardware Ozmoo smoke passed.")
+    print(f"Hardware Ozmoo smoke passed. morePrompts={total_more_prompts}")
     print(visible(lines))
     return 0
 

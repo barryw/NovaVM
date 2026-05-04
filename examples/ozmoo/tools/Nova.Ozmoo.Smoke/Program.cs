@@ -9,6 +9,7 @@ if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.Ozmoo.Smoke <fd0.ndi> [command[=>expected] ...]");
     Console.Error.WriteLine("       Nova.Ozmoo.Smoke <fd0.ndi> --script <file>");
+    Console.Error.WriteLine("       Nova.Ozmoo.Smoke <fd0.ndi> --generic-boot [--boot-only] [--expect-more]");
     return 1;
 }
 
@@ -19,7 +20,10 @@ if (!File.Exists(imagePath))
     return 1;
 }
 
-List<SmokeCommand> commands = LoadCommands(args);
+bool genericBoot = args.Skip(1).Contains("--generic-boot", StringComparer.Ordinal);
+bool bootOnly = args.Skip(1).Contains("--boot-only", StringComparer.Ordinal);
+bool expectMore = args.Skip(1).Contains("--expect-more", StringComparer.Ordinal);
+List<SmokeCommand> commands = LoadCommands(args, bootOnly);
 JsonNode? manifest = TryReadManifest(imagePath);
 string storageRoot = Path.Combine(Path.GetTempPath(), $"nova-ozmoo-smoke-{Guid.NewGuid():N}");
 
@@ -40,21 +44,21 @@ try
     cpu.Boot();
 
     int maxSteps = ReadEnvInt("OZMOO_SMOKE_MAX_STEPS", 80_000_000);
-    string screen = RunUntilScreenContains(
-        cpu,
-        bus,
-        ">",
-        maxSteps);
+    int morePrompts = 0;
+    string screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts);
     RunForSteps(cpu, bus, 200_000);
     screen = SnapshotScreen(bus.Vgc);
 
     if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
         throw new InvalidOperationException($"Ozmoo hit an unsupported opcode.\n{screen}");
 
-    RequireContains(screen, "ZORK I: The Great Underground Empire");
-    RequireContains(screen, "West of House");
-    RequireContains(screen, "boarded front door");
-    RequireContains(screen, "There is a small mailbox here.");
+    if (!genericBoot)
+    {
+        RequireContains(screen, "ZORK I: The Great Underground Empire");
+        RequireContains(screen, "West of House");
+        RequireContains(screen, "boarded front door");
+        RequireContains(screen, "There is a small mailbox here.");
+    }
     RequireContains(screen, ">");
     RequireStatusLine(screen, cpu, bus);
     RequireReadyPrompt(bus.Vgc, screen);
@@ -70,7 +74,7 @@ try
     {
         Console.WriteLine($"> {command.Text}");
         SendLine(cpu, bus, editor, command.Text);
-        screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps);
+        screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts);
         RunForSteps(cpu, bus, 200_000);
         screen = SnapshotScreen(bus.Vgc);
         if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
@@ -89,15 +93,18 @@ try
         int? release = manifest["Release"]?.GetValue<int>();
         string? serial = manifest["Serial"]?.GetValue<string>();
 
-        if (version is not null)
+        if (!genericBoot && version is not null)
             RequireContains(bootScreen, "ZORK I:");
         if (release is not null)
-            RequireContains(bootScreen, $"Revision {release}");
+            RequireContainsEither(bootScreen, $"Revision {release}", $"Release {release}");
         if (!string.IsNullOrWhiteSpace(serial))
             RequireContains(bootScreen, $"Serial number {serial}");
     }
 
-    Console.WriteLine("Nova Ozmoo smoke passed.");
+    if (expectMore && morePrompts == 0)
+        throw new InvalidOperationException($"Expected at least one [ MORE ] prompt.\n{SnapshotScreen(bus.Vgc)}");
+
+    Console.WriteLine($"Nova Ozmoo smoke passed. morePrompts={morePrompts}");
     Console.WriteLine(SnapshotScreen(bus.Vgc));
     return 0;
 }
@@ -131,9 +138,37 @@ static int ReadEnvInt(string name, int fallback)
     return int.TryParse(value, out int parsed) && parsed > 0 ? parsed : fallback;
 }
 
-static List<SmokeCommand> LoadCommands(string[] args)
+static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly)
 {
-    if (args.Length == 1)
+    if (bootOnly)
+        return [];
+
+    var commands = new List<SmokeCommand>();
+    for (int i = 1; i < args.Length; i++)
+    {
+        switch (args[i])
+        {
+            case "--generic-boot":
+            case "--boot-only":
+            case "--expect-more":
+                break;
+            case "--script":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--script requires a file path.");
+                string path = Path.GetFullPath(args[++i]);
+                commands.AddRange(
+                    File.ReadLines(path)
+                        .Select(line => line.Trim())
+                        .Where(line => line.Length > 0 && !line.StartsWith('#'))
+                        .Select(ParseCommandSpec));
+                break;
+            default:
+                commands.Add(ParseCommandSpec(args[i]));
+                break;
+        }
+    }
+
+    if (commands.Count == 0)
     {
         return
         [
@@ -141,17 +176,7 @@ static List<SmokeCommand> LoadCommands(string[] args)
         ];
     }
 
-    if (args.Length == 3 && args[1] == "--script")
-    {
-        string path = Path.GetFullPath(args[2]);
-        return File.ReadLines(path)
-            .Select(line => line.Trim())
-            .Where(line => line.Length > 0 && !line.StartsWith('#'))
-            .Select(ParseCommandSpec)
-            .ToList();
-    }
-
-    return args.Skip(1).Select(ParseCommandSpec).ToList();
+    return commands;
 }
 
 static SmokeCommand ParseCommandSpec(string spec)
@@ -167,43 +192,7 @@ static SmokeCommand ParseCommandSpec(string spec)
     return new SmokeCommand(command, expected);
 }
 
-static string RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
-{
-    const int snapshotMask = 0x3FFF;
-
-    for (int i = 0; i < maxSteps; i++)
-    {
-        int cycles = cpu.ClocksForNext();
-        cpu.ExecuteNext();
-        bus.AdvanceCycles(cycles);
-
-        if ((i & snapshotMask) != 0)
-            continue;
-
-        string screen = SnapshotScreen(bus.Vgc);
-        if (screen.Contains(marker, StringComparison.Ordinal))
-            return screen;
-    }
-
-    string finalScreen = SnapshotScreen(bus.Vgc);
-    int globals = ReadWord(bus, 0x0050, 0x0051);
-    int opcodePc = ReadWord(bus, 0x0081, 0x0080);
-    var finalState = cpu.GetState();
-    string zvmState =
-        $"cpu=A${finalState.A:X2}/X${finalState.X:X2}/Y${finalState.Y:X2} " +
-        $"zvm_pc=${bus.Read(0x007F):X2}{bus.Read(0x007E):X2} " +
-        $"op_pc=${opcodePc:X4} op_bytes=${ReadXramWord(bus, opcodePc):X4} " +
-        $"globals=${globals:X4} g92=${ReadXramWord(bus, globals + ((0x92 - 0x10) * 2)):X4} g94=${ReadXramWord(bus, globals + ((0x94 - 0x10) * 2)):X4} " +
-        $"zaddr=${bus.Read(0x0042):X2}{bus.Read(0x0041):X2}{bus.Read(0x0040):X2} " +
-        $"xaddr=${bus.Read(0x0022):X2}{bus.Read(0x0021):X2}{bus.Read(0x0020):X2} xdata=${bus.Read(0x0023):X2} " +
-        $"zvm_opcode=${bus.Read(0x0082):X2} " +
-        $"stop=${bus.Read(0x0300):X2} sp=${bus.Read(0x0301):X2} frames=${bus.Read(0x0302):X2} " +
-        $"ops={ReadWord(bus, 0x0307, 0x0303):X4},{ReadWord(bus, 0x0308, 0x0304):X4},{ReadWord(bus, 0x0309, 0x0305):X4} " +
-        $"locals={ReadWord(bus, 0x031B, 0x030B):X4},{ReadWord(bus, 0x031C, 0x030C):X4},{ReadWord(bus, 0x031D, 0x030D):X4},{ReadWord(bus, 0x031E, 0x030E):X4},{ReadWord(bus, 0x031F, 0x030F):X4}";
-    throw new TimeoutException($"Timed out waiting for '{marker}' at PC=${cpu.Pc:X4} {zvmState}.\n{finalScreen}");
-}
-
-static string RunUntilReadyPrompt(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, int maxSteps)
+static string RunUntilReadyPrompt(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, int maxSteps, ref int morePrompts)
 {
     const int snapshotMask = 0x3FFF;
     var trace = new Queue<string>();
@@ -232,6 +221,7 @@ static string RunUntilReadyPrompt(Cpu cpu, CompositeBusDevice bus, ScreenEditor 
             throw new InvalidOperationException($"Ozmoo hit an unsupported opcode. {FormatZvmState(cpu, bus)}\n{screen}");
         if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
         {
+            morePrompts++;
             editor.QueueInput(0x0D);
             RunForSteps(cpu, bus, 8_000);
             continue;
@@ -337,6 +327,20 @@ static void RequireContains(string screen, string expected, string? command = nu
         string context = command is null ? "screen" : $"output after '{command}'";
         throw new InvalidOperationException($"Expected {context} to contain '{expected}'.\n{screen}");
     }
+}
+
+static void RequireContainsEither(string screen, string expectedA, string expectedB)
+{
+    if (ContainsNormalized(screen, expectedA) || ContainsNormalized(screen, expectedB))
+        return;
+    throw new InvalidOperationException(
+        $"Expected screen to contain either '{expectedA}' or '{expectedB}'.\n{screen}");
+}
+
+static bool ContainsNormalized(string screen, string expected)
+{
+    return screen.Contains(expected, StringComparison.Ordinal) ||
+        NormalizeWhitespace(screen).Contains(NormalizeWhitespace(expected), StringComparison.Ordinal);
 }
 
 static string NormalizeWhitespace(string text)

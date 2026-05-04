@@ -1,0 +1,6 @@
+# Zork III-specific boot, parser, and pagination smoke.
+look=>Endless Stair&&brass lantern
+take lamp=>Taken.
+turn on lamp=>lamp is now on
+s=>Junction&&great rock&&Elvish sword
+look.look.look.look.look.look.look.look.look.look.look.look=>Junction&&great rock&&Elvish sword
