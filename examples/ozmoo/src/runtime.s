@@ -18,6 +18,23 @@
 .include "zobject.s"
 .include "zvm.s"
 
+.define OZMOO_WORD_MAX 80
+.define OZMOO_MORE_LEN 8
+
+.segment "BSS"
+oz_char:               .res 1
+oz_word_len:           .res 1
+oz_raw_input_mode:     .res 1
+oz_more_enabled:       .res 1
+oz_more_line_count:    .res 1
+oz_auto_wrap:          .res 1
+oz_saved_x:            .res 1
+oz_saved_y:            .res 1
+oz_saved_color:        .res 1
+oz_saved_attr:         .res 1
+oz_saved_flags:        .res 1
+oz_word_buf:           .res OZMOO_WORD_MAX
+
 .segment "ZEROPAGE"
 msg_ptr:        .res 2
 hex_value:      .res 1
@@ -87,6 +104,11 @@ halt:
         BRA halt
 
 init_screen:
+        STZ oz_word_len
+        STZ oz_raw_input_mode
+        STZ oz_more_enabled
+        STZ oz_more_line_count
+        STZ oz_auto_wrap
         JSR setup_text_region
         STZ VTEXT_CURX
         STZ VTEXT_CURY
@@ -125,6 +147,11 @@ setup_story_region:
         RTS
 
 init_game_screen:
+        STZ oz_word_len
+        STZ oz_more_line_count
+        STZ oz_auto_wrap
+        LDA #$01
+        STA oz_more_enabled
         JSR setup_text_region
         STZ VTEXT_CURX
         STZ VTEXT_CURY
@@ -249,23 +276,297 @@ print_text:
         RTS
 
 print_char:
-        PHA
+        STA oz_char
+        PHX
+        PHY
         LDA zvm_stream_flags
         AND #ZVM_STREAM_3_ACTIVE
         BEQ @screen
-        PLA
-        PHA
+        LDA oz_char
         JSR zvm_stream3_put_char
 @screen:
         LDA zvm_stream_flags
         AND #ZVM_STREAM_SCREEN_OFF
         BNE @done
+        LDA oz_char
+        JSR oz_screen_put_char
+@done:
+        PLY
+        PLX
+        RTS
+
+oz_screen_put_char:
+        STA oz_char
+        LDA oz_raw_input_mode
+        BNE oz_screen_put_raw_saved
+        LDA VTEXT_FLAGS
+        AND #VTEXT_FLAG_WRAP
+        BEQ oz_screen_put_raw_saved
+
+        LDA oz_char
+        CMP #$20
+        BEQ @space
+        CMP #$0D
+        BEQ @control
+        CMP #$0A
+        BEQ @control
+        CMP #$08
+        BEQ @control
+        CMP #$0C
+        BEQ @control
+        CMP #$20
+        BCC @control
+
+        LDX oz_word_len
+        CPX #OZMOO_WORD_MAX
+        BCC @store_word
+        LDA oz_char
+        PHA
+        JSR oz_screen_flush_word
         PLA
+        JMP oz_screen_put_raw
+
+@store_word:
+        LDA oz_char
+        STA oz_word_buf,X
+        INC oz_word_len
+        RTS
+
+@space:
+        JSR oz_screen_flush_word
+        LDA oz_auto_wrap
+        BEQ @emit_space
+        LDA VTEXT_CURX
+        BNE @emit_space
+        STZ oz_auto_wrap
+        RTS
+@emit_space:
+        LDA #' '
+        JMP oz_screen_put_raw
+
+@control:
+        LDA oz_char
+        PHA
+        JSR oz_screen_flush_word
+        PLA
+        JMP oz_screen_put_raw
+
+oz_screen_put_raw_saved:
+        LDA oz_char
+
+oz_screen_put_raw:
+        STA oz_char
+        CMP #$0A
+        BEQ oz_screen_linefeed
+        CMP #$0D
+        BEQ @vtext_control
+        CMP #$20
+        BCC @vtext_control
+
+        LDA VTEXT_FLAGS
+        AND #VTEXT_FLAG_WRAP
+        BEQ @vtext_printable
+        LDA VTEXT_WIDTH
+        BEQ @vtext_printable
+        DEC
+        CMP VTEXT_CURX
+        BNE @vtext_printable
+
+        LDA VTEXT_FLAGS
+        STA oz_saved_flags
+        AND #($FF - VTEXT_FLAG_WRAP)
+        STA VTEXT_FLAGS
+        LDA oz_char
+        STA VTEXT_CHAR
+        JSR vtext_put_char
+        PHA
+        LDA oz_saved_flags
+        STA VTEXT_FLAGS
+        PLA
+        BNE @done
+        JSR oz_screen_linefeed
+        LDA #$01
+        STA oz_auto_wrap
+        JMP vtext_ok
+
+@vtext_printable:
+        STZ oz_auto_wrap
+        LDA oz_char
         STA VTEXT_CHAR
         JMP vtext_put_char
+
+@vtext_control:
+        STZ oz_auto_wrap
+        LDA oz_char
+        STA VTEXT_CHAR
+        JMP vtext_put_char
+
 @done:
-        PLA
         RTS
+
+oz_screen_linefeed:
+        STZ oz_auto_wrap
+        JSR oz_screen_maybe_more
+        LDA #$0A
+        STA VTEXT_CHAR
+        JSR vtext_put_char
+        BNE @done
+        JSR oz_screen_count_line
+@done:
+        RTS
+
+oz_screen_flush_word:
+        LDA oz_word_len
+        BEQ @done
+        LDA oz_raw_input_mode
+        BNE @emit
+        LDA VTEXT_FLAGS
+        AND #VTEXT_FLAG_WRAP
+        BEQ @emit
+        LDA VTEXT_CURX
+        BEQ @emit
+        LDA VTEXT_WIDTH
+        SEC
+        SBC VTEXT_CURX
+        CMP oz_word_len
+        BCS @emit
+        JSR oz_screen_linefeed
+
+@emit:
+        LDX #$00
+@loop:
+        CPX oz_word_len
+        BCS @clear
+        LDA oz_word_buf,X
+        PHX
+        JSR oz_screen_put_raw
+        PLX
+        INX
+        BRA @loop
+@clear:
+        STZ oz_word_len
+@done:
+        RTS
+
+oz_screen_count_line:
+        LDA oz_more_enabled
+        BEQ @done
+        LDA VTEXT_FLAGS
+        AND #VTEXT_FLAG_SCROLL
+        BEQ @done
+        LDA oz_more_line_count
+        CMP #$FF
+        BEQ @done
+        INC oz_more_line_count
+@done:
+        RTS
+
+oz_screen_maybe_more:
+        LDA oz_more_enabled
+        BEQ @done
+        LDA oz_raw_input_mode
+        BNE @done
+        LDA VTEXT_FLAGS
+        AND #VTEXT_FLAG_SCROLL
+        BEQ @done
+        LDA VTEXT_HEIGHT
+        CMP #$02
+        BCC @done
+        SEC
+        SBC #$01
+        CMP VTEXT_CURY
+        BNE @done
+        STA oz_char
+        LDA oz_more_line_count
+        CMP oz_char
+        BCC @done
+        JSR oz_screen_more_prompt
+        STZ oz_more_line_count
+@done:
+        RTS
+
+oz_screen_more_prompt:
+        LDA VTEXT_CURX
+        STA oz_saved_x
+        LDA VTEXT_CURY
+        STA oz_saved_y
+        LDA VTEXT_COLOR
+        STA oz_saved_color
+        LDA VTEXT_ATTR
+        STA oz_saved_attr
+        LDA VTEXT_FLAGS
+        STA oz_saved_flags
+
+        LDA #$F0
+        STA VTEXT_COLOR
+        STZ VTEXT_ATTR
+        STZ VTEXT_FLAGS
+        JSR oz_screen_more_position
+        LDX #$00
+@draw_loop:
+        LDA msg_more,X
+        BEQ @draw_done
+        STA VTEXT_CHAR
+        PHX
+        JSR vtext_put_char
+        PLX
+        INX
+        BRA @draw_loop
+
+@draw_done:
+        JSR oz_screen_restore_saved
+@wait:
+        LDA VGC_CHARIN
+        BEQ @wait
+        CMP #$0D
+        BEQ @erase
+        CMP #$0A
+        BNE @wait
+
+@erase:
+        LDA oz_saved_color
+        STA VTEXT_COLOR
+        LDA oz_saved_attr
+        STA VTEXT_ATTR
+        STZ VTEXT_FLAGS
+        JSR oz_screen_more_position
+        LDX #OZMOO_MORE_LEN
+@erase_loop:
+        LDA #' '
+        STA VTEXT_CHAR
+        PHX
+        JSR vtext_put_char
+        PLX
+        DEX
+        BNE @erase_loop
+        JMP oz_screen_restore_saved
+
+oz_screen_more_position:
+        LDA VTEXT_WIDTH
+        SEC
+        SBC #OZMOO_MORE_LEN
+        BCS @x_ok
+        LDA #$00
+@x_ok:
+        STA VTEXT_CURX
+        LDA VTEXT_HEIGHT
+        SEC
+        SBC #$01
+        STA VTEXT_CURY
+        JMP vtext_set_cursor
+
+oz_screen_restore_saved:
+        LDA oz_saved_x
+        STA VTEXT_CURX
+        LDA oz_saved_y
+        STA VTEXT_CURY
+        LDA oz_saved_color
+        STA VTEXT_COLOR
+        LDA oz_saved_attr
+        STA VTEXT_ATTR
+        LDA oz_saved_flags
+        STA VTEXT_FLAGS
+        JMP vtext_set_cursor
 
 newline:
         LDA #$0D
@@ -440,6 +741,8 @@ msg_object1:
         .byte "OBJECT #1: ", 0
 msg_platform_ready:
         .byte "NOVA Z-MEMORY PLATFORM READY.", 0
+msg_more:
+        .byte "[ MORE ]", 0
 
 .include "xram.s"
 .include "vtext.s"

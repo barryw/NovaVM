@@ -1710,6 +1710,9 @@ zvm_true_branch:
 
 zvm_read:
         JSR zvm_show_status
+        JSR oz_screen_flush_word
+        LDA #$01
+        STA oz_raw_input_mode
         LDA zvm_operand_lo
         STA zvm_text_lo
         LDA zvm_operand_hi
@@ -1761,6 +1764,9 @@ zvm_read:
         LDA #$00
         JSR zvm_store_input_terminator
         JSR newline
+        STZ oz_raw_input_mode
+        STZ oz_more_line_count
+        STZ oz_auto_wrap
         LDA zvm_parse_lo
         ORA zvm_parse_hi
         BEQ @return

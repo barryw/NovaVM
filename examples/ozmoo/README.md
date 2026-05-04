@@ -99,7 +99,10 @@ make -C examples/ozmoo test-zork-house STORY=/path/to/zork1.z3
 The smoke runner boots the generated `fd0.ndi` in the Avalonia hardware model,
 lets BASIC run `AUTOBOOT.bin`, swaps in `ozmoo.bin` at `$C000`, and verifies the
 runtime screen against `STORY.MANIFEST`. Scripted runs use visible command
-transcripts so stale text left on screen cannot satisfy a later turn.
+transcripts so stale text left on screen cannot satisfy a later turn. They also
+normalize whitespace in expected phrases, which catches words split across the
+right edge while allowing normal word-boundary line wrapping. If Ozmoo displays
+`[ MORE ]`, the smoke runners press Enter and continue waiting for the prompt.
 
 ## Current State
 
@@ -107,4 +110,5 @@ This is still the staging runtime. It now has the Nova platform boundary and
 XRAM-backed story memory in place, including version filtering, byte/word story
 reads and writes, text decoding, line input, dictionary/tokenizer support, the
 core opcode loop, object/property operations, calls/returns, and basic Z3 screen
-handling. Save/restore and broader story compatibility are still pending.
+handling with word-boundary wrapping and `[ MORE ]` pagination. Save/restore
+and broader story compatibility are still pending.

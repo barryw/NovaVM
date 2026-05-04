@@ -2,6 +2,7 @@
 s=>South of House
 look=>South of House
 w=>West of House
+look=>boarded front door
 open mailbox=>Opening the small mailbox reveals a leaflet.
 take leaflet=>Taken.
 inventory=>leaflet

@@ -53,6 +53,7 @@ try
 
     RequireContains(screen, "ZORK I: The Great Underground Empire");
     RequireContains(screen, "West of House");
+    RequireContains(screen, "boarded front door");
     RequireContains(screen, "There is a small mailbox here.");
     RequireContains(screen, ">");
     RequireStatusLine(screen, cpu, bus);
@@ -69,7 +70,7 @@ try
     {
         Console.WriteLine($"> {command.Text}");
         SendLine(cpu, bus, editor, command.Text);
-        screen = RunUntilReadyPrompt(cpu, bus, maxSteps);
+        screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps);
         RunForSteps(cpu, bus, 200_000);
         screen = SnapshotScreen(bus.Vgc);
         if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
@@ -202,7 +203,7 @@ static string RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string mar
     throw new TimeoutException($"Timed out waiting for '{marker}' at PC=${cpu.Pc:X4} {zvmState}.\n{finalScreen}");
 }
 
-static string RunUntilReadyPrompt(Cpu cpu, CompositeBusDevice bus, int maxSteps)
+static string RunUntilReadyPrompt(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, int maxSteps)
 {
     const int snapshotMask = 0x3FFF;
     var trace = new Queue<string>();
@@ -229,6 +230,12 @@ static string RunUntilReadyPrompt(Cpu cpu, CompositeBusDevice bus, int maxSteps)
         string screen = SnapshotScreen(bus.Vgc);
         if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
             throw new InvalidOperationException($"Ozmoo hit an unsupported opcode. {FormatZvmState(cpu, bus)}\n{screen}");
+        if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
+        {
+            editor.QueueInput(0x0D);
+            RunForSteps(cpu, bus, 8_000);
+            continue;
+        }
         if (IsReadyPrompt(bus.Vgc, screen))
             return screen;
     }
@@ -324,11 +331,33 @@ static string ExtractCommandTranscript(string screen, string command)
 
 static void RequireContains(string screen, string expected, string? command = null)
 {
-    if (!screen.Contains(expected, StringComparison.Ordinal))
+    if (!screen.Contains(expected, StringComparison.Ordinal) &&
+        !NormalizeWhitespace(screen).Contains(NormalizeWhitespace(expected), StringComparison.Ordinal))
     {
         string context = command is null ? "screen" : $"output after '{command}'";
         throw new InvalidOperationException($"Expected {context} to contain '{expected}'.\n{screen}");
     }
+}
+
+static string NormalizeWhitespace(string text)
+{
+    var sb = new StringBuilder(text.Length);
+    bool inWhitespace = false;
+    foreach (char ch in text)
+    {
+        if (char.IsWhiteSpace(ch))
+        {
+            if (!inWhitespace)
+                sb.Append(' ');
+            inWhitespace = true;
+            continue;
+        }
+
+        sb.Append(ch);
+        inWhitespace = false;
+    }
+
+    return sb.ToString();
 }
 
 static void RequireStatusLine(string screen, Cpu cpu, CompositeBusDevice bus)

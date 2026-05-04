@@ -1,13 +1,13 @@
 # Walks far enough to force visible screen scrolling while preserving world state.
-n=>North of House
-e=>Behind House
+n=>North of House&&narrow path winds through the trees
+e=>Behind House&&small window which is slightly ajar
 open window=>open the window
-enter house=>Kitchen
-w=>Living Room
+enter house=>Kitchen&&passage leads to the west&&dark staircase can be seen leading upward
+w=>Living Room&&large oriental rug
 take lamp=>Taken.
 take sword=>Taken.
 move rug=>revealing
 open trap door=>opens
 turn on lamp=>brass lantern is now on
 d=>Cellar
-look=>Cellar
+look=>Cellar&&narrow passageway leading north&&crawlway to the south&&Your sword is glowing

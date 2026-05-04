@@ -91,6 +91,10 @@ def wait_ready_prompt(client: DebugClient, timeout: float) -> tuple[list[str], i
     last: tuple[list[str], int, int] | None = None
     while time.monotonic() < deadline:
         last = read_screen(client)
+        if any("[ MORE ]" in line for line in last[0]):
+            client.command("send_key", key="ENTER")
+            time.sleep(0.3)
+            continue
         if is_ready_prompt(*last):
             return last
         time.sleep(0.2)
@@ -122,6 +126,10 @@ def visible(lines: list[str]) -> str:
     return "\n".join(line.rstrip() for line in lines if line.strip())
 
 
+def normalize_whitespace(text: str) -> str:
+    return " ".join(text.split())
+
+
 def main() -> int:
     args = parse_args()
     client = DebugClient(args.host, args.port, args.timeout)
@@ -135,7 +143,7 @@ def main() -> int:
             lines, cursor_x, cursor_y = wait_ready_prompt(client, args.prompt_timeout)
             transcript = extract_command_transcript(lines, command)
             for marker in expected:
-                if marker not in transcript:
+                if marker not in transcript and normalize_whitespace(marker) not in normalize_whitespace(transcript):
                     print(transcript, file=sys.stderr)
                     raise RuntimeError(f"expected output after {command!r} to contain {marker!r}")
             print(f"ok cursor={cursor_x},{cursor_y}")
