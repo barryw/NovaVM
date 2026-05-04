@@ -10,6 +10,7 @@ SMOKE := tools/Nova.Ozmoo.Smoke/Nova.Ozmoo.Smoke.csproj
 SMOKE_DLL := tools/Nova.Ozmoo.Smoke/bin/Release/net10.0/Nova.Ozmoo.Smoke.dll
 PACKER_SRC := $(PACKER) tools/Nova.Ozmoo.Packer/Program.cs
 SMOKE_SRC := $(SMOKE) tools/Nova.Ozmoo.Smoke/Program.cs
+SMOKE_ARGS ?=
 AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin
 RUNTIME := $(BUILD_DIR)/ozmoo.bin
 PROJECT ?=
@@ -51,7 +52,13 @@ $(SMOKE_DLL): $(SMOKE_SRC)
 	$(DOTNET) build $(SMOKE) -c Release
 
 smoke: $(IMAGE) $(SMOKE_DLL)
-	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)"
+	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)" $(SMOKE_ARGS)
+
+test-zork-state: $(IMAGE) $(SMOKE_DLL)
+	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)" --script tests/zork-state-smoke.txt
+
+test-zork-house: $(IMAGE) $(SMOKE_DLL)
+	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)" --script tests/zork-house-scroll-smoke.txt
 
 $(IMAGE): $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) | $(DIST_DIR)
 	$(DOTNET) run --project $(PACKER) -- $(PACK_ARGS)
@@ -65,4 +72,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke clean
+.PHONY: all ndi smoke test-zork-state test-zork-house clean

@@ -1730,8 +1730,12 @@ zvm_read:
         BEQ @done
         CMP #$08
         BEQ @backspace
+        CMP #$7F
+        BEQ @backspace
         CMP #$20
         BCC @key_loop
+        CMP #$7F
+        BCS @key_loop
         LDX zvm_input_len
         CPX zvm_input_max
         BCS @key_loop

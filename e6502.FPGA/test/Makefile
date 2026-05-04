@@ -42,7 +42,7 @@ SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.s
         $(RTL)/sid/sid_curve_reader.sv
 CPU   = $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_uart test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_ozmoo_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_xmc_window_decode_top test_xmc_read_no_write_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_uart test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_ozmoo_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -73,6 +73,9 @@ test_vgc_sprites: test_vgc_sprites.sv vgc_tb.svh $(VGC)
 
 test_vgc_regs: test_vgc_regs.sv vgc_tb.svh $(VGC)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_regs.sv && $(RUN) test/$(BD)/$@/$@
+
+test_vgc_blitter_scroll: test_vgc_blitter_scroll.sv $(VGC) $(RTL)/blitter.sv
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) $(RTL)/blitter.sv test_vgc_blitter_scroll.sv && $(RUN) test/$(BD)/$@/$@
 
 # POR-determinism regression. Built with --x-assign unique so every
 # uninitialized reg starts with a non-zero value — models ECP5 power-on

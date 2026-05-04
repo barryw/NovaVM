@@ -1,0 +1,7 @@
+# Exercises object-tree persistence after movement and inventory changes.
+s=>South of House
+look=>South of House
+w=>West of House
+open mailbox=>Opening the small mailbox reveals a leaflet.
+take leaflet=>Taken.
+inventory=>leaflet

@@ -663,6 +663,8 @@ module vgc (
     // DEL (0x7F) → BS (0x08) translation applied at push time.
     // Previously done in top.sv's key_reg latch which has been removed.
     wire [7:0] key_data_xlat = (key_data == 8'h7F) ? 8'h08 : key_data;
+    wire       key_data_accept = key_valid && !key_fifo_full &&
+                                 key_data_xlat != 8'h00 && !key_data_xlat[7];
 
     sfifo #(
         .BW(8),
@@ -670,7 +672,7 @@ module vgc (
     ) key_fifo_inst (
         .i_clk  (clk),
         .i_reset(vgc_module_rst),
-        .i_wr   (key_valid && !key_fifo_full),
+        .i_wr   (key_data_accept),
         .i_data (key_data_xlat),
         .o_full (key_fifo_full),
         .o_fill (key_fifo_fill),
@@ -2095,8 +2097,21 @@ module vgc (
         end
     end
 
+    logic [7:0] blt_live_rdata;
     always_comb begin
-        blt_rdata = blt_rd_latch;
+        case (blt_space)
+            3'd1: blt_live_rdata = char_a_dout;
+            3'd2: blt_live_rdata = color_a_dout;
+            3'd3: blt_live_rdata = {4'b0, gfx_a_dout};
+            3'd4: blt_live_rdata = spr_a_dout;
+            3'd6: blt_live_rdata = tile_blt_rdata;
+            SPACE_TEXTATTR: blt_live_rdata = attr_a_dout;
+            default: blt_live_rdata = 8'h00;
+        endcase
+
+        // Bus masters hold blt_re through their wait state and sample here.
+        // Preserve the old latched value for one-shot debug/test reads.
+        blt_rdata = blt_re ? blt_live_rdata : blt_rd_latch;
     end
 
     wire dbg_vmem_char_we = dbg_vmem_we && dbg_vmem_space == SPACE_CHAR &&
@@ -2124,7 +2139,12 @@ module vgc (
     wire dbg_vmem_tile_re = dbg_vmem_re && dbg_vmem_space == SPACE_TILE &&
                             (dbg_vmem_addr < TILE_SIZE);
 
-    // Port A address/data/we mux for each memory
+    // Port A address/data/we mux for each memory.
+    //
+    // Debug reads are deliberately lowest priority. The host polls screen RAM
+    // while programs are running; those reads must not steal the only write/read
+    // port from CPU text writes or blitter scrolls. A debug snapshot may see a
+    // stale byte during contention, but it must never perturb machine state.
     always_comb begin
         // char_ram port A
         char_a_we = 0;
@@ -2134,8 +2154,6 @@ module vgc (
             char_a_addr = dbg_vmem_addr[11:0];
             char_a_din = dbg_vmem_wdata;
             char_a_we = 1;
-        end else if (dbg_vmem_char_re) begin
-            char_a_addr = dbg_vmem_addr[11:0];
         end else if (blt_we && blt_space == 3'd1) begin
             char_a_addr = blt_addr[11:0];
             char_a_din = blt_wdata;
@@ -2148,6 +2166,8 @@ module vgc (
             char_a_addr = blt_addr[11:0];
         end else if (vram_char_read) begin
             char_a_addr = vram_port_read_addr[11:0];
+        end else if (dbg_vmem_char_re) begin
+            char_a_addr = dbg_vmem_addr[11:0];
         end else begin
             char_a_addr = cmd_char_addr;
         end
@@ -2160,8 +2180,6 @@ module vgc (
             color_a_addr = dbg_vmem_addr[11:0];
             color_a_din = dbg_vmem_wdata;
             color_a_we = 1;
-        end else if (dbg_vmem_color_re) begin
-            color_a_addr = dbg_vmem_addr[11:0];
         end else if (blt_we && blt_space == 3'd2) begin
             color_a_addr = blt_addr[11:0];
             color_a_din = blt_wdata;
@@ -2174,6 +2192,8 @@ module vgc (
             color_a_addr = blt_addr[11:0];
         end else if (vram_color_read) begin
             color_a_addr = vram_port_read_addr[11:0];
+        end else if (dbg_vmem_color_re) begin
+            color_a_addr = dbg_vmem_addr[11:0];
         end else begin
             color_a_addr = cmd_color_addr;
         end
@@ -2186,8 +2206,6 @@ module vgc (
             attr_a_addr = dbg_vmem_addr[11:0];
             attr_a_din = dbg_vmem_wdata;
             attr_a_we = 1;
-        end else if (dbg_vmem_attr_re) begin
-            attr_a_addr = dbg_vmem_addr[11:0];
         end else if (blt_we && blt_space == SPACE_TEXTATTR) begin
             attr_a_addr = blt_addr[11:0];
             attr_a_din = blt_wdata;
@@ -2200,6 +2218,8 @@ module vgc (
             attr_a_addr = blt_addr[11:0];
         end else if (vram_attr_read) begin
             attr_a_addr = vram_port_read_addr[11:0];
+        end else if (dbg_vmem_attr_re) begin
+            attr_a_addr = dbg_vmem_addr[11:0];
         end else begin
             attr_a_addr = cmd_attr_addr;
         end
@@ -2222,8 +2242,6 @@ module vgc (
             gfx_a_addr = dbg_vmem_addr;
             gfx_a_din = dbg_vmem_wdata[3:0];
             gfx_a_we = 1;
-        end else if (dbg_vmem_gfx_re) begin
-            gfx_a_addr = dbg_vmem_addr;
         end else if (blt_we && blt_space == 3'd3) begin
             gfx_a_addr = blt_addr;
             gfx_a_din = blt_wdata[3:0];
@@ -2244,6 +2262,8 @@ module vgc (
             gfx_a_addr = cmd_gfx_addr;
         end else if (vram_gfx_read) begin
             gfx_a_addr = {1'b0, vram_port_read_addr};
+        end else if (dbg_vmem_gfx_re) begin
+            gfx_a_addr = dbg_vmem_addr;
         end
 
         // sprite_shapes port A
@@ -2255,9 +2275,6 @@ module vgc (
             spr_a_addr = dbg_vmem_addr[10:0];
             spr_a_din = dbg_vmem_wdata;
             spr_a_we = 1;
-        end else if (dbg_vmem_spr_re) begin
-            spr_a_addr = dbg_vmem_addr[10:0];
-            spr_a_re = 1;
         end else if (blt_we && blt_space == 3'd4) begin
             spr_a_addr = blt_addr[10:0];
             spr_a_din = blt_wdata;
@@ -2275,6 +2292,9 @@ module vgc (
         end else if (vram_spr_read) begin
             spr_a_addr = vram_port_read_addr[10:0];
             spr_a_re = 1;
+        end else if (dbg_vmem_spr_re) begin
+            spr_a_addr = dbg_vmem_addr[10:0];
+            spr_a_re = 1;
         end
     end
 
@@ -2291,13 +2311,17 @@ module vgc (
     logic        vgc_tile_re;
 
     wire [14:0] tile_blt_addr  = dbg_vmem_tile_we ? dbg_vmem_addr[14:0] :
+                                  vgc_tile_we      ? vgc_tile_addr :
+                                  (blt_we && blt_space == 3'd6) ? blt_addr[14:0] :
+                                  vgc_tile_re      ? vgc_tile_addr :
+                                  vram_tile_read   ? vram_port_read_addr[14:0] :
+                                  (blt_re && blt_space == 3'd6) ? blt_addr[14:0] :
                                   dbg_vmem_tile_re ? dbg_vmem_addr[14:0] :
-                                  (vgc_tile_we || vgc_tile_re) ? vgc_tile_addr :
-                                  vram_tile_read ? vram_port_read_addr[14:0] : blt_addr[14:0];
+                                                     blt_addr[14:0];
     wire [7:0]  tile_blt_wdata = dbg_vmem_tile_we ? dbg_vmem_wdata :
                                   vgc_tile_we ? vgc_tile_wdata : blt_wdata;
     wire        tile_blt_we    = dbg_vmem_tile_we || vgc_tile_we || (blt_we && blt_space == 3'd6);
-    wire        tile_blt_re    = dbg_vmem_tile_re || vgc_tile_re || vram_tile_read || (blt_re && blt_space == 3'd6);
+    wire        tile_blt_re    = vgc_tile_re || vram_tile_read || (blt_re && blt_space == 3'd6) || dbg_vmem_tile_re;
 
     always_comb begin
         unique case (dbg_vmem_space)

@@ -452,7 +452,39 @@ module test_blitter;
         check("overlap: dst[2] = CC", sim_ram[16'h9003] == 8'hCC);
         check("overlap: dst[3] = DD", sim_ram[16'h9004] == 8'hDD);
 
-        // ----- Test 17: Range validation — src out of bounds -----
+        // ----- Test 17: VGC text-region scroll copy shape -----
+        $display("Test: VGC text scroll copy");
+        for (int r = 0; r < 50; r++) begin
+            for (int c = 0; c < 80; c++) begin
+                sim_char[(r * 80) + c] = 8'(((r * 17) + c) & 8'hFF);
+            end
+        end
+
+        setup_copy(1, 160, 80, 1, 80, 80, 80, 48);
+        blt_start();
+        wait_blt_done();
+
+        check("vgc scroll copy: status ok", dut.regs[1] == 8'h02);
+        check("vgc scroll copy: count = 3840", {dut.regs[24], dut.regs[23], dut.regs[22]} == 24'd3840);
+        all_regs_zero = 1;
+        for (int r = 1; r < 49; r++) begin
+            for (int c = 0; c < 80; c++) begin
+                all_regs_zero &= sim_char[(r * 80) + c] == 8'((((r + 1) * 17) + c) & 8'hFF);
+            end
+        end
+        check("vgc scroll copy: rows 2-49 moved to rows 1-48", all_regs_zero);
+        check("vgc scroll copy: status row untouched", sim_char[0] == 8'h00 && sim_char[79] == 8'h4F);
+
+        setup_fill(1, 3920, 80, 80, 1, 8'h20);
+        blt_start();
+        wait_blt_done();
+
+        all_regs_zero = 1;
+        for (int c = 0; c < 80; c++)
+            all_regs_zero &= sim_char[3920 + c] == 8'h20;
+        check("vgc scroll fill: bottom row cleared", all_regs_zero);
+
+        // ----- Test 18: Range validation — src out of bounds -----
         $display("Test: Range validation");
         // Char RAM is 4000 bytes (80×50). Try to read beyond it.
         setup_copy(1, 3990, 2000, 0, 16'hA000, 20, 20, 1);
@@ -461,7 +493,7 @@ module test_blitter;
         check("src range: status error", dut.regs[1] == 8'h03);
         check("src range: errcode = range", dut.regs[2] == 8'h03);
 
-        // ----- Test 18: Range validation — dst out of bounds -----
+        // ----- Test 19: Range validation — dst out of bounds -----
         $display("Test: Dst range validation");
         setup_fill(2, 4790, 2000, 20, 1, 8'h01);
         blt_start();
@@ -469,7 +501,7 @@ module test_blitter;
         check("dst range: status error", dut.regs[1] == 8'h03);
         check("dst range: errcode = range", dut.regs[2] == 8'h03);
 
-        // ----- Test 19: Write protection — ROM area -----
+        // ----- Test 20: Write protection — ROM area -----
         $display("Test: Write protection");
         setup_fill(0, 16'hC000, 256, 10, 1, 8'hFF);
         blt_start();
@@ -484,7 +516,7 @@ module test_blitter;
         check("below rom: status ok", dut.regs[1] == 8'h02);
         check("below rom: ram[$BFF0] = 42", sim_ram[16'hBFF0] == 8'h42);
 
-        // ----- Test 20: Row buffer with color-key -----
+        // ----- Test 21: Row buffer with color-key -----
         $display("Test: Row buffer + color-key");
         sim_ram[16'hA000] = 8'h01;
         sim_ram[16'hA001] = 8'h00;  // transparent

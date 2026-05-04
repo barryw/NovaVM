@@ -89,14 +89,22 @@ Run the boot/runtime smoke test against a generated image:
 make -C examples/ozmoo smoke STORY=/path/to/zork1.z3
 ```
 
+Run the scripted Zork I state/scroll regressions against a generated image:
+
+```sh
+make -C examples/ozmoo test-zork-state STORY=/path/to/zork1.z3
+make -C examples/ozmoo test-zork-house STORY=/path/to/zork1.z3
+```
+
 The smoke runner boots the generated `fd0.ndi` in the Avalonia hardware model,
 lets BASIC run `AUTOBOOT.bin`, swaps in `ozmoo.bin` at `$C000`, and verifies the
-runtime screen against `STORY.MANIFEST`.
+runtime screen against `STORY.MANIFEST`. Scripted runs use visible command
+transcripts so stale text left on screen cannot satisfy a later turn.
 
 ## Current State
 
 This is still the staging runtime. It now has the Nova platform boundary and
-XRAM-backed story header decoder in place, including version filtering and
-byte/word story reads. The real interpreter still needs the opcode loop, line
-input, dictionary/tokenizer, object/property operations, call stack, text
-decoder, and save/restore support.
+XRAM-backed story memory in place, including version filtering, byte/word story
+reads and writes, text decoding, line input, dictionary/tokenizer support, the
+core opcode loop, object/property operations, calls/returns, and basic Z3 screen
+handling. Save/restore and broader story compatibility are still pending.

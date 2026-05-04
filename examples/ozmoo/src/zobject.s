@@ -24,6 +24,7 @@ zobject_tmp:           .res 1
 zobject_mask:          .res 1
 zobject_child_tmp:     .res 1
 zobject_target:        .res 1
+zobject_destination:   .res 1
 
 .segment "CODE"
 
@@ -368,10 +369,10 @@ zobject_insert:
         LDA zobject_num
         STA zobject_target
         LDA zobject_value_lo
-        STA zobject_tmp          ; destination
+        STA zobject_destination
         JSR zobject_remove
 
-        LDA zobject_tmp
+        LDA zobject_destination
         JSR zobject_get_child
         BNE @done
         LDA zobject_value_lo
@@ -379,7 +380,7 @@ zobject_insert:
 
         LDA zobject_target
         STA zobject_num
-        LDA zobject_tmp
+        LDA zobject_destination
         STA zobject_value_lo
         JSR zobject_set_parent
         LDA zobject_target
@@ -388,7 +389,7 @@ zobject_insert:
         STA zobject_value_lo
         JSR zobject_set_sibling
 
-        LDA zobject_tmp
+        LDA zobject_destination
         STA zobject_num
         LDA zobject_target
         STA zobject_value_lo

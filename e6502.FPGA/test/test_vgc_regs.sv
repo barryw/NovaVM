@@ -422,6 +422,19 @@ module test_vgc_regs;
         data = tb_blt_rdata;
     endtask
 
+    task automatic blt_read_held_one_wait(input logic [2:0] space, input logic [15:0] addr,
+                                           output logic [7:0] data);
+        @(posedge clk);
+        tb_blt_space <= space;
+        tb_blt_addr  <= addr;
+        tb_blt_re    <= 1;
+        @(posedge clk);
+        #1;
+        data = tb_blt_rdata;
+        tb_blt_re    <= 0;
+        @(posedge clk);
+    endtask
+
     task automatic test_blt_read_char();
         logic [7:0] d;
         $display("");
@@ -430,6 +443,16 @@ module test_vgc_regs;
         step(4);
         blt_read(3'd1, 16'h00AB, d);
         check_eq("blt read char[0x0AB]", int'(d), 8'hC3);
+    endtask
+
+    task automatic test_blt_read_char_bus_master_latency();
+        logic [7:0] d;
+        $display("");
+        $display("Test: held blitter-port char read is valid after one wait cycle");
+        dut.text_inst.char_mem.mem[11'h155] = 8'h5A;
+        step(4);
+        blt_read_held_one_wait(3'd1, 16'h0155, d);
+        check_eq("held blt read char[0x155]", int'(d), 8'h5A);
     endtask
 
     task automatic test_blt_read_color();
@@ -522,6 +545,7 @@ module test_vgc_regs;
         test_sprite_register_readback();
         test_sprite_count_reg();
         test_blt_read_char();
+        test_blt_read_char_bus_master_latency();
         test_blt_read_color();
         test_blt_read_gfx();
         test_blt_read_sprite();

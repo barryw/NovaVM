@@ -5,9 +5,10 @@ using e6502.Avalonia.Input;
 using e6502.Storage;
 using KDS.e6502;
 
-if (args.Length != 1)
+if (args.Length < 1)
 {
-    Console.Error.WriteLine("usage: Nova.Ozmoo.Smoke <fd0.ndi>");
+    Console.Error.WriteLine("usage: Nova.Ozmoo.Smoke <fd0.ndi> [command[=>expected] ...]");
+    Console.Error.WriteLine("       Nova.Ozmoo.Smoke <fd0.ndi> --script <file>");
     return 1;
 }
 
@@ -18,6 +19,7 @@ if (!File.Exists(imagePath))
     return 1;
 }
 
+List<SmokeCommand> commands = LoadCommands(args);
 JsonNode? manifest = TryReadManifest(imagePath);
 string storageRoot = Path.Combine(Path.GetTempPath(), $"nova-ozmoo-smoke-{Guid.NewGuid():N}");
 
@@ -54,17 +56,31 @@ try
     RequireContains(screen, "There is a small mailbox here.");
     RequireContains(screen, ">");
     RequireStatusLine(screen, cpu, bus);
-    RequireCursorAfterLastTextLine(bus.Vgc, screen);
+    RequireReadyPrompt(bus.Vgc, screen);
 
-    SendLine(cpu, bus, editor, "look");
-    screen = RunUntilPromptCount(cpu, bus, 2, maxSteps);
-    RunForSteps(cpu, bus, 200_000);
+    editor.QueueInput(0xF0);
+    RunForSteps(cpu, bus, 8_000);
     screen = SnapshotScreen(bus.Vgc);
-    if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
-        throw new InvalidOperationException($"Ozmoo hit an unsupported opcode after input.\n{screen}");
-    RequireContains(screen, "There is a small mailbox here.");
-    RequireContains(screen, ">");
-    RequireStatusLine(screen, cpu, bus);
+    RequireReadyPrompt(bus.Vgc, screen);
+
+    string bootScreen = screen;
+
+    foreach (var command in commands)
+    {
+        Console.WriteLine($"> {command.Text}");
+        SendLine(cpu, bus, editor, command.Text);
+        screen = RunUntilReadyPrompt(cpu, bus, maxSteps);
+        RunForSteps(cpu, bus, 200_000);
+        screen = SnapshotScreen(bus.Vgc);
+        if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
+            throw new InvalidOperationException($"Ozmoo hit an unsupported opcode after input '{command.Text}'.\n{screen}");
+        RequireContains(screen, ">");
+        RequireStatusLine(screen, cpu, bus);
+        RequireReadyPrompt(bus.Vgc, screen);
+        string commandTranscript = ExtractCommandTranscript(screen, command.Text);
+        foreach (string expected in command.Expected)
+            RequireContains(commandTranscript, expected, command.Text);
+    }
 
     if (manifest is not null)
     {
@@ -73,11 +89,11 @@ try
         string? serial = manifest["Serial"]?.GetValue<string>();
 
         if (version is not null)
-            RequireContains(screen, "ZORK I:");
+            RequireContains(bootScreen, "ZORK I:");
         if (release is not null)
-            RequireContains(screen, $"Revision {release}");
+            RequireContains(bootScreen, $"Revision {release}");
         if (!string.IsNullOrWhiteSpace(serial))
-            RequireContains(screen, $"Serial number {serial}");
+            RequireContains(bootScreen, $"Serial number {serial}");
     }
 
     Console.WriteLine("Nova Ozmoo smoke passed.");
@@ -112,6 +128,42 @@ static int ReadEnvInt(string name, int fallback)
 {
     string? value = Environment.GetEnvironmentVariable(name);
     return int.TryParse(value, out int parsed) && parsed > 0 ? parsed : fallback;
+}
+
+static List<SmokeCommand> LoadCommands(string[] args)
+{
+    if (args.Length == 1)
+    {
+        return
+        [
+            new SmokeCommand("look", ["There is a small mailbox here."])
+        ];
+    }
+
+    if (args.Length == 3 && args[1] == "--script")
+    {
+        string path = Path.GetFullPath(args[2]);
+        return File.ReadLines(path)
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'))
+            .Select(ParseCommandSpec)
+            .ToList();
+    }
+
+    return args.Skip(1).Select(ParseCommandSpec).ToList();
+}
+
+static SmokeCommand ParseCommandSpec(string spec)
+{
+    string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
+    string command = parts[0];
+    if (string.IsNullOrWhiteSpace(command))
+        throw new ArgumentException($"Empty Ozmoo smoke command in '{spec}'.");
+
+    string[] expected = parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[1])
+        ? parts[1].Split("&&", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+        : [];
+    return new SmokeCommand(command, expected);
 }
 
 static string RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
@@ -150,7 +202,7 @@ static string RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string mar
     throw new TimeoutException($"Timed out waiting for '{marker}' at PC=${cpu.Pc:X4} {zvmState}.\n{finalScreen}");
 }
 
-static string RunUntilPromptCount(Cpu cpu, CompositeBusDevice bus, int minPromptCount, int maxSteps)
+static string RunUntilReadyPrompt(Cpu cpu, CompositeBusDevice bus, int maxSteps)
 {
     const int snapshotMask = 0x3FFF;
     var trace = new Queue<string>();
@@ -175,36 +227,31 @@ static string RunUntilPromptCount(Cpu cpu, CompositeBusDevice bus, int minPrompt
             continue;
 
         string screen = SnapshotScreen(bus.Vgc);
-        if (CountPromptLines(screen) >= minPromptCount)
+        if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
+            throw new InvalidOperationException($"Ozmoo hit an unsupported opcode. {FormatZvmState(cpu, bus)}\n{screen}");
+        if (IsReadyPrompt(bus.Vgc, screen))
             return screen;
     }
 
     string finalScreen = SnapshotScreen(bus.Vgc);
     string recent = string.Join(" ", trace);
-    throw new TimeoutException($"Timed out waiting for {minPromptCount} prompts. {FormatZvmState(cpu, bus)} recent={recent}\n{finalScreen}");
-}
-
-static int CountPromptLines(string text)
-{
-    int count = 0;
-    foreach (string line in text.Split('\n'))
-    {
-        if (line.TrimStart().StartsWith('>'))
-            count++;
-    }
-    return count;
+    throw new TimeoutException($"Timed out waiting for input prompt. {FormatZvmState(cpu, bus)} recent={recent}\n{finalScreen}");
 }
 
 static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
 {
     int globals = ReadWord(bus, 0x0050, 0x0051);
     int opcodePc = ReadWord(bus, 0x0081, 0x0080);
+    int global10 = globals > 0 ? ReadXramWord(bus, globals) : 0;
+    int global11 = globals > 0 ? ReadXramWord(bus, globals + 2) : 0;
+    int global12 = globals > 0 ? ReadXramWord(bus, globals + 4) : 0;
+    int global13 = globals > 0 ? ReadXramWord(bus, globals + 6) : 0;
     var state = cpu.GetState();
     return
         $"cpu=PC${cpu.Pc:X4}/A${state.A:X2}/X${state.X:X2}/Y${state.Y:X2} " +
         $"zvm_pc=${bus.Read(0x007F):X2}{bus.Read(0x007E):X2} " +
         $"op_pc=${opcodePc:X4} op_bytes=${ReadXramWord(bus, opcodePc):X4} " +
-        $"globals=${globals:X4} " +
+        $"globals=${globals:X4} g10=${global10:X4} g11=${global11:X4} g12=${global12:X4} g13=${global13:X4} " +
         $"zaddr=${bus.Read(0x0042):X2}{bus.Read(0x0041):X2}{bus.Read(0x0040):X2} " +
         $"xaddr=${bus.Read(0x0022):X2}{bus.Read(0x0021):X2}{bus.Read(0x0020):X2} xdata=${bus.Read(0x0023):X2} " +
         $"zvm_opcode=${bus.Read(0x0082):X2} stop=${bus.Read(0x0300):X2} sp=${bus.Read(0x0301):X2} frames=${bus.Read(0x0302):X2} " +
@@ -259,18 +306,38 @@ static string ReadXramBytes(CompositeBusDevice bus, int address, int count)
     return sb.ToString();
 }
 
-static void RequireContains(string screen, string expected)
+static string ExtractCommandTranscript(string screen, string command)
+{
+    string[] lines = screen.Split('\n');
+    string echo = ">" + command;
+    for (int i = lines.Length - 1; i >= 0; i--)
+    {
+        string line = lines[i].TrimEnd();
+        if (!line.Equals(echo, StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        return string.Join('\n', lines.Skip(i));
+    }
+
+    return screen;
+}
+
+static void RequireContains(string screen, string expected, string? command = null)
 {
     if (!screen.Contains(expected, StringComparison.Ordinal))
-        throw new InvalidOperationException($"Expected screen to contain '{expected}'.\n{screen}");
+    {
+        string context = command is null ? "screen" : $"output after '{command}'";
+        throw new InvalidOperationException($"Expected {context} to contain '{expected}'.\n{screen}");
+    }
 }
 
 static void RequireStatusLine(string screen, Cpu cpu, CompositeBusDevice bus)
 {
     string firstLine = screen.Split('\n')[0];
-    if (!firstLine.Contains("West of House", StringComparison.Ordinal) ||
-        !firstLine.Contains("Score:", StringComparison.Ordinal) ||
-        !firstLine.Contains("Moves:", StringComparison.Ordinal))
+    int scoreAt = firstLine.IndexOf("Score:", StringComparison.Ordinal);
+    int movesAt = firstLine.IndexOf("Moves:", StringComparison.Ordinal);
+    bool hasLocation = scoreAt > 0 && !string.IsNullOrWhiteSpace(firstLine[..scoreAt]);
+    if (!hasLocation || scoreAt < 0 || movesAt < scoreAt)
     {
         int globals = ReadWord(bus, 0x0050, 0x0051);
         int objectTable = ReadWord(bus, 0x004E, 0x004F);
@@ -285,47 +352,26 @@ static void RequireStatusLine(string screen, Cpu cpu, CompositeBusDevice bus)
     }
 }
 
-static void RequireCursorAfterLastTextLine(VirtualGraphicsController vgc, string screen)
+static void RequireReadyPrompt(VirtualGraphicsController vgc, string screen)
 {
-    string[] lines = screen.Split('\n');
-    int rows = Math.Min(lines.Length, VgcConstants.ScreenRows);
-    for (int row = 0; row < rows; row++)
-    {
-        string trimmed = lines[row].TrimStart();
-        int leadingSpaces = lines[row].Length - trimmed.Length;
-        int promptColumn = trimmed.StartsWith('>') ? leadingSpaces : -1;
-        if (promptColumn >= 0)
-        {
-            int promptActualX = vgc.GetCursorX();
-            int promptActualY = vgc.GetCursorY();
-            int expectedX = Math.Min(promptColumn + 1, VgcConstants.ScreenCols - 1);
-            if (promptActualX != expectedX || promptActualY != row)
-            {
-                throw new InvalidOperationException(
-                    $"Expected visible cursor after prompt at {expectedX},{row}; got {promptActualX},{promptActualY}.\n{screen}");
-            }
-            return;
-        }
-    }
-
-    int lastTextRow = -1;
-    for (int row = 0; row < rows; row++)
-    {
-        if (!string.IsNullOrWhiteSpace(lines[row]))
-            lastTextRow = row;
-    }
-
-    if (lastTextRow < 0)
-        throw new InvalidOperationException("Expected Ozmoo smoke screen to contain text.");
-
-    int expectedY = Math.Min(lastTextRow + 1, VgcConstants.ScreenRows - 1);
-    int actualX = vgc.GetCursorX();
-    int actualY = vgc.GetCursorY();
-    if (actualX != 0 || actualY != expectedY)
+    if (!IsReadyPrompt(vgc, screen))
     {
         throw new InvalidOperationException(
-            $"Expected visible cursor at 0,{expectedY} after Ozmoo text output; got {actualX},{actualY}.\n{screen}");
+            $"Expected visible cursor on a bare Zork prompt; got {vgc.GetCursorX()},{vgc.GetCursorY()}.\n{screen}");
     }
+}
+
+static bool IsReadyPrompt(VirtualGraphicsController vgc, string screen)
+{
+    string[] lines = screen.Split('\n');
+    int actualX = vgc.GetCursorX();
+    int actualY = vgc.GetCursorY();
+    if (actualY < 0 || actualY >= Math.Min(lines.Length, VgcConstants.ScreenRows))
+        return false;
+    string line = lines[actualY];
+    if (actualX != 1 || line.Length == 0 || line[0] != '>')
+        return false;
+    return line[1..].All(ch => ch == ' ');
 }
 
 static string SnapshotScreen(VirtualGraphicsController vgc)
@@ -342,3 +388,5 @@ static string SnapshotScreen(VirtualGraphicsController vgc)
     }
     return sb.ToString();
 }
+
+sealed record SmokeCommand(string Text, IReadOnlyList<string> Expected);

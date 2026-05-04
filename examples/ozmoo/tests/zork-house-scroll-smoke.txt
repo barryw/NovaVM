@@ -1,0 +1,13 @@
+# Walks far enough to force visible screen scrolling while preserving world state.
+n=>North of House
+e=>Behind House
+open window=>open the window
+enter house=>Kitchen
+w=>Living Room
+take lamp=>Taken.
+take sword=>Taken.
+move rug=>revealing
+open trap door=>opens
+turn on lamp=>brass lantern is now on
+d=>Cellar
+look=>Cellar

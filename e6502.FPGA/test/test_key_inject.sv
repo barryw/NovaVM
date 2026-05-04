@@ -236,7 +236,7 @@ module test_key_inject;
         dbg_pause = 1;
         repeat(5) @(posedge clk);
         for (int i = 0; i < 50; i++)
-            inject_key(8'h60 + 8'(i));  // 'a'+i
+            inject_key(8'h30 + 8'(i));  // printable ASCII range
         dbg_pause = 0;
 
         repeat(100000) @(posedge clk);
@@ -254,12 +254,10 @@ module test_key_inject;
             // variable declaration initializers only fire once at time 0 —
             // so `got` and `exp` would stay locked at their time-0 values and
             // every iteration would spuriously mismatch.
-            // Injected range is 0x60..0x91 (i=0..49). 0x7F hits at i=31 and is
-            // intentionally translated by vgc.sv to 0x08 (DEL→BS) at push time,
-            // so the expected byte at that slot is 0x08 rather than 0x7F.
+            // Injected range is 0x30..0x61 (i=0..49), all printable ASCII.
             for (int i = 0; i < 50; i++) begin
-                automatic logic [7:0] injected = 8'h60 + 8'(i);
-                automatic logic [7:0] exp = (injected == 8'h7F) ? 8'h08 : injected;
+                automatic logic [7:0] injected = 8'h30 + 8'(i);
+                automatic logic [7:0] exp = injected;
                 automatic logic [7:0] got = dut.main_ram.mem[16'(16'h0205 + i)];
                 if (got != exp) begin
                     if (first_fail < 0) first_fail = i;
@@ -270,8 +268,8 @@ module test_key_inject;
                 $display("  PASS [%0d] all 50 bursted keys landed in order (incl DEL->BS xlat)", test_num);
                 pass_count++;
             end else begin
-                automatic logic [7:0] fail_inj = 8'h60 + 8'(first_fail);
-                automatic logic [7:0] fail_exp = (fail_inj == 8'h7F) ? 8'h08 : fail_inj;
+                automatic logic [7:0] fail_inj = 8'h30 + 8'(first_fail);
+                automatic logic [7:0] fail_exp = fail_inj;
                 $display("  FAIL [%0d] first mismatch at i=%0d (got 0x%02X want 0x%02X)",
                     test_num, first_fail,
                     dut.main_ram.mem[16'(16'h0205 + first_fail)],
@@ -279,6 +277,22 @@ module test_key_inject;
                 fail_count++;
             end
         end
+
+        $display("-- Injecting non-ASCII/NUL noise plus DEL and 'Z' --");
+        dbg_pause = 1;
+        repeat(5) @(posedge clk);
+        inject_key(8'hF0);
+        inject_key(8'h80);
+        inject_key(8'h00);
+        inject_key(8'h7F);
+        inject_key(8'h5A);
+        dbg_pause = 0;
+
+        repeat(30000) @(posedge clk);
+
+        check_eq8("buf[55] == DEL translated to BS", dut.main_ram.mem[16'h0237], 8'h08);
+        check_eq8("buf[56] == 'Z'", dut.main_ram.mem[16'h0238], 8'h5A);
+        check_eq8("X advanced only for accepted keys", dbg_cpu_x, 8'h39);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);
