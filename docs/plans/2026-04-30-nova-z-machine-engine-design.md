@@ -1,11 +1,11 @@
-# Nova Z-Machine Engine Design
+# NovaZ Engine Design
 
 *Date: 2026-04-30*
 
 ## Summary
 
-Build a Nova-native Z-machine runtime so Nova can boot an `.ndi` image and
-play a bundled interactive-fiction story from XRAM. The runtime should be
+Build NovaZ, a Nova-native Z-machine runtime, so Nova can boot an `.ndi` image
+and play a bundled interactive-fiction story from XRAM. The runtime should be
 written in 65C02 assembly, exercise Nova's real storage, XRAM, VGC, and input
 hardware, and eventually support Z-machine story versions starting with Z3 and
 growing toward Z6+.
@@ -209,7 +209,7 @@ cursor/window state. Direct `RegCharOut` output can remain a diagnostic or
 fallback path.
 
 Nova should provide this as a small reusable text-region layer, not as
-Ozmoo-private raw VGC code and not as a large C128-style windowing system. The
+runtime-private raw VGC code and not as a large C128-style windowing system. The
 primitive we need is common across Z-machine output, monitor/debugger panes,
 BASIC help/status areas, and terminal-style scroll margins: a rectangular text
 area with its own cursor, attributes, clipping, and optional scrolling.
@@ -245,7 +245,7 @@ path is standardized for VGC memory spaces. Scroll-up is overlap-safe with a
 forward copy because the destination rows are lower than the source rows.
 Scroll-down, if later needed, should use a backward or direction-aware copy.
 
-Ozmoo/Z-machine code should map Z-machine windows onto these text regions
+NovaZ code should map Z-machine windows onto these text regions
 rather than manipulating VGC planes directly. For Z4/Z5, `split_window` changes
 the upper/lower region geometry; the lower region's scroll top becomes the row
 after the split. Z6 graphical windows remain a later compatibility layer on top
@@ -416,6 +416,5 @@ This milestone proves Nova can move large story assets through NDI and XRAM.
 ## Recommended First Step
 
 Start with Milestone 1: prove that an autobooting 65C02 binary can load a full
-story image into XRAM and verify it from XRAM. Until that works, any Ozmoo or
-Z-machine engine port will be blocked by storage and memory plumbing rather
-than interpreter logic.
+story image into XRAM and verify it from XRAM. Until that works, NovaZ will be
+blocked by storage and memory plumbing rather than interpreter logic.

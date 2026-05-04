@@ -1,0 +1,9 @@
+# Zork I save/restore smoke. The restored inventory proves dynamic memory,
+# stack/frame state, and the saved save-branch resume path all came back.
+open mailbox=>reveals a leaflet
+take leaflet=>Taken.
+save=>Ok.
+drop leaflet=>Dropped.
+.reboot
+restore=>Ok.
+inventory=>A leaflet

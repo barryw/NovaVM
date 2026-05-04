@@ -236,9 +236,10 @@ def test_runtime_autoboot_contract() -> None:
     unit_dm = read("e6502UnitTests/DeviceManagerTests.cs")
     unit_fio = read("e6502UnitTests/FileIoControllerTests.cs")
     unit_rom = read("e6502UnitTests/RomSwapTests.cs")
-    ozmoo_make = read("examples/ozmoo/Makefile")
-    ozmoo_auto = read("examples/ozmoo/src/autoboot.s")
-    ozmoo_runtime = read("examples/ozmoo/src/runtime.s")
+    novaz_make = read("examples/novaz/Makefile")
+    novaz_auto = read("examples/novaz/src/autoboot.s")
+    novaz_runtime = read("examples/novaz/src/runtime.s")
+    novaz_zstory = read("examples/novaz/src/zstory.s")
 
     checks = {
         "BASIC exposes primary runtime ROM swap label": "ROMSWAP_PRIMARY" in nova_inc
@@ -276,15 +277,16 @@ def test_runtime_autoboot_contract() -> None:
         and "SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists" in unit_dm,
         "unit tests cover runtime load command": "LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime" in unit_fio,
         "unit tests cover primary ROM swap alias": "WriteRomSwapPrimary_SelectsPrimaryRuntimeRom" in unit_rom,
-        "Ozmoo example builds launcher plus runtime": "AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin" in ozmoo_make
-        and "RUNTIME := $(BUILD_DIR)/ozmoo.bin" in ozmoo_make
-        and "IMAGE ?= $(DIST_DIR)/fd0.ndi" in ozmoo_make
-        and "--runtime" in ozmoo_make,
-        "Ozmoo launcher replaces BASIC runtime": "fio_load_runtime" in ozmoo_auto
-        and "STA REG_ROMSWAP" in ozmoo_auto
-        and "JMP ($FFFC)" in ozmoo_auto,
-        "Ozmoo runtime loads story into XRAM": "JMP xram_xload" in ozmoo_runtime
-        and '.byte "story.bin"' in ozmoo_runtime,
+        "NovaZ example builds launcher plus runtime": "AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin" in novaz_make
+        and "RUNTIME := $(BUILD_DIR)/novaz.bin" in novaz_make
+        and "IMAGE ?= $(DIST_DIR)/fd0.ndi" in novaz_make
+        and "--runtime" in novaz_make,
+        "NovaZ launcher replaces BASIC runtime": "fio_load_runtime" in novaz_auto
+        and "STA REG_ROMSWAP" in novaz_auto
+        and "JMP ($FFFC)" in novaz_auto,
+        "NovaZ runtime loads story into XRAM": "JSR zstory_load_default" in novaz_runtime
+        and "JMP xram_xload" in novaz_zstory
+        and '.byte "story.bin"' in novaz_zstory,
     }
     for name, ok in checks.items():
         check(name, ok)

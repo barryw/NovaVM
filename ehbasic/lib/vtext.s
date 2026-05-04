@@ -1,7 +1,7 @@
 ; Shared NovaVM text-region runtime.
 ;
 ; Provides small rectangular text regions over the VGC char/color/attribute
-; planes. Domain runtimes such as Ozmoo decide what a region means; this code
+; planes. Domain runtimes such as NovaZ decide what a region means; this code
 ; only clips, clears, writes, and scrolls rectangular text areas.
 
 .include "vtext.inc"

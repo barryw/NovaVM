@@ -269,7 +269,11 @@ e6502.FPGA/fpga/.claude/
 e6502.ESP32/novahost/test/test_ndi
 e6502.ESP32/novahost/test/*.dSYM/
 
+# Python test caches
+__pycache__/
+*.py[cod]
+
 # Example build outputs and local story files
-examples/ozmoo/build/
-examples/ozmoo/dist/
-examples/ozmoo/projects/*/STORY.BIN
+examples/novaz/build/
+examples/novaz/dist/
+examples/novaz/projects/*/STORY.BIN

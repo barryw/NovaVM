@@ -63,6 +63,26 @@ public class NdiImageTests
     }
 
     [TestMethod]
+    public void WriteFile_ExistingName_ReplacesData()
+    {
+        string path = TempPath();
+        try
+        {
+            NdiImage.CreateFormatted(path, "TEST", 800);
+            using var img = NdiImage.Open(path);
+
+            img.WriteFile("save.bin", NdiFileType.Bin, 0xFFFF, [1, 2, 3, 4]);
+            int freeAfterFirstWrite = img.FreeSectors;
+            img.WriteFile("save.bin", NdiFileType.Bin, 0xFFFF, [9, 8]);
+
+            CollectionAssert.AreEqual(new byte[] { 9, 8 }, img.ReadFile("save.bin", 0xFFFF));
+            Assert.AreEqual(1, img.ListDirectory(0xFFFF).Count(e => e.Filename == "save.bin"));
+            Assert.AreEqual(freeAfterFirstWrite, img.FreeSectors);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
     public void WriteFile_InSubdirectory()
     {
         string path = TempPath();

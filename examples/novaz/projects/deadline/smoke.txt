@@ -1,0 +1,4 @@
+# Deadline-specific boot, parser, and time-status smoke.
+look=>South Lawn&&Robner estate
+wait=>Time passes...&&It is now
+time=>It is now

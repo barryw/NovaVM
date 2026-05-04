@@ -128,6 +128,17 @@ public sealed class NdiImage : IDisposable
     public void WriteFile(string name, NdiFileType type, ushort parentIndex, byte[] data)
     {
         ThrowIfDisposed();
+        int existing = _directory.FindEntry(name, parentIndex);
+        if (existing >= 0)
+        {
+            var existingEntry = _directory.GetEntry(existing);
+            if (existingEntry.IsDirectory)
+                throw new InvalidOperationException($"'{name}' is a directory. Use RemoveDirectory.");
+
+            _bam.Free(checked((int)existingEntry.StartSector), checked((int)existingEntry.SectorCount));
+            _directory.RemoveEntry(existing);
+        }
+
         int sectorSize = _header.SectorSize;
         int sectorCount = (data.Length + sectorSize - 1) / sectorSize;
         if (sectorCount == 0) sectorCount = 1;

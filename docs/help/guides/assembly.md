@@ -256,7 +256,7 @@ VTEXT handles clear, line clear, character output, and blitter-backed region
 scrolls across the character, color, and text-attribute planes.
 
 This is the right layer for fixed status rows, editor panes, REPL regions, and
-Ozmoo story windows. The library does not know about Z-machine windows; Ozmoo
+NovaZ story windows. The library does not know about Z-machine windows; NovaZ
 maps story-file windows onto VTEXT regions.
 
 ### Example: reading one byte from XRAM in assembly

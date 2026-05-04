@@ -1,7 +1,7 @@
 ; NovaVM shared text-region runtime interface.
 ;
 ; This layer is intentionally language-neutral. It knows about rectangular
-; regions over the VGC text planes, but not about BASIC, Ozmoo, or Z-machine
+; regions over the VGC text planes, but not about BASIC, NovaZ, or Z-machine
 ; window semantics.
 ;
 ; Calling convention:

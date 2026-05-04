@@ -1,4 +1,4 @@
-// VGC + blitter integration regression for vtext/Ozmoo scrolling.
+// VGC + blitter integration regression for vtext/NovaZ scrolling.
 // Reproduces the shared-library scroll shape: copy rows 2..49 to 1..48
 // within VGC char/color/text-attribute RAM, then clear the bottom story row.
 

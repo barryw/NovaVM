@@ -42,7 +42,7 @@ SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.s
         $(RTL)/sid/sid_curve_reader.sv
 CPU   = $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_uart test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_ozmoo_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_uart test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -203,9 +203,9 @@ test_debug_bridge_rx_fifo: test_debug_bridge_rx_fifo.sv $(RTL)/debug_bridge.sv $
 test_debug_sdram_port_b_cdc: test_debug_sdram_port_b_cdc.sv $(RTL)/sdram/debug_sdram_port_b_cdc.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/sdram/debug_sdram_port_b_cdc.sv $< && $(RUN) test/$(BD)/$@/$@
 
-# Ozmoo/XLOAD-shaped XRAM roundtrip. Loads a synthetic story blob through the
+# NovaZ/XLOAD-shaped XRAM roundtrip. Loads a synthetic story blob through the
 # same SDRAM debug commands NovaHost FIO uses, then reads each chunk back.
-test_ozmoo_xram_roundtrip: test_ozmoo_xram_roundtrip.sv $(RTL)/debug_bridge.sv $(RTL)/debug_byte_fifo.sv $(RTL)/sdram/debug_sdram_port_b_cdc.sv
+test_novaz_xram_roundtrip: test_novaz_xram_roundtrip.sv $(RTL)/debug_bridge.sv $(RTL)/debug_byte_fifo.sv $(RTL)/sdram/debug_sdram_port_b_cdc.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_byte_fifo.sv $(RTL)/debug_bridge.sv $(RTL)/sdram/debug_sdram_port_b_cdc.sv $< && $(RUN) test/$(BD)/$@/$@
 
 # End-to-end test: instantiates full top.sv (CPU + VGC + SID + blitter + RAM/ROM),
@@ -244,7 +244,7 @@ test_rom_over_sid: test_rom_over_sid.sv $(ROM_LOAD_RTL)
 test_xmc_window_decode_top: test_xmc_window_decode_top.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
-# Top-level XMC read-only regression. Verifies the Ozmoo-shaped
+# Top-level XMC read-only regression. Verifies the NovaZ-shaped
 # `LDA $BF00,X` path never pulses the XRAM write path.
 test_xmc_read_no_write_top: test_xmc_read_no_write_top.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@

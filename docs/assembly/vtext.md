@@ -4,7 +4,7 @@
 region layer over the VGC character, color, and text-attribute planes.
 
 VTEXT is deliberately not a window manager. It does not know about BASIC,
-Ozmoo, or Z-machine windows. Callers define rectangular regions and decide what
+NovaZ, or Z-machine windows. Callers define rectangular regions and decide what
 those regions mean.
 
 ## ABI
@@ -54,18 +54,18 @@ jsr vtext_select_region
 jsr vtext_store_region
 ```
 
-Each region slot is `VTEXT_REGION_SIZE` bytes. This lets Ozmoo define a fixed
+Each region slot is `VTEXT_REGION_SIZE` bytes. This lets NovaZ define a fixed
 status region and a scrolling story region without making Nova understand
 Z-machine windows.
 
 ## Example Boundary
 
-For a Z3-style Infocom screen, Ozmoo can define:
+For a Z3-style Infocom screen, NovaZ can define:
 
 ```asm
 ; Region 0: row 0 status line, fixed
 ; Region 1: rows 1..49 story output, wrap + scroll
 ```
 
-VTEXT handles row-local output, clear, and scroll. Ozmoo remains responsible
+VTEXT handles row-local output, clear, and scroll. NovaZ remains responsible
 for interpreting story-file window rules and formatting the status line.

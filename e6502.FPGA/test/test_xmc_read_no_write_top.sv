@@ -1,6 +1,6 @@
 // XMC read-only regression.
 //
-// Ozmoo's story reader maps XMC window 3, then reads bytes with
+// NovaZ's story reader maps XMC window 3, then reads bytes with
 // `LDA $BF00,X`. A read through the XMC window must never generate an XRAM
 // write, even while the SDRAM-backed XRAM wrapper stalls the CPU.
 
