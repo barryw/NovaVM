@@ -671,6 +671,7 @@ TabLoop
       STZ   IrqBase           ; clear IRQ handler enabled flag
       STZ   FAC1_o            ; clear FAC1 overflow byte
       STZ   last_sh           ; clear descriptor stack top item pointer high byte
+      JSR   LAB_BOOT_SCREEN_CLEAR
 
       LDA   #$0E              ; set default tab size
       STA   TabSiz            ; save it
@@ -703,9 +704,11 @@ LAB_2D99
       ASL                     ; shift test byte left (now $AA)
       STA   (Itempl),Y        ; save via temporary integer
       CMP   (Itempl),Y        ; compare via temporary integer
-      BEQ   LAB_2D93          ; if ok go do next byte
-
       BNE   LAB_2DB6          ; branch if fail
+
+      TYA                     ; verified byte is RAM; clear it for cold start
+      STA   (Itempl),Y        ; leave no stale BASIC/autoboot program bytes
+      BEQ   LAB_2D93          ; branch always, as Y=0
 
 LAB_2DB6
       LDA   Itempl            ; get temporary integer low byte
@@ -1569,6 +1572,7 @@ LAB_1463
 ; reset execution to start, clear vars and flush stack
 
 LAB_1477
+      STZ   VGC_CURSEN        ; hide cursor while BASIC program execution is active
       CLC                     ; clear carry
       LDA   Smeml             ; get start of mem low byte
       ADC   #$FF              ; -1
@@ -2225,6 +2229,7 @@ LAB_CONT
 
                               ; we can continue so ..
 LAB_166C
+      STZ   VGC_CURSEN        ; hide cursor while continued program execution is active
       LDA   #TK_ON            ; set token for ON
       JSR   LAB_IRQ           ; set IRQ flags
       LDA   #TK_ON            ; set token for ON
@@ -8812,7 +8817,7 @@ PG2_TABE
 
 ; draw a text-only cold-start splash screen
 
-LAB_SPLASH
+LAB_BOOT_SCREEN_CLEAR
       STZ   VGC_BGCOL         ; black background
       LDA   #$0F              ; light grey text
       STA   VGC_FGCOL
@@ -8822,6 +8827,10 @@ LAB_SPLASH
 
       LDA   #$0C              ; clear text layer and home cursor
       JSR   V_OUTP
+      RTS
+
+LAB_SPLASH
+      JSR   LAB_BOOT_SCREEN_CLEAR
       LDA   #$21              ; centered x for "NovaBASIC v1.0"
       STA   VGC_CURSX
       STA   TPos
@@ -10238,7 +10247,18 @@ LAB_AUTOBOOT
 
       ; Issue LOAD command
       JSR   fio_load
-      BNE   @ab_done              ; no autoboot file found
+      BEQ   @ab_found             ; autoboot exists
+      LDA   FIO_ERRCODE
+      CMP   #FIO_ERR_NOTFOUND
+      BNE   @ab_done              ; leave unexpected boot I/O errors visible
+      JSR   fio_clear_error       ; missing AUTOBOOT is normal, not a disk error
+      BRA   @ab_done
+
+@ab_found
+
+      LDA   #<@ab_booting
+      LDY   #>@ab_booting
+      JSR   LAB_18C3
 
       ; Check file type
       LDA   FIO_DIRTYPE
@@ -10285,6 +10305,9 @@ LAB_AUTOBOOT
 
 @ab_name
       .byte "AUTOBOOT"
+
+@ab_booting
+      .byte "Booting...",$0D,$0A,$00
 
 
 ; character get subroutine for zero page

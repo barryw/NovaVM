@@ -42,7 +42,7 @@ BIT_BACKUPS="$FPGA_DIR/fpga/bit_backups"
 BITSTREAM="${BITSTREAM:-}"
 SYNTH="${SYNTH:-1}"
 LABEL="${LABEL:-stack_boot_hardened}"
-EXTRA_DEFINES="${EXTRA_DEFINES:--DVIDEO_720X480 -DGPDI_P_ONLY}"
+EXTRA_DEFINES="${EXTRA_DEFINES:--DVIDEO_720X480 -DGPDI_P_ONLY -DLATTICE_ECP5}"
 export EXTRA_DEFINES
 FQBN="${FQBN:-esp32:esp32:lolin32:PartitionScheme=min_spiffs}"
 ESP_UPLOAD="${ESP_UPLOAD:-ota}"
@@ -203,30 +203,7 @@ reload_rom_from_sd() {
 
     echo "=== [5b/5] reloading ROMs from SD"
     wait_for_fpga_bridge_available "$host"
-    python3 - "$host" <<'PY'
-import json
-import socket
-import sys
-
-host = sys.argv[1]
-req = json.dumps({"command": "reload_rom"}).encode("utf-8") + b"\n"
-
-with socket.create_connection((host, 6503), timeout=15) as sock:
-    sock.settimeout(30)
-    sock.sendall(req)
-    data = b""
-    while not data.endswith(b"\n"):
-        chunk = sock.recv(4096)
-        if not chunk:
-            break
-        data += chunk
-
-line = data.decode("utf-8", errors="replace").strip()
-print(line)
-res = json.loads(line or "{}")
-if not res.get("ok"):
-    sys.exit(1)
-PY
+    "$REPO_ROOT/tools/novahostctl.py" --host "$host" --timeout 30 reload-rom
 }
 
 find_espota() {

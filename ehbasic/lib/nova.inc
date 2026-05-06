@@ -926,6 +926,13 @@ FIO_CMD_CLEARERR  = $27
 ; @summary Host command that streams a 16K file into the primary runtime ROM bank. Callers must execute from RAM while issuing it.
 FIO_CMD_LOADRUNTIME = $28
 .endif
+.ifndef FIO_CMD_XPAGE
+; @label FIO.CMD_XPAGE
+; @kind const
+; @symbol FIO_CMD_XPAGE
+; @summary Host command that streams a file slice into XRAM using FIO_SRC/FIO_ENDL as a 24-bit file offset.
+FIO_CMD_XPAGE    = $29
+.endif
 
 .ifndef FIO_OK
 FIO_OK            = $02

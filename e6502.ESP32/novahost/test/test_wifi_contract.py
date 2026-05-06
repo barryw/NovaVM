@@ -230,9 +230,11 @@ def test_runtime_autoboot_contract() -> None:
     storage_dm = read("e6502.Storage/DeviceManager.cs")
     dispatcher_h = read("e6502.ESP32/novahost/fio_dispatcher.h")
     dispatcher = read("e6502.ESP32/novahost/fio_dispatcher.cpp")
+    debug = read("e6502.ESP32/novahost/debug_server.cpp")
     esp_dm_h = read("e6502.ESP32/novahost/device_manager.h")
     esp_dm = read("e6502.ESP32/novahost/device_manager.cpp")
     novahost = read("e6502.ESP32/novahost/novahost.ino")
+    sd_http = read("e6502.ESP32/novahost/sd_http_server.cpp")
     unit_dm = read("e6502UnitTests/DeviceManagerTests.cs")
     unit_fio = read("e6502UnitTests/FileIoControllerTests.cs")
     unit_rom = read("e6502UnitTests/RomSwapTests.cs")
@@ -259,20 +261,25 @@ def test_runtime_autoboot_contract() -> None:
         and "SelectBootDevice()" in storage_dm,
         "ESP dispatcher defines runtime command": "CMD_LOADRUNTIME = 0x28" in dispatcher_h
         and "RUNTIME_ROM_BYTES = 16 * 1024" in dispatcher_h,
-        "ESP dispatcher handles runtime command": "case CMD_LOADRUNTIME: handle_load_runtime(); break;" in dispatcher
+        "ESP dispatcher handles runtime command": "case CMD_LOADRUNTIME:" in dispatcher
         and "handle_load_runtime()" in dispatcher
-        and "_bridge.loadRom(0" in dispatcher,
+        and "pokeRomBlock(0" in dispatcher,
         "ESP load mirrors BAS-before-BIN resolution": "find_load_entry" in dispatcher
         and '"%s.bas"' in dispatcher
         and '"%s.bin"' in dispatcher,
-        "ESP auto-mounts floppies and chooses boot slot": "auto_mount_fds()" in esp_dm_h
+        "ESP boot config controls mounted drives and chooses boot slot": "mountConfiguredDrives" in novahost
+        and 'doc["mounts"]' in novahost
         and "select_boot_slot() const" in esp_dm_h
-        and "int DeviceManager::auto_mount_fds()" in esp_dm
         and "int DeviceManager::select_boot_slot() const" in esp_dm
         and "FD0, FD1, FD2, FD3, HD0, HD1" in esp_dm,
-        "NovaHost mounts FD before HD and sets default boot slot": "auto_mount_fds();" in novahost
-        and "auto_mount_hds();" in novahost
+        "NovaHost does not blindly mount root disk images": "auto_mount_fds();" not in novahost
+        and "auto_mount_hds();" not in novahost
         and "set_default_slot(boot_slot)" in novahost,
+        "REST drive changes persist to boot config": "persistDriveMountConfig" in sd_http
+        and 'mounts[prefix] = sd_path ? sd_path : ""' in sd_http,
+        "debug text injection normalizes LF to BASIC Enter": "void DebugServer::cmdTypeText" in debug
+        and "ch == '\\n'" in debug
+        and "ch = '\\r'" in debug,
         "unit tests cover boot order": "FindAutoboot_PrefersInsertedFloppyOverHardDrive" in unit_dm
         and "SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists" in unit_dm,
         "unit tests cover runtime load command": "LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime" in unit_fio,
@@ -292,6 +299,41 @@ def test_runtime_autoboot_contract() -> None:
         check(name, ok)
 
 
+def test_boot_splash_handoff_contract() -> None:
+    novahost = read("e6502.ESP32/novahost/novahost.ino")
+    splash = novahost.split("bool showBootSplash()", 1)[1]
+    splash = splash.split("// =========================================================================\n// WiFi setup", 1)[0]
+    rom_load = novahost.split("bool loadRomsToFPGA()", 1)[1]
+    rom_load = rom_load.split("// =========================================================================\n// Accept new log viewer", 1)[0]
+    fade_out = splash.find("fadeBootSplash(15, 0, 1000);")
+    clear_text = splash.find("clearVgcText()", fade_out)
+    restore_text = splash.find("restoreBootSplashVideoState();", clear_text)
+    reset_hold = rom_load.find("fpgaBridge.resetHold()")
+    rom_clear_text = rom_load.find("clearVgcText()", reset_hold)
+    stream_basic = rom_load.find("streamRomAsset(0", rom_clear_text)
+
+    checks = {
+        "NovaHost defines text VRAM dimensions": "VGC_TEXT_LEN       = 80UL * 50UL" in novahost,
+        "NovaHost can fill text chars from ESP": "VGC_SPACE_CHAR" in novahost
+        and "fillVgcRange(VGC_SPACE_CHAR" in novahost
+        and "0x20, \"chars\"" in novahost,
+        "NovaHost can reset text colors from ESP": "VGC_SPACE_COLOR" in novahost
+        and "fillVgcRange(VGC_SPACE_COLOR" in novahost
+        and "0x0F, \"colors\"" in novahost,
+        "NovaHost clears text attributes from ESP": "VGC_SPACE_TEXTATTR" in novahost
+        and "fillVgcRange(VGC_SPACE_TEXTATTR" in novahost
+        and "0x00, \"attrs\"" in novahost,
+        "boot splash clears text before restoring text mode": fade_out >= 0
+        and clear_text > fade_out
+        and restore_text > clear_text,
+        "ROM load clears text after reset hold before streaming": reset_hold >= 0
+        and rom_clear_text > reset_hold
+        and stream_basic > rom_clear_text,
+    }
+    for name, ok in checks.items():
+        check(name, ok)
+
+
 def main() -> int:
     tests = [
         ("serial commands", test_serial_commands),
@@ -301,6 +343,7 @@ def main() -> int:
         ("FIO clear-error contract", test_fio_clear_error_contract),
         ("FIO SD dispatch contract", test_fio_sd_dispatch_contract),
         ("runtime autoboot contract", test_runtime_autoboot_contract),
+        ("boot splash handoff contract", test_boot_splash_handoff_contract),
     ]
     failed = 0
     for name, fn in tests:

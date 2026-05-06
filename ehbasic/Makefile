@@ -15,7 +15,9 @@ ABI_SOURCES = \
 	lib/blitter.inc lib/blitter.s \
 	lib/copper.inc lib/copper.s \
 	lib/tile.inc lib/tile.s \
-	lib/xram.inc lib/xram.s lib/xmc.s
+	lib/xram.inc lib/xram.s \
+	lib/pager.inc lib/pager.s \
+	lib/xmc.s
 
 # ROM build
 basic.bin basic.sym: basic.o ehbasic.cfg

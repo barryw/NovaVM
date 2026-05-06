@@ -1,0 +1,6 @@
+# Trinity V4 startup, parser, and scrolling smoke.
+look=>Palace Gate&&Broad Walk
+n=>Broad Walk&&Round Pond
+look=>Broad Walk&&crumbs nearby
+s=>Palace Gate
+look=>Palace Gate&&Flower Walk

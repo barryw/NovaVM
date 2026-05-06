@@ -364,9 +364,21 @@ void DebugServer::cmdSendKey(const String& json) {
 
 void DebugServer::cmdTypeText(const String& json) {
     String text = extractString(json, "text");
+    bool previousWasCr = false;
     for (unsigned int i = 0; i < text.length(); i++) {
-        _bridge.sendKey((uint8_t)text[i]);
-        delay(1);  // give screen editor time to process
+        char ch = text[i];
+        if (ch == '\n') {
+            if (previousWasCr) {
+                previousWasCr = false;
+                continue;
+            }
+            ch = '\r';
+        }
+        previousWasCr = (ch == '\r');
+        if (!_bridge.sendKey((uint8_t)ch)) {
+            respondError("FPGA send_key failed");
+            return;
+        }
     }
     respondOk();
 }

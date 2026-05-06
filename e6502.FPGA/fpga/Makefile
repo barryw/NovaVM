@@ -24,10 +24,15 @@ FPGALOAD = openFPGALoader
 #   IO buffer generate the complementary pins. Without this, nextpnr rejects
 #   gpdi_dn[*] because the LPF's LVCMOS33D pins must be constrained to the
 #   A side of a pseudo-differential pair.
-EXTRA_DEFINES ?= -DVIDEO_720X480 -DGPDI_P_ONLY
+EXTRA_DEFINES ?= -DVIDEO_720X480 -DGPDI_P_ONLY -DLATTICE_ECP5
 SV = read_verilog -sv -DSYNTHESIS $(EXTRA_DEFINES)
 VL = read_verilog -DSYNTHESIS $(EXTRA_DEFINES)
 BUILD_ARGS = $(BUILDDIR)/build_args.txt
+# hdl-util HDMI generates very deep temporary names. Yosys' AUTONAME pass can
+# spend tens of GB on those names after ABC9 even though nextpnr does not need
+# them, so the production flow runs the ECP5 recipe through mapped cells and
+# then performs the useful checks/output explicitly.
+SYNTH_ECP5_JSON = synth_ecp5 -top fpga_top -run begin:map_cells; techmap -map +/lattice/cells_map_trellis.v; opt_lut_ins -tech lattice; clean; hierarchy -check; stat; check -noinit; blackbox =A:whitebox
 
 NEXTPNR_SEED ?= 1
 NEXTPNR_THREADS ?=
@@ -55,13 +60,22 @@ RTL_VGC = $(DPRAM) $(RTLDIR)/vgc.sv $(RTLDIR)/vgc_timing.sv $(RTLDIR)/vgc_text.s
 RTL_UART = $(RTLDIR)/debug_uart_rx.sv \
            $(RTLDIR)/debug_uart_tx.sv \
            $(RTLDIR)/debug_byte_fifo.sv
-RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv fpga_top.sv uart_rx.sv uart_tx.sv $(RTL_UART)
+RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv \
+           $(RTLDIR)/sid_hdmi_audio.sv fpga_top.sv uart_rx.sv uart_tx.sv $(RTL_UART)
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
            $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv \
            $(RTLDIR)/sid/sid_curve_reader.sv
-RTL_HDMI = $(RTLDIR)/hdmi/vga2dvid.v $(RTLDIR)/hdmi/tmds_encoder.v \
-           $(RTLDIR)/hdmi/fake_differential.v $(RTLDIR)/hdmi/hdmi_device_ref.v
+RTL_HDMI = $(RTLDIR)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/audio_info_frame.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/audio_sample_packet.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/auxiliary_video_information_info_frame.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/packet_assembler.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/packet_picker.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/source_product_description_info_frame.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/tmds_channel.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/serializer.sv \
+           $(RTLDIR)/thirdparty/hdl-util-hdmi/hdmi.sv
 RTL_SDRAM_V  = $(RTLDIR)/sdram/sdram.v
 RTL_SDRAM_SV = $(RTLDIR)/sdram/xram_sdram.sv $(RTLDIR)/sdram/debug_sdram_port_b_cdc.sv
 
@@ -88,9 +102,9 @@ $(BUILDDIR)/$(PROJ).json: $(BUILD_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_S
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
-		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_SDRAM_SV); \
-		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM_V); \
-		synth_ecp5 -top fpga_top; \
+		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_SV); \
+		$(VL) $(RTL_CPU) $(RTL_SDRAM_V); \
+		$(SYNTH_ECP5_JSON); \
 		write_json $@"
 
 # =========================================================================
@@ -108,9 +122,9 @@ $(BUILDDIR)/post_synth.v: $(BUILD_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_S
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
-		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_SDRAM_SV); \
-		$(VL) $(RTL_CPU) $(RTL_HDMI) $(RTL_SDRAM_V); \
-		synth_ecp5 -top fpga_top; \
+		$(SV) $(RTL_VGC) $(RTL_TOP) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_SV); \
+		$(VL) $(RTL_CPU) $(RTL_SDRAM_V); \
+		$(SYNTH_ECP5_JSON); \
 		stat; \
 		write_verilog $@; \
 		write_rtlil $(BUILDDIR)/post_synth.il"

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -135,7 +136,10 @@ public class FileIoControllerTests
             SetFilename(fio, "runtime");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdLoadRuntime);
 
-            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"err={fio.Read((ushort)VgcConstants.FioErrCode)}");
             Assert.AreEqual(VgcConstants.FioErrNone, fio.Read((ushort)VgcConstants.FioErrCode));
             Assert.AreEqual(VgcConstants.RomSize, ReadSize(fio));
             CollectionAssert.AreEqual(runtime, loaded);
@@ -163,7 +167,10 @@ public class FileIoControllerTests
 
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdClearErr);
 
-            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"err={fio.Read((ushort)VgcConstants.FioErrCode)}");
             Assert.AreEqual(VgcConstants.FioErrNone, fio.Read((ushort)VgcConstants.FioErrCode));
             Assert.AreEqual(0, fio.Read((ushort)VgcConstants.FioCmd));
         }
@@ -188,7 +195,10 @@ public class FileIoControllerTests
             SetFilename(fio, "delete-me");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDelete);
 
-            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"err={fio.Read((ushort)VgcConstants.FioErrCode)}");
             Assert.AreEqual(VgcConstants.FioErrNone, fio.Read((ushort)VgcConstants.FioErrCode));
             Assert.IsFalse(File.Exists(path));
         }
@@ -233,7 +243,10 @@ public class FileIoControllerTests
             var fio = MakeController(dir);
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
 
-            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"err={fio.Read((ushort)VgcConstants.FioErrCode)}");
             Assert.AreEqual("alpha", ReadFilename(fio));
             Assert.AreEqual(1, ReadSize(fio));
 
@@ -543,6 +556,127 @@ public class FileIoControllerTests
             Assert.AreEqual((byte)0x22, xram[0x21]);
             Assert.AreEqual((byte)0x33, xram[0x22]);
             Assert.AreEqual((byte)0x00, xram[0x23]);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XPage_LoadsFileSliceIntoXram()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            byte[] file = Enumerable.Range(0, 512).Select(i => (byte)i).ToArray();
+            File.WriteAllBytes(Path.Combine(dir, "story.bin"), file);
+            var xram = new byte[2048];
+
+            var fio = MakeControllerWithXram(dir, xram);
+            SetFilename(fio, "story.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x20);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x01);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x00);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetXram);
+            fio.Write((ushort)VgcConstants.FioGSpace, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x40);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenL, 16);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(16, ReadSize(fio));
+            for (int i = 0; i < 16; i++)
+                Assert.AreEqual(file[0x120 + i], xram[0x40 + i]);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XPage_LoadsFileSliceIntoCpuRam()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            byte[] file = Enumerable.Range(0, 512).Select(i => (byte)(255 - i)).ToArray();
+            File.WriteAllBytes(Path.Combine(dir, "story.bin"), file);
+            var memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                dir);
+
+            SetFilename(fio, "story.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x00);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x01);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x00);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetRam);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x20);
+            fio.Write((ushort)VgcConstants.FioGLenL, 12);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"err={fio.Read((ushort)VgcConstants.FioErrCode)}");
+            Assert.AreEqual(12, ReadSize(fio));
+            for (int i = 0; i < 12; i++)
+                Assert.AreEqual(file[0x100 + i], memory[0x2000 + i]);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XPage_LoadsFileSliceIntoVgcMemory()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            byte[] file = Enumerable.Range(0, 512).Select(i => (byte)(0x80 + i)).ToArray();
+            File.WriteAllBytes(Path.Combine(dir, "story.bin"), file);
+            var screen = new byte[64];
+            var fio = MakeControllerWithGraphics(
+                dir,
+                screen,
+                new byte[64],
+                new byte[64],
+                new byte[64]);
+
+            SetFilename(fio, "story.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x40);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x00);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x00);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetVgc);
+            fio.Write((ushort)VgcConstants.FioGSpace, VgcConstants.MemSpaceScreen);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x10);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenL, 10);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"err={fio.Read((ushort)VgcConstants.FioErrCode)}");
+            Assert.AreEqual(10, ReadSize(fio));
+            for (int i = 0; i < 10; i++)
+                Assert.AreEqual(file[0x40 + i], screen[0x10 + i]);
         }
         finally
         {

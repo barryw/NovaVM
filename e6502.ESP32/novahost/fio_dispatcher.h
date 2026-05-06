@@ -94,13 +94,14 @@ private:
     static constexpr uint8_t CMD_PWD      = 0x26;
     static constexpr uint8_t CMD_CLEARERR = 0x27;
     static constexpr uint8_t CMD_LOADRUNTIME = 0x28;
+    static constexpr uint8_t CMD_XPAGE    = 0x29;
 
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
 
-    // Shared LOAD/SAVE transfer buffer. Keeping this as one member instead of
-    // two function-local static buffers saves 16KB of ESP32 global RAM.
-    static constexpr int TRANSFER_BUF_BYTES = 16384;
+    // Shared transfer buffer. The FPGA bridge transfers at most 256 payload
+    // bytes per block; keep room for an optional 256-byte verify readback.
+    static constexpr int TRANSFER_BUF_BYTES = 512;
     static constexpr int RUNTIME_ROM_BYTES = 16 * 1024;
     static constexpr uint32_t XRAM_BYTES = 512UL * 1024UL;
     uint8_t _transfer_buf[TRANSFER_BUF_BYTES];
@@ -115,11 +116,19 @@ private:
     uint32_t xram_addr() const { return ((uint32_t)_bank[OFF_GSPACE] << 16) |
                                         ((uint32_t)_bank[OFF_GADDR_HI] << 8) |
                                          (uint32_t)_bank[OFF_GADDR_LO]; }
+    uint32_t file_offset() const { return ((uint32_t)_bank[OFF_END_LO] << 16) |
+                                          ((uint32_t)_bank[OFF_SRC_HI] << 8) |
+                                           (uint32_t)_bank[OFF_SRC_LO]; }
+    uint8_t  page_target() const { return _bank[OFF_DIRTYPE]; }
     uint8_t  gspace() const { return _bank[OFF_GSPACE]; }
     uint16_t gaddr() const { return _bank[OFF_GADDR_LO] |
                                     ((uint16_t)_bank[OFF_GADDR_HI] << 8); }
     uint16_t transfer_len() const { return _bank[OFF_GLEN_LO] |
                                            ((uint16_t)_bank[OFF_GLEN_HI] << 8); }
+
+    static constexpr uint8_t PAGE_TARGET_XRAM = 0x00;
+    static constexpr uint8_t PAGE_TARGET_RAM  = 0x01;
+    static constexpr uint8_t PAGE_TARGET_VGC  = 0x02;
 
     // Returns a null-terminated copy of the filename in `out` (size 64).
     void copy_filename(char* out);
@@ -139,6 +148,7 @@ private:
     void handle_gsave();
     void handle_xload();
     void handle_xsave();
+    void handle_xpage();
     void handle_dir_open();
     void handle_dir_read();
     void handle_delete();

@@ -151,7 +151,7 @@ public sealed class HelpPanel : UserControl
     {
         var box = new TextBox
         {
-            Watermark = "Search docs...",
+            PlaceholderText = "Search docs...",
             FontSize = HelpStyles.FontSizeBody,
             Padding = new Thickness(10, 8),
             CornerRadius = new CornerRadius(HelpStyles.CornerRadius)

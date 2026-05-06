@@ -101,6 +101,7 @@ void FioDispatcher::handle_event() {
         case CMD_GSAVE:    handle_gsave();    break;
         case CMD_XLOAD:    handle_xload();    break;
         case CMD_XSAVE:    handle_xsave();    break;
+        case CMD_XPAGE:    handle_xpage();    break;
         case CMD_DIR_OPEN: handle_dir_open(); break;
         case CMD_DIR_READ: handle_dir_read(); break;
         case CMD_DELETE:   handle_delete();   break;
@@ -217,24 +218,31 @@ void FioDispatcher::handle_load_runtime() {
         return;
     }
 
-    int got = img->read_file_by_index(idx, _transfer_buf, sizeof(_transfer_buf));
-    if (got != RUNTIME_ROM_BYTES) {
-        logLn("[fio] LOADRUNTIME %s: read %d bytes, expected %u\n",
-              scratch, got, (unsigned)RUNTIME_ROM_BYTES);
-        respond_err(ERR_IO);
-        return;
-    }
-
     // The caller must be running from RAM: this overwrites the primary ROM bank
     // currently used for NovaBASIC so the launcher can jump into another runtime.
-    if (!_bridge.loadRom(0, _transfer_buf, (size_t)got)) {
-        respond_err(ERR_IO);
-        return;
+    uint32_t off = 0;
+    while (off < RUNTIME_ROM_BYTES) {
+        uint16_t chunk = (RUNTIME_ROM_BYTES - off >= 256)
+            ? 256
+            : (uint16_t)(RUNTIME_ROM_BYTES - off);
+        int got = img->read_file_chunk_by_index(idx, off, _transfer_buf, chunk);
+        if (got != (int)chunk) {
+            logLn("[fio] LOADRUNTIME %s: chunk read failed at %u\n",
+                  scratch, (unsigned)off);
+            respond_err(ERR_IO);
+            return;
+        }
+        uint16_t wire_count = (chunk == 256) ? 0 : chunk;
+        if (!_bridge.pokeRomBlock(0, (uint16_t)off, _transfer_buf, wire_count)) {
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
     }
 
-    write_size((uint32_t)got);
+    write_size(RUNTIME_ROM_BYTES);
     logLn("[fio] LOADRUNTIME %s -> primary ROM bank (%d bytes) OK\n",
-          scratch, got);
+          scratch, RUNTIME_ROM_BYTES);
     respond_ok();
 }
 
@@ -271,20 +279,13 @@ void FioDispatcher::handle_load() {
         return;
     }
 
-    if (e.size_bytes > TRANSFER_BUF_BYTES) {
-        // Future: stream in chunks. For now, hard cap.
-        logLn("[fio] LOAD %s: %u bytes exceeds %d cap\n",
-                      scratch, (unsigned)e.size_bytes, TRANSFER_BUF_BYTES);
-        respond_err(ERR_IO);
-        return;
-    }
     if (e.size_bytes < 2) {
         respond_err(ERR_IO);
         return;
     }
 
-    int got = img->read_file_by_index(idx, _transfer_buf, sizeof(_transfer_buf));
-    if (got < 0) { respond_err(ERR_IO); return; }
+    int got = img->read_file_chunk_by_index(idx, 0, _transfer_buf, 2);
+    if (got != 2) { respond_err(ERR_IO); return; }
 
     uint16_t dest = src();
     if (is_bin) {
@@ -293,15 +294,31 @@ void FioDispatcher::handle_load() {
         _bridge.poke(BANK_BASE + OFF_SRC_HI, (uint8_t)(dest >> 8));
     }
 
-    int payload_bytes = got - 2;
-    if (!_bridge.loadRam(dest, _transfer_buf + 2, (size_t)payload_bytes)) {
+    uint32_t payload_bytes = e.size_bytes - 2;
+    if (payload_bytes > 0x10000UL || dest > 0x10000UL - payload_bytes) {
         respond_err(ERR_IO);
         return;
     }
-    write_size((uint32_t)payload_bytes);
+
+    uint32_t off = 0;
+    while (off < payload_bytes) {
+        uint32_t remaining = payload_bytes - off;
+        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+        got = img->read_file_chunk_by_index(idx, 2 + off, _transfer_buf, chunk);
+        if (got != (int)chunk) {
+            respond_err(ERR_IO);
+            return;
+        }
+        if (!_bridge.loadRam((uint16_t)(dest + off), _transfer_buf, chunk)) {
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+    write_size(payload_bytes);
     _bridge.poke(BANK_BASE + OFF_DIRTYPE, is_bin ? ndi::FT_BIN : ndi::FT_BAS);
     logLn("[fio] LOAD %s → $%04X (%d bytes payload) OK\n",
-                  scratch, dest, payload_bytes);
+                  scratch, dest, (int)payload_bytes);
     respond_ok();
 }
 
@@ -316,7 +333,6 @@ void FioDispatcher::handle_save() {
     uint16_t e = end();
     if (e < s) { respond_err(ERR_IO); return; }
     uint32_t size = (uint32_t)(e - s + 1);
-    if (size > TRANSFER_BUF_BYTES) { respond_err(ERR_IO); return; }
 
     char scratch[64];
     int slot;
@@ -328,19 +344,6 @@ void FioDispatcher::handle_save() {
     auto* img = _dm.image(slot);
     if (!img) { respond_err(ERR_NO_MOUNT); return; }
 
-    // Read the source range from CPU RAM via 256-byte peek blocks.
-    uint32_t off = 0;
-    while (off < size) {
-        uint16_t chunk = (size - off >= 256) ? 256 : (uint16_t)(size - off);
-        // peekBlock count param: 0 means 256 in protocol.
-        uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
-        if (!_bridge.peekBlock((uint16_t)(s + off), wire_count, _transfer_buf + off)) {
-            respond_err(ERR_IO);
-            return;
-        }
-        off += chunk;
-    }
-
     ndi::FileType ftype = file_type_for_name(scratch);
 
     // If a file with the same name already exists, delete it first
@@ -348,11 +351,35 @@ void FioDispatcher::handle_save() {
     int existing = img->find_entry(scratch, parent);
     if (existing >= 0) img->delete_file(scratch, parent);
 
-    int new_idx = img->write_file(scratch, ftype, parent, _transfer_buf, size);
+    int new_idx = img->create_file(scratch, ftype, parent, size);
     if (new_idx < 0) {
         respond_err(ERR_FULL);
         return;
     }
+
+    uint32_t off = 0;
+    while (off < size) {
+        uint16_t chunk = (size - off >= 256) ? 256 : (uint16_t)(size - off);
+        uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
+        if (!_bridge.peekBlock((uint16_t)(s + off), wire_count, _transfer_buf)) {
+            img->delete_file(scratch, parent);
+            respond_err(ERR_IO);
+            return;
+        }
+        if (!img->write_file_chunk_by_index(new_idx, off, _transfer_buf, chunk)) {
+            img->delete_file(scratch, parent);
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+
+    if (!img->zero_file_tail_by_index(new_idx)) {
+        img->delete_file(scratch, parent);
+        respond_err(ERR_IO);
+        return;
+    }
+
     logLn("[fio] SAVE %s ($%04X-$%04X, %u bytes) OK\n",
                   scratch, s, e, (unsigned)size);
     respond_ok();
@@ -648,6 +675,116 @@ void FioDispatcher::handle_xsave() {
     write_size(total);
     logLn("[fio] XSAVE %s <- XRAM $%06X (%u bytes) OK\n",
           scratch, (unsigned)src_addr, (unsigned)total);
+    respond_ok();
+}
+
+void FioDispatcher::handle_xpage() {
+    char name[64];
+    copy_filename(name);
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+
+    int idx = img->find_entry(scratch, parent);
+    if (idx < 0) {
+        logLn("[fio] XPAGE: '%s' not found in dev=%s\n",
+              scratch, DeviceManager::prefix_for_slot(slot));
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    ndi::DirEntry e;
+    if (!img->get_entry(idx, e) || e.is_directory()) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint8_t target = page_target();
+    uint32_t dest = (target == PAGE_TARGET_XRAM) ? xram_addr() : gaddr();
+    uint32_t src = file_offset();
+    uint32_t requested = transfer_len();
+    if (requested == 0 || src >= e.size_bytes) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t total = requested;
+    if (total > e.size_bytes - src) {
+        total = e.size_bytes - src;
+    }
+
+    switch (target) {
+        case PAGE_TARGET_XRAM:
+            if (dest > XRAM_BYTES || total > XRAM_BYTES || dest > XRAM_BYTES - total) {
+                respond_err(ERR_IO);
+                return;
+            }
+            break;
+        case PAGE_TARGET_RAM:
+            if (dest > 0x10000UL || total > 0x10000UL || dest > 0x10000UL - total) {
+                respond_err(ERR_IO);
+                return;
+            }
+            break;
+        case PAGE_TARGET_VGC:
+        {
+            uint32_t space_size = vgc_space_bytes(gspace());
+            if (space_size == 0 ||
+                dest > space_size ||
+                total > space_size ||
+                dest > space_size - total) {
+                respond_err(ERR_IO);
+                return;
+            }
+            break;
+        }
+        default:
+            respond_err(ERR_IO);
+            return;
+    }
+
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t remaining = total - off;
+        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+        int got = img->read_file_chunk_by_index(idx, src + off, _transfer_buf, chunk);
+        if (got != (int)chunk) {
+            respond_err(ERR_IO);
+            return;
+        }
+        uint16_t wire_count = (chunk == 256) ? 0 : chunk;
+        bool ok = false;
+        switch (target) {
+            case PAGE_TARGET_XRAM:
+                ok = _bridge.pokeSdramBlock(dest + off, _transfer_buf, wire_count);
+                break;
+            case PAGE_TARGET_RAM:
+                ok = _bridge.loadRam((uint16_t)(dest + off), _transfer_buf, chunk);
+                break;
+            case PAGE_TARGET_VGC:
+                ok = _bridge.pokeVgcBlock(gspace(), (uint16_t)(dest + off),
+                                           _transfer_buf, wire_count);
+                break;
+        }
+        if (!ok) {
+            logLn("[fio] XPAGE write failed target=%u addr=$%06X\n",
+                  (unsigned)target, (unsigned)(dest + off));
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+
+    write_size(total);
+    logLn("[fio] XPAGE %s+$%06X -> target %u:$%06X (%u bytes) OK\n",
+          scratch, (unsigned)src, (unsigned)target, (unsigned)dest, (unsigned)total);
     respond_ok();
 }
 

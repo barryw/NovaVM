@@ -299,6 +299,26 @@ module test_vgc_text;
         expected = (3 + 12) % ROWS_TB;
         check_eq("'Q' lands at (3+12) mod ROWS",
                  peek_char_cell(0, expected), 8'h51);
+
+        // Regression for 50-row mode: screen_addr must not do row+offset in
+        // 6 bits, because 20+49 wraps at 64 before the modulo-50 correction.
+        dut.scroll_offset = 6'(ROWS_TB - 1);
+        step(2);
+        check_eq("seeded scroll_offset=ROWS-1", dut.scroll_offset, ROWS_TB - 1);
+
+        bus_write(REG_CURSORX_A, 8'h00);
+        bus_write(REG_CURSORY_A, 8'd20);
+        step(4);
+        type_char(8'h52);  // 'R'
+        expected = (20 + (ROWS_TB - 1)) % ROWS_TB;
+        check_eq("'R' lands at (20+ROWS-1) mod ROWS",
+                 peek_char_cell(0, expected), 8'h52);
+
+        scroll_count = 0;
+        for (int r = 0; r < ROWS_TB; r++)
+            if (r != expected && peek_char_cell(0, r) == 8'h52)
+                scroll_count++;
+        check_eq("no stray 'R' mirrors", scroll_count, 0);
     endtask
 
     // T7: REG_CHAROUT control chars — BS (0x08), CR (0x0D), Reverse-CR (0x13), FF (0x0C)

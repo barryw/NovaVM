@@ -246,8 +246,20 @@ public sealed class EmulatorTcpServer : IDisposable
 
         int delayMs = req["delay_ms"]?.GetValue<int>() ?? 2;
 
-        foreach (char c in text)
+        bool previousWasCr = false;
+        foreach (char raw in text)
         {
+            char c = raw;
+            if (c == '\n')
+            {
+                if (previousWasCr)
+                {
+                    previousWasCr = false;
+                    continue;
+                }
+                c = '\r';
+            }
+            previousWasCr = c == '\r';
             _editor.QueueInput((byte)c);
             _lastInputQueuedUtc = DateTime.UtcNow;
             if (delayMs > 0)

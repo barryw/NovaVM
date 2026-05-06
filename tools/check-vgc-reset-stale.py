@@ -4,16 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import json
-import os
-import socket
 import sys
 import time
 from dataclasses import dataclass
 
+from novahost_client import DEFAULT_DEBUG_PORT, DEFAULT_HOST, NovaHostClient
 
-DEFAULT_HOST = os.environ.get("NOVAHOST", "192.168.1.65")
-DEFAULT_PORT = int(os.environ.get("NOVAHOST_PORT", "6503"))
 BLOCK = 256
 
 
@@ -36,52 +32,18 @@ PLANES = (
 )
 
 
-class DebugClient:
-    def __init__(self, host: str, port: int, timeout: float):
-        self._sock = socket.create_connection((host, port), timeout=timeout)
-        self._sock.settimeout(timeout)
-
-    def close(self) -> None:
-        self._sock.close()
-
-    def command(self, command: str, **kwargs: int | str) -> dict:
-        payload = {"command": command, **kwargs}
-        self._sock.sendall(json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n")
-        raw = b""
-        while not raw.endswith(b"\n"):
-            chunk = self._sock.recv(65536)
-            if not chunk:
-                break
-            raw += chunk
-        if not raw:
-            raise RuntimeError(f"{command}: no response")
-        try:
-            response = json.loads(raw.decode("utf-8", errors="replace"))
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"{command}: invalid JSON response: {raw!r}") from exc
-        if not response.get("ok", False):
-            raise RuntimeError(f"{command}: {response.get('error', response)}")
-        return response
+def fill_plane(client: NovaHostClient, plane: Plane) -> None:
+    client.fill_vram(plane.space, 0, plane.dirty_value, plane.length)
 
 
-def fill_plane(client: DebugClient, plane: Plane) -> None:
-    client.command(
-        "fill_vram",
-        space=plane.space,
-        address=0,
-        value=plane.dirty_value,
-        length=plane.length,
-    )
-
-
-def read_block(client: DebugClient, space: int, address: int, length: int) -> list[int]:
-    response = client.command("read_vram", space=space, address=address, length=length)
+def read_block(client: NovaHostClient, space: int, address: int, length: int) -> list[int]:
+    response = client.read_vram(space, address, length)
     if length == 1:
         return [int(response["value"])]
     return [int(v) for v in response["data"]]
 
 
-def scan_plane(client: DebugClient, plane: Plane) -> tuple[int, str | None]:
+def scan_plane(client: NovaHostClient, plane: Plane) -> tuple[int, str | None]:
     failures = 0
     first: str | None = None
 
@@ -105,7 +67,7 @@ def parse_args() -> argparse.Namespace:
         description="Dirty VGC memories, cold-reset the VM, and verify stale data is gone."
     )
     parser.add_argument("--host", default=DEFAULT_HOST)
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--port", type=int, default=DEFAULT_DEBUG_PORT)
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--settle", type=float, default=0.5, help="seconds to wait after cold_start")
     return parser.parse_args()
@@ -113,14 +75,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    client = DebugClient(args.host, args.port, args.timeout)
-
-    try:
-        status = client.command("boot_status")
+    with NovaHostClient(args.host, args.port, timeout=args.timeout) as client:
+        status = client.boot_status()
         if not status.get("fpgaBridgeAvailable", True):
             raise RuntimeError(f"FPGA bridge unavailable: {status}")
 
-        client.command("dbg_pause")
+        client.pause()
 
         print("Dirtying VGC memory planes...")
         for plane in PLANES:
@@ -128,7 +88,7 @@ def main() -> int:
             print(f"  dirtied {plane.name}")
 
         print("Issuing cold_start reset...")
-        client.command("cold_start", wait_ready=0)
+        client.cold_start(wait_ready=False)
         time.sleep(args.settle)
 
         print("Scanning for stale data...")
@@ -143,8 +103,6 @@ def main() -> int:
                 print(f"PASS {plane.name}: {expectation}")
 
         return 1 if failed else 0
-    finally:
-        client.close()
 
 
 if __name__ == "__main__":

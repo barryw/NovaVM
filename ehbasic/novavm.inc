@@ -81,6 +81,10 @@ FioCmdUnmount           = $25
 FioCmdPwd               = $26
 FioCmdClearErr          = $27
 FioCmdLoadRuntime       = $28
+FioCmdXPage             = $29
+FioPageTargetXram       = $00
+FioPageTargetRam        = $01
+FioPageTargetVgc        = $02
 FioDirTypeDir           = $05
 FioErrDiskFull          = $04
 FioErrNotMounted        = $05
@@ -621,7 +625,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E829
-V_OUTP                  = $E82C
-V_LOAD                  = $E82F
-V_SAVE                  = $E832
+V_INPT                  = $E835
+V_OUTP                  = $E838
+V_LOAD                  = $E83B
+V_SAVE                  = $E83E

@@ -208,6 +208,7 @@ public class VirtualGraphicsController : IBusDevice
         _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] = 15;
         _regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] = 0;
         _regs[VgcConstants.RegBorder - VgcConstants.VgcBase] = 11;
+        _regs[VgcConstants.RegCursorEnable - VgcConstants.VgcBase] = 0;
         _textFlags = 0;
         _textReverseAttr = 0xF0;
 
@@ -443,6 +444,9 @@ public class VirtualGraphicsController : IBusDevice
                 case VgcConstants.RegCursorY:
                     _regs[address - VgcConstants.VgcBase] =
                         (byte)Math.Min(data & 0x3F, VgcConstants.ScreenRows - 1);
+                    return;
+                case VgcConstants.RegCursorEnable:
+                    _regs[address - VgcConstants.VgcBase] = (byte)(data & 0x01);
                     return;
                 default:
                     _regs[address - VgcConstants.VgcBase] = data;

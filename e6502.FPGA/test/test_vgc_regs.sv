@@ -163,16 +163,34 @@ module test_vgc_regs;
     endtask
 
     task automatic test_cursor_enable();
+        logic [7:0] rb;
         $display("");
         $display("Test: cursor_enable at $A00A (1-bit)");
+        check_eq("cursor_enable reset default is off", int'(dut.cursor_enable), 0);
         bus_write(16'hA00A, 8'd0); step(2);
         check_eq("cursor_enable=0", int'(dut.cursor_enable), 0);
+        bus_read(16'hA00A, rb);
+        check_eq("$A00A CPU readback sees cursor_enable=0", int'(rb), 0);
+        dbg_read(16'hA00A, rb);
+        check_eq("$A00A debug readback sees cursor_enable=0", int'(rb), 0);
         bus_write(16'hA00A, 8'd1); step(2);
         check_eq("cursor_enable=1", int'(dut.cursor_enable), 1);
+        bus_read(16'hA00A, rb);
+        check_eq("$A00A CPU readback sees cursor_enable=1", int'(rb), 1);
+        dbg_read(16'hA00A, rb);
+        check_eq("$A00A debug readback sees cursor_enable=1", int'(rb), 1);
         // Any non-zero write of only bit 0 enables
         bus_write(16'hA00A, 8'hFE); step(2);
         check_eq("cursor_enable bit 0 only (0xFE → 0)",
                  int'(dut.cursor_enable), 0);
+        bus_read(16'hA00A, rb);
+        check_eq("$A00A CPU readback masks cursor_enable bit 0", int'(rb), 0);
+        dbg_read(16'hA00A, rb);
+        check_eq("$A00A debug readback masks cursor_enable bit 0", int'(rb), 0);
+        dbg_write(16'hA00A, 8'd1);
+        check_eq("debug write cursor_enable=1", int'(dut.cursor_enable), 1);
+        dbg_read(16'hA00A, rb);
+        check_eq("$A00A debug readback sees debug-written cursor_enable=1", int'(rb), 1);
     endtask
 
     task automatic test_collision_clear_on_write();

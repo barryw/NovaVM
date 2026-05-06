@@ -1,0 +1,21 @@
+# Zork I parser, movement, inventory, scrolling, and pagination smoke.
+look=>West of House&&small mailbox
+open mailbox=>Opening the small mailbox reveals a leaflet.
+take leaflet=>Taken.
+inventory=>leaflet
+n=>North of House&&narrow path
+e=>Behind House&&window
+open window=>With great effort
+enter house=>Kitchen&&table
+w=>Living Room&&brass lantern
+take lamp=>Taken.
+take sword=>Taken.
+move rug=>trap door
+open trap door=>door reluctantly opens
+turn on lamp=>lantern is now on
+d=>Cellar&&narrow passageway
+look=>Cellar&&narrow passageway
+u=>trap door is closed
+inventory=>brass lantern&&sword
+wait.wait.wait.wait.wait.wait.wait.wait.wait.wait=>Time passes
+look.look.look.look.look.look.look.look.look.look=>Cellar&&narrow passageway

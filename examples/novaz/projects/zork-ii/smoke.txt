@@ -1,0 +1,11 @@
+# Zork II parser, movement, inventory, scrolling, and pagination smoke.
+look=>Inside the Barrow&&brass lantern&&sword
+take lamp=>Taken.
+take sword=>Taken.
+inventory=>lamp&&sword
+turn on lamp=>lamp is now on
+s=>Narrow Tunnel&&foot bridge
+s=>Foot Bridge&&deep ravine
+s=>Great Cavern&&phosphorescent moss
+look=>frozen solid
+wait.wait.wait.wait.wait=>Time passes

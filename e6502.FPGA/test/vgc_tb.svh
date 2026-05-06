@@ -192,6 +192,12 @@ task automatic dbg_write(input logic [15:0] addr, input logic [7:0] data);
     @(posedge clk);
 endtask
 
+task automatic dbg_read(input logic [15:0] addr, output logic [7:0] data);
+    dbg_addr = addr;
+    #1;
+    data = dbg_rdata;
+endtask
+
 task automatic dbg_vmem_write(input logic [7:0] space, input int addr, input logic [7:0] data);
     @(posedge clk);
     dbg_vmem_space <= space[2:0];

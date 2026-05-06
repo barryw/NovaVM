@@ -1,0 +1,6 @@
+# AMFV V4 startup, status-window, parser, and output smoke.
+look=>Communications Mode&&World News Network Feed
+ppcc=>PRISM Project Control Center&&banks of terminals
+peof=>Dr. Perelman&&office of your creator
+look=>Dr. Perelman's Office&&printout of a magazine article
+wnnf=>World News Network Feed&&Stock prices

@@ -61,6 +61,116 @@ public class BasicRegressionTests
     }
 
     [TestMethod]
+    public void MissingAutoboot_DoesNotLeaveFioErrorLatched()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        Assert.AreNotEqual(0x03, bus.Read(0xB9A1),
+            "Missing optional AUTOBOOT should not leave FIO_STATUS in error state.");
+        Assert.AreEqual(0x00, bus.Read(0xB9A2),
+            "Missing optional AUTOBOOT should clear FIO_ERRCODE before Ready.");
+    }
+
+    [TestMethod]
+    public void RunProgram_HidesCursorWhileProgramIsExecuting()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 CLS",
+            "20 PRINT \"RUNNING\"",
+            "30 GOTO 30",
+        ]);
+
+        QueueLine(editor, "RUN");
+        RunUntil(cpu, bus, 50_000_000,
+            () => SnapshotScreen(bus.Vgc).StartsWith("RUNNING", StringComparison.Ordinal) &&
+                  !bus.Vgc.IsCursorEnabled,
+            "BASIC program to be running with the cursor hidden");
+    }
+
+    [TestMethod]
+    public void InputStatement_ShowsCursorOnlyWhileWaitingForInput()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 INPUT A$",
+            "20 PRINT \"AFTER\"",
+            "30 END",
+        ]);
+
+        QueueLine(editor, "RUN");
+        RunUntil(cpu, bus, 50_000_000,
+            () => !editor.HasQueuedInput &&
+                  SnapshotScreen(bus.Vgc).Contains("?", StringComparison.Ordinal) &&
+                  bus.Vgc.IsCursorEnabled,
+            "BASIC INPUT to wait with the cursor visible");
+
+        QueueLine(editor, "OK");
+        RunUntilEditorIdle(cpu, bus, editor, 50_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("AFTER", StringComparison.Ordinal),
+            $"INPUT program should resume after receiving text.\n{screen}");
+    }
+
+    [TestMethod]
+    public void GetStatement_LeavesCursorHiddenWhilePolling()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 CLS",
+            "20 PRINT \"WAIT\"",
+            "30 GET A$",
+            "40 IF A$=\"\" THEN 30",
+            "50 PRINT \"GOT\"",
+        ]);
+
+        QueueLine(editor, "RUN");
+        RunUntil(cpu, bus, 50_000_000,
+            () => !editor.HasQueuedInput &&
+                  SnapshotScreen(bus.Vgc).StartsWith("WAIT", StringComparison.Ordinal),
+            "BASIC GET polling loop to start");
+        RunSteps(cpu, bus, 100_000);
+
+        Assert.IsFalse(bus.Vgc.IsCursorEnabled,
+            "BASIC GET is nonblocking polling, so the cursor should remain hidden.");
+
+        editor.QueueInput((byte)'X');
+        RunUntilEditorIdle(cpu, bus, editor, 50_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("GOT", StringComparison.Ordinal),
+            $"GET program should consume queued input and continue.\n{screen}");
+    }
+
+    [TestMethod]
     public void XramStashFetchRoundtripRestoresRam()
     {
         string screen = RunProgram(new[]
@@ -300,24 +410,46 @@ public class BasicRegressionTests
     {
         foreach (string line in lines)
         {
-            foreach (char ch in line)
-                editor.QueueInput((byte)ch);
-            editor.QueueInput(0x0D);
+            QueueLine(editor, line);
             RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
         }
     }
 
+    private static void QueueLine(ScreenEditor editor, string line)
+    {
+        foreach (char ch in line)
+            editor.QueueInput((byte)ch);
+        editor.QueueInput(0x0D);
+    }
+
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
+    {
+        RunUntil(cpu, bus, maxSteps,
+            () => SnapshotScreen(bus.Vgc).Contains(marker, StringComparison.Ordinal),
+            $"screen to contain '{marker}'");
+    }
+
+    private static void RunUntil(Cpu cpu, CompositeBusDevice bus, int maxSteps, Func<bool> predicate, string description)
     {
         for (int i = 0; i < maxSteps; i++)
         {
             int cycles = cpu.ClocksForNext();
             cpu.ExecuteNext();
             bus.AdvanceCycles(cycles);
-            if ((i & 0x3FF) == 0 && SnapshotScreen(bus.Vgc).Contains(marker, StringComparison.Ordinal))
+            if ((i & 0x3FF) == 0 && predicate())
                 return;
         }
-        Assert.Fail($"Timed out waiting for '{marker}'.\n{SnapshotScreen(bus.Vgc)}");
+        Assert.Fail($"Timed out waiting for {description}.\n{SnapshotScreen(bus.Vgc)}");
+    }
+
+    private static void RunSteps(Cpu cpu, CompositeBusDevice bus, int steps)
+    {
+        for (int i = 0; i < steps; i++)
+        {
+            int cycles = cpu.ClocksForNext();
+            cpu.ExecuteNext();
+            bus.AdvanceCycles(cycles);
+        }
     }
 
     private static void RunUntilEditorIdle(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, int maxSteps)

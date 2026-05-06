@@ -62,6 +62,103 @@ public class EhBasicTokenizationTests
     }
 
     [TestMethod]
+    public void AvaloniaRomColdStartClearsTextBeforeMemoryProbe()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        for (int i = 0; i < VgcConstants.ScreenCols * VgcConstants.ScreenRows; i++)
+            Assert.IsTrue(bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceScreen, i, (byte)'X'));
+
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        RunForSteps(cpu, bus, 1_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("X", StringComparison.Ordinal),
+            $"Cold start should clear stale text before the RAM probe can leave it visible.\n{screen}");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomColdStartClearsBasicProgramRam()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        int[] zeroedProgramAddresses = [0x0300, 0x0301, 0x0302, 0x0400, 0x2000, 0x7FFF];
+        int[] topOfRamAddresses = [0x9FFE, 0x9FFF];
+        int[] sampleAddresses = [.. zeroedProgramAddresses, .. topOfRamAddresses];
+        foreach (int address in sampleAddresses)
+            bus.WriteRam((ushort)address, 0xA5);
+
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        foreach (int address in zeroedProgramAddresses)
+        {
+            Assert.AreEqual(0x00, bus.ReadRam((ushort)address),
+                $"Cold start should clear stale BASIC program RAM at ${address:X4}.");
+        }
+
+        foreach (int address in topOfRamAddresses)
+        {
+            Assert.AreNotEqual(0xA5, bus.ReadRam((ushort)address),
+                $"Cold start should not leave stale top-of-RAM bytes at ${address:X4}.");
+        }
+
+        ushort programStart = (ushort)(bus.Read(VgcConstants.ZpSmeml) | (bus.Read(VgcConstants.ZpSmemh) << 8));
+        ushort variablesStart = (ushort)(bus.Read(VgcConstants.ZpSvarl) | (bus.Read(VgcConstants.ZpSvarh) << 8));
+        Assert.AreEqual(0x0301, programStart, "Cold start should reset BASIC program start.");
+        Assert.AreEqual(0x0303, variablesStart, "Cold start should leave BASIC with an empty program.");
+    }
+
+    [TestMethod]
+    public void AvaloniaRomAutobootDisplaysBootingInsteadOfReadyPrompt()
+    {
+        string? oldRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string? oldNoAutoMount = Environment.GetEnvironmentVariable("NOVA_NO_AUTOMOUNT");
+        string? oldNoAuto = Environment.GetEnvironmentVariable("NOAUTO");
+        string root = Path.Combine(Path.GetTempPath(), $"e6502-autoboot-{Guid.NewGuid():N}");
+        CompositeBusDevice? bus = null;
+
+        try
+        {
+            string hd0 = Path.Combine(root, "hd0");
+            Directory.CreateDirectory(hd0);
+            Directory.CreateDirectory(Path.Combine(root, "hd1"));
+            Directory.CreateDirectory(Path.Combine(root, "disks"));
+
+            File.WriteAllBytes(Path.Combine(hd0, "AUTOBOOT.bin"),
+                [0x00, 0x40, 0x4C, 0x00, 0x40]); // load at $4000, JMP $4000
+
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", "1");
+            Environment.SetEnvironmentVariable("NOAUTO", null);
+
+            bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            cpu.Boot();
+
+            RunUntilScreenContains(cpu, bus, "Booting...", 80_000_000);
+
+            string screen = SnapshotScreen(bus.Vgc);
+            Assert.IsTrue(screen.Contains("NovaBASIC v1.0", StringComparison.Ordinal),
+                $"BASIC banner should be visible before autoboot starts.\n{screen}");
+            Assert.IsTrue(screen.Contains("Booting...", StringComparison.Ordinal),
+                $"Autoboot should show the booting handoff message.\n{screen}");
+            Assert.IsFalse(screen.Contains("Ready", StringComparison.Ordinal),
+                $"Autoboot should not show the interactive Ready prompt before jumping.\n{screen}");
+        }
+        finally
+        {
+            bus?.Dispose();
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", oldRoot);
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", oldNoAutoMount);
+            Environment.SetEnvironmentVariable("NOAUTO", oldNoAuto);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void AvaloniaRomResetTokenizesAsExtendedStatement()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
@@ -695,6 +792,16 @@ public class EhBasicTokenizationTests
         for (int i = 0; i < steps; i++)
         {
             cpu.ExecuteNext();
+        }
+    }
+
+    private static void RunForSteps(Cpu cpu, CompositeBusDevice bus, int steps)
+    {
+        for (int i = 0; i < steps; i++)
+        {
+            int cycles = cpu.ClocksForNext();
+            cpu.ExecuteNext();
+            bus.AdvanceCycles(cycles);
         }
     }
 

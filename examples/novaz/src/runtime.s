@@ -8,6 +8,7 @@
 .setcpu "65c02"
 
 .include "xram.inc"
+.include "pager.inc"
 .include "vtext.inc"
 .include "zstory.inc"
 .include "ztext.inc"
@@ -17,6 +18,8 @@
 .include "ztext.s"
 .include "zobject.s"
 .include "zvm.s"
+
+.export nz_raw_input_mode
 
 .define NOVAZ_WORD_MAX 80
 .define NOVAZ_MORE_LEN 8
@@ -104,6 +107,8 @@ halt:
         BRA halt
 
 init_screen:
+        JSR init_video_colors
+        JSR nz_cursor_off
         STZ nz_word_len
         STZ nz_raw_input_mode
         STZ nz_more_enabled
@@ -115,6 +120,22 @@ init_screen:
         JSR vtext_clear_region
         JMP vtext_home
 
+init_video_colors:
+        STZ VGC_BGCOL
+        STZ VGC_BORDER
+        LDA #$0F
+        STA VGC_FGCOL
+        RTS
+
+nz_cursor_on:
+        LDA #$01
+        STA VGC_CURSEN
+        RTS
+
+nz_cursor_off:
+        STZ VGC_CURSEN
+        RTS
+
 setup_text_region:
         LDA #$00
         STA VTEXT_LEFT
@@ -123,7 +144,7 @@ setup_text_region:
         STA VTEXT_WIDTH
         LDA #50
         STA VTEXT_HEIGHT
-        LDA #$0F
+        LDA #$0C
         STA VTEXT_COLOR
         STZ VTEXT_ATTR
         LDA #(VTEXT_FLAG_WRAP | VTEXT_FLAG_SCROLL)
@@ -133,13 +154,21 @@ setup_text_region:
 setup_story_region:
         LDA #$00
         STA VTEXT_LEFT
+        LDA zstory_version
+        CMP #$04
+        BCC @v1_v3
+        STZ VTEXT_TOP
+        LDA #50
+        BRA @height
+@v1_v3:
         LDA #$01
         STA VTEXT_TOP
+        LDA #49
+@height:
+        STA VTEXT_HEIGHT
         LDA #80
         STA VTEXT_WIDTH
-        LDA #49
-        STA VTEXT_HEIGHT
-        LDA #$0F
+        LDA #$0C
         STA VTEXT_COLOR
         STZ VTEXT_ATTR
         LDA #(VTEXT_FLAG_WRAP | VTEXT_FLAG_SCROLL)
@@ -160,98 +189,6 @@ init_game_screen:
         STZ VTEXT_CURX
         STZ VTEXT_CURY
         JMP vtext_set_cursor
-
-print_header:
-        JSR setup_text_region
-
-        LDA #<msg_version
-        LDY #>msg_version
-        JSR print_text
-        LDA zstory_version
-        JSR print_u8_dec
-        JSR newline
-
-        LDA #<msg_release
-        LDY #>msg_release
-        JSR print_text
-        LDA zstory_release_hi
-        LDX zstory_release_lo
-        JSR print_u16_dec
-        JSR newline
-
-        LDA #<msg_serial
-        LDY #>msg_serial
-        JSR print_text
-        JSR print_serial
-        JSR newline
-
-        LDA #<msg_initial_pc
-        LDY #>msg_initial_pc
-        JSR print_text
-        LDA zstory_initial_pc_hi
-        LDX zstory_initial_pc_lo
-        JSR print_hex16
-        JSR newline
-
-        LDA #<msg_static
-        LDY #>msg_static
-        JSR print_text
-        LDA zstory_static_hi
-        LDX zstory_static_lo
-        JSR print_hex16
-        JSR newline
-
-        LDA #<msg_globals
-        LDY #>msg_globals
-        JSR print_text
-        LDA zstory_globals_hi
-        LDX zstory_globals_lo
-        JSR print_hex16
-        JSR newline
-
-        LDA #<msg_dictionary
-        LDY #>msg_dictionary
-        JSR print_text
-        LDA zstory_dictionary_hi
-        LDX zstory_dictionary_lo
-        JSR print_hex16
-        JSR newline
-
-        LDA #<msg_object_table
-        LDY #>msg_object_table
-        JSR print_text
-        LDA zstory_object_hi
-        LDX zstory_object_lo
-        JSR print_hex16
-        JSR newline
-
-        LDA #<msg_abbrev
-        LDY #>msg_abbrev
-        JSR print_text
-        LDA zstory_abbrev_hi
-        LDX zstory_abbrev_lo
-        JSR print_hex16
-        JSR newline
-
-        LDA #<msg_checksum
-        LDY #>msg_checksum
-        JSR print_text
-        LDA zstory_checksum_hi
-        LDX zstory_checksum_lo
-        JSR print_hex16
-        JSR newline
-
-        LDA #<msg_object1
-        LDY #>msg_object1
-        JSR print_text
-        LDA #$01
-        JSR zobject_print_short_name
-        JSR newline
-
-        LDA #<msg_platform_ready
-        LDY #>msg_platform_ready
-        JSR print_line
-        RTS
 
 ; A/Y = pointer to null-terminated string.
 print_line:
@@ -284,6 +221,7 @@ print_char:
         BEQ @screen
         LDA nz_char
         JSR zvm_stream3_put_char
+        BRA @done
 @screen:
         LDA zvm_stream_flags
         AND #ZVM_STREAM_SCREEN_OFF
@@ -298,6 +236,10 @@ print_char:
 nz_screen_put_char:
         STA nz_char
         LDA nz_raw_input_mode
+        BNE nz_screen_put_raw_saved
+        LDA zvm_text_buffering
+        BEQ nz_screen_put_raw_saved
+        LDA zvm_window_current
         BNE nz_screen_put_raw_saved
         LDA VTEXT_FLAGS
         AND #VTEXT_FLAG_WRAP
@@ -693,58 +635,25 @@ print_u16_dec:
         BCC @loop
         RTS
 
-print_serial:
-        LDX #$00
-@loop:
-        LDA zstory_serial,X
-        JSR print_char
-        INX
-        CPX #$06
-        BCC @loop
-        RTS
-
 .segment "RODATA"
 
 msg_title:
-        .byte "NOVAZ RUNTIME", 0
+        .byte "NOVA Z-MACHINE RUNTIME", 0
 msg_loading:
-        .byte "LOADING story.bin INTO XRAM...", 0
+        .byte "OPENING story.bin...", 0
 msg_loaded:
-        .byte "STORY LOADED.", 0
+        .byte "STORY HEADER LOADED.", 0
 msg_load_failed:
         .byte "STORY LOAD FAILED.", 0
 msg_header_failed:
         .byte "STORY HEADER READ FAILED.", 0
 msg_unsupported:
         .byte "UNSUPPORTED Z-MACHINE VERSION: ", 0
-msg_version:
-        .byte "Z-MACHINE VERSION: ", 0
-msg_release:
-        .byte "RELEASE: ", 0
-msg_serial:
-        .byte "SERIAL: ", 0
-msg_initial_pc:
-        .byte "INITIAL PC: $", 0
-msg_static:
-        .byte "STATIC MEMORY: $", 0
-msg_globals:
-        .byte "GLOBALS: $", 0
-msg_dictionary:
-        .byte "DICTIONARY: $", 0
-msg_object_table:
-        .byte "OBJECT TABLE: $", 0
-msg_abbrev:
-        .byte "ABBREVIATIONS: $", 0
-msg_checksum:
-        .byte "CHECKSUM: $", 0
-msg_object1:
-        .byte "OBJECT #1: ", 0
-msg_platform_ready:
-        .byte "NOVA Z-MEMORY PLATFORM READY.", 0
 msg_more:
         .byte "[ MORE ]", 0
 
 .include "xram.s"
+.include "pager.s"
 .include "vtext.s"
 
 .segment "VECTORS"

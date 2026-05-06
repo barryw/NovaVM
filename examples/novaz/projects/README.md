@@ -22,6 +22,15 @@ specific game. Run it with:
 make -C examples/novaz test-project PROJECT=zork-iii
 ```
 
+When the local Infocom archive is mounted, the checked-in project smoke scripts
+can be run without copying story files into the project directories:
+
+```sh
+make -C examples/novaz test-infocom-z3-smokes
+make -C examples/novaz test-infocom-v45-smokes
+make -C examples/novaz test-infocom-smokes
+```
+
 Pass `PROJECT_SMOKE_ARGS=--generic-boot --expect-more` when a game script is
 intended to force and verify the `[ MORE ]` pagination prompt.
 

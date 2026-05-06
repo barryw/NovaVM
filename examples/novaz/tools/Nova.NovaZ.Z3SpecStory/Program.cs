@@ -418,6 +418,19 @@ static void EmitSpecProgram(ZCode z)
     z.Fail("verify");
     z.Label("verify_ok");
 
+    z.VarOp(10, Operand.Small(2));
+    z.VarOp(11, Operand.Small(1));
+    z.Print("upper window ok");
+    z.NewLine();
+    z.VarOp(11, Operand.Small(0));
+    z.VarOp(18, Operand.Small(0));
+    z.Print("buffer off ok");
+    z.NewLine();
+    z.VarOp(18, Operand.Small(1));
+    z.VarOp(20, Operand.Small(0));
+    z.Print("z3 window ok");
+    z.NewLine();
+
     z.Jump("after_routines");
 
     z.AlignWord();

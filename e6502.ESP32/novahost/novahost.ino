@@ -8,8 +8,13 @@
 
 #include <WiFi.h>
 #include <WiFiClient.h>
-#include <ESPmDNS.h>
+#ifndef NOVA_ENABLE_OTA
+#define NOVA_ENABLE_OTA 1
+#endif
+#if NOVA_ENABLE_OTA
 #include <ArduinoOTA.h>
+#endif
+#include <ArduinoJson.h>
 #include <HardwareSerial.h>
 #include <SD.h>
 #include <SPI.h>
@@ -211,13 +216,6 @@ void startNetworkServicesIfNeeded() {
     if (!novaWifi.connected() || g_network_services_started)
         return;
 
-    if (MDNS.begin("novahost")) {
-        MDNS.addService("telnet", "tcp", LOG_PORT);
-        MDNS.addService("e6502-debug", "tcp", 6503);
-        logLn("mDNS service registered; use static IP %s",
-              WiFi.localIP().toString().c_str());
-    }
-
     logServer.begin();
     logLn("Debug log server on port %d", LOG_PORT);
     logLn("Connect with: nc %s %d",
@@ -225,6 +223,7 @@ void startNetworkServicesIfNeeded() {
 
     debugServer.begin();
 
+#if NOVA_ENABLE_OTA
     ArduinoOTA.setHostname("novahost");
     ArduinoOTA.onStart([]() {
         logLn("OTA: upload starting (%s)",
@@ -234,6 +233,9 @@ void startNetworkServicesIfNeeded() {
     ArduinoOTA.onError([](ota_error_t err) { logLn("OTA: error %u", err); });
     ArduinoOTA.begin();
     logLn("OTA enabled on %s:3232", WiFi.localIP().toString().c_str());
+#else
+    logLn("OTA disabled in this Novahost build");
+#endif
 
     sdHttpServer.begin();
     logLn("HTTP server ready: http://%s/",
@@ -270,13 +272,20 @@ static const size_t BOOT_ROM_LEN       = 16 * 1024;
 static const size_t SID_CURVE_ROM_LEN  = 8 * 1024;
 static const uint32_t SID_CURVE_BASE   = 0x800000;
 static const size_t BOOT_LOGO_GFX_LEN  = 320UL * 200UL;
+static const size_t VGC_TEXT_LEN       = 80UL * 50UL;
 
 static const uint16_t VGC_MODE          = 0xA000;
 static const uint16_t VGC_BGCOL         = 0xA001;
+static const uint16_t VGC_FGCOL         = 0xA002;
+static const uint16_t VGC_CURSOR_X      = 0xA003;
+static const uint16_t VGC_CURSOR_Y      = 0xA004;
 static const uint16_t VGC_BORDER        = 0xA00D;
 static const uint16_t VGC_CURSOR_ENABLE = 0xA00A;
 static const uint16_t VGC_DISPLAY_DIM   = 0xA0E5;
+static const uint8_t  VGC_SPACE_CHAR    = 0x01;
+static const uint8_t  VGC_SPACE_COLOR   = 0x02;
 static const uint8_t  VGC_SPACE_GFX     = 0x03;
+static const uint8_t  VGC_SPACE_TEXTATTR = 0x07;
 static const uint8_t  VGC_MODE_GFX_ONLY = 0x03;
 
 static const char* const BASIC_ROM_PATHS[] = {
@@ -306,6 +315,87 @@ static const char* const BOOT_LOGO_RAW_PATHS[] = {
 // =========================================================================
 // SD card setup and boot asset helpers
 // =========================================================================
+bool normalizeMountPath(const char* raw, char* out, size_t out_len) {
+    if (!raw || raw[0] == 0 || out_len == 0)
+        return false;
+
+    if (raw[0] == '/')
+        snprintf(out, out_len, "%s", raw);
+    else
+        snprintf(out, out_len, "/%s", raw);
+    out[out_len - 1] = 0;
+
+    String lower(out);
+    lower.toLowerCase();
+    return lower.endsWith(".ndi");
+}
+
+bool mountConfiguredDrive(int slot, JsonObjectConst mounts) {
+    const char* prefix = DeviceManager::prefix_for_slot(slot);
+    if (!prefix)
+        return false;
+
+    JsonVariantConst value = mounts[prefix];
+    if (value.isNull())
+        return false;
+
+    const char* configured_path = value.as<const char*>();
+    char sd_path[128];
+    if (!normalizeMountPath(configured_path, sd_path, sizeof(sd_path)))
+        return false;
+
+    File entry = SD.open(sd_path, FILE_READ);
+    if (!entry) {
+        logLn("Boot config mount skipped: %s -> %s not found",
+              prefix, sd_path);
+        return false;
+    }
+    entry.close();
+
+    if (!deviceManager.mount(slot, sd_path)) {
+        logLn("Boot config mount failed: %s -> %s", prefix, sd_path);
+        return false;
+    }
+
+    logLn("Boot config mounted %s -> %s", prefix, sd_path);
+    return true;
+}
+
+void mountConfiguredDrives(int& fd_count, int& hd_count) {
+    fd_count = 0;
+    hd_count = 0;
+
+    File cfg = SD.open("/config/boot.json", FILE_READ);
+    if (!cfg) {
+        logLn("Boot config missing; no disk images auto-mounted");
+        return;
+    }
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, cfg);
+    cfg.close();
+    if (err) {
+        logLn("Boot config parse failed: %s; no disk images auto-mounted",
+              err.c_str());
+        return;
+    }
+
+    JsonObjectConst mounts = doc["mounts"].as<JsonObjectConst>();
+    if (mounts.isNull()) {
+        logLn("Boot config has no mounts object; no disk images auto-mounted");
+        return;
+    }
+
+    for (int slot = 0; slot < DeviceManager::NUM_SLOTS; slot++) {
+        if (!mountConfiguredDrive(slot, mounts))
+            continue;
+        if (slot >= DeviceManager::FD0)
+            fd_count++;
+        else
+            hd_count++;
+    }
+}
+
 bool mountSdCard() {
     // SD card mount via SPI mode. ULX3S routes SD to ESP32 GPIOs in a
     // way that's incompatible with SDIO 1-bit/4-bit on this board (verified
@@ -341,12 +431,13 @@ bool mountSdCard() {
     g_sd_diag = String(diag_buf);
     logLn("SD: mount OK - %s", diag_buf);
 
-    int fd_count = deviceManager.auto_mount_fds();
-    int hd_count = deviceManager.auto_mount_hds();
+    int fd_count = 0;
+    int hd_count = 0;
+    mountConfiguredDrives(fd_count, hd_count);
     int boot_slot = deviceManager.select_boot_slot();
     deviceManager.set_default_slot(boot_slot);
     const char* boot_prefix = DeviceManager::prefix_for_slot(boot_slot);
-    logLn("SD: auto-mounted %d fd*.ndi and %d hd*.ndi disk image(s); boot default=%s",
+    logLn("SD: config-mounted %d floppy and %d hard disk image(s); boot default=%s",
           fd_count, hd_count, boot_prefix ? boot_prefix : "?");
     char mount_buf[80];
     snprintf(mount_buf, sizeof(mount_buf), " | fd_mounts=%d hd_mounts=%d boot=%s",
@@ -488,6 +579,50 @@ bool clearVgcGfx() {
         }
     }
     return true;
+}
+
+bool fillVgcRange(uint8_t space, uint16_t start, size_t length,
+                  uint8_t value, const char* label) {
+    uint8_t tail[256];
+
+    for (size_t off = 0; off < length; ) {
+        size_t remaining = length - off;
+        size_t chunk = remaining >= 256 ? 256 : remaining;
+        uint16_t addr = (uint16_t)(start + off);
+
+        bool ok;
+        if (chunk == 256) {
+            ok = fpgaBridge.fillVgcBlock(space, addr, value);
+        } else {
+            memset(tail, value, chunk);
+            ok = fpgaBridge.pokeVgcBlock(space, addr, tail, (uint16_t)chunk);
+        }
+
+        if (!ok) {
+            logLn("Boot text clear failed at %s offset %u",
+                  label, (unsigned)off);
+            return false;
+        }
+
+        off += chunk;
+    }
+
+    return true;
+}
+
+bool clearVgcText() {
+    bool ok =
+        fillVgcRange(VGC_SPACE_CHAR, 0, VGC_TEXT_LEN, 0x20, "chars") &&
+        fillVgcRange(VGC_SPACE_COLOR, 0, VGC_TEXT_LEN, 0x0F, "colors") &&
+        fillVgcRange(VGC_SPACE_TEXTATTR, 0, VGC_TEXT_LEN, 0x00, "attrs");
+
+    ok = fpgaBridge.poke(VGC_BGCOL, 0x00) && ok;
+    ok = fpgaBridge.poke(VGC_FGCOL, 0x0F) && ok;
+    ok = fpgaBridge.poke(VGC_BORDER, 0x0B) && ok;
+    ok = fpgaBridge.poke(VGC_CURSOR_X, 0x00) && ok;
+    ok = fpgaBridge.poke(VGC_CURSOR_Y, 0x00) && ok;
+
+    return ok;
 }
 
 bool readByte(File& f, uint8_t& value) {
@@ -653,6 +788,8 @@ bool showBootSplash() {
     fadeBootSplash(15, 0, 1000);
     if (!clearVgcGfx())
         logLn("WARN: boot splash graphics clear failed after fade-out");
+    if (!clearVgcText())
+        logLn("WARN: boot splash text clear failed after fade-out");
     restoreBootSplashVideoState();
 
     logLn("Boot splash complete (took %lu ms)", millis() - t0);
@@ -738,6 +875,10 @@ void printWifiHelp() {
     Serial.println("  wifi disconnect");
     Serial.println("  wifi reconnect");
     Serial.println("  wifi forget");
+}
+
+void printSerialHelp() {
+    printWifiHelp();
 }
 
 void printWifiStatusSerial() {
@@ -885,7 +1026,7 @@ void handleSerialCommand(String line) {
 
     args[0].toLowerCase();
     if (args[0] == "help" || args[0] == "?") {
-        printWifiHelp();
+        printSerialHelp();
         return;
     }
     if (args[0] == "wifi") {
@@ -964,6 +1105,9 @@ bool loadRomsToFPGA() {
             logLn("ROM load FAILED: FPGA bridge never acked resetHold (wired up? bitstream loaded?)");
             return false;
         }
+
+        if (!clearVgcText())
+            logLn("WARN: ROM load text clear failed before asset streaming");
 
         if (!streamRomAsset(0, "basic ROM", BASIC_ROM_PATHS,
                             sizeof(BASIC_ROM_PATHS) / sizeof(BASIC_ROM_PATHS[0]),
@@ -1199,7 +1343,9 @@ void loop() {
 
     // Accept new log viewer connections
     if (novaWifi.connected() && g_network_services_started) {
+#if NOVA_ENABLE_OTA
         ArduinoOTA.handle();
+#endif
         handleLogClients();
         debugServer.loop();
         sdHttpServer.loop();

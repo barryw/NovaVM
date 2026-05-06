@@ -782,7 +782,7 @@ module vgc (
         cursor_x = 0; cursor_y = 0;
         border_color = 4'd11; fg_color = 4'd15; bg_color = 4'd0;
         display_dim = 4'd15;
-        gfx_color = 4'd1; mode = 0; cursor_enable = 1;
+        gfx_color = 4'd1; mode = 0; cursor_enable = 0;
         vram_plane = SPACE_CHAR; vram_addr = 0; vram_ctrl = 8'h01;
         vram_cpu_read_pending = 0; vram_cpu_read_space = SPACE_CHAR; vram_cpu_read_latch = 0;
         vram_port_read_active = 0; vram_port_read_space = SPACE_CHAR; vram_port_read_addr = 0;
@@ -919,9 +919,10 @@ module vgc (
     endfunction
 
     function automatic logic [11:0] screen_addr(input logic [6:0] col, input logic [5:0] row);
+        logic [6:0] rr_sum;
         logic [5:0] rr;
-        rr = row + scroll_offset;
-        if (rr >= ROWS) rr = rr - ROWS;
+        rr_sum = {1'b0, row} + {1'b0, scroll_offset};
+        rr = (rr_sum >= 7'(ROWS)) ? rr_sum[5:0] - 6'(ROWS) : rr_sum[5:0];
         screen_addr = text_linear_addr(rr, col);
     endfunction
 
@@ -1082,6 +1083,7 @@ module vgc (
                 REG_CURSORY: dbg_rdata = {2'b0, cursor_y};
                 5'd7:        dbg_rdata = {5'b0, font_slot};
                 5'd8:        dbg_rdata = frame_counter;  // VGC_FRAME
+                5'd10:       dbg_rdata = {7'b0, cursor_enable};
                 REG_BORDER:  dbg_rdata = {4'b0, border_color};
                 REG_CHARIN:  dbg_rdata = char_in_reg;
                 REG_CMD:     dbg_rdata = {7'b0, cmd_busy || artist_busy || memcmd_pending || (memread_pending != 2'd0)};
@@ -1137,7 +1139,7 @@ module vgc (
             cursor_x <= 0; cursor_y <= 0; mode <= 0;
             border_color <= 4'd11; fg_color <= 4'd15; bg_color <= 4'd0;
             gfx_color <= 4'd1; display_dim <= 4'd15;
-            cursor_enable <= 1; font_slot <= 0;
+            cursor_enable <= 0; font_slot <= 0;
             frame_counter <= 0;
             vram_plane <= SPACE_CHAR; vram_addr <= 16'd0; vram_ctrl <= 8'h01;
             text_flags <= 8'h00; text_reverse_attr <= 8'hF0;

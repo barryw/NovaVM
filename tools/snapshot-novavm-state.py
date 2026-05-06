@@ -12,20 +12,15 @@ import argparse
 import datetime as _dt
 import json
 import os
-import socket
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from bisect import bisect_right
 from pathlib import Path
 from typing import Any
 
+from novahost_client import DEFAULT_DEBUG_PORT, DEFAULT_HOST, DEFAULT_HTTP_PORT, NovaHostClient
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_HOST = "192.168.1.65"
-DEFAULT_PORT = 6503
-DEFAULT_HTTP_PORT = 80
 MMIO_REGS = [
     ("RegMode", 0xA000),
     ("RegBgCol", 0xA001),
@@ -63,39 +58,6 @@ MMIO_REGS = [
 ]
 
 
-class DebugClient:
-    def __init__(self, host: str, port: int, timeout: float) -> None:
-        self._sock = socket.create_connection((host, port), timeout=timeout)
-        self._sock.settimeout(timeout)
-        self._rx = b""
-
-    def close(self) -> None:
-        self._sock.close()
-
-    def command(self, command: str, **kwargs: Any) -> dict[str, Any]:
-        payload = {"command": command}
-        payload.update(kwargs)
-        self._sock.sendall(json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n")
-
-        while b"\n" not in self._rx:
-            chunk = self._sock.recv(65536)
-            if not chunk:
-                break
-            self._rx += chunk
-
-        if b"\n" not in self._rx:
-            raise RuntimeError(f"no newline response for debug command {command!r}")
-
-        line, self._rx = self._rx.split(b"\n", 1)
-        text = line.decode("utf-8", errors="replace").strip()
-        if not text:
-            raise RuntimeError(f"empty response for debug command {command!r}")
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"invalid JSON from {command!r}: {text}") from exc
-
-
 def parse_args() -> argparse.Namespace:
     stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     default_out = Path("/tmp") / f"novavm-snapshot-{stamp}"
@@ -104,7 +66,7 @@ def parse_args() -> argparse.Namespace:
         description="Capture a NovaVM hardware debug snapshot through NovaHost."
     )
     parser.add_argument("--host", default=os.environ.get("NOVAHOST", DEFAULT_HOST))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("NOVAHOST_PORT", DEFAULT_PORT)))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("NOVAHOST_PORT", DEFAULT_DEBUG_PORT)))
     parser.add_argument("--http-port", type=int, default=int(os.environ.get("HTTP_PORT", DEFAULT_HTTP_PORT)))
     parser.add_argument("--timeout", type=float, default=float(os.environ.get("DEBUG_RESPONSE_TIMEOUT", "15")))
     parser.add_argument("--out", type=Path, default=default_out)
@@ -124,19 +86,6 @@ def parse_args() -> argparse.Namespace:
         help="cc65 symbol file used to map PC to ROM labels",
     )
     return parser.parse_args()
-
-
-def http_get_json(host: str, port: int, path: str, timeout: float) -> dict[str, Any]:
-    url = f"http://{host}:{port}{path}"
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
-            data = resp.read().decode("utf-8", errors="replace")
-        try:
-            return {"ok": True, "url": url, "json": json.loads(data), "raw": data}
-        except json.JSONDecodeError:
-            return {"ok": True, "url": url, "raw": data}
-    except (OSError, urllib.error.URLError) as exc:
-        return {"ok": False, "url": url, "error": str(exc)}
 
 
 def load_symbols(path: Path) -> list[tuple[int, str]]:
@@ -219,7 +168,7 @@ def hexdump(start: int, values: list[int | None], width: int = 16) -> str:
     return "\n".join(lines)
 
 
-def read_range_bytewise(client: DebugClient, start: int, length: int) -> dict[str, Any]:
+def read_range_bytewise(client: NovaHostClient, start: int, length: int) -> dict[str, Any]:
     values: list[int | None] = []
     errors: list[dict[str, Any]] = []
     for offset in range(length):
@@ -238,7 +187,7 @@ def read_range_bytewise(client: DebugClient, start: int, length: int) -> dict[st
     return {"start": start & 0xFFFF, "length": length, "values": values, "errors": errors}
 
 
-def read_range(client: DebugClient, start: int, length: int) -> dict[str, Any]:
+def read_range(client: NovaHostClient, start: int, length: int) -> dict[str, Any]:
     values: list[int | None] = []
     errors: list[dict[str, Any]] = []
     offset = 0
@@ -270,7 +219,7 @@ def read_range(client: DebugClient, start: int, length: int) -> dict[str, Any]:
     return {"start": start & 0xFFFF, "length": length, "values": values, "errors": errors}
 
 
-def read_mmio_regs(client: DebugClient) -> dict[str, Any]:
+def read_mmio_regs(client: NovaHostClient) -> dict[str, Any]:
     regs: dict[str, Any] = {}
     errors: list[dict[str, Any]] = []
     for name, addr in MMIO_REGS:
@@ -416,6 +365,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     symbols = load_symbols(args.symbols)
+    http_client = NovaHostClient(args.host, args.port, args.http_port, args.timeout)
     snapshot: dict[str, Any] = {
         "label": args.label,
         "timestamp": _dt.datetime.now().isoformat(timespec="seconds"),
@@ -425,8 +375,8 @@ def main() -> int:
         "symbol_file": str(args.symbols),
         "symbols_loaded": len(symbols),
         "http": {
-            "health": http_get_json(args.host, args.http_port, "/health", args.timeout),
-            "sd_status": http_get_json(args.host, args.http_port, "/sd-status", args.timeout),
+            "health": http_client.try_http_get_json("/health"),
+            "sd_status": http_client.try_http_get_json("/sd-status"),
         },
         "debug": {},
         "memory": {},
@@ -434,9 +384,9 @@ def main() -> int:
         "errors": [],
     }
 
-    client: DebugClient | None = None
+    client: NovaHostClient | None = None
     try:
-        client = DebugClient(args.host, args.port, args.timeout)
+        client = NovaHostClient(args.host, args.port, args.http_port, args.timeout)
         snapshot["debug"]["boot_status"] = client.command("boot_status")
         if not snapshot["debug"]["boot_status"].get("fpgaBridgeAvailable", True):
             snapshot["errors"].append("FPGA bridge not available; skipped CPU/memory snapshot")

@@ -10,6 +10,38 @@ extern bool novaFpgaBridgeAvailable();
 extern uint8_t novaHostStatusFlags();
 extern void novaWifiStateChanged();
 
+static bool persistDriveMountConfig(const char* prefix, const char* sd_path) {
+    if (!prefix || prefix[0] == 0)
+        return false;
+
+    JsonDocument doc;
+    File cfg = SD.open("/config/boot.json", FILE_READ);
+    if (cfg) {
+        DeserializationError err = deserializeJson(doc, cfg);
+        cfg.close();
+        if (err) {
+            logLn("[sdhttp] boot config parse failed while persisting mount: %s",
+                  err.c_str());
+            doc.clear();
+        }
+    }
+
+    JsonObject mounts = doc["mounts"].to<JsonObject>();
+    mounts[prefix] = sd_path ? sd_path : "";
+
+    if (!SD.exists("/config") && !SD.mkdir("/config"))
+        return false;
+
+    File out = SD.open("/config/boot.json", FILE_WRITE, true);
+    if (!out)
+        return false;
+
+    serializeJsonPretty(doc, out);
+    out.println();
+    out.close();
+    return true;
+}
+
 void SdHttpServer::begin() {
     if (_started) return;
     _started = true;
@@ -536,6 +568,9 @@ void SdHttpServer::handle_drive_mount(WiFiClient& client, int slot,
         return;
     }
 
+    if (!persistDriveMountConfig(prefix, sd_path))
+        logLn("[sdhttp] WARN: failed to persist mount config for %s", prefix);
+
     logLn("[sdhttp] MOUNT %s -> %s", prefix, sd_path);
     send_headers(client, 200, "application/json");
     client.print("{\"ok\":true,\"slot\":");
@@ -548,6 +583,9 @@ void SdHttpServer::handle_drive_mount(WiFiClient& client, int slot,
 void SdHttpServer::handle_drive_unmount(WiFiClient& client, int slot) {
     const char* prefix = DeviceManager::prefix_for_slot(slot);
     _dm.unmount(slot);
+
+    if (!persistDriveMountConfig(prefix, ""))
+        logLn("[sdhttp] WARN: failed to persist unmount config for %s", prefix);
 
     logLn("[sdhttp] UNMOUNT %s", prefix);
     send_headers(client, 200, "application/json");

@@ -143,27 +143,12 @@ wait_for_fpga_bridge_available() {
 debug_cmd() {
     local payload="$1"
 
-    python3 - "$NOVAHOST" "$NOVAHOST_PORT" "$DEBUG_RESPONSE_TIMEOUT" "$payload" <<'PY'
-import socket
-import sys
-
-host = sys.argv[1]
-port = int(sys.argv[2])
-timeout = float(sys.argv[3])
-payload = sys.argv[4].encode("utf-8") + b"\n"
-
-with socket.create_connection((host, port), timeout=timeout) as sock:
-    sock.settimeout(timeout)
-    sock.sendall(payload)
-    data = b""
-    while not data.endswith(b"\n"):
-        chunk = sock.recv(4096)
-        if not chunk:
-            break
-        data += chunk
-
-sys.stdout.write(data.decode("utf-8", errors="replace"))
-PY
+    "$REPO_ROOT/tools/novahostctl.py" \
+        --host "$NOVAHOST" \
+        --port "$NOVAHOST_PORT" \
+        --http-port "$HTTP_PORT" \
+        --timeout "$DEBUG_RESPONSE_TIMEOUT" \
+        raw "$payload"
 }
 
 run_with_timeout() {

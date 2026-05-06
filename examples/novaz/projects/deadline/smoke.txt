@@ -1,4 +1,8 @@
 # Deadline-specific boot, parser, and time-status smoke.
 look=>South Lawn&&Robner estate
+n=>Front Path&&front door
+s=>South Lawn
 wait=>Time passes...&&It is now
 time=>It is now
+wait.wait.wait.wait.wait.wait.wait.wait.wait.wait=>It is now
+look.look.look.look.look=>South Lawn&&Robner estate

@@ -288,9 +288,9 @@ into system areas. See the memory map in Appendix \refchap:memmap for safe zones
 ### Cursor Control
 
 The text cursor position is set with `LOCATE x, y` where *x* is
-the column (0--79) and *y* is the row (0--24).
+the column (0--79) and *y* is the row (0--49).
 
-Cursor **visibility** is controlled via the VGC register at $A00A:
+Cursor **visibility** is controlled via bit 0 of the VGC register at $A00A:
 
 ```basic
 10 POKE $A00A, 0  : REM hide cursor
@@ -298,8 +298,14 @@ Cursor **visibility** is controlled via the VGC register at $A00A:
 30 POKE $A00A, 1  : REM show cursor
 ```
 
-Any non-zero value enables the blinking cursor; zero hides it. This is
-useful in games where you want a clean display without a flashing block.
+Bit 0 set enables the blinking cursor; bit 0 clear hides it. The hardware reset
+default is hidden, so runtimes should explicitly enable the cursor only while
+waiting for text input.
+
+NovaBASIC manages this automatically for the normal command prompt and `INPUT`:
+the cursor is visible while BASIC is waiting for line input, and hidden while a
+program is executing. Programs that need manual control can still write `$A00A`
+directly.
 
 ## Style Tips
 

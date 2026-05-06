@@ -140,6 +140,9 @@ public sealed partial class FileIoController
             case VgcConstants.FioCmdXSave:
                 DoXSave();
                 break;
+            case VgcConstants.FioCmdXPage:
+                DoXPage();
+                break;
             case VgcConstants.FioCmdSidPlay:
                 DoSidPlay();
                 break;
@@ -1016,6 +1019,120 @@ public sealed partial class FileIoController
 
             SetTransferSize(len);
             SetOk();
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoXPage()
+    {
+        try
+        {
+            string? filename = ReadFilename();
+            if (filename is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            byte target = _regs[VgcConstants.FioDirType - VgcConstants.FioBase];
+            int reqLen = GetFioTransferLength();
+            int fileOffset = GetFioFileOffset();
+            if (reqLen <= 0 || fileOffset < 0)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            byte[]? data = LoadDataFile(filename, ".bin", out bool notFound);
+            if (data is null)
+            {
+                SetError(notFound ? VgcConstants.FioErrNotFound : VgcConstants.FioErrIo);
+                return;
+            }
+            if (fileOffset >= data.Length)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            int len = Math.Min(reqLen, data.Length - fileOffset);
+            switch (target)
+            {
+                case VgcConstants.FioPageTargetXram:
+                {
+                    if (_xramWrite is null || _xramCapacity is null)
+                    {
+                        SetError(VgcConstants.FioErrIo);
+                        return;
+                    }
+
+                    int xaddr = GetFioXramAddress();
+                    if (!XramRangeOk(xaddr, len))
+                    {
+                        SetError(VgcConstants.FioErrIo);
+                        return;
+                    }
+
+                    for (int i = 0; i < len; i++)
+                    {
+                        if (!_xramWrite(xaddr + i, data[fileOffset + i]))
+                        {
+                            SetError(VgcConstants.FioErrIo);
+                            return;
+                        }
+                    }
+
+                    _xramRefreshStats?.Invoke();
+                    break;
+                }
+                case VgcConstants.FioPageTargetRam:
+                {
+                    int addr = GetFioGraphicsAddress();
+                    if (addr < 0 || len < 0 || addr + len > 0x10000)
+                    {
+                        SetError(VgcConstants.FioErrIo);
+                        return;
+                    }
+
+                    for (int i = 0; i < len; i++)
+                        _busWrite((ushort)(addr + i), data[fileOffset + i]);
+                    break;
+                }
+                case VgcConstants.FioPageTargetVgc:
+                {
+                    if (_vgcWrite is null || _vgcSpaceLength is null)
+                    {
+                        SetError(VgcConstants.FioErrIo);
+                        return;
+                    }
+
+                    byte space = _regs[VgcConstants.FioGSpace - VgcConstants.FioBase];
+                    int addr = GetFioGraphicsAddress();
+                    int spaceLen = _vgcSpaceLength(space);
+                    if (spaceLen <= 0 || addr < 0 || len < 0 || addr + len > spaceLen)
+                    {
+                        SetError(VgcConstants.FioErrIo);
+                        return;
+                    }
+
+                    for (int i = 0; i < len; i++)
+                        _vgcWrite(space, addr + i, data[fileOffset + i]);
+                    break;
+                }
+                default:
+                    SetError(VgcConstants.FioErrIo);
+                    return;
+            }
+
+            SetTransferSize(len);
+            SetOk();
+        }
+        catch (FileNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
         }
         catch
         {
@@ -1990,9 +2107,18 @@ public sealed partial class FileIoController
         return lo | (mid << 8) | (hi << 16);
     }
 
+    private int GetFioGraphicsAddress() =>
+        _regs[VgcConstants.FioGAddrL - VgcConstants.FioBase]
+        | (_regs[VgcConstants.FioGAddrH - VgcConstants.FioBase] << 8);
+
     private int GetFioTransferLength() =>
         _regs[VgcConstants.FioGLenL - VgcConstants.FioBase]
         | (_regs[VgcConstants.FioGLenH - VgcConstants.FioBase] << 8);
+
+    private int GetFioFileOffset() =>
+        _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+        | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8)
+        | (_regs[VgcConstants.FioEndL - VgcConstants.FioBase] << 16);
 
     private bool XramRangeOk(int address, int length)
     {

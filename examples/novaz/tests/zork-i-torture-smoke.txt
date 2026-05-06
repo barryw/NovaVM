@@ -1,0 +1,48 @@
+# Zork I lifecycle torture: restart, save/restore across reboot, death,
+# deterministic combat, and quit termination.
+
+!restart=>Do you wish to restart
+.wait 0.5
+y=>West of House&&small mailbox
+
+open mailbox=>reveals a leaflet
+take leaflet=>Taken.
+save=>Ok.
+drop leaflet=>Dropped.
+.reboot
+restore=>Ok.
+inventory=>A leaflet
+
+n=>North of House
+e=>Behind House
+open window=>open the window
+enter house=>Kitchen
+w=>Living Room
+move rug=>trap door
+open trap door=>opens
+d=>pitch black
+!n=>You have died&&Forest
+
+!restart=>Do you wish to restart
+.wait 0.5
+y=>West of House&&small mailbox
+
+n=>North of House
+e=>Behind House
+open window=>open the window
+enter house=>Kitchen
+w=>Living Room
+take lamp=>Taken.
+take sword=>Taken.
+move rug=>trap door
+open trap door=>opens
+turn on lamp=>lantern is now on
+d=>Cellar&&sword is glowing
+n=>Troll Room&&troll
+kill troll with sword=>fatal blow&&troll breathes his last
+
+!quit=>Do you wish to leave
+.wait 0.5
+!y=>Do you wish to leave
+.wait 0.5
+.expect-stop 3

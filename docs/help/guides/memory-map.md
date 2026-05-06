@@ -82,7 +82,7 @@ The VGC IRQ block lives at A0F0--A0FF.
 | $A007 | RegFont | R/W | Active font slot (0--7). 0=CP437, 1=PETSCII Upper, 2=PETSCII Lower. |
 | $A008 | RegStatus | RO | Frame counter; incremented each video frame. Writes are ignored. |
 | $A009 | RegSpriteCount | RO | Count of currently enabled sprites (0--16). Writes are ignored. |
-| $A00A | RegCursorEnable | R/W | Non-zero enables the cursor blink. |
+| $A00A | RegCursorEnable | R/W | Bit 0 enables the cursor blink; reset default is hidden. |
 | $A00B | RegColSt | RO | Sprite-to-sprite collision bitmask; reading clears the register. |
 | $A00C | RegColBg | RO | Sprite-to-background collision bitmask; reading clears the register. |
 | $A00D | RegBorder | R/W | Border color index (0--15); reset value is 11 (dark grey). |

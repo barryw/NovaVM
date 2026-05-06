@@ -1,3 +1,34 @@
+# NovaHost Client
+
+Use `novahost_client.py` for Python tools that need NovaHost HTTP/debug access.
+Use `novahostctl.py` for shell or manual hardware operations.
+
+Defaults target the static board IP:
+
+```bash
+tools/novahostctl.py state
+tools/novahostctl.py screen
+tools/novahostctl.py basic 'PRINT "HELLO"'
+tools/novahostctl.py mute-sid
+tools/novahostctl.py cold-start
+```
+
+Override connection details with `--host`, `--port`, `--http-port`, or the
+`NOVAHOST`, `NOVAHOST_PORT`, and `HTTP_PORT` environment variables.
+
+# Nova FTDI Keyboard
+
+`nova-ftdi-keyboard.py` turns the host terminal into a keyboard bridge for the
+ULX3S FTDI UART input. The current FPGA keyboard UART is `9600 8N1`.
+
+```bash
+tools/nova-ftdi-keyboard.py --list
+tools/nova-ftdi-keyboard.py --port /dev/cu.usbserial-D01457
+```
+
+Type normally in the terminal. `Ctrl-]` exits the bridge; `Ctrl-C` is forwarded
+to Nova unless `--ctrl-c-quits` is passed.
+
 # score2bas
 
 `score2bas.py` transpiles a music score into a NovaBASIC v1.0 program that uses `SOUND` and `VSYNC`.

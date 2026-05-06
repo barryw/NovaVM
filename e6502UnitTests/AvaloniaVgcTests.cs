@@ -31,6 +31,22 @@ public class AvaloniaVgcTests
         Assert.AreEqual(11, _vgc.Read(VgcConstants.RegBorder));
 
     [TestMethod]
+    public void InitialCursor_IsDisabled() =>
+        Assert.IsFalse(_vgc.IsCursorEnabled);
+
+    [TestMethod]
+    public void CursorEnable_UsesBitZeroOnly()
+    {
+        _vgc.Write(VgcConstants.RegCursorEnable, 1);
+        Assert.IsTrue(_vgc.IsCursorEnabled);
+        Assert.AreEqual(1, _vgc.Read(VgcConstants.RegCursorEnable));
+
+        _vgc.Write(VgcConstants.RegCursorEnable, 0xFE);
+        Assert.IsFalse(_vgc.IsCursorEnabled);
+        Assert.AreEqual(0, _vgc.Read(VgcConstants.RegCursorEnable));
+    }
+
+    [TestMethod]
     public void InitialScreenRam_IsSpaces()
     {
         for (int row = 0; row < VgcConstants.ScreenRows; row++)

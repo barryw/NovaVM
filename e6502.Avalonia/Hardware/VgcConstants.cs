@@ -101,6 +101,10 @@ public static class VgcConstants
     public const byte FioCmdPwd        = 0x26;
     public const byte FioCmdClearErr   = 0x27;
     public const byte FioCmdLoadRuntime = 0x28;    // disk -> primary runtime ROM bank
+    public const byte FioCmdXPage      = 0x29;     // disk file slice -> XRAM
+    public const byte FioPageTargetXram = 0x00;    // XPAGE target: flat XRAM
+    public const byte FioPageTargetRam  = 0x01;    // XPAGE target: CPU RAM
+    public const byte FioPageTargetVgc  = 0x02;    // XPAGE target: VGC memory
 
     public const byte FioDirTypeDir    = 0x05;
     public const byte FioErrDiskFull   = 0x04;
@@ -661,7 +665,7 @@ public static class VgcConstants
     public const int RegFont           = 0xA007;   // active font slot (0-7)
     public const int RegStatus         = 0xA008;   // read-only
     public const int RegSpriteCount    = 0xA009;   // read-only sprite count
-    public const int RegCursorEnable   = 0xA00A;   // cursor visible (non-zero = show)
+    public const int RegCursorEnable   = 0xA00A;   // bit 0: cursor visible
     public const int RegColSt          = 0xA00B;   // sprite-sprite collision (read clears)
     public const int RegColBg          = 0xA00C;   // sprite-background collision (read clears)
     public const int RegBorder         = 0xA00D;

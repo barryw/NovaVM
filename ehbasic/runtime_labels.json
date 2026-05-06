@@ -72,7 +72,7 @@
       "symbol": "audio_instrument",
       "abi": "pseudo-register",
       "summary": "Define an instrument envelope and waveform.",
-      "address": "$EDA4"
+      "address": "$EDB4"
     },
     {
       "label": "AUDIO.INST_ID",
@@ -105,7 +105,7 @@
       "symbol": "audio_midplay",
       "abi": "pseudo-register",
       "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDB7"
+      "address": "$EDC7"
     },
     {
       "label": "AUDIO.MIDSTOP",
@@ -123,7 +123,7 @@
       "symbol": "audio_midstop",
       "abi": "none",
       "summary": "Stop MIDI file playback.",
-      "address": "$EDBC"
+      "address": "$EDCC"
     },
     {
       "label": "AUDIO.MUSIC_LOOP",
@@ -143,7 +143,7 @@
       "symbol": "audio_music_loop",
       "abi": "pseudo-register",
       "summary": "Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.",
-      "address": "$EDDE"
+      "address": "$EDEE"
     },
     {
       "label": "AUDIO.MUSIC_NOTE",
@@ -166,7 +166,7 @@
       "symbol": "audio_music_note",
       "abi": "register",
       "summary": "Return the current MIDI note for a music voice.",
-      "address": "$EDFC"
+      "address": "$EE0C"
     },
     {
       "label": "AUDIO.MUSIC_PLAY",
@@ -184,7 +184,7 @@
       "symbol": "audio_music_play",
       "abi": "none",
       "summary": "Start queued music playback.",
-      "address": "$EDCB"
+      "address": "$EDDB"
     },
     {
       "label": "AUDIO.MUSIC_PLAYING",
@@ -202,7 +202,7 @@
       "symbol": "audio_music_playing",
       "abi": "none",
       "summary": "Return nonzero if music is playing.",
-      "address": "$EDF2"
+      "address": "$EE02"
     },
     {
       "label": "AUDIO.MUSIC_PRIORITY",
@@ -222,7 +222,7 @@
       "symbol": "audio_music_priority",
       "abi": "pseudo-register",
       "summary": "Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.",
-      "address": "$EDE3"
+      "address": "$EDF3"
     },
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
@@ -245,7 +245,7 @@
       "symbol": "audio_music_sequence",
       "abi": "pseudo-register",
       "summary": "Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.",
-      "address": "$EDC6"
+      "address": "$EDD6"
     },
     {
       "label": "AUDIO.MUSIC_STOP",
@@ -263,7 +263,7 @@
       "symbol": "audio_music_stop",
       "abi": "none",
       "summary": "Stop music playback.",
-      "address": "$EDD4"
+      "address": "$EDE4"
     },
     {
       "label": "AUDIO.MUSIC_TEMPO",
@@ -284,7 +284,7 @@
       "symbol": "audio_music_tempo",
       "abi": "pseudo-register",
       "summary": "Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.",
-      "address": "$EDD9"
+      "address": "$EDE9"
     },
     {
       "label": "AUDIO.NOTE",
@@ -327,7 +327,7 @@
       "symbol": "audio_play_sound",
       "abi": "register",
       "summary": "Play a one-shot note using A/X/Y register arguments.",
-      "address": "$ED87"
+      "address": "$ED97"
     },
     {
       "label": "AUDIO.RELEASE",
@@ -366,7 +366,7 @@
       "symbol": "audio_set_volume",
       "abi": "register",
       "summary": "Set master or per-voice volume using A/X register arguments.",
-      "address": "$ED92"
+      "address": "$EDA2"
     },
     {
       "label": "AUDIO.SFLOAD",
@@ -387,7 +387,7 @@
       "symbol": "audio_sfload",
       "abi": "pseudo-register",
       "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDC1"
+      "address": "$EDD1"
     },
     {
       "label": "AUDIO.SFX_PLAYING",
@@ -405,7 +405,7 @@
       "symbol": "audio_sfx_playing",
       "abi": "none",
       "summary": "Return nonzero if a sound effect is playing.",
-      "address": "$EDEC"
+      "address": "$EDFC"
     },
     {
       "label": "AUDIO.SIDPLAY",
@@ -427,7 +427,7 @@
       "symbol": "audio_sidplay",
       "abi": "pseudo-register",
       "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.",
-      "address": "$EDA9"
+      "address": "$EDB9"
     },
     {
       "label": "AUDIO.SIDSTOP",
@@ -445,7 +445,7 @@
       "symbol": "audio_sidstop",
       "abi": "none",
       "summary": "Stop SID file playback.",
-      "address": "$EDB2"
+      "address": "$EDC2"
     },
     {
       "label": "AUDIO.SOUND",
@@ -467,7 +467,7 @@
       "symbol": "audio_sound",
       "abi": "pseudo-register",
       "summary": "Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.",
-      "address": "$ED9A"
+      "address": "$EDAA"
     },
     {
       "label": "AUDIO.STATUS",
@@ -485,7 +485,7 @@
       "symbol": "audio_status",
       "abi": "none",
       "summary": "Return raw music status bits.",
-      "address": "$EDE8"
+      "address": "$EDF8"
     },
     {
       "label": "AUDIO.STRH",
@@ -566,7 +566,7 @@
       "symbol": "audio_volume",
       "abi": "pseudo-register",
       "summary": "Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.",
-      "address": "$ED9F"
+      "address": "$EDAF"
     },
     {
       "label": "AUDIO.VOLUME_LEVEL",
@@ -1051,7 +1051,7 @@
       "kind": "routine",
       "symbol": "fio_cd",
       "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
-      "address": "$ED6E"
+      "address": "$ED7E"
     },
     {
       "label": "FIO.CHECK",
@@ -1068,7 +1068,7 @@
       "kind": "routine",
       "symbol": "fio_check",
       "summary": "Convert the current FIO status register to the shared A=0/1 result.",
-      "address": "$ECEF"
+      "address": "$ECFF"
     },
     {
       "label": "FIO.CLEAR_ERROR",
@@ -1085,7 +1085,7 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$ED0F"
+      "address": "$ED1F"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
@@ -1098,6 +1098,18 @@
       "symbol": "FIO_CMD_LOADRUNTIME",
       "summary": "Host command that streams a 16K file into the primary runtime ROM bank. Callers must execute from RAM while issuing it.",
       "address": "$28"
+    },
+    {
+      "label": "FIO.CMD_XPAGE",
+      "source": "lib/nova.inc",
+      "line": 930,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_CMD_XPAGE",
+      "summary": "Host command that streams a file slice into XRAM using FIO_SRC/FIO_ENDL as a 24-bit file offset.",
+      "address": "$29"
     },
     {
       "label": "FIO.COPY_NAME",
@@ -1118,7 +1130,7 @@
       "kind": "routine",
       "symbol": "fio_copy_name",
       "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
-      "address": "$ED2E"
+      "address": "$ED3E"
     },
     {
       "label": "FIO.DELETE",
@@ -1133,7 +1145,7 @@
       "kind": "routine",
       "symbol": "fio_delete",
       "summary": "Delete the file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$ED5F"
+      "address": "$ED6F"
     },
     {
       "label": "FIO.DIR_OPEN",
@@ -1145,7 +1157,7 @@
       "kind": "routine",
       "symbol": "fio_dir_open",
       "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
-      "address": "$ED55"
+      "address": "$ED65"
     },
     {
       "label": "FIO.DIR_READ",
@@ -1157,7 +1169,7 @@
       "kind": "routine",
       "symbol": "fio_dir_read",
       "summary": "Read the next directory entry into the FIO directory result registers.",
-      "address": "$ED5A"
+      "address": "$ED6A"
     },
     {
       "label": "FIO.EXEC",
@@ -1179,7 +1191,7 @@
       "kind": "routine",
       "symbol": "fio_exec",
       "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
-      "address": "$ECFC"
+      "address": "$ED0C"
     },
     {
       "label": "FIO.GLOAD",
@@ -1199,7 +1211,7 @@
       "kind": "routine",
       "symbol": "fio_gload",
       "summary": "Load VGC/graphics memory using FIO graphics registers.",
-      "address": "$ED69"
+      "address": "$ED79"
     },
     {
       "label": "FIO.GSAVE",
@@ -1219,7 +1231,7 @@
       "kind": "routine",
       "symbol": "fio_gsave",
       "summary": "Save VGC/graphics memory using FIO graphics registers.",
-      "address": "$ED64"
+      "address": "$ED74"
     },
     {
       "label": "FIO.ISSUE",
@@ -1236,7 +1248,7 @@
       "kind": "routine",
       "symbol": "fio_issue",
       "summary": "Issue a raw FIO command without waiting for completion.",
-      "address": "$ECEB"
+      "address": "$ECFB"
     },
     {
       "label": "FIO.LOAD",
@@ -1253,7 +1265,7 @@
       "kind": "routine",
       "symbol": "fio_load",
       "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
-      "address": "$ED50"
+      "address": "$ED60"
     },
     {
       "label": "FIO.LOAD_RUNTIME",
@@ -1268,7 +1280,7 @@
       "kind": "routine",
       "symbol": "fio_load_runtime",
       "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
-      "address": "$ED82"
+      "address": "$ED92"
     },
     {
       "label": "FIO.MKDIR",
@@ -1283,7 +1295,7 @@
       "kind": "routine",
       "symbol": "fio_mkdir",
       "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$ED73"
+      "address": "$ED83"
     },
     {
       "label": "FIO.NAME",
@@ -1339,7 +1351,7 @@
       "kind": "routine",
       "symbol": "fio_pwd",
       "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
-      "address": "$ED7D"
+      "address": "$ED8D"
     },
     {
       "label": "FIO.RMDIR",
@@ -1354,7 +1366,7 @@
       "kind": "routine",
       "symbol": "fio_rmdir",
       "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
-      "address": "$ED78"
+      "address": "$ED88"
     },
     {
       "label": "FIO.RUN",
@@ -1384,7 +1396,7 @@
       "kind": "routine",
       "symbol": "fio_save",
       "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
-      "address": "$ED4B"
+      "address": "$ED5B"
     },
     {
       "label": "FIO.SET_IO_ERROR",
@@ -1401,7 +1413,7 @@
       "kind": "routine",
       "symbol": "fio_set_io_error",
       "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
-      "address": "$ED21"
+      "address": "$ED31"
     },
     {
       "label": "NIC.ACCEPT",
@@ -1465,7 +1477,7 @@
       "kind": "routine",
       "symbol": "nic_command",
       "summary": "Issue a raw NIC command.",
-      "address": "$EE08"
+      "address": "$EE18"
     },
     {
       "label": "NIC.CONNECT",
@@ -1482,7 +1494,7 @@
       "kind": "routine",
       "symbol": "nic_connect",
       "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
-      "address": "$EE0C"
+      "address": "$EE1C"
     },
     {
       "label": "NIC.COPY_NAME",
@@ -1503,7 +1515,7 @@
       "kind": "routine",
       "symbol": "nic_copy_name",
       "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
-      "address": "$EE32"
+      "address": "$EE42"
     },
     {
       "label": "NIC.DISCONNECT",
@@ -1517,7 +1529,7 @@
       "kind": "routine",
       "symbol": "nic_disconnect",
       "summary": "Disconnect NIC_SLOT.",
-      "address": "$EE10"
+      "address": "$EE20"
     },
     {
       "label": "NIC.LENGTH",
@@ -1534,7 +1546,7 @@
       "kind": "routine",
       "symbol": "nic_length",
       "summary": "Read the most recent NIC message length.",
-      "address": "$EE2E"
+      "address": "$EE3E"
     },
     {
       "label": "NIC.LISTEN",
@@ -1567,7 +1579,7 @@
       "kind": "routine",
       "symbol": "nic_ready",
       "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
-      "address": "$EE24"
+      "address": "$EE34"
     },
     {
       "label": "NIC.RECV",
@@ -1583,7 +1595,7 @@
       "kind": "routine",
       "symbol": "nic_recv",
       "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
-      "address": "$EE18"
+      "address": "$EE28"
     },
     {
       "label": "NIC.SEND",
@@ -1600,7 +1612,7 @@
       "kind": "routine",
       "symbol": "nic_send",
       "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
-      "address": "$EE14"
+      "address": "$EE24"
     },
     {
       "label": "NIC.STATUS",
@@ -1622,7 +1634,216 @@
       "kind": "routine",
       "symbol": "nic_status",
       "summary": "Read clamped NIC slot status.",
-      "address": "$EE1C"
+      "address": "$EE2C"
+    },
+    {
+      "label": "PAGER.ADDRH",
+      "source": "lib/pager.inc",
+      "line": 23,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_ADDRH",
+      "summary": "High byte of destination address for 24-bit targets.",
+      "address": "$22"
+    },
+    {
+      "label": "PAGER.ADDRL",
+      "source": "lib/pager.inc",
+      "line": 13,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_ADDRL",
+      "summary": "Low byte of destination address.",
+      "address": "$20"
+    },
+    {
+      "label": "PAGER.ADDRM",
+      "source": "lib/pager.inc",
+      "line": 18,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_ADDRM",
+      "summary": "Middle byte of destination address or VGC space selector.",
+      "address": "$21"
+    },
+    {
+      "label": "PAGER.FILEH",
+      "source": "lib/pager.inc",
+      "line": 65,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_FILEH",
+      "summary": "High byte of the source file offset.",
+      "address": "$2D"
+    },
+    {
+      "label": "PAGER.FILEL",
+      "source": "lib/pager.inc",
+      "line": 55,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_FILEL",
+      "summary": "Low byte of the source file offset.",
+      "address": "$2B"
+    },
+    {
+      "label": "PAGER.FILEM",
+      "source": "lib/pager.inc",
+      "line": 60,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_FILEM",
+      "summary": "Middle byte of the source file offset.",
+      "address": "$2C"
+    },
+    {
+      "label": "PAGER.LENH",
+      "source": "lib/pager.inc",
+      "line": 33,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_LENH",
+      "summary": "High byte of transfer length.",
+      "address": "$27"
+    },
+    {
+      "label": "PAGER.LENL",
+      "source": "lib/pager.inc",
+      "line": 28,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_LENL",
+      "summary": "Low byte of transfer length.",
+      "address": "$26"
+    },
+    {
+      "label": "PAGER.LOAD_FILE_PAGE",
+      "source": "lib/pager.s",
+      "line": 13,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "PAGER_FILEL",
+        "PAGER_FILEM",
+        "PAGER_FILEH",
+        "PAGER_TARGET",
+        "PAGER_ADDRL",
+        "PAGER_ADDRM",
+        "PAGER_ADDRH",
+        "PAGER_LENL",
+        "PAGER_LENH",
+        "PAGER_NAMELEN",
+        "PAGER_NAMEPTR_L",
+        "PAGER_NAMEPTR_H"
+      ],
+      "kind": "routine",
+      "symbol": "pager_load_file_page",
+      "summary": "Load PAGER_LEN bytes from PAGER_FILE offset in PAGER_NAME into PAGER_TARGET/PAGER_ADDR."
+    },
+    {
+      "label": "PAGER.NAMELEN",
+      "source": "lib/pager.inc",
+      "line": 38,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_NAMELEN",
+      "summary": "Filename length for the paged file.",
+      "address": "$28"
+    },
+    {
+      "label": "PAGER.NAMEPTR_H",
+      "source": "lib/pager.inc",
+      "line": 48,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_NAMEPTR_H",
+      "summary": "High byte of paged filename pointer.",
+      "address": "$2A"
+    },
+    {
+      "label": "PAGER.NAMEPTR_L",
+      "source": "lib/pager.inc",
+      "line": 43,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_NAMEPTR_L",
+      "summary": "Low byte of paged filename pointer.",
+      "address": "$29"
+    },
+    {
+      "label": "PAGER.TARGET",
+      "source": "lib/pager.inc",
+      "line": 72,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "PAGER_TARGET",
+      "summary": "Destination target selector: 0=XRAM, 1=CPU RAM, 2=VGC memory.",
+      "address": "$2E"
+    },
+    {
+      "label": "PAGER.TARGET_RAM",
+      "source": "lib/pager.inc",
+      "line": 83,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "PAGER_TARGET_RAM",
+      "summary": "PAGER.TARGET value for CPU RAM destinations.",
+      "address": "$01"
+    },
+    {
+      "label": "PAGER.TARGET_VGC",
+      "source": "lib/pager.inc",
+      "line": 88,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "PAGER_TARGET_VGC",
+      "summary": "PAGER.TARGET value for VGC memory destinations.",
+      "address": "$02"
+    },
+    {
+      "label": "PAGER.TARGET_XRAM",
+      "source": "lib/pager.inc",
+      "line": 78,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "PAGER_TARGET_XRAM",
+      "summary": "PAGER.TARGET value for flat XRAM destinations.",
+      "address": "$00"
     },
     {
       "label": "ROMSWAP.PRIMARY",
@@ -1651,7 +1872,7 @@
       "kind": "routine",
       "symbol": "sprite_background_collision_status",
       "summary": "Read the sprite-background collision status register.",
-      "address": "$E986"
+      "address": "$E996"
     },
     {
       "label": "SPRITE.COLLISION_STATUS",
@@ -1668,7 +1889,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_status",
       "summary": "Read the sprite-sprite collision status register.",
-      "address": "$E982"
+      "address": "$E992"
     },
     {
       "label": "SPRITE.COMMAND",
@@ -1685,7 +1906,7 @@
       "kind": "routine",
       "symbol": "sprite_command",
       "summary": "Issue a raw sprite VGC command without waiting for completion.",
-      "address": "$E928"
+      "address": "$E938"
     },
     {
       "label": "SPRITE.DISABLE",
@@ -1699,7 +1920,7 @@
       "kind": "routine",
       "symbol": "sprite_disable",
       "summary": "Disable the sprite in VGC.P0.",
-      "address": "$E936"
+      "address": "$E946"
     },
     {
       "label": "SPRITE.ENABLE",
@@ -1713,7 +1934,7 @@
       "kind": "routine",
       "symbol": "sprite_enable",
       "summary": "Enable the sprite in VGC.P0.",
-      "address": "$E931"
+      "address": "$E941"
     },
     {
       "label": "SPRITE.GET_X",
@@ -1739,7 +1960,7 @@
       "kind": "routine",
       "symbol": "sprite_get_x",
       "summary": "Read a sprite's 16-bit X coordinate.",
-      "address": "$E967"
+      "address": "$E977"
     },
     {
       "label": "SPRITE.GET_Y",
@@ -1761,7 +1982,7 @@
       "kind": "routine",
       "symbol": "sprite_get_y",
       "summary": "Read a sprite's Y coordinate.",
-      "address": "$E978"
+      "address": "$E988"
     },
     {
       "label": "SPRITE.POS",
@@ -1778,7 +1999,7 @@
       "kind": "routine",
       "symbol": "sprite_pos",
       "summary": "Move a sprite using VGC.P0=sprite, VGC.P1/P2=x, VGC.P3=y.",
-      "address": "$E92C"
+      "address": "$E93C"
     },
     {
       "label": "SPRITE.REG_OFFSET",
@@ -1804,7 +2025,7 @@
       "kind": "routine",
       "symbol": "sprite_reg_offset",
       "summary": "Compute the VGC sprite attribute block offset for a sprite field.",
-      "address": "$E940"
+      "address": "$E950"
     },
     {
       "label": "SPRITE.ROW",
@@ -1827,7 +2048,7 @@
       "kind": "routine",
       "symbol": "sprite_row",
       "summary": "Write one sprite bitmap row using VGC.P0..VGC.P9.",
-      "address": "$E93B"
+      "address": "$E94B"
     },
     {
       "label": "SPRITE.SET_REG16",
@@ -1856,7 +2077,7 @@
       "kind": "routine",
       "symbol": "sprite_set_reg16",
       "summary": "Write one 16-bit sprite attribute field.",
-      "address": "$E958"
+      "address": "$E968"
     },
     {
       "label": "SPRITE.SET_REG8",
@@ -1881,7 +2102,7 @@
       "kind": "routine",
       "symbol": "sprite_set_reg8",
       "summary": "Write one 8-bit sprite attribute field.",
-      "address": "$E94D"
+      "address": "$E95D"
     },
     {
       "label": "SPRITE.SET_SHAPE",
@@ -1902,7 +2123,7 @@
       "kind": "routine",
       "symbol": "sprite_set_shape",
       "summary": "Set a sprite's shape index.",
-      "address": "$E94B"
+      "address": "$E95B"
     },
     {
       "label": "SYS.REGA",
@@ -2227,7 +2448,7 @@
       "kind": "routine",
       "symbol": "vgc_cls",
       "summary": "Clear the text screen through the VGC character output register.",
-      "address": "$E8C2"
+      "address": "$E8D2"
     },
     {
       "label": "VGC.COMMAND",
@@ -2244,7 +2465,7 @@
       "kind": "routine",
       "symbol": "vgc_cmd",
       "summary": "Issue a raw VGC command without waiting for completion.",
-      "address": "$E8AD"
+      "address": "$E8BD"
     },
     {
       "label": "VGC.EXEC",
@@ -2292,7 +2513,7 @@
       "kind": "routine",
       "symbol": "vgc_flash_off",
       "summary": "Disable flashing text.",
-      "address": "$E91F"
+      "address": "$E92F"
     },
     {
       "label": "VGC.FLASH_ON",
@@ -2304,7 +2525,7 @@
       "kind": "routine",
       "symbol": "vgc_flash_on",
       "summary": "Enable flashing text.",
-      "address": "$E916"
+      "address": "$E926"
     },
     {
       "label": "VGC.GCLS",
@@ -2390,7 +2611,7 @@
       "kind": "routine",
       "symbol": "vgc_locate",
       "summary": "Set the text cursor position from VGC.P0/VGC.P1.",
-      "address": "$E8D4"
+      "address": "$E8E4"
     },
     {
       "label": "VGC.MEM_READ",
@@ -2412,7 +2633,7 @@
       "kind": "routine",
       "symbol": "vgc_mem_read",
       "summary": "Read one byte from VGC memory using VGC.P0..VGC.P4.",
-      "address": "$E8E9"
+      "address": "$E8F9"
     },
     {
       "label": "VGC.MEM_WRITE",
@@ -2430,7 +2651,7 @@
       "kind": "routine",
       "symbol": "vgc_mem_write",
       "summary": "Write one byte to VGC memory using VGC.P0..VGC.P4.",
-      "address": "$E8EC"
+      "address": "$E8FC"
     },
     {
       "label": "VGC.PAINT",
@@ -2494,7 +2715,7 @@
       "kind": "routine",
       "symbol": "vgc_reverse_default",
       "summary": "Enable reverse text using the current foreground/background colours.",
-      "address": "$E8F4"
+      "address": "$E904"
     },
     {
       "label": "VGC.REVERSE_EXPLICIT",
@@ -2511,7 +2732,7 @@
       "kind": "routine",
       "symbol": "vgc_reverse_explicit",
       "summary": "Enable reverse text with explicit packed foreground/background colours.",
-      "address": "$E8FF"
+      "address": "$E90F"
     },
     {
       "label": "VGC.REVERSE_OFF",
@@ -2523,7 +2744,7 @@
       "kind": "routine",
       "symbol": "vgc_reverse_off",
       "summary": "Disable reverse text.",
-      "address": "$E90D"
+      "address": "$E91D"
     },
     {
       "label": "VGC.SET_BG",
@@ -2540,7 +2761,7 @@
       "kind": "routine",
       "symbol": "vgc_set_bg",
       "summary": "Set the current text background colour.",
-      "address": "$E8CC"
+      "address": "$E8DC"
     },
     {
       "label": "VGC.SET_BORDER",
@@ -2557,7 +2778,7 @@
       "kind": "routine",
       "symbol": "vgc_set_border",
       "summary": "Set the VGC border colour.",
-      "address": "$E8D0"
+      "address": "$E8E0"
     },
     {
       "label": "VGC.SET_FG",
@@ -2574,7 +2795,7 @@
       "kind": "routine",
       "symbol": "vgc_set_fg",
       "summary": "Set the current text foreground colour.",
-      "address": "$E8C8"
+      "address": "$E8D8"
     },
     {
       "label": "VGC.SET_FONT",
@@ -2591,7 +2812,7 @@
       "kind": "routine",
       "symbol": "vgc_set_font",
       "summary": "Select the active text font slot.",
-      "address": "$E8E5"
+      "address": "$E8F5"
     },
     {
       "label": "VGC.SET_MODE",
@@ -2608,7 +2829,7 @@
       "kind": "routine",
       "symbol": "vgc_set_mode",
       "summary": "Set the active VGC graphics/text mode.",
-      "address": "$E8E1"
+      "address": "$E8F1"
     },
     {
       "label": "VGC.UNPLOT",
@@ -2641,7 +2862,7 @@
       "kind": "routine",
       "symbol": "vgc_vsync",
       "summary": "Wait until the VGC frame counter advances.",
-      "address": "$E8B9"
+      "address": "$E8C9"
     },
     {
       "label": "VGC.WAIT_COMMAND",
@@ -2653,7 +2874,7 @@
       "kind": "routine",
       "symbol": "vgc_wait_cmd",
       "summary": "Wait for the active VGC command to complete.",
-      "address": "$E8B1"
+      "address": "$E8C1"
     },
     {
       "label": "XMC.ALLOC",

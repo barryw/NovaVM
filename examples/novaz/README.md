@@ -103,6 +103,15 @@ Run a project-specific regression, such as Deadline's time-status smoke:
 make -C examples/novaz test-project PROJECT=deadline STORY=/path/to/deadline.z3
 ```
 
+Run the local Infocom archive smokes when `/Volumes/Software/Emulation/Infocom`
+is mounted:
+
+```sh
+make -C examples/novaz test-infocom-z3-smokes
+make -C examples/novaz test-infocom-v45-smokes
+make -C examples/novaz test-infocom-smokes
+```
+
 Run the generated Z3 compliance smoke:
 
 ```sh
@@ -119,6 +128,28 @@ output stream 3, `verify`, and dictionary tokenization including separator
 tokens. Keep this target Z3-only; Version 4+ work should get separate generated
 stories and targets.
 
+Run the generated Version 4 text style fixture:
+
+```sh
+make -C examples/novaz test-z4-styles
+```
+
+`test-z4-styles` builds a tiny synthetic Z4 story that prints normal, bold,
+reverse, bold-reverse, italic, and fixed-style text. The smoke runner checks
+both the visible text and the VGC text color cells: normal/ignored styles use
+color `$0C`, bold uses `$0F`, reverse normal uses `$C0`, and bold reverse uses
+`$F0`.
+
+Run the generated Version 5 compliance smoke:
+
+```sh
+make -C examples/novaz test-z5-spec
+```
+
+`test-z5-spec` builds a tiny synthetic Z5 story that exercises V5 text-buffer
+layout, selected memory/table operations, output stream handling, and parser
+input through the same Nova runtime path.
+
 The smoke runner boots the generated `fd0.ndi` in the Avalonia hardware model,
 lets BASIC run `AUTOBOOT.bin`, swaps in `novaz.bin` at `$C000`, and verifies the
 runtime screen against `STORY.MANIFEST`. Scripted runs use visible command
@@ -132,8 +163,9 @@ right edge while allowing normal word-boundary line wrapping. If NovaZ displays
 This is still the staging runtime. It now has the Nova platform boundary and
 XRAM-backed story memory in place, including version filtering, byte/word story
 reads and writes, text decoding, line input, dictionary/tokenizer support, the
-core opcode loop, object/property operations, calls/returns, and basic Z3 screen
-handling with word-boundary wrapping and `[ MORE ]` pagination. Z3 save/restore
-uses native Nova save files through the shared XRAM/FIO path. The generated Z3
-compliance smoke now guards the core interpreter behavior that game transcripts
-do not reliably cover. Broader story compatibility is still pending.
+core opcode loop, object/property operations, calls/returns, Z3 screen handling
+with word-boundary wrapping and `[ MORE ]` pagination, and enough V4/V5 support
+to boot and script representative Infocom games. Z3 save/restore uses native
+Nova save files through the shared XRAM/FIO path. The generated Z3/Z5
+compliance smokes and Z4 style fixture guard opcode-focused behavior that game
+transcripts do not reliably cover.

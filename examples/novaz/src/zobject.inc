@@ -24,6 +24,7 @@ ZOBJECT_ERR_UNSUPPORTED = $02
 .global zobject_print_short_name
 
 .global zobject_num
+.global zobject_num_hi
 .global zobject_prop_num
 .global zobject_attr_num
 .global zobject_value_hi

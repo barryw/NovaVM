@@ -2,9 +2,8 @@
 // Wraps the simulation 'top' module with board-level I/O:
 //   - PLL: 25 MHz osc -> 25 MHz pixel clock + 125 MHz TMDS shift clock
 //     (or 720x480p: 27 MHz pixel + 135 MHz TMDS shift)
-//   - HDMI output via GPDI (vga2dvid + fake differential DDR)
+//   - HDMI output via GPDI (hdl-util/hdmi with PCM audio)
 //   - UART keyboard input via FTDI serial
-//   - 4-bit R-2R DAC audio output
 //   - LEDs for debug, buttons for reset
 
 module fpga_top (
@@ -28,10 +27,6 @@ module fpga_top (
     output logic        wifi_gpio0,   // keep ESP32 out of download mode
     input  logic        wifi_txd,     // ESP32 TX -> FPGA RX (debug commands)
     output logic        wifi_rxd,     // FPGA TX -> ESP32 RX (debug responses)
-
-    // Audio DAC (4-bit R-2R)
-    output logic [3:0]  audio_l,
-    output logic [3:0]  audio_r,
 
     // SDRAM — MT48LC16M16 (32MB). Not yet used by the core, just brought up
     // on the pads so Phase 2.5 Step 2 can migrate XRAM into it.
@@ -260,19 +255,6 @@ module fpga_top (
     end
 
     wire test_active = (test_h < CEA_H_ACTIVE) && (test_v < CEA_V_ACTIVE);
-    wire test_hsync_pulse = (test_h >= CEA_H_ACTIVE + CEA_H_FRONT) &&
-                            (test_h <  CEA_H_ACTIVE + CEA_H_FRONT + CEA_H_SYNC);
-    wire test_vsync_pulse = (test_v >= CEA_V_ACTIVE + CEA_V_FRONT) &&
-                            (test_v <  CEA_V_ACTIVE + CEA_V_FRONT + CEA_V_SYNC);
-`ifdef VIDEO_VGA640_TIMING
-    // Match the known-good ULX3S reference project: active-low H, active-high V.
-    wire test_hsync  = ~test_hsync_pulse;
-    wire test_vsync  =  test_vsync_pulse;
-`else
-    // CEA 720x480p DTDs use negative H/V sync polarity: idle high, pulse low.
-    wire test_hsync  = ~test_hsync_pulse;
-    wire test_vsync  = ~test_vsync_pulse;
-`endif
     wire test_canvas = test_active && (test_h >= NOVA_X0) && (test_h < NOVA_X1);
     wire test_grid   = test_canvas && (((test_h - NOVA_X0) == 10'd0) ||
                                        ((test_h - NOVA_X0) == 10'd319) ||
@@ -298,123 +280,68 @@ module fpga_top (
             test_rgb24 = 24'h0010a0;
     end
 
-    wire [1:0] tmds_red, tmds_green, tmds_blue, tmds_clock;
-`ifdef VIDEO_REF_HDMI
-    hdmi_device_ref #(
-        .DDR_ENABLED(1)
-    ) hdmi_ref_inst (
-        .pclk          (clk_pixel),
-        .tmds_clk      (clk_shift),
-        .in_vga_red    (test_rgb24[23:16]),
-        .in_vga_green  (test_rgb24[15:8]),
-        .in_vga_blue   (test_rgb24[7:0]),
-        .in_vga_blank  (~test_active),
-        .in_vga_vsync  (test_vsync),
-        .in_vga_hsync  (test_hsync),
-        .out_tmds_red  (tmds_red),
-        .out_tmds_green(tmds_green),
-        .out_tmds_blue (tmds_blue),
-        .out_tmds_clk  (tmds_clock)
+    logic       clk_audio = 1'b0;
+    logic [8:0] clk_audio_div = 9'd280;
+    logic [1:0] clk_audio_phase = 2'd0;
+
+    always_ff @(posedge clk_pixel) begin
+        if (rst) begin
+            clk_audio       <= 1'b0;
+            clk_audio_div   <= 9'd280;
+            clk_audio_phase <= 2'd0;
+        end else if (clk_audio_div == 9'd0) begin
+            clk_audio <= ~clk_audio;
+            clk_audio_div <= (clk_audio_phase == 2'd3) ? 9'd281 : 9'd280;
+            clk_audio_phase <= clk_audio_phase + 2'd1;
+        end else begin
+            clk_audio_div <= clk_audio_div - 9'd1;
+        end
+    end
+
+    logic [1:0][15:0] test_audio_sample_word;
+    assign test_audio_sample_word = '0;
+
+    wire [2:0] test_hdmi_tmds;
+    wire       test_hdmi_tmds_clock;
+    wire [9:0] test_hdmi_cx, test_hdmi_cy;
+    wire [9:0] test_hdmi_frame_width, test_hdmi_frame_height;
+    wire [9:0] test_hdmi_screen_width, test_hdmi_screen_height;
+
+    hdmi #(
+`ifdef VIDEO_VGA640_TIMING
+        .VIDEO_ID_CODE(1),
+`else
+        .VIDEO_ID_CODE(2),
+`endif
+        .VIDEO_REFRESH_RATE_MILLIHZ(59940),
+        .AUDIO_RATE(48000),
+        .AUDIO_BIT_WIDTH(16),
+        .VENDOR_NAME({"Nova", 32'd0}),
+        .PRODUCT_DESCRIPTION({"NovaVM", 80'd0}),
+        .SOURCE_DEVICE_INFORMATION(8'h09)
+    ) test_hdmi_inst (
+        .clk_pixel_x5(clk_shift),
+        .clk_pixel   (clk_pixel),
+        .clk_audio   (clk_audio),
+        .reset       (rst),
+        .rgb         (test_rgb24),
+        .audio_sample_word(test_audio_sample_word),
+        .tmds        (test_hdmi_tmds),
+        .tmds_clock  (test_hdmi_tmds_clock),
+        .cx          (test_hdmi_cx),
+        .cy          (test_hdmi_cy),
+        .frame_width (test_hdmi_frame_width),
+        .frame_height(test_hdmi_frame_height),
+        .screen_width(test_hdmi_screen_width),
+        .screen_height(test_hdmi_screen_height)
     );
 
-    ODDRX1F ref_ddr_clock (
-        .D0(tmds_clock[0]),
-        .D1(tmds_clock[1]),
-        .Q(gpdi_dp[3]),
-        .SCLK(clk_shift),
-        .RST(1'b0)
-    );
-    ODDRX1F ref_ddr_red (
-        .D0(tmds_red[0]),
-        .D1(tmds_red[1]),
-        .Q(gpdi_dp[2]),
-        .SCLK(clk_shift),
-        .RST(1'b0)
-    );
-    ODDRX1F ref_ddr_green (
-        .D0(tmds_green[0]),
-        .D1(tmds_green[1]),
-        .Q(gpdi_dp[1]),
-        .SCLK(clk_shift),
-        .RST(1'b0)
-    );
-    ODDRX1F ref_ddr_blue (
-        .D0(tmds_blue[0]),
-        .D1(tmds_blue[1]),
-        .Q(gpdi_dp[0]),
-        .SCLK(clk_shift),
-        .RST(1'b0)
-    );
-
+    assign gpdi_dp[0] = test_hdmi_tmds[0];
+    assign gpdi_dp[1] = test_hdmi_tmds[1];
+    assign gpdi_dp[2] = test_hdmi_tmds[2];
+    assign gpdi_dp[3] = test_hdmi_tmds_clock;
 `ifndef GPDI_P_ONLY
-    ODDRX1F ref_ddr_clock_n (
-        .D0(~tmds_clock[0]),
-        .D1(~tmds_clock[1]),
-        .Q(gpdi_dn[3]),
-        .SCLK(clk_shift),
-        .RST(1'b0)
-    );
-    ODDRX1F ref_ddr_red_n (
-        .D0(~tmds_red[0]),
-        .D1(~tmds_red[1]),
-        .Q(gpdi_dn[2]),
-        .SCLK(clk_shift),
-        .RST(1'b0)
-    );
-    ODDRX1F ref_ddr_green_n (
-        .D0(~tmds_green[0]),
-        .D1(~tmds_green[1]),
-        .Q(gpdi_dn[1]),
-        .SCLK(clk_shift),
-        .RST(1'b0)
-    );
-    ODDRX1F ref_ddr_blue_n (
-        .D0(~tmds_blue[0]),
-        .D1(~tmds_blue[1]),
-        .Q(gpdi_dn[0]),
-        .SCLK(clk_shift),
-        .RST(1'b0)
-    );
-`endif
-`else
-`ifdef GPDI_P_ONLY
-    wire [3:0] gpdi_dn_unused;
-`endif
-
-    vga2dvid vga2dvid_inst (
-        .clk_pixel (clk_pixel),
-        .clk_shift (clk_shift),
-        .in_color  (test_rgb24),
-        .in_blank  (~test_active),
-        .in_hsync  (test_hsync),
-        .in_vsync  (test_vsync),
-        .resetn    (~rst),
-        .out_red   (tmds_red),
-        .out_green (tmds_green),
-        .out_blue  (tmds_blue),
-        .out_clock (tmds_clock)
-    );
-
-    fake_differential #(
-        .C_ddr(1),
-`ifdef GPDI_P_ONLY
-        .C_drive_n(0)
-`else
-        .C_drive_n(1)
-`endif
-    ) fake_diff_inst (
-        .clk_shift(clk_shift),
-        .in_clock (tmds_clock),
-        .in_red   (tmds_red),
-        .in_green (tmds_green),
-        .in_blue  (tmds_blue),
-        .out_p    (gpdi_dp),
-`ifdef GPDI_P_ONLY
-        .out_n    (gpdi_dn_unused)
-`else
-        .out_n    (gpdi_dn)
-`endif
-    );
+    assign gpdi_dn = ~gpdi_dp;
 `endif
 
     reg [24:0] heartbeat = 0;
@@ -425,9 +352,6 @@ module fpga_top (
     assign leds[6]   = pll_locked;
     assign leds[5]   = ~rst;
     assign leds[4:0] = btn[4:0];
-
-    assign audio_l = 4'h8;
-    assign audio_r = 4'h8;
 
     assign ftdi_rxd = 1'b1;
     assign wifi_gpio0 = 1'b1;
@@ -786,72 +710,87 @@ module fpga_top (
     wire        mux_sdram_oeB   = dbg_sdram_b_active ? dbg_sdram_b_oe   : core_sdram_oeB;
 
     // =========================================================================
-    // HDMI output — VGA signals through TMDS encoder to GPDI
+    // HDMI output — true HDMI video + 16-bit stereo PCM over GPDI.
     // =========================================================================
 
     // Pad 4-bit color to 8-bit
     wire [23:0] rgb24 = {vid_r, vid_r, vid_g, vid_g, vid_b, vid_b};
+    wire [23:0] hdmi_rgb24 = vid_de ? rgb24 : 24'h000000;
 
-    // VGA timing — use VGC's own sync/DE signals (pipeline-aligned with pixel data)
-    // VGC outputs active-low sync. Preserve the established 640x480 polarity
-    // behavior, but emit negative-polarity CEA-style sync bits in 720x480 mode.
+    // hdl-util/hdmi samples audio on a separate sample-rate clock. Generate
+    // 48 kHz from the 27 MHz CEA pixel clock by alternating 281/282-cycle
+    // half periods: 27 MHz / (2 * 281.25) = 48 kHz.
+    logic       clk_audio = 1'b0;
+    logic [8:0] clk_audio_div = 9'd280;
+    logic [1:0] clk_audio_phase = 2'd0;
+
+    always_ff @(posedge clk_pixel) begin
+        if (rst) begin
+            clk_audio       <= 1'b0;
+            clk_audio_div   <= 9'd280;
+            clk_audio_phase <= 2'd0;
+        end else if (clk_audio_div == 9'd0) begin
+            clk_audio <= ~clk_audio;
+            clk_audio_div <= (clk_audio_phase == 2'd3) ? 9'd281 : 9'd280;
+            clk_audio_phase <= clk_audio_phase + 2'd1;
+        end else begin
+            clk_audio_div <= clk_audio_div - 9'd1;
+        end
+    end
+
+    logic [1:0][15:0] hdmi_audio_sample_word;
+
+    sid_hdmi_audio sid_hdmi_audio_inst (
+        .clk              (clk_audio),
+        .rst              (rst),
+        .sid_audio_l      (sid_audio_l),
+        .sid_audio_r      (sid_audio_r),
+        .audio_sample_word(hdmi_audio_sample_word)
+    );
+
+    wire [2:0] hdmi_tmds;
+    wire       hdmi_tmds_clock;
+    wire [9:0] hdmi_cx, hdmi_cy;
+    wire [9:0] hdmi_frame_width, hdmi_frame_height;
+    wire [9:0] hdmi_screen_width, hdmi_screen_height;
+
+    hdmi #(
 `ifdef VIDEO_720X480
-    wire hdmi_hsync = vid_hsync;
-    wire hdmi_vsync = vid_vsync;
+        .VIDEO_ID_CODE(2),
+        .VIDEO_REFRESH_RATE_MILLIHZ(59940),
 `else
-    wire hdmi_hsync = ~vid_hsync;
-    wire hdmi_vsync = ~vid_vsync;
+        .VIDEO_ID_CODE(1),
+        .VIDEO_REFRESH_RATE_MILLIHZ(59940),
 `endif
-    wire [1:0] tmds_red, tmds_green, tmds_blue, tmds_clock;
-`ifdef GPDI_P_ONLY
-    wire [3:0] gpdi_dn_unused;
-`endif
-
-    vga2dvid vga2dvid_inst (
-        .clk_pixel (clk_pixel),
-        .clk_shift (clk_shift),
-        .in_color  (rgb24),
-        .in_blank  (~vid_de),
-        .in_hsync  (hdmi_hsync),
-        .in_vsync  (hdmi_vsync),
-        .resetn    (~rst),
-        .out_red   (tmds_red),
-        .out_green (tmds_green),
-        .out_blue  (tmds_blue),
-        .out_clock (tmds_clock)
+        .AUDIO_RATE(48000),
+        .AUDIO_BIT_WIDTH(16),
+        .VENDOR_NAME({"Nova", 32'd0}),
+        .PRODUCT_DESCRIPTION({"NovaVM", 80'd0}),
+        .SOURCE_DEVICE_INFORMATION(8'h09)
+    ) hdmi_inst (
+        .clk_pixel_x5(clk_shift),
+        .clk_pixel   (clk_pixel),
+        .clk_audio   (clk_audio),
+        .reset       (rst),
+        .rgb         (hdmi_rgb24),
+        .audio_sample_word(hdmi_audio_sample_word),
+        .tmds        (hdmi_tmds),
+        .tmds_clock  (hdmi_tmds_clock),
+        .cx          (hdmi_cx),
+        .cy          (hdmi_cy),
+        .frame_width (hdmi_frame_width),
+        .frame_height(hdmi_frame_height),
+        .screen_width(hdmi_screen_width),
+        .screen_height(hdmi_screen_height)
     );
 
-    // DDR output via fake_differential (drives both P and N pins)
-    fake_differential #(
-        .C_ddr(1),
-`ifdef GPDI_P_ONLY
-        .C_drive_n(0)
-`else
-        .C_drive_n(1)
+    assign gpdi_dp[0] = hdmi_tmds[0];      // Blue
+    assign gpdi_dp[1] = hdmi_tmds[1];      // Green
+    assign gpdi_dp[2] = hdmi_tmds[2];      // Red
+    assign gpdi_dp[3] = hdmi_tmds_clock;   // Clock
+`ifndef GPDI_P_ONLY
+    assign gpdi_dn = ~gpdi_dp;
 `endif
-    ) fake_diff_inst (
-        .clk_shift(clk_shift),
-        .in_clock (tmds_clock),
-        .in_red   (tmds_red),
-        .in_green (tmds_green),
-        .in_blue  (tmds_blue),
-        .out_p    (gpdi_dp),
-`ifdef GPDI_P_ONLY
-        .out_n    (gpdi_dn_unused)
-`else
-        .out_n    (gpdi_dn)
-`endif
-    );
-
-    // =========================================================================
-    // Audio — convert signed 18-bit SID output to unsigned 4-bit for DAC
-    // =========================================================================
-    // Offset binary: add 2^17 to make unsigned, take top 4 bits
-    wire [17:0] audio_l_unsigned = sid_audio_l + 18'sd131072;
-    wire [17:0] audio_r_unsigned = sid_audio_r + 18'sd131072;
-
-    assign audio_l = audio_l_unsigned[17:14];
-    assign audio_r = audio_r_unsigned[17:14];
 
     // =========================================================================
     // SDRAM bring-up — instantiated idle for Phase 2.5 Step 1

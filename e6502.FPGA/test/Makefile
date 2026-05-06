@@ -41,8 +41,18 @@ SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.s
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv \
         $(RTL)/sid/sid_curve_reader.sv
 CPU   = $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v
+HDMI  = $(RTL)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/audio_info_frame.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/audio_sample_packet.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/auxiliary_video_information_info_frame.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/packet_assembler.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/packet_picker.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/source_product_description_info_frame.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/tmds_channel.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/serializer.sv \
+        $(RTL)/thirdparty/hdl-util-hdmi/hdmi.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_uart test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_hdmi_audio test_sid_hdmi_audio test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_uart test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_sid_cpu_audio_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -112,6 +122,12 @@ test_cpu_dormann_65c02: test_cpu_dormann.sv $(CPU)
 
 test_cpu_wai_stp: test_cpu_wai_stp.sv $(CPU)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSIM --top-module $@ --Mdir $(BD)/$@ -o $@ $(CPU) $< && $(RUN) test/$(BD)/$@/$@
+
+test_hdmi_audio: test_hdmi_audio.sv $(HDMI)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(HDMI) $< && $(RUN) test/$(BD)/$@/$@
+
+test_sid_hdmi_audio: test_sid_hdmi_audio.sv $(RTL)/sid_hdmi_audio.sv
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/sid_hdmi_audio.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_sid: test_sid.sv $(SID)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) $< && $(RUN) test/$(BD)/$@/$@
@@ -237,6 +253,11 @@ test_key_inject: test_key_inject.sv $(ROM_LOAD_RTL)
 # because EhBASIC places live ROM at those addresses. Replaces the old
 # test_sid_readback which tested the (now removed) SID-over-ROM intercept.
 test_rom_over_sid: test_rom_over_sid.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
+# Top-level SID audio regression. Runs real CPU writes into both SID chips
+# and verifies signed audio output changes.
+test_sid_cpu_audio_top: test_sid_cpu_audio_top.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
 # Top-level XMC mapped-window decode regression. Verifies the synthesis path

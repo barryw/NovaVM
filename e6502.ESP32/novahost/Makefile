@@ -4,6 +4,7 @@
 # Usage:
 #   make           — stage assets, compile, upload via direct OTA
 #   make compile   — stage assets, compile only
+#   make compact   — stage assets, compile serial-flashable firmware without OTA
 #   make serial    — stage assets, compile, upload via USB serial
 #   make sd-assets — build SD card asset tree under build/sd/
 #
@@ -27,7 +28,9 @@ FPGA_ROM  := $(REPO_ROOT)/e6502.FPGA/rom
 HEX16TOBIN:= python3 $(REPO_ROOT)/tools/hex16_to_bin.py
 SD_ASSETS := build/sd
 
-.PHONY: all compile rom sd-assets serial upload upload-cli ota-direct clean ehbasic
+COMPACT_BUILD ?= build/compact
+
+.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic
 
 all: upload
 
@@ -54,6 +57,9 @@ rom: sd-assets
 
 compile: sd-assets
 	arduino-cli compile --fqbn $(FQBN) .
+
+compact: sd-assets
+	arduino-cli compile --fqbn $(FQBN) --build-path $(COMPACT_BUILD) --build-property build.extra_flags="-DNOVA_ENABLE_OTA=0" .
 
 upload: ota-direct
 

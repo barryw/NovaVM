@@ -1,8 +1,8 @@
 ; NovaZ Z-story/XRAM interface.
 ;
-; This is the Nova-specific story memory layer the interpreter will build on.
-; The whole story file is loaded into flat XRAM at address $000000, and these
-; routines provide byte/word reads plus decoded header state.
+; This is the Nova-specific story memory layer the interpreter builds on.
+; Dynamic memory is resident in flat XRAM at address $000000. Static/high story
+; bytes are demand-paged from story.bin into an XRAM cache.
 
 .ifndef NOVA_NOVAZ_ZSTORY_INC_INCLUDED
 NOVA_NOVAZ_ZSTORY_INC_INCLUDED = 1
@@ -36,5 +36,11 @@ ZHEADER_CHECKSUM       = $1C
 .global zstory_flags1
 .global zstory_globals_hi
 .global zstory_globals_lo
+.global zstory_filebytes_h
+.global zstory_filebytes_m
+.global zstory_filebytes_l
+.global zstory_checksum_hi
+.global zstory_checksum_lo
+.global zstory_read_file8
 
 .endif
