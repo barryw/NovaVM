@@ -1,0 +1,7 @@
+# ZTUU V5 startup, parser, inventory, movement, and status smoke.
+look=>New Excavation&&narrow&&tunnel
+inventory=>cheaply-made sword&&brass lantern
+ne=>Tunnel&&trapped
+look=>Tunnel&&blocked
+ne=>Cultural Complex&&Convention Center
+look=>Cultural Complex&&Royal Theater

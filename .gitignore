@@ -273,6 +273,17 @@ e6502.ESP32/novahost/test/*.dSYM/
 __pycache__/
 *.py[cod]
 
+# Local agent/editor state
+.claude/scheduled_tasks.lock
+
+# macOS/Swift local build artifacts
+.DS_Store
+NovaDraw/.build/
+NovaDraw/.swiftpm/
+NovaDraw/**/xcuserdata/
+NovaDraw/**/*.xcuserstate
+NovaDraw/*.app/
+
 # Example build outputs and local story files
 examples/novaz/build/
 examples/novaz/dist/

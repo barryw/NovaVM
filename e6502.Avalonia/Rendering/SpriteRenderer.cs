@@ -121,6 +121,7 @@ public static class SpriteRenderer
         ref ushort spriteToSprite,
         ref ushort spriteToBg)
     {
+        byte gfxTransparentColor = vgc.GetGfxTransparentColor();
         for (int x = 0; x < VgcConstants.GfxWidth; x++)
         {
             ushort mask = spriteMask[x];
@@ -136,7 +137,7 @@ public static class SpriteRenderer
             int gfxY = (scanlineY + scrollY) % VgcConstants.GfxHeight;
             if (gfxY < 0) gfxY += VgcConstants.GfxHeight;
 
-            if (vgc.GetGfxPixelColor(gfxX, gfxY) != 0)
+            if (vgc.GetGfxPixelColor(gfxX, gfxY) != gfxTransparentColor)
                 spriteToBg |= mask;
         }
     }
@@ -159,6 +160,7 @@ public static class SpriteRenderer
 
         ushort spriteToSprite = 0;
         ushort spriteToBg = 0;
+        byte gfxTransparentColor = vgc.GetGfxTransparentColor();
 
         for (int i = 0; i < VgcConstants.MaxSprites; i++)
         {
@@ -171,7 +173,7 @@ public static class SpriteRenderer
                 int gfxY = py - VgcConstants.SpriteCanvasY;
                 if (gfxX >= 0 && gfxX < VgcConstants.GfxWidth &&
                     gfxY >= 0 && gfxY < VgcConstants.GfxHeight &&
-                    vgc.GetGfxPixelColor(gfxX, gfxY) != 0)
+                    vgc.GetGfxPixelColor(gfxX, gfxY) != gfxTransparentColor)
                 {
                     spriteToBg |= (ushort)(1 << i);
                     break;

@@ -1,0 +1,3 @@
+# Beyond Zork V5 startup menu smoke. The project runner verifies that startup
+# reaches the first game prompt; parser longplay coverage is tracked separately.
+.wait 0

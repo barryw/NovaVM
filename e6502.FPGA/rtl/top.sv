@@ -320,7 +320,7 @@ module top (
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
                         (mem_addr >= 16'hA0C0 && mem_addr <= 16'hA0DF) ||
-                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E7) ||
+                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E8) ||
                         (mem_addr >= 16'hA0F0 && mem_addr <= 16'hA0FF);
 
     // Register the decode signals for next-cycle mux
@@ -498,7 +498,7 @@ module top (
     wire       dbg_poke_vgc = dbg_poke_en &&
                               (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                                ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E7)) ||
+                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E8)) ||
                                ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
 
     fio fio_inst (
@@ -713,7 +713,7 @@ module top (
     wire dbg_poke_vgc = dbg_poke_en &&
                         (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                          ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                         ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E7)) ||
+                         ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E8)) ||
                          ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
 
     initial begin
@@ -782,7 +782,7 @@ module top (
     wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
                         (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
                         (cpu_addr >= 16'hA0C0 && cpu_addr <= 16'hA0DF) ||
-                        (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0E7) ||
+                        (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0E8) ||
                         (cpu_addr >= 16'hA0F0 && cpu_addr <= 16'hA0FF);
 
     always_ff @(posedge clk) begin
@@ -917,6 +917,7 @@ module top (
     wire        blt_vgc_re;
     wire [7:0]  blt_cpu_rdata;
     wire        blt_rdy;
+    wire        vgc_video_blit_safe;
 
     wire [15:0] dma_ram_addr;
     wire [7:0]  dma_ram_wdata;
@@ -977,7 +978,8 @@ module top (
         .vgc_rdata  (blt_vgc_rdata),
         .vgc_wdata  (blt_vgc_wdata),
         .vgc_we     (blt_vgc_we),
-        .vgc_re     (blt_vgc_re)
+        .vgc_re     (blt_vgc_re),
+        .video_write_safe(vgc_video_blit_safe)
     );
 
     dma dma_inst (
@@ -1004,7 +1006,8 @@ module top (
         .vgc_rdata  (dma_vgc_rdata),
         .vgc_wdata  (dma_vgc_wdata),
         .vgc_we     (dma_vgc_we),
-        .vgc_re     (dma_vgc_re)
+        .vgc_re     (dma_vgc_re),
+        .video_write_safe(vgc_video_blit_safe)
     );
 
     // =========================================================================
@@ -1167,6 +1170,7 @@ module top (
         .blt_wdata      (bm_vgc_wdata),
         .blt_we         (bm_vgc_we),
         .blt_re         (bm_vgc_re),
+        .video_blit_safe(vgc_video_blit_safe),
         .dbg_addr       (dbg_peek_addr),
         .dbg_rdata      (vgc_dbg_rdata),
         .dbg_we         (dbg_poke_vgc),
@@ -1212,7 +1216,7 @@ module top (
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
     wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
-    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0E7);
+    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0E8);
     wire dbg_fio       = (dbg_peek_addr >= 16'hB9A0 && dbg_peek_addr <= 16'hB9EF);
     assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
 
@@ -1240,7 +1244,7 @@ module top (
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
     wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
-    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0E7);
+    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0E8);
     assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
     wire [7:0] dbg_rom_read_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
                                                   : basic_rom[dbg_peek_addr - ROM_BASE];

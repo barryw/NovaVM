@@ -27,6 +27,15 @@ if (options.StoryPath is not null && !File.Exists(options.StoryPath))
     return 1;
 }
 
+foreach (var asset in options.Assets)
+{
+    if (!File.Exists(asset.Path))
+    {
+        Console.Error.WriteLine($"Asset file not found: {asset.Path}");
+        return 1;
+    }
+}
+
 var outputDir = Path.GetDirectoryName(Path.GetFullPath(options.OutputPath));
 if (!string.IsNullOrEmpty(outputDir))
     Directory.CreateDirectory(outputDir);
@@ -63,8 +72,17 @@ if (options.StoryPath is not null)
     Console.WriteLine("Imported STORY.MANIFEST");
 }
 
+foreach (var asset in options.Assets)
+{
+    var data = File.ReadAllBytes(asset.Path);
+    image.WriteFile(asset.Name, NdiFileType.Bin, 0xFFFF, data);
+    Console.WriteLine($"Imported {asset.Name} ({data.Length} bytes)");
+}
+
 Console.WriteLine($"Wrote {options.OutputPath}");
 return 0;
+
+internal sealed record AssetOption(string Path, string Name);
 
 internal sealed record Options(
     string OutputPath,
@@ -74,7 +92,8 @@ internal sealed record Options(
     string? StoryPath,
     string StoryName,
     string Label,
-    int SizeKb)
+    int SizeKb,
+    IReadOnlyList<AssetOption> Assets)
 {
     public static Options? Parse(string[] args)
     {
@@ -86,6 +105,7 @@ internal sealed record Options(
         string storyName = "story.bin";
         string label = "NOVAZ";
         int sizeKb = 1440;
+        var assets = new List<AssetOption>();
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -125,6 +145,15 @@ internal sealed record Options(
                     sizeKb = parsed;
                     i++;
                     break;
+                case "--asset" when value is not null:
+                    if (!TryParseAsset(value, out var asset))
+                    {
+                        Console.Error.WriteLine($"Invalid asset argument: {value}");
+                        return null;
+                    }
+                    assets.Add(asset);
+                    i++;
+                    break;
                 case "-h" or "--help":
                     return null;
                 default:
@@ -141,16 +170,34 @@ internal sealed record Options(
             return null;
         if (string.IsNullOrWhiteSpace(storyName) || storyName.Length > 32)
             return null;
+        if (assets.Any(a => string.IsNullOrWhiteSpace(a.Name) || a.Name.Length > 32))
+            return null;
         if (sizeKb <= 0)
             return null;
 
-        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb);
+        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb, assets);
+    }
+
+    private static bool TryParseAsset(string value, out AssetOption asset)
+    {
+        asset = new AssetOption(string.Empty, string.Empty);
+        int separator = value.LastIndexOf(':');
+        if (separator <= 0 || separator == value.Length - 1)
+            return false;
+
+        string path = value[..separator];
+        string name = value[(separator + 1)..];
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(name))
+            return false;
+
+        asset = new AssetOption(path, name);
+        return true;
     }
 
     public static void PrintUsage()
     {
         Console.Error.WriteLine("Nova.NovaZ.Packer");
-        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <novaz.bin> [--runtime-name novaz.bin] [--story <story-file>] [--story-name story.bin] [--label NOVAZ] [--size-kb 1440]");
+        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <novaz.bin> [--runtime-name novaz.bin] [--story <story-file>] [--story-name story.bin] [--asset <path:image-name>] [--label NOVAZ] [--size-kb 1440]");
     }
 }
 

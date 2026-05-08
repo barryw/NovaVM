@@ -1,0 +1,6 @@
+# Sherlock V5 startup, time-status, parser, and movement smoke.
+look=>221-B Baker Street&&gas streetlight
+n=>fog&&no light
+s=>fog&&no light
+wait=>Time passes
+look=>221-B Baker Street&&door to the house

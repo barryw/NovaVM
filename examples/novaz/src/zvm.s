@@ -16,7 +16,7 @@ NOVA_NOVAZ_ZVM_IMPLEMENTATION_INCLUDED = 1
 
 ZVM_SAVE_HEADER_SIZE       = $40
 ZVM_SAVE_PREFIX_SIZE       = $08
-ZVM_SAVE_FORMAT_VERSION    = $01
+ZVM_SAVE_FORMAT_VERSION    = $02
 ZVM_SAVE_SCRATCH_ADDRL     = $00
 ZVM_SAVE_SCRATCH_ADDRM     = $00
 ZVM_SAVE_SCRATCH_ADDRH     = $07
@@ -50,6 +50,10 @@ ZVM_SAVE_BRANCH_OFF_L      = $17
 ZVM_SAVE_PC_B              = $18
 ZVM_SAVE_PC_H              = $19
 ZVM_SAVE_PC_L              = $1A
+ZVM_SAVE_RETURN_KIND       = $1B
+ZVM_SAVE_STORE_VAR         = $1C
+ZVM_SAVE_RETURN_BRANCH     = $00
+ZVM_SAVE_RETURN_STORE      = $01
 
 .segment "ZEROPAGE"
 
@@ -182,6 +186,8 @@ zvm_mem_stride:       .res 1
 zvm_table_cols:       .res 1
 zvm_table_rows:       .res 1
 zvm_table_skip:       .res 1
+zvm_save_return_kind: .res 1
+zvm_save_store_var:   .res 1
 zvm_state_end:
 
 ZVM_SAVE_STATE_SIZE = zvm_state_end - zvm_state_start
@@ -1136,7 +1142,11 @@ zvm_restart:
         JMP reset
 
 zvm_save:
+        LDA zstory_version
+        CMP #$04
+        BCS zvm_save_store
         JSR zvm_branch_decode
+        STZ zvm_save_return_kind
         JSR zvm_save_game
         BEQ @ok
         LDA #$00
@@ -1145,11 +1155,54 @@ zvm_save:
         LDA #$01
         JMP zvm_branch_apply
 
+zvm_save_store:
+        LDA #ZVM_SAVE_RETURN_STORE
+        STA zvm_save_return_kind
+        JSR zvm_fetch
+        STA zvm_save_store_var
+        JSR zvm_save_game
+        BEQ @ok
+        STZ zvm_value_lo
+        BRA @store
+@ok:
+        LDA #$01
+        STA zvm_value_lo
+@store:
+        STZ zvm_value_hi
+        LDA zvm_save_store_var
+        JMP zvm_set_var
+
 zvm_restore:
+        LDA zstory_version
+        CMP #$04
+        BCS zvm_restore_store
         JSR zvm_restore_game
         BEQ @ok
         JMP zvm_branch_false
 @ok:
+        LDA #$01
+        JMP zvm_branch_apply
+
+zvm_restore_store:
+        JSR zvm_fetch
+        STA zvm_save_store_var
+        JSR zvm_restore_game
+        BEQ zvm_apply_saved_store_return
+        STZ zvm_value_lo
+        STZ zvm_value_hi
+        LDA zvm_save_store_var
+        JMP zvm_set_var
+
+zvm_apply_saved_store_return:
+        LDA zvm_save_header + ZVM_SAVE_RETURN_KIND
+        CMP #ZVM_SAVE_RETURN_STORE
+        BNE @branch_return
+        LDA #$02
+        STA zvm_value_lo
+        STZ zvm_value_hi
+        LDA zvm_save_header + ZVM_SAVE_STORE_VAR
+        JMP zvm_set_var
+@branch_return:
         LDA #$01
         JMP zvm_branch_apply
 
@@ -1255,7 +1308,7 @@ zvm_restore_game:
 
         JSR zvm_copy_vm_state_from_xram
         BNE @done
-        JSR zvm_collapse_upper_window
+        JSR zvm_restore_display_after_load
         LDA zvm_save_header + ZVM_SAVE_BRANCH_IF
         STA zvm_branch_if
         LDA zvm_save_header + ZVM_SAVE_BRANCH_OFF_H
@@ -1294,6 +1347,15 @@ zvm_restore_dynamic:
         STZ XRAM_LENL
         STZ XRAM_LENH
         JMP xram_xload
+
+zvm_restore_display_after_load:
+        LDA zstory_version
+        CMP #$04
+        BCS @v4_or_newer
+        JMP zvm_collapse_upper_window
+@v4_or_newer:
+        JSR zvm_clamp_window_cursors
+        JMP zvm_select_active_window
 
 zvm_save_state_file:
         JSR zvm_use_state_save_name
@@ -1437,6 +1499,10 @@ zvm_fill_save_header:
         STA zvm_save_header + ZVM_SAVE_PC_H
         LDA zvm_pc_l
         STA zvm_save_header + ZVM_SAVE_PC_L
+        LDA zvm_save_return_kind
+        STA zvm_save_header + ZVM_SAVE_RETURN_KIND
+        LDA zvm_save_store_var
+        STA zvm_save_header + ZVM_SAVE_STORE_VAR
         RTS
 
 zvm_validate_save_header:
@@ -2269,12 +2335,25 @@ zvm_random:
         ADC #$01
         JMP zvm_store_a_lo_zero_hi
 @seed:
-        LDA zvm_operand_lo
+        LDA #$00
+        SEC
+        SBC zvm_operand_lo
         STA zvm_rng_lo
-        LDA zvm_operand_hi
+        LDA #$00
+        SBC zvm_operand_hi
         STA zvm_rng_hi
         JMP zvm_false_store
 @zero:
+        JSR rng_get16
+        BNE @fallback_seed
+        LDA RNG_VALUE0
+        EOR VGC_FRAME
+        STA zvm_rng_lo
+        LDA RNG_VALUE1
+        EOR zvm_opcode_pc_l
+        STA zvm_rng_hi
+        JMP zvm_false_store
+@fallback_seed:
         LDA #$4D
         STA zvm_rng_lo
         LDA #$21
@@ -4279,8 +4358,8 @@ zvm_var_table:
 zvm_var_count = (* - zvm_var_table) / 2
 
 zvm_ext_table:
-        .word zvm_save
-        .word zvm_restore
+        .word zvm_save_store
+        .word zvm_restore_store
         .word zvm_log_shift
         .word zvm_art_shift
         .word zvm_set_font

@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using e6502.Storage;
@@ -19,6 +20,7 @@ public sealed partial class FileIoController
     private readonly Func<int, byte, bool>? _xramWrite;
     private readonly Func<int>? _xramCapacity;
     private readonly Action? _xramRefreshStats;
+    private readonly Func<uint> _rngProvider;
     private readonly SidPlayer? _sidPlayer;
     private readonly MusicEngine? _musicEngine;
     private readonly MidiPlayback? _midiPlayback;
@@ -50,7 +52,8 @@ public sealed partial class FileIoController
         Func<int, byte, bool>? xramWrite = null,
         Func<int>? xramCapacity = null,
         Action? xramRefreshStats = null,
-        Action<byte[]>? loadRuntimeRom = null)
+        Action<byte[]>? loadRuntimeRom = null,
+        Func<uint>? rngProvider = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
@@ -61,6 +64,7 @@ public sealed partial class FileIoController
         _xramWrite = xramWrite;
         _xramCapacity = xramCapacity;
         _xramRefreshStats = xramRefreshStats;
+        _rngProvider = rngProvider ?? DefaultRandomUInt32;
         _sidPlayer = sidPlayer;
         _musicEngine = musicEngine;
         _midiPlayback = midiPlayback;
@@ -75,6 +79,16 @@ public sealed partial class FileIoController
         // Wire up auto-soundfont loading for MML playback with WTS voices
         if (_musicEngine is not null && _wts is not null)
             _musicEngine.OnWtsSoundfontNeeded = () => MidiAutoSoundfont.TryLoad(this, _wts);
+    }
+
+    private static uint DefaultRandomUInt32()
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        RandomNumberGenerator.Fill(bytes);
+        return (uint)bytes[0]
+            | ((uint)bytes[1] << 8)
+            | ((uint)bytes[2] << 16)
+            | ((uint)bytes[3] << 24);
     }
 
     public string SaveDirectory => _saveDir;
@@ -142,6 +156,9 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdXPage:
                 DoXPage();
+                break;
+            case VgcConstants.FioCmdRng:
+                DoRng();
                 break;
             case VgcConstants.FioCmdSidPlay:
                 DoSidPlay();
@@ -257,6 +274,16 @@ public sealed partial class FileIoController
         }
 
         return (device, name, savedDir);
+    }
+
+    private void DoRng()
+    {
+        uint value = _rngProvider();
+        _regs[VgcConstants.FioRng0 - VgcConstants.FioBase] = (byte)(value & 0xFF);
+        _regs[VgcConstants.FioRng1 - VgcConstants.FioBase] = (byte)((value >> 8) & 0xFF);
+        _regs[VgcConstants.FioRng2 - VgcConstants.FioBase] = (byte)((value >> 16) & 0xFF);
+        _regs[VgcConstants.FioRng3 - VgcConstants.FioBase] = (byte)((value >> 24) & 0xFF);
+        SetOk();
     }
 
     /// <summary>Restores device CurrentDirectory if it was temporarily changed.</summary>

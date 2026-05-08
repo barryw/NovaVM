@@ -475,6 +475,7 @@ public sealed class EmulatorTcpServer : IDisposable
     private string CmdReadGraphics()
     {
         var vgc = _bus.Vgc;
+        byte gfxTransparentColor = vgc.GetGfxTransparentColor();
         var rows = new string[VgcConstants.ScreenRows];
         for (int row = 0; row < VgcConstants.ScreenRows; row++)
         {
@@ -488,11 +489,11 @@ public sealed class EmulatorTcpServer : IDisposable
                 bool botHalf = false;
                 for (int dy = 0; dy < 4 && !topHalf; dy++)
                     for (int dx = 0; dx < 4 && !topHalf; dx++)
-                        if (vgc.GetGfxPixelColor(gxBase + dx, gyBase + dy) != 0)
+                        if (vgc.GetGfxPixelColor(gxBase + dx, gyBase + dy) != gfxTransparentColor)
                             topHalf = true;
                 for (int dy = 4; dy < 8 && !botHalf; dy++)
                     for (int dx = 0; dx < 4 && !botHalf; dx++)
-                        if (vgc.GetGfxPixelColor(gxBase + dx, gyBase + dy) != 0)
+                        if (vgc.GetGfxPixelColor(gxBase + dx, gyBase + dy) != gfxTransparentColor)
                             botHalf = true;
                 if (topHalf && botHalf) sb.Append('#');
                 else if (topHalf) sb.Append('^');

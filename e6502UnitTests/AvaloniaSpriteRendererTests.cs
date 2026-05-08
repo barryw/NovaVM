@@ -287,6 +287,62 @@ public class AvaloniaSpriteRendererTests
     }
 
     [TestMethod]
+    public void DetectCollisions_GfxTransparentColor_AllowsBlackBackgroundCollision()
+    {
+        _vgc.Write(VgcConstants.RegGfxTransparentColor, 2);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, VgcConstants.SpriteCanvasX);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, VgcConstants.SpriteCanvasY);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0x20);
+        for (int i = 3; i <= 9; i++) _vgc.Write((ushort)(VgcConstants.RegP0 + i), 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprRow);
+
+        var (_, sb) = SpriteRenderer.DetectCollisions(_vgc);
+
+        Assert.IsTrue((sb & 0x01) != 0, "Palette 0 gfx pixels should be opaque when transparent color is 2");
+    }
+
+    [TestMethod]
+    public void DetectCollisions_GfxTransparentColor_SkipsConfiguredColor()
+    {
+        _vgc.Write(VgcConstants.RegGfxTransparentColor, 2);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, VgcConstants.SpriteCanvasX);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, VgcConstants.SpriteCanvasY);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprPos);
+
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0x20);
+        for (int i = 3; i <= 9; i++) _vgc.Write((ushort)(VgcConstants.RegP0 + i), 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprRow);
+
+        _vgc.Write(VgcConstants.RegP0, 2);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdGcolor);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdPlot);
+
+        var (_, sb) = SpriteRenderer.DetectCollisions(_vgc);
+
+        Assert.AreEqual(0, sb, "Configured transparent gfx color should not collide with sprites");
+    }
+
+    [TestMethod]
     public void DetectCollisions_NoBgOverlap_NoBits()
     {
         // Enable sprite 0 at (0,0)

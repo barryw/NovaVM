@@ -1,0 +1,7 @@
+# Border Zone V5 startup, chapter selection, parser, and real-time status smoke.
+look=>Your Compartment&&camera bag&&briefcase
+inventory=>document&&wristwatch&&white carnation
+take briefcase=>Taken.
+open door=>swings open
+e=>passageway&&guards
+look=>Outside Your Compartment&&machine gun

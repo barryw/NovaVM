@@ -1,5 +1,6 @@
 #include "fio_dispatcher.h"
 #include <Arduino.h>
+#include <esp_system.h>
 #include <string.h>
 
 extern void logLn(const char* fmt, ...);
@@ -119,6 +120,7 @@ void FioDispatcher::handle_event() {
         case CMD_PWD:      handle_pwd();      break;
         case CMD_CLEARERR: handle_clear_error(); break;
         case CMD_LOADRUNTIME: handle_load_runtime(); break;
+        case CMD_RNG:      handle_rng();      break;
         default:
             logLn("[fio] unknown cmd 0x%02X\n", (unsigned)c);
             respond_err(ERR_IO);
@@ -243,6 +245,15 @@ void FioDispatcher::handle_load_runtime() {
     write_size(RUNTIME_ROM_BYTES);
     logLn("[fio] LOADRUNTIME %s -> primary ROM bank (%d bytes) OK\n",
           scratch, RUNTIME_ROM_BYTES);
+    respond_ok();
+}
+
+void FioDispatcher::handle_rng() {
+    uint32_t value = esp_random();
+    _bridge.poke(BANK_BASE + OFF_SRC_LO, (uint8_t)(value & 0xFF));
+    _bridge.poke(BANK_BASE + OFF_SRC_HI, (uint8_t)((value >> 8) & 0xFF));
+    _bridge.poke(BANK_BASE + OFF_END_LO, (uint8_t)((value >> 16) & 0xFF));
+    _bridge.poke(BANK_BASE + OFF_END_HI, (uint8_t)((value >> 24) & 0xFF));
     respond_ok();
 }
 

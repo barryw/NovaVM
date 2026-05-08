@@ -820,6 +820,7 @@ EXT_BLTFILL:
       .include "lib/copper.s"
       .include "lib/tile.s"
       .include "lib/audio.s"
+      .include "lib/rng.s"
       .include "lib/xram.s"
       .include "lib/xmc.s"
 

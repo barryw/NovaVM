@@ -41,7 +41,8 @@ module dma (
     input  logic [7:0]  vgc_rdata,
     output logic [7:0]  vgc_wdata,
     output logic        vgc_we,
-    output logic        vgc_re
+    output logic        vgc_re,
+    input  logic        video_write_safe
 );
 
     // =========================================================================
@@ -167,6 +168,18 @@ module dma (
         end
     endfunction
 
+    function automatic logic is_video_space(input logic [2:0] sp);
+        case (sp)
+            SPACE_CHAR, SPACE_COLOR, SPACE_GFX, SPACE_SPRITE, SPACE_TILE, SPACE_TEXTATTR:
+                is_video_space = 1'b1;
+            default:
+                is_video_space = 1'b0;
+        endcase
+    endfunction
+
+    wire video_write_wait = is_video_space(dst_space) && !video_write_safe &&
+                            read_valid;
+
     // =========================================================================
     // Memory read data mux
     // =========================================================================
@@ -221,7 +234,7 @@ module dma (
                     vgc_space = dst_space;
                     vgc_addr = dst_addr[16:0];
                     vgc_wdata = read_byte;
-                    vgc_we = 1;
+                    vgc_we = !video_write_wait;
                 end
             endcase
         end
@@ -314,7 +327,7 @@ module dma (
                 end
 
                 S_WRITE: begin
-                    if (dst_space == SPACE_XRAM && xram_busy) begin
+                    if ((dst_space == SPACE_XRAM && xram_busy) || video_write_wait) begin
                         // stall until XRAM wrapper accepts the write
                     end
                     else if (read_valid) begin

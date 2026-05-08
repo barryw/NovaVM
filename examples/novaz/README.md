@@ -112,6 +112,18 @@ make -C examples/novaz test-infocom-v45-smokes
 make -C examples/novaz test-infocom-smokes
 ```
 
+Run the longer scripted playthroughs when you want heavier game coverage:
+
+```sh
+make -C examples/novaz test-infocom-z3-longplays
+make -C examples/novaz test-infocom-v45-longplays
+make -C examples/novaz test-infocom-longplays
+```
+
+These scripts keep the quick smokes fast, but add representative restart,
+save/restore, death, combat, time-status, V4 status-window, V5 save, parser,
+inventory, scrolling, and event coverage across real Infocom stories.
+
 Run the generated Z3 compliance smoke:
 
 ```sh

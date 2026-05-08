@@ -42,6 +42,18 @@ class TextColorExpectation:
 
 
 @dataclass(frozen=True)
+class ScreenRowExpectation:
+    row: int
+    text: str
+
+
+@dataclass(frozen=True)
+class ForbiddenTextBelowExpectation:
+    first_row: int
+    text: str
+
+
+@dataclass(frozen=True)
 class HardwareSmoke:
     name: str
     image: Path
@@ -54,6 +66,8 @@ class HardwareSmoke:
     expect_time_status: bool = False
     no_status_line: bool = False
     header_expected_any: tuple[str, ...] = ()
+    expected_rows: tuple[ScreenRowExpectation, ...] = ()
+    forbidden_text_below: tuple[ForbiddenTextBelowExpectation, ...] = ()
     mount_path: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -112,6 +126,11 @@ SMOKES: tuple[HardwareSmoke, ...] = (
         script=repo_path("examples/novaz/tests/zork-i-torture-smoke.txt"),
     ),
     HardwareSmoke(
+        name="zork-i-longplay",
+        image=repo_path("examples/novaz/dist/zork-i/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/zork-i/longplay.txt"),
+    ),
+    HardwareSmoke(
         name="zork-ii",
         image=repo_path("examples/novaz/dist/zork-ii/fd0.ndi"),
         script=repo_path("examples/novaz/projects/zork-ii/smoke.txt"),
@@ -129,11 +148,40 @@ SMOKES: tuple[HardwareSmoke, ...] = (
         expect_time_status=True,
     ),
     HardwareSmoke(
+        name="deadline-longplay",
+        image=repo_path("examples/novaz/dist/deadline/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/deadline/longplay.txt"),
+        expect_time_status=True,
+    ),
+    HardwareSmoke(
         name="amfv",
         image=repo_path("examples/novaz/dist/amfv/fd0.ndi"),
         script=repo_path("examples/novaz/projects/amfv/smoke.txt"),
         no_status_line=True,
         header_expected_any=("Mode:",),
+        expected_rows=(
+            ScreenRowExpectation(0, "Mode:"),
+            ScreenRowExpectation(1, "Location:"),
+        ),
+        forbidden_text_below=(
+            ForbiddenTextBelowExpectation(2, "Mode:"),
+            ForbiddenTextBelowExpectation(2, "Location:"),
+        ),
+    ),
+    HardwareSmoke(
+        name="amfv-longplay",
+        image=repo_path("examples/novaz/dist/amfv/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/amfv/longplay.txt"),
+        no_status_line=True,
+        header_expected_any=("Mode:",),
+        expected_rows=(
+            ScreenRowExpectation(0, "Mode:"),
+            ScreenRowExpectation(1, "Location:"),
+        ),
+        forbidden_text_below=(
+            ForbiddenTextBelowExpectation(2, "Mode:"),
+            ForbiddenTextBelowExpectation(2, "Location:"),
+        ),
     ),
     HardwareSmoke(
         name="trinity",
@@ -143,11 +191,70 @@ SMOKES: tuple[HardwareSmoke, ...] = (
         header_expected_any=("Palace Gate", "Broad Walk"),
     ),
     HardwareSmoke(
+        name="trinity-longplay",
+        image=repo_path("examples/novaz/dist/trinity/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/trinity/longplay.txt"),
+        no_status_line=True,
+        header_expected_any=("Palace Gate", "Broad Walk", "Inverness Terrace"),
+    ),
+    HardwareSmoke(
         name="hhgg",
         image=repo_path("examples/novaz/dist/hhgg/fd0.ndi"),
         script=repo_path("examples/novaz/projects/hhgg/smoke.txt"),
         no_status_line=True,
         header_expected_any=("Darkness", "Bedroom"),
+    ),
+    HardwareSmoke(
+        name="hhgg-longplay",
+        image=repo_path("examples/novaz/dist/hhgg/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/hhgg/longplay.txt"),
+        no_status_line=True,
+        header_expected_any=("Darkness", "Bedroom"),
+    ),
+    HardwareSmoke(
+        name="beyond-zork",
+        image=repo_path("examples/novaz/dist/beyond-zork/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/beyond-zork/smoke.txt"),
+        no_status_line=True,
+        header_expected_any=("Hilltop",),
+    ),
+    HardwareSmoke(
+        name="border-zone",
+        image=repo_path("examples/novaz/dist/border-zone/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/border-zone/smoke.txt"),
+        no_status_line=True,
+        header_expected_any=("Your Compartment", "Outside Your Compartment"),
+    ),
+    HardwareSmoke(
+        name="border-zone-longplay",
+        image=repo_path("examples/novaz/dist/border-zone/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/border-zone/longplay.txt"),
+        no_status_line=True,
+        header_expected_any=("Your Compartment", "Outside Your Compartment"),
+    ),
+    HardwareSmoke(
+        name="sherlock",
+        image=repo_path("examples/novaz/dist/sherlock/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/sherlock/smoke.txt"),
+        no_status_line=True,
+        header_expected_any=("221-B Baker Street",),
+    ),
+    HardwareSmoke(
+        name="sherlock-longplay",
+        image=repo_path("examples/novaz/dist/sherlock/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/sherlock/longplay.txt"),
+        no_status_line=True,
+        header_expected_any=("221-B Baker Street",),
+    ),
+    HardwareSmoke(
+        name="ztuu",
+        image=repo_path("examples/novaz/dist/ztuu/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/ztuu/smoke.txt"),
+    ),
+    HardwareSmoke(
+        name="ztuu-longplay",
+        image=repo_path("examples/novaz/dist/ztuu/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/ztuu/longplay.txt"),
     ),
 )
 
@@ -300,6 +407,31 @@ def require_header(screen: str, expected_values: tuple[str, ...]) -> None:
     raise RuntimeError(f"expected first screen row to contain {expected}; got {first_line!r}\n{screen}")
 
 
+def require_layout(screen: str, smoke: HardwareSmoke) -> None:
+    lines = screen.splitlines()
+    for expected in smoke.expected_rows:
+        if expected.row >= len(lines):
+            raise RuntimeError(
+                f"expected row {expected.row} to contain {expected.text!r}; "
+                f"screen has only {len(lines)} rows\n{screen}"
+            )
+        if contains_normalized(lines[expected.row], expected.text):
+            continue
+        raise RuntimeError(
+            f"expected row {expected.row} to contain {expected.text!r}; "
+            f"got {lines[expected.row]!r}\n{screen}"
+        )
+
+    for forbidden in smoke.forbidden_text_below:
+        for row, line in enumerate(lines[forbidden.first_row:], start=forbidden.first_row):
+            if not contains_normalized(line, forbidden.text):
+                continue
+            raise RuntimeError(
+                f"found forbidden header/status text {forbidden.text!r} on row {row}; "
+                f"expected it to stay above row {forbidden.first_row}\n{screen}"
+            )
+
+
 def find_text(screen: str, text: str) -> tuple[int, int] | None:
     for row, line in enumerate(screen.splitlines()):
         col = line.find(text)
@@ -354,8 +486,11 @@ def build_images(selected: list[HardwareSmoke]) -> None:
     targets = []
     if any(s.name in {"z3-spec", "z4-styles", "z5-spec"} for s in selected):
         targets.extend(["test-z3-spec", "test-z4-styles", "test-z5-spec"])
-    if any(s.name in {"zork-i", "zork-ii", "zork-iii", "deadline", "amfv", "trinity", "hhgg"} for s in selected):
+    smoke_names = {s.name for s in selected}
+    if any(name in {"zork-i", "zork-i-torture", "zork-ii", "zork-iii", "deadline", "amfv", "trinity", "hhgg", "beyond-zork", "border-zone", "sherlock", "ztuu"} for name in smoke_names):
         targets.append("test-infocom-smokes")
+    if any(name in {"zork-i-longplay", "deadline-longplay", "amfv-longplay", "trinity-longplay", "hhgg-longplay", "border-zone-longplay", "sherlock-longplay", "ztuu-longplay"} for name in smoke_names):
+        targets.append("test-infocom-longplays")
     if not targets:
         return
     subprocess.run(["make", "-C", str(REPO_ROOT / "examples/novaz"), *targets], check=True)
@@ -424,6 +559,10 @@ def handle_startup_prompt(client: NovaHostClient, screen: str) -> bool:
         return False
     if "hit any key" in lower or "press any key" in lower:
         client.send_key(" ")
+        time.sleep(0.5)
+        return True
+    if "is this a vt220" in lower or "please type yes or no" in lower:
+        client.type_text("NO\r")
         return True
     if "type restore" in lower and "start the game" in lower:
         client.type_text("N\r")
@@ -434,11 +573,13 @@ def handle_startup_prompt(client: NovaHostClient, screen: str) -> bool:
     if "which chapter would you like" in lower:
         client.type_text("1\r")
         return True
-    if "beyond science" in lower:
+    if "beyond science" in lower or "zork is a registered trademark" in lower:
         client.send_key(" ")
+        time.sleep(0.5)
         return True
     if "type [return] to continue" in lower:
         client.send_key("\r")
+        time.sleep(0.5)
         return True
     return False
 
@@ -481,6 +622,31 @@ def require_text_color(client: NovaHostClient, screen: str, expected: TextColorE
             f"expected {expected.text!r} cell {col + offset},{row} "
             f"to use color ${expected.color:02X}; saw ${actual:02X}\n{screen}"
         )
+
+
+def wait_for_game_prompt(
+    client: NovaHostClient,
+    smoke: HardwareSmoke,
+    *,
+    timeout: float,
+    more_counter: list[int],
+) -> str:
+    snapshot = wait_for_screen(
+        client,
+        smoke.expected_screens,
+        timeout=timeout,
+        more_counter=more_counter,
+        want_prompt=True,
+    )
+    screen = screen_text(snapshot)
+    require_header(screen, smoke.header_expected_any)
+    require_layout(screen, smoke)
+    if not smoke.no_status_line:
+        screen = wait_for_status_snapshot(client, screen, expect_time_status=smoke.expect_time_status)
+        require_status_line(screen)
+    if smoke.expect_time_status:
+        require_time_status_line(screen)
+    return screen
 
 
 def run_smoke(
@@ -530,20 +696,12 @@ def run_smoke(
             print(f"=== {smoke.name}: passed morePrompts={more_counter[0]}", flush=True)
             return
 
-        snapshot = wait_for_screen(
+        screen = wait_for_game_prompt(
             client,
-            smoke.expected_screens,
+            smoke,
             timeout=boot_timeout,
             more_counter=more_counter,
-            want_prompt=True,
         )
-        screen = screen_text(snapshot)
-        require_header(screen, smoke.header_expected_any)
-        if not smoke.no_status_line:
-            screen = wait_for_status_snapshot(client, screen, expect_time_status=smoke.expect_time_status)
-            require_status_line(screen)
-        if smoke.expect_time_status:
-            require_time_status_line(screen)
 
         for command in load_commands(smoke):
             if command.text.lower() == ".reboot":
@@ -551,6 +709,12 @@ def run_smoke(
                 client.cold_start(wait_ready=False)
                 client.close()
                 time.sleep(0.5)
+                screen = wait_for_game_prompt(
+                    client,
+                    smoke,
+                    timeout=boot_timeout,
+                    more_counter=more_counter,
+                )
                 continue
             if command.wait_seconds is not None:
                 print(f".wait {command.wait_seconds:g}", flush=True)
@@ -590,6 +754,7 @@ def run_smoke(
             screen = screen_text(snapshot)
             if command.wait_for_prompt:
                 require_header(screen, smoke.header_expected_any)
+                require_layout(screen, smoke)
                 if not smoke.no_status_line:
                     screen = wait_for_status_snapshot(client, screen, expect_time_status=smoke.expect_time_status)
                     require_status_line(screen)

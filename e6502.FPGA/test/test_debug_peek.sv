@@ -139,6 +139,16 @@ module test_debug_peek;
         dbg_peek_en   <= 0;
     endtask
 
+    task automatic do_poke(input logic [15:0] addr, input logic [7:0] data);
+        @(posedge clk);
+        dbg_poke_addr <= addr;
+        dbg_poke_data <= data;
+        dbg_poke_en   <= 1;
+        @(posedge clk);
+        dbg_poke_en   <= 0;
+        repeat(2) @(posedge clk);
+    endtask
+
     // Same program as test_rom_load.sv
     localparam int PROG_LEN = 13;
     byte unsigned prog [PROG_LEN] = '{
@@ -209,6 +219,15 @@ module test_debug_peek;
         // Peek VGC register — REG_FGCOL = $A002. Default 15.
         do_peek(16'hA002, peek_val);
         check_eq8("peek \$A002 (fg_color) == 15", peek_val, 8'h0F);
+
+        // Peek/poke VGC graphics transparent-color register at the upper edge
+        // of the $A0E0 register routing block. This catches top-level decode
+        // ranges that accidentally stop at $A0E7.
+        do_peek(16'hA0E8, peek_val);
+        check_eq8("peek \$A0E8 (gfx transparent color) reset == 0", peek_val, 8'h00);
+        do_poke(16'hA0E8, 8'h07);
+        do_peek(16'hA0E8, peek_val);
+        check_eq8("peek \$A0E8 after debug poke == 7", peek_val, 8'h07);
 
         // Control: peek ROM — should return first opcode byte 0xA9
         do_peek(16'hC000, peek_val);

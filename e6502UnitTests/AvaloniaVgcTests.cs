@@ -31,6 +31,10 @@ public class AvaloniaVgcTests
         Assert.AreEqual(11, _vgc.Read(VgcConstants.RegBorder));
 
     [TestMethod]
+    public void InitialGfxTransparentColor_IsZero() =>
+        Assert.AreEqual(0, _vgc.Read(VgcConstants.RegGfxTransparentColor));
+
+    [TestMethod]
     public void InitialCursor_IsDisabled() =>
         Assert.IsFalse(_vgc.IsCursorEnabled);
 
@@ -44,6 +48,18 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegCursorEnable, 0xFE);
         Assert.IsFalse(_vgc.IsCursorEnabled);
         Assert.AreEqual(0, _vgc.Read(VgcConstants.RegCursorEnable));
+    }
+
+    [TestMethod]
+    public void GfxTransparentColor_UsesLowNibbleOnly()
+    {
+        _vgc.Write(VgcConstants.RegGfxTransparentColor, 2);
+        Assert.AreEqual(2, _vgc.Read(VgcConstants.RegGfxTransparentColor));
+        Assert.AreEqual(2, _vgc.GetGfxTransparentColor());
+
+        _vgc.Write(VgcConstants.RegGfxTransparentColor, 0xFE);
+        Assert.AreEqual(14, _vgc.Read(VgcConstants.RegGfxTransparentColor));
+        Assert.AreEqual(14, _vgc.GetGfxTransparentColor());
     }
 
     [TestMethod]

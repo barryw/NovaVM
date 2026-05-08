@@ -49,7 +49,8 @@ module blitter (
     input  logic [7:0]  vgc_rdata,
     output logic [7:0]  vgc_wdata,
     output logic        vgc_we,
-    output logic        vgc_re
+    output logic        vgc_re,
+    input  logic        video_write_safe
 );
 
     // =========================================================================
@@ -205,6 +206,19 @@ module blitter (
         end
     endfunction
 
+    function automatic logic is_video_space(input logic [2:0] sp);
+        case (sp)
+            SPACE_CHAR, SPACE_COLOR, SPACE_GFX, SPACE_SPRITE, SPACE_TILE, SPACE_TEXTATTR:
+                is_video_space = 1'b1;
+            default:
+                is_video_space = 1'b0;
+        endcase
+    endfunction
+
+    wire write_skipped_by_colorkey = colorkey_mode && read_byte == color_key;
+    wire video_write_wait = is_video_space(dst_space) && !video_write_safe &&
+                            read_valid && !write_skipped_by_colorkey;
+
     // =========================================================================
     // Memory read data mux
     // =========================================================================
@@ -250,8 +264,8 @@ module blitter (
         end
 
         // Write data setup (for S_WRITE and S_ROWBUF_WRITE)
-        if ((state == S_WRITE && read_valid && !(colorkey_mode && read_byte == color_key)) ||
-            (state == S_ROWBUF_WRITE && read_valid && !(colorkey_mode && read_byte == color_key))) begin
+        if ((state == S_WRITE && read_valid && !write_skipped_by_colorkey) ||
+            (state == S_ROWBUF_WRITE && read_valid && !write_skipped_by_colorkey)) begin
             case (dst_space)
                 SPACE_CPU: begin
                     ram_addr = dst_addr[15:0];
@@ -267,7 +281,7 @@ module blitter (
                     vgc_space = dst_space;
                     vgc_addr = dst_addr[16:0];
                     vgc_wdata = read_byte;
-                    vgc_we = 1;
+                    vgc_we = !video_write_wait;
                 end
             endcase
         end
@@ -380,11 +394,11 @@ module blitter (
                     // is busy, keep xram_we / xram_addr / xram_wdata asserted
                     // (combinationally driven from this state) until the
                     // wrapper can accept the byte. Hold state until ready.
-                    if (dst_space == SPACE_XRAM && xram_busy) begin
+                    if ((dst_space == SPACE_XRAM && xram_busy) || video_write_wait) begin
                         // stall — re-enter S_WRITE implicitly by not advancing
                     end
                     else if (read_valid) begin
-                        if (!(colorkey_mode && read_byte == color_key))
+                        if (!write_skipped_by_colorkey)
                             wrote_count <= wrote_count + 1;
 
                         if (col + 1 >= width) begin
@@ -393,7 +407,7 @@ module blitter (
                                 regs[R_STATUS] <= ST_OK;
                                 regs[R_ERRCODE] <= ERR_NONE;
                                 {regs[R_COUNTH], regs[R_COUNTM], regs[R_COUNTL]}
-                                    <= wrote_count + (!(colorkey_mode && read_byte == color_key) ? 24'd1 : 24'd0);
+                                    <= wrote_count + (!write_skipped_by_colorkey ? 24'd1 : 24'd0);
                                 state <= S_DONE;
                             end else begin
                                 row <= row + 1;
@@ -457,11 +471,11 @@ module blitter (
                     // Same back-pressure gating as S_WRITE. Same-space XRAM
                     // copies (src_space == dst_space == XRAM) use this path
                     // via the row-buffer.
-                    if (dst_space == SPACE_XRAM && xram_busy) begin
+                    if ((dst_space == SPACE_XRAM && xram_busy) || video_write_wait) begin
                         // stall — hold the row-buffer write steady until ready
                     end else begin
                     // Write one byte per clock from row buffer
-                    if (!(colorkey_mode && read_byte == color_key))
+                    if (!write_skipped_by_colorkey)
                         wrote_count <= wrote_count + 1;
 
                     if (col + 1 >= width) begin
@@ -471,7 +485,7 @@ module blitter (
                             regs[R_STATUS] <= ST_OK;
                             regs[R_ERRCODE] <= ERR_NONE;
                             {regs[R_COUNTH], regs[R_COUNTM], regs[R_COUNTL]}
-                                <= wrote_count + (!(colorkey_mode && read_byte == color_key) ? 24'd1 : 24'd0);
+                                <= wrote_count + (!write_skipped_by_colorkey ? 24'd1 : 24'd0);
                             state <= S_DONE;
                         end else begin
                             row <= row + 1;

@@ -112,7 +112,8 @@ module test_blitter_xram_backpressure;
         .xram_busy(xram_busy_effective),
         .vgc_space(blt_vgc_space), .vgc_addr(blt_vgc_addr),
         .vgc_rdata(8'h00), .vgc_wdata(blt_vgc_wdata),
-        .vgc_we(blt_vgc_we), .vgc_re(blt_vgc_re)
+        .vgc_we(blt_vgc_we), .vgc_re(blt_vgc_re),
+        .video_write_safe(1'b1)
     );
 
     int pass = 0, fail = 0, tnum = 0;

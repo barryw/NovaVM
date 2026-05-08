@@ -151,6 +151,26 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void RngCommand_ReturnsProviderBytes()
+    {
+        var memory = new byte[65536];
+        var fio = new FileIoController(
+            address => memory[address],
+            (address, data) => memory[address] = data,
+            rngProvider: () => 0xA1B2C3D4);
+
+        fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdRng);
+
+        Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+        Assert.AreEqual(VgcConstants.FioErrNone, fio.Read((ushort)VgcConstants.FioErrCode));
+        Assert.AreEqual(0, fio.Read((ushort)VgcConstants.FioCmd));
+        Assert.AreEqual(0xD4, fio.Read((ushort)VgcConstants.FioRng0));
+        Assert.AreEqual(0xC3, fio.Read((ushort)VgcConstants.FioRng1));
+        Assert.AreEqual(0xB2, fio.Read((ushort)VgcConstants.FioRng2));
+        Assert.AreEqual(0xA1, fio.Read((ushort)VgcConstants.FioRng3));
+    }
+
+    [TestMethod]
     public void ClearErr_ClearsLatchedFileIoError()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");

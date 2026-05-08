@@ -1,0 +1,10 @@
+# ZTUU V5 longplay: save/restore around early-map movement.
+save
+look=>New Excavation&&narrow&&tunnel
+inventory=>cheaply-made sword&&brass lantern
+ne=>Tunnel&&trapped
+ne=>Cultural Complex&&Convention Center
+look=>Cultural Complex&&Royal Theater
+.reboot
+restore
+look=>New Excavation&&narrow&&tunnel

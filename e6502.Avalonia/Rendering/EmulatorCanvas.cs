@@ -331,6 +331,7 @@ public class EmulatorCanvas : Control
         int cursorX = _vgc.GetCursorX();
         int cursorY = _vgc.GetCursorY();
         bool cursorEnabled = _cursorVisible && _vgc.IsCursorEnabled;
+        byte gfxTransparentColor = _vgc.GetGfxTransparentColor();
 
         bool tileMode = state.Mode == 4;
         TileRenderState? tiles = tileMode ? TileRenderState.FromVgc(_vgc) : null;
@@ -405,7 +406,8 @@ public class EmulatorCanvas : Control
                 int sampleGfxX = Wrap320(x + state.ScrollX);
                 int sampleGfxY = Wrap200(y + state.ScrollY);
                 byte gfxColorIndex = _vgc.GetGfxPixelColor(sampleGfxX, sampleGfxY);
-                uint gfxPixel = gfxColorIndex == 0 ? 0u : Palette[gfxColorIndex & 0x0F];
+                bool gfxOpaque = gfxColorIndex != gfxTransparentColor;
+                uint gfxPixel = gfxOpaque ? Palette[gfxColorIndex & 0x0F] : 0u;
 
                 for (int dy = 0; dy < 2; dy++)
                 {
@@ -443,14 +445,14 @@ public class EmulatorCanvas : Control
                         }
                         else if (state.Mode == 3)
                         {
-                            if (gfxPixel != 0)
+                            if (gfxOpaque)
                                 pixel = gfxPixel;
                             if (spriteBetween != 0)
                                 pixel = Palette[spriteBetween & 0x0F];
                         }
                         else if (state.Mode == 2)
                         {
-                            if (gfxPixel != 0)
+                            if (gfxOpaque)
                                 pixel = gfxPixel;
                             if (spriteBetween != 0)
                                 pixel = Palette[spriteBetween & 0x0F];
@@ -463,7 +465,7 @@ public class EmulatorCanvas : Control
                                 pixel = textPixel;
                             if (spriteBetween != 0)
                                 pixel = Palette[spriteBetween & 0x0F];
-                            if (state.Mode >= 1 && gfxPixel != 0)
+                            if (state.Mode >= 1 && gfxOpaque)
                                 pixel = gfxPixel;
                         }
 

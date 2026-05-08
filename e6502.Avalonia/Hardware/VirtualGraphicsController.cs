@@ -23,6 +23,7 @@ public interface IScreenInput
 ///   $A0C0-$A0DF  Tile registers
 ///   $A0E0-$A0E4  VDC-style VRAM port for char/color/gfx/sprite/tile memory
 ///   $A0E5        Display dimmer (0=black, 15=full brightness)
+///   $A0E8        Graphics-plane transparent color (0-15)
 ///
 /// Sprite shape data stored in 256 × 128-byte slots (32KB), accessible via
 /// memory space I/O and DMA. Each sprite has a shape index register pointing
@@ -123,6 +124,7 @@ public class VirtualGraphicsController : IBusDevice
     private byte _displayDim;
     private byte _textFlags;
     private byte _textReverseAttr;
+    private byte _gfxTransparentColor;
 
     // Copper program (host-side, command driven) — 128 lists, vblank-synchronized
     private readonly List<CopperEvent>[] _copperEvents = new List<CopperEvent>[VgcConstants.CopperListCount];
@@ -176,6 +178,7 @@ public class VirtualGraphicsController : IBusDevice
         _vramCtrl = VgcConstants.VramCtrlAutoInc;
         _vramReadLatch = 0;
         _displayDim = 15;
+        _gfxTransparentColor = 0;
         for (int i = 0; i < VgcConstants.CopperListCount; i++)
         {
             if (_copperEvents[i] != null)
@@ -281,7 +284,8 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.DisplayDim)
             return true;
 
-        if (address == VgcConstants.RegTextFlags || address == VgcConstants.RegTextReverseAttr)
+        if (address == VgcConstants.RegTextFlags || address == VgcConstants.RegTextReverseAttr ||
+            address == VgcConstants.RegGfxTransparentColor)
             return true;
 
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
@@ -316,6 +320,9 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.RegTextReverseAttr)
             return _textReverseAttr;
+
+        if (address == VgcConstants.RegGfxTransparentColor)
+            return _gfxTransparentColor;
 
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
             return ReadIrqRegister(address);
@@ -404,6 +411,12 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.RegTextReverseAttr)
         {
             _textReverseAttr = data;
+            return;
+        }
+
+        if (address == VgcConstants.RegGfxTransparentColor)
+        {
+            _gfxTransparentColor = (byte)(data & 0x0F);
             return;
         }
 
@@ -633,10 +646,12 @@ public class VirtualGraphicsController : IBusDevice
     public ReadOnlySpan<CopperEvent> GetCopperProgram() => _copperPrograms[_copperActiveList];
 
     public bool GetGfxPixel(int x, int y) =>
-        _gfxBitmap[y * VgcConstants.GfxWidth + x] != 0;
+        _gfxBitmap[y * VgcConstants.GfxWidth + x] != _gfxTransparentColor;
 
     public byte GetGfxPixelColor(int x, int y) =>
         _gfxBitmap[y * VgcConstants.GfxWidth + x];
+
+    public byte GetGfxTransparentColor() => _gfxTransparentColor;
 
     public ReadOnlySpan<byte> GetSpriteShape(int index) =>
         _spriteShapes.AsSpan(_spriteShapeIndex[index] * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);

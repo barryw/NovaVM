@@ -57,6 +57,10 @@ public static class VgcConstants
     public const int FioSrcH           = 0xB9A5;   // source/dest addr high
     public const int FioEndL           = 0xB9A6;   // end addr low (SAVE only)
     public const int FioEndH           = 0xB9A7;   // end addr high (SAVE only)
+    public const int FioRng0           = FioSrcL;  // RNG byte 0 after FioCmdRng
+    public const int FioRng1           = FioSrcH;  // RNG byte 1 after FioCmdRng
+    public const int FioRng2           = FioEndL;  // RNG byte 2 after FioCmdRng
+    public const int FioRng3           = FioEndH;  // RNG byte 3 after FioCmdRng
     public const int FioSizeL          = 0xB9A8;   // loaded size low (set by host after LOAD)
     public const int FioSizeH          = 0xB9A9;   // loaded size high
     public const int FioGSpace         = 0xB9AA;   // graphics plane selector; XLOAD/XSAVE XRAM high byte
@@ -102,6 +106,7 @@ public static class VgcConstants
     public const byte FioCmdClearErr   = 0x27;
     public const byte FioCmdLoadRuntime = 0x28;    // disk -> primary runtime ROM bank
     public const byte FioCmdXPage      = 0x29;     // disk file slice -> XRAM
+    public const byte FioCmdRng        = 0x2A;     // host-backed 32-bit random value
     public const byte FioPageTargetXram = 0x00;    // XPAGE target: flat XRAM
     public const byte FioPageTargetRam  = 0x01;    // XPAGE target: CPU RAM
     public const byte FioPageTargetVgc  = 0x02;    // XPAGE target: VGC memory
@@ -549,6 +554,7 @@ public static class VgcConstants
     public const int DisplayDim        = 0xA0E5;   // 0=black, 15=full brightness
     public const int RegTextFlags      = 0xA0E6;   // bit0=reverse, bit1=explicit reverse attr, bit2=flash
     public const int RegTextReverseAttr = 0xA0E7;  // packed bg/fg used when bit1 is set
+    public const int RegGfxTransparentColor = 0xA0E8; // graphics-plane transparent color, default 0
 
     public const byte VramPlaneChar    = 0x01;
     public const byte VramPlaneColor   = 0x02;

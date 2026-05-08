@@ -754,6 +754,7 @@ LAB_2E05
       .ENDIF
 
       JSR   LAB_1463          ; do "NEW" and "CLEAR"
+      JSR   LAB_SEED_RND_HOST ; seed BASIC RND from Nova host entropy
       JSR   LAB_SPLASH        ; draw centered text startup splash
       LDA   Ememl             ; get end of mem low byte
       SEC                     ; set carry for subtract
@@ -7797,6 +7798,51 @@ CopyPRNG
       STA   FAC1_s            ; save FAC1 sign
 
       JMP   LAB_24D5          ; normalise FAC1 and return
+
+; Seed BASIC's existing 32-bit PRNG from the Nova host if it answers quickly.
+; This keeps RND fast and preserves deterministic RND(nonzero) behavior while
+; avoiding a fixed sequence after every cold boot.
+LAB_SEED_RND_HOST
+      STZ   FIO_STATUS
+      STZ   FIO_ERRCODE
+      LDA   #FIO_CMD_RNG
+      STA   FIO_CMD
+      LDX   #$80
+@outer
+      LDY   #$00
+@wait
+      LDA   FIO_STATUS
+      BNE   @status
+      DEY
+      BNE   @wait
+      DEX
+      BNE   @outer
+      STZ   FIO_CMD
+      BRA   @fallback
+@status
+      CMP   #FIO_OK
+      BNE   @fallback
+      LDA   FIO_RNG0
+      STA   Rbyte4
+      LDA   FIO_RNG1
+      STA   Rbyte1
+      LDA   FIO_RNG2
+      STA   Rbyte2
+      LDA   FIO_RNG3
+      STA   Rbyte3
+      RTS
+@fallback
+      LDA   VGC_FRAME
+      EOR   #$4D
+      STA   Rbyte4
+      LDA   VGC_FRAME
+      EOR   #$21
+      STA   Rbyte1
+      LDA   #$AF
+      STA   Rbyte2
+      LDA   #$13
+      STA   Rbyte3
+      RTS
 
 ; perform COS()
 

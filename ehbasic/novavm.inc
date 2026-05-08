@@ -82,6 +82,7 @@ FioCmdPwd               = $26
 FioCmdClearErr          = $27
 FioCmdLoadRuntime       = $28
 FioCmdXPage             = $29
+FioCmdRng               = $2A
 FioPageTargetXram       = $00
 FioPageTargetRam        = $01
 FioPageTargetVgc        = $02
@@ -427,6 +428,7 @@ VramCtrl                = $A0E4
 DisplayDim              = $A0E5
 RegTextFlags            = $A0E6
 RegTextReverseAttr      = $A0E7
+RegGfxTransparentColor  = $A0E8
 VramPlaneChar           = $01
 VramPlaneColor          = $02
 VramPlaneGfx            = $03
@@ -625,7 +627,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E835
-V_OUTP                  = $E838
-V_LOAD                  = $E83B
-V_SAVE                  = $E83E
+V_INPT                  = $E887
+V_OUTP                  = $E88A
+V_LOAD                  = $E88D
+V_SAVE                  = $E890

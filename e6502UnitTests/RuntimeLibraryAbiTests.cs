@@ -67,6 +67,63 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void TweenStateUsesLinkerStorageAndStableRoutineAbi()
+    {
+        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "tween.inc"));
+        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "tween.s"));
+
+        string[] stateSymbols =
+        [
+            "TWEEN_STARTL",
+            "TWEEN_STARTH",
+            "TWEEN_ENDL",
+            "TWEEN_ENDH",
+            "TWEEN_DURATION",
+            "TWEEN_FRAME",
+            "TWEEN_MODE",
+            "TWEEN_VALUEL",
+            "TWEEN_VALUEH",
+            "TWEEN_DONE",
+            "TWEEN_PROGRESS",
+            "TWEEN_EASE"
+        ];
+
+        foreach (string symbol in stateSymbols)
+        {
+            AssertNoNvrAlias(inc, symbol);
+            StringAssert.Contains(inc, $".global {symbol}");
+            StringAssert.Contains(impl, $"{symbol}:");
+        }
+
+        string[] routines =
+        [
+            "tween_begin",
+            "tween_eval",
+            "tween_eval_linear",
+            "tween_eval_ease_in",
+            "tween_eval_ease_out",
+            "tween_eval_ease_in_out",
+            "tween_step",
+            "tween_step_linear",
+            "tween_step_ease_in",
+            "tween_step_ease_out",
+            "tween_step_ease_in_out"
+        ];
+
+        foreach (string routine in routines)
+        {
+            StringAssert.Contains(inc, $".global {routine}");
+            StringAssert.Contains(impl, $".export {routine}");
+        }
+
+        StringAssert.Contains(impl, ".segment \"BSS\"");
+        StringAssert.Contains(inc, "TWEEN_MODE_LINEAR");
+        StringAssert.Contains(inc, "TWEEN_MODE_EASE_IN");
+        StringAssert.Contains(inc, "TWEEN_MODE_EASE_OUT");
+        StringAssert.Contains(inc, "TWEEN_MODE_EASE_IN_OUT");
+    }
+
+    [TestMethod]
     public void ExtensionRomCodeSegmentUsesLinkerPlacement()
     {
         string source = File.ReadAllText(RepoPath("ehbasic", "extension.s"));

@@ -34,6 +34,7 @@ module test_blitter;
     wire  [7:0]  blt_vgc_wdata;
     wire         blt_vgc_we;
     wire         blt_vgc_re;
+    logic        video_write_safe;
 
     // Simulated memories
     logic [7:0] sim_ram [0:65535];
@@ -103,7 +104,8 @@ module test_blitter;
         .xram_wdata(blt_xram_wdata), .xram_we(blt_xram_we),
         .vgc_space(blt_vgc_space), .vgc_addr(blt_vgc_addr),
         .vgc_rdata(blt_vgc_rdata), .vgc_wdata(blt_vgc_wdata),
-        .vgc_we(blt_vgc_we), .vgc_re(blt_vgc_re)
+        .vgc_we(blt_vgc_we), .vgc_re(blt_vgc_re),
+        .video_write_safe(video_write_safe)
     );
 
     int pass_count = 0;
@@ -202,6 +204,7 @@ module test_blitter;
         $display("");
 
         rst = 1; cpu_we = 0; cpu_re = 0;
+        video_write_safe = 1;
         cpu_addr = 0; cpu_wdata = 0;
 
         for (int i = 0; i < 65536; i++) sim_ram[i] = 0;
@@ -405,6 +408,32 @@ module test_blitter;
         check("gfx[0] = 5", sim_gfx[0] == 4'd5);
         check("gfx[319] = 5", sim_gfx[319] == 4'd5);
         check("gfx[320] = 0 (not filled)", sim_gfx[320] == 4'd0);
+
+        // ----- Test 13b: Video destinations wait for vblank-safe writes -----
+        $display("Test: VGC video write gating");
+        for (int i = 1000; i < 1004; i++) sim_gfx[i] = 4'h0;
+        video_write_safe = 0;
+        setup_fill(3, 1000, 4, 4, 1, 8'h07);
+        blt_start();
+        repeat(20) @(posedge clk);
+        check("video fill waits while unsafe", blt_rdy == 0 && blt_vgc_we == 0);
+        check("video fill wrote nothing while unsafe",
+              sim_gfx[1000] == 4'h0 && sim_gfx[1003] == 4'h0);
+        video_write_safe = 1;
+        wait_blt_done();
+        check("video fill resumes when safe", dut.regs[1] == 8'h02);
+        check("video fill wrote after safe",
+              sim_gfx[1000] == 4'h7 && sim_gfx[1003] == 4'h7);
+
+        // ----- Test 13c: Non-video destinations ignore the video gate -----
+        $display("Test: Non-video blits ignore video gate");
+        video_write_safe = 0;
+        setup_fill(0, 16'h7200, 4, 4, 1, 8'h66);
+        blt_start();
+        wait_blt_done();
+        check("ram fill did not wait for video gate", dut.regs[1] == 8'h02);
+        check("ram fill wrote while video gate unsafe", sim_ram[16'h7200] == 8'h66);
+        video_write_safe = 1;
 
         // ----- Test 14: Copy to XRAM -----
         $display("Test: Copy to XRAM");

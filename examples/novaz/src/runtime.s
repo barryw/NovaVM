@@ -9,6 +9,7 @@
 
 .include "xram.inc"
 .include "pager.inc"
+.include "rng.inc"
 .include "vtext.inc"
 .include "zstory.inc"
 .include "ztext.inc"
@@ -36,6 +37,8 @@ nz_saved_y:            .res 1
 nz_saved_color:        .res 1
 nz_saved_attr:         .res 1
 nz_saved_flags:        .res 1
+nz_probe_x:            .res 1
+nz_probe_y:            .res 1
 nz_word_buf:           .res NOVAZ_WORD_MAX
 
 .segment "ZEROPAGE"
@@ -128,6 +131,8 @@ init_video_colors:
         RTS
 
 nz_cursor_on:
+        JSR nz_screen_align_prompt_cursor
+        JSR vtext_set_cursor
         LDA #$01
         STA VGC_CURSEN
         RTS
@@ -510,6 +515,55 @@ nz_screen_restore_saved:
         STA VTEXT_FLAGS
         JMP vtext_set_cursor
 
+nz_screen_align_prompt_cursor:
+        LDA VTEXT_CURX
+        CMP #$01
+        BNE @done
+        LDA VTEXT_CURY
+        BEQ @done
+
+        LDA VTEXT_CURX
+        STA nz_probe_x
+        LDA VTEXT_CURY
+        STA nz_probe_y
+
+        STZ VTEXT_CURX
+        JSR vtext_calc_addr
+        JSR nz_screen_read_char_cell
+        CMP #' '
+        BNE @restore
+
+        DEC VTEXT_CURY
+        STZ VTEXT_CURX
+        JSR vtext_calc_addr
+        JSR nz_screen_read_char_cell
+        CMP #'>'
+        BNE @restore
+
+        LDA #$01
+        STA VTEXT_CURX
+        JSR vtext_calc_addr
+        JSR nz_screen_read_char_cell
+        CMP #' '
+        BNE @restore
+
+        RTS
+
+@restore:
+        LDA nz_probe_x
+        STA VTEXT_CURX
+        LDA nz_probe_y
+        STA VTEXT_CURY
+@done:
+        RTS
+
+nz_screen_read_char_cell:
+        LDA #VTEXT_PLANE_CHAR
+        JSR vtext_select_vram_addr
+        LDA VGC_VRAM_DATA
+        LDA VGC_VRAM_DATA
+        RTS
+
 newline:
         LDA #$0D
         JSR print_char
@@ -654,6 +708,7 @@ msg_more:
 
 .include "xram.s"
 .include "pager.s"
+.include "rng.s"
 .include "vtext.s"
 
 .segment "VECTORS"

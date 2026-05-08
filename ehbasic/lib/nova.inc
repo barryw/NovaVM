@@ -341,6 +341,13 @@ VGC_TXTFLAGS      = $A0E6
 .ifndef VGC_TXTREVATTR
 VGC_TXTREVATTR    = $A0E7
 .endif
+; @label VGC.GFXTRANS
+; @kind const
+; @symbol VGC_GFXTRANS
+; @summary Graphics-plane transparent color register. Defaults to 0; set to another palette index when graphics code needs visible palette-0 black pixels.
+.ifndef VGC_GFXTRANS
+VGC_GFXTRANS      = $A0E8
+.endif
 
 .ifndef VGC_VPLANE
 VGC_VPLANE        = VGC_VRAM_PLANE
@@ -932,6 +939,43 @@ FIO_CMD_LOADRUNTIME = $28
 ; @symbol FIO_CMD_XPAGE
 ; @summary Host command that streams a file slice into XRAM using FIO_SRC/FIO_ENDL as a 24-bit file offset.
 FIO_CMD_XPAGE    = $29
+.endif
+.ifndef FIO_CMD_RNG
+; @label FIO.CMD_RNG
+; @kind const
+; @symbol FIO_CMD_RNG
+; @summary Host command that returns 32 bits from NovaHost's hardware-backed RNG.
+FIO_CMD_RNG      = $2A
+.endif
+
+; Host RNG result byte aliases. FIO.CMD_RNG returns little-endian bytes here.
+; @label FIO.RNG0
+; @kind u8
+; @symbol FIO_RNG0
+; @summary Low byte returned by FIO.CMD_RNG.
+.ifndef FIO_RNG0
+FIO_RNG0         = FIO_SRCL
+.endif
+; @label FIO.RNG1
+; @kind u8
+; @symbol FIO_RNG1
+; @summary Second byte returned by FIO.CMD_RNG.
+.ifndef FIO_RNG1
+FIO_RNG1         = FIO_SRCH
+.endif
+; @label FIO.RNG2
+; @kind u8
+; @symbol FIO_RNG2
+; @summary Third byte returned by FIO.CMD_RNG.
+.ifndef FIO_RNG2
+FIO_RNG2         = FIO_ENDL
+.endif
+; @label FIO.RNG3
+; @kind u8
+; @symbol FIO_RNG3
+; @summary High byte returned by FIO.CMD_RNG.
+.ifndef FIO_RNG3
+FIO_RNG3         = FIO_ENDH
 .endif
 
 .ifndef FIO_OK

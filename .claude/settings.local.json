@@ -578,7 +578,15 @@
       "Bash(/Users/barry/Git/e6502/e6502.NDI/bin/Release/net10.0/ndi dir *)",
       "Bash(rsync -az /Users/barry/Git/e6502/e6502.FPGA/fpga/Makefile /Users/barry/Git/e6502/e6502.FPGA/rtl/ beast:~/e6502_synth/e6502.FPGA/)",
       "Bash(nohup tools/beast-synth.sh bitstream slb_ff_clean)",
-      "Bash(ps -p 9022 -o etime=)"
+      "Bash(ps -p 9022 -o etime=)",
+      "Bash(sw_vers)",
+      "Bash(swift --version)",
+      "Bash(xcodebuild -version)",
+      "Bash(swift build *)",
+      "Bash(swift test *)",
+      "Bash(xcrun swift *)",
+      "Bash(swift run *)",
+      "Bash(swift *)"
     ]
   },
   "enableAllProjectMcpServers": true,

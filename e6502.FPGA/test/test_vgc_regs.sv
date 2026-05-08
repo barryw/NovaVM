@@ -84,6 +84,38 @@ module test_vgc_regs;
         release dut.spr_pixel_pri;
     endtask
 
+    task automatic test_gfx_transparent_color_compositor();
+        $display("");
+        $display("Test: graphics compositor uses configurable transparent color");
+
+        force dut.visible_d2 = 1'b1;
+        force dut.in_text_area_d2 = 1'b1;
+        force dut.reset_display_blank = 1'b0;
+        force dut.mode = 3'd3;
+        force dut.bg_color = 4'd1;
+        force dut.gfx_trans_color = 4'd2;
+        force dut.spr_pixel_hit = 1'b0;
+
+        force dut.gfx_b_dout = 4'd0;
+        #1;
+        check_eq("palette 0 is visible when gfx transparent color is 2",
+                 int'(dut.pixel_color), 12'h000);
+
+        force dut.gfx_b_dout = 4'd2;
+        #1;
+        check_eq("configured transparent gfx color falls through to background",
+                 int'(dut.pixel_color), 12'hFFF);
+
+        release dut.visible_d2;
+        release dut.in_text_area_d2;
+        release dut.reset_display_blank;
+        release dut.mode;
+        release dut.bg_color;
+        release dut.gfx_trans_color;
+        release dut.spr_pixel_hit;
+        release dut.gfx_b_dout;
+    endtask
+
     task automatic test_sprite_scanline_read_prefetch();
         $display("");
         $display("Test: sprite scanline reader prefetches one physical pixel");
@@ -249,6 +281,25 @@ module test_vgc_regs;
                  int'(dut.display_dim), 15);
     endtask
 
+    task automatic test_gfx_transparent_color_register();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: graphics transparent color register at $A0E8 — 4-bit");
+        do_reset();
+        check_eq("gfx_trans_color reset default is 0", int'(dut.gfx_trans_color), 0);
+        bus_write(REG_GFXTRANS_A, 8'h02); step(2);
+        check_eq("gfx_trans_color=2", int'(dut.gfx_trans_color), 2);
+        bus_read(REG_GFXTRANS_A, rb); step(2);
+        check_eq("$A0E8 CPU readback sees gfx_trans_color=2", int'(rb), 2);
+        bus_write(REG_GFXTRANS_A, 8'hFE); step(2);
+        check_eq("gfx_trans_color masks to 4 bits (0xFE -> 14)",
+                 int'(dut.gfx_trans_color), 14);
+        dbg_write(REG_GFXTRANS_A, 8'h0B);
+        check_eq("debug write gfx_trans_color=11", int'(dut.gfx_trans_color), 11);
+        dbg_read(REG_GFXTRANS_A, rb);
+        check_eq("$A0E8 debug readback sees debug-written gfx_trans_color=11", int'(rb), 11);
+    endtask
+
     task automatic test_debug_write_paths();
         $display("");
         $display("Test: debug write path can update VGC regs and VRAM while CPU is reset");
@@ -256,6 +307,8 @@ module test_vgc_regs;
         check_eq("debug write mode=3", int'(dut.mode), 3);
         dbg_write(16'hA0E5, 8'd4);
         check_eq("debug write display_dim=4", int'(dut.display_dim), 4);
+        dbg_write(REG_GFXTRANS_A, 8'd6);
+        check_eq("debug write gfx_trans_color=6", int'(dut.gfx_trans_color), 6);
         dbg_vmem_write(VPLANE_GFX_A, 16'h1234, 8'h0B);
         check_eq("debug vmem write gfx[0x1234]=0xB",
                  int'(dut.gfx_inst.gfx_mem.mem[16'h1234]), 4'hB);
@@ -519,6 +572,7 @@ module test_vgc_regs;
         bus_write(16'hA00A,       8'd1);   step(2);
         // $A00D write accepted but no-op — border removed, nothing to assert
         bus_write(16'hA00D,       8'd11);  step(2);
+        bus_write(REG_GFXTRANS_A, 8'd12);  step(2);
         bus_write(VIRQ_ENABLE_A,  8'h13);  step(2);
 
         check_eq("mode stable",         int'(dut.mode),          2);
@@ -530,6 +584,7 @@ module test_vgc_regs;
         check_eq("scroll_y stable",     int'(dut.scroll_y),      8);
         check_eq("font_slot stable",    int'(dut.font_slot),     1);
         check_eq("gfx_color stable",    int'(dut.gfx_color),     9);
+        check_eq("gfx_trans_color stable", int'(dut.gfx_trans_color), 12);
         check_eq("cursor_enable stable", int'(dut.cursor_enable), 1);
         check_eq("irq_enable stable",   int'(dut.irq_enable),    8'h13);
     endtask
@@ -544,6 +599,7 @@ module test_vgc_regs;
         test_mode_register();
         test_color_registers();
         test_border_masks_sprites();
+        test_gfx_transparent_color_compositor();
         test_sprite_scanline_read_prefetch();
         test_cursor_xy();
         test_scroll_registers();
@@ -553,6 +609,7 @@ module test_vgc_regs;
         test_collision_clear_on_write();
         test_irq_block();
         test_display_dim_register();
+        test_gfx_transparent_color_register();
         test_debug_write_paths();
         test_memread_char();
         test_memread_color();

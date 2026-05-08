@@ -41,6 +41,7 @@ module test_copper;
         .tile_dma_active(tile_dma_active),
         .blt_space(3'd0), .blt_addr(16'd0), .blt_rdata(),
         .blt_wdata(8'd0), .blt_we(1'b0), .blt_re(1'b0),
+        .video_blit_safe(),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
         .irq_out(irq_out),

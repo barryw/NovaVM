@@ -1,0 +1,16 @@
+# Deadline Z3 longplay: time-status, entry sequence, scrolling, save/restore.
+look=>South Lawn&&Robner estate
+save=>Ok.
+n=>Front Path&&front door
+open door=>now open
+n=>Foyer&&Mrs. Robner&&will at noon
+n=>North of Foyer&&staircase
+e=>Bottom of Stairs&&second floor
+w=>North of Foyer
+wait=>Time passes&&It is now
+time=>It is now
+!wait.wait.wait.wait.wait.wait.wait.wait.wait=>Do you want to keep waiting
+n=>North of Foyer
+.reboot
+restore=>Ok.
+look=>South Lawn&&Robner estate

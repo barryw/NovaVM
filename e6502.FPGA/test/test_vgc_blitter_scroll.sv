@@ -57,6 +57,7 @@ module test_vgc_blitter_scroll;
     wire  [7:0]  blt_vgc_wdata;
     wire         blt_vgc_we;
     wire         blt_vgc_re;
+    wire         video_blit_safe;
 
     logic [7:0] sim_ram [0:65535];
     logic [7:0] sim_xram [0:524287];
@@ -72,6 +73,11 @@ module test_vgc_blitter_scroll;
             sim_xram[blt_xram_addr] <= blt_xram_wdata;
     end
 
+    always_ff @(posedge clk) begin
+        if (blt_vgc_we && !video_blit_safe)
+            $fatal(1, "blitter wrote VGC video memory outside vblank");
+    end
+
     vgc vgc_inst (
         .clk(clk), .rst(rst), .video_rst(rst),
         .cpu_ce(vgc_cpu_ce),
@@ -84,6 +90,7 @@ module test_vgc_blitter_scroll;
         .blt_space(blt_vgc_space), .blt_addr(blt_vgc_addr),
         .blt_rdata(blt_vgc_rdata), .blt_wdata(blt_vgc_wdata),
         .blt_we(blt_vgc_we), .blt_re(blt_vgc_re),
+        .video_blit_safe(video_blit_safe),
         .dbg_addr(dbg_addr), .dbg_rdata(dbg_rdata),
         .dbg_we(dbg_we), .dbg_waddr(dbg_waddr), .dbg_wdata(dbg_wdata),
         .dbg_vmem_we(dbg_vmem_we), .dbg_vmem_re(dbg_vmem_re),
@@ -109,7 +116,8 @@ module test_vgc_blitter_scroll;
         .xram_re(blt_xram_re), .xram_busy(1'b0),
         .vgc_space(blt_vgc_space), .vgc_addr(blt_vgc_addr),
         .vgc_rdata(blt_vgc_rdata), .vgc_wdata(blt_vgc_wdata),
-        .vgc_we(blt_vgc_we), .vgc_re(blt_vgc_re)
+        .vgc_we(blt_vgc_we), .vgc_re(blt_vgc_re),
+        .video_write_safe(video_blit_safe)
     );
 
     localparam BLT = 16'hBA83;

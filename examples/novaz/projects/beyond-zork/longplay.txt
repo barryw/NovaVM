@@ -1,0 +1,2 @@
+# Placeholder until Beyond Zork parser vocabulary compatibility is fixed.
+.wait 0

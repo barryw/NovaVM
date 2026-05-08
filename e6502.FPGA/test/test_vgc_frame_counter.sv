@@ -59,6 +59,7 @@ module test_vgc_frame_counter;
         .blt_space(blt_space), .blt_addr(blt_addr),
         .blt_rdata(blt_rdata), .blt_wdata(blt_wdata),
         .blt_we(blt_we), .blt_re(blt_re),
+        .video_blit_safe(),
         .dbg_addr(dbg_addr), .dbg_rdata(dbg_rdata),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),

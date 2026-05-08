@@ -40,7 +40,7 @@ Define an instrument envelope and waveform.
 
 - Kind: `routine`
 - Symbol: `audio_instrument`
-- Address: `$EDB4`
+- Address: `$EE0B`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -68,7 +68,7 @@ Play the MIDI file named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_midplay`
-- Address: `$EDC7`
+- Address: `$EE1E`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -84,7 +84,7 @@ Stop MIDI file playback.
 
 - Kind: `routine`
 - Symbol: `audio_midstop`
-- Address: `$EDCC`
+- Address: `$EE23`
 - ABI: `none`
 
 Outputs:
@@ -96,7 +96,7 @@ Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.
 
 - Kind: `routine`
 - Symbol: `audio_music_loop`
-- Address: `$EDEE`
+- Address: `$EE45`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -111,7 +111,7 @@ Return the current MIDI note for a music voice.
 
 - Kind: `routine`
 - Symbol: `audio_music_note`
-- Address: `$EE0C`
+- Address: `$EE63`
 - ABI: `register`
 
 Inputs:
@@ -126,7 +126,7 @@ Start queued music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_play`
-- Address: `$EDDB`
+- Address: `$EE32`
 - ABI: `none`
 
 Outputs:
@@ -138,7 +138,7 @@ Return nonzero if music is playing.
 
 - Kind: `routine`
 - Symbol: `audio_music_playing`
-- Address: `$EE02`
+- Address: `$EE59`
 - ABI: `none`
 
 Outputs:
@@ -150,7 +150,7 @@ Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.
 
 - Kind: `routine`
 - Symbol: `audio_music_priority`
-- Address: `$EDF3`
+- Address: `$EE4A`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -165,7 +165,7 @@ Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.
 
 - Kind: `routine`
 - Symbol: `audio_music_sequence`
-- Address: `$EDD6`
+- Address: `$EE2D`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -183,7 +183,7 @@ Stop music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_stop`
-- Address: `$EDE4`
+- Address: `$EE3B`
 - ABI: `none`
 
 Outputs:
@@ -195,7 +195,7 @@ Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.
 
 - Kind: `routine`
 - Symbol: `audio_music_tempo`
-- Address: `$EDE9`
+- Address: `$EE40`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -219,7 +219,7 @@ Play a one-shot note using A/X/Y register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_play_sound`
-- Address: `$ED97`
+- Address: `$EDEE`
 - ABI: `register`
 
 Inputs:
@@ -244,7 +244,7 @@ Set master or per-voice volume using A/X register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_set_volume`
-- Address: `$EDA2`
+- Address: `$EDF9`
 - ABI: `register`
 
 Inputs:
@@ -260,7 +260,7 @@ Load the soundfont named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_sfload`
-- Address: `$EDD1`
+- Address: `$EE28`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -276,7 +276,7 @@ Return nonzero if a sound effect is playing.
 
 - Kind: `routine`
 - Symbol: `audio_sfx_playing`
-- Address: `$EDFC`
+- Address: `$EE53`
 - ABI: `none`
 
 Outputs:
@@ -288,7 +288,7 @@ Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-b
 
 - Kind: `routine`
 - Symbol: `audio_sidplay`
-- Address: `$EDB9`
+- Address: `$EE10`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -305,7 +305,7 @@ Stop SID file playback.
 
 - Kind: `routine`
 - Symbol: `audio_sidstop`
-- Address: `$EDC2`
+- Address: `$EE19`
 - ABI: `none`
 
 Outputs:
@@ -317,7 +317,7 @@ Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
 
 - Kind: `routine`
 - Symbol: `audio_sound`
-- Address: `$EDAA`
+- Address: `$EE01`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -334,7 +334,7 @@ Return raw music status bits.
 
 - Kind: `routine`
 - Symbol: `audio_status`
-- Address: `$EDF8`
+- Address: `$EE4F`
 - ABI: `none`
 
 Outputs:
@@ -386,7 +386,7 @@ Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
 
 - Kind: `routine`
 - Symbol: `audio_volume`
-- Address: `$EDAF`
+- Address: `$EE06`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -730,7 +730,7 @@ Change directory to FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_cd`
-- Address: `$ED7E`
+- Address: `$EDD0`
 
 Requires:
 - `FIO_NAME`
@@ -742,7 +742,7 @@ Convert the current FIO status register to the shared A=0/1 result.
 
 - Kind: `routine`
 - Symbol: `fio_check`
-- Address: `$ECFF`
+- Address: `$ED51`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -753,7 +753,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$ED1F`
+- Address: `$ED71`
 
 Outputs:
 - `A`: 0 on success.
@@ -765,6 +765,14 @@ Host command that streams a 16K file into the primary runtime ROM bank. Callers 
 - Kind: `const`
 - Symbol: `FIO_CMD_LOADRUNTIME`
 - Address: `$28`
+
+## FIO.CMD_RNG
+
+Host command that returns 32 bits from NovaHost's hardware-backed RNG.
+
+- Kind: `const`
+- Symbol: `FIO_CMD_RNG`
+- Address: `$2A`
 
 ## FIO.CMD_XPAGE
 
@@ -780,7 +788,7 @@ Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_copy_name`
-- Address: `$ED3E`
+- Address: `$ED90`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid name.
@@ -796,7 +804,7 @@ Delete the file named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_delete`
-- Address: `$ED6F`
+- Address: `$EDC1`
 
 Requires:
 - `FIO_NAME`
@@ -808,7 +816,7 @@ Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.
 
 - Kind: `routine`
 - Symbol: `fio_dir_open`
-- Address: `$ED65`
+- Address: `$EDB7`
 
 ## FIO.DIR_READ
 
@@ -816,7 +824,7 @@ Read the next directory entry into the FIO directory result registers.
 
 - Kind: `routine`
 - Symbol: `fio_dir_read`
-- Address: `$ED6A`
+- Address: `$EDBC`
 
 ## FIO.EXEC
 
@@ -824,7 +832,7 @@ Issue an FIO command, wait for completion, and return A=0/1 status.
 
 - Kind: `routine`
 - Symbol: `fio_exec`
-- Address: `$ED0C`
+- Address: `$ED5E`
 
 Inputs:
 - `A`: FIO command byte.
@@ -838,7 +846,7 @@ Load VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gload`
-- Address: `$ED79`
+- Address: `$EDCB`
 
 Requires:
 - `FIO_NAME`
@@ -855,7 +863,7 @@ Save VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gsave`
-- Address: `$ED74`
+- Address: `$EDC6`
 
 Requires:
 - `FIO_NAME`
@@ -872,7 +880,7 @@ Issue a raw FIO command without waiting for completion.
 
 - Kind: `routine`
 - Symbol: `fio_issue`
-- Address: `$ECFB`
+- Address: `$ED4D`
 
 Inputs:
 - `A`: FIO command byte.
@@ -883,7 +891,7 @@ Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.
 
 - Kind: `routine`
 - Symbol: `fio_load`
-- Address: `$ED60`
+- Address: `$EDB2`
 
 Requires:
 - `FIO_NAME`
@@ -897,7 +905,7 @@ Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runt
 
 - Kind: `routine`
 - Symbol: `fio_load_runtime`
-- Address: `$ED92`
+- Address: `$EDE4`
 
 Requires:
 - `FIO_NAME`
@@ -909,7 +917,7 @@ Create the directory named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_mkdir`
-- Address: `$ED83`
+- Address: `$EDD5`
 
 Requires:
 - `FIO_NAME`
@@ -954,7 +962,7 @@ Read the current directory into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_pwd`
-- Address: `$ED8D`
+- Address: `$EDDF`
 
 ## FIO.RMDIR
 
@@ -962,11 +970,55 @@ Remove the directory named by FIO.NAME/FIO_NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_rmdir`
-- Address: `$ED88`
+- Address: `$EDDA`
 
 Requires:
 - `FIO_NAME`
 - `FIO_NAMELEN`
+
+## FIO.RNG
+
+Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.
+
+- Kind: `routine`
+- Symbol: `fio_rng`
+- Address: `$EDE9`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+- `FIO_RNG0`: FIO_RNG1 FIO_RNG2 FIO_RNG3
+
+## FIO.RNG0
+
+Low byte returned by FIO.CMD_RNG.
+
+- Kind: `u8`
+- Symbol: `FIO_RNG0`
+- Address: `$B9A4`
+
+## FIO.RNG1
+
+Second byte returned by FIO.CMD_RNG.
+
+- Kind: `u8`
+- Symbol: `FIO_RNG1`
+- Address: `$B9A5`
+
+## FIO.RNG2
+
+Third byte returned by FIO.CMD_RNG.
+
+- Kind: `u8`
+- Symbol: `FIO_RNG2`
+- Address: `$B9A6`
+
+## FIO.RNG3
+
+High byte returned by FIO.CMD_RNG.
+
+- Kind: `u8`
+- Symbol: `FIO_RNG3`
+- Address: `$B9A7`
 
 ## FIO.RUN
 
@@ -981,7 +1033,7 @@ Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.
 
 - Kind: `routine`
 - Symbol: `fio_save`
-- Address: `$ED5B`
+- Address: `$EDAD`
 
 Requires:
 - `FIO_NAME`
@@ -997,7 +1049,7 @@ Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.
 
 - Kind: `routine`
 - Symbol: `fio_set_io_error`
-- Address: `$ED31`
+- Address: `$ED83`
 
 Outputs:
 - `A`: 1 on error.
@@ -1039,7 +1091,7 @@ Issue a raw NIC command.
 
 - Kind: `routine`
 - Symbol: `nic_command`
-- Address: `$EE18`
+- Address: `$EE6F`
 
 Inputs:
 - `A`: NIC command byte.
@@ -1050,7 +1102,7 @@ Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.
 
 - Kind: `routine`
 - Symbol: `nic_connect`
-- Address: `$EE1C`
+- Address: `$EE73`
 
 Requires:
 - `NIC_SLOT`
@@ -1064,7 +1116,7 @@ Copy a pointer-based host name to NIC_NAMEBUF and append NUL.
 
 - Kind: `routine`
 - Symbol: `nic_copy_name`
-- Address: `$EE42`
+- Address: `$EE99`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid length.
@@ -1080,7 +1132,7 @@ Disconnect NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_disconnect`
-- Address: `$EE20`
+- Address: `$EE77`
 
 Requires:
 - `NIC_SLOT`
@@ -1091,7 +1143,7 @@ Read the most recent NIC message length.
 
 - Kind: `routine`
 - Symbol: `nic_length`
-- Address: `$EE3E`
+- Address: `$EE95`
 
 Outputs:
 - `A`: Message length byte.
@@ -1109,7 +1161,7 @@ Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.
 
 - Kind: `routine`
 - Symbol: `nic_ready`
-- Address: `$EE34`
+- Address: `$EE8B`
 
 Inputs:
 - `X`: Slot number.
@@ -1123,7 +1175,7 @@ Receive data for NIC_SLOT into NIC_DMAL/H.
 
 - Kind: `routine`
 - Symbol: `nic_recv`
-- Address: `$EE28`
+- Address: `$EE7F`
 
 Requires:
 - `NIC_SLOT`
@@ -1136,7 +1188,7 @@ Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_send`
-- Address: `$EE24`
+- Address: `$EE7B`
 
 Requires:
 - `NIC_SLOT`
@@ -1150,7 +1202,7 @@ Read clamped NIC slot status.
 
 - Kind: `routine`
 - Symbol: `nic_status`
-- Address: `$EE2C`
+- Address: `$EE83`
 
 Inputs:
 - `X`: Slot number.
@@ -1302,6 +1354,71 @@ PAGER.TARGET value for flat XRAM destinations.
 - Symbol: `PAGER_TARGET_XRAM`
 - Address: `$00`
 
+## RNG.GET16
+
+Fill RNG.VALUE0..1 with 16 random bits from the Nova host.
+
+- Kind: `routine`
+- Symbol: `rng_get16`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+- `RNG_VALUE0`: RNG_VALUE1
+
+## RNG.GET32
+
+Fill RNG.VALUE0..3 with 32 random bits from the Nova host.
+
+- Kind: `routine`
+- Symbol: `rng_get32`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+- `RNG_VALUE0`: RNG_VALUE1 RNG_VALUE2 RNG_VALUE3
+
+## RNG.GET8
+
+Fill RNG.VALUE0 with an 8-bit random value from the Nova host.
+
+- Kind: `routine`
+- Symbol: `rng_get8`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+- `RNG_VALUE0`: 
+
+## RNG.VALUE0
+
+Low byte of the most recent RNG.GET32 result.
+
+- Kind: `u8`
+- Symbol: `RNG_VALUE0`
+- Address: `$B9A4`
+
+## RNG.VALUE1
+
+Second byte of the most recent RNG.GET32 result.
+
+- Kind: `u8`
+- Symbol: `RNG_VALUE1`
+- Address: `$B9A5`
+
+## RNG.VALUE2
+
+Third byte of the most recent RNG.GET32 result.
+
+- Kind: `u8`
+- Symbol: `RNG_VALUE2`
+- Address: `$B9A6`
+
+## RNG.VALUE3
+
+High byte of the most recent RNG.GET32 result.
+
+- Kind: `u8`
+- Symbol: `RNG_VALUE3`
+- Address: `$B9A7`
+
 ## ROMSWAP.PRIMARY
 
 Select the primary runtime ROM bank at $C000. At cold boot this is NovaBASIC; a RAM launcher may replace it with another runtime first.
@@ -1316,7 +1433,7 @@ Read the sprite-background collision status register.
 
 - Kind: `routine`
 - Symbol: `sprite_background_collision_status`
-- Address: `$E996`
+- Address: `$E9E8`
 
 Outputs:
 - `A`: Background collision status byte.
@@ -1327,7 +1444,7 @@ Read the sprite-sprite collision status register.
 
 - Kind: `routine`
 - Symbol: `sprite_collision_status`
-- Address: `$E992`
+- Address: `$E9E4`
 
 Outputs:
 - `A`: Collision status byte.
@@ -1338,7 +1455,7 @@ Issue a raw sprite VGC command without waiting for completion.
 
 - Kind: `routine`
 - Symbol: `sprite_command`
-- Address: `$E938`
+- Address: `$E98A`
 
 Inputs:
 - `A`: VGC sprite command byte.
@@ -1349,7 +1466,7 @@ Disable the sprite in VGC.P0.
 
 - Kind: `routine`
 - Symbol: `sprite_disable`
-- Address: `$E946`
+- Address: `$E998`
 
 Requires:
 - `VGC_P0`
@@ -1360,7 +1477,7 @@ Enable the sprite in VGC.P0.
 
 - Kind: `routine`
 - Symbol: `sprite_enable`
-- Address: `$E941`
+- Address: `$E993`
 
 Requires:
 - `VGC_P0`
@@ -1371,7 +1488,7 @@ Read a sprite's 16-bit X coordinate.
 
 - Kind: `routine`
 - Symbol: `sprite_get_x`
-- Address: `$E977`
+- Address: `$E9C9`
 
 Inputs:
 - `X`: Sprite index.
@@ -1386,7 +1503,7 @@ Read a sprite's Y coordinate.
 
 - Kind: `routine`
 - Symbol: `sprite_get_y`
-- Address: `$E988`
+- Address: `$E9DA`
 
 Inputs:
 - `X`: Sprite index.
@@ -1400,7 +1517,7 @@ Move a sprite using VGC.P0=sprite, VGC.P1/P2=x, VGC.P3=y.
 
 - Kind: `routine`
 - Symbol: `sprite_pos`
-- Address: `$E93C`
+- Address: `$E98E`
 
 Requires:
 - `VGC_P0`
@@ -1414,7 +1531,7 @@ Compute the VGC sprite attribute block offset for a sprite field.
 
 - Kind: `routine`
 - Symbol: `sprite_reg_offset`
-- Address: `$E950`
+- Address: `$E9A2`
 
 Inputs:
 - `X`: Sprite index.
@@ -1429,7 +1546,7 @@ Write one sprite bitmap row using VGC.P0..VGC.P9.
 
 - Kind: `routine`
 - Symbol: `sprite_row`
-- Address: `$E94B`
+- Address: `$E99D`
 
 Requires:
 - `VGC_P0`
@@ -1449,7 +1566,7 @@ Write one 16-bit sprite attribute field.
 
 - Kind: `routine`
 - Symbol: `sprite_set_reg16`
-- Address: `$E968`
+- Address: `$E9BA`
 
 Inputs:
 - `X`: Sprite index.
@@ -1463,7 +1580,7 @@ Write one 8-bit sprite attribute field.
 
 - Kind: `routine`
 - Symbol: `sprite_set_reg8`
-- Address: `$E95D`
+- Address: `$E9AF`
 
 Inputs:
 - `X`: Sprite index.
@@ -1476,7 +1593,7 @@ Set a sprite's shape index.
 
 - Kind: `routine`
 - Symbol: `sprite_set_shape`
-- Address: `$E95B`
+- Address: `$E9AD`
 
 Inputs:
 - `X`: Sprite index.
@@ -1664,6 +1781,369 @@ Set the tile transparent colour.
 Inputs:
 - `X`: Transparent colour byte.
 
+## TWEEN.BEGIN
+
+Reset TWEEN.FRAME/DONE and set TWEEN.VALUE to TWEEN.START.
+
+- Kind: `routine`
+- Symbol: `tween_begin`
+
+Outputs:
+- `TWEEN_FRAME`: Reset to 0.
+- `TWEEN_DONE`: Cleared to 0.
+- `TWEEN_VALUEL`: Low byte of TWEEN.START.
+- `TWEEN_VALUEH`: High byte of TWEEN.START.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+
+## TWEEN.DONE
+
+Non-zero when the tween has reached its end value.
+
+- Kind: `u8`
+- Symbol: `TWEEN_DONE`
+
+## TWEEN.DURATION
+
+Tween length in frames. Zero snaps to the end value.
+
+- Kind: `u8`
+- Symbol: `TWEEN_DURATION`
+
+## TWEEN.EASE
+
+Last eased progress value, 0..255.
+
+- Kind: `u8`
+- Symbol: `TWEEN_EASE`
+
+## TWEEN.ENDH
+
+High byte of the tween end value.
+
+- Kind: `u8`
+- Symbol: `TWEEN_ENDH`
+
+## TWEEN.ENDL
+
+Low byte of the tween end value.
+
+- Kind: `u8`
+- Symbol: `TWEEN_ENDL`
+
+## TWEEN.EVAL
+
+Evaluate the current tween frame using TWEEN.MODE.
+
+- Kind: `routine`
+- Symbol: `tween_eval`
+
+Outputs:
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+- `TWEEN_MODE`
+
+## TWEEN.EVAL_EASE_IN
+
+Evaluate the current tween frame with slow-start dampening.
+
+- Kind: `routine`
+- Symbol: `tween_eval_ease_in`
+
+Outputs:
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+
+## TWEEN.EVAL_EASE_IN_OUT
+
+Evaluate the current tween frame with dampening at both ends.
+
+- Kind: `routine`
+- Symbol: `tween_eval_ease_in_out`
+
+Outputs:
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+
+## TWEEN.EVAL_EASE_OUT
+
+Evaluate the current tween frame with slow-end dampening.
+
+- Kind: `routine`
+- Symbol: `tween_eval_ease_out`
+
+Outputs:
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+
+## TWEEN.EVAL_LINEAR
+
+Evaluate the current tween frame with a linear curve.
+
+- Kind: `routine`
+- Symbol: `tween_eval_linear`
+
+Outputs:
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+
+## TWEEN.FRAME
+
+Current tween frame, from 0 through TWEEN.DURATION.
+
+- Kind: `u8`
+- Symbol: `TWEEN_FRAME`
+
+## TWEEN.MODE
+
+Easing mode: 0 linear, 1 ease-in, 2 ease-out, 3 ease-in-out.
+
+- Kind: `u8`
+- Symbol: `TWEEN_MODE`
+
+## TWEEN.MODE_EASE_IN
+
+Constant for quadratic ease-in interpolation.
+
+- Kind: `const`
+- Symbol: `TWEEN_MODE_EASE_IN`
+- Address: `$01`
+
+## TWEEN.MODE_EASE_IN_OUT
+
+Constant for quadratic ease-in/ease-out interpolation.
+
+- Kind: `const`
+- Symbol: `TWEEN_MODE_EASE_IN_OUT`
+- Address: `$03`
+
+## TWEEN.MODE_EASE_OUT
+
+Constant for quadratic ease-out interpolation.
+
+- Kind: `const`
+- Symbol: `TWEEN_MODE_EASE_OUT`
+- Address: `$02`
+
+## TWEEN.MODE_LINEAR
+
+Constant for linear interpolation.
+
+- Kind: `const`
+- Symbol: `TWEEN_MODE_LINEAR`
+- Address: `$00`
+
+## TWEEN.PROGRESS
+
+Last normalized progress value, 0..255.
+
+- Kind: `u8`
+- Symbol: `TWEEN_PROGRESS`
+
+## TWEEN.STARTH
+
+High byte of the tween start value.
+
+- Kind: `u8`
+- Symbol: `TWEEN_STARTH`
+
+## TWEEN.STARTL
+
+Low byte of the tween start value.
+
+- Kind: `u8`
+- Symbol: `TWEEN_STARTL`
+
+## TWEEN.STEP
+
+Increment TWEEN.FRAME by one, then evaluate using TWEEN.MODE.
+
+- Kind: `routine`
+- Symbol: `tween_step`
+
+Outputs:
+- `TWEEN_FRAME`: Advanced frame value.
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+- `TWEEN_MODE`
+
+## TWEEN.STEP_EASE_IN
+
+Increment TWEEN.FRAME by one, then evaluate with slow-start dampening.
+
+- Kind: `routine`
+- Symbol: `tween_step_ease_in`
+
+Outputs:
+- `TWEEN_FRAME`: Advanced frame value.
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+
+## TWEEN.STEP_EASE_IN_OUT
+
+Increment TWEEN.FRAME by one, then evaluate with dampening at both ends.
+
+- Kind: `routine`
+- Symbol: `tween_step_ease_in_out`
+
+Outputs:
+- `TWEEN_FRAME`: Advanced frame value.
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+
+## TWEEN.STEP_EASE_OUT
+
+Increment TWEEN.FRAME by one, then evaluate with slow-end dampening.
+
+- Kind: `routine`
+- Symbol: `tween_step_ease_out`
+
+Outputs:
+- `TWEEN_FRAME`: Advanced frame value.
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+
+## TWEEN.STEP_LINEAR
+
+Increment TWEEN.FRAME by one, then evaluate with a linear curve.
+
+- Kind: `routine`
+- Symbol: `tween_step_linear`
+
+Outputs:
+- `TWEEN_FRAME`: Advanced frame value.
+- `TWEEN_VALUEL`: Low byte of computed value.
+- `TWEEN_VALUEH`: High byte of computed value.
+- `TWEEN_DONE`: Non-zero when the end value has been reached.
+- `TWEEN_PROGRESS`: Normalized progress, 0..255.
+- `TWEEN_EASE`: Eased progress, 0..255.
+
+Requires:
+- `TWEEN_STARTL`
+- `TWEEN_STARTH`
+- `TWEEN_ENDL`
+- `TWEEN_ENDH`
+- `TWEEN_DURATION`
+- `TWEEN_FRAME`
+
+## TWEEN.VALUEH
+
+High byte of the last tween result.
+
+- Kind: `u8`
+- Symbol: `TWEEN_VALUEH`
+
+## TWEEN.VALUEL
+
+Low byte of the last tween result.
+
+- Kind: `u8`
+- Symbol: `TWEEN_VALUEL`
+
 ## VGC.CIRCLE
 
 Issue the VGC circle/ellipse command using VGC.P0..VGC.P7.
@@ -1687,7 +2167,7 @@ Clear the text screen through the VGC character output register.
 
 - Kind: `routine`
 - Symbol: `vgc_cls`
-- Address: `$E8D2`
+- Address: `$E924`
 
 ## VGC.COMMAND
 
@@ -1695,7 +2175,7 @@ Issue a raw VGC command without waiting for completion.
 
 - Kind: `routine`
 - Symbol: `vgc_cmd`
-- Address: `$E8BD`
+- Address: `$E90F`
 
 Inputs:
 - `A`: VGC command byte.
@@ -1733,7 +2213,7 @@ Disable flashing text.
 
 - Kind: `routine`
 - Symbol: `vgc_flash_off`
-- Address: `$E92F`
+- Address: `$E981`
 
 ## VGC.FLASH_ON
 
@@ -1741,7 +2221,7 @@ Enable flashing text.
 
 - Kind: `routine`
 - Symbol: `vgc_flash_on`
-- Address: `$E926`
+- Address: `$E978`
 
 ## VGC.GCLS
 
@@ -1760,6 +2240,14 @@ Issue the VGC graphics colour command using VGC.P0/P1.
 Requires:
 - `VGC_P0`
 - `VGC_P1`
+
+## VGC.GFXTRANS
+
+Graphics-plane transparent color register. Defaults to 0; set to another palette index when graphics code needs visible palette-0 black pixels.
+
+- Kind: `const`
+- Symbol: `VGC_GFXTRANS`
+- Address: `$A0E8`
 
 ## VGC.GTEXT
 
@@ -1801,7 +2289,7 @@ Set the text cursor position from VGC.P0/VGC.P1.
 
 - Kind: `routine`
 - Symbol: `vgc_locate`
-- Address: `$E8E4`
+- Address: `$E936`
 
 Inputs:
 - `VGC_P0`: Cursor X column.
@@ -1813,7 +2301,7 @@ Read one byte from VGC memory using VGC.P0..VGC.P4.
 
 - Kind: `routine`
 - Symbol: `vgc_mem_read`
-- Address: `$E8F9`
+- Address: `$E94B`
 
 Outputs:
 - `VGC_P3`: Read byte.
@@ -1830,7 +2318,7 @@ Write one byte to VGC memory using VGC.P0..VGC.P4.
 
 - Kind: `routine`
 - Symbol: `vgc_mem_write`
-- Address: `$E8FC`
+- Address: `$E94E`
 
 Requires:
 - `VGC_P0`
@@ -1888,7 +2376,7 @@ Enable reverse text using the current foreground/background colours.
 
 - Kind: `routine`
 - Symbol: `vgc_reverse_default`
-- Address: `$E904`
+- Address: `$E956`
 
 ## VGC.REVERSE_EXPLICIT
 
@@ -1896,7 +2384,7 @@ Enable reverse text with explicit packed foreground/background colours.
 
 - Kind: `routine`
 - Symbol: `vgc_reverse_explicit`
-- Address: `$E90F`
+- Address: `$E961`
 
 Inputs:
 - `A`: Packed reverse attribute, low nibble foreground and high nibble background.
@@ -1907,7 +2395,7 @@ Disable reverse text.
 
 - Kind: `routine`
 - Symbol: `vgc_reverse_off`
-- Address: `$E91D`
+- Address: `$E96F`
 
 ## VGC.SET_BG
 
@@ -1915,7 +2403,7 @@ Set the current text background colour.
 
 - Kind: `routine`
 - Symbol: `vgc_set_bg`
-- Address: `$E8DC`
+- Address: `$E92E`
 
 Inputs:
 - `X`: Background colour byte.
@@ -1926,7 +2414,7 @@ Set the VGC border colour.
 
 - Kind: `routine`
 - Symbol: `vgc_set_border`
-- Address: `$E8E0`
+- Address: `$E932`
 
 Inputs:
 - `X`: Border colour byte.
@@ -1937,7 +2425,7 @@ Set the current text foreground colour.
 
 - Kind: `routine`
 - Symbol: `vgc_set_fg`
-- Address: `$E8D8`
+- Address: `$E92A`
 
 Inputs:
 - `X`: Foreground colour byte.
@@ -1948,7 +2436,7 @@ Select the active text font slot.
 
 - Kind: `routine`
 - Symbol: `vgc_set_font`
-- Address: `$E8F5`
+- Address: `$E947`
 
 Inputs:
 - `X`: Font slot, 0..7.
@@ -1959,7 +2447,7 @@ Set the active VGC graphics/text mode.
 
 - Kind: `routine`
 - Symbol: `vgc_set_mode`
-- Address: `$E8F1`
+- Address: `$E943`
 
 Inputs:
 - `X`: Mode byte.
@@ -1983,7 +2471,7 @@ Wait until the VGC frame counter advances.
 
 - Kind: `routine`
 - Symbol: `vgc_vsync`
-- Address: `$E8C9`
+- Address: `$E91B`
 
 Outputs:
 - `A`: Last observed frame counter value.
@@ -1994,7 +2482,538 @@ Wait for the active VGC command to complete.
 
 - Kind: `routine`
 - Symbol: `vgc_wait_cmd`
-- Address: `$E8C1`
+- Address: `$E913`
+
+## VSPRITE.BGADDRH
+
+High byte of the caller-owned saved-background buffer address. Use 0 for CPU RAM.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_BGADDRH`
+
+## VSPRITE.BGADDRL
+
+Low byte of the caller-owned saved-background buffer address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_BGADDRL`
+
+## VSPRITE.BGADDRM
+
+Middle byte of the caller-owned saved-background buffer address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_BGADDRM`
+
+## VSPRITE.BGSPACE
+
+Blitter memory space for the saved-background buffer. Use BLT_SPACE_CPU for normal RAM buffers.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_BGSPACE`
+
+## VSPRITE.BGSTRH
+
+High byte of the saved-background buffer row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_BGSTRH`
+
+## VSPRITE.BGSTRL
+
+Low byte of the saved-background buffer row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_BGSTRL`
+
+## VSPRITE.BLIT
+
+Copy the configured virtual sprite rectangle with the blitter.
+
+- Kind: `routine`
+- Symbol: `vsprite_blit`
+
+Inputs:
+- `VSPRITE_FLAGS`: Set bit 0 to enable color-key transparency.
+- `VSPRITE_COLORKEY`: Source byte skipped when color-key mode is enabled.
+- `VGC_GFXTRANS`: Graphics-plane color treated as transparent by display composition; set this to a non-black color when blitting visible palette-0 black pixels.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE_SRCSPACE`
+- `VSPRITE_DSTSPACE`
+- `VSPRITE_SRCADDR*`
+- `VSPRITE_DSTADDR*`
+- `VSPRITE_WIDTH*`
+- `VSPRITE_HEIGHT*`
+- `VSPRITE_SRCSTR*`
+- `VSPRITE_DSTSTR*`
+
+## VSPRITE.COLORKEY
+
+Source byte skipped by color-keyed blits. For graphics-plane virtual sprites, normally match this to VGC.GFXTRANS.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_COLORKEY`
+
+## VSPRITE.DESC_FLAG_COLORKEY
+
+Descriptor flag enabling source color-key transparency.
+
+- Kind: `const`
+- Symbol: `VSPRITE_DESC_FLAG_COLORKEY`
+- Address: `$01`
+
+## VSPRITE.DESC_SAVED
+
+Internal descriptor flag set when old X/Y has a saved background to restore.
+
+- Kind: `const`
+- Symbol: `VSPRITE_DESC_SAVED`
+- Address: `$40`
+
+## VSPRITE.DESC_VISIBLE
+
+Descriptor flag enabling scene save/draw for this virtual sprite.
+
+- Kind: `const`
+- Symbol: `VSPRITE_DESC_VISIBLE`
+- Address: `$80`
+
+## VSPRITE.DSTADDRH
+
+High byte of the virtual-sprite destination address. VSPRITE.GFX_* routines compute this from VSPRITE.X/Y.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_DSTADDRH`
+
+## VSPRITE.DSTADDRL
+
+Low byte of the virtual-sprite destination address. VSPRITE.GFX_* routines compute this from VSPRITE.X/Y.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_DSTADDRL`
+
+## VSPRITE.DSTADDRM
+
+Middle byte of the virtual-sprite destination address. VSPRITE.GFX_* routines compute this from VSPRITE.X/Y.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_DSTADDRM`
+
+## VSPRITE.DSTSPACE
+
+Blitter memory space for the virtual-sprite destination rectangle.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_DSTSPACE`
+
+## VSPRITE.DSTSTRH
+
+High byte of the destination row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_DSTSTRH`
+
+## VSPRITE.DSTSTRL
+
+Low byte of the destination row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_DSTSTRL`
+
+## VSPRITE.FILL
+
+Fill the configured destination rectangle with VSPRITE.FILLVALUE.
+
+- Kind: `routine`
+- Symbol: `vsprite_fill`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE_DSTSPACE`
+- `VSPRITE_DSTADDR*`
+- `VSPRITE_WIDTH*`
+- `VSPRITE_HEIGHT*`
+- `VSPRITE_DSTSTR*`
+
+## VSPRITE.FILLVALUE
+
+Byte value used by VSPRITE.FILL and VSPRITE.GFX_FILL.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_FILLVALUE`
+
+## VSPRITE.FLAGS
+
+Bitfield controlling virtual-sprite blits. Set VSPRITE.FLAG_COLORKEY to enable source transparency.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_FLAGS`
+
+## VSPRITE.FLAG_COLORKEY
+
+Enable source color-key transparency for VSPRITE.BLIT and VSPRITE.GFX_BLIT.
+
+- Kind: `const`
+- Symbol: `VSPRITE_FLAG_COLORKEY`
+- Address: `$01`
+
+## VSPRITE.GFX_ADDR
+
+Convert VSPRITE.X/Y to a linear VGC graphics-plane destination address.
+
+- Kind: `routine`
+- Symbol: `vsprite_gfx_addr`
+
+Outputs:
+- `VSPRITE_DSTADDR*`: y * 320 + x.
+
+Requires:
+- `VSPRITE_XL`
+- `VSPRITE_XH`
+- `VSPRITE_Y`
+
+## VSPRITE.GFX_BLIT
+
+Copy the configured virtual sprite to the VGC graphics plane at X/Y.
+
+- Kind: `routine`
+- Symbol: `vsprite_gfx_blit`
+
+Inputs:
+- `VSPRITE_COLORKEY`: Source transparent color when VSPRITE_FLAG_COLORKEY is set; normally match this to VGC_GFXTRANS for graphics-plane virtual sprites.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE_XL`
+- `VSPRITE_XH`
+- `VSPRITE_Y`
+- `VSPRITE_SRCSPACE`
+- `VSPRITE_SRCADDR*`
+- `VSPRITE_WIDTH*`
+- `VSPRITE_HEIGHT*`
+- `VSPRITE_SRCSTR*`
+
+## VSPRITE.GFX_FILL
+
+Fill a graphics-plane rectangle at VSPRITE.X/Y.
+
+- Kind: `routine`
+- Symbol: `vsprite_gfx_fill`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE_XL`
+- `VSPRITE_XH`
+- `VSPRITE_Y`
+- `VSPRITE_WIDTH*`
+- `VSPRITE_HEIGHT*`
+- `VSPRITE_FILLVALUE`
+
+## VSPRITE.GFX_RESTORE_BG
+
+Restore a caller-owned VSPRITE.BG* buffer into the graphics plane at VSPRITE.X/Y.
+
+- Kind: `routine`
+- Symbol: `vsprite_gfx_restore_bg`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE_XL`
+- `VSPRITE_XH`
+- `VSPRITE_Y`
+- `VSPRITE_WIDTH*`
+- `VSPRITE_HEIGHT*`
+- `VSPRITE_BGSPACE`
+- `VSPRITE_BGADDR*`
+- `VSPRITE_BGSTR*`
+
+## VSPRITE.GFX_SAVE_BG
+
+Save a graphics-plane rectangle under VSPRITE.X/Y into the caller-owned VSPRITE.BG* buffer.
+
+- Kind: `routine`
+- Symbol: `vsprite_gfx_save_bg`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE_XL`
+- `VSPRITE_XH`
+- `VSPRITE_Y`
+- `VSPRITE_WIDTH*`
+- `VSPRITE_HEIGHT*`
+- `VSPRITE_BGSPACE`
+- `VSPRITE_BGADDR*`
+- `VSPRITE_BGSTR*`
+
+## VSPRITE.HEIGHTH
+
+High byte of the rectangle height in rows.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_HEIGHTH`
+
+## VSPRITE.HEIGHTL
+
+Low byte of the rectangle height in rows.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_HEIGHTL`
+
+## VSPRITE.SCENE_ADDRH
+
+High byte of the caller-owned scene descriptor table.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_ADDRH`
+
+## VSPRITE.SCENE_ADDRL
+
+Low byte of the caller-owned scene descriptor table.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_ADDRL`
+
+## VSPRITE.SCENE_BEGIN
+
+Restore all saved old backgrounds in the configured scene descriptor list.
+
+- Kind: `routine`
+- Symbol: `vsprite_scene_begin`
+
+Requires:
+- `VSPRITE_SCENE_ADDRL`
+- `VSPRITE_SCENE_ADDRH`
+- `VSPRITE_SCENE_COUNT`
+
+## VSPRITE.SCENE_COMMIT
+
+Save all current backgrounds, then draw all visible descriptors in list order.
+
+- Kind: `routine`
+- Symbol: `vsprite_scene_commit`
+
+Requires:
+- `VSPRITE_SCENE_ADDRL`
+- `VSPRITE_SCENE_ADDRH`
+- `VSPRITE_SCENE_COUNT`
+
+## VSPRITE.SCENE_COMMIT_ATOMIC
+
+Compose a scene into a caller-owned work buffer, then commit the completed dirty rectangle to graphics memory.
+
+- Kind: `routine`
+- Symbol: `vsprite_scene_commit_atomic`
+
+Requires:
+- `VSPRITE_SCENE_ADDRL`
+- `VSPRITE_SCENE_ADDRH`
+- `VSPRITE_SCENE_COUNT`
+- `VSPRITE_SCENE_X*`
+- `VSPRITE_SCENE_Y`
+- `VSPRITE_SCENE_WIDTH*`
+- `VSPRITE_SCENE_HEIGHT*`
+- `VSPRITE_SCENE_WORK*`
+
+## VSPRITE.SCENE_COUNT
+
+Number of descriptors in the scene table.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_COUNT`
+
+## VSPRITE.SCENE_DRAW
+
+Draw all visible descriptors in list order without saving backgrounds.
+
+- Kind: `routine`
+- Symbol: `vsprite_scene_draw`
+
+Requires:
+- `VSPRITE_SCENE_ADDRL`
+- `VSPRITE_SCENE_ADDRH`
+- `VSPRITE_SCENE_COUNT`
+
+## VSPRITE.SCENE_HEIGHTH
+
+High byte of the dirty rectangle height for atomic scene commits.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_HEIGHTH`
+
+## VSPRITE.SCENE_HEIGHTL
+
+Low byte of the dirty rectangle height for atomic scene commits.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_HEIGHTL`
+
+## VSPRITE.SCENE_WIDTHH
+
+High byte of the dirty rectangle width for atomic scene commits.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_WIDTHH`
+
+## VSPRITE.SCENE_WIDTHL
+
+Low byte of the dirty rectangle width for atomic scene commits.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_WIDTHL`
+
+## VSPRITE.SCENE_WORKADDRH
+
+High byte of the atomic scene work buffer address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_WORKADDRH`
+
+## VSPRITE.SCENE_WORKADDRL
+
+Low byte of the atomic scene work buffer address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_WORKADDRL`
+
+## VSPRITE.SCENE_WORKADDRM
+
+Middle byte of the atomic scene work buffer address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_WORKADDRM`
+
+## VSPRITE.SCENE_WORKSPACE
+
+Blitter memory space for the atomic scene work buffer.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_WORKSPACE`
+
+## VSPRITE.SCENE_WORKSTRH
+
+High byte of the atomic scene work buffer row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_WORKSTRH`
+
+## VSPRITE.SCENE_WORKSTRL
+
+Low byte of the atomic scene work buffer row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_WORKSTRL`
+
+## VSPRITE.SCENE_XH
+
+High byte of the graphics-plane dirty rectangle X coordinate for atomic scene commits.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_XH`
+
+## VSPRITE.SCENE_XL
+
+Low byte of the graphics-plane dirty rectangle X coordinate for atomic scene commits.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_XL`
+
+## VSPRITE.SCENE_Y
+
+Graphics-plane dirty rectangle Y coordinate for atomic scene commits.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SCENE_Y`
+
+## VSPRITE.SRCADDRH
+
+High byte of the virtual-sprite source address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SRCADDRH`
+
+## VSPRITE.SRCADDRL
+
+Low byte of the virtual-sprite source address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SRCADDRL`
+
+## VSPRITE.SRCADDRM
+
+Middle byte of the virtual-sprite source address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SRCADDRM`
+
+## VSPRITE.SRCSPACE
+
+Blitter memory space for the virtual-sprite source rectangle.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SRCSPACE`
+
+## VSPRITE.SRCSTRH
+
+High byte of the source row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SRCSTRH`
+
+## VSPRITE.SRCSTRL
+
+Low byte of the source row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_SRCSTRL`
+
+## VSPRITE.WIDTHH
+
+High byte of the rectangle width in pixels/bytes.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_WIDTHH`
+
+## VSPRITE.WIDTHL
+
+Low byte of the rectangle width in pixels/bytes.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_WIDTHL`
+
+## VSPRITE.XH
+
+High byte of the graphics-plane X coordinate used by VSPRITE.GFX_* helpers.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_XH`
+
+## VSPRITE.XL
+
+Low byte of the graphics-plane X coordinate used by VSPRITE.GFX_* helpers.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_XL`
+
+## VSPRITE.Y
+
+Graphics-plane Y coordinate used by VSPRITE.GFX_* helpers.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_Y`
 
 ## XMC.ALLOC
 

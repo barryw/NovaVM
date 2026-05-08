@@ -223,7 +223,9 @@ def test_fio_sd_dispatch_contract() -> None:
 
 def test_runtime_autoboot_contract() -> None:
     nova_inc = read("ehbasic/lib/nova.inc")
+    basic = read("ehbasic/basic.asm")
     fio = read("ehbasic/lib/fio.s")
+    rng = read("ehbasic/lib/rng.s")
     constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
     controller = read("e6502.Avalonia/Hardware/FileIoController.cs")
     composite = read("e6502.Avalonia/Hardware/CompositeBusDevice.cs")
@@ -247,9 +249,17 @@ def test_runtime_autoboot_contract() -> None:
         "BASIC exposes primary runtime ROM swap label": "ROMSWAP_PRIMARY" in nova_inc
         and "ROMSWAP_PRIMARY   = ROMSWAP_BASIC" in nova_inc,
         "BASIC exposes LOADRUNTIME command ID": "FIO_CMD_LOADRUNTIME = $28" in nova_inc,
+        "BASIC exposes host RNG command ID": "FIO_CMD_RNG      = $2A" in nova_inc
+        and "FIO_RNG0         = FIO_SRCL" in nova_inc,
+        "BASIC RND is seeded from host RNG at cold start": "JSR   LAB_SEED_RND_HOST" in basic
+        and "LDA   #FIO_CMD_RNG" in basic
+        and "STA   Rbyte4" in basic,
         "shared FIO exports runtime loader": ".export fio_load_runtime" in fio
         and "LDA   #FIO_CMD_LOADRUNTIME" in fio,
+        "shared RNG library wraps host command": ".export rng_get32" in rng
+        and "LDA   #FIO_CMD_RNG" in rng,
         "emulator command constants match": "FioCmdLoadRuntime = 0x28" in constants
+        and "FioCmdRng        = 0x2A" in constants
         and "RomSwapPrimary  = RomSwapBasic" in constants
         and "RomSize           = 0x4000" in constants,
         "emulator FIO handles runtime loading": "case VgcConstants.FioCmdLoadRuntime:" in controller
@@ -261,9 +271,14 @@ def test_runtime_autoboot_contract() -> None:
         and "SelectBootDevice()" in storage_dm,
         "ESP dispatcher defines runtime command": "CMD_LOADRUNTIME = 0x28" in dispatcher_h
         and "RUNTIME_ROM_BYTES = 16 * 1024" in dispatcher_h,
+        "ESP dispatcher defines hardware RNG command": "CMD_RNG      = 0x2A" in dispatcher_h
+        and "void handle_rng();" in dispatcher_h,
         "ESP dispatcher handles runtime command": "case CMD_LOADRUNTIME:" in dispatcher
         and "handle_load_runtime()" in dispatcher
         and "pokeRomBlock(0" in dispatcher,
+        "ESP dispatcher handles hardware RNG command": "case CMD_RNG:" in dispatcher
+        and "handle_rng()" in dispatcher
+        and "esp_random()" in dispatcher,
         "ESP load mirrors BAS-before-BIN resolution": "find_load_entry" in dispatcher
         and '"%s.bas"' in dispatcher
         and '"%s.bin"' in dispatcher,
@@ -283,6 +298,7 @@ def test_runtime_autoboot_contract() -> None:
         "unit tests cover boot order": "FindAutoboot_PrefersInsertedFloppyOverHardDrive" in unit_dm
         and "SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists" in unit_dm,
         "unit tests cover runtime load command": "LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime" in unit_fio,
+        "unit tests cover RNG command": "RngCommand_ReturnsProviderBytes" in unit_fio,
         "unit tests cover primary ROM swap alias": "WriteRomSwapPrimary_SelectsPrimaryRuntimeRom" in unit_rom,
         "NovaZ example builds launcher plus runtime": "AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin" in novaz_make
         and "RUNTIME := $(BUILD_DIR)/novaz.bin" in novaz_make

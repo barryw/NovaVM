@@ -40,6 +40,7 @@ module vgc (
     input  logic [7:0]  blt_wdata,
     input  logic        blt_we,
     input  logic        blt_re,
+    output logic        video_blit_safe,
 
     // Debug read port — separate from CPU bus to avoid side effects
     input  logic [15:0] dbg_addr,
@@ -122,6 +123,7 @@ module vgc (
     localparam DIM_REG_ADDR   = 16'hA0E5;
     localparam TEXT_FLAGS_ADDR = 16'hA0E6;
     localparam TEXT_REVATTR_ADDR = 16'hA0E7;
+    localparam GFX_TRANS_ADDR = 16'hA0E8;
 
     // Register offsets
     localparam REG_MODE    = 0;
@@ -264,6 +266,7 @@ module vgc (
 
     wire vblank_start = (h_count == 10'd0 && v_count == V_ACTIVE);
     wire frame_start  = (h_count == 10'd0 && v_count == 10'd0);
+    assign video_blit_safe = (v_count >= V_ACTIVE);
 
     // Soft/custom resets are frame-synchronized so the HDMI stream never sees
     // a mid-frame timing jump or half-old/half-black output. `video_rst` is the
@@ -611,7 +614,7 @@ module vgc (
     logic [7:0]  regs [0:31];
     logic [6:0]  cursor_x;
     logic [5:0]  cursor_y;
-    logic [3:0]  border_color, fg_color, bg_color, gfx_color, display_dim;
+    logic [3:0]  border_color, fg_color, bg_color, gfx_color, display_dim, gfx_trans_color;
     logic [2:0]  mode;
     logic        cursor_enable;
     logic [2:0]  vram_plane;
@@ -873,6 +876,7 @@ module vgc (
     wire vram_reg_sel  = (cpu_addr >= VRAM_REG_BASE && cpu_addr <= VRAM_REG_END);
     wire dim_reg_sel   = (cpu_addr == DIM_REG_ADDR);
     wire text_reg_sel  = (cpu_addr == TEXT_FLAGS_ADDR || cpu_addr == TEXT_REVATTR_ADDR);
+    wire gfx_trans_sel = (cpu_addr == GFX_TRANS_ADDR);
     wire fio_name_sel  = (cpu_addr >= FIO_NAME && cpu_addr <= 16'hB9EF);
     wire fio_len_sel   = (cpu_addr == FIO_NAME_LEN);
     wire tile_reg_sel  = (cpu_addr >= 16'hA0C0 && cpu_addr <= 16'hA0DF);
@@ -902,6 +906,7 @@ module vgc (
     wire vram_reg_sel_w  = (r_cpu_addr_w >= VRAM_REG_BASE && r_cpu_addr_w <= VRAM_REG_END);
     wire dim_reg_sel_w   = (r_cpu_addr_w == DIM_REG_ADDR);
     wire text_reg_sel_w  = (r_cpu_addr_w == TEXT_FLAGS_ADDR || r_cpu_addr_w == TEXT_REVATTR_ADDR);
+    wire gfx_trans_sel_w = (r_cpu_addr_w == GFX_TRANS_ADDR);
     wire fio_name_sel_w  = (r_cpu_addr_w >= FIO_NAME && r_cpu_addr_w <= 16'hB9EF);
     wire fio_len_sel_w   = (r_cpu_addr_w == FIO_NAME_LEN);
     wire [4:0]  reg_offset_w   = r_cpu_addr_w[4:0];
@@ -1025,6 +1030,7 @@ module vgc (
                 default:           cpu_rdata = 8'h00;
             endcase
         end
+        else if (gfx_trans_sel) cpu_rdata = {4'b0, gfx_trans_color};
         else if (tile_reg_sel)   cpu_rdata = tile_rdata;
         else if (spr_reg_sel) begin
             // 8 regs per sprite: X lo, X hi, Y lo, Y hi, shape, flags, pri, trans
@@ -1053,12 +1059,14 @@ module vgc (
     wire dbg_vram_sel  = (dbg_addr >= VRAM_REG_BASE && dbg_addr <= VRAM_REG_END);
     wire dbg_dim_sel   = (dbg_addr == DIM_REG_ADDR);
     wire dbg_text_sel  = (dbg_addr == TEXT_FLAGS_ADDR || dbg_addr == TEXT_REVATTR_ADDR);
+    wire dbg_gfx_trans_sel = (dbg_addr == GFX_TRANS_ADDR);
     wire dbg_write_vgc_sel  = dbg_we && (dbg_waddr >= VGC_BASE && dbg_waddr <= VGC_REGS_END);
     wire dbg_write_irq_sel  = dbg_we && (dbg_waddr >= VGC_IRQ_BASE && dbg_waddr <= VGC_IRQ_END);
     wire dbg_write_spr_sel  = dbg_we && (dbg_waddr >= SPR_REG_BASE && dbg_waddr <= SPR_REG_END);
     wire dbg_write_vram_sel = dbg_we && (dbg_waddr >= VRAM_REG_BASE && dbg_waddr <= VRAM_REG_END);
     wire dbg_write_dim_sel  = dbg_we && (dbg_waddr == DIM_REG_ADDR);
     wire dbg_write_text_sel = dbg_we && (dbg_waddr == TEXT_FLAGS_ADDR || dbg_waddr == TEXT_REVATTR_ADDR);
+    wire dbg_write_gfx_trans_sel = dbg_we && (dbg_waddr == GFX_TRANS_ADDR);
     wire [4:0] dbg_reg_offset_w = dbg_waddr[4:0];
     wire [2:0] dbg_vram_reg_off_w = dbg_waddr[2:0];
 
@@ -1116,6 +1124,7 @@ module vgc (
                 default:           dbg_rdata = 8'h00;
             endcase
         end
+        else if (dbg_gfx_trans_sel) dbg_rdata = {4'b0, gfx_trans_color};
         else if (dbg_spr_sel) begin
             case (dbg_spr_field)
                 3'd0: dbg_rdata = spr_next_x[dbg_spr_index][7:0];
@@ -1138,7 +1147,7 @@ module vgc (
         if (vgc_module_rst) begin
             cursor_x <= 0; cursor_y <= 0; mode <= 0;
             border_color <= 4'd11; fg_color <= 4'd15; bg_color <= 4'd0;
-            gfx_color <= 4'd1; display_dim <= 4'd15;
+            gfx_color <= 4'd1; display_dim <= 4'd15; gfx_trans_color <= 4'd0;
             cursor_enable <= 0; font_slot <= 0;
             frame_counter <= 0;
             vram_plane <= SPACE_CHAR; vram_addr <= 16'd0; vram_ctrl <= 8'h01;
@@ -1872,6 +1881,9 @@ module vgc (
                 if (dim_reg_sel_w)
                     display_dim <= r_cpu_wdata_w[3:0];
 
+                if (gfx_trans_sel_w)
+                    gfx_trans_color <= r_cpu_wdata_w[3:0];
+
                 if (text_reg_sel_w) begin
                     case (r_cpu_addr_w)
                         TEXT_FLAGS_ADDR:   text_flags <= r_cpu_wdata_w;
@@ -1958,6 +1970,9 @@ module vgc (
                     default: ;
                 endcase
             end
+
+            if (dbg_write_gfx_trans_sel)
+                gfx_trans_color <= dbg_wdata[3:0];
 
             if (dbg_write_spr_sel) begin
                 case (dbg_spr_field_w)
@@ -2059,7 +2074,7 @@ module vgc (
 
             // Collision detection — accumulate during active display
             if (in_text_area_d2 && gfx_x_d2 < GFX_W) begin
-                if (spr_pixel_hit && gfx_b_dout != 0)
+                if (spr_pixel_hit && gfx_b_dout != gfx_trans_color)
                     collision_bg <= collision_bg | 8'hFF;
             end
             end
@@ -2463,10 +2478,10 @@ module vgc (
             end else begin
                 case (mode)
                     3'd0: pixel_color = text_pixel_d2;
-                    3'd1: pixel_color = (cur_gfx_d2 != 0) ? gfx_pixel_d2 : text_pixel_d2;
+                    3'd1: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : text_pixel_d2;
                     3'd2: pixel_color = pixel_on_d2 ? palette[cur_fg_d2] :
-                                        (cur_gfx_d2 != 0 && cur_bg_d2 == bg_color) ? gfx_pixel_d2 : palette[cur_bg_d2];
-                    3'd3: pixel_color = (cur_gfx_d2 != 0) ? gfx_pixel_d2 : palette[bg_color];
+                                        (cur_gfx_d2 != gfx_trans_color && cur_bg_d2 == bg_color) ? gfx_pixel_d2 : palette[cur_bg_d2];
+                    3'd3: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : palette[bg_color];
                     3'd4: pixel_color = (tile_opaque_d2 != 0) ? tile_rgb_d2 : palette[bg_color];
                     default: pixel_color = text_pixel_d2;
                 endcase
@@ -2483,7 +2498,7 @@ module vgc (
                     end
                 end else begin
                     if (spr_pixel_pri == 2'd0) begin
-                        if (!pixel_on_d2 && cur_gfx_d2 == 0)
+                        if (!pixel_on_d2 && cur_gfx_d2 == gfx_trans_color)
                             pixel_color = palette[spr_pixel];
                     end else begin
                         pixel_color = palette[spr_pixel];

@@ -10,7 +10,7 @@ if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-text-color <text=>hex>] [--skip-manifest-check]");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--skip-manifest-check]");
     return 1;
 }
 
@@ -30,6 +30,7 @@ bool skipManifestCheck = args.Skip(1).Contains("--skip-manifest-check", StringCo
 bool noStatusLine = args.Skip(1).Contains("--no-status-line", StringComparer.Ordinal);
 List<string> expectedScreens = LoadExpectedScreens(args);
 List<ExpectedTextColor> expectedTextColors = LoadExpectedTextColors(args);
+List<ExpectedGfxColor> expectedGfxColors = LoadExpectedGfxColors(args);
 List<SmokeCommand> commands = LoadCommands(args, bootOnly, screenOnly);
 JsonNode? manifest = TryReadManifest(imagePath);
 int? rawInputModeAddress = TryReadRuntimeSymbol("nz_raw_input_mode");
@@ -56,14 +57,16 @@ try
 
     if (screenOnly)
     {
-        if (expectedScreens.Count == 0 && expectedTextColors.Count == 0)
-            throw new InvalidOperationException("--screen-only requires at least one --expect-screen or --expect-text-color check.");
+        if (expectedScreens.Count == 0 && expectedTextColors.Count == 0 && expectedGfxColors.Count == 0)
+            throw new InvalidOperationException("--screen-only requires at least one --expect-screen, --expect-text-color, or --expect-gfx-color check.");
 
-        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedTextColors, ref morePrompts);
+        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedTextColors, expectedGfxColors, ref morePrompts);
         foreach (string expected in expectedScreens)
             RequireContains(screenOnlySnapshot, expected);
         foreach (var expected in expectedTextColors)
             RequireTextColor(bus.Vgc, screenOnlySnapshot, expected);
+        foreach (var expected in expectedGfxColors)
+            RequireGfxColor(bus.Vgc, screenOnlySnapshot, expected);
         if (expectMore && morePrompts == 0)
             throw new InvalidOperationException($"Expected at least one [ MORE ] prompt.\n{screenOnlySnapshot}");
 
@@ -154,7 +157,7 @@ try
         {
             if (command.Expected.Count == 0)
                 throw new InvalidOperationException($"No-prompt command '{command.Text}' requires expected screen text.");
-            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], ref morePrompts);
+            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], ref morePrompts);
         }
         RunForSteps(cpu, bus, 200_000);
         screen = SnapshotScreen(bus.Vgc);
@@ -425,6 +428,41 @@ static List<ExpectedTextColor> LoadExpectedTextColors(string[] args)
     return expected;
 }
 
+static List<ExpectedGfxColor> LoadExpectedGfxColors(string[] args)
+{
+    var expected = new List<ExpectedGfxColor>();
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].Equals("--expect-gfx-color", StringComparison.Ordinal))
+            continue;
+        if (i + 1 >= args.Length)
+            throw new ArgumentException("--expect-gfx-color requires x,y=>hex.");
+
+        string spec = args[++i];
+        string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+            throw new ArgumentException($"Expected graphics color must be '<x,y=>hex>': {spec}");
+
+        string[] xy = parts[0].Split(',', 2, StringSplitOptions.TrimEntries);
+        if (xy.Length != 2 ||
+            !int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int x) ||
+            !int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int y))
+            throw new ArgumentException($"Expected graphics color coordinate must be 'x,y': {spec}");
+        if ((uint)x >= VgcConstants.GfxWidth || (uint)y >= VgcConstants.GfxHeight)
+            throw new ArgumentOutOfRangeException(nameof(args), $"Graphics coordinate out of range in '{spec}'.");
+
+        string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? parts[1][2..]
+            : parts[1];
+        if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte color))
+            throw new ArgumentException($"Expected graphics color must use a one-byte hex value: {spec}");
+
+        expected.Add(new ExpectedGfxColor(x, y, color));
+    }
+
+    return expected;
+}
+
 static string RunUntilScreenMatches(
     Cpu cpu,
     CompositeBusDevice bus,
@@ -432,6 +470,7 @@ static string RunUntilScreenMatches(
     int maxSteps,
     IReadOnlyList<string> expectedScreens,
     IReadOnlyList<ExpectedTextColor> expectedTextColors,
+    IReadOnlyList<ExpectedGfxColor> expectedGfxColors,
     ref int morePrompts)
 {
     const int snapshotMask = 0x3FFF;
@@ -459,12 +498,32 @@ static string RunUntilScreenMatches(
 
         bool hasExpectedScreens = expectedScreens.All(expected => ContainsNormalized(screen, expected));
         bool hasExpectedColorText = expectedTextColors.All(expected => FindText(screen, expected.Text) is not null);
-        if (hasExpectedScreens && hasExpectedColorText)
+        bool hasExpectedGfxColors = expectedGfxColors.All(expected => bus.Vgc.GetGfxPixelColor(expected.X, expected.Y) == expected.Color);
+        if (hasExpectedScreens && hasExpectedColorText && hasExpectedGfxColors)
             return screen;
     }
 
     string finalScreen = SnapshotScreen(bus.Vgc);
-    throw new TimeoutException($"Timed out waiting for expected screen content. {FormatZvmState(cpu, bus)}\n{finalScreen}");
+    string gfxMismatches = FormatGfxMismatches(bus, expectedGfxColors);
+    throw new TimeoutException($"Timed out waiting for expected screen content. {FormatZvmState(cpu, bus)}{gfxMismatches}\n{finalScreen}");
+}
+
+static string FormatGfxMismatches(CompositeBusDevice bus, IReadOnlyList<ExpectedGfxColor> expectedGfxColors)
+{
+    if (expectedGfxColors.Count == 0)
+        return string.Empty;
+
+    var mismatches = expectedGfxColors
+        .Select(expected => new
+        {
+            Expected = expected,
+            Actual = bus.Vgc.GetGfxPixelColor(expected.X, expected.Y)
+        })
+        .Where(sample => sample.Actual != sample.Expected.Color)
+        .Select(sample => $"{sample.Expected.X},{sample.Expected.Y}: expected ${sample.Expected.Color:X2}, got ${sample.Actual:X2}");
+
+    string summary = string.Join("; ", mismatches);
+    return summary.Length == 0 ? string.Empty : $" gfx mismatches=[{summary}]";
 }
 
 static string RunUntilReadyPrompt(
@@ -541,7 +600,9 @@ static string RunUntilReadyPrompt(
         return finalScreen;
 
     string recent = string.Join(" ", trace);
-    throw new TimeoutException($"Timed out waiting for input prompt. {FormatZvmState(cpu, bus)} recent={recent}\n{finalScreen}");
+    throw new TimeoutException(
+        $"Timed out waiting for input prompt. {FormatZvmState(cpu, bus)} recent={recent} " +
+        $"{FormatPromptDiagnostics(bus.Vgc, finalScreen)}\n{finalScreen}");
 }
 
 static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
@@ -577,6 +638,10 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
     int? fileBytesHAddress = TryReadRuntimeSymbol("zstory_filebytes_h");
     int? checksumLoAddress = TryReadRuntimeSymbol("zstory_checksum_lo");
     int? checksumHiAddress = TryReadRuntimeSymbol("zstory_checksum_hi");
+    int? vtextCurXAddress = TryReadRuntimeSymbol("VTEXT_CURX");
+    int? vtextCurYAddress = TryReadRuntimeSymbol("VTEXT_CURY");
+    int? vtextTopAddress = TryReadRuntimeSymbol("VTEXT_TOP");
+    int? vtextLeftAddress = TryReadRuntimeSymbol("VTEXT_LEFT");
     string verify = verifySumLoAddress is int sumLo && verifySumHiAddress is int sumHi
         ? $" verify=${bus.Read((ushort)sumHi):X2}{bus.Read((ushort)sumLo):X2}"
         : "";
@@ -594,6 +659,13 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
         checksumHiAddress is int checkHi
             ? $" storyBytes=${bus.Read((ushort)fileH):X2}{bus.Read((ushort)fileM):X2}{bus.Read((ushort)fileL):X2} checksum=${bus.Read((ushort)checkHi):X2}{bus.Read((ushort)checkLo):X2}"
             : "";
+    string vtext =
+        vtextCurXAddress is int vx &&
+        vtextCurYAddress is int vy &&
+        vtextLeftAddress is int vl &&
+        vtextTopAddress is int vt
+            ? $" vtext={bus.Read((ushort)vl)},{bus.Read((ushort)vt)}+{bus.Read((ushort)vx)},{bus.Read((ushort)vy)}"
+            : "";
     var state = cpu.GetState();
     return
         $"cpu=PC${cpu.Pc:X4}/A${state.A:X2}/X${state.X:X2}/Y${state.Y:X2} " +
@@ -605,7 +677,7 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
         $"xaddr=${bus.Read(0x0022):X2}{bus.Read(0x0021):X2}{bus.Read(0x0020):X2} xdata=${bus.Read(0x0023):X2} " +
         $"fio=${bus.Read(VgcConstants.FioCmd):X2}/${bus.Read(VgcConstants.FioStatus):X2}/${bus.Read(VgcConstants.FioErrCode):X2} " +
         $"xmc=${bus.Read(VgcConstants.XmcStatus):X2}/${bus.Read(VgcConstants.XmcErrCode):X2} " +
-        $"cursor={bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()} " +
+        $"cursor={bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()}{vtext} " +
         $"zvm_opcode=${bus.Read(0x008F):X2} stop=${bus.Read((ushort)stopAddress):X2} sp=${bus.Read((ushort)spAddress):X2} frames=${bus.Read((ushort)frameCountAddress):X2}{verify}{verifyEnd}{storyMeta} " +
         $"ops={ReadWord(bus, operandHiAddress, operandLoAddress):X4},{ReadWord(bus, operandHiAddress + 1, operandLoAddress + 1):X4},{ReadWord(bus, operandHiAddress + 2, operandLoAddress + 2):X4},{ReadWord(bus, operandHiAddress + 3, operandLoAddress + 3):X4} " +
         $"locals={ReadWord(bus, localsHiAddress, localsLoAddress):X4},{ReadWord(bus, localsHiAddress + 1, localsLoAddress + 1):X4},{ReadWord(bus, localsHiAddress + 2, localsLoAddress + 2):X4},{ReadWord(bus, localsHiAddress + 3, localsLoAddress + 3):X4}";
@@ -682,7 +754,14 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
         screen.Contains("Press any key", StringComparison.OrdinalIgnoreCase))
     {
         editor.QueueInput(0x20);
-        RunForSteps(cpu, bus, 8_000);
+        RunForSteps(cpu, bus, 500_000);
+        return true;
+    }
+
+    if (screen.Contains("Is this a VT220", StringComparison.OrdinalIgnoreCase) ||
+        screen.Contains("Please type YES or NO", StringComparison.OrdinalIgnoreCase))
+    {
+        SendLine(cpu, bus, editor, "NO");
         return true;
     }
 
@@ -711,19 +790,18 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
         return true;
     }
 
-    if (screen.Contains("beyond Science", StringComparison.OrdinalIgnoreCase))
+    if (screen.Contains("beyond Science", StringComparison.OrdinalIgnoreCase) ||
+        screen.Contains("ZORK is a registered trademark", StringComparison.OrdinalIgnoreCase))
     {
-        if (HasTrailingBarePrompt(screen.Split('\n')))
-            return false;
         editor.QueueInput(0x20);
-        RunForSteps(cpu, bus, 200_000);
+        RunForSteps(cpu, bus, 500_000);
         return true;
     }
 
     if (screen.Contains("Type [RETURN] to continue", StringComparison.OrdinalIgnoreCase))
     {
         editor.QueueInput(0x0D);
-        RunForSteps(cpu, bus, 200_000);
+        RunForSteps(cpu, bus, 500_000);
         return true;
     }
 
@@ -801,6 +879,17 @@ static void RequireTextColor(VirtualGraphicsController vgc, string screen, Expec
             $"Expected '{expected.Text}' at {col},{row} to use text color ${expected.Color:X2}; " +
             $"cell {col + i},{row} was ${actual:X2}.\n{screen}");
     }
+}
+
+static void RequireGfxColor(VirtualGraphicsController vgc, string screen, ExpectedGfxColor expected)
+{
+    byte actual = vgc.GetGfxPixelColor(expected.X, expected.Y);
+    if (actual == expected.Color)
+        return;
+
+    throw new InvalidOperationException(
+        $"Expected graphics pixel {expected.X},{expected.Y} to use color ${expected.Color:X2}; " +
+        $"was ${actual:X2}.\n{screen}");
 }
 
 static (int Row, int Col)? FindText(string screen, string text)
@@ -900,7 +989,8 @@ static void RequireReadyPrompt(
     if (!IsReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress))
     {
         throw new InvalidOperationException(
-            $"Expected visible cursor or active read loop on a bare Zork prompt; got {bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()} pc=${cpu.Pc:X4} opcode=${bus.Read(0x008F):X2}.\n{screen}");
+            $"Expected visible cursor or active read loop on a bare Zork prompt; got {bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()} pc=${cpu.Pc:X4} opcode=${bus.Read(0x008F):X2}. " +
+            $"{FormatPromptDiagnostics(bus.Vgc, screen)}\n{screen}");
     }
 }
 
@@ -918,7 +1008,7 @@ static bool IsReadyPrompt(
         bool inReadLoop = cpu.Pc == keyLoopAddress || cpu.Pc == keyLoopAddress + 3;
         return inReadLoop &&
             bus.Read((ushort)address) != 0 &&
-            (HasCursorBarePrompt(vgc, lines) || HasTrailingBarePrompt(lines));
+            HasCursorBarePrompt(vgc, lines);
     }
 
     return HasCursorBarePrompt(vgc, lines);
@@ -933,29 +1023,22 @@ static bool HasCursorBarePrompt(VirtualGraphicsController vgc, string[] lines)
         string line = lines[actualY];
         if (line.Length > 0 && line[0] == '>')
             return line[1..].All(ch => ch == ' ');
-        if (actualY > 0 && line.All(ch => ch == ' '))
-        {
-            string previousLine = lines[actualY - 1];
-            return previousLine.Length > 0 &&
-                previousLine[0] == '>' &&
-                previousLine[1..].All(ch => ch == ' ');
-        }
     }
 
     return false;
 }
 
-static bool HasTrailingBarePrompt(string[] lines)
+static string FormatPromptDiagnostics(VirtualGraphicsController vgc, string screen)
 {
-    for (int i = Math.Min(lines.Length, VgcConstants.ScreenRows) - 1; i >= 0; i--)
-    {
-        string line = lines[i].TrimEnd();
-        if (line.Length == 0)
-            continue;
-        return line[0] == '>' && line[1..].All(ch => ch == ' ');
-    }
-
-    return false;
+    string[] lines = screen.Split('\n');
+    int cursorY = vgc.GetCursorY();
+    int cursorX = vgc.GetCursorX();
+    int firstRow = Math.Max(0, cursorY - 2);
+    int lastRow = Math.Min(Math.Min(lines.Length, VgcConstants.ScreenRows) - 1, cursorY + 2);
+    var sb = new StringBuilder($"cursor={cursorX},{cursorY}");
+    for (int row = firstRow; row <= lastRow; row++)
+        sb.Append($" row{row}='{lines[row].TrimEnd()}'");
+    return sb.ToString();
 }
 
 static string SnapshotScreen(VirtualGraphicsController vgc)
@@ -998,3 +1081,4 @@ sealed record SmokeCommand(
     SmokeInputMode Mode = SmokeInputMode.Line,
     bool WaitForPrompt = true);
 sealed record ExpectedTextColor(string Text, byte Color);
+sealed record ExpectedGfxColor(int X, int Y, byte Color);

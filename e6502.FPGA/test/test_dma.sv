@@ -35,6 +35,7 @@ module test_dma;
     wire  [7:0]  dma_vgc_wdata;
     wire         dma_vgc_we;
     wire         dma_vgc_re;
+    logic        video_write_safe;
 
     // Simulated memories
     logic [7:0] sim_ram [0:65535];
@@ -69,6 +70,8 @@ module test_dma;
 
     // VGC memory write handler
     always_ff @(posedge clk) begin
+        if (dma_vgc_we && !video_write_safe)
+            $fatal(1, "DMA wrote VGC video memory outside vblank-safe window");
         if (dma_vgc_we) begin
             case (dma_vgc_space)
                 3'd1: sim_char[dma_vgc_addr[11:0]]    <= dma_vgc_wdata;
@@ -96,7 +99,8 @@ module test_dma;
         .xram_wdata(dma_xram_wdata), .xram_we(dma_xram_we),
         .vgc_space(dma_vgc_space), .vgc_addr(dma_vgc_addr),
         .vgc_rdata(dma_vgc_rdata), .vgc_wdata(dma_vgc_wdata),
-        .vgc_we(dma_vgc_we), .vgc_re(dma_vgc_re)
+        .vgc_we(dma_vgc_we), .vgc_re(dma_vgc_re),
+        .video_write_safe(video_write_safe)
     );
 
     int pass_count = 0;
@@ -177,6 +181,7 @@ module test_dma;
         $display("");
 
         rst = 1; cpu_we = 0; cpu_re = 0;
+        video_write_safe = 1;
         cpu_addr = 0; cpu_wdata = 0;
 
         for (int i = 0; i < 65536; i++) sim_ram[i] = 0;
@@ -322,6 +327,22 @@ module test_dma;
         check("gfx copy ok", dut.regs[1] == 8'h02);
         check("gfx[500] = 1", sim_gfx[500] == 4'd1);
         check("gfx[509] = 10", sim_gfx[509] == 4'hA);
+
+        // ----- Test: VGC video writes wait for vblank-safe window -----
+        $display("Test: VGC video write gating");
+        for (int i = 700; i < 704; i++) sim_gfx[i] = 4'h0;
+        video_write_safe = 0;
+        setup_fill(3, 700, 4, 8'h07);
+        dma_start();
+        repeat(20) @(posedge clk);
+        check("video fill waits while unsafe", dma_rdy == 0 && dma_vgc_we == 0);
+        check("video fill wrote nothing while unsafe",
+              sim_gfx[700] == 4'h0 && sim_gfx[703] == 4'h0);
+        video_write_safe = 1;
+        wait_dma_done();
+        check("video fill resumes when safe", dut.regs[1] == 8'h02);
+        check("video fill wrote after safe",
+              sim_gfx[700] == 4'h7 && sim_gfx[703] == 4'h7);
 
         // ----- Test: RDY stall during DMA -----
         $display("Test: RDY stall");

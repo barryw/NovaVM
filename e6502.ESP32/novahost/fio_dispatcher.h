@@ -95,6 +95,7 @@ private:
     static constexpr uint8_t CMD_CLEARERR = 0x27;
     static constexpr uint8_t CMD_LOADRUNTIME = 0x28;
     static constexpr uint8_t CMD_XPAGE    = 0x29;
+    static constexpr uint8_t CMD_RNG      = 0x2A;
 
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
@@ -160,6 +161,7 @@ private:
     void handle_pwd();
     void handle_clear_error();
     void handle_load_runtime();
+    void handle_rng();
     void handle_unsupported_sd_command(const char* name);
 
     // Directory-iterator state for DIR_OPEN/DIR_READ. Single iterator

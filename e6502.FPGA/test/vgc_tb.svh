@@ -27,6 +27,7 @@ localparam logic [15:0] VREG_DATA_A     = 16'hA0E3;
 localparam logic [15:0] VREG_CTRL_A     = 16'hA0E4;
 localparam logic [15:0] REG_TEXTFLAGS_A = 16'hA0E6;
 localparam logic [15:0] REG_TEXTREV_A   = 16'hA0E7;
+localparam logic [15:0] REG_GFXTRANS_A  = 16'hA0E8;
 localparam logic [7:0]  VPLANE_CHAR_A   = 8'h01;
 localparam logic [7:0]  VPLANE_COLOR_A  = 8'h02;
 localparam logic [7:0]  VPLANE_GFX_A    = 8'h03;
@@ -100,6 +101,7 @@ vgc dut (
     .tile_dma_active(tile_dma_active),
     .blt_space(tb_blt_space), .blt_addr(tb_blt_addr), .blt_rdata(tb_blt_rdata),
     .blt_wdata(tb_blt_wdata), .blt_we(tb_blt_we), .blt_re(tb_blt_re),
+    .video_blit_safe(),
     .dbg_addr(dbg_addr), .dbg_rdata(dbg_rdata),
     .dbg_we(dbg_we), .dbg_waddr(dbg_waddr), .dbg_wdata(dbg_wdata),
     .dbg_vmem_we(dbg_vmem_we), .dbg_vmem_re(dbg_vmem_re),

@@ -29,6 +29,7 @@ FIO_IMPLEMENTATION_INCLUDED = 1
       .export fio_rmdir
       .export fio_pwd
       .export fio_load_runtime
+      .export fio_rng
 .ifndef FIO_NO_STREAMING
       .export fio_run
       .export fio_prepare_xram_transfer
@@ -240,6 +241,17 @@ fio_pwd:
 ; @requires FIO_NAME FIO_NAMELEN
 fio_load_runtime:
       LDA   #FIO_CMD_LOADRUNTIME
+      JMP   fio_exec
+
+; Fetch 32 host-backed random bits into FIO_RNG0..3.
+; @label FIO.RNG
+; @kind routine
+; @symbol fio_rng
+; @summary Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.
+; @out A: 0 on success, 1 on error.
+; @out FIO_RNG0 FIO_RNG1 FIO_RNG2 FIO_RNG3
+fio_rng:
+      LDA   #FIO_CMD_RNG
       JMP   fio_exec
 
 .ifndef FIO_NO_STREAMING
