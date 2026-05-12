@@ -39,6 +39,17 @@ nic_command:
       INC   NIC_CMDSEQ
 @seq_ok:
       STA   NIC_CMD
+      ; Let the posted MMIO write become visible before callers wait for clear.
+      TAX
+      LDY   #$00
+@posted:
+      LDA   NIC_CMD
+      CMP   NIC_CMDSHADOW
+      BEQ   @done
+      DEY
+      BNE   @posted
+@done:
+      TXA
       RTS
 
 ; @label NIC.CONNECT

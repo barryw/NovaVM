@@ -1781,16 +1781,30 @@ load_engine_for_mode:
 load_selected_engine_or_halt:
         JSR load_engine_for_mode
         BEQ @ok
-        LDA #2
-        STA text_x
-        LDA #2
-        STA text_y
-        LDA #<msg_engine_failed
-        LDY #>msg_engine_failed
-        JSR print_at
+        JSR show_engine_error_dialog
         JMP halt
 @ok:
         RTS
+
+show_engine_error_dialog:
+        JSR nui_dialog_defaults
+        LDA #22
+        STA NUI_DIALOG_LEFT
+        LDA #16
+        STA NUI_DIALOG_TOP
+        LDA #36
+        STA NUI_DIALOG_WIDTH
+        LDA #9
+        STA NUI_DIALOG_HEIGHT
+        LDA #<msg_engine_error_title
+        STA NUI_TITLEL
+        LDA #>msg_engine_error_title
+        STA NUI_TITLEH
+        LDA #<msg_engine_error_body
+        STA NUI_MSGL
+        LDA #>msg_engine_error_body
+        STA NUI_MSGH
+        JMP nui_show_error
 
 load_full_engine:
         LDA #<engine_full_name
@@ -1862,8 +1876,10 @@ show_title_menu:
         STA NUI_MSGL
         LDA #>msg_setup_modes
         STA NUI_MSGH
-        STZ NUI_FOOTERL
-        STZ NUI_FOOTERH
+        LDA #<msg_select_footer
+        STA NUI_FOOTERL
+        LDA #>msg_select_footer
+        STA NUI_FOOTERH
         JSR nui_show_dialog
         STZ VGC_CURSEN
         RTS
@@ -1942,6 +1958,7 @@ to_upper:
         RTS
 
 setup_new_game:
+@mode:
         JSR select_player_mode
         LDA play_mode
         CMP #PLAYMODE_HUMAN_VS_HUMAN
@@ -1949,10 +1966,15 @@ setup_new_game:
         CMP #PLAYMODE_NETWORK
         BEQ @network_ready
         JSR select_difficulty
+        BEQ :+
+        BRA @mode
+:
         LDA play_mode
         CMP #PLAYMODE_HUMAN_VS_NOVA
         BNE @ready
         JSR select_color
+        BEQ @ready
+        BRA @mode
 @ready:
         RTS
 @network_ready:
@@ -1979,8 +2001,10 @@ select_player_mode:
         STA NUI_MSGL
         LDA #>msg_setup_modes
         STA NUI_MSGH
-        STZ NUI_FOOTERL
-        STZ NUI_FOOTERH
+        LDA #<msg_select_footer
+        STA NUI_FOOTERL
+        LDA #>msg_select_footer
+        STA NUI_FOOTERH
         JSR nui_show_dialog
 @wait:
         JSR wait_key
@@ -2016,13 +2040,13 @@ select_player_mode:
 select_difficulty:
         JSR show_menu_backdrop
         JSR nui_dialog_defaults
-        LDA #19
+        LDA #23
         STA NUI_DIALOG_LEFT
-        LDA #7
+        LDA #6
         STA NUI_DIALOG_TOP
-        LDA #42
+        LDA #34
         STA NUI_DIALOG_WIDTH
-        LDA #10
+        LDA #11
         STA NUI_DIALOG_HEIGHT
         LDA #<msg_setup_level
         STA NUI_TITLEL
@@ -2032,11 +2056,19 @@ select_difficulty:
         STA NUI_MSGL
         LDA #>msg_setup_levels
         STA NUI_MSGH
-        STZ NUI_FOOTERL
-        STZ NUI_FOOTERH
+        LDA #<msg_level_footer
+        STA NUI_FOOTERL
+        LDA #>msg_level_footer
+        STA NUI_FOOTERH
         JSR nui_show_dialog
 @wait:
         JSR wait_key
+        CMP #$1B
+        BEQ @back
+        CMP #$08
+        BEQ @back
+        CMP #$7F
+        BEQ @back
         CMP #'E'
         BEQ @easy
         CMP #'M'
@@ -2053,26 +2085,32 @@ select_difficulty:
 @easy:
         LDA #DIFFICULTY_EASY
         STA selected_difficulty
+        LDA #$00
         RTS
 @medium:
         LDA #DIFFICULTY_MEDIUM
         STA selected_difficulty
+        LDA #$00
         RTS
 @hard:
         LDA #DIFFICULTY_HARD
         STA selected_difficulty
+        LDA #$00
+        RTS
+@back:
+        LDA #$01
         RTS
 
 select_color:
         JSR show_menu_backdrop
         JSR nui_dialog_defaults
-        LDA #22
+        LDA #25
         STA NUI_DIALOG_LEFT
-        LDA #8
+        LDA #7
         STA NUI_DIALOG_TOP
-        LDA #36
+        LDA #30
         STA NUI_DIALOG_WIDTH
-        LDA #8
+        LDA #10
         STA NUI_DIALOG_HEIGHT
         LDA #<msg_setup_color
         STA NUI_TITLEL
@@ -2082,11 +2120,19 @@ select_color:
         STA NUI_MSGL
         LDA #>msg_setup_colors
         STA NUI_MSGH
-        STZ NUI_FOOTERL
-        STZ NUI_FOOTERH
+        LDA #<msg_color_footer
+        STA NUI_FOOTERL
+        LDA #>msg_color_footer
+        STA NUI_FOOTERH
         JSR nui_show_dialog
 @wait:
         JSR wait_key
+        CMP #$1B
+        BEQ @back
+        CMP #$08
+        BEQ @back
+        CMP #$7F
+        BEQ @back
         CMP #'W'
         BEQ @white
         CMP #'B'
@@ -2099,10 +2145,15 @@ select_color:
 @white:
         LDA #ENGINE_WHITES_TURN
         STA human_side
+        LDA #$00
         RTS
 @black:
         LDA #ENGINE_BLACKS_TURN
         STA human_side
+        LDA #$00
+        RTS
+@back:
+        LDA #$01
         RTS
 
 start_game_screen:
@@ -2213,13 +2264,7 @@ play_game_loop:
         JMP post_game_loop
 
 post_game_loop:
-        LDA #PANEL_TEXT_X
-        STA text_x
-        LDA #24
-        STA text_y
-        LDA #<msg_game_over_prompt
-        LDY #>msg_game_over_prompt
-        JSR print_at
+        JSR show_post_game_dialog
 @wait:
         JSR wait_key
         CMP #'N'
@@ -2228,11 +2273,7 @@ post_game_loop:
         BEQ @demo
         BRA @wait
 @new_game:
-        JSR setup_new_game
-        JSR load_selected_engine_or_halt
-        JSR init_engine_game
-        JSR start_game_screen
-        JMP game_dispatch
+        JMP restart_selected_game
 @demo:
         LDA #PLAYMODE_DEMO
         STA play_mode
@@ -2240,6 +2281,37 @@ post_game_loop:
         JSR init_engine_game
         JSR start_game_screen
         JMP game_dispatch
+
+restart_selected_game:
+        JSR setup_new_game
+        JSR load_selected_engine_or_halt
+        JSR init_engine_game
+        JSR start_game_screen
+        JMP game_dispatch
+
+show_post_game_dialog:
+        JSR nui_dialog_defaults
+        LDA #22
+        STA NUI_DIALOG_LEFT
+        LDA #15
+        STA NUI_DIALOG_TOP
+        LDA #36
+        STA NUI_DIALOG_WIDTH
+        LDA #9
+        STA NUI_DIALOG_HEIGHT
+        LDA #<msg_game_over_menu_title
+        STA NUI_TITLEL
+        LDA #>msg_game_over_menu_title
+        STA NUI_TITLEH
+        LDA #<msg_game_over_options
+        STA NUI_MSGL
+        LDA #>msg_game_over_options
+        STA NUI_MSGH
+        LDA #<msg_game_over_footer
+        STA NUI_FOOTERL
+        LDA #>msg_game_over_footer
+        STA NUI_FOOTERH
+        JMP nui_show_dialog
 
 engine_turn:
         JSR set_status_thinking
@@ -2904,8 +2976,8 @@ validate_human_move:
 network_game_loop:
         JSR load_network_overlay
         BEQ @loaded
-        JSR show_network_error_dialog
-        JMP post_game_loop
+        JSR show_network_module_error_dialog
+        JMP restart_selected_game
 @loaded:
         JSR overlay_call_main
         PHA
@@ -2914,6 +2986,7 @@ network_game_loop:
         PLA
         BEQ @done
         JSR show_network_error_dialog
+        JMP restart_selected_game
 @done:
         JMP post_game_loop
 
@@ -2941,6 +3014,14 @@ load_network_overlay:
 show_network_error_dialog:
         JSR set_status_network_error
         JSR nui_dialog_defaults
+        LDA #16
+        STA NUI_DIALOG_LEFT
+        LDA #15
+        STA NUI_DIALOG_TOP
+        LDA #48
+        STA NUI_DIALOG_WIDTH
+        LDA #10
+        STA NUI_DIALOG_HEIGHT
         LDA #<msg_net_error_title
         STA NUI_TITLEL
         LDA #>msg_net_error_title
@@ -2948,6 +3029,27 @@ show_network_error_dialog:
         LDA #<msg_net_error_body
         STA NUI_MSGL
         LDA #>msg_net_error_body
+        STA NUI_MSGH
+        JMP nui_show_error
+
+show_network_module_error_dialog:
+        JSR set_status_network_error
+        JSR nui_dialog_defaults
+        LDA #18
+        STA NUI_DIALOG_LEFT
+        LDA #15
+        STA NUI_DIALOG_TOP
+        LDA #44
+        STA NUI_DIALOG_WIDTH
+        LDA #10
+        STA NUI_DIALOG_HEIGHT
+        LDA #<msg_net_module_title
+        STA NUI_TITLEL
+        LDA #>msg_net_module_title
+        STA NUI_TITLEH
+        LDA #<msg_net_module_body
+        STA NUI_MSGL
+        LDA #>msg_net_module_body
         STA NUI_MSGH
         JMP nui_show_error
 
@@ -3631,17 +3733,23 @@ msg_setup_modes:
         .byte "2  HUMAN VS COMPUTER", $0D
         .byte "3  HUMAN VS HUMAN", $0D
         .byte "4  NETWORK GAME", 0
+msg_select_footer:
+        .byte "1-4 SELECT", 0
 msg_setup_level:
-        .byte "DIFFICULTY", 0
+        .byte "NOVA LEVEL", 0
 msg_setup_levels:
-        .byte "E EASY    3 SEC", $0D
-        .byte "M MEDIUM 10 SEC", $0D
-        .byte "H HARD   25 SEC", 0
+        .byte "E  EASY    3 SEC", $0D
+        .byte "M  MEDIUM 10 SEC", $0D
+        .byte "H  HARD   25 SEC", 0
+msg_level_footer:
+        .byte "E/M/H SELECT  DEL BACK", 0
 msg_setup_color:
         .byte "PLAY AS", 0
 msg_setup_colors:
-        .byte "W WHITE", $0D
-        .byte "B BLACK", 0
+        .byte "W  WHITE", $0D
+        .byte "B  BLACK", 0
+msg_color_footer:
+        .byte "W/B SELECT  DEL BACK", 0
 msg_turn_white:
         .byte "TURN WHITE ", 0
 msg_turn_black:
@@ -3671,6 +3779,11 @@ msg_net_error_title:
 msg_net_error_body:
         .byte "network error: game server unavailable.", $0D
         .byte "check novahost network settings", 0
+msg_net_module_title:
+        .byte "NETWORK MODULE", 0
+msg_net_module_body:
+        .byte "network module unavailable.", $0D
+        .byte "check nova chess disk image", 0
 msg_prompt_move:
         .byte "MOVE:       ", 0
 msg_input_blank:
@@ -3684,10 +3797,18 @@ msg_input_illegal:
 input_blink_colors:
         .byte COLOR_WHITE, COLOR_LIGHT_SQUARE, COLOR_DARK_SQUARE, COLOR_WHITE_DETAIL
         .byte COLOR_BLACK, COLOR_WHITE_DETAIL, COLOR_DARK_SQUARE, COLOR_LIGHT_SQUARE
-msg_game_over_prompt:
-        .byte "N NEW  D DEMO", 0
-msg_engine_failed:
-        .byte "CHESS ENGINE LOAD FAILED", 0
+msg_game_over_menu_title:
+        .byte "GAME OVER", 0
+msg_game_over_options:
+        .byte "N  NEW GAME", $0D
+        .byte "D  DEMO MODE", 0
+msg_game_over_footer:
+        .byte "N/D SELECT", 0
+msg_engine_error_title:
+        .byte "ENGINE ERROR", 0
+msg_engine_error_body:
+        .byte "chess engine load failed.", $0D
+        .byte "check nova chess disk image", 0
 
 file_label_x:
         .byte 18, 40, 62, 84, 106, 128, 150, 172

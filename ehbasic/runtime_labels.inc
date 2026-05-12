@@ -108,7 +108,7 @@ RuntimeLabelBuckets:
       .word $0028
       .byte "FIO.CMD_LOADRUNTIME"
       .byte 13
-      .word $EDA1
+      .word $EDB0
       .byte "NIC.COPY_NAME"
       .byte 10
       .word $B9A5
@@ -537,7 +537,7 @@ RuntimeLabelBuckets:
       .word $ECD4
       .byte "FIO.RMDIR"
       .byte 10
-      .word $ED9D
+      .word $EDAC
       .byte "NIC.LENGTH"
       .byte 19
       .word $0002
@@ -558,7 +558,7 @@ RuntimeLabelBuckets:
       .word $ECAC
       .byte "FIO.LOAD"
       .byte 10
-      .word $ED8B
+      .word $ED9A
       .byte "NIC.STATUS"
       .byte 13
       .word $E8C4
@@ -609,13 +609,13 @@ RuntimeLabelBuckets:
 
 @bucket_32:
       .byte 11
-      .word $ED7B
+      .word $ED8A
       .byte "NIC.CONNECT"
       .byte 14
-      .word $ED7F
+      .word $ED8E
       .byte "NIC.DISCONNECT"
       .byte 8
-      .word $ED83
+      .word $ED92
       .byte "NIC.SEND"
       .byte 0
 
@@ -678,7 +678,7 @@ RuntimeLabelBuckets:
       .word $EC7D
       .byte "FIO.SET_IO_ERROR"
       .byte 8
-      .word $ED87
+      .word $ED96
       .byte "NIC.RECV"
       .byte 0
 
@@ -729,7 +729,7 @@ RuntimeLabelBuckets:
 
 @bucket_3D:
       .byte 9
-      .word $ED93
+      .word $EDA2
       .byte "NIC.READY"
       .byte 13
       .word $0028

@@ -209,7 +209,7 @@ def review_pause(label: str, seconds: float) -> None:
 def run_zero_player(client: NovaHostClient, boot_timeout: float, mode_timeout: float) -> None:
     cold_start_to_menu(client, boot_timeout)
     send_key(client, "1")
-    wait_screen(client, ("DIFFICULTY",), mode_timeout)
+    wait_screen(client, ("NOVA LEVEL",), mode_timeout)
     send_key(client, "E")
     wait_screen(client, ("01.W", "01.B", "STATUS", "MOVES"), mode_timeout)
     require_gfx_pixel(client, 64, 162, 0x01, "0-player board")
@@ -219,7 +219,7 @@ def run_zero_player(client: NovaHostClient, boot_timeout: float, mode_timeout: f
 def run_one_player(client: NovaHostClient, boot_timeout: float, mode_timeout: float) -> None:
     cold_start_to_menu(client, boot_timeout)
     send_key(client, "2")
-    wait_screen(client, ("DIFFICULTY",), mode_timeout)
+    wait_screen(client, ("NOVA LEVEL",), mode_timeout)
     send_key(client, "E")
     wait_screen(client, ("PLAY AS",), mode_timeout)
     send_key(client, "W")

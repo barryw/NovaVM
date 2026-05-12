@@ -1,7 +1,7 @@
 Modules list:
 -------------
 basic.o:
-    CODE              Offs=000000  Size=003C29  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=003C38  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
     BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
     DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
@@ -20,7 +20,7 @@ DATA                  000000  000000  000000  00001
 NULL                  000000  000000  000000  00001
 RODATA                000000  000000  000000  00001
 ZEROPAGE              000080  000080  000000  00001
-CODE                  00C000  00FC28  003C29  00001
+CODE                  00C000  00FC37  003C38  00001
 MONITOR               00FFD7  00FFF5  00001F  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 
@@ -49,10 +49,10 @@ fio_load_runtime          00ECDE  LA    fio_mkdir                 00ECCF  LA
 fio_pwd                   00ECD9  LA    fio_rmdir                 00ECD4  LA    
 fio_rng                   00ECE3  LA    fio_save                  00ECA7  LA    
 fio_set_io_error          00EC7D  LA    nic_command               00ED69  LA    
-nic_connect               00ED7B  LA    nic_copy_name             00EDA1  LA    
-nic_disconnect            00ED7F  LA    nic_length                00ED9D  LA    
-nic_ready                 00ED93  LA    nic_recv                  00ED87  LA    
-nic_send                  00ED83  LA    nic_status                00ED8B  LA    
+nic_connect               00ED8A  LA    nic_copy_name             00EDB0  LA    
+nic_disconnect            00ED8E  LA    nic_length                00EDAC  LA    
+nic_ready                 00EDA2  LA    nic_recv                  00ED96  LA    
+nic_send                  00ED92  LA    nic_status                00ED9A  LA    
 sprite_background_collision_status 00E919  LA    sprite_collision_status   00E915  LA    
 sprite_command            00E8BB  LA    sprite_disable            00E8C9  LA    
 sprite_enable             00E8C4  LA    sprite_get_x              00E8FA  LA    
@@ -112,10 +112,10 @@ audio_music_tempo         00ED3A  LA    audio_music_loop          00ED3F  LA
 audio_music_priority      00ED44  LA    audio_status              00ED49  LA    
 audio_sfx_playing         00ED4D  LA    audio_music_playing       00ED53  LA    
 audio_music_note          00ED5D  LA    nic_command               00ED69  LA    
-nic_connect               00ED7B  LA    nic_disconnect            00ED7F  LA    
-nic_send                  00ED83  LA    nic_recv                  00ED87  LA    
-nic_status                00ED8B  LA    nic_ready                 00ED93  LA    
-nic_length                00ED9D  LA    nic_copy_name             00EDA1  LA    
+nic_connect               00ED8A  LA    nic_disconnect            00ED8E  LA    
+nic_send                  00ED92  LA    nic_recv                  00ED96  LA    
+nic_status                00ED9A  LA    nic_ready                 00EDA2  LA    
+nic_length                00EDAC  LA    nic_copy_name             00EDB0  LA    
 
 
 

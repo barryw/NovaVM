@@ -1418,7 +1418,7 @@ Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.
 
 - Kind: `routine`
 - Symbol: `nic_connect`
-- Address: `$ED7B`
+- Address: `$ED8A`
 
 Requires:
 - `NIC_SLOT`
@@ -1432,7 +1432,7 @@ Copy a pointer-based host name to NIC_NAMEBUF and append NUL.
 
 - Kind: `routine`
 - Symbol: `nic_copy_name`
-- Address: `$EDA1`
+- Address: `$EDB0`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid length.
@@ -1448,7 +1448,7 @@ Disconnect NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_disconnect`
-- Address: `$ED7F`
+- Address: `$ED8E`
 
 Requires:
 - `NIC_SLOT`
@@ -1459,7 +1459,7 @@ Read the most recent NIC message length.
 
 - Kind: `routine`
 - Symbol: `nic_length`
-- Address: `$ED9D`
+- Address: `$EDAC`
 
 Outputs:
 - `A`: Message length byte.
@@ -1477,7 +1477,7 @@ Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.
 
 - Kind: `routine`
 - Symbol: `nic_ready`
-- Address: `$ED93`
+- Address: `$EDA2`
 
 Inputs:
 - `X`: Slot number.
@@ -1491,7 +1491,7 @@ Receive data for NIC_SLOT into NIC_DMAL/H.
 
 - Kind: `routine`
 - Symbol: `nic_recv`
-- Address: `$ED87`
+- Address: `$ED96`
 
 Requires:
 - `NIC_SLOT`
@@ -1504,7 +1504,7 @@ Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_send`
-- Address: `$ED83`
+- Address: `$ED92`
 
 Requires:
 - `NIC_SLOT`
@@ -1518,7 +1518,7 @@ Read clamped NIC slot status.
 
 - Kind: `routine`
 - Symbol: `nic_status`
-- Address: `$ED8B`
+- Address: `$ED9A`
 
 Inputs:
 - `X`: Slot number.

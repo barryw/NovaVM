@@ -1995,7 +1995,7 @@
     {
       "label": "NIC.ACCEPT",
       "source": "lib/nic.s",
-      "line": 71,
+      "line": 82,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2059,7 +2059,7 @@
     {
       "label": "NIC.CONNECT",
       "source": "lib/nic.s",
-      "line": 44,
+      "line": 55,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2071,12 +2071,12 @@
       "kind": "routine",
       "symbol": "nic_connect",
       "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
-      "address": "$ED7B"
+      "address": "$ED8A"
     },
     {
       "label": "NIC.COPY_NAME",
       "source": "lib/nic.s",
-      "line": 138,
+      "line": 149,
       "inputs": [],
       "outputs": [
         {
@@ -2092,12 +2092,12 @@
       "kind": "routine",
       "symbol": "nic_copy_name",
       "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
-      "address": "$EDA1"
+      "address": "$EDB0"
     },
     {
       "label": "NIC.DISCONNECT",
       "source": "lib/nic.s",
-      "line": 53,
+      "line": 64,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2106,12 +2106,12 @@
       "kind": "routine",
       "symbol": "nic_disconnect",
       "summary": "Disconnect NIC_SLOT.",
-      "address": "$ED7F"
+      "address": "$ED8E"
     },
     {
       "label": "NIC.LENGTH",
       "source": "lib/nic.s",
-      "line": 127,
+      "line": 138,
       "inputs": [],
       "outputs": [
         {
@@ -2123,12 +2123,12 @@
       "kind": "routine",
       "symbol": "nic_length",
       "summary": "Read the most recent NIC message length.",
-      "address": "$ED9D"
+      "address": "$EDAC"
     },
     {
       "label": "NIC.LISTEN",
       "source": "lib/nic.s",
-      "line": 63,
+      "line": 74,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2139,7 +2139,7 @@
     {
       "label": "NIC.READY",
       "source": "lib/nic.s",
-      "line": 113,
+      "line": 124,
       "inputs": [
         {
           "name": "X",
@@ -2156,12 +2156,12 @@
       "kind": "routine",
       "symbol": "nic_ready",
       "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
-      "address": "$ED93"
+      "address": "$EDA2"
     },
     {
       "label": "NIC.RECV",
       "source": "lib/nic.s",
-      "line": 89,
+      "line": 100,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2172,12 +2172,12 @@
       "kind": "routine",
       "symbol": "nic_recv",
       "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
-      "address": "$ED87"
+      "address": "$ED96"
     },
     {
       "label": "NIC.SEND",
       "source": "lib/nic.s",
-      "line": 80,
+      "line": 91,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2189,12 +2189,12 @@
       "kind": "routine",
       "symbol": "nic_send",
       "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
-      "address": "$ED83"
+      "address": "$ED92"
     },
     {
       "label": "NIC.STATUS",
       "source": "lib/nic.s",
-      "line": 99,
+      "line": 110,
       "inputs": [
         {
           "name": "X",
@@ -2211,7 +2211,7 @@
       "kind": "routine",
       "symbol": "nic_status",
       "summary": "Read clamped NIC slot status.",
-      "address": "$ED8B"
+      "address": "$ED9A"
     },
     {
       "label": "NVG.ADDRH",

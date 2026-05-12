@@ -546,9 +546,11 @@ void NicDispatcher::resolve_endpoint(
 }
 
 void NicDispatcher::load_config() {
-    if (_configLoaded)
-        return;
     _configLoaded = true;
+    _configLoadedOk = false;
+    _gameServerHost[0] = 0;
+    _gameServerPort = 6503;
+    _lastError[0] = 0;
 
     File cfg = SD.open("/config/boot.json", FILE_READ);
     if (!cfg) {

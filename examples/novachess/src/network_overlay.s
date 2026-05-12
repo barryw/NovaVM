@@ -19,7 +19,6 @@ network_frame:       .res NGS_MAX_FRAME_PAYLOAD
 .export network_overlay_unload
 
 network_overlay_main:
-        JSR KERNEL_START_GAME_SCREEN
         JSR network_setup_game
         BEQ @loop
         LDA #$01
