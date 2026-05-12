@@ -11,7 +11,7 @@
 .include "fio.inc"
 .include "nvg.inc"
 .include "tween.inc"
-.include "nchess_net.inc"
+.include "overlay.inc"
 .include "nui.inc"
 .include "engine_labels.inc"
 
@@ -133,6 +133,8 @@ PLAYMODE_HUMAN_VS_NOVA    = $01
 PLAYMODE_NOVA_VS_NOVA     = $02
 PLAYMODE_HUMAN_VS_HUMAN   = $03
 PLAYMODE_NETWORK          = $04
+NETWORK_OVERLAY_LOAD      = $6000
+NETWORK_OVERLAY_MAXLEN    = $3000
 
 DIFFICULTY_EASY           = $00
 DIFFICULTY_MEDIUM         = $01
@@ -241,10 +243,10 @@ input_blink_color:   .res 1
 input_display_len:   .res 1
 input_error_l:       .res 1
 input_error_h:       .res 1
+input_idle_hook_l:   .res 1
+input_idle_hook_h:   .res 1
 title_wait_l:        .res 1
 title_wait_h:        .res 1
-network_table_idl:   .res 1
-network_table_idh:   .res 1
 splash_loaded:       .res 1
 piece_buffer:        .res PIECE_SIZE * PIECE_SIZE
 anim_bg_buffer:      .res PIECE_SIZE * PIECE_SIZE
@@ -258,11 +260,26 @@ board_state:         .res 64
 panel_line:          .res PANEL_LINE_LEN
 move_history:        .res PANEL_MOVE_ROWS * PANEL_LINE_LEN
 input_buffer:        .res INPUT_BUFFER_LEN + 1
-network_frame:       .res NGS_MAX_FRAME_PAYLOAD
 
 .include "../Pieces.inc"
 
 .segment "CODE"
+
+.export start_game_screen
+.export update_clock
+.export set_status_network
+.export set_status_thinking
+.export set_status_moving
+.export set_status_invalid
+.export wait_demo_frames
+.export prompt_human_move
+.export commit_current_move
+.export show_game_result
+.export input_set_idle_hook
+.export input_clear_idle_hook
+.export self_from
+.export self_to
+.export game_state
 
 reset:
         SEI
@@ -1752,6 +1769,8 @@ print_at:
         RTS
 
 load_engine_for_mode:
+        JSR input_clear_idle_hook
+        JSR overlay_unload
         LDA play_mode
         CMP #PLAYMODE_HUMAN_VS_HUMAN
         BEQ load_rules_engine
@@ -1811,6 +1830,8 @@ load_title_splash:
         RTS
 
 init_game_defaults:
+        JSR overlay_clear_active
+        JSR input_clear_idle_hook
         LDA #PLAYMODE_DEMO
         STA play_mode
         LDA #ENGINE_WHITES_TURN
@@ -2295,6 +2316,31 @@ print_move_prompt:
         STA VTEXT_CURY
         JMP vtext_set_cursor
 
+input_set_idle_hook:
+        STA input_idle_hook_l
+        STX input_idle_hook_h
+        RTS
+
+input_clear_idle_hook:
+        STZ input_idle_hook_l
+        STZ input_idle_hook_h
+        RTS
+
+input_call_idle_hook:
+        LDA input_idle_hook_l
+        ORA input_idle_hook_h
+        BNE @call
+        LDA #$00
+        RTS
+@call:
+        LDA #>(@returned - 1)
+        PHA
+        LDA #<(@returned - 1)
+        PHA
+        JMP (input_idle_hook_l)
+@returned:
+        RTS
+
 read_move_input:
         STZ input_len
         STZ input_from_state
@@ -2311,10 +2357,7 @@ read_move_input:
         STA VGC_CURSEN
 @loop:
         JSR input_update_flash
-        LDA play_mode
-        CMP #PLAYMODE_NETWORK
-        BNE @read_key
-        JSR ngs_keepalive_tick
+        JSR input_call_idle_hook
         BEQ @read_key
         STZ VGC_CURSEN
         JSR input_clear_highlights
@@ -2859,184 +2902,41 @@ validate_human_move:
         RTS
 
 network_game_loop:
-        JSR start_game_screen
-        JSR network_setup_game
-        BEQ @loop
+        JSR load_network_overlay
+        BEQ @loaded
         JSR show_network_error_dialog
-        JSR ngs_disconnect
         JMP post_game_loop
-@loop:
-        JSR update_clock
-        JSR ENGINE_CHESS_CHECK_GAME_STATE
-        STA game_state
-        CMP #GAME_CHECKMATE
-        BCS @game_over
-
-        JSR network_human_turn
-        BEQ @loop
+@loaded:
+        JSR overlay_call_main
+        PHA
+        JSR input_clear_idle_hook
+        JSR overlay_unload
+        PLA
+        BEQ @done
         JSR show_network_error_dialog
-        JSR ngs_disconnect
-        JMP post_game_loop
-@game_over:
-        JSR show_game_result
-        JSR ngs_disconnect
+@done:
         JMP post_game_loop
 
-network_human_turn:
-@retry:
-        JSR prompt_human_move
-        BEQ @move_ready
-        CMP #$02
-        BEQ @error
-        JSR set_status_invalid
-        LDX #45
-        JSR wait_demo_frames
-        BRA @retry
-@move_ready:
-        JSR set_status_moving
-        JSR commit_current_move
-        JSR network_send_current_move
-        BNE @error
-        LDA game_state
-        CMP #GAME_CHECKMATE
-        BCS @ok
-        JSR set_status_thinking
-        JSR network_wait_opponent_move
-        BNE @error
-        JSR set_status_moving
-        JSR commit_current_move
-@ok:
-        LDA #$00
+load_network_overlay:
+        LDA #<network_overlay_name
+        STA OVL_NAMEPTR_L
+        LDA #>network_overlay_name
+        STA OVL_NAMEPTR_H
+        LDA #(network_overlay_name_end - network_overlay_name)
+        STA OVL_NAMELEN
+        LDA #<NETWORK_OVERLAY_LOAD
+        STA OVL_LOADL
+        LDA #>NETWORK_OVERLAY_LOAD
+        STA OVL_LOADH
+        LDA #<NETWORK_OVERLAY_MAXLEN
+        STA OVL_MAXLENL
+        LDA #>NETWORK_OVERLAY_MAXLEN
+        STA OVL_MAXLENH
+        JSR overlay_load_fixed
+        BEQ :+
         RTS
-@error:
-        LDA #$01
-        RTS
-
-network_setup_game:
-        JSR set_status_network
-        JSR nchess_net_init
-        LDA #<network_frame
-        LDX #>network_frame
-        JSR ngs_set_buffer
-        LDA NGS_RESULT
-        BEQ :+
-        JMP @error
 :
-        JSR ngs_disconnect
-
-        JSR ngs_connect_default
-        LDA NGS_RESULT
-        BEQ :+
-        JMP @error
-:
-        JSR ngs_wait_connected
-        BEQ :+
-        JMP @error
-:
-
-        LDA #<game_server_handle
-        LDX #>game_server_handle
-        LDY #game_server_handle_end - game_server_handle
-        JSR ngs_set_string
-        JSR nchess_net_build_hello
-        LDA NCHESS_RESULT
-        BEQ :+
-        JMP @error
-:
-        JSR ngs_send_current
-        BEQ :+
-        JMP @error
-:
-        LDA #NGS_KIND_WELCOME
-        JSR ngs_wait_kind
-        BEQ :+
-        JMP @error
-:
-
-        LDA #<game_server_table_name
-        LDX #>game_server_table_name
-        LDY #game_server_table_name_end - game_server_table_name
-        JSR ngs_set_string
-        JSR nchess_net_build_create_table
-        LDA NCHESS_RESULT
-        BEQ :+
-        JMP @error
-:
-        JSR ngs_send_current
-        BEQ :+
-        JMP @error
-:
-        LDA #NGS_KIND_TABLE_CREATED
-        JSR ngs_wait_kind
-        BEQ :+
-        JMP @error
-:
-        JSR ngs_read_u16
-        LDA NGS_RESULT
-        BEQ :+
-        JMP @error
-:
-        LDA NGS_VALUE_L
-        STA network_table_idl
-        STA NGS_TABLE_IDL
-        LDA NGS_VALUE_H
-        STA network_table_idh
-        STA NGS_TABLE_IDH
-
-        LDA #$00
-        RTS
-@error:
-        JSR ngs_disconnect
-        LDA #$01
-        RTS
-
-network_send_current_move:
-        LDA network_table_idl
-        STA NGS_TABLE_IDL
-        LDA network_table_idh
-        STA NGS_TABLE_IDH
-        LDA self_from
-        STA NCHESS_MOVE_FROM
-        LDA self_to
-        STA NCHESS_MOVE_TO
-        JSR nchess_net_build_move
-        LDA NCHESS_RESULT
-        BNE @error
-        JMP ngs_send_current
-@error:
-        LDA #$01
-        RTS
-
-network_wait_opponent_move:
-@wait_event:
-        LDA #NGS_KIND_TABLE_EVENT
-        JSR ngs_wait_kind
-        BNE @error
-        JSR nchess_net_parse_table_event
-        LDA NCHESS_RESULT
-        BNE @wait_event
-        LDA NCHESS_EVENT_TABLEL
-        CMP network_table_idl
-        BNE @wait_event
-        LDA NCHESS_EVENT_TABLEH
-        CMP network_table_idh
-        BNE @wait_event
-        LDA NCHESS_EVENT_FROM
-        CMP self_from
-        BNE @stockfish
-        LDA NCHESS_EVENT_TO
-        CMP self_to
-        BEQ @wait_event
-@stockfish:
-        LDA NCHESS_EVENT_FROM
-        STA self_from
-        LDA NCHESS_EVENT_TO
-        STA self_to
-        LDA #$00
-        RTS
-@error:
-        LDA #$01
-        RTS
+        JMP overlay_call_init
 
 show_network_error_dialog:
         JSR set_status_network_error
@@ -3664,12 +3564,9 @@ engine_rules_name:
         .byte "CHESSRUL"
 engine_rules_name_end:
 
-game_server_handle:
-        .byte "nova-chess"
-game_server_handle_end:
-game_server_table_name:
-        .byte "Nova Chess"
-game_server_table_name_end:
+network_overlay_name:
+        .byte "NETGAME.OVL"
+network_overlay_name_end:
 
 msg_game_over:
         .byte "GAME OVER  ", 0
@@ -3843,7 +3740,7 @@ glyph_8:
 .include "vsprite.s"
 .include "vtext.s"
 .include "tween.s"
-.include "nchess_net.s"
+.include "overlay.s"
 .include "nui.s"
 
 .segment "VECTORS"

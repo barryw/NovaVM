@@ -62,6 +62,24 @@ from CPU RAM, then receives bytes back into CPU RAM:
 tools/check-nic-hardware.py --exercise-basic-dma
 ```
 
+# Overlay Packager
+
+Fixed-address overlays are packaged by `e6502.Tools`:
+
+```bash
+dotnet run --project e6502.Tools -- pack-overlay \
+  --input build/module.bin \
+  --output build/MODULE.OVL \
+  --load $7000 \
+  --max-size $2000 \
+  --sym build/module.sym \
+  --main module_main
+```
+
+The packager writes the 32-byte `NOVO` header consumed by
+`ehbasic/lib/overlay.s`, resolves entry symbols from ld65 `-Ln` files, and
+validates that the payload and entry addresses fit the fixed overlay slot.
+
 # Nova FTDI Keyboard
 
 `nova-ftdi-keyboard.py` turns the host terminal into a keyboard bridge for the

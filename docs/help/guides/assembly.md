@@ -323,6 +323,23 @@ Filenames without an extension use `.xram`; explicit extensions are honored.
 See `docs/assembly/xram.md` for the full assembly ABI, build pattern, and
 fixture-backed integration tests.
 
+## Fixed-Address Overlays
+
+`ehbasic/lib/overlay.inc` and `ehbasic/lib/overlay.s` provide a reusable loader
+for fixed-address executable overlays. The resident application owns a CPU RAM
+slot, links each overlay for that exact slot address, and calls
+`overlay_load_fixed` to validate a `NOVO` header and stream the payload into RAM
+through the shared pager/FIO path.
+
+The first overlay runtime deliberately avoids relocation and dependency graphs:
+one active overlay slot, fixed load address, absolute entry vectors, and
+`A=0`/`A=1` status returns. This is the intended layer for optional app modules
+such as network lobby code, game-specific network adapters, local AI engines,
+and diagnostics that should not live permanently in the app kernel.
+
+See `docs/assembly/overlay.md` for the header layout, loader ABI, and entry-call
+rules.
+
 ## VGC Register-Level Programming
 
 The VGC command pipeline works by writing parameters to registers

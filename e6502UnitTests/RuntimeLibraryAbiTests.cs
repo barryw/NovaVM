@@ -266,6 +266,80 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void OverlayManagerUsesFixedHeaderAndLinkerStorage()
+    {
+        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "overlay.inc"));
+        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "overlay.s"));
+        IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
+
+        Assert.AreEqual(0x20, constants["OVL_HEADER_SIZE"]);
+        Assert.AreEqual(0x01, constants["OVL_FORMAT_VERSION"]);
+        Assert.AreEqual(0x01, constants["OVL_ABI_MAJOR"]);
+        Assert.AreEqual(0x00, constants["OVL_HDR_MAGIC0"]);
+        Assert.AreEqual(0x08, constants["OVL_HDR_LOADL"]);
+        Assert.AreEqual(0x0A, constants["OVL_HDR_SIZEL"]);
+        Assert.AreEqual(0x0E, constants["OVL_HDR_INITL"]);
+        Assert.AreEqual(0x10, constants["OVL_HDR_MAINL"]);
+        Assert.AreEqual(0x14, constants["OVL_HDR_UNLOADL"]);
+        StringAssert.Contains(inc, "OVL_MAGIC0             = 'N'");
+
+        string[] stateSymbols =
+        [
+            "OVL_NAMEPTR_L",
+            "OVL_NAMEPTR_H",
+            "OVL_NAMELEN",
+            "OVL_LOADL",
+            "OVL_LOADH",
+            "OVL_MAXLENL",
+            "OVL_MAXLENH",
+            "OVL_RESULT",
+            "OVL_LOADED",
+            "OVL_ACTIVE_LOADL",
+            "OVL_ACTIVE_LOADH",
+            "OVL_ACTIVE_SIZEL",
+            "OVL_ACTIVE_SIZEH",
+            "OVL_ENTRY_INITL",
+            "OVL_ENTRY_INITH",
+            "OVL_ENTRY_MAINL",
+            "OVL_ENTRY_MAINH",
+            "OVL_ENTRY_TICKL",
+            "OVL_ENTRY_TICKH",
+            "OVL_ENTRY_UNLOADL",
+            "OVL_ENTRY_UNLOADH"
+        ];
+
+        foreach (string symbol in stateSymbols)
+        {
+            AssertNoNvrAlias(inc, symbol);
+            StringAssert.Contains(inc, $".global {symbol}");
+            StringAssert.Contains(impl, $"{symbol}:");
+        }
+
+        string[] routines =
+        [
+            "overlay_ok",
+            "overlay_set_error",
+            "overlay_clear_active",
+            "overlay_load_fixed",
+            "overlay_unload",
+            "overlay_call_init",
+            "overlay_call_main",
+            "overlay_call_tick"
+        ];
+
+        foreach (string routine in routines)
+        {
+            StringAssert.Contains(inc, $".global {routine}");
+            StringAssert.Contains(impl, $".export {routine}");
+        }
+
+        StringAssert.Contains(impl, ".segment \"BSS\"");
+        StringAssert.Contains(impl, ".include \"fio.s\"");
+        StringAssert.Contains(impl, ".include \"pager.s\"");
+        StringAssert.Contains(impl, "PAGER_TARGET_RAM");
+    }
+
+    [TestMethod]
     public void XmcPrivateStateUsesLinkerStorageNotNvrMailbox()
     {
         string source = File.ReadAllText(RepoPath("ehbasic", "lib", "xmc.s"));
