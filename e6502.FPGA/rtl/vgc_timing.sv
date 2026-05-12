@@ -45,10 +45,18 @@ module vgc_timing (
     output logic [7:0]  gfx_y_d1, gfx_y_d2,
     output logic [2:0]  font_line_d1,
 
-    // Scroll offset (from register file)
+    // Visual scroll registers. Copper and sprites remain tied to physical
+    // beam coordinates; these offsets affect text/gfx fetch coordinates only.
+    // Inputs are normalized by the VGC register block to 0..319 / 0..199.
+    input  logic [8:0]  scroll_x,
+    input  logic [7:0]  scroll_y,
+    input  logic        scroll_gfx_enable,
+    input  logic        scroll_text_enable,
+
+    // Terminal text-ring scroll offset (from CHAROUT/newline handling)
     input  logic [5:0]  scroll_offset,
 
-    // Pre-computed gfx coordinates for tile engine
+    // Pre-computed gfx coordinates for sprite/gfx sampling
     output logic [8:0]  pre_gfx_x,
     output logic [7:0]  pre_gfx_y
 );
@@ -165,7 +173,7 @@ module vgc_timing (
     // pixels outside this window are border color in the compositor.
     assign in_text_area = canvas_visible && (canvas_v_count < V_BORDER + TEXT_H);
 
-    // Pre-compute gfx coordinates for tile engine (combinational)
+    // Pre-compute gfx coordinates for sprite/gfx sampling (combinational)
     assign pre_gfx_x = canvas_h_count[9:1];
     assign pre_gfx_y = (canvas_v_count >> 1);
 
@@ -198,30 +206,52 @@ module vgc_timing (
     // =========================================================================
     // Derived coordinate signals (current cycle)
     // =========================================================================
-    // 7-bit intermediate for real_row arithmetic. ROWS=60, so text_row and
-    // scroll_offset are both 6-bit; their unsigned sum can reach 118, which
+    // 7-bit intermediate for real_row arithmetic. ROWS=50, so text_row and
+    // scroll_offset are both 6-bit; their unsigned sum can reach 98, which
     // needs 7 bits so the `>= ROWS` mod-fixup can run before wrap. Same class
     // of fix as the prior 7-row mirror bug — the extra carry bit matters.
     logic [6:0] real_row_sum;
+    logic [8:0] phys_gfx_x;
+    logic [7:0] phys_gfx_y;
+    logic [9:0] scrolled_x_sum;
+    logic [8:0] scrolled_y_sum;
+    logic [8:0] scrolled_x;
+    logic [7:0] scrolled_y;
+    logic [8:0] text_fetch_x;
+    logic [7:0] text_fetch_y;
+    logic [9:0] text_pixel_x;
 
     always_comb begin
-        text_col   = canvas_h_count[9:3];
-        font_pixel = canvas_h_count[2:0];
-        text_line  = canvas_v_count - V_BORDER;     // 1:1 text (no pixel doubling)
+        phys_gfx_x = canvas_h_count[9:1];
+        phys_gfx_y = canvas_v_count[8:1];
+
+        scrolled_x_sum = {1'b0, phys_gfx_x} + {1'b0, scroll_x};
+        scrolled_y_sum = {1'b0, phys_gfx_y} + {1'b0, scroll_y};
+        scrolled_x = (scrolled_x_sum >= 10'd320) ? 9'(scrolled_x_sum - 10'd320)
+                                                 : scrolled_x_sum[8:0];
+        scrolled_y = (scrolled_y_sum >= 9'd200) ? 8'(scrolled_y_sum - 9'd200)
+                                                : scrolled_y_sum[7:0];
+
+        gfx_x = scroll_gfx_enable ? scrolled_x : phys_gfx_x;
+        gfx_y = scroll_gfx_enable ? scrolled_y : phys_gfx_y;
+
+        text_fetch_x = scroll_text_enable ? scrolled_x : phys_gfx_x;
+        text_fetch_y = scroll_text_enable ? scrolled_y : phys_gfx_y;
+        text_pixel_x = {text_fetch_x, canvas_h_count[0]};
+
+        text_col   = text_pixel_x[9:3];
+        font_pixel = text_pixel_x[2:0];
+        text_line  = {1'b0, text_fetch_y, canvas_v_count[0]};
         text_row   = text_line[8:3];                // 6-bit, 0..63
         font_line  = text_line[2:0];
         real_row_sum = {1'b0, text_row} + {1'b0, scroll_offset};
         real_row   = (real_row_sum >= 7'(ROWS)) ? real_row_sum[5:0] - 6'(ROWS)
                                                 : real_row_sum[5:0];
-
-        // Graphics coordinates (320x200, pixel-doubled to 640x400)
-        gfx_x = canvas_h_count[9:1];
-        gfx_y = canvas_v_count[8:1];                // halved canvas y (0..199)
     end
 
     // =========================================================================
     // Delayed coordinate signals — reset with the timing pipeline so text,
-    // graphics, sprites, and tiles all restart from the same pixel phase.
+    // graphics and sprites all restart from the same pixel phase.
     // =========================================================================
     always_ff @(posedge clk) begin
         if (rst) begin

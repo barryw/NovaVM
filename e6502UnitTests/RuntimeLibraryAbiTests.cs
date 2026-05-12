@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
+using e6502.GameServer.Protocol;
+using e6502.GameServer.Server;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace e6502UnitTests;
@@ -8,6 +12,227 @@ namespace e6502UnitTests;
 [TestClass]
 public class RuntimeLibraryAbiTests
 {
+    [TestMethod]
+    public void GameServerAssemblyProtocolConstantsMatchServer()
+    {
+        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "gameserver.inc"));
+        IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
+
+        Assert.AreEqual(NovaGameProtocol.ServerProtocolMajor, constants["NGS_SERVER_PROTO_MAJOR"]);
+        Assert.AreEqual(NovaGameProtocol.ServerProtocolMinor, constants["NGS_SERVER_PROTO_MINOR"]);
+        Assert.AreEqual(NovaGameProtocol.DefaultPort, constants["NGS_DEFAULT_PORT"]);
+        Assert.AreEqual(NovaGameProtocol.EnvelopeSize, constants["NGS_ENVELOPE_SIZE"]);
+        Assert.AreEqual(NovaGameProtocol.MaxFramePayload, constants["NGS_MAX_FRAME_PAYLOAD"]);
+        Assert.AreEqual(NovaGameProtocol.MaxMessagePayload, constants["NGS_MAX_MESSAGE_PAYLOAD"]);
+
+        AssertKind(MessageKind.Hello, "NGS_KIND_HELLO");
+        AssertKind(MessageKind.Welcome, "NGS_KIND_WELCOME");
+        AssertKind(MessageKind.Error, "NGS_KIND_ERROR");
+        AssertKind(MessageKind.Ping, "NGS_KIND_PING");
+        AssertKind(MessageKind.Pong, "NGS_KIND_PONG");
+        AssertKind(MessageKind.LobbyChat, "NGS_KIND_LOBBY_CHAT");
+        AssertKind(MessageKind.UserListRequest, "NGS_KIND_USER_LIST_REQUEST");
+        AssertKind(MessageKind.UserListItem, "NGS_KIND_USER_LIST_ITEM");
+        AssertKind(MessageKind.UserJoined, "NGS_KIND_USER_JOINED");
+        AssertKind(MessageKind.UserLeft, "NGS_KIND_USER_LEFT");
+        AssertKind(MessageKind.TableChat, "NGS_KIND_TABLE_CHAT");
+        AssertKind(MessageKind.GameListRequest, "NGS_KIND_GAME_LIST_REQUEST");
+        AssertKind(MessageKind.GameListItem, "NGS_KIND_GAME_LIST_ITEM");
+        AssertKind(MessageKind.TableListRequest, "NGS_KIND_TABLE_LIST_REQUEST");
+        AssertKind(MessageKind.TableListItem, "NGS_KIND_TABLE_LIST_ITEM");
+        AssertKind(MessageKind.TableCreate, "NGS_KIND_TABLE_CREATE");
+        AssertKind(MessageKind.TableJoin, "NGS_KIND_TABLE_JOIN");
+        AssertKind(MessageKind.TableLeave, "NGS_KIND_TABLE_LEAVE");
+        AssertKind(MessageKind.TableObserve, "NGS_KIND_TABLE_OBSERVE");
+        AssertKind(MessageKind.TableCreated, "NGS_KIND_TABLE_CREATED");
+        AssertKind(MessageKind.TableJoined, "NGS_KIND_TABLE_JOINED");
+        AssertKind(MessageKind.TableLeft, "NGS_KIND_TABLE_LEFT");
+        AssertKind(MessageKind.TableEvent, "NGS_KIND_TABLE_EVENT");
+        AssertKind(MessageKind.PlayerAction, "NGS_KIND_PLAYER_ACTION");
+        AssertKind(MessageKind.StateRequest, "NGS_KIND_STATE_REQUEST");
+        AssertKind(MessageKind.StateChunk, "NGS_KIND_STATE_CHUNK");
+        AssertKind(MessageKind.AiListRequest, "NGS_KIND_AI_LIST_REQUEST");
+        AssertKind(MessageKind.AiListItem, "NGS_KIND_AI_LIST_ITEM");
+        AssertKind(MessageKind.AiAddToTable, "NGS_KIND_AI_ADD_TO_TABLE");
+        AssertKind(MessageKind.OpponentListRequest, "NGS_KIND_OPPONENT_LIST_REQUEST");
+        AssertKind(MessageKind.OpponentListItem, "NGS_KIND_OPPONENT_LIST_ITEM");
+
+        AssertFlag(MessageFlags.Response, "NGS_FLAG_RESPONSE");
+        AssertFlag(MessageFlags.Error, "NGS_FLAG_ERROR");
+        AssertFlag(MessageFlags.More, "NGS_FLAG_MORE");
+        AssertFlag(MessageFlags.Event, "NGS_FLAG_EVENT");
+
+        AssertError(ProtocolErrorCode.BadMessage, "NGS_ERRCODE_BAD_MESSAGE");
+        AssertError(ProtocolErrorCode.UnsupportedProtocol, "NGS_ERRCODE_UNSUPPORTED_PROTOCOL");
+        AssertError(ProtocolErrorCode.HandleInUse, "NGS_ERRCODE_HANDLE_IN_USE");
+        AssertError(ProtocolErrorCode.NotRegistered, "NGS_ERRCODE_NOT_REGISTERED");
+        AssertError(ProtocolErrorCode.UnknownGame, "NGS_ERRCODE_UNKNOWN_GAME");
+        AssertError(ProtocolErrorCode.UnknownTable, "NGS_ERRCODE_UNKNOWN_TABLE");
+        AssertError(ProtocolErrorCode.BadAction, "NGS_ERRCODE_BAD_ACTION");
+        AssertError(ProtocolErrorCode.TableFull, "NGS_ERRCODE_TABLE_FULL");
+        AssertError(ProtocolErrorCode.UnsupportedMessage, "NGS_ERRCODE_UNSUPPORTED_MESSAGE");
+        AssertError(ProtocolErrorCode.InvalidHandle, "NGS_ERRCODE_INVALID_HANDLE");
+        AssertError(ProtocolErrorCode.NotSeated, "NGS_ERRCODE_NOT_SEATED");
+        AssertError(ProtocolErrorCode.NotParticipant, "NGS_ERRCODE_NOT_PARTICIPANT");
+        AssertError(ProtocolErrorCode.UnknownAiProvider, "NGS_ERRCODE_UNKNOWN_AI_PROVIDER");
+        AssertError(ProtocolErrorCode.Timeout, "NGS_ERRCODE_TIMEOUT");
+
+        Assert.AreEqual((int)OpponentKind.Human, constants["NGS_OPPONENT_HUMAN"]);
+        Assert.AreEqual((int)OpponentKind.Ai, constants["NGS_OPPONENT_AI"]);
+
+        void AssertKind(MessageKind kind, string symbol) =>
+            Assert.AreEqual((int)kind, constants[symbol], symbol);
+
+        void AssertFlag(MessageFlags flag, string symbol) =>
+            Assert.AreEqual((int)flag, constants[symbol], symbol);
+
+        void AssertError(ProtocolErrorCode code, string symbol) =>
+            Assert.AreEqual((int)code, constants[symbol], symbol);
+    }
+
+    [TestMethod]
+    public void GameServerAssemblyClientUsesLinkerStorageAndStableRoutineAbi()
+    {
+        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "gameserver.inc"));
+        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "gameserver.s"));
+
+        string[] stateSymbols =
+        [
+            "NGS_SLOT",
+            "NGS_PORTL",
+            "NGS_PORTH",
+            "NGS_SEQ",
+            "NGS_BUFL",
+            "NGS_BUFH",
+            "NGS_LEN",
+            "NGS_LAST_LEN",
+            "NGS_VERSION",
+            "NGS_KIND",
+            "NGS_RECV_SEQ",
+            "NGS_FLAGS",
+            "NGS_RESULT",
+            "NGS_READL",
+            "NGS_READH",
+            "NGS_REMAIN",
+            "NGS_STRPTRL",
+            "NGS_STRPTRH",
+            "NGS_STRLEN",
+            "NGS_VALUE_L",
+            "NGS_VALUE_H",
+            "NGS_CLIENT_CAPL",
+            "NGS_CLIENT_CAPH",
+            "NGS_GAME_IDL",
+            "NGS_GAME_IDH",
+            "NGS_GAME_PROTO_MAJOR",
+            "NGS_GAME_PROTO_MINOR",
+            "NGS_TABLE_IDL",
+            "NGS_TABLE_IDH",
+            "NGS_ROLE",
+            "NGS_ACTION_TYPE",
+            "NGS_TIMEOUT_L",
+            "NGS_TIMEOUT_H",
+            "NGS_LAST_STATUS",
+            "NGS_EXPECTED_KIND",
+            "NGS_ERROR_CODE",
+            "NGS_ERROR_TEXTPTRL",
+            "NGS_ERROR_TEXTPTRH",
+            "NGS_ERROR_TEXTLEN"
+        ];
+
+        foreach (string symbol in stateSymbols)
+        {
+            AssertNoNvrAlias(inc, symbol);
+            StringAssert.Contains(inc, $".global {symbol}");
+            StringAssert.Contains(impl, $"{symbol}:");
+        }
+
+        string[] routines =
+        [
+            "ngs_init",
+            "ngs_set_buffer",
+            "ngs_set_string",
+            "ngs_connect",
+            "ngs_connect_default",
+            "ngs_disconnect",
+            "ngs_status",
+            "ngs_ready",
+            "ngs_send_current",
+            "ngs_recv_current",
+            "ngs_set_timeout",
+            "ngs_wait_connected",
+            "ngs_wait_message",
+            "ngs_wait_kind",
+            "ngs_parse_error",
+            "ngs_ping_roundtrip",
+            "ngs_begin_message",
+            "ngs_write_byte",
+            "ngs_write_u16",
+            "ngs_write_string",
+            "ngs_write_bytes",
+            "ngs_parse_envelope",
+            "ngs_read_byte",
+            "ngs_read_u16",
+            "ngs_read_string",
+            "ngs_build_hello",
+            "ngs_build_ping",
+            "ngs_build_lobby_chat",
+            "ngs_build_table_chat",
+            "ngs_build_user_list_request",
+            "ngs_build_game_list_request",
+            "ngs_build_table_list_request",
+            "ngs_build_table_create",
+            "ngs_build_table_join",
+            "ngs_build_table_observe",
+            "ngs_build_table_leave",
+            "ngs_build_player_action",
+            "ngs_build_state_request",
+            "ngs_build_ai_list_request",
+            "ngs_build_ai_add_to_table",
+            "ngs_build_opponent_list_request"
+        ];
+
+        foreach (string routine in routines)
+        {
+            StringAssert.Contains(inc, $".global {routine}");
+            StringAssert.Contains(impl, $".export {routine}");
+        }
+
+        StringAssert.Contains(impl, ".segment \"BSS\"");
+        StringAssert.Contains(impl, ".include \"nic.s\"");
+    }
+
+    [TestMethod]
+    public void NovaChessNetworkAdapterConstantsMatchServerChessAdapter()
+    {
+        string inc = File.ReadAllText(RepoPath("examples", "novachess", "src", "nchess_net.inc"));
+        IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
+
+        Assert.AreEqual(ChessGameAdapter.GameId, constants["NCHESS_GAME_ID"]);
+        Assert.AreEqual(ChessGameAdapter.ProtocolMajor, constants["NCHESS_PROTO_MAJOR"]);
+        Assert.AreEqual(ChessGameAdapter.ProtocolMinor, constants["NCHESS_PROTO_MINOR"]);
+        Assert.AreEqual(ChessGameAdapter.ActionMove, constants["NCHESS_ACTION_MOVE"]);
+        Assert.AreEqual(ChessGameAdapter.ActionResign, constants["NCHESS_ACTION_RESIGN"]);
+        Assert.AreEqual(ChessGameAdapter.ActionOfferDraw, constants["NCHESS_ACTION_OFFER_DRAW"]);
+
+        string impl = File.ReadAllText(RepoPath("examples", "novachess", "src", "nchess_net.s"));
+        foreach (string routine in new[]
+        {
+            "nchess_net_init",
+            "nchess_net_build_hello",
+            "nchess_net_build_opponent_list_request",
+            "nchess_net_build_create_table",
+            "nchess_net_build_join_table",
+            "nchess_net_build_add_ai",
+            "nchess_net_build_move",
+            "nchess_net_parse_table_event",
+            "nchess_net_parse_state_chunk"
+        })
+        {
+            StringAssert.Contains(inc, $".global {routine}");
+            StringAssert.Contains(impl, $".export {routine}");
+        }
+    }
+
     [TestMethod]
     public void VTextStateUsesLinkerStorageNotNvrMailbox()
     {
@@ -140,6 +365,20 @@ public class RuntimeLibraryAbiTests
         Assert.IsFalse(
             Regex.IsMatch(source, $@"(?m)^\s*{Regex.Escape(symbol)}\s*=\s*NVR\d[HL]?\b"),
             $"{symbol} must not alias an NVR pseudo-register.");
+    }
+
+    private static IReadOnlyDictionary<string, int> ParseCa65NumericConstants(string source)
+    {
+        var constants = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (Match match in Regex.Matches(source, @"(?m)^\s*([A-Z0-9_]+)\s*=\s*(\$[0-9A-Fa-f]+|[0-9]+)\b"))
+        {
+            string value = match.Groups[2].Value;
+            constants[match.Groups[1].Value] = value.StartsWith('$')
+                ? int.Parse(value[1..], NumberStyles.HexNumber, CultureInfo.InvariantCulture)
+                : int.Parse(value, CultureInfo.InvariantCulture);
+        }
+
+        return constants;
     }
 
     private static string RepoPath(params string[] parts)

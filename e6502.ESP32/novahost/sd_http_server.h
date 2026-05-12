@@ -7,8 +7,9 @@
 //   PUT    /wifi         -> update WiFi config JSON
 //   POST   /wifi/connect|disconnect|reconnect|forget
 //   GET    /drives      -> JSON slot mount status
-//   POST   /drives/<slot>/mount   -> mount slot, optional {"path":"/file.ndi"}
-//   POST   /drives/<slot>/unmount -> unmount slot
+//   POST   /drives/<slot>/mount   -> mount slot from {"path":"/file.ndi"}
+//                                     or its persisted logical slot pointer
+//   POST   /drives/<slot>/unmount -> unmount slot and clear its persisted path
 //   GET    /sd-status    -> SD diagnostic JSON
 //   POST   /reboot       -> reboot NovaHost after responding
 //   GET    /sd/          -> JSON listing

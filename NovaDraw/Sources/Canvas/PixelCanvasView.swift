@@ -43,9 +43,12 @@ struct PixelCanvasView: View {
                 onMagnify: handleMagnify,
                 onCut: toolEngine.cutSelection,
                 onCopy: toolEngine.copySelection,
-                onPaste: toolEngine.pasteClipboard,
+                onPaste: handlePaste,
                 onDelete: toolEngine.deleteSelection,
                 onDeselect: toolEngine.deselectSelection,
+                onCancelSelection: toolEngine.cancelSelectionAction,
+                onCommitSelection: toolEngine.commitSelection,
+                onNudgeSelection: toolEngine.nudgeSelection,
                 canCutOrCopy: { document.selection != nil },
                 canPaste: { document.clipboard != nil }
             )
@@ -72,6 +75,9 @@ struct PixelCanvasView: View {
     }
 
     private func handleLeftMouse(phase: MousePhase, location: CGPoint, modifiers: NSEvent.ModifierFlags) {
+        hoverLocation = location
+        cursorPosition = pixelCoord(from: location)
+
         if shouldAdjustFloatingBackdrop(modifiers: modifiers) || activeBackdropDragLocation != nil {
             handleBackdropDrag(phase: phase, location: location)
             return
@@ -92,6 +98,11 @@ struct PixelCanvasView: View {
         case .up:
             toolEngine.mouseUp(x: coord.x, y: coord.y)
         }
+    }
+
+    private func handlePaste() {
+        let target = hoverLocation.flatMap(pixelCoord(from:))
+        toolEngine.pasteClipboard(at: target)
     }
 
     private func handleRightMouse(phase: MousePhase, location: CGPoint, modifiers: NSEvent.ModifierFlags) {
@@ -167,10 +178,11 @@ struct PixelCanvasView: View {
         }
 
         let factor: CGFloat = deltaY > 0 ? 1.25 : 0.8
-        CanvasViewport.applyCenteredZoom(
+        CanvasViewport.applyZoom(
             document: document,
             size: viewSize,
-            zoom: document.zoom * factor
+            zoom: document.zoom * factor,
+            anchor: location
         )
     }
 
@@ -180,10 +192,11 @@ struct PixelCanvasView: View {
             return
         }
 
-        CanvasViewport.applyCenteredZoom(
+        CanvasViewport.applyZoom(
             document: document,
             size: viewSize,
-            zoom: document.zoom * (1 + magnification)
+            zoom: document.zoom * (1 + magnification),
+            anchor: location
         )
     }
 
@@ -346,6 +359,9 @@ private struct CanvasMouseEventView: NSViewRepresentable {
     let onPaste: () -> Void
     let onDelete: () -> Void
     let onDeselect: () -> Void
+    let onCancelSelection: () -> Void
+    let onCommitSelection: () -> Void
+    let onNudgeSelection: (Int, Int) -> Void
     let canCutOrCopy: () -> Bool
     let canPaste: () -> Bool
 
@@ -362,6 +378,9 @@ private struct CanvasMouseEventView: NSViewRepresentable {
         view.onPaste = onPaste
         view.onDelete = onDelete
         view.onDeselect = onDeselect
+        view.onCancelSelection = onCancelSelection
+        view.onCommitSelection = onCommitSelection
+        view.onNudgeSelection = onNudgeSelection
         view.canCutOrCopy = canCutOrCopy
         view.canPaste = canPaste
         return view
@@ -379,6 +398,9 @@ private struct CanvasMouseEventView: NSViewRepresentable {
         nsView.onPaste = onPaste
         nsView.onDelete = onDelete
         nsView.onDeselect = onDeselect
+        nsView.onCancelSelection = onCancelSelection
+        nsView.onCommitSelection = onCommitSelection
+        nsView.onNudgeSelection = onNudgeSelection
         nsView.canCutOrCopy = canCutOrCopy
         nsView.canPaste = canPaste
     }
@@ -395,6 +417,9 @@ private struct CanvasMouseEventView: NSViewRepresentable {
         var onPaste: (() -> Void)?
         var onDelete: (() -> Void)?
         var onDeselect: (() -> Void)?
+        var onCancelSelection: (() -> Void)?
+        var onCommitSelection: (() -> Void)?
+        var onNudgeSelection: ((Int, Int) -> Void)?
         var canCutOrCopy: (() -> Bool)?
         var canPaste: (() -> Bool)?
 
@@ -443,7 +468,7 @@ private struct CanvasMouseEventView: NSViewRepresentable {
 
         override func cancelOperation(_ sender: Any?) {
             _ = sender
-            onDeselect?()
+            onCancelSelection?()
         }
 
         override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -469,9 +494,40 @@ private struct CanvasMouseEventView: NSViewRepresentable {
         }
 
         override func keyDown(with event: NSEvent) {
+            let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
             switch event.keyCode {
             case 51, 117:
                 onDelete?()
+            case 36, 76:
+                guard flags.isSubset(of: [.shift]) else {
+                    super.keyDown(with: event)
+                    return
+                }
+                onCommitSelection?()
+            case 123:
+                guard flags.isSubset(of: [.shift]) else {
+                    super.keyDown(with: event)
+                    return
+                }
+                onNudgeSelection?(-(flags.contains(.shift) ? 8 : 1), 0)
+            case 124:
+                guard flags.isSubset(of: [.shift]) else {
+                    super.keyDown(with: event)
+                    return
+                }
+                onNudgeSelection?(flags.contains(.shift) ? 8 : 1, 0)
+            case 125:
+                guard flags.isSubset(of: [.shift]) else {
+                    super.keyDown(with: event)
+                    return
+                }
+                onNudgeSelection?(0, flags.contains(.shift) ? 8 : 1)
+            case 126:
+                guard flags.isSubset(of: [.shift]) else {
+                    super.keyDown(with: event)
+                    return
+                }
+                onNudgeSelection?(0, -(flags.contains(.shift) ? 8 : 1))
             default:
                 super.keyDown(with: event)
             }

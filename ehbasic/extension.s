@@ -79,8 +79,8 @@ ExtTable:
       .word EXT_PWD-1         ; cmd 3: PWD print working directory
       .word EXT_XMEM-1        ; cmd 4: XMEM status display
       .word EXT_XDIR-1        ; cmd 5: XDIR listing loop
-      .word EXT_TSAVE-1       ; cmd 6: TSAVE tile file
-      .word EXT_TLOAD-1       ; cmd 7: TLOAD tile file
+      .word EXT_UNSUPPORTED-1 ; cmd 6: reserved
+      .word EXT_UNSUPPORTED-1 ; cmd 7: reserved
       .word EXT_HELP-1        ; cmd 8: HELP command
       .word EXT_DMAFILL-1     ; cmd 9: DMAFILL
       .word EXT_BLTFILL-1     ; cmd A: BLITFILL
@@ -90,24 +90,9 @@ ExtTable:
       .word EXT_XSAVE-1       ; cmd E: XSAVE XRAM -> file
       .word EXT_DMACOPY-1     ; cmd F: DMACOPY
       .word EXT_BLITCOPY-1    ; cmd 10: BLITCOPY
-      .word EXT_TILESIZE-1    ; cmd 11: TILESIZE
-      .word EXT_TMIRROR-1     ; cmd 12: TMIRROR
-      .word EXT_TTRANS-1      ; cmd 13: TTRANS
-      .word EXT_TDEF-1        ; cmd 14: TDEF
-      .word EXT_TPUT-1        ; cmd 15: TPUT
-      .word EXT_TATTR-1       ; cmd 16: TATTR
-      .word EXT_TFILL-1       ; cmd 17: TFILL
-      .word EXT_TROW-1        ; cmd 18: TROW
-      .word EXT_TCOL-1        ; cmd 19: TCOL
-      .word EXT_TNTLOAD-1     ; cmd 1A: TNTLOAD
-      .word EXT_TCLS-1        ; cmd 1B: TCLS
-      .word EXT_TBUF-1        ; cmd 1C: TBUF
-      .word EXT_TBSET-1       ; cmd 1D: TBSET
-      .word EXT_TBPUT-1       ; cmd 1E: TBPUT
-      .word EXT_TBFILL-1      ; cmd 1F: TBFILL
-      .word EXT_TSCROLL-1     ; cmd 20: TSCROLL
-      .word EXT_TPAL-1        ; cmd 21: TPAL
-      .word EXT_TPALC-1       ; cmd 22: TPALC
+      .repeat $12
+      .word EXT_UNSUPPORTED-1 ; cmds 11-22: reserved
+      .endrepeat
       .word EXT_ADDR-1        ; cmd 23: ADDR("label") lookup
       .word EXT_XBANK-1       ; cmd 24: XBANK
       .word EXT_XPOKE-1       ; cmd 25: XPOKE
@@ -557,35 +542,8 @@ EXT_XDIR:
       LDA   #$00
       RTS
 
-; =====================================================================
-; TSAVE handler — save tile state to .tile file
-; Filename already in FIO_NAME/FIO_NAMELEN.
-; Returns: A=0 success, A=errcode on error (Z flag set accordingly).
-; =====================================================================
-EXT_TSAVE:
-      LDA   #FIO_CMD_TSAVE
-      JSR   fio_exec
-      BEQ   @tsave_ok
-      LDA   FIO_ERRCODE
-      RTS
-@tsave_ok:
-      LDA   #$00
-      RTS
-
-; =====================================================================
-; TLOAD handler — load tile state from .tile file
-; Filename already in FIO_NAME/FIO_NAMELEN.
-; Returns: A=0 success, A=errcode on error (Z flag set accordingly).
-; =====================================================================
-EXT_TLOAD:
-      LDA   #FIO_CMD_TLOAD
-      JSR   fio_exec
-      BEQ   @tload_ok
-      LDA   FIO_ERRCODE
-      RTS
-@tload_ok:
-      LDA   #$00
-      RTS
+EXT_UNSUPPORTED:
+      JMP   EXT_SNERR_VEC
 
 ; =====================================================================
 ; HELP handler — moved from BASIC ROM to save space.
@@ -818,7 +776,6 @@ EXT_BLTFILL:
 
       .include "lib/blitter.s"
       .include "lib/copper.s"
-      .include "lib/tile.s"
       .include "lib/audio.s"
       .include "lib/rng.s"
       .include "lib/xram.s"
@@ -974,195 +931,6 @@ EXT_XMAP:
 EXT_XUNMAP:
       JSR   EXT_GTBY_VEC
       JMP   xmc_unmap_window
-
-; =====================================================================
-; Tile engine command handlers.
-; BASIC stubs dispatch here; these parsers use BASIC's RAM-resident scanner
-; bridges, then issue commands through lib/tile.s.
-; =====================================================================
-
-ext_vsync:
-      LDA   VGC_FRAME
-@wait:
-      CMP   VGC_FRAME
-      BEQ   @wait
-      RTS
-
-ext_tile_b0c:
-      JSR   EXT_GTBY_VEC      ; byte -> TileP0, then consume comma
-      STX   TileP0
-      JMP   ext_comma
-
-ext_tile_wad:
-      JSR   EXT_GTWRD_VEC     ; word -> TileAddrL/H
-      LDA   FAC1_3
-      STA   TileAddrL
-      LDA   FAC1_2
-      STA   TileAddrH
-      RTS
-
-EXT_TILESIZE:
-      JSR   EXT_GTBY_VEC
-      JSR   ext_vsync
-      JMP   tile_set_size
-
-EXT_TMIRROR:
-      JSR   EXT_GTBY_VEC
-      JSR   ext_vsync
-      JMP   tile_set_mirror
-
-EXT_TTRANS:
-      JSR   EXT_GTBY_VEC
-      JSR   ext_vsync
-      JMP   tile_set_trans_color
-
-EXT_TDEF:
-      JSR   ext_tile_b0c
-      JSR   EXT_GTWRD_VEC
-      LDA   FAC1_3
-      STA   NVR7L
-      LDA   FAC1_2
-      STA   NVR7H
-      JSR   LAB_GBYT
-      CMP   #','
-      BEQ   @td_bulk
-      LDA   NVR7L
-      STA   TileAddrL
-      LDA   NVR7H
-      STA   TileAddrH
-      JSR   ext_vsync
-      JMP   tile_def
-@td_bulk:
-      LDA   NVR7L
-      STA   TileP1
-      JSR   ext_comma
-      JSR   ext_tile_wad
-      JSR   ext_vsync
-      JMP   tile_def_bulk
-
-EXT_TPUT:
-      LDA   #TileCmdPut
-      .byte $2C
-EXT_TATTR:
-      LDA   #TileCmdAttr
-      PHA
-      JSR   EXT_GTBY_VEC
-      STX   TileP0
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TileP1
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TileP2
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TileP3
-      JSR   ext_vsync
-      PLA
-      JMP   tile_cmd
-
-EXT_TFILL:
-      JSR   ext_tile_b0c
-      JSR   EXT_GTBY_VEC
-      STX   TileP1
-      JSR   ext_vsync
-      JMP   tile_fill
-
-EXT_TROW:
-      LDA   #TileCmdRow
-      .byte $2C
-EXT_TCOL:
-      LDA   #TileCmdCol
-      PHA
-      JSR   EXT_GTBY_VEC
-      STX   TileP0
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TileP1
-      JSR   ext_comma
-      JSR   ext_tile_wad
-      JSR   ext_vsync
-      PLA
-      JMP   tile_cmd
-
-EXT_TNTLOAD:
-      JSR   ext_tile_b0c
-      JSR   ext_tile_wad
-      JSR   ext_vsync
-      JMP   tile_load
-
-EXT_TCLS:
-      JSR   ext_vsync
-      JMP   tile_cls
-
-EXT_TBUF:
-      JSR   EXT_GTBY_VEC
-      STX   TileP0
-      JMP   tile_buf_fill
-
-EXT_TBSET:
-      LDA   #TileCmdBufSet
-      .byte $2C
-EXT_TBPUT:
-      LDA   #TileCmdBufPut
-      PHA
-      JSR   EXT_GTBY_VEC
-      STX   TileP0
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TileP1
-      PLA
-      JMP   tile_cmd
-
-EXT_TBFILL:
-      JSR   EXT_GTBY_VEC
-      STX   TileP0
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TileP1
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TileP2
-      JMP   tile_buf_range
-
-EXT_TSCROLL:
-      JSR   EXT_GTWRD_VEC
-      LDA   FAC1_3
-      STA   NVR0L
-      LDA   FAC1_2
-      STA   NVR0H
-      JSR   ext_comma
-      JSR   EXT_GTWRD_VEC
-      LDA   FAC1_3
-      STA   NVR1L
-      LDA   FAC1_2
-      STA   NVR1H
-      JSR   ext_vsync
-      JMP   tile_set_scroll
-
-EXT_TPAL:
-      JSR   EXT_GTBY_VEC
-      STX   TilePalP0
-      JSR   ext_comma
-      JSR   ext_tile_wad
-      JSR   ext_vsync
-      JMP   tile_pal
-
-EXT_TPALC:
-      JSR   EXT_GTBY_VEC
-      STX   TilePalP0
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TilePalP1
-      JSR   ext_comma
-      JSR   ext_tile_b0c
-      JSR   EXT_GTBY_VEC
-      STX   TileP1
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   TileP2
-      JSR   ext_vsync
-      JMP   tile_palc
 
 ; =====================================================================
 ; EXT_COPPER — COPPER subcommand parser.

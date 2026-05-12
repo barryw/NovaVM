@@ -13,6 +13,8 @@
 extern void logLn(const char* fmt, ...);
 extern const char* novaBootPhaseName();
 extern bool novaFpgaBridgeAvailable();
+extern bool novaNicDispatcherAvailable();
+extern void novaNicDebugJson(char* out, size_t out_size);
 
 // =========================================================================
 // Construction and setup
@@ -32,15 +34,23 @@ void DebugServer::begin() {
 // =========================================================================
 
 void DebugServer::loop() {
-    // Accept new client (one at a time)
-    if (!_client || !_client.connected()) {
+    if (_server.hasClient()) {
         WiFiClient newClient = _server.available();
-        if (newClient) {
+        bool canReplace =
+            !_client || !_client.connected() ||
+            _asyncOp == ASYNC_NONE;
+
+        if (canReplace) {
+            if (_client)
+                _client.stop();
             _client = newClient;
             _rxBuf = "";
             _asyncOp = ASYNC_NONE;
             logLn("Debug client connected from %s",
                   _client.remoteIP().toString().c_str());
+        } else {
+            newClient.println("{\"ok\":false,\"error\":\"debug server busy\"}");
+            newClient.stop();
         }
     }
 
@@ -76,9 +86,18 @@ void DebugServer::handleCommand(const String& json) {
     if (cmd == "boot_status") {
         char buf[128];
         snprintf(buf, sizeof(buf),
-                 "{\"ok\":true,\"bootPhase\":\"%s\",\"fpgaBridgeAvailable\":%s}",
+                 "{\"ok\":true,\"bootPhase\":\"%s\",\"fpgaBridgeAvailable\":%s,"
+                 "\"capabilities\":{\"nicDispatcher\":%s}}",
                  novaBootPhaseName(),
-                 novaFpgaBridgeAvailable() ? "true" : "false");
+                 novaFpgaBridgeAvailable() ? "true" : "false",
+                 novaNicDispatcherAvailable() ? "true" : "false");
+        respond(buf);
+        return;
+    }
+
+    if (cmd == "nic_status") {
+        char buf[1024];
+        novaNicDebugJson(buf, sizeof(buf));
         respond(buf);
         return;
     }
@@ -115,6 +134,7 @@ void DebugServer::handleCommand(const String& json) {
     else if (cmd == "dbg_break_list")  cmdDbgBreakList();
     else if (cmd == "dbg_trace")       cmdDbgTrace(json);
     else if (cmd == "cold_start")  cmdColdStart(json);
+    else if (cmd == "vm_reset")    cmdVmReset(json);
     else if (cmd == "wait_ready")  cmdWaitReady(json);
     else if (cmd == "watch")       cmdWatch(json);
     else if (cmd == "run_cycles")  cmdRunCycles(json);
@@ -722,9 +742,47 @@ void DebugServer::cmdReloadRom() {
 // =========================================================================
 
 void DebugServer::cmdColdStart(const String& json) {
-    // A cold start is a system reset, not Ctrl-C. Keep the CPU held while the
-    // custom chips reset, then release and let hardware scrub VGC state before
-    // the reset vector runs.
+    // A cold boot returns the machine to the default ROM image first, just as
+    // NovaHost's power-on boot task does. Mounted media may still autoboot
+    // after NovaBASIC starts; unmounted media cannot keep a stale runtime alive.
+    if (!loadRomsToFPGA()) {
+        respondError("ROM reload failed during cold start");
+        return;
+    }
+
+    // Resume if paused/stopped under the debug bridge.
+    _bridge.resume();
+    _paused = false;
+
+    if (extractInt(json, "wait_ready", 1) == 0) {
+        respondOk();
+        return;
+    }
+
+    String waitText = extractString(json, "text");
+    if (waitText.length() == 0)
+        waitText = "Ready";
+    unsigned long deadline = millis() + 10000;
+    while (millis() < deadline) {
+        if (_bridge.readScreen(_screenBuf)) {
+            if (findTextOnScreen(waitText.c_str()) >= 0) {
+                respondOk();
+                return;
+            }
+        }
+        delay(50);
+    }
+
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "Cold start timed out waiting for %.64s", waitText.c_str());
+    respondError(buf);
+}
+
+void DebugServer::cmdVmReset(const String& json) {
+    // Reset the currently-loaded runtime without reloading the default ROM
+    // bank. Use this for runtime-specific smoke tests; use cold_start for a
+    // real cold boot.
     bool fullReset = _bridge.systemResetHold();
     if (!fullReset)
         _bridge.resetHold();
@@ -743,9 +801,6 @@ void DebugServer::cmdColdStart(const String& json) {
         return;
     }
 
-    // Wait for "Ready" prompt. Do not report success unless the VM actually
-    // reached the prompt; otherwise test runners race ahead and hide reset
-    // failures behind later transport timeouts.
     String waitText = extractString(json, "text");
     if (waitText.length() == 0)
         waitText = "Ready";
@@ -760,7 +815,10 @@ void DebugServer::cmdColdStart(const String& json) {
         delay(50);
     }
 
-    respondError("Cold start timed out waiting for Ready");
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "VM reset timed out waiting for %.64s", waitText.c_str());
+    respondError(buf);
 }
 
 void DebugServer::cmdWaitReady(const String& json) {

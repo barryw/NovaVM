@@ -6,6 +6,8 @@ namespace e6502.Avalonia.Hardware;
 
 public sealed class VirtualNetworkController : IDisposable
 {
+    private const string GameServerAlias = "nova-game-server";
+
     private readonly byte[] _regs = new byte[VgcConstants.NicEnd - VgcConstants.NicBase + 1];
     private readonly Func<ushort, byte> _busRead;
     private readonly Action<ushort, byte> _busWrite;
@@ -60,7 +62,10 @@ public sealed class VirtualNetworkController : IDisposable
         _regs[offset] = data;
 
         if (address == VgcConstants.NicCmd)
+        {
             ExecuteCommand(data);
+            _regs[offset] = 0;
+        }
     }
 
     private void ExecuteCommand(byte cmd)
@@ -92,7 +97,31 @@ public sealed class VirtualNetworkController : IDisposable
         int port = _regs[VgcConstants.NicRemotePortL - VgcConstants.NicBase]
                  | (_regs[VgcConstants.NicRemotePortH - VgcConstants.NicBase] << 8);
 
+        port = ResolveGameServerPort(hostname, port);
+        hostname = ResolveGameServerHost(hostname);
+        Trace($"connect slot={slot} host={hostname} port={port}");
+
         _ = ConnectAsync(slot, hostname, port);
+    }
+
+    private static string ResolveGameServerHost(string hostname)
+    {
+        if (!string.Equals(hostname, GameServerAlias, StringComparison.OrdinalIgnoreCase))
+            return hostname;
+
+        string? configured = Environment.GetEnvironmentVariable("NOVA_GAME_SERVER_HOST");
+        return string.IsNullOrWhiteSpace(configured) ? "localhost" : configured;
+    }
+
+    private static int ResolveGameServerPort(string hostname, int port)
+    {
+        if (!string.Equals(hostname, GameServerAlias, StringComparison.OrdinalIgnoreCase))
+            return port;
+
+        string? configured = Environment.GetEnvironmentVariable("NOVA_GAME_SERVER_PORT");
+        return int.TryParse(configured, out int parsed) && parsed > 0 && parsed <= ushort.MaxValue
+            ? parsed
+            : port;
     }
 
     private async Task ConnectAsync(int slot, string hostname, int port)
@@ -105,11 +134,19 @@ public sealed class VirtualNetworkController : IDisposable
             await client.ConnectAsync(hostname, port, cts.Token);
             s.Connect(client);
             s.StartReading(OnMessageReceived, slot);
+            Trace($"connected slot={slot} host={hostname} port={port}");
         }
-        catch
+        catch (Exception ex)
         {
+            Trace($"connect failed slot={slot} host={hostname} port={port}: {ex.GetType().Name}: {ex.Message}");
             s.SetError();
         }
+    }
+
+    private static void Trace(string message)
+    {
+        if (Environment.GetEnvironmentVariable("NOVA_NIC_TRACE") == "1")
+            Console.Error.WriteLine($"[nic] {message}");
     }
 
     private void DoDisconnect(int slot)
@@ -124,10 +161,13 @@ public sealed class VirtualNetworkController : IDisposable
         int len = _regs[VgcConstants.NicDmaLen - VgcConstants.NicBase];
         if (len == 0) len = 256;
 
+        _regs[VgcConstants.NicDmaStatus - VgcConstants.NicBase] = VgcConstants.NicDmaStatusBusy;
+        _regs[VgcConstants.NicDmaErr - VgcConstants.NicBase] = VgcConstants.NicDmaErrNone;
         var data = new byte[len];
         for (int i = 0; i < len; i++)
             data[i] = _busRead((ushort)(addr + i));
 
+        _regs[VgcConstants.NicDmaStatus - VgcConstants.NicBase] = VgcConstants.NicDmaStatusTxReady;
         s.Send(data);
     }
 
@@ -142,10 +182,13 @@ public sealed class VirtualNetworkController : IDisposable
 
         ushort addr = (ushort)(_regs[VgcConstants.NicDmaAddrL - VgcConstants.NicBase]
                              | (_regs[VgcConstants.NicDmaAddrH - VgcConstants.NicBase] << 8));
+        _regs[VgcConstants.NicDmaStatus - VgcConstants.NicBase] = VgcConstants.NicDmaStatusBusy;
+        _regs[VgcConstants.NicDmaErr - VgcConstants.NicBase] = VgcConstants.NicDmaErrNone;
         for (int i = 0; i < data.Length; i++)
             _busWrite((ushort)(addr + i), data[i]);
 
         _regs[VgcConstants.NicMsgLen - VgcConstants.NicBase] = (byte)(data.Length == 256 ? 0 : data.Length);
+        _regs[VgcConstants.NicDmaStatus - VgcConstants.NicBase] = VgcConstants.NicDmaStatusRxDone;
     }
     private void DoListen(int slot)
     {

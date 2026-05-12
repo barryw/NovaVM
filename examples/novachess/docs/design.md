@@ -40,7 +40,8 @@ Chess grows:
 
 - `D`: engine-vs-engine demo/self-play.
 - `N`: new game setup.
-- player mode: human vs Nova, Nova vs Nova, or human vs human.
+- player mode: local one-player, local two-player, computer-vs-computer, or
+  network game.
 - difficulty: Easy, Medium, Hard. This writes the engine's exported
   `difficulty` byte before the game starts.
 - side selection for human-vs-Nova: White or Black.
@@ -52,11 +53,34 @@ move. That keeps chess rules inside the engine instead of duplicating them in
 the UI. Promotion UI is still deliberately thin: the engine currently supports
 queen and knight promotions.
 
-Longer term, opponent selection should be modeled as a provider rather than as
-engine-specific UI: local Nova engine, second local human, and network opponent.
-The network provider can later route positions/moves through NovaHost to a game
-server backed by Stockfish without changing board rendering, move animation, or
-game-state presentation.
+Opponent selection is modeled as a provider rather than as engine-specific UI:
+local Nova engine, second local human, and network opponent. The network path
+asks the generic Nova Game Server for typed opponents (`human` or `ai`) and can
+select an AI provider such as Stockfish without advertising Stockfish as a
+separate chess mode.
+
+Nova Chess does not carry a server hostname. It calls the shared game-server
+runtime's default connect routine, which targets the `nova-game-server` endpoint
+alias on port 6503. Avalonia resolves that alias to localhost by default, and
+NovaHost boot config carries the equivalent game-server host/port for hardware.
+
+The first network adapter layer now lives in `src/nchess_net.inc` and
+`src/nchess_net.s`. It uses the generic Nova game-server client ABI and maps
+engine 0x88 moves to chess `PLAYER_ACTION` payloads:
+
+- game id `2`, game protocol `1.0`
+- action `1`: move, payload `[from88, to88]`
+- `TABLE_EVENT` move payload from the server:
+  `[actor, ply, side, from88, to88]`
+- `STATE_CHUNK` payload starts with:
+  `[version, ply, sideToMove, lastFrom88, lastTo88, moveCount]`
+- `OPPONENT_LIST_ITEM` identifies each available opponent with a type byte:
+  `0` for human sessions and `1` for AI providers.
+
+This is deliberately transport-first. The server-side chess adapter records and
+broadcasts the move log so Nova clients can synchronize and observe tables; the
+Nova Chess client still uses its local engine as rule authority before sending
+human moves.
 
 ## Virtual Sprites
 

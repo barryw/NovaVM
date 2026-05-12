@@ -542,7 +542,6 @@ public class AvaloniaCompositeBusTests
         bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceTextAttr, 0, VgcConstants.TextAttrFlash);
         bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, 0, 0x0D);
         bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceSprite, 0, 0xA5);
-        bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceTile, 0, 0xC3);
         bus.Write((ushort)VgcConstants.RegFgCol, 0x02);
         bus.Write((ushort)VgcConstants.RegCmd, VgcConstants.CmdCopperEnable);
 
@@ -572,7 +571,6 @@ public class AvaloniaCompositeBusTests
         Assert.AreEqual(0x00, bus.Vgc.GetScreenTextAttr(0, 0));
         Assert.AreEqual(0x00, bus.ReadVramByte(VgcConstants.VramPlaneGfx, 0));
         Assert.AreEqual(0x00, bus.ReadVramByte(VgcConstants.VramPlaneSprite, 0));
-        Assert.AreEqual(0x00, bus.ReadVramByte(VgcConstants.VramPlaneTile, 0));
         Assert.AreEqual(15, bus.Read((ushort)VgcConstants.RegFgCol));
         Assert.IsFalse(bus.Vgc.IsCopperEnabled);
 

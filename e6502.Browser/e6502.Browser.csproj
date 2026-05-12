@@ -59,8 +59,6 @@
     <Compile Include="..\e6502.Avalonia\Rendering\SpriteRenderer.cs" Link="Rendering\SpriteRenderer.cs" />
     <Compile Include="..\e6502.Avalonia\Rendering\SpriteRenderState.cs" Link="Rendering\SpriteRenderState.cs" />
     <Compile Include="..\e6502.Avalonia\Rendering\BlockGraphics.cs" Link="Rendering\BlockGraphics.cs" />
-    <Compile Include="..\e6502.Avalonia\Rendering\TileRenderState.cs" Link="Rendering\TileRenderState.cs" />
-    <Compile Include="..\e6502.Avalonia\Rendering\TileRenderer.cs" Link="Rendering\TileRenderer.cs" />
   </ItemGroup>
 
   <!-- Input -->

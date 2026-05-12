@@ -29,5 +29,11 @@
   "mounts": {
     "fd0": "",
     "hd0": ""
+  },
+  "network": {
+    "gameServer": {
+      "host": "192.168.1.93",
+      "port": 6503
+    }
   }
 }

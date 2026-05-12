@@ -19,8 +19,6 @@ module test_vgc_blitter_scroll;
     logic        vgc_cpu_re;
     logic        key_valid;
     logic [7:0]  key_data;
-    wire  [15:0] tile_dma_addr;
-    wire         tile_dma_active;
     logic [15:0] dbg_addr;
     wire  [7:0]  dbg_rdata;
     logic        dbg_we;
@@ -84,9 +82,6 @@ module test_vgc_blitter_scroll;
         .cpu_addr(vgc_cpu_addr), .cpu_wdata(vgc_cpu_wdata),
         .cpu_rdata(vgc_cpu_rdata), .cpu_we(vgc_cpu_we), .cpu_re(vgc_cpu_re),
         .key_valid(key_valid), .key_data(key_data),
-        .tile_dma_addr(tile_dma_addr),
-        .tile_dma_data(8'h00),
-        .tile_dma_active(tile_dma_active),
         .blt_space(blt_vgc_space), .blt_addr(blt_vgc_addr),
         .blt_rdata(blt_vgc_rdata), .blt_wdata(blt_vgc_wdata),
         .blt_we(blt_vgc_we), .blt_re(blt_vgc_re),

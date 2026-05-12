@@ -186,6 +186,124 @@ import Testing
         #expect(!doc.isPixelPainted(4, 5))
     }
 
+    @Test func pasteUsesMouseTargetWhenNoSelection() {
+        let (doc, engine) = makeDoc(8, 8)
+        doc.setPixel(1, 1, 3)
+        doc.selection = (1, 1, 1, 1)
+        engine.copySelection()
+        doc.selection = nil
+
+        engine.pasteClipboard(at: (5, 4))
+
+        #expect(doc.currentTool == .select)
+        #expect(doc.selection?.x == 5)
+        #expect(doc.selection?.y == 4)
+        #expect(doc.getPixel(5, 4) == 3)
+        #expect(doc.isPixelPainted(5, 4))
+    }
+
+    @Test func undoClearsFloatingPasteState() {
+        let (doc, engine) = makeDoc(8, 8)
+        doc.setPixel(1, 1, 3)
+        doc.selection = (1, 1, 1, 1)
+        engine.copySelection()
+        doc.selection = nil
+
+        engine.pasteClipboard(at: (5, 4))
+        engine.undo()
+
+        #expect(doc.selection == nil)
+        #expect(!doc.isPixelPainted(5, 4))
+
+        engine.nudgeSelection(dx: 1, dy: 0)
+        #expect(!doc.isPixelPainted(5, 4))
+        #expect(!doc.isPixelPainted(6, 4))
+    }
+
+    @Test func nudgeSelectionMovesPixelsAndCommitDeselects() {
+        let (doc, engine) = makeDoc(8, 8)
+        doc.setPixel(1, 1, 3)
+        doc.setPixel(2, 1, 4)
+        doc.selection = (1, 1, 2, 1)
+
+        engine.nudgeSelection(dx: 2, dy: 1)
+
+        #expect(doc.selection?.x == 3)
+        #expect(doc.selection?.y == 2)
+        #expect(!doc.isPixelPainted(1, 1))
+        #expect(!doc.isPixelPainted(2, 1))
+        #expect(doc.getPixel(3, 2) == 3)
+        #expect(doc.getPixel(4, 2) == 4)
+
+        engine.commitSelection()
+
+        #expect(doc.selection == nil)
+        #expect(doc.getPixel(3, 2) == 3)
+        #expect(doc.getPixel(4, 2) == 4)
+
+        doc.undo()
+        #expect(doc.getPixel(1, 1) == 3)
+        #expect(doc.getPixel(2, 1) == 4)
+        #expect(!doc.isPixelPainted(3, 2))
+        #expect(!doc.isPixelPainted(4, 2))
+    }
+
+    @Test func cancelFloatingSelectionRestoresOriginalPixels() {
+        let (doc, engine) = makeDoc(8, 8)
+        doc.setPixel(1, 1, 3)
+        doc.setPixel(2, 1, 4)
+        doc.selection = (1, 1, 2, 1)
+
+        engine.nudgeSelection(dx: 2, dy: 1)
+        engine.cancelSelectionAction()
+
+        #expect(doc.selection?.x == 1)
+        #expect(doc.selection?.y == 1)
+        #expect(doc.getPixel(1, 1) == 3)
+        #expect(doc.getPixel(2, 1) == 4)
+        #expect(!doc.isPixelPainted(3, 2))
+        #expect(!doc.isPixelPainted(4, 2))
+    }
+
+    @Test func mouseDragSelectionPreviewsMovedPixelsBeforeMouseUp() {
+        let (doc, engine) = makeDoc(8, 8)
+        doc.setPixel(1, 1, 3)
+        doc.setPixel(2, 1, 4)
+        doc.currentTool = .select
+        doc.selection = (1, 1, 2, 1)
+
+        engine.mouseDown(x: 1, y: 1, shift: false)
+        engine.mouseDragged(x: 4, y: 3, shift: false)
+
+        #expect(doc.selection?.x == 4)
+        #expect(doc.selection?.y == 3)
+        #expect(!doc.isPixelPainted(1, 1))
+        #expect(!doc.isPixelPainted(2, 1))
+        #expect(doc.getPixel(4, 3) == 3)
+        #expect(doc.getPixel(5, 3) == 4)
+
+        engine.mouseUp(x: 4, y: 3)
+        #expect(doc.getPixel(4, 3) == 3)
+        #expect(doc.getPixel(5, 3) == 4)
+    }
+
+    @Test func clickingInsideSelectionDoesNotLiftPixelsUntilDrag() {
+        let (doc, engine) = makeDoc(8, 8)
+        doc.setPixel(1, 1, 3)
+        doc.currentTool = .select
+        doc.selection = (1, 1, 1, 1)
+        doc.markClean()
+
+        engine.mouseDown(x: 1, y: 1, shift: false)
+        engine.mouseUp(x: 1, y: 1)
+
+        #expect(doc.selection?.x == 1)
+        #expect(doc.selection?.y == 1)
+        #expect(doc.getPixel(1, 1) == 3)
+        #expect(doc.isPixelPainted(1, 1))
+        #expect(!doc.isDirty)
+    }
+
     @Test func cutSelectionCopiesClearsAndCanUndo() {
         let (doc, engine) = makeDoc(8, 8)
         doc.setPixel(0, 0, 3)

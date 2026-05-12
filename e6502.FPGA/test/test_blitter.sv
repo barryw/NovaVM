@@ -134,10 +134,21 @@ module test_blitter;
     endtask
 
     task automatic wait_blt_done();
+        int cycles;
         repeat(2) @(posedge clk); // let state machine start
         // Wait for IDLE (0) or DONE (6) — don't match on intermediate states
         // S_IDLE=0, S_DONE=8 after adding S_READ_WAIT / S_ROWBUF_READ_WAIT
-        while (dut.state != 0 && dut.state != 8) @(posedge clk);
+        cycles = 0;
+        while (dut.state != 0 && dut.state != 8 && cycles < 100000) begin
+            cycles++;
+            @(posedge clk);
+        end
+        if (cycles == 100000) begin
+            $display("  TIMEOUT waiting for blitter: state=%0d status=%02x err=%02x row=%0d col=%0d read_valid=%0d video_safe=%0d",
+                     dut.state, dut.regs[1], dut.regs[2], dut.row, dut.col,
+                     dut.read_valid, video_write_safe);
+            fail_count++;
+        end
         repeat(2) @(posedge clk); // settle
     endtask
 

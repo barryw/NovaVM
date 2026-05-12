@@ -140,6 +140,12 @@ class NovaHostClient:
             kwargs["text"] = text
         return self.command("cold_start", require_ok=True, **kwargs)
 
+    def vm_reset(self, wait_ready: bool = True, text: str | None = None) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"wait_ready": 1 if wait_ready else 0}
+        if text:
+            kwargs["text"] = text
+        return self.command("vm_reset", require_ok=True, **kwargs)
+
     def reload_rom(self) -> dict[str, Any]:
         return self.command("reload_rom", require_ok=True)
 

@@ -40,6 +40,12 @@ module top (
     input  logic [15:0] dbg_poke_addr,
     input  logic [7:0]  dbg_poke_data,
     input  logic        dbg_pause,        // halt CPU when high
+    input  logic        dbg_nic_buf_we,
+    input  logic        dbg_nic_buf_re,
+    input  logic        dbg_nic_buf_sel,
+    input  logic [7:0]  dbg_nic_buf_addr,
+    input  logic [7:0]  dbg_nic_buf_data,
+    output logic [7:0]  dbg_nic_buf_rdata,
     input  logic        dbg_vmem_we,
     input  logic        dbg_vmem_re,
     input  logic [2:0]  dbg_vmem_space,
@@ -98,10 +104,11 @@ module top (
     output logic        sdram_oeB,
     input  logic [7:0]  sdram_doutB,
 
-    // File I/O event — pulses one clock when the CPU writes a non-zero
-    // value to FioCmd ($B9A0). fpga_top.sv routes this to the debug
-    // bridge, which emits an async EVENT_FIO to the ESP32.
-    output logic        fio_event
+    // Host-service events pulse one clock when the CPU writes a non-zero
+    // command byte. fpga_top.sv routes these to the debug bridge, which emits
+    // async events to NovaHost.
+    output logic        fio_event,
+    output logic        nic_event
 `ifndef SYNTHESIS
     ,
     // Simulation-only VRAM peek path. Excluded from synthesis so the
@@ -168,7 +175,7 @@ module top (
     // =========================================================================
     // 64KB main memory — dpram for BRAM inference
     // Port A: CPU read/write (+ blitter write when CPU stalled)
-    // Port B: tile DMA / blitter reads / debug reads
+    // Port B: blitter reads / debug reads
     // =========================================================================
 `ifdef SYNTHESIS
     // --- SYNTHESIS: use dpram instances for BRAM inference ---
@@ -274,7 +281,10 @@ module top (
 
     localparam XMC_BANKS_REG = 6'h0D;
     localparam XMC_WINCTL_REG = 6'h16;
-
+    localparam XMC_USEDL_REG  = 6'h0E;
+    localparam XMC_USEDH_REG  = 6'h0F;
+    localparam XMC_FREEL_REG  = 6'h10;
+    localparam XMC_FREEH_REG  = 6'h11;
     initial begin
         for (int i = 0; i < 64; i++) xmc_regs[i] = 0;
         xmc_regs[XMC_BANKS_REG] = 8'd8;
@@ -316,11 +326,11 @@ module top (
     wire cpu_in_rom = (mem_addr >= ROM_BASE);
     wire dma_reg_sel = (mem_addr >= 16'hBA63 && mem_addr <= 16'hBA75);
     wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B);
+    wire nic_reg_sel = (mem_addr >= 16'hA100 && mem_addr <= 16'hA13F);
     wire fio_reg_sel = (mem_addr >= 16'hB9A0 && mem_addr <= 16'hB9EF);
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
-                        (mem_addr >= 16'hA0C0 && mem_addr <= 16'hA0DF) ||
-                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0E8) ||
+                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0EA) ||
                         (mem_addr >= 16'hA0F0 && mem_addr <= 16'hA0FF);
 
     // Register the decode signals for next-cycle mux
@@ -329,6 +339,7 @@ module top (
     logic r_cpu_in_rom, r_ext_rom_active;
     logic r_vgc_read_sel;
     logic r_fio_reg_sel;
+    logic r_nic_reg_sel;
     logic [5:0] r_xmc_reg_off;
 
     // Register decode signals every cycle — they align with dpram outputs
@@ -343,6 +354,7 @@ module top (
         r_ext_rom_active  <= ext_rom_active;
         r_vgc_read_sel    <= vgc_read_sel;
         r_fio_reg_sel     <= fio_reg_sel;
+        r_nic_reg_sel     <= nic_reg_sel;
         r_xmc_reg_off     <= xmc_reg_off;
     end
 
@@ -485,6 +497,64 @@ module top (
             r_vgc_cpu_rdata <= vgc_cpu_rdata;
 
     // ==========================================================================
+    // Network Interface Controller register bank ($A100-$A13F). CPU writes to
+    // NIC_CMD pulse nic_event; NovaHost services the command via debug-bridge
+    // peeks/pokes and updates slot/global status. The IRQ output is OR'd into
+    // the CPU IRQ line below.
+    // ==========================================================================
+    wire [7:0] nic_cpu_rdata;
+    wire [7:0] nic_dbg_rdata;
+    wire       nic_irq;
+    wire       nic_rdy;
+    wire       nic_dma_grant;
+    wire [15:0] nic_ram_addr;
+    wire [7:0]  nic_ram_wdata;
+    wire        nic_ram_we;
+    wire        nic_ram_re;
+    wire [7:0]  nic_ram_rdata;
+    wire       dbg_poke_nic = dbg_poke_en &&
+                              (dbg_poke_addr >= 16'hA100) &&
+                              (dbg_poke_addr <= 16'hA13F);
+    wire       dbg_peek_nic = dbg_peek_en &&
+                              (dbg_peek_addr >= 16'hA100) &&
+                              (dbg_peek_addr <= 16'hA13F);
+
+    nic nic_inst (
+        .clk       (clk),
+        .rst       (custom_rst),
+        .cpu_ce    (cpu_ce),
+        .cpu_addr  (cpu_addr),
+        .cpu_wdata (cpu_dout),
+        .cpu_we    (cpu_we),
+        .cpu_rdata (nic_cpu_rdata),
+        .dbg_we    (dbg_poke_nic),
+        .dbg_addr  (dbg_poke_addr[5:0]),
+        .dbg_wdata (dbg_poke_data),
+        .dbg_raddr (dbg_peek_addr[5:0]),
+        .dbg_rdata (nic_dbg_rdata),
+        .dbg_buf_we    (dbg_nic_buf_we),
+        .dbg_buf_re    (dbg_nic_buf_re),
+        .dbg_buf_sel   (dbg_nic_buf_sel),
+        .dbg_buf_addr  (dbg_nic_buf_addr),
+        .dbg_buf_wdata (dbg_nic_buf_data),
+        .dbg_buf_rdata (dbg_nic_buf_rdata),
+        .dma_grant (nic_dma_grant),
+        .rdy_out   (nic_rdy),
+        .ram_addr  (nic_ram_addr),
+        .ram_rdata (nic_ram_rdata),
+        .ram_wdata (nic_ram_wdata),
+        .ram_we    (nic_ram_we),
+        .ram_re    (nic_ram_re),
+        .nic_event (nic_event),
+        .irq       (nic_irq)
+    );
+
+    logic [7:0] r_nic_cpu_rdata;
+    always_ff @(posedge clk)
+        if (cpu_ce)
+            r_nic_cpu_rdata <= nic_cpu_rdata;
+
+    // ==========================================================================
     // File I/O register bank ($B9A0-$B9EF). CPU writes captured here;
     // fio_event pulses on CPU write of non-zero to $B9A0 (FioCmd).
     // Debug-bridge pokes to this range land in fio.sv via dbg_poke
@@ -498,8 +568,14 @@ module top (
     wire       dbg_poke_vgc = dbg_poke_en &&
                               (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                                ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E8)) ||
+                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0EA)) ||
                                ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
+    wire       dbg_poke_blt = dbg_poke_en &&
+                              (dbg_poke_addr >= 16'hBA83) &&
+                              (dbg_poke_addr <= 16'hBA9B);
+    wire       dbg_peek_blt = dbg_peek_en &&
+                              (dbg_peek_addr >= 16'hBA83) &&
+                              (dbg_peek_addr <= 16'hBA9B);
 
     fio fio_inst (
         .clk       (clk),
@@ -566,9 +642,10 @@ module top (
     // is $A2 = LDX #$00, part of LAB_1F7C (array-index multiply). An
     // interception would replace a live instruction with the config
     // register's stored byte. Fall through to ROM for all SID addresses.
-    wire [7:0] io_group_data = r_fio_reg_sel ? r_fio_cpu_rdata
-                                              : r_vgc_cpu_rdata;
-    wire io_group_sel        = r_vgc_read_sel | r_fio_reg_sel;
+    wire [7:0] io_group_data = r_nic_reg_sel ? r_nic_cpu_rdata :
+                               r_fio_reg_sel ? r_fio_cpu_rdata :
+                                               r_vgc_cpu_rdata;
+    wire io_group_sel        = r_vgc_read_sel | r_fio_reg_sel | r_nic_reg_sel;
 
     // Group C — ROM (active bank) + main RAM (default fallback).
     wire [7:0] mem_group_data =
@@ -598,14 +675,14 @@ module top (
             ram_a_addr = bm_ram_addr;
             ram_a_din  = bm_ram_wdata;
             ram_a_we   = 1'b1;
-        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_fio && dbg_poke_addr < ROM_BASE) begin
+        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_nic && !dbg_poke_fio && !dbg_poke_blt && dbg_poke_addr < ROM_BASE) begin
             // Debug poke
             ram_a_addr = dbg_poke_addr;
             ram_a_din  = dbg_poke_data;
             ram_a_we   = 1'b1;
         end else if (cpu_we && cpu_active && cpu_addr < ROM_BASE &&
                      !xmc_win_sel && !xmc_reg_sel && !vgc_read_sel &&
-                     !fio_reg_sel && !dma_reg_sel && !blt_reg_sel) begin
+                     !nic_reg_sel && !fio_reg_sel && !dma_reg_sel && !blt_reg_sel) begin
             // CPU write to RAM
             ram_a_we = 1'b1;
         end
@@ -618,13 +695,11 @@ module top (
     // vgc_cpu_rdata → char_in_reg which reads the sfifo head.
 
     // =========================================================================
-    // Main RAM port B: tile DMA / blitter reads / debug reads
-    // Priority: tile DMA > blitter > debug
+    // Main RAM port B: blitter reads / debug reads
+    // Priority: blitter/DMA > debug
     // =========================================================================
     always_comb begin
-        if (tile_dma_active)
-            ram_b_addr = tile_dma_addr;
-        else if (bm_ram_read_active)
+        if (bm_ram_read_active)
             ram_b_addr = bm_ram_addr;
         else
             ram_b_addr = dbg_peek_addr;
@@ -634,16 +709,13 @@ module top (
     // S_READ state. dpram port B output (ram_b_dout) is available next cycle.
     // Both FSMs have S_READ→S_WRITE pipelines that consume data in S_WRITE.
     wire bm_ram_read_active = ((blt_rdy == 1'b0) && !blt_ram_we)
-                           || ((dma_rdy == 1'b0) && !dma_ram_we);
+                           || ((dma_rdy == 1'b0) && !dma_ram_we)
+                           || (nic_dma_grant && nic_ram_re);
     wire [7:0] blt_ram_rdata  = ram_b_dout;
     wire [7:0] blt_xram_rdata = xram_a_dout;
     wire [7:0] dma_ram_rdata  = ram_b_dout;
     wire [7:0] dma_xram_rdata = xram_a_dout;
-
-    // Tile DMA read: tile engine sets dma_addr on cycle N (registered output),
-    // dpram port B outputs data on cycle N+1. The tile engine's dma_data_valid
-    // flag goes high on cycle N+1, so data arrives exactly when needed.
-    wire [7:0] tile_dma_data = ram_b_dout;
+    assign nic_ram_rdata = ram_b_dout;
 
     // =========================================================================
     // Memory writes — non-RAM (XMC regs, ROM bank switching)
@@ -653,6 +725,8 @@ module top (
             for (int i = 0; i < 64; i++) xmc_regs[i] <= 8'h00;
             xmc_regs[XMC_BANKS_REG] <= 8'd8;
             xmc_regs[XMC_WINCTL_REG] <= 8'h0F;
+            xmc_regs[XMC_FREEL_REG] <= 8'h00;
+            xmc_regs[XMC_FREEH_REG] <= 8'h04;
             ext_rom_active <= 0;
         end else begin
         if (cpu_we && cpu_active) begin
@@ -713,8 +787,14 @@ module top (
     wire dbg_poke_vgc = dbg_poke_en &&
                         (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                          ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                         ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0E8)) ||
+                         ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0EA)) ||
                          ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
+    wire dbg_poke_blt = dbg_poke_en &&
+                        (dbg_poke_addr >= 16'hBA83) &&
+                        (dbg_poke_addr <= 16'hBA9B);
+    wire dbg_peek_blt = dbg_peek_en &&
+                        (dbg_peek_addr >= 16'hBA83) &&
+                        (dbg_peek_addr <= 16'hBA9B);
 
     initial begin
         for (int i = 0; i < 65536; i++)
@@ -738,6 +818,10 @@ module top (
 
     localparam XMC_BANKS_REG = 6'h0D;
     localparam XMC_WINCTL_REG = 6'h16;
+    localparam XMC_USEDL_REG  = 6'h0E;
+    localparam XMC_USEDH_REG  = 6'h0F;
+    localparam XMC_FREEL_REG  = 6'h10;
+    localparam XMC_FREEH_REG  = 6'h11;
 
     initial begin
         for (int i = 0; i < 64; i++) xmc_regs[i] = 0;
@@ -781,8 +865,7 @@ module top (
     wire sid_cfg_sel  = (cpu_addr == SID_CFG);
     wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
                         (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
-                        (cpu_addr >= 16'hA0C0 && cpu_addr <= 16'hA0DF) ||
-                        (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0E8) ||
+                        (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0EA) ||
                         (cpu_addr >= 16'hA0F0 && cpu_addr <= 16'hA0FF);
 
     always_ff @(posedge clk) begin
@@ -819,6 +902,8 @@ module top (
             for (int i = 0; i < 64; i++) xmc_regs[i] <= 8'h00;
             xmc_regs[XMC_BANKS_REG] <= 8'd8;
             xmc_regs[XMC_WINCTL_REG] <= 8'h0F;
+            xmc_regs[XMC_FREEL_REG] <= 8'h00;
+            xmc_regs[XMC_FREEH_REG] <= 8'h04;
             ext_rom_active <= 0;
         end else begin
         if (cpu_we) begin
@@ -871,7 +956,7 @@ module top (
             ram[CHARIN] <= 0;
     end
 
-    // Combinational RAM/XRAM reads for blitter, DMA, and tile engine (sim only).
+    // Combinational RAM/XRAM reads for blitter and DMA (sim only).
     // The bus-master is whichever of blitter/DMA is currently active; its
     // addr drives these reads. The idle master's addr is 0 and sees ram[0],
     // which the idle-state machine ignores.
@@ -879,8 +964,6 @@ module top (
     wire [7:0] blt_xram_rdata = xram[bm_xram_addr];
     wire [7:0] dma_ram_rdata  = ram[bm_ram_addr];
     wire [7:0] dma_xram_rdata = xram[bm_xram_addr];
-    wire [7:0] tile_dma_data  = ram[tile_dma_addr];
-
     // Sim path: xram_sdram_inst isn't instantiated here (`ifdef SYNTHESIS`
     // branch owns it), so port A must be zeroed. Port B is always driven
     // by sid_curve_reader which sits outside this ifdef.
@@ -889,6 +972,16 @@ module top (
     assign sdram_weA   = 1'b0;
     assign sdram_oeA   = 1'b0;
     assign fio_event   = 1'b0;
+    assign nic_event   = 1'b0;
+    wire nic_irq       = 1'b0;
+    wire nic_rdy       = 1'b1;
+    wire nic_dma_grant;
+    wire [15:0] nic_ram_addr = 16'h0000;
+    wire [7:0]  nic_ram_wdata = 8'h00;
+    wire        nic_ram_we = 1'b0;
+    wire        nic_ram_re = 1'b0;
+    wire [7:0]  nic_ram_rdata = 8'h00;
+    assign dbg_nic_buf_rdata = 8'h00;
 
 `endif
 
@@ -937,31 +1030,54 @@ module top (
     // Bus-master mux — DMA takes priority when busy, blitter otherwise.
     // Both are idle (rdy=1) → signals default to 0 in each module.
     wire        dma_busy = !dma_rdy;
-    wire [15:0] bm_ram_addr   = dma_busy ? dma_ram_addr   : blt_ram_addr;
-    wire [7:0]  bm_ram_wdata  = dma_busy ? dma_ram_wdata  : blt_ram_wdata;
-    wire        bm_ram_we     = dma_busy ? dma_ram_we     : blt_ram_we;
-    wire [18:0] bm_xram_addr  = dma_busy ? dma_xram_addr  : blt_xram_addr;
-    wire [7:0]  bm_xram_wdata = dma_busy ? dma_xram_wdata : blt_xram_wdata;
-    wire        bm_xram_we    = dma_busy ? dma_xram_we    : blt_xram_we;
-    wire        bm_xram_re    = dma_busy ? dma_xram_re    : blt_xram_re;
-    wire [2:0]  bm_vgc_space  = dma_busy ? dma_vgc_space  : blt_vgc_space;
-    wire [16:0] bm_vgc_addr   = dma_busy ? dma_vgc_addr   : blt_vgc_addr;
-    wire [7:0]  bm_vgc_wdata  = dma_busy ? dma_vgc_wdata  : blt_vgc_wdata;
-    wire        bm_vgc_we     = dma_busy ? dma_vgc_we     : blt_vgc_we;
-    wire        bm_vgc_re     = dma_busy ? dma_vgc_re     : blt_vgc_re;
+    wire        blt_busy = !blt_rdy;
+    wire        nic_busy = !nic_rdy;
+    assign nic_dma_grant = nic_busy && !dma_busy && !blt_busy;
+    wire [15:0] bm_ram_addr   = dma_busy ? dma_ram_addr :
+                                blt_busy ? blt_ram_addr : nic_ram_addr;
+    wire [7:0]  bm_ram_wdata  = dma_busy ? dma_ram_wdata :
+                                blt_busy ? blt_ram_wdata : nic_ram_wdata;
+    wire        bm_ram_we     = dma_busy ? dma_ram_we :
+                                blt_busy ? blt_ram_we :
+                                nic_dma_grant ? nic_ram_we : 1'b0;
+    wire [18:0] bm_xram_addr  = dma_busy ? dma_xram_addr  :
+                                blt_busy ? blt_xram_addr  : 19'd0;
+    wire [7:0]  bm_xram_wdata = dma_busy ? dma_xram_wdata :
+                                blt_busy ? blt_xram_wdata : 8'd0;
+    wire        bm_xram_we    = dma_busy ? dma_xram_we    :
+                                blt_busy ? blt_xram_we    : 1'b0;
+    wire        bm_xram_re    = dma_busy ? dma_xram_re    :
+                                blt_busy ? blt_xram_re    : 1'b0;
+    wire [2:0]  bm_vgc_space  = dma_busy ? dma_vgc_space  :
+                                blt_busy ? blt_vgc_space  : 3'd0;
+    wire [16:0] bm_vgc_addr   = dma_busy ? dma_vgc_addr   :
+                                blt_busy ? blt_vgc_addr   : 17'd0;
+    wire [7:0]  bm_vgc_wdata  = dma_busy ? dma_vgc_wdata  :
+                                blt_busy ? blt_vgc_wdata  : 8'd0;
+    wire        bm_vgc_we     = dma_busy ? dma_vgc_we     :
+                                blt_busy ? blt_vgc_we     : 1'b0;
+    wire        bm_vgc_re     = dma_busy ? dma_vgc_re     :
+                                blt_busy ? blt_vgc_re     : 1'b0;
     // VGC rdata + memory reads feed both masters (the idle one ignores them)
     wire [7:0]  bm_vgc_rdata;
     wire [7:0]  blt_vgc_rdata = bm_vgc_rdata;
     wire [7:0]  dma_vgc_rdata = bm_vgc_rdata;
 
+    wire [15:0] blt_bus_addr  = dbg_poke_blt ? dbg_poke_addr :
+                                dbg_peek_blt ? dbg_peek_addr :
+                                               cpu_addr;
+    wire [7:0]  blt_bus_wdata = dbg_poke_blt ? dbg_poke_data : cpu_dout;
+    wire        blt_bus_we    = dbg_poke_blt ? 1'b1 : (cpu_we & cpu_active);
+    wire        blt_bus_re    = dbg_peek_blt ? 1'b1 : 1'b0;
+
     blitter blt_inst (
         .clk        (clk),
         .rst        (custom_rst),
-        .cpu_addr   (cpu_addr),
-        .cpu_wdata  (cpu_dout),
-        .cpu_we     (cpu_we & cpu_active),
+        .cpu_addr   (blt_bus_addr),
+        .cpu_wdata  (blt_bus_wdata),
+        .cpu_we     (blt_bus_we),
         .cpu_rdata  (blt_cpu_rdata),
-        .cpu_re     (1'b0),
+        .cpu_re     (blt_bus_re),
         .rdy_out    (blt_rdy),
         .ram_addr   (blt_ram_addr),
         .ram_rdata  (blt_ram_rdata),
@@ -1113,9 +1229,9 @@ module top (
     // =========================================================================
     wire vgc_rdy;
     wire vgc_irq;
-    wire cpu_irq = ~irq_n | vgc_irq;
+    wire cpu_irq = ~irq_n | vgc_irq | nic_irq;
     wire cpu_nmi = ~nmi_n;
-    wire cpu_rdy = blt_rdy & dma_rdy & vgc_rdy & ~dbg_pause & cpu_active;
+    wire cpu_rdy = blt_rdy & dma_rdy & nic_rdy & vgc_rdy & ~dbg_pause & cpu_active;
 
     cpu cpu_inst (
         .clk    (clk),
@@ -1146,8 +1262,6 @@ module top (
     wire [7:0]  vgc_cpu_rdata;
     wire [7:0]  vgc_dbg_rdata;
     wire        vgc_dbg_owns;
-    wire [15:0] tile_dma_addr;
-    wire        tile_dma_active;
 
     vgc vgc_inst (
         .clk            (clk),
@@ -1161,9 +1275,6 @@ module top (
         .cpu_re         (~cpu_we),
         .key_valid      (key_valid),
         .key_data       (key_data),
-        .tile_dma_addr  (tile_dma_addr),
-        .tile_dma_data  (tile_dma_data),
-        .tile_dma_active(tile_dma_active),
         .blt_space      (bm_vgc_space),
         .blt_addr       (bm_vgc_addr),
         .blt_rdata      (bm_vgc_rdata),
@@ -1212,20 +1323,21 @@ module top (
     wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
     wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F) ||
                          (dbg_peek_addr >= 16'hA0F0 && dbg_peek_addr <= 16'hA0FF);
-    wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
     wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
-    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0E8);
+    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0EA);
     wire dbg_fio       = (dbg_peek_addr >= 16'hB9A0 && dbg_peek_addr <= 16'hB9EF);
-    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
 
     // For debug reads, RAM port B serves as the read port.
     // ROM reads use the same brom_b/erom_b ports (address set combinationally).
     // SID overlaps ROM and is write-only in the CPU-visible map, so debug reads
     // fall through to ROM/RAM instead of sampling live SID register shadows.
     wire [7:0] dbg_peek_data_mux = dbg_peek_en ? (vgc_dbg_owns ? vgc_dbg_rdata :
+                                                  dbg_peek_nic ? nic_dbg_rdata :
                                                   dbg_fio      ? fio_dbg_rdata :
+                                                  dbg_peek_blt ? blt_cpu_rdata :
                                                   dbg_in_rom   ? (ext_rom_active ? erom_b_dout : brom_b_dout) :
                                                                   ram_b_dout) : 8'h00;
 
@@ -1240,15 +1352,15 @@ module top (
     wire dbg_in_rom = (dbg_peek_addr >= ROM_BASE);
     wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F) ||
                          (dbg_peek_addr >= 16'hA0F0 && dbg_peek_addr <= 16'hA0FF);
-    wire dbg_vgc_tile  = (dbg_peek_addr >= 16'hA0C0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
     wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
-    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0E8);
-    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_tile | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
+    wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0EA);
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
     wire [7:0] dbg_rom_read_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
                                                   : basic_rom[dbg_peek_addr - ROM_BASE];
     wire [7:0] dbg_peek_data_mux = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :
+                                                  dbg_peek_blt     ? blt_cpu_rdata :
                                                   dbg_in_rom       ? dbg_rom_read_data :
                                                                      ram[dbg_peek_addr]) : 8'h00;
 
@@ -1258,7 +1370,7 @@ module top (
 
     // Poke: write to main RAM on clock edge (ROM-protected)
     always_ff @(posedge clk) begin
-        if (dbg_poke_en && !dbg_poke_vgc && dbg_poke_addr < ROM_BASE)
+        if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_blt && dbg_poke_addr < ROM_BASE)
             ram[dbg_poke_addr] <= dbg_poke_data;
     end
 `endif

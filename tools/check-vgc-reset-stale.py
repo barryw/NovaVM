@@ -28,7 +28,6 @@ PLANES = (
     Plane("text attrs", 7, 4000, 0x80, True),
     Plane("graphics bitmap", 3, 64000, 0x0D, True),
     Plane("sprite shapes", 4, 2048, 0xA5, True),
-    Plane("tile patterns", 6, 32768, 0xC3, True),
 )
 
 
@@ -64,12 +63,12 @@ def scan_plane(client: NovaHostClient, plane: Plane) -> tuple[int, str | None]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Dirty VGC memories, cold-reset the VM, and verify stale data is gone."
+        description="Dirty VGC memories, reset the current VM runtime, and verify stale data is gone."
     )
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_DEBUG_PORT)
     parser.add_argument("--timeout", type=float, default=60.0)
-    parser.add_argument("--settle", type=float, default=0.5, help="seconds to wait after cold_start")
+    parser.add_argument("--settle", type=float, default=0.5, help="seconds to wait after vm_reset")
     return parser.parse_args()
 
 
@@ -87,8 +86,8 @@ def main() -> int:
             fill_plane(client, plane)
             print(f"  dirtied {plane.name}")
 
-        print("Issuing cold_start reset...")
-        client.cold_start(wait_ready=False)
+        print("Issuing vm_reset...")
+        client.vm_reset(wait_ready=False)
         time.sleep(args.settle)
 
         print("Scanning for stale data...")

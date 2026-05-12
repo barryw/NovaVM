@@ -59,6 +59,8 @@ module test_sid_cpu_audio_top;
         .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr),
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
+        .dbg_nic_buf_we(1'b0), .dbg_nic_buf_re(1'b0), .dbg_nic_buf_sel(1'b0),
+        .dbg_nic_buf_addr(8'd0), .dbg_nic_buf_data(8'd0), .dbg_nic_buf_rdata(),
         .dbg_vmem_we(1'b0), .dbg_vmem_re(1'b0), .dbg_vmem_space(3'd0),
         .dbg_vmem_addr(17'd0), .dbg_vmem_data(8'd0), .dbg_vmem_rdata(),
         .dbg_rom_we(dbg_rom_we), .dbg_rom_idx(dbg_rom_idx),
@@ -88,7 +90,8 @@ module test_sid_cpu_audio_top;
         .sdram_doutA(8'h00), .sdram_doneA(1'b0),
         .sdram_addrB(), .sdram_dinB(), .sdram_weB(), .sdram_oeB(),
         .sdram_doutB(8'h00),
-        .fio_event(fio_event)
+        .fio_event(fio_event),
+        .nic_event()
     );
 
     int pass_count = 0;

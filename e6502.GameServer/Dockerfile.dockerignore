@@ -1,0 +1,12 @@
+.git/
+.idea/
+.pytest_cache/
+TestResults/
+**/bin/
+**/obj/
+**/.DS_Store
+NovaDraw/
+docs/manual/*.pdf
+e6502.FPGA/fpga/build/
+e6502.FPGA/test/obj_*/
+screenshots/

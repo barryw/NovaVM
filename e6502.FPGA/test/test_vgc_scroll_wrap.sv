@@ -31,6 +31,11 @@ module test_vgc_scroll_wrap;
     logic [9:0] h_count = 0;
     logic [9:0] v_count = 0;
     logic [5:0] scroll_offset = 0;
+    logic [8:0] scroll_x = 0;
+    logic [7:0] scroll_y = 0;
+    logic       scroll_gfx_enable = 0;
+    logic       scroll_text_enable = 0;
+    logic       rst = 0;
 
     wire  [9:0] h_count_d1, h_count_d2, v_count_d1, v_count_d2;
     wire        visible, h_visible, v_visible, in_text_area;
@@ -55,6 +60,7 @@ module test_vgc_scroll_wrap;
 
     vgc_timing dut (
         .clk(clk),
+        .rst(rst),
         .h_count(h_count), .v_count(v_count),
         .h_count_d1(h_count_d1), .h_count_d2(h_count_d2),
         .v_count_d1(v_count_d1), .v_count_d2(v_count_d2),
@@ -76,6 +82,10 @@ module test_vgc_scroll_wrap;
         .gfx_x_d1(gfx_x_d1), .gfx_x_d2(gfx_x_d2),
         .gfx_y_d1(gfx_y_d1), .gfx_y_d2(gfx_y_d2),
         .font_line_d1(font_line_d1),
+        .scroll_x(scroll_x),
+        .scroll_y(scroll_y),
+        .scroll_gfx_enable(scroll_gfx_enable),
+        .scroll_text_enable(scroll_text_enable),
         .scroll_offset(scroll_offset)
     );
 
@@ -92,6 +102,62 @@ module test_vgc_scroll_wrap;
         end else begin
             $display("  FAIL text_row=%0d scroll=%0d: got real_row=%0d want %0d",
                      t_row, s_off, real_row, expected);
+            fail_count++;
+        end
+    endtask
+
+    task automatic check_gfx_coord(
+        input int phys_x,
+        input int phys_y,
+        input int sx,
+        input int sy,
+        input bit enable,
+        input int expected_x,
+        input int expected_y
+    );
+        h_count = phys_x * 2;
+        v_count = V_BORDER + phys_y * 2;
+        scroll_x = 9'(sx);
+        scroll_y = 8'(sy);
+        scroll_gfx_enable = enable;
+        #1;
+        if (gfx_x == 9'(expected_x) && gfx_y == 8'(expected_y)) begin
+            pass_count++;
+        end else begin
+            $display("  FAIL gfx phys=%0d,%0d scroll=%0d,%0d enable=%0d: got %0d,%0d want %0d,%0d",
+                     phys_x, phys_y, sx, sy, enable, gfx_x, gfx_y, expected_x, expected_y);
+            fail_count++;
+        end
+    endtask
+
+    task automatic check_text_coord(
+        input int phys_px,
+        input int phys_py,
+        input int sx,
+        input int sy,
+        input bit enable,
+        input int expected_col,
+        input int expected_row,
+        input int expected_font_pixel,
+        input int expected_font_line
+    );
+        h_count = phys_px;
+        v_count = V_BORDER + phys_py;
+        scroll_x = 9'(sx);
+        scroll_y = 8'(sy);
+        scroll_text_enable = enable;
+        scroll_offset = 0;
+        #1;
+        if (text_col == 7'(expected_col) &&
+            real_row == 6'(expected_row) &&
+            font_pixel == 3'(expected_font_pixel) &&
+            font_line == 3'(expected_font_line)) begin
+            pass_count++;
+        end else begin
+            $display("  FAIL text phys=%0d,%0d scroll=%0d,%0d enable=%0d: got col=%0d row=%0d fp=%0d fl=%0d want col=%0d row=%0d fp=%0d fl=%0d",
+                     phys_px, phys_py, sx, sy, enable,
+                     text_col, real_row, font_pixel, font_line,
+                     expected_col, expected_row, expected_font_pixel, expected_font_line);
             fail_count++;
         end
     endtask
@@ -140,6 +206,14 @@ module test_vgc_scroll_wrap;
                      duplicates_found);
             fail_count++;
         end
+
+        $display("-- visual scroll coordinate checks --");
+        check_gfx_coord(0, 0, 319, 199, 1, 319, 199);
+        check_gfx_coord(1, 1, 319, 199, 1, 0, 0);
+        check_gfx_coord(17, 23, 9'd320, 8'd200, 1, 17, 23);
+        check_gfx_coord(17, 23, 100, 50, 0, 17, 23);
+        check_text_coord(6, 6, 1, 1, 1, 1, 1, 0, 0);
+        check_text_coord(6, 6, 1, 1, 0, 0, 0, 6, 6);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===",

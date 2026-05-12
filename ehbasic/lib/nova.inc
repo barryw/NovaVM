@@ -348,6 +348,21 @@ VGC_TXTREVATTR    = $A0E7
 .ifndef VGC_GFXTRANS
 VGC_GFXTRANS      = $A0E8
 .endif
+.ifndef VGC_PALETTE
+VGC_PALETTE       = $A0E9
+.endif
+.ifndef VGC_SCROLLCTL
+VGC_SCROLLCTL     = $A0EA
+.endif
+.ifndef VGC_SCROLLCTL_XHI
+VGC_SCROLLCTL_XHI = $01
+.endif
+.ifndef VGC_SCROLLCTL_GFX
+VGC_SCROLLCTL_GFX = $02
+.endif
+.ifndef VGC_SCROLLCTL_TEXT
+VGC_SCROLLCTL_TEXT = $04
+.endif
 
 .ifndef VGC_VPLANE
 VGC_VPLANE        = VGC_VRAM_PLANE
@@ -376,9 +391,6 @@ VGC_PLANE_GFX     = $03
 .endif
 .ifndef VGC_PLANE_SPRITE
 VGC_PLANE_SPRITE  = $04
-.endif
-.ifndef VGC_PLANE_TILE
-VGC_PLANE_TILE    = $06
 .endif
 .ifndef VGC_PLANE_TEXTATTR
 VGC_PLANE_TEXTATTR = $07
@@ -520,6 +532,15 @@ NIC_IRQCTRL       = $A103
 .ifndef NIC_IRQSTATUS
 NIC_IRQSTATUS     = $A104
 .endif
+.ifndef NIC_CMDSEQ
+NIC_CMDSEQ        = $A105
+.endif
+.ifndef NIC_CMDSHADOW
+NIC_CMDSHADOW     = $A106
+.endif
+.ifndef NIC_HOSTCTRL
+NIC_HOSTCTRL      = $A107
+.endif
 .ifndef NIC_RPORTL
 NIC_RPORTL        = $A108
 .endif
@@ -543,6 +564,12 @@ NIC_DMALEN        = $A112
 .endif
 .ifndef NIC_MSGLEN
 NIC_MSGLEN        = $A113
+.endif
+.ifndef NIC_DMASTATUS
+NIC_DMASTATUS     = $A114
+.endif
+.ifndef NIC_DMAERR
+NIC_DMAERR        = $A115
 .endif
 .ifndef NIC_SLOTST0
 NIC_SLOTST0       = $A118
@@ -605,6 +632,30 @@ NIC_STATUS_ANYDATA = $02
 .ifndef NIC_STATUS_ANYERROR
 NIC_STATUS_ANYERROR = $80
 .endif
+.ifndef NIC_HOSTCTRL_RX_START
+NIC_HOSTCTRL_RX_START = $01
+.endif
+.ifndef NIC_DMAST_TX_READY
+NIC_DMAST_TX_READY = $01
+.endif
+.ifndef NIC_DMAST_RX_DONE
+NIC_DMAST_RX_DONE = $02
+.endif
+.ifndef NIC_DMAST_ERROR
+NIC_DMAST_ERROR  = $40
+.endif
+.ifndef NIC_DMAST_BUSY
+NIC_DMAST_BUSY   = $80
+.endif
+.ifndef NIC_DMAERR_NONE
+NIC_DMAERR_NONE  = $00
+.endif
+.ifndef NIC_DMAERR_RANGE
+NIC_DMAERR_RANGE = $01
+.endif
+.ifndef NIC_DMAERR_BUSY
+NIC_DMAERR_BUSY  = $02
+.endif
 .ifndef NIC_MAX_SLOTS
 NIC_MAX_SLOTS     = $04
 .endif
@@ -613,137 +664,6 @@ NIC_MAX_MSGSIZE   = $0100
 .endif
 .ifndef NIC_MAX_QUEUE
 NIC_MAX_QUEUE     = $10
-.endif
-
-; ---------------------------------------------------------------------
-; Tile engine registers and command constants.
-; ---------------------------------------------------------------------
-.ifndef TileConfig
-TileConfig        = $A0C0
-.endif
-.ifndef TileTransColor
-TileTransColor    = $A0C1
-.endif
-.ifndef TileScrollXL
-TileScrollXL      = $A0C2
-.endif
-.ifndef TileScrollXH
-TileScrollXH      = $A0C3
-.endif
-.ifndef TileScrollYL
-TileScrollYL      = $A0C4
-.endif
-.ifndef TileScrollYH
-TileScrollYH      = $A0C5
-.endif
-.ifndef TileStatus
-TileStatus        = $A0C6
-.endif
-.ifndef TileCmd
-TileCmd           = $A0C7
-.endif
-.ifndef TileP0
-TileP0            = $A0C8
-.endif
-.ifndef TileP1
-TileP1            = $A0C9
-.endif
-.ifndef TileP2
-TileP2            = $A0CA
-.endif
-.ifndef TileP3
-TileP3            = $A0CB
-.endif
-.ifndef TileAddrL
-TileAddrL         = $A0CC
-.endif
-.ifndef TileAddrH
-TileAddrH         = $A0CD
-.endif
-.ifndef TilePalP0
-TilePalP0         = $A0CE
-.endif
-.ifndef TilePalP1
-TilePalP1         = $A0CF
-.endif
-.ifndef TileColL
-TileColL          = $A0D0
-.endif
-.ifndef TileColH
-TileColH          = $A0D1
-.endif
-.ifndef TilePeekVal
-TilePeekVal       = $A0D2
-.endif
-.ifndef TilePeekAttr
-TilePeekAttr      = $A0D3
-.endif
-
-.ifndef TileCfgSize16
-TileCfgSize16     = $01
-.endif
-.ifndef TileCfgMirrorMask
-TileCfgMirrorMask = $06
-.endif
-.ifndef TileCfgMirrorShift
-TileCfgMirrorShift = 1
-.endif
-.ifndef TileCmdDef
-TileCmdDef        = $01
-.endif
-.ifndef TileCmdDefBulk
-TileCmdDefBulk    = $02
-.endif
-.ifndef TileCmdPut
-TileCmdPut        = $03
-.endif
-.ifndef TileCmdAttr
-TileCmdAttr       = $04
-.endif
-.ifndef TileCmdFill
-TileCmdFill       = $05
-.endif
-.ifndef TileCmdRow
-TileCmdRow        = $06
-.endif
-.ifndef TileCmdCol
-TileCmdCol        = $07
-.endif
-.ifndef TileCmdLoad
-TileCmdLoad       = $08
-.endif
-.ifndef TileCmdALoad
-TileCmdALoad      = $09
-.endif
-.ifndef TileCmdPal
-TileCmdPal        = $0A
-.endif
-.ifndef TileCmdPalC
-TileCmdPalC       = $0B
-.endif
-.ifndef TileCmdPeek
-TileCmdPeek       = $0C
-.endif
-.ifndef TileCmdRowAttr
-TileCmdRowAttr    = $0D
-.endif
-.ifndef TileCmdColAttr
-TileCmdColAttr    = $0E
-.endif
-.ifndef TileCmdCls
-TileCmdCls        = $0F
-.endif
-.ifndef TileCmdBufFill
-TileCmdBufFill    = $10
-.endif
-.ifndef TileCmdBufSet
-TileCmdBufSet     = $11
-.endif
-.ifndef TileCmdBufRange
-TileCmdBufRange   = $12
-.endif
-.ifndef TileCmdBufPut
-TileCmdBufPut     = $13
 .endif
 
 ; ---------------------------------------------------------------------
@@ -884,18 +804,6 @@ FIO_CMD_MIDSTOP   = $14
 .ifndef FIO_CMD_SFLOAD
 FIO_CMD_SFLOAD    = $15
 .endif
-.ifndef FIO_CMD_TSAVE
-FIO_CMD_TSAVE     = $16
-.endif
-.ifndef FIO_CMD_TLOAD
-FIO_CMD_TLOAD     = $17
-.endif
-.ifndef FioCmdTSave
-FioCmdTSave       = FIO_CMD_TSAVE
-.endif
-.ifndef FioCmdTLoad
-FioCmdTLoad       = FIO_CMD_TLOAD
-.endif
 .ifndef FIO_CMD_XLOAD
 FIO_CMD_XLOAD     = $18
 .endif
@@ -946,6 +854,13 @@ FIO_CMD_XPAGE    = $29
 ; @symbol FIO_CMD_RNG
 ; @summary Host command that returns 32 bits from NovaHost's hardware-backed RNG.
 FIO_CMD_RNG      = $2A
+.endif
+.ifndef FIO_CMD_NVGLOAD
+; @label FIO.CMD_NVGLOAD
+; @kind const
+; @symbol FIO_CMD_NVGLOAD
+; @summary Host command that decodes a Nova NVG1 file into the graphics bitmap plane.
+FIO_CMD_NVGLOAD  = $2B
 .endif
 
 ; Host RNG result byte aliases. FIO.CMD_RNG returns little-endian bytes here.
@@ -1043,12 +958,7 @@ EXT_CMD_XMEM      = $04
 .ifndef EXT_CMD_XDIR
 EXT_CMD_XDIR      = $05
 .endif
-.ifndef EXT_CMD_TSAVE
-EXT_CMD_TSAVE     = $06
-.endif
-.ifndef EXT_CMD_TLOAD
-EXT_CMD_TLOAD     = $07
-.endif
+; $06-$07 reserved
 .ifndef EXT_CMD_HELP
 EXT_CMD_HELP      = $08
 .endif
@@ -1076,60 +986,7 @@ EXT_CMD_DMACOPY   = $0F
 .ifndef EXT_CMD_BLITCOPY
 EXT_CMD_BLITCOPY  = $10
 .endif
-.ifndef EXT_CMD_TILESIZE
-EXT_CMD_TILESIZE  = $11
-.endif
-.ifndef EXT_CMD_TMIRROR
-EXT_CMD_TMIRROR   = $12
-.endif
-.ifndef EXT_CMD_TTRANS
-EXT_CMD_TTRANS    = $13
-.endif
-.ifndef EXT_CMD_TDEF
-EXT_CMD_TDEF      = $14
-.endif
-.ifndef EXT_CMD_TPUT
-EXT_CMD_TPUT      = $15
-.endif
-.ifndef EXT_CMD_TATTR
-EXT_CMD_TATTR     = $16
-.endif
-.ifndef EXT_CMD_TFILL
-EXT_CMD_TFILL     = $17
-.endif
-.ifndef EXT_CMD_TROW
-EXT_CMD_TROW      = $18
-.endif
-.ifndef EXT_CMD_TCOL
-EXT_CMD_TCOL      = $19
-.endif
-.ifndef EXT_CMD_TNTLOAD
-EXT_CMD_TNTLOAD   = $1A
-.endif
-.ifndef EXT_CMD_TCLS
-EXT_CMD_TCLS      = $1B
-.endif
-.ifndef EXT_CMD_TBUF
-EXT_CMD_TBUF      = $1C
-.endif
-.ifndef EXT_CMD_TBSET
-EXT_CMD_TBSET     = $1D
-.endif
-.ifndef EXT_CMD_TBPUT
-EXT_CMD_TBPUT     = $1E
-.endif
-.ifndef EXT_CMD_TBFILL
-EXT_CMD_TBFILL    = $1F
-.endif
-.ifndef EXT_CMD_TSCROLL
-EXT_CMD_TSCROLL   = $20
-.endif
-.ifndef EXT_CMD_TPAL
-EXT_CMD_TPAL      = $21
-.endif
-.ifndef EXT_CMD_TPALC
-EXT_CMD_TPALC     = $22
-.endif
+; $11-$22 reserved
 .ifndef EXT_CMD_ADDR
 EXT_CMD_ADDR      = $23
 .endif
@@ -1660,9 +1517,6 @@ DMA_SPACE_VGC_SPRITE = $04
 .ifndef DMA_SPACE_XRAM
 DMA_SPACE_XRAM    = $05
 .endif
-.ifndef DMA_SPACE_VGC_TILE
-DMA_SPACE_VGC_TILE = $06
-.endif
 .ifndef DMA_SPACE_VGC_TEXTATTR
 DMA_SPACE_VGC_TEXTATTR = $07
 .endif
@@ -1827,9 +1681,6 @@ BLT_SPACE_VGC_SPRITE = DMA_SPACE_VGC_SPRITE
 .endif
 .ifndef BLT_SPACE_XRAM
 BLT_SPACE_XRAM    = DMA_SPACE_XRAM
-.endif
-.ifndef BLT_SPACE_VGC_TILE
-BLT_SPACE_VGC_TILE = DMA_SPACE_VGC_TILE
 .endif
 .ifndef BLT_SPACE_VGC_TEXTATTR
 BLT_SPACE_VGC_TEXTATTR = DMA_SPACE_VGC_TEXTATTR

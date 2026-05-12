@@ -108,7 +108,7 @@ The key concept is **stride**: the number of bytes from the beginning of
 one row to the beginning of the next. For the 80-column text screen, stride is
 80. For the 320-pixel-wide graphics bitmap, stride is 160 (320 pixels at 4
 bits each, packed into 2 nibbles per byte). If source and destination have
-different strides -- for example when copying a narrow tile into a wider
+different strides -- for example when copying a narrow block into a wider
 canvas -- you specify each independently.
 
 ### `BLITCOPY srcSpace, srcAddr, srcStride, dstSpace, dstAddr, dstStride, width, height`
@@ -128,12 +128,12 @@ Line 40 copies 24 rows of 80 characters, shifting the entire screen up.
 Line 50 fills the vacated bottom row (offset 1920 = 24x80) with spaces.
 
 ```basic
-10 REM Copy a 10x8 tile from CPU RAM at $3000 into color RAM
+10 REM Copy a 10x8 block from CPU RAM at $3000 into color RAM
 20 REM at column 5, row 3 (offset = 3*80+5 = 245).
 30 BLITCOPY 0, 12288, 10, 2, 245, 80, 10, 8
 ```
 
-The source stride is 10 because the tile is stored compactly (row-by-row,
+The source stride is 10 because the block is stored compactly (row-by-row,
 10 bytes per row) in CPU RAM. The destination stride is 80 because color RAM
 is 80 columns wide.
 
@@ -175,7 +175,7 @@ Use `DMACOPY` and `DMAFILL` for flat, one-dimensional transfers --
 copying a saved screen buffer, filling a region of expansion RAM, or moving a
 block of arbitrary bytes. Use `BLITCOPY` and `BLITFILL` when your data
 is inherently two-dimensional and you need to respect row boundaries, such as
-scrolling text, drawing rectangles, or working with tile graphics. Choosing the
+scrolling text, drawing rectangles, or working with sprite graphics. Choosing the
 right tool avoids writing stride arithmetic in BASIC loops.
 :::
 

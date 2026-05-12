@@ -8,6 +8,7 @@ extern bool g_sd_mounted;
 extern const char* novaBootPhaseName();
 extern bool novaFpgaBridgeAvailable();
 extern uint8_t novaHostStatusFlags();
+extern bool novaNicDispatcherAvailable();
 extern void novaWifiStateChanged();
 
 static bool persistDriveMountConfig(const char* prefix, const char* sd_path) {
@@ -39,6 +40,38 @@ static bool persistDriveMountConfig(const char* prefix, const char* sd_path) {
     serializeJsonPretty(doc, out);
     out.println();
     out.close();
+    return true;
+}
+
+static bool loadDriveMountConfig(const char* prefix, char* out,
+                                 size_t out_len) {
+    if (!prefix || prefix[0] == 0 || !out || out_len == 0)
+        return false;
+    out[0] = 0;
+
+    File cfg = SD.open("/config/boot.json", FILE_READ);
+    if (!cfg)
+        return false;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, cfg);
+    cfg.close();
+    if (err) {
+        logLn("[sdhttp] boot config parse failed while reading mount: %s",
+              err.c_str());
+        return false;
+    }
+
+    JsonVariantConst value = doc["mounts"][prefix];
+    if (value.isNull())
+        return false;
+
+    const char* path = value.as<const char*>();
+    if (!path || path[0] == 0)
+        return false;
+
+    strncpy(out, path, out_len);
+    out[out_len - 1] = 0;
     return true;
 }
 
@@ -108,16 +141,18 @@ void SdHttpServer::handle_client(WiFiClient& client) {
 
     if (strcmp(method, "GET") == 0 && strcmp(url, "/health") == 0) {
         uint8_t host_status_flags = novaHostStatusFlags();
-        char body[256];
+        char body[320];
         snprintf(body, sizeof(body),
                  "{\"ok\":true,\"bootPhase\":\"%s\",\"sdMounted\":%s,"
                  "\"fpgaBridgeAvailable\":%s,"
-                 "\"hostStatusFlags\":%u,\"hostStatusHex\":\"0x%02X\"}",
+                 "\"hostStatusFlags\":%u,\"hostStatusHex\":\"0x%02X\","
+                 "\"capabilities\":{\"nicDispatcher\":%s}}",
                  novaBootPhaseName(),
                  g_sd_mounted ? "true" : "false",
                  novaFpgaBridgeAvailable() ? "true" : "false",
                  (unsigned)host_status_flags,
-                 (unsigned)host_status_flags);
+                 (unsigned)host_status_flags,
+                 novaNicDispatcherAvailable() ? "true" : "false");
         send_json(client, 200, body);
         return;
     }
@@ -488,16 +523,32 @@ void SdHttpServer::handle_drives(WiFiClient& client, const char* method,
 }
 
 void SdHttpServer::handle_drives_list(WiFiClient& client) {
+    static const int list_order[] = {
+        DeviceManager::FD0, DeviceManager::FD1,
+        DeviceManager::FD2, DeviceManager::FD3,
+        DeviceManager::HD0, DeviceManager::HD1
+    };
+
     send_headers(client, 200, "application/json");
     client.print('[');
-    for (int slot = 0; slot < DeviceManager::NUM_SLOTS; slot++) {
-        if (slot > 0) client.print(',');
+    for (int i = 0; i < DeviceManager::NUM_SLOTS; i++) {
+        int slot = list_order[i];
+        const char* prefix = DeviceManager::prefix_for_slot(slot);
+        char configured_path[300];
+
+        if (i > 0) client.print(',');
         client.print("{\"slot\":");
-        write_json_string(client, DeviceManager::prefix_for_slot(slot));
+        write_json_string(client, prefix);
         client.print(",\"mounted\":");
         client.print(_dm.is_mounted(slot) ? "true" : "false");
         client.print(",\"currentPath\":");
         write_json_string(client, _dm.current_path(slot));
+        client.print(",\"configuredPath\":");
+        if (loadDriveMountConfig(prefix, configured_path,
+                                 sizeof(configured_path)))
+            write_json_string(client, configured_path);
+        else
+            write_json_string(client, "");
         client.print('}');
     }
     client.print(']');
@@ -512,8 +563,8 @@ void SdHttpServer::handle_drive_mount(WiFiClient& client, int slot,
     }
 
     const char* prefix = DeviceManager::prefix_for_slot(slot);
-    char sd_path[300];
-    snprintf(sd_path, sizeof(sd_path), "/%s.ndi", prefix);
+    char sd_path[300] = {0};
+    bool have_path = false;
 
     if (have_content_len && content_len > 0) {
         String body;
@@ -530,19 +581,31 @@ void SdHttpServer::handle_drive_mount(WiFiClient& client, int slot,
         }
 
         JsonVariantConst v = doc["path"];
-        if (!v.isNull()) {
-            const char* path = v.as<const char*>();
-            if (!path || path[0] == 0) {
-                send_error(client, 400, "bad path");
-                return;
-            }
-            if (path[0] == '/') {
-                strncpy(sd_path, path, sizeof(sd_path));
-                sd_path[sizeof(sd_path) - 1] = 0;
-            } else {
-                snprintf(sd_path, sizeof(sd_path), "/%s", path);
-            }
+        const char* path = v.as<const char*>();
+        if (!path || path[0] == 0) {
+            send_error(client, 400, "bad path");
+            return;
         }
+        if (path[0] == '/') {
+            strncpy(sd_path, path, sizeof(sd_path));
+            sd_path[sizeof(sd_path) - 1] = 0;
+        } else {
+            snprintf(sd_path, sizeof(sd_path), "/%s", path);
+        }
+        have_path = true;
+    } else if (loadDriveMountConfig(prefix, sd_path, sizeof(sd_path))) {
+        have_path = true;
+    }
+
+    if (!have_path || sd_path[0] == 0) {
+        send_error(client, 400, "missing path");
+        return;
+    }
+    if (sd_path[0] != '/') {
+        char normalized[300];
+        snprintf(normalized, sizeof(normalized), "/%s", sd_path);
+        strncpy(sd_path, normalized, sizeof(sd_path));
+        sd_path[sizeof(sd_path) - 1] = 0;
     }
 
     if (!path_sane(sd_path + 1, false)) {

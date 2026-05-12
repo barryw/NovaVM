@@ -35,7 +35,7 @@ BD_BASE ?= build
 BD      = $(BD_BASE)$(if $(filter 1,$(TRACE)),-trace,)
 
 VGC   = $(RTL)/dpram.sv $(RTL)/vgc_timing.sv $(RTL)/vgc_text.sv $(RTL)/vgc_gfx.sv \
-        $(RTL)/artist.sv $(RTL)/vgc_sprites.sv $(RTL)/vgc_copper.sv $(RTL)/vgc.sv $(RTL)/tile_engine.sv \
+        $(RTL)/artist.sv $(RTL)/vgc_sprites.sv $(RTL)/vgc_copper.sv $(RTL)/vgc.sv \
         $(RTL)/thirdparty/sfifo.v
 SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.sv \
         $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv \
@@ -52,7 +52,7 @@ HDMI  = $(RTL)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/serializer.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/hdmi.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_tile_engine test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_hdmi_audio test_sid_hdmi_audio test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_fio_top test_rom_load test_debug_uart test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_sid_cpu_audio_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_blitter test_blitter_xram_backpressure test_dma test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_hdmi_audio test_sid_hdmi_audio test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_nic test_fio_top test_nic_top test_rom_load test_debug_uart test_debug_spi_slave test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_sid_cpu_audio_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -94,9 +94,6 @@ test_vgc_blitter_scroll: test_vgc_blitter_scroll.sv $(VGC) $(RTL)/blitter.sv
 # rst-release. Was the boot-artifact bug diagnosed 2026-04-26.
 test_vgc_por_determinism: test_vgc_por_determinism.sv vgc_tb.svh $(VGC)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --x-assign unique --x-initial unique --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_por_determinism.sv && $(RUN) test/$(BD)/$@/$@ +verilator+rand+reset+2
-
-test_tile_engine: test_tile_engine.sv $(RTL)/dpram.sv $(RTL)/tile_engine.sv
-	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/dpram.sv $(RTL)/tile_engine.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_blitter: test_blitter.sv $(RTL)/blitter.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/blitter.sv $< && $(RUN) test/$(BD)/$@/$@
@@ -196,6 +193,9 @@ test_sid_model: test_sid_model.sv sid_tb.svh $(SID)
 test_fio: test_fio.sv $(RTL)/fio.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/fio.sv test_fio.sv && $(RUN) test/$(BD)/$@/$@
 
+test_nic: test_nic.sv $(RTL)/nic.sv
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/nic.sv test_nic.sv && $(RUN) test/$(BD)/$@/$@
+
 # FIO integration in top.sv — proves fio.sv is wired correctly through
 # the io_group cpu_din mux, dbg_poke routing, and fio_event output.
 # Loads a tiny 6502 program that writes to $B9A0/$B9A1, counts
@@ -203,10 +203,16 @@ test_fio: test_fio.sv $(RTL)/fio.sv
 test_fio_top: test_fio_top.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
+test_nic_top: test_nic_top.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
 # Debug-bridge protocol unit test — drives rx_valid/rx_data directly, verifies
 # CMD_POKE_ROM, CMD_POKE_ROM_BLK, CMD_RESET_HOLD/REL decode + outputs.
 test_debug_uart: test_debug_uart.sv $(RTL)/debug_uart_rx.sv $(RTL)/debug_uart_tx.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_uart_rx.sv $(RTL)/debug_uart_tx.sv $< && $(RUN) test/$(BD)/$@/$@
+
+test_debug_spi_slave: test_debug_spi_slave.sv $(RTL)/debug_spi_slave.sv $(RTL)/debug_byte_fifo.sv
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_byte_fifo.sv $(RTL)/debug_spi_slave.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_debug_bridge: test_debug_bridge.sv $(RTL)/debug_bridge.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_bridge.sv $< && $(RUN) test/$(BD)/$@/$@
@@ -226,7 +232,7 @@ test_novaz_xram_roundtrip: test_novaz_xram_roundtrip.sv $(RTL)/debug_bridge.sv $
 
 # End-to-end test: instantiates full top.sv (CPU + VGC + SID + blitter + RAM/ROM),
 # streams a tiny 6502 program into basic_rom via dbg_rom_we, verifies execution.
-ROM_LOAD_RTL = $(VGC) $(SID) $(RTL)/blitter.sv $(RTL)/dma.sv $(RTL)/fio.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv $(RTL)/sdram/sdram.v $(RTL)/sdram/xram_sdram.sv
+ROM_LOAD_RTL = $(VGC) $(SID) $(RTL)/blitter.sv $(RTL)/dma.sv $(RTL)/fio.sv $(RTL)/nic.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv $(RTL)/sdram/sdram.v $(RTL)/sdram/xram_sdram.sv
 test_rom_load: test_rom_load.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 

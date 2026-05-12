@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using e6502.Avalonia.Hardware;
+using e6502.Storage;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Common;
@@ -42,6 +43,30 @@ public class FileIoControllerTests
         int lo = fio.Read((ushort)VgcConstants.FioSizeL);
         int hi = fio.Read((ushort)VgcConstants.FioSizeH);
         return lo | (hi << 8);
+    }
+
+    private static byte[] MakeNvg(int width, int height, params (ushort Address, byte[] Pixels)[] spans)
+    {
+        using var ms = new MemoryStream();
+        ms.Write([(byte)'N', (byte)'V', (byte)'G', (byte)'1']);
+        ms.WriteByte((byte)(width & 0xFF));
+        ms.WriteByte((byte)((width >> 8) & 0xFF));
+        ms.WriteByte((byte)(height & 0xFF));
+        ms.WriteByte((byte)((height >> 8) & 0xFF));
+        ms.WriteByte((byte)(spans.Length & 0xFF));
+        ms.WriteByte((byte)((spans.Length >> 8) & 0xFF));
+        ms.WriteByte((byte)((spans.Length >> 16) & 0xFF));
+        ms.WriteByte((byte)((spans.Length >> 24) & 0xFF));
+
+        foreach (var (address, pixels) in spans)
+        {
+            ms.WriteByte((byte)(address & 0xFF));
+            ms.WriteByte((byte)((address >> 8) & 0xFF));
+            ms.WriteByte((byte)pixels.Length);
+            ms.Write(pixels);
+        }
+
+        return ms.ToArray();
     }
 
     private static FileIoController MakeControllerWithGraphics(
@@ -296,6 +321,7 @@ public class FileIoControllerTests
             var screen = new byte[2000];
             var color = new byte[2000];
             var gfx = new byte[64000];
+            Array.Fill(gfx, (byte)0xEE);
             var sprite = new byte[2048];
             for (int i = 0; i < 32; i++) sprite[0x40 + i] = (byte)(0xA0 + i);
 
@@ -508,6 +534,125 @@ public class FileIoControllerTests
             Assert.AreEqual(fileData.Length, ReadSize(fio));
             for (int i = 0; i < fileData.Length; i++)
                 Assert.AreEqual(fileData[i], screen[0x10 + i]);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void GLoad_ExplicitGfxExtensionOnMountedNdi_DoesNotAppendExtensionTwice()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        string hd0 = Path.Combine(root, "hd0");
+        string hd1 = Path.Combine(root, "hd1");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(hd0);
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        DeviceManager? deviceManager = null;
+
+        try
+        {
+            byte[] fileData = [0x0E, 0x03, 0x0D, 0x07];
+            string imagePath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(imagePath, "TEST", 800);
+            using (var image = NdiImage.Open(imagePath))
+                image.WriteFile("SPLASH.GFX", NdiFileType.Gfx, 0xFFFF, fileData);
+
+            deviceManager = new DeviceManager(hd0, hd1, disks);
+            deviceManager.AutoMount();
+            deviceManager.DefaultDevice = deviceManager.SelectBootDevice();
+
+            var screen = new byte[2000];
+            var color = new byte[2000];
+            var gfx = new byte[64000];
+            var sprite = new byte[2048];
+            var memory = new byte[65536];
+
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                hd0,
+                vgcRead: (_, _) => 0,
+                vgcWrite: (space, offset, value) =>
+                {
+                    if (space == VgcConstants.MemSpaceGfx && (uint)offset < gfx.Length)
+                        gfx[offset] = value;
+                },
+                vgcSpaceLength: space => space switch
+                {
+                    VgcConstants.MemSpaceScreen => screen.Length,
+                    VgcConstants.MemSpaceColor => color.Length,
+                    VgcConstants.MemSpaceGfx => gfx.Length,
+                    VgcConstants.MemSpaceSprite => sprite.Length,
+                    _ => 0
+                },
+                deviceManager: deviceManager);
+
+            SetFilename(fio, "SPLASH.GFX");
+            fio.Write((ushort)VgcConstants.FioGSpace, VgcConstants.MemSpaceGfx);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x20);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdGLoad);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(fileData.Length, ReadSize(fio));
+            CollectionAssert.AreEqual(fileData, gfx.Skip(0x20).Take(fileData.Length).ToArray());
+        }
+        finally
+        {
+            try
+            {
+                deviceManager?.GetDevice("FD0").Unmount();
+            }
+            catch
+            {
+                // Best-effort cleanup so temp image handles are released.
+            }
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void NvgLoad_DecodesSparseNvgIntoGraphicsPlane()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            byte[] nvg = MakeNvg(
+                4,
+                2,
+                (1, [5, 6]),
+                (4, [7, 8, 9]));
+            File.WriteAllBytes(Path.Combine(dir, "scene.nvg"), nvg);
+
+            var screen = new byte[2000];
+            var color = new byte[2000];
+            var gfx = new byte[64000];
+            var sprite = new byte[2048];
+
+            var fio = MakeControllerWithGraphics(dir, screen, color, gfx, sprite);
+            int dest = (3 * 320) + 10;
+            SetFilename(fio, "scene");
+            fio.Write((ushort)VgcConstants.FioGSpace, VgcConstants.MemSpaceGfx);
+            fio.Write((ushort)VgcConstants.FioGAddrL, (byte)(dest & 0xFF));
+            fio.Write((ushort)VgcConstants.FioGAddrH, (byte)((dest >> 8) & 0xFF));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdNvgLoad);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(5, ReadSize(fio));
+            Assert.AreEqual((byte)0, gfx[dest]);
+            Assert.AreEqual((byte)5, gfx[dest + 1]);
+            Assert.AreEqual((byte)6, gfx[dest + 2]);
+            Assert.AreEqual((byte)7, gfx[dest + 320]);
+            Assert.AreEqual((byte)8, gfx[dest + 321]);
+            Assert.AreEqual((byte)9, gfx[dest + 322]);
+            Assert.AreEqual((byte)0, gfx[0]);
+            Assert.AreEqual((byte)0, gfx[^1]);
         }
         finally
         {

@@ -9,7 +9,7 @@ RTLDIR   = ../rtl
 # paths so the build works regardless of the user's shell configuration.
 # `export PATH := ...` is unreliable across Make versions on macOS — some
 # recipes exec directly and bypass the export. Absolute paths always work.
-OSS_CAD_SUITE_BIN := /opt/homebrew/oss-cad-suite/bin
+OSS_CAD_SUITE_BIN ?= /opt/homebrew/oss-cad-suite/bin
 export PATH := $(OSS_CAD_SUITE_BIN):$(PATH)
 
 DPRAM = $(RTLDIR)/dpram.sv
@@ -27,7 +27,8 @@ FPGALOAD = openFPGALoader
 EXTRA_DEFINES ?= -DVIDEO_720X480 -DGPDI_P_ONLY -DLATTICE_ECP5
 SV = read_verilog -sv -DSYNTHESIS $(EXTRA_DEFINES)
 VL = read_verilog -DSYNTHESIS $(EXTRA_DEFINES)
-BUILD_ARGS = $(BUILDDIR)/build_args.txt
+SYNTH_ARGS = $(BUILDDIR)/synth_args.txt
+PNR_ARGS = $(BUILDDIR)/pnr_args.txt
 # hdl-util HDMI generates very deep temporary names. Yosys' AUTONAME pass can
 # spend tens of GB on those names after ABC9 even though nextpnr does not need
 # them, so the production flow runs the ECP5 recipe through mapped cells and
@@ -36,9 +37,12 @@ SYNTH_ECP5_JSON = synth_ecp5 -top fpga_top -run begin:map_cells; techmap -map +/
 
 NEXTPNR_SEED ?= 1
 NEXTPNR_THREADS ?=
+NEXTPNR_PRE_PLACE ?= place_hdmi_serializer.py
 NEXTPNR_REPORT = $(BUILDDIR)/nextpnr-report.json
 NEXTPNR_THREAD_FLAGS = $(if $(strip $(NEXTPNR_THREADS)),--threads $(NEXTPNR_THREADS),)
-NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed $(NEXTPNR_SEED) $(NEXTPNR_THREAD_FLAGS) --report $(NEXTPNR_REPORT) --timing-allow-fail
+NEXTPNR_PRE_PLACE_FLAGS = $(if $(strip $(NEXTPNR_PRE_PLACE)),--pre-place $(NEXTPNR_PRE_PLACE),)
+NEXTPNR_PRE_PLACE_DEPS = $(if $(strip $(NEXTPNR_PRE_PLACE)),$(NEXTPNR_PRE_PLACE),)
+NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed $(NEXTPNR_SEED) $(NEXTPNR_THREAD_FLAGS) $(NEXTPNR_PRE_PLACE_FLAGS) --report $(NEXTPNR_REPORT)
 
 .PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag diag-vgc diag-sprites FORCE
 
@@ -55,13 +59,14 @@ ehbasic:
 # =========================================================================
 RTL_VGC = $(DPRAM) $(RTLDIR)/vgc.sv $(RTLDIR)/vgc_timing.sv $(RTLDIR)/vgc_text.sv \
           $(RTLDIR)/vgc_gfx.sv $(RTLDIR)/artist.sv $(RTLDIR)/vgc_sprites.sv \
-          $(RTLDIR)/vgc_copper.sv $(RTLDIR)/tile_engine.sv $(RTLDIR)/blitter.sv \
-          $(RTLDIR)/dma.sv $(RTLDIR)/fio.sv $(RTLDIR)/thirdparty/sfifo.v
-RTL_UART = $(RTLDIR)/debug_uart_rx.sv \
-           $(RTLDIR)/debug_uart_tx.sv \
-           $(RTLDIR)/debug_byte_fifo.sv
+          $(RTLDIR)/vgc_copper.sv $(RTLDIR)/blitter.sv \
+          $(RTLDIR)/dma.sv $(RTLDIR)/fio.sv \
+          $(RTLDIR)/thirdparty/sfifo.v
+RTL_BRIDGE = $(RTLDIR)/debug_byte_fifo.sv \
+             $(RTLDIR)/debug_spi_slave.sv
 RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv \
-           $(RTLDIR)/sid_hdmi_audio.sv fpga_top.sv uart_rx.sv uart_tx.sv $(RTL_UART)
+           $(RTLDIR)/sid_hdmi_audio.sv $(RTLDIR)/nic.sv fpga_top.sv \
+           uart_rx.sv $(RTL_BRIDGE)
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
            $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv \
@@ -82,14 +87,9 @@ RTL_SDRAM_SV = $(RTLDIR)/sdram/xram_sdram.sv $(RTLDIR)/sdram/debug_sdram_port_b_
 # =========================================================================
 # Synthesis — rebuilds only when source files change (don't 'make clean'!)
 # =========================================================================
-$(BUILD_ARGS): FORCE
+$(SYNTH_ARGS): FORCE
 	@mkdir -p $(BUILDDIR)
 	@printf '%s\n' \
-		'DEVICE=$(DEVICE)' \
-		'PACKAGE=$(PACKAGE)' \
-		'PIN_DEF=$(PIN_DEF)' \
-		'NEXTPNR_FLAGS=$(NEXTPNR_FLAGS)' \
-		'NEXTPNR_SEED=$(NEXTPNR_SEED)' \
 		'EXTRA_DEFINES=$(EXTRA_DEFINES)' \
 		> $(BUILDDIR)/build_args.new
 	@if ! cmp -s $(BUILDDIR)/build_args.new $@; then \
@@ -98,7 +98,23 @@ $(BUILD_ARGS): FORCE
 		rm -f $(BUILDDIR)/build_args.new; \
 	fi
 
-$(BUILDDIR)/$(PROJ).json: $(BUILD_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
+$(PNR_ARGS): FORCE
+	@mkdir -p $(BUILDDIR)
+	@printf '%s\n' \
+		'DEVICE=$(DEVICE)' \
+		'PACKAGE=$(PACKAGE)' \
+		'PIN_DEF=$(PIN_DEF)' \
+		'NEXTPNR_FLAGS=$(NEXTPNR_FLAGS)' \
+		'NEXTPNR_SEED=$(NEXTPNR_SEED)' \
+		'NEXTPNR_PRE_PLACE=$(NEXTPNR_PRE_PLACE)' \
+		> $(BUILDDIR)/build_args.new
+	@if ! cmp -s $(BUILDDIR)/build_args.new $@; then \
+		mv $(BUILDDIR)/build_args.new $@; \
+	else \
+		rm -f $(BUILDDIR)/build_args.new; \
+	fi
+
+$(BUILDDIR)/$(PROJ).json: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -118,7 +134,7 @@ diag-vgc: $(BUILDDIR)/post_synth_vgc.v
 
 diag-sprites: $(BUILDDIR)/post_synth_sprites.v
 
-$(BUILDDIR)/post_synth.v: $(BUILD_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
+$(BUILDDIR)/post_synth.v: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -132,7 +148,7 @@ $(BUILDDIR)/post_synth.v: $(BUILD_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_S
 	@echo "  Verilog: $@"
 	@echo "  ILANG:   $(BUILDDIR)/post_synth.il"
 
-$(BUILDDIR)/post_synth_vgc.v: $(BUILD_ARGS) $(RTL_VGC)
+$(BUILDDIR)/post_synth_vgc.v: $(SYNTH_ARGS) $(RTL_VGC)
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -145,7 +161,7 @@ $(BUILDDIR)/post_synth_vgc.v: $(BUILD_ARGS) $(RTL_VGC)
 	@echo "  Verilog: $@"
 	@echo "  ILANG:   $(BUILDDIR)/post_synth_vgc.il"
 
-$(BUILDDIR)/post_synth_sprites.v: $(BUILD_ARGS) $(DPRAM) $(RTLDIR)/vgc_sprites.sv
+$(BUILDDIR)/post_synth_sprites.v: $(SYNTH_ARGS) $(DPRAM) $(RTLDIR)/vgc_sprites.sv
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -163,7 +179,7 @@ synth: ehbasic $(BUILDDIR)/$(PROJ).json
 # =========================================================================
 # Place & Route + Bitstream
 # =========================================================================
-$(BUILDDIR)/$(PROJ).config: $(BUILD_ARGS) $(BUILDDIR)/$(PROJ).json $(PIN_DEF)
+$(BUILDDIR)/$(PROJ).config: $(PNR_ARGS) $(BUILDDIR)/$(PROJ).json $(PIN_DEF) $(NEXTPNR_PRE_PLACE_DEPS)
 	$(NEXTPNR) $(NEXTPNR_FLAGS) --textcfg $@ --json $(BUILDDIR)/$(PROJ).json --lpf $(PIN_DEF)
 
 pnr: ehbasic $(BUILDDIR)/$(PROJ).config

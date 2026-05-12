@@ -188,7 +188,7 @@ MATE_SCORE = 120; Score for checkmate (+120 = we win, -120 = we lose)
 DRAW_SCORE = 0; Score for stalemate/draw
 NEG_INFINITY = $80; -128 as signed byte (worst possible)
 MAX_DEPTH = 8; Maximum search depth
-MAX_KILLER_DEPTH = 16; Maximum killer move storage depth
+MAX_KILLER_DEPTH = MAX_DEPTH; Maximum killer move storage depth
 
 ;
 ; Game State Constants (returned by CheckGameState)
@@ -262,72 +262,6 @@ CASTLE_BQ = %00001000; Black queenside
 CASTLE_ALL = %00001111; All rights intact
 
 ;
-; Zero Page Allocations
-; The C64 profile keeps the original low-ZP layout. Nova moves this scratch
-; block to $50-$83 so Nova's pseudo-register mailbox at $20-$2f remains
-; available to shared libraries.
-;
-
-.ifdef ENGINE_NOVA_ZP
-
-; Memory copy/fill operations
-copy_from = $50; 2 bytes: source pointer
-copy_to = $52; 2 bytes: destination pointer
-copy_size = $54; 2 bytes: byte count
-fill_to = $56; 2 bytes: destination pointer
-fill_size = $58; 2 bytes: byte count
-fill_value = $5a; 1 byte: fill value
-
-; Math operations
-num1 = $5b; 2 bytes: operand 1
-num2 = $5d; 2 bytes: operand 2
-result = $5f; 2 bytes: result
-
-; Display pointers
-printvector = $61; 2 bytes: print output location
-capturedvector = $63; 2 bytes: captured pieces storage
-inputlocationvector = $65; 2 bytes: user input screen location
-printclockvector = $67; 2 bytes: clock display location
-
-; General purpose temp storage
-temp1 = $69; 2 bytes
-temp2 = $6b; 2 bytes
-
-; String printing (PrintString/PrintAt)
-str_ptr = $6d; 2 bytes: pointer to null-terminated string
-scr_ptr = $6f; 2 bytes: pointer to screen memory
-col_ptr = $71; 2 bytes: pointer to color memory
-print_color = $73; 1 byte: text color
-
-; Move validation (IsSquareAttacked, piece validation)
-attack_sq = $74; 1 byte: square being checked for attack
-attack_color = $75; 1 byte: color attacking (0=black, 1=white)
-move_delta = $76; 1 byte: calculated move delta (signed)
-ray_dir = $77; 1 byte: current ray direction offset
-ray_sq = $78; 1 byte: current square in ray traversal
-piece_type = $79; 1 byte: piece type being validated
-
-; AI Search temps (used by Negamax alpha-beta)
-search_alpha = $7a; 1 byte: alpha bound for current call
-search_beta = $7b; 1 byte: beta bound for current call
-
-; Timer library registers
-r0 = $7c
-r0L = $7c
-r0H = $7d
-r1 = $7e
-r1L = $7e
-r1H = $7f
-r2 = $80
-r2L = $80
-r2H = $81
-r3 = $82
-r3L = $82
-r3H = $83
-
-.else
-
-;
 ; Zero Page Allocations ($02-$25, 36 bytes)
 ; Note: $00-$01 = CPU port, $50-$5f = keyboard routine
 ;
@@ -388,8 +322,6 @@ r2H = $35
 r3 = $36
 r3L = $36
 r3H = $37
-
-.endif
 
 ;
 ; Timer Library Constants

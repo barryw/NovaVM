@@ -1,5 +1,5 @@
 // NovaHost — ESP32 host services for the e6502 FPGA computer
-// Communicates with FPGA via UART (Serial2: wifi_rxd/wifi_txd)
+// Communicates with FPGA via SPI on the shared ULX3S ESP/SD bus
 // Provides: WiFi, debug bridge (TCP:6503 ↔ FPGA binary protocol)
 //
 // Debug logs streamed over WiFi: connect with `nc <ip> 23`
@@ -15,7 +15,6 @@
 #include <ArduinoOTA.h>
 #endif
 #include <ArduinoJson.h>
-#include <HardwareSerial.h>
 #include <SD.h>
 #include <SPI.h>
 #include <ctype.h>
@@ -24,6 +23,7 @@
 #include "device_manager.h"
 #include "fio_event_reader.h"
 #include "fio_dispatcher.h"
+#include "nic_dispatcher.h"
 #include "sd_http_server.h"
 #include "nova_wifi.h"
 // Boot ROMs and bulky assets live on the SD card. The FPGA bitstream still
@@ -42,16 +42,15 @@ static const char* WIFI_SSID = "";
 static const char* WIFI_PASSWORD = "";
 #endif
 
-// FPGA UART — uses ESP32 Serial2.
-// ULX3S v3.1.x: GPIO26/GPIO27 route to FPGA pins L1/N3.
-// (v3.0.x used GPIO16/17 on the same FPGA pins — different board revision.)
-#define FPGA_SERIAL Serial2
-// 115200 — known-reliable on flying wires between ESP32 and FPGA.
-// 3.125 Mbaud attempted and failed (bridge commands all timed out; likely
-// signal integrity). Can bump again with proper signal conditioning later.
-#define FPGA_BAUD   115200
-#define FPGA_RX_PIN 26   // ESP32 GPIO26 = Serial2 RX (receives from FPGA L1)
-#define FPGA_TX_PIN 27   // ESP32 GPIO27 = Serial2 TX (transmits to FPGA N3)
+// Shared SPI bus on ULX3S SD-card pins. The SD card uses SPI mode with
+// CS=GPIO13. The FPGA debug bridge uses GPIO4 (sd_d[1]) as its own CS.
+// GPIO12/sd_d[2] is intentionally unused.
+#define SD_SPI_SCK_PIN  14
+#define SD_SPI_MISO_PIN 2
+#define SD_SPI_MOSI_PIN 15
+#define SD_CS_PIN       13
+#define FPGA_SPI_CS_PIN 4
+#define FPGA_SPI_HZ     500000
 
 // Debug log server — telnet-style TCP on port 23
 #define LOG_PORT 23
@@ -99,14 +98,15 @@ void logLn(const char* fmt, ...) {
 // Global objects
 // =========================================================================
 bool wifi_connected = false;
-FpgaBridge fpgaBridge(FPGA_SERIAL);
+FpgaBridge fpgaBridge;
 DebugServer debugServer(fpgaBridge);
 NovaWifiManager novaWifi;
 
 // File I/O subsystem — SD card, mount manager, dispatcher, event reader.
 DeviceManager   deviceManager;
 FioDispatcher   fioDispatcher(fpgaBridge, deviceManager);
-FioEventReader  fioEventReader(FPGA_SERIAL);
+FioEventReader  fioEventReader;
+NicDispatcher   nicDispatcher(fpgaBridge);
 SdHttpServer    sdHttpServer(deviceManager, novaWifi);
 
 // SD mount diagnostic — captured at boot, exposed via /sd-status JSON.
@@ -166,6 +166,14 @@ bool novaFpgaBridgeAvailable() {
 
 uint8_t novaHostStatusFlags() {
     return (uint8_t)g_host_status_flags;
+}
+
+bool novaNicDispatcherAvailable() {
+    return true;
+}
+
+void novaNicDebugJson(char* out, size_t out_size) {
+    nicDispatcher.write_debug_json(out, out_size);
 }
 
 void publishHostStatusToFpga(bool force = false) {
@@ -304,17 +312,21 @@ static const char* const SID_CURVE_PATHS[] = {
     "/assets/f6581_curve.bin"
 };
 
-static const char* const BOOT_LOGO_RLE_PATHS[] = {
+static const char* const BOOT_LOGO_NVG_PATHS[] = {
     "/assets/boot/novavm_logo.nvg"
-};
-
-static const char* const BOOT_LOGO_RAW_PATHS[] = {
-    "/assets/boot/novavm_logo.gfx"
 };
 
 // =========================================================================
 // SD card setup and boot asset helpers
 // =========================================================================
+void initSharedSpiBus() {
+    pinMode(SD_CS_PIN, OUTPUT);
+    pinMode(FPGA_SPI_CS_PIN, OUTPUT);
+    digitalWrite(SD_CS_PIN, HIGH);
+    digitalWrite(FPGA_SPI_CS_PIN, HIGH);
+    SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_CS_PIN);
+}
+
 bool normalizeMountPath(const char* raw, char* out, size_t out_len) {
     if (!raw || raw[0] == 0 || out_len == 0)
         return false;
@@ -330,7 +342,21 @@ bool normalizeMountPath(const char* raw, char* out, size_t out_len) {
     return lower.endsWith(".ndi");
 }
 
-bool mountConfiguredDrive(int slot, JsonObjectConst mounts) {
+bool writeBootConfig(JsonDocument& doc) {
+    if (!SD.exists("/config") && !SD.mkdir("/config"))
+        return false;
+
+    File out = SD.open("/config/boot.json", FILE_WRITE, true);
+    if (!out)
+        return false;
+
+    serializeJsonPretty(doc, out);
+    out.println();
+    out.close();
+    return true;
+}
+
+bool mountConfiguredDrive(int slot, JsonObject mounts, bool& config_dirty) {
     const char* prefix = DeviceManager::prefix_for_slot(slot);
     if (!prefix)
         return false;
@@ -340,14 +366,20 @@ bool mountConfiguredDrive(int slot, JsonObjectConst mounts) {
         return false;
 
     const char* configured_path = value.as<const char*>();
-    char sd_path[128];
-    if (!normalizeMountPath(configured_path, sd_path, sizeof(sd_path)))
+    char sd_path[300];
+    if (!normalizeMountPath(configured_path, sd_path, sizeof(sd_path))) {
+        logLn("Boot config mount cleared: %s has invalid path", prefix);
+        mounts[prefix] = "";
+        config_dirty = true;
         return false;
+    }
 
     File entry = SD.open(sd_path, FILE_READ);
     if (!entry) {
-        logLn("Boot config mount skipped: %s -> %s not found",
+        logLn("Boot config mount cleared: %s -> %s not found",
               prefix, sd_path);
+        mounts[prefix] = "";
+        config_dirty = true;
         return false;
     }
     entry.close();
@@ -380,20 +412,29 @@ void mountConfiguredDrives(int& fd_count, int& hd_count) {
         return;
     }
 
-    JsonObjectConst mounts = doc["mounts"].as<JsonObjectConst>();
+    JsonObject mounts = doc["mounts"].as<JsonObject>();
     if (mounts.isNull()) {
         logLn("Boot config has no mounts object; no disk images auto-mounted");
         return;
     }
 
-    for (int slot = 0; slot < DeviceManager::NUM_SLOTS; slot++) {
-        if (!mountConfiguredDrive(slot, mounts))
+    static const int mount_order[] = {
+        DeviceManager::FD0, DeviceManager::FD1,
+        DeviceManager::FD2, DeviceManager::FD3,
+        DeviceManager::HD0, DeviceManager::HD1
+    };
+    bool config_dirty = false;
+    for (int slot : mount_order) {
+        if (!mountConfiguredDrive(slot, mounts, config_dirty))
             continue;
         if (slot >= DeviceManager::FD0)
             fd_count++;
         else
             hd_count++;
     }
+
+    if (config_dirty && !writeBootConfig(doc))
+        logLn("WARN: failed to persist cleaned boot mount config");
 }
 
 bool mountSdCard() {
@@ -401,9 +442,10 @@ bool mountSdCard() {
     // way that's incompatible with SDIO 1-bit/4-bit on this board (verified
     // 2026-04-25). Pinout: SCK=GPIO14, MISO=GPIO2/sd_d[0],
     // MOSI=GPIO15/sd_cmd, CS=GPIO13/sd_d[3].
-    logLn("SD: mounting via SPI (SCK=14 MISO=2 MOSI=15 CS=13)...");
-    SPI.begin(14, 2, 15, 13);
-    g_sd_mounted = SD.begin(13, SPI, 4000000);
+    logLn("SD: mounting via SPI (SCK=%d MISO=%d MOSI=%d CS=%d)...",
+          SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_CS_PIN);
+    digitalWrite(FPGA_SPI_CS_PIN, HIGH);
+    g_sd_mounted = SD.begin(SD_CS_PIN, SPI, 4000000);
 
     char diag_buf[256];
     if (!g_sd_mounted) {
@@ -650,19 +692,19 @@ bool readU32(File& f, uint32_t& value) {
     return true;
 }
 
-bool streamBootLogoRle(File& f, const char* path) {
+bool streamBootLogoNvg(File& f, const char* path) {
     uint8_t magic[4];
     if (f.read(magic, sizeof(magic)) != sizeof(magic) ||
         magic[0] != 'N' || magic[1] != 'V' ||
         magic[2] != 'G' || magic[3] != '1') {
-        logLn("Boot splash invalid RLE header: %s", path);
+        logLn("Boot splash invalid NVG header: %s", path);
         return false;
     }
 
     uint16_t width = 0, height = 0;
     uint32_t span_count = 0;
     if (!readU16(f, width) || !readU16(f, height) || !readU32(f, span_count)) {
-        logLn("Boot splash truncated RLE header: %s", path);
+        logLn("Boot splash truncated NVG header: %s", path);
         return false;
     }
     if (width != 320 || height != 200) {
@@ -692,30 +734,6 @@ bool streamBootLogoRle(File& f, const char* path) {
         }
     }
 
-    return true;
-}
-
-bool streamBootLogoRaw(File& f, const char* path) {
-    size_t actual = f.size();
-    if (actual != BOOT_LOGO_GFX_LEN) {
-        logLn("Boot splash wrong raw size: %s is %u bytes, expected %u",
-              path, (unsigned)actual, (unsigned)BOOT_LOGO_GFX_LEN);
-        return false;
-    }
-
-    uint8_t buf[256];
-    for (size_t off = 0; off < BOOT_LOGO_GFX_LEN; ) {
-        size_t got = f.read(buf, sizeof(buf));
-        if (got != sizeof(buf)) {
-            logLn("Boot splash raw read failed at offset %u", (unsigned)off);
-            return false;
-        }
-        if (!fpgaBridge.pokeVgcBlock(VGC_SPACE_GFX, (uint16_t)off, buf, 0)) {
-            logLn("Boot splash raw stream failed at offset %u", (unsigned)off);
-            return false;
-        }
-        off += got;
-    }
     return true;
 }
 
@@ -751,16 +769,9 @@ bool showBootSplash() {
     }
 
     const char* path = nullptr;
-    File f = openFirstAsset("boot splash RLE", BOOT_LOGO_RLE_PATHS,
-                            sizeof(BOOT_LOGO_RLE_PATHS) / sizeof(BOOT_LOGO_RLE_PATHS[0]),
+    File f = openFirstAsset("boot splash NVG", BOOT_LOGO_NVG_PATHS,
+                            sizeof(BOOT_LOGO_NVG_PATHS) / sizeof(BOOT_LOGO_NVG_PATHS[0]),
                             path);
-    bool rle = true;
-    if (!f) {
-        f = openFirstAsset("boot splash raw", BOOT_LOGO_RAW_PATHS,
-                           sizeof(BOOT_LOGO_RAW_PATHS) / sizeof(BOOT_LOGO_RAW_PATHS[0]),
-                           path);
-        rle = false;
-    }
     if (!f) return false;
 
     if (!holdFpgaResetForBoot("Boot splash")) {
@@ -776,7 +787,7 @@ bool showBootSplash() {
         return false;
     }
 
-    bool ok = rle ? streamBootLogoRle(f, path) : streamBootLogoRaw(f, path);
+    bool ok = streamBootLogoNvg(f, path);
     f.close();
     if (!ok) {
         restoreBootSplashVideoState();
@@ -1055,8 +1066,7 @@ void pollSerialConsole() {
 // =========================================================================
 // Boot-time ROM/assets load into FPGA via debug bridge
 // =========================================================================
-// At 115200 baud with bulk CMD_POKE_ROM_BLK (one ack per 256-byte block),
-// full 32 KB ROM load takes ~3 seconds.
+// Bulk bridge commands keep ROM loading to one ack per 256-byte block.
 bool loadRomsToFPGA() {
     logLn("Loading boot assets from SD into FPGA...");
     unsigned long t0 = millis();
@@ -1270,18 +1280,20 @@ void setup() {
     Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());
     Serial.printf("Flash: %d MB\n", ESP.getFlashChipSize() / (1024 * 1024));
 
-    // FPGA UART — binary debug protocol via debug_bridge.sv
-    FPGA_SERIAL.begin(FPGA_BAUD, SERIAL_8N1, FPGA_RX_PIN, FPGA_TX_PIN);
-    Serial.printf("FPGA UART initialized on GPIO%d/%d (binary debug protocol)\n",
-                  FPGA_RX_PIN, FPGA_TX_PIN);
+    initSharedSpiBus();
+    fpgaBridge.beginSpi(SPI, FPGA_SPI_CS_PIN, FPGA_SPI_HZ, SD_CS_PIN);
+    Serial.printf("FPGA bridge initialized over SPI (SCK=%d MISO=%d MOSI=%d CS=%d, %lu Hz)\n",
+                  SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN,
+                  FPGA_SPI_CS_PIN, (unsigned long)FPGA_SPI_HZ);
 
     // Give the FPGA debug bridge a moment to settle before we start poking it.
     delay(100);
 
-    // Wire the FIO event reader → dispatcher trampoline. Whenever the
-    // FPGA emits 0xFE 0xE0 on the bridge, the reader fires the
-    // dispatcher to drain registers + execute the file op.
-    fioEventReader.onEvent(FioDispatcher::onFioEventStatic, &fioDispatcher);
+    // Wire host-service event reader → dispatchers. FIO events execute
+    // immediately; NIC events are marked pending and serviced from loop()
+    // so socket polling and bridge traffic stay ordered.
+    fioEventReader.onFioEvent(FioDispatcher::onFioEventStatic, &fioDispatcher);
+    fioEventReader.onNicEvent(NicDispatcher::onNicEventStatic, &nicDispatcher);
     fpgaBridge.onDrainByte(FioEventReader::onDrainByteStatic, &fioEventReader);
 
     // Critical infrastructure comes first. The board should be reachable over
@@ -1300,27 +1312,6 @@ void setup() {
 // =========================================================================
 void loop() {
     pollSerialConsole();
-
-    // Drain async FIO events only after the boot task is done with the bridge.
-    // The boot task streams ROM/assets over the same UART, so polling during
-    // boot would corrupt that protocol.
-    if (novaFpgaBridgeAvailable()) {
-        fioEventReader.poll();
-        static unsigned long lastFioPoll = 0;
-        if (millis() - lastFioPoll >= 5) {
-            lastFioPoll = millis();
-            fioDispatcher.poll_pending();
-        }
-    }
-
-    // The FPGA host-status latch resets whenever the bitstream is reloaded
-    // from flash. Force a lightweight refresh so LEDs recover even if the ESP
-    // flags themselves have not changed.
-    static unsigned long lastHostStatusRefresh = 0;
-    if (novaFpgaBridgeAvailable() && millis() - lastHostStatusRefresh > 1000) {
-        lastHostStatusRefresh = millis();
-        publishHostStatusToFpga(true);
-    }
 
     // Track WiFi state changes and mirror them onto the FPGA user LEDs.
     static unsigned long lastWifiCheck = 0;
@@ -1341,13 +1332,39 @@ void loop() {
         }
     }
 
-    // Accept new log viewer connections
+    // Keep host-control services responsive before servicing guest-driven
+    // bridge work. Debug/HTTP touch the shared SD/FPGA SPI bus, so they stay
+    // out while the boot task owns that path for asset streaming.
     if (novaWifi.connected() && g_network_services_started) {
 #if NOVA_ENABLE_OTA
         ArduinoOTA.handle();
 #endif
         handleLogClients();
-        debugServer.loop();
-        sdHttpServer.loop();
+        if (novaFpgaBridgeAvailable()) {
+            debugServer.loop();
+            sdHttpServer.loop();
+        }
+    }
+
+    // Drain async FIO/NIC events only after the boot task is done with the
+    // bridge. The boot task streams ROM/assets over the same shared SPI bus,
+    // so polling during boot would corrupt that protocol.
+    if (novaFpgaBridgeAvailable()) {
+        fpgaBridge.drain();
+        static unsigned long lastFioPoll = 0;
+        if (millis() - lastFioPoll >= 5) {
+            lastFioPoll = millis();
+            fioDispatcher.poll_pending();
+        }
+        nicDispatcher.poll();
+    }
+
+    // The FPGA host-status latch resets whenever the bitstream is reloaded
+    // from flash. Force a lightweight refresh so LEDs recover even if the ESP
+    // flags themselves have not changed.
+    static unsigned long lastHostStatusRefresh = 0;
+    if (novaFpgaBridgeAvailable() && millis() - lastHostStatusRefresh > 1000) {
+        lastHostStatusRefresh = millis();
+        publishHostStatusToFpga(true);
     }
 }

@@ -17,12 +17,8 @@ NOVA_NOVAZ_ZVM_IMPLEMENTATION_INCLUDED = 1
 ZVM_SAVE_HEADER_SIZE       = $40
 ZVM_SAVE_PREFIX_SIZE       = $08
 ZVM_SAVE_FORMAT_VERSION    = $02
-ZVM_SAVE_SCRATCH_ADDRL     = $00
-ZVM_SAVE_SCRATCH_ADDRM     = $00
-ZVM_SAVE_SCRATCH_ADDRH     = $07
 ZVM_SAVE_STATE_ADDRL       = ZVM_SAVE_HEADER_SIZE
 ZVM_SAVE_STATE_ADDRM       = $00
-ZVM_SAVE_STATE_ADDRH       = $07
 ZVM_COLOR_NORMAL           = $0C
 ZVM_COLOR_BOLD             = $0F
 ZVM_COLOR_REVERSE_NORMAL   = $C0
@@ -194,6 +190,9 @@ ZVM_SAVE_STATE_SIZE = zvm_state_end - zvm_state_start
 ZVM_SAVE_TOTAL_SIZE = ZVM_SAVE_HEADER_SIZE + ZVM_SAVE_STATE_SIZE
 
 zvm_save_header:      .res ZVM_SAVE_HEADER_SIZE
+zvm_save_scratch_base_l: .res 1
+zvm_save_scratch_base_m: .res 1
+zvm_save_scratch_base_h: .res 1
 
 .segment "CODE"
 
@@ -1272,18 +1271,26 @@ zvm_verify_shift_end:
 zvm_save_game:
         JSR zvm_save_dynamic
         BNE @done
+        JSR zvm_alloc_save_scratch
+        BNE @done
         JSR zvm_fill_save_header
         JSR zvm_copy_save_header_to_xram
-        BNE @done
+        BNE @cleanup
         JSR zvm_copy_vm_state_to_xram
-        BNE @done
+        BNE @cleanup
         JSR zvm_save_state_file
+@cleanup:
+        PHA
+        JSR zvm_free_save_scratch
+        PLA
 @done:
         RTS
 
 zvm_restore_game:
-        JSR zvm_load_state_file
+        JSR zvm_alloc_save_scratch
         BNE @done
+        JSR zvm_load_state_file
+        BNE @cleanup
 
         LDA XRAM_LENL
         CMP #<ZVM_SAVE_TOTAL_SIZE
@@ -1293,12 +1300,12 @@ zvm_restore_game:
         BNE @bad
 
         JSR zvm_copy_save_header_from_xram
-        BNE @done
+        BNE @cleanup
         JSR zvm_validate_save_header
         BNE @bad
 
         JSR zvm_restore_dynamic
-        BNE @done
+        BNE @cleanup
         LDA XRAM_LENL
         CMP zstory_static_lo
         BNE @bad
@@ -1307,7 +1314,7 @@ zvm_restore_game:
         BNE @bad
 
         JSR zvm_copy_vm_state_from_xram
-        BNE @done
+        BNE @cleanup
         JSR zvm_restore_display_after_load
         LDA zvm_save_header + ZVM_SAVE_BRANCH_IF
         STA zvm_branch_if
@@ -1322,17 +1329,19 @@ zvm_restore_game:
         LDA zvm_save_header + ZVM_SAVE_PC_L
         STA zvm_pc_l
         LDA #$00
-        RTS
+        BRA @cleanup
 @bad:
         LDA #$01
+@cleanup:
+        PHA
+        JSR zvm_free_save_scratch
+        PLA
 @done:
         RTS
 
 zvm_save_dynamic:
         JSR zvm_use_dynamic_save_name
-        STZ XRAM_ADDRL
-        STZ XRAM_ADDRM
-        STZ XRAM_ADDRH
+        JSR zstory_set_dynamic_xram_origin
         LDA zstory_static_lo
         STA XRAM_LENL
         LDA zstory_static_hi
@@ -1341,9 +1350,7 @@ zvm_save_dynamic:
 
 zvm_restore_dynamic:
         JSR zvm_use_dynamic_save_name
-        STZ XRAM_ADDRL
-        STZ XRAM_ADDRM
-        STZ XRAM_ADDRH
+        JSR zstory_set_dynamic_xram_origin
         STZ XRAM_LENL
         STZ XRAM_LENH
         JMP xram_xload
@@ -1414,18 +1421,39 @@ zvm_prepare_save_state_copy:
         RTS
 
 zvm_set_save_scratch_addr:
-        STZ XRAM_ADDRL
-        STZ XRAM_ADDRM
-        LDA #ZVM_SAVE_SCRATCH_ADDRH
+        LDA zvm_save_scratch_base_l
+        STA XRAM_ADDRL
+        LDA zvm_save_scratch_base_m
+        STA XRAM_ADDRM
+        LDA zvm_save_scratch_base_h
         STA XRAM_ADDRH
         RTS
 
 zvm_set_save_state_addr:
-        LDA #ZVM_SAVE_STATE_ADDRL
+        LDA zvm_save_scratch_base_l
+        CLC
+        ADC #ZVM_SAVE_STATE_ADDRL
         STA XRAM_ADDRL
-        STZ XRAM_ADDRM
-        LDA #ZVM_SAVE_STATE_ADDRH
+        LDA zvm_save_scratch_base_m
+        ADC #ZVM_SAVE_STATE_ADDRM
+        STA XRAM_ADDRM
+        LDA zvm_save_scratch_base_h
+        ADC #$00
         STA XRAM_ADDRH
+        RTS
+
+zvm_alloc_save_scratch:
+        LDA #XRAM_NOVAZ_SAVE_L
+        STA zvm_save_scratch_base_l
+        LDA #XRAM_NOVAZ_SAVE_M
+        STA zvm_save_scratch_base_m
+        LDA #XRAM_NOVAZ_SAVE_H
+        STA zvm_save_scratch_base_h
+        LDA #$00
+        RTS
+
+zvm_free_save_scratch:
+        LDA #$00
         RTS
 
 zvm_use_state_save_name:

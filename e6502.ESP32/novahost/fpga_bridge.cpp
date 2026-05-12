@@ -29,50 +29,158 @@
 #define CMD_SYS_RESET_REL  0x19
 #define CMD_READ_SDRAM_BLK 0x1A
 #define CMD_HOST_STATUS    0x1B
+#define CMD_NIC_TX_READ_BLK 0x1C
+#define CMD_NIC_RX_WRITE_BLK 0x1D
+
+#define EVENT_MARKER       0xFE
 
 #define VGC_SPACE_CHAR  0x01
 #define VGC_SPACE_COLOR 0x02
 #define TEXT_BYTES      4000
 
 // =========================================================================
-// Low-level serial helpers
+// Low-level transport helpers
 // =========================================================================
 
+bool FpgaBridge::beginSpi(SPIClass& spi, uint8_t csPin, uint32_t hz,
+                          uint8_t peerCsPin) {
+    _spi = &spi;
+    _spiCsPin = csPin;
+    _spiPeerCsPin = peerCsPin;
+    _spiHz = hz;
+    pinMode(_spiCsPin, OUTPUT);
+    digitalWrite(_spiCsPin, HIGH);
+    if (_spiPeerCsPin != 255) {
+        pinMode(_spiPeerCsPin, OUTPUT);
+        digitalWrite(_spiPeerCsPin, HIGH);
+    }
+    _spiEnabled = true;
+    return true;
+}
+
+const char* FpgaBridge::transportName() const {
+    return "spi";
+}
+
 void FpgaBridge::drain() {
-    while (_serial.available()) {
-        int b = _serial.read();
-        if (b < 0) break;
+    uint8_t value = 0;
+    for (int i = 0; i < SPI_DRAIN_LIMIT; i++) {
+        if (!tryRecvSpiByte(value))
+            break;
         if (_drainHandler) {
-            _drainHandler(_drainUser, (uint8_t)b);
+            _drainHandler(_drainUser, value);
         }
     }
 }
 
 int FpgaBridge::recvByte() {
-    unsigned long start = millis();
-    while (!_serial.available()) {
-        if (millis() - start >= BYTE_TIMEOUT_MS) return -1;
-        delay(1);
-    }
-    return _serial.read();
+    return recvByte(true);
+}
+
+int FpgaBridge::recvByte(bool wait) {
+    return recvSpiByte(wait);
 }
 
 bool FpgaBridge::recvBytes(uint8_t* buf, int count) {
     unsigned long start = millis();
     for (int i = 0; i < count; i++) {
-        while (!_serial.available()) {
-            if (millis() - start >= BULK_TIMEOUT_MS) return false;
+        while (true) {
+            int b = recvByte(false);
+            if (b >= 0) {
+                buf[i] = (uint8_t)b;
+                break;
+            }
+
+            if (millis() - start >= BULK_TIMEOUT_MS)
+                return false;
             delay(1);
         }
-        int b = _serial.read();
-        buf[i] = (uint8_t)b;
     }
     return true;
 }
 
+bool FpgaBridge::tryRecvSpiByte(uint8_t& value) {
+    int b = recvSpiByte(false);
+    if (b < 0)
+        return false;
+    value = (uint8_t)b;
+    return true;
+}
+
+int FpgaBridge::recvSpiByte(bool wait) {
+    if (!spiReady())
+        return -1;
+
+    unsigned long start = millis();
+    while (true) {
+        int result = -1;
+
+        _spi->beginTransaction(spiSettings());
+        if (_spiPeerCsPin != 255)
+            digitalWrite(_spiPeerCsPin, HIGH);
+        digitalWrite(_spiCsPin, LOW);
+        _spi->transfer(SPI_READ_OP);
+        uint8_t token = _spi->transfer(0x00);
+        if (token == SPI_TOKEN_DATA) {
+            result = _spi->transfer(0x00);
+        }
+        digitalWrite(_spiCsPin, HIGH);
+        _spi->endTransaction();
+
+        if (result >= 0)
+            return result;
+        if (!wait || millis() - start >= BYTE_TIMEOUT_MS)
+            return -1;
+        delay(1);
+    }
+}
+
+void FpgaBridge::writeByte(uint8_t value) {
+    writeBytes(&value, 1);
+}
+
+void FpgaBridge::writeBytes(const uint8_t* data, size_t len) {
+    if (len == 0)
+        return;
+
+    if (!spiReady())
+        return;
+
+    _spi->beginTransaction(spiSettings());
+    if (_spiPeerCsPin != 255)
+        digitalWrite(_spiPeerCsPin, HIGH);
+    digitalWrite(_spiCsPin, LOW);
+    _spi->transfer(SPI_WRITE_OP);
+    for (size_t i = 0; i < len; i++) {
+        _spi->transfer(data[i]);
+    }
+    digitalWrite(_spiCsPin, HIGH);
+    _spi->endTransaction();
+}
+
 bool FpgaBridge::recvStatus() {
-    int s = recvByte();
-    return s == 0x00;
+    while (true) {
+        int s = recvByte();
+        if (s < 0)
+            return false;
+
+        // Host-service events share the bridge response stream. If a CPU-side
+        // FIO/NIC event arrives just before the debug-bridge status byte,
+        // dispatch it and keep waiting for the actual response instead of
+        // turning the event marker into a false command failure.
+        if (s == EVENT_MARKER) {
+            int eventType = recvByte();
+            if (eventType < 0)
+                return false;
+            if (_drainHandler) {
+                _drainHandler(_drainUser, (uint8_t)s);
+                _drainHandler(_drainUser, (uint8_t)eventType);
+            }
+            continue;
+        }
+
+        return s == 0x00;
+    }
 }
 
 // =========================================================================
@@ -82,7 +190,7 @@ bool FpgaBridge::recvStatus() {
 bool FpgaBridge::peek(uint16_t addr, uint8_t& value) {
     drain();
     uint8_t buf[3] = { CMD_PEEK, (uint8_t)(addr >> 8), (uint8_t)(addr & 0xFF) };
-    _serial.write(buf, 3);
+    writeBytes(buf, 3);
     if (!recvStatus()) return false;
     int b = recvByte();
     if (b < 0) return false;
@@ -93,14 +201,14 @@ bool FpgaBridge::peek(uint16_t addr, uint8_t& value) {
 bool FpgaBridge::poke(uint16_t addr, uint8_t value) {
     drain();
     uint8_t buf[4] = { CMD_POKE, (uint8_t)(addr >> 8), (uint8_t)(addr & 0xFF), value };
-    _serial.write(buf, 4);
+    writeBytes(buf, 4);
     return recvStatus();
 }
 
 bool FpgaBridge::sendKey(uint8_t key) {
     drain();
     uint8_t buf[2] = { CMD_SEND_KEY, key };
-    _serial.write(buf, 2);
+    writeBytes(buf, 2);
     return recvStatus();
 }
 
@@ -128,7 +236,7 @@ bool FpgaBridge::readColor(uint8_t* buf) {
 
 bool FpgaBridge::cpuState(CpuState& st) {
     drain();
-    _serial.write(CMD_CPU_STATE);
+    writeByte(CMD_CPU_STATE);
     if (!recvStatus()) return false;
     uint8_t buf[8];
     if (!recvBytes(buf, 8)) return false;
@@ -149,7 +257,7 @@ bool FpgaBridge::cpuState(CpuState& st) {
 
 bool FpgaBridge::step(CpuState& st) {
     drain();
-    _serial.write(CMD_STEP);
+    writeByte(CMD_STEP);
     if (!recvStatus()) return false;
     uint8_t buf[8];
     if (!recvBytes(buf, 8)) return false;
@@ -178,7 +286,7 @@ bool FpgaBridge::breakSet(uint8_t slot, uint16_t addr, bool enabled) {
         (uint8_t)(addr & 0xFF),
         enabled ? (uint8_t)1 : (uint8_t)0
     };
-    _serial.write(buf, 5);
+    writeBytes(buf, 5);
     return recvStatus();
 }
 
@@ -186,13 +294,13 @@ bool FpgaBridge::breakClear(uint8_t slot) {
     if (slot >= 4) return false;
     drain();
     uint8_t buf[2] = { CMD_BREAK_CLR, slot };
-    _serial.write(buf, 2);
+    writeBytes(buf, 2);
     return recvStatus();
 }
 
 bool FpgaBridge::breakList(BreakpointState& state) {
     drain();
-    _serial.write(CMD_BREAK_LIST);
+    writeByte(CMD_BREAK_LIST);
     if (!recvStatus()) return false;
     uint8_t buf[14];
     if (!recvBytes(buf, 14)) return false;
@@ -210,7 +318,7 @@ bool FpgaBridge::traceRead(uint8_t count, uint8_t* buf, uint16_t& bytesRead) {
     if (count > TRACE_RECORDS) return false;
     drain();
     uint8_t cmd[2] = { CMD_TRACE_READ, count };
-    _serial.write(cmd, 2);
+    writeBytes(cmd, 2);
     if (!recvStatus()) return false;
     uint8_t actualRecords = (count == 0) ? TRACE_RECORDS : count;
     bytesRead = (uint16_t)actualRecords * TRACE_RECORD_BYTES;
@@ -219,53 +327,75 @@ bool FpgaBridge::traceRead(uint8_t count, uint8_t* buf, uint16_t& bytesRead) {
 
 bool FpgaBridge::pause() {
     drain();
-    _serial.write(CMD_PAUSE);
+    writeByte(CMD_PAUSE);
     return recvStatus();
 }
 
 bool FpgaBridge::resume() {
     drain();
-    _serial.write(CMD_RESUME);
+    writeByte(CMD_RESUME);
     return recvStatus();
 }
 
 bool FpgaBridge::hostStatus(uint8_t flags) {
     drain();
     uint8_t buf[2] = { CMD_HOST_STATUS, flags };
-    _serial.write(buf, 2);
+    writeBytes(buf, 2);
     return recvStatus();
 }
 
 bool FpgaBridge::peekBlock(uint16_t addr, uint8_t count, uint8_t* buf) {
     drain();
     uint8_t cmd[4] = { CMD_PEEK_BLOCK, (uint8_t)(addr >> 8), (uint8_t)(addr & 0xFF), count };
-    _serial.write(cmd, 4);
+    writeBytes(cmd, 4);
     if (!recvStatus()) return false;
     int n = (count == 0) ? 256 : count;
     return recvBytes(buf, n);
 }
 
+bool FpgaBridge::nicReadTxBlock(uint8_t offset, uint8_t count, uint8_t* buf) {
+    drain();
+    uint8_t cmd[3] = { CMD_NIC_TX_READ_BLK, offset, count };
+    writeBytes(cmd, 3);
+    if (!recvStatus()) return false;
+    int n = (count == 0) ? 256 : count;
+    return recvBytes(buf, n);
+}
+
+bool FpgaBridge::nicWriteRxBlock(uint8_t offset, const uint8_t* data, uint16_t count) {
+    if (count > 256) return false;
+    drain();
+    uint8_t header[3] = {
+        CMD_NIC_RX_WRITE_BLK,
+        offset,
+        (uint8_t)(count & 0xFF)          // 256 encodes as 0
+    };
+    writeBytes(header, 3);
+    writeBytes(data, (count == 0) ? 256 : count);
+    return recvStatus();
+}
+
 bool FpgaBridge::resetHold() {
     drain();
-    _serial.write(CMD_RESET_HOLD);
+    writeByte(CMD_RESET_HOLD);
     return recvStatus();
 }
 
 bool FpgaBridge::resetRelease() {
     drain();
-    _serial.write(CMD_RESET_REL);
+    writeByte(CMD_RESET_REL);
     return recvStatus();
 }
 
 bool FpgaBridge::systemResetHold() {
     drain();
-    _serial.write(CMD_SYS_RESET_HOLD);
+    writeByte(CMD_SYS_RESET_HOLD);
     return recvStatus();
 }
 
 bool FpgaBridge::systemResetRelease() {
     drain();
-    _serial.write(CMD_SYS_RESET_REL);
+    writeByte(CMD_SYS_RESET_REL);
     return recvStatus();
 }
 
@@ -278,7 +408,7 @@ bool FpgaBridge::pokeRom(uint8_t idx, uint16_t addr, uint8_t value) {
         (uint8_t)(addr & 0xFF),
         value
     };
-    _serial.write(buf, 5);
+    writeBytes(buf, 5);
     return recvStatus();
 }
 
@@ -294,13 +424,13 @@ bool FpgaBridge::pokeRomBlock(uint8_t idx, uint16_t start_addr,
         (uint8_t)(start_addr & 0xFF),
         (uint8_t)(count & 0xFF)     // 256 encodes as 0
     };
-    _serial.write(header, 5);
-    _serial.write(data, (count == 0) ? 256 : count);
+    writeBytes(header, 5);
+    writeBytes(data, (count == 0) ? 256 : count);
     return recvStatus();
 }
 
 bool FpgaBridge::loadRom(uint8_t idx, const uint8_t* data, size_t len) {
-    // Split into 256-byte blocks. At 3.125 Mbaud, 16KB is ~52ms.
+    // Split into 256-byte bridge blocks.
     const size_t BLOCK = 256;
     for (size_t off = 0; off < len; off += BLOCK) {
         size_t chunk = (len - off >= BLOCK) ? BLOCK : (len - off);
@@ -322,8 +452,8 @@ bool FpgaBridge::pokeSdramBlock(uint32_t addr, const uint8_t* data, uint16_t cou
         (uint8_t)( addr        & 0xFF),
         (uint8_t)(count & 0xFF)        // 256 encodes as 0
     };
-    _serial.write(header, 5);
-    _serial.write(data, (count == 0) ? 256 : count);
+    writeBytes(header, 5);
+    writeBytes(data, (count == 0) ? 256 : count);
     return recvStatus();
 }
 
@@ -336,7 +466,7 @@ bool FpgaBridge::readSdramBlock(uint32_t addr, uint8_t count, uint8_t* buf) {
         (uint8_t)( addr        & 0xFF),
         count
     };
-    _serial.write(header, 5);
+    writeBytes(header, 5);
     if (!recvStatus()) return false;
     int n = (count == 0) ? 256 : count;
     return recvBytes(buf, n);
@@ -362,8 +492,8 @@ bool FpgaBridge::pokeBlock(uint16_t addr, const uint8_t* data, uint16_t count) {
         (uint8_t)(addr & 0xFF),
         (uint8_t)(count & 0xFF)            // 256 encodes as 0
     };
-    _serial.write(header, 4);
-    _serial.write(data, (count == 0) ? 256 : count);
+    writeBytes(header, 4);
+    writeBytes(data, (count == 0) ? 256 : count);
     return recvStatus();
 }
 
@@ -378,8 +508,8 @@ bool FpgaBridge::pokeVgcBlock(uint8_t space, uint16_t start_addr,
         (uint8_t)(start_addr & 0xFF),
         (uint8_t)(count & 0xFF)            // 256 encodes as 0
     };
-    _serial.write(header, 5);
-    _serial.write(data, (count == 0) ? 256 : count);
+    writeBytes(header, 5);
+    writeBytes(data, (count == 0) ? 256 : count);
     return recvStatus();
 }
 
@@ -392,7 +522,7 @@ bool FpgaBridge::fillVgcBlock(uint8_t space, uint16_t start_addr, uint8_t value)
         (uint8_t)(start_addr & 0xFF),
         value
     };
-    _serial.write(header, 5);
+    writeBytes(header, 5);
     return recvStatus();
 }
 
@@ -406,7 +536,7 @@ bool FpgaBridge::readVgcBlock(uint8_t space, uint16_t start_addr,
         (uint8_t)(start_addr & 0xFF),
         count
     };
-    _serial.write(header, 5);
+    writeBytes(header, 5);
     if (!recvStatus()) return false;
     int n = (count == 0) ? 256 : count;
     return recvBytes(buf, n);

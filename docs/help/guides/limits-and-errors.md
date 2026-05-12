@@ -89,7 +89,7 @@ wrapping to `$FFFF`.
 | Named block name length | The ROM enforces a 1--28 byte name (`XmcNameLen` is capped at 28 by the name buffer size: BA24--BA3F = 28 bytes). The host trims whitespace; a blank name after trimming is rejected with `XmcErrName`. |
 | Named block name case | Name lookup is case-insensitive in the host (`StringComparer.OrdinalIgnoreCase`). Storing "`SPRITE`" and retrieving "`sprite`" will succeed. |
 | `XALLOC len` with `len<=0` | The ROM passes zero through `LAB_GTWRD`, which itself rejects negative values. The XMC command handler rejects `len<=0` with `XmcErrBadArgs`. |
-| `XALLOC` with no free space | If no contiguous run of the required pages exists, or the handle pool (1--255) is exhausted, the command fails with `XmcErrNoSpace`. |
+| `XALLOC` with no free space | If the low-XRAM software heap cannot satisfy the requested run of pages, the command fails with `XmcErrNoSpace`. |
 | `STASH`/`FETCH` (raw) with `len=0` | The XMC host treats a zero-length raw transfer as a no-op and returns `XmcStatusOk`. No data is moved and no pages are marked. |
 | `FETCH "name",ram` (named fetch) | The ROM sends `XmcLenL/H = 0` for the named-fetch command. The host interprets `requested=0` as "fetch the entire stored block": `len = (requested <= 0) ? block.Length : min(requested, block.Length)`. |
 | `STASH "name",ram,len` over existing block | If the named block already exists and the new length fits in the allocated pages, only `block.Length` is updated (no reallocation). If it does not fit, the old block is freed and a new allocation is attempted. |

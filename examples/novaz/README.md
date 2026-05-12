@@ -21,7 +21,8 @@ launcher path:
 - autoboot on Nova through BASIC,
 - have the launcher load `novaz.bin` into the primary runtime ROM bank,
 - jump through the NovaZ runtime reset vector,
-- stream `story.bin` into XRAM with the shared `xram` library,
+- allocate owned XRAM buffers for dynamic story memory and the static story
+  page cache,
 - read and display the story header through flat XRAM addressing,
 - provide a Nova `zstory` layer for interpreter byte/word reads from XRAM.
 
@@ -173,8 +174,9 @@ right edge while allowing normal word-boundary line wrapping. If NovaZ displays
 ## Current State
 
 This is still the staging runtime. It now has the Nova platform boundary and
-XRAM-backed story memory in place, including version filtering, byte/word story
-reads and writes, text decoding, line input, dictionary/tokenizer support, the
+XRAM-backed story memory in place, including fixed dynamic-memory and page-cache
+workspaces, version filtering, byte/word story reads and writes,
+text decoding, line input, dictionary/tokenizer support, the
 core opcode loop, object/property operations, calls/returns, Z3 screen handling
 with word-boundary wrapping and `[ MORE ]` pagination, and enough V4/V5 support
 to boot and script representative Infocom games. Z3 save/restore uses native

@@ -493,6 +493,10 @@ NovaBASIC can save and load VGC memory spaces to disk:
 | GSAVE "name", space, offset, len | Save `len` bytes from VGC memory space starting at `offset` to a `.gfx` file. |
 | GLOAD "name", space, offset[, len] | Load a `.gfx` file into VGC memory space at `offset`. If `len` is omitted, the entire file is loaded. |
 
+Assembly applications can load NovaDraw `.nvg`/NVG1 images with the
+`NVG.LOAD` runtime helper. NovaHost clears the graphics bitmap, decodes the
+spans, and streams the pixels directly into graphics bitmap memory.
+
 VGC memory spaces:
 
 | **Space** | **Contents** |

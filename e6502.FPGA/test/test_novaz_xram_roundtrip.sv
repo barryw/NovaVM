@@ -124,6 +124,8 @@ module test_novaz_xram_roundtrip;
         .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr),
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
+        .dbg_nic_buf_we(), .dbg_nic_buf_re(), .dbg_nic_buf_sel(),
+        .dbg_nic_buf_addr(), .dbg_nic_buf_data(), .dbg_nic_buf_rdata(8'h00),
         .dbg_vmem_we(dbg_vmem_we), .dbg_vmem_re(dbg_vmem_re),
         .dbg_vmem_space(dbg_vmem_space), .dbg_vmem_addr(dbg_vmem_addr),
         .dbg_vmem_data(dbg_vmem_data), .dbg_vmem_rdata(dbg_vmem_rdata),
@@ -156,6 +158,7 @@ module test_novaz_xram_roundtrip;
         .sdram_b_dout(brg_sdram_b_dout),
         .sdram_b_done_toggle(brg_sdram_b_done_toggle),
         .fio_event(fio_event),
+        .nic_event(1'b0),
         .host_status(host_status)
     );
 

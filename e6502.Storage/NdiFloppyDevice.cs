@@ -16,6 +16,7 @@ public sealed class NdiFloppyDevice : IStorageDevice
             [".bin"] = NdiFileType.Bin,
             [".mid"] = NdiFileType.Mid,
             [".gfx"] = NdiFileType.Gfx,
+            [".nvg"] = NdiFileType.Gfx,
             [".xram"] = NdiFileType.Bin,
         };
 

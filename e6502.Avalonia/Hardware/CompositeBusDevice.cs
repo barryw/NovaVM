@@ -485,7 +485,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             VgcConstants.DmaSpaceVgcColor => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceColor),
             VgcConstants.DmaSpaceVgcGfx => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceGfx),
             VgcConstants.DmaSpaceVgcSprite => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceSprite),
-            VgcConstants.DmaSpaceVgcTile => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceTile),
             VgcConstants.DmaSpaceVgcTextAttr => _vgc.GetMemorySpaceLength(VgcConstants.MemSpaceTextAttr),
             VgcConstants.DmaSpaceXram => _xmc.CapacityBytes,
             _ => 0
@@ -525,11 +524,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                     ? (true, sprite)
                     : (false, (byte)0);
 
-            case VgcConstants.DmaSpaceVgcTile:
-                return _vgc.TryReadMemorySpace(VgcConstants.MemSpaceTile, address, out byte tile)
-                    ? (true, tile)
-                    : (false, (byte)0);
-
             case VgcConstants.DmaSpaceXram:
                 return _xmc.TryReadLinear(address, out byte xram)
                     ? (true, xram)
@@ -561,9 +555,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
             case VgcConstants.DmaSpaceVgcSprite:
                 return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceSprite, address, value);
-
-            case VgcConstants.DmaSpaceVgcTile:
-                return _vgc.TryWriteMemorySpace(VgcConstants.MemSpaceTile, address, value);
 
             case VgcConstants.DmaSpaceXram:
                 return _xmc.TryWriteLinear(address, value);

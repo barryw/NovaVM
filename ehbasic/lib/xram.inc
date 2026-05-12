@@ -81,4 +81,22 @@ XRAM_XMC_ERR_RANGE = $01
 XRAM_XMC_ERR_BADARGS = $02
 XRAM_XMC_ERR_NOTFOUND = $03
 
+; Fixed XRAM layout. Nova is single-tasking, so shared runtimes use
+; role-sized workspaces instead of a hardware malloc/free table.
+XRAM_USER_HEAP_PAGES = 1024     ; $000000-$03FFFF for BASIC/XMC blocks.
+
+XRAM_NOVAZ_DYNAMIC_L = $00      ; $040000-$04FFFF, max 64KB dynamic story.
+XRAM_NOVAZ_DYNAMIC_M = $00
+XRAM_NOVAZ_DYNAMIC_H = $04
+XRAM_NOVAZ_CACHE_L   = $00      ; $050000-$053FFF, 16KB static page cache.
+XRAM_NOVAZ_CACHE_M   = $00
+XRAM_NOVAZ_CACHE_H   = $05
+XRAM_NOVAZ_SAVE_L    = $00      ; $054000+, transient save/restore staging.
+XRAM_NOVAZ_SAVE_M    = $40
+XRAM_NOVAZ_SAVE_H    = $05
+
+XRAM_NVG_STAGE_L     = $00      ; $070000-$07F9FF, 64,000-byte NVG stage.
+XRAM_NVG_STAGE_M     = $00
+XRAM_NVG_STAGE_H     = $07
+
 .endif

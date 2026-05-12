@@ -1,9 +1,11 @@
 CA65 ?= ca65
 LD65 ?= ld65
 DOTNET ?= dotnet
+PYTHON ?= python3
 CA65FLAGS ?=
 SMOKE_EXTRA ?=
-SMOKE_GFX_EXPECTATIONS ?= --expect-gfx-color "10,6=>0F" --expect-gfx-color "32,6=>0C" --expect-gfx-color "6,2=>0F" --expect-gfx-color "8,4=>0B" --expect-gfx-color "19,188=>01" --expect-gfx-color "195,13=>01"
+SMOKE_SCREEN_EXPECTATIONS ?= --expect-screen "SELECT A MODE" --expect-screen "4  NETWORK GAME"
+SMOKE_GFX_EXPECTATIONS ?= --expect-gfx-color "90,80=>0E" --expect-gfx-color "150,80=>03" --expect-gfx-color "170,75=>0D" --expect-gfx-color "220,85=>07"
 RENDER_STEP_PAUSE ?= 1
 RENDER_FINAL_PAUSE ?= 120
 RENDER_PIXEL_STEP ?= 1
@@ -16,6 +18,11 @@ RENDER_BUILD_DIR ?= build-render
 RENDER_IMAGE ?= dist/render-test.ndi
 MENU_BUILD_DIR ?= build-menu
 MENU_IMAGE ?= dist/menu-test.ndi
+MODE_BUILD_DIR ?= build-mode
+MODE_IMAGE ?= dist/mode-test.ndi
+MODE_GFX_EXPECTATIONS ?= --expect-gfx-color "64,162=>01"
+NETWORK_GAME_SERVER_HOST ?= 127.0.0.1
+NETWORK_GAME_SERVER_PORT ?= 16504
 CASTLE_BUILD_DIR ?= build-castle
 CASTLE_IMAGE ?= dist/castle-test.ndi
 
@@ -32,24 +39,35 @@ ENGINE_CA65FLAGS ?=
 AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin
 RUNTIME := $(BUILD_DIR)/novachess.bin
 ENGINE := $(BUILD_DIR)/CHESSENG.BIN
+RULES_ENGINE := $(BUILD_DIR)/CHESSRUL.BIN
+SPLASH_NVG := $(BUILD_DIR)/SPLASH.NVG
 ENGINE_SYM := $(BUILD_DIR)/engine_nova.sym
+RULES_ENGINE_SYM := $(BUILD_DIR)/rules_nova.sym
 ENGINE_LABELS := $(BUILD_DIR)/engine_labels.inc
+RULES_ENGINE_LABELS := $(BUILD_DIR)/rules_engine_labels.inc
 IMAGE ?= $(DIST_DIR)/fd0.ndi
 LABEL ?= NCHESS
 SIZE_KB ?= 1440
 RUNTIME_NAME ?= novachess.bin
 ENGINE_NAME ?= CHESSENG.BIN
+RULES_ENGINE_NAME ?= CHESSRUL.BIN
+SPLASH_NVG_NAME ?= SPLASH.NVG
+SPLASH_SOURCE := assets/NovaChessSplashSource.png
+SPLASH_SCRIPT := tools/make_splash_nvg.py
+SPLASH_PREVIEW := $(BUILD_DIR)/SPLASH.png
+SPLASH_PROJECT := $(BUILD_DIR)/NovaChessSplash.novadraw
 ENGINE_VENDOR := vendor/chess6502-engine
 ENGINE_VENDOR_SOURCES := $(shell find $(ENGINE_VENDOR)/src -name '*.s' -print)
 ENGINE_SOURCES := src/engine_nova.s src/engine_platform_nova.s src/engine_nova.cfg $(ENGINE_VENDOR_SOURCES)
+RULES_ENGINE_SOURCES := src/rules_nova.s src/engine_nova.cfg $(ENGINE_VENDOR_SOURCES)
 
-all: $(AUTOBOOT) $(ENGINE_LABELS) $(RUNTIME) $(ENGINE)
+all: $(AUTOBOOT) $(ENGINE_LABELS) $(RULES_ENGINE_LABELS) check-engine-abi $(RUNTIME) $(ENGINE) $(RULES_ENGINE) $(SPLASH_NVG)
 
 $(AUTOBOOT): src/autoboot.s src/autoboot.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s | $(BUILD_DIR)
 	$(CA65) $(CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/autoboot.o src/autoboot.s
 	$(LD65) -C src/autoboot.cfg -m $(BUILD_DIR)/autoboot.map -Ln $(BUILD_DIR)/autoboot.sym -o $@ $(BUILD_DIR)/autoboot.o
 
-$(RUNTIME): src/runtime.s src/runtime.cfg $(ENGINE_LABELS) $(NOVA_LIB)/nova.inc $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/vsprite.inc $(NOVA_LIB)/vsprite.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/tween.inc $(NOVA_LIB)/tween.s | $(BUILD_DIR)
+$(RUNTIME): src/runtime.s src/runtime.cfg src/nchess_net.inc src/nchess_net.s $(ENGINE_LABELS) $(RULES_ENGINE_LABELS) $(NOVA_LIB)/nova.inc $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/vsprite.inc $(NOVA_LIB)/vsprite.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/nvg.inc $(NOVA_LIB)/nvg.s $(NOVA_LIB)/tween.inc $(NOVA_LIB)/tween.s $(NOVA_LIB)/nic.inc $(NOVA_LIB)/nic.s $(NOVA_LIB)/gameserver.inc $(NOVA_LIB)/gameserver.s $(NOVA_LIB)/nui.inc $(NOVA_LIB)/nui.s | $(BUILD_DIR)
 	$(CA65) $(CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/runtime.o src/runtime.s
 	$(LD65) -C src/runtime.cfg -m $(BUILD_DIR)/runtime.map -Ln $(BUILD_DIR)/runtime.sym -o $@ $(BUILD_DIR)/runtime.o
 
@@ -57,8 +75,23 @@ $(ENGINE): $(ENGINE_SOURCES) | $(BUILD_DIR)
 	$(CA65) $(ENGINE_CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -I src -I $(ENGINE_VENDOR)/src -I $(ENGINE_VENDOR)/src/engine -I $(ENGINE_VENDOR)/src/ai -o $(BUILD_DIR)/engine_nova.o src/engine_nova.s
 	$(LD65) -C src/engine_nova.cfg -m $(BUILD_DIR)/engine_nova.map -Ln $(BUILD_DIR)/engine_nova.sym -o $@ $(BUILD_DIR)/engine_nova.o
 
+$(RULES_ENGINE): $(RULES_ENGINE_SOURCES) | $(BUILD_DIR)
+	$(CA65) $(ENGINE_CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -I src -I $(ENGINE_VENDOR)/src -I $(ENGINE_VENDOR)/src/engine -I $(ENGINE_VENDOR)/src/ai -o $(BUILD_DIR)/rules_nova.o src/rules_nova.s
+	$(LD65) -C src/engine_nova.cfg -m $(BUILD_DIR)/rules_nova.map -Ln $(BUILD_DIR)/rules_nova.sym -o $@ $(BUILD_DIR)/rules_nova.o
+
+$(SPLASH_NVG): $(SPLASH_SOURCE) $(SPLASH_SCRIPT) | $(BUILD_DIR)
+	$(PYTHON) "$(SPLASH_SCRIPT)" "$(SPLASH_SOURCE)" "$@" --format nvg --forbid-color 9 --normalize-family 5,13 --erase-rect 48,174,224,20 --preview "$(SPLASH_PREVIEW)" --novadraw "$(SPLASH_PROJECT)"
+
 $(ENGINE_LABELS): $(ENGINE) | $(BUILD_DIR)
-	awk 'BEGIN { map["chess_engine_start"]="ENGINE_START"; map["ChessInitPieceLists"]="ENGINE_CHESS_INIT_PIECE_LISTS"; map["ChessGenerateLegalMoves"]="ENGINE_CHESS_GENERATE_LEGAL_MOVES"; map["ChessFindBestMove"]="ENGINE_CHESS_FIND_BEST_MOVE"; map["ChessMakeMove"]="ENGINE_CHESS_MAKE_MOVE"; map["ChessBeginGame"]="ENGINE_CHESS_BEGIN_GAME"; map["ChessCommitMove"]="ENGINE_CHESS_COMMIT_MOVE"; map["ChessRecordPosition"]="ENGINE_CHESS_RECORD_POSITION"; map["ChessClearPositionHistory"]="ENGINE_CHESS_CLEAR_POSITION_HISTORY"; map["ChessCheckRepetition"]="ENGINE_CHESS_CHECK_REPETITION"; map["ChessCheckGameState"]="ENGINE_CHESS_CHECK_GAME_STATE"; map["Board88"]="ENGINE_BOARD88"; map["BestMoveFrom"]="ENGINE_BEST_MOVE_FROM"; map["BestMoveTo"]="ENGINE_BEST_MOVE_TO"; map["MoveCount"]="ENGINE_MOVE_COUNT"; map["MoveListFrom"]="ENGINE_MOVE_LIST_FROM"; map["MoveListTo"]="ENGINE_MOVE_LIST_TO"; map["currentplayer"]="ENGINE_CURRENTPLAYER"; map["difficulty"]="ENGINE_DIFFICULTY"; map["TTClear"]="ENGINE_TT_CLEAR"; } $$3 ~ /^\./ { sym = substr($$3, 2); if (sym in map) printf "%-36s = $$%s\n", map[sym], $$2; }' "$(ENGINE_SYM)" > $@
+	awk 'BEGIN { map["nova_chess_engine_start"]="ENGINE_START"; map["nova_chess_init_piece_lists"]="ENGINE_CHESS_INIT_PIECE_LISTS"; map["nova_chess_generate_legal_moves"]="ENGINE_CHESS_GENERATE_LEGAL_MOVES"; map["nova_chess_find_best_move"]="ENGINE_CHESS_FIND_BEST_MOVE"; map["nova_chess_make_move"]="ENGINE_CHESS_MAKE_MOVE"; map["nova_chess_begin_game"]="ENGINE_CHESS_BEGIN_GAME"; map["nova_chess_commit_move"]="ENGINE_CHESS_COMMIT_MOVE"; map["nova_chess_unmake_move"]="ENGINE_CHESS_UNMAKE_MOVE"; map["nova_chess_is_square_attacked"]="ENGINE_CHESS_IS_SQUARE_ATTACKED"; map["nova_chess_check_king_in_check"]="ENGINE_CHESS_CHECK_KING_IN_CHECK"; map["nova_chess_record_position"]="ENGINE_CHESS_RECORD_POSITION"; map["nova_chess_clear_position_history"]="ENGINE_CHESS_CLEAR_POSITION_HISTORY"; map["nova_chess_check_repetition"]="ENGINE_CHESS_CHECK_REPETITION"; map["nova_chess_check_game_state"]="ENGINE_CHESS_CHECK_GAME_STATE"; map["nova_chess_tt_clear"]="ENGINE_TT_CLEAR"; map["Board88"]="ENGINE_BOARD88"; map["BestMoveFrom"]="ENGINE_BEST_MOVE_FROM"; map["BestMoveTo"]="ENGINE_BEST_MOVE_TO"; map["MoveCount"]="ENGINE_MOVE_COUNT"; map["MoveListFrom"]="ENGINE_MOVE_LIST_FROM"; map["MoveListTo"]="ENGINE_MOVE_LIST_TO"; map["currentplayer"]="ENGINE_CURRENTPLAYER"; map["difficulty"]="ENGINE_DIFFICULTY"; } $$3 ~ /^\./ { sym = substr($$3, 2); if (sym in map) printf "%-36s = $$%s\n", map[sym], $$2; }' "$(ENGINE_SYM)" > $@
+
+$(RULES_ENGINE_LABELS): $(RULES_ENGINE) | $(BUILD_DIR)
+	awk 'BEGIN { map["nova_chess_engine_start"]="ENGINE_START"; map["nova_chess_init_piece_lists"]="ENGINE_CHESS_INIT_PIECE_LISTS"; map["nova_chess_generate_legal_moves"]="ENGINE_CHESS_GENERATE_LEGAL_MOVES"; map["nova_chess_find_best_move"]="ENGINE_CHESS_FIND_BEST_MOVE"; map["nova_chess_make_move"]="ENGINE_CHESS_MAKE_MOVE"; map["nova_chess_begin_game"]="ENGINE_CHESS_BEGIN_GAME"; map["nova_chess_commit_move"]="ENGINE_CHESS_COMMIT_MOVE"; map["nova_chess_unmake_move"]="ENGINE_CHESS_UNMAKE_MOVE"; map["nova_chess_is_square_attacked"]="ENGINE_CHESS_IS_SQUARE_ATTACKED"; map["nova_chess_check_king_in_check"]="ENGINE_CHESS_CHECK_KING_IN_CHECK"; map["nova_chess_record_position"]="ENGINE_CHESS_RECORD_POSITION"; map["nova_chess_clear_position_history"]="ENGINE_CHESS_CLEAR_POSITION_HISTORY"; map["nova_chess_check_repetition"]="ENGINE_CHESS_CHECK_REPETITION"; map["nova_chess_check_game_state"]="ENGINE_CHESS_CHECK_GAME_STATE"; map["nova_chess_tt_clear"]="ENGINE_TT_CLEAR"; map["Board88"]="ENGINE_BOARD88"; map["MoveCount"]="ENGINE_MOVE_COUNT"; map["MoveListFrom"]="ENGINE_MOVE_LIST_FROM"; map["MoveListTo"]="ENGINE_MOVE_LIST_TO"; map["currentplayer"]="ENGINE_CURRENTPLAYER"; map["difficulty"]="ENGINE_DIFFICULTY"; } $$3 ~ /^\./ { sym = substr($$3, 2); if (sym in map) printf "%-36s = $$%s\n", map[sym], $$2; }' "$(RULES_ENGINE_SYM)" > $@
+
+check-engine-abi: $(ENGINE_LABELS) $(RULES_ENGINE_LABELS)
+	awk '$$1 ~ /^(ENGINE_START|ENGINE_CHESS_INIT_PIECE_LISTS|ENGINE_CHESS_GENERATE_LEGAL_MOVES|ENGINE_CHESS_FIND_BEST_MOVE|ENGINE_CHESS_MAKE_MOVE|ENGINE_CHESS_BEGIN_GAME|ENGINE_CHESS_COMMIT_MOVE|ENGINE_CHESS_UNMAKE_MOVE|ENGINE_CHESS_IS_SQUARE_ATTACKED|ENGINE_CHESS_CHECK_KING_IN_CHECK|ENGINE_CHESS_RECORD_POSITION|ENGINE_CHESS_CLEAR_POSITION_HISTORY|ENGINE_CHESS_CHECK_REPETITION|ENGINE_CHESS_CHECK_GAME_STATE|ENGINE_TT_CLEAR|ENGINE_BOARD88|ENGINE_MOVE_COUNT|ENGINE_MOVE_LIST_FROM|ENGINE_MOVE_LIST_TO|ENGINE_CURRENTPLAYER|ENGINE_DIFFICULTY)$$/' "$(ENGINE_LABELS)" > $(BUILD_DIR)/engine_shared_abi.inc
+	awk '$$1 ~ /^(ENGINE_START|ENGINE_CHESS_INIT_PIECE_LISTS|ENGINE_CHESS_GENERATE_LEGAL_MOVES|ENGINE_CHESS_FIND_BEST_MOVE|ENGINE_CHESS_MAKE_MOVE|ENGINE_CHESS_BEGIN_GAME|ENGINE_CHESS_COMMIT_MOVE|ENGINE_CHESS_UNMAKE_MOVE|ENGINE_CHESS_IS_SQUARE_ATTACKED|ENGINE_CHESS_CHECK_KING_IN_CHECK|ENGINE_CHESS_RECORD_POSITION|ENGINE_CHESS_CLEAR_POSITION_HISTORY|ENGINE_CHESS_CHECK_REPETITION|ENGINE_CHESS_CHECK_GAME_STATE|ENGINE_TT_CLEAR|ENGINE_BOARD88|ENGINE_MOVE_COUNT|ENGINE_MOVE_LIST_FROM|ENGINE_MOVE_LIST_TO|ENGINE_CURRENTPLAYER|ENGINE_DIFFICULTY)$$/' "$(RULES_ENGINE_LABELS)" > $(BUILD_DIR)/rules_shared_abi.inc
+	diff -u $(BUILD_DIR)/engine_shared_abi.inc $(BUILD_DIR)/rules_shared_abi.inc
 
 ndi: $(IMAGE)
 
@@ -66,25 +99,38 @@ $(SMOKE_DLL): $(SMOKE_SRC)
 	$(DOTNET) build $(SMOKE) -c Release $(SMOKE_BUILD_ARGS)
 
 smoke: $(IMAGE) $(SMOKE_DLL)
-	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "NOVA CHESS" --expect-screen "STATUS" --expect-screen "MOVES" $(SMOKE_GFX_EXPECTATIONS) $(SMOKE_EXTRA)
+	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)" --generic-boot --screen-only --skip-manifest-check $(SMOKE_SCREEN_EXPECTATIONS) $(SMOKE_GFX_EXPECTATIONS) $(SMOKE_EXTRA)
 
 render-test:
-	$(MAKE) smoke BUILD_DIR=$(RENDER_BUILD_DIR) IMAGE=$(RENDER_IMAGE) CA65FLAGS="-DCHESS_RENDER_TEST=1 -DDEMO_STEP_PAUSE=$(RENDER_STEP_PAUSE) -DDEMO_FINAL_PAUSE=$(RENDER_FINAL_PAUSE) -DDEMO_PIXEL_STEP=$(RENDER_PIXEL_STEP) -DDEMO_REPEAT=$(RENDER_REPEAT)" SMOKE_GFX_EXPECTATIONS='--expect-gfx-color "10,6=>0F" --expect-gfx-color "32,6=>0C" --expect-gfx-color "19,188=>01" --expect-gfx-color "195,13=>01" --expect-gfx-color "107,101=>01" --expect-gfx-color "128,119=>01" --expect-gfx-color "132,120=>0F" --expect-gfx-color "152,74=>01" --expect-gfx-color "16,98=>01" --expect-gfx-color "174,74=>01" --expect-gfx-color "108,140=>01" --expect-gfx-color "107,79=>0B" --expect-gfx-color "110,79=>0C" --expect-gfx-color "128,53=>0B" --expect-gfx-color "132,54=>0C" --expect-gfx-color "152,96=>0B" --expect-gfx-color "16,76=>0B" --expect-gfx-color "174,96=>0B" --expect-gfx-color "108,30=>0B"'
+	$(MAKE) smoke BUILD_DIR=$(RENDER_BUILD_DIR) IMAGE=$(RENDER_IMAGE) CA65FLAGS="-DCHESS_RENDER_TEST=1 -DCHESS_SELFPLAY_DEMO=0 -DDEMO_STEP_PAUSE=$(RENDER_STEP_PAUSE) -DDEMO_FINAL_PAUSE=$(RENDER_FINAL_PAUSE) -DDEMO_PIXEL_STEP=$(RENDER_PIXEL_STEP) -DDEMO_REPEAT=$(RENDER_REPEAT)" SMOKE_SCREEN_EXPECTATIONS='--expect-screen "NOVA CHESS" --expect-screen "STATUS" --expect-screen "MOVES"' SMOKE_GFX_EXPECTATIONS='--expect-gfx-color "10,6=>0F" --expect-gfx-color "32,6=>0C" --expect-gfx-color "19,188=>01" --expect-gfx-color "195,13=>01" --expect-gfx-color "107,101=>01" --expect-gfx-color "128,119=>01" --expect-gfx-color "132,120=>0F" --expect-gfx-color "152,74=>01" --expect-gfx-color "16,98=>01" --expect-gfx-color "174,74=>01" --expect-gfx-color "108,140=>01" --expect-gfx-color "107,79=>0B" --expect-gfx-color "110,79=>0C" --expect-gfx-color "128,53=>0B" --expect-gfx-color "132,54=>0C" --expect-gfx-color "152,96=>0B" --expect-gfx-color "16,76=>0B" --expect-gfx-color "174,96=>0B" --expect-gfx-color "108,30=>0B"'
 
 menu-test: $(SMOKE_DLL)
 	$(MAKE) ndi BUILD_DIR=$(MENU_BUILD_DIR) IMAGE=$(MENU_IMAGE) CA65FLAGS="-DCHESS_AUTOSTART_DEMO=0"
-	$(DOTNET) $(SMOKE_DLL) "$(MENU_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "NOVA CHESS" --expect-screen "N NEW GAME" --expect-screen "D DEMO"
+	$(DOTNET) $(SMOKE_DLL) "$(MENU_IMAGE)" --generic-boot --screen-only --skip-manifest-check $(SMOKE_SCREEN_EXPECTATIONS) $(SMOKE_GFX_EXPECTATIONS)
+
+mode-test: $(SMOKE_DLL)
+	$(MAKE) ndi BUILD_DIR=$(MODE_BUILD_DIR) IMAGE=$(MODE_IMAGE) CA65FLAGS="-DCHESS_AUTOSTART_DEMO=0"
+	env NOVAZ_SMOKE_MAX_STEPS=160000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "1E" --skip-manifest-check --expect-screen "01.W" --expect-screen "01.B" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
+	env NOVAZ_SMOKE_MAX_STEPS=160000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "2EWE2E4\r" --skip-manifest-check --expect-screen "01.W E2-E4" --expect-screen "01.B" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
+	env NOVAZ_SMOKE_MAX_STEPS=120000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "3E2E4\rE7E5\r" --skip-manifest-check --expect-screen "01.W E2-E4" --expect-screen "01.B E7-E5" --expect-screen "TURN WHITE" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
+	env NOVAZ_SMOKE_MAX_STEPS=120000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "3A3" --skip-manifest-check --expect-screen "MOVE:A3" --expect-screen "BAD FROM SQUARE" --expect-gfx-color "10,116=>0A"
+	env NOVAZ_SMOKE_MAX_STEPS=120000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "3E2E5" --skip-manifest-check --expect-screen "MOVE:E2-E5" --expect-screen "ILLEGAL MOVE" --expect-gfx-color "98,72=>0A"
+	env NOVAZ_SMOKE_MAX_STEPS=160000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "3E2\x082E4\r" --skip-manifest-check --expect-screen "01.W E2-E4" --expect-screen "TURN BLACK" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
+
+network-mode-test: $(SMOKE_DLL)
+	$(MAKE) ndi BUILD_DIR=$(MODE_BUILD_DIR) IMAGE=$(MODE_IMAGE) CA65FLAGS="-DCHESS_AUTOSTART_DEMO=0"
+	env NOVA_GAME_SERVER_HOST="$(NETWORK_GAME_SERVER_HOST)" NOVA_GAME_SERVER_PORT="$(NETWORK_GAME_SERVER_PORT)" NOVAZ_SMOKE_MAX_STEPS=160000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "4E2E4\r" --skip-manifest-check --expect-screen "01.W E2-E4" --expect-screen "01.B" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
 
 castle-test: $(SMOKE_DLL)
-	$(MAKE) ndi BUILD_DIR=$(CASTLE_BUILD_DIR) IMAGE=$(CASTLE_IMAGE) CA65FLAGS="-DCHESS_CASTLE_TEST=1 -DDEMO_STEP_PAUSE=0 -DDEMO_FINAL_PAUSE=0 -DDEMO_REPEAT=0"
+	$(MAKE) ndi BUILD_DIR=$(CASTLE_BUILD_DIR) IMAGE=$(CASTLE_IMAGE) CA65FLAGS="-DCHESS_CASTLE_TEST=1 -DCHESS_SELFPLAY_DEMO=0 -DDEMO_STEP_PAUSE=0 -DDEMO_FINAL_PAUSE=0 -DDEMO_REPEAT=0"
 	$(DOTNET) $(SMOKE_DLL) "$(CASTLE_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "NOVA CHESS" --expect-screen "STATUS" --expect-screen "MOVES" --expect-gfx-color "64,162=>01" --expect-gfx-color "82,164=>01"
 
-test: smoke menu-test castle-test
+test: smoke menu-test mode-test castle-test
 	$(MAKE) render-test RENDER_STEP_PAUSE=$(TEST_RENDER_STEP_PAUSE) RENDER_FINAL_PAUSE=$(TEST_RENDER_FINAL_PAUSE) RENDER_PIXEL_STEP=$(TEST_RENDER_PIXEL_STEP) RENDER_REPEAT=$(TEST_RENDER_REPEAT)
 
-$(IMAGE): $(AUTOBOOT) $(RUNTIME) $(ENGINE) $(PACKER)
+$(IMAGE): $(AUTOBOOT) $(RUNTIME) $(ENGINE) $(RULES_ENGINE) $(SPLASH_NVG) check-engine-abi $(PACKER)
 	mkdir -p "$(dir $(IMAGE))"
-	$(DOTNET) run --project $(PACKER) -- --output "$(IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --asset "$(ENGINE):$(ENGINE_NAME)" --label "$(LABEL)" --size-kb "$(SIZE_KB)"
+	$(DOTNET) run --project $(PACKER) -- --output "$(IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --asset "$(ENGINE):$(ENGINE_NAME)" --asset "$(RULES_ENGINE):$(RULES_ENGINE_NAME)" --asset "$(SPLASH_NVG):$(SPLASH_NVG_NAME)" --label "$(LABEL)" --size-kb "$(SIZE_KB)"
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -92,4 +138,4 @@ $(BUILD_DIR):
 clean:
 	rm -rf $(BUILD_DIR) build-render $(DIST_DIR)
 
-.PHONY: all ndi smoke render-test menu-test castle-test test clean
+.PHONY: all ndi check-engine-abi smoke render-test menu-test mode-test network-mode-test castle-test test clean

@@ -1,7 +1,7 @@
 // DMA controller — 1D bulk copy / fill engine at $BA63-$BA75
 // Mirrors Avalonia's VirtualDmaController. Separate from the blitter at
 // $BA83 (which handles 2D rectangles). Operates across CPU RAM, XRAM,
-// and VGC spaces (char/color/gfx/sprite). Stalls CPU via rdy_out.
+// and VGC spaces (char/color/gfx/sprite/text attributes). Stalls CPU via rdy_out.
 
 module dma (
     input  logic        clk,
@@ -35,7 +35,7 @@ module dma (
     output logic [7:0]  xram_wdata,
     output logic        xram_we,
 
-    // Memory port C: VGC internal (char/color/gfx/sprite)
+    // Memory port C: VGC internal (char/color/gfx/sprite/text attributes)
     output logic [2:0]  vgc_space,
     output logic [16:0] vgc_addr,
     input  logic [7:0]  vgc_rdata,
@@ -68,7 +68,7 @@ module dma (
 
     localparam SPACE_CPU = 3'd0, SPACE_CHAR = 3'd1, SPACE_COLOR = 3'd2;
     localparam SPACE_GFX = 3'd3, SPACE_SPRITE = 3'd4, SPACE_XRAM = 3'd5;
-    localparam SPACE_TILE = 3'd6, SPACE_TEXTATTR = 3'd7;
+    localparam SPACE_TEXTATTR = 3'd7;
 
     localparam [23:0] ROM_BASE = 24'h00C000;
 
@@ -138,7 +138,6 @@ module dma (
             SPACE_GFX:    space_size = 20'(64000);
             SPACE_SPRITE: space_size = 20'(32768);
             SPACE_XRAM:   space_size = 20'(524288);
-            SPACE_TILE:   space_size = 20'(32768);
             SPACE_TEXTATTR: space_size = 20'(4000);
             default:      space_size = 0;
         endcase
@@ -170,7 +169,7 @@ module dma (
 
     function automatic logic is_video_space(input logic [2:0] sp);
         case (sp)
-            SPACE_CHAR, SPACE_COLOR, SPACE_GFX, SPACE_SPRITE, SPACE_TILE, SPACE_TEXTATTR:
+            SPACE_CHAR, SPACE_COLOR, SPACE_GFX, SPACE_SPRITE, SPACE_TEXTATTR:
                 is_video_space = 1'b1;
             default:
                 is_video_space = 1'b0;

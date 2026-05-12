@@ -107,6 +107,7 @@ public static class VgcConstants
     public const byte FioCmdLoadRuntime = 0x28;    // disk -> primary runtime ROM bank
     public const byte FioCmdXPage      = 0x29;     // disk file slice -> XRAM
     public const byte FioCmdRng        = 0x2A;     // host-backed 32-bit random value
+    public const byte FioCmdNvgLoad    = 0x2B;     // .nvg file -> graphics bitmap
     public const byte FioPageTargetXram = 0x00;    // XPAGE target: flat XRAM
     public const byte FioPageTargetRam  = 0x01;    // XPAGE target: CPU RAM
     public const byte FioPageTargetVgc  = 0x02;    // XPAGE target: VGC memory
@@ -422,6 +423,9 @@ public static class VgcConstants
     public const int NicSlot           = 0xA102;   // active slot ID (0-3)
     public const int NicIrqCtrl        = 0xA103;   // IRQ enable mask (bit per slot)
     public const int NicIrqStatus      = 0xA104;   // IRQ pending flags (read-clears)
+    public const int NicCmdSeq         = 0xA105;   // command nonce for host retry disambiguation
+    public const int NicCmdShadow      = 0xA106;   // last command byte before NIC_CMD write
+    public const int NicHostCtrl       = 0xA107;   // host-only control; bit0 starts RX DMA
 
     public const int NicRemotePortL    = 0xA108;   // remote port low byte
     public const int NicRemotePortH    = 0xA109;   // remote port high byte
@@ -432,6 +436,8 @@ public static class VgcConstants
     public const int NicDmaAddrH       = 0xA111;   // DMA RAM address high
     public const int NicDmaLen         = 0xA112;   // DMA length (1-255, 0=256)
     public const int NicMsgLen         = 0xA113;   // received message length (read-only)
+    public const int NicDmaStatus      = 0xA114;   // hardware payload DMA status
+    public const int NicDmaErr         = 0xA115;   // hardware payload DMA error
 
     public const int NicSlotStatus0    = 0xA118;   // slot 0 status
     public const int NicSlotStatus1    = 0xA119;   // slot 1 status
@@ -460,6 +466,15 @@ public static class VgcConstants
     public const byte NicStatusReady      = 0x01;  // bit 0
     public const byte NicStatusAnyData    = 0x02;  // bit 1
     public const byte NicStatusAnyError   = 0x80;  // bit 7
+
+    public const byte NicHostCtrlRxStart  = 0x01;
+    public const byte NicDmaStatusTxReady = 0x01;
+    public const byte NicDmaStatusRxDone  = 0x02;
+    public const byte NicDmaStatusError   = 0x40;
+    public const byte NicDmaStatusBusy    = 0x80;
+    public const byte NicDmaErrNone       = 0x00;
+    public const byte NicDmaErrRange      = 0x01;
+    public const byte NicDmaErrBusy       = 0x02;
 
     public const int NicMaxSlots          = 4;
     public const int NicMaxMessageSize    = 256;
@@ -535,15 +550,8 @@ public static class VgcConstants
     public const int ShapeSlotCount   = 256;
     public const int ShapeRamSize     = ShapeSlotCount * SpriteShapeSize;  // 32768
 
-    // -------------------------------------------------------------------------
-    // Tile engine registers ($A0C0-$A0DF)
-    // -------------------------------------------------------------------------
-
-    public const int TileRegBase       = 0xA0C0;
-    public const int TileRegEnd        = 0xA0DF;
-
     // VDC-style VRAM port registers ($A0E0-$A0E4). This is the only CPU-visible
-    // path for text/color/gfx/sprite/tile memory; direct text/color windows are gone.
+    // path for text/color/gfx/sprite/text-attribute memory; direct text/color windows are gone.
     public const int VramRegBase       = 0xA0E0;
     public const int VramRegEnd        = 0xA0E4;
     public const int VramPlane         = 0xA0E0;
@@ -555,12 +563,21 @@ public static class VgcConstants
     public const int RegTextFlags      = 0xA0E6;   // bit0=reverse, bit1=explicit reverse attr, bit2=flash
     public const int RegTextReverseAttr = 0xA0E7;  // packed bg/fg used when bit1 is set
     public const int RegGfxTransparentColor = 0xA0E8; // graphics-plane transparent color, default 0
+    public const int RegPaletteMode    = 0xA0E9;   // bit0: 0=C64/Nova palette, 1=IBM EGA palette
+    public const int RegScrollCtl      = 0xA0EA;   // bit0=SCROLLX high, bit1=gfx scroll, bit2=text scroll
+
+    public const byte ScrollCtlXHigh   = 0x01;
+    public const byte ScrollCtlGfx     = 0x02;
+    public const byte ScrollCtlText    = 0x04;
+    public const byte ScrollCtlDefault = ScrollCtlGfx | ScrollCtlText;
+
+    public const byte PaletteModeC64    = 0x00;
+    public const byte PaletteModeEga    = 0x01;
 
     public const byte VramPlaneChar    = 0x01;
     public const byte VramPlaneColor   = 0x02;
     public const byte VramPlaneGfx     = 0x03;
     public const byte VramPlaneSprite  = 0x04;
-    public const byte VramPlaneTile    = 0x06;
     public const byte VramPlaneTextAttr = 0x07;
     public const byte VramCtrlAutoInc  = 0x01;
 
@@ -570,98 +587,11 @@ public static class VgcConstants
 
     public const byte TextAttrFlash           = 0x01;
 
-    // Configuration registers
-    public const int TileConfig        = 0xA0C0;   // bit0: size (0=8x8, 1=16x16), bits 2-1: mirror mode (0-3)
-    public const int TileTransColor    = 0xA0C1;   // global transparent color index (0-15), default 0
-    public const int TileScrollXL      = 0xA0C2;   // scroll X low byte
-    public const int TileScrollXH      = 0xA0C3;   // scroll X high byte
-    public const int TileScrollYL      = 0xA0C4;   // scroll Y low byte
-    public const int TileScrollYH      = 0xA0C5;   // scroll Y high byte
-    public const int TileStatus        = 0xA0C6;   // R: last command status (0=ok)
-    public const int TileCmd           = 0xA0C7;   // W: write triggers tile command
-
-    // Command parameters
-    public const int TileP0            = 0xA0C8;
-    public const int TileP1            = 0xA0C9;
-    public const int TileP2            = 0xA0CA;
-    public const int TileP3            = 0xA0CB;
-    public const int TileAddrL         = 0xA0CC;   // source/dest CPU RAM address low
-    public const int TileAddrH         = 0xA0CD;   // source/dest CPU RAM address high
-    public const int TilePalP0         = 0xA0CE;   // palette parameter 0 (sub-palette index)
-    public const int TilePalP1         = 0xA0CF;   // palette parameter 1 (color index)
-
-    // Collision registers
-    public const int TileColL          = 0xA0D0;   // R: sprite-tile collision bits 0-7 (read clears)
-    public const int TileColH          = 0xA0D1;   // R: sprite-tile collision bits 8-15 (read clears)
-
-    // Peek registers
-    public const int TilePeekVal       = 0xA0D2;   // R: tile index at last peeked position
-    public const int TilePeekAttr      = 0xA0D3;   // R: attribute at last peeked position
-
-    // Tile commands (written to TileCmd)
-    public const byte TileCmdDef       = 0x01;     // define one tile: P0=tile#, TileAddr=src
-    public const byte TileCmdDefBulk   = 0x02;     // define multiple: P0=start, P1=count, TileAddr=src
-    public const byte TileCmdPut       = 0x03;     // set NT entry: P0=NT, P1=X, P2=Y, P3=tile#
-    public const byte TileCmdAttr      = 0x04;     // set attribute: P0=NT, P1=X, P2=Y, P3=attr
-    public const byte TileCmdFill      = 0x05;     // fill NT: P0=NT, P1=tile#
-    public const byte TileCmdRow       = 0x06;     // write row: P0=NT, P1=Y, TileAddr=src
-    public const byte TileCmdCol       = 0x07;     // write column: P0=NT, P1=X, TileAddr=src
-    public const byte TileCmdLoad      = 0x08;     // load NT: P0=NT, TileAddr=src (1000 bytes)
-    public const byte TileCmdALoad     = 0x09;     // load attr table: P0=NT, TileAddr=src (1000 bytes)
-    public const byte TileCmdPal       = 0x0A;     // load sub-palette: PalP0=index, TileAddr=src (48 bytes)
-    public const byte TileCmdPalC      = 0x0B;     // set one color: PalP0=sub, PalP1=color, P0=R, P1=G, P2=B
-    public const byte TileCmdPeek      = 0x0C;     // peek: P0=NT, P1=X, P2=Y → TilePeekVal/Attr
-    public const byte TileCmdRowAttr   = 0x0D;     // write attr row: P0=NT, P1=Y, TileAddr=src
-    public const byte TileCmdColAttr   = 0x0E;     // write attr col: P0=NT, P1=X, TileAddr=src
-    public const byte TileCmdCls       = 0x0F;     // clear all NTs and attrs to 0
-    public const byte TileCmdBufFill   = 0x10;     // fill column buffer: P0=tile#
-    public const byte TileCmdBufSet    = 0x11;     // set buffer entry: P0=row, P1=tile#
-    public const byte TileCmdBufRange  = 0x12;     // fill buffer range: P0=y1, P1=y2, P2=tile#
-    public const byte TileCmdBufPut    = 0x13;     // write buffer to NT: P0=NT, P1=col
-
-    // Tile config bit masks
-    public const byte TileCfgSize16    = 0x01;     // bit 0: 0=8x8, 1=16x16
-    public const byte TileCfgMirrorMask = 0x06;    // bits 2-1: mirror mode
-    public const int  TileCfgMirrorShift = 1;
-
-    // Mirror modes
-    public const byte TileMirrorH      = 0;        // horizontal mirror (NT0=NT1, NT2=NT3)
-    public const byte TileMirrorV      = 1;        // vertical mirror (NT0=NT2, NT1=NT3)
-    public const byte TileMirrorFour   = 2;        // four-screen (all independent)
-    public const byte TileMirrorSingle = 3;        // single-screen (all = NT0)
-
-    // Tile attribute bit masks
-    public const byte TileAttrVFlip    = 0x80;
-    public const byte TileAttrHFlip    = 0x40;
-    public const byte TileAttrPriority = 0x20;     // 0=behind between-sprites, 1=in front
-    public const byte TileAttrPalMask  = 0x0F;     // sub-palette index (0-15)
-
-    // Tile dimensions and counts
-    public const int TileCount         = 256;
-    public const int NametableCount    = 4;
-    public const int NametableCols     = 40;        // tiles per row (320/8)
-    public const int NametableRows     = 25;        // tiles per column (200/8)
-    public const int NametableSize     = NametableCols * NametableRows; // 1000
-    public const int TileSize8         = 32;        // 8x8 × 4-bit = 32 bytes
-    public const int TileSize16        = 128;       // 16x16 × 4-bit = 128 bytes
-    public const int TileRamSize8      = TileCount * TileSize8;   // 8192
-    public const int TileRamSize16     = TileCount * TileSize16;  // 32768
-    public const int TilePaletteCount  = 16;        // sub-palettes
-    public const int TilePaletteColors = 16;        // colors per sub-palette
-    public const int TilePaletteRamSize = TilePaletteCount * TilePaletteColors * 3; // 768 bytes RGB
-
-    // File I/O commands for tiles
-    public const byte FioCmdTSave      = 0x16;
-    public const byte FioCmdTLoad      = 0x17;
-
-    // DMA space for tile data
-    public const byte DmaSpaceVgcTile  = 0x06;
-
     // -------------------------------------------------------------------------
     // VGC core registers ($A000-$A00F)
     // -------------------------------------------------------------------------
 
-    public const int RegMode           = 0xA000;   // 0=text only, 1=gfx over text, 2=text over gfx, 3=gfx+sprites no text, 4=tiles+sprites
+    public const int RegMode           = 0xA000;   // 0=text only, 1=gfx over text, 2=text over gfx, 3/4=gfx+sprites no text
     public const int RegBgCol          = 0xA001;
     public const int RegFgCol          = 0xA002;
     public const int RegCursorX        = 0xA003;   // 0-79
@@ -775,7 +705,6 @@ public static class VgcConstants
     public const byte MemSpaceColor    = VramPlaneColor;   // 4000 bytes (color RAM)
     public const byte MemSpaceGfx      = VramPlaneGfx;     // 320*200 bytes (graphics bitmap)
     public const byte MemSpaceSprite   = VramPlaneSprite;  // 256*128 bytes (sprite shape RAM)
-    public const byte MemSpaceTile     = VramPlaneTile;    // tile definition data
     public const byte MemSpaceTextAttr = VramPlaneTextAttr; // 4000 bytes (text style attributes)
 
     // -------------------------------------------------------------------------

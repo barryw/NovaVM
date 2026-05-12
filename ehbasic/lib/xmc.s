@@ -42,7 +42,7 @@
 META_PAGES      = 5
 .endif
 .ifndef TOTAL_PAGES
-TOTAL_PAGES     = 2048
+TOTAL_PAGES     = XRAM_USER_HEAP_PAGES
 .endif
 
 ; =====================================================================

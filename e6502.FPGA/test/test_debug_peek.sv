@@ -70,6 +70,8 @@ module test_debug_peek;
         .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr),
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
+        .dbg_nic_buf_we(1'b0), .dbg_nic_buf_re(1'b0), .dbg_nic_buf_sel(1'b0),
+        .dbg_nic_buf_addr(8'd0), .dbg_nic_buf_data(8'd0), .dbg_nic_buf_rdata(),
         .dbg_vmem_we(1'b0), .dbg_vmem_re(1'b0), .dbg_vmem_space(3'd0),
         .dbg_vmem_addr(17'd0), .dbg_vmem_data(8'd0), .dbg_vmem_rdata(),
         .dbg_rom_we(dbg_rom_we), .dbg_rom_idx(dbg_rom_idx),
@@ -228,6 +230,15 @@ module test_debug_peek;
         do_poke(16'hA0E8, 8'h07);
         do_peek(16'hA0E8, peek_val);
         check_eq8("peek \$A0E8 after debug poke == 7", peek_val, 8'h07);
+
+        // NovaHost uses debug pokes to program the blitter for host-staged
+        // image loads. These must hit the real blitter registers, not RAM.
+        do_peek(16'hBA86, peek_val);
+        check_eq8("peek \$BA86 (blitter srcspace) reset == 0", peek_val, 8'h00);
+        do_poke(16'hBA86, 8'h05);
+        do_peek(16'hBA86, peek_val);
+        check_eq8("peek \$BA86 after debug poke == 5", peek_val, 8'h05);
+        check_eq8("debug poke \$BA86 does not shadow RAM", dut.main_ram.mem[16'hBA86], 8'h00);
 
         // Control: peek ROM — should return first opcode byte 0xA9
         do_peek(16'hC000, peek_val);

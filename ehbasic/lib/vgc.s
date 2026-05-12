@@ -20,6 +20,8 @@ VGC_IMPLEMENTATION_INCLUDED = 1
       .export vgc_set_fg
       .export vgc_set_bg
       .export vgc_set_border
+      .export vgc_display_on
+      .export vgc_display_off
       .export vgc_locate
       .export vgc_set_mode
       .export vgc_set_font
@@ -124,6 +126,24 @@ vgc_set_bg:
 ; @in X: Border colour byte.
 vgc_set_border:
       STX   VGC_BORDER
+      RTS
+
+; @label VGC.DISPLAY_ON
+; @kind routine
+; @symbol vgc_display_on
+; @summary Restore full VGC output brightness.
+vgc_display_on:
+      LDA   #$0F
+      STA   VGC_DIMMER
+      RTS
+
+; @label VGC.DISPLAY_OFF
+; @kind routine
+; @symbol vgc_display_off
+; @summary Blank VGC output while keeping video timing active.
+vgc_display_off:
+      LDA   #$00
+      STA   VGC_DIMMER
       RTS
 
 ; @label VGC.LOCATE

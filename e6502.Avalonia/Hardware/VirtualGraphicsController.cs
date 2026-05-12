@@ -20,10 +20,11 @@ public interface IScreenInput
 /// Address ownership:
 ///   $A000-$A01F  VGC registers + command interface
 ///   $A040-$A0BF  Sprite registers (8 bytes × 16 sprites)
-///   $A0C0-$A0DF  Tile registers
-///   $A0E0-$A0E4  VDC-style VRAM port for char/color/gfx/sprite/tile memory
+///   $A0E0-$A0E4  VDC-style VRAM port for char/color/gfx/sprite/text-attr memory
 ///   $A0E5        Display dimmer (0=black, 15=full brightness)
 ///   $A0E8        Graphics-plane transparent color (0-15)
+///   $A0E9        Fixed VGC palette mode (0=C64/Nova, 1=IBM EGA)
+///   $A0EA        Scroll control (bit0=SCROLLX high, bit1=gfx, bit2=text)
 ///
 /// Sprite shape data stored in 256 × 128-byte slots (32KB), accessible via
 /// memory space I/O and DMA. Each sprite has a shape index register pointing
@@ -83,38 +84,6 @@ public class VirtualGraphicsController : IBusDevice
     // Current graphics draw color (0 = use text foreground color)
     private byte _gfxDrawColor;
 
-    // -------------------------------------------------------------------------
-    // Tile engine state (host-side, not in 6502 address space)
-    // -------------------------------------------------------------------------
-
-    // Tile definitions: 256 tiles, max 128 bytes each (16x16 mode)
-    private readonly byte[] _tileData = new byte[VgcConstants.TileRamSize16];
-    private readonly object _tileLock = new();
-    private volatile bool _tileDirty;
-    private readonly byte[] _columnBuffer = new byte[VgcConstants.NametableRows]; // 25-entry column buffer
-
-    // 4 nametables, each 1000 bytes (40x25 tile indices)
-    private readonly byte[][] _nametables = new byte[VgcConstants.NametableCount][];
-
-    // 4 attribute tables, each 1000 bytes (per-tile attribute)
-    private readonly byte[][] _attrTables = new byte[VgcConstants.NametableCount][];
-
-    // Palette RAM: 16 sub-palettes × 16 colors × 3 bytes (RGB)
-    private readonly byte[] _tilePaletteRam = new byte[VgcConstants.TilePaletteRamSize];
-
-    // Tile config state
-    private byte _tileConfig;       // bit0=size, bits2-1=mirror
-    private byte _tileTransColor;   // global transparent color index
-    private int _tileScrollX;       // 16-bit pixel scroll X
-    private int _tileScrollY;       // 16-bit pixel scroll Y
-    private byte _tileStatus;       // last command status
-    private byte _tilePeekVal;      // last peeked tile index
-    private byte _tilePeekAttr;     // last peeked attribute
-    private ushort _tileCollision;  // sprite-tile collision bitmask
-
-    // Tile command parameter registers (local copy)
-    private readonly byte[] _tileRegs = new byte[VgcConstants.TileRegEnd - VgcConstants.TileRegBase + 1];
-
     private byte _irqEnable;
     private byte _irqStatus;
     private byte _vramPlane;
@@ -125,6 +94,8 @@ public class VirtualGraphicsController : IBusDevice
     private byte _textFlags;
     private byte _textReverseAttr;
     private byte _gfxTransparentColor;
+    private byte _paletteMode;
+    private byte _scrollCtl;
 
     // Copper program (host-side, command driven) — 128 lists, vblank-synchronized
     private readonly List<CopperEvent>[] _copperEvents = new List<CopperEvent>[VgcConstants.CopperListCount];
@@ -145,15 +116,7 @@ public class VirtualGraphicsController : IBusDevice
     // Screen input source
     private IScreenInput? _screenEditor;
 
-    public VirtualGraphicsController()
-    {
-        for (int i = 0; i < VgcConstants.NametableCount; i++)
-        {
-            _nametables[i] = new byte[VgcConstants.NametableSize];
-            _attrTables[i] = new byte[VgcConstants.NametableSize];
-        }
-        Reset();
-    }
+    public VirtualGraphicsController() => Reset();
 
     public void SetFont(BitmapFont font) => _bitmapFont = font;
     public void SetBusMemory(byte[] mem) => _busMemory = mem;
@@ -179,6 +142,8 @@ public class VirtualGraphicsController : IBusDevice
         _vramReadLatch = 0;
         _displayDim = 15;
         _gfxTransparentColor = 0;
+        _paletteMode = VgcConstants.PaletteModeC64;
+        _scrollCtl = VgcConstants.ScrollCtlDefault;
         for (int i = 0; i < VgcConstants.CopperListCount; i++)
         {
             if (_copperEvents[i] != null)
@@ -215,48 +180,7 @@ public class VirtualGraphicsController : IBusDevice
         _textFlags = 0;
         _textReverseAttr = 0xF0;
 
-        // Tile engine reset
-        ResetTileEngine();
-    }
-
-    private void ResetTileEngine()
-    {
-        lock (_tileLock)
-        {
-            Array.Clear(_tileData);
-            _tileDirty = true;
-        }
-        for (int i = 0; i < VgcConstants.NametableCount; i++)
-        {
-            Array.Clear(_nametables[i]);
-            Array.Clear(_attrTables[i]);
-        }
-        Array.Clear(_tilePaletteRam);
-        Array.Clear(_tileRegs);
-        _tileConfig = 0;
-        _tileTransColor = 0;
-        _tileScrollX = 0;
-        _tileScrollY = 0;
-        _tileStatus = 0;
-        _tilePeekVal = 0;
-        _tilePeekAttr = 0;
-        _tileCollision = 0;
         SysResetRequested = false;
-
-        // Initialize sub-palette 0 to the standard VGC palette
-        InitDefaultTilePalette();
-    }
-
-    private void InitDefaultTilePalette()
-    {
-        for (int i = 0; i < VgcConstants.TilePaletteColors; i++)
-        {
-            var c = Rendering.ColorPalette.Get(i);
-            int offset = i * 3;
-            _tilePaletteRam[offset] = c.R;
-            _tilePaletteRam[offset + 1] = c.G;
-            _tilePaletteRam[offset + 2] = c.B;
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -273,10 +197,6 @@ public class VirtualGraphicsController : IBusDevice
         if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
             return true;
 
-        // Tile registers: $A0C0-$A0DF
-        if (address >= VgcConstants.TileRegBase && address <= VgcConstants.TileRegEnd)
-            return true;
-
         // VDC-style VRAM port: $A0E0-$A0E4
         if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
             return true;
@@ -285,7 +205,8 @@ public class VirtualGraphicsController : IBusDevice
             return true;
 
         if (address == VgcConstants.RegTextFlags || address == VgcConstants.RegTextReverseAttr ||
-            address == VgcConstants.RegGfxTransparentColor)
+            address == VgcConstants.RegGfxTransparentColor || address == VgcConstants.RegPaletteMode ||
+            address == VgcConstants.RegScrollCtl)
             return true;
 
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
@@ -304,10 +225,6 @@ public class VirtualGraphicsController : IBusDevice
         if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
             return ReadSpriteRegister(address);
 
-        // Tile registers $A0C0-$A0DF
-        if (address >= VgcConstants.TileRegBase && address <= VgcConstants.TileRegEnd)
-            return ReadTileRegister(address);
-
         // VDC-style VRAM port $A0E0-$A0E4
         if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
             return ReadVramRegister(address);
@@ -323,6 +240,12 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.RegGfxTransparentColor)
             return _gfxTransparentColor;
+
+        if (address == VgcConstants.RegPaletteMode)
+            return _paletteMode;
+
+        if (address == VgcConstants.RegScrollCtl)
+            return (byte)(_scrollCtl & 0x07);
 
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
             return ReadIrqRegister(address);
@@ -382,13 +305,6 @@ public class VirtualGraphicsController : IBusDevice
             return;
         }
 
-        // Tile registers $A0C0-$A0DF
-        if (address >= VgcConstants.TileRegBase && address <= VgcConstants.TileRegEnd)
-        {
-            WriteTileRegister(address, data);
-            return;
-        }
-
         // VDC-style VRAM port $A0E0-$A0E4
         if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
         {
@@ -417,6 +333,18 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.RegGfxTransparentColor)
         {
             _gfxTransparentColor = (byte)(data & 0x0F);
+            return;
+        }
+
+        if (address == VgcConstants.RegPaletteMode)
+        {
+            _paletteMode = (byte)(data & 0x01);
+            return;
+        }
+
+        if (address == VgcConstants.RegScrollCtl)
+        {
+            _scrollCtl = (byte)(data & 0x07);
             return;
         }
 
@@ -537,9 +465,6 @@ public class VirtualGraphicsController : IBusDevice
             case VgcConstants.VramPlaneSprite when (uint)addr < _spriteShapes.Length:
                 lock (_spriteShapeLock) value = _spriteShapes[addr];
                 return true;
-            case VgcConstants.VramPlaneTile when (uint)addr < _tileData.Length:
-                lock (_tileLock) value = _tileData[addr];
-                return true;
             case VgcConstants.VramPlaneTextAttr when (uint)addr < _textAttrRam.Length:
                 value = _textAttrRam[addr];
                 return true;
@@ -567,13 +492,6 @@ public class VirtualGraphicsController : IBusDevice
                 {
                     _spriteShapes[addr] = value;
                     _spriteShapesDirty = true;
-                }
-                return true;
-            case VgcConstants.VramPlaneTile when (uint)addr < _tileData.Length:
-                lock (_tileLock)
-                {
-                    _tileData[addr] = value;
-                    _tileDirty = true;
                 }
                 return true;
             case VgcConstants.VramPlaneTextAttr when (uint)addr < _textAttrRam.Length:
@@ -620,8 +538,15 @@ public class VirtualGraphicsController : IBusDevice
     public byte GetScrollX() =>
         _regs[VgcConstants.RegScrollX - VgcConstants.VgcBase];
 
+    public int GetScrollXFull() =>
+        _regs[VgcConstants.RegScrollX - VgcConstants.VgcBase] |
+        ((_scrollCtl & VgcConstants.ScrollCtlXHigh) != 0 ? 0x100 : 0);
+
     public byte GetScrollY() =>
         _regs[VgcConstants.RegScrollY - VgcConstants.VgcBase];
+
+    public byte GetScrollCtl() =>
+        (byte)(_scrollCtl & 0x07);
 
     public byte GetFontIndex() =>
         (byte)(_regs[VgcConstants.RegFont - VgcConstants.VgcBase] & 0x07);
@@ -639,6 +564,8 @@ public class VirtualGraphicsController : IBusDevice
         _regs[VgcConstants.RegCursorEnable - VgcConstants.VgcBase] != 0;
 
     public byte GetDisplayDim() => _displayDim;
+
+    public byte GetPaletteMode() => _paletteMode;
 
     public bool IrqPending => (_irqStatus & _irqEnable) != 0;
     public bool IsCopperEnabled => _copperEnabled;
@@ -1174,7 +1101,6 @@ public class VirtualGraphicsController : IBusDevice
             VgcConstants.MemSpaceColor => _colorRam.Length,
             VgcConstants.MemSpaceGfx => _gfxBitmap.Length,
             VgcConstants.MemSpaceSprite => _spriteShapes.Length,
-            VgcConstants.MemSpaceTile => _tileData.Length,
             VgcConstants.MemSpaceTextAttr => _textAttrRam.Length,
             _ => 0
         };
@@ -1199,9 +1125,6 @@ public class VirtualGraphicsController : IBusDevice
             case VgcConstants.MemSpaceSprite when (uint)addr < _spriteShapes.Length:
                 lock (_spriteShapeLock) value = _spriteShapes[addr];
                 return true;
-            case VgcConstants.MemSpaceTile when (uint)addr < _tileData.Length:
-                lock (_tileLock) value = _tileData[addr];
-                return true;
             default:
                 return false;
         }
@@ -1225,9 +1148,6 @@ public class VirtualGraphicsController : IBusDevice
                 return true;
             case VgcConstants.MemSpaceSprite when (uint)addr < _spriteShapes.Length:
                 lock (_spriteShapeLock) { _spriteShapes[addr] = value; _spriteShapesDirty = true; }
-                return true;
-            case VgcConstants.MemSpaceTile when (uint)addr < _tileData.Length:
-                lock (_tileLock) { _tileData[addr] = value; _tileDirty = true; }
                 return true;
             default:
                 return false;
@@ -1329,6 +1249,13 @@ public class VirtualGraphicsController : IBusDevice
             return IsCopperWritableRegister(registerIndex);
         }
 
+        if (registerSpecifier == VgcConstants.RegScrollCtl ||
+            registerSpecifier == VgcConstants.RegScrollCtl - VgcConstants.VgcBase)
+        {
+            registerIndex = (byte)(VgcConstants.RegScrollCtl - VgcConstants.VgcBase);
+            return true;
+        }
+
         // Absolute address: Sprite registers $A040-$A0BF
         if (registerSpecifier >= VgcConstants.SpriteRegBase && registerSpecifier <= VgcConstants.SpriteRegEnd)
         {
@@ -1346,6 +1273,7 @@ public class VirtualGraphicsController : IBusDevice
         registerIndex == VgcConstants.RegBorder - VgcConstants.VgcBase ||
         registerIndex == VgcConstants.RegScrollX - VgcConstants.VgcBase ||
         registerIndex == VgcConstants.RegScrollY - VgcConstants.VgcBase ||
+        registerIndex == VgcConstants.RegScrollCtl - VgcConstants.VgcBase ||
         IsCopperSpriteRegister(registerIndex);
 
     private static bool IsCopperSpriteRegister(byte registerIndex)
@@ -1353,449 +1281,6 @@ public class VirtualGraphicsController : IBusDevice
         int offset = registerIndex - (VgcConstants.SpriteRegBase - VgcConstants.VgcBase);
         return offset >= 0 && offset < VgcConstants.MaxSprites * VgcConstants.SpriteRegStride;
     }
-
-
-    // -------------------------------------------------------------------------
-    // Tile engine registers
-    // -------------------------------------------------------------------------
-
-    private byte ReadTileRegister(int address)
-    {
-        return address switch
-        {
-            VgcConstants.TileConfig => _tileConfig,
-            VgcConstants.TileTransColor => _tileTransColor,
-            VgcConstants.TileScrollXL => (byte)(_tileScrollX & 0xFF),
-            VgcConstants.TileScrollXH => (byte)((_tileScrollX >> 8) & 0xFF),
-            VgcConstants.TileScrollYL => (byte)(_tileScrollY & 0xFF),
-            VgcConstants.TileScrollYH => (byte)((_tileScrollY >> 8) & 0xFF),
-            VgcConstants.TileStatus => _tileStatus,
-            VgcConstants.TileColL =>
-                ReadAndClearTileCollisionLow(),
-            VgcConstants.TileColH =>
-                ReadAndClearTileCollisionHigh(),
-            VgcConstants.TilePeekVal => _tilePeekVal,
-            VgcConstants.TilePeekAttr => _tilePeekAttr,
-            _ => _tileRegs[address - VgcConstants.TileRegBase]
-        };
-    }
-
-    private byte ReadAndClearTileCollisionLow()
-    {
-        byte val = (byte)(_tileCollision & 0xFF);
-        _tileCollision = 0;
-        return val;
-    }
-
-    private byte ReadAndClearTileCollisionHigh()
-    {
-        byte val = (byte)((_tileCollision >> 8) & 0xFF);
-        _tileCollision = 0;
-        return val;
-    }
-
-    private void WriteTileRegister(int address, byte data)
-    {
-        _tileRegs[address - VgcConstants.TileRegBase] = data;
-
-        switch (address)
-        {
-            case VgcConstants.TileConfig:
-                _tileConfig = data;
-                break;
-            case VgcConstants.TileTransColor:
-                _tileTransColor = (byte)(data & 0x0F);
-                break;
-            case VgcConstants.TileScrollXL:
-                _tileScrollX = (_tileScrollX & 0xFF00) | data;
-                break;
-            case VgcConstants.TileScrollXH:
-                _tileScrollX = (data << 8) | (_tileScrollX & 0xFF);
-                break;
-            case VgcConstants.TileScrollYL:
-                _tileScrollY = (_tileScrollY & 0xFF00) | data;
-                break;
-            case VgcConstants.TileScrollYH:
-                _tileScrollY = (data << 8) | (_tileScrollY & 0xFF);
-                break;
-            case VgcConstants.TileCmd:
-                ExecuteTileCommand(data);
-                break;
-            // All other registers (params, palette params, addr) are just stored
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Tile engine commands
-    // -------------------------------------------------------------------------
-
-    private void ExecuteTileCommand(byte cmd)
-    {
-        _tileStatus = 0;
-        byte p0 = _tileRegs[VgcConstants.TileP0 - VgcConstants.TileRegBase];
-        byte p1 = _tileRegs[VgcConstants.TileP1 - VgcConstants.TileRegBase];
-        byte p2 = _tileRegs[VgcConstants.TileP2 - VgcConstants.TileRegBase];
-        byte p3 = _tileRegs[VgcConstants.TileP3 - VgcConstants.TileRegBase];
-        int addr = _tileRegs[VgcConstants.TileAddrL - VgcConstants.TileRegBase]
-                 | (_tileRegs[VgcConstants.TileAddrH - VgcConstants.TileRegBase] << 8);
-        byte palP0 = _tileRegs[VgcConstants.TilePalP0 - VgcConstants.TileRegBase];
-        byte palP1 = _tileRegs[VgcConstants.TilePalP1 - VgcConstants.TileRegBase];
-
-        switch (cmd)
-        {
-            case VgcConstants.TileCmdDef:
-                TileDefine(p0, addr);
-                break;
-            case VgcConstants.TileCmdDefBulk:
-                TileDefineBulk(p0, p1, addr);
-                break;
-            case VgcConstants.TileCmdPut:
-                TilePut(p0, p1, p2, p3);
-                break;
-            case VgcConstants.TileCmdAttr:
-                TileSetAttr(p0, p1, p2, p3);
-                break;
-            case VgcConstants.TileCmdFill:
-                TileFillNametable(p0, p1);
-                break;
-            case VgcConstants.TileCmdRow:
-                TileWriteRow(p0, p1, addr);
-                break;
-            case VgcConstants.TileCmdCol:
-                TileWriteCol(p0, p1, addr);
-                break;
-            case VgcConstants.TileCmdLoad:
-                TileLoadNametable(p0, addr);
-                break;
-            case VgcConstants.TileCmdALoad:
-                TileLoadAttrTable(p0, addr);
-                break;
-            case VgcConstants.TileCmdPal:
-                TileLoadPalette(palP0, addr);
-                break;
-            case VgcConstants.TileCmdPalC:
-                TileSetPaletteColor(palP0, palP1, p0, p1, p2);
-                break;
-            case VgcConstants.TileCmdPeek:
-                TilePeek(p0, p1, p2);
-                break;
-            case VgcConstants.TileCmdRowAttr:
-                TileWriteRowAttr(p0, p1, addr);
-                break;
-            case VgcConstants.TileCmdColAttr:
-                TileWriteColAttr(p0, p1, addr);
-                break;
-            case VgcConstants.TileCmdCls:
-                TileClearAll();
-                break;
-            case VgcConstants.TileCmdBufFill:
-                TileBufferFill(p0);
-                break;
-            case VgcConstants.TileCmdBufSet:
-                TileBufferSet(p0, p1);
-                break;
-            case VgcConstants.TileCmdBufRange:
-                TileBufferRange(p0, p1, p2);
-                break;
-            case VgcConstants.TileCmdBufPut:
-                TileBufferPut(p0, p1);
-                break;
-            default:
-                _tileStatus = 1; // unknown command
-                break;
-        }
-    }
-
-    private int CurrentTileSize =>
-        (_tileConfig & VgcConstants.TileCfgSize16) != 0
-            ? VgcConstants.TileSize16
-            : VgcConstants.TileSize8;
-
-    private int ResolveMirroredNT(int nt)
-    {
-        int mirror = (_tileConfig & VgcConstants.TileCfgMirrorMask) >> VgcConstants.TileCfgMirrorShift;
-        return mirror switch
-        {
-            VgcConstants.TileMirrorH => nt switch      // NT0=NT1, NT2=NT3
-            {
-                1 => 0,
-                3 => 2,
-                _ => nt
-            },
-            VgcConstants.TileMirrorV => nt switch      // NT0=NT2, NT1=NT3
-            {
-                2 => 0,
-                3 => 1,
-                _ => nt
-            },
-            VgcConstants.TileMirrorSingle => 0,         // all = NT0
-            _ => nt                                      // four-screen: no mirroring
-        };
-    }
-
-    private void TileDefine(int tileIndex, int cpuAddr)
-    {
-        if ((uint)tileIndex >= VgcConstants.TileCount || _busMemory == null) { _tileStatus = 1; return; }
-        int size = CurrentTileSize;
-        int offset = tileIndex * size;
-        lock (_tileLock)
-        {
-            for (int i = 0; i < size && (cpuAddr + i) < _busMemory.Length; i++)
-                _tileData[offset + i] = _busMemory[cpuAddr + i];
-            _tileDirty = true;
-        }
-    }
-
-    private void TileDefineBulk(int startTile, int count, int cpuAddr)
-    {
-        if (_busMemory == null) { _tileStatus = 1; return; }
-        int size = CurrentTileSize;
-        lock (_tileLock)
-        {
-            for (int t = 0; t < count && (startTile + t) < VgcConstants.TileCount; t++)
-            {
-                int offset = (startTile + t) * size;
-                int src = cpuAddr + t * size;
-                for (int i = 0; i < size && (src + i) < _busMemory.Length; i++)
-                    _tileData[offset + i] = _busMemory[src + i];
-            }
-            _tileDirty = true;
-        }
-    }
-
-    private void TilePut(int nt, int x, int y, byte tileIndex)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if ((uint)x >= VgcConstants.NametableCols || (uint)y >= VgcConstants.NametableRows) return;
-        _nametables[nt][y * VgcConstants.NametableCols + x] = tileIndex;
-    }
-
-    private void TileSetAttr(int nt, int x, int y, byte attr)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if ((uint)x >= VgcConstants.NametableCols || (uint)y >= VgcConstants.NametableRows) return;
-        _attrTables[nt][y * VgcConstants.NametableCols + x] = attr;
-    }
-
-    private void TileFillNametable(int nt, byte tileIndex)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        Array.Fill(_nametables[nt], tileIndex);
-        Array.Clear(_attrTables[nt]);
-    }
-
-    private void TileWriteRow(int nt, int row, int cpuAddr)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if ((uint)row >= VgcConstants.NametableRows || _busMemory == null) return;
-        int offset = row * VgcConstants.NametableCols;
-        for (int i = 0; i < VgcConstants.NametableCols && (cpuAddr + i) < _busMemory.Length; i++)
-            _nametables[nt][offset + i] = _busMemory[cpuAddr + i];
-    }
-
-    private void TileWriteCol(int nt, int col, int cpuAddr)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if ((uint)col >= VgcConstants.NametableCols || _busMemory == null) return;
-        for (int r = 0; r < VgcConstants.NametableRows && (cpuAddr + r) < _busMemory.Length; r++)
-            _nametables[nt][r * VgcConstants.NametableCols + col] = _busMemory[cpuAddr + r];
-    }
-
-    private void TileBufferFill(byte tile)
-    {
-        Array.Fill(_columnBuffer, tile);
-    }
-
-    private void TileBufferSet(int row, byte tile)
-    {
-        if ((uint)row < VgcConstants.NametableRows)
-            _columnBuffer[row] = tile;
-    }
-
-    private void TileBufferRange(int y1, int y2, byte tile)
-    {
-        if (y1 < 0) y1 = 0;
-        if (y2 >= VgcConstants.NametableRows) y2 = VgcConstants.NametableRows - 1;
-        for (int r = y1; r <= y2; r++)
-            _columnBuffer[r] = tile;
-    }
-
-    private void TileBufferPut(int nt, int col)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if ((uint)col >= VgcConstants.NametableCols) return;
-        for (int r = 0; r < VgcConstants.NametableRows; r++)
-            _nametables[nt][r * VgcConstants.NametableCols + col] = _columnBuffer[r];
-    }
-
-    private void TileLoadNametable(int nt, int cpuAddr)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if (_busMemory == null) return;
-        int len = Math.Min(VgcConstants.NametableSize, _busMemory.Length - cpuAddr);
-        if (len <= 0) return;
-        Array.Copy(_busMemory, cpuAddr, _nametables[nt], 0, len);
-    }
-
-    private void TileLoadAttrTable(int nt, int cpuAddr)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if (_busMemory == null) return;
-        int len = Math.Min(VgcConstants.NametableSize, _busMemory.Length - cpuAddr);
-        if (len <= 0) return;
-        Array.Copy(_busMemory, cpuAddr, _attrTables[nt], 0, len);
-    }
-
-    private void TileLoadPalette(int subPalette, int cpuAddr)
-    {
-        if ((uint)subPalette >= VgcConstants.TilePaletteCount || _busMemory == null) { _tileStatus = 1; return; }
-        int offset = subPalette * VgcConstants.TilePaletteColors * 3;
-        int bytes = VgcConstants.TilePaletteColors * 3; // 48
-        for (int i = 0; i < bytes && (cpuAddr + i) < _busMemory.Length; i++)
-            _tilePaletteRam[offset + i] = _busMemory[cpuAddr + i];
-    }
-
-    private void TileSetPaletteColor(int subPalette, int colorIndex, byte r, byte g, byte b)
-    {
-        if ((uint)subPalette >= VgcConstants.TilePaletteCount ||
-            (uint)colorIndex >= VgcConstants.TilePaletteColors) { _tileStatus = 1; return; }
-        int offset = (subPalette * VgcConstants.TilePaletteColors + colorIndex) * 3;
-        _tilePaletteRam[offset] = r;
-        _tilePaletteRam[offset + 1] = g;
-        _tilePaletteRam[offset + 2] = b;
-    }
-
-    private void TilePeek(int nt, int x, int y)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if ((uint)x >= VgcConstants.NametableCols || (uint)y >= VgcConstants.NametableRows)
-        {
-            _tilePeekVal = 0;
-            _tilePeekAttr = 0;
-            return;
-        }
-        int idx = y * VgcConstants.NametableCols + x;
-        _tilePeekVal = _nametables[nt][idx];
-        _tilePeekAttr = _attrTables[nt][idx];
-    }
-
-    private void TileWriteRowAttr(int nt, int row, int cpuAddr)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if ((uint)row >= VgcConstants.NametableRows || _busMemory == null) return;
-        int offset = row * VgcConstants.NametableCols;
-        for (int i = 0; i < VgcConstants.NametableCols && (cpuAddr + i) < _busMemory.Length; i++)
-            _attrTables[nt][offset + i] = _busMemory[cpuAddr + i];
-    }
-
-    private void TileWriteColAttr(int nt, int col, int cpuAddr)
-    {
-        nt = ResolveMirroredNT(nt & 0x03);
-        if ((uint)col >= VgcConstants.NametableCols || _busMemory == null) return;
-        for (int r = 0; r < VgcConstants.NametableRows && (cpuAddr + r) < _busMemory.Length; r++)
-            _attrTables[nt][r * VgcConstants.NametableCols + col] = _busMemory[cpuAddr + r];
-    }
-
-    private void TileClearAll()
-    {
-        for (int i = 0; i < VgcConstants.NametableCount; i++)
-        {
-            Array.Clear(_nametables[i]);
-            Array.Clear(_attrTables[i]);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Tile engine accessors (for renderer and file I/O)
-    // -------------------------------------------------------------------------
-
-    public byte GetTileConfig() => _tileConfig;
-    public byte GetTileTransColor() => _tileTransColor;
-    public int GetTileScrollX() => _tileScrollX;
-    public int GetTileScrollY() => _tileScrollY;
-
-    public bool IsTileSize16 => (_tileConfig & VgcConstants.TileCfgSize16) != 0;
-
-    public int GetTileMirrorMode() =>
-        (_tileConfig & VgcConstants.TileCfgMirrorMask) >> VgcConstants.TileCfgMirrorShift;
-
-    public void SetTileCollision(ushort mask) => _tileCollision |= mask;
-
-    /// <summary>Copies tile definition data under lock. Returns true if data was dirty.</summary>
-    public bool SnapshotTileData(byte[] buffer)
-    {
-        bool wasDirty = _tileDirty;
-        lock (_tileLock)
-        {
-            Array.Copy(_tileData, buffer, Math.Min(_tileData.Length, buffer.Length));
-            _tileDirty = false;
-        }
-        return wasDirty;
-    }
-
-    /// <summary>Copies a nametable for rendering.</summary>
-    public void CopyNametable(int nt, byte[] dest)
-    {
-        if ((uint)nt < VgcConstants.NametableCount)
-            Array.Copy(_nametables[nt], dest, VgcConstants.NametableSize);
-    }
-
-    /// <summary>Copies an attribute table for rendering.</summary>
-    public void CopyAttrTable(int nt, byte[] dest)
-    {
-        if ((uint)nt < VgcConstants.NametableCount)
-            Array.Copy(_attrTables[nt], dest, VgcConstants.NametableSize);
-    }
-
-    /// <summary>Copies palette RAM for rendering.</summary>
-    public void CopyTilePaletteRam(byte[] dest) =>
-        Array.Copy(_tilePaletteRam, dest, VgcConstants.TilePaletteRamSize);
-
-    /// <summary>Gets raw nametable reference (for tests).</summary>
-    public byte[] GetNametable(int nt) => _nametables[ResolveMirroredNT(nt & 0x03)];
-
-    /// <summary>Gets raw attribute table reference (for tests).</summary>
-    public byte[] GetAttrTable(int nt) => _attrTables[ResolveMirroredNT(nt & 0x03)];
-
-    /// <summary>Gets raw tile data reference (for tests).</summary>
-    public ReadOnlySpan<byte> GetTileData() => _tileData;
-
-    /// <summary>Gets raw palette RAM reference (for tests).</summary>
-    public ReadOnlySpan<byte> GetTilePaletteRam() => _tilePaletteRam;
-
-    /// <summary>Bulk-set nametable data (for file I/O load).</summary>
-    public void SetNametable(int nt, byte[] data)
-    {
-        if ((uint)nt < VgcConstants.NametableCount)
-            Array.Copy(data, _nametables[nt], Math.Min(data.Length, VgcConstants.NametableSize));
-    }
-
-    /// <summary>Bulk-set attribute table data (for file I/O load).</summary>
-    public void SetAttrTable(int nt, byte[] data)
-    {
-        if ((uint)nt < VgcConstants.NametableCount)
-            Array.Copy(data, _attrTables[nt], Math.Min(data.Length, VgcConstants.NametableSize));
-    }
-
-    /// <summary>Bulk-set tile definitions (for file I/O load).</summary>
-    public void SetTileData(byte[] data)
-    {
-        lock (_tileLock)
-        {
-            Array.Copy(data, _tileData, Math.Min(data.Length, _tileData.Length));
-            _tileDirty = true;
-        }
-    }
-
-    /// <summary>Bulk-set palette RAM (for file I/O load).</summary>
-    public void SetTilePaletteRam(byte[] data) =>
-        Array.Copy(data, _tilePaletteRam, Math.Min(data.Length, _tilePaletteRam.Length));
-
-    /// <summary>Set tile config register directly (for file I/O load).</summary>
-    public void SetTileConfig(byte config) => _tileConfig = config;
-
-    /// <summary>Set tile transparent color directly (for file I/O load).</summary>
-    public void SetTileTransColor(byte color) => _tileTransColor = (byte)(color & 0x0F);
 
     // -------------------------------------------------------------------------
     // Character output

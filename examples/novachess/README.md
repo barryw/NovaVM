@@ -11,6 +11,13 @@ The current checkpoint is visual and platform-facing:
 - Blitter-backed virtual sprites for the pieces.
 - Text overlay for turn, clocks, engine status, and move information.
 - A vendored `chess6502-engine` build loaded from the NDI as `CHESSENG.BIN`.
+- A `src/nchess_net.*` game-server adapter layer that can build chess
+  `PLAYER_ACTION` messages and parse chess table events/state chunks.
+- New-game menu modes for local one-player, local two-player,
+  computer-vs-computer, and network games. The network path asks the generic
+  Nova Game Server for typed opponents and can select AI providers such as
+  Stockfish without hard-coding Stockfish as a game mode or carrying its own
+  server hostname.
 
 Engine layout:
 

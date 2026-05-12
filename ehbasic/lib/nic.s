@@ -32,6 +32,12 @@ NIC_SERVER_COMMANDS = 1
 ; @summary Issue a raw NIC command.
 ; @in A: NIC command byte.
 nic_command:
+      STA   NIC_CMDSHADOW
+      STZ   NIC_CMD
+      INC   NIC_CMDSEQ
+      BNE   @seq_ok
+      INC   NIC_CMDSEQ
+@seq_ok:
       STA   NIC_CMD
       RTS
 

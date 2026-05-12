@@ -69,7 +69,7 @@ envelopes and four waveforms -- triangle, sawtooth, pulse, and noise.
 - Save and load programs and data files with `SAVE`, `LOAD`,
 `DIR`, and `DEL`.
 - Access **512KB of banked expansion memory** for large data
-sets, tile maps, sprite sheets, or music sequences.
+sets, sprite sheets, or music sequences.
 - Drop into **6502 assembly language** via `SYS` and
 `POKE`/`PEEK` for performance-critical inner loops.
 

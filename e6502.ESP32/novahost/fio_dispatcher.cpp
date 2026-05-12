@@ -21,6 +21,7 @@ ndi::FileType file_type_for_name(const char* name) {
     else if (strcasecmp(ext, ".xram") == 0) return ndi::FT_BIN;
     else if (strcasecmp(ext, ".mid")  == 0) return ndi::FT_MID;
     else if (strcasecmp(ext, ".gfx")  == 0) return ndi::FT_GFX;
+    else if (strcasecmp(ext, ".nvg")  == 0) return ndi::FT_GFX;
     return ndi::FT_BIN;
 }
 
@@ -30,10 +31,27 @@ uint32_t vgc_space_bytes(uint8_t space) {
         case 0x02: return 4000;   // color RAM
         case 0x03: return 64000;  // bitmap graphics
         case 0x04: return 32768;  // sprite shapes
-        case 0x06: return 32768;  // tile data
         case 0x07: return 4000;   // text attributes
         default:   return 0;
     }
+}
+
+constexpr uint8_t VGC_SPACE_GFX = 0x03;
+constexpr uint32_t NVG_BITMAP_BYTES = 320UL * 200UL;
+
+bool clear_vgc_gfx(FpgaBridge& bridge, uint8_t* zero_buf) {
+    memset(zero_buf, 0, 256);
+    for (uint32_t off = 0; off < NVG_BITMAP_BYTES; off += 256) {
+        uint16_t chunk = (NVG_BITMAP_BYTES - off >= 256)
+            ? 0
+            : (uint16_t)(NVG_BITMAP_BYTES - off);
+        if (!bridge.pokeVgcBlock(VGC_SPACE_GFX, (uint16_t)off, zero_buf, chunk)) {
+            logLn("[fio] NVGLOAD gfx clear failed at VGC gfx:$%04X\n",
+                  (unsigned)off);
+            return false;
+        }
+    }
+    return true;
 }
 
 bool has_extension(const char* name) {
@@ -68,6 +86,76 @@ int find_load_entry(ndi::NdiImage* img, const char* name, uint16_t parent,
 
     return -1;
 }
+
+class NdiFileReader {
+public:
+    NdiFileReader(ndi::NdiImage* img, int index, uint32_t size,
+                  uint8_t* cache, size_t cache_size)
+        : _img(img), _index(index), _size(size),
+          _cache(cache), _cache_size(cache_size) {}
+
+    bool read(uint8_t* dest, size_t len) {
+        size_t copied = 0;
+        while (copied < len) {
+            if (_pos >= _size) return false;
+            if (_pos < _cache_start ||
+                _pos >= _cache_start + _cache_valid) {
+                if (!fill_cache()) return false;
+            }
+
+            size_t cache_off = (size_t)(_pos - _cache_start);
+            size_t available = _cache_valid - cache_off;
+            size_t take = len - copied;
+            if (take > available) take = available;
+            memcpy(dest + copied, _cache + cache_off, take);
+            _pos += (uint32_t)take;
+            copied += take;
+        }
+        return true;
+    }
+
+    bool read_u8(uint8_t& value) {
+        return read(&value, 1);
+    }
+
+    bool read_u16(uint16_t& value) {
+        uint8_t b[2];
+        if (!read(b, sizeof(b))) return false;
+        value = (uint16_t)b[0] | ((uint16_t)b[1] << 8);
+        return true;
+    }
+
+    bool read_u32(uint32_t& value) {
+        uint8_t b[4];
+        if (!read(b, sizeof(b))) return false;
+        value = (uint32_t)b[0] |
+                ((uint32_t)b[1] << 8) |
+                ((uint32_t)b[2] << 16) |
+                ((uint32_t)b[3] << 24);
+        return true;
+    }
+
+private:
+    bool fill_cache() {
+        _cache_start = _pos;
+        size_t wanted = _cache_size;
+        uint32_t remaining = _size - _pos;
+        if (wanted > remaining) wanted = remaining;
+        int got = _img->read_file_chunk_by_index(_index, _pos, _cache, wanted);
+        if (got <= 0) return false;
+        _cache_valid = (size_t)got;
+        return true;
+    }
+
+    ndi::NdiImage* _img;
+    int _index;
+    uint32_t _size;
+    uint8_t* _cache;
+    size_t _cache_size;
+    uint32_t _pos = 0;
+    uint32_t _cache_start = 0;
+    size_t _cache_valid = 0;
+};
 }
 
 void FioDispatcher::handle_event() {
@@ -109,8 +197,6 @@ void FioDispatcher::handle_event() {
         case CMD_SIDPLAY:  handle_unsupported_sd_command("SIDPLAY"); break;
         case CMD_MIDPLAY:  handle_unsupported_sd_command("MIDPLAY"); break;
         case CMD_SFLOAD:   handle_unsupported_sd_command("SFLOAD");  break;
-        case CMD_TSAVE:    handle_unsupported_sd_command("TSAVE");   break;
-        case CMD_TLOAD:    handle_unsupported_sd_command("TLOAD");   break;
         case CMD_CD:       handle_cd();       break;
         case CMD_MKDIR:    handle_mkdir();    break;
         case CMD_RMDIR:    handle_rmdir();    break;
@@ -121,6 +207,7 @@ void FioDispatcher::handle_event() {
         case CMD_CLEARERR: handle_clear_error(); break;
         case CMD_LOADRUNTIME: handle_load_runtime(); break;
         case CMD_RNG:      handle_rng();      break;
+        case CMD_NVGLOAD:  handle_nvgload();  break;
         default:
             logLn("[fio] unknown cmd 0x%02X\n", (unsigned)c);
             respond_err(ERR_IO);
@@ -531,6 +618,134 @@ void FioDispatcher::handle_gsave() {
     write_size(total);
     logLn("[fio] GSAVE %s <- VGC space %u:$%04X (%u bytes) OK\n",
           scratch, (unsigned)space, (unsigned)src_addr, (unsigned)total);
+    respond_ok();
+}
+
+void FioDispatcher::handle_nvgload() {
+    char name[64];
+    copy_filename(name);
+
+    uint8_t space = gspace();
+    uint16_t dest = gaddr();
+    if (space != 0x03) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+
+    if (!has_extension(scratch)) {
+        size_t used = strlen(scratch);
+        if (used + 4 >= sizeof(scratch)) {
+            respond_err(ERR_IO);
+            return;
+        }
+        strcat(scratch, ".nvg");
+    }
+
+    int idx = img->find_entry(scratch, parent);
+    if (idx < 0) {
+        logLn("[fio] NVGLOAD: '%s' not found in dev=%s\n",
+              scratch, DeviceManager::prefix_for_slot(slot));
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    ndi::DirEntry e;
+    if (!img->get_entry(idx, e) || e.is_directory()) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint8_t* cache = _transfer_buf;
+    uint8_t* pixels = _transfer_buf + 256;
+    NdiFileReader reader(img, idx, e.size_bytes, cache, 256);
+
+    uint8_t magic[4];
+    if (!reader.read(magic, sizeof(magic)) ||
+        magic[0] != 'N' || magic[1] != 'V' ||
+        magic[2] != 'G' || magic[3] != '1') {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint16_t width = 0, height = 0;
+    uint32_t span_count = 0;
+    if (!reader.read_u16(width) ||
+        !reader.read_u16(height) ||
+        !reader.read_u32(span_count) ||
+        width == 0 || height == 0 ||
+        width > 320 || height > 200) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint16_t base_x = dest % 320;
+    uint16_t base_y = dest / 320;
+    if ((uint32_t)base_x + width > 320 ||
+        (uint32_t)base_y + height > 200) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    if (!clear_vgc_gfx(_bridge, pixels)) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t image_len = (uint32_t)width * height;
+    uint32_t written = 0;
+    for (uint32_t span = 0; span < span_count; span++) {
+        uint16_t addr = 0;
+        uint8_t len = 0;
+        if (!reader.read_u16(addr) ||
+            !reader.read_u8(len) ||
+            len == 0 ||
+            (uint32_t)addr + len > image_len ||
+            !reader.read(pixels, len)) {
+            respond_err(ERR_IO);
+            return;
+        }
+
+        uint32_t image_pos = addr;
+        uint8_t pos = 0;
+        while (pos < len) {
+            uint16_t src_x = image_pos % width;
+            uint16_t src_y = image_pos / width;
+            uint16_t row_remaining = width - src_x;
+            uint8_t chunk = len - pos;
+            if (chunk > row_remaining) chunk = (uint8_t)row_remaining;
+
+            uint32_t gfx_addr = (uint32_t)dest + ((uint32_t)src_y * 320UL) + src_x;
+            if (gfx_addr + chunk > NVG_BITMAP_BYTES) {
+                respond_err(ERR_IO);
+                return;
+            }
+            uint16_t wire_count = (chunk == 256) ? 0 : chunk;
+            if (!_bridge.pokeVgcBlock(space, (uint16_t)gfx_addr, pixels + pos, wire_count)) {
+                logLn("[fio] NVGLOAD gfx write failed at VGC gfx:$%04X\n",
+                      (unsigned)gfx_addr);
+                respond_err(ERR_IO);
+                return;
+            }
+
+            image_pos += chunk;
+            pos += chunk;
+            written += chunk;
+        }
+    }
+
+    write_size(written);
+    logLn("[fio] NVGLOAD %s -> VGC gfx:$%04X (%u pixels) OK\n",
+          scratch, (unsigned)dest, (unsigned)written);
     respond_ok();
 }
 

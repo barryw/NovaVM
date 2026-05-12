@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Smoke test: FPGA debug bridge via NovaHost TCP:6503.
 
-Exercises the full stack: Test script -> TCP JSON -> ESP32 -> UART binary
+Exercises the full stack: Test script -> TCP JSON -> ESP32 -> SPI binary
 -> FPGA debug_bridge -> core CPU.
 """
 import json

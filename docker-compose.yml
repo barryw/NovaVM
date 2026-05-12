@@ -1,0 +1,12 @@
+services:
+  nova-game-server:
+    build:
+      context: .
+      dockerfile: e6502.GameServer/Dockerfile
+    image: e6502-game-server:dev
+    container_name: nova-game-server
+    environment:
+      NOVA_GAME_PORT: "6503"
+    ports:
+      - "6503:6503"
+    restart: unless-stopped

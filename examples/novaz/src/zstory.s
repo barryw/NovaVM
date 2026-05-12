@@ -9,7 +9,6 @@ NOVA_NOVAZ_ZSTORY_IMPLEMENTATION_INCLUDED = 1
 
 ZSTORY_HEADER_LOAD_LEN = $40
 ZSTORY_PAGE_SIZE_HI    = $04        ; 1024-byte pages.
-ZSTORY_CACHE_BASE_H    = $04        ; XRAM $040000-$043FFF.
 ZSTORY_CACHE_SLOTS     = 16
 
 .segment "ZEROPAGE"
@@ -47,12 +46,19 @@ zstory_checksum_lo:    .res 1
 zstory_page_no:        .res 1
 zstory_slot:           .res 1
 zstory_next_slot:      .res 1
+zstory_tmp:            .res 1
 zstory_serial:         .res 6
 
 .segment "BSS"
 
 zstory_cache_valid:    .res ZSTORY_CACHE_SLOTS
 zstory_cache_page:     .res ZSTORY_CACHE_SLOTS
+zstory_dynamic_base_l: .res 1
+zstory_dynamic_base_m: .res 1
+zstory_dynamic_base_h: .res 1
+zstory_cache_base_l:   .res 1
+zstory_cache_base_m:   .res 1
+zstory_cache_base_h:   .res 1
 
 .segment "CODE"
 
@@ -64,10 +70,12 @@ zstory_cache_page:     .res ZSTORY_CACHE_SLOTS
 .export zstory_read16
 .export zstory_write8
 .export zstory_write16
+.export zstory_set_dynamic_xram_origin
 
-; Load the default story file into flat XRAM at $000000.
+; Initialize fixed XRAM workspaces and load the default story header.
 ; Returns A=0 on success, A=1 on FIO/XRAM error.
 zstory_load_default:
+        JSR zstory_init_fixed_xram_bases
         JSR zstory_clear_cache
         LDA #<zstory_default_name
         STA XRAM_NAMEPTR_L
@@ -76,9 +84,7 @@ zstory_load_default:
         LDA #(zstory_default_name_end - zstory_default_name)
         STA XRAM_NAMELEN
 
-        STZ XRAM_ADDRL
-        STZ XRAM_ADDRM
-        STZ XRAM_ADDRH
+        JSR zstory_set_dynamic_xram_origin
         LDA #ZSTORY_HEADER_LOAD_LEN
         STA XRAM_LENL
         STZ XRAM_LENH
@@ -327,16 +333,18 @@ zstory_write_header_word_value:
 
 ; A = header byte offset. Returns XRAM_DATA and A=0 on success.
 zstory_read_header_byte:
-        STA XRAM_ADDRL
-        STZ XRAM_ADDRM
-        STZ XRAM_ADDRH
+        STA zstory_addr_l
+        STZ zstory_addr_m
+        STZ zstory_addr_h
+        JSR zstory_set_dynamic_xram_addr
         JMP xram_read8
 
 ; A = header word offset. Returns zstory_word_hi/lo and A=0 on success.
 zstory_read_header_word:
-        STA XRAM_ADDRL
-        STZ XRAM_ADDRM
-        STZ XRAM_ADDRH
+        STA zstory_addr_l
+        STZ zstory_addr_m
+        STZ zstory_addr_h
+        JSR zstory_set_dynamic_xram_addr
         JSR xram_read8
         BNE @done
         LDA XRAM_DATA
@@ -354,12 +362,7 @@ zstory_read_header_word:
 zstory_read8:
         JSR zstory_addr_is_dynamic
         BNE @paged
-        LDA zstory_addr_l
-        STA XRAM_ADDRL
-        LDA zstory_addr_m
-        STA XRAM_ADDRM
-        LDA zstory_addr_h
-        STA XRAM_ADDRH
+        JSR zstory_set_dynamic_xram_addr
         JMP xram_read8
 @paged:
         PHY
@@ -405,12 +408,7 @@ zstory_read16:
 zstory_write8:
         JSR zstory_addr_is_dynamic
         BNE @readonly
-        LDA zstory_addr_l
-        STA XRAM_ADDRL
-        LDA zstory_addr_m
-        STA XRAM_ADDRM
-        LDA zstory_addr_h
-        STA XRAM_ADDRH
+        JSR zstory_set_dynamic_xram_addr
         JMP xram_write8
 @readonly:
         LDA #ZSTORY_ERR_READONLY
@@ -471,13 +469,11 @@ zstory_load_dynamic:
         LDA #(zstory_default_name_end - zstory_default_name)
         STA XRAM_NAMELEN
 
-        STZ XRAM_ADDRL
-        STZ XRAM_ADDRM
-        STZ XRAM_ADDRH
         LDA zstory_static_lo
         STA XRAM_LENL
         LDA zstory_static_hi
         STA XRAM_LENH
+        JSR zstory_set_dynamic_xram_origin
         JSR xram_xload
         BEQ @done
 @error:
@@ -557,12 +553,16 @@ zstory_load_cache_slot:
         LDA #(zstory_default_name_end - zstory_default_name)
         STA PAGER_NAMELEN
 
-        STZ PAGER_ADDRL
+        LDA zstory_cache_base_l
+        STA PAGER_ADDRL
         LDA zstory_slot
         ASL
         ASL
+        CLC
+        ADC zstory_cache_base_m
         STA PAGER_ADDRM
-        LDA #ZSTORY_CACHE_BASE_H
+        LDA zstory_cache_base_h
+        ADC #$00
         STA PAGER_ADDRH
         STZ PAGER_LENL
         LDA #ZSTORY_PAGE_SIZE_HI
@@ -586,18 +586,62 @@ zstory_load_cache_slot:
 
 zstory_set_cache_xram_addr:
         LDA zstory_addr_l
+        CLC
+        ADC zstory_cache_base_l
         STA XRAM_ADDRL
         LDA zstory_slot
         ASL
         ASL
-        STA XRAM_ADDRM
+        STA zstory_tmp
         LDA zstory_addr_m
         AND #$03
         CLC
-        ADC XRAM_ADDRM
+        ADC zstory_tmp
+        STA zstory_tmp
+        LDA zstory_cache_base_m
+        CLC
+        ADC zstory_tmp
         STA XRAM_ADDRM
-        LDA #ZSTORY_CACHE_BASE_H
+        LDA zstory_cache_base_h
+        ADC #$00
         STA XRAM_ADDRH
+        RTS
+
+zstory_set_dynamic_xram_origin:
+        LDA zstory_dynamic_base_l
+        STA XRAM_ADDRL
+        LDA zstory_dynamic_base_m
+        STA XRAM_ADDRM
+        LDA zstory_dynamic_base_h
+        STA XRAM_ADDRH
+        RTS
+
+zstory_set_dynamic_xram_addr:
+        LDA zstory_dynamic_base_l
+        CLC
+        ADC zstory_addr_l
+        STA XRAM_ADDRL
+        LDA zstory_dynamic_base_m
+        ADC zstory_addr_m
+        STA XRAM_ADDRM
+        LDA zstory_dynamic_base_h
+        ADC zstory_addr_h
+        STA XRAM_ADDRH
+        RTS
+
+zstory_init_fixed_xram_bases:
+        LDA #XRAM_NOVAZ_DYNAMIC_L
+        STA zstory_dynamic_base_l
+        LDA #XRAM_NOVAZ_DYNAMIC_M
+        STA zstory_dynamic_base_m
+        LDA #XRAM_NOVAZ_DYNAMIC_H
+        STA zstory_dynamic_base_h
+        LDA #XRAM_NOVAZ_CACHE_L
+        STA zstory_cache_base_l
+        LDA #XRAM_NOVAZ_CACHE_M
+        STA zstory_cache_base_m
+        LDA #XRAM_NOVAZ_CACHE_H
+        STA zstory_cache_base_h
         RTS
 
 zstory_store_release:

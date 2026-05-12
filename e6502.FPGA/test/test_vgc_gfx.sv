@@ -407,9 +407,6 @@ module test_vgc_gfx;
         int bad_char;
         int bad_color;
         int bad_sprite;
-        int bad_tile;
-        int bad_nt;
-        int bad_attr;
 
         $display("");
         $display("Test: SYSRESET removes stale data from every VGC memory plane");
@@ -425,14 +422,6 @@ module test_vgc_gfx;
         for (int i = 0; i < 2048; i++) begin
             dut.sprite_inst.spr_mem0.mem[i] = 8'hA5;
             dut.sprite_inst.spr_mem1.mem[i] = 8'h5A;
-        end
-
-        for (int i = 0; i < 32768; i++)
-            dut.tile_inst.tile_data_ram.mem[i] = 8'hC3;
-
-        for (int i = 0; i < 4096; i++) begin
-            dut.tile_inst.nametable_ram.mem[i] = 8'h77;
-            dut.tile_inst.attr_table_ram.mem[i] = 8'h88;
         end
 
         write_cmd(CMD_SYSRESET);
@@ -455,24 +444,10 @@ module test_vgc_gfx;
             if (dut.sprite_inst.spr_mem1.mem[i] != 8'h00) bad_sprite++;
         end
 
-        bad_tile = 0;
-        for (int i = 0; i < 32768; i++)
-            if (dut.tile_inst.tile_data_ram.mem[i] != 8'h00) bad_tile++;
-
-        bad_nt = 0;
-        bad_attr = 0;
-        for (int i = 0; i < 4096; i++) begin
-            if (dut.tile_inst.nametable_ram.mem[i] != 8'h00) bad_nt++;
-            if (dut.tile_inst.attr_table_ram.mem[i] != 8'h00) bad_attr++;
-        end
-
         check_eq("SYSRESET: no stale text chars remain", bad_char, 0);
         check_eq("SYSRESET: no stale text colors remain", bad_color, 0);
         check_eq("SYSRESET: no stale bitmap pixels remain", bad_gfx, 0);
         check_eq("SYSRESET: no stale sprite shape bytes remain", bad_sprite, 0);
-        check_eq("SYSRESET: no stale tile pattern bytes remain", bad_tile, 0);
-        check_eq("SYSRESET: no stale tile map bytes remain", bad_nt, 0);
-        check_eq("SYSRESET: no stale tile attr bytes remain", bad_attr, 0);
     endtask
 
     // -----------------------------------------------------------------------

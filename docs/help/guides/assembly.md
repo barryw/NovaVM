@@ -222,6 +222,12 @@ access, DMA-backed bulk copies, fills, and direct `XLOAD`/`XSAVE` streaming.
 If a runtime needs BASIC's named-block allocator and XMC register command
 contract, link `ehbasic/lib/xmc.s` as well.
 
+Standalone runtimes should use fixed XRAM workspaces rather than dynamic
+hardware allocation. `xram.inc` defines the shared high-XRAM bands used by
+NovaZ and the NVG loader, while the low 256 KB stays available to BASIC/XMC
+named blocks. A runtime that needs private scratch should claim a documented
+range and clear it at launch.
+
 Those symbols are aliases over the Nova pseudo-register ABI:
 
 | **Symbol** | **Pseudo-register** |

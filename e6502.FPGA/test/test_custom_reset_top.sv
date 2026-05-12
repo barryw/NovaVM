@@ -65,6 +65,8 @@ module test_custom_reset_top;
         .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr),
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
+        .dbg_nic_buf_we(1'b0), .dbg_nic_buf_re(1'b0), .dbg_nic_buf_sel(1'b0),
+        .dbg_nic_buf_addr(8'd0), .dbg_nic_buf_data(8'd0), .dbg_nic_buf_rdata(),
         .dbg_vmem_we(dbg_vmem_we), .dbg_vmem_re(dbg_vmem_re),
         .dbg_vmem_space(dbg_vmem_space),
         .dbg_vmem_addr(dbg_vmem_addr), .dbg_vmem_data(dbg_vmem_data),
@@ -97,7 +99,6 @@ module test_custom_reset_top;
     localparam SPACE_COLOR  = 3'd2;
     localparam SPACE_GFX    = 3'd3;
     localparam SPACE_SPRITE = 3'd4;
-    localparam SPACE_TILE   = 3'd6;
 
     int pass_count = 0;
     int fail_count = 0;
@@ -171,7 +172,7 @@ module test_custom_reset_top;
         repeat(4) @(posedge clk);
     endtask
 
-    localparam int PROG_LEN = 68;
+    localparam int PROG_LEN = 58;
     byte unsigned prog [PROG_LEN] = '{
         8'hA9, 8'h05, 8'h8D, 8'h01, 8'hA0,  // STA $A001 VGC bg
         8'hA9, 8'h03, 8'h8D, 8'h02, 8'hA0,  // STA $A002 VGC fg
@@ -179,8 +180,6 @@ module test_custom_reset_top;
         8'hA9, 8'h56, 8'h8D, 8'h00, 8'hBA,  // STA $BA00 XMC reg 0
         8'hA9, 8'h05, 8'h8D, 8'h66, 8'hBA,  // STA $BA66 DMA srcspace
         8'hA9, 8'h06, 8'h8D, 8'h86, 8'hBA,  // STA $BA86 blitter srcspace
-        8'hA9, 8'h07, 8'h8D, 8'hC0, 8'hA0,  // STA $A0C0 tile config
-        8'hA9, 8'h09, 8'h8D, 8'hC1, 8'hA0,  // STA $A0C1 tile transparent color
         8'hA9, 8'h1B, 8'h8D, 8'h00, 8'hD4,  // STA $D400 SID1 freq lo
         8'hA9, 8'h2C, 8'h8D, 8'h01, 8'hD4,  // STA $D401 SID1 freq hi
         8'hA9, 8'h07, 8'h8D, 8'h1D, 8'hD4,  // STA $D41D SID1 voice volume
@@ -275,10 +274,6 @@ module test_custom_reset_top;
         check_eq8("CPU mutated XMC before reset", dut.xmc_regs[6'h00], 8'h56);
         check_eq8("CPU mutated DMA before reset", dut.dma_inst.regs[3], 8'h05);
         check_eq8("CPU mutated blitter before reset", dut.blt_inst.regs[3], 8'h06);
-        check("CPU mutated tile config before reset",
-              dut.vgc_inst.tile_inst.tile_size16 == 1 && dut.vgc_inst.tile_inst.mirror_mode == 2'd3);
-        check_eq8("CPU mutated tile trans before reset",
-                  {4'h0, dut.vgc_inst.tile_inst.trans_color}, 8'h09);
         check_eq8("CPU mutated SID1 before reset",
                   dut.sid1_inst.voice_freq[0][7:0], 8'h1B);
         check_eq8("CPU mutated SID2 before reset",
@@ -303,7 +298,6 @@ module test_custom_reset_top;
         dbg_vmem_write(SPACE_COLOR,  17'd0,    8'h04);
         dbg_vmem_write(SPACE_GFX,    17'd1234, 8'h0F);
         dbg_vmem_write(SPACE_SPRITE, 17'd0,    8'hFF);
-        dbg_vmem_write(SPACE_TILE,   17'd100,  8'hAB);
 
         dbg_peek(16'hB9A0, d);
         check_eq8("FIO mutated before system reset", d, 8'h42);
@@ -313,8 +307,6 @@ module test_custom_reset_top;
                   dut.vgc_inst.text_inst.char_mem.mem[0], 8'h58);
         check_eq8("gfx RAM mutated before system reset",
                   {4'h0, dut.vgc_inst.gfx_inst.gfx_mem.mem[1234]}, 8'h0F);
-        check_eq8("tile RAM mutated before system reset",
-                  dut.vgc_inst.tile_inst.tile_data_ram.mem[100], 8'hAB);
         dut.vgc_inst.copper_enabled = 1'b1;
         dut.vgc_inst.copper_count = 9'd1;
         dut.vgc_inst.copper_pos[0] = 17'd123;
@@ -350,9 +342,6 @@ module test_custom_reset_top;
         check_eq8("SID1 freq reset", dut.sid1_inst.voice_freq[0][7:0], 8'h00);
         check_eq8("SID1 voice volume default", {4'h0, dut.sid1_inst.voice_vol[0]}, 8'h0F);
         check_eq8("SID2 freq reset", dut.sid2_inst.voice_freq[0][7:0], 8'h00);
-        check("tile config reset",
-              dut.vgc_inst.tile_inst.tile_size16 == 0 && dut.vgc_inst.tile_inst.mirror_mode == 0);
-        check_eq8("tile trans reset", {4'h0, dut.vgc_inst.tile_inst.trans_color}, 8'h00);
         check_eq8("char RAM reset to space",
                   dut.vgc_inst.text_inst.char_mem.mem[0], 8'h20);
         check_eq8("color RAM reset to default fg",
@@ -381,8 +370,6 @@ module test_custom_reset_top;
               dut.vgc_inst.copper_list_pos[64] == 0 &&
               dut.vgc_inst.copper_list_reg[64] == 0 &&
               dut.vgc_inst.copper_list_val[64] == 0);
-        check_eq8("tile RAM reset",
-                  dut.vgc_inst.tile_inst.tile_data_ram.mem[100], 8'h00);
 
         // CPU-issued VGC SYSRESET must reset the CPU too. This catches the
         // BASIC `RESET` regression where the custom chips reset underneath

@@ -35,6 +35,14 @@ public class AvaloniaVgcTests
         Assert.AreEqual(0, _vgc.Read(VgcConstants.RegGfxTransparentColor));
 
     [TestMethod]
+    public void InitialPaletteMode_IsC64() =>
+        Assert.AreEqual(VgcConstants.PaletteModeC64, _vgc.Read(VgcConstants.RegPaletteMode));
+
+    [TestMethod]
+    public void InitialScrollCtl_EnablesTextAndGraphicsScroll() =>
+        Assert.AreEqual(VgcConstants.ScrollCtlDefault, _vgc.Read(VgcConstants.RegScrollCtl));
+
+    [TestMethod]
     public void InitialCursor_IsDisabled() =>
         Assert.IsFalse(_vgc.IsCursorEnabled);
 
@@ -60,6 +68,27 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegGfxTransparentColor, 0xFE);
         Assert.AreEqual(14, _vgc.Read(VgcConstants.RegGfxTransparentColor));
         Assert.AreEqual(14, _vgc.GetGfxTransparentColor());
+    }
+
+    [TestMethod]
+    public void PaletteMode_UsesBitZeroOnly()
+    {
+        _vgc.Write(VgcConstants.RegPaletteMode, VgcConstants.PaletteModeEga);
+        Assert.AreEqual(VgcConstants.PaletteModeEga, _vgc.Read(VgcConstants.RegPaletteMode));
+        Assert.AreEqual(VgcConstants.PaletteModeEga, _vgc.GetPaletteMode());
+
+        _vgc.Write(VgcConstants.RegPaletteMode, 0xFE);
+        Assert.AreEqual(VgcConstants.PaletteModeC64, _vgc.Read(VgcConstants.RegPaletteMode));
+        Assert.AreEqual(VgcConstants.PaletteModeC64, _vgc.GetPaletteMode());
+    }
+
+    [TestMethod]
+    public void ColorPalette_EgaModeUsesIbmEgaColors()
+    {
+        Assert.AreEqual(0xFFFFFFFFu, ColorPalette.GetBgra(1, VgcConstants.PaletteModeC64));
+        Assert.AreEqual(0xFF0000AAu, ColorPalette.GetBgra(1, VgcConstants.PaletteModeEga));
+        Assert.AreEqual(0xFFAA5500u, ColorPalette.GetBgra(6, VgcConstants.PaletteModeEga));
+        Assert.AreEqual(0xFFFFFFFFu, ColorPalette.GetBgra(15, VgcConstants.PaletteModeEga));
     }
 
     [TestMethod]
@@ -463,6 +492,14 @@ public class AvaloniaVgcTests
         Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegTextFlags));
 
     [TestMethod]
+    public void OwnsAddress_RegPaletteMode_True() =>
+        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegPaletteMode));
+
+    [TestMethod]
+    public void OwnsAddress_RegScrollCtl_True() =>
+        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegScrollCtl));
+
+    [TestMethod]
     public void OwnsAddress_GapStart_False() =>
         Assert.IsFalse(_vgc.OwnsAddress(0xA020));
 
@@ -593,9 +630,13 @@ public class AvaloniaVgcTests
     {
         _vgc.Write(VgcConstants.RegScrollX, 12);
         _vgc.Write(VgcConstants.RegScrollY, 34);
+        _vgc.Write(VgcConstants.RegScrollCtl, 0xFF);
 
         Assert.AreEqual(12, _vgc.GetScrollX());
+        Assert.AreEqual(0x112, _vgc.GetScrollXFull());
         Assert.AreEqual(34, _vgc.GetScrollY());
+        Assert.AreEqual(0x07, _vgc.GetScrollCtl());
+        Assert.AreEqual(0x07, _vgc.Read(VgcConstants.RegScrollCtl));
     }
 
     [TestMethod]
@@ -967,6 +1008,25 @@ public class AvaloniaVgcTests
 
         Assert.AreEqual(1, program.Length);
         Assert.AreEqual(42, program[0].Value);
+    }
+
+    [TestMethod]
+    public void Copper_CanTargetScrollCtl()
+    {
+        _vgc.Write(VgcConstants.RegP0, 0);     // x lo
+        _vgc.Write(VgcConstants.RegP1, 0);     // x hi
+        _vgc.Write(VgcConstants.RegP2, 20);    // y
+        _vgc.Write(VgcConstants.RegP3, (byte)(VgcConstants.RegScrollCtl & 0xFF));
+        _vgc.Write(VgcConstants.RegP4, (byte)(VgcConstants.RegScrollCtl >> 8));
+        _vgc.Write(VgcConstants.RegP5, VgcConstants.ScrollCtlGfx);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdCopperAdd);
+
+        _vgc.IncrementFrameCounter();
+        var program = _vgc.GetCopperProgram();
+
+        Assert.AreEqual(1, program.Length);
+        Assert.AreEqual(VgcConstants.RegScrollCtl - VgcConstants.VgcBase, program[0].RegisterIndex);
+        Assert.AreEqual(VgcConstants.ScrollCtlGfx, program[0].Value);
     }
 
     [TestMethod]

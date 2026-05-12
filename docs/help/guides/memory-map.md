@@ -20,9 +20,9 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | A000--A01F | 32 B | Virtual Graphics Controller (VGC) registers and command interface |
 | A03F | 1 B | ROM swap/control register |
 | A040--A0BF | 128 B | Sprite Registers (16 sprites x 8 bytes) |
-| A0C0--A0DF | 32 B | Tile Engine registers |
-| A0E0--A0E4 | 5 B | VDC-style VRAM port (char/color/gfx/sprite/tile memory) |
+| A0E0--A0E4 | 5 B | VDC-style VRAM port (char/color/gfx/sprite/text-attribute memory) |
 | A0E5 | 1 B | VGC display dimmer (0=black, 15=full brightness) |
+| A0E6--A0EA | 5 B | VGC text, fixed-palette, and scroll controls |
 | A0F0--A0FF | 16 B | VGC IRQ block |
 | A100--A13F | 64 B | Network Interface Controller (NIC) registers |
 | B9A0--B9EF | 80 B | File I/O Controller (FIO) registers |
@@ -40,7 +40,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 
 ::: note
 The address range A020--A03E is reserved for language/host services. Unlisted
-addresses in A0E6--A0EF and A140--A9FF are not claimed by any coprocessor and
+addresses in A0EB--A0EF and A140--A9FF are not claimed by any coprocessor and
 fall through to the underlying flat RAM.
 The range BAA0--BBFF is similarly unallocated RAM, except for documented
 system buffers such as the file metadata buffer.
@@ -76,9 +76,9 @@ The VGC IRQ block lives at A0F0--A0FF.
 | $A001 | RegBgCol | R/W | Background color index (0--15); reset value is 0 (black). |
 | $A002 | RegFgCol | R/W | Default foreground color index (0--15); reset value is 15 (light grey). |
 | $A003 | RegCursorX | R/W | Text cursor column (0--79). |
-| $A004 | RegCursorY | R/W | Text cursor row (0--24). |
-| $A005 | RegScrollX | R/W | Horizontal scroll offset (used by copper raster effects). |
-| $A006 | RegScrollY | R/W | Vertical scroll offset (used by copper raster effects). |
+| $A004 | RegCursorY | R/W | Text cursor row (0--49). |
+| $A005 | RegScrollX | R/W | Horizontal scroll offset low byte. Bit 8 lives in RegScrollCtl bit 0. |
+| $A006 | RegScrollY | R/W | Vertical scroll offset (0--199 modulo). |
 | $A007 | RegFont | R/W | Active font slot (0--7). 0=CP437, 1=PETSCII Upper, 2=PETSCII Lower. |
 | $A008 | RegStatus | RO | Frame counter; incremented each video frame. Writes are ignored. |
 | $A009 | RegSpriteCount | RO | Count of currently enabled sprites (0--16). Writes are ignored. |
@@ -89,12 +89,15 @@ The VGC IRQ block lives at A0F0--A0FF.
 | $A00E | RegCharOut | R/W | Character output port; writing outputs a character to the text screen. |
 | $A00F | RegCharIn | R/W | Character input port; reading dequeues the next keypress byte. |
 
-### Text Style Registers (A0E6--A0E7)
+### Text, Palette, and Scroll Registers (A0E6--A0EA)
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
 | $A0E6 | RegTextFlags | R/W | Text output flags: bit 0=reverse, bit 1=use explicit reverse attribute, bit 2=flash. |
 | $A0E7 | RegTextReverseAttr | R/W | Packed reverse color attribute used when bit 1 is set: high nibble=background, low nibble=foreground. |
+| $A0E8 | RegGfxTransparentColor | R/W | Graphics-plane transparent color index (0--15); reset value is 0. |
+| $A0E9 | RegPaletteMode | R/W | Fixed VGC palette selector. Bit 0: 0=C64/Nova palette, 1=IBM EGA palette. Reset value is 0. |
+| $A0EA | RegScrollCtl | R/W | Scroll control. Bit 0=RegScrollX bit 8, bit 1=apply scroll to graphics, bit 2=apply scroll to text. Reset value is 6 (graphics+text enabled, X bit 8 clear). |
 
 ### IRQ Control (A0F0--A0FF)
 
@@ -182,7 +185,7 @@ or sprite commands rather than a direct CPU memory window.
 
 Memory spaces match the VDC-style VRAM port and DMA/blitter IDs:
 1=character RAM (4000 B), 2=color RAM (4000 B), 3=graphics bitmap
-(64000 B), 4=sprite shape RAM (32768 B; 256 slots), 6=tile data RAM.
+(64000 B), 4=sprite shape RAM (32768 B; 256 slots), 7=text attribute RAM.
 Auto-increment advances the address after each read or write.
 
 ### Copper Commands (1B--1E, 20--22)
@@ -194,7 +197,7 @@ compatibility. Active-list swaps take effect at vblank.
 
 | **Code** | **Name** | **Parameters and behavior** |
 | --- | --- | --- |
-| $1B | CmdCopperAdd | P0/P1 = X (16-bit), P2 = Y, P3/P4 = register (0--15, A000--A00F, A040--A0BF for sprite registers, or `$FE` for IRQ event), P5 = value. Adds to the target list. Replaces existing event at same position/register. Max 32 events per list on FPGA. |
+| $1B | CmdCopperAdd | P0/P1 = X (16-bit), P2 = Y, P3/P4 = register (0--15, A000--A00F, A0EA for scroll control, A040--A0BF for sprite registers, or `$FE` for IRQ event), P5 = value. Adds to the target list. Replaces existing event at same position/register. Max 32 events per list on FPGA. |
 | $1C | CmdCopperClear | No parameters. Remove all events from the target list. |
 | $1D | CmdCopperEnable | No parameters. Start executing the active copper list each frame. |
 | $1E | CmdCopperDisable | No parameters. Stop executing copper. |
@@ -206,10 +209,10 @@ compatibility. Active-list swaps take effect at vblank.
 
 | **Code** | **Name** | **Parameters and behavior** |
 | --- | --- | --- |
-| $1F | CmdSysReset | No parameters. Performs a full machine reset: CPU reset plus all custom-chip state, including VGC registers/video memory, sprites, tiles, DMA, blitter, SID chips, and host-facing devices. This is the command invoked by the BASIC `RESET` statement. |
+| $1F | CmdSysReset | No parameters. Performs a full machine reset: CPU reset plus all custom-chip state, including VGC registers/video memory, sprites, DMA, blitter, SID chips, and host-facing devices. This is the command invoked by the BASIC `RESET` statement. |
 
 Copper-writable registers: RegMode (A000), RegBgCol (A001),
-RegScrollX (A005), RegScrollY (A006), and sprite registers
+RegScrollX (A005), RegScrollY (A006), RegScrollCtl (A0EA), and sprite registers
 A040--A0BF (all eight fields, including TransColor at offset +7).
 
 ## SID Chip Registers
@@ -372,7 +375,7 @@ triggers the configured operation.
 ::: note
 When color-key mode is active (bit 1 of `BltMode`), source pixels
 matching `BltColorKey` are skipped and the destination byte is left
-unchanged. This enables transparent sprite and tile overlays.
+unchanged. This enables transparent sprite and graphics overlays.
 :::
 
 ## NIC Register Map
@@ -391,6 +394,9 @@ selected by `NicSlot`.
 | $A102 | NicSlot | R/W | Active slot ID (0--3). |
 | $A103 | NicIrqCtrl | R/W | IRQ enable mask (one bit per slot). |
 | $A104 | NicIrqStatus | RO | IRQ pending flags (reading clears). |
+| $A105 | NicCmdSeq | R/W | Command sequence byte used by shared NIC helpers. |
+| $A106 | NicCmdShadow | R/W | Last command byte written before `NicCmd`. |
+| $A107 | NicHostCtrl | WO | Host-only control; bit 0 starts RX payload DMA. |
 | $A108 | NicRemotePortL | R/W | Remote port low byte (for connect). |
 | $A109 | NicRemotePortH | R/W | Remote port high byte. |
 | $A10A | NicLocalPortL | R/W | Local port low byte (for listen). |
@@ -399,6 +405,8 @@ selected by `NicSlot`.
 | $A111 | NicDmaAddrH | R/W | DMA RAM address high byte. |
 | $A112 | NicDmaLen | R/W | DMA length (1--255; $00 = 256). |
 | $A113 | NicMsgLen | RO | Last received message length. |
+| $A114 | NicDmaStatus | RO | Hardware payload DMA status. |
+| $A115 | NicDmaErr | RO | Hardware payload DMA error code. |
 | $A118 | NicSlotStatus0 | RO | Slot 0 status flags. |
 | $A119 | NicSlotStatus1 | RO | Slot 1 status flags. |
 | $A11A | NicSlotStatus2 | RO | Slot 2 status flags. |
@@ -434,6 +442,24 @@ selected by `NicSlot`.
 | 1 | AnyData | At least one slot has queued data. |
 | 7 | AnyError | At least one slot has an error flag set. |
 
+### NIC Payload DMA Bits
+
+`NicCmdSend` copies the requested CPU RAM payload into the FPGA NIC TX buffer
+before NovaHost receives the NIC event. For receive, NovaHost writes the FPGA
+NIC RX buffer, writes `NicMsgLen`, then writes bit 0 of `NicHostCtrl`; hardware
+copies the staged payload into CPU RAM at `NicDmaAddrL/H`.
+
+| **Register** | **Bit/Value** | **Meaning** |
+| --- | --- | --- |
+| NicHostCtrl | bit 0 | Start RX DMA from the NIC RX buffer into CPU RAM. |
+| NicDmaStatus | bit 0 | TX buffer contains the latest SEND payload. |
+| NicDmaStatus | bit 1 | RX DMA completed. |
+| NicDmaStatus | bit 6 | DMA error. |
+| NicDmaStatus | bit 7 | DMA busy. |
+| NicDmaErr | $00 | No DMA error. |
+| NicDmaErr | $01 | Requested CPU RAM range is invalid. |
+| NicDmaErr | $02 | DMA engine was already busy. |
+
 ## FIO Register Map
 
 The File I/O Controller occupies B9A0--B9EF.
@@ -448,17 +474,17 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $B9A1 | FioStatus | RO | Result status: 0=idle, 2=ok, 3=error. |
 | $B9A2 | FioErrCode | RO | Error detail code (see below). |
 | $B9A3 | FioNameLen | R/W | Filename length in bytes (1--63). |
-| $B9A4 | FioSrcL | R/W | Source/destination address, low byte. |
-| $B9A5 | FioSrcH | R/W | Source/destination address, high byte. |
-| $B9A6 | FioEndL | R/W | End address, low byte (used by `SAVE` to determine program extent). |
+| $B9A4 | FioSrcL | R/W | Source/destination address, low byte; `NVGLOAD` XRAM staging address low byte. |
+| $B9A5 | FioSrcH | R/W | Source/destination address, high byte; `NVGLOAD` XRAM staging address middle byte. |
+| $B9A6 | FioEndL | R/W | End address, low byte (used by `SAVE` to determine program extent); `NVGLOAD` XRAM staging address high byte. |
 | $B9A7 | FioEndH | R/W | End address, high byte. |
 | $B9A8 | FioSizeL | RO | Loaded data size, low byte (written by host after `LOAD` or `DIR` read). |
 | $B9A9 | FioSizeH | RO | Loaded data size, high byte. |
-| $B9AA | FioGSpace | R/W | Graphics memory space for `GSAVE`/`GLOAD`; XRAM address high byte for `XLOAD`/`XSAVE`. |
-| $B9AB | FioGAddrL | R/W | Graphics/XRAM offset, low byte. |
-| $B9AC | FioGAddrH | R/W | Graphics/XRAM offset, high byte. |
-| $B9AD | FioGLenL | R/W | Graphics/XRAM transfer length, low byte. |
-| $B9AE | FioGLenH | R/W | Graphics/XRAM transfer length, high byte. |
+| $B9AA | FioGSpace | R/W | Graphics memory space for `GSAVE`/`GLOAD`/`NVGLOAD`; XRAM address high byte for `XLOAD`/`XSAVE`. |
+| $B9AB | FioGAddrL | R/W | Graphics/XRAM offset, low byte; `NVGLOAD` bitmap destination low byte. |
+| $B9AC | FioGAddrH | R/W | Graphics/XRAM offset, high byte; `NVGLOAD` bitmap destination high byte. |
+| $B9AD | FioGLenL | R/W | Graphics/XRAM transfer length, low byte; ignored by `NVGLOAD`. |
+| $B9AE | FioGLenH | R/W | Graphics/XRAM transfer length, high byte; ignored by `NVGLOAD`. |
 | $B9AF | FioDirType | RO | Directory entry type: 0=PRG, 1=SID. |
 | B9B0--B9EF | FioName | R/W | Filename buffer (64 bytes ASCII, not null-terminated). |
 
@@ -485,6 +511,7 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $11 | FioCmdMLoop | Set loop. FioSrcL=0 (off) or 1 (on). |
 | $18 | FioCmdXLoad | Load a file directly into XRAM. FioGSpace/GAddrL/GAddrH=24-bit destination, FioGLenL/H=max length or 0 for full file. |
 | $19 | FioCmdXSave | Save XRAM directly to a file. FioGSpace/GAddrL/GAddrH=24-bit source, FioGLenL/H=length. |
+| $2B | FioCmdNvgLoad | Clear graphics bitmap memory, decode a `.nvg`/NVG1 file into the caller-provided 64,000-byte XRAM staging buffer, then blit that buffer into graphics memory. `FioGSpace` must be 3; `FioGAddrL/H` is the bitmap destination offset; `FioSrcL/H` plus `FioEndL` form the 24-bit XRAM staging address. `FioSizeL/H` returns pixels written. |
 
 ### FIO Status Codes
 
@@ -506,17 +533,34 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 ## XMC Register Map
 
 The Expansion Memory Controller occupies BA00--BA3F.
-Writing to $BA00 (`XmcCmd`) triggers the operation.
+The ROM/runtime XMC command processor consumes `$BA00` (`XmcCmd`) and updates
+the status registers; the FPGA exposes the registers and XRAM windows but does
+not contain a general-purpose hardware allocator.
 Memory windows (BC00--BFFF) provide direct CPU-bus access to mapped XRAM pages.
+
+### XRAM Workspace Conventions
+
+The 512 KB XRAM device is still fully addressable. To avoid a hardware heap,
+shared runtimes reserve fixed bands by convention:
+
+| **XRAM range** | **Use** |
+| --- | --- |
+| $000000--$03FFFF | BASIC/XMC named-block heap and raw user data. |
+| $040000--$04FFFF | NovaZ dynamic story memory workspace. |
+| $050000--$053FFF | NovaZ 16 KB static-story page cache. |
+| $054000--$05FFFF | NovaZ save/restore scratch workspace. |
+| $060000--$06FFFF | Reserved app/runtime workspace. |
+| $070000--$07F9FF | NVG decode staging buffer. |
+| $07FA00--$07FFFF | Reserved. |
 
 ### XMC Registers
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
-| $BA00 | XmcCmd | R/W | Command byte; writing triggers execution. |
+| $BA00 | XmcCmd | R/W | Command byte consumed by the runtime XMC command processor. |
 | $BA01 | XmcStatus | RO | Result status: 0=idle, 2=ok, 3=error. |
 | $BA02 | XmcErrCode | RO | Error detail code (see below). |
-| $BA03 | XmcCfg | R/W | Reserved. |
+| $BA03 | XmcCfg | R/W | Reserved configuration byte. |
 | $BA04 | XmcAddrL | R/W | XRAM address, low byte. |
 | $BA05 | XmcAddrM | R/W | XRAM address, middle byte. |
 | $BA06 | XmcAddrH | R/W | XRAM address, high byte. |
@@ -532,7 +576,7 @@ Memory windows (BC00--BFFF) provide direct CPU-bus access to mapped XRAM pages.
 | $BA10 | XmcPagesFreeL | RO | Free 256-byte pages, low byte. |
 | $BA11 | XmcPagesFreeH | RO | Free 256-byte pages, high byte. |
 | $BA12 | XmcNameLen | R/W | Name length for named block operations (1--28). |
-| $BA13 | XmcHandle | RO | Block handle returned by `Alloc`/`NStash`/`DirRead`. |
+| $BA13 | XmcHandle | R/W | Block handle returned by `Alloc`/`NStash`/`DirRead`. |
 | $BA14 | XmcDirCountL | RO | Count of named blocks, low byte. |
 | $BA15 | XmcDirCountH | RO | Count of named blocks, high byte. |
 | $BA16 | XmcWinCtl | R/W | Window enable bitmask (bit 0=window 0, bit 1=window 1, etc.). |

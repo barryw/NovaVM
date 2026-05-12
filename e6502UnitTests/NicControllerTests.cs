@@ -52,6 +52,15 @@ public class NicControllerTests
     }
 
     [TestMethod]
+    public void Nic_CommandRegister_ClearsAfterCommand()
+    {
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdDisconnect);
+
+        Assert.AreEqual(0, _nic.Read((ushort)VgcConstants.NicCmd));
+    }
+
+    [TestMethod]
     public void Nic_IrqStatus_ReadClears()
     {
         // Enable IRQ for slot 0
@@ -89,6 +98,7 @@ public class NicControllerTests
         Assert.AreEqual(0x49, _ram[0x2081]);
         Assert.AreEqual(0x21, _ram[0x2082]);
         Assert.AreEqual(3, _nic.Read((ushort)VgcConstants.NicMsgLen));
+        Assert.AreEqual(VgcConstants.NicDmaStatusRxDone, _nic.Read((ushort)VgcConstants.NicDmaStatus));
     }
 
     [TestMethod]
@@ -113,6 +123,7 @@ public class NicControllerTests
         _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdSend);
         byte slotStatus = _nic.Read((ushort)VgcConstants.NicSlotStatus0);
         Assert.AreNotEqual(0, (byte)(slotStatus & VgcConstants.NicSlotError));
+        Assert.AreEqual(VgcConstants.NicDmaStatusTxReady, _nic.Read((ushort)VgcConstants.NicDmaStatus));
     }
 
     [TestMethod]
@@ -165,6 +176,40 @@ public class NicControllerTests
         await Task.Delay(50);
         Assert.AreEqual(0, (byte)(_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected));
 
+        server.Stop();
+    }
+
+    [TestMethod]
+    public async Task Nic_Connect_ResolvesGameServerAliasToLoopback()
+    {
+        using var server = new TcpListener(System.Net.IPAddress.Loopback, 0);
+        server.Start();
+        int port = ((System.Net.IPEndPoint)server.LocalEndpoint).Port;
+
+        string host = "nova-game-server";
+        for (int i = 0; i < host.Length; i++)
+            _nic.Write((ushort)(VgcConstants.NicNameBuf + i), (byte)host[i]);
+        _nic.Write((ushort)(VgcConstants.NicNameBuf + host.Length), 0);
+
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicRemotePortL, (byte)(port & 0xFF));
+        _nic.Write((ushort)VgcConstants.NicRemotePortH, (byte)(port >> 8));
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdConnect);
+
+        using var serverClient = await server.AcceptTcpClientAsync();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 2000)
+        {
+            byte status = _nic.Read((ushort)VgcConstants.NicSlotStatus0);
+            if ((status & VgcConstants.NicSlotConnected) != 0) break;
+            await Task.Delay(10);
+        }
+
+        Assert.AreNotEqual(0, (byte)(_nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected));
+
+        _nic.Write((ushort)VgcConstants.NicSlot, 0);
+        _nic.Write((ushort)VgcConstants.NicCmd, VgcConstants.NicCmdDisconnect);
         server.Stop();
     }
 

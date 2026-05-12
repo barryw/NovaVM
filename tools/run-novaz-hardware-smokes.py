@@ -522,9 +522,6 @@ def wait_for_screen(
             client.send_key("\r")
             time.sleep(0.2)
             continue
-        if handle_startup_prompt(client, last_screen):
-            time.sleep(0.5)
-            continue
         has_expected = all(contains_normalized(last_screen, item) for item in expected)
         has_prompt = not want_prompt or has_trailing_bare_prompt(last_screen)
         if has_expected and has_prompt:
@@ -541,13 +538,16 @@ def wait_for_screen(
                 client.send_key("\r")
                 time.sleep(0.2)
                 continue
-            if handle_startup_prompt(client, settled_screen):
-                time.sleep(0.5)
-                continue
             settled_expected = all(contains_normalized(settled_screen, item) for item in expected)
             settled_prompt = not want_prompt or has_trailing_bare_prompt(settled_screen)
             if settled_expected and settled_prompt:
                 return settled
+            if handle_startup_prompt(client, settled_screen):
+                time.sleep(0.5)
+                continue
+        if handle_startup_prompt(client, last_screen):
+            time.sleep(0.5)
+            continue
         time.sleep(0.25)
 
     raise TimeoutError(f"timed out waiting for screen content {expected}\n{last_screen}")

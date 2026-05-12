@@ -271,7 +271,7 @@ public class EhBasicTokenizationTests
             "\"BLITTER.COPY\"",
             "\"XMC.MAP_WINDOW\"",
             "\"XRAM.READ8\"",
-            "\"TILE.SET_SIZE\"",
+            "\"VGC.MEM_WRITE\"",
             "\"COPPER.ADD\"",
             "\"NIC.CONNECT\"",
             "\"VGC.CLS\"",

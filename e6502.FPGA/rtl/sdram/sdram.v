@@ -93,14 +93,15 @@ end
 // --------------------------- startup/reset ---------------------------
 // ---------------------------------------------------------------------
 
-// wait 1ms (85000 cycles) after FPGA config is done before going
-// into normal operation. Initialize the ram in the last 16 reset cycles (cycles 15-0)
-reg [16:0] reset;
+// Initialize the SDRAM during the first 31 controller cycles after reset.
+// Keep this counter only as wide as the loaded range. A wider counter creates
+// unreachable high bits that still feed the reset command/address mux in
+// synthesis and shows up as a false 100 MHz SDRAM timing path.
+reg [4:0] reset;
 always @(posedge clk) begin
-	//if(init)	reset <= 17'h14c08;
-	if(init)	reset <= 17'h1f;
+	if(init)	reset <= 5'd31;
 	else if((q == STATE_LAST) && (reset != 0))
-		reset <= reset - 17'd1;
+		reset <= reset - 5'd1;
 end
 
 // ---------------------------------------------------------------------
@@ -122,10 +123,31 @@ wire [3:0] sd_cmd;   // current command sent to sd ram
 
 // clkref high - port A
 // clkref low  - port B
-wire        req_we   = clkref ? weA   : weB;
-wire        req_oe   = clkref ? oeA   : oeB;
-wire [24:0] req_addr = clkref ? addrA : addrB;
-wire  [7:0] req_din  = clkref ? dinA  : dinB;
+//
+// Stage the wide port mux before STATE_CMD_START. The request bridges hold
+// addr/data/we/oe until done, so sampling one SDRAM clock earlier is safe and
+// keeps the controller's 100 MHz command cycle off a wide external mux path.
+reg        req_port_a_r;
+reg        req_we_r;
+reg        req_oe_r;
+reg [24:0] req_addr_r;
+reg  [7:0] req_din_r;
+
+always @(posedge clk) begin
+	if(init) begin
+		req_port_a_r <= 1'b0;
+		req_we_r     <= 1'b0;
+		req_oe_r     <= 1'b0;
+		req_addr_r   <= 25'd0;
+		req_din_r    <= 8'd0;
+	end else begin
+		req_port_a_r <= clkref;
+		req_we_r     <= clkref ? weA   : weB;
+		req_oe_r     <= clkref ? oeA   : oeB;
+		req_addr_r   <= clkref ? addrA : addrB;
+		req_din_r    <= clkref ? dinA  : dinB;
+	end
+end
 
 reg        cycle_port_a;
 reg        cycle_we;
@@ -147,11 +169,11 @@ always @(posedge clk) begin
 		cycle_din    <= 8'd0;
 	end else begin
 		if(q == STATE_CMD_START) begin
-			cycle_port_a <= clkref;
-			cycle_we     <= req_we;
-			cycle_oe     <= !req_we && req_oe;
-			cycle_addr   <= req_addr;
-			cycle_din    <= req_din;
+			cycle_port_a <= req_port_a_r;
+			cycle_we     <= req_we_r;
+			cycle_oe     <= !req_we_r && req_oe_r;
+			cycle_addr   <= req_addr_r;
+			cycle_din    <= req_din_r;
 		end
 		if(q == STATE_CMD_READ && cycle_oe) begin
 			if(cycle_port_a) begin
@@ -173,30 +195,30 @@ always @(posedge clk) begin
 end
 
 wire [3:0] reset_cmd = 
-	((q == STATE_CMD_START) && (reset == 13))?CMD_PRECHARGE:
-	((q == STATE_CMD_START) && (reset ==  2))?CMD_LOAD_MODE:
+	((q == STATE_CMD_START) && (reset == 5'd13))?CMD_PRECHARGE:
+	((q == STATE_CMD_START) && (reset == 5'd2 ))?CMD_LOAD_MODE:
 	CMD_INHIBIT;
 
 wire [3:0] run_cmd =
-	((req_we || req_oe) && (q == STATE_CMD_START))?CMD_ACTIVE:
+	((req_we_r || req_oe_r) && (q == STATE_CMD_START))?CMD_ACTIVE:
 	( cycle_we          && (q == STATE_CMD_CONT ))?CMD_WRITE:
 	( cycle_oe          && (q == STATE_CMD_CONT ))?CMD_READ:
-	(!(req_we || req_oe) && (q == STATE_CMD_START))?CMD_AUTO_REFRESH:
+	(!(req_we_r || req_oe_r) && (q == STATE_CMD_START))?CMD_AUTO_REFRESH:
 	CMD_INHIBIT;
 
 assign sd_cmd = (reset != 0)?reset_cmd:run_cmd;
 
-wire [12:0] reset_addr = (reset == 13)?13'b0010000000000:MODE;
+wire [12:0] reset_addr = (reset == 5'd13)?13'b0010000000000:MODE;
 
 wire [12:0] run_addr =
-	(q == STATE_CMD_START)?req_addr[21:9]:{ 4'b0010, cycle_addr[24], cycle_addr[8:1]};
+	(q == STATE_CMD_START)?req_addr_r[21:9]:{ 4'b0010, cycle_addr[24], cycle_addr[8:1]};
 
 assign sd_data_out = we_out?{ cycle_din, cycle_din }:16'b0;
 //register SDRAM output signals
 assign sd_addr = (reset != 0)?reset_addr:run_addr;
 
 assign sd_ba = (reset != 0)?2'b00:
-	(q == STATE_CMD_START)?req_addr[23:22]:cycle_addr[23:22];
+	(q == STATE_CMD_START)?req_addr_r[23:22]:cycle_addr[23:22];
 
 assign sd_dqm = we_out?{ cycle_addr[0], ~cycle_addr[0] }:2'b00;
 

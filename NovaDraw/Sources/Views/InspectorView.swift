@@ -99,16 +99,24 @@ struct InspectorView: View {
             }
 
             inspectorSection("Grid") {
-                Picker("Major Lines", selection: Binding(
-                    get: { document.gridMajor },
-                    set: { document.gridMajor = $0 }
-                )) {
-                    Text("8px").tag(8)
-                    Text("16px").tag(16)
-                    Text("20px").tag(20)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Major lines")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Picker("Major lines", selection: Binding(
+                        get: { document.gridMajor },
+                        set: { document.gridMajor = $0 }
+                    )) {
+                        Text("8px").tag(8)
+                        Text("16px").tag(16)
+                        Text("20px").tag(20)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
             }
 
             Spacer()

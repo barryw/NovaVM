@@ -2,7 +2,7 @@
 ; Run: sim6502 -s tests/integration/fileio.6502 --backend novavm
 ; Note: File commands require string args — use CHR$-built strings
 ; Save directory: ~/e6502-programs
-; GSAVE/GLOAD spaces: 1=screen, 2=color, 3=gfx, 4=sprite, 6=tile, 7=text attrs
+; GSAVE/GLOAD spaces: 1=screen, 2=color, 3=gfx, 4=sprite, 7=text attrs
 ; Known issue: PEEK after GLOAD may not reflect restored VGC memory via CPU bus.
 ;              GSAVE/GLOAD operate on VGC internal spaces; CPU PEEK reads through
 ;              the bus which may not see GLOAD writes. Verify via screen output instead.

@@ -164,12 +164,27 @@ module test_vgc_regs;
     endtask
 
     task automatic test_scroll_registers();
+        logic [7:0] rb;
         $display("");
-        $display("Test: scroll_x, scroll_y — full 8 bits");
-        bus_write(16'hA005, 8'hAB); step(2);
+        $display("Test: scroll_x, scroll_y, scroll_ctl — 9-bit horizontal and layer enables");
+        check_eq("scroll_ctl reset enables gfx+text", int'(dut.scroll_ctl), 8'h06);
+        bus_write(REG_SCROLLX_A, 8'hAB); step(2);
         check_eq("scroll_x = 0xAB", int'(dut.scroll_x), 8'hAB);
-        bus_write(16'hA006, 8'h5C); step(2);
+        bus_write(REG_SCROLLY_A, 8'h5C); step(2);
         check_eq("scroll_y = 0x5C", int'(dut.scroll_y), 8'h5C);
+        bus_write(REG_SCROLLCTL_A, 8'hFF); step(2);
+        check_eq("scroll_ctl masks to low 3 bits", int'(dut.scroll_ctl), 8'h07);
+        check_eq("scroll_x_full includes high bit", int'(dut.scroll_x_full), 9'h1AB);
+        check_eq("scroll_x_fetch is modulo 320", int'(dut.scroll_x_fetch), 9'h06B);
+        bus_read(REG_SCROLLCTL_A, rb);
+        check_eq("$A0EA CPU readback masks high bits", int'(rb), 8'h07);
+        bus_write(REG_SCROLLY_A, 8'd255); step(2);
+        check_eq("scroll_y_fetch is modulo 200", int'(dut.scroll_y_fetch), 55);
+        dbg_write(REG_SCROLLCTL_A, 8'h02); step(2);
+        check_eq("debug write updates scroll_ctl", int'(dut.scroll_ctl), 8'h02);
+        check_eq("debug write recomputes scroll_x_fetch without high bit", int'(dut.scroll_x_fetch), 8'hAB);
+        dbg_read(REG_SCROLLCTL_A, rb);
+        check_eq("$A0EA debug readback", int'(rb), 8'h02);
     endtask
 
     task automatic test_font_slot();
@@ -300,6 +315,57 @@ module test_vgc_regs;
         check_eq("$A0E8 debug readback sees debug-written gfx_trans_color=11", int'(rb), 11);
     endtask
 
+    task automatic test_palette_mode_register();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: palette mode register at $A0E9 — bit0 selects C64/Nova or EGA");
+        do_reset();
+        check_eq("palette_mode reset default is C64/Nova", int'(dut.palette_mode), 0);
+        bus_read(REG_PALETTE_MODE_A, rb); step(2);
+        check_eq("$A0E9 CPU readback reset default is 0", int'(rb), 0);
+
+        bus_write(REG_PALETTE_MODE_A, 8'h01); step(2);
+        check_eq("palette_mode=1 selects EGA", int'(dut.palette_mode), 1);
+        bus_read(REG_PALETTE_MODE_A, rb); step(2);
+        check_eq("$A0E9 CPU readback sees EGA", int'(rb), 1);
+
+        bus_write(REG_PALETTE_MODE_A, 8'hFE); step(2);
+        check_eq("palette_mode uses bit 0 only (0xFE -> 0)", int'(dut.palette_mode), 0);
+
+        dbg_write(REG_PALETTE_MODE_A, 8'h01);
+        check_eq("debug write palette_mode=1", int'(dut.palette_mode), 1);
+        dbg_read(REG_PALETTE_MODE_A, rb);
+        check_eq("$A0E9 debug readback sees debug-written palette_mode=1", int'(rb), 1);
+    endtask
+
+    task automatic test_palette_mode_compositor();
+        $display("");
+        $display("Test: palette mode changes fixed-index compositor colors");
+
+        force dut.visible_d2 = 1'b1;
+        force dut.in_text_area_d2 = 1'b0;
+        force dut.reset_display_blank = 1'b0;
+        force dut.border_color = 4'd1;
+        force dut.spr_pixel_hit = 1'b0;
+
+        force dut.palette_mode = 1'b0;
+        #1;
+        check_eq("C64/Nova color index 1 is white",
+                 int'(dut.pixel_color), 12'hFFF);
+
+        force dut.palette_mode = 1'b1;
+        #1;
+        check_eq("EGA color index 1 is blue",
+                 int'(dut.pixel_color), 12'h00A);
+
+        release dut.visible_d2;
+        release dut.in_text_area_d2;
+        release dut.reset_display_blank;
+        release dut.border_color;
+        release dut.spr_pixel_hit;
+        release dut.palette_mode;
+    endtask
+
     task automatic test_debug_write_paths();
         $display("");
         $display("Test: debug write path can update VGC regs and VRAM while CPU is reset");
@@ -309,6 +375,8 @@ module test_vgc_regs;
         check_eq("debug write display_dim=4", int'(dut.display_dim), 4);
         dbg_write(REG_GFXTRANS_A, 8'd6);
         check_eq("debug write gfx_trans_color=6", int'(dut.gfx_trans_color), 6);
+        dbg_write(REG_PALETTE_MODE_A, 8'd1);
+        check_eq("debug write palette_mode=1", int'(dut.palette_mode), 1);
         dbg_vmem_write(VPLANE_GFX_A, 16'h1234, 8'h0B);
         check_eq("debug vmem write gfx[0x1234]=0xB",
                  int'(dut.gfx_inst.gfx_mem.mem[16'h1234]), 4'hB);
@@ -319,7 +387,7 @@ module test_vgc_regs;
 
     // CMD_MEMREAD = $19. Params: regs[17]=space, regs[18]=addr_lo, regs[19]=addr_hi.
     // Result lands in regs[20] ($A014). Spaces match the VDC-style VRAM port:
-    // 1=char, 2=color, 3=gfx, 4=sprite, 6=tile.
+    // 1=char, 2=color, 3=gfx, 4=sprite, 7=text attributes.
     task automatic test_memread_char();
         logic [7:0] rb;
         $display("");
@@ -573,6 +641,7 @@ module test_vgc_regs;
         // $A00D write accepted but no-op — border removed, nothing to assert
         bus_write(16'hA00D,       8'd11);  step(2);
         bus_write(REG_GFXTRANS_A, 8'd12);  step(2);
+        bus_write(REG_PALETTE_MODE_A, 8'd1); step(2);
         bus_write(VIRQ_ENABLE_A,  8'h13);  step(2);
 
         check_eq("mode stable",         int'(dut.mode),          2);
@@ -585,8 +654,35 @@ module test_vgc_regs;
         check_eq("font_slot stable",    int'(dut.font_slot),     1);
         check_eq("gfx_color stable",    int'(dut.gfx_color),     9);
         check_eq("gfx_trans_color stable", int'(dut.gfx_trans_color), 12);
+        check_eq("palette_mode stable", int'(dut.palette_mode), 1);
         check_eq("cursor_enable stable", int'(dut.cursor_enable), 1);
         check_eq("irq_enable stable",   int'(dut.irq_enable),    8'h13);
+    endtask
+
+    task automatic test_copper_scroll_register_writes();
+        $display("");
+        $display("Test: copper writes update real scroll registers");
+
+        force dut.copper_fire = 1'b1;
+        force dut.copper_fire_reg = 8'd5;
+        force dut.copper_fire_val = 8'h34;
+        step(1);
+        check_eq("copper reg 5 updates scroll_x", int'(dut.scroll_x), 8'h34);
+
+        force dut.copper_fire_reg = 8'd6;
+        force dut.copper_fire_val = 8'h56;
+        step(1);
+        check_eq("copper reg 6 updates scroll_y", int'(dut.scroll_y), 8'h56);
+
+        force dut.copper_fire_reg = 8'hEA;
+        force dut.copper_fire_val = 8'h05;
+        step(1);
+        check_eq("copper reg $EA updates scroll_ctl", int'(dut.scroll_ctl), 8'h05);
+
+        release dut.copper_fire;
+        release dut.copper_fire_reg;
+        release dut.copper_fire_val;
+        step(1);
     endtask
 
     // -----------------------------------------------------------------------
@@ -610,6 +706,8 @@ module test_vgc_regs;
         test_irq_block();
         test_display_dim_register();
         test_gfx_transparent_color_register();
+        test_palette_mode_register();
+        test_palette_mode_compositor();
         test_debug_write_paths();
         test_memread_char();
         test_memread_color();
@@ -625,6 +723,7 @@ module test_vgc_regs;
         test_blt_read_gfx();
         test_blt_read_sprite();
         test_independent_registers();
+        test_copper_scroll_register_writes();
 
         summary();
         $finish;

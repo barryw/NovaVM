@@ -62,8 +62,8 @@ struct ContentView: View {
                         .onKeyPress(keys: [.init("z")], phases: .down) { press in
                             let cmd = press.modifiers.contains(.command)
                             let shift = press.modifiers.contains(.shift)
-                            if cmd && shift { doc.redo(); return .handled }
-                            if cmd { doc.undo(); return .handled }
+                            if cmd && shift { engine.redo(); return .handled }
+                            if cmd { engine.undo(); return .handled }
                             return .ignored
                         }
                         .onKeyPress(keys: [.init("0")], phases: .down) { press in

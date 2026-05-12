@@ -1,6 +1,7 @@
 // Debug bridge — binary protocol decoder/encoder
-// Receives commands from UART RX, drives debug ports on top.sv,
-// sends responses via UART TX.
+// Receives commands from the host byte stream, drives debug ports on top.sv,
+// sends responses on the same stream. The board top currently connects this
+// stream to the ESP32/NovaHost SPI transport.
 //
 // Binary protocol (ESP32 → FPGA):
 //   Byte 0: Command
@@ -20,7 +21,7 @@ module debug_bridge #(
     input  logic        clk,
     input  logic        rst,
 
-    // UART interface
+    // Host byte-stream interface
     input  logic [7:0]  rx_data,
     input  logic        rx_valid,
     output logic        rx_ready,
@@ -36,6 +37,16 @@ module debug_bridge #(
     output logic [15:0] dbg_poke_addr,
     output logic [7:0]  dbg_poke_data,
     output logic        dbg_pause,
+
+    // Private NIC packet-buffer debug path. These are not CPU-visible MMIO
+    // windows; NovaHost uses explicit bridge commands so NIC payload buffers do
+    // not consume address space such as WTS at $A140.
+    output logic        dbg_nic_buf_we,
+    output logic        dbg_nic_buf_re,
+    output logic        dbg_nic_buf_sel,
+    output logic [7:0]  dbg_nic_buf_addr,
+    output logic [7:0]  dbg_nic_buf_data,
+    input  logic [7:0]  dbg_nic_buf_rdata,
 
     // Direct VGC memory debug path. Writes are used by NovaHost while the CPU
     // is held in reset to stream boot splash assets. Reads are debug-only and
@@ -98,11 +109,12 @@ module debug_bridge #(
     input  logic [7:0]  sdram_b_dout,
     input  logic        sdram_b_done_toggle,
 
-    // File I/O event — pulses one clock when the CPU writes a non-zero
-    // value to FioCmd ($B9A0). Bridge latches the pulse and emits an
-    // async 2-byte EVENT_FIO sequence (0xFE 0xE0) to the ESP32 the
-    // next time it enters S_IDLE with no RX pending.
+    // Host-service events pulse one clock when the CPU writes a non-zero
+    // command byte. Bridge latches each pulse and emits an async 2-byte
+    // event sequence (0xFE, event-type) to the ESP32 the next time it enters
+    // S_IDLE with no RX pending.
     input  logic        fio_event,
+    input  logic        nic_event,
 
     // Host status bits latched from NovaHost and exposed by fpga_top on
     // ULX3S LEDs. bit0=WiFi connected, bit1=FIO active, bit2=FIO error,
@@ -157,6 +169,10 @@ module debug_bridge #(
                                            // count=0 means 256. Streams bytes
                                            // from SDRAM port B back to the host.
     localparam CMD_HOST_STATUS    = 8'h1B; // [flags] host-status LED bits
+    localparam CMD_NIC_TX_READ_BLK= 8'h1C; // [offset, count] count=0 means 256
+                                           // streams bytes from NIC TX buffer.
+    localparam CMD_NIC_RX_WRITE_BLK=8'h1D; // [offset, count, ...data]
+                                           // writes bytes to NIC RX buffer.
 
     localparam [5:0] CPU_STATE_DECODE = 6'd12;
     localparam int TRACE_DEPTH = 64;
@@ -167,12 +183,13 @@ module debug_bridge #(
     localparam [3:0] TRACE_REC_LAST_BYTE = 4'd11;
 
     // Async FPGA→ESP event marker bytes. Sent as a 2-byte sequence
-    // (EVENT_MARKER, EVENT_TYPE_FIO) when fio_event pulses. EVENT_MARKER
+    // (EVENT_MARKER, event-type) when a host-service event pulses. EVENT_MARKER
     // (0xFE) is unused by the request/response protocol (which uses 0x00
     // for status-OK and 0xFF for status-error), so the ESP's RX handler
     // can dispatch on 0xFE in its idle path.
     localparam EVENT_MARKER    = 8'hFE;
     localparam EVENT_TYPE_FIO  = 8'hE0;
+    localparam EVENT_TYPE_NIC  = 8'hE1;
 
     // SDRAM port-B fallback timeout. The bridge keeps we/oe asserted until
     // the SDRAM controller reports doneB. The completion arrives as a toggle
@@ -183,7 +200,7 @@ module debug_bridge #(
     // =========================================================================
     // State machine
     // =========================================================================
-    typedef enum logic [4:0] {
+    typedef enum logic [5:0] {
         S_IDLE,          // 0: wait for command byte
         S_RECV,          // 1: collecting parameter bytes
         S_PEEK_WAIT,     // 2: dpram + top-level debug output latency
@@ -214,7 +231,10 @@ module debug_bridge #(
         S_TRACE_TX,      // 27: transmit one trace byte
         S_TRACE_TX_WAIT, // 28: wait for trace byte TX completion
         S_SDRAM_READ,    // 29: issue SDRAM port B read
-        S_SDRAM_READ_WAIT// 30: wait for SDRAM read data
+        S_SDRAM_READ_WAIT,// 30: wait for SDRAM read data
+        S_NIC_BULK_WRITE,// 31: stream incoming bytes into NIC RX buffer
+        S_NIC_BULK_READ, // 32: set NIC TX-buffer read address
+        S_NIC_BULK_WAIT  // 33: wait for NIC buffer read path
     } state_t;
 
     state_t state;
@@ -256,9 +276,11 @@ module debug_bridge #(
     logic [2:0]  vgc_bulk_space;
     logic [7:0]  vgc_fill_value;
 
-    // Async FIO event latch — fio_event is a 1-clock pulse; stash it
-    // until we can send the 2-byte marker sequence to the ESP.
-    logic event_pending;
+    // Async event latches — host-service events are 1-clock pulses; stash them
+    // until we can send 2-byte marker sequences to the ESP.
+    logic fio_event_pending;
+    logic nic_event_pending;
+    wire any_event_pending = fio_event_pending | nic_event_pending;
 
     // 1-byte RX staging register between the ready/valid source and the
     // command state machine. External FIFOing owns burst absorption; this
@@ -472,6 +494,11 @@ module debug_bridge #(
             dbg_vmem_data    <= 0;
             dbg_poke_addr    <= 0;
             dbg_poke_data    <= 0;
+            dbg_nic_buf_we   <= 0;
+            dbg_nic_buf_re   <= 0;
+            dbg_nic_buf_sel  <= 0;
+            dbg_nic_buf_addr <= 0;
+            dbg_nic_buf_data <= 0;
             key_inject_valid <= 0;
             key_inject_data  <= 0;
             tx_data          <= 0;
@@ -486,7 +513,8 @@ module debug_bridge #(
             sdram_done_armed_level <= 1'b0;
             vgc_bulk_space   <= 0;
             vgc_fill_value   <= 0;
-            event_pending    <= 0;
+            fio_event_pending <= 0;
+            nic_event_pending <= 0;
             rx_buf_valid     <= 0;
             rx_buf_data      <= 0;
             host_status      <= 0;
@@ -497,6 +525,8 @@ module debug_bridge #(
             dbg_rom_we       <= 0;
             dbg_vmem_we      <= 0;
             dbg_vmem_re      <= 0;
+            dbg_nic_buf_we   <= 0;
+            dbg_nic_buf_re   <= 0;
             dbg_cpu_resume   <= 1'b0;
             key_inject_valid <= 0;
             sdram_done_sync  <= {sdram_done_sync[1:0], sdram_b_done_toggle};
@@ -509,9 +539,10 @@ module debug_bridge #(
                 end
             end
 
-            // Latch any fio_event pulse — sticks until drained by the
-            // S_EVENT_TX_MARK path below.
-            if (fio_event) event_pending <= 1;
+            // Latch host-service event pulses — each sticks until drained by
+            // the S_EVENT_TX_MARK path below.
+            if (fio_event) fio_event_pending <= 1;
+            if (nic_event) nic_event_pending <= 1;
 
             // RX buffer: latch any incoming byte if buffer is empty.
             // Consumed by state machine via `rx_buf_valid <= 0`.
@@ -540,7 +571,7 @@ module debug_bridge #(
                     // Priority: service any buffered CMD byte first.
                     // Event emission only runs when the RX buffer is
                     // empty — otherwise a pending CMD would be starved.
-                    if (!rx_buf_valid && event_pending && !tx_busy) begin
+                    if (!rx_buf_valid && any_event_pending && !tx_busy) begin
                         state <= S_EVENT_TX_MARK;
                     end else if (rx_buf_valid) begin
                         cmd          <= rx_buf_data;
@@ -564,6 +595,8 @@ module debug_bridge #(
                             CMD_BREAK_CLR:   begin recv_need <= 3'd1; state <= S_RECV; end
                             CMD_TRACE_READ:  begin recv_need <= 3'd1; state <= S_RECV; end
                             CMD_HOST_STATUS: begin recv_need <= 3'd1; state <= S_RECV; end
+                            CMD_NIC_TX_READ_BLK: begin recv_need <= 3'd2; state <= S_RECV; end
+                            CMD_NIC_RX_WRITE_BLK: begin recv_need <= 3'd2; state <= S_RECV; end
                             CMD_SYS_RESET_HOLD: begin
                                 dbg_cpu_reset          <= 1'b1;
                                 dbg_system_reset       <= 1'b1;
@@ -835,6 +868,22 @@ module debug_bridge #(
                                     state           <= S_TX_BYTE;
                                 end
 
+                                CMD_NIC_TX_READ_BLK: begin
+                                    bulk_addr      <= {8'h00, param0};
+                                    bulk_remaining <= (rx_buf_data == 0) ? 11'd256
+                                                                         : {3'b0, rx_buf_data};
+                                    resp_idx       <= 0;
+                                    resp_total     <= 1;  // status, then bulk
+                                    state          <= S_TX_BYTE;
+                                end
+
+                                CMD_NIC_RX_WRITE_BLK: begin
+                                    bulk_addr      <= {8'h00, param0};
+                                    bulk_remaining <= (rx_buf_data == 0) ? 11'd256
+                                                                         : {3'b0, rx_buf_data};
+                                    state          <= S_NIC_BULK_WRITE;
+                                end
+
                                 default: begin
                                     state <= S_IDLE;
                                 end
@@ -933,7 +982,8 @@ module debug_bridge #(
                             state <= S_TRACE_TX;
                         end else if (bulk_remaining > 0) begin
                             // Switch to bulk read mode
-                            state <= (cmd == CMD_READ_VGC_BLK)   ? S_VGC_BULK_READ :
+                            state <= (cmd == CMD_NIC_TX_READ_BLK) ? S_NIC_BULK_READ :
+                                     (cmd == CMD_READ_VGC_BLK)   ? S_VGC_BULK_READ :
                                      (cmd == CMD_READ_SDRAM_BLK) ? S_SDRAM_READ :
                                                                   S_BULK_PEEK;
                         end else begin
@@ -986,10 +1036,32 @@ module debug_bridge #(
                         if (bulk_remaining == 1) begin
                             state <= S_IDLE;
                         end else begin
-                            state <= (cmd == CMD_READ_VGC_BLK)   ? S_VGC_BULK_READ :
+                            state <= (cmd == CMD_NIC_TX_READ_BLK) ? S_NIC_BULK_READ :
+                                     (cmd == CMD_READ_VGC_BLK)   ? S_VGC_BULK_READ :
                                      (cmd == CMD_READ_SDRAM_BLK) ? S_SDRAM_READ :
                                                                   S_BULK_PEEK;
                         end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // NIC_BULK_READ: debug-only bulk read from NIC TX buffer.
+                // ---------------------------------------------------------
+                S_NIC_BULK_READ: begin
+                    dbg_nic_buf_sel  <= 1'b0;
+                    dbg_nic_buf_addr <= bulk_addr[7:0];
+                    dbg_nic_buf_re   <= 1'b1;
+                    wait_count       <= 0;
+                    state            <= S_NIC_BULK_WAIT;
+                end
+
+                S_NIC_BULK_WAIT: begin
+                    if (wait_count == 2'd1) begin
+                        peek_latch     <= dbg_nic_buf_rdata;
+                        dbg_nic_buf_re <= 1'b0;
+                        state          <= S_BULK_TX;
+                    end else begin
+                        wait_count <= wait_count + 1'b1;
                     end
                 end
 
@@ -1144,6 +1216,28 @@ module debug_bridge #(
                 end
 
                 // ---------------------------------------------------------
+                // NIC_BULK_WRITE: stream incoming bytes into the NIC RX
+                // buffer. Host later pokes NIC_HOSTCTRL.RX_START to DMA the
+                // buffer into CPU RAM.
+                // ---------------------------------------------------------
+                S_NIC_BULK_WRITE: begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid    <= 0;          // consume
+                        dbg_nic_buf_sel <= 1'b1;
+                        dbg_nic_buf_addr <= bulk_addr[7:0];
+                        dbg_nic_buf_data <= rx_buf_data;
+                        dbg_nic_buf_we   <= 1'b1;
+                        bulk_addr        <= bulk_addr + 1;
+                        bulk_remaining   <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
+                        end
+                    end
+                end
+
+                // ---------------------------------------------------------
                 // VGC_BULK_WRITE: stream incoming bytes directly into VGC
                 // memory. Used for boot-time graphics assets while CPU reset
                 // is held.
@@ -1167,8 +1261,8 @@ module debug_bridge #(
 
                 // ---------------------------------------------------------
                 // VGC_FILL_WRITE: fill exactly 256 sequential VGC bytes with
-                // one host command. This keeps boot clear-to-black fast even
-                // at the reliable 115200-baud debug link.
+                // one host command. This keeps boot clear-to-black compact
+                // without transferring every byte from the host.
                 // ---------------------------------------------------------
                 S_VGC_FILL_WRITE: begin
                     dbg_vmem_space <= vgc_bulk_space;
@@ -1248,16 +1342,21 @@ module debug_bridge #(
                 end
 
                 // ---------------------------------------------------------
-                // EVENT_TX_TYPE: TX the event type byte (0xE0 for FIO).
-                // Clearing event_pending here lets a new fio_event arrive
-                // during emission and queue up another notification.
+                // EVENT_TX_TYPE: TX the event type byte. Clearing only the
+                // selected latch here lets a new event arrive during emission
+                // and queue up another notification.
                 // ---------------------------------------------------------
                 S_EVENT_TX_TYPE: begin
                     if (!tx_busy) begin
-                        tx_data       <= EVENT_TYPE_FIO;
-                        tx_start      <= 1;
-                        event_pending <= 0;
-                        state         <= S_EVENT_TX_TYPE_WAIT;
+                        if (fio_event_pending) begin
+                            tx_data           <= EVENT_TYPE_FIO;
+                            fio_event_pending <= 0;
+                        end else begin
+                            tx_data           <= EVENT_TYPE_NIC;
+                            nic_event_pending <= 0;
+                        end
+                        tx_start <= 1;
+                        state    <= S_EVENT_TX_TYPE_WAIT;
                     end
                 end
 

@@ -160,6 +160,9 @@ public sealed partial class FileIoController
             case VgcConstants.FioCmdRng:
                 DoRng();
                 break;
+            case VgcConstants.FioCmdNvgLoad:
+                DoNvgLoad();
+                break;
             case VgcConstants.FioCmdSidPlay:
                 DoSidPlay();
                 break;
@@ -228,12 +231,6 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdSfLoad:
                 DoSfLoad();
-                break;
-            case VgcConstants.FioCmdTSave:
-                DoTSave();
-                break;
-            case VgcConstants.FioCmdTLoad:
-                DoTLoad();
                 break;
             default:
                 SetError(VgcConstants.FioErrIo);
@@ -849,7 +846,8 @@ public sealed partial class FileIoController
                 var (device, name, savedDir) = resolved.Value;
                 try
                 {
-                    device.Save(name, data, ".gfx");
+                    var (baseName, extension) = SplitDataFilename(name, ".gfx");
+                    device.Save(baseName, data, extension);
                 }
                 finally
                 {
@@ -903,12 +901,13 @@ public sealed partial class FileIoController
                 var (device, name, savedDir) = resolved.Value;
                 try
                 {
-                    if (!device.FileExists(name, ".gfx"))
+                    var (baseName, extension) = SplitDataFilename(name, ".gfx");
+                    if (!device.FileExists(baseName, extension))
                     {
                         SetError(VgcConstants.FioErrNotFound);
                         return;
                     }
-                    data = device.Load(name, ".gfx");
+                    data = device.Load(baseName, extension);
                 }
                 finally
                 {
@@ -950,6 +949,131 @@ public sealed partial class FileIoController
         {
             SetError(VgcConstants.FioErrIo);
         }
+    }
+
+    private void DoNvgLoad()
+    {
+        try
+        {
+            if (_vgcWrite is null || _vgcSpaceLength is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            string? filename = ReadFilename();
+            if (filename is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            byte space = _regs[VgcConstants.FioGSpace - VgcConstants.FioBase];
+            if (space != VgcConstants.VramPlaneGfx)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            int dest = GetFioGraphicsAddress();
+            byte[]? data = LoadDataFile(filename, ".nvg", out bool notFound);
+            if (data is null)
+            {
+                SetError(notFound ? VgcConstants.FioErrNotFound : VgcConstants.FioErrIo);
+                return;
+            }
+
+            int spaceLen = _vgcSpaceLength(space);
+            if (spaceLen <= 0)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+            for (int i = 0; i < spaceLen; i++)
+                _vgcWrite(space, i, 0);
+
+            if (!DecodeNvgToGraphics(data, space, dest, out int pixelsWritten))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            SetTransferSize(pixelsWritten);
+            SetOk();
+        }
+        catch (FileNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private bool DecodeNvgToGraphics(byte[] data, byte space, int dest, out int pixelsWritten)
+    {
+        pixelsWritten = 0;
+        if (data.Length < 12 ||
+            data[0] != (byte)'N' ||
+            data[1] != (byte)'V' ||
+            data[2] != (byte)'G' ||
+            data[3] != (byte)'1')
+            return false;
+
+        int width = data[4] | (data[5] << 8);
+        int height = data[6] | (data[7] << 8);
+        int spanCount = data[8] | (data[9] << 8) | (data[10] << 16) | (data[11] << 24);
+        if (width <= 0 || height <= 0 || width > 320 || height > 200 || spanCount < 0)
+            return false;
+
+        int baseX = dest % 320;
+        int baseY = dest / 320;
+        if (baseX < 0 || baseY < 0 || baseX + width > 320 || baseY + height > 200)
+            return false;
+
+        int spaceLen = _vgcSpaceLength?.Invoke(space) ?? 0;
+        if (spaceLen <= 0)
+            return false;
+
+        int imageLen = width * height;
+        int offset = 12;
+        for (int span = 0; span < spanCount; span++)
+        {
+            if (offset + 3 > data.Length)
+                return false;
+
+            int addr = data[offset] | (data[offset + 1] << 8);
+            int len = data[offset + 2];
+            offset += 3;
+
+            if (len == 0 || addr < 0 || addr + len > imageLen || offset + len > data.Length)
+                return false;
+
+            int imagePos = addr;
+            int pos = 0;
+            while (pos < len)
+            {
+                int srcX = imagePos % width;
+                int srcY = imagePos / width;
+                int chunk = Math.Min(len - pos, width - srcX);
+                int vgcAddr = dest + (srcY * 320) + srcX;
+
+                if (vgcAddr < 0 || vgcAddr + chunk > spaceLen)
+                    return false;
+
+                for (int i = 0; i < chunk; i++)
+                    _vgcWrite!(space, vgcAddr + i, data[offset + pos + i]);
+
+                imagePos += chunk;
+                pos += chunk;
+                pixelsWritten += chunk;
+            }
+
+            offset += len;
+        }
+
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -1155,215 +1279,6 @@ public sealed partial class FileIoController
             }
 
             SetTransferSize(len);
-            SetOk();
-        }
-        catch (FileNotFoundException)
-        {
-            SetError(VgcConstants.FioErrNotFound);
-        }
-        catch
-        {
-            SetError(VgcConstants.FioErrIo);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Tile file I/O (.tile binary format)
-    // -------------------------------------------------------------------------
-
-    private static readonly byte[] TileMagic = "TILE"u8.ToArray();
-    private const byte TileFileVersion = 1;
-
-    private void DoTSave()
-    {
-        try
-        {
-            if (_vgc is null)
-            {
-                SetError(VgcConstants.FioErrIo);
-                return;
-            }
-
-            string? filename = ReadFilename();
-            if (filename is null)
-            {
-                SetError(VgcConstants.FioErrIo);
-                return;
-            }
-
-            byte config = _vgc.GetTileConfig();
-            bool is16 = (config & VgcConstants.TileCfgSize16) != 0;
-            int tileDataSize = is16 ? VgcConstants.TileRamSize16 : VgcConstants.TileRamSize8;
-
-            // Header (8) + palette (768) + tile defs + 4 NTs (4000) + 4 attrs (4000)
-            int totalSize = 8 + VgcConstants.TilePaletteRamSize + tileDataSize
-                          + VgcConstants.NametableCount * VgcConstants.NametableSize * 2;
-            byte[] data = new byte[totalSize];
-            int offset = 0;
-
-            // Header: magic (4), version (1), tile size (1), mirror mode (1), trans color (1)
-            TileMagic.CopyTo(data, offset); offset += 4;
-            data[offset++] = TileFileVersion;
-            data[offset++] = is16 ? (byte)16 : (byte)8;
-            data[offset++] = (byte)_vgc.GetTileMirrorMode();
-            data[offset++] = _vgc.GetTileTransColor();
-
-            // Palette RAM
-            _vgc.GetTilePaletteRam().CopyTo(data.AsSpan(offset));
-            offset += VgcConstants.TilePaletteRamSize;
-
-            // Tile definitions
-            _vgc.GetTileData()[..tileDataSize].CopyTo(data.AsSpan(offset));
-            offset += tileDataSize;
-
-            // Nametables (4 × 1000)
-            for (int nt = 0; nt < VgcConstants.NametableCount; nt++)
-            {
-                _vgc.GetNametable(nt).AsSpan(0, VgcConstants.NametableSize).CopyTo(data.AsSpan(offset));
-                offset += VgcConstants.NametableSize;
-            }
-
-            // Attribute tables (4 × 1000)
-            for (int nt = 0; nt < VgcConstants.NametableCount; nt++)
-            {
-                _vgc.GetAttrTable(nt).AsSpan(0, VgcConstants.NametableSize).CopyTo(data.AsSpan(offset));
-                offset += VgcConstants.NametableSize;
-            }
-
-            var resolved = ResolveDevice(filename);
-            if (resolved is not null)
-            {
-                var (device, name, savedDir) = resolved.Value;
-                try { device.Save(name, data, ".tile"); }
-                finally { RestoreDir(device, savedDir); }
-            }
-            else
-            {
-                Directory.CreateDirectory(_saveDir);
-                string path = GetFullPath(filename, ".tile");
-                File.WriteAllBytes(path, data);
-            }
-
-            _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(totalSize & 0xFF);
-            _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((totalSize >> 8) & 0xFF);
-            SetOk();
-        }
-        catch
-        {
-            SetError(VgcConstants.FioErrIo);
-        }
-    }
-
-    private void DoTLoad()
-    {
-        try
-        {
-            if (_vgc is null)
-            {
-                SetError(VgcConstants.FioErrIo);
-                return;
-            }
-
-            string? filename = ReadFilename();
-            if (filename is null)
-            {
-                SetError(VgcConstants.FioErrIo);
-                return;
-            }
-
-            byte[] data;
-            var resolved = ResolveDevice(filename);
-            if (resolved is not null)
-            {
-                var (device, name, savedDir) = resolved.Value;
-                try
-                {
-                    if (!device.FileExists(name, ".tile"))
-                    {
-                        SetError(VgcConstants.FioErrNotFound);
-                        return;
-                    }
-                    data = device.Load(name, ".tile");
-                }
-                finally { RestoreDir(device, savedDir); }
-            }
-            else
-            {
-                string path = GetFullPath(filename, ".tile");
-                if (!File.Exists(path))
-                {
-                    SetError(VgcConstants.FioErrNotFound);
-                    return;
-                }
-                data = File.ReadAllBytes(path);
-            }
-
-            // Validate header
-            if (data.Length < 8
-                || data[0] != TileMagic[0] || data[1] != TileMagic[1]
-                || data[2] != TileMagic[2] || data[3] != TileMagic[3])
-            {
-                SetError(VgcConstants.FioErrIo);
-                return;
-            }
-
-            byte version = data[4];
-            if (version != TileFileVersion)
-            {
-                SetError(VgcConstants.FioErrIo);
-                return;
-            }
-
-            byte tileSize = data[5];
-            byte mirrorMode = data[6];
-            byte transColor = data[7];
-
-            bool is16 = tileSize == 16;
-            int tileDataSize = is16 ? VgcConstants.TileRamSize16 : VgcConstants.TileRamSize8;
-            int expectedSize = 8 + VgcConstants.TilePaletteRamSize + tileDataSize
-                             + VgcConstants.NametableCount * VgcConstants.NametableSize * 2;
-
-            if (data.Length < expectedSize)
-            {
-                SetError(VgcConstants.FioErrIo);
-                return;
-            }
-
-            // Reconstruct config byte: bit0 = size16, bits 2-1 = mirror
-            byte config = (byte)((is16 ? VgcConstants.TileCfgSize16 : 0)
-                                | ((mirrorMode & 0x03) << VgcConstants.TileCfgMirrorShift));
-            _vgc.SetTileConfig(config);
-            _vgc.SetTileTransColor(transColor);
-
-            int offset = 8;
-
-            // Palette RAM
-            _vgc.SetTilePaletteRam(data[offset..(offset + VgcConstants.TilePaletteRamSize)]);
-            offset += VgcConstants.TilePaletteRamSize;
-
-            // Tile definitions
-            _vgc.SetTileData(data[offset..(offset + tileDataSize)]);
-            offset += tileDataSize;
-
-            // Nametables
-            for (int nt = 0; nt < VgcConstants.NametableCount; nt++)
-            {
-                _vgc.SetNametable(nt, data[offset..(offset + VgcConstants.NametableSize)]);
-                offset += VgcConstants.NametableSize;
-            }
-
-            // Attribute tables
-            for (int nt = 0; nt < VgcConstants.NametableCount; nt++)
-            {
-                _vgc.SetAttrTable(nt, data[offset..(offset + VgcConstants.NametableSize)]);
-                offset += VgcConstants.NametableSize;
-            }
-
-            // Set mode to 4 (tiles + sprites)
-            _vgc.Write(VgcConstants.RegMode, 4);
-
-            _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(data.Length & 0xFF);
-            _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((data.Length >> 8) & 0xFF);
             SetOk();
         }
         catch (FileNotFoundException)

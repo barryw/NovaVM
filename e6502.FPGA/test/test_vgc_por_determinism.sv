@@ -161,7 +161,6 @@ module test_vgc_por_determinism;
         // latch must stay asserted until the next frame boundary so hardware
         // never emits a half-reset/half-live frame.
         force dut.reset_clear_phase = 3'd0;
-        force dut.tile_reset_busy = 1'b0;
         force dut.h_count = 10'd123;
         force dut.v_count = 10'd45;
         @(posedge clk); #1;
@@ -174,7 +173,6 @@ module test_vgc_por_determinism;
                dut.reset_display_blank === 1'b0);
         release dut.h_count;
         release dut.v_count;
-        release dut.tile_reset_busy;
         release dut.reset_clear_phase;
 
         // None of the output signals should ever be X.

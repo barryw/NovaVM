@@ -27,8 +27,26 @@ enum CanvasViewport {
     }
 
     static func applyZoom(document: NovaDocument, size: CGSize, zoom: CGFloat, anchor: CGPoint) {
-        _ = anchor
-        applyCenteredZoom(document: document, size: size, zoom: zoom)
+        let newZoom = clampedZoom(zoom)
+        let oldZoom = document.zoom
+
+        guard oldZoom > 0,
+              oldZoom.isFinite,
+              anchor.x.isFinite,
+              anchor.y.isFinite
+        else {
+            applyCenteredZoom(document: document, size: size, zoom: newZoom)
+            return
+        }
+
+        let canvasX = (anchor.x - document.panOffset.x) / oldZoom
+        let canvasY = (anchor.y - document.panOffset.y) / oldZoom
+
+        document.zoom = newZoom
+        document.panOffset = CGPoint(
+            x: anchor.x - canvasX * newZoom,
+            y: anchor.y - canvasY * newZoom
+        )
     }
 
     static func applyCenteredZoom(document: NovaDocument, size: CGSize, zoom: CGFloat) {

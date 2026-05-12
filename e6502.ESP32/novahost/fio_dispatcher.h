@@ -81,8 +81,6 @@ private:
     static constexpr uint8_t CMD_SIDPLAY  = 0x08;
     static constexpr uint8_t CMD_MIDPLAY  = 0x13;
     static constexpr uint8_t CMD_SFLOAD   = 0x15;
-    static constexpr uint8_t CMD_TSAVE    = 0x16;
-    static constexpr uint8_t CMD_TLOAD    = 0x17;
     static constexpr uint8_t CMD_XLOAD    = 0x18;
     static constexpr uint8_t CMD_XSAVE    = 0x19;
     static constexpr uint8_t CMD_CD       = 0x20;
@@ -96,6 +94,7 @@ private:
     static constexpr uint8_t CMD_LOADRUNTIME = 0x28;
     static constexpr uint8_t CMD_XPAGE    = 0x29;
     static constexpr uint8_t CMD_RNG      = 0x2A;
+    static constexpr uint8_t CMD_NVGLOAD  = 0x2B;
 
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
@@ -114,6 +113,9 @@ private:
                                        ((uint16_t)_bank[OFF_SRC_HI] << 8); }
     uint16_t end()     const { return _bank[OFF_END_LO] |
                                        ((uint16_t)_bank[OFF_END_HI] << 8); }
+    uint32_t nvg_stage_addr() const { return ((uint32_t)_bank[OFF_END_LO] << 16) |
+                                             ((uint32_t)_bank[OFF_SRC_HI] << 8) |
+                                              (uint32_t)_bank[OFF_SRC_LO]; }
     uint32_t xram_addr() const { return ((uint32_t)_bank[OFF_GSPACE] << 16) |
                                         ((uint32_t)_bank[OFF_GADDR_HI] << 8) |
                                          (uint32_t)_bank[OFF_GADDR_LO]; }
@@ -162,6 +164,7 @@ private:
     void handle_clear_error();
     void handle_load_runtime();
     void handle_rng();
+    void handle_nvgload();
     void handle_unsupported_sd_command(const char* name);
 
     // Directory-iterator state for DIR_OPEN/DIR_READ. Single iterator

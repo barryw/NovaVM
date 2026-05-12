@@ -15,15 +15,30 @@ final class ToolEngine {
         case none, creating, moving
     }
 
+    private struct FloatingSelection {
+        let width: Int
+        let height: Int
+        let pixels: NovaPixelSnapshot
+        let basePixels: NovaPixelSnapshot
+        let originalPixels: NovaPixelSnapshot
+        let originalSelection: (x: Int, y: Int, w: Int, h: Int)?
+        let imageIndex: Int
+    }
+
     private var selectDragMode: SelectDragMode = .none
     private var moveOffset: (dx: Int, dy: Int) = (0, 0)
-    private var movedPixels: NovaPixelSnapshot?
+    private var floatingSelection: FloatingSelection?
 
     init(document: NovaDocument) {
         self.document = document
     }
 
     func mouseDown(x: Int, y: Int, shift: Bool) {
+        discardFloatingSelectionIfImageChanged()
+        if document.currentTool != .select {
+            commitFloatingSelection(deselect: true)
+        }
+
         dragStart = (x, y)
         dragShift = shift
 
@@ -44,17 +59,15 @@ final class ToolEngine {
             previewPixels = document.makePixelSnapshot()
             document.pushUndo()
         case .select:
-            if let sel = document.selection,
+            if let sel = normalizedSelection(document.selection),
                x >= sel.x && x < sel.x + sel.w && y >= sel.y && y < sel.y + sel.h {
+                document.selection = sel
                 selectDragMode = .moving
                 moveOffset = (dx: x - sel.x, dy: y - sel.y)
-                movedPixels = capturePixels(in: sel)
-                document.pushUndo()
-                clearPixels(in: sel)
             } else {
+                commitFloatingSelection(deselect: true)
                 selectDragMode = .creating
                 document.selection = (x, y, 1, 1)
-                movedPixels = nil
             }
         }
     }
@@ -84,9 +97,14 @@ final class ToolEngine {
             case .creating:
                 document.selection = (start.x, start.y, x - start.x, y - start.y)
             case .moving:
-                document.selection = (x - moveOffset.dx, y - moveOffset.dy,
-                                      document.selection?.w ?? 0,
-                                      document.selection?.h ?? 0)
+                guard let sel = normalizedSelection(document.selection) else { break }
+                beginFloatingSelectionIfNeeded()
+                let movedSelection = (x - moveOffset.dx, y - moveOffset.dy, sel.w, sel.h)
+                if floatingSelection != nil {
+                    renderFloatingSelection(at: movedSelection)
+                } else {
+                    document.selection = movedSelection
+                }
             case .none:
                 break
             }
@@ -122,10 +140,7 @@ final class ToolEngine {
                 let nh = max(1, abs(rawH))
                 document.selection = (nx, ny, nw, nh)
             case .moving:
-                if let pix = movedPixels, let sel = document.selection {
-                    stampPixels(pix, atX: sel.x, y: sel.y, width: sel.w, height: sel.h)
-                }
-                movedPixels = nil
+                break
             case .none:
                 break
             }
@@ -162,10 +177,27 @@ final class ToolEngine {
         previewPixels = nil
     }
 
+    // MARK: - Undo / Redo
+
+    func undo() {
+        floatingSelection = nil
+        selectDragMode = .none
+        document.clearSelection()
+        document.undo()
+    }
+
+    func redo() {
+        floatingSelection = nil
+        selectDragMode = .none
+        document.clearSelection()
+        document.redo()
+    }
+
     // MARK: - Selection operations
 
     func copySelection() {
-        guard let sel = document.selection else { return }
+        discardFloatingSelectionIfImageChanged()
+        guard let sel = normalizedSelection(document.selection) else { return }
         let snapshot = capturePixels(in: sel)
         document.clipboard = (sel.w, sel.h, snapshot.pixels, snapshot.paintedPixels)
     }
@@ -176,26 +208,126 @@ final class ToolEngine {
         deleteSelection()
     }
 
-    func pasteClipboard() {
+    func pasteClipboard(at target: (x: Int, y: Int)? = nil) {
+        discardFloatingSelectionIfImageChanged()
         guard let clip = document.clipboard else { return }
+        let px = document.selection?.x ?? target?.x ?? max(0, (document.width - clip.w) / 2)
+        let py = document.selection?.y ?? target?.y ?? max(0, (document.height - clip.h) / 2)
+
+        commitFloatingSelection(deselect: false)
         document.selectTool(.select)
         document.pushUndo()
-        let px = document.selection?.x ?? 0
-        let py = document.selection?.y ?? 0
         let snapshot = NovaPixelSnapshot(pixels: clip.pixels, paintedPixels: clip.paintedPixels)
-        stampPixels(snapshot, atX: px, y: py, width: clip.w, height: clip.h)
-        document.selection = (px, py, clip.w, clip.h)
+        floatingSelection = FloatingSelection(
+            width: clip.w,
+            height: clip.h,
+            pixels: snapshot,
+            basePixels: document.makePixelSnapshot(),
+            originalPixels: document.makePixelSnapshot(),
+            originalSelection: nil,
+            imageIndex: document.selectedImageIndex
+        )
+        renderFloatingSelection(at: (px, py, clip.w, clip.h))
     }
 
     func deselectSelection() {
+        commitFloatingSelection(deselect: true)
         document.clearSelection()
     }
 
     func deleteSelection() {
-        guard let sel = document.selection else { return }
+        discardFloatingSelectionIfImageChanged()
+        guard let sel = normalizedSelection(document.selection) else { return }
+        commitFloatingSelection(deselect: false)
         document.pushUndo()
         clearPixels(in: sel)
         document.selection = nil
+    }
+
+    func nudgeSelection(dx: Int, dy: Int) {
+        discardFloatingSelectionIfImageChanged()
+        guard dx != 0 || dy != 0,
+              let sel = normalizedSelection(document.selection) else { return }
+
+        document.selection = sel
+        beginFloatingSelectionIfNeeded()
+        renderFloatingSelection(at: (sel.x + dx, sel.y + dy, sel.w, sel.h))
+    }
+
+    func commitSelection() {
+        commitFloatingSelection(deselect: true)
+        document.clearSelection()
+    }
+
+    func cancelSelectionAction() {
+        discardFloatingSelectionIfImageChanged()
+        guard let floatingSelection else {
+            document.clearSelection()
+            return
+        }
+
+        document.loadPixelSnapshotRaw(floatingSelection.originalPixels, markDirty: true)
+        document.selection = floatingSelection.originalSelection
+        self.floatingSelection = nil
+        selectDragMode = .none
+    }
+
+    private func beginFloatingSelectionIfNeeded() {
+        discardFloatingSelectionIfImageChanged()
+        guard floatingSelection == nil,
+              let sel = normalizedSelection(document.selection) else { return }
+
+        let originalPixels = document.makePixelSnapshot()
+        let pixels = capturePixels(in: sel)
+        document.pushUndo()
+        clearPixels(in: sel)
+        floatingSelection = FloatingSelection(
+            width: sel.w,
+            height: sel.h,
+            pixels: pixels,
+            basePixels: document.makePixelSnapshot(),
+            originalPixels: originalPixels,
+            originalSelection: sel,
+            imageIndex: document.selectedImageIndex
+        )
+        renderFloatingSelection(at: sel)
+    }
+
+    private func renderFloatingSelection(at sel: (x: Int, y: Int, w: Int, h: Int)) {
+        guard let floatingSelection else { return }
+        document.loadPixelSnapshotRaw(floatingSelection.basePixels)
+        document.selection = (sel.x, sel.y, floatingSelection.width, floatingSelection.height)
+        stampPixels(
+            floatingSelection.pixels,
+            atX: sel.x,
+            y: sel.y,
+            width: floatingSelection.width,
+            height: floatingSelection.height
+        )
+    }
+
+    private func commitFloatingSelection(deselect: Bool) {
+        discardFloatingSelectionIfImageChanged()
+        floatingSelection = nil
+        if deselect {
+            document.clearSelection()
+        }
+    }
+
+    private func discardFloatingSelectionIfImageChanged() {
+        if let floatingSelection, floatingSelection.imageIndex != document.selectedImageIndex {
+            self.floatingSelection = nil
+        }
+    }
+
+    private func normalizedSelection(_ selection: (x: Int, y: Int, w: Int, h: Int)?) -> (x: Int, y: Int, w: Int, h: Int)? {
+        guard let selection else { return nil }
+        let x = selection.w >= 0 ? selection.x : selection.x + selection.w
+        let y = selection.h >= 0 ? selection.y : selection.y + selection.h
+        let w = abs(selection.w)
+        let h = abs(selection.h)
+        guard w > 0, h > 0 else { return nil }
+        return (x, y, w, h)
     }
 
     private func capturePixels(in sel: (x: Int, y: Int, w: Int, h: Int)) -> NovaPixelSnapshot {

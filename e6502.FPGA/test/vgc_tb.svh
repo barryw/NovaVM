@@ -11,6 +11,8 @@ localparam logic [15:0] REG_BGCOL_A     = 16'hA001;
 localparam logic [15:0] REG_FGCOL_A     = 16'hA002;
 localparam logic [15:0] REG_CURSORX_A   = 16'hA003;
 localparam logic [15:0] REG_CURSORY_A   = 16'hA004;
+localparam logic [15:0] REG_SCROLLX_A   = 16'hA005;
+localparam logic [15:0] REG_SCROLLY_A   = 16'hA006;
 localparam logic [15:0] REG_CHAROUT_A   = 16'hA00E;
 localparam logic [15:0] REG_CHARIN_A    = 16'hA00F;
 localparam logic [15:0] REG_CMD_A       = 16'hA010;
@@ -28,11 +30,12 @@ localparam logic [15:0] VREG_CTRL_A     = 16'hA0E4;
 localparam logic [15:0] REG_TEXTFLAGS_A = 16'hA0E6;
 localparam logic [15:0] REG_TEXTREV_A   = 16'hA0E7;
 localparam logic [15:0] REG_GFXTRANS_A  = 16'hA0E8;
+localparam logic [15:0] REG_PALETTE_MODE_A = 16'hA0E9;
+localparam logic [15:0] REG_SCROLLCTL_A = 16'hA0EA;
 localparam logic [7:0]  VPLANE_CHAR_A   = 8'h01;
 localparam logic [7:0]  VPLANE_COLOR_A  = 8'h02;
 localparam logic [7:0]  VPLANE_GFX_A    = 8'h03;
 localparam logic [7:0]  VPLANE_SPRITE_A = 8'h04;
-localparam logic [7:0]  VPLANE_TILE_A   = 8'h06;
 localparam logic [7:0]  VPLANE_TEXTATTR_A = 8'h07;
 
 localparam int COLS_TB = 80;
@@ -58,9 +61,6 @@ logic        cpu_re;
 
 logic        key_valid;
 logic [7:0]  key_data;
-
-wire  [15:0] tile_dma_addr;
-wire         tile_dma_active;
 
 // Blitter-style memory interface — exposed as driver signals so tests can
 // exercise the VGC's blt_* read/write path directly without instantiating
@@ -96,9 +96,6 @@ vgc dut (
     .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
     .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
     .key_valid(key_valid), .key_data(key_data),
-    .tile_dma_addr(tile_dma_addr),
-    .tile_dma_data(8'h00),
-    .tile_dma_active(tile_dma_active),
     .blt_space(tb_blt_space), .blt_addr(tb_blt_addr), .blt_rdata(tb_blt_rdata),
     .blt_wdata(tb_blt_wdata), .blt_we(tb_blt_we), .blt_re(tb_blt_re),
     .video_blit_safe(),

@@ -283,9 +283,10 @@ To test whether sprite `n` specifically collided with sprite 2, check bit
 
 ## Color Palette
 
-NovaBASIC uses a fixed 16-color palette inspired by the Commodore 64.
-All graphics, text, sprite, background, and border colors use the same
-indices.
+NovaBASIC starts with a 16-color palette inspired by the Commodore 64.
+All fixed-index graphics, text, sprite, background, and border colors use
+the same indices. `RegPaletteMode` at `$A0E9` selects the fixed palette:
+write `0` for the default C64/Nova palette or `1` for IBM EGA colors.
 
 | **Index** | **Color** | **Index** | **Color** |
 | --- | --- | --- | --- |
@@ -303,6 +304,17 @@ and the border to 11 (dark grey). Use `COLOR fg[,bg[,border]]` for text,
 background, and border colors. Text cells store both foreground and background
 in Color RAM; `REVERSE` swaps them for subsequent output, and `FLASH` marks
 subsequent text cells as blinking.
+
+The EGA mode keeps the same 0--15 color indices but changes the RGB values to
+the IBM EGA 16-color palette. This is useful for DOS EGA asset ports:
+
+```basic
+POKE $A0E9,1 : REM IBM EGA palette
+POKE $A0E9,0 : REM C64/Nova palette
+```
+
+`RegPaletteMode` controls the fixed VGC palette used by text, bitmap graphics,
+sprites, background, and border.
 
 ## The Copper (Raster Effects)
 
@@ -335,6 +347,7 @@ block:
 | RegBgCol | $A001 | Change background color mid-screen |
 | RegScrollX | $A005 | Shift horizontal scroll offset |
 | RegScrollY | $A006 | Shift vertical scroll offset |
+| RegScrollCtl | $A0EA | Bit 0 = RegScrollX bit 8, bit 1 = apply scroll to graphics, bit 2 = apply scroll to text |
 | A040--A0BF | (sprite regs) | All sprite register fields (see below) |
 
 ### COPPER BASIC keyword
@@ -347,6 +360,7 @@ The `COPPER` keyword provides direct access to the copper system:
 | COPPER ADD x, y, MODE, value | Add event: set display mode at position. |
 | COPPER ADD x, y, SCROLLX, value | Add event: set horizontal scroll at position. |
 | COPPER ADD x, y, SCROLLY, value | Add event: set vertical scroll at position. |
+| COPPER ADD x, y, $A0EA, value | Add event: set scroll control at position. |
 | COPPER ADD x, y, SPRX(n), value | Set sprite *n* X low byte at position. |
 | COPPER ADD x, y, SPRXH(n), value | Set sprite *n* X high byte at position. |
 | COPPER ADD x, y, SPRY(n), value | Set sprite *n* Y position at position. |

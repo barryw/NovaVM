@@ -10,7 +10,7 @@ if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--skip-manifest-check]");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--skip-manifest-check]");
     return 1;
 }
 
@@ -29,6 +29,7 @@ bool expectTimeStatus = args.Skip(1).Contains("--expect-time-status", StringComp
 bool skipManifestCheck = args.Skip(1).Contains("--skip-manifest-check", StringComparer.Ordinal);
 bool noStatusLine = args.Skip(1).Contains("--no-status-line", StringComparer.Ordinal);
 List<string> expectedScreens = LoadExpectedScreens(args);
+List<string> screenInputs = LoadScreenInputs(args);
 List<ExpectedTextColor> expectedTextColors = LoadExpectedTextColors(args);
 List<ExpectedGfxColor> expectedGfxColors = LoadExpectedGfxColors(args);
 List<SmokeCommand> commands = LoadCommands(args, bootOnly, screenOnly);
@@ -59,6 +60,9 @@ try
     {
         if (expectedScreens.Count == 0 && expectedTextColors.Count == 0 && expectedGfxColors.Count == 0)
             throw new InvalidOperationException("--screen-only requires at least one --expect-screen, --expect-text-color, or --expect-gfx-color check.");
+
+        foreach (string input in screenInputs)
+            SendRaw(cpu, bus, editor, input);
 
         string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedTextColors, expectedGfxColors, ref morePrompts);
         foreach (string expected in expectedScreens)
@@ -306,6 +310,11 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
                     throw new ArgumentException("--expect-screen requires text.");
                 i++;
                 break;
+            case "--screen-input":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--screen-input requires text.");
+                i++;
+                break;
             case "--expect-text-color":
                 if (i + 1 >= args.Length)
                     throw new ArgumentException("--expect-text-color requires text=>hex.");
@@ -401,6 +410,69 @@ static List<string> LoadExpectedScreens(string[] args)
     return expected;
 }
 
+static List<string> LoadScreenInputs(string[] args)
+{
+    var inputs = new List<string>();
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].Equals("--screen-input", StringComparison.Ordinal))
+            continue;
+        if (i + 1 >= args.Length)
+            throw new ArgumentException("--screen-input requires text.");
+        inputs.Add(DecodeScreenInput(args[++i]));
+    }
+
+    return inputs;
+}
+
+static string DecodeScreenInput(string input)
+{
+    var decoded = new StringBuilder(input.Length);
+    for (int i = 0; i < input.Length; i++)
+    {
+        char ch = input[i];
+        if (ch != '\\')
+        {
+            decoded.Append(ch);
+            continue;
+        }
+
+        if (++i >= input.Length)
+            throw new ArgumentException("--screen-input cannot end with a trailing escape.");
+
+        char escape = input[i];
+        switch (escape)
+        {
+            case '0':
+                decoded.Append('\0');
+                break;
+            case 'n':
+                decoded.Append('\n');
+                break;
+            case 'r':
+                decoded.Append('\r');
+                break;
+            case 't':
+                decoded.Append('\t');
+                break;
+            case '\\':
+                decoded.Append('\\');
+                break;
+            case 'x':
+                if (i + 2 >= input.Length ||
+                    !byte.TryParse(input.Substring(i + 1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte value))
+                    throw new ArgumentException("--screen-input has an invalid \\xNN escape.");
+                decoded.Append((char)value);
+                i += 2;
+                break;
+            default:
+                throw new ArgumentException($"--screen-input has an unknown escape '\\{escape}'.");
+        }
+    }
+
+    return decoded.ToString();
+}
+
 static List<ExpectedTextColor> LoadExpectedTextColors(string[] args)
 {
     var expected = new List<ExpectedTextColor>();
@@ -476,6 +548,8 @@ static string RunUntilScreenMatches(
     const int snapshotMask = 0x3FFF;
     for (int i = 0; i < maxSteps; i++)
     {
+        YieldHostHardware(i);
+
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
@@ -714,10 +788,18 @@ static void RunForSteps(Cpu cpu, CompositeBusDevice bus, int steps)
 {
     for (int i = 0; i < steps; i++)
     {
+        YieldHostHardware(i);
+
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
     }
+}
+
+static void YieldHostHardware(int step)
+{
+    if ((step & 0x3FF) == 0)
+        Thread.Sleep(0);
 }
 
 static void SendLine(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string text)

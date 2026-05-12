@@ -8,6 +8,8 @@ struct NovaDrawApp: App {
     @State private var showingNewCanvas = false
     @State private var traceImportRequest: TraceSheetImportRequest?
     @State private var showingCa65Export = false
+    @State private var observedProjectWriteDate: Date?
+    @State private var recentProjectURLs = RecentProjectsStore.load()
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +18,9 @@ struct NovaDrawApp: App {
                         onOpenProject: openProject)
                 .onOpenURL { url in
                     openProject(from: url)
+                }
+                .task(id: document?.fileURL) {
+                    await watchOpenProjectFile()
                 }
                 .sheet(isPresented: $showingNewCanvas) {
                     NewCanvasSheet(onCreate: createDocument, onOpenProject: nil)
@@ -46,6 +51,22 @@ struct NovaDrawApp: App {
                     .keyboardShortcut("n")
                 Button("Open Project...") { openProject() }
                     .keyboardShortcut("o")
+
+                Menu("Open Recent") {
+                    if recentProjectURLs.isEmpty {
+                        Button("No Recent Projects") {}
+                            .disabled(true)
+                    } else {
+                        ForEach(recentProjectURLs.map(RecentProject.init)) { project in
+                            Button(project.title) {
+                                openRecentProject(project.url)
+                            }
+                            .help(project.url.path)
+                        }
+                        Divider()
+                        Button("Clear Menu") { clearRecentProjects() }
+                    }
+                }
             }
 
             CommandGroup(replacing: .saveItem) {
@@ -87,10 +108,10 @@ struct NovaDrawApp: App {
             }
 
             CommandGroup(replacing: .undoRedo) {
-                Button("Undo") { document?.undo() }
+                Button("Undo") { toolEngine?.undo() }
                     .keyboardShortcut("z")
                     .disabled(document?.canUndo != true)
-                Button("Redo") { document?.redo() }
+                Button("Redo") { toolEngine?.redo() }
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(document?.canRedo != true)
             }
@@ -178,6 +199,16 @@ struct NovaDrawApp: App {
         loadProject(from: url)
     }
 
+    private func openRecentProject(_ url: URL) {
+        guard confirmDiscardChanges() else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            removeRecentProject(url)
+            showError("The recent project could not be found.")
+            return
+        }
+        loadProject(from: url)
+    }
+
     @discardableResult
     private func saveProject() -> Bool {
         guard let doc = document else { return false }
@@ -213,7 +244,9 @@ struct NovaDrawApp: App {
             loaded.markSaved(to: url)
             document = loaded
             toolEngine = ToolEngine(document: loaded)
+            observedProjectWriteDate = projectWriteDate(url)
             showingNewCanvas = false
+            recordRecentProject(url)
         } catch {
             showError("NovaDraw could not open the project.", error: error)
         }
@@ -223,11 +256,67 @@ struct NovaDrawApp: App {
         do {
             try ProjectFormat.encode(document: doc).write(to: url, options: .atomic)
             doc.markSaved(to: url)
+            observedProjectWriteDate = projectWriteDate(url)
+            recordRecentProject(url)
             return true
         } catch {
             showError("NovaDraw could not save the project.", error: error)
             return false
         }
+    }
+
+    private func recordRecentProject(_ url: URL) {
+        recentProjectURLs = RecentProjectsStore.adding(url, to: recentProjectURLs)
+        RecentProjectsStore.save(recentProjectURLs)
+    }
+
+    private func removeRecentProject(_ url: URL) {
+        recentProjectURLs = RecentProjectsStore.removing(url, from: recentProjectURLs)
+        RecentProjectsStore.save(recentProjectURLs)
+    }
+
+    private func clearRecentProjects() {
+        recentProjectURLs = []
+        RecentProjectsStore.save(recentProjectURLs)
+    }
+
+    @MainActor
+    private func watchOpenProjectFile() async {
+        guard let url = document?.fileURL else { return }
+        observedProjectWriteDate = projectWriteDate(url)
+
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard let currentURL = document?.fileURL, currentURL == url else { return }
+            guard let writeDate = projectWriteDate(url) else { continue }
+            guard observedProjectWriteDate != writeDate else { continue }
+
+            reloadProjectAfterExternalChange(from: url, writeDate: writeDate)
+        }
+    }
+
+    @MainActor
+    private func reloadProjectAfterExternalChange(from url: URL, writeDate: Date) {
+        do {
+            let data = try Data(contentsOf: url)
+            guard let loaded = ProjectFormat.decode(data: data) else {
+                return
+            }
+
+            loaded.markSaved(to: url)
+            document = loaded
+            toolEngine = ToolEngine(document: loaded)
+            observedProjectWriteDate = writeDate
+        } catch {
+            return
+        }
+    }
+
+    private func projectWriteDate(_ url: URL) -> Date? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+            return nil
+        }
+        return attributes[.modificationDate] as? Date
     }
 
     private func confirmDiscardChanges() -> Bool {

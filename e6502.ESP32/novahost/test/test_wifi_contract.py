@@ -142,6 +142,70 @@ def test_host_status_led_contract() -> None:
     )
 
 
+def test_fpga_spi_bridge_contract() -> None:
+    novahost = read("e6502.ESP32/novahost/novahost.ino")
+    bridge_h = read("e6502.ESP32/novahost/fpga_bridge.h")
+    bridge = read("e6502.ESP32/novahost/fpga_bridge.cpp")
+    event_reader_h = read("e6502.ESP32/novahost/fio_event_reader.h")
+    event_reader = read("e6502.ESP32/novahost/fio_event_reader.cpp")
+    fpga_top = read("e6502.FPGA/fpga/fpga_top.sv")
+    fpga_make = read("e6502.FPGA/fpga/Makefile")
+    lpf = read("e6502.FPGA/fpga/ulx3s.lpf")
+    spi_slave = read("e6502.FPGA/rtl/debug_spi_slave.sv")
+    spi_test = read("e6502.FPGA/test/test_debug_spi_slave.sv")
+
+    checks = {
+        "NovaHost defines shared ULX3S SPI pins": "#define SD_SPI_SCK_PIN  14" in novahost
+        and "#define SD_SPI_MISO_PIN 2" in novahost
+        and "#define SD_SPI_MOSI_PIN 15" in novahost
+        and "#define SD_CS_PIN       13" in novahost
+        and "#define FPGA_SPI_CS_PIN 4" in novahost,
+        "NovaHost initializes one shared SPI bus": "void initSharedSpiBus()" in novahost
+        and "SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_CS_PIN)" in novahost,
+        "NovaHost bridge is SPI-only": "FpgaBridge fpgaBridge;" in novahost
+        and "FPGA_SERIAL" not in novahost
+        and "FpgaBridge(HardwareSerial" not in bridge_h
+        and "_serial.write" not in bridge,
+        "NovaHost bridge knows SD peer CS and holds it high": "beginSpi(SPI, FPGA_SPI_CS_PIN, FPGA_SPI_HZ, SD_CS_PIN)" in novahost
+        and "_spiPeerCsPin" in bridge_h
+        and "digitalWrite(_spiPeerCsPin, HIGH);" in bridge,
+        "ESP bridge writes use explicit SPI WRITE transaction": "SPI_WRITE_OP = 0x57" in bridge_h
+        and "_spi->transfer(SPI_WRITE_OP);" in bridge,
+        "ESP bridge reads use token-framed SPI READ transaction": "SPI_READ_OP = 0x52" in bridge_h
+        and "SPI_TOKEN_DATA = 0x01" in bridge_h
+        and "_spi->transfer(SPI_READ_OP);" in bridge
+        and "uint8_t token = _spi->transfer(0x00);" in bridge,
+        "FIO/NIC event reader is transport-agnostic": "HardwareSerial" not in event_reader_h
+        and "poll()" not in event_reader_h
+        and "_serial" not in event_reader,
+        "main loop drains events through the SPI bridge": "fpgaBridge.drain();" in novahost
+        and "fioEventReader.poll();" not in novahost,
+        "debug and SD HTTP services wait while boot owns shared SPI": "if (novaFpgaBridgeAvailable()) {" in novahost
+        and "debugServer.loop();" in novahost
+        and "sdHttpServer.loop();" in novahost,
+        "FPGA board top routes debug bridge to SPI only": "assign dbg_rx_data = dbg_spi_rx_data;" in fpga_top
+        and "assign dbg_rx_valid = dbg_spi_rx_valid;" in fpga_top
+        and ".tx_start     (dbg_tx_start)" in fpga_top
+        and "debug_uart_rx #(" not in fpga_top
+        and "debug_uart_tx #(" not in fpga_top,
+        "FPGA synthesis sources do not include ESP debug UART fallback": "RTL_BRIDGE" in fpga_make
+        and "debug_spi_slave.sv" in fpga_make
+        and "debug_uart_rx.sv" not in fpga_make
+        and "debug_uart_tx.sv" not in fpga_make,
+        "ULX3S SPI constraints use SD pins with FPGA CS on D1": 'SITE "H2"' in lpf
+        and 'SITE "J1"' in lpf
+        and 'SITE "J3"' in lpf
+        and 'SITE "H1"' in lpf,
+        "FPGA SPI slave protocol is command-framed": "WRITE_OP = 8'h57" in spi_slave
+        and "READ_OP = 8'h52" in spi_slave
+        and "READ_TOKEN_DATA = 8'h01" in spi_slave,
+        "FPGA SPI test protects dummy-read and 0xA5 payload cases": "read polling did not enqueue dummy MOSI" in spi_test
+        and "0xA5 payload survives framing" in spi_test,
+    }
+    for name, ok in checks.items():
+        check(name, ok)
+
+
 def test_fio_clear_error_contract() -> None:
     basic = read("ehbasic/basic.asm")
     fio = read("ehbasic/lib/fio.s")
@@ -186,7 +250,7 @@ def test_fio_sd_dispatch_contract() -> None:
 
     for constant in [
         "CMD_GSAVE", "CMD_GLOAD", "CMD_SIDPLAY", "CMD_MIDPLAY",
-        "CMD_SFLOAD", "CMD_TSAVE", "CMD_TLOAD", "CMD_FORMAT", "CMD_PWD",
+        "CMD_SFLOAD", "CMD_FORMAT", "CMD_PWD",
     ]:
         check(f"ESP dispatcher defines {constant}", constant in header)
 
@@ -197,8 +261,6 @@ def test_fio_sd_dispatch_contract() -> None:
         "ESP registers SIDPLAY as deliberate SD command": 'handle_unsupported_sd_command("SIDPLAY")' in dispatcher,
         "ESP registers MIDPLAY as deliberate SD command": 'handle_unsupported_sd_command("MIDPLAY")' in dispatcher,
         "ESP registers SFLOAD as deliberate SD command": 'handle_unsupported_sd_command("SFLOAD")' in dispatcher,
-        "ESP registers TSAVE as deliberate SD command": 'handle_unsupported_sd_command("TSAVE")' in dispatcher,
-        "ESP registers TLOAD as deliberate SD command": 'handle_unsupported_sd_command("TLOAD")' in dispatcher,
         "ESP registers FORMAT as deliberate SD command": 'handle_unsupported_sd_command("FORMAT")' in dispatcher,
         "unsupported SD commands still finish through FIO error status": "void FioDispatcher::handle_unsupported_sd_command" in dispatcher
         and "respond_err(ERR_IO);" in dispatcher,
@@ -207,17 +269,76 @@ def test_fio_sd_dispatch_contract() -> None:
         "GLOAD reads NDI chunks and writes VGC memory": "read_file_chunk_by_index(idx" in dispatcher
         and "pokeVgcBlock(space" in dispatcher,
         "VGC FIO validates canonical VGC spaces": "case 0x01: return 4000" in dispatcher
+        and "case 0x02: return 4000" in dispatcher
         and "case 0x03: return 64000" in dispatcher
-        and "case 0x06: return 32768" in dispatcher,
+        and "case 0x04: return 32768" in dispatcher
+        and "case 0x07: return 4000" in dispatcher,
         "PWD has tracked current paths": "current_path(int slot)" in device_manager,
         "FPGA bridge drain preserves async FIO events": "_drainHandler(_drainUser" in bridge
         and "onDrainByteStatic" in event_reader
         and "fpgaBridge.onDrainByte" in novahost,
+        "FPGA bridge status receive consumes complete async event packets": "int eventType = recvByte();" in bridge
+        and "_drainHandler(_drainUser, (uint8_t)eventType);" in bridge
+        and "continue;" in bridge,
         "FIO command register is polled as event-loss fallback": "void FioDispatcher::poll_pending()" in dispatcher
         and "_bridge.peek(BANK_BASE + OFF_CMD" in dispatcher
         and "fioDispatcher.poll_pending();" in novahost,
     }
     for name, ok in dispatch_checks.items():
+        check(name, ok)
+
+
+def test_nic_command_sequence_contract() -> None:
+    nova_inc = read("ehbasic/lib/nova.inc")
+    nic_inc = read("ehbasic/lib/nic.inc")
+    nic_runtime = read("ehbasic/lib/nic.s")
+    constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
+    fpga_nic = read("e6502.FPGA/rtl/nic.sv")
+    dispatcher_h = read("e6502.ESP32/novahost/nic_dispatcher.h")
+    dispatcher = read("e6502.ESP32/novahost/nic_dispatcher.cpp")
+
+    checks = {
+        "BASIC exposes NIC command sequence register": "NIC_CMDSEQ        = $A105" in nova_inc,
+        "runtime documents NIC command sequence semantics": "writes NIC_CMDSHADOW first" in nic_inc
+        and "increments NIC_CMDSEQ" in nic_inc
+        and "then writes" in nic_inc
+        and "NIC_CMD" in nic_inc,
+        "shared NIC command helper stages shadow before sequence and command": re.search(
+            r"STA\s+NIC_CMDSHADOW[\s\S]*INC\s+NIC_CMDSEQ[\s\S]*@seq_ok:[\s\S]*STA\s+NIC_CMD\s*\n",
+            nic_runtime,
+        )
+        is not None,
+        "emulator constants reserve NIC command sequence registers": "public const int NicCmdSeq         = 0xA105" in constants
+        and "public const int NicCmdShadow      = 0xA106" in constants,
+        "FPGA NIC register map reserves command sequence registers": "+05  NIC_CMDSEQ" in fpga_nic
+        and "+06  NIC_CMDSHADOW" in fpga_nic,
+        "NovaHost reads command sequence from NIC bank": "OFF_CMDSEQ    = 0x05" in dispatcher_h
+        and "OFF_CMDSHADOW = 0x06" in dispatcher_h
+        and "uint8_t seq = _bank[OFF_CMDSEQ]" in dispatcher
+        and "_lastCommandSeq = seq" in dispatcher,
+        "NovaHost recovers a command cleared before event service": "cmd = _bank[OFF_CMDSHADOW]" in dispatcher
+        and "_bank[OFF_CMDSHADOW] != 0" in dispatcher,
+        "NovaHost does not retry-clear a fresh command": "bool NicDispatcher::is_new_command" in dispatcher
+        and "seq != _lastCommandSeq" in dispatcher
+        and "_pending = true" in dispatcher,
+        "NovaHost retries command clear synchronously first": "for (int attempt = 0; attempt < 3; attempt++)" in dispatcher
+        and "_bridge.poke(BANK_BASE + OFF_CMD, 0)" in dispatcher,
+        "NovaHost reads SEND payloads from FPGA NIC TX buffer": "nicReadTxBlock(0, wireCount, buf)" in dispatcher
+        and "OFF_DMASTATUS = 0x14" in dispatcher_h
+        and "DMAST_TX_READY" in dispatcher_h,
+        "NovaHost SEND relies on write results instead of WiFiClient connected preflight": "!s.connected || len > MAX_MSG_SIZE" in dispatcher
+        and "!s.connected || !s.client.connected() || len > MAX_MSG_SIZE" not in dispatcher,
+        "NovaHost preserves buffered bytes after TCP close": "!s.client.connected() && s.client.available() == 0" in dispatcher,
+        "NovaHost stages RECV payloads into FPGA NIC RX buffer": "nicWriteRxBlock(0, msg.data, wireCount)" in dispatcher
+        and "OFF_HOSTCTRL  = 0x07" in dispatcher_h
+        and "HOSTCTRL_RX_START" in dispatcher_h,
+        "NovaHost waits for hardware NIC RX DMA completion": "wait_dma_complete(DMAST_RX_DONE)" in dispatcher
+        and "DMAST_BUSY" in dispatcher_h
+        and "DMAST_ERROR" in dispatcher_h,
+        "NovaHost NIC path no longer pauses CPU for payload DMA": "send dma pause failed" not in dispatcher
+        and "recv dma pause failed" not in dispatcher,
+    }
+    for name, ok in checks.items():
         check(name, ok)
 
 
@@ -244,6 +365,9 @@ def test_runtime_autoboot_contract() -> None:
     novaz_auto = read("examples/novaz/src/autoboot.s")
     novaz_runtime = read("examples/novaz/src/runtime.s")
     novaz_zstory = read("examples/novaz/src/zstory.s")
+    nvg_runtime = read("ehbasic/lib/nvg.s")
+    nvg_inc = read("ehbasic/lib/nvg.inc")
+    xram_inc = read("ehbasic/lib/xram.inc")
 
     checks = {
         "BASIC exposes primary runtime ROM swap label": "ROMSWAP_PRIMARY" in nova_inc
@@ -258,8 +382,21 @@ def test_runtime_autoboot_contract() -> None:
         and "LDA   #FIO_CMD_LOADRUNTIME" in fio,
         "shared RNG library wraps host command": ".export rng_get32" in rng
         and "LDA   #FIO_CMD_RNG" in rng,
+        "shared NVG library wraps host decode command": "FIO_CMD_NVGLOAD  = $2B" in nova_inc
+        and "lib/nvg.inc lib/nvg.s" in read("ehbasic/Makefile")
+        and ".export nvg_load" in nvg_runtime,
+        "shared NVG library streams through host decode command": "streamed directly into the graphics" in nvg_inc
+        and "LDA   #VGC_PLANE_GFX" in nvg_runtime
+        and "FIO_CMD_NVGLOAD" in nvg_runtime
+        and "XRAM_NVG_STAGE_L" not in nvg_runtime,
+        "shared XRAM layout reserves non-overlapping runtime workspaces": "XRAM_USER_HEAP_PAGES = 1024" in xram_inc
+        and "XRAM_NOVAZ_DYNAMIC_H = $04" in xram_inc
+        and "XRAM_NOVAZ_CACHE_H   = $05" in xram_inc
+        and "XRAM_NOVAZ_SAVE_M    = $40" in xram_inc
+        and "XRAM_NVG_STAGE_H     = $07" in xram_inc,
         "emulator command constants match": "FioCmdLoadRuntime = 0x28" in constants
         and "FioCmdRng        = 0x2A" in constants
+        and "FioCmdNvgLoad    = 0x2B" in constants
         and "RomSwapPrimary  = RomSwapBasic" in constants
         and "RomSize           = 0x4000" in constants,
         "emulator FIO handles runtime loading": "case VgcConstants.FioCmdLoadRuntime:" in controller
@@ -273,12 +410,18 @@ def test_runtime_autoboot_contract() -> None:
         and "RUNTIME_ROM_BYTES = 16 * 1024" in dispatcher_h,
         "ESP dispatcher defines hardware RNG command": "CMD_RNG      = 0x2A" in dispatcher_h
         and "void handle_rng();" in dispatcher_h,
+        "ESP dispatcher defines NVG load command": "CMD_NVGLOAD  = 0x2B" in dispatcher_h
+        and "void handle_nvgload();" in dispatcher_h,
         "ESP dispatcher handles runtime command": "case CMD_LOADRUNTIME:" in dispatcher
         and "handle_load_runtime()" in dispatcher
         and "pokeRomBlock(0" in dispatcher,
         "ESP dispatcher handles hardware RNG command": "case CMD_RNG:" in dispatcher
         and "handle_rng()" in dispatcher
         and "esp_random()" in dispatcher,
+        "ESP dispatcher handles NVG load command": "case CMD_NVGLOAD:" in dispatcher
+        and "handle_nvgload()" in dispatcher
+        and "pokeVgcBlock(space" in dispatcher
+        and "NVGLOAD" in dispatcher,
         "ESP load mirrors BAS-before-BIN resolution": "find_load_entry" in dispatcher
         and '"%s.bas"' in dispatcher
         and '"%s.bin"' in dispatcher,
@@ -287,11 +430,20 @@ def test_runtime_autoboot_contract() -> None:
         and "select_boot_slot() const" in esp_dm_h
         and "int DeviceManager::select_boot_slot() const" in esp_dm
         and "FD0, FD1, FD2, FD3, HD0, HD1" in esp_dm,
+        "ESP boot config uses FD-before-HD mount order": "DeviceManager::FD0, DeviceManager::FD1" in novahost
+        and "DeviceManager::FD2, DeviceManager::FD3" in novahost
+        and "DeviceManager::HD0, DeviceManager::HD1" in novahost,
+        "ESP boot config clears stale logical mount pointers": "mounts[prefix] = \"\";" in novahost
+        and "config_dirty = true;" in novahost
+        and "writeBootConfig(doc)" in novahost,
         "NovaHost does not blindly mount root disk images": "auto_mount_fds();" not in novahost
         and "auto_mount_hds();" not in novahost
         and "set_default_slot(boot_slot)" in novahost,
-        "REST drive changes persist to boot config": "persistDriveMountConfig" in sd_http
-        and 'mounts[prefix] = sd_path ? sd_path : ""' in sd_http,
+        "REST drive changes persist logical slot pointers": "persistDriveMountConfig" in sd_http
+        and "loadDriveMountConfig" in sd_http
+        and 'mounts[prefix] = sd_path ? sd_path : ""' in sd_http
+        and '"/%s.ndi"' not in sd_http
+        and "configuredPath" in sd_http,
         "debug text injection normalizes LF to BASIC Enter": "void DebugServer::cmdTypeText" in debug
         and "ch == '\\n'" in debug
         and "ch = '\\r'" in debug,
@@ -299,6 +451,7 @@ def test_runtime_autoboot_contract() -> None:
         and "SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists" in unit_dm,
         "unit tests cover runtime load command": "LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime" in unit_fio,
         "unit tests cover RNG command": "RngCommand_ReturnsProviderBytes" in unit_fio,
+        "unit tests cover NVG load command": "NvgLoad_DecodesSparseNvgIntoGraphicsPlane" in unit_fio,
         "unit tests cover primary ROM swap alias": "WriteRomSwapPrimary_SelectsPrimaryRuntimeRom" in unit_rom,
         "NovaZ example builds launcher plus runtime": "AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin" in novaz_make
         and "RUNTIME := $(BUILD_DIR)/novaz.bin" in novaz_make
@@ -307,8 +460,11 @@ def test_runtime_autoboot_contract() -> None:
         "NovaZ launcher replaces BASIC runtime": "fio_load_runtime" in novaz_auto
         and "STA REG_ROMSWAP" in novaz_auto
         and "JMP ($FFFC)" in novaz_auto,
-        "NovaZ runtime loads story into XRAM": "JSR zstory_load_default" in novaz_runtime
+        "NovaZ runtime loads story into fixed XRAM workspaces": "JSR zstory_load_default" in novaz_runtime
         and "JMP xram_xload" in novaz_zstory
+        and "JSR zstory_init_fixed_xram_bases" in novaz_zstory
+        and "XRAM_NOVAZ_DYNAMIC_H" in novaz_zstory
+        and "XRAM_NOVAZ_CACHE_H" in novaz_zstory
         and '.byte "story.bin"' in novaz_zstory,
     }
     for name, ok in checks.items():
@@ -356,8 +512,10 @@ def main() -> int:
         ("REST routes", test_rest_routes),
         ("password redaction", test_password_redaction),
         ("host-status LED contract", test_host_status_led_contract),
+        ("FPGA SPI bridge contract", test_fpga_spi_bridge_contract),
         ("FIO clear-error contract", test_fio_clear_error_contract),
         ("FIO SD dispatch contract", test_fio_sd_dispatch_contract),
+        ("NIC command sequence contract", test_nic_command_sequence_contract),
         ("runtime autoboot contract", test_runtime_autoboot_contract),
         ("boot splash handoff contract", test_boot_splash_handoff_contract),
     ]

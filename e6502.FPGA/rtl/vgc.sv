@@ -1,13 +1,12 @@
 // VGC — Virtual Graphics Controller (NOVA — top level)
-// 80x50 text + 320x200 graphics + tile engine + command processor
+// 80x50 text + 320x200 graphics + command processor
 // Generates VGA/480p-like RGB + sync signals
 //
-// Modes: 0=text only, 1=gfx over text, 2=text over gfx, 3=gfx only, 4=tiles+sprites
+// Modes: 0=text only, 1=gfx over text, 2=text over gfx, 3/4=gfx+sprites no text
 // Drawing: command register at $A010, parameters at $A011-$A01F
 //
 // Instantiates sub-modules: vgc_timing (VESTA), vgc_text (SCRIBE),
 // vgc_gfx (CANVAS), vgc_sprites (PIXIE), vgc_copper (CONDUCTOR)
-// Plus the existing tile_engine (MOSAIC)
 
 module vgc (
     input  logic        clk,        // pixel clock (~25 MHz)
@@ -26,15 +25,10 @@ module vgc (
     input  logic        key_valid,
     input  logic [7:0]  key_data,
 
-    // Tile engine DMA — CPU RAM read port
-    output logic [15:0] tile_dma_addr,
-    input  logic [7:0]  tile_dma_data,
-    output logic        tile_dma_active,
-
     // Blitter memory port — read/write access to VGC internal memories.
     // Width is 17 bits so bus masters can share one address shape. Current
     // spaces use fewer bits (char/color 12, gfx 16, sprite 11) and ignore the top.
-    input  logic [2:0]  blt_space,    // 1=char, 2=color, 3=gfx, 4=sprite, 6=tile, 7=text attr
+    input  logic [2:0]  blt_space,    // 1=char, 2=color, 3=gfx, 4=sprite, 7=text attr
     input  logic [16:0] blt_addr,
     output logic [7:0]  blt_rdata,
     input  logic [7:0]  blt_wdata,
@@ -109,7 +103,6 @@ module vgc (
     localparam GFX_W    = 320, GFX_H   = 200;
     localparam GFX_SIZE = GFX_W * GFX_H;               // 64000 pixels
     localparam SPR_SIZE  = 2048;
-    localparam TILE_SIZE = 32768;
 
     // Address map
     localparam VGC_BASE       = 16'hA000;
@@ -124,6 +117,13 @@ module vgc (
     localparam TEXT_FLAGS_ADDR = 16'hA0E6;
     localparam TEXT_REVATTR_ADDR = 16'hA0E7;
     localparam GFX_TRANS_ADDR = 16'hA0E8;
+    localparam PALETTE_MODE_ADDR = 16'hA0E9;
+    localparam SCROLL_CTL_ADDR = 16'hA0EA;
+
+    localparam SCROLL_CTL_XHI  = 8'h01;
+    localparam SCROLL_CTL_GFX  = 8'h02;
+    localparam SCROLL_CTL_TEXT = 8'h04;
+    localparam SCROLL_CTL_DEFAULT = SCROLL_CTL_GFX | SCROLL_CTL_TEXT;
 
     // Register offsets
     localparam REG_MODE    = 0;
@@ -158,7 +158,6 @@ module vgc (
     localparam SPACE_COLOR  = 3'd2;
     localparam SPACE_GFX    = 3'd3;
     localparam SPACE_SPRITE = 3'd4;
-    localparam SPACE_TILE   = 3'd6;
     localparam SPACE_TEXTATTR = 3'd7;
 
     localparam TXF_REVERSE = 8'h01;
@@ -237,6 +236,11 @@ module vgc (
     logic [8:0] pre_gfx_x;
     logic [7:0] pre_gfx_y;
     logic [5:0] scroll_offset;
+    logic [8:0] scroll_x_full;
+    logic [8:0] scroll_x_fetch;
+    logic [7:0] scroll_y_fetch;
+    logic       scroll_gfx_enable;
+    logic       scroll_text_enable;
 
     vgc_timing timing_inst (
         .clk(clk), .rst(video_rst),
@@ -260,6 +264,10 @@ module vgc (
         .gfx_x_d1(gfx_x_d1), .gfx_x_d2(gfx_x_d2),
         .gfx_y_d1(gfx_y_d1), .gfx_y_d2(gfx_y_d2),
         .font_line_d1(font_line_d1),
+        .scroll_x(scroll_x_fetch),
+        .scroll_y(scroll_y_fetch),
+        .scroll_gfx_enable(scroll_gfx_enable),
+        .scroll_text_enable(scroll_text_enable),
         .scroll_offset(scroll_offset),
         .pre_gfx_x(pre_gfx_x), .pre_gfx_y(pre_gfx_y)
     );
@@ -292,15 +300,51 @@ module vgc (
     end
 
     // =========================================================================
-    // Palette (16 C64-style colors → 12-bit RGB)
+    // Fixed palette (16 color indices -> 12-bit RGB)
     // =========================================================================
-    logic [11:0] palette [0:15];
-    initial begin
-        palette[0]  = 12'h000; palette[1]  = 12'hFFF; palette[2]  = 12'h800; palette[3]  = 12'hAFE;
-        palette[4]  = 12'hC4C; palette[5]  = 12'h0C5; palette[6]  = 12'h00A; palette[7]  = 12'hEE7;
-        palette[8]  = 12'hD85; palette[9]  = 12'h640; palette[10] = 12'hF77; palette[11] = 12'h333;
-        palette[12] = 12'h777; palette[13] = 12'h8F6; palette[14] = 12'h08F; palette[15] = 12'hBBB;
-    end
+    logic palette_mode = 1'b0; // 0=C64/Nova, 1=IBM EGA
+
+    function automatic logic [11:0] palette_rgb(input logic [3:0] idx);
+        if (palette_mode) begin
+            case (idx)
+                4'h0: palette_rgb = 12'h000;
+                4'h1: palette_rgb = 12'h00A;
+                4'h2: palette_rgb = 12'h0A0;
+                4'h3: palette_rgb = 12'h0AA;
+                4'h4: palette_rgb = 12'hA00;
+                4'h5: palette_rgb = 12'hA0A;
+                4'h6: palette_rgb = 12'hA50;
+                4'h7: palette_rgb = 12'hAAA;
+                4'h8: palette_rgb = 12'h555;
+                4'h9: palette_rgb = 12'h55F;
+                4'hA: palette_rgb = 12'h5F5;
+                4'hB: palette_rgb = 12'h5FF;
+                4'hC: palette_rgb = 12'hF55;
+                4'hD: palette_rgb = 12'hF5F;
+                4'hE: palette_rgb = 12'hFF5;
+                default: palette_rgb = 12'hFFF;
+            endcase
+        end else begin
+            case (idx)
+                4'h0: palette_rgb = 12'h000;
+                4'h1: palette_rgb = 12'hFFF;
+                4'h2: palette_rgb = 12'h800;
+                4'h3: palette_rgb = 12'hAFE;
+                4'h4: palette_rgb = 12'hC4C;
+                4'h5: palette_rgb = 12'h0C5;
+                4'h6: palette_rgb = 12'h00A;
+                4'h7: palette_rgb = 12'hEE7;
+                4'h8: palette_rgb = 12'hD85;
+                4'h9: palette_rgb = 12'h640;
+                4'hA: palette_rgb = 12'hF77;
+                4'hB: palette_rgb = 12'h333;
+                4'hC: palette_rgb = 12'h777;
+                4'hD: palette_rgb = 12'h8F6;
+                4'hE: palette_rgb = 12'h08F;
+                default: palette_rgb = 12'hBBB;
+            endcase
+        end
+    endfunction
 
     // =========================================================================
     // Text sub-module (SCRIBE) — dpram port A signals
@@ -583,7 +627,7 @@ module vgc (
         .clk(clk), .rst(vgc_module_rst),
         .h_count(h_count), .v_count(v_count),
         .in_text_area(in_text_area),
-        .gfx_x(gfx_x), .gfx_y(gfx_y),
+        .gfx_x(pre_gfx_x), .gfx_y(pre_gfx_y),
         .copper_pos_flat(copper_pos_flat), .copper_reg_flat(copper_reg_flat),
         .copper_val_flat(copper_val_flat), .copper_count(copper_count),
         .copper_enabled(copper_enabled),
@@ -648,7 +692,10 @@ module vgc (
     wire         sprite_frame_publish = sprite_frame_commit &&
                                         !sprite_shape_publish_block &&
                                         !sprite_shape_sync_busy;
-    logic [7:0]  scroll_x, scroll_y;
+    logic [7:0]  scroll_x, scroll_y, scroll_ctl;
+    assign scroll_x_full = {scroll_ctl[0], scroll_x};
+    assign scroll_gfx_enable = scroll_ctl[1];
+    assign scroll_text_enable = scroll_ctl[2];
     // Keyboard input — 256-byte ring buffer (ZipCPU sfifo, public domain,
     // formally verified). Replaces the single-entry char_in_reg that
     // previously dropped rapid keystrokes. See rtl/thirdparty/sfifo.v.
@@ -691,10 +738,8 @@ module vgc (
     logic        scroll_pending;
     logic        scroll_clearing;
     logic [6:0]  scroll_col;
-    logic        tile_reset_busy;
 
-    assign rdy_out = !(vgc_reset_pending || scroll_pending ||
-                       reset_clear_busy || tile_reset_busy);
+    assign rdy_out = !(vgc_reset_pending || scroll_pending || reset_clear_busy);
     wire [7:0] irq_event_mask =
         ((vblank_start && irq_enable[0]) ? IRQ_VBLANK : 8'h00) |
         ((copper_fire && copper_fire_reg == COPPER_REG_IRQ)
@@ -791,7 +836,8 @@ module vgc (
         vram_port_read_active = 0; vram_port_read_space = SPACE_CHAR; vram_port_read_addr = 0;
         text_flags = 8'h00; text_reverse_attr = 8'hF0;
         frame_counter = 0;
-        scroll_x = 0; scroll_y = 0;
+        scroll_x = 0; scroll_y = 0; scroll_ctl = SCROLL_CTL_DEFAULT;
+        scroll_x_fetch = 0; scroll_y_fetch = 0;
         scroll_offset = 0; scroll_pending = 0; scroll_clearing = 0; scroll_col = 0;
         key_fifo_rd = 0; charin_sel_prev = 0; cmd_busy = 0; cmd_op = 0;
         font_slot = 0; collision_ss = 0; collision_bg = 0;
@@ -801,7 +847,6 @@ module vgc (
         sprcopy_phase = 0; sprcopy_data = 0; sprdef_wait = 0;
         memread_pending = 2'd0; memread_space = SPACE_CHAR;
         memcmd_pending = 1'b0; memcmd_code = 0; memcmd_delay = 0;
-        vgc_tile_addr = 0; vgc_tile_wdata = 0; vgc_tile_we = 0; vgc_tile_re = 0;
         cmd_x = 0; cmd_y = 0; cmd_x2 = 0; cmd_y2 = 0; cmd_cx = 0; cmd_cy = 0;
         cmd_char_addr = 0; cmd_char_din = 0; cmd_char_we = 0;
         cmd_color_addr = 0; cmd_color_din = 0; cmd_color_we = 0;
@@ -877,10 +922,10 @@ module vgc (
     wire dim_reg_sel   = (cpu_addr == DIM_REG_ADDR);
     wire text_reg_sel  = (cpu_addr == TEXT_FLAGS_ADDR || cpu_addr == TEXT_REVATTR_ADDR);
     wire gfx_trans_sel = (cpu_addr == GFX_TRANS_ADDR);
+    wire palette_mode_sel = (cpu_addr == PALETTE_MODE_ADDR);
+    wire scroll_ctl_sel = (cpu_addr == SCROLL_CTL_ADDR);
     wire fio_name_sel  = (cpu_addr >= FIO_NAME && cpu_addr <= 16'hB9EF);
     wire fio_len_sel   = (cpu_addr == FIO_NAME_LEN);
-    wire tile_reg_sel  = (cpu_addr >= 16'hA0C0 && cpu_addr <= 16'hA0DF);
-    wire [7:0]  tile_rdata;
     wire [4:0]  reg_offset   = cpu_addr[4:0];
     wire [3:0]  irq_offset   = cpu_addr[3:0];
     wire [2:0]  vram_reg_off = cpu_addr[2:0];
@@ -907,6 +952,8 @@ module vgc (
     wire dim_reg_sel_w   = (r_cpu_addr_w == DIM_REG_ADDR);
     wire text_reg_sel_w  = (r_cpu_addr_w == TEXT_FLAGS_ADDR || r_cpu_addr_w == TEXT_REVATTR_ADDR);
     wire gfx_trans_sel_w = (r_cpu_addr_w == GFX_TRANS_ADDR);
+    wire palette_mode_sel_w = (r_cpu_addr_w == PALETTE_MODE_ADDR);
+    wire scroll_ctl_sel_w = (r_cpu_addr_w == SCROLL_CTL_ADDR);
     wire fio_name_sel_w  = (r_cpu_addr_w >= FIO_NAME && r_cpu_addr_w <= 16'hB9EF);
     wire fio_len_sel_w   = (r_cpu_addr_w == FIO_NAME_LEN);
     wire [4:0]  reg_offset_w   = r_cpu_addr_w[4:0];
@@ -935,12 +982,26 @@ module vgc (
         gfx_addr_xy = {1'b0, y, 8'b0} + {3'b0, y, 6'b0} + {8'b0, x};
     endfunction
 
+    function automatic logic [8:0] normalize_scroll_x(
+        input logic high_bit,
+        input logic [7:0] low_byte
+    );
+        logic [8:0] full;
+        begin
+            full = {high_bit, low_byte};
+            normalize_scroll_x = (full >= 9'd320) ? 9'(full - 9'd320) : full;
+        end
+    endfunction
+
+    function automatic logic [7:0] normalize_scroll_y(input logic [7:0] value);
+        normalize_scroll_y = (value >= 8'd200) ? 8'(value - 8'd200) : value;
+    endfunction
+
     wire vram_data_read = cpu_re && cpu_ce && vram_reg_sel && vram_reg_off == VR_DATA;
     wire vram_char_read = vram_port_read_active && vram_port_read_space == SPACE_CHAR   && vram_port_read_addr < TEXT_SIZE;
     wire vram_color_read= vram_port_read_active && vram_port_read_space == SPACE_COLOR  && vram_port_read_addr < TEXT_SIZE;
     wire vram_gfx_read  = vram_port_read_active && vram_port_read_space == SPACE_GFX    && vram_port_read_addr < GFX_SIZE;
     wire vram_spr_read  = vram_port_read_active && vram_port_read_space == SPACE_SPRITE && vram_port_read_addr < SPR_SIZE;
-    wire vram_tile_read = vram_port_read_active && vram_port_read_space == SPACE_TILE   && vram_port_read_addr < TILE_SIZE;
     wire vram_attr_read = vram_port_read_active && vram_port_read_space == SPACE_TEXTATTR && vram_port_read_addr < TEXT_SIZE;
 
     // =========================================================================
@@ -973,7 +1034,6 @@ module vgc (
                     SPACE_COLOR:  vram_cpu_read_latch <= color_a_dout;
                     SPACE_GFX:    vram_cpu_read_latch <= {4'b0, gfx_a_dout};
                     SPACE_SPRITE: vram_cpu_read_latch <= spr_a_dout;
-                    SPACE_TILE:   vram_cpu_read_latch <= tile_blt_rdata;
                     SPACE_TEXTATTR: vram_cpu_read_latch <= attr_a_dout;
                     default:      vram_cpu_read_latch <= 8'h00;
                 endcase
@@ -1023,6 +1083,8 @@ module vgc (
             endcase
         end
         else if (dim_reg_sel) cpu_rdata = {4'b0, display_dim};
+        else if (palette_mode_sel) cpu_rdata = {7'b0, palette_mode};
+        else if (scroll_ctl_sel) cpu_rdata = {5'b0, scroll_ctl[2:0]};
         else if (text_reg_sel) begin
             case (cpu_addr)
                 TEXT_FLAGS_ADDR:   cpu_rdata = text_flags;
@@ -1031,7 +1093,6 @@ module vgc (
             endcase
         end
         else if (gfx_trans_sel) cpu_rdata = {4'b0, gfx_trans_color};
-        else if (tile_reg_sel)   cpu_rdata = tile_rdata;
         else if (spr_reg_sel) begin
             // 8 regs per sprite: X lo, X hi, Y lo, Y hi, shape, flags, pri, trans
             // Flags byte layout matches the write path (bit 7 = enable,
@@ -1054,12 +1115,13 @@ module vgc (
     // can inspect registers and the VDC-style VRAM port state only.
     wire dbg_vgc_sel   = (dbg_addr >= VGC_BASE && dbg_addr <= VGC_REGS_END);
     wire dbg_irq_sel   = (dbg_addr >= VGC_IRQ_BASE && dbg_addr <= VGC_IRQ_END);
-    wire dbg_tile_sel  = (dbg_addr >= 16'hA0C0 && dbg_addr <= 16'hA0DF);
     wire dbg_spr_sel   = (dbg_addr >= SPR_REG_BASE && dbg_addr <= SPR_REG_END);
     wire dbg_vram_sel  = (dbg_addr >= VRAM_REG_BASE && dbg_addr <= VRAM_REG_END);
     wire dbg_dim_sel   = (dbg_addr == DIM_REG_ADDR);
     wire dbg_text_sel  = (dbg_addr == TEXT_FLAGS_ADDR || dbg_addr == TEXT_REVATTR_ADDR);
     wire dbg_gfx_trans_sel = (dbg_addr == GFX_TRANS_ADDR);
+    wire dbg_palette_mode_sel = (dbg_addr == PALETTE_MODE_ADDR);
+    wire dbg_scroll_ctl_sel = (dbg_addr == SCROLL_CTL_ADDR);
     wire dbg_write_vgc_sel  = dbg_we && (dbg_waddr >= VGC_BASE && dbg_waddr <= VGC_REGS_END);
     wire dbg_write_irq_sel  = dbg_we && (dbg_waddr >= VGC_IRQ_BASE && dbg_waddr <= VGC_IRQ_END);
     wire dbg_write_spr_sel  = dbg_we && (dbg_waddr >= SPR_REG_BASE && dbg_waddr <= SPR_REG_END);
@@ -1067,6 +1129,8 @@ module vgc (
     wire dbg_write_dim_sel  = dbg_we && (dbg_waddr == DIM_REG_ADDR);
     wire dbg_write_text_sel = dbg_we && (dbg_waddr == TEXT_FLAGS_ADDR || dbg_waddr == TEXT_REVATTR_ADDR);
     wire dbg_write_gfx_trans_sel = dbg_we && (dbg_waddr == GFX_TRANS_ADDR);
+    wire dbg_write_palette_mode_sel = dbg_we && (dbg_waddr == PALETTE_MODE_ADDR);
+    wire dbg_write_scroll_ctl_sel = dbg_we && (dbg_waddr == SCROLL_CTL_ADDR);
     wire [4:0] dbg_reg_offset_w = dbg_waddr[4:0];
     wire [2:0] dbg_vram_reg_off_w = dbg_waddr[2:0];
 
@@ -1089,6 +1153,8 @@ module vgc (
                 REG_FGCOL:   dbg_rdata = {4'b0, fg_color};
                 REG_CURSORX: dbg_rdata = {1'b0, cursor_x};
                 REG_CURSORY: dbg_rdata = {2'b0, cursor_y};
+                5'd5:        dbg_rdata = scroll_x;
+                5'd6:        dbg_rdata = scroll_y;
                 5'd7:        dbg_rdata = {5'b0, font_slot};
                 5'd8:        dbg_rdata = frame_counter;  // VGC_FRAME
                 5'd10:       dbg_rdata = {7'b0, cursor_enable};
@@ -1117,6 +1183,8 @@ module vgc (
             endcase
         end
         else if (dbg_dim_sel) dbg_rdata = {4'b0, display_dim};
+        else if (dbg_palette_mode_sel) dbg_rdata = {7'b0, palette_mode};
+        else if (dbg_scroll_ctl_sel) dbg_rdata = {5'b0, scroll_ctl[2:0]};
         else if (dbg_text_sel) begin
             case (dbg_addr)
                 TEXT_FLAGS_ADDR:   dbg_rdata = text_flags;
@@ -1148,7 +1216,10 @@ module vgc (
             cursor_x <= 0; cursor_y <= 0; mode <= 0;
             border_color <= 4'd11; fg_color <= 4'd15; bg_color <= 4'd0;
             gfx_color <= 4'd1; display_dim <= 4'd15; gfx_trans_color <= 4'd0;
-            cursor_enable <= 0; font_slot <= 0;
+            cursor_enable <= 0; palette_mode <= 1'b0; font_slot <= 0;
+            scroll_ctl <= SCROLL_CTL_DEFAULT;
+            scroll_x_fetch <= 0;
+            scroll_y_fetch <= 0;
             frame_counter <= 0;
             vram_plane <= SPACE_CHAR; vram_addr <= 16'd0; vram_ctrl <= 8'h01;
             text_flags <= 8'h00; text_reverse_attr <= 8'hF0;
@@ -1189,8 +1260,6 @@ module vgc (
             cmd_spr_din <= 8'h00;
             cmd_spr_we <= 0;
             cmd_spr_re <= 0;
-            vgc_tile_addr <= 15'd0; vgc_tile_wdata <= 8'h00;
-            vgc_tile_we <= 0; vgc_tile_re <= 0;
             artist_cmd_valid <= 0;
             artist_cmd_code <= 8'h00;
             vgc_cmd_reset_req <= 1'b0;
@@ -1336,10 +1405,6 @@ module vgc (
                 end
             end
 
-            // Clear VGC tile command strobes
-            vgc_tile_we <= 0;
-            vgc_tile_re <= 0;
-
             // MemRead latency: 2-cycle pipeline. Memory-space IDs match the
             // VDC-style VRAM port/DMA/blitter plane IDs.
             //   memread_pending==2 after dispatch — re-assert the read
@@ -1350,7 +1415,6 @@ module vgc (
                 case (memread_space)
                     SPACE_GFX:    cmd_gfx_re <= 1;       // keep gfx read active
                     SPACE_SPRITE: cmd_spr_re <= 1;       // keep sprite read active
-                    SPACE_TILE:   vgc_tile_re <= 1;      // keep tile read active
                     // char/color use the port A default-addr
                     // path which holds cmd_char_addr / cmd_color_addr.
                     default: ;
@@ -1363,7 +1427,6 @@ module vgc (
                     SPACE_TEXTATTR: regs[20] <= attr_a_dout;
                     SPACE_GFX:    regs[20] <= {4'b0, gfx_a_dout};
                     SPACE_SPRITE: regs[20] <= spr_a_dout;
-                    SPACE_TILE:   regs[20] <= tile_blt_rdata;
                     default: ;
                 endcase
                 memread_pending <= 2'd0;
@@ -1408,12 +1471,6 @@ module vgc (
                                     memread_pending <= 2'd2;
                                     memread_space <= SPACE_SPRITE;
                                 end
-                                SPACE_TILE: begin
-                                    vgc_tile_addr <= {regs[19][6:0], regs[18]};
-                                    vgc_tile_re <= 1;
-                                    memread_pending <= 2'd2;
-                                    memread_space <= SPACE_TILE;
-                                end
                                 default: ;
                             endcase
                         end
@@ -1443,11 +1500,6 @@ module vgc (
                                     cmd_spr_addr <= {regs[19], regs[18]};
                                     cmd_spr_din <= regs[20];
                                     cmd_spr_we <= 1;
-                                end
-                                SPACE_TILE: begin
-                                    vgc_tile_addr <= {regs[19][6:0], regs[18]};
-                                    vgc_tile_wdata <= regs[20];
-                                    vgc_tile_we <= 1;
                                 end
                                 default: ;
                             endcase
@@ -1593,9 +1645,24 @@ module vgc (
             // Copper fire: apply register writes from sub-module
             if (copper_fire) begin
                 case (copper_fire_reg)
+                    8'd0: mode         <= copper_fire_val[2:0];
                     8'd1: bg_color     <= copper_fire_val[3:0];
                     8'd2: fg_color     <= copper_fire_val[3:0];
+                    8'd5: begin
+                        scroll_x <= copper_fire_val;
+                        scroll_x_fetch <= normalize_scroll_x(scroll_ctl[0], copper_fire_val);
+                    end
+                    8'd6: begin
+                        scroll_y <= copper_fire_val;
+                        scroll_y_fetch <= normalize_scroll_y(copper_fire_val);
+                    end
+                    8'd7: font_slot    <= (copper_fire_val[2:0] >= 3'd3) ? 3'd0
+                                                                          : copper_fire_val[2:0];
                     8'd13: border_color <= copper_fire_val[3:0];
+                    8'hEA: begin
+                        scroll_ctl <= {5'b0, copper_fire_val[2:0]};
+                        scroll_x_fetch <= normalize_scroll_x(copper_fire_val[0], scroll_x);
+                    end
                     COPPER_REG_IRQ: ; // irq_event_mask latches enabled source bits
                     default: regs[copper_fire_reg[4:0]] <= copper_fire_val;
                 endcase
@@ -1616,8 +1683,14 @@ module vgc (
                         REG_CURSORY: cursor_y <= (r_cpu_wdata_w[5:0] > LAST_TEXT_ROW)
                                                    ? LAST_TEXT_ROW
                                                    : r_cpu_wdata_w[5:0];
-                        5'd5:        scroll_x <= r_cpu_wdata_w;
-                        5'd6:        scroll_y <= r_cpu_wdata_w;
+                        5'd5: begin
+                            scroll_x <= r_cpu_wdata_w;
+                            scroll_x_fetch <= normalize_scroll_x(scroll_ctl[0], r_cpu_wdata_w);
+                        end
+                        5'd6: begin
+                            scroll_y <= r_cpu_wdata_w;
+                            scroll_y_fetch <= normalize_scroll_y(r_cpu_wdata_w);
+                        end
                         5'd7:        font_slot <= (r_cpu_wdata_w[2:0] >= 3'd3) ? 3'd0
                                                                                : r_cpu_wdata_w[2:0];
                         5'd8:        gfx_color <= r_cpu_wdata_w[3:0];
@@ -1862,13 +1935,6 @@ module vgc (
                                         cmd_spr_we <= 1;
                                     end
                                 end
-                                SPACE_TILE: begin
-                                    if (vram_addr < TILE_SIZE) begin
-                                        vgc_tile_addr <= vram_addr[14:0];
-                                        vgc_tile_wdata <= r_cpu_wdata_w;
-                                        vgc_tile_we <= 1;
-                                    end
-                                end
                                 default: ;
                             endcase
                             if (vram_ctrl[0])
@@ -1883,6 +1949,14 @@ module vgc (
 
                 if (gfx_trans_sel_w)
                     gfx_trans_color <= r_cpu_wdata_w[3:0];
+
+                if (palette_mode_sel_w)
+                    palette_mode <= r_cpu_wdata_w[0];
+
+                if (scroll_ctl_sel_w) begin
+                    scroll_ctl <= {5'b0, r_cpu_wdata_w[2:0]};
+                    scroll_x_fetch <= normalize_scroll_x(r_cpu_wdata_w[0], scroll_x);
+                end
 
                 if (text_reg_sel_w) begin
                     case (r_cpu_addr_w)
@@ -1938,8 +2012,14 @@ module vgc (
                     REG_CURSORY: cursor_y <= (dbg_wdata[5:0] > LAST_TEXT_ROW)
                                                ? LAST_TEXT_ROW
                                                : dbg_wdata[5:0];
-                    5'd5:        scroll_x <= dbg_wdata;
-                    5'd6:        scroll_y <= dbg_wdata;
+                    5'd5: begin
+                        scroll_x <= dbg_wdata;
+                        scroll_x_fetch <= normalize_scroll_x(scroll_ctl[0], dbg_wdata);
+                    end
+                    5'd6: begin
+                        scroll_y <= dbg_wdata;
+                        scroll_y_fetch <= normalize_scroll_y(dbg_wdata);
+                    end
                     5'd7:        font_slot <= (dbg_wdata[2:0] >= 3'd3) ? 3'd0
                                                                         : dbg_wdata[2:0];
                     5'd8:        gfx_color <= dbg_wdata[3:0];
@@ -1973,6 +2053,14 @@ module vgc (
 
             if (dbg_write_gfx_trans_sel)
                 gfx_trans_color <= dbg_wdata[3:0];
+
+            if (dbg_write_palette_mode_sel)
+                palette_mode <= dbg_wdata[0];
+
+            if (dbg_write_scroll_ctl_sel) begin
+                scroll_ctl <= {5'b0, dbg_wdata[2:0]};
+                scroll_x_fetch <= normalize_scroll_x(dbg_wdata[0], scroll_x);
+            end
 
             if (dbg_write_spr_sel) begin
                 case (dbg_spr_field_w)
@@ -2032,13 +2120,6 @@ module vgc (
                                     cmd_spr_addr <= vram_addr[10:0];
                                     cmd_spr_din <= dbg_wdata;
                                     cmd_spr_we <= 1;
-                                end
-                            end
-                            SPACE_TILE: begin
-                                if (vram_addr < TILE_SIZE) begin
-                                    vgc_tile_addr <= vram_addr[14:0];
-                                    vgc_tile_wdata <= dbg_wdata;
-                                    vgc_tile_we <= 1;
                                 end
                             end
                             default: ;
@@ -2106,7 +2187,6 @@ module vgc (
                     3'd2: blt_rd_latch <= color_a_dout;
                     3'd3: blt_rd_latch <= {4'b0, gfx_a_dout};
                     3'd4: blt_rd_latch <= spr_a_dout;
-                    3'd6: blt_rd_latch <= tile_blt_rdata;
                     SPACE_TEXTATTR: blt_rd_latch <= attr_a_dout;
                     default: ;
                 endcase
@@ -2121,7 +2201,6 @@ module vgc (
             3'd2: blt_live_rdata = color_a_dout;
             3'd3: blt_live_rdata = {4'b0, gfx_a_dout};
             3'd4: blt_live_rdata = spr_a_dout;
-            3'd6: blt_live_rdata = tile_blt_rdata;
             SPACE_TEXTATTR: blt_live_rdata = attr_a_dout;
             default: blt_live_rdata = 8'h00;
         endcase
@@ -2141,8 +2220,6 @@ module vgc (
                            (dbg_vmem_addr < GFX_SIZE);
     wire dbg_vmem_spr_we = dbg_vmem_we && dbg_vmem_space == SPACE_SPRITE &&
                            (dbg_vmem_addr < SPR_SIZE);
-    wire dbg_vmem_tile_we = dbg_vmem_we && dbg_vmem_space == SPACE_TILE &&
-                            (dbg_vmem_addr < TILE_SIZE);
     wire dbg_vmem_char_re = dbg_vmem_re && dbg_vmem_space == SPACE_CHAR &&
                             (dbg_vmem_addr < TEXT_SIZE);
     wire dbg_vmem_color_re = dbg_vmem_re && dbg_vmem_space == SPACE_COLOR &&
@@ -2153,8 +2230,6 @@ module vgc (
                            (dbg_vmem_addr < GFX_SIZE);
     wire dbg_vmem_spr_re = dbg_vmem_re && dbg_vmem_space == SPACE_SPRITE &&
                            (dbg_vmem_addr < SPR_SIZE);
-    wire dbg_vmem_tile_re = dbg_vmem_re && dbg_vmem_space == SPACE_TILE &&
-                            (dbg_vmem_addr < TILE_SIZE);
 
     // Port A address/data/we mux for each memory.
     //
@@ -2315,31 +2390,6 @@ module vgc (
         end
     end
 
-    // =========================================================================
-    // Tile engine instance
-    // =========================================================================
-    wire [11:0] tile_rgb;
-    wire [1:0]  tile_opaque;
-    wire [7:0]  tile_blt_rdata;
-
-    logic [14:0] vgc_tile_addr;
-    logic [7:0]  vgc_tile_wdata;
-    logic        vgc_tile_we;
-    logic        vgc_tile_re;
-
-    wire [14:0] tile_blt_addr  = dbg_vmem_tile_we ? dbg_vmem_addr[14:0] :
-                                  vgc_tile_we      ? vgc_tile_addr :
-                                  (blt_we && blt_space == 3'd6) ? blt_addr[14:0] :
-                                  vgc_tile_re      ? vgc_tile_addr :
-                                  vram_tile_read   ? vram_port_read_addr[14:0] :
-                                  (blt_re && blt_space == 3'd6) ? blt_addr[14:0] :
-                                  dbg_vmem_tile_re ? dbg_vmem_addr[14:0] :
-                                                     blt_addr[14:0];
-    wire [7:0]  tile_blt_wdata = dbg_vmem_tile_we ? dbg_vmem_wdata :
-                                  vgc_tile_we ? vgc_tile_wdata : blt_wdata;
-    wire        tile_blt_we    = dbg_vmem_tile_we || vgc_tile_we || (blt_we && blt_space == 3'd6);
-    wire        tile_blt_re    = vgc_tile_re || vram_tile_read || (blt_re && blt_space == 3'd6) || dbg_vmem_tile_re;
-
     always_comb begin
         unique case (dbg_vmem_space)
             SPACE_CHAR:   dbg_vmem_rdata = char_a_dout;
@@ -2347,36 +2397,9 @@ module vgc (
             SPACE_TEXTATTR: dbg_vmem_rdata = attr_a_dout;
             SPACE_GFX:    dbg_vmem_rdata = {4'h0, gfx_a_dout};
             SPACE_SPRITE: dbg_vmem_rdata = spr_a_dout;
-            SPACE_TILE:   dbg_vmem_rdata = tile_blt_rdata;
             default:      dbg_vmem_rdata = 8'h00;
         endcase
     end
-
-    tile_engine tile_inst (
-        .clk        (clk),
-        .rst        (vgc_module_rst),
-        .cpu_addr   (cpu_addr),
-        .cpu_raddr  (cpu_addr),
-        .cpu_waddr  (r_cpu_addr_w),
-        .cpu_wdata  (r_cpu_wdata_w),
-        .cpu_we     (write_active),
-        .cpu_rdata  (tile_rdata),
-        .cpu_re     (cpu_re),
-        .dma_addr   (tile_dma_addr),
-        .dma_data   (tile_dma_data),
-        .dma_active (tile_dma_active),
-        .reset_busy (tile_reset_busy),
-        .blt_tile_addr (tile_blt_addr),
-        .blt_tile_wdata(tile_blt_wdata),
-        .blt_tile_we   (tile_blt_we),
-        .blt_tile_re   (tile_blt_re),
-        .blt_tile_rdata(tile_blt_rdata),
-        .pixel_x    (pre_gfx_x),
-        .pixel_y    (pre_gfx_y),
-        .pixel_valid(in_text_area),
-        .tile_rgb   (tile_rgb),
-        .tile_opaque(tile_opaque)
-    );
 
 `ifndef SYNTHESIS
     always_comb begin
@@ -2407,10 +2430,6 @@ module vgc (
                             : sprite_inst.spr_mem0.mem[dbg_vram_addr[10:0]];
                     end
                 end
-                SPACE_TILE: begin
-                    if (dbg_vram_addr < TILE_SIZE)
-                        dbg_vram_rdata = tile_inst.tile_data_ram.mem[dbg_vram_addr[14:0]];
-                end
                 default: ;
             endcase
         end
@@ -2434,7 +2453,7 @@ module vgc (
     // and release only at the first clean frame boundary after all scrubbers
     // are idle.
     always_ff @(posedge clk) begin
-        if (video_rst || vgc_module_rst || reset_clear_busy || tile_reset_busy)
+        if (video_rst || vgc_module_rst || reset_clear_busy)
             reset_display_blank <= 1'b1;
         else if (frame_start)
             reset_display_blank <= 1'b0;
@@ -2442,26 +2461,15 @@ module vgc (
 
     wire reset_display_active = reset_display_blank || vgc_module_rst;
 
-    // Tile engine output delayed to match pipeline. POR determinism via
-    // declaration init — ECP5 trellis honors `= 0` as bitstream FF init,
-    // costs nothing in fabric. Without init, mode-4 boot starts with garbage
-    // tile pixels until the first valid tile_rgb propagates.
-    logic [11:0] tile_rgb_d1 = 0, tile_rgb_d2 = 0;
-    logic [1:0]  tile_opaque_d1 = 0, tile_opaque_d2 = 0;
-    always_ff @(posedge clk) begin
-        tile_rgb_d1 <= tile_rgb;       tile_rgb_d2 <= tile_rgb_d1;
-        tile_opaque_d1 <= tile_opaque; tile_opaque_d2 <= tile_opaque_d1;
-    end
-
     always_comb begin
         cur_fg_d2     = color_b_dout[3:0];
         cur_bg_d2     = color_b_dout[7:4];
         text_flash_hidden_d2 = attr_b_dout[0] && !frame_counter[5];
         pixel_on_d2   = font_b_dout[3'd7 - font_pixel_d2] && !text_flash_hidden_d2;
-        text_pixel_d2 = pixel_on_d2 ? palette[cur_fg_d2] : palette[cur_bg_d2];
+        text_pixel_d2 = pixel_on_d2 ? palette_rgb(cur_fg_d2) : palette_rgb(cur_bg_d2);
 
         cur_gfx_d2    = gfx_b_dout;
-        gfx_pixel_d2  = palette[cur_gfx_d2];
+        gfx_pixel_d2  = palette_rgb(cur_gfx_d2);
 
         // Layer compositing with sprite priorities. `visible_d2` is the
         // physical active-video window; `in_text_area_d2` is the Nova canvas.
@@ -2470,19 +2478,19 @@ module vgc (
             pixel_color = 12'h000;
         else if (reset_display_active)
             // Keep HDMI timing stable, but hide stale BRAM contents while the
-            // reset scrubbers clear text/graphics/sprite/tile memory.
+            // reset scrubbers clear text/graphics/sprite memory.
             pixel_color = 12'h000;
         else begin
             if (!in_text_area_d2) begin
-                pixel_color = palette[border_color];
+                pixel_color = palette_rgb(border_color);
             end else begin
                 case (mode)
                     3'd0: pixel_color = text_pixel_d2;
                     3'd1: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : text_pixel_d2;
-                    3'd2: pixel_color = pixel_on_d2 ? palette[cur_fg_d2] :
-                                        (cur_gfx_d2 != gfx_trans_color && cur_bg_d2 == bg_color) ? gfx_pixel_d2 : palette[cur_bg_d2];
-                    3'd3: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : palette[bg_color];
-                    3'd4: pixel_color = (tile_opaque_d2 != 0) ? tile_rgb_d2 : palette[bg_color];
+                    3'd2: pixel_color = pixel_on_d2 ? palette_rgb(cur_fg_d2) :
+                                        (cur_gfx_d2 != gfx_trans_color && cur_bg_d2 == bg_color) ? gfx_pixel_d2 : palette_rgb(cur_bg_d2);
+                    3'd3: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : palette_rgb(bg_color);
+                    3'd4: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : palette_rgb(bg_color);
                     default: pixel_color = text_pixel_d2;
                 endcase
             end
@@ -2490,18 +2498,18 @@ module vgc (
             if (spr_pixel_hit && in_text_area_d2) begin
                 if (mode == 3'd4) begin
                     if (spr_pixel_pri == 2'd0) begin
-                        if (tile_opaque_d2 == 0) pixel_color = palette[spr_pixel];
+                        if (cur_gfx_d2 == gfx_trans_color) pixel_color = palette_rgb(spr_pixel);
                     end else if (spr_pixel_pri == 2'd1) begin
-                        if (tile_opaque_d2 < 2'd2) pixel_color = palette[spr_pixel];
+                        pixel_color = palette_rgb(spr_pixel);
                     end else begin
-                        pixel_color = palette[spr_pixel];
+                        pixel_color = palette_rgb(spr_pixel);
                     end
                 end else begin
                     if (spr_pixel_pri == 2'd0) begin
                         if (!pixel_on_d2 && cur_gfx_d2 == gfx_trans_color)
-                            pixel_color = palette[spr_pixel];
+                            pixel_color = palette_rgb(spr_pixel);
                     end else begin
-                        pixel_color = palette[spr_pixel];
+                        pixel_color = palette_rgb(spr_pixel);
                     end
                 end
             end
@@ -2634,7 +2642,7 @@ module vgc (
     assign vid_b     = vid_b_r;
 
     always_comb begin
-        post_cursor_color = (cursor_here && cursor_blink) ? palette[fg_color] : pixel_color;
+        post_cursor_color = (cursor_here && cursor_blink) ? palette_rgb(fg_color) : pixel_color;
         dim_r = post_cursor_color[11:8] * display_dim;
         dim_g = post_cursor_color[7:4] * display_dim;
         dim_b = post_cursor_color[3:0] * display_dim;

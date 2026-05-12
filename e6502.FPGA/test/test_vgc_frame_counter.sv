@@ -37,8 +37,6 @@ module test_vgc_frame_counter;
     logic        key_valid = 0;
     logic [7:0]  key_data  = 0;
 
-    // Tie off unused
-    wire [15:0] tile_dma_addr; wire [7:0] tile_dma_data = 0; wire tile_dma_active;
     wire [2:0] blt_space; wire [15:0] blt_addr; wire [7:0] blt_rdata;
     logic [7:0] blt_wdata = 0; logic blt_we = 0, blt_re = 0;
     logic [15:0] dbg_addr = 0;
@@ -54,8 +52,6 @@ module test_vgc_frame_counter;
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata), .cpu_rdata(cpu_rdata),
         .cpu_we(cpu_we), .cpu_re(cpu_re),
         .key_valid(key_valid), .key_data(key_data),
-        .tile_dma_addr(tile_dma_addr), .tile_dma_data(tile_dma_data),
-        .tile_dma_active(tile_dma_active),
         .blt_space(blt_space), .blt_addr(blt_addr),
         .blt_rdata(blt_rdata), .blt_wdata(blt_wdata),
         .blt_we(blt_we), .blt_re(blt_re),

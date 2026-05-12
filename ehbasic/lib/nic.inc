@@ -21,6 +21,17 @@
 ;   NIC_SLOT      slot number
 ;   NIC_DMAL/H    CPU destination pointer
 ;   NIC_MSGLEN    byte count returned by hardware
+;
+; NIC.COMMAND writes NIC_CMDSHADOW first, increments NIC_CMDSEQ, then writes
+; NIC_CMD. NovaHost uses the pair to distinguish a fresh command from a delayed
+; retry clear of the previous command byte, and to recover the command if that
+; clear races with the new write.
+;
+; Hardware payload DMA:
+;   NIC_CMD_SEND snapshots NIC_DMAL/H:NIC_DMALEN bytes into the FPGA NIC TX
+;   buffer before NovaHost receives the event. NovaHost stages received bytes
+;   into the FPGA NIC RX buffer, writes NIC_MSGLEN, then writes
+;   NIC_HOSTCTRL_RX_START to copy the payload into NIC_DMAL/H.
 
 .ifndef NIC_INC_INCLUDED
 NIC_INC_INCLUDED = 1

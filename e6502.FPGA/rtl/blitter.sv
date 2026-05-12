@@ -1,6 +1,6 @@
 // Blitter — 2D rectangular DMA engine
 // Registers at $BA83-$BA9B. Copy, fill, and color-key transparency modes.
-// Operates across 7 memory spaces (CPU RAM, char, color, gfx, sprite, XRAM, tile).
+// Operates across CPU RAM, char, color, gfx, sprite, XRAM, and text attributes.
 // Stalls CPU via rdy_out during operation for maximum throughput.
 // Row buffer for safe same-space overlapping copies. Range and write-protect validation.
 
@@ -43,7 +43,7 @@ module blitter (
     output logic        xram_re,
     input  logic        xram_busy,
 
-    // Memory port C: VGC internal (char/color/gfx/sprite/tile)
+    // Memory port C: VGC internal (char/color/gfx/sprite/text attributes)
     output logic [2:0]  vgc_space,
     output logic [16:0] vgc_addr,     // shared VGC-space address bus
     input  logic [7:0]  vgc_rdata,
@@ -78,7 +78,7 @@ module blitter (
     localparam ERR_RANGE = 8'h03, ERR_BADARGS = 8'h04, ERR_WRITEPROT = 8'h05;
 
     localparam SPACE_CPU = 3'd0, SPACE_CHAR = 3'd1, SPACE_COLOR = 3'd2;
-    localparam SPACE_GFX = 3'd3, SPACE_SPRITE = 3'd4, SPACE_XRAM = 3'd5, SPACE_TILE = 3'd6;
+    localparam SPACE_GFX = 3'd3, SPACE_SPRITE = 3'd4, SPACE_XRAM = 3'd5;
     localparam SPACE_TEXTATTR = 3'd7;
 
     localparam ROM_BASE = 24'hC000;
@@ -103,7 +103,10 @@ module blitter (
         S_ROWBUF_READ_WAIT  = 4'd6, // dpram dout settles; capture row_buf[buf_idx]
         S_ROWBUF_WRITE      = 4'd7, // buffered mode: write row from buffer
         S_DONE              = 4'd8,
-        S_ROWBUF_WRITE_LOAD = 4'd9  // latch row_buf[buf_idx] before driving memory ports
+        S_ROWBUF_WRITE_LOAD = 4'd9, // latch row_buf[buf_idx] before driving memory ports
+        S_VALIDATE_SRC      = 4'd10,
+        S_VALIDATE_DST      = 4'd11,
+        S_VALIDATE_START    = 4'd12
     } state_t;
 
     state_t state;
@@ -111,12 +114,20 @@ module blitter (
     logic [2:0]  src_space, dst_space;
     logic [23:0] src_base, dst_base;
     logic [15:0] width, height;
+    logic [15:0] last_col, last_row;
     logic [15:0] src_stride, dst_stride;
     logic [7:0]  fill_value, color_key;
     logic [15:0] row, col;
     logic [23:0] wrote_count;
     logic [7:0]  read_byte;
     logic        read_valid;
+    logic [31:0] validate_row_start;
+    logic [31:0] validate_limit;
+    logic [15:0] validate_remaining;
+    logic [15:0] validate_stride;
+    logic [15:0] validate_width;
+    logic        validate_base_in_range;
+    wire  [31:0] validate_last_byte = validate_row_start + {16'd0, validate_width};
 
     // Row buffer for same-space copies
     logic [7:0]  row_buf [0:ROW_BUF_SIZE-1];
@@ -129,12 +140,15 @@ module blitter (
         fill_mode = 0; colorkey_mode = 0; use_row_buffer = 0;
         src_space = 0; dst_space = 0;
         src_base = 0; dst_base = 0;
-        width = 0; height = 0;
+        width = 0; height = 0; last_col = 0; last_row = 0;
         src_stride = 0; dst_stride = 0;
         fill_value = 0; color_key = 0;
         row = 0; col = 0; wrote_count = 0;
         read_byte = 0; read_valid = 0; buf_idx = 0;
         src_row_off = 0; dst_row_off = 0;
+        validate_row_start = 0; validate_limit = 0;
+        validate_remaining = 0; validate_stride = 0; validate_width = 0;
+        validate_base_in_range = 0;
     end
 
     // =========================================================================
@@ -173,42 +187,14 @@ module blitter (
             SPACE_GFX:    space_size = 20'(64000);
             SPACE_SPRITE: space_size = 20'(32768);
             SPACE_XRAM:   space_size = 20'(524288);
-            SPACE_TILE:   space_size = 20'(32768);
             SPACE_TEXTATTR: space_size = 20'(4000);
             default:      space_size = 0;
         endcase
     endfunction
 
-    // Range check: does base + (height-1)*stride + width fit in space?
-    function automatic logic rect_fits(
-        input logic [23:0] base, input logic [15:0] w, input logic [15:0] h,
-        input logic [15:0] stride, input logic [19:0] sz
-    );
-        logic [31:0] last_row_start, last_byte;
-        if (w == 0 || h == 0 || sz == 0) begin rect_fits = 0; end
-        else begin
-            last_row_start = {8'b0, base} + 32'(h - 1) * 32'(stride);
-            last_byte = last_row_start + 32'(w);
-            rect_fits = (last_byte <= {12'b0, sz}) && ({8'b0, base} < {12'b0, sz});
-        end
-    endfunction
-
-    // Write-protect check: CPU RAM writes must stay below ROM
-    function automatic logic write_protect_ok(
-        input logic [2:0] space, input logic [23:0] base,
-        input logic [15:0] w, input logic [15:0] h, input logic [15:0] stride
-    );
-        logic [31:0] last_byte;
-        if (space != SPACE_CPU) begin write_protect_ok = 1; end
-        else begin
-            last_byte = {8'b0, base} + 32'(h - 1) * 32'(stride) + 32'(w);
-            write_protect_ok = (last_byte <= {8'b0, ROM_BASE});
-        end
-    endfunction
-
     function automatic logic is_video_space(input logic [2:0] sp);
         case (sp)
-            SPACE_CHAR, SPACE_COLOR, SPACE_GFX, SPACE_SPRITE, SPACE_TILE, SPACE_TEXTATTR:
+            SPACE_CHAR, SPACE_COLOR, SPACE_GFX, SPACE_SPRITE, SPACE_TEXTATTR:
                 is_video_space = 1'b1;
             default:
                 is_video_space = 1'b0;
@@ -309,6 +295,8 @@ module blitter (
             dst_base <= 0;
             width <= 0;
             height <= 0;
+            last_col <= 0;
+            last_row <= 0;
             src_stride <= 0;
             dst_stride <= 0;
             fill_value <= 0;
@@ -321,6 +309,12 @@ module blitter (
             buf_idx <= 0;
             src_row_off <= 0;
             dst_row_off <= 0;
+            validate_row_start <= 0;
+            validate_limit <= 0;
+            validate_remaining <= 0;
+            validate_stride <= 0;
+            validate_width <= 0;
+            validate_base_in_range <= 0;
         end else begin
 
             case (state)
@@ -339,32 +333,75 @@ module blitter (
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADSPACE;
                         state <= S_DONE;
-                    end else if (!fill_mode &&
-                                 !rect_fits(src_base, width, height, src_stride, space_size(src_space))) begin
+                    end else begin
+                        if (!fill_mode) begin
+                            validate_row_start <= {8'b0, src_base};
+                            validate_limit <= {12'b0, space_size(src_space)};
+                            validate_remaining <= last_row;
+                            validate_stride <= src_stride;
+                            validate_width <= width;
+                            validate_base_in_range <= ({8'b0, src_base} < {12'b0, space_size(src_space)});
+                            state <= S_VALIDATE_SRC;
+                        end else begin
+                            validate_row_start <= {8'b0, dst_base};
+                            validate_limit <= {12'b0, space_size(dst_space)};
+                            validate_remaining <= last_row;
+                            validate_stride <= dst_stride;
+                            validate_width <= width;
+                            validate_base_in_range <= ({8'b0, dst_base} < {12'b0, space_size(dst_space)});
+                            state <= S_VALIDATE_DST;
+                        end
+                    end
+                end
+
+                S_VALIDATE_SRC: begin
+                    if (validate_remaining != 0) begin
+                        validate_row_start <= validate_row_start + {16'd0, validate_stride};
+                        validate_remaining <= validate_remaining - 16'd1;
+                    end else if (!validate_base_in_range || validate_last_byte > validate_limit) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_RANGE;
                         state <= S_DONE;
-                    end else if (!rect_fits(dst_base, width, height, dst_stride, space_size(dst_space))) begin
+                    end else begin
+                        validate_row_start <= {8'b0, dst_base};
+                        validate_limit <= {12'b0, space_size(dst_space)};
+                        validate_remaining <= last_row;
+                        validate_stride <= dst_stride;
+                        validate_width <= width;
+                        validate_base_in_range <= ({8'b0, dst_base} < {12'b0, space_size(dst_space)});
+                        state <= S_VALIDATE_DST;
+                    end
+                end
+
+                S_VALIDATE_DST: begin
+                    if (validate_remaining != 0) begin
+                        validate_row_start <= validate_row_start + {16'd0, validate_stride};
+                        validate_remaining <= validate_remaining - 16'd1;
+                    end else if (!validate_base_in_range || validate_last_byte > validate_limit) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_RANGE;
                         state <= S_DONE;
-                    end else if (!write_protect_ok(dst_space, dst_base, width, height, dst_stride)) begin
+                    end else if (dst_space == SPACE_CPU && validate_last_byte > {8'b0, ROM_BASE}) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_WRITEPROT;
                         state <= S_DONE;
                     end else begin
-                        if (fill_mode) begin
-                            state <= S_WRITE;
-                            read_valid <= 1;
-                            read_byte <= fill_value;
-                        end else if (use_row_buffer) begin
-                            state <= S_ROWBUF_READ;
-                            col <= 0;
-                            buf_idx <= 0;
-                        end else begin
-                            state <= S_READ;
-                            read_valid <= 0;
-                        end
+                        state <= S_VALIDATE_START;
+                    end
+                end
+
+                S_VALIDATE_START: begin
+                    if (fill_mode) begin
+                        state <= S_WRITE;
+                        read_valid <= 1;
+                        read_byte <= fill_value;
+                    end else if (use_row_buffer) begin
+                        state <= S_ROWBUF_READ;
+                        col <= 0;
+                        buf_idx <= 0;
+                    end else begin
+                        state <= S_READ;
+                        read_valid <= 0;
                     end
                 end
 
@@ -401,9 +438,9 @@ module blitter (
                         if (!write_skipped_by_colorkey)
                             wrote_count <= wrote_count + 1;
 
-                        if (col + 1 >= width) begin
+                        if (col == last_col) begin
                             col <= 0;
-                            if (row + 1 >= height) begin
+                            if (row == last_row) begin
                                 regs[R_STATUS] <= ST_OK;
                                 regs[R_ERRCODE] <= ERR_NONE;
                                 {regs[R_COUNTH], regs[R_COUNTM], regs[R_COUNTL]}
@@ -445,7 +482,7 @@ module blitter (
                         // stall — r_dout not yet valid
                     end else begin
                         row_buf[buf_idx] <= mem_read_data;
-                        if (col + 1 >= width) begin
+                        if (col == last_col) begin
                             col <= 0;
                             buf_idx <= 0;
                             read_valid <= 0;
@@ -478,10 +515,10 @@ module blitter (
                     if (!write_skipped_by_colorkey)
                         wrote_count <= wrote_count + 1;
 
-                    if (col + 1 >= width) begin
+                    if (col == last_col) begin
                         col <= 0;
                         buf_idx <= 0;
-                        if (row + 1 >= height) begin
+                        if (row == last_row) begin
                             regs[R_STATUS] <= ST_OK;
                             regs[R_ERRCODE] <= ERR_NONE;
                             {regs[R_COUNTH], regs[R_COUNTM], regs[R_COUNTL]}
@@ -524,6 +561,8 @@ module blitter (
                             dst_base   <= {regs[R_DSTH], regs[R_DSTM], regs[R_DSTL]};
                             width      <= {regs[R_WIDTHH], regs[R_WIDTHL]};
                             height     <= {regs[R_HEIGHTH], regs[R_HEIGHTL]};
+                            last_col   <= {regs[R_WIDTHH], regs[R_WIDTHL]} - 16'd1;
+                            last_row   <= {regs[R_HEIGHTH], regs[R_HEIGHTL]} - 16'd1;
                             src_stride <= {regs[R_SRCSTRIDEH], regs[R_SRCSTRIDEL]};
                             dst_stride <= {regs[R_DSTSTRIDEH], regs[R_DSTSTRIDEL]};
                             fill_mode     <= regs[R_MODE][MODE_FILL];

@@ -52,9 +52,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("reload-rom", help="reload ROM images from SD")
     sub.add_parser("cursor", help="read text cursor position")
 
-    cold = sub.add_parser("cold-start", help="reset the VM")
+    cold = sub.add_parser("cold-start", help="reload default ROMs and reset the VM")
     cold.add_argument("--no-wait", action="store_true", help="do not wait for Ready")
     cold.add_argument("--text", help="screen text to wait for instead of Ready")
+
+    vm_reset = sub.add_parser("vm-reset", help="reset the currently loaded runtime without reloading ROMs")
+    vm_reset.add_argument("--no-wait", action="store_true", help="do not wait for Ready")
+    vm_reset.add_argument("--text", help="screen text to wait for instead of Ready")
 
     wait = sub.add_parser("wait-ready", help="wait for screen text")
     wait.add_argument("--text", default="Ready")
@@ -120,6 +124,8 @@ def dispatch(args: argparse.Namespace) -> int:
             print_json(client.resume(), args.pretty)
         elif args.cmd == "cold-start":
             print_json(client.cold_start(wait_ready=not args.no_wait, text=args.text), args.pretty)
+        elif args.cmd == "vm-reset":
+            print_json(client.vm_reset(wait_ready=not args.no_wait, text=args.text), args.pretty)
         elif args.cmd == "wait-ready":
             print_json(client.wait_ready(text=args.text, timeout_ms=args.timeout_ms), args.pretty)
         elif args.cmd == "reload-rom":

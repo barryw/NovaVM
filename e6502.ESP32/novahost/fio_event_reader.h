@@ -1,10 +1,9 @@
-// FIO event reader — async events from the FPGA debug bridge.
+// Host-service event reader — async events from the FPGA debug bridge.
 //
-// The FPGA emits a 2-byte sequence (0xFE, 0xE0) over the UART whenever
-// the 6502 writes a non-zero value to FioCmd ($B9A0). This class
-// detects that sequence and dispatches a callback. It must be polled
-// from the main loop AND called by FpgaBridge::drain() so events
-// queued before a CMD don't get dumped into the void.
+// The FPGA emits a 2-byte sequence (0xFE, event-type) over the host bridge whenever
+// the 6502 writes a non-zero command byte to a host-backed register bank.
+// FIO uses event type 0xE0; NIC uses 0xE1. This class detects that sequence
+// and dispatches callbacks from FpgaBridge::drain() / recvStatus().
 //
 // Bytes that don't match the event marker are logged + dropped (they
 // indicate a stale command response or a protocol error).
@@ -13,44 +12,34 @@
 #define NOVAHOST_FIO_EVENT_READER_H
 
 #include <Arduino.h>
-#include <HardwareSerial.h>
 
 class FioEventReader {
 public:
     using Handler = void (*)(void* user);
 
-    FioEventReader(HardwareSerial& serial)
-        : _serial(serial), _state(STATE_IDLE),
-          _handler(nullptr), _user(nullptr) {}
+    FioEventReader()
+        : _state(STATE_IDLE),
+          _fioHandler(nullptr), _fioUser(nullptr),
+          _nicHandler(nullptr), _nicUser(nullptr) {}
 
-    void onEvent(Handler h, void* user) { _handler = h; _user = user; }
-
-    // Pump any pending bytes from the serial buffer. Dispatches a FIO
-    // event when the 0xFE 0xE0 sequence is seen. Logs other bytes via
-    // a printf-like callback (Serial.printf for now) so we notice
-    // protocol drift.
-    //
-    // Returns the number of bytes processed.
-    int poll();
+    void onEvent(Handler h, void* user) { onFioEvent(h, user); }
+    void onFioEvent(Handler h, void* user) { _fioHandler = h; _fioUser = user; }
+    void onNicEvent(Handler h, void* user) { _nicHandler = h; _nicUser = user; }
 
     void consume(uint8_t value);
     static void onDrainByteStatic(void* user, uint8_t value) {
         static_cast<FioEventReader*>(user)->consume(value);
     }
 
-    // Like poll() but bounded to a small window — used by FpgaBridge
-    // before/after CMDs so events aren't lost when the bridge would
-    // otherwise drain stale bytes. Stops once the buffer is empty.
-    int pump_until_empty() { return poll(); }
-
 private:
     enum State { STATE_IDLE, STATE_AWAIT_TYPE };
-    HardwareSerial& _serial;
     State           _state;
-    Handler         _handler;
-    void*           _user;
+    Handler         _fioHandler;
+    void*           _fioUser;
+    Handler         _nicHandler;
+    void*           _nicUser;
 
-    void dispatch_fio_event();
+    void dispatch_event(uint8_t eventType);
 };
 
 #endif

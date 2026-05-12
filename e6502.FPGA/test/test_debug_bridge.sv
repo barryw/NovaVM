@@ -31,6 +31,12 @@ module test_debug_bridge;
     wire [15:0] dbg_poke_addr;
     wire [7:0]  dbg_poke_data;
     wire        dbg_pause;
+    wire        dbg_nic_buf_we;
+    wire        dbg_nic_buf_re;
+    wire        dbg_nic_buf_sel;
+    wire [7:0]  dbg_nic_buf_addr;
+    wire [7:0]  dbg_nic_buf_data;
+    logic [7:0] dbg_nic_buf_rdata;
     wire        dbg_vmem_we;
     wire        dbg_vmem_re;
     wire [2:0]  dbg_vmem_space;
@@ -75,8 +81,9 @@ module test_debug_bridge;
     logic       sdram_b_done_toggle;
     wire [7:0]  host_status;
 
-    // FIO event input — we pulse this to simulate a CPU write to $B9A0.
+    // Host event inputs — pulse these to simulate CPU writes to MMIO command regs.
     logic       fio_event = 0;
+    logic       nic_event = 0;
     int         resume_pulses = 0;
 
     localparam integer TEST_BOOT_AUTO_RELEASE_CYCLES = 16;
@@ -93,6 +100,12 @@ module test_debug_bridge;
         .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr),
         .dbg_poke_data(dbg_poke_data),
         .dbg_pause(dbg_pause),
+        .dbg_nic_buf_we(dbg_nic_buf_we),
+        .dbg_nic_buf_re(dbg_nic_buf_re),
+        .dbg_nic_buf_sel(dbg_nic_buf_sel),
+        .dbg_nic_buf_addr(dbg_nic_buf_addr),
+        .dbg_nic_buf_data(dbg_nic_buf_data),
+        .dbg_nic_buf_rdata(dbg_nic_buf_rdata),
         .dbg_vmem_we(dbg_vmem_we),
         .dbg_vmem_re(dbg_vmem_re),
         .dbg_vmem_space(dbg_vmem_space),
@@ -128,6 +141,7 @@ module test_debug_bridge;
         .sdram_b_dout(sdram_b_dout),
         .sdram_b_done_toggle(sdram_b_done_toggle),
         .fio_event(fio_event),
+        .nic_event(nic_event),
         .host_status(host_status)
     );
 
@@ -335,6 +349,23 @@ module test_debug_bridge;
             dbg_vmem_rdata <= vgc_shadow[dbg_vmem_addr[15:0]];
     end
 
+    logic [7:0] nic_tx_shadow [0:255];
+    logic [7:0] nic_rx_shadow [0:255];
+    initial begin
+        for (int i = 0; i < 256; i++) begin
+            nic_tx_shadow[i] = 8'h00;
+            nic_rx_shadow[i] = 8'hFF;
+        end
+    end
+    always_comb begin
+        dbg_nic_buf_rdata = dbg_nic_buf_sel ? nic_rx_shadow[dbg_nic_buf_addr]
+                                            : nic_tx_shadow[dbg_nic_buf_addr];
+    end
+    always_ff @(posedge clk) begin
+        if (dbg_nic_buf_we && dbg_nic_buf_sel)
+            nic_rx_shadow[dbg_nic_buf_addr] <= dbg_nic_buf_data;
+    end
+
     task automatic test_poke_block_ram();
         logic [7:0] ack;
         $display("");
@@ -423,6 +454,43 @@ module test_debug_bridge;
         wait_tx(b); check_eq8("vgc read byte 1", b, 8'h92);
         wait_tx(b); check_eq8("vgc read byte 2", b, 8'h93);
         wait_tx(b); check_eq8("vgc read byte 3", b, 8'h94);
+    endtask
+
+    task automatic test_nic_tx_read_block();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_NIC_TX_READ_BLK reads 4 bytes from NIC TX buffer");
+        nic_tx_shadow[8'h10] = 8'h31;
+        nic_tx_shadow[8'h11] = 8'h32;
+        nic_tx_shadow[8'h12] = 8'h33;
+        nic_tx_shadow[8'h13] = 8'h34;
+
+        send_byte(8'h1C);   // CMD_NIC_TX_READ_BLK
+        send_byte(8'h10);   // offset
+        send_byte(8'h04);   // count
+        wait_tx(b); check_eq8("nic tx read status", b, 8'h00);
+        wait_tx(b); check_eq8("nic tx byte 0", b, 8'h31);
+        wait_tx(b); check_eq8("nic tx byte 1", b, 8'h32);
+        wait_tx(b); check_eq8("nic tx byte 2", b, 8'h33);
+        wait_tx(b); check_eq8("nic tx byte 3", b, 8'h34);
+    endtask
+
+    task automatic test_nic_rx_write_block();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_NIC_RX_WRITE_BLK writes 3 bytes into NIC RX buffer");
+        send_byte(8'h1D);   // CMD_NIC_RX_WRITE_BLK
+        send_byte(8'h20);   // offset
+        send_byte(8'h03);   // count
+        send_byte(8'hA1);
+        send_byte(8'hA2);
+        send_byte(8'hA3);
+        wait_tx(ack);
+        check_eq8("nic rx write status", ack, 8'h00);
+        check_eq8("nic rx byte 0", nic_rx_shadow[8'h20], 8'hA1);
+        check_eq8("nic rx byte 1", nic_rx_shadow[8'h21], 8'hA2);
+        check_eq8("nic rx byte 2", nic_rx_shadow[8'h22], 8'hA3);
+        check_eq8("nic rx boundary untouched", nic_rx_shadow[8'h23], 8'hFF);
     endtask
 
     task automatic test_bulk_count_zero_means_256();
@@ -660,6 +728,7 @@ module test_debug_bridge;
         rx_valid <= 0;
         tx_busy  <= 0;
         fio_event <= 0;
+        nic_event <= 0;
         repeat(3) @(posedge clk);
 
         rst <= 0;
@@ -773,13 +842,29 @@ module test_debug_bridge;
     endtask
 
     // ------------------------------------------------------------------
-    // FIO event emission tests
+    // Host event emission tests
     // ------------------------------------------------------------------
     task automatic pulse_fio_event();
         @(posedge clk);
         fio_event <= 1;
         @(posedge clk);
         fio_event <= 0;
+    endtask
+
+    task automatic pulse_nic_event();
+        @(posedge clk);
+        nic_event <= 1;
+        @(posedge clk);
+        nic_event <= 0;
+    endtask
+
+    task automatic pulse_both_events();
+        @(posedge clk);
+        fio_event <= 1;
+        nic_event <= 1;
+        @(posedge clk);
+        fio_event <= 0;
+        nic_event <= 0;
     endtask
 
     task automatic test_fio_event_emission();
@@ -791,6 +876,32 @@ module test_debug_bridge;
         check_eq8("event marker byte", mark, 8'hFE);
         wait_tx(type_byte);
         check_eq8("event type byte (FIO)", type_byte, 8'hE0);
+    endtask
+
+    task automatic test_nic_event_emission();
+        logic [7:0] mark, type_byte;
+        $display("");
+        $display("Test: nic_event pulse emits EVENT_MARKER + EVENT_TYPE_NIC");
+        pulse_nic_event();
+        wait_tx(mark);
+        check_eq8("NIC event marker byte", mark, 8'hFE);
+        wait_tx(type_byte);
+        check_eq8("event type byte (NIC)", type_byte, 8'hE1);
+    endtask
+
+    task automatic test_event_priority_when_both_pending();
+        logic [7:0] mark, type_byte;
+        $display("");
+        $display("Test: simultaneous fio_event/nic_event emits FIO then NIC");
+        pulse_both_events();
+        wait_tx(mark);
+        check_eq8("first event marker", mark, 8'hFE);
+        wait_tx(type_byte);
+        check_eq8("first event type is FIO", type_byte, 8'hE0);
+        wait_tx(mark);
+        check_eq8("second event marker", mark, 8'hFE);
+        wait_tx(type_byte);
+        check_eq8("second event type is NIC", type_byte, 8'hE1);
     endtask
 
     // If fio_event fires while a CMD is mid-flight (between RX of first
@@ -873,6 +984,8 @@ module test_debug_bridge;
         test_bulk_poke_vgc();
         test_fill_vgc_block();
         test_bulk_read_vgc();
+        test_nic_tx_read_block();
+        test_nic_rx_write_block();
         test_cpu_state_wait_stop_status();
         test_resume_pulses_cpu_resume();
         test_breakpoint_set_hit_list_clear();
@@ -880,6 +993,8 @@ module test_debug_bridge;
         test_trace_read_last_records();
         test_host_status_latch();
         test_fio_event_emission();
+        test_nic_event_emission();
+        test_event_priority_when_both_pending();
         test_fio_event_queued_during_cmd();
         test_fio_event_no_retrigger_when_cleared();
         test_boot_auto_release_when_unclaimed();

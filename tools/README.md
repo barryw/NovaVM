@@ -11,10 +11,56 @@ tools/novahostctl.py screen
 tools/novahostctl.py basic 'PRINT "HELLO"'
 tools/novahostctl.py mute-sid
 tools/novahostctl.py cold-start
+tools/novahostctl.py vm-reset
 ```
 
 Override connection details with `--host`, `--port`, `--http-port`, or the
 `NOVAHOST`, `NOVAHOST_PORT`, and `HTTP_PORT` environment variables.
+
+`cold-start` matches a real cold boot: NovaHost reloads the default ROMs from
+SD, then releases the VM so mounted media can autoboot. `vm-reset` only resets
+the currently loaded runtime.
+
+# Drive Mounts
+
+Drive slots are logical pointers stored in `/config/boot.json`, not special
+root filenames. Mounting persists the pointer; unmounting clears it. During
+boot, NovaHost scans mounted floppies before hard disks (`fd0`..`fd3`, then
+`hd0`..`hd1`) and clears stale configured pointers whose images no longer
+exist.
+
+```bash
+curl -X POST http://192.168.1.65/drives/fd0/mount \
+  -H 'Content-Type: application/json' \
+  --data '{"path":"/games/novachess.ndi"}'
+curl -X POST http://192.168.1.65/drives/fd0/unmount
+curl http://192.168.1.65/drives
+```
+
+# NIC Hardware Smoke
+
+`check-nic-hardware.py` verifies the live FPGA/NovaHost NIC path. By default it
+only touches NIC test registers and restores them:
+
+```bash
+tools/check-nic-hardware.py
+```
+
+To also prove NovaHost is running the NIC dispatcher, use the Nova Chess-driven
+event test. This cold-starts the VM and selects `N NEW GAME`, then `4 NETWORK
+GAME`, so it changes the running app state:
+
+```bash
+tools/check-nic-hardware.py --exercise-novachess-network
+```
+
+To verify the FPGA payload DMA path on hardware, run the BASIC-driven DMA
+smoke. It cold-starts BASIC, connects NovaHost to a local TCP peer, sends bytes
+from CPU RAM, then receives bytes back into CPU RAM:
+
+```bash
+tools/check-nic-hardware.py --exercise-basic-dma
+```
 
 # Nova FTDI Keyboard
 

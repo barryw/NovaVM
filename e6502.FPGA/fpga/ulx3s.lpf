@@ -47,7 +47,7 @@ LOCATE COMP "ftdi_txd" SITE "M1";  # FTDI TX -> FPGA RX
 IOBUF  PORT "ftdi_rxd" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=4;
 IOBUF  PORT "ftdi_txd" PULLMODE=UP IO_TYPE=LVCMOS33;
 
-# ESP32 control and debug UART.
+# ESP32 control and legacy UART pins.
 #
 # This board enumerates as "ULX3S FPGA 85K v3.0.8", but ESP32 reset probing
 # confirms the v3.1.x EN/GPIO0 routing:
@@ -64,13 +64,27 @@ IOBUF  PORT "ftdi_txd" PULLMODE=UP IO_TYPE=LVCMOS33;
 LOCATE COMP "wifi_gpio0" SITE "F1";
 IOBUF  PORT "wifi_gpio0" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=4;
 
-# Debug bridge UART — uses ESP32 Serial2 pins. On v3.1.x boards L1/N3 route
-# to ESP32 GPIO26/GPIO27 (NOT GPIO16/17 as on v3.0.x). NovaHost firmware
-# must configure Serial2 on GPIO26/27 to match.
+# Legacy ESP32 Serial2 pins. The NovaHost command bridge is SPI-only; keep
+# these constrained so the output stays idle and the input remains pulled up.
+# On v3.1.x boards L1/N3 route to ESP32 GPIO26/GPIO27.
 LOCATE COMP "wifi_rxd" SITE "L1";   # FPGA TX -> ESP32 GPIO26 (RX)
 LOCATE COMP "wifi_txd" SITE "N3";   # ESP32 GPIO27 (TX) -> FPGA RX
 IOBUF  PORT "wifi_txd" PULLMODE=UP IO_TYPE=LVCMOS33;
 IOBUF  PORT "wifi_rxd" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+
+# ESP32 shared-SPI debug bridge. These match the official ULX3S SD-card pin
+# mapping: GPIO14/H2=CLK, GPIO15/J1=CMD/MOSI, GPIO2/J3=D0/MISO, and
+# GPIO4/H1=D1. NovaHost uses the SD card in 1-bit SPI mode, where D1/GPIO4 is
+# free for a separate FPGA chip-select. This is intentionally not compatible
+# with future 4-bit SDIO without moving the FPGA CS.
+LOCATE COMP "esp_spi_sck"  SITE "H2"; # ESP32 GPIO14 / SD CLK
+LOCATE COMP "esp_spi_mosi" SITE "J1"; # ESP32 GPIO15 / SD CMD
+LOCATE COMP "esp_spi_miso" SITE "J3"; # ESP32 GPIO2  / SD D0
+LOCATE COMP "esp_spi_cs_n" SITE "H1"; # ESP32 GPIO4  / SD D1
+IOBUF  PORT "esp_spi_sck"  PULLMODE=UP   IO_TYPE=LVCMOS33;
+IOBUF  PORT "esp_spi_mosi" PULLMODE=UP   IO_TYPE=LVCMOS33;
+IOBUF  PORT "esp_spi_cs_n" PULLMODE=UP   IO_TYPE=LVCMOS33;
+IOBUF  PORT "esp_spi_miso" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
 
 # GPDI (HDMI) — emard reference settings
 LOCATE COMP "gpdi_dp[0]" SITE "A16"; # Blue +

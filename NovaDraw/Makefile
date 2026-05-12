@@ -3,10 +3,13 @@ BUILD_DIR = .build/release
 APP_BUNDLE = $(APP_NAME).app
 INSTALL_DIR = /Applications
 
-.PHONY: build bundle install run clean
+.PHONY: build mcp bundle install run clean
 
 build:
 	swift build -c release
+
+mcp:
+	swift build -c release --product NovaDrawMCP
 
 bundle: build
 	rm -rf $(APP_BUNDLE)

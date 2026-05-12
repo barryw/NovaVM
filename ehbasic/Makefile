@@ -9,16 +9,17 @@ ABI_SOURCES = \
 	lib/nova.inc lib/fio.inc lib/fio.s \
 	lib/audio.inc lib/audio.s \
 	lib/nic.inc lib/nic.s \
+	lib/gameserver.inc lib/gameserver.s \
 	lib/vgc.inc lib/vgc.s \
 	lib/sprite.inc lib/sprite.s \
 	lib/dma.inc lib/dma.s \
 	lib/blitter.inc lib/blitter.s \
 	lib/vsprite.inc lib/vsprite.s \
 	lib/copper.inc lib/copper.s \
-	lib/tile.inc lib/tile.s \
 	lib/xram.inc lib/xram.s \
 	lib/pager.inc lib/pager.s \
 	lib/rng.inc lib/rng.s \
+	lib/nvg.inc lib/nvg.s \
 	lib/tween.inc lib/tween.s \
 	lib/xmc.s
 
@@ -33,7 +34,7 @@ basic.o: basic.asm min_mon.asm lib/nova.inc lib/fio.inc lib/fio.s lib/audio.inc 
 extension.bin: extension.o extension.cfg
 	ld65 -C extension.cfg -o extension.bin extension.o
 
-extension.o: extension.s runtime_labels.inc lib/nova.inc lib/fio.inc lib/fio.s lib/audio.inc lib/audio.s lib/dma.inc lib/dma.s lib/blitter.inc lib/blitter.s lib/copper.inc lib/copper.s lib/tile.inc lib/tile.s lib/xram.inc lib/xram.s lib/rng.inc lib/rng.s lib/xmc.s
+extension.o: extension.s runtime_labels.inc lib/nova.inc lib/fio.inc lib/fio.s lib/audio.inc lib/audio.s lib/dma.inc lib/dma.s lib/blitter.inc lib/blitter.s lib/copper.inc lib/copper.s lib/xram.inc lib/xram.s lib/rng.inc lib/rng.s lib/xmc.s
 	ca65 --cpu 65c02 extension.s -o extension.o
 
 # Token table extraction

@@ -40,7 +40,6 @@ DEFAULT_SUITES=(
     vtext_asm
     sid
     copper
-    tiles
     math
     fio
     fileio

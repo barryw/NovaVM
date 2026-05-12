@@ -33,7 +33,8 @@ can:
 - Name blocks and recall them without tracking raw addresses.
 - Map 256-byte XRAM pages directly into CPU address windows for transparent
 byte-level access via `PEEK` and `POKE`.
-- Allocate and free regions using a lightweight page-tracking allocator.
+- Use documented fixed workspaces for runtimes that need predictable scratch
+storage.
 
 The XRAM hardware is controlled by the Expansion Memory Controller (XMC), mapped at
 `$BA00`. You normally never touch those registers directly -- the BASIC
@@ -271,9 +272,9 @@ lower-level commands are available.
 
 ### `XALLOC length`
 
-Allocates *length* bytes in XRAM using the low-level allocator. This is mostly
-useful for diagnostics and tooling that inspect XMC registers directly; ordinary
-BASIC programs should usually use named `STASH`/`FETCH` blocks or raw offsets.
+Allocates *length* bytes from the low-XRAM software heap. This is mostly useful
+for diagnostics and tooling that inspect XMC registers directly; ordinary BASIC
+programs should usually use named `STASH`/`FETCH` blocks or raw offsets.
 
 ```
 XALLOC 4096
@@ -284,6 +285,11 @@ XALLOC 4096
 Releases the XRAM range starting at *offset* with the given *length*.
 Any named or unnamed blocks that overlap that range are removed from the allocation
 table.
+
+Assembly applications should avoid heap-style XRAM allocation. Use the flat
+`xram.s` routines with a documented fixed workspace and clear that workspace at
+program launch. `xram.inc` defines the shared layout bands used by NovaZ and the
+NVG loader.
 
 ::: warning
 **XRESET** clears all allocation tracking in one step -- named blocks,

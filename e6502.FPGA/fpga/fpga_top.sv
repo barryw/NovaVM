@@ -4,6 +4,7 @@
 //     (or 720x480p: 27 MHz pixel + 135 MHz TMDS shift)
 //   - HDMI output via GPDI (hdl-util/hdmi with PCM audio)
 //   - UART keyboard input via FTDI serial
+//   - SPI command bridge from ESP32/NovaHost
 //   - LEDs for debug, buttons for reset
 
 module fpga_top (
@@ -23,10 +24,17 @@ module fpga_top (
     input  logic        ftdi_txd,     // FPGA receives from FTDI
     output logic        ftdi_rxd,     // FPGA transmits to FTDI
 
-    // ESP32 control and debug UART
+    // ESP32 control pins. The command bridge uses shared SPI below.
     output logic        wifi_gpio0,   // keep ESP32 out of download mode
-    input  logic        wifi_txd,     // ESP32 TX -> FPGA RX (debug commands)
-    output logic        wifi_rxd,     // FPGA TX -> ESP32 RX (debug responses)
+    input  logic        wifi_txd,     // unused legacy ESP UART TX pin
+    output logic        wifi_rxd,     // held idle; SPI is the host bridge
+
+    // ESP32 shared-SPI debug bridge. These pins share the ULX3S SD-card SPI
+    // bus; esp_spi_cs_n is a separate FPGA chip-select on SD D1/GPIO4.
+    input  logic        esp_spi_sck,
+    input  logic        esp_spi_mosi,
+    input  logic        esp_spi_cs_n,
+    inout  wire         esp_spi_miso,
 
     // SDRAM — MT48LC16M16 (32MB). Not yet used by the core, just brought up
     // on the pads so Phase 2.5 Step 2 can migrate XRAM into it.
@@ -356,6 +364,7 @@ module fpga_top (
     assign ftdi_rxd = 1'b1;
     assign wifi_gpio0 = 1'b1;
     assign wifi_rxd = 1'b1;
+    assign esp_spi_miso = 1'bz;
 
     assign sdram_clk  = 1'b0;
     assign sdram_cke  = 1'b0;
@@ -397,7 +406,8 @@ module fpga_top (
     );
 
     // =========================================================================
-    // Debug UART — ESP32 WiFi serial (115200 8N1)
+    // Host debug bridge stream. NovaHost talks to the FPGA over SPI only; the
+    // ESP UART pins are intentionally not a command fallback.
     // =========================================================================
     wire [7:0] dbg_rx_data;
     wire       dbg_rx_valid;
@@ -405,69 +415,53 @@ module fpga_top (
     wire [7:0] dbg_tx_data;
     wire       dbg_tx_start;
     wire       dbg_tx_busy;
-    wire       dbg_tx_out;
-    wire [7:0] dbg_uart_rx_data;
-    wire       dbg_uart_rx_valid;
-    wire       dbg_uart_rx_ready;
-    wire       dbg_uart_rx_overrun;
-    wire       dbg_uart_rx_frame_error;
-    wire       dbg_uart_tx_ready;
-    wire       dbg_uart_tx_busy;
-    wire       dbg_uart_fifo_overflow;
-
-    // Debug UART runs at 115200. RX is a Nova-owned ready/valid UART with
-    // explicit framing/overrun reporting, followed by a narrow byte FIFO.
-    // One Nova protocol block is at most 256 payload bytes plus a 5-byte
-    // header, so a 512-byte FIFO covers a full packet with headroom without
-    // dragging in a generic AXI-stream FIFO.
-    debug_uart_rx #(
-        .CLK_HZ(UART_CLK_HZ),
-        .BAUD  (115200)
-    ) dbg_uart_rx (
-        .clk           (clk_pixel),
-        .rst           (rst),
-        .rx            (wifi_txd),
-        .data          (dbg_uart_rx_data),
-        .valid         (dbg_uart_rx_valid),
-        .ready         (dbg_uart_rx_ready),
-        .busy          (),
-        .overrun_error (dbg_uart_rx_overrun),
-        .frame_error   (dbg_uart_rx_frame_error)
-    );
-
-    debug_byte_fifo #(
-        .ADDR_WIDTH(9)
-    ) dbg_uart_rx_fifo (
-        .clk      (clk_pixel),
-        .rst      (rst),
-        .s_data   (dbg_uart_rx_data),
-        .s_valid  (dbg_uart_rx_valid),
-        .s_ready  (dbg_uart_rx_ready),
-        .m_data   (dbg_rx_data),
-        .m_valid  (dbg_rx_valid),
-        .m_ready  (dbg_rx_ready),
-        .overflow (dbg_uart_fifo_overflow),
-        .fill     ()
-    );
-
-    debug_uart_tx #(
-        .CLK_HZ(UART_CLK_HZ),
-        .BAUD  (115200)
-    ) dbg_uart_tx (
-        .clk   (clk_pixel),
-        .rst   (rst),
-        .data  (dbg_tx_data),
-        .valid (dbg_tx_start),
-        .ready (dbg_uart_tx_ready),
-        .tx    (dbg_tx_out),
-        .busy  (dbg_uart_tx_busy)
-    );
-
-    assign dbg_tx_busy = dbg_uart_tx_busy || !dbg_uart_tx_ready;
-    assign wifi_rxd = dbg_tx_out;
+    assign wifi_rxd = 1'b1;
 
     // =========================================================================
-    // Debug bridge — binary protocol between ESP32 UART and core debug ports
+    // Debug SPI — ESP32 shared-SPI byte transport
+    // =========================================================================
+    wire [7:0] dbg_spi_rx_data;
+    wire       dbg_spi_rx_valid;
+    wire       dbg_spi_rx_ready;
+    wire       dbg_spi_tx_busy;
+    wire       dbg_spi_miso;
+    wire       dbg_spi_miso_oe;
+    wire       dbg_spi_rx_overflow;
+    wire       dbg_spi_tx_overflow;
+    wire       dbg_spi_tx_underflow;
+    wire       dbg_spi_selected_seen;
+
+    debug_spi_slave #(
+        .ADDR_WIDTH(9),
+        .IDLE_BYTE(8'hA5)
+    ) dbg_spi (
+        .clk          (clk_pixel),
+        .rst          (rst),
+        .spi_sck      (esp_spi_sck),
+        .spi_cs_n     (esp_spi_cs_n),
+        .spi_mosi     (esp_spi_mosi),
+        .spi_miso     (dbg_spi_miso),
+        .spi_miso_oe  (dbg_spi_miso_oe),
+        .rx_data      (dbg_spi_rx_data),
+        .rx_valid     (dbg_spi_rx_valid),
+        .rx_ready     (dbg_spi_rx_ready),
+        .tx_data      (dbg_tx_data),
+        .tx_start     (dbg_tx_start),
+        .tx_busy      (dbg_spi_tx_busy),
+        .rx_overflow  (dbg_spi_rx_overflow),
+        .tx_overflow  (dbg_spi_tx_overflow),
+        .tx_underflow (dbg_spi_tx_underflow),
+        .selected_seen(dbg_spi_selected_seen)
+    );
+
+    assign esp_spi_miso = dbg_spi_miso_oe ? dbg_spi_miso : 1'bz;
+    assign dbg_rx_data = dbg_spi_rx_data;
+    assign dbg_rx_valid = dbg_spi_rx_valid;
+    assign dbg_spi_rx_ready = dbg_rx_ready && dbg_spi_rx_valid;
+    assign dbg_tx_busy = dbg_spi_tx_busy;
+
+    // =========================================================================
+    // Debug bridge — binary protocol between ESP32 SPI and core debug ports
     // =========================================================================
     wire        brg_peek_en;
     wire [15:0] brg_peek_addr;
@@ -475,6 +469,12 @@ module fpga_top (
     wire        brg_poke_en;
     wire [15:0] brg_poke_addr;
     wire [7:0]  brg_poke_data;
+    wire        brg_nic_buf_we;
+    wire        brg_nic_buf_re;
+    wire        brg_nic_buf_sel;
+    wire [7:0]  brg_nic_buf_addr;
+    wire [7:0]  brg_nic_buf_data;
+    wire [7:0]  brg_nic_buf_rdata;
     wire        brg_vmem_we;
     wire        brg_vmem_re;
     wire [2:0]  brg_vmem_space;
@@ -507,9 +507,10 @@ module fpga_top (
     wire        brg_sdram_b_done_toggle;
     wire [7:0]  brg_host_status;
 
-    // File I/O event — pulsed by core's fio.sv on CPU write to $B9A0.
-    // Bridge latches it and emits an async EVENT_FIO sequence to the ESP.
+    // Host-service events — pulsed by core register banks on CPU command
+    // writes. Bridge latches them and emits async event sequences to the ESP.
     wire        core_fio_event;
+    wire        core_nic_event;
 
     debug_bridge dbg_bridge (
         .clk             (clk_pixel),
@@ -527,6 +528,12 @@ module fpga_top (
         .dbg_poke_addr   (brg_poke_addr),
         .dbg_poke_data   (brg_poke_data),
         .dbg_pause       (brg_pause),
+        .dbg_nic_buf_we  (brg_nic_buf_we),
+        .dbg_nic_buf_re  (brg_nic_buf_re),
+        .dbg_nic_buf_sel (brg_nic_buf_sel),
+        .dbg_nic_buf_addr(brg_nic_buf_addr),
+        .dbg_nic_buf_data(brg_nic_buf_data),
+        .dbg_nic_buf_rdata(brg_nic_buf_rdata),
         .dbg_vmem_we     (brg_vmem_we),
         .dbg_vmem_re     (brg_vmem_re),
         .dbg_vmem_space  (brg_vmem_space),
@@ -566,6 +573,7 @@ module fpga_top (
         .sdram_b_dout    (brg_sdram_b_dout),
         .sdram_b_done_toggle(brg_sdram_b_done_toggle),
         .fio_event       (core_fio_event),
+        .nic_event       (core_nic_event),
         .host_status     (brg_host_status)
     );
 
@@ -600,7 +608,7 @@ module fpga_top (
         .audio_l    (sid_audio_l),
         .audio_r    (sid_audio_r),
 
-        // Debug interface — driven by debug bridge via ESP32 UART
+        // Debug interface — driven by debug bridge via ESP32 SPI
         .dbg_peek_en  (brg_peek_en),
         .dbg_peek_addr(brg_peek_addr),
         .dbg_peek_data(brg_peek_data),
@@ -608,6 +616,12 @@ module fpga_top (
         .dbg_poke_addr(brg_poke_addr),
         .dbg_poke_data(brg_poke_data),
         .dbg_pause    (brg_pause),
+        .dbg_nic_buf_we  (brg_nic_buf_we),
+        .dbg_nic_buf_re  (brg_nic_buf_re),
+        .dbg_nic_buf_sel (brg_nic_buf_sel),
+        .dbg_nic_buf_addr(brg_nic_buf_addr),
+        .dbg_nic_buf_data(brg_nic_buf_data),
+        .dbg_nic_buf_rdata(brg_nic_buf_rdata),
         .dbg_vmem_we  (brg_vmem_we),
         .dbg_vmem_re  (brg_vmem_re),
         .dbg_vmem_space(brg_vmem_space),
@@ -659,7 +673,8 @@ module fpga_top (
         .sdram_oeB  (core_sdram_oeB),
         .sdram_doutB(core_sdram_doutB),
 
-        .fio_event  (core_fio_event)
+        .fio_event  (core_fio_event),
+        .nic_event  (core_nic_event)
     );
 
     // SDRAM port A wires from core
@@ -856,7 +871,7 @@ module fpga_top (
     //   3 FIO drive LED, 2 CPU running, 1 CPU paused, 0 NovaHost seen.
     // Operator panel:
     //   7 heartbeat, 6 PLL locked, 5 top reset released, 4 CPU reset released,
-    //   3 system reset asserted, 2 ESP debug UART seen, 1 FTDI UART seen,
+    //   3 system reset asserted, 2 ESP debug SPI selected, 1 FTDI UART seen,
     //   0 CPU paused.
     // =========================================================================
     reg [23:0] heartbeat = 0;  // POR init for clean LED phase from boot
@@ -867,7 +882,6 @@ module fpga_top (
     reg        btn6_stable = 1'b0;
     reg [19:0] btn6_debounce = 20'd0;
     reg        led_operator_mode = 1'b0;
-    reg        dbg_uart_ever_received = 1'b0;
     reg        ftdi_uart_ever_received = 1'b0;
 
     always_ff @(posedge clk_pixel) begin
@@ -876,7 +890,6 @@ module fpga_top (
             btn6_stable <= 1'b0;
             btn6_debounce <= 20'd0;
             led_operator_mode <= 1'b0;
-            dbg_uart_ever_received <= 1'b0;
             ftdi_uart_ever_received <= 1'b0;
         end else begin
             btn6_sync <= {btn6_sync[0], btn[6]};
@@ -891,8 +904,6 @@ module fpga_top (
                 btn6_debounce <= btn6_debounce + 20'd1;
             end
 
-            if (dbg_rx_valid)
-                dbg_uart_ever_received <= 1'b1;
             if (uart_valid)
                 ftdi_uart_ever_received <= 1'b1;
         end
@@ -922,7 +933,7 @@ module fpga_top (
         ~rst,
         ~brg_cpu_reset,
         brg_system_reset,
-        dbg_uart_ever_received,
+        dbg_spi_selected_seen,
         ftdi_uart_ever_received,
         brg_pause
     };

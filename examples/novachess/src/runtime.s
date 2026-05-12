@@ -9,7 +9,10 @@
 .include "vsprite.inc"
 .include "vtext.inc"
 .include "fio.inc"
+.include "nvg.inc"
 .include "tween.inc"
+.include "nchess_net.inc"
+.include "nui.inc"
 .include "engine_labels.inc"
 
 BOARD_X              = 10
@@ -50,10 +53,10 @@ CHESS_CASTLE_TEST    = 0
 CHESS_SELFPLAY_DEMO  = 1
 .endif
 .ifndef CHESS_AUTOSTART_DEMO
-CHESS_AUTOSTART_DEMO = 1
+CHESS_AUTOSTART_DEMO = 0
 .endif
 .ifndef CHESS_SPLASH_FRAMES
-CHESS_SPLASH_FRAMES  = 60
+CHESS_SPLASH_FRAMES  = 30000
 .endif
 .ifndef SELFPLAY_MOVE_PAUSE
 SELFPLAY_MOVE_PAUSE  = 24
@@ -76,7 +79,11 @@ FRAMES_PER_SECOND    = 60
 
 COLOR_BLACK          = 0
 COLOR_WHITE          = 1
+COLOR_RED            = 10
 COLOR_TRANSPARENT    = 2
+COLOR_CYAN           = 3
+COLOR_GREEN          = 5
+COLOR_YELLOW         = 7
 COLOR_DARK_SQUARE    = 12
 COLOR_LIGHT_SQUARE   = 15
 COLOR_ACCENT         = 14
@@ -132,6 +139,13 @@ DIFFICULTY_MEDIUM         = $01
 DIFFICULTY_HARD           = $02
 
 INPUT_BUFFER_LEN          = 5
+INPUT_ENTRY_X             = PANEL_TEXT_X + 5
+INPUT_ERROR_Y             = 25
+INPUT_STATE_NONE          = $00
+INPUT_STATE_FLASH         = $01
+INPUT_STATE_INVALID       = $02
+INPUT_BLINK_SHIFT         = 4
+INPUT_BLINK_FRAMES        = 10
 
 .segment "ZEROPAGE"
 msg_ptr:             .res 2
@@ -147,8 +161,6 @@ square_xh:           .res 1
 square_y:            .res 1
 piece_code:          .res 1
 piece_type:          .res 1
-piece_color:         .res 1
-piece_detail_color:  .res 1
 mask_byte:           .res 1
 bit_count:           .res 1
 row_count:           .res 1
@@ -219,6 +231,21 @@ input_to:            .res 1
 input_promo:         .res 1
 legal_index:         .res 1
 menu_key:            .res 1
+input_key:           .res 1
+input_from_state:    .res 1
+input_to_state:      .res 1
+input_blink_phase:   .res 1
+input_blink_tick:    .res 1
+input_blink_frame:   .res 1
+input_blink_color:   .res 1
+input_display_len:   .res 1
+input_error_l:       .res 1
+input_error_h:       .res 1
+title_wait_l:        .res 1
+title_wait_h:        .res 1
+network_table_idl:   .res 1
+network_table_idh:   .res 1
+splash_loaded:       .res 1
 piece_buffer:        .res PIECE_SIZE * PIECE_SIZE
 anim_bg_buffer:      .res PIECE_SIZE * PIECE_SIZE
 castle_king_buffer:  .res PIECE_SIZE * PIECE_SIZE
@@ -231,6 +258,7 @@ board_state:         .res 64
 panel_line:          .res PANEL_LINE_LEN
 move_history:        .res PANEL_MOVE_ROWS * PANEL_LINE_LEN
 input_buffer:        .res INPUT_BUFFER_LEN + 1
+network_frame:       .res NGS_MAX_FRAME_PAYLOAD
 
 .include "../Pieces.inc"
 
@@ -244,28 +272,20 @@ reset:
 
         JSR init_video
         JSR clear_text
-        JSR load_engine
-        BEQ @engine_loaded
-        LDA #2
-        STA text_x
-        LDA #2
-        STA text_y
-        LDA #<msg_engine_failed
-        LDY #>msg_engine_failed
-        JSR print_at
-        JMP halt
-@engine_loaded:
 .if CHESS_CASTLE_TEST
         JSR init_game_defaults
+        JSR load_selected_engine_or_halt
         JSR castle_demo_suite
 .elseif CHESS_RENDER_TEST
         JSR init_game_defaults
+        JSR load_selected_engine_or_halt
         JSR init_engine_game
         JSR start_game_screen
         JSR demo_piece_suite
 .else
         JSR init_game_defaults
         JSR title_flow
+        JSR load_selected_engine_or_halt
         JSR init_engine_game
         JSR start_game_screen
         JSR game_dispatch
@@ -311,6 +331,7 @@ clear_text:
         JMP vtext_clear_region
 
 clear_gfx:
+        STZ splash_loaded
         STZ VSPRITE_XL
         STZ VSPRITE_XH
         STZ VSPRITE_Y
@@ -499,20 +520,6 @@ draw_piece_at_vsprite:
         AND #$07
         BEQ @done
         STA piece_type
-
-        LDA piece_code
-        AND #PIECE_BLACK
-        BEQ @white
-        LDA #COLOR_BLACK_PIECE
-        STA piece_color
-        LDA #COLOR_BLACK_DETAIL
-        BRA @detail_color
-@white:
-        LDA #COLOR_WHITE_PIECE
-        STA piece_color
-        LDA #COLOR_WHITE_DETAIL
-@detail_color:
-        STA piece_detail_color
 
         JSR build_piece_buffer
 
@@ -774,7 +781,7 @@ wait_frame:
         BEQ @wait
         RTS
 
-.if CHESS_RENDER_TEST || CHESS_SELFPLAY_DEMO
+.if CHESS_RENDER_TEST || CHESS_CASTLE_TEST || CHESS_SELFPLAY_DEMO
 animate_line:
         JSR begin_anim_tween
         JSR init_anim_scene
@@ -1026,40 +1033,6 @@ build_piece_buffer:
         STA buf_ptr + 1
         JMP copy_novadraw_piece_buffer
 
-@mask_piece:
-        LDX piece_type
-        DEX
-        LDA piece_mask_lo,X
-        STA mask_ptr
-        LDA piece_mask_hi,X
-        STA mask_ptr + 1
-        LDA #<piece_buffer
-        STA buf_ptr
-        LDA #>piece_buffer
-        STA buf_ptr + 1
-        LDA #PIECE_SIZE
-        STA row_count
-@row:
-        LDY #$00
-        LDA (mask_ptr),Y
-        STA mask_byte
-        JSR expand_mask_byte
-        JSR inc_mask_ptr
-        LDY #$00
-        LDA (mask_ptr),Y
-        STA mask_byte
-        JSR expand_mask_byte
-        JSR inc_mask_ptr
-        LDY #$00
-        LDA (mask_ptr),Y
-        STA mask_byte
-        JSR expand_mask_tail
-        JSR inc_mask_ptr
-        DEC row_count
-        BNE @row
-        JSR apply_piece_detail
-        RTS
-
 copy_novadraw_piece_buffer:
         LDX piece_type
         DEX
@@ -1141,118 +1114,11 @@ copy_novadraw_piece_buffer_indexed:
         BNE @black_row
         RTS
 
-expand_mask_byte:
-        LDA #8
-        STA bit_count
-@bit:
-        ASL mask_byte
-        LDA #COLOR_TRANSPARENT
-        BCC @store
-        LDA piece_color
-@store:
-        LDY #$00
-        STA (buf_ptr),Y
-        INC buf_ptr
-        BNE @next
-        INC buf_ptr + 1
-@next:
-        DEC bit_count
-        BNE @bit
-        RTS
-
-expand_mask_tail:
-        LDA #PIECE_TAIL_BITS
-        STA bit_count
-@bit:
-        ASL mask_byte
-        LDA #COLOR_TRANSPARENT
-        BCC @store
-        LDA piece_color
-@store:
-        LDY #$00
-        STA (buf_ptr),Y
-        INC buf_ptr
-        BNE @next
-        INC buf_ptr + 1
-@next:
-        DEC bit_count
-        BNE @bit
-        RTS
-
 inc_mask_ptr:
         INC mask_ptr
         BNE @done
         INC mask_ptr + 1
 @done:
-        RTS
-
-apply_piece_detail:
-        LDX piece_type
-        DEX
-        LDA piece_detail_lo,X
-        STA mask_ptr
-        LDA piece_detail_hi,X
-        STA mask_ptr + 1
-        LDA #<piece_buffer
-        STA buf_ptr
-        LDA #>piece_buffer
-        STA buf_ptr + 1
-        LDA #PIECE_SIZE
-        STA row_count
-@row:
-        LDY #$00
-        LDA (mask_ptr),Y
-        STA mask_byte
-        JSR expand_detail_byte
-        JSR inc_mask_ptr
-        LDY #$00
-        LDA (mask_ptr),Y
-        STA mask_byte
-        JSR expand_detail_byte
-        JSR inc_mask_ptr
-        LDY #$00
-        LDA (mask_ptr),Y
-        STA mask_byte
-        JSR expand_detail_tail
-        JSR inc_mask_ptr
-        DEC row_count
-        BNE @row
-        RTS
-
-expand_detail_byte:
-        LDA #8
-        STA bit_count
-@bit:
-        ASL mask_byte
-        BCC @skip
-        LDA piece_detail_color
-        LDY #$00
-        STA (buf_ptr),Y
-@skip:
-        INC buf_ptr
-        BNE @next
-        INC buf_ptr + 1
-@next:
-        DEC bit_count
-        BNE @bit
-        RTS
-
-expand_detail_tail:
-        LDA #PIECE_TAIL_BITS
-        STA bit_count
-@bit:
-        ASL mask_byte
-        BCC @skip
-        LDA piece_detail_color
-        LDY #$00
-        STA (buf_ptr),Y
-@skip:
-        INC buf_ptr
-        BNE @next
-        INC buf_ptr + 1
-@next:
-        DEC bit_count
-        BNE @bit
         RTS
 
 draw_panel:
@@ -1435,7 +1301,13 @@ update_status_from_game_state:
         BEQ set_status_check
         CMP #GAME_CHECKMATE
         BCC @playing
+.if CHESS_SELFPLAY_DEMO
         JMP show_game_result
+.else
+        LDA #<msg_game_over
+        LDY #>msg_game_over
+        JMP print_status
+.endif
 @playing:
         JMP set_status_playing
 
@@ -1467,6 +1339,16 @@ set_status_check:
 set_status_invalid:
         LDA #<msg_status_invalid
         LDY #>msg_status_invalid
+        JMP print_status
+
+set_status_network:
+        LDA #<msg_status_network
+        LDY #>msg_status_network
+        JMP print_status
+
+set_status_network_error:
+        LDA #<msg_status_neterr
+        LDY #>msg_status_neterr
         JMP print_status
 
 print_status:
@@ -1869,16 +1751,62 @@ print_at:
 @done:
         RTS
 
-load_engine:
-        LDA #<engine_name
+load_engine_for_mode:
+        LDA play_mode
+        CMP #PLAYMODE_HUMAN_VS_HUMAN
+        BEQ load_rules_engine
+        CMP #PLAYMODE_NETWORK
+        BEQ load_rules_engine
+        JMP load_full_engine
+
+load_selected_engine_or_halt:
+        JSR load_engine_for_mode
+        BEQ @ok
+        LDA #2
+        STA text_x
+        LDA #2
+        STA text_y
+        LDA #<msg_engine_failed
+        LDY #>msg_engine_failed
+        JSR print_at
+        JMP halt
+@ok:
+        RTS
+
+load_full_engine:
+        LDA #<engine_full_name
         STA FIO_ARG_NAMEPTR_L
-        LDA #>engine_name
+        LDA #>engine_full_name
         STA FIO_ARG_NAMEPTR_H
-        LDA #(engine_name_end - engine_name)
+        LDA #(engine_full_name_end - engine_full_name)
+        BRA load_engine_named
+
+load_rules_engine:
+        LDA #<engine_rules_name
+        STA FIO_ARG_NAMEPTR_L
+        LDA #>engine_rules_name
+        STA FIO_ARG_NAMEPTR_H
+        LDA #(engine_rules_name_end - engine_rules_name)
+load_engine_named:
         STA FIO_ARG_NAMELEN
         JSR fio_copy_name
         BNE @done
         JMP fio_load
+@done:
+        RTS
+
+load_title_splash:
+        LDA #<splash_nvg_name
+        STA NVG_NAMEPTR_L
+        LDA #>splash_nvg_name
+        STA NVG_NAMEPTR_H
+        LDA #(splash_nvg_name_end - splash_nvg_name)
+        STA NVG_NAMELEN
+        JSR nvg_load_named
+        BNE @done
+        LDA #$01
+        STA splash_loaded
+        LDA #$00
 @done:
         RTS
 
@@ -1892,95 +1820,88 @@ init_game_defaults:
         RTS
 
 title_flow:
-        JSR show_title_menu
-.if CHESS_AUTOSTART_DEMO
-        JSR wait_splash_or_key
-        BEQ @demo
-        BRA @handle_key
-.else
-        JSR wait_key
-        BRA @handle_key
-.endif
-@demo:
-        LDA #PLAYMODE_DEMO
-        STA play_mode
-        RTS
-@handle_key:
-        STA menu_key
-        CMP #'D'
-        BEQ @demo
-        CMP #'N'
-        BEQ @setup
-        CMP #'S'
-        BEQ @setup
-        JMP title_flow
-@setup:
         JMP setup_new_game
 
 show_title_menu:
+        JSR show_menu_backdrop
+        JSR nui_dialog_defaults
+        LDA #24
+        STA NUI_DIALOG_LEFT
+        LDA #5
+        STA NUI_DIALOG_TOP
+        LDA #32
+        STA NUI_DIALOG_WIDTH
+        LDA #10
+        STA NUI_DIALOG_HEIGHT
+        LDA #<msg_select_mode
+        STA NUI_TITLEL
+        LDA #>msg_select_mode
+        STA NUI_TITLEH
+        LDA #<msg_setup_modes
+        STA NUI_MSGL
+        LDA #>msg_setup_modes
+        STA NUI_MSGH
+        STZ NUI_FOOTERL
+        STZ NUI_FOOTERH
+        JSR nui_show_dialog
+        STZ VGC_CURSEN
+        RTS
+
+show_menu_backdrop:
         JSR clear_text
+        LDA splash_loaded
+        BNE @ready
+        STZ VGC_DIMMER
+        JSR load_title_splash
+        BEQ @show
+@fallback:
         JSR clear_gfx
-        LDA #$01
-        STA VTEXT_COLOR
-        STZ VTEXT_ATTR
-        STZ VTEXT_FLAGS
-
-        LDA #31
-        STA text_x
-        LDA #9
-        STA text_y
-        LDA #<msg_title
-        LDY #>msg_title
-        JSR print_at
-
-        LDA #27
-        STA text_x
-        LDA #13
-        STA text_y
-        LDA #<msg_title_new_game
-        LDY #>msg_title_new_game
-        JSR print_at
-
-        LDA #27
-        STA text_x
-        LDA #15
-        STA text_y
-        LDA #<msg_title_demo
-        LDY #>msg_title_demo
-        JSR print_at
-
-        LDA #23
-        STA text_x
-        LDA #20
-        STA text_y
-        LDA #<msg_title_network
-        LDY #>msg_title_network
-        JSR print_at
-
-        LDA #27
-        STA VGC_CURSX
-        LDA #23
-        STA VGC_CURSY
+@show:
+        LDA #$0F
+        STA VGC_DIMMER
+@ready:
         RTS
 
 wait_splash_or_key:
-        LDX #CHESS_SPLASH_FRAMES
+@drain:
+        LDA VGC_CHARIN
+        BNE @drain
+        LDA #<CHESS_SPLASH_FRAMES
+        STA title_wait_l
+        LDA #>CHESS_SPLASH_FRAMES
+        STA title_wait_h
 @loop:
         LDA VGC_CHARIN
         BNE @key
-        PHX
+        LDA title_wait_l
+        ORA title_wait_h
+        BEQ @timeout
         JSR wait_frame
-        PLX
-        DEX
-        BNE @loop
+        LDA title_wait_l
+        BNE @dec_low
+        DEC title_wait_h
+@dec_low:
+        DEC title_wait_l
+        BRA @loop
+@timeout:
         LDA #$00
         RTS
 @key:
-        JMP to_upper
+        JSR to_upper
+        CMP #'D'
+        BEQ @done
+        CMP #'N'
+        BEQ @done
+        CMP #'S'
+        BEQ @done
+        CMP #$0D
+        BEQ @done
+        BRA @loop
+@done:
+        RTS
 
 wait_key:
-        LDA #$01
-        STA VGC_CURSEN
+        STZ VGC_CURSEN
 @loop:
         LDA VGC_CHARIN
         BEQ @loop
@@ -2004,6 +1925,8 @@ setup_new_game:
         LDA play_mode
         CMP #PLAYMODE_HUMAN_VS_HUMAN
         BEQ @ready
+        CMP #PLAYMODE_NETWORK
+        BEQ @network_ready
         JSR select_difficulty
         LDA play_mode
         CMP #PLAYMODE_HUMAN_VS_NOVA
@@ -2011,58 +1934,45 @@ setup_new_game:
         JSR select_color
 @ready:
         RTS
+@network_ready:
+        LDA #ENGINE_WHITES_TURN
+        STA human_side
+        RTS
 
 select_player_mode:
-        JSR clear_text
-        LDA #$01
-        STA VTEXT_COLOR
-        STZ VTEXT_ATTR
-        STZ VTEXT_FLAGS
-        LDA #31
-        STA text_x
-        LDA #8
-        STA text_y
-        LDA #<msg_setup_game
-        LDY #>msg_setup_game
-        JSR print_at
+        JSR show_menu_backdrop
+        JSR nui_dialog_defaults
         LDA #24
-        STA text_x
-        LDA #12
-        STA text_y
-        LDA #<msg_setup_human_nova
-        LDY #>msg_setup_human_nova
-        JSR print_at
-        LDA #24
-        STA text_x
-        LDA #14
-        STA text_y
-        LDA #<msg_setup_nova_nova
-        LDY #>msg_setup_nova_nova
-        JSR print_at
-        LDA #24
-        STA text_x
-        LDA #16
-        STA text_y
-        LDA #<msg_setup_human_human
-        LDY #>msg_setup_human_human
-        JSR print_at
-        LDA #24
-        STA text_x
-        LDA #19
-        STA text_y
-        LDA #<msg_setup_network_later
-        LDY #>msg_setup_network_later
-        JSR print_at
+        STA NUI_DIALOG_LEFT
+        LDA #5
+        STA NUI_DIALOG_TOP
+        LDA #32
+        STA NUI_DIALOG_WIDTH
+        LDA #10
+        STA NUI_DIALOG_HEIGHT
+        LDA #<msg_select_mode
+        STA NUI_TITLEL
+        LDA #>msg_select_mode
+        STA NUI_TITLEH
+        LDA #<msg_setup_modes
+        STA NUI_MSGL
+        LDA #>msg_setup_modes
+        STA NUI_MSGH
+        STZ NUI_FOOTERL
+        STZ NUI_FOOTERH
+        JSR nui_show_dialog
 @wait:
         JSR wait_key
         CMP #'1'
-        BEQ @human_nova
-        CMP #'2'
         BEQ @nova_nova
+        CMP #'2'
+        BEQ @human_nova
         CMP #'3'
         BEQ @human_human
+        CMP #'4'
+        BEQ @network
         CMP #'D'
-        BEQ @demo
+        BEQ @nova_nova
         BRA @wait
 @human_nova:
         LDA #PLAYMODE_HUMAN_VS_NOVA
@@ -2076,45 +1986,34 @@ select_player_mode:
         LDA #PLAYMODE_HUMAN_VS_HUMAN
         STA play_mode
         RTS
-@demo:
-        LDA #PLAYMODE_DEMO
+@network:
+        LDA #PLAYMODE_NETWORK
         STA play_mode
+        LDA #ENGINE_WHITES_TURN
+        STA human_side
         RTS
-
 select_difficulty:
-        JSR clear_text
-        LDA #$01
-        STA VTEXT_COLOR
-        STZ VTEXT_ATTR
-        STZ VTEXT_FLAGS
-        LDA #30
-        STA text_x
-        LDA #8
-        STA text_y
+        JSR show_menu_backdrop
+        JSR nui_dialog_defaults
+        LDA #19
+        STA NUI_DIALOG_LEFT
+        LDA #7
+        STA NUI_DIALOG_TOP
+        LDA #42
+        STA NUI_DIALOG_WIDTH
+        LDA #10
+        STA NUI_DIALOG_HEIGHT
         LDA #<msg_setup_level
-        LDY #>msg_setup_level
-        JSR print_at
-        LDA #26
-        STA text_x
-        LDA #12
-        STA text_y
-        LDA #<msg_setup_easy
-        LDY #>msg_setup_easy
-        JSR print_at
-        LDA #26
-        STA text_x
-        LDA #14
-        STA text_y
-        LDA #<msg_setup_medium
-        LDY #>msg_setup_medium
-        JSR print_at
-        LDA #26
-        STA text_x
-        LDA #16
-        STA text_y
-        LDA #<msg_setup_hard
-        LDY #>msg_setup_hard
-        JSR print_at
+        STA NUI_TITLEL
+        LDA #>msg_setup_level
+        STA NUI_TITLEH
+        LDA #<msg_setup_levels
+        STA NUI_MSGL
+        LDA #>msg_setup_levels
+        STA NUI_MSGH
+        STZ NUI_FOOTERL
+        STZ NUI_FOOTERH
+        JSR nui_show_dialog
 @wait:
         JSR wait_key
         CMP #'E'
@@ -2144,32 +2043,27 @@ select_difficulty:
         RTS
 
 select_color:
-        JSR clear_text
-        LDA #$01
-        STA VTEXT_COLOR
-        STZ VTEXT_ATTR
-        STZ VTEXT_FLAGS
-        LDA #30
-        STA text_x
+        JSR show_menu_backdrop
+        JSR nui_dialog_defaults
+        LDA #22
+        STA NUI_DIALOG_LEFT
         LDA #8
-        STA text_y
+        STA NUI_DIALOG_TOP
+        LDA #36
+        STA NUI_DIALOG_WIDTH
+        LDA #8
+        STA NUI_DIALOG_HEIGHT
         LDA #<msg_setup_color
-        LDY #>msg_setup_color
-        JSR print_at
-        LDA #26
-        STA text_x
-        LDA #12
-        STA text_y
-        LDA #<msg_setup_white
-        LDY #>msg_setup_white
-        JSR print_at
-        LDA #26
-        STA text_x
-        LDA #14
-        STA text_y
-        LDA #<msg_setup_black
-        LDY #>msg_setup_black
-        JSR print_at
+        STA NUI_TITLEL
+        LDA #>msg_setup_color
+        STA NUI_TITLEH
+        LDA #<msg_setup_colors
+        STA NUI_MSGL
+        LDA #>msg_setup_colors
+        STA NUI_MSGH
+        STZ NUI_FOOTERL
+        STZ NUI_FOOTERH
+        JSR nui_show_dialog
 @wait:
         JSR wait_key
         CMP #'W'
@@ -2262,9 +2156,13 @@ game_dispatch:
         BEQ @selfplay
         CMP #PLAYMODE_NOVA_VS_NOVA
         BEQ @selfplay
+        CMP #PLAYMODE_NETWORK
+        BEQ @network
         JMP play_game_loop
 @selfplay:
         JMP selfplay_loop
+@network:
+        JMP network_game_loop
 
 play_game_loop:
 @loop:
@@ -2310,12 +2208,14 @@ post_game_loop:
         BRA @wait
 @new_game:
         JSR setup_new_game
+        JSR load_selected_engine_or_halt
         JSR init_engine_game
         JSR start_game_screen
         JMP game_dispatch
 @demo:
         LDA #PLAYMODE_DEMO
         STA play_mode
+        JSR load_selected_engine_or_halt
         JSR init_engine_game
         JSR start_game_screen
         JMP game_dispatch
@@ -2362,12 +2262,19 @@ commit_current_move:
 prompt_human_move:
         JSR print_move_prompt
         JSR read_move_input
-        BNE @bad
+        BEQ @parse
+        CMP #$02
+        BEQ @network_error
+        BRA @bad
+@parse:
         JSR parse_move_input
         BNE @bad
         JSR validate_human_move
         BNE @bad
         LDA #$00
+        RTS
+@network_error:
+        LDA #$02
         RTS
 @bad:
         LDA #$01
@@ -2390,9 +2297,30 @@ print_move_prompt:
 
 read_move_input:
         STZ input_len
+        STZ input_from_state
+        STZ input_to_state
+        STZ input_error_l
+        STZ input_error_h
+        STZ input_blink_phase
+        STZ input_blink_tick
+        LDA VGC_FRAME
+        STA input_blink_frame
+        JSR input_set_blink_color
+        JSR input_refresh_visuals
         LDA #$01
         STA VGC_CURSEN
 @loop:
+        JSR input_update_flash
+        LDA play_mode
+        CMP #PLAYMODE_NETWORK
+        BNE @read_key
+        JSR ngs_keepalive_tick
+        BEQ @read_key
+        STZ VGC_CURSEN
+        JSR input_clear_highlights
+        LDA #$02
+        RTS
+@read_key:
         LDA VGC_CHARIN
         BEQ @loop
         CMP #$0D
@@ -2408,34 +2336,441 @@ read_move_input:
         CMP #$7F
         BCS @loop
         JSR to_upper
-        LDX input_len
-        CPX #INPUT_BUFFER_LEN
-        BCS @loop
-        STA input_buffer,X
-        INC input_len
-        STA VTEXT_CHAR
-        JSR vtext_put_char
+        STA input_key
+        JSR input_accept_key
         BRA @loop
 @backspace:
         LDA input_len
         BEQ @loop
         DEC input_len
-        LDA #$08
-        STA VTEXT_CHAR
-        JSR vtext_put_char
-        LDA #' '
-        STA VTEXT_CHAR
-        JSR vtext_put_char
-        LDA #$08
-        STA VTEXT_CHAR
-        JSR vtext_put_char
+        JSR input_refresh_visuals
         BRA @loop
 @enter:
+        LDA input_to_state
+        CMP #INPUT_STATE_FLASH
+        BNE @loop
+        STZ VGC_CURSEN
+        JSR input_clear_highlights
+        LDA #$00
+        RTS
+
+input_accept_key:
+        LDX input_len
+        CPX #INPUT_BUFFER_LEN
+        BCS @done
+        CPX #2
+        BCC @store
+        LDA input_from_state
+        CMP #INPUT_STATE_FLASH
+        BNE @done
+        CPX #4
+        BCC @store
+        CPX #4
+        BNE @done
+        LDA input_to_state
+        CMP #INPUT_STATE_FLASH
+        BNE @done
+        LDA input_key
+        CMP #'Q'
+        BEQ @store
+        CMP #'N'
+        BNE @done
+@store:
+        LDA input_key
+        STA input_buffer,X
+        INC input_len
+        JSR input_refresh_visuals
+@done:
+        RTS
+
+input_refresh_visuals:
+        JSR input_restore_current_outlines
+        JSR input_compute_states
+        JSR input_render_entry
+        JSR input_render_error
+        JMP input_draw_state_outlines
+
+input_clear_highlights:
+        JSR input_restore_current_outlines
+        STZ input_from_state
+        STZ input_to_state
+        JMP input_clear_error
+
+input_restore_current_outlines:
+        LDA input_from_state
+        BEQ @to_state
+        LDA input_from
+        JSR restore_square_from_engine_square
+@to_state:
+        LDA input_to_state
+        BEQ @done
+        LDA input_to
+        JSR restore_square_from_engine_square
+@done:
+        RTS
+
+input_compute_states:
+        STZ input_from_state
+        STZ input_to_state
+        STZ input_error_l
+        STZ input_error_h
+        LDA input_len
+        CMP #2
+        BCS @have_from
+        RTS
+@have_from:
+        JSR input_parse_from_only
+        BEQ @from_coord_ok
+        LDA #<msg_input_bad_from
+        LDY #>msg_input_bad_from
+        JMP input_set_error
+@from_coord_ok:
+        JSR input_from_has_legal_move
+        BEQ @from_ok
+        LDA #INPUT_STATE_INVALID
+        STA input_from_state
+        LDA #<msg_input_bad_from
+        LDY #>msg_input_bad_from
+        JMP input_set_error
+@from_ok:
+        LDA #INPUT_STATE_FLASH
+        STA input_from_state
         LDA input_len
         CMP #4
-        BCC @loop
-        STZ VGC_CURSEN
+        BCS @have_to
+        RTS
+@have_to:
+        JSR parse_move_input
+        BEQ @to_coord_ok
+        JSR input_parse_to_only
+        BNE @bad_to
+        LDA #INPUT_STATE_INVALID
+        STA input_to_state
+@bad_to:
+        LDA #<msg_input_bad_to
+        LDY #>msg_input_bad_to
+        JMP input_set_error
+@to_coord_ok:
+        JSR validate_human_move
+        BEQ @to_ok
+        LDA #INPUT_STATE_INVALID
+        STA input_to_state
+        LDA #<msg_input_illegal
+        LDY #>msg_input_illegal
+        JMP input_set_error
+@to_ok:
+        LDA #INPUT_STATE_FLASH
+        STA input_to_state
+        RTS
+
+input_set_error:
+        STA input_error_l
+        STY input_error_h
+        RTS
+
+input_render_entry:
+        LDA #INPUT_ENTRY_X
+        STA text_x
+        LDA #24
+        STA text_y
+        LDA #<msg_input_blank
+        LDY #>msg_input_blank
+        JSR print_at
+
+        LDY #$00
+        LDA input_len
+        BEQ @done
+        LDA input_buffer
+        STA panel_line,Y
+        INY
+        LDA input_len
+        CMP #2
+        BCC @done
+        LDA input_buffer + 1
+        STA panel_line,Y
+        INY
+        LDA input_from_state
+        CMP #INPUT_STATE_FLASH
+        BNE @done
+        LDA #'-'
+        STA panel_line,Y
+        INY
+        LDA input_len
+        CMP #3
+        BCC @done
+        LDA input_buffer + 2
+        STA panel_line,Y
+        INY
+        LDA input_len
+        CMP #4
+        BCC @done
+        LDA input_buffer + 3
+        STA panel_line,Y
+        INY
+        LDA input_len
+        CMP #5
+        BCC @done
+        LDA input_buffer + 4
+        STA panel_line,Y
+        INY
+@done:
+        TYA
+        STA input_display_len
         LDA #$00
+        STA panel_line,Y
+        LDA #INPUT_ENTRY_X
+        STA text_x
+        LDA #24
+        STA text_y
+        LDA #<panel_line
+        LDY #>panel_line
+        JSR print_at
+        LDA #INPUT_ENTRY_X
+        CLC
+        ADC input_display_len
+        STA VTEXT_CURX
+        LDA #24
+        STA VTEXT_CURY
+        JMP vtext_set_cursor
+
+input_clear_error:
+        LDA #PANEL_TEXT_X
+        STA text_x
+        LDA #INPUT_ERROR_Y
+        STA text_y
+        LDA #<msg_input_blank
+        LDY #>msg_input_blank
+        JMP print_at
+
+input_render_error:
+        JSR input_clear_error
+        LDA input_error_l
+        ORA input_error_h
+        BEQ @done
+        LDA #PANEL_TEXT_X
+        STA text_x
+        LDA #INPUT_ERROR_Y
+        STA text_y
+        LDA input_error_l
+        LDY input_error_h
+        JMP print_at
+@done:
+        RTS
+
+input_update_flash:
+        LDA input_from_state
+        CMP #INPUT_STATE_FLASH
+        BEQ @maybe_update
+        LDA input_to_state
+        CMP #INPUT_STATE_FLASH
+        BEQ @maybe_update
+        RTS
+@maybe_update:
+        LDA VGC_FRAME
+        CMP input_blink_frame
+        BEQ @done
+        STA input_blink_frame
+        INC input_blink_tick
+        LDA input_blink_tick
+        CMP #INPUT_BLINK_FRAMES
+        BCC @done
+        STZ input_blink_tick
+        INC input_blink_phase
+        LDA input_blink_phase
+        AND #$07
+        STA input_blink_phase
+        JSR input_set_blink_color
+        JSR input_restore_current_outlines
+        JSR input_draw_state_outlines
+@done:
+        RTS
+
+input_set_blink_color:
+        LDX input_blink_phase
+        LDA input_blink_colors,X
+        STA input_blink_color
+        RTS
+
+input_draw_state_outlines:
+        JSR input_draw_flash_outlines
+        LDA input_from_state
+        CMP #INPUT_STATE_INVALID
+        BNE @to_invalid
+        LDX #COLOR_RED
+        LDA input_from
+        JSR draw_square_outline
+@to_invalid:
+        LDA input_to_state
+        CMP #INPUT_STATE_INVALID
+        BNE @done
+        LDX #COLOR_RED
+        LDA input_to
+        JSR draw_square_outline
+@done:
+        RTS
+
+input_draw_flash_outlines:
+        LDA input_from_state
+        CMP #INPUT_STATE_FLASH
+        BNE @to_flash
+        LDX input_blink_color
+        LDA input_from
+        JSR draw_square_outline
+@to_flash:
+        LDA input_to_state
+        CMP #INPUT_STATE_FLASH
+        BNE @done
+        LDX input_blink_color
+        LDA input_to
+        JSR draw_square_outline
+@done:
+        RTS
+
+restore_square_from_engine_square:
+        JSR engine_square_to_board_index
+        JSR set_square_position_from_board_index
+
+        LDA square_xl
+        STA VSPRITE_XL
+        LDA square_xh
+        STA VSPRITE_XH
+        LDA square_y
+        STA VSPRITE_Y
+        LDA #SQUARE_SIZE
+        STA VSPRITE_WIDTHL
+        STZ VSPRITE_WIDTHH
+        STA VSPRITE_HEIGHTL
+        STZ VSPRITE_HEIGHTH
+
+        LDA board_row
+        CLC
+        ADC board_file
+        AND #$01
+        BEQ @light
+        LDA #COLOR_DARK_SQUARE
+        BRA @fill
+@light:
+        LDA #COLOR_LIGHT_SQUARE
+@fill:
+        STA VSPRITE_FILLVALUE
+        JSR vsprite_gfx_fill
+
+        LDY board_index
+        LDA board_state,Y
+        BEQ @done
+        STA piece_code
+        JMP draw_piece_on_square
+@done:
+        RTS
+
+draw_square_outline:
+        STA square_tmp
+        STX VGC_P0
+        LDA #VCMD_GCOLOR
+        JSR input_vgc_exec
+        LDA square_tmp
+        JSR engine_square_to_board_index
+        JSR set_square_position_from_board_index
+
+        LDA square_xl
+        STA to_x
+        CLC
+        ADC #(SQUARE_SIZE - 1)
+        STA anim_x
+        LDA square_y
+        STA to_y
+        CLC
+        ADC #(SQUARE_SIZE - 1)
+        STA anim_y
+
+        STZ VGC_P1
+        STZ VGC_P3
+        STZ VGC_P5
+        STZ VGC_P7
+
+        LDA to_x
+        STA VGC_P0
+        LDA to_y
+        STA VGC_P2
+        LDA anim_x
+        STA VGC_P4
+        LDA anim_y
+        STA VGC_P6
+        LDA #VCMD_RECT
+input_vgc_exec:
+        STA VGC_CMD
+@wait:
+        LDA VGC_CMD
+        AND #$01
+        BNE @wait
+        RTS
+
+input_parse_from_only:
+        LDA input_len
+        CMP #2
+        BCC @invalid
+        LDA input_buffer
+        JSR parse_file
+        BCS @invalid
+        STA from_file
+        LDA input_buffer + 1
+        JSR parse_rank_to_row
+        BCS @invalid
+        STA from_row
+        LDA from_row
+        ASL
+        ASL
+        ASL
+        ASL
+        ORA from_file
+        STA input_from
+        LDA #$00
+        RTS
+@invalid:
+        LDA #$01
+        RTS
+
+input_parse_to_only:
+        LDA input_len
+        CMP #4
+        BCC @invalid
+        LDA input_buffer + 2
+        JSR parse_file
+        BCS @invalid
+        STA to_file
+        LDA input_buffer + 3
+        JSR parse_rank_to_row
+        BCS @invalid
+        STA to_row
+        LDA to_row
+        ASL
+        ASL
+        ASL
+        ASL
+        ORA to_file
+        STA input_to
+        LDA #$00
+        RTS
+@invalid:
+        LDA #$01
+        RTS
+
+input_from_has_legal_move:
+        JSR ENGINE_CHESS_GENERATE_LEGAL_MOVES
+        LDX #$00
+@loop:
+        CPX ENGINE_MOVE_COUNT
+        BCS @invalid
+        LDA ENGINE_MOVE_LIST_FROM,X
+        CMP input_from
+        BEQ @valid
+        INX
+        BRA @loop
+@valid:
+        LDA #$00
+        RTS
+@invalid:
+        LDA #$01
         RTS
 
 parse_move_input:
@@ -2454,38 +2789,10 @@ parse_move_input:
         STA input_promo
 
 @coords:
-        LDA input_buffer
-        JSR parse_file
-        BCS @invalid
-        STA from_file
-        LDA input_buffer + 1
-        JSR parse_rank_to_row
-        BCS @invalid
-        STA from_row
-        LDA input_buffer + 2
-        JSR parse_file
-        BCS @invalid
-        STA to_file
-        LDA input_buffer + 3
-        JSR parse_rank_to_row
-        BCS @invalid
-        STA to_row
-
-        LDA from_row
-        ASL
-        ASL
-        ASL
-        ASL
-        ORA from_file
-        STA input_from
-
-        LDA to_row
-        ASL
-        ASL
-        ASL
-        ASL
-        ORA to_file
-        STA input_to
+        JSR input_parse_from_only
+        BNE @invalid
+        JSR input_parse_to_only
+        BNE @invalid
         LDA #$00
         RTS
 @invalid:
@@ -2550,6 +2857,199 @@ validate_human_move:
 @invalid:
         LDA #$01
         RTS
+
+network_game_loop:
+        JSR start_game_screen
+        JSR network_setup_game
+        BEQ @loop
+        JSR show_network_error_dialog
+        JSR ngs_disconnect
+        JMP post_game_loop
+@loop:
+        JSR update_clock
+        JSR ENGINE_CHESS_CHECK_GAME_STATE
+        STA game_state
+        CMP #GAME_CHECKMATE
+        BCS @game_over
+
+        JSR network_human_turn
+        BEQ @loop
+        JSR show_network_error_dialog
+        JSR ngs_disconnect
+        JMP post_game_loop
+@game_over:
+        JSR show_game_result
+        JSR ngs_disconnect
+        JMP post_game_loop
+
+network_human_turn:
+@retry:
+        JSR prompt_human_move
+        BEQ @move_ready
+        CMP #$02
+        BEQ @error
+        JSR set_status_invalid
+        LDX #45
+        JSR wait_demo_frames
+        BRA @retry
+@move_ready:
+        JSR set_status_moving
+        JSR commit_current_move
+        JSR network_send_current_move
+        BNE @error
+        LDA game_state
+        CMP #GAME_CHECKMATE
+        BCS @ok
+        JSR set_status_thinking
+        JSR network_wait_opponent_move
+        BNE @error
+        JSR set_status_moving
+        JSR commit_current_move
+@ok:
+        LDA #$00
+        RTS
+@error:
+        LDA #$01
+        RTS
+
+network_setup_game:
+        JSR set_status_network
+        JSR nchess_net_init
+        LDA #<network_frame
+        LDX #>network_frame
+        JSR ngs_set_buffer
+        LDA NGS_RESULT
+        BEQ :+
+        JMP @error
+:
+        JSR ngs_disconnect
+
+        JSR ngs_connect_default
+        LDA NGS_RESULT
+        BEQ :+
+        JMP @error
+:
+        JSR ngs_wait_connected
+        BEQ :+
+        JMP @error
+:
+
+        LDA #<game_server_handle
+        LDX #>game_server_handle
+        LDY #game_server_handle_end - game_server_handle
+        JSR ngs_set_string
+        JSR nchess_net_build_hello
+        LDA NCHESS_RESULT
+        BEQ :+
+        JMP @error
+:
+        JSR ngs_send_current
+        BEQ :+
+        JMP @error
+:
+        LDA #NGS_KIND_WELCOME
+        JSR ngs_wait_kind
+        BEQ :+
+        JMP @error
+:
+
+        LDA #<game_server_table_name
+        LDX #>game_server_table_name
+        LDY #game_server_table_name_end - game_server_table_name
+        JSR ngs_set_string
+        JSR nchess_net_build_create_table
+        LDA NCHESS_RESULT
+        BEQ :+
+        JMP @error
+:
+        JSR ngs_send_current
+        BEQ :+
+        JMP @error
+:
+        LDA #NGS_KIND_TABLE_CREATED
+        JSR ngs_wait_kind
+        BEQ :+
+        JMP @error
+:
+        JSR ngs_read_u16
+        LDA NGS_RESULT
+        BEQ :+
+        JMP @error
+:
+        LDA NGS_VALUE_L
+        STA network_table_idl
+        STA NGS_TABLE_IDL
+        LDA NGS_VALUE_H
+        STA network_table_idh
+        STA NGS_TABLE_IDH
+
+        LDA #$00
+        RTS
+@error:
+        JSR ngs_disconnect
+        LDA #$01
+        RTS
+
+network_send_current_move:
+        LDA network_table_idl
+        STA NGS_TABLE_IDL
+        LDA network_table_idh
+        STA NGS_TABLE_IDH
+        LDA self_from
+        STA NCHESS_MOVE_FROM
+        LDA self_to
+        STA NCHESS_MOVE_TO
+        JSR nchess_net_build_move
+        LDA NCHESS_RESULT
+        BNE @error
+        JMP ngs_send_current
+@error:
+        LDA #$01
+        RTS
+
+network_wait_opponent_move:
+@wait_event:
+        LDA #NGS_KIND_TABLE_EVENT
+        JSR ngs_wait_kind
+        BNE @error
+        JSR nchess_net_parse_table_event
+        LDA NCHESS_RESULT
+        BNE @wait_event
+        LDA NCHESS_EVENT_TABLEL
+        CMP network_table_idl
+        BNE @wait_event
+        LDA NCHESS_EVENT_TABLEH
+        CMP network_table_idh
+        BNE @wait_event
+        LDA NCHESS_EVENT_FROM
+        CMP self_from
+        BNE @stockfish
+        LDA NCHESS_EVENT_TO
+        CMP self_to
+        BEQ @wait_event
+@stockfish:
+        LDA NCHESS_EVENT_FROM
+        STA self_from
+        LDA NCHESS_EVENT_TO
+        STA self_to
+        LDA #$00
+        RTS
+@error:
+        LDA #$01
+        RTS
+
+show_network_error_dialog:
+        JSR set_status_network_error
+        JSR nui_dialog_defaults
+        LDA #<msg_net_error_title
+        STA NUI_TITLEL
+        LDA #>msg_net_error_title
+        STA NUI_TITLEH
+        LDA #<msg_net_error_body
+        STA NUI_MSGL
+        LDA #>msg_net_error_body
+        STA NUI_MSGH
+        JMP nui_show_error
 
 selfplay_loop:
 @loop:
@@ -2624,7 +3124,9 @@ show_game_result:
         LDA #<msg_draw_repeat_auto
         LDY #>msg_draw_repeat_auto
         JMP print_status
+.endif
 
+.if CHESS_CASTLE_TEST || CHESS_SELFPLAY_DEMO
 animate_engine_move:
         JSR prepare_engine_move_geometry
         LDA self_from
@@ -3147,13 +3649,27 @@ abs_signed_small:
         RTS
 .endif
 
-.include "fio.s"
+.include "nvg.s"
 
 .segment "RODATA"
 
-engine_name:
+splash_nvg_name:
+        .byte "SPLASH.NVG"
+splash_nvg_name_end:
+
+engine_full_name:
         .byte "CHESSENG"
-engine_name_end:
+engine_full_name_end:
+engine_rules_name:
+        .byte "CHESSRUL"
+engine_rules_name_end:
+
+game_server_handle:
+        .byte "nova-chess"
+game_server_handle_end:
+game_server_table_name:
+        .byte "Nova Chess"
+game_server_table_name_end:
 
 msg_game_over:
         .byte "GAME OVER  ", 0
@@ -3207,311 +3723,27 @@ novadraw_piece_lo:
 novadraw_piece_hi:
         .byte >pieces_pawn, >pieces_knight, >pieces_bishop, >pieces_rook, >pieces_queen, >pieces_king
 
-piece_mask_lo:
-        .byte <mask_pawn, <mask_knight, <mask_bishop, <mask_rook, <mask_queen, <mask_king
-piece_mask_hi:
-        .byte >mask_pawn, >mask_knight, >mask_bishop, >mask_rook, >mask_queen, >mask_king
-
-piece_detail_lo:
-        .byte <detail_pawn, <detail_knight, <detail_bishop, <detail_rook, <detail_queen, <detail_king
-piece_detail_hi:
-        .byte >detail_pawn, >detail_knight, >detail_bishop, >detail_rook, >detail_queen, >detail_king
-
-mask_pawn:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %11110000, %00000000
-        .byte %00000001, %11111000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000001, %11111000, %00000000
-        .byte %00000000, %11110000, %00000000
-        .byte %00000001, %11111000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000001, %11111000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00001111, %11111111, %00000000
-        .byte %00011111, %11111111, %10000000
-        .byte %00011111, %11111111, %10000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-detail_pawn:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %01000000, %00000000
-        .byte %00000000, %10000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000000, %10000000, %00000000
-        .byte %00000000, %01000000, %00000000
-        .byte %00000000, %10000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000000, %10000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00001111, %11111111, %00000000
-        .byte %00001000, %00000001, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-mask_knight:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000001, %11000000, %00000000
-        .byte %00000011, %11100000, %00000000
-        .byte %00000111, %11110000, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00011111, %11111110, %00000000
-        .byte %00111111, %11111111, %00000000
-        .byte %00111111, %11111111, %00000000
-        .byte %00011111, %11111110, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00000111, %11111000, %00000000
-        .byte %00000011, %11110000, %00000000
-        .byte %00000111, %11111000, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00011111, %11111110, %00000000
-        .byte %00111111, %11111111, %00000000
-        .byte %01111111, %11111111, %10000000
-        .byte %01111111, %11111111, %10000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-detail_knight:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000100, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000000, %10100000, %00000000
-        .byte %00000100, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000000, %10000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000100, %00000000, %00000000
-        .byte %00001000, %00000000, %00000000
-        .byte %00010000, %00000000, %00000000
-        .byte %00111111, %11111111, %00000000
-        .byte %00100000, %00000001, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-mask_bishop:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %01100000, %00000000
-        .byte %00000000, %11110000, %00000000
-        .byte %00000001, %11111000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00000111, %10011110, %00000000
-        .byte %00000111, %00001110, %00000000
-        .byte %00000011, %10011100, %00000000
-        .byte %00000001, %11111000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000001, %11111000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00001111, %11111111, %00000000
-        .byte %00011111, %11111111, %10000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-detail_bishop:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %01000000, %00000000
-        .byte %00000000, %10000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000010, %00000000, %00000000
-        .byte %00000001, %00000000, %00000000
-        .byte %00000000, %10000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00001000, %00000001, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-mask_rook:
-        .byte %00000000, %00000000, %00000000
-        .byte %00111001, %11100111, %00000000
-        .byte %00111111, %11111111, %00000000
-        .byte %00011111, %11111110, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00001111, %11111100, %00000000
-        .byte %00011111, %11111110, %00000000
-        .byte %00111111, %11111111, %00000000
-        .byte %00111111, %11111111, %00000000
-        .byte %01111111, %11111111, %10000000
-        .byte %01111111, %11111111, %10000000
-        .byte %00111111, %11111111, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-detail_rook:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00001000, %00010000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000100, %00100000, %00000000
-        .byte %00000100, %00100000, %00000000
-        .byte %00000100, %00100000, %00000000
-        .byte %00000100, %00100000, %00000000
-        .byte %00000100, %00100000, %00000000
-        .byte %00000100, %00100000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00011111, %11111110, %00000000
-        .byte %00100000, %00000001, %00000000
-        .byte %00111111, %11111111, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-mask_queen:
-        .byte %00000000, %00000000, %00000000
-        .byte %00110001, %10001100, %00000000
-        .byte %01111011, %11011110, %00000000
-        .byte %00111111, %11111100, %00000000
-        .byte %00011111, %11111000, %00000000
-        .byte %00001111, %11110000, %00000000
-        .byte %00011111, %11111000, %00000000
-        .byte %00111111, %11111100, %00000000
-        .byte %00111111, %11111100, %00000000
-        .byte %00011111, %11111000, %00000000
-        .byte %00001111, %11110000, %00000000
-        .byte %00001111, %11110000, %00000000
-        .byte %00011111, %11111000, %00000000
-        .byte %00111111, %11111100, %00000000
-        .byte %01111111, %11111110, %00000000
-        .byte %01111111, %11111110, %00000000
-        .byte %11111111, %11111111, %00000000
-        .byte %01111111, %11111110, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-detail_queen:
-        .byte %00000000, %00000000, %00000000
-        .byte %00010001, %00001000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00111111, %11111100, %00000000
-        .byte %00100000, %00000100, %00000000
-        .byte %01111111, %11111110, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-mask_king:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %01100000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000000, %01100000, %00000000
-        .byte %00000000, %01100000, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00001111, %11111111, %00000000
-        .byte %00001111, %11111111, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000011, %11111100, %00000000
-        .byte %00000111, %11111110, %00000000
-        .byte %00001111, %11111111, %00000000
-        .byte %00011111, %11111111, %10000000
-        .byte %00111111, %11111111, %11000000
-        .byte %00111111, %11111111, %11000000
-        .byte %00011111, %11111111, %10000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
-detail_king:
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %01000000, %00000000
-        .byte %00000011, %11110000, %00000000
-        .byte %00000000, %01000000, %00000000
-        .byte %00000000, %01000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00001111, %11111111, %00000000
-        .byte %00010000, %00000000, %10000000
-        .byte %00011111, %11111111, %10000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-        .byte %00000000, %00000000, %00000000
-
 msg_title:
         .byte "NOVA CHESS", 0
-msg_title_new_game:
-        .byte "N NEW GAME", 0
-msg_title_demo:
-        .byte "D DEMO / SELF PLAY", 0
-msg_title_network:
-        .byte "NETWORK / STOCKFISH COMING LATER", 0
+msg_select_mode:
+        .byte "SELECT A MODE", 0
 msg_setup_game:
         .byte "NEW GAME", 0
-msg_setup_human_nova:
-        .byte "1 HUMAN VS NOVA", 0
-msg_setup_nova_nova:
-        .byte "2 NOVA VS NOVA", 0
-msg_setup_human_human:
-        .byte "3 HUMAN VS HUMAN", 0
-msg_setup_network_later:
-        .byte "NETWORK PLAY WILL USE NOVAHOST", 0
+msg_setup_modes:
+        .byte "1  COMPUTER VS COMPUTER", $0D
+        .byte "2  HUMAN VS COMPUTER", $0D
+        .byte "3  HUMAN VS HUMAN", $0D
+        .byte "4  NETWORK GAME", 0
 msg_setup_level:
         .byte "DIFFICULTY", 0
-msg_setup_easy:
-        .byte "E EASY    3 SEC", 0
-msg_setup_medium:
-        .byte "M MEDIUM 10 SEC", 0
-msg_setup_hard:
+msg_setup_levels:
+        .byte "E EASY    3 SEC", $0D
+        .byte "M MEDIUM 10 SEC", $0D
         .byte "H HARD   25 SEC", 0
 msg_setup_color:
         .byte "PLAY AS", 0
-msg_setup_white:
-        .byte "W WHITE", 0
-msg_setup_black:
+msg_setup_colors:
+        .byte "W WHITE", $0D
         .byte "B BLACK", 0
 msg_turn_white:
         .byte "TURN WHITE ", 0
@@ -3533,8 +3765,28 @@ msg_status_check:
         .byte "CHECK       ", 0
 msg_status_invalid:
         .byte "INVALID     ", 0
+msg_status_network:
+        .byte "NETWORK     ", 0
+msg_status_neterr:
+        .byte "NET ERROR   ", 0
+msg_net_error_title:
+        .byte "NETWORK ERROR", 0
+msg_net_error_body:
+        .byte "network error: game server unavailable.", $0D
+        .byte "check novahost network settings", 0
 msg_prompt_move:
         .byte "MOVE:       ", 0
+msg_input_blank:
+        .byte "                    ", 0
+msg_input_bad_from:
+        .byte "BAD FROM SQUARE", 0
+msg_input_bad_to:
+        .byte "BAD TO SQUARE", 0
+msg_input_illegal:
+        .byte "ILLEGAL MOVE", 0
+input_blink_colors:
+        .byte COLOR_WHITE, COLOR_LIGHT_SQUARE, COLOR_DARK_SQUARE, COLOR_WHITE_DETAIL
+        .byte COLOR_BLACK, COLOR_WHITE_DETAIL, COLOR_DARK_SQUARE, COLOR_LIGHT_SQUARE
 msg_game_over_prompt:
         .byte "N NEW  D DEMO", 0
 msg_engine_failed:
@@ -3591,6 +3843,8 @@ glyph_8:
 .include "vsprite.s"
 .include "vtext.s"
 .include "tween.s"
+.include "nchess_net.s"
+.include "nui.s"
 
 .segment "VECTORS"
         .word reset

@@ -31,10 +31,6 @@ public static partial class DirectCanvas
     private static readonly byte[] _shapeRamSnapshot = new byte[VgcConstants.ShapeRamSize];
     private static bool _shapeRamInitialized;
 
-    // Tile scratch buffers
-    private static readonly uint[] _tileLine = new uint[VgcConstants.GfxWidth];
-    private static readonly byte[] _tileOpaque = new byte[VgcConstants.GfxWidth];
-
     // Cursor state
     private static bool _cursorVisible = true;
 
@@ -122,11 +118,8 @@ public static partial class DirectCanvas
         int cursorY = vgc.GetCursorY();
         bool cursorEnabled = _cursorVisible && vgc.IsCursorEnabled;
 
-        bool tileMode = state.Mode == 4;
-        TileRenderState? tiles = tileMode ? TileRenderState.FromVgc(vgc) : null;
-
         ushort colSS = 0, colSB = 0;
-        ushort colTile = 0;
+        byte gfxTransparentColor = vgc.GetGfxTransparentColor();
 
         for (int y = 0; y < VgcConstants.GfxHeight; y++)
         {
@@ -147,23 +140,9 @@ public static partial class DirectCanvas
             SpriteRenderer.RasterizeScanline(y, sprites, shapeRam,
                 _lineBehind, _lineBetween, _lineFront, _spriteMask);
 
-            // Rasterize tiles for this scanline (Mode 4 only)
-            if (tileMode)
-                TileRenderer.RasterizeScanline(y, tiles!, _tileLine, _tileOpaque);
-
             // Accumulate collision data
             SpriteRenderer.AccumulateCollisions(_spriteMask, vgc,
-                state.ScrollX, state.ScrollY, y, ref colSS, ref colSB);
-
-            // Sprite-tile collision: any sprite pixel overlapping a non-transparent tile pixel
-            if (tileMode)
-            {
-                for (int cx = 0; cx < VgcConstants.GfxWidth; cx++)
-                {
-                    if (_spriteMask[cx] != 0 && _tileOpaque[cx] != 0)
-                        colTile |= _spriteMask[cx];
-                }
-            }
+                state.GfxScrollX, state.GfxScrollY, y, ref colSS, ref colSB);
 
             for (int x = 0; x < VgcConstants.GfxWidth; x++)
             {
@@ -183,10 +162,11 @@ public static partial class DirectCanvas
                 byte spriteBetween = _lineBetween[x];
                 byte spriteFront = _lineFront[x];
 
-                int sampleGfxX = Wrap320(x + state.ScrollX);
-                int sampleGfxY = Wrap200(y + state.ScrollY);
+                int sampleGfxX = Wrap320(x + state.GfxScrollX);
+                int sampleGfxY = Wrap200(y + state.GfxScrollY);
                 byte gfxColorIndex = vgc.GetGfxPixelColor(sampleGfxX, sampleGfxY);
-                uint gfxPixel = gfxColorIndex == 0 ? 0u : _palette[gfxColorIndex & 0x0F];
+                bool gfxOpaque = gfxColorIndex != gfxTransparentColor;
+                uint gfxPixel = gfxOpaque ? _palette[gfxColorIndex & 0x0F] : 0u;
 
                 for (int dy = 0; dy < 2; dy++)
                 {
@@ -202,35 +182,19 @@ public static partial class DirectCanvas
 
                         bool textOpaque = false;
                         uint textPixel = 0;
-                        if (state.Mode != 3)
+                        if (state.Mode != 3 && state.Mode != 4)
                             textOpaque = TrySampleTextPixel(px, py, state, cursorX, cursorY, cursorEnabled, font, vgc, out textPixel);
 
-                        if (tileMode)
+                        if (state.Mode == 3 || state.Mode == 4)
                         {
-                            // Mode 4: tiles + sprites
-                            byte tilePri = _tileOpaque[x];
-                            // _tileLine stores ARGB (0xAARRGGBB) from TileRenderState — convert to our RGBA
-                            uint tilePixel = ArgbToRgba(_tileLine[x]);
-
-                            // Behind tiles (priority 0)
-                            if (tilePri == 1)
-                                pixel = tilePixel;
-                            if (spriteBetween != 0)
-                                pixel = _palette[spriteBetween & 0x0F];
-                            // Front tiles (priority 1) go over between-sprites
-                            if (tilePri == 2)
-                                pixel = tilePixel;
-                        }
-                        else if (state.Mode == 3)
-                        {
-                            if (gfxPixel != 0)
+                            if (gfxOpaque)
                                 pixel = gfxPixel;
                             if (spriteBetween != 0)
                                 pixel = _palette[spriteBetween & 0x0F];
                         }
                         else if (state.Mode == 2)
                         {
-                            if (gfxPixel != 0)
+                            if (gfxOpaque)
                                 pixel = gfxPixel;
                             if (spriteBetween != 0)
                                 pixel = _palette[spriteBetween & 0x0F];
@@ -243,7 +207,7 @@ public static partial class DirectCanvas
                                 pixel = textPixel;
                             if (spriteBetween != 0)
                                 pixel = _palette[spriteBetween & 0x0F];
-                            if (state.Mode >= 1 && gfxPixel != 0)
+                            if (state.Mode >= 1 && gfxOpaque)
                                 pixel = gfxPixel;
                         }
 
@@ -262,8 +226,6 @@ public static partial class DirectCanvas
         }
 
         vgc.SetCollisionRegisters(colSS, colSB);
-        if (tileMode)
-            vgc.SetTileCollision(colTile);
     }
 
     private static bool TrySampleTextPixel(
@@ -277,8 +239,8 @@ public static partial class DirectCanvas
         VirtualGraphicsController vgc,
         out uint pixel)
     {
-        int srcPx = Wrap640(px + (state.ScrollX << 1));
-        int srcPy = Wrap400(py + (state.ScrollY << 1));
+        int srcPx = Wrap640(px + (state.TextScrollX << 1));
+        int srcPy = Wrap400(py + (state.TextScrollY << 1));
 
         int col = srcPx / BitmapFont.GlyphWidth;
         int row = srcPy / (BitmapFont.GlyphHeight * 2);
@@ -350,23 +312,12 @@ public static partial class DirectCanvas
         return palette;
     }
 
-    /// <summary>
-    /// Converts ARGB uint (0xAARRGGBB) from TileRenderState to our RGBA format (R<<24|G<<16|B<<8|A).
-    /// </summary>
-    private static uint ArgbToRgba(uint argb)
-    {
-        byte a = (byte)(argb >> 24);
-        byte r = (byte)(argb >> 16);
-        byte g = (byte)(argb >> 8);
-        byte b = (byte)(argb);
-        return ((uint)r << 24) | ((uint)g << 16) | ((uint)b << 8) | a;
-    }
-
     private struct RenderVideoState
     {
         public byte Mode;
         public int ScrollX;
         public int ScrollY;
+        public byte ScrollCtl;
         public byte BgColor;
         public int FontIndex;
 
@@ -376,6 +327,7 @@ public static partial class DirectCanvas
                 Mode = vgc.GetMode(),
                 ScrollX = vgc.GetScrollX(),
                 ScrollY = vgc.GetScrollY(),
+                ScrollCtl = vgc.GetScrollCtl(),
                 BgColor = vgc.GetBgColor(),
                 FontIndex = vgc.GetFontIndex()
             };
@@ -396,10 +348,27 @@ public static partial class DirectCanvas
                 case VgcConstants.RegScrollY - VgcConstants.VgcBase:
                     ScrollY = value;
                     break;
+                case VgcConstants.RegScrollCtl - VgcConstants.VgcBase:
+                    ScrollCtl = (byte)(value & 0x07);
+                    break;
                 case VgcConstants.RegFont - VgcConstants.VgcBase:
                     FontIndex = value & 0x07;
                     break;
             }
         }
+
+        public int GfxScrollX => (ScrollCtl & VgcConstants.ScrollCtlGfx) != 0 ? ScrollXFull : 0;
+        public int GfxScrollY => (ScrollCtl & VgcConstants.ScrollCtlGfx) != 0 ? ScrollYMod : 0;
+        public int TextScrollX => (ScrollCtl & VgcConstants.ScrollCtlText) != 0 ? ScrollXFull : 0;
+        public int TextScrollY => (ScrollCtl & VgcConstants.ScrollCtlText) != 0 ? ScrollYMod : 0;
+
+        private int ScrollXFull => NormalizeScrollX(ScrollX | ((ScrollCtl & VgcConstants.ScrollCtlXHigh) != 0 ? 0x100 : 0));
+        private int ScrollYMod => NormalizeScrollY(ScrollY);
+
+        private static int NormalizeScrollX(int value) =>
+            value >= VgcConstants.GfxWidth ? value - VgcConstants.GfxWidth : value;
+
+        private static int NormalizeScrollY(int value) =>
+            value >= VgcConstants.GfxHeight ? value - VgcConstants.GfxHeight : value;
     }
 }

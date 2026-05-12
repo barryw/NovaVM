@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import NovaDrawMCPKit
 import Testing
 @testable import NovaDraw
 
@@ -127,6 +128,22 @@ import Testing
         data.removeLast()
 
         #expect(ProjectFormat.decode(data: data) == nil)
+    }
+
+    @Test func mcpCreatedProjectDecodesInNovaDraw() throws {
+        var project = try NovaDrawProject(width: 3, height: 2, imageNames: ["agent art"])
+        try project.setPixel(imageIndex: 0, x: 1, y: 0, color: 12)
+        try project.setPixel(imageIndex: 0, x: 2, y: 1, color: 0)
+
+        let decoded = ProjectFormat.decode(data: try NovaDrawProjectCodec.encode(project))
+
+        #expect(decoded?.width == 3)
+        #expect(decoded?.height == 2)
+        #expect(decoded?.images.first?.name == "agent art")
+        #expect(decoded?.getPixel(1, 0) == 12)
+        #expect(decoded?.isPixelPainted(1, 0) == true)
+        #expect(decoded?.getPixel(2, 1) == 0)
+        #expect(decoded?.isPixelPainted(2, 1) == true)
     }
 
     private func makeImage() -> NSImage {

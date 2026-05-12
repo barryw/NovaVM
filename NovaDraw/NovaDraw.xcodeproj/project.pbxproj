@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1A0000000000000000000040 /* NovaDrawApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000020 /* NovaDrawApp.swift */; };
+		1A0000000000000000000070 /* RecentProjectsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000071 /* RecentProjectsStore.swift */; };
 		1A0000000000000000000041 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000021 /* ContentView.swift */; };
 		1A0000000000000000000042 /* NewCanvasSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000022 /* NewCanvasSheet.swift */; };
 		1A0000000000000000000051 /* TraceSheetImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000037 /* TraceSheetImportSheet.swift */; };
@@ -40,6 +41,7 @@
 		1A0000000000000000000067 /* TraceSheetRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000039 /* TraceSheetRendererTests.swift */; };
 		1A0000000000000000000068 /* CanvasViewportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000003B /* CanvasViewportTests.swift */; };
 		1A0000000000000000000069 /* Ca65ExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000003F /* Ca65ExporterTests.swift */; };
+		1A0000000000000000000072 /* RecentProjectsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000073 /* RecentProjectsStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +60,7 @@
 		1A0000000000000000000012 /* NovaDraw.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NovaDraw.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000013 /* NovaDrawTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NovaDrawTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000020 /* NovaDrawApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovaDrawApp.swift; sourceTree = "<group>"; };
+		1A0000000000000000000071 /* RecentProjectsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentProjectsStore.swift; sourceTree = "<group>"; };
 		1A0000000000000000000021 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		1A0000000000000000000022 /* NewCanvasSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewCanvasSheet.swift; sourceTree = "<group>"; };
 		1A0000000000000000000037 /* TraceSheetImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraceSheetImportSheet.swift; sourceTree = "<group>"; };
@@ -89,6 +92,7 @@
 		1A0000000000000000000039 /* TraceSheetRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraceSheetRendererTests.swift; sourceTree = "<group>"; };
 		1A000000000000000000003B /* CanvasViewportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasViewportTests.swift; sourceTree = "<group>"; };
 		1A000000000000000000003F /* Ca65ExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ca65ExporterTests.swift; sourceTree = "<group>"; };
+		1A0000000000000000000073 /* RecentProjectsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentProjectsStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -145,6 +149,7 @@
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000000020 /* NovaDrawApp.swift */,
+				1A0000000000000000000071 /* RecentProjectsStore.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -211,6 +216,7 @@
 				1A0000000000000000000039 /* TraceSheetRendererTests.swift */,
 				1A000000000000000000003B /* CanvasViewportTests.swift */,
 				1A000000000000000000003F /* Ca65ExporterTests.swift */,
+				1A0000000000000000000073 /* RecentProjectsStoreTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -323,6 +329,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A0000000000000000000040 /* NovaDrawApp.swift in Sources */,
+				1A0000000000000000000070 /* RecentProjectsStore.swift in Sources */,
 				1A0000000000000000000041 /* ContentView.swift in Sources */,
 				1A0000000000000000000042 /* NewCanvasSheet.swift in Sources */,
 				1A0000000000000000000051 /* TraceSheetImportSheet.swift in Sources */,
@@ -361,6 +368,7 @@
 				1A0000000000000000000067 /* TraceSheetRendererTests.swift in Sources */,
 				1A0000000000000000000068 /* CanvasViewportTests.swift in Sources */,
 				1A0000000000000000000069 /* Ca65ExporterTests.swift in Sources */,
+				1A0000000000000000000072 /* RecentProjectsStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

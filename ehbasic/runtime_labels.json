@@ -72,7 +72,7 @@
       "symbol": "audio_instrument",
       "abi": "pseudo-register",
       "summary": "Define an instrument envelope and waveform.",
-      "address": "$EE0B"
+      "address": "$ED05"
     },
     {
       "label": "AUDIO.INST_ID",
@@ -105,7 +105,7 @@
       "symbol": "audio_midplay",
       "abi": "pseudo-register",
       "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE1E"
+      "address": "$ED18"
     },
     {
       "label": "AUDIO.MIDSTOP",
@@ -123,7 +123,7 @@
       "symbol": "audio_midstop",
       "abi": "none",
       "summary": "Stop MIDI file playback.",
-      "address": "$EE23"
+      "address": "$ED1D"
     },
     {
       "label": "AUDIO.MUSIC_LOOP",
@@ -143,7 +143,7 @@
       "symbol": "audio_music_loop",
       "abi": "pseudo-register",
       "summary": "Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.",
-      "address": "$EE45"
+      "address": "$ED3F"
     },
     {
       "label": "AUDIO.MUSIC_NOTE",
@@ -166,7 +166,7 @@
       "symbol": "audio_music_note",
       "abi": "register",
       "summary": "Return the current MIDI note for a music voice.",
-      "address": "$EE63"
+      "address": "$ED5D"
     },
     {
       "label": "AUDIO.MUSIC_PLAY",
@@ -184,7 +184,7 @@
       "symbol": "audio_music_play",
       "abi": "none",
       "summary": "Start queued music playback.",
-      "address": "$EE32"
+      "address": "$ED2C"
     },
     {
       "label": "AUDIO.MUSIC_PLAYING",
@@ -202,7 +202,7 @@
       "symbol": "audio_music_playing",
       "abi": "none",
       "summary": "Return nonzero if music is playing.",
-      "address": "$EE59"
+      "address": "$ED53"
     },
     {
       "label": "AUDIO.MUSIC_PRIORITY",
@@ -222,7 +222,7 @@
       "symbol": "audio_music_priority",
       "abi": "pseudo-register",
       "summary": "Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.",
-      "address": "$EE4A"
+      "address": "$ED44"
     },
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
@@ -245,7 +245,7 @@
       "symbol": "audio_music_sequence",
       "abi": "pseudo-register",
       "summary": "Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.",
-      "address": "$EE2D"
+      "address": "$ED27"
     },
     {
       "label": "AUDIO.MUSIC_STOP",
@@ -263,7 +263,7 @@
       "symbol": "audio_music_stop",
       "abi": "none",
       "summary": "Stop music playback.",
-      "address": "$EE3B"
+      "address": "$ED35"
     },
     {
       "label": "AUDIO.MUSIC_TEMPO",
@@ -284,7 +284,7 @@
       "symbol": "audio_music_tempo",
       "abi": "pseudo-register",
       "summary": "Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.",
-      "address": "$EE40"
+      "address": "$ED3A"
     },
     {
       "label": "AUDIO.NOTE",
@@ -327,7 +327,7 @@
       "symbol": "audio_play_sound",
       "abi": "register",
       "summary": "Play a one-shot note using A/X/Y register arguments.",
-      "address": "$EDEE"
+      "address": "$ECE8"
     },
     {
       "label": "AUDIO.RELEASE",
@@ -366,7 +366,7 @@
       "symbol": "audio_set_volume",
       "abi": "register",
       "summary": "Set master or per-voice volume using A/X register arguments.",
-      "address": "$EDF9"
+      "address": "$ECF3"
     },
     {
       "label": "AUDIO.SFLOAD",
@@ -387,7 +387,7 @@
       "symbol": "audio_sfload",
       "abi": "pseudo-register",
       "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE28"
+      "address": "$ED22"
     },
     {
       "label": "AUDIO.SFX_PLAYING",
@@ -405,7 +405,7 @@
       "symbol": "audio_sfx_playing",
       "abi": "none",
       "summary": "Return nonzero if a sound effect is playing.",
-      "address": "$EE53"
+      "address": "$ED4D"
     },
     {
       "label": "AUDIO.SIDPLAY",
@@ -427,7 +427,7 @@
       "symbol": "audio_sidplay",
       "abi": "pseudo-register",
       "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.",
-      "address": "$EE10"
+      "address": "$ED0A"
     },
     {
       "label": "AUDIO.SIDSTOP",
@@ -445,7 +445,7 @@
       "symbol": "audio_sidstop",
       "abi": "none",
       "summary": "Stop SID file playback.",
-      "address": "$EE19"
+      "address": "$ED13"
     },
     {
       "label": "AUDIO.SOUND",
@@ -467,7 +467,7 @@
       "symbol": "audio_sound",
       "abi": "pseudo-register",
       "summary": "Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.",
-      "address": "$EE01"
+      "address": "$ECFB"
     },
     {
       "label": "AUDIO.STATUS",
@@ -485,7 +485,7 @@
       "symbol": "audio_status",
       "abi": "none",
       "summary": "Return raw music status bits.",
-      "address": "$EE4F"
+      "address": "$ED49"
     },
     {
       "label": "AUDIO.STRH",
@@ -566,7 +566,7 @@
       "symbol": "audio_volume",
       "abi": "pseudo-register",
       "summary": "Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.",
-      "address": "$EE06"
+      "address": "$ED00"
     },
     {
       "label": "AUDIO.VOLUME_LEVEL",
@@ -1051,7 +1051,7 @@
       "kind": "routine",
       "symbol": "fio_cd",
       "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDD0"
+      "address": "$ECCA"
     },
     {
       "label": "FIO.CHECK",
@@ -1068,7 +1068,7 @@
       "kind": "routine",
       "symbol": "fio_check",
       "summary": "Convert the current FIO status register to the shared A=0/1 result.",
-      "address": "$ED51"
+      "address": "$EC4B"
     },
     {
       "label": "FIO.CLEAR_ERROR",
@@ -1085,12 +1085,12 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$ED71"
+      "address": "$EC6B"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
       "source": "lib/nova.inc",
-      "line": 930,
+      "line": 838,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1100,9 +1100,21 @@
       "address": "$28"
     },
     {
+      "label": "FIO.CMD_NVGLOAD",
+      "source": "lib/nova.inc",
+      "line": 859,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_CMD_NVGLOAD",
+      "summary": "Host command that decodes a Nova NVG1 file into the graphics bitmap plane.",
+      "address": "$2B"
+    },
+    {
       "label": "FIO.CMD_RNG",
       "source": "lib/nova.inc",
-      "line": 944,
+      "line": 852,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1114,7 +1126,7 @@
     {
       "label": "FIO.CMD_XPAGE",
       "source": "lib/nova.inc",
-      "line": 937,
+      "line": 845,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1142,7 +1154,7 @@
       "kind": "routine",
       "symbol": "fio_copy_name",
       "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
-      "address": "$ED90"
+      "address": "$EC8A"
     },
     {
       "label": "FIO.DELETE",
@@ -1157,7 +1169,7 @@
       "kind": "routine",
       "symbol": "fio_delete",
       "summary": "Delete the file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDC1"
+      "address": "$ECBB"
     },
     {
       "label": "FIO.DIR_OPEN",
@@ -1169,7 +1181,7 @@
       "kind": "routine",
       "symbol": "fio_dir_open",
       "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
-      "address": "$EDB7"
+      "address": "$ECB1"
     },
     {
       "label": "FIO.DIR_READ",
@@ -1181,7 +1193,7 @@
       "kind": "routine",
       "symbol": "fio_dir_read",
       "summary": "Read the next directory entry into the FIO directory result registers.",
-      "address": "$EDBC"
+      "address": "$ECB6"
     },
     {
       "label": "FIO.EXEC",
@@ -1203,7 +1215,7 @@
       "kind": "routine",
       "symbol": "fio_exec",
       "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
-      "address": "$ED5E"
+      "address": "$EC58"
     },
     {
       "label": "FIO.GLOAD",
@@ -1223,7 +1235,7 @@
       "kind": "routine",
       "symbol": "fio_gload",
       "summary": "Load VGC/graphics memory using FIO graphics registers.",
-      "address": "$EDCB"
+      "address": "$ECC5"
     },
     {
       "label": "FIO.GSAVE",
@@ -1243,7 +1255,7 @@
       "kind": "routine",
       "symbol": "fio_gsave",
       "summary": "Save VGC/graphics memory using FIO graphics registers.",
-      "address": "$EDC6"
+      "address": "$ECC0"
     },
     {
       "label": "FIO.ISSUE",
@@ -1260,7 +1272,7 @@
       "kind": "routine",
       "symbol": "fio_issue",
       "summary": "Issue a raw FIO command without waiting for completion.",
-      "address": "$ED4D"
+      "address": "$EC47"
     },
     {
       "label": "FIO.LOAD",
@@ -1277,7 +1289,7 @@
       "kind": "routine",
       "symbol": "fio_load",
       "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
-      "address": "$EDB2"
+      "address": "$ECAC"
     },
     {
       "label": "FIO.LOAD_RUNTIME",
@@ -1292,7 +1304,7 @@
       "kind": "routine",
       "symbol": "fio_load_runtime",
       "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
-      "address": "$EDE4"
+      "address": "$ECDE"
     },
     {
       "label": "FIO.MKDIR",
@@ -1307,12 +1319,12 @@
       "kind": "routine",
       "symbol": "fio_mkdir",
       "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDD5"
+      "address": "$ECCF"
     },
     {
       "label": "FIO.NAME",
       "source": "lib/nova.inc",
-      "line": 804,
+      "line": 724,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1324,7 +1336,7 @@
     {
       "label": "FIO.NAMELEN",
       "source": "lib/nova.inc",
-      "line": 761,
+      "line": 681,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1363,7 +1375,7 @@
       "kind": "routine",
       "symbol": "fio_pwd",
       "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDDF"
+      "address": "$ECD9"
     },
     {
       "label": "FIO.RMDIR",
@@ -1378,7 +1390,7 @@
       "kind": "routine",
       "symbol": "fio_rmdir",
       "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
-      "address": "$EDDA"
+      "address": "$ECD4"
     },
     {
       "label": "FIO.RNG",
@@ -1399,12 +1411,12 @@
       "kind": "routine",
       "symbol": "fio_rng",
       "summary": "Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.",
-      "address": "$EDE9"
+      "address": "$ECE3"
     },
     {
       "label": "FIO.RNG0",
       "source": "lib/nova.inc",
-      "line": 952,
+      "line": 867,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1416,7 +1428,7 @@
     {
       "label": "FIO.RNG1",
       "source": "lib/nova.inc",
-      "line": 959,
+      "line": 874,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1428,7 +1440,7 @@
     {
       "label": "FIO.RNG2",
       "source": "lib/nova.inc",
-      "line": 966,
+      "line": 881,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1440,7 +1452,7 @@
     {
       "label": "FIO.RNG3",
       "source": "lib/nova.inc",
-      "line": 973,
+      "line": 888,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1477,7 +1489,7 @@
       "kind": "routine",
       "symbol": "fio_save",
       "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
-      "address": "$EDAD"
+      "address": "$ECA7"
     },
     {
       "label": "FIO.SET_IO_ERROR",
@@ -1494,12 +1506,496 @@
       "kind": "routine",
       "symbol": "fio_set_io_error",
       "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
-      "address": "$ED83"
+      "address": "$EC7D"
+    },
+    {
+      "label": "NGS.BEGIN_MESSAGE",
+      "source": "lib/gameserver.s",
+      "line": 434,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_begin_message",
+      "summary": "Begin a request frame and allocate the next non-zero sequence byte."
+    },
+    {
+      "label": "NGS.BUILD_AI_ADD_TO_TABLE",
+      "source": "lib/gameserver.s",
+      "line": 1081,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_ai_add_to_table",
+      "summary": "Build AI_ADD_TO_TABLE with NGS_TABLE_IDL/H and NGS_VALUE_L/H provider id."
+    },
+    {
+      "label": "NGS.BUILD_AI_LIST_REQUEST",
+      "source": "lib/gameserver.s",
+      "line": 1064,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_ai_list_request",
+      "summary": "Build AI_LIST_REQUEST, optionally filtered by non-zero NGS_GAME_IDL/H."
+    },
+    {
+      "label": "NGS.BUILD_GAME_LIST_REQUEST",
+      "source": "lib/gameserver.s",
+      "line": 942,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_game_list_request",
+      "summary": "Build GAME_LIST_REQUEST."
+    },
+    {
+      "label": "NGS.BUILD_HELLO",
+      "source": "lib/gameserver.s",
+      "line": 868,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_hello",
+      "summary": "Build HELLO using NGS_STRPTRL/H:NGS_STRLEN as the requested handle."
+    },
+    {
+      "label": "NGS.BUILD_LOBBY_CHAT",
+      "source": "lib/gameserver.s",
+      "line": 908,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_lobby_chat",
+      "summary": "Build LOBBY_CHAT from NGS_STRPTRL/H:NGS_STRLEN."
+    },
+    {
+      "label": "NGS.BUILD_OPPONENT_LIST_REQUEST",
+      "source": "lib/gameserver.s",
+      "line": 1100,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_opponent_list_request",
+      "summary": "Build OPPONENT_LIST_REQUEST, optionally filtered by non-zero NGS_GAME_IDL/H."
+    },
+    {
+      "label": "NGS.BUILD_PING",
+      "source": "lib/gameserver.s",
+      "line": 900,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_ping",
+      "summary": "Build an empty PING request."
+    },
+    {
+      "label": "NGS.BUILD_PLAYER_ACTION",
+      "source": "lib/gameserver.s",
+      "line": 1032,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_player_action",
+      "summary": "Build PLAYER_ACTION with table id, action type, and raw payload bytes."
+    },
+    {
+      "label": "NGS.BUILD_STATE_REQUEST",
+      "source": "lib/gameserver.s",
+      "line": 1053,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_state_request",
+      "summary": "Build STATE_REQUEST with NGS_TABLE_IDL/H."
+    },
+    {
+      "label": "NGS.BUILD_TABLE_CHAT",
+      "source": "lib/gameserver.s",
+      "line": 917,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_table_chat",
+      "summary": "Build TABLE_CHAT with NGS_TABLE_IDL/H and string text."
+    },
+    {
+      "label": "NGS.BUILD_TABLE_CREATE",
+      "source": "lib/gameserver.s",
+      "line": 967,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_table_create",
+      "summary": "Build TABLE_CREATE using game id/version and NGS_STRPTRL/H table name."
+    },
+    {
+      "label": "NGS.BUILD_TABLE_JOIN",
+      "source": "lib/gameserver.s",
+      "line": 992,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_table_join",
+      "summary": "Build TABLE_JOIN with NGS_TABLE_IDL/H and NGS_ROLE."
+    },
+    {
+      "label": "NGS.BUILD_TABLE_LEAVE",
+      "source": "lib/gameserver.s",
+      "line": 1021,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_table_leave",
+      "summary": "Build TABLE_LEAVE with NGS_TABLE_IDL/H."
+    },
+    {
+      "label": "NGS.BUILD_TABLE_LIST_REQUEST",
+      "source": "lib/gameserver.s",
+      "line": 950,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_table_list_request",
+      "summary": "Build TABLE_LIST_REQUEST, optionally filtered by non-zero NGS_GAME_IDL/H."
+    },
+    {
+      "label": "NGS.BUILD_TABLE_OBSERVE",
+      "source": "lib/gameserver.s",
+      "line": 1010,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_table_observe",
+      "summary": "Build TABLE_OBSERVE with NGS_TABLE_IDL/H."
+    },
+    {
+      "label": "NGS.BUILD_USER_LIST_REQUEST",
+      "source": "lib/gameserver.s",
+      "line": 934,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_build_user_list_request",
+      "summary": "Build USER_LIST_REQUEST."
+    },
+    {
+      "label": "NGS.CONNECT",
+      "source": "lib/gameserver.s",
+      "line": 195,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_connect",
+      "summary": "Connect NGS_SLOT to NGS_STRPTRL/H:NGS_STRLEN at NGS_PORTL/H."
+    },
+    {
+      "label": "NGS.CONNECT_DEFAULT",
+      "source": "lib/gameserver.s",
+      "line": 220,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_connect_default",
+      "summary": "Connect NGS_SLOT to the default Nova game-server endpoint."
+    },
+    {
+      "label": "NGS.DISCONNECT",
+      "source": "lib/gameserver.s",
+      "line": 235,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_disconnect",
+      "summary": "Disconnect NGS_SLOT."
+    },
+    {
+      "label": "NGS.INIT",
+      "source": "lib/gameserver.s",
+      "line": 118,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_init",
+      "summary": "Initialize game-server client state and default port 6503."
+    },
+    {
+      "label": "NGS.KEEPALIVE_RESET",
+      "source": "lib/gameserver.s",
+      "line": 281,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_keepalive_reset",
+      "summary": "Reset the keepalive countdown to NGS_KEEPALIVE_INTERVAL_L/H."
+    },
+    {
+      "label": "NGS.KEEPALIVE_SET_INTERVAL",
+      "source": "lib/gameserver.s",
+      "line": 272,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_keepalive_set_interval",
+      "summary": "Set the client keepalive ping interval used by NGS.KEEPALIVE_TICK."
+    },
+    {
+      "label": "NGS.KEEPALIVE_TICK",
+      "source": "lib/gameserver.s",
+      "line": 294,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_keepalive_tick",
+      "summary": "Send periodic PING frames while an app is blocked in UI/input code."
+    },
+    {
+      "label": "NGS.PARSE_ENVELOPE",
+      "source": "lib/gameserver.s",
+      "line": 730,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_parse_envelope",
+      "summary": "Parse the frame envelope at NGS_BUFL/H using NGS_LAST_LEN."
+    },
+    {
+      "label": "NGS.PARSE_ERROR",
+      "source": "lib/gameserver.s",
+      "line": 626,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_parse_error",
+      "summary": "Parse current ERROR payload into NGS_ERROR_CODE and NGS_ERROR_TEXT*."
+    },
+    {
+      "label": "NGS.PING_ROUNDTRIP",
+      "source": "lib/gameserver.s",
+      "line": 713,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_ping_roundtrip",
+      "summary": "Send PING and wait for PONG using the shared timeout/error handling."
+    },
+    {
+      "label": "NGS.READY",
+      "source": "lib/gameserver.s",
+      "line": 253,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_ready",
+      "summary": "Return A=1 when NGS_SLOT has a queued message, otherwise A=0."
+    },
+    {
+      "label": "NGS.READ_BYTE",
+      "source": "lib/gameserver.s",
+      "line": 784,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_read_byte",
+      "summary": "Read one byte from the parsed payload into A."
+    },
+    {
+      "label": "NGS.READ_STRING",
+      "source": "lib/gameserver.s",
+      "line": 829,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_read_string",
+      "summary": "Read a length-prefixed string pointer into NGS_STRPTRL/H:NGS_STRLEN."
+    },
+    {
+      "label": "NGS.READ_U16",
+      "source": "lib/gameserver.s",
+      "line": 809,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_read_u16",
+      "summary": "Read a little-endian u16 into NGS_VALUE_L/H and A/X."
+    },
+    {
+      "label": "NGS.RECV_CURRENT",
+      "source": "lib/gameserver.s",
+      "line": 600,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_recv_current",
+      "summary": "Receive and parse one queued frame from NGS_SLOT into NGS_BUFL/H."
+    },
+    {
+      "label": "NGS.SEND_CURRENT",
+      "source": "lib/gameserver.s",
+      "line": 571,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_send_current",
+      "summary": "Send the current frame through NGS_SLOT using NIC DMA registers."
+    },
+    {
+      "label": "NGS.SET_BUFFER",
+      "source": "lib/gameserver.s",
+      "line": 175,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_set_buffer",
+      "summary": "Set the 256-byte CPU RAM frame buffer."
+    },
+    {
+      "label": "NGS.SET_STRING",
+      "source": "lib/gameserver.s",
+      "line": 185,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_set_string",
+      "summary": "Set the pointer/length pair used by host, string, and raw payload routines."
+    },
+    {
+      "label": "NGS.SET_TIMEOUT",
+      "source": "lib/gameserver.s",
+      "line": 262,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_set_timeout",
+      "summary": "Set shared wait timeout in video frames."
+    },
+    {
+      "label": "NGS.STATUS",
+      "source": "lib/gameserver.s",
+      "line": 245,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_status",
+      "summary": "Return NGS_SLOT status in A."
+    },
+    {
+      "label": "NGS.WAIT_CONNECTED",
+      "source": "lib/gameserver.s",
+      "line": 393,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_wait_connected",
+      "summary": "Wait for NGS_SLOT to connect or fail within NGS_TIMEOUT_L/H frames."
+    },
+    {
+      "label": "NGS.WAIT_KIND",
+      "source": "lib/gameserver.s",
+      "line": 696,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_wait_kind",
+      "summary": "Wait for a non-error frame of the requested kind, skipping unrelated events."
+    },
+    {
+      "label": "NGS.WAIT_MESSAGE",
+      "source": "lib/gameserver.s",
+      "line": 656,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_wait_message",
+      "summary": "Wait for and receive one frame; protocol ERROR frames are parsed and returned as NGS_ERR_PROTOCOL_ERROR."
+    },
+    {
+      "label": "NGS.WRITE_BYTE",
+      "source": "lib/gameserver.s",
+      "line": 463,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_write_byte",
+      "summary": "Append one payload byte to the current frame."
+    },
+    {
+      "label": "NGS.WRITE_BYTES",
+      "source": "lib/gameserver.s",
+      "line": 540,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_write_bytes",
+      "summary": "Append raw bytes from NGS_STRPTRL/H without a length prefix."
+    },
+    {
+      "label": "NGS.WRITE_STRING",
+      "source": "lib/gameserver.s",
+      "line": 520,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_write_string",
+      "summary": "Append NGS_STRLEN plus bytes from NGS_STRPTRL/H."
+    },
+    {
+      "label": "NGS.WRITE_U16",
+      "source": "lib/gameserver.s",
+      "line": 483,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "ngs_write_u16",
+      "summary": "Append a little-endian 16-bit value."
     },
     {
       "label": "NIC.ACCEPT",
       "source": "lib/nic.s",
-      "line": 65,
+      "line": 71,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1510,7 +2006,7 @@
     {
       "label": "NIC.ARG_NAMELEN",
       "source": "lib/nic.inc",
-      "line": 34,
+      "line": 45,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1522,7 +2018,7 @@
     {
       "label": "NIC.ARG_NAMEPTR_H",
       "source": "lib/nic.inc",
-      "line": 44,
+      "line": 55,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1534,7 +2030,7 @@
     {
       "label": "NIC.ARG_NAMEPTR_L",
       "source": "lib/nic.inc",
-      "line": 39,
+      "line": 50,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1558,12 +2054,12 @@
       "kind": "routine",
       "symbol": "nic_command",
       "summary": "Issue a raw NIC command.",
-      "address": "$EE6F"
+      "address": "$ED69"
     },
     {
       "label": "NIC.CONNECT",
       "source": "lib/nic.s",
-      "line": 38,
+      "line": 44,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1575,12 +2071,12 @@
       "kind": "routine",
       "symbol": "nic_connect",
       "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
-      "address": "$EE73"
+      "address": "$ED7B"
     },
     {
       "label": "NIC.COPY_NAME",
       "source": "lib/nic.s",
-      "line": 132,
+      "line": 138,
       "inputs": [],
       "outputs": [
         {
@@ -1596,12 +2092,12 @@
       "kind": "routine",
       "symbol": "nic_copy_name",
       "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
-      "address": "$EE99"
+      "address": "$EDA1"
     },
     {
       "label": "NIC.DISCONNECT",
       "source": "lib/nic.s",
-      "line": 47,
+      "line": 53,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1610,12 +2106,12 @@
       "kind": "routine",
       "symbol": "nic_disconnect",
       "summary": "Disconnect NIC_SLOT.",
-      "address": "$EE77"
+      "address": "$ED7F"
     },
     {
       "label": "NIC.LENGTH",
       "source": "lib/nic.s",
-      "line": 121,
+      "line": 127,
       "inputs": [],
       "outputs": [
         {
@@ -1627,12 +2123,12 @@
       "kind": "routine",
       "symbol": "nic_length",
       "summary": "Read the most recent NIC message length.",
-      "address": "$EE95"
+      "address": "$ED9D"
     },
     {
       "label": "NIC.LISTEN",
       "source": "lib/nic.s",
-      "line": 57,
+      "line": 63,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1643,7 +2139,7 @@
     {
       "label": "NIC.READY",
       "source": "lib/nic.s",
-      "line": 107,
+      "line": 113,
       "inputs": [
         {
           "name": "X",
@@ -1660,12 +2156,12 @@
       "kind": "routine",
       "symbol": "nic_ready",
       "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
-      "address": "$EE8B"
+      "address": "$ED93"
     },
     {
       "label": "NIC.RECV",
       "source": "lib/nic.s",
-      "line": 83,
+      "line": 89,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1676,12 +2172,12 @@
       "kind": "routine",
       "symbol": "nic_recv",
       "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
-      "address": "$EE7F"
+      "address": "$ED87"
     },
     {
       "label": "NIC.SEND",
       "source": "lib/nic.s",
-      "line": 74,
+      "line": 80,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1693,12 +2189,12 @@
       "kind": "routine",
       "symbol": "nic_send",
       "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
-      "address": "$EE7B"
+      "address": "$ED83"
     },
     {
       "label": "NIC.STATUS",
       "source": "lib/nic.s",
-      "line": 93,
+      "line": 99,
       "inputs": [
         {
           "name": "X",
@@ -1715,7 +2211,149 @@
       "kind": "routine",
       "symbol": "nic_status",
       "summary": "Read clamped NIC slot status.",
-      "address": "$EE83"
+      "address": "$ED8B"
+    },
+    {
+      "label": "NVG.ADDRH",
+      "source": "lib/nvg.inc",
+      "line": 17,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "NVG_ADDRH",
+      "summary": "High byte of the graphics bitmap destination offset for NVG.LOAD_AT.",
+      "address": "$B9AC"
+    },
+    {
+      "label": "NVG.ADDRL",
+      "source": "lib/nvg.inc",
+      "line": 12,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "NVG_ADDRL",
+      "summary": "Low byte of the graphics bitmap destination offset for NVG.LOAD_AT.",
+      "address": "$B9AB"
+    },
+    {
+      "label": "NVG.LOAD",
+      "source": "lib/nvg.s",
+      "line": 18,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "nvg_load",
+      "summary": "Clear graphics bitmap memory, then decode FIO.NAME as an NVG1 file into graphics bitmap offset 0."
+    },
+    {
+      "label": "NVG.LOAD_AT",
+      "source": "lib/nvg.s",
+      "line": 32,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN",
+        "NVG_ADDRL",
+        "NVG_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "nvg_load_at",
+      "summary": "Clear graphics bitmap memory, then decode FIO.NAME as an NVG1 file into graphics bitmap offset NVG.ADDRL/H."
+    },
+    {
+      "label": "NVG.LOAD_NAMED",
+      "source": "lib/nvg.s",
+      "line": 48,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "NVG_NAMELEN",
+        "NVG_NAMEPTR_L",
+        "NVG_NAMEPTR_H"
+      ],
+      "kind": "routine",
+      "symbol": "nvg_load_named",
+      "summary": "Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then clear graphics bitmap memory and decode the NVG1 file at offset 0."
+    },
+    {
+      "label": "NVG.LOAD_NAMED_AT",
+      "source": "lib/nvg.s",
+      "line": 62,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "NVG_NAMELEN",
+        "NVG_NAMEPTR_L",
+        "NVG_NAMEPTR_H",
+        "NVG_ADDRL",
+        "NVG_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "nvg_load_named_at",
+      "summary": "Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then clear graphics bitmap memory and decode the NVG1 file at NVG.ADDRL/H."
+    },
+    {
+      "label": "NVG.NAMELEN",
+      "source": "lib/nvg.inc",
+      "line": 22,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "NVG_NAMELEN",
+      "summary": "Filename length argument for NVG.LOAD_NAMED.",
+      "address": "$28"
+    },
+    {
+      "label": "NVG.NAMEPTR_H",
+      "source": "lib/nvg.inc",
+      "line": 32,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "NVG_NAMEPTR_H",
+      "summary": "High byte of filename pointer argument for NVG.LOAD_NAMED.",
+      "address": "$2A"
+    },
+    {
+      "label": "NVG.NAMEPTR_L",
+      "source": "lib/nvg.inc",
+      "line": 27,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "zp",
+      "symbol": "NVG_NAMEPTR_L",
+      "summary": "Low byte of filename pointer argument for NVG.LOAD_NAMED.",
+      "address": "$29"
     },
     {
       "label": "PAGER.ADDRH",
@@ -2061,7 +2699,7 @@
       "kind": "routine",
       "symbol": "sprite_background_collision_status",
       "summary": "Read the sprite-background collision status register.",
-      "address": "$E9E8"
+      "address": "$E919"
     },
     {
       "label": "SPRITE.COLLISION_STATUS",
@@ -2078,7 +2716,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_status",
       "summary": "Read the sprite-sprite collision status register.",
-      "address": "$E9E4"
+      "address": "$E915"
     },
     {
       "label": "SPRITE.COMMAND",
@@ -2095,7 +2733,7 @@
       "kind": "routine",
       "symbol": "sprite_command",
       "summary": "Issue a raw sprite VGC command without waiting for completion.",
-      "address": "$E98A"
+      "address": "$E8BB"
     },
     {
       "label": "SPRITE.DISABLE",
@@ -2109,7 +2747,7 @@
       "kind": "routine",
       "symbol": "sprite_disable",
       "summary": "Disable the sprite in VGC.P0.",
-      "address": "$E998"
+      "address": "$E8C9"
     },
     {
       "label": "SPRITE.ENABLE",
@@ -2123,7 +2761,7 @@
       "kind": "routine",
       "symbol": "sprite_enable",
       "summary": "Enable the sprite in VGC.P0.",
-      "address": "$E993"
+      "address": "$E8C4"
     },
     {
       "label": "SPRITE.GET_X",
@@ -2149,7 +2787,7 @@
       "kind": "routine",
       "symbol": "sprite_get_x",
       "summary": "Read a sprite's 16-bit X coordinate.",
-      "address": "$E9C9"
+      "address": "$E8FA"
     },
     {
       "label": "SPRITE.GET_Y",
@@ -2171,7 +2809,7 @@
       "kind": "routine",
       "symbol": "sprite_get_y",
       "summary": "Read a sprite's Y coordinate.",
-      "address": "$E9DA"
+      "address": "$E90B"
     },
     {
       "label": "SPRITE.POS",
@@ -2188,7 +2826,7 @@
       "kind": "routine",
       "symbol": "sprite_pos",
       "summary": "Move a sprite using VGC.P0=sprite, VGC.P1/P2=x, VGC.P3=y.",
-      "address": "$E98E"
+      "address": "$E8BF"
     },
     {
       "label": "SPRITE.REG_OFFSET",
@@ -2214,7 +2852,7 @@
       "kind": "routine",
       "symbol": "sprite_reg_offset",
       "summary": "Compute the VGC sprite attribute block offset for a sprite field.",
-      "address": "$E9A2"
+      "address": "$E8D3"
     },
     {
       "label": "SPRITE.ROW",
@@ -2237,7 +2875,7 @@
       "kind": "routine",
       "symbol": "sprite_row",
       "summary": "Write one sprite bitmap row using VGC.P0..VGC.P9.",
-      "address": "$E99D"
+      "address": "$E8CE"
     },
     {
       "label": "SPRITE.SET_REG16",
@@ -2266,7 +2904,7 @@
       "kind": "routine",
       "symbol": "sprite_set_reg16",
       "summary": "Write one 16-bit sprite attribute field.",
-      "address": "$E9BA"
+      "address": "$E8EB"
     },
     {
       "label": "SPRITE.SET_REG8",
@@ -2291,7 +2929,7 @@
       "kind": "routine",
       "symbol": "sprite_set_reg8",
       "summary": "Write one 8-bit sprite attribute field.",
-      "address": "$E9AF"
+      "address": "$E8E0"
     },
     {
       "label": "SPRITE.SET_SHAPE",
@@ -2312,7 +2950,7 @@
       "kind": "routine",
       "symbol": "sprite_set_shape",
       "summary": "Set a sprite's shape index.",
-      "address": "$E9AD"
+      "address": "$E8DE"
     },
     {
       "label": "SYS.REGA",
@@ -2349,263 +2987,6 @@
       "symbol": "SYS_REGY",
       "summary": "Returned Y register from the most recent SYS call.",
       "address": "$E9"
-    },
-    {
-      "label": "TILE.ATTR",
-      "source": "lib/tile.s",
-      "line": 131,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_attr",
-      "summary": "Set a tile attribute using TileP0..TileP3."
-    },
-    {
-      "label": "TILE.BUF_FILL",
-      "source": "lib/tile.s",
-      "line": 179,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_buf_fill",
-      "summary": "Fill the tile command buffer."
-    },
-    {
-      "label": "TILE.BUF_PUT",
-      "source": "lib/tile.s",
-      "line": 195,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_buf_put",
-      "summary": "Put a tile command buffer entry."
-    },
-    {
-      "label": "TILE.BUF_RANGE",
-      "source": "lib/tile.s",
-      "line": 203,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_buf_range",
-      "summary": "Apply a range of tile command buffer entries."
-    },
-    {
-      "label": "TILE.BUF_SET",
-      "source": "lib/tile.s",
-      "line": 187,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_buf_set",
-      "summary": "Set a tile command buffer entry."
-    },
-    {
-      "label": "TILE.CLS",
-      "source": "lib/tile.s",
-      "line": 171,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_cls",
-      "summary": "Clear tile memory."
-    },
-    {
-      "label": "TILE.COL",
-      "source": "lib/tile.s",
-      "line": 155,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_col",
-      "summary": "Copy a column of tile data from TileAddrL/H."
-    },
-    {
-      "label": "TILE.COMMAND",
-      "source": "lib/tile.s",
-      "line": 35,
-      "inputs": [
-        {
-          "name": "A",
-          "description": "Tile command byte."
-        }
-      ],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_cmd",
-      "summary": "Issue a raw tile engine command."
-    },
-    {
-      "label": "TILE.DEF",
-      "source": "lib/tile.s",
-      "line": 107,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_def",
-      "summary": "Define one tile from TileP0 and TileAddrL/H."
-    },
-    {
-      "label": "TILE.DEF_BULK",
-      "source": "lib/tile.s",
-      "line": 115,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_def_bulk",
-      "summary": "Define a run of tiles from TileP0/TileP1 and TileAddrL/H."
-    },
-    {
-      "label": "TILE.FILL",
-      "source": "lib/tile.s",
-      "line": 139,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_fill",
-      "summary": "Fill tile memory using TileP0/TileP1."
-    },
-    {
-      "label": "TILE.LOAD",
-      "source": "lib/tile.s",
-      "line": 163,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_load",
-      "summary": "Load tile data from TileAddrL/H."
-    },
-    {
-      "label": "TILE.PALETTE",
-      "source": "lib/tile.s",
-      "line": 211,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_pal",
-      "summary": "Load tile palette data."
-    },
-    {
-      "label": "TILE.PALETTE_COLOR",
-      "source": "lib/tile.s",
-      "line": 219,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_palc",
-      "summary": "Set one tile palette colour."
-    },
-    {
-      "label": "TILE.PUT",
-      "source": "lib/tile.s",
-      "line": 123,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_put",
-      "summary": "Put a tile using TileP0..TileP3."
-    },
-    {
-      "label": "TILE.ROW",
-      "source": "lib/tile.s",
-      "line": 147,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_row",
-      "summary": "Copy a row of tile data from TileAddrL/H."
-    },
-    {
-      "label": "TILE.SET_MIRROR",
-      "source": "lib/tile.s",
-      "line": 61,
-      "inputs": [
-        {
-          "name": "X",
-          "description": "Mirror mode."
-        }
-      ],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_set_mirror",
-      "summary": "Set tile mirror mode from the low two bits of X."
-    },
-    {
-      "label": "TILE.SET_SCROLL",
-      "source": "lib/tile.s",
-      "line": 88,
-      "inputs": [
-        {
-          "name": "NVR0L",
-          "description": "Scroll X low byte."
-        },
-        {
-          "name": "NVR0H",
-          "description": "Scroll X high byte."
-        },
-        {
-          "name": "NVR1L",
-          "description": "Scroll Y low byte."
-        },
-        {
-          "name": "NVR1H",
-          "description": "Scroll Y high byte."
-        }
-      ],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_set_scroll",
-      "summary": "Set tile scroll position."
-    },
-    {
-      "label": "TILE.SET_SIZE",
-      "source": "lib/tile.s",
-      "line": 45,
-      "inputs": [
-        {
-          "name": "X",
-          "description": "16 selects 16x16; any other value selects 8x8."
-        }
-      ],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_set_size",
-      "summary": "Select 8x8 or 16x16 tile size."
-    },
-    {
-      "label": "TILE.SET_TRANS_COLOR",
-      "source": "lib/tile.s",
-      "line": 78,
-      "inputs": [
-        {
-          "name": "X",
-          "description": "Transparent colour byte."
-        }
-      ],
-      "outputs": [],
-      "requires": [],
-      "kind": "routine",
-      "symbol": "tile_set_trans_color",
-      "summary": "Set the tile transparent colour."
     },
     {
       "label": "TWEEN.BEGIN",
@@ -3236,7 +3617,7 @@
     {
       "label": "VGC.CIRCLE",
       "source": "lib/vgc.s",
-      "line": 281,
+      "line": 301,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3256,19 +3637,19 @@
     {
       "label": "VGC.CLS",
       "source": "lib/vgc.s",
-      "line": 93,
+      "line": 95,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_cls",
       "summary": "Clear the text screen through the VGC character output register.",
-      "address": "$E924"
+      "address": "$E849"
     },
     {
       "label": "VGC.COMMAND",
       "source": "lib/vgc.s",
-      "line": 47,
+      "line": 49,
       "inputs": [
         {
           "name": "A",
@@ -3280,12 +3661,36 @@
       "kind": "routine",
       "symbol": "vgc_cmd",
       "summary": "Issue a raw VGC command without waiting for completion.",
-      "address": "$E90F"
+      "address": "$E834"
+    },
+    {
+      "label": "VGC.DISPLAY_OFF",
+      "source": "lib/vgc.s",
+      "line": 140,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_display_off",
+      "summary": "Blank VGC output while keeping video timing active.",
+      "address": "$E861"
+    },
+    {
+      "label": "VGC.DISPLAY_ON",
+      "source": "lib/vgc.s",
+      "line": 131,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_display_on",
+      "summary": "Restore full VGC output brightness.",
+      "address": "$E85B"
     },
     {
       "label": "VGC.EXEC",
       "source": "lib/vgc.s",
-      "line": 70,
+      "line": 72,
       "inputs": [
         {
           "name": "A",
@@ -3301,7 +3706,7 @@
     {
       "label": "VGC.FILL",
       "source": "lib/vgc.s",
-      "line": 308,
+      "line": 328,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3321,31 +3726,31 @@
     {
       "label": "VGC.FLASH_OFF",
       "source": "lib/vgc.s",
-      "line": 226,
+      "line": 246,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_flash_off",
       "summary": "Disable flashing text.",
-      "address": "$E981"
+      "address": "$E8B2"
     },
     {
       "label": "VGC.FLASH_ON",
       "source": "lib/vgc.s",
-      "line": 216,
+      "line": 236,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_flash_on",
       "summary": "Enable flashing text.",
-      "address": "$E978"
+      "address": "$E8A9"
     },
     {
       "label": "VGC.GCLS",
       "source": "lib/vgc.s",
-      "line": 237,
+      "line": 257,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3356,7 +3761,7 @@
     {
       "label": "VGC.GCOLOR",
       "source": "lib/vgc.s",
-      "line": 245,
+      "line": 265,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3382,7 +3787,7 @@
     {
       "label": "VGC.GTEXT",
       "source": "lib/vgc.s",
-      "line": 290,
+      "line": 310,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3402,7 +3807,7 @@
     {
       "label": "VGC.LINE",
       "source": "lib/vgc.s",
-      "line": 272,
+      "line": 292,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3422,7 +3827,7 @@
     {
       "label": "VGC.LOCATE",
       "source": "lib/vgc.s",
-      "line": 129,
+      "line": 149,
       "inputs": [
         {
           "name": "VGC_P0",
@@ -3438,12 +3843,12 @@
       "kind": "routine",
       "symbol": "vgc_locate",
       "summary": "Set the text cursor position from VGC.P0/VGC.P1.",
-      "address": "$E936"
+      "address": "$E867"
     },
     {
       "label": "VGC.MEM_READ",
       "source": "lib/vgc.s",
-      "line": 160,
+      "line": 180,
       "inputs": [],
       "outputs": [
         {
@@ -3460,12 +3865,12 @@
       "kind": "routine",
       "symbol": "vgc_mem_read",
       "summary": "Read one byte from VGC memory using VGC.P0..VGC.P4.",
-      "address": "$E94B"
+      "address": "$E87C"
     },
     {
       "label": "VGC.MEM_WRITE",
       "source": "lib/vgc.s",
-      "line": 170,
+      "line": 190,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3478,12 +3883,12 @@
       "kind": "routine",
       "symbol": "vgc_mem_write",
       "summary": "Write one byte to VGC memory using VGC.P0..VGC.P4.",
-      "address": "$E94E"
+      "address": "$E87F"
     },
     {
       "label": "VGC.PAINT",
       "source": "lib/vgc.s",
-      "line": 317,
+      "line": 337,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3499,7 +3904,7 @@
     {
       "label": "VGC.PLOT",
       "source": "lib/vgc.s",
-      "line": 254,
+      "line": 274,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3515,7 +3920,7 @@
     {
       "label": "VGC.RECT",
       "source": "lib/vgc.s",
-      "line": 299,
+      "line": 319,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3535,19 +3940,19 @@
     {
       "label": "VGC.REVERSE",
       "source": "lib/vgc.s",
-      "line": 181,
+      "line": 201,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_default",
       "summary": "Enable reverse text using the current foreground/background colours.",
-      "address": "$E956"
+      "address": "$E887"
     },
     {
       "label": "VGC.REVERSE_EXPLICIT",
       "source": "lib/vgc.s",
-      "line": 193,
+      "line": 213,
       "inputs": [
         {
           "name": "A",
@@ -3559,24 +3964,24 @@
       "kind": "routine",
       "symbol": "vgc_reverse_explicit",
       "summary": "Enable reverse text with explicit packed foreground/background colours.",
-      "address": "$E961"
+      "address": "$E892"
     },
     {
       "label": "VGC.REVERSE_OFF",
       "source": "lib/vgc.s",
-      "line": 206,
+      "line": 226,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_off",
       "summary": "Disable reverse text.",
-      "address": "$E96F"
+      "address": "$E8A0"
     },
     {
       "label": "VGC.SET_BG",
       "source": "lib/vgc.s",
-      "line": 111,
+      "line": 113,
       "inputs": [
         {
           "name": "X",
@@ -3588,12 +3993,12 @@
       "kind": "routine",
       "symbol": "vgc_set_bg",
       "summary": "Set the current text background colour.",
-      "address": "$E92E"
+      "address": "$E853"
     },
     {
       "label": "VGC.SET_BORDER",
       "source": "lib/vgc.s",
-      "line": 120,
+      "line": 122,
       "inputs": [
         {
           "name": "X",
@@ -3605,12 +4010,12 @@
       "kind": "routine",
       "symbol": "vgc_set_border",
       "summary": "Set the VGC border colour.",
-      "address": "$E932"
+      "address": "$E857"
     },
     {
       "label": "VGC.SET_FG",
       "source": "lib/vgc.s",
-      "line": 102,
+      "line": 104,
       "inputs": [
         {
           "name": "X",
@@ -3622,12 +4027,12 @@
       "kind": "routine",
       "symbol": "vgc_set_fg",
       "summary": "Set the current text foreground colour.",
-      "address": "$E92A"
+      "address": "$E84F"
     },
     {
       "label": "VGC.SET_FONT",
       "source": "lib/vgc.s",
-      "line": 151,
+      "line": 171,
       "inputs": [
         {
           "name": "X",
@@ -3639,12 +4044,12 @@
       "kind": "routine",
       "symbol": "vgc_set_font",
       "summary": "Select the active text font slot.",
-      "address": "$E947"
+      "address": "$E878"
     },
     {
       "label": "VGC.SET_MODE",
       "source": "lib/vgc.s",
-      "line": 142,
+      "line": 162,
       "inputs": [
         {
           "name": "X",
@@ -3656,12 +4061,12 @@
       "kind": "routine",
       "symbol": "vgc_set_mode",
       "summary": "Set the active VGC graphics/text mode.",
-      "address": "$E943"
+      "address": "$E874"
     },
     {
       "label": "VGC.UNPLOT",
       "source": "lib/vgc.s",
-      "line": 263,
+      "line": 283,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3677,7 +4082,7 @@
     {
       "label": "VGC.VSYNC",
       "source": "lib/vgc.s",
-      "line": 81,
+      "line": 83,
       "inputs": [],
       "outputs": [
         {
@@ -3689,19 +4094,19 @@
       "kind": "routine",
       "symbol": "vgc_vsync",
       "summary": "Wait until the VGC frame counter advances.",
-      "address": "$E91B"
+      "address": "$E840"
     },
     {
       "label": "VGC.WAIT_COMMAND",
       "source": "lib/vgc.s",
-      "line": 57,
+      "line": 59,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_wait_cmd",
       "summary": "Wait for the active VGC command to complete.",
-      "address": "$E913"
+      "address": "$E838"
     },
     {
       "label": "VSPRITE.BGADDRH",

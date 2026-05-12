@@ -1,4 +1,4 @@
-// Lightweight byte FIFO for the ESP32 debug UART path.
+// Lightweight byte FIFO for host debug byte streams.
 //
 // This intentionally implements only the ready/valid byte stream Nova needs:
 // no AXI sidebands, frame mode, pause logic, or packet metadata. Depth is a

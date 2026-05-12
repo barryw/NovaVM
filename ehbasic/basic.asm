@@ -531,31 +531,7 @@ XTK_UNMOUNT        = $4E              ; UNMOUNT "dev:"
 XTK_PWD            = $4F              ; PWD
 XTK_SFLOAD         = $50              ; SFLOAD "filename" — load soundfont
 XTK_GTEXT          = $51              ; GTEXT x,y,font,scale,"string"
-XTK_TILESIZE       = $52              ; TILESIZE n
-XTK_MIRROR         = $53              ; MIRROR n
-XTK_TTRANS         = $54              ; TTRANS n
-XTK_TDEF           = $55              ; TDEF tile#,addr / TDEF start,count,addr
-XTK_TPUT           = $56              ; TPUT nt,x,y,tile#
-XTK_TATTR          = $57              ; TATTR nt,x,y,attr
-XTK_TFILL          = $58              ; TFILL nt,tile#
-XTK_TROW           = $59              ; TROW nt,y,addr
-XTK_TCOL           = $5A              ; TCOL nt,x,addr
-XTK_TNTLOAD        = $5B              ; TNTLOAD nt,addr
-XTK_TCLS           = $5C              ; TCLS
-XTK_TSCROLLX       = $5D              ; TSCROLLX — function (no args)
-XTK_TSCROLLY       = $5E              ; TSCROLLY — function (no args)
-XTK_TSCROLL        = $5F              ; TSCROLL x,y
-XTK_TPALC          = $60              ; TPALC sub,color,r,g,b
-XTK_TPAL           = $61              ; TPAL sub,addr
-XTK_TSAVE          = $62              ; TSAVE "file"
-XTK_TLOAD          = $63              ; TLOAD "file"
-XTK_TPEEK          = $64              ; TPEEK(nt,x,y) — function
-XTK_TPEEKATTR      = $65              ; TPEEKATTR(nt,x,y) — function
-XTK_TILECOL        = $66              ; TILECOL — function (no args)
-XTK_TBUF           = $67              ; TBUF tile — fill column buffer
-XTK_TBSET          = $68              ; TBSET row,tile — set buffer entry
-XTK_TBFILL         = $69              ; TBFILL y1,y2,tile — fill buffer range
-XTK_TBPUT          = $6A              ; TBPUT nt,x — write buffer to nametable
+                                      ; $52-$6A reserved
 XTK_REVERSE        = $6B              ; REVERSE [fg,bg] — reverse text output
 XTK_REVERSEOFF     = $6C              ; REVERSEOFF — normal text output
 XTK_FLASH          = $6D              ; FLASH — flashing text output
@@ -2061,31 +2037,10 @@ TAB_XTKCMD
       .word LAB_PWD-1         ; XTK_PWD        ($4F)
       .word LAB_SFLOAD-1      ; XTK_SFLOAD     ($50)
       .word LAB_GTEXT-1       ; XTK_GTEXT      ($51)
-      .word LAB_TILESIZE-1    ; XTK_TILESIZE   ($52)
-      .word LAB_MIRROR-1      ; XTK_MIRROR     ($53)
-      .word LAB_TTRANS-1      ; XTK_TTRANS     ($54)
-      .word LAB_TDEF-1        ; XTK_TDEF       ($55)
-      .word LAB_TPUT-1        ; XTK_TPUT       ($56)
-      .word LAB_TATTR-1       ; XTK_TATTR      ($57)
-      .word LAB_TFILL-1       ; XTK_TFILL      ($58)
-      .word LAB_15D9-1        ; XTK_TROW       ($59) — tile bulk helper removed
-      .word LAB_15D9-1        ; XTK_TCOL       ($5A) — tile bulk helper removed
-      .word LAB_15D9-1        ; XTK_TNTLOAD    ($5B) — tile bulk helper removed
-      .word LAB_TCLS-1        ; XTK_TCLS       ($5C)
-      .word LAB_15D9-1        ; XTK_TSCROLLX   ($5D) — function only
-      .word LAB_15D9-1        ; XTK_TSCROLLY   ($5E) — function only
-      .word LAB_TSCROLL-1     ; XTK_TSCROLL    ($5F)
-      .word LAB_TPALC-1       ; XTK_TPALC      ($60)
-      .word LAB_TPAL-1        ; XTK_TPAL       ($61)
-      .word LAB_15D9-1        ; XTK_TSAVE      ($62) — unsupported on ESP
-      .word LAB_15D9-1        ; XTK_TLOAD      ($63) — unsupported on ESP
-      .word LAB_15D9-1        ; XTK_TPEEK      ($64) — function only
-      .word LAB_15D9-1        ; XTK_TPEEKATTR  ($65) — function only
-      .word LAB_15D9-1        ; XTK_TILECOL    ($66) — function only
-      .word LAB_15D9-1        ; XTK_TBUF       ($67) — tile bulk helper removed
-      .word LAB_15D9-1        ; XTK_TBSET      ($68) — tile bulk helper removed
-      .word LAB_15D9-1        ; XTK_TBFILL     ($69) — tile bulk helper removed
-      .word LAB_15D9-1        ; XTK_TBPUT      ($6A) — tile bulk helper removed
+      ; $52-$6A reserved
+      .repeat $19
+      .word LAB_15D9-1
+      .endrepeat
       .word LAB_REVERSE-1     ; XTK_REVERSE    ($6B)
       .word LAB_REVERSEOFF-1  ; XTK_REVERSEOFF ($6C)
       .word LAB_FLASH-1       ; XTK_FLASH      ($6D)
@@ -3799,8 +3754,6 @@ LAB_1BEE
       .byte XTK_NRECV, XTK_NSTATUS, XTK_NREADY
       .byte XTK_DMASTATUS, XTK_DMAERR, XTK_DMACOUNT
       .byte XTK_BLITSTATUS, XTK_BLITERR, XTK_BLITCOUNT
-      .byte XTK_TPEEK, XTK_TPEEKATTR
-      .byte XTK_TILECOL, XTK_TSCROLLX, XTK_TSCROLLY
       .byte XTK_VPEEK, XTK_ADDR
 @FUNC_TBL_SZ = * - @func_ids
 @func_addrs
@@ -3808,8 +3761,6 @@ LAB_1BEE
       .word @xtk_nrecv-1, @xtk_nstatus-1, @xtk_nready-1
       .word @xtk_dmastatus-1, @xtk_dmaerr-1, @xtk_dmacount-1
       .word @xtk_blitstatus-1, @xtk_bliterr-1, @xtk_blitcount-1
-      .word @xtk_tpeek-1, @xtk_tpeekattr-1
-      .word @xtk_tilecol-1, @xtk_tscrollx-1, @xtk_tscrolly-1
       .word @xtk_vpeek-1, @xtk_addr-1
 
 @xtk_xpeek
@@ -3940,35 +3891,6 @@ LAB_1BEE
 @ret_0ay
       JMP   LAB_RET_0AY       ; return AY as FAC1
 
-; TPEEK(nt,x,y) — returns tile index
-@xtk_tpeek
-      LDX   #$00
-      BEQ   @tpeek_go
-; TPEEKATTR(nt,x,y) — returns attribute byte
-@xtk_tpeekattr
-      LDX   #$01
-@tpeek_go
-      STX   Itempl
-      JSR   LAB_IGBY
-      JSR   LAB_GTBY
-      STX   TileP0
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP1
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   TileP2
-      JSR   LAB_1BFB
-      LDA   #TileCmdPeek
-      STA   TileCmd
-      LDX   Itempl
-      BNE   @tpeek_a
-      LDY   TilePeekVal
-      BRA   @ret_0ay
-@tpeek_a
-      LDY   TilePeekAttr
-      BRA   @ret_0ay
-
 ; VPEEK(plane,addr) — read a byte from VGC memory
 @xtk_vpeek
       JSR   LAB_IGBY          ; consume token, advance to plane
@@ -4002,27 +3924,6 @@ LAB_1BEE
       JMP   LAB_FCER
 @addr_ok
       JMP   LAB_AYFC          ; extension returns A=high, Y=low
-
-; TILECOL — returns 16-bit collision bitmask
-@xtk_tilecol
-      JSR   LAB_IGBY          ; consume token, advance
-      LDY   TileColL
-      LDA   TileColH
-      JMP   LAB_AYFC
-
-; TSCROLLX — returns 16-bit scroll X position
-@xtk_tscrollx
-      JSR   LAB_IGBY          ; consume token, advance
-      LDY   TileScrollXL
-      LDA   TileScrollXH
-      JMP   LAB_AYFC
-
-; TSCROLLY — returns 16-bit scroll Y position
-@xtk_tscrolly
-      JSR   LAB_IGBY          ; consume token, advance
-      LDY   TileScrollYL
-      LDA   TileScrollYH
-      JMP   LAB_AYFC
 
 LAB_1BEE_STD
       SEC                     ; plain token base subtraction
@@ -8740,12 +8641,9 @@ TAB_XTKSTR
       .word @s_pwd
       .word @s_sfload
       .word @s_gtext
-      .word @s_tilesize, @s_mirror, @s_ttrans, @s_tdef, @s_tput
-      .word @s_tattr, @s_tfill, @s_reserved_ext, @s_reserved_ext, @s_reserved_ext
-      .word @s_tcls, @s_tscrollx, @s_tscrolly, @s_tscroll
-      .word @s_tpalc, @s_tpal
-      .word @s_reserved_ext, @s_reserved_ext, @s_tpeek, @s_tpeekattr, @s_tilecol
-      .word @s_reserved_ext, @s_reserved_ext, @s_reserved_ext, @s_reserved_ext
+      .repeat $19
+      .word @s_reserved_ext
+      .endrepeat
       .word @s_reverse, @s_reverseoff, @s_flash, @s_flashoff
       .word @s_vpoke, @s_vpeek, @s_fioclr, @s_addr
 
@@ -8805,22 +8703,6 @@ TAB_XTKSTR
 @s_pwd:    .byte "PWD",0
 @s_sfload: .byte "SFLOAD",0
 @s_gtext:  .byte "GTEXT",0
-@s_tilesize: .byte "TILESIZE",0
-@s_mirror:  .byte "TMIRROR",0
-@s_ttrans:  .byte "TTRANS",0
-@s_tdef:    .byte "TDEF",0
-@s_tput:    .byte "TPUT",0
-@s_tattr:   .byte "TATTR",0
-@s_tfill:   .byte "TFILL",0
-@s_tcls:    .byte "TCLS",0
-@s_tscroll: .byte "TSCROLL",0
-@s_tpal:    .byte "TPAL",0
-@s_tpalc:   .byte "TPALC",0
-@s_tpeek:   .byte "TPEEK(",0
-@s_tpeekattr: .byte "TPATTR(",0
-@s_tilecol: .byte "TILECOL",0
-@s_tscrollx: .byte "TSCROLLX",0
-@s_tscrolly: .byte "TSCROLLY",0
 @s_reverse: .byte "REVERSE",0
 @s_reverseoff: .byte "REVERSEOFF",0
 @s_flash:   .byte "FLASH",0
@@ -9133,44 +9015,6 @@ LAB_GTEXT
       JSR   LAB_VSYNC
       LDA   #VCMD_GTEXT
       JMP   LAB_VGC_CMD_RTS
-
-; ── Tile engine BASIC commands ────────────────────────────────
-; Full tile command parsing lives in the extension ROM and dispatches through
-; the shared tile library.
-
-LAB_TILESIZE
-      LDA   #EXT_CMD_TILESIZE
-      JMP   EXT_vec
-LAB_MIRROR
-      LDA   #EXT_CMD_TMIRROR
-      JMP   EXT_vec
-LAB_TTRANS
-      LDA   #EXT_CMD_TTRANS
-      JMP   EXT_vec
-LAB_TDEF
-      LDA   #EXT_CMD_TDEF
-      JMP   EXT_vec
-LAB_TPUT
-      LDA   #EXT_CMD_TPUT
-      JMP   EXT_vec
-LAB_TATTR
-      LDA   #EXT_CMD_TATTR
-      JMP   EXT_vec
-LAB_TFILL
-      LDA   #EXT_CMD_TFILL
-      JMP   EXT_vec
-LAB_TCLS
-      LDA   #EXT_CMD_TCLS
-      JMP   EXT_vec
-LAB_TSCROLL
-      LDA   #EXT_CMD_TSCROLL
-      JMP   EXT_vec
-LAB_TPAL
-      LDA   #EXT_CMD_TPAL
-      JMP   EXT_vec
-LAB_TPALC
-      LDA   #EXT_CMD_TPALC
-      JMP   EXT_vec
 
 ; perform RECT x0, y0, x1, y1
 
