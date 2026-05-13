@@ -40,7 +40,9 @@ NGS_DEFAULT_PORT       = $1967
 NGS_ENVELOPE_SIZE      = $04
 NGS_MAX_FRAME_PAYLOAD  = $0100
 NGS_MAX_MESSAGE_PAYLOAD = $00FC
-NGS_DEFAULT_TIMEOUT    = $FFFF
+; Shared waits use video frames. Zero means no application-level timeout; apps
+; should set a finite timeout around connect/setup handshakes.
+NGS_DEFAULT_TIMEOUT    = $0000
 NGS_KEEPALIVE_DEFAULT  = $4650  ; 5 minutes at 60 Hz.
 
 NGS_KIND_HELLO             = $01

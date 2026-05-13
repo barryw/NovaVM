@@ -7,6 +7,7 @@
 .include "network_kernel_labels.inc"
 
 GAME_CHECKMATE = $02
+NETWORK_SETUP_TIMEOUT = 900
 
 .segment "BSS"
 network_table_idl:   .res 1
@@ -87,6 +88,7 @@ network_human_turn:
 network_setup_game:
         JSR KERNEL_SET_STATUS_NETWORK
         JSR nchess_net_init
+        JSR network_set_setup_timeout
         LDA #<network_frame
         LDX #>network_frame
         JSR ngs_set_buffer
@@ -155,12 +157,23 @@ network_setup_game:
         STA network_table_idh
         STA NGS_TABLE_IDH
 
+        JSR network_set_game_timeout
         LDA #$00
         RTS
 @error:
         JSR ngs_disconnect
         LDA #$01
         RTS
+
+network_set_setup_timeout:
+        LDA #<NETWORK_SETUP_TIMEOUT
+        LDX #>NETWORK_SETUP_TIMEOUT
+        JMP ngs_set_timeout
+
+network_set_game_timeout:
+        LDA #<NGS_DEFAULT_TIMEOUT
+        LDX #>NGS_DEFAULT_TIMEOUT
+        JMP ngs_set_timeout
 
 network_send_current_move:
         LDA network_table_idl

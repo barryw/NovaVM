@@ -1309,7 +1309,7 @@ Set the pointer/length pair used by host, string, and raw payload routines.
 
 ## NGS.SET_TIMEOUT
 
-Set shared wait timeout in video frames.
+Set shared wait timeout in video frames; zero waits indefinitely.
 
 - Kind: `routine`
 - Symbol: `ngs_set_timeout`

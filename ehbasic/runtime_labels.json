@@ -1511,7 +1511,7 @@
     {
       "label": "NGS.BEGIN_MESSAGE",
       "source": "lib/gameserver.s",
-      "line": 434,
+      "line": 430,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1522,7 +1522,7 @@
     {
       "label": "NGS.BUILD_AI_ADD_TO_TABLE",
       "source": "lib/gameserver.s",
-      "line": 1081,
+      "line": 1077,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1533,7 +1533,7 @@
     {
       "label": "NGS.BUILD_AI_LIST_REQUEST",
       "source": "lib/gameserver.s",
-      "line": 1064,
+      "line": 1060,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1544,7 +1544,7 @@
     {
       "label": "NGS.BUILD_GAME_LIST_REQUEST",
       "source": "lib/gameserver.s",
-      "line": 942,
+      "line": 938,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1555,7 +1555,7 @@
     {
       "label": "NGS.BUILD_HELLO",
       "source": "lib/gameserver.s",
-      "line": 868,
+      "line": 864,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1566,7 +1566,7 @@
     {
       "label": "NGS.BUILD_LOBBY_CHAT",
       "source": "lib/gameserver.s",
-      "line": 908,
+      "line": 904,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1577,7 +1577,7 @@
     {
       "label": "NGS.BUILD_OPPONENT_LIST_REQUEST",
       "source": "lib/gameserver.s",
-      "line": 1100,
+      "line": 1096,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1588,7 +1588,7 @@
     {
       "label": "NGS.BUILD_PING",
       "source": "lib/gameserver.s",
-      "line": 900,
+      "line": 896,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1599,7 +1599,7 @@
     {
       "label": "NGS.BUILD_PLAYER_ACTION",
       "source": "lib/gameserver.s",
-      "line": 1032,
+      "line": 1028,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1610,7 +1610,7 @@
     {
       "label": "NGS.BUILD_STATE_REQUEST",
       "source": "lib/gameserver.s",
-      "line": 1053,
+      "line": 1049,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1621,7 +1621,7 @@
     {
       "label": "NGS.BUILD_TABLE_CHAT",
       "source": "lib/gameserver.s",
-      "line": 917,
+      "line": 913,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1632,7 +1632,7 @@
     {
       "label": "NGS.BUILD_TABLE_CREATE",
       "source": "lib/gameserver.s",
-      "line": 967,
+      "line": 963,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1643,7 +1643,7 @@
     {
       "label": "NGS.BUILD_TABLE_JOIN",
       "source": "lib/gameserver.s",
-      "line": 992,
+      "line": 988,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1654,7 +1654,7 @@
     {
       "label": "NGS.BUILD_TABLE_LEAVE",
       "source": "lib/gameserver.s",
-      "line": 1021,
+      "line": 1017,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1665,7 +1665,7 @@
     {
       "label": "NGS.BUILD_TABLE_LIST_REQUEST",
       "source": "lib/gameserver.s",
-      "line": 950,
+      "line": 946,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1676,7 +1676,7 @@
     {
       "label": "NGS.BUILD_TABLE_OBSERVE",
       "source": "lib/gameserver.s",
-      "line": 1010,
+      "line": 1006,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1687,7 +1687,7 @@
     {
       "label": "NGS.BUILD_USER_LIST_REQUEST",
       "source": "lib/gameserver.s",
-      "line": 934,
+      "line": 930,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1775,7 +1775,7 @@
     {
       "label": "NGS.PARSE_ENVELOPE",
       "source": "lib/gameserver.s",
-      "line": 730,
+      "line": 726,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1786,7 +1786,7 @@
     {
       "label": "NGS.PARSE_ERROR",
       "source": "lib/gameserver.s",
-      "line": 626,
+      "line": 622,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1797,7 +1797,7 @@
     {
       "label": "NGS.PING_ROUNDTRIP",
       "source": "lib/gameserver.s",
-      "line": 713,
+      "line": 709,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1819,7 +1819,7 @@
     {
       "label": "NGS.READ_BYTE",
       "source": "lib/gameserver.s",
-      "line": 784,
+      "line": 780,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1830,7 +1830,7 @@
     {
       "label": "NGS.READ_STRING",
       "source": "lib/gameserver.s",
-      "line": 829,
+      "line": 825,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1841,7 +1841,7 @@
     {
       "label": "NGS.READ_U16",
       "source": "lib/gameserver.s",
-      "line": 809,
+      "line": 805,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1852,7 +1852,7 @@
     {
       "label": "NGS.RECV_CURRENT",
       "source": "lib/gameserver.s",
-      "line": 600,
+      "line": 596,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1863,7 +1863,7 @@
     {
       "label": "NGS.SEND_CURRENT",
       "source": "lib/gameserver.s",
-      "line": 571,
+      "line": 567,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1902,7 +1902,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "ngs_set_timeout",
-      "summary": "Set shared wait timeout in video frames."
+      "summary": "Set shared wait timeout in video frames; zero waits indefinitely."
     },
     {
       "label": "NGS.STATUS",
@@ -1918,7 +1918,7 @@
     {
       "label": "NGS.WAIT_CONNECTED",
       "source": "lib/gameserver.s",
-      "line": 393,
+      "line": 389,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1929,7 +1929,7 @@
     {
       "label": "NGS.WAIT_KIND",
       "source": "lib/gameserver.s",
-      "line": 696,
+      "line": 692,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1940,7 +1940,7 @@
     {
       "label": "NGS.WAIT_MESSAGE",
       "source": "lib/gameserver.s",
-      "line": 656,
+      "line": 652,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1951,7 +1951,7 @@
     {
       "label": "NGS.WRITE_BYTE",
       "source": "lib/gameserver.s",
-      "line": 463,
+      "line": 459,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1962,7 +1962,7 @@
     {
       "label": "NGS.WRITE_BYTES",
       "source": "lib/gameserver.s",
-      "line": 540,
+      "line": 536,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1973,7 +1973,7 @@
     {
       "label": "NGS.WRITE_STRING",
       "source": "lib/gameserver.s",
-      "line": 520,
+      "line": 516,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1984,7 +1984,7 @@
     {
       "label": "NGS.WRITE_U16",
       "source": "lib/gameserver.s",
-      "line": 483,
+      "line": 479,
       "inputs": [],
       "outputs": [],
       "requires": [],

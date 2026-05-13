@@ -262,7 +262,7 @@ ngs_ready:
 ; @label NGS.SET_TIMEOUT
 ; @kind routine
 ; @symbol ngs_set_timeout
-; @summary Set shared wait timeout in video frames.
+; @summary Set shared wait timeout in video frames; zero waits indefinitely.
 ngs_set_timeout:
       STA   NGS_TIMEOUT_L
       STX   NGS_TIMEOUT_H
@@ -336,13 +336,6 @@ ngs_begin_wait:
       STA   NVR7L
       LDA   NGS_TIMEOUT_H
       STA   NVR7H
-      LDA   NVR7L
-      ORA   NVR7H
-      BNE   @timeout_ok
-      LDA   #$FF
-      STA   NVR7L
-      STA   NVR7H
-@timeout_ok:
       LDA   VGC_FRAME
       STA   NVR5L
       RTS
@@ -352,6 +345,9 @@ ngs_wait_tick:
       CMP   NVR5L
       BEQ   @continue
       STA   NVR5L
+      LDA   NGS_TIMEOUT_L
+      ORA   NGS_TIMEOUT_H
+      BEQ   @continue
       LDA   NVR7L
       ORA   NVR7H
       BEQ   @timeout

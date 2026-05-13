@@ -133,10 +133,16 @@ mode-test: $(SMOKE_DLL)
 	env NOVAZ_SMOKE_MAX_STEPS=120000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "3A3" --skip-manifest-check --expect-screen "MOVE:A3" --expect-screen "BAD FROM SQUARE" --expect-gfx-color "10,116=>0A"
 	env NOVAZ_SMOKE_MAX_STEPS=120000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "3E2E5" --skip-manifest-check --expect-screen "MOVE:E2-E5" --expect-screen "ILLEGAL MOVE" --expect-gfx-color "98,72=>0A"
 	env NOVAZ_SMOKE_MAX_STEPS=160000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "3E2\x082E4\r" --skip-manifest-check --expect-screen "01.W E2-E4" --expect-screen "TURN BLACK" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
+	env NOVAZ_SMOKE_MAX_STEPS=120000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "1\x083" --skip-manifest-check --expect-screen "MOVE:" --expect-screen "TURN WHITE" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
+	env NOVAZ_SMOKE_MAX_STEPS=120000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "2E\x083" --skip-manifest-check --expect-screen "MOVE:" --expect-screen "TURN WHITE" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
 
 network-mode-test: $(SMOKE_DLL)
 	$(MAKE) ndi BUILD_DIR=$(MODE_BUILD_DIR) IMAGE=$(MODE_IMAGE) CA65FLAGS="-DCHESS_AUTOSTART_DEMO=0"
 	env NOVA_GAME_SERVER_HOST="$(NETWORK_GAME_SERVER_HOST)" NOVA_GAME_SERVER_PORT="$(NETWORK_GAME_SERVER_PORT)" NOVAZ_SMOKE_MAX_STEPS=160000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "4E2E4\r" --skip-manifest-check --expect-screen "01.W E2-E4" --expect-screen "01.B" --expect-screen "STATUS" --expect-screen "MOVES" $(MODE_GFX_EXPECTATIONS)
+
+network-error-test: $(SMOKE_DLL)
+	$(MAKE) ndi BUILD_DIR=$(MODE_BUILD_DIR) IMAGE=$(MODE_IMAGE) CA65FLAGS="-DCHESS_AUTOSTART_DEMO=0"
+	env NOVA_GAME_SERVER_HOST="127.0.0.1" NOVA_GAME_SERVER_PORT="1" NOVAZ_SMOKE_MAX_STEPS=200000000 $(DOTNET) $(SMOKE_DLL) "$(MODE_IMAGE)" --generic-boot --screen-only --screen-input "4" --skip-manifest-check --expect-screen "NETWORK ERROR" --expect-screen "game server unavailable"
 
 castle-test: $(SMOKE_DLL)
 	$(MAKE) ndi BUILD_DIR=$(CASTLE_BUILD_DIR) IMAGE=$(CASTLE_IMAGE) CA65FLAGS="-DCHESS_CASTLE_TEST=1 -DCHESS_SELFPLAY_DEMO=0 -DDEMO_STEP_PAUSE=0 -DDEMO_FINAL_PAUSE=0 -DDEMO_REPEAT=0"
@@ -155,4 +161,4 @@ $(BUILD_DIR):
 clean:
 	rm -rf $(BUILD_DIR) build-render $(DIST_DIR)
 
-.PHONY: all ndi check-engine-abi smoke render-test menu-test mode-test network-mode-test castle-test test clean
+.PHONY: all ndi check-engine-abi smoke render-test menu-test mode-test network-mode-test network-error-test castle-test test clean

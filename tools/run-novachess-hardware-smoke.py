@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--only",
         default="all",
-        help="comma-separated subset: menu,zero,one,two,input,network, or all",
+        help="comma-separated subset: menu,zero,one,two,input,back,network,network-error, or all",
     )
     parser.add_argument("--start-server", action="store_true")
     parser.add_argument("--game-server-host")
@@ -179,10 +179,10 @@ def cold_start_to_menu(client: NovaHostClient, timeout: float) -> str:
 
 def parse_modes(value: str) -> set[str]:
     if value == "all":
-        return {"menu", "zero", "one", "two", "input", "network"}
+        return {"menu", "zero", "one", "two", "input", "back", "network"}
 
     modes = {part.strip() for part in value.split(",") if part.strip()}
-    valid = {"menu", "zero", "one", "two", "input", "network"}
+    valid = {"menu", "zero", "one", "two", "input", "back", "network", "network-error"}
     unknown = modes - valid
     if unknown:
         raise ValueError(f"unknown --only mode(s): {', '.join(sorted(unknown))}")
@@ -279,6 +279,26 @@ def run_input_validation(
     print("PASS move input validation and backspace", flush=True)
 
 
+def run_back_navigation(client: NovaHostClient, boot_timeout: float, mode_timeout: float) -> None:
+    cold_start_to_menu(client, boot_timeout)
+    send_key(client, "1")
+    wait_screen(client, ("NOVA LEVEL",), mode_timeout)
+    send_key(client, "BACKSPACE")
+    wait_screen(client, ("SELECT A MODE", "4  NETWORK GAME"), mode_timeout)
+
+    send_key(client, "2")
+    wait_screen(client, ("NOVA LEVEL",), mode_timeout)
+    send_key(client, "E")
+    wait_screen(client, ("PLAY AS",), mode_timeout)
+    send_key(client, "BACKSPACE")
+    wait_screen(client, ("SELECT A MODE", "4  NETWORK GAME"), mode_timeout)
+
+    send_key(client, "3")
+    wait_screen(client, ("MOVE:", "TURN WHITE", "STATUS", "MOVES"), mode_timeout)
+    require_gfx_pixel(client, 64, 162, 0x01, "back navigation board")
+    print("PASS setup back navigation", flush=True)
+
+
 def run_network(client: NovaHostClient, boot_timeout: float, mode_timeout: float) -> None:
     cold_start_to_menu(client, boot_timeout)
     send_key(client, "4")
@@ -287,6 +307,15 @@ def run_network(client: NovaHostClient, boot_timeout: float, mode_timeout: float
     wait_screen(client, ("01.W E2-E4", "01.B", "STATUS", "MOVES"), mode_timeout)
     require_gfx_pixel(client, 64, 162, 0x01, "network board")
     print("PASS network game against configured server", flush=True)
+
+
+def run_network_error(client: NovaHostClient, boot_timeout: float, mode_timeout: float) -> None:
+    cold_start_to_menu(client, boot_timeout)
+    send_key(client, "4")
+    wait_screen(client, ("NETWORK ERROR", "game server unavailable"), mode_timeout)
+    send_key(client, "ENTER")
+    wait_screen(client, ("SELECT A MODE", "4  NETWORK GAME"), mode_timeout)
+    print("PASS network error dialog and menu recovery", flush=True)
 
 
 def start_game_server(port: int) -> subprocess.Popen[str]:
@@ -383,8 +412,12 @@ def main() -> int:
                 run_two_player(client, args.boot_timeout, args.mode_timeout)
             if "input" in modes:
                 run_input_validation(client, args.boot_timeout, args.mode_timeout, args.input_review_delay)
+            if "back" in modes:
+                run_back_navigation(client, args.boot_timeout, args.mode_timeout)
             if "network" in modes:
                 run_network(client, args.boot_timeout, args.mode_timeout)
+            if "network-error" in modes:
+                run_network_error(client, args.boot_timeout, args.mode_timeout)
         finally:
             client.close()
 
