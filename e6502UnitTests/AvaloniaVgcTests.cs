@@ -633,7 +633,7 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegScrollCtl, 0xFF);
 
         Assert.AreEqual(12, _vgc.GetScrollX());
-        Assert.AreEqual(0x112, _vgc.GetScrollXFull());
+        Assert.AreEqual(0x100 | 12, _vgc.GetScrollXFull());
         Assert.AreEqual(34, _vgc.GetScrollY());
         Assert.AreEqual(0x07, _vgc.GetScrollCtl());
         Assert.AreEqual(0x07, _vgc.Read(VgcConstants.RegScrollCtl));
