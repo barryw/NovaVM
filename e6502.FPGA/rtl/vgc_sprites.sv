@@ -41,9 +41,10 @@ module vgc_sprites (
     output logic [3:0]  spr_pixel,
     output logic [1:0]  spr_pixel_pri,
     output logic        spr_pixel_hit,
+    output logic [3:0]  spr_pixel_owner,
 
     // --- Collision detection outputs ---
-    output logic [7:0]  collision_bg_bits
+    output logic [15:0] collision_ss_bits
 );
 
 `ifdef VIDEO_720X480
@@ -54,6 +55,9 @@ module vgc_sprites (
     localparam V_ACTIVE  = 480;
     localparam SPR_PLANE_W = H_ACTIVE / 2;
     localparam SPR_PLANE_H = V_ACTIVE / 2;
+    localparam NOVA_Y0   = 40;
+    localparam NOVA_H    = 400;
+    localparam NOVA_Y1   = NOVA_Y0 + NOVA_H;
     localparam NUM_SPRITES = 16;
     localparam SPR_W     = 16;
     localparam SPR_H     = 16;
@@ -266,55 +270,51 @@ module vgc_sprites (
     end
 
     // =========================================================================
-    // Sprite scanline buffers — EXPLICIT FF ARRAYS (not memory inference)
+    // Sprite scanline buffers — ping-ponged BRAM
     //
-    // History 2026-04-28/29: Three attempts to force yosys to map this as
-    // DP16KD BRAM all failed — the dpram module, ram_style="block" attribute,
-    // -nolutram synth flag, and inline 512-deep pattern all produced
-    // distributed LUT4-D cells with a cascade-write bug that silently dropped
-    // SPR_CLEAR writes, leaving stale sprite data in the buffer forever. The
-    // visible symptom was a phantom-sprite vertical bar at every previously
-    // written sprite-X position, persisting across cold_starts.
-    //
-    // Resolution: synthesize as raw FFs. ram_style="registers" hint plus an
-    // explicit per-FF write-decode pattern bypasses memory_libmap entirely.
-    //
-    // The buffers are ping-ponged. One bank is read by compositing while the
-    // other is cleared/filled for the next native VGA line. A single buffer
-    // cannot work reliably here: clear alone takes the full sprite-plane
-    // width (320 or 360 cycles), so the old design modified the buffer while
-    // the next visible line was already reading it. That matches the observed
-    // "solid 16-pixel gray bar" artifact when stale sprite pixels survive.
+    // One bank is read by compositing while the other is cleared/filled for the
+    // next native VGA line. The dpram wrapper forces DP16KD mapping so the small
+    // line buffer does not become distributed RAM with wide write muxes.
     // =========================================================================
+    localparam SLB_DEPTH = 1024; // 2 banks x up to 360 sprite-plane pixels
+
     logic [8:0]  slb_a_addr;
-    logic [6:0]  slb_a_din;
+    logic [10:0] slb_a_din;
     logic        slb_a_we;
     logic        slb_a_bank;
     logic [8:0]  slb_b_addr;
-    logic [6:0]  slb_b_dout;
+    logic [10:0] slb_b_dout;
+    logic [10:0] slb_b_raw;
+    logic [10:0] slb_a_dout_unused;
     logic        slb_display_bank;
+    logic        slb_b_valid_d;
 
-    (* ram_style = "registers" *)
-    reg [6:0] slb_mem [0:1][0:SPR_PLANE_W-1];
+    wire [9:0] slb_a_ram_addr = {slb_a_bank, slb_a_addr};
+    wire [9:0] slb_b_ram_addr = {slb_display_bank, slb_b_addr};
+    wire       slb_a_we_safe  = slb_a_we && (slb_a_addr < SPR_PLANE_W);
 
-    initial begin
-        slb_display_bank = 1'b0;
-        slb_a_bank = 1'b1;
-        for (int bank = 0; bank < 2; bank++)
-            for (int i = 0; i < SPR_PLANE_W; i++)
-                slb_mem[bank][i] = 7'd0;
-    end
+    dpram #(.WIDTH(11), .DEPTH(SLB_DEPTH)) slb_ram (
+        .clk(clk),
+        .addr_a(slb_a_ram_addr),
+        .din_a(slb_a_din),
+        .we_a(slb_a_we_safe),
+        .dout_a(slb_a_dout_unused),
+        .addr_b(slb_b_ram_addr),
+        .dout_b(slb_b_raw)
+    );
 
     always_ff @(posedge clk) begin
-        if (slb_a_we && slb_a_addr < SPR_PLANE_W)
-            slb_mem[slb_a_bank][slb_a_addr] <= slb_a_din;
-        slb_b_dout <= (slb_b_addr < SPR_PLANE_W) ? slb_mem[slb_display_bank][slb_b_addr] : 7'd0;
+        slb_b_valid_d <= (slb_b_addr < SPR_PLANE_W);
     end
+
+    assign slb_b_dout = slb_b_valid_d ? slb_b_raw : 7'd0;
 
     // Unpack port B read for rendering
     wire [3:0] slb_rd_color = slb_b_dout[4:1];
     wire       slb_rd_valid = slb_b_dout[0];
-    wire [1:0] slb_rd_pri   = slb_b_dout[6:5];
+    wire [3:0] slb_rd_owner = slb_b_dout[8:5];
+    wire [1:0] slb_rd_pri   = slb_b_dout[10:9];
+    logic [4:0] slb_owner [0:SPR_PLANE_W-1]; // {valid, sprite index}
 
     // Sprite evaluation state machine
     localparam SPR_IDLE   = 3'd0;
@@ -338,12 +338,16 @@ module vgc_sprites (
     logic [3:0]  spr_eval_shape_r;
     logic [3:0]  spr_eval_trans_r;
     logic [7:0]  spr_next_scanline;
+    logic        spr_next_line_in_canvas;
     logic [4:0]  spr_write_px;
     logic        scanline_output_valid;
+    logic        scanline_ready;
 
     wire        visible_line_start = (h_count == 10'd0) && (v_count < V_ACTIVE);
     wire [9:0]  spr_prep_v = (v_count == V_ACTIVE - 1) ? 10'd0 : (v_count + 10'd1);
-    wire [7:0]  spr_prep_y = spr_prep_v[8:1];  // 480 native lines -> 240 sprite rows
+    wire        spr_prep_in_canvas = (spr_prep_v >= NOVA_Y0) && (spr_prep_v < NOVA_Y1);
+    wire [9:0]  spr_prep_canvas_y = spr_prep_v - NOVA_Y0;
+    wire [7:0]  spr_prep_y = spr_prep_canvas_y[8:1];  // 400 canvas lines -> 200 sprite rows
 
     initial begin
         spr_eval_state = SPR_IDLE;
@@ -358,13 +362,34 @@ module vgc_sprites (
         spr_eval_shape_r = 0;
         spr_eval_trans_r = 0;
         spr_next_scanline = 0;
+        spr_next_line_in_canvas = 0;
         spr_write_px = 0;
         slb_a_addr = 0;
         slb_a_din = 7'd0;
         slb_a_we = 0;
+        slb_b_valid_d = 1'b0;
+        slb_display_bank = 1'b0;
+        slb_a_bank = 1'b1;
         scanline_output_valid = 1'b0;
+        scanline_ready = 1'b0;
+        collision_ss_bits = 16'h0000;
         for (int i = 0; i < 8; i++)
             spr_row_data[i] = 8'h00;
+        for (int i = 0; i < SPR_PLANE_W; i++)
+            slb_owner[i] = 5'd0;
+    end
+
+    // Shape BRAM reads are synchronous, but the address itself must be stable
+    // before the clock edge. Keeping this combinational lets the existing
+    // one-byte-per-cycle read pipeline capture bytes in order.
+    always_comb begin
+        logic [3:0] fy;
+
+        fy = spr_eval_flip_v ? (4'd15 - spr_eval_y_line[3:0]) : spr_eval_y_line[3:0];
+        if (spr_eval_state == SPR_READ)
+            spr_b_addr = {spr_eval_shape_r, fy, spr_read_byte};
+        else
+            spr_b_addr = 11'd0;
     end
 
     // =========================================================================
@@ -380,11 +405,12 @@ module vgc_sprites (
         spr_pixel     = 4'h0;
         spr_pixel_pri = 2'd0;
         spr_pixel_hit = 0;
-        collision_bg_bits = 8'h00;
+        spr_pixel_owner = 4'd0;
         if (scanline_output_valid && visible_d2 && sprite_x_d2 < SPR_PLANE_W) begin
             if (slb_rd_valid) begin
                 spr_pixel     = slb_rd_color;
                 spr_pixel_pri = slb_rd_pri;
+                spr_pixel_owner = slb_rd_owner;
                 spr_pixel_hit = 1;
             end
         end
@@ -395,6 +421,7 @@ module vgc_sprites (
     // =========================================================================
     always_ff @(posedge clk) begin
         slb_a_we <= 0;  // default: no write unless a state asserts it
+        collision_ss_bits <= 16'h0000;
         if (rst) begin
             spr_eval_state <= SPR_IDLE;
             spr_eval_idx <= 0;
@@ -408,16 +435,16 @@ module vgc_sprites (
             spr_eval_shape_r <= 0;
             spr_eval_trans_r <= 0;
             spr_next_scanline <= 0;
+            spr_next_line_in_canvas <= 0;
             spr_write_px <= 0;
             slb_a_addr <= 0;
-            slb_a_din <= 7'd0;
+            slb_a_din <= 11'd0;
             slb_a_we <= 0;
+            collision_ss_bits <= 16'h0000;
             slb_display_bank <= 1'b0;
             slb_a_bank <= 1'b1;
             scanline_output_valid <= 1'b0;
-            for (int bank = 0; bank < 2; bank++)
-                for (int i = 0; i < SPR_PLANE_W; i++)
-                    slb_mem[bank][i] <= 7'd0;
+            scanline_ready <= 1'b0;
             for (int i = 0; i < 8; i++)
                 spr_row_data[i] <= 8'h00;
         end else begin
@@ -426,21 +453,25 @@ module vgc_sprites (
                 // then reuse the old display bank as the next prep target.
                 slb_display_bank <= ~slb_display_bank;
                 slb_a_bank <= slb_display_bank;
+                scanline_output_valid <= scanline_ready;
+                scanline_ready <= 1'b0;
                 spr_eval_state <= SPR_CLEAR;
                 spr_clear_x <= 0;
                 spr_eval_idx <= 0;
                 spr_next_scanline <= spr_prep_y;
+                spr_next_line_in_canvas <= spr_prep_in_canvas;
             end else case (spr_eval_state)
                 SPR_IDLE: begin
-                    // Work is started at visible_line_start so preparation has
-                    // a whole native line (800 cycles), not just hblank.
+                // Work is started at visible_line_start so preparation has
+                // a whole native line (800 cycles), not just hblank.
                 end
                 SPR_CLEAR: begin
                     slb_a_addr <= spr_clear_x;
-                    slb_a_din  <= 7'd0;
+                    slb_a_din  <= 11'd0;
                     slb_a_we   <= 1;
+                    slb_owner[spr_clear_x] <= 5'd0;
                     if (spr_clear_x >= SPR_PLANE_W - 1) begin
-                        spr_eval_state <= SPR_CHECK;
+                        spr_eval_state <= spr_next_line_in_canvas ? SPR_CHECK : SPR_DONE;
                         spr_eval_idx <= 0;
                     end else
                         spr_clear_x <= spr_clear_x + 1;
@@ -476,11 +507,6 @@ module vgc_sprites (
                     end
                 end
                 SPR_READ: begin
-                    begin
-                        logic [3:0] fy;
-                        fy = spr_eval_flip_v ? (4'd15 - spr_eval_y_line[3:0]) : spr_eval_y_line[3:0];
-                        spr_b_addr <= {spr_eval_shape_r, fy, spr_read_byte};
-                    end
                     if (spr_read_byte > 0) begin
                         spr_row_data[spr_read_byte - 1] <= spr_b_dout;
                     end
@@ -510,8 +536,14 @@ module vgc_sprites (
                         screen_x = {1'b0, spr_eval_x_r} + {13'b0, spr_write_px[3:0]};
                         if (screen_x < SPR_PLANE_W && color != spr_eval_trans_r) begin
                             slb_a_addr <= screen_x[8:0];
-                            slb_a_din  <= {spr_eval_pri_r, color, 1'b1};
+                            slb_a_din  <= {spr_eval_pri_r, spr_eval_idx[3:0], color, 1'b1};
                             slb_a_we   <= 1;
+                            if (slb_owner[screen_x[8:0]][4] &&
+                                slb_owner[screen_x[8:0]][3:0] != spr_eval_idx[3:0]) begin
+                                collision_ss_bits[slb_owner[screen_x[8:0]][3:0]] <= 1'b1;
+                                collision_ss_bits[spr_eval_idx[3:0]] <= 1'b1;
+                            end
+                            slb_owner[screen_x[8:0]] <= {1'b1, spr_eval_idx[3:0]};
                         end
                     end
                     if (spr_write_px == 15) begin
@@ -521,7 +553,7 @@ module vgc_sprites (
                         spr_write_px <= spr_write_px + 1;
                 end
                 SPR_DONE: begin
-                    scanline_output_valid <= 1'b1;
+                    scanline_ready <= 1'b1;
                     spr_eval_state <= SPR_IDLE;
                 end
                 default: spr_eval_state <= SPR_IDLE;

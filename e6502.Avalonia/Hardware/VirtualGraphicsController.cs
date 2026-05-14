@@ -25,6 +25,7 @@ public interface IScreenInput
 ///   $A0E8        Graphics-plane transparent color (0-15)
 ///   $A0E9        Fixed VGC palette mode (0=C64/Nova, 1=IBM EGA)
 ///   $A0EA        Scroll control (bit0=SCROLLX high, bit1=gfx, bit2=text)
+///   $A0EB-$A0EC  High bytes for 16-sprite collision masks
 ///
 /// Sprite shape data stored in 256 × 128-byte slots (32KB), accessible via
 /// memory space I/O and DMA. Each sprite has a shape index register pointing
@@ -96,6 +97,8 @@ public class VirtualGraphicsController : IBusDevice
     private byte _gfxTransparentColor;
     private byte _paletteMode;
     private byte _scrollCtl;
+    private ushort _collisionSpriteSprite;
+    private ushort _collisionSpriteBackground;
 
     // Copper program (host-side, command driven) — 128 lists, vblank-synchronized
     private readonly List<CopperEvent>[] _copperEvents = new List<CopperEvent>[VgcConstants.CopperListCount];
@@ -144,6 +147,8 @@ public class VirtualGraphicsController : IBusDevice
         _gfxTransparentColor = 0;
         _paletteMode = VgcConstants.PaletteModeC64;
         _scrollCtl = VgcConstants.ScrollCtlDefault;
+        _collisionSpriteSprite = 0;
+        _collisionSpriteBackground = 0;
         for (int i = 0; i < VgcConstants.CopperListCount; i++)
         {
             if (_copperEvents[i] != null)
@@ -206,7 +211,8 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.RegTextFlags || address == VgcConstants.RegTextReverseAttr ||
             address == VgcConstants.RegGfxTransparentColor || address == VgcConstants.RegPaletteMode ||
-            address == VgcConstants.RegScrollCtl)
+            address == VgcConstants.RegScrollCtl || address == VgcConstants.RegColStHi ||
+            address == VgcConstants.RegColBgHi)
             return true;
 
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
@@ -247,6 +253,12 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.RegScrollCtl)
             return (byte)(_scrollCtl & 0x07);
 
+        if (address == VgcConstants.RegColStHi)
+            return CollisionHigh(_collisionSpriteSprite);
+
+        if (address == VgcConstants.RegColBgHi)
+            return CollisionHigh(_collisionSpriteBackground);
+
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
             return ReadIrqRegister(address);
 
@@ -266,15 +278,11 @@ public class VirtualGraphicsController : IBusDevice
             {
                 case VgcConstants.RegColSt:
                 {
-                    byte val = _regs[idx];
-                    _regs[idx] = 0;
-                    return val;
+                    return CollisionLow(_collisionSpriteSprite);
                 }
                 case VgcConstants.RegColBg:
                 {
-                    byte val = _regs[idx];
-                    _regs[idx] = 0;
-                    return val;
+                    return CollisionLow(_collisionSpriteBackground);
                 }
                 case VgcConstants.RegCharIn:
                 {
@@ -348,6 +356,18 @@ public class VirtualGraphicsController : IBusDevice
             return;
         }
 
+        if (address == VgcConstants.RegColStHi)
+        {
+            _collisionSpriteSprite &= 0x00FF;
+            return;
+        }
+
+        if (address == VgcConstants.RegColBgHi)
+        {
+            _collisionSpriteBackground &= 0x00FF;
+            return;
+        }
+
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
         {
             WriteIrqRegister(address, data);
@@ -377,6 +397,12 @@ public class VirtualGraphicsController : IBusDevice
                 case VgcConstants.RegStatus:
                 case VgcConstants.RegSpriteCount:
                     // read-only, ignore writes
+                    return;
+                case VgcConstants.RegColSt:
+                    _collisionSpriteSprite &= 0xFF00;
+                    return;
+                case VgcConstants.RegColBg:
+                    _collisionSpriteBackground &= 0xFF00;
                     return;
                 case VgcConstants.RegCharOut:
                     _regs[address - VgcConstants.VgcBase] = data;
@@ -562,6 +588,12 @@ public class VirtualGraphicsController : IBusDevice
 
     public bool IsCursorEnabled =>
         _regs[VgcConstants.RegCursorEnable - VgcConstants.VgcBase] != 0;
+
+    public bool IsCursorVisibleInCurrentMode =>
+        IsCursorEnabled && IsTextLayerVisible(GetMode());
+
+    public static bool IsTextLayerVisible(byte mode) =>
+        mode != 3 && mode != 4;
 
     public byte GetDisplayDim() => _displayDim;
 
@@ -780,9 +812,21 @@ public class VirtualGraphicsController : IBusDevice
 
     public void SetCollisionRegisters(ushort spriteToSprite, ushort spriteToBg)
     {
-        _regs[VgcConstants.RegColSt - VgcConstants.VgcBase] = (byte)(spriteToSprite & 0xFF);
-        _regs[VgcConstants.RegColBg - VgcConstants.VgcBase] = (byte)(spriteToBg & 0xFF);
+        ushort spriteToSpriteMask = spriteToSprite;
+        ushort spriteToBgMask = spriteToBg;
+
+        _collisionSpriteSprite |= spriteToSpriteMask;
+        _collisionSpriteBackground |= spriteToBgMask;
+
+        if (spriteToSpriteMask != 0)
+            RaiseIrqSource(VgcConstants.IrqSpriteCollision);
+        if (spriteToBgMask != 0)
+            RaiseIrqSource(VgcConstants.IrqSpriteBackground);
     }
+
+    private static byte CollisionLow(ushort mask) => (byte)(mask & 0x00FF);
+
+    private static byte CollisionHigh(ushort mask) => (byte)(mask >> 8);
 
     // -------------------------------------------------------------------------
     // Frame counter

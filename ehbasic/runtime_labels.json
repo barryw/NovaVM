@@ -72,7 +72,7 @@
       "symbol": "audio_instrument",
       "abi": "pseudo-register",
       "summary": "Define an instrument envelope and waveform.",
-      "address": "$ED05"
+      "address": "$EEF5"
     },
     {
       "label": "AUDIO.INST_ID",
@@ -105,7 +105,7 @@
       "symbol": "audio_midplay",
       "abi": "pseudo-register",
       "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$ED18"
+      "address": "$EF08"
     },
     {
       "label": "AUDIO.MIDSTOP",
@@ -123,7 +123,7 @@
       "symbol": "audio_midstop",
       "abi": "none",
       "summary": "Stop MIDI file playback.",
-      "address": "$ED1D"
+      "address": "$EF0D"
     },
     {
       "label": "AUDIO.MUSIC_LOOP",
@@ -143,7 +143,7 @@
       "symbol": "audio_music_loop",
       "abi": "pseudo-register",
       "summary": "Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.",
-      "address": "$ED3F"
+      "address": "$EF2F"
     },
     {
       "label": "AUDIO.MUSIC_NOTE",
@@ -166,7 +166,7 @@
       "symbol": "audio_music_note",
       "abi": "register",
       "summary": "Return the current MIDI note for a music voice.",
-      "address": "$ED5D"
+      "address": "$EF4D"
     },
     {
       "label": "AUDIO.MUSIC_PLAY",
@@ -184,7 +184,7 @@
       "symbol": "audio_music_play",
       "abi": "none",
       "summary": "Start queued music playback.",
-      "address": "$ED2C"
+      "address": "$EF1C"
     },
     {
       "label": "AUDIO.MUSIC_PLAYING",
@@ -202,7 +202,7 @@
       "symbol": "audio_music_playing",
       "abi": "none",
       "summary": "Return nonzero if music is playing.",
-      "address": "$ED53"
+      "address": "$EF43"
     },
     {
       "label": "AUDIO.MUSIC_PRIORITY",
@@ -222,7 +222,7 @@
       "symbol": "audio_music_priority",
       "abi": "pseudo-register",
       "summary": "Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.",
-      "address": "$ED44"
+      "address": "$EF34"
     },
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
@@ -245,7 +245,7 @@
       "symbol": "audio_music_sequence",
       "abi": "pseudo-register",
       "summary": "Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.",
-      "address": "$ED27"
+      "address": "$EF17"
     },
     {
       "label": "AUDIO.MUSIC_STOP",
@@ -263,7 +263,7 @@
       "symbol": "audio_music_stop",
       "abi": "none",
       "summary": "Stop music playback.",
-      "address": "$ED35"
+      "address": "$EF25"
     },
     {
       "label": "AUDIO.MUSIC_TEMPO",
@@ -284,7 +284,7 @@
       "symbol": "audio_music_tempo",
       "abi": "pseudo-register",
       "summary": "Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.",
-      "address": "$ED3A"
+      "address": "$EF2A"
     },
     {
       "label": "AUDIO.NOTE",
@@ -327,7 +327,7 @@
       "symbol": "audio_play_sound",
       "abi": "register",
       "summary": "Play a one-shot note using A/X/Y register arguments.",
-      "address": "$ECE8"
+      "address": "$EED8"
     },
     {
       "label": "AUDIO.RELEASE",
@@ -366,7 +366,7 @@
       "symbol": "audio_set_volume",
       "abi": "register",
       "summary": "Set master or per-voice volume using A/X register arguments.",
-      "address": "$ECF3"
+      "address": "$EEE3"
     },
     {
       "label": "AUDIO.SFLOAD",
@@ -387,7 +387,7 @@
       "symbol": "audio_sfload",
       "abi": "pseudo-register",
       "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$ED22"
+      "address": "$EF12"
     },
     {
       "label": "AUDIO.SFX_PLAYING",
@@ -405,7 +405,7 @@
       "symbol": "audio_sfx_playing",
       "abi": "none",
       "summary": "Return nonzero if a sound effect is playing.",
-      "address": "$ED4D"
+      "address": "$EF3D"
     },
     {
       "label": "AUDIO.SIDPLAY",
@@ -427,7 +427,7 @@
       "symbol": "audio_sidplay",
       "abi": "pseudo-register",
       "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.",
-      "address": "$ED0A"
+      "address": "$EEFA"
     },
     {
       "label": "AUDIO.SIDSTOP",
@@ -445,7 +445,7 @@
       "symbol": "audio_sidstop",
       "abi": "none",
       "summary": "Stop SID file playback.",
-      "address": "$ED13"
+      "address": "$EF03"
     },
     {
       "label": "AUDIO.SOUND",
@@ -467,7 +467,7 @@
       "symbol": "audio_sound",
       "abi": "pseudo-register",
       "summary": "Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.",
-      "address": "$ECFB"
+      "address": "$EEEB"
     },
     {
       "label": "AUDIO.STATUS",
@@ -485,7 +485,7 @@
       "symbol": "audio_status",
       "abi": "none",
       "summary": "Return raw music status bits.",
-      "address": "$ED49"
+      "address": "$EF39"
     },
     {
       "label": "AUDIO.STRH",
@@ -566,7 +566,7 @@
       "symbol": "audio_volume",
       "abi": "pseudo-register",
       "summary": "Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.",
-      "address": "$ED00"
+      "address": "$EEF0"
     },
     {
       "label": "AUDIO.VOLUME_LEVEL",
@@ -1051,7 +1051,7 @@
       "kind": "routine",
       "symbol": "fio_cd",
       "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
-      "address": "$ECCA"
+      "address": "$EEBA"
     },
     {
       "label": "FIO.CHECK",
@@ -1068,7 +1068,7 @@
       "kind": "routine",
       "symbol": "fio_check",
       "summary": "Convert the current FIO status register to the shared A=0/1 result.",
-      "address": "$EC4B"
+      "address": "$EE3B"
     },
     {
       "label": "FIO.CLEAR_ERROR",
@@ -1085,12 +1085,12 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$EC6B"
+      "address": "$EE5B"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
       "source": "lib/nova.inc",
-      "line": 838,
+      "line": 1070,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1102,7 +1102,7 @@
     {
       "label": "FIO.CMD_NVGLOAD",
       "source": "lib/nova.inc",
-      "line": 859,
+      "line": 1091,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1114,7 +1114,7 @@
     {
       "label": "FIO.CMD_RNG",
       "source": "lib/nova.inc",
-      "line": 852,
+      "line": 1084,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1126,7 +1126,7 @@
     {
       "label": "FIO.CMD_XPAGE",
       "source": "lib/nova.inc",
-      "line": 845,
+      "line": 1077,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1154,7 +1154,7 @@
       "kind": "routine",
       "symbol": "fio_copy_name",
       "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
-      "address": "$EC8A"
+      "address": "$EE7A"
     },
     {
       "label": "FIO.DELETE",
@@ -1169,7 +1169,7 @@
       "kind": "routine",
       "symbol": "fio_delete",
       "summary": "Delete the file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$ECBB"
+      "address": "$EEAB"
     },
     {
       "label": "FIO.DIR_OPEN",
@@ -1181,7 +1181,7 @@
       "kind": "routine",
       "symbol": "fio_dir_open",
       "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
-      "address": "$ECB1"
+      "address": "$EEA1"
     },
     {
       "label": "FIO.DIR_READ",
@@ -1193,7 +1193,7 @@
       "kind": "routine",
       "symbol": "fio_dir_read",
       "summary": "Read the next directory entry into the FIO directory result registers.",
-      "address": "$ECB6"
+      "address": "$EEA6"
     },
     {
       "label": "FIO.EXEC",
@@ -1215,7 +1215,7 @@
       "kind": "routine",
       "symbol": "fio_exec",
       "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
-      "address": "$EC58"
+      "address": "$EE48"
     },
     {
       "label": "FIO.GLOAD",
@@ -1235,7 +1235,7 @@
       "kind": "routine",
       "symbol": "fio_gload",
       "summary": "Load VGC/graphics memory using FIO graphics registers.",
-      "address": "$ECC5"
+      "address": "$EEB5"
     },
     {
       "label": "FIO.GSAVE",
@@ -1255,7 +1255,7 @@
       "kind": "routine",
       "symbol": "fio_gsave",
       "summary": "Save VGC/graphics memory using FIO graphics registers.",
-      "address": "$ECC0"
+      "address": "$EEB0"
     },
     {
       "label": "FIO.ISSUE",
@@ -1272,7 +1272,7 @@
       "kind": "routine",
       "symbol": "fio_issue",
       "summary": "Issue a raw FIO command without waiting for completion.",
-      "address": "$EC47"
+      "address": "$EE37"
     },
     {
       "label": "FIO.LOAD",
@@ -1289,7 +1289,7 @@
       "kind": "routine",
       "symbol": "fio_load",
       "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
-      "address": "$ECAC"
+      "address": "$EE9C"
     },
     {
       "label": "FIO.LOAD_RUNTIME",
@@ -1304,7 +1304,7 @@
       "kind": "routine",
       "symbol": "fio_load_runtime",
       "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
-      "address": "$ECDE"
+      "address": "$EECE"
     },
     {
       "label": "FIO.MKDIR",
@@ -1319,12 +1319,12 @@
       "kind": "routine",
       "symbol": "fio_mkdir",
       "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$ECCF"
+      "address": "$EEBF"
     },
     {
       "label": "FIO.NAME",
       "source": "lib/nova.inc",
-      "line": 724,
+      "line": 755,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1336,7 +1336,7 @@
     {
       "label": "FIO.NAMELEN",
       "source": "lib/nova.inc",
-      "line": 681,
+      "line": 712,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1375,7 +1375,7 @@
       "kind": "routine",
       "symbol": "fio_pwd",
       "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
-      "address": "$ECD9"
+      "address": "$EEC9"
     },
     {
       "label": "FIO.RMDIR",
@@ -1390,7 +1390,7 @@
       "kind": "routine",
       "symbol": "fio_rmdir",
       "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
-      "address": "$ECD4"
+      "address": "$EEC4"
     },
     {
       "label": "FIO.RNG",
@@ -1411,12 +1411,12 @@
       "kind": "routine",
       "symbol": "fio_rng",
       "summary": "Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.",
-      "address": "$ECE3"
+      "address": "$EED3"
     },
     {
       "label": "FIO.RNG0",
       "source": "lib/nova.inc",
-      "line": 867,
+      "line": 1099,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1428,7 +1428,7 @@
     {
       "label": "FIO.RNG1",
       "source": "lib/nova.inc",
-      "line": 874,
+      "line": 1106,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1440,7 +1440,7 @@
     {
       "label": "FIO.RNG2",
       "source": "lib/nova.inc",
-      "line": 881,
+      "line": 1113,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1452,7 +1452,7 @@
     {
       "label": "FIO.RNG3",
       "source": "lib/nova.inc",
-      "line": 888,
+      "line": 1120,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1489,7 +1489,7 @@
       "kind": "routine",
       "symbol": "fio_save",
       "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
-      "address": "$ECA7"
+      "address": "$EE97"
     },
     {
       "label": "FIO.SET_IO_ERROR",
@@ -1506,7 +1506,7 @@
       "kind": "routine",
       "symbol": "fio_set_io_error",
       "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
-      "address": "$EC7D"
+      "address": "$EE6D"
     },
     {
       "label": "NGS.BEGIN_MESSAGE",
@@ -2054,7 +2054,7 @@
       "kind": "routine",
       "symbol": "nic_command",
       "summary": "Issue a raw NIC command.",
-      "address": "$ED69"
+      "address": "$EF59"
     },
     {
       "label": "NIC.CONNECT",
@@ -2071,7 +2071,7 @@
       "kind": "routine",
       "symbol": "nic_connect",
       "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
-      "address": "$ED8A"
+      "address": "$EF7A"
     },
     {
       "label": "NIC.COPY_NAME",
@@ -2092,7 +2092,7 @@
       "kind": "routine",
       "symbol": "nic_copy_name",
       "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
-      "address": "$EDB0"
+      "address": "$EFA0"
     },
     {
       "label": "NIC.DISCONNECT",
@@ -2106,7 +2106,7 @@
       "kind": "routine",
       "symbol": "nic_disconnect",
       "summary": "Disconnect NIC_SLOT.",
-      "address": "$ED8E"
+      "address": "$EF7E"
     },
     {
       "label": "NIC.LENGTH",
@@ -2123,7 +2123,7 @@
       "kind": "routine",
       "symbol": "nic_length",
       "summary": "Read the most recent NIC message length.",
-      "address": "$EDAC"
+      "address": "$EF9C"
     },
     {
       "label": "NIC.LISTEN",
@@ -2156,7 +2156,7 @@
       "kind": "routine",
       "symbol": "nic_ready",
       "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
-      "address": "$EDA2"
+      "address": "$EF92"
     },
     {
       "label": "NIC.RECV",
@@ -2172,7 +2172,7 @@
       "kind": "routine",
       "symbol": "nic_recv",
       "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
-      "address": "$ED96"
+      "address": "$EF86"
     },
     {
       "label": "NIC.SEND",
@@ -2189,7 +2189,7 @@
       "kind": "routine",
       "symbol": "nic_send",
       "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
-      "address": "$ED92"
+      "address": "$EF82"
     },
     {
       "label": "NIC.STATUS",
@@ -2211,7 +2211,7 @@
       "kind": "routine",
       "symbol": "nic_status",
       "summary": "Read clamped NIC slot status.",
-      "address": "$ED9A"
+      "address": "$EF8A"
     },
     {
       "label": "NVG.ADDRH",
@@ -2675,7 +2675,7 @@
     {
       "label": "ROMSWAP.PRIMARY",
       "source": "lib/nova.inc",
-      "line": 228,
+      "line": 247,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2685,43 +2685,222 @@
       "address": "$02"
     },
     {
-      "label": "SPRITE.BACKGROUND_STATUS",
+      "label": "SPRITE.BACKGROUND_CLEAR",
       "source": "lib/sprite.s",
-      "line": 206,
+      "line": 315,
       "inputs": [],
       "outputs": [
         {
           "name": "A",
-          "description": "Background collision status byte."
+          "description": "VGC_IRQ_SPRBG."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_background_clear",
+      "summary": "Clear the sprite-background collision mask and acknowledge its IRQ source.",
+      "address": "$EADC"
+    },
+    {
+      "label": "SPRITE.BACKGROUND_IRQ_DISABLE",
+      "source": "lib/sprite.s",
+      "line": 352,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_background_irq_disable",
+      "summary": "Disable the VGC sprite-background IRQ source.",
+      "address": "$EAFE"
+    },
+    {
+      "label": "SPRITE.BACKGROUND_IRQ_ENABLE",
+      "source": "lib/sprite.s",
+      "line": 340,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_background_irq_enable",
+      "summary": "Clear stale sprite-background collisions, enable the VGC sprite-background IRQ source, and enable CPU IRQs.",
+      "address": "$EAF1"
+    },
+    {
+      "label": "SPRITE.BACKGROUND_MASK",
+      "source": "lib/sprite.s",
+      "line": 304,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Background collision status high byte for sprites 8-15."
+        },
+        {
+          "name": "Y",
+          "description": "Background collision status low byte for sprites 0-7."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_background_collision_mask",
+      "summary": "Read the 16-bit sprite-background collision status mask without clearing it.",
+      "address": "$EAD5"
+    },
+    {
+      "label": "SPRITE.BACKGROUND_READ_CLEAR",
+      "source": "lib/sprite.s",
+      "line": 327,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Background collision status high byte for sprites 8-15."
+        },
+        {
+          "name": "Y",
+          "description": "Background collision status low byte for sprites 0-7."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_background_read_clear",
+      "summary": "Read the 16-bit sprite-background collision mask, clear it, and acknowledge its IRQ source.",
+      "address": "$EAE8"
+    },
+    {
+      "label": "SPRITE.BACKGROUND_STATUS",
+      "source": "lib/sprite.s",
+      "line": 295,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Background collision status byte for sprites 0-7."
         }
       ],
       "requires": [],
       "kind": "routine",
       "symbol": "sprite_background_collision_status",
-      "summary": "Read the sprite-background collision status register.",
-      "address": "$E919"
+      "summary": "Read the low byte of the sprite-background collision status register.",
+      "address": "$EAD1"
     },
     {
-      "label": "SPRITE.COLLISION_STATUS",
+      "label": "SPRITE.CLEAR",
       "source": "lib/sprite.s",
-      "line": 197,
+      "line": 91,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0"
+      ],
+      "kind": "routine",
+      "symbol": "sprite_clear",
+      "summary": "Clear the shape data for the sprite in VGC.P0."
+    },
+    {
+      "label": "SPRITE.COLLISION_CLEAR",
+      "source": "lib/sprite.s",
+      "line": 247,
       "inputs": [],
       "outputs": [
         {
           "name": "A",
-          "description": "Collision status byte."
+          "description": "VGC_IRQ_SPRCOLL."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_collision_clear",
+      "summary": "Clear the sprite-sprite collision mask and acknowledge its IRQ source.",
+      "address": "$EAA4"
+    },
+    {
+      "label": "SPRITE.COLLISION_IRQ_DISABLE",
+      "source": "lib/sprite.s",
+      "line": 284,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_collision_irq_disable",
+      "summary": "Disable the VGC sprite collision IRQ source.",
+      "address": "$EAC6"
+    },
+    {
+      "label": "SPRITE.COLLISION_IRQ_ENABLE",
+      "source": "lib/sprite.s",
+      "line": 272,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_collision_irq_enable",
+      "summary": "Clear stale sprite-sprite collisions, enable the VGC sprite collision IRQ source, and enable CPU IRQs.",
+      "address": "$EAB9"
+    },
+    {
+      "label": "SPRITE.COLLISION_MASK",
+      "source": "lib/sprite.s",
+      "line": 236,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Collision status high byte for sprites 8-15."
+        },
+        {
+          "name": "Y",
+          "description": "Collision status low byte for sprites 0-7."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_collision_mask",
+      "summary": "Read the 16-bit sprite-sprite collision status mask without clearing it.",
+      "address": "$EA9D"
+    },
+    {
+      "label": "SPRITE.COLLISION_READ_CLEAR",
+      "source": "lib/sprite.s",
+      "line": 259,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Collision status high byte for sprites 8-15."
+        },
+        {
+          "name": "Y",
+          "description": "Collision status low byte for sprites 0-7."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "sprite_collision_read_clear",
+      "summary": "Read the 16-bit sprite-sprite collision mask, clear it, and acknowledge its IRQ source.",
+      "address": "$EAB0"
+    },
+    {
+      "label": "SPRITE.COLLISION_STATUS",
+      "source": "lib/sprite.s",
+      "line": 227,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Collision status byte for sprites 0-7."
         }
       ],
       "requires": [],
       "kind": "routine",
       "symbol": "sprite_collision_status",
-      "summary": "Read the sprite-sprite collision status register.",
-      "address": "$E915"
+      "summary": "Read the low byte of the sprite-sprite collision status register.",
+      "address": "$EA99"
     },
     {
       "label": "SPRITE.COMMAND",
       "source": "lib/sprite.s",
-      "line": 34,
+      "line": 44,
       "inputs": [
         {
           "name": "A",
@@ -2733,12 +2912,26 @@
       "kind": "routine",
       "symbol": "sprite_command",
       "summary": "Issue a raw sprite VGC command without waiting for completion.",
-      "address": "$E8BB"
+      "address": "$EA3F"
+    },
+    {
+      "label": "SPRITE.COPY",
+      "source": "lib/sprite.s",
+      "line": 100,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1"
+      ],
+      "kind": "routine",
+      "symbol": "sprite_copy",
+      "summary": "Copy sprite shape data from VGC.P0 to VGC.P1."
     },
     {
       "label": "SPRITE.DISABLE",
       "source": "lib/sprite.s",
-      "line": 62,
+      "line": 72,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2747,12 +2940,12 @@
       "kind": "routine",
       "symbol": "sprite_disable",
       "summary": "Disable the sprite in VGC.P0.",
-      "address": "$E8C9"
+      "address": "$EA4D"
     },
     {
       "label": "SPRITE.ENABLE",
       "source": "lib/sprite.s",
-      "line": 53,
+      "line": 63,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2761,12 +2954,26 @@
       "kind": "routine",
       "symbol": "sprite_enable",
       "summary": "Enable the sprite in VGC.P0.",
-      "address": "$E8C4"
+      "address": "$EA48"
+    },
+    {
+      "label": "SPRITE.FLIP",
+      "source": "lib/sprite.s",
+      "line": 109,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1"
+      ],
+      "kind": "routine",
+      "symbol": "sprite_flip",
+      "summary": "Set sprite flip flags using VGC.P0=sprite and VGC.P1=flags."
     },
     {
       "label": "SPRITE.GET_X",
       "source": "lib/sprite.s",
-      "line": 166,
+      "line": 196,
       "inputs": [
         {
           "name": "X",
@@ -2787,12 +2994,12 @@
       "kind": "routine",
       "symbol": "sprite_get_x",
       "summary": "Read a sprite's 16-bit X coordinate.",
-      "address": "$E8FA"
+      "address": "$EA7E"
     },
     {
       "label": "SPRITE.GET_Y",
       "source": "lib/sprite.s",
-      "line": 184,
+      "line": 214,
       "inputs": [
         {
           "name": "X",
@@ -2809,12 +3016,12 @@
       "kind": "routine",
       "symbol": "sprite_get_y",
       "summary": "Read a sprite's Y coordinate.",
-      "address": "$E90B"
+      "address": "$EA8F"
     },
     {
       "label": "SPRITE.POS",
       "source": "lib/sprite.s",
-      "line": 44,
+      "line": 54,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2826,12 +3033,26 @@
       "kind": "routine",
       "symbol": "sprite_pos",
       "summary": "Move a sprite using VGC.P0=sprite, VGC.P1/P2=x, VGC.P3=y.",
-      "address": "$E8BF"
+      "address": "$EA43"
+    },
+    {
+      "label": "SPRITE.PRIORITY",
+      "source": "lib/sprite.s",
+      "line": 118,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VGC_P0",
+        "VGC_P1"
+      ],
+      "kind": "routine",
+      "symbol": "sprite_priority",
+      "summary": "Set sprite priority using VGC.P0=sprite and VGC.P1=priority."
     },
     {
       "label": "SPRITE.REG_OFFSET",
       "source": "lib/sprite.s",
-      "line": 101,
+      "line": 131,
       "inputs": [
         {
           "name": "X",
@@ -2852,12 +3073,12 @@
       "kind": "routine",
       "symbol": "sprite_reg_offset",
       "summary": "Compute the VGC sprite attribute block offset for a sprite field.",
-      "address": "$E8D3"
+      "address": "$EA57"
     },
     {
       "label": "SPRITE.ROW",
       "source": "lib/sprite.s",
-      "line": 71,
+      "line": 81,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2875,12 +3096,12 @@
       "kind": "routine",
       "symbol": "sprite_row",
       "summary": "Write one sprite bitmap row using VGC.P0..VGC.P9.",
-      "address": "$E8CE"
+      "address": "$EA52"
     },
     {
       "label": "SPRITE.SET_REG16",
       "source": "lib/sprite.s",
-      "line": 148,
+      "line": 178,
       "inputs": [
         {
           "name": "X",
@@ -2904,12 +3125,12 @@
       "kind": "routine",
       "symbol": "sprite_set_reg16",
       "summary": "Write one 16-bit sprite attribute field.",
-      "address": "$E8EB"
+      "address": "$EA6F"
     },
     {
       "label": "SPRITE.SET_REG8",
       "source": "lib/sprite.s",
-      "line": 132,
+      "line": 162,
       "inputs": [
         {
           "name": "X",
@@ -2929,12 +3150,12 @@
       "kind": "routine",
       "symbol": "sprite_set_reg8",
       "summary": "Write one 8-bit sprite attribute field.",
-      "address": "$E8E0"
+      "address": "$EA64"
     },
     {
       "label": "SPRITE.SET_SHAPE",
       "source": "lib/sprite.s",
-      "line": 120,
+      "line": 150,
       "inputs": [
         {
           "name": "X",
@@ -2950,7 +3171,7 @@
       "kind": "routine",
       "symbol": "sprite_set_shape",
       "summary": "Set a sprite's shape index.",
-      "address": "$E8DE"
+      "address": "$EA62"
     },
     {
       "label": "SYS.REGA",
@@ -3617,7 +3838,7 @@
     {
       "label": "VGC.CIRCLE",
       "source": "lib/vgc.s",
-      "line": 301,
+      "line": 350,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3637,19 +3858,19 @@
     {
       "label": "VGC.CLS",
       "source": "lib/vgc.s",
-      "line": 95,
+      "line": 99,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_cls",
       "summary": "Clear the text screen through the VGC character output register.",
-      "address": "$E849"
+      "address": "$E9AE"
     },
     {
       "label": "VGC.COMMAND",
       "source": "lib/vgc.s",
-      "line": 49,
+      "line": 53,
       "inputs": [
         {
           "name": "A",
@@ -3661,36 +3882,36 @@
       "kind": "routine",
       "symbol": "vgc_cmd",
       "summary": "Issue a raw VGC command without waiting for completion.",
-      "address": "$E834"
+      "address": "$E999"
     },
     {
       "label": "VGC.DISPLAY_OFF",
       "source": "lib/vgc.s",
-      "line": 140,
+      "line": 144,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_display_off",
       "summary": "Blank VGC output while keeping video timing active.",
-      "address": "$E861"
+      "address": "$E9C6"
     },
     {
       "label": "VGC.DISPLAY_ON",
       "source": "lib/vgc.s",
-      "line": 131,
+      "line": 135,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_display_on",
       "summary": "Restore full VGC output brightness.",
-      "address": "$E85B"
+      "address": "$E9C0"
     },
     {
       "label": "VGC.EXEC",
       "source": "lib/vgc.s",
-      "line": 72,
+      "line": 76,
       "inputs": [
         {
           "name": "A",
@@ -3706,7 +3927,7 @@
     {
       "label": "VGC.FILL",
       "source": "lib/vgc.s",
-      "line": 328,
+      "line": 377,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3726,31 +3947,31 @@
     {
       "label": "VGC.FLASH_OFF",
       "source": "lib/vgc.s",
-      "line": 246,
+      "line": 295,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_flash_off",
       "summary": "Disable flashing text.",
-      "address": "$E8B2"
+      "address": "$EA36"
     },
     {
       "label": "VGC.FLASH_ON",
       "source": "lib/vgc.s",
-      "line": 236,
+      "line": 285,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_flash_on",
       "summary": "Enable flashing text.",
-      "address": "$E8A9"
+      "address": "$EA2D"
     },
     {
       "label": "VGC.GCLS",
       "source": "lib/vgc.s",
-      "line": 257,
+      "line": 306,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3761,7 +3982,7 @@
     {
       "label": "VGC.GCOLOR",
       "source": "lib/vgc.s",
-      "line": 265,
+      "line": 314,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3775,7 +3996,7 @@
     {
       "label": "VGC.GFXTRANS",
       "source": "lib/nova.inc",
-      "line": 344,
+      "line": 363,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3787,7 +4008,7 @@
     {
       "label": "VGC.GTEXT",
       "source": "lib/vgc.s",
-      "line": 310,
+      "line": 359,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3805,9 +4026,81 @@
       "summary": "Issue the VGC graphics text command using VGC.P0..VGC.P5 and FIO.NAME."
     },
     {
+      "label": "VGC.IRQ_ACK",
+      "source": "lib/vgc.s",
+      "line": 189,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "VGC IRQ source mask."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_irq_ack",
+      "summary": "Acknowledge pending VGC IRQ source bits.",
+      "address": "$E9E7"
+    },
+    {
+      "label": "VGC.IRQ_DISABLE",
+      "source": "lib/vgc.s",
+      "line": 178,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "VGC IRQ source mask."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_irq_disable",
+      "summary": "Disable one or more VGC IRQ source bits.",
+      "address": "$E9DE"
+    },
+    {
+      "label": "VGC.IRQ_ENABLE",
+      "source": "lib/vgc.s",
+      "line": 167,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "VGC IRQ source mask."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_irq_enable",
+      "summary": "Enable one or more VGC IRQ source bits and enable maskable CPU IRQs.",
+      "address": "$E9D6"
+    },
+    {
+      "label": "VGC.IRQ_INSTALL",
+      "source": "lib/vgc.s",
+      "line": 153,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Handler address high byte."
+        },
+        {
+          "name": "Y",
+          "description": "Handler address low byte."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_irq_install",
+      "summary": "Install the CPU IRQ vector used when enabled VGC IRQ sources fire.",
+      "address": "$E9CC"
+    },
+    {
       "label": "VGC.LINE",
       "source": "lib/vgc.s",
-      "line": 292,
+      "line": 341,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3827,7 +4120,7 @@
     {
       "label": "VGC.LOCATE",
       "source": "lib/vgc.s",
-      "line": 149,
+      "line": 198,
       "inputs": [
         {
           "name": "VGC_P0",
@@ -3843,12 +4136,12 @@
       "kind": "routine",
       "symbol": "vgc_locate",
       "summary": "Set the text cursor position from VGC.P0/VGC.P1.",
-      "address": "$E867"
+      "address": "$E9EB"
     },
     {
       "label": "VGC.MEM_READ",
       "source": "lib/vgc.s",
-      "line": 180,
+      "line": 229,
       "inputs": [],
       "outputs": [
         {
@@ -3865,12 +4158,12 @@
       "kind": "routine",
       "symbol": "vgc_mem_read",
       "summary": "Read one byte from VGC memory using VGC.P0..VGC.P4.",
-      "address": "$E87C"
+      "address": "$EA00"
     },
     {
       "label": "VGC.MEM_WRITE",
       "source": "lib/vgc.s",
-      "line": 190,
+      "line": 239,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3883,12 +4176,12 @@
       "kind": "routine",
       "symbol": "vgc_mem_write",
       "summary": "Write one byte to VGC memory using VGC.P0..VGC.P4.",
-      "address": "$E87F"
+      "address": "$EA03"
     },
     {
       "label": "VGC.PAINT",
       "source": "lib/vgc.s",
-      "line": 337,
+      "line": 386,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3904,7 +4197,7 @@
     {
       "label": "VGC.PLOT",
       "source": "lib/vgc.s",
-      "line": 274,
+      "line": 323,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3920,7 +4213,7 @@
     {
       "label": "VGC.RECT",
       "source": "lib/vgc.s",
-      "line": 319,
+      "line": 368,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -3940,19 +4233,19 @@
     {
       "label": "VGC.REVERSE",
       "source": "lib/vgc.s",
-      "line": 201,
+      "line": 250,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_default",
       "summary": "Enable reverse text using the current foreground/background colours.",
-      "address": "$E887"
+      "address": "$EA0B"
     },
     {
       "label": "VGC.REVERSE_EXPLICIT",
       "source": "lib/vgc.s",
-      "line": 213,
+      "line": 262,
       "inputs": [
         {
           "name": "A",
@@ -3964,24 +4257,24 @@
       "kind": "routine",
       "symbol": "vgc_reverse_explicit",
       "summary": "Enable reverse text with explicit packed foreground/background colours.",
-      "address": "$E892"
+      "address": "$EA16"
     },
     {
       "label": "VGC.REVERSE_OFF",
       "source": "lib/vgc.s",
-      "line": 226,
+      "line": 275,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_off",
       "summary": "Disable reverse text.",
-      "address": "$E8A0"
+      "address": "$EA24"
     },
     {
       "label": "VGC.SET_BG",
       "source": "lib/vgc.s",
-      "line": 113,
+      "line": 117,
       "inputs": [
         {
           "name": "X",
@@ -3993,12 +4286,12 @@
       "kind": "routine",
       "symbol": "vgc_set_bg",
       "summary": "Set the current text background colour.",
-      "address": "$E853"
+      "address": "$E9B8"
     },
     {
       "label": "VGC.SET_BORDER",
       "source": "lib/vgc.s",
-      "line": 122,
+      "line": 126,
       "inputs": [
         {
           "name": "X",
@@ -4010,12 +4303,12 @@
       "kind": "routine",
       "symbol": "vgc_set_border",
       "summary": "Set the VGC border colour.",
-      "address": "$E857"
+      "address": "$E9BC"
     },
     {
       "label": "VGC.SET_FG",
       "source": "lib/vgc.s",
-      "line": 104,
+      "line": 108,
       "inputs": [
         {
           "name": "X",
@@ -4027,12 +4320,12 @@
       "kind": "routine",
       "symbol": "vgc_set_fg",
       "summary": "Set the current text foreground colour.",
-      "address": "$E84F"
+      "address": "$E9B4"
     },
     {
       "label": "VGC.SET_FONT",
       "source": "lib/vgc.s",
-      "line": 171,
+      "line": 220,
       "inputs": [
         {
           "name": "X",
@@ -4044,12 +4337,12 @@
       "kind": "routine",
       "symbol": "vgc_set_font",
       "summary": "Select the active text font slot.",
-      "address": "$E878"
+      "address": "$E9FC"
     },
     {
       "label": "VGC.SET_MODE",
       "source": "lib/vgc.s",
-      "line": 162,
+      "line": 211,
       "inputs": [
         {
           "name": "X",
@@ -4061,12 +4354,12 @@
       "kind": "routine",
       "symbol": "vgc_set_mode",
       "summary": "Set the active VGC graphics/text mode.",
-      "address": "$E874"
+      "address": "$E9F8"
     },
     {
       "label": "VGC.UNPLOT",
       "source": "lib/vgc.s",
-      "line": 283,
+      "line": 332,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4082,7 +4375,7 @@
     {
       "label": "VGC.VSYNC",
       "source": "lib/vgc.s",
-      "line": 83,
+      "line": 87,
       "inputs": [],
       "outputs": [
         {
@@ -4094,19 +4387,19 @@
       "kind": "routine",
       "symbol": "vgc_vsync",
       "summary": "Wait until the VGC frame counter advances.",
-      "address": "$E840"
+      "address": "$E9A5"
     },
     {
       "label": "VGC.WAIT_COMMAND",
       "source": "lib/vgc.s",
-      "line": 59,
+      "line": 63,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_wait_cmd",
       "summary": "Wait for the active VGC command to complete.",
-      "address": "$E838"
+      "address": "$E99D"
     },
     {
       "label": "VSPRITE.BGADDRH",

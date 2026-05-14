@@ -278,11 +278,11 @@ public static class VgcConstants
     public const int TimerDivH         = 0xBA43;  // divisor high byte
 
     // -------------------------------------------------------------------------
-    // DMA controller registers ($BA63-$BA82)
+    // DMA controller registers ($BA63-$BA75)
     // -------------------------------------------------------------------------
 
     public const int DmaBase           = 0xBA63;
-    public const int DmaEnd            = 0xBA82;
+    public const int DmaEnd            = 0xBA75;
 
     public const int DmaCmd            = 0xBA63;  // write triggers command
     public const int DmaStatus         = 0xBA64;  // 0=idle, 1=busy, 2=ok, 3=error
@@ -330,11 +330,11 @@ public static class VgcConstants
     public const byte DmaSpaceVgcTextAttr = 0x07;
 
     // -------------------------------------------------------------------------
-    // Blitter controller registers ($BA83-$BAA2)
+    // Blitter controller registers ($BA83-$BA9B)
     // -------------------------------------------------------------------------
 
     public const int BltBase           = 0xBA83;
-    public const int BltEnd            = 0xBAA2;
+    public const int BltEnd            = 0xBA9B;
 
     public const int BltCmd            = 0xBA83;  // write triggers command
     public const int BltStatus         = 0xBA84;  // 0=idle, 1=busy, 2=ok, 3=error
@@ -379,8 +379,8 @@ public static class VgcConstants
     public const byte BltModeFill      = 0x01;
     public const byte BltModeColorKey  = 0x02;
 
-    public const int FreeBase          = 0xBAA3;
-    public const int FreeEnd           = 0xBFFF;
+    public const int FreeBase          = 0xBB50;
+    public const int FreeEnd           = 0xBBFF;
 
     // -------------------------------------------------------------------------
     // File metadata buffer ($BAB0-$BB1F) — populated during filtered DIRREAD
@@ -410,6 +410,81 @@ public static class VgcConstants
     public const int MetaTitleLen   = 32;
     public const int MetaAuthorLen  = 32;
     public const int MetaCopyrightLen = 32;
+
+    // -------------------------------------------------------------------------
+    // Math coprocessor registers ($BB20-$BB4F)
+    // -------------------------------------------------------------------------
+
+    public const int MathBase          = 0xBB20;
+    public const int MathEnd           = 0xBB4F;
+
+    public const int MathMul16ALo      = 0xBB20;
+    public const int MathMul16AHi      = 0xBB21;
+    public const int MathMul16BLo      = 0xBB22;
+    public const int MathMul16BHi      = 0xBB23;  // write triggers MUL16
+    public const int MathMulFxALo      = 0xBB24;
+    public const int MathMulFxAHi      = 0xBB25;
+    public const int MathMulFxBLo      = 0xBB26;
+    public const int MathMulFxBHi      = 0xBB27;  // write triggers MUL_FX
+    public const int MathDivNLo        = 0xBB28;
+    public const int MathDivN1         = 0xBB29;
+    public const int MathDivN2         = 0xBB2A;
+    public const int MathDivNHi        = 0xBB2B;
+    public const int MathDivDLo        = 0xBB2C;
+    public const int MathDivDHi        = 0xBB2D;  // write triggers DIV_S32_16
+    public const int MathSinCosAngle   = 0xBB2E;  // write triggers SINCOS
+    public const int MathAtanDyLo      = 0xBB2F;
+    public const int MathAtanDyHi      = 0xBB30;
+    public const int MathAtanDxLo      = 0xBB31;
+    public const int MathAtanDxHi      = 0xBB32;  // write triggers ATAN2
+    public const int MathDistDxLo      = 0xBB33;
+    public const int MathDistDxHi      = 0xBB34;
+    public const int MathDistDyLo      = 0xBB35;
+    public const int MathDistDyHi      = 0xBB36;  // write triggers DIST_APPROX
+    public const int MathRng           = 0xBB37;  // read advances, write seeds
+    public const int MathRes0          = 0xBB38;
+    public const int MathRes1          = 0xBB39;
+    public const int MathRes2          = 0xBB3A;
+    public const int MathRes3          = 0xBB3B;
+    public const int MathCaps0         = 0xBB3C;  // implemented operation bitmap
+    public const int MathCaps1         = 0xBB3D;  // vector capability bitmap
+    public const int MathStatus        = 0xBB3E;  // last operation status
+    public const int MathVersion       = 0xBB3F;  // math coprocessor ABI version
+
+    public const int MathVecAxLo       = 0xBB40;
+    public const int MathVecAxHi       = 0xBB41;
+    public const int MathVecAyLo       = 0xBB42;
+    public const int MathVecAyHi       = 0xBB43;
+    public const int MathVecBxLo       = 0xBB44;
+    public const int MathVecBxHi       = 0xBB45;
+    public const int MathVecByLo       = 0xBB46;
+    public const int MathVecByHi       = 0xBB47;
+    public const int MathVecScalarLo   = 0xBB48;
+    public const int MathVecScalarHi   = 0xBB49;
+    public const int MathVecOp         = 0xBB4E;  // write triggers vector operation
+
+    public const byte MathVersionCurrent = 0x02;
+    public const byte MathCapMul16       = 0x01;
+    public const byte MathCapMulFx       = 0x02;
+    public const byte MathCapSinCos      = 0x04;
+    public const byte MathCapDistApprox  = 0x08;
+    public const byte MathCapRng         = 0x10;
+    public const byte MathCapDivS32_16   = 0x20;
+    public const byte MathCapAtan2       = 0x40;
+    public const byte MathCap1VecDotS16  = 0x01;
+    public const byte MathCap1VecDotFx   = 0x02;
+    public const byte MathCap1VecCrossS16 = 0x04;
+    public const byte MathCap1VecLen2    = 0x08;
+    public const byte MathCap1VecScaleFx = 0x10;
+    public const byte MathVecOpDotS16    = 0x01;
+    public const byte MathVecOpDotFx     = 0x02;
+    public const byte MathVecOpCrossS16  = 0x03;
+    public const byte MathVecOpLen2      = 0x04;
+    public const byte MathVecOpScaleFx   = 0x05;
+    public const byte MathStatusOk       = 0x00;
+    public const byte MathStatusDivZero  = 0x01;
+    public const byte MathStatusOverflow = 0x02;
+    public const byte MathStatusUnimpl   = 0x80;
 
     // -------------------------------------------------------------------------
     // Network Interface Controller (NIC) registers ($A100-$A13F)
@@ -565,6 +640,8 @@ public static class VgcConstants
     public const int RegGfxTransparentColor = 0xA0E8; // graphics-plane transparent color, default 0
     public const int RegPaletteMode    = 0xA0E9;   // bit0: 0=C64/Nova palette, 1=IBM EGA palette
     public const int RegScrollCtl      = 0xA0EA;   // bit0=SCROLLX high, bit1=gfx scroll, bit2=text scroll
+    public const int RegColStHi        = 0xA0EB;   // sprite-sprite collision high byte (sprites 8-15, write clears)
+    public const int RegColBgHi        = 0xA0EC;   // sprite-background collision high byte (sprites 8-15, write clears)
 
     public const byte ScrollCtlXHigh   = 0x01;
     public const byte ScrollCtlGfx     = 0x02;
@@ -602,8 +679,8 @@ public static class VgcConstants
     public const int RegStatus         = 0xA008;   // read-only
     public const int RegSpriteCount    = 0xA009;   // read-only sprite count
     public const int RegCursorEnable   = 0xA00A;   // bit 0: cursor visible
-    public const int RegColSt          = 0xA00B;   // sprite-sprite collision (read clears)
-    public const int RegColBg          = 0xA00C;   // sprite-background collision (read clears)
+    public const int RegColSt          = 0xA00B;   // sprite-sprite collision low byte (sprites 0-7, write clears)
+    public const int RegColBg          = 0xA00C;   // sprite-background collision low byte (sprites 0-7, write clears)
     public const int RegBorder         = 0xA00D;
     public const int RegCharOut        = 0xA00E;   // character output
     public const int RegCharIn         = 0xA00F;   // character input
@@ -639,9 +716,11 @@ public static class VgcConstants
     public const int RegIrqStatus      = 0xA0F1;
     public const int RegIrqForce       = 0xA0F2;
     public const int RegIrqValid       = 0xA0F3;
-    public const byte IrqValidMask     = 0x1F;
+    public const byte IrqValidMask     = 0x7F;
     public const byte IrqVBlank        = 0x01;
     public const byte IrqCopper0       = 0x02;
+    public const byte IrqSpriteCollision = 0x20;
+    public const byte IrqSpriteBackground = 0x40;
     public const byte CopperRegIrq     = 0xFE;
 
     // -------------------------------------------------------------------------

@@ -22,7 +22,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | A040--A0BF | 128 B | Sprite Registers (16 sprites x 8 bytes) |
 | A0E0--A0E4 | 5 B | VDC-style VRAM port (char/color/gfx/sprite/text-attribute memory) |
 | A0E5 | 1 B | VGC display dimmer (0=black, 15=full brightness) |
-| A0E6--A0EA | 5 B | VGC text, fixed-palette, and scroll controls |
+| A0E6--A0EC | 7 B | VGC text, fixed-palette, scroll, and collision high-byte controls |
 | A0F0--A0FF | 16 B | VGC IRQ block |
 | A100--A13F | 64 B | Network Interface Controller (NIC) registers |
 | B9A0--B9EF | 80 B | File I/O Controller (FIO) registers |
@@ -30,8 +30,10 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | BA00--BA3F | 64 B | Expansion Memory Controller (XMC) registers |
 | BA40--BA4F | 16 B | Timer Controller registers |
 | BA50--BA56 | 7 B | Music Status and Voice Note Readback (6 voices) |
-| BA60--BA7F | 32 B | DMA Controller registers |
-| BA80--BA9F | 32 B | Blitter Controller registers |
+| BA63--BA75 | 19 B | DMA Controller registers |
+| BA83--BA9B | 25 B | Blitter Controller registers |
+| BAB0--BB1F | 112 B | File metadata buffer |
+| BB20--BB4F | 48 B | Math Coprocessor registers |
 | BC00--BFFF | 1,024 B | XMC Memory Windows (4 x 256-byte mapped pages) |
 | C000--FFFF | 16,384 B | ROM (NovaBASIC interpreter) |
 | D400--D41C | 29 B | SID chip registers (inside ROM range; writes intercepted) |
@@ -40,10 +42,10 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 
 ::: note
 The address range A020--A03E is reserved for language/host services. Unlisted
-addresses in A0EB--A0EF and A140--A9FF are not claimed by any coprocessor and
+addresses in A0ED--A0EF and A140--A9FF are not claimed by any coprocessor and
 fall through to the underlying flat RAM.
-The range BAA0--BBFF is similarly unallocated RAM, except for documented
-system buffers such as the file metadata buffer.
+The range BA9C--BAAF and BB50--BBFF is similarly unallocated RAM. BAB0--BB1F
+is the file metadata buffer, and BB20--BB4F is the math coprocessor.
 SID registers at D400--D43C occupy space within the ROM address range
 but are intercepted on write by the SID chip emulators.
 :::
@@ -58,6 +60,29 @@ they explicitly implement the same boot ABI.
 | --- | --- | --- | --- |
 | $B9F0 | AutobootSkip | R/W | Non-zero disables the language's startup autoboot attempt. |
 | $B9F1 | AutobootActive | R/W | Non-zero while a startup autoboot program is being entered; runtimes use this to suppress broken-autoboot errors and fall back to `Ready`. |
+
+## Math Coprocessor Registers
+
+The math coprocessor occupies BB20--BB4F. Multi-byte arguments and results are
+little-endian. Writing the high byte of a trigger operand starts the operation;
+the FPGA holds RDY low until the result is available.
+
+| **Address** | **Name** | **Access** | **Description** |
+| --- | --- | --- | --- |
+| $BB20--$BB23 | MathMul16A/B | R/W | Signed 16 x 16 multiply. Write $BB23 to trigger; result is signed 32-bit in $BB38--$BB3B. |
+| $BB24--$BB27 | MathMulFxA/B | R/W | Signed Q8.8 multiply. Write $BB27 to trigger; saturated Q8.8 result is in $BB38--$BB39. |
+| $BB28--$BB2D | MathDivN/D | R/W | Signed 32 / signed 16 division. Write $BB2D to trigger; quotient is in $BB38--$BB39, remainder is in $BB3A--$BB3B. |
+| $BB2E | MathSinCosAngle | W | Write unsigned 8-bit angle to trigger; sine is in $BB38 and cosine is in $BB39 as signed 1.7 values. |
+| $BB2F--$BB32 | MathAtanDy/Dx | R/W | Signed 16-bit dy/dx. Write $BB32 to trigger; unsigned angle is in $BB38 and approximate hypot is in $BB39--$BB3A. |
+| $BB33--$BB36 | MathDistDx/Dy | R/W | Signed 16-bit dx/dy. Write $BB36 to trigger; approximate unsigned distance is in $BB38--$BB39. |
+| $BB37 | MathRng | R/W | Read advances xorshift32 and returns the low byte; writes seed one byte of the 32-bit state round-robin. |
+| $BB38--$BB3B | MathRes0--3 | R | Shared result bank. Read before triggering another operation. |
+| $BB3C | MathCaps0 | R | Capability bits: bit 0=MUL16, bit 1=MULFX, bit 2=SINCOS, bit 3=DIST_APPROX, bit 4=RNG, bit 5=DIV, bit 6=ATAN2. |
+| $BB3D | MathCaps1 | R | Capability bits: bit 0=VEC_DOT_S16, bit 1=VEC_DOT_FX, bit 2=VEC_CROSS_S16, bit 3=VEC_LEN2, bit 4=VEC_SCALE_FX. |
+| $BB3E | MathStatus | R | Last operation status: bit 0=divide by zero, bit 1=overflow/saturation, bit 7=unimplemented operation. |
+| $BB3F | MathVersion | R | Math coprocessor ABI version; v2 reads $02. |
+| $BB40--$BB49 | MathVecA/B/Scalar | R/W | Vector operand bank: AX, AY, BX, BY, and scalar, all signed 16-bit values. |
+| $BB4E | MathVecOp | W | Write operation code to trigger: 1=DOT_S16, 2=DOT_FX, 3=CROSS_S16, 4=LEN2, 5=SCALE_FX. Results use $BB38--$BB3B. |
 
 ## VGC Register Map
 
@@ -83,13 +108,13 @@ The VGC IRQ block lives at A0F0--A0FF.
 | $A008 | RegStatus | RO | Frame counter; incremented each video frame. Writes are ignored. |
 | $A009 | RegSpriteCount | RO | Count of currently enabled sprites (0--16). Writes are ignored. |
 | $A00A | RegCursorEnable | R/W | Bit 0 enables the cursor blink; reset default is hidden. |
-| $A00B | RegColSt | RO | Sprite-to-sprite collision bitmask; reading clears the register. |
-| $A00C | RegColBg | RO | Sprite-to-background collision bitmask; reading clears the register. |
+| $A00B | RegColSt | R/WC | Sprite-to-sprite collision low byte for sprites 0--7; write any value to clear this byte. |
+| $A00C | RegColBg | R/WC | Sprite-to-background collision low byte for sprites 0--7; write any value to clear this byte. |
 | $A00D | RegBorder | R/W | Border color index (0--15); reset value is 11 (dark grey). |
 | $A00E | RegCharOut | R/W | Character output port; writing outputs a character to the text screen. |
 | $A00F | RegCharIn | R/W | Character input port; reading dequeues the next keypress byte. |
 
-### Text, Palette, and Scroll Registers (A0E6--A0EA)
+### Text, Palette, Scroll, and Collision Extension Registers (A0E6--A0EC)
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
@@ -98,15 +123,17 @@ The VGC IRQ block lives at A0F0--A0FF.
 | $A0E8 | RegGfxTransparentColor | R/W | Graphics-plane transparent color index (0--15); reset value is 0. |
 | $A0E9 | RegPaletteMode | R/W | Fixed VGC palette selector. Bit 0: 0=C64/Nova palette, 1=IBM EGA palette. Reset value is 0. |
 | $A0EA | RegScrollCtl | R/W | Scroll control. Bit 0=RegScrollX bit 8, bit 1=apply scroll to graphics, bit 2=apply scroll to text. Reset value is 6 (graphics+text enabled, X bit 8 clear). |
+| $A0EB | RegColStHi | R/WC | Sprite-to-sprite collision high byte for sprites 8--15; write any value to clear this byte. |
+| $A0EC | RegColBgHi | R/WC | Sprite-to-background collision high byte for sprites 8--15; write any value to clear this byte. |
 
 ### IRQ Control (A0F0--A0FF)
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
-| $A0F0 | RegIrqEnable | R/W | Enabled IRQ source mask. Bit 0=vblank, bit 1=copper event 0, bits 2--4=copper/user events 1--3. |
+| $A0F0 | RegIrqEnable | R/W | Enabled IRQ source mask. Bit 0=vblank, bits 1--4=copper/user events 0--3, bit 5=sprite collision, bit 6=sprite-background collision. |
 | $A0F1 | RegIrqStatus | R/W1C | Pending IRQ source mask. Write `1` bits to acknowledge/clear pending sources. |
 | $A0F2 | RegIrqForce | WO | Set enabled pending bits for diagnostics/tests. |
-| $A0F3 | RegIrqValid | RO | Valid implemented source mask (`$1F`). |
+| $A0F3 | RegIrqValid | RO | Valid implemented source mask (`$7F`). |
 
 The CPU IRQ line is asserted while `(RegIrqStatus & RegIrqEnable) != 0`.
 Use `$A0F1` to acknowledge handled sources before returning from an IRQ handler.

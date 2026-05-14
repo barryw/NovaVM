@@ -28,7 +28,17 @@ SPRITE_IMPLEMENTATION_INCLUDED = 1
       .export sprite_get_x
       .export sprite_get_y
       .export sprite_collision_status
+      .export sprite_collision_mask
+      .export sprite_collision_clear
+      .export sprite_collision_read_clear
+      .export sprite_collision_irq_enable
+      .export sprite_collision_irq_disable
       .export sprite_background_collision_status
+      .export sprite_background_collision_mask
+      .export sprite_background_clear
+      .export sprite_background_read_clear
+      .export sprite_background_irq_enable
+      .export sprite_background_irq_disable
 
 ; Input: A = sprite VGC command. Does not wait for completion.
 ; @label SPRITE.COMMAND
@@ -78,18 +88,38 @@ sprite_row:
       JMP   sprite_command
 
 .ifndef SPRITE_NO_EXTRA
+; @label SPRITE.CLEAR
+; @kind routine
+; @symbol sprite_clear
+; @summary Clear the shape data for the sprite in VGC.P0.
+; @requires VGC_P0
 sprite_clear:
       LDA   #VCMD_SPRCLR
       JMP   sprite_command
 
+; @label SPRITE.COPY
+; @kind routine
+; @symbol sprite_copy
+; @summary Copy sprite shape data from VGC.P0 to VGC.P1.
+; @requires VGC_P0 VGC_P1
 sprite_copy:
       LDA   #VCMD_SPRCOPY
       JMP   sprite_command
 
+; @label SPRITE.FLIP
+; @kind routine
+; @symbol sprite_flip
+; @summary Set sprite flip flags using VGC.P0=sprite and VGC.P1=flags.
+; @requires VGC_P0 VGC_P1
 sprite_flip:
       LDA   #VCMD_SPRFLIP
       JMP   sprite_command
 
+; @label SPRITE.PRIORITY
+; @kind routine
+; @symbol sprite_priority
+; @summary Set sprite priority using VGC.P0=sprite and VGC.P1=priority.
+; @requires VGC_P0 VGC_P1
 sprite_priority:
       LDA   #VCMD_SPRPRI
       JMP   sprite_command
@@ -197,19 +227,137 @@ sprite_get_y:
 ; @label SPRITE.COLLISION_STATUS
 ; @kind routine
 ; @symbol sprite_collision_status
-; @summary Read the sprite-sprite collision status register.
-; @out A: Collision status byte.
+; @summary Read the low byte of the sprite-sprite collision status register.
+; @out A: Collision status byte for sprites 0-7.
 sprite_collision_status:
       LDA   VGC_COLLST
+      RTS
+
+; @label SPRITE.COLLISION_MASK
+; @kind routine
+; @symbol sprite_collision_mask
+; @summary Read the 16-bit sprite-sprite collision status mask without clearing it.
+; @out A: Collision status high byte for sprites 8-15.
+; @out Y: Collision status low byte for sprites 0-7.
+sprite_collision_mask:
+      LDY   VGC_COLLST
+      LDA   VGC_COLLST_HI
+      RTS
+
+; @label SPRITE.COLLISION_CLEAR
+; @kind routine
+; @symbol sprite_collision_clear
+; @summary Clear the sprite-sprite collision mask and acknowledge its IRQ source.
+; @out A: VGC_IRQ_SPRCOLL.
+sprite_collision_clear:
+      STZ   VGC_COLLST
+      STZ   VGC_COLLST_HI
+      LDA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_STATUS
+      RTS
+
+; @label SPRITE.COLLISION_READ_CLEAR
+; @kind routine
+; @symbol sprite_collision_read_clear
+; @summary Read the 16-bit sprite-sprite collision mask, clear it, and acknowledge its IRQ source.
+; @out A: Collision status high byte for sprites 8-15.
+; @out Y: Collision status low byte for sprites 0-7.
+sprite_collision_read_clear:
+      JSR   sprite_collision_mask
+      PHA
+      JSR   sprite_collision_clear
+      PLA
+      RTS
+
+; @label SPRITE.COLLISION_IRQ_ENABLE
+; @kind routine
+; @symbol sprite_collision_irq_enable
+; @summary Clear stale sprite-sprite collisions, enable the VGC sprite collision IRQ source, and enable CPU IRQs.
+sprite_collision_irq_enable:
+      JSR   sprite_collision_clear
+      LDA   VGC_IRQ_ENABLE
+      ORA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_ENABLE
+      CLI
+      RTS
+
+; @label SPRITE.COLLISION_IRQ_DISABLE
+; @kind routine
+; @symbol sprite_collision_irq_disable
+; @summary Disable the VGC sprite collision IRQ source.
+sprite_collision_irq_disable:
+      LDA   #VGC_IRQ_SPRCOLL
+      EOR   #$FF
+      AND   VGC_IRQ_ENABLE
+      STA   VGC_IRQ_ENABLE
       RTS
 
 ; @label SPRITE.BACKGROUND_STATUS
 ; @kind routine
 ; @symbol sprite_background_collision_status
-; @summary Read the sprite-background collision status register.
-; @out A: Background collision status byte.
+; @summary Read the low byte of the sprite-background collision status register.
+; @out A: Background collision status byte for sprites 0-7.
 sprite_background_collision_status:
       LDA   VGC_COLLBG
+      RTS
+
+; @label SPRITE.BACKGROUND_MASK
+; @kind routine
+; @symbol sprite_background_collision_mask
+; @summary Read the 16-bit sprite-background collision status mask without clearing it.
+; @out A: Background collision status high byte for sprites 8-15.
+; @out Y: Background collision status low byte for sprites 0-7.
+sprite_background_collision_mask:
+      LDY   VGC_COLLBG
+      LDA   VGC_COLLBG_HI
+      RTS
+
+; @label SPRITE.BACKGROUND_CLEAR
+; @kind routine
+; @symbol sprite_background_clear
+; @summary Clear the sprite-background collision mask and acknowledge its IRQ source.
+; @out A: VGC_IRQ_SPRBG.
+sprite_background_clear:
+      STZ   VGC_COLLBG
+      STZ   VGC_COLLBG_HI
+      LDA   #VGC_IRQ_SPRBG
+      STA   VGC_IRQ_STATUS
+      RTS
+
+; @label SPRITE.BACKGROUND_READ_CLEAR
+; @kind routine
+; @symbol sprite_background_read_clear
+; @summary Read the 16-bit sprite-background collision mask, clear it, and acknowledge its IRQ source.
+; @out A: Background collision status high byte for sprites 8-15.
+; @out Y: Background collision status low byte for sprites 0-7.
+sprite_background_read_clear:
+      JSR   sprite_background_collision_mask
+      PHA
+      JSR   sprite_background_clear
+      PLA
+      RTS
+
+; @label SPRITE.BACKGROUND_IRQ_ENABLE
+; @kind routine
+; @symbol sprite_background_irq_enable
+; @summary Clear stale sprite-background collisions, enable the VGC sprite-background IRQ source, and enable CPU IRQs.
+sprite_background_irq_enable:
+      JSR   sprite_background_clear
+      LDA   VGC_IRQ_ENABLE
+      ORA   #VGC_IRQ_SPRBG
+      STA   VGC_IRQ_ENABLE
+      CLI
+      RTS
+
+; @label SPRITE.BACKGROUND_IRQ_DISABLE
+; @kind routine
+; @symbol sprite_background_irq_disable
+; @summary Disable the VGC sprite-background IRQ source.
+sprite_background_irq_disable:
+      LDA   #VGC_IRQ_SPRBG
+      EOR   #$FF
+      AND   VGC_IRQ_ENABLE
+      STA   VGC_IRQ_ENABLE
       RTS
 
 .endif

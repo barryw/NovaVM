@@ -32,6 +32,243 @@ public class BasicRegressionTests
     }
 
     [TestMethod]
+    public void MathCoprocessorFunctionsAreAvailableFromBasic()
+    {
+        string screen = RunProgram(new[]
+        {
+            "10 IF MSIN(64)=127 THEN 20",
+            "15 PRINT \"BAD MSIN\":END",
+            "20 IF MCOS(0)=127 THEN 30",
+            "25 PRINT \"BAD MCOS\":END",
+            "30 IF MSIN(192)=-128 THEN 40",
+            "35 PRINT \"BAD SNEG\":END",
+            "40 IF MDIST(3,4)=5 THEN 50",
+            "45 PRINT \"BAD DIST\":END",
+            "50 IF MDIST(-10,4)=12 THEN 60",
+            "55 PRINT \"BAD DNEG\":END",
+            "60 IF MMULFX($0180,$0180)=576 THEN 70",
+            "65 PRINT \"BAD MUL\":END",
+            "70 IF MMULFX(-256,512)=-512 THEN 80",
+            "75 PRINT \"BAD MNEG\":END",
+            "80 IF MDIV(-100,7)=-14 THEN 90",
+            "85 PRINT \"BAD MDIV\":END",
+            "90 IF MREM(-100,7)=-2 THEN 100",
+            "95 PRINT \"BAD MREM\":END",
+            "100 IF MATAN2(100,0)=64 THEN 110",
+            "105 PRINT \"BAD ATAN\":END",
+            "110 IF MDOTFX($0180,$0100,$0200,-256)=512 THEN 120",
+            "115 PRINT \"BAD DOT\":END",
+            "120 IF MLEN2(3,4)=25 THEN 130",
+            "125 PRINT \"BAD LEN\":END",
+            "130 IF MSCALX($0180,$0100,$0080)=192 THEN 140",
+            "135 PRINT \"BAD SCX\":END",
+            "140 IF MSCALY($0180,$0100,$0080)=128 THEN 150",
+            "145 PRINT \"BAD SCY\":END",
+            "150 IF MMUL16L(300,4)=1200 THEN 160",
+            "155 PRINT \"BAD M16L\":END",
+            "160 IF MMUL16H(-100,7)=-1 THEN 170",
+            "165 PRINT \"BAD M16H\":END",
+            "170 IF MDOTS16L($0180,$0100,$0200,-256)=0 THEN 180",
+            "175 PRINT \"BAD DSL\":END",
+            "180 IF MDOTS16H($0180,$0100,$0200,-256)=2 THEN 190",
+            "185 PRINT \"BAD DSH\":END",
+            "190 IF MCROSSL($0180,$0100,$0200,-256)=32768 THEN 200",
+            "195 PRINT \"BAD CRL\":END",
+            "200 IF MCROSSH($0180,$0100,$0200,-256)=-4 THEN 210",
+            "205 PRINT \"BAD CRH\":END",
+            "210 A=MRND:IF A<0 THEN 225",
+            "215 IF A>255 THEN 225",
+            "220 PRINT \"MATH OK\":END",
+            "225 PRINT \"BAD MRND\"",
+            "RUN"
+        });
+        int runIndex = screen.LastIndexOf("RUN", StringComparison.Ordinal);
+        string output = runIndex >= 0 ? screen[runIndex..] : screen;
+
+        Assert.IsFalse(output.Contains("BAD", StringComparison.Ordinal),
+            $"Math coprocessor BASIC functions should return expected values.\n{screen}");
+        Assert.IsTrue(output.Contains("MATH OK", StringComparison.Ordinal),
+            $"Math coprocessor BASIC program did not finish cleanly.\n{screen}");
+    }
+
+    [TestMethod]
+    public void RelocatedExtensionRomPrimitivesExecuteThroughBasicDispatch()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 XBANK 0",
+            "20 XPOKE 4660,90",
+            "30 VPOKE 2,0,77",
+            "40 POKE 5000,0",
+            "50 BITSET 5000,3",
+            "60 BITTGL 5000,1",
+            "70 BITCLR 5000,2",
+            "80 POKE 5001,XPEEK(4660)",
+            "90 POKE 5002,VPEEK(2,0)",
+            "100 POKE 5003,PLAYING",
+            "110 POKE 5004,MNOTE(1)",
+            "120 PRINT \"EXT OK\"",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Relocated extension ROM primitives should parse and run.\n{screen}");
+        Assert.IsFalse(screen.Contains("Function Call Error", StringComparison.Ordinal),
+            $"Relocated extension ROM primitives should preserve their argument handling.\n{screen}");
+        Assert.IsTrue(screen.Contains("EXT OK", StringComparison.Ordinal),
+            $"Relocated extension ROM primitive program did not finish cleanly.\n{screen}");
+        Assert.AreEqual(0, bus.Read(5000),
+            "BITSET/BITTGL/BITCLR should leave the target byte cleared.");
+        Assert.AreEqual(90, bus.Read(5001),
+            "XPEEK should read the byte written through XPOKE.");
+        Assert.AreEqual(77, bus.Read(5002),
+            "VPEEK should read the byte written through VPOKE.");
+        Assert.AreEqual(0, bus.Read(5003),
+            "PLAYING should return zero when no music is active.");
+        Assert.AreEqual(0, bus.Read(5004),
+            "MNOTE should return zero for a silent voice.");
+    }
+
+    [TestMethod]
+    public void SpriteCollisionFunctionsAndEventSyntaxAreAvailableFromBasic()
+    {
+        string screen = RunProgram(new[]
+        {
+            "10 ON SPRITE COLLISION GOSUB 100",
+            "20 PRINT \"EVENT OK\"",
+            "30 END",
+            "100 PRINT \"IRQ\"",
+            "110 RETIRQ",
+            "RUN"
+        });
+
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"ON SPRITE COLLISION GOSUB should tokenize and run.\n{screen}");
+        Assert.IsTrue(screen.Contains("EVENT OK", StringComparison.Ordinal),
+            $"Sprite collision event setup program did not finish cleanly.\n{screen}");
+
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        bus.Vgc.SetCollisionRegisters(0x0203, 0x0404);
+
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "PRINT SPRCOLL",
+            "PRINT SPRBG",
+        ]);
+
+        string functionScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(functionScreen.Contains(" 515", StringComparison.Ordinal),
+            $"SPRCOLL should return the full 16-bit sprite collision mask.\n{functionScreen}");
+        Assert.IsTrue(functionScreen.Contains(" 1028", StringComparison.Ordinal),
+            $"SPRBG should return the full 16-bit sprite-background collision mask.\n{functionScreen}");
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegColSt),
+            "SPRCOLL should clear the sprite collision low register.");
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegColStHi),
+            "SPRCOLL should clear the sprite collision high register.");
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegColBg),
+            "SPRBG should clear the sprite-background collision low register.");
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegColBgHi),
+            "SPRBG should clear the sprite-background collision high register.");
+    }
+
+    [TestMethod]
+    public void SpriteCollisionIrqDispatchesToBasicHandler()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 H=0:C=0",
+            "20 ON SPRITE COLLISION GOSUB 100",
+            "30 PRINT \"WAIT\"",
+            "40 IF H=0 THEN 40",
+            "50 PRINT \"DONE\";C",
+            "60 END",
+            "100 C=SPRCOLL",
+            "110 H=1",
+            "120 RETIRQ",
+        ]);
+        QueueLine(editor, "CLS");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        QueueLine(editor, "RUN");
+        RunUntil(cpu, bus, 50_000_000,
+            () => SnapshotScreen(bus.Vgc).Contains("WAIT", StringComparison.Ordinal),
+            "BASIC program to arm sprite collision IRQ");
+
+        Assert.AreEqual(
+            VgcConstants.IrqSpriteCollision,
+            (byte)(bus.Vgc.Read(VgcConstants.RegIrqEnable) & VgcConstants.IrqSpriteCollision),
+            "ON SPRITE COLLISION GOSUB should enable the VGC sprite-collision IRQ source.");
+
+        bus.Vgc.SetCollisionRegisters(0x0103, 0x0000);
+        Assert.IsTrue(bus.VgcIrqPending, "Collision should raise the enabled VGC IRQ source.");
+        cpu.IrqWaiting = true;
+        RunUntil(cpu, bus, 50_000_000,
+            () => SnapshotScreen(bus.Vgc).Contains("DONE 259", StringComparison.Ordinal),
+            "sprite collision IRQ handler to run");
+
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegColSt),
+            "SPRCOLL in the IRQ handler should clear the collision low latch.");
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegColStHi),
+            "SPRCOLL in the IRQ handler should clear the collision high latch.");
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegIrqStatus),
+            "SPRCOLL in the IRQ handler should acknowledge the VGC collision IRQ source.");
+    }
+
+    [TestMethod]
+    public void RamIrqTrampolineAcknowledgesSpriteCollisionBeforeReturning()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        const ushort irqVector = 0x020D;
+        byte[] expected =
+        [
+            0x48,                               // PHA
+            0xA5, 0xDF,                         // LDA IrqBase
+            0x4A,                               // LSR
+            0x05, 0xDF,                         // ORA IrqBase
+            0x85, 0xDF,                         // STA IrqBase
+            0xA9, VgcConstants.IrqSpriteCollision,
+            0x8D, 0xF1, 0xA0,                   // STA VGC_IRQ_STATUS
+            0x68,                               // PLA
+            0x40,                               // RTI
+        ];
+
+        for (int offset = 0; offset < expected.Length; offset++)
+        {
+            Assert.AreEqual(expected[offset], bus.ReadRam((ushort)(irqVector + offset)),
+                $"BASIC RAM IRQ trampoline byte mismatch at ${irqVector + offset:X4}; sprite collision IRQs must be acknowledged before RTI to avoid an IRQ storm.");
+        }
+    }
+
+    [TestMethod]
     public void Sid1PokeLandsInSidChip()
     {
         // Known structural limitation: BASIC PEEK($D400-$D43F) cannot return

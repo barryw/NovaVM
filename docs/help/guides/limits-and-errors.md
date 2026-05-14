@@ -54,7 +54,7 @@ wrapping to `$FFFF`.
 | `SPRITESHAPE` | Tokenised and recognised by the ROM parser; writes the shape slot field in the sprite register block at `$A044 + n*8`. |
 | `SPRITESET n,field,value` | Field must be 0--7. Field 0 accepts an unsigned 16-bit X value; other fields accept byte values. Sprite attribute writes are buffered by hardware and published at the frame boundary. |
 | `SPRITEX(n)`/`SPRITEY(n)` | `SPRITEX` returns the unsigned 16-bit X register; `SPRITEY` returns the unsigned 8-bit Y register. Y high is reserved and reads as 0. |
-| `COLLISION(n)`/`BUMPED(n)` | The VGC updates `RegColSt` and `RegColBg` each frame; the ROM reads the appropriate register and clears it on read. A given bit is set if sprite *n* participated in a collision that frame. |
+| `SPRCOLL`/`SPRBG` | The VGC updates 16-bit collision masks each frame. `RegColSt`/`RegColBg` hold sprites 0--7, and `RegColStHi`/`RegColBgHi` hold sprites 8--15. `SPRCOLL` and `SPRBG` read and clear the full masks. |
 | Default sprite priority | On reset all sprites default to priority 2 (in front of everything). This matches the `SpritePriInFront` constant. |
 | `CmdSprFlip` flags | Only bits 0--1 of the flags byte are used (`flags & 0x03`): bit 0 = horizontal flip, bit 1 = vertical flip. |
 | `CmdSprPri` clamping | Priority values above 2 are clamped to 2 (`Math.Min(value, 2)`). Values 0, 1, and 2 are the only meaningful levels. |

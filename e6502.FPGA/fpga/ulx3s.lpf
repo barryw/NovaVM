@@ -86,6 +86,17 @@ IOBUF  PORT "esp_spi_mosi" PULLMODE=UP   IO_TYPE=LVCMOS33;
 IOBUF  PORT "esp_spi_cs_n" PULLMODE=UP   IO_TYPE=LVCMOS33;
 IOBUF  PORT "esp_spi_miso" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
 
+# Second USB port (US2) directly wired to the FPGA. The pull-control pins are
+# diode-steered pull-up/down controls; Nova drives them LOW for host pulldowns.
+LOCATE COMP "usb_fpga_bd_dp" SITE "D15"; # single-ended bidirectional D+
+LOCATE COMP "usb_fpga_bd_dn" SITE "E15"; # single-ended bidirectional D-
+LOCATE COMP "usb_fpga_pu_dp" SITE "B12"; # pull up/down control
+LOCATE COMP "usb_fpga_pu_dn" SITE "C12"; # pull up/down control
+IOBUF  PORT "usb_fpga_bd_dp" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "usb_fpga_bd_dn" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "usb_fpga_pu_dp" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=16;
+IOBUF  PORT "usb_fpga_pu_dn" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=16;
+
 # GPDI (HDMI) — emard reference settings
 LOCATE COMP "gpdi_dp[0]" SITE "A16"; # Blue +
 LOCATE COMP "gpdi_dn[0]" SITE "B16"; # Blue -

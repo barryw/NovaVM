@@ -60,15 +60,36 @@ The VGC detects two types of collisions each frame:
 - Sprite-sprite: Two enabled sprites overlap on non-transparent pixels
 - Sprite-background: A sprite overlaps a non-zero graphics pixel
 
-Read collisions with the `COLLISION()` and `BUMPED()` functions:
+Read full 16-sprite collision masks with the `SPRCOLL` and `SPRBG` functions.
+Bit 0 is sprite 0, bit 8 is sprite 8, and bit 15 is sprite 15:
 
 ```basic
-IF COLLISION(0) THEN PRINT "SPRITE 0 HIT ANOTHER SPRITE"
-IF BUMPED(0) THEN PRINT "SPRITE 0 HIT BACKGROUND"
+10 VSYNC
+20 C = SPRCOLL
+30 B = SPRBG
+40 IF (C AND 1) <> 0 THEN PRINT "SPRITE 0 HIT ANOTHER SPRITE"
+50 IF (C AND 256) <> 0 THEN PRINT "SPRITE 8 HIT ANOTHER SPRITE"
+60 IF (B AND 32768) <> 0 THEN PRINT "SPRITE 15 HIT BACKGROUND"
+70 GOTO 10
+```
+
+For interrupt-driven sprite-sprite collision handling from BASIC, set a handler
+with `ON SPRITE COLLISION GOSUB line`, read `SPRCOLL` inside the handler, and
+finish with `RETIRQ`:
+
+```basic
+10 ON SPRITE COLLISION GOSUB 1000
+20 REM GAME LOOP
+30 GOTO 20
+1000 C = SPRCOLL
+1010 IF (C AND 1) <> 0 THEN PRINT "SPRITE 0 COLLIDED"
+1020 IF (C AND 512) <> 0 THEN PRINT "SPRITE 9 COLLIDED"
+1030 RETIRQ
 ```
 
 ::: note
-Collision flags are cleared after reading. Read them once per frame and store the result if you need to check multiple times.
+`SPRCOLL` and `SPRBG` clear their latched masks after reading them. Store the
+returned value if you need to check multiple bits.
 :::
 
 ## Flipping

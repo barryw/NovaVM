@@ -97,13 +97,13 @@ REGIONS = [
         "name": "vgc_sprites",
         "box": (40, 54, 96, 86),
         "enforce": False,
-        "match": ("sprite_inst", "\\sprite_inst", "spr_mem0", "spr_mem1", "slb_mem"),
+        "match": ("sprite_inst", "\\sprite_inst", "spr_mem0", "spr_mem1", "slb_ram"),
     },
     {
         "name": "vgc_copper",
         "box": (74, 18, 104, 42),
         "enforce": False,
-        "match": ("copper_inst", "\\copper_inst"),
+        "match": ("copper_inst", "\\copper_inst", "copper_list_mem"),
     },
     {
         "name": "vgc_io_regs",
@@ -144,7 +144,7 @@ REGIONS = [
         "name": "sid_audio",
         "box": (8, 1, 82, 44),
         "enforce": False,
-        "match": ("sid1_inst", "sid2_inst", "\\sid1_inst", "\\sid2_inst", "sid_hdmi_audio_inst"),
+        "match": ("sid_inst", "\\sid_inst", "sid_hdmi_audio_inst"),
     },
 ]
 

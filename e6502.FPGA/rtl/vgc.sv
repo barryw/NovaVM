@@ -95,7 +95,9 @@ module vgc (
 
     localparam COLS     = 80,  ROWS    = 50;
     localparam CHAR_W   = 8,   CHAR_H  = 8;
+    localparam TEXT_W   = COLS * CHAR_W;               // 640 pixels
     localparam TEXT_H   = ROWS * CHAR_H;               // 400 pixels (1:1, no doubling)
+    localparam H_BORDER = (H_ACTIVE - TEXT_W) / 2;      // 40px in 720x480 mode, 0 in VGA mode
     localparam V_BORDER = (V_ACTIVE - TEXT_H) / 2;     // 40 lines top/bottom
     localparam TEXT_SIZE = COLS * ROWS;                 // 4000 cells
     localparam logic [5:0] LAST_TEXT_ROW = ROWS - 1;
@@ -119,6 +121,8 @@ module vgc (
     localparam GFX_TRANS_ADDR = 16'hA0E8;
     localparam PALETTE_MODE_ADDR = 16'hA0E9;
     localparam SCROLL_CTL_ADDR = 16'hA0EA;
+    localparam COLLST_HI_ADDR = 16'hA0EB;
+    localparam COLLBG_HI_ADDR = 16'hA0EC;
 
     localparam SCROLL_CTL_XHI  = 8'h01;
     localparam SCROLL_CTL_GFX  = 8'h02;
@@ -141,9 +145,11 @@ module vgc (
     localparam IRQ_ENABLE  = 4'h0;       // R/W: enabled source mask
     localparam IRQ_STATUS  = 4'h1;       // R/W1C: pending source mask
     localparam IRQ_FORCE   = 4'h2;       // W: set enabled pending bits
-    localparam IRQ_VALID   = 8'h1F;
+    localparam IRQ_VALID   = 8'h7F;
     localparam IRQ_VBLANK  = 8'h01;
     localparam IRQ_COPPER0 = 8'h02;
+    localparam IRQ_SPRCOLL = 8'h20;
+    localparam IRQ_SPRBG   = 8'h40;
     localparam COPPER_REG_IRQ = 8'hFE;
 
     // VDC-style VRAM port registers at $A0E0-$A0E4
@@ -520,7 +526,8 @@ module vgc (
     logic [3:0]  spr_pixel;
     logic [1:0]  spr_pixel_pri;
     logic        spr_pixel_hit;
-    logic [7:0]  spr_collision_bg_bits;
+    logic [3:0]  spr_pixel_owner;
+    logic [15:0] spr_collision_ss_bits;
 
     // Pack sprite attribute arrays into flat vectors for sub-module
     logic [16*16-1:0] spr_x_flat;
@@ -551,7 +558,9 @@ module vgc (
     // the same cycle. Without this, sprites draw one physical pixel late and
     // leave a 1px blue gap at the inner border edge.
     wire [9:0] sprite_h_read_d2 = h_count_d2 + 10'd1;
-    wire [8:0] sprite_x_read_d2 = sprite_h_read_d2[9:1];
+    wire [9:0] sprite_h_canvas_read_d2 =
+        (sprite_h_read_d2 < 10'(H_BORDER)) ? 10'd0 : (sprite_h_read_d2 - 10'(H_BORDER));
+    wire [8:0] sprite_x_read_d2 = sprite_h_canvas_read_d2[9:1];
 
     vgc_sprites sprite_inst (
         .clk(clk), .rst(vgc_module_rst),
@@ -569,19 +578,25 @@ module vgc (
         .spr_trans_flat(spr_trans_flat),
         .spr_pixel(spr_pixel), .spr_pixel_pri(spr_pixel_pri),
         .spr_pixel_hit(spr_pixel_hit),
-        .collision_bg_bits(spr_collision_bg_bits)
+        .spr_pixel_owner(spr_pixel_owner),
+        .collision_ss_bits(spr_collision_ss_bits)
     );
 
     // =========================================================================
     // Copper sub-module (CONDUCTOR)
     // =========================================================================
     // Copper — raster-synchronized register writer with multi-list support
-    localparam COPPER_MAX   = 32;
+    localparam COPPER_MAX   = 128;
 `ifdef SYNTHESIS
     localparam COPPER_LISTS = 8;    // 8 lists for FPGA (saves ~127K bits of registers)
 `else
     localparam COPPER_LISTS = 128;  // 128 lists for simulation (full software compat)
 `endif
+    localparam COPPER_LIST_BITS = $clog2(COPPER_LISTS);
+    localparam COPPER_INDEX_BITS = $clog2(COPPER_MAX);
+    localparam COPPER_LIST_DEPTH = COPPER_LISTS * COPPER_MAX;
+    localparam COPPER_LIST_ADDR_W = $clog2(COPPER_LIST_DEPTH);
+    localparam COPPER_ENTRY_W = 33; // {17-bit beam pos, 8-bit VGC reg, 8-bit value}
 
     // Active list: used during rendering
     logic [16:0] copper_pos   [0:COPPER_MAX-1];
@@ -591,29 +606,64 @@ module vgc (
     logic [8:0]  copper_index;
     logic        copper_enabled;
 
-    // Multi-list storage
-    logic [16:0] copper_list_pos [0:COPPER_LISTS*COPPER_MAX-1];
-    logic [7:0]  copper_list_reg [0:COPPER_LISTS*COPPER_MAX-1];
-    logic [7:0]  copper_list_val [0:COPPER_LISTS*COPPER_MAX-1];
+    // Multi-list storage: entries live in BRAM; per-list counts stay in FFs.
     logic [8:0]  copper_list_count [0:COPPER_LISTS-1];
-    logic [6:0]  copper_target_list;
-    logic [6:0]  copper_active_list;
-    logic [6:0]  copper_pending_list;
+    logic [COPPER_LIST_BITS-1:0] copper_target_list;
+    logic [COPPER_LIST_BITS-1:0] copper_active_list;
+    logic [COPPER_LIST_BITS-1:0] copper_pending_list;
+
+    logic [COPPER_LIST_ADDR_W-1:0] copper_list_wr_addr;
+    logic [COPPER_ENTRY_W-1:0]     copper_list_wr_data;
+    logic                          copper_list_wr_we;
+    logic [COPPER_ENTRY_W-1:0]     copper_list_wr_dout_unused;
+    wire  [COPPER_LIST_ADDR_W-1:0] copper_list_rd_addr;
+    logic [COPPER_ENTRY_W-1:0]     copper_list_rd_data;
 
     // Copper list copy state machine
     logic        copper_loading;
     logic [8:0]  copper_load_idx;
-    logic [6:0]  copper_load_src;
+    logic [COPPER_LIST_BITS-1:0] copper_load_src;
+    logic        copper_load_capture;
+
+    function automatic logic [COPPER_LIST_ADDR_W-1:0] copper_entry_addr(
+        input logic [COPPER_LIST_BITS-1:0] list,
+        input logic [COPPER_INDEX_BITS-1:0] index
+    );
+        copper_entry_addr = {list, index};
+    endfunction
+
+    function automatic logic [COPPER_ENTRY_W-1:0] pack_copper_entry(
+        input logic [16:0] pos,
+        input logic [7:0] reg_id,
+        input logic [7:0] val
+    );
+        pack_copper_entry = {pos, reg_id, val};
+    endfunction
+
+    assign copper_list_rd_addr = copper_entry_addr(
+        copper_load_src,
+        copper_load_idx[COPPER_INDEX_BITS-1:0]
+    );
+
+    dpram #(.WIDTH(COPPER_ENTRY_W), .DEPTH(COPPER_LIST_DEPTH)) copper_list_mem (
+        .clk(clk),
+        .addr_a(copper_list_wr_addr),
+        .din_a(copper_list_wr_data),
+        .we_a(copper_list_wr_we),
+        .dout_a(copper_list_wr_dout_unused),
+        .addr_b(copper_list_rd_addr),
+        .dout_b(copper_list_rd_data)
+    );
 
     // Copper fire signals from sub-module
     logic        copper_fire;
     logic [7:0]  copper_fire_reg;
     logic [7:0]  copper_fire_val;
 
-    // Pack copper active list arrays into flat vectors for sub-module
-    logic [32*17-1:0] copper_pos_flat;
-    logic [32*8-1:0]  copper_reg_flat;
-    logic [32*8-1:0]  copper_val_flat;
+    // Pack copper active list arrays into flat vectors for sub-module.
+    logic [COPPER_MAX*17-1:0] copper_pos_flat;
+    logic [COPPER_MAX*8-1:0]  copper_reg_flat;
+    logic [COPPER_MAX*8-1:0]  copper_val_flat;
 
     always_comb begin
         for (int i = 0; i < COPPER_MAX; i++) begin
@@ -623,7 +673,7 @@ module vgc (
         end
     end
 
-    vgc_copper copper_inst (
+    vgc_copper #(.COPPER_MAX(COPPER_MAX)) copper_inst (
         .clk(clk), .rst(vgc_module_rst),
         .h_count(h_count), .v_count(v_count),
         .in_text_area(in_text_area),
@@ -641,15 +691,16 @@ module vgc (
         for (int i = 0; i < COPPER_MAX; i++) begin
             copper_pos[i] = 0; copper_reg[i] = 0; copper_val[i] = 0;
         end
-        for (int i = 0; i < COPPER_LISTS * COPPER_MAX; i++) begin
-            copper_list_pos[i] = 0; copper_list_reg[i] = 0; copper_list_val[i] = 0;
-        end
         for (int i = 0; i < COPPER_LISTS; i++)
             copper_list_count[i] = 0;
         copper_count = 0; copper_enabled = 0;
         copper_target_list = 0; copper_active_list = 0;
         copper_pending_list = 0;
         copper_loading = 0; copper_load_idx = 0; copper_load_src = 0;
+        copper_load_capture = 0;
+        copper_list_wr_addr = 0;
+        copper_list_wr_data = 0;
+        copper_list_wr_we = 0;
     end
 
     // =========================================================================
@@ -661,6 +712,7 @@ module vgc (
     logic [3:0]  border_color, fg_color, bg_color, gfx_color, display_dim, gfx_trans_color;
     logic [2:0]  mode;
     logic        cursor_enable;
+    logic        text_layer_visible;
     logic [2:0]  vram_plane;
     logic [15:0] vram_addr;
     logic [7:0]  vram_ctrl;
@@ -672,6 +724,10 @@ module vgc (
     logic [15:0] vram_port_read_addr;
     logic [7:0]  text_flags;
     logic [7:0]  text_reverse_attr;
+
+    function automatic logic mode_text_layer_visible(input logic [2:0] display_mode);
+        mode_text_layer_visible = (display_mode != 3'd3) && (display_mode != 3'd4);
+    endfunction
     // Frame counter at $A008 (VGC_FRAME in basic.asm:8806). Increments once
     // per vblank entry — EhBASIC's SPRITESET/SPRPRI use `LDA VGC_FRAME;
     // CMP VGC_FRAME; BEQ loop` to wait for vblank sync. Without this,
@@ -731,8 +787,8 @@ module vgc (
         .o_empty(key_fifo_empty)
     );
     logic [2:0]  font_slot;
-    logic [7:0]  collision_ss;
-    logic [7:0]  collision_bg;
+    logic [15:0] collision_ss;
+    logic [15:0] collision_bg;
     logic [7:0]  irq_enable;
     logic [7:0]  irq_pending;
     logic        scroll_pending;
@@ -740,11 +796,17 @@ module vgc (
     logic [6:0]  scroll_col;
 
     assign rdy_out = !(vgc_reset_pending || scroll_pending || reset_clear_busy);
+    wire sprite_bg_collision_now =
+        in_text_area_d2 && gfx_x_d2 < GFX_W &&
+        spr_pixel_hit && gfx_b_dout != gfx_trans_color;
+
     wire [7:0] irq_event_mask =
         ((vblank_start && irq_enable[0]) ? IRQ_VBLANK : 8'h00) |
         ((copper_fire && copper_fire_reg == COPPER_REG_IRQ)
             ? (copper_fire_val & IRQ_VALID & irq_enable)
-            : 8'h00);
+            : 8'h00) |
+        (((|spr_collision_ss_bits) && irq_enable[5]) ? IRQ_SPRCOLL : 8'h00) |
+        ((sprite_bg_collision_now && irq_enable[6]) ? IRQ_SPRBG : 8'h00);
 
     // Gtext / FIO name buffer
     localparam FIO_NAME_LEN = 16'hB9A3;
@@ -830,7 +892,7 @@ module vgc (
         cursor_x = 0; cursor_y = 0;
         border_color = 4'd11; fg_color = 4'd15; bg_color = 4'd0;
         display_dim = 4'd15;
-        gfx_color = 4'd1; mode = 0; cursor_enable = 0;
+        gfx_color = 4'd1; mode = 0; cursor_enable = 0; text_layer_visible = 1'b1;
         vram_plane = SPACE_CHAR; vram_addr = 0; vram_ctrl = 8'h01;
         vram_cpu_read_pending = 0; vram_cpu_read_space = SPACE_CHAR; vram_cpu_read_latch = 0;
         vram_port_read_active = 0; vram_port_read_space = SPACE_CHAR; vram_port_read_addr = 0;
@@ -924,6 +986,7 @@ module vgc (
     wire gfx_trans_sel = (cpu_addr == GFX_TRANS_ADDR);
     wire palette_mode_sel = (cpu_addr == PALETTE_MODE_ADDR);
     wire scroll_ctl_sel = (cpu_addr == SCROLL_CTL_ADDR);
+    wire collision_hi_sel = (cpu_addr == COLLST_HI_ADDR || cpu_addr == COLLBG_HI_ADDR);
     wire fio_name_sel  = (cpu_addr >= FIO_NAME && cpu_addr <= 16'hB9EF);
     wire fio_len_sel   = (cpu_addr == FIO_NAME_LEN);
     wire [4:0]  reg_offset   = cpu_addr[4:0];
@@ -954,6 +1017,7 @@ module vgc (
     wire gfx_trans_sel_w = (r_cpu_addr_w == GFX_TRANS_ADDR);
     wire palette_mode_sel_w = (r_cpu_addr_w == PALETTE_MODE_ADDR);
     wire scroll_ctl_sel_w = (r_cpu_addr_w == SCROLL_CTL_ADDR);
+    wire collision_hi_sel_w = (r_cpu_addr_w == COLLST_HI_ADDR || r_cpu_addr_w == COLLBG_HI_ADDR);
     wire fio_name_sel_w  = (r_cpu_addr_w >= FIO_NAME && r_cpu_addr_w <= 16'hB9EF);
     wire fio_len_sel_w   = (r_cpu_addr_w == FIO_NAME_LEN);
     wire [4:0]  reg_offset_w   = r_cpu_addr_w[4:0];
@@ -962,6 +1026,12 @@ module vgc (
     wire [6:0]  spr_offset_w   = r_cpu_addr_w[6:0] - 7'h40;
     wire [3:0]  spr_index_w    = spr_offset_w[6:3];
     wire [2:0]  spr_field_w    = spr_offset_w[2:0];
+
+    wire        copper_spr_reg_sel = (copper_fire_reg >= SPR_REG_BASE[7:0] &&
+                                      copper_fire_reg <= SPR_REG_END[7:0]);
+    wire [6:0]  copper_spr_offset  = copper_fire_reg[6:0] - 7'h40;
+    wire [3:0]  copper_spr_index   = copper_spr_offset[6:3];
+    wire [2:0]  copper_spr_field   = copper_spr_offset[2:0];
 
     // =========================================================================
     // Screen address helper
@@ -1056,8 +1126,8 @@ module vgc (
                 5'd8:        cpu_rdata = frame_counter;  // VGC_FRAME
                 5'd9:        cpu_rdata = {3'b0, spr_enabled_count};
                 5'd10:       cpu_rdata = {7'b0, cursor_enable};
-                5'd11:       cpu_rdata = collision_ss;
-                5'd12:       cpu_rdata = collision_bg;
+                5'd11:       cpu_rdata = collision_ss[7:0];
+                5'd12:       cpu_rdata = collision_bg[7:0];
                 REG_BORDER:  cpu_rdata = {4'b0, border_color};
                 REG_CHARIN:  cpu_rdata = char_in_reg;
                 REG_CMD:     cpu_rdata = {7'b0, cmd_busy || artist_busy || memcmd_pending || (memread_pending != 2'd0)};
@@ -1070,6 +1140,13 @@ module vgc (
                 IRQ_STATUS: cpu_rdata = irq_pending;
                 4'h3:       cpu_rdata = IRQ_VALID;
                 default:    cpu_rdata = 8'h00;
+            endcase
+        end
+        else if (collision_hi_sel) begin
+            case (cpu_addr)
+                COLLST_HI_ADDR: cpu_rdata = collision_ss[15:8];
+                COLLBG_HI_ADDR: cpu_rdata = collision_bg[15:8];
+                default:        cpu_rdata = 8'h00;
             endcase
         end
         else if (vram_reg_sel) begin
@@ -1122,6 +1199,7 @@ module vgc (
     wire dbg_gfx_trans_sel = (dbg_addr == GFX_TRANS_ADDR);
     wire dbg_palette_mode_sel = (dbg_addr == PALETTE_MODE_ADDR);
     wire dbg_scroll_ctl_sel = (dbg_addr == SCROLL_CTL_ADDR);
+    wire dbg_collision_hi_sel = (dbg_addr == COLLST_HI_ADDR || dbg_addr == COLLBG_HI_ADDR);
     wire dbg_write_vgc_sel  = dbg_we && (dbg_waddr >= VGC_BASE && dbg_waddr <= VGC_REGS_END);
     wire dbg_write_irq_sel  = dbg_we && (dbg_waddr >= VGC_IRQ_BASE && dbg_waddr <= VGC_IRQ_END);
     wire dbg_write_spr_sel  = dbg_we && (dbg_waddr >= SPR_REG_BASE && dbg_waddr <= SPR_REG_END);
@@ -1131,6 +1209,7 @@ module vgc (
     wire dbg_write_gfx_trans_sel = dbg_we && (dbg_waddr == GFX_TRANS_ADDR);
     wire dbg_write_palette_mode_sel = dbg_we && (dbg_waddr == PALETTE_MODE_ADDR);
     wire dbg_write_scroll_ctl_sel = dbg_we && (dbg_waddr == SCROLL_CTL_ADDR);
+    wire dbg_write_collision_hi_sel = dbg_we && (dbg_waddr == COLLST_HI_ADDR || dbg_waddr == COLLBG_HI_ADDR);
     wire [4:0] dbg_reg_offset_w = dbg_waddr[4:0];
     wire [2:0] dbg_vram_reg_off_w = dbg_waddr[2:0];
 
@@ -1158,6 +1237,8 @@ module vgc (
                 5'd7:        dbg_rdata = {5'b0, font_slot};
                 5'd8:        dbg_rdata = frame_counter;  // VGC_FRAME
                 5'd10:       dbg_rdata = {7'b0, cursor_enable};
+                5'd11:       dbg_rdata = collision_ss[7:0];
+                5'd12:       dbg_rdata = collision_bg[7:0];
                 REG_BORDER:  dbg_rdata = {4'b0, border_color};
                 REG_CHARIN:  dbg_rdata = char_in_reg;
                 REG_CMD:     dbg_rdata = {7'b0, cmd_busy || artist_busy || memcmd_pending || (memread_pending != 2'd0)};
@@ -1185,6 +1266,13 @@ module vgc (
         else if (dbg_dim_sel) dbg_rdata = {4'b0, display_dim};
         else if (dbg_palette_mode_sel) dbg_rdata = {7'b0, palette_mode};
         else if (dbg_scroll_ctl_sel) dbg_rdata = {5'b0, scroll_ctl[2:0]};
+        else if (dbg_collision_hi_sel) begin
+            case (dbg_addr)
+                COLLST_HI_ADDR: dbg_rdata = collision_ss[15:8];
+                COLLBG_HI_ADDR: dbg_rdata = collision_bg[15:8];
+                default:        dbg_rdata = 8'h00;
+            endcase
+        end
         else if (dbg_text_sel) begin
             case (dbg_addr)
                 TEXT_FLAGS_ADDR:   dbg_rdata = text_flags;
@@ -1214,6 +1302,7 @@ module vgc (
     always_ff @(posedge clk) begin
         if (vgc_module_rst) begin
             cursor_x <= 0; cursor_y <= 0; mode <= 0;
+            text_layer_visible <= 1'b1;
             border_color <= 4'd11; fg_color <= 4'd15; bg_color <= 4'd0;
             gfx_color <= 4'd1; display_dim <= 4'd15; gfx_trans_color <= 4'd0;
             cursor_enable <= 0; palette_mode <= 1'b0; font_slot <= 0;
@@ -1227,11 +1316,15 @@ module vgc (
             scroll_x <= 0; scroll_y <= 0;
             cmd_busy <= 0;
             key_fifo_rd <= 0;
-            collision_ss <= 0; collision_bg <= 0;
+            collision_ss <= 16'h0000; collision_bg <= 16'h0000;
             irq_enable <= 0; irq_pending <= 0;
             copper_enabled <= 0; copper_count <= 0;
             copper_target_list <= 0; copper_active_list <= 0; copper_pending_list <= 0;
             copper_loading <= 0; copper_load_idx <= 0; copper_load_src <= 0;
+            copper_load_capture <= 1'b0;
+            copper_list_wr_addr <= '0;
+            copper_list_wr_data <= '0;
+            copper_list_wr_we <= 1'b0;
             sprrow_count <= 0; sprrow_spr <= 0; sprrow_row <= 0;
             sprcopy_phase <= 0; sprcopy_data <= 0; sprdef_wait <= 0;
             charin_sel_prev <= 1'b0;
@@ -1272,11 +1365,6 @@ module vgc (
                 copper_reg[i] <= 0;
                 copper_val[i] <= 0;
             end
-            for (int i = 0; i < COPPER_LISTS * COPPER_MAX; i++) begin
-                copper_list_pos[i] <= 0;
-                copper_list_reg[i] <= 0;
-                copper_list_val[i] <= 0;
-            end
             for (int i = 0; i < COPPER_LISTS; i++)
                 copper_list_count[i] <= 0;
             for (int i = 0; i < 64; i++)
@@ -1303,9 +1391,11 @@ module vgc (
             cmd_spr_we <= 0;
             cmd_spr_re <= 0;
             artist_cmd_valid <= 0;
+            copper_list_wr_we <= 1'b0;
             vgc_cmd_reset_req <= 1'b0;
             sys_reset_req <= 1'b0;
             irq_pending <= irq_pending | irq_event_mask;
+            collision_ss <= collision_ss | spr_collision_ss_bits;
 
             if (vram_data_read && vram_ctrl[0])
                 vram_addr <= vram_addr + 16'd1;
@@ -1601,13 +1691,19 @@ module vgc (
             // Copper list loading state machine
             if (copper_loading) begin
                 if (copper_load_idx < copper_list_count[copper_load_src]) begin
-                    copper_pos[copper_load_idx] <= copper_list_pos[{copper_load_src, copper_load_idx[4:0]}];
-                    copper_reg[copper_load_idx] <= copper_list_reg[{copper_load_src, copper_load_idx[4:0]}];
-                    copper_val[copper_load_idx] <= copper_list_val[{copper_load_src, copper_load_idx[4:0]}];
-                    copper_load_idx <= copper_load_idx + 1;
+                    if (copper_load_capture) begin
+                        copper_pos[copper_load_idx] <= copper_list_rd_data[32:16];
+                        copper_reg[copper_load_idx] <= copper_list_rd_data[15:8];
+                        copper_val[copper_load_idx] <= copper_list_rd_data[7:0];
+                        copper_load_idx <= copper_load_idx + 1;
+                        copper_load_capture <= 1'b0;
+                    end else begin
+                        copper_load_capture <= 1'b1;
+                    end
                 end else begin
                     copper_count <= copper_list_count[copper_load_src];
                     copper_loading <= 0;
+                    copper_load_capture <= 1'b0;
                 end
             end
 
@@ -1624,6 +1720,7 @@ module vgc (
                     copper_loading <= 1;
                     copper_load_idx <= 0;
                     copper_load_src <= copper_pending_list;
+                    copper_load_capture <= 1'b0;
                 end
             end
 
@@ -1644,28 +1741,48 @@ module vgc (
 
             // Copper fire: apply register writes from sub-module
             if (copper_fire) begin
-                case (copper_fire_reg)
-                    8'd0: mode         <= copper_fire_val[2:0];
-                    8'd1: bg_color     <= copper_fire_val[3:0];
-                    8'd2: fg_color     <= copper_fire_val[3:0];
-                    8'd5: begin
-                        scroll_x <= copper_fire_val;
-                        scroll_x_fetch <= normalize_scroll_x(scroll_ctl[0], copper_fire_val);
-                    end
-                    8'd6: begin
-                        scroll_y <= copper_fire_val;
-                        scroll_y_fetch <= normalize_scroll_y(copper_fire_val);
-                    end
-                    8'd7: font_slot    <= (copper_fire_val[2:0] >= 3'd3) ? 3'd0
-                                                                          : copper_fire_val[2:0];
-                    8'd13: border_color <= copper_fire_val[3:0];
-                    8'hEA: begin
-                        scroll_ctl <= {5'b0, copper_fire_val[2:0]};
-                        scroll_x_fetch <= normalize_scroll_x(copper_fire_val[0], scroll_x);
-                    end
-                    COPPER_REG_IRQ: ; // irq_event_mask latches enabled source bits
-                    default: regs[copper_fire_reg[4:0]] <= copper_fire_val;
-                endcase
+                if (copper_spr_reg_sel) begin
+                    case (copper_spr_field)
+                        3'd0: spr_x[copper_spr_index][7:0]  <= copper_fire_val;
+                        3'd1: spr_x[copper_spr_index][15:8] <= copper_fire_val;
+                        3'd2: spr_y[copper_spr_index]       <= copper_fire_val;
+                        3'd3: ; // Y high byte reserved; Y is unsigned 0..239.
+                        3'd4: spr_shape[copper_spr_index]   <= copper_fire_val[3:0];
+                        3'd5: begin
+                            spr_flip_h[copper_spr_index] <= copper_fire_val[0];
+                            spr_flip_v[copper_spr_index] <= copper_fire_val[1];
+                            spr_enable[copper_spr_index] <= copper_fire_val[7];
+                        end
+                        3'd6: spr_pri[copper_spr_index]     <= copper_fire_val[1:0];
+                        3'd7: spr_trans[copper_spr_index]   <= copper_fire_val[3:0];
+                    endcase
+                end else begin
+                    case (copper_fire_reg)
+                        8'd0: begin
+                            mode <= copper_fire_val[2:0];
+                            text_layer_visible <= mode_text_layer_visible(copper_fire_val[2:0]);
+                        end
+                        8'd1: bg_color     <= copper_fire_val[3:0];
+                        8'd2: fg_color     <= copper_fire_val[3:0];
+                        8'd5: begin
+                            scroll_x <= copper_fire_val;
+                            scroll_x_fetch <= normalize_scroll_x(scroll_ctl[0], copper_fire_val);
+                        end
+                        8'd6: begin
+                            scroll_y <= copper_fire_val;
+                            scroll_y_fetch <= normalize_scroll_y(copper_fire_val);
+                        end
+                        8'd7: font_slot    <= (copper_fire_val[2:0] >= 3'd3) ? 3'd0
+                                                                              : copper_fire_val[2:0];
+                        8'd13: border_color <= copper_fire_val[3:0];
+                        8'hEA: begin
+                            scroll_ctl <= {5'b0, copper_fire_val[2:0]};
+                            scroll_x_fetch <= normalize_scroll_x(copper_fire_val[0], scroll_x);
+                        end
+                        COPPER_REG_IRQ: ; // irq_event_mask latches enabled source bits
+                        default: regs[copper_fire_reg[4:0]] <= copper_fire_val;
+                    endcase
+                end
             end
 
             // CPU writes — fires on `write_active` (1 pixel cycle after
@@ -1676,7 +1793,10 @@ module vgc (
             if (write_active) begin
                 if (vgc_reg_sel_w) begin
                     case (reg_offset_w)
-                        REG_MODE:    mode <= r_cpu_wdata_w[2:0];
+                        REG_MODE: begin
+                            mode <= r_cpu_wdata_w[2:0];
+                            text_layer_visible <= mode_text_layer_visible(r_cpu_wdata_w[2:0]);
+                        end
                         REG_BGCOL:   bg_color <= r_cpu_wdata_w[3:0];
                         REG_FGCOL:   fg_color <= r_cpu_wdata_w[3:0];
                         REG_CURSORX: cursor_x <= r_cpu_wdata_w[6:0];
@@ -1695,8 +1815,8 @@ module vgc (
                                                                                : r_cpu_wdata_w[2:0];
                         5'd8:        gfx_color <= r_cpu_wdata_w[3:0];
                         5'd10:       cursor_enable <= r_cpu_wdata_w[0];
-                        5'd11:       collision_ss <= 0;
-                        5'd12:       collision_bg <= 0;
+                        5'd11:       collision_ss[7:0] <= 8'h00;
+                        5'd12:       collision_bg[7:0] <= 8'h00;
                         REG_BORDER:  border_color <= r_cpu_wdata_w[3:0];
                         REG_CHAROUT: begin
                             case (r_cpu_wdata_w)
@@ -1841,12 +1961,16 @@ module vgc (
                                     end
                                     8'h1B: begin // CmdCopperAdd
                                         if (copper_list_count[copper_target_list] < COPPER_MAX) begin
-                                            copper_list_pos[{copper_target_list, copper_list_count[copper_target_list][4:0]}]
-                                                <= gfx_addr_xy({regs[18][0], regs[17]}, regs[19]);
-                                            copper_list_reg[{copper_target_list, copper_list_count[copper_target_list][4:0]}]
-                                                <= regs[20];
-                                            copper_list_val[{copper_target_list, copper_list_count[copper_target_list][4:0]}]
-                                                <= regs[22];
+                                            copper_list_wr_addr <= copper_entry_addr(
+                                                copper_target_list,
+                                                copper_list_count[copper_target_list][COPPER_INDEX_BITS-1:0]
+                                            );
+                                            copper_list_wr_data <= pack_copper_entry(
+                                                gfx_addr_xy({regs[18][0], regs[17]}, regs[19]),
+                                                regs[20],
+                                                regs[22]
+                                            );
+                                            copper_list_wr_we <= 1'b1;
                                             copper_list_count[copper_target_list] <= copper_list_count[copper_target_list] + 1;
                                             if (copper_target_list == copper_active_list) begin
                                                 copper_pos[copper_count] <= gfx_addr_xy({regs[18][0], regs[17]}, regs[19]);
@@ -1869,10 +1993,10 @@ module vgc (
                                         copper_enabled <= 0;
                                     end
                                     CMD_COPPERLIST: begin
-                                        copper_target_list <= regs[17][6:0];
+                                        copper_target_list <= regs[17][COPPER_LIST_BITS-1:0];
                                     end
                                     CMD_COPPERUSE: begin
-                                        copper_pending_list <= regs[17][6:0];
+                                        copper_pending_list <= regs[17][COPPER_LIST_BITS-1:0];
                                     end
                                     CMD_COPPERLISTEND: begin
                                         copper_target_list <= copper_active_list;
@@ -1958,6 +2082,14 @@ module vgc (
                     scroll_x_fetch <= normalize_scroll_x(r_cpu_wdata_w[0], scroll_x);
                 end
 
+                if (collision_hi_sel_w) begin
+                    case (r_cpu_addr_w)
+                        COLLST_HI_ADDR: collision_ss[15:8] <= 8'h00;
+                        COLLBG_HI_ADDR: collision_bg[15:8] <= 8'h00;
+                        default: ;
+                    endcase
+                end
+
                 if (text_reg_sel_w) begin
                     case (r_cpu_addr_w)
                         TEXT_FLAGS_ADDR:   text_flags <= r_cpu_wdata_w;
@@ -2005,7 +2137,10 @@ module vgc (
             // this while the CPU is held in reset for boot-time splash setup.
             if (dbg_write_vgc_sel) begin
                 case (dbg_reg_offset_w)
-                    REG_MODE:    mode <= dbg_wdata[2:0];
+                    REG_MODE: begin
+                        mode <= dbg_wdata[2:0];
+                        text_layer_visible <= mode_text_layer_visible(dbg_wdata[2:0]);
+                    end
                     REG_BGCOL:   bg_color <= dbg_wdata[3:0];
                     REG_FGCOL:   fg_color <= dbg_wdata[3:0];
                     REG_CURSORX: cursor_x <= dbg_wdata[6:0];
@@ -2024,8 +2159,8 @@ module vgc (
                                                                         : dbg_wdata[2:0];
                     5'd8:        gfx_color <= dbg_wdata[3:0];
                     5'd10:       cursor_enable <= dbg_wdata[0];
-                    5'd11:       collision_ss <= 0;
-                    5'd12:       collision_bg <= 0;
+                    5'd11:       collision_ss[7:0] <= 8'h00;
+                    5'd12:       collision_bg[7:0] <= 8'h00;
                     REG_BORDER:  border_color <= dbg_wdata[3:0];
                     default: ;
                 endcase
@@ -2060,6 +2195,14 @@ module vgc (
             if (dbg_write_scroll_ctl_sel) begin
                 scroll_ctl <= {5'b0, dbg_wdata[2:0]};
                 scroll_x_fetch <= normalize_scroll_x(dbg_wdata[0], scroll_x);
+            end
+
+            if (dbg_write_collision_hi_sel) begin
+                case (dbg_waddr)
+                    COLLST_HI_ADDR: collision_ss[15:8] <= 8'h00;
+                    COLLBG_HI_ADDR: collision_bg[15:8] <= 8'h00;
+                    default: ;
+                endcase
             end
 
             if (dbg_write_spr_sel) begin
@@ -2154,10 +2297,8 @@ module vgc (
             end
 
             // Collision detection — accumulate during active display
-            if (in_text_area_d2 && gfx_x_d2 < GFX_W) begin
-                if (spr_pixel_hit && gfx_b_dout != gfx_trans_color)
-                    collision_bg <= collision_bg | 8'hFF;
-            end
+            if (sprite_bg_collision_now)
+                collision_bg[spr_pixel_owner[3:0]] <= 1'b1;
             end
         end
     end
@@ -2528,7 +2669,8 @@ module vgc (
                 blink_count <= blink_count + 1;
         end
     end
-    wire cursor_here = cursor_enable && !reset_display_active && in_text_area_d2 &&
+    wire cursor_draw_enable = cursor_enable && text_layer_visible;
+    wire cursor_here = cursor_draw_enable && !reset_display_active && in_text_area_d2 &&
                        (text_col_d2 == cursor_x) && (text_row_d2 == cursor_y);
 
     assign irq_out = |(irq_pending & irq_enable);

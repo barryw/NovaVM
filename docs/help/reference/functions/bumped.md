@@ -7,6 +7,8 @@ syntax: "BUMPED(n)"
 see_also: [graphics-and-display]
 ---
 
-Sprite-to-background collision bitmask for sprite *n*.
+Legacy sprite-to-background collision helper. For all 16 sprites, prefer
+`SPRBG`, which returns the full 16-bit latched background collision mask and
+clears it.
 
 See the [Graphics And Display](/docs/help/guides/graphics-and-display.md) guide for more details.

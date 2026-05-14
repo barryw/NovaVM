@@ -1,7 +1,7 @@
 # Math Coprocessor Design
 
 **Date:** 2026-04-23
-**Status:** Design locked, implementation pending
+**Status:** v2 implemented: scalar ops, DIV/ATAN2, RNG, and fixed-point vector helpers
 **Target:** FPGA (ULX3S-85F) and Avalonia software emulator
 
 ## Motivation
@@ -16,14 +16,26 @@ bus-cycle CPU stall, and combined sin/cos lookup in two cycles.
 ## Numeric format
 
 - **Signed 16-bit integer** as the native whole-number type.
-- **8.8 signed fixed-point** for positions, velocities, scalars.
+- **16.8 fixed-point positions** in software: 16-bit pixel integer plus
+  8-bit fraction. Absolute screen positions can exceed signed 8.8 range
+  on a 320-pixel-wide display, so positions are not stored as raw 8.8.
+- **8.8 signed fixed-point** for velocities, scalars, restitution, and
+  other values whose useful range fits -128.0 to +127.996.
+- **10.6 signed fixed-point** is the preferred packed 16-bit format for
+  fractional screen-space deltas when a coprocessor operation needs both
+  sign and sub-pixel precision across the full display.
 - **1.7 signed fixed-point** for trig outputs (range −1.0 to +0.992, stored
   as `s8`). Matches the natural information content of `sin(angle)`.
 - **8-bit unsigned angles**, 0–255 = full circle. No radians anywhere.
 
-16.16 and float were considered and rejected — both add MMIO surface and
-register file cost without enabling any 2D game use case that 8.8 can't
-hit at 320×240.
+16.16 and float were considered and rejected for the coprocessor ABI — both
+add MMIO surface and register-file cost without enabling a 2D game use case
+that `16.8` positions plus 16-bit packed operands cannot hit at 320×240.
+
+The coprocessor itself treats most operands as signed 16-bit values. The
+caller owns the interpretation: integer, 8.8, 10.6, or another fixed-point
+layout. `MUL_FX` is the one format-specific Tier 1 operation; it is explicitly
+signed 8.8 × signed 8.8 → signed saturated 8.8.
 
 ## Operation set (Tier 1)
 
@@ -31,11 +43,16 @@ hit at 320×240.
 |---|---|---|---|
 | `MUL16` | signed 16×16 → 32 | 1 fabric cycle | 1 DSP |
 | `MUL_FX` | 8.8 × 8.8 → 8.8 saturated | 1 fabric cycle | 1 DSP + post-shift/sat LUTs |
-| `DIV_S32_16` | signed 32÷16 → 16 quot + 16 rem | ~17 fabric cycles | ~200 LUTs iterative |
-| `SINCOS` | u8 angle → (sin_1p7, cos_1p7) | 2 fabric cycles | 1 BRAM (sin LUT) |
-| `ATAN2` | (s16 dy, s16 dx) → (u8 angle, u16 hypot) | 8 fabric cycles | CORDIC ~150 LUTs |
+| `DIV_S32_16` | signed 32÷16 → 16 quot + 16 rem | 32 fabric cycles | iterative divider |
+| `SINCOS` | u8 angle → (sin_1p7, cos_1p7) | 1 fabric cycle | quarter-wave LUT |
+| `ATAN2` | (s16 dy, s16 dx) → (u8 angle, u16 approx hypot) | 8 fabric cycles | CORDIC angle + DIST_APPROX hypot |
 | `DIST_APPROX` | (s16 dx, s16 dy) → u16 approx sqrt(dx²+dy²) | 1 fabric cycle | ~30 LUTs |
 | `RNG` | xorshift32 on read | 1 fabric cycle | ~30 LUTs |
+| `VEC_DOT_S16` | (ax,ay)·(bx,by) with s16 components → s32 | 3 fabric cycles | shared multiplier |
+| `VEC_DOT_FX` | Q8.8 vector dot → saturated Q8.8 | 3 fabric cycles | shared multiplier |
+| `VEC_CROSS_S16` | ax·by − ay·bx with s16 components → s32 | 3 fabric cycles | shared multiplier |
+| `VEC_LEN2` | ax² + ay² with s16 components → u32 | 3 fabric cycles | shared multiplier |
+| `VEC_SCALE_FX` | Q8.8 vector × Q8.8 scalar → two saturated Q8.8 results | 3 fabric cycles | shared multiplier |
 
 **Explicitly deferred:**
 - `DIV_FX` — emulate with MUL_FX + reciprocal LUT if needed.
@@ -43,6 +60,11 @@ hit at 320×240.
   DIST_APPROX covers the collision-check case.
 - Matrix transforms — composable in software from SINCOS + MUL16.
 - 2×2 vector rotate — composable in software; 2 MUL_FX + 2 adds.
+
+**Implementation staging:** v1 landed the MMIO block, CPU stall plumbing,
+Avalonia parity, constants, and tests for `MUL16`, `MUL_FX`, `SINCOS`,
+`DIST_APPROX`, and `RNG`. v2 implements `DIV_S32_16`, `ATAN2`, and the
+fixed-point vector helper bank.
 
 ## Interaction model
 
@@ -91,59 +113,89 @@ not as custom opcodes.
 
 ## MMIO layout
 
-Free address range in `$BA`: `$BA9C-$BAFF` (100 bytes unused after XMC,
-Timer, Music, DMA, Blitter). The coprocessor claims `$BAA0-$BABF` (32 bytes).
+The original `$BAA0-$BABF` placement conflicts with the existing file metadata
+buffer at `$BAB0-$BB1F`, and Avalonia still had stale blitter comments claiming
+ownership through `$BAA2`. Existing metadata is already a software-visible
+contract, while the math coprocessor is new, so the coprocessor moves to the
+first clean region after metadata: `$BB20-$BB4F`.
 
 ```
-; Math Coprocessor — $BAA0 … $BABF                            (* = trigger)
+; Math Coprocessor — $BB20 … $BB4F                            (* = trigger)
 
-$BAA0  MUL16_A_LO       ┐
-$BAA1  MUL16_A_HI       │ signed 16×16 → RES[0..3] (s32)
-$BAA2  MUL16_B_LO       │
-$BAA3  MUL16_B_HI  *    ┘
+$BB20  MUL16_A_LO       ┐
+$BB21  MUL16_A_HI       │ signed 16×16 → RES[0..3] (s32)
+$BB22  MUL16_B_LO       │
+$BB23  MUL16_B_HI  *    ┘
 
-$BAA4  MULFX_A_LO       ┐
-$BAA5  MULFX_A_HI       │ 8.8 × 8.8 → RES[0..1] (sat 8.8)
-$BAA6  MULFX_B_LO       │
-$BAA7  MULFX_B_HI  *    ┘
+$BB24  MULFX_A_LO       ┐
+$BB25  MULFX_A_HI       │ 8.8 × 8.8 → RES[0..1] (sat 8.8)
+$BB26  MULFX_B_LO       │
+$BB27  MULFX_B_HI  *    ┘
 
-$BAA8  DIV_N_LO         ┐
-$BAA9  DIV_N_1          │ signed s32÷s16 → RES[0..1] quot,
-$BAAA  DIV_N_2          │                   RES[2..3] rem
-$BAAB  DIV_N_HI         │ div-by-zero → $FFFF, no trap
-$BAAC  DIV_D_LO         │
-$BAAD  DIV_D_HI   *     ┘
+$BB28  DIV_N_LO         ┐
+$BB29  DIV_N_1          │ signed s32÷s16 → RES[0..1] quot,
+$BB2A  DIV_N_2          │                   RES[2..3] rem
+$BB2B  DIV_N_HI         │ div-by-zero → $FFFF, no trap
+$BB2C  DIV_D_LO         │
+$BB2D  DIV_D_HI   *     ┘
 
-$BAAE  SINCOS_ANGLE *     u8 angle → RES[0]=sin_1p7, RES[1]=cos_1p7
+$BB2E  SINCOS_ANGLE *     u8 angle → RES[0]=sin_1p7, RES[1]=cos_1p7
 
-$BAAF  ATAN_DY_LO      ┐
-$BAB0  ATAN_DY_HI      │ (s16 dy, s16 dx) →
-$BAB1  ATAN_DX_LO      │     RES[0]=angle_u8, RES[1..2]=hypot_u16
-$BAB2  ATAN_DX_HI *    ┘
+$BB2F  ATAN_DY_LO      ┐
+$BB30  ATAN_DY_HI      │ (s16 dy, s16 dx) →
+$BB31  ATAN_DX_LO      │     RES[0]=angle_u8, RES[1..2]=hypot_u16
+$BB32  ATAN_DX_HI *    ┘
 
-$BAB3  DIST_DX_LO      ┐
-$BAB4  DIST_DX_HI      │ (s16 dx, s16 dy) → RES[0..1]=u16 approx
-$BAB5  DIST_DY_LO      │
-$BAB6  DIST_DY_HI *    ┘
+$BB33  DIST_DX_LO      ┐
+$BB34  DIST_DX_HI      │ (s16 dx, s16 dy) → RES[0..1]=u16 approx
+$BB35  DIST_DY_LO      │
+$BB36  DIST_DY_HI *    ┘
 
-$BAB7  RNG               read: advances + returns u8
+$BB37  RNG               read: advances + returns u8
                          write: seed byte (round-robin, 4-byte state)
 
-$BAB8  RES_0            ┐
-$BAB9  RES_1            │ Shared 32-bit result bank — read before next op.
-$BABA  RES_2            │
-$BABB  RES_3            ┘
+$BB38  RES_0            ┐
+$BB39  RES_1            │ Shared 32-bit result bank — read before next op.
+$BB3A  RES_2            │
+$BB3B  RES_3            ┘
 
-$BABC-BF  reserved
+$BB3C  CAPS_0            bit 0=MUL16, bit 1=MULFX, bit 2=SINCOS,
+                         bit 3=DIST_APPROX, bit 4=RNG,
+                         bit 5=DIV_S32_16, bit 6=ATAN2
+$BB3D  CAPS_1            vector capability bitmap:
+                         bit 0=VEC_DOT_S16, bit 1=VEC_DOT_FX,
+                         bit 2=VEC_CROSS_S16, bit 3=VEC_LEN2,
+                         bit 4=VEC_SCALE_FX
+$BB3E  STATUS            last operation status:
+                         bit 0=divide by zero, bit 1=overflow/saturation,
+                         bit 7=unimplemented operation
+$BB3F  VERSION           math coprocessor ABI version, v2 reads $02
+
+$BB40  VEC_AX_LO         ┐
+$BB41  VEC_AX_HI         │ vector operand A.x
+$BB42  VEC_AY_LO         │ vector operand A.y
+$BB43  VEC_AY_HI         │
+$BB44  VEC_BX_LO         │ vector operand B.x
+$BB45  VEC_BX_HI         │
+$BB46  VEC_BY_LO         │ vector operand B.y
+$BB47  VEC_BY_HI         │
+$BB48  VEC_SCALAR_LO     │ Q8.8 scalar for VEC_SCALE_FX
+$BB49  VEC_SCALAR_HI     ┘
+$BB4E  VEC_OP       *    write: 1=DOT_S16, 2=DOT_FX, 3=CROSS_S16,
+                                4=LEN2, 5=SCALE_FX
 ```
 
 Two notes on the layout:
 - **Shared `RES_0..3`.** Simpler mux, smaller LUT count in the read path.
   Game code reads results before issuing the next op. (Given sync-stall,
   this is natural — the result is sitting there the cycle after trigger.)
-- **RNG seed via round-robin writes to $BAB7.** Four writes load a 32-bit
+- **RNG seed via round-robin writes to $BB37.** Four writes load a 32-bit
   seed; internal byte-pointer auto-increments and wraps. Reset default is
   a non-zero magic value (`$DEADBEEF`) because xorshift32 locks at 0.
+- **Capability/status registers.** `CAPS_0`, `CAPS_1`, `STATUS`, and
+  `VERSION` are read-only from 6502 code. `STATUS` is overwritten by each
+  operation; successful operations write `$00`, saturating operations set
+  `STATUS_OVERFLOW`, and reserved triggers set `STATUS_UNIMPLEMENTED`.
 
 ## Algorithms
 
@@ -151,9 +203,9 @@ Two notes on the layout:
 
 Both share a single `MULT18X18D` DSP block with different post-processing:
 - `MUL16`: full 32-bit product, no shift, no saturation. RES_0..RES_3.
-- `MUL_FX`: take bits [23:8] of the 32-bit product (Q8.8 × Q8.8 = Q16.16,
-  keep the middle 16 bits for Q8.8). Saturate if top 8 bits disagree with
-  the sign bit: `overflow = ~(&top) & ~(~|top)`.
+- `MUL_FX`: arithmetically shift the 32-bit product right by 8 (Q8.8 ×
+  Q8.8 = Q16.16, keep Q8.8). Saturate the shifted result to signed 16-bit
+  range: `$7FFF` for positive overflow, `$8000` for negative overflow.
 
 ### DIV_S32_16
 
@@ -216,14 +268,14 @@ state = y
 return low byte of y
 ```
 Full period 2³²−1. Reset default state = `$DEADBEEF`. Seedable: four
-writes to `$BAB7` overwrite the four bytes of state in round-robin order.
+writes to `$BB37` overwrite the four bytes of state in round-robin order.
 
 ## RTL file structure
 
 ```
 e6502.FPGA/rtl/
 ├── math_copro.sv          ; top wrapper, MMIO decode, stall, result mux
-├── math_mul.sv            ; shared DSP mult for MUL16 and MUL_FX
+├── math_mul.sv            ; optional later split for shared DSP mult
 ├── math_div.sv            ; iterative signed 32/16 divider
 ├── math_trig.sv           ; sin LUT (1 BRAM) + combined SINCOS interface
 ├── math_cordic.sv         ; CORDIC vectoring for ATAN2 + hypot
@@ -238,13 +290,9 @@ e6502.FPGA/test/
 ```
 
 Integration points in `rtl/top.sv`:
-1. Declare `math_reg_sel = (cpu_addr >= 16'hBAA0 && cpu_addr <= 16'hBABF)`.
-2. Add `math.cpu_din` to the CPU read-mux else-if chain.
-   **Caution:** each `else if` adds a LUT level to the priority mux.
-   We've been bitten going from 10→11 branches dropping pixel clock from
-   25.83 → 23.45 MHz (see `feedback_priority_mux_timing.md`). Before
-   shipping: run PNR and verify we stay ≥ 25 MHz. If we lose margin,
-   collapse the chain into a parallel selector.
+1. Declare `math_reg_sel = (cpu_addr >= 16'hBB20 && cpu_addr <= 16'hBB4F)`.
+2. Add `math.cpu_din` inside the existing grouped `$BA/$BB` MMIO mux. Do not
+   append another long priority branch to the final CPU read mux.
 3. `cpu_rdy_combined = existing_rdy_signal & ~math_busy`.
 
 ## Resource budget
@@ -262,7 +310,7 @@ Comfortable fit with 5 BRAM blocks still spare post-integration.
 ## Software parity — Avalonia
 
 The Avalonia emulator gets a C# mirror at
-`e6502.Avalonia/Hardware/MathCoprocessor.cs`, intercepting `$BAA0-$BABF` via
+`e6502.Avalonia/Hardware/MathCoprocessor.cs`, intercepting `$BB20-$BB4F` via
 `CompositeBusDevice`. Pure-integer C# implementations of every op. Stall is a
 no-op (ops complete instantly in software).
 
@@ -289,8 +337,10 @@ reference tables.
 
 ### Negative / boundary tests
 - `MUL16(-32768, -32768)` = +1073741824 (sign bit of RES_3 must be 0).
-- `MUL_FX(1.5, 1.5)` must saturate to +0.999 (not wrap to -0.75).
-- `MUL_FX(-2.0, 2.0)` must saturate to -1.0.
+- `MUL_FX(1.5, 1.5)` = 2.25 exactly (`$0240`), proving ordinary scalar
+  values do not saturate accidentally.
+- `MUL_FX(100.0, 2.0)` must saturate to `$7FFF`.
+- `MUL_FX(-100.0, 2.0)` must saturate to `$8000`.
 - `DIV(x, 0)` → $FFFFFFFF, stall completes in ≤1 cycle.
 - `DIV(INT32_MIN, -1)` → saturate to $7FFF quotient.
 - Back-to-back DIV with same divisor, different dividends → no stale state.
@@ -349,8 +399,8 @@ in a later phase.
 
 - arlet_6502 `RDY` input: `rtl/arlet_6502/cpu.v:21`, `cpu.v:32` — existing
   stall mechanism we're hooking into.
-- Free MMIO range verified: `$BA9C-$BAFF` unused in `rtl/top.sv` as of
-  commit `2f21297` (2026-04-23).
+- Free MMIO range revised: `$BB20-$BB4F` is used after the `$BAB0-$BB1F`
+  metadata buffer and before the `$BC00-$BFFF` XMC windows.
 - ECP5 DSP reference: Lattice TN-02204 (in `~/Downloads/`).
 - CORDIC reference: Volder, "The CORDIC Trigonometric Computing Technique"
   (1959). Any modern textbook.

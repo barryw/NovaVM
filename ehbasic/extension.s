@@ -2,7 +2,7 @@
 ; Contains overflow command handlers called from BASIC ROM via RAM trampoline.
 ;
 ; Entry point at $C000: reads ExtCmdId from zero page and dispatches.
-; Handlers access hardware registers directly — never call BASIC ROM routines.
+; Handlers access hardware directly and use RAM bridges for BASIC parser helpers.
 
 ; --- Zero page communication ---
 ExtCmdId        = $E4           ; command ID (set by RAM trampoline)
@@ -32,9 +32,10 @@ addr_hash       = ext_dig4
 
 ; --- RAM addresses ---
 EXT_RESET_VEC   = $0233         ; reset recovery routine in RAM
-EXT_GTBY_VEC    = $023B         ; bridge: extension → BASIC LAB_GTBY → extension
-EXT_GTWRD_VEC   = $0249         ; bridge: extension → BASIC LAB_GTWRD → extension
-EXT_SNERR_VEC   = $0257         ; bridge: extension → BASIC LAB_15D9 syntax err
+EXT_GTBY_VEC    = $0240         ; bridge: extension → BASIC LAB_GTBY → extension
+EXT_GTWRD_VEC   = $024E         ; bridge: extension → BASIC LAB_GTWRD → extension
+EXT_GTSW_VEC    = $025C         ; bridge: extension → BASIC LAB_GTSW → extension
+EXT_SNERR_VEC   = $026A         ; bridge: extension → BASIC LAB_15D9 syntax err
 
 ; --- BASIC ZP routines (RAM-resident, callable from extension ROM) ---
 LAB_IGBY        = $BC           ; advance + skip-spaces + return byte (A)
@@ -90,9 +91,24 @@ ExtTable:
       .word EXT_XSAVE-1       ; cmd E: XSAVE XRAM -> file
       .word EXT_DMACOPY-1     ; cmd F: DMACOPY
       .word EXT_BLITCOPY-1    ; cmd 10: BLITCOPY
-      .repeat $12
-      .word EXT_UNSUPPORTED-1 ; cmds 11-22: reserved
-      .endrepeat
+      .word EXT_MMUL16L-1     ; cmd 11: MMUL16L(a,b)
+      .word EXT_MMUL16H-1     ; cmd 12: MMUL16H(a,b)
+      .word EXT_MDOTS16L-1    ; cmd 13: MDOTS16L(ax,ay,bx,by)
+      .word EXT_MDOTS16H-1    ; cmd 14: MDOTS16H(ax,ay,bx,by)
+      .word EXT_MCROSSL-1     ; cmd 15: MCROSSL(ax,ay,bx,by)
+      .word EXT_MCROSSH-1     ; cmd 16: MCROSSH(ax,ay,bx,by)
+      .word EXT_MMULFX-1      ; cmd 17: MMULFX(a,b)
+      .word EXT_MDIST-1       ; cmd 18: MDIST(dx,dy)
+      .word EXT_MSIN-1        ; cmd 19: MSIN(angle)
+      .word EXT_MCOS-1        ; cmd 1A: MCOS(angle)
+      .word EXT_MRND-1        ; cmd 1B: MRND
+      .word EXT_MDIV-1        ; cmd 1C: MDIV(n,d)
+      .word EXT_MREM-1        ; cmd 1D: MREM(n,d)
+      .word EXT_MATAN2-1      ; cmd 1E: MATAN2(dy,dx)
+      .word EXT_MDOTFX-1      ; cmd 1F: MDOTFX(ax,ay,bx,by)
+      .word EXT_MLEN2-1       ; cmd 20: MLEN2(x,y)
+      .word EXT_MSCALX-1      ; cmd 21: MSCALX(x,y,s)
+      .word EXT_MSCALY-1      ; cmd 22: MSCALY(x,y,s)
       .word EXT_ADDR-1        ; cmd 23: ADDR("label") lookup
       .word EXT_XBANK-1       ; cmd 24: XBANK
       .word EXT_XPOKE-1       ; cmd 25: XPOKE
@@ -101,6 +117,29 @@ ExtTable:
       .word EXT_XALLOC-1      ; cmd 28: XALLOC
       .word EXT_XMAP-1        ; cmd 29: XMAP
       .word EXT_XUNMAP-1      ; cmd 2A: XUNMAP
+      .word EXT_XPEEK-1       ; cmd 2B: XPEEK(offset)
+      .word EXT_PLAYING-1     ; cmd 2C: PLAYING
+      .word EXT_MNOTE-1       ; cmd 2D: MNOTE(voice)
+      .word EXT_NSTATUS-1     ; cmd 2E: NSTATUS(slot)
+      .word EXT_NREADY-1      ; cmd 2F: NREADY(slot)
+      .word EXT_DMASTATUS-1   ; cmd 30: DMASTATUS
+      .word EXT_DMAERR-1      ; cmd 31: DMAERR
+      .word EXT_DMACOUNT-1    ; cmd 32: DMACOUNT
+      .word EXT_BLITSTATUS-1  ; cmd 33: BLITSTATUS
+      .word EXT_BLITERR-1     ; cmd 34: BLITERR
+      .word EXT_BLITCOUNT-1   ; cmd 35: BLITCOUNT
+      .word EXT_SPRCOLL-1     ; cmd 36: SPRCOLL
+      .word EXT_SPRBG-1       ; cmd 37: SPRBG
+      .word EXT_VPEEK-1       ; cmd 38: VPEEK(plane,addr)
+      .word EXT_BITSET-1      ; cmd 39: BITSET addr,mask
+      .word EXT_BITCLR-1      ; cmd 3A: BITCLR addr,mask
+      .word EXT_BITTGL-1      ; cmd 3B: BITTGL addr,mask
+      .word EXT_REVERSE-1     ; cmd 3C: REVERSE [fg,bg]
+      .word EXT_REVERSEOFF-1  ; cmd 3D: REVERSEOFF
+      .word EXT_FLASH-1       ; cmd 3E: FLASH
+      .word EXT_FLASHOFF-1    ; cmd 3F: FLASHOFF
+      .word EXT_VPOKE-1       ; cmd 40: VPOKE plane,addr,value
+      .word EXT_FIOCLR-1      ; cmd 41: FIOCLR
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -626,6 +665,550 @@ EXT_HELP:
       LDA   #$01
       STA   REG_HELP
       LDA   #$00
+      RTS
+
+; =====================================================================
+; Math coprocessor BASIC function parsers that do not fit in primary ROM.
+; Returns 16-bit result in A:Y using the same convention as BASIC's LAB_AYFC:
+; A = high byte, Y = low byte.
+; =====================================================================
+
+EXT_MMUL16L:
+      JSR   ext_parse_mul16_s16
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MMUL16H:
+      JSR   ext_parse_mul16_s16
+      LDY   MATH_RES2
+      LDA   MATH_RES3
+      RTS
+
+EXT_MDOTS16L:
+      JSR   ext_parse_vec_ab4_s16
+      LDA   #MATH_VEC_OP_DOT_S16
+      STA   MATH_VEC_OP
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MDOTS16H:
+      JSR   ext_parse_vec_ab4_s16
+      LDA   #MATH_VEC_OP_DOT_S16
+      STA   MATH_VEC_OP
+      LDY   MATH_RES2
+      LDA   MATH_RES3
+      RTS
+
+EXT_MCROSSL:
+      JSR   ext_parse_vec_ab4_s16
+      LDA   #MATH_VEC_OP_CROSS_S16
+      STA   MATH_VEC_OP
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MCROSSH:
+      JSR   ext_parse_vec_ab4_s16
+      LDA   #MATH_VEC_OP_CROSS_S16
+      STA   MATH_VEC_OP
+      LDY   MATH_RES2
+      LDA   MATH_RES3
+      RTS
+
+EXT_MMULFX:
+      JSR   ext_parse_mulfx_s16
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MDIST:
+      JSR   ext_parse_dist_s16
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MSIN:
+      JSR   ext_parse_sincos_angle
+      LDA   MATH_RES0
+      RTS
+
+EXT_MCOS:
+      JSR   ext_parse_sincos_angle
+      LDA   MATH_RES1
+      RTS
+
+EXT_MRND:
+      JSR   LAB_IGBY            ; consume extension token id
+      LDY   MATH_RNG
+      LDA   #$00
+      RTS
+
+EXT_MDIV:
+      JSR   ext_parse_div_s16
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MREM:
+      JSR   ext_parse_div_s16
+      LDY   MATH_RES2
+      LDA   MATH_RES3
+      RTS
+
+EXT_MATAN2:
+      JSR   ext_parse_atan2_s16
+      LDY   MATH_RES0
+      LDA   #$00
+      RTS
+
+EXT_MDOTFX:
+      JSR   ext_parse_vec_ab4_s16
+      LDA   #MATH_VEC_OP_DOT_FX
+      STA   MATH_VEC_OP
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MLEN2:
+      JSR   LAB_IGBY            ; consume extension token id, advance to x
+      JSR   ext_parse_vec_a2_s16
+      JSR   ext_rparen
+      LDA   #MATH_VEC_OP_LEN2
+      STA   MATH_VEC_OP
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MSCALX:
+      JSR   ext_parse_vec_a_scalar_s16
+      LDA   #MATH_VEC_OP_SCALE_FX
+      STA   MATH_VEC_OP
+      LDY   MATH_RES0
+      LDA   MATH_RES1
+      RTS
+
+EXT_MSCALY:
+      JSR   ext_parse_vec_a_scalar_s16
+      LDA   #MATH_VEC_OP_SCALE_FX
+      STA   MATH_VEC_OP
+      LDY   MATH_RES2
+      LDA   MATH_RES3
+      RTS
+
+ext_parse_mul16_s16:
+      JSR   LAB_IGBY          ; consume extension token id, advance to first arg
+      JSR   EXT_GTSW_VEC      ; a -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_MUL16_A_LO
+      LDA   FAC1_2
+      STA   MATH_MUL16_A_HI
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; b -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_MUL16_B_LO
+      LDA   FAC1_2
+      STA   MATH_MUL16_B_HI   ; write triggers coprocessor operation
+      JMP   ext_rparen
+
+ext_parse_mulfx_s16:
+      JSR   LAB_IGBY          ; consume extension token id, advance to first arg
+      JSR   EXT_GTSW_VEC      ; a -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_MULFX_A_LO
+      LDA   FAC1_2
+      STA   MATH_MULFX_A_HI
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; b -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_MULFX_B_LO
+      LDA   FAC1_2
+      STA   MATH_MULFX_B_HI   ; write triggers coprocessor operation
+      JMP   ext_rparen
+
+ext_parse_dist_s16:
+      JSR   LAB_IGBY          ; consume extension token id, advance to dx
+      JSR   EXT_GTSW_VEC      ; dx -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_DIST_DX_LO
+      LDA   FAC1_2
+      STA   MATH_DIST_DX_HI
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; dy -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_DIST_DY_LO
+      LDA   FAC1_2
+      STA   MATH_DIST_DY_HI   ; write triggers coprocessor operation
+      JMP   ext_rparen
+
+ext_parse_sincos_angle:
+      JSR   LAB_IGBY          ; consume extension token id, advance to angle
+      JSR   EXT_GTBY_VEC      ; angle -> X
+      STX   MATH_SINCOS_ANGLE ; write triggers coprocessor operation
+      JMP   ext_rparen
+
+ext_parse_div_s16:
+      JSR   LAB_IGBY          ; consume extension token id, advance to numerator
+      JSR   EXT_GTSW_VEC      ; numerator -> FAC1_3/FAC1_2
+      LDY   #$00
+      LDA   FAC1_3
+      STA   MATH_DIV_N_LO
+      LDA   FAC1_2
+      STA   MATH_DIV_N_1
+      BPL   @div_num_extend
+      DEY
+@div_num_extend:
+      STY   MATH_DIV_N_2
+      STY   MATH_DIV_N_HI
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; denominator -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_DIV_D_LO
+      LDA   FAC1_2
+      STA   MATH_DIV_D_HI     ; write triggers coprocessor operation
+      JMP   ext_rparen
+
+ext_parse_atan2_s16:
+      JSR   LAB_IGBY          ; consume extension token id, advance to dy
+      JSR   EXT_GTSW_VEC      ; dy -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_ATAN_DY_LO
+      LDA   FAC1_2
+      STA   MATH_ATAN_DY_HI
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; dx -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_ATAN_DX_LO
+      LDA   FAC1_2
+      STA   MATH_ATAN_DX_HI   ; write triggers coprocessor operation
+      JMP   ext_rparen
+
+ext_parse_vec_ab4_s16:
+      JSR   LAB_IGBY          ; consume extension token id, advance to ax
+      JSR   ext_parse_vec_a2_s16
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; bx -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_VEC_BX_LO
+      LDA   FAC1_2
+      STA   MATH_VEC_BX_HI
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; by -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_VEC_BY_LO
+      LDA   FAC1_2
+      STA   MATH_VEC_BY_HI
+      JMP   ext_rparen
+
+ext_parse_vec_a2_s16:
+      JSR   EXT_GTSW_VEC      ; ax -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_VEC_AX_LO
+      LDA   FAC1_2
+      STA   MATH_VEC_AX_HI
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; ay -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_VEC_AY_LO
+      LDA   FAC1_2
+      STA   MATH_VEC_AY_HI
+      RTS
+
+ext_parse_vec_a_scalar_s16:
+      JSR   LAB_IGBY          ; consume extension token id, advance to x
+      JSR   ext_parse_vec_a2_s16
+      JSR   ext_comma
+      JSR   EXT_GTSW_VEC      ; scalar -> FAC1_3/FAC1_2
+      LDA   FAC1_3
+      STA   MATH_VEC_S_LO
+      LDA   FAC1_2
+      STA   MATH_VEC_S_HI
+      JMP   ext_rparen
+
+; =====================================================================
+; BASIC hardware helpers relocated from the primary ROM.
+; Function handlers consume the raw extended token id. Command handlers
+; are entered after BASIC's statement dispatcher has already consumed it.
+; =====================================================================
+
+EXT_XPEEK:
+      JSR   LAB_IGBY          ; consume extension token id, advance to offset
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   XMC_XAL
+      LDA   FAC1_2
+      STA   XMC_XAM
+      LDA   XMC_BANK
+      STA   XMC_XAH
+      JSR   ext_rparen
+      LDA   #XMC_CMD_GET
+      STA   XMC_CMD
+      LDA   XMC_STATUS
+      CMP   #XMC_OK
+      BEQ   @ok
+      LDX   #$01
+      LDA   #$00
+      TAY
+      RTS
+@ok:
+      LDX   #$00
+      LDY   XMC_DATA
+      LDA   #$00
+      RTS
+
+EXT_PLAYING:
+      JSR   LAB_IGBY          ; consume extension token id
+      JSR   audio_music_playing
+      TAY
+      LDA   #$00
+      RTS
+
+EXT_MNOTE:
+      JSR   LAB_IGBY          ; consume extension token id, advance to voice
+      JSR   EXT_GTBY_VEC
+      STX   ext_firstdig
+      JSR   ext_rparen
+      LDX   ext_firstdig
+      JSR   audio_music_note
+      TAY
+      LDA   #$00
+      RTS
+
+EXT_NSTATUS:
+      JSR   LAB_IGBY          ; consume extension token id, advance to slot
+      JSR   EXT_GTBY_VEC
+      STX   ext_firstdig
+      JSR   ext_rparen
+      LDX   ext_firstdig
+      JSR   ext_nic_status
+      TAY
+      LDA   #$00
+      RTS
+
+EXT_NREADY:
+      JSR   LAB_IGBY          ; consume extension token id, advance to slot
+      JSR   EXT_GTBY_VEC
+      STX   ext_firstdig
+      JSR   ext_rparen
+      LDX   ext_firstdig
+      JSR   ext_nic_status
+      AND   #NIC_ST_DATAREADY
+      BEQ   @not_ready
+      LDY   #$FF
+      LDA   #$FF
+      RTS
+@not_ready:
+      LDY   #$00
+      LDA   #$00
+      RTS
+
+EXT_DMASTATUS:
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   DMA_STATUS
+      LDA   #$00
+      RTS
+
+EXT_DMAERR:
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   DMA_ERRCODE
+      LDA   #$00
+      RTS
+
+EXT_DMACOUNT:
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   DMA_CNTL
+      LDA   DMA_CNTM
+      RTS
+
+EXT_BLITSTATUS:
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   BLT_STATUS
+      LDA   #$00
+      RTS
+
+EXT_BLITERR:
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   BLT_ERRCODE
+      LDA   #$00
+      RTS
+
+EXT_BLITCOUNT:
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   BLT_CNTL
+      LDA   BLT_CNTM
+      RTS
+
+EXT_SPRCOLL:
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   VGC_COLLST
+      LDA   VGC_COLLST_HI
+      PHA
+      STZ   VGC_COLLST
+      STZ   VGC_COLLST_HI
+      LDA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_STATUS
+      PLA
+      RTS
+
+EXT_SPRBG:
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   VGC_COLLBG
+      LDA   VGC_COLLBG_HI
+      PHA
+      STZ   VGC_COLLBG
+      STZ   VGC_COLLBG_HI
+      LDA   #VGC_IRQ_SPRBG
+      STA   VGC_IRQ_STATUS
+      PLA
+      RTS
+
+EXT_VPEEK:
+      JSR   LAB_IGBY          ; consume extension token id, advance to plane
+      JSR   EXT_GTBY_VEC
+      STX   VGC_P0
+      JSR   ext_comma
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   VGC_P1
+      LDA   FAC1_2
+      STA   VGC_P2
+      STZ   VGC_P4
+      JSR   ext_rparen
+      LDA   #VCMD_MEMREAD
+      STA   VGC_CMD
+      JSR   ext_vgc_wait_cmd
+      LDY   VGC_P3
+      LDA   #$00
+      RTS
+
+EXT_BITSET:
+      JSR   ext_parse_addr_mask
+      TXA
+      LDY   #$00
+      ORA   (ext_ptrL),Y
+      STA   (ext_ptrL),Y
+      LDA   #$00
+      RTS
+
+EXT_BITCLR:
+      JSR   ext_parse_addr_mask
+      TXA
+      EOR   #$FF
+      LDY   #$00
+      AND   (ext_ptrL),Y
+      STA   (ext_ptrL),Y
+      LDA   #$00
+      RTS
+
+EXT_BITTGL:
+      JSR   ext_parse_addr_mask
+      TXA
+      LDY   #$00
+      EOR   (ext_ptrL),Y
+      STA   (ext_ptrL),Y
+      LDA   #$00
+      RTS
+
+EXT_REVERSE:
+      JSR   LAB_GBYT          ; optional explicit reverse colours?
+      BEQ   @default
+      CMP   #':'
+      BEQ   @default
+      JSR   EXT_GTBY_VEC
+      TXA
+      AND   #$0F
+      PHA
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      TXA
+      AND   #$0F
+      ASL
+      ASL
+      ASL
+      ASL
+      STA   ext_firstdig
+      PLA
+      ORA   ext_firstdig
+      STA   VGC_TXTREVATTR
+      LDA   VGC_TXTFLAGS
+      AND   #$FC
+      ORA   #(VTXT_REV | VTXT_REVEX)
+      STA   VGC_TXTFLAGS
+      LDA   #$00
+      RTS
+@default:
+      LDA   VGC_TXTFLAGS
+      AND   #$FC
+      ORA   #VTXT_REV
+      STA   VGC_TXTFLAGS
+      LDA   #$00
+      RTS
+
+EXT_REVERSEOFF:
+      LDA   VGC_TXTFLAGS
+      AND   #$FC
+      STA   VGC_TXTFLAGS
+      LDA   #$00
+      RTS
+
+EXT_FLASH:
+      LDA   VGC_TXTFLAGS
+      ORA   #VTXT_FLASH
+      STA   VGC_TXTFLAGS
+      LDA   #$00
+      RTS
+
+EXT_FLASHOFF:
+      LDA   VGC_TXTFLAGS
+      AND   #$FB
+      STA   VGC_TXTFLAGS
+      LDA   #$00
+      RTS
+
+EXT_VPOKE:
+      JSR   EXT_GTBY_VEC
+      STX   VGC_P0
+      JSR   ext_comma
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   VGC_P1
+      LDA   FAC1_2
+      STA   VGC_P2
+      JSR   ext_comma
+      JSR   EXT_GTBY_VEC
+      STX   VGC_P3
+      STZ   VGC_P4
+      LDA   #VCMD_MEMWRITE
+      STA   VGC_CMD
+      JSR   ext_vgc_wait_cmd
+      LDA   #$00
+      RTS
+
+EXT_FIOCLR:
+      JMP   fio_clear_error
+
+ext_parse_addr_mask:
+      JSR   EXT_GTWRD_VEC
+      LDA   FAC1_3
+      STA   ext_ptrL
+      LDA   FAC1_2
+      STA   ext_ptrH
+      JSR   ext_comma
+      JMP   EXT_GTBY_VEC
+
+ext_nic_status:
+      TXA
+      AND   #$03
+      TAX
+      LDA   NIC_SLOTST0,X
+      RTS
+
+ext_vgc_wait_cmd:
+@wait:
+      LDA   VGC_CMD
+      AND   #$01
+      BNE   @wait
       RTS
 
 ; =====================================================================
@@ -1173,6 +1756,15 @@ ext_comma:
 @no_comma:
       JMP   EXT_SNERR_VEC
 
+ext_rparen:
+      JSR   LAB_GBYT
+      CMP   #')'
+      BNE   @no_rparen
+      JSR   LAB_IGBY
+      RTS
+@no_rparen:
+      JMP   EXT_SNERR_VEC
+
       .include "runtime_labels.inc"
 
 ; =====================================================================
@@ -1191,6 +1783,6 @@ ExtReset:
       .segment "VECTORS"
       .org    $FFFA
 
-      .word $0217             ; NMI  -> RAM NMI handler
+      .word $021C             ; NMI  -> RAM NMI handler
       .word ExtReset          ; RESET -> extension reset handler
       .word $020D             ; IRQ  -> RAM IRQ handler

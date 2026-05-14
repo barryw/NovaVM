@@ -223,9 +223,9 @@ TimerStatus             = $BA41
 TimerDivL               = $BA42
 TimerDivH               = $BA43
 
-; --- DMA controller registers ($BA63-$BA82) ---
+; --- DMA controller registers ($BA63-$BA75) ---
 DmaBase                 = $BA63
-DmaEnd                  = $BA82
+DmaEnd                  = $BA75
 DmaCmd                  = $BA63
 DmaStatus               = $BA64
 DmaErrCode              = $BA65
@@ -265,9 +265,9 @@ DmaSpaceVgcSprite       = $04
 DmaSpaceXram            = $05
 DmaSpaceVgcTextAttr     = $07
 
-; --- Blitter controller registers ($BA83-$BAA2) ---
+; --- Blitter controller registers ($BA83-$BA9B) ---
 BltBase                 = $BA83
-BltEnd                  = $BAA2
+BltEnd                  = $BA9B
 BltCmd                  = $BA83
 BltStatus               = $BA84
 BltErrCode              = $BA85
@@ -306,8 +306,8 @@ BltErrBadArgs           = $04
 BltErrWriteProt         = $05
 BltModeFill             = $01
 BltModeColorKey         = $02
-FreeBase                = $BAA3
-FreeEnd                 = $BFFF
+FreeBase                = $BB50
+FreeEnd                 = $BBFF
 
 ; --- File metadata buffer ($BAB0-$BB1F) — populated during filtered DIRREAD ---
 MetaBase                = $BAB0
@@ -331,6 +331,75 @@ MetaGfxSpace            = $BB1C
 MetaTitleLen            = $20
 MetaAuthorLen           = $20
 MetaCopyrightLen        = $20
+
+; --- Math coprocessor registers ($BB20-$BB4F) ---
+MathBase                = $BB20
+MathEnd                 = $BB4F
+MathMul16ALo            = $BB20
+MathMul16AHi            = $BB21
+MathMul16BLo            = $BB22
+MathMul16BHi            = $BB23
+MathMulFxALo            = $BB24
+MathMulFxAHi            = $BB25
+MathMulFxBLo            = $BB26
+MathMulFxBHi            = $BB27
+MathDivNLo              = $BB28
+MathDivN1               = $BB29
+MathDivN2               = $BB2A
+MathDivNHi              = $BB2B
+MathDivDLo              = $BB2C
+MathDivDHi              = $BB2D
+MathSinCosAngle         = $BB2E
+MathAtanDyLo            = $BB2F
+MathAtanDyHi            = $BB30
+MathAtanDxLo            = $BB31
+MathAtanDxHi            = $BB32
+MathDistDxLo            = $BB33
+MathDistDxHi            = $BB34
+MathDistDyLo            = $BB35
+MathDistDyHi            = $BB36
+MathRng                 = $BB37
+MathRes0                = $BB38
+MathRes1                = $BB39
+MathRes2                = $BB3A
+MathRes3                = $BB3B
+MathCaps0               = $BB3C
+MathCaps1               = $BB3D
+MathStatus              = $BB3E
+MathVersion             = $BB3F
+MathVecAxLo             = $BB40
+MathVecAxHi             = $BB41
+MathVecAyLo             = $BB42
+MathVecAyHi             = $BB43
+MathVecBxLo             = $BB44
+MathVecBxHi             = $BB45
+MathVecByLo             = $BB46
+MathVecByHi             = $BB47
+MathVecScalarLo         = $BB48
+MathVecScalarHi         = $BB49
+MathVecOp               = $BB4E
+MathVersionCurrent      = $02
+MathCapMul16            = $01
+MathCapMulFx            = $02
+MathCapSinCos           = $04
+MathCapDistApprox       = $08
+MathCapRng              = $10
+MathCapDivS32_16        = $20
+MathCapAtan2            = $40
+MathCap1VecDotS16       = $01
+MathCap1VecDotFx        = $02
+MathCap1VecCrossS16     = $04
+MathCap1VecLen2         = $08
+MathCap1VecScaleFx      = $10
+MathVecOpDotS16         = $01
+MathVecOpDotFx          = $02
+MathVecOpCrossS16       = $03
+MathVecOpLen2           = $04
+MathVecOpScaleFx        = $05
+MathStatusOk            = $00
+MathStatusDivZero       = $01
+MathStatusOverflow      = $02
+MathStatusUnimpl        = $80
 
 ; --- Network Interface Controller (NIC) registers ($A100-$A13F) ---
 NicBase                 = $A100
@@ -441,6 +510,8 @@ RegTextReverseAttr      = $A0E7
 RegGfxTransparentColor  = $A0E8
 RegPaletteMode          = $A0E9
 RegScrollCtl            = $A0EA
+RegColStHi              = $A0EB
+RegColBgHi              = $A0EC
 ScrollCtlXHigh          = $01
 ScrollCtlGfx            = $02
 ScrollCtlText           = $04
@@ -500,9 +571,11 @@ RegIrqEnable            = $A0F0
 RegIrqStatus            = $A0F1
 RegIrqForce             = $A0F2
 RegIrqValid             = $A0F3
-IrqValidMask            = $1F
+IrqValidMask            = $7F
 IrqVBlank               = $01
 IrqCopper0              = $02
+IrqSpriteCollision      = $20
+IrqSpriteBackground     = $40
 CopperRegIrq            = $FE
 
 ; --- Graphics commands ---
@@ -582,7 +655,7 @@ CmpStatusError          = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                = $C000
-V_INPT                  = $E7AC
-V_OUTP                  = $E7AF
-V_LOAD                  = $E7B2
-V_SAVE                  = $E7B5
+V_INPT                  = $E911
+V_OUTP                  = $E914
+V_LOAD                  = $E917
+V_SAVE                  = $E91A

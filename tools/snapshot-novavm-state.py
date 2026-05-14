@@ -36,6 +36,8 @@ MMIO_REGS = [
     ("RegColSt", 0xA00B),
     ("RegColBg", 0xA00C),
     ("RegBorder", 0xA00D),
+    ("RegColStHi", 0xA0EB),
+    ("RegColBgHi", 0xA0EC),
     ("RegCmd", 0xA010),
     ("RegP0", 0xA011),
     ("RegP1", 0xA012),

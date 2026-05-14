@@ -531,7 +531,27 @@ XTK_UNMOUNT        = $4E              ; UNMOUNT "dev:"
 XTK_PWD            = $4F              ; PWD
 XTK_SFLOAD         = $50              ; SFLOAD "filename" — load soundfont
 XTK_GTEXT          = $51              ; GTEXT x,y,font,scale,"string"
-                                      ; $52-$6A reserved
+XTK_MMULFX         = $52              ; MMULFX(a,b) - signed Q8.8 multiply
+XTK_MDIST          = $53              ; MDIST(dx,dy) - approximate distance
+XTK_MSIN           = $54              ; MSIN(angle) - signed 1.7 sine
+XTK_MCOS           = $55              ; MCOS(angle) - signed 1.7 cosine
+XTK_MRND           = $56              ; MRND - math coprocessor RNG byte
+XTK_SPRCOLL        = $57              ; SPRCOLL - sprite collision mask, clears/acks source
+XTK_SPRBG          = $58              ; SPRBG - sprite-background collision mask, clears/acks source
+XTK_MDIV           = $59              ; MDIV(n,d) - signed quotient
+XTK_MREM           = $5A              ; MREM(n,d) - signed remainder
+XTK_MATAN2         = $5B              ; MATAN2(dy,dx) - unsigned angle
+XTK_MDOTFX         = $5C              ; MDOTFX(ax,ay,bx,by) - Q8.8 dot product
+XTK_MLEN2          = $5D              ; MLEN2(x,y) - low 16 bits of length squared
+XTK_MSCALX         = $5E              ; MSCALX(x,y,s) - Q8.8 scaled x
+XTK_MSCALY         = $5F              ; MSCALY(x,y,s) - Q8.8 scaled y
+XTK_MMUL16L        = $60              ; MMUL16L(a,b) - signed 16x16 product low word
+XTK_MMUL16H        = $61              ; MMUL16H(a,b) - signed 16x16 product high word
+XTK_MDOTS16L       = $62              ; MDOTS16L(ax,ay,bx,by) - signed dot low word
+XTK_MDOTS16H       = $63              ; MDOTS16H(ax,ay,bx,by) - signed dot high word
+XTK_MCROSSL        = $64              ; MCROSSL(ax,ay,bx,by) - signed cross low word
+XTK_MCROSSH        = $65              ; MCROSSH(ax,ay,bx,by) - signed cross high word
+                                      ; $66-$6A reserved
 XTK_REVERSE        = $6B              ; REVERSE [fg,bg] — reverse text output
 XTK_REVERSEOFF     = $6C              ; REVERSEOFF — normal text output
 XTK_FLASH          = $6D              ; FLASH — flashing text output
@@ -581,16 +601,17 @@ VEC_SV            = VEC_LD+2  ; save vector
 ; program RAM pages!
 
 ;Ibuffs            = IRQ_vec+$14
-EXT_vec           = VEC_SV+$16
-                              ; extension ROM call trampoline in RAM ($0221)
-                              ; Followed by EXT_RESET_CODE ($022E, 8 bytes) and
+EXT_vec           = VEC_SV+$1B
+                              ; extension ROM call trampoline in RAM ($0226)
+                              ; Followed by EXT_RESET_CODE ($0238, 8 bytes) and
                               ; the Extension→BASIC bridge trampolines:
-                              ;   EXT_GTBY  ($023B, 14 bytes) — parse byte expr
-                              ;   EXT_GTWRD ($0249, 14 bytes) — parse 16-bit expr
-                              ;   EXT_SNERR ($0257,  8 bytes) — syntax error
-Ibuffs            = VEC_SV+$54
+                              ;   EXT_GTBY  ($0240, 14 bytes) — parse byte expr
+                              ;   EXT_GTWRD ($024E, 14 bytes) — parse 16-bit expr
+                              ;   EXT_GTSW  ($025C, 14 bytes) — parse signed expr
+                              ;   EXT_SNERR ($026A,  8 bytes) — syntax error
+Ibuffs            = VEC_SV+$67
                               ; start of input buffer after IRQ/NMI/ext code
-Ibuffe            = Ibuffs+$A0; end of input buffer (160 bytes, ends at $02FA)
+Ibuffe            = Ibuffs+$7F; end of input buffer, max length must stay < $80
 
 Ram_base          = $0300     ; start of user RAM (set as needed, should be page aligned)
 Ram_top           = $A000     ; end of contiguous BASIC RAM+1 (before MMIO window)
@@ -2037,8 +2058,28 @@ TAB_XTKCMD
       .word LAB_PWD-1         ; XTK_PWD        ($4F)
       .word LAB_SFLOAD-1      ; XTK_SFLOAD     ($50)
       .word LAB_GTEXT-1       ; XTK_GTEXT      ($51)
-      ; $52-$6A reserved
-      .repeat $19
+      .word LAB_15D9-1        ; XTK_MMULFX     ($52) - function only
+      .word LAB_15D9-1        ; XTK_MDIST      ($53) - function only
+      .word LAB_15D9-1        ; XTK_MSIN       ($54) - function only
+      .word LAB_15D9-1        ; XTK_MCOS       ($55) - function only
+      .word LAB_15D9-1        ; XTK_MRND       ($56) - function only
+      .word LAB_15D9-1        ; XTK_SPRCOLL    ($57) - function only
+      .word LAB_15D9-1        ; XTK_SPRBG      ($58) - function only
+      .word LAB_15D9-1        ; XTK_MDIV       ($59) - function only
+      .word LAB_15D9-1        ; XTK_MREM       ($5A) - function only
+      .word LAB_15D9-1        ; XTK_MATAN2     ($5B) - function only
+      .word LAB_15D9-1        ; XTK_MDOTFX     ($5C) - function only
+      .word LAB_15D9-1        ; XTK_MLEN2      ($5D) - function only
+      .word LAB_15D9-1        ; XTK_MSCALX     ($5E) - function only
+      .word LAB_15D9-1        ; XTK_MSCALY     ($5F) - function only
+      .word LAB_15D9-1        ; XTK_MMUL16L    ($60) - function only
+      .word LAB_15D9-1        ; XTK_MMUL16H    ($61) - function only
+      .word LAB_15D9-1        ; XTK_MDOTS16L   ($62) - function only
+      .word LAB_15D9-1        ; XTK_MDOTS16H   ($63) - function only
+      .word LAB_15D9-1        ; XTK_MCROSSL    ($64) - function only
+      .word LAB_15D9-1        ; XTK_MCROSSH    ($65) - function only
+      ; $66-$6A reserved
+      .repeat $05
       .word LAB_15D9-1
       .endrepeat
       .word LAB_REVERSE-1     ; XTK_REVERSE    ($6B)
@@ -2596,6 +2637,12 @@ LAB_NOIN
       JMP   LAB_SNMI          ; else go set-up NMI
 
 LAB_NONM
+      CMP   #TK_SPRCMD        ; was it SPRITE token ?
+      BNE   @not_sprite_event ; if not go do normal ON command
+
+      JMP   LAB_SSPRCOLL      ; else go set-up sprite collision IRQ
+
+@not_sprite_event
       JSR   LAB_GTBY          ; get byte parameter
       PHA                     ; push GOTO/GOSUB token
       CMP   #TK_GOSUB         ; compare with GOSUB token
@@ -3754,6 +3801,13 @@ LAB_1BEE
       .byte XTK_NRECV, XTK_NSTATUS, XTK_NREADY
       .byte XTK_DMASTATUS, XTK_DMAERR, XTK_DMACOUNT
       .byte XTK_BLITSTATUS, XTK_BLITERR, XTK_BLITCOUNT
+      .byte XTK_MMULFX, XTK_MDIST, XTK_MSIN, XTK_MCOS, XTK_MRND
+      .byte XTK_SPRCOLL, XTK_SPRBG
+      .byte XTK_MDIV, XTK_MREM, XTK_MATAN2, XTK_MDOTFX
+      .byte XTK_MLEN2, XTK_MSCALX, XTK_MSCALY
+      .byte XTK_MMUL16L, XTK_MMUL16H
+      .byte XTK_MDOTS16L, XTK_MDOTS16H
+      .byte XTK_MCROSSL, XTK_MCROSSH
       .byte XTK_VPEEK, XTK_ADDR
 @FUNC_TBL_SZ = * - @func_ids
 @func_addrs
@@ -3761,46 +3815,32 @@ LAB_1BEE
       .word @xtk_nrecv-1, @xtk_nstatus-1, @xtk_nready-1
       .word @xtk_dmastatus-1, @xtk_dmaerr-1, @xtk_dmacount-1
       .word @xtk_blitstatus-1, @xtk_bliterr-1, @xtk_blitcount-1
+      .word @xtk_mmulfx-1, @xtk_mdist-1, @xtk_msin-1, @xtk_mcos-1, @xtk_mrnd-1
+      .word @xtk_sprcoll-1, @xtk_sprbg-1
+      .word @xtk_mdiv-1, @xtk_mrem-1, @xtk_matan2-1, @xtk_mdotfx-1
+      .word @xtk_mlen2-1, @xtk_mscalx-1, @xtk_mscaly-1
+      .word @xtk_mmul16l-1, @xtk_mmul16h-1
+      .word @xtk_mdots16l-1, @xtk_mdots16h-1
+      .word @xtk_mcrossl-1, @xtk_mcrossh-1
       .word @xtk_vpeek-1, @xtk_addr-1
 
 @xtk_xpeek
-      ; '(' was consumed during tokenization as part of keyword
-      JSR   LAB_IGBY          ; consume extension id, advance to argument
-      JSR   LAB_EVNM          ; evaluate expression and check numeric
-      JSR   LAB_EVPI          ; convert FAC1 to unsigned integer
-      JSR   LAB_1BFB          ; scan for ')' and advance
-      LDA   FAC1_3            ; x offset low
-      STA   XMC_XAL
-      LDA   FAC1_2            ; x offset high
-      STA   XMC_XAM
-      LDA   XMC_BANK          ; current bank -> top address byte
-      STA   XMC_XAH
-      LDA   #XMC_CMD_GET
-      STA   XMC_CMD
-      LDA   XMC_STATUS
-      CMP   #XMC_OK
+      LDA   #EXT_CMD_XPEEK
+      JSR   EXT_vec
+      CPX   #$00
       BEQ   @xpeek_ok
       JMP   LAB_FCER
 @xpeek_ok
-      LDY   XMC_DATA
-      JMP   LAB_1FD0          ; convert Y byte to FAC1 and return
+      JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 @xtk_playing
-      JSR   LAB_IGBY          ; consume PLAYING token, advance past it
-      JSR   audio_music_playing
-      TAY
+      LDA   #EXT_CMD_PLAYING
+      JSR   EXT_vec
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 @xtk_mnote
-      ; MNOTE(voice) — return current MIDI note for voice 1-14
-      ; '(' was consumed during tokenization as part of keyword
-      JSR   LAB_IGBY          ; consume MNOTE token, advance to argument
-      JSR   LAB_EVNM          ; evaluate voice expression (numeric)
-      JSR   LAB_1BFB          ; scan for ')' and advance
-      JSR   LAB_F2FX          ; convert FAC1 to integer
-      LDX   Itempl            ; voice number (1-14)
-      JSR   audio_music_note
-      TAY
+      LDA   #EXT_CMD_MNOTE
+      JSR   EXT_vec
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 ; NRECV$(slot) — receive message as BASIC string
@@ -3824,65 +3864,200 @@ LAB_1BEE
 
 ; NSTATUS(slot) — return slot status byte
 @xtk_nstatus
-      JSR   LAB_IGBY          ; consume token
-      JSR   LAB_EVNM          ; evaluate numeric expression (slot)
-      JSR   LAB_1BFB          ; scan for ')'
-      JSR   LAB_EVBY          ; convert to byte → X
-      JSR   nic_status
-      TAY
+      LDA   #EXT_CMD_NSTATUS
+      JSR   EXT_vec
       JMP   @ret_0ay          ; return AY as FAC1
 
 ; NREADY(slot) — return -1 (true) if data waiting, 0 (false) otherwise
 ; Uses BASIC boolean convention: true = $FFFF (-1) so NOT works correctly
 @xtk_nready
-      JSR   LAB_IGBY          ; consume token
-      JSR   LAB_EVNM          ; evaluate numeric expression (slot)
-      JSR   LAB_1BFB          ; scan for ')'
-      JSR   LAB_EVBY          ; convert to byte → X
-      JSR   nic_ready
-      BEQ   @nready_no
-      LDY   #$FF              ; true = $FFFF (-1)
-      LDA   #$FF
+      LDA   #EXT_CMD_NREADY
+      JSR   EXT_vec
       JMP   LAB_AYFC
-@nready_no
-      JMP   @ret_zero         ; return 0
 
 ; DMASTATUS — return DMA status register (no args)
 @xtk_dmastatus
-      JSR   LAB_IGBY          ; consume token
-      LDY   DMA_STATUS
+      LDA   #EXT_CMD_DMASTATUS
+      JSR   EXT_vec
       JMP   @ret_0ay
 
 ; DMAERR — return DMA error code register (no args)
 @xtk_dmaerr
-      JSR   LAB_IGBY          ; consume token
-      LDY   DMA_ERRCODE
+      LDA   #EXT_CMD_DMAERR
+      JSR   EXT_vec
       JMP   @ret_0ay
 
 ; DMACOUNT — return last DMA byte count (low 16 bits)
 @xtk_dmacount
-      JSR   LAB_IGBY          ; consume token
-      LDY   DMA_CNTL
-      LDA   DMA_CNTM
+      LDA   #EXT_CMD_DMACOUNT
+      JSR   EXT_vec
       JMP   LAB_AYFC
 
 ; BLITSTATUS — return blitter status register (no args)
 @xtk_blitstatus
-      JSR   LAB_IGBY          ; consume token
-      LDY   BLT_STATUS
+      LDA   #EXT_CMD_BLITSTATUS
+      JSR   EXT_vec
       JMP   @ret_0ay
 
 ; BLITERR — return blitter error code register (no args)
 @xtk_bliterr
-      JSR   LAB_IGBY          ; consume token
-      LDY   BLT_ERRCODE
+      LDA   #EXT_CMD_BLITERR
+      JSR   EXT_vec
       JMP   @ret_0ay
 
 ; BLITCOUNT — return last blit written-byte count (low 16 bits)
 @xtk_blitcount
-      JSR   LAB_IGBY          ; consume token
-      LDY   BLT_CNTL
-      LDA   BLT_CNTM
+      LDA   #EXT_CMD_BLITCOUNT
+      JSR   EXT_vec
+      JMP   LAB_AYFC
+
+; MMULFX(a,b) - signed Q8.8 multiply with saturated Q8.8 result
+@xtk_mmulfx
+      LDA   #EXT_CMD_MMULFX
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; MDIST(dx,dy) - approximate distance from signed 16-bit deltas
+@xtk_mdist
+      LDA   #EXT_CMD_MDIST
+      JSR   EXT_vec
+      JMP   @ret_u16
+
+; MSIN(angle) - signed 1.7 sine for angle 0..255
+@xtk_msin
+      LDA   #EXT_CMD_MSIN
+      JSR   EXT_vec
+      JMP   @ret_s8
+
+; MCOS(angle) - signed 1.7 cosine for angle 0..255
+@xtk_mcos
+      LDA   #EXT_CMD_MCOS
+      JSR   EXT_vec
+      JMP   @ret_s8
+
+; MRND - read one byte from the math coprocessor RNG
+@xtk_mrnd
+      LDA   #EXT_CMD_MRND
+      JSR   EXT_vec
+      JMP   @ret_0ay
+
+; MDIV(n,d) - signed 16-bit quotient from sign-extended numerator
+@xtk_mdiv
+      LDA   #EXT_CMD_MDIV
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; MREM(n,d) - signed 16-bit remainder from sign-extended numerator
+@xtk_mrem
+      LDA   #EXT_CMD_MREM
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; MATAN2(dy,dx) - unsigned 8-bit angle, 0..255 = full circle
+@xtk_matan2
+      LDA   #EXT_CMD_MATAN2
+      JSR   EXT_vec
+      JMP   @ret_0ay
+
+; MDOTFX(ax,ay,bx,by) - signed Q8.8 vector dot product
+@xtk_mdotfx
+      LDA   #EXT_CMD_MDOTFX
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; MLEN2(x,y) - low 16 bits of unsigned length squared
+@xtk_mlen2
+      LDA   #EXT_CMD_MLEN2
+      JSR   EXT_vec
+      JMP   @ret_u16
+
+; MSCALX(x,y,s) - signed Q8.8 scaled x component
+@xtk_mscalx
+      LDA   #EXT_CMD_MSCALX
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; MSCALY(x,y,s) - signed Q8.8 scaled y component
+@xtk_mscaly
+      LDA   #EXT_CMD_MSCALY
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; MMUL16L(a,b) - low word of signed 16x16 product, returned unsigned
+@xtk_mmul16l
+      LDA   #EXT_CMD_MMUL16L
+      JSR   EXT_vec
+      JMP   @ret_u16
+
+; MMUL16H(a,b) - high word of signed 16x16 product, returned signed
+@xtk_mmul16h
+      LDA   #EXT_CMD_MMUL16H
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; MDOTS16L(ax,ay,bx,by) - low word of signed 16-bit dot product
+@xtk_mdots16l
+      LDA   #EXT_CMD_MDOTS16L
+      JSR   EXT_vec
+      JMP   @ret_u16
+
+; MDOTS16H(ax,ay,bx,by) - high word of signed 16-bit dot product
+@xtk_mdots16h
+      LDA   #EXT_CMD_MDOTS16H
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; MCROSSL(ax,ay,bx,by) - low word of signed 16-bit cross product
+@xtk_mcrossl
+      LDA   #EXT_CMD_MCROSSL
+      JSR   EXT_vec
+      JMP   @ret_u16
+
+; MCROSSH(ax,ay,bx,by) - high word of signed 16-bit cross product
+@xtk_mcrossh
+      LDA   #EXT_CMD_MCROSSH
+      JSR   EXT_vec
+      JMP   @ret_s16
+
+; SPRCOLL - read and clear the sprite-sprite collision mask, then ack IRQ source
+@xtk_sprcoll
+      LDA   #EXT_CMD_SPRCOLL
+      JSR   EXT_vec
+      JMP   LAB_AYFC
+
+; SPRBG - read and clear the sprite-background collision mask, then ack IRQ source
+@xtk_sprbg
+      LDA   #EXT_CMD_SPRBG
+      JSR   EXT_vec
+      JMP   LAB_AYFC
+
+; return unsigned 16-bit A:Y as a positive BASIC number
+@ret_u16
+      LSR   Dtypef
+      STA   FAC1_1
+      STY   FAC1_2
+      LDX   #$90
+      SEC
+      JMP   LAB_STFA
+
+; return A as a signed 8-bit BASIC number
+@ret_s8
+      JMP   LAB_27DB
+
+; return signed 16-bit A:Y as a BASIC number
+@ret_s16
+      BPL   @ret_s16_positive
+      STA   XOAw_h
+      STY   XOAw_l
+      SEC
+      LDA   #$00
+      SBC   XOAw_l
+      TAY
+      LDA   #$00
+      SBC   XOAw_h
+      JSR   LAB_AYFC
+      JMP   LAB_GTHAN
+@ret_s16_positive
       JMP   LAB_AYFC
 
 ; shared return helpers for no-arg functions
@@ -3893,20 +4068,9 @@ LAB_1BEE
 
 ; VPEEK(plane,addr) — read a byte from VGC memory
 @xtk_vpeek
-      JSR   LAB_IGBY          ; consume token, advance to plane
-      JSR   LAB_GTBY
-      STX   VGC_P0
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   VGC_P1
-      LDA   FAC1_2
-      STA   VGC_P2
-      STZ   VGC_P4
-      JSR   LAB_1BFB
-      JSR   vgc_mem_read
-      LDY   VGC_P3
-      BRA   @ret_0ay
+      LDA   #EXT_CMD_VPEEK
+      JSR   EXT_vec
+      JMP   @ret_0ay
 
 ; ADDR("label") — resolve generated runtime labels in extension ROM.
 @xtk_addr
@@ -7862,34 +8026,22 @@ LAB_2CC2
 ; perform BITSET addr, mask — set bits: mem[addr] = mem[addr] OR mask
 
 LAB_BITSET
-      JSR   LAB_GADB          ; addr in Itempl/h, mask in X
-      LDY   #$00
-      TXA                     ; A = mask
-      ORA   (Itempl),Y        ; OR with byte at addr
-      STA   (Itempl),Y        ; store result
+      LDA   #EXT_CMD_BITSET
+      JMP   EXT_vec
 LAB_2D04
       RTS
 
 ; perform BITCLR addr, mask — clear bits: mem[addr] = mem[addr] AND NOT mask
 
 LAB_BITCLR
-      JSR   LAB_GADB          ; addr in Itempl/h, mask in X
-      LDY   #$00
-      TXA                     ; A = mask
-      EOR   #$FF              ; invert mask
-      AND   (Itempl),Y        ; AND with byte at addr
-      STA   (Itempl),Y        ; store result
-      RTS
+      LDA   #EXT_CMD_BITCLR
+      JMP   EXT_vec
 
 ; perform BITTGL addr, mask — toggle bits: mem[addr] = mem[addr] EOR mask
 
 LAB_BITTGL
-      JSR   LAB_GADB          ; addr in Itempl/h, mask in X
-      LDY   #$00
-      TXA                     ; A = mask
-      EOR   (Itempl),Y        ; EOR with byte at addr
-      STA   (Itempl),Y        ; store result
-      RTS
+      LDA   #EXT_CMD_BITTGL
+      JMP   EXT_vec
 
 ;; ========================================
 ;; HELP [keyword$]
@@ -8282,6 +8434,49 @@ LAB_LFND
 LAB_IRTS
       RTS
 
+; perform ON SPRITE COLLISION GOSUB line
+
+LAB_SSPRCOLL
+      JSR   LAB_IGBY          ; consume SPRITE token
+      CMP   #TK_COLLISION
+      BNE   @sprcoll_syntax
+      JSR   LAB_IGBY          ; consume COLLISION token
+      CMP   #TK_GOSUB
+      BNE   @sprcoll_syntax
+      JSR   LAB_IGBY          ; consume GOSUB token
+
+      LDX   #IrqBase
+      STX   TempB             ; use BASIC's IRQ dispatch slot
+      JSR   LAB_GFPN          ; get handler line number into temp integer
+      LDA   Smeml             ; get start of mem low byte
+      LDX   Smemh             ; get start of mem high byte
+      JSR   LAB_SHLN          ; search Basic for temp integer line number from AX
+      BCS   @sprcoll_found
+      JMP   LAB_16F7          ; else go do "Undefined statement" error and warm start
+
+@sprcoll_found
+      LDX   TempB
+      LDA   Baslnl            ; get pointer low byte
+      SBC   #$01              ; -1 (carry already set for subtract)
+      STA   PLUS_1,X          ; save as interrupt pointer low byte
+      LDA   Baslnh            ; get pointer high byte
+      SBC   #$00              ; subtract carry
+      STA   PLUS_2,X          ; save as interrupt pointer high byte
+      LDA   #$C0              ; set interrupt enabled/setup bits
+      STA   PLUS_0,X          ; set interrupt flags
+      STZ   VGC_COLLST        ; clear stale collision mask before arming
+      STZ   VGC_COLLST_HI
+      LDA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_STATUS    ; clear stale pending collision IRQ
+      LDA   VGC_IRQ_ENABLE
+      ORA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_ENABLE
+      CLI
+      RTS
+
+@sprcoll_syntax
+      JMP   LAB_SNER
+
 ; return from IRQ service, restores the enabled flag.
 
 ; perform RETIRQ
@@ -8641,7 +8836,13 @@ TAB_XTKSTR
       .word @s_pwd
       .word @s_sfload
       .word @s_gtext
-      .repeat $19
+      .word @s_mmulfx, @s_mdist, @s_msin, @s_mcos, @s_mrnd
+      .word @s_sprcoll, @s_sprbg
+      .word @s_mdiv, @s_mrem, @s_matan2, @s_mdotfx
+      .word @s_mlen2, @s_mscalx, @s_mscaly
+      .word @s_mmul16l, @s_mmul16h, @s_mdots16l, @s_mdots16h
+      .word @s_mcrossl, @s_mcrossh
+      .repeat $05
       .word @s_reserved_ext
       .endrepeat
       .word @s_reverse, @s_reverseoff, @s_flash, @s_flashoff
@@ -8703,6 +8904,26 @@ TAB_XTKSTR
 @s_pwd:    .byte "PWD",0
 @s_sfload: .byte "SFLOAD",0
 @s_gtext:  .byte "GTEXT",0
+@s_mmulfx: .byte "MMULFX(",0
+@s_mdist:  .byte "MDIST(",0
+@s_msin:   .byte "MSIN(",0
+@s_mcos:   .byte "MCOS(",0
+@s_mrnd:   .byte "MRND",0
+@s_sprcoll: .byte "SPRCOLL",0
+@s_sprbg:  .byte "SPRBG",0
+@s_mdiv:   .byte "MDIV(",0
+@s_mrem:   .byte "MREM(",0
+@s_matan2: .byte "MATAN2(",0
+@s_mdotfx: .byte "MDOTFX(",0
+@s_mlen2:  .byte "MLEN2(",0
+@s_mscalx: .byte "MSCALX(",0
+@s_mscaly: .byte "MSCALY(",0
+@s_mmul16l: .byte "MMUL16L(",0
+@s_mmul16h: .byte "MMUL16H(",0
+@s_mdots16l: .byte "MDOTS16L(",0
+@s_mdots16h: .byte "MDOTS16H(",0
+@s_mcrossl: .byte "MCROSSL(",0
+@s_mcrossh: .byte "MCROSSH(",0
 @s_reverse: .byte "REVERSE",0
 @s_reverseoff: .byte "REVERSEOFF",0
 @s_flash:   .byte "FLASH",0
@@ -8826,60 +9047,32 @@ LAB_COLOR
 ; perform REVERSE [fg,bg]
 
 LAB_REVERSE
-      JSR   LAB_GBYT          ; optional explicit reverse colours?
-      BEQ   @swap
-      CMP   #':'              ; no args before next statement
-      BEQ   @swap
-      JSR   LAB_GTBY          ; reverse foreground in X
-      TXA
-      AND   #$0F
-      PHA
-      JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; reverse background in X
-      TXA
-      AND   #$0F
-      ASL
-      ASL
-      ASL
-      ASL
-      STA   TempB
-      PLA
-      ORA   TempB
-      JMP   vgc_reverse_explicit
-@swap
-      JMP   vgc_reverse_default
+      LDA   #EXT_CMD_REVERSE
+      JMP   EXT_vec
 
 ; perform REVERSEOFF
 
 LAB_REVERSEOFF
-      JMP   vgc_reverse_off
+      LDA   #EXT_CMD_REVERSEOFF
+      JMP   EXT_vec
 
 ; perform FLASH
 
 LAB_FLASH
-      JMP   vgc_flash_on
+      LDA   #EXT_CMD_FLASH
+      JMP   EXT_vec
 
 ; perform FLASHOFF
 
 LAB_FLASHOFF
-      JMP   vgc_flash_off
+      LDA   #EXT_CMD_FLASHOFF
+      JMP   EXT_vec
 
 ; perform VPOKE plane,addr,value — write a byte to VGC memory
 
 LAB_VPOKE
-      JSR   LAB_GTBY
-      STX   VGC_P0
-      JSR   LAB_1C01
-      JSR   LAB_GTWRD
-      LDA   FAC1_3
-      STA   VGC_P1
-      LDA   FAC1_2
-      STA   VGC_P2
-      JSR   LAB_1C01
-      JSR   LAB_GTBY
-      STX   VGC_P3
-      STZ   VGC_P4
-      JMP   vgc_mem_write
+      LDA   #EXT_CMD_VPOKE
+      JMP   EXT_vec
 
 ; perform LOCATE x, y
 
@@ -9048,6 +9241,9 @@ LAB_PAINT
 ;   SPRPOS ($14): P0=sprite, P1=x_low, P2=x_high, P3=y_low, P4 reserved
 
 LAB_SPRCMD
+      JSR   LAB_GBYT          ; peek at sprite number or event keyword
+      CMP   #TK_COLLISION
+      BEQ   @spr_collision_cmd
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
       STX   Itempl            ; save sprite number
       JSR   LAB_1C01          ; require comma
@@ -9081,6 +9277,39 @@ LAB_SPRCMD
       LDA   Itempl            ; get sprite number
       STA   VGC_P0             ; P0 = sprite index
       JMP   sprite_disable     ; trigger and return
+
+@spr_collision_cmd
+      JSR   LAB_IGBY          ; consume COLLISION token
+      CMP   #TK_ON
+      BEQ   @spr_collision_on
+      CMP   #TK_OFF
+      BEQ   @spr_collision_off
+      CMP   #TK_CLEAR
+      BEQ   @spr_collision_clear
+      JMP   LAB_SNER
+
+@spr_collision_on
+      JSR   LAB_IGBY          ; consume ON token
+      LDA   VGC_IRQ_ENABLE
+      ORA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_ENABLE
+      CLI
+      RTS
+
+@spr_collision_off
+      JSR   LAB_IGBY          ; consume OFF token
+      LDA   VGC_IRQ_ENABLE
+      AND   #$DF
+      STA   VGC_IRQ_ENABLE
+      RTS
+
+@spr_collision_clear
+      JSR   LAB_IGBY          ; consume CLEAR token
+      STZ   VGC_COLLST        ; clear collision mask
+      STZ   VGC_COLLST_HI
+      LDA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_STATUS    ; write-one-clear pending collision IRQ
+      RTS
 
 ; perform SPRITESHAPE n, shape
 ; Writes shape index to sprite register VGC_SPR_SHAPE + n*8
@@ -9848,9 +10077,8 @@ LAB_SFLOAD
 ; perform FIOCLR — clear FIO error/status latch
 
 LAB_FIOCLR
-      JSR   fio_clear_error
-      BNE   LAB_FIO_ERRHND
-      RTS
+      LDA   #EXT_CMD_FIOCLR
+      JMP   LAB_EXT_FCER
 
 ; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
 ; on invalid/empty/too-long name, jumps directly to LAB_FIO_ERRIO
@@ -10706,6 +10934,8 @@ LBB_CLS
 LBB_COLLISION
       .byte "OLLISION(",TK_COLLISION
                               ; COLLISION(
+      .byte "OLLISION",TK_COLLISION
+                              ; COLLISION (event keyword)
 LBB_COLOR
       .byte "OLOR",TK_COLOR   ; COLOR
 LBB_CONT

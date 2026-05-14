@@ -208,6 +208,85 @@ Avoid file I/O, heavy computation, or anything that re-enters the interpreter in
 an unexpected state. Long handlers can cause instability.
 :::
 
+### Sprite collision IRQs from BASIC
+
+BASIC has a dedicated command for sprite-sprite collision interrupts. The VGC
+sets one bit for each sprite that participated in a collision. `SPRCOLL`
+returns the full 16-bit mask, clears the latched mask, and acknowledges the VGC
+sprite collision IRQ source.
+
+```basic
+10 ON SPRITE COLLISION GOSUB 1000
+20 REM MAIN GAME LOOP
+30 GOTO 20
+1000 C = SPRCOLL
+1010 IF (C AND 1) <> 0 THEN PRINT "SPRITE 0 COLLIDED"
+1020 IF (C AND 256) <> 0 THEN PRINT "SPRITE 8 COLLIDED"
+1030 RETIRQ
+```
+
+For sprite-background collisions, poll `SPRBG` once per frame unless your
+program installs its own assembly IRQ handler.
+
+### Sprite collision IRQs from assembly
+
+Assembly programs use two layers:
+
+- The CPU IRQ vector at `$FFFE/$FFFF` decides which routine runs.
+- `VGC_IRQ_ENABLE` selects which VGC IRQ sources can raise the CPU IRQ line.
+
+The shared runtime helpers in `ehbasic/lib/vgc.s` and `ehbasic/lib/sprite.s`
+handle the common setup. Link those files into the program, or include them
+once from the program's build.
+
+```asm
+      .include "nova.inc"
+      .include "vgc.inc"
+      .include "sprite.inc"
+
+COLL_LO = NVR0L
+COLL_HI = NVR0H
+
+init_sprite_irq:
+      LDA   #>sprite_irq_handler
+      LDY   #<sprite_irq_handler
+      JSR   vgc_irq_install
+
+      JSR   sprite_collision_irq_enable
+      RTS
+
+sprite_irq_handler:
+      PHA
+      PHX
+      PHY
+
+      LDA   VGC_IRQ_STATUS
+      AND   #VGC_IRQ_SPRCOLL
+      BEQ   @done
+
+      JSR   sprite_collision_read_clear
+      STY   COLL_LO
+      STA   COLL_HI
+
+      ; Bit 0 in COLL_LO = sprite 0, bit 0 in COLL_HI = sprite 8.
+      LDA   COLL_HI
+      AND   #$01
+      BEQ   @done
+      ; Handle sprite 8 collision here.
+
+@done:
+      PLY
+      PLX
+      PLA
+      RTI
+```
+
+If one handler services multiple VGC IRQ sources, test `VGC_IRQ_STATUS` for each
+enabled source and acknowledge every source you handle. The sprite helpers
+`sprite_collision_read_clear` and `sprite_background_read_clear` both return the
+16-bit mask in `A:Y`, clear the matching collision latch, and acknowledge the
+matching VGC IRQ source.
+
 ## XRAM Assembly Runtime
 
 NovaVM provides a reusable ca65 XRAM runtime in `ehbasic/lib/xram.inc` and

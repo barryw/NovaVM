@@ -18,6 +18,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly VirtualNetworkController _nic;
     private readonly VirtualDmaController _dma;
     private readonly VirtualBlitterController _blitter;
+    private readonly MathCoprocessor _math = new();
     private readonly CompilerController _compiler;
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
@@ -45,6 +46,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public VirtualNetworkController Nic => _nic;
     public VirtualDmaController Dma => _dma;
     public VirtualBlitterController Blitter => _blitter;
+    public MathCoprocessor MathCoprocessor => _math;
     public CompilerController Compiler => _compiler;
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
@@ -204,6 +206,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _timer.Reset();
         _dma.Reset();
         _blitter.Reset();
+        _math.Reset();
         _fio.Reset();
         _xmc.Reset();
         _nic.ResetAll();
@@ -282,6 +285,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_nic.OwnsAddress(address)) return _nic.Read(address);
         if (_dma.OwnsAddress(address)) return _dma.Read(address);
         if (_blitter.OwnsAddress(address)) return _blitter.Read(address);
+        if (_math.OwnsAddress(address)) return _math.Read(address);
         if (_xmc.OwnsAddress(address)) return _xmc.Read(address);
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
         if (address >= VgcConstants.WtsBase && address <= VgcConstants.WtsEnd)
@@ -297,6 +301,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_nic.OwnsAddress(address)) { _nic.Write(address, data); return; }
         if (_dma.OwnsAddress(address)) { _dma.Write(address, data); return; }
         if (_blitter.OwnsAddress(address)) { _blitter.Write(address, data); return; }
+        if (_math.OwnsAddress(address)) { _math.Write(address, data); return; }
         if (_xmc.OwnsAddress(address)) { _xmc.Write(address, data); return; }
         if (_fio.OwnsAddress(address)) { _fio.Write(address, data); return; }
         // Help system registers — intercept before VGC since $A020-$A030 falls in VGC range.

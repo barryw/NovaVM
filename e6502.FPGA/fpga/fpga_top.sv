@@ -4,6 +4,7 @@
 //     (or 720x480p: 27 MHz pixel + 135 MHz TMDS shift)
 //   - HDMI output via GPDI (hdl-util/hdmi with PCM audio)
 //   - UART keyboard input via FTDI serial
+//   - USB low-speed HID keyboard input via US2
 //   - SPI command bridge from ESP32/NovaHost
 //   - LEDs for debug, buttons for reset
 
@@ -35,6 +36,12 @@ module fpga_top (
     input  logic        esp_spi_mosi,
     input  logic        esp_spi_cs_n,
     inout  wire         esp_spi_miso,
+
+    // FPGA-side USB port (US2) for low-speed HID host devices.
+    inout  wire         usb_fpga_bd_dn,
+    inout  wire         usb_fpga_bd_dp,
+    output logic        usb_fpga_pu_dn,
+    output logic        usb_fpga_pu_dp,
 
     // SDRAM — MT48LC16M16 (32MB). Not yet used by the core, just brought up
     // on the pads so Phase 2.5 Step 2 can migrate XRAM into it.
@@ -158,6 +165,31 @@ module fpga_top (
     wire clk_shift  = pll_clk[1];  // 125 MHz
     wire clk_sdram  = pll_clk[2];  // 100 MHz
     wire clk_sdref  = pll_clk[3];  // 6.25 MHz — clkref for sdram.v (16:1)
+`endif
+
+`ifndef VIDEO_480P_TESTPATTERN
+    wire [3:0] pll_usb_clk;
+    wire       pll_usb_locked;
+
+    ecp5pll #(
+        .in_hz  (100000000),
+        .out0_hz(12000000),
+        .out1_hz(0),
+        .out2_hz(0),
+        .out3_hz(0)
+    ) pll_usb_inst (
+        .clk_i      (clk_sdram),
+        .clk_o      (pll_usb_clk),
+        .locked     (pll_usb_locked),
+        .reset      (1'b0),
+        .standby    (1'b0),
+        .phasesel   (2'b0),
+        .phasedir   (1'b0),
+        .phasestep  (1'b0),
+        .phaseloadreg(1'b0)
+    );
+
+    wire clk_usb = pll_usb_clk[0];  // 12 MHz required by usb_hid_host
 `endif
 
     // =========================================================================
@@ -365,6 +397,10 @@ module fpga_top (
     assign wifi_gpio0 = 1'b1;
     assign wifi_rxd = 1'b1;
     assign esp_spi_miso = 1'bz;
+    assign usb_fpga_bd_dp = 1'bz;
+    assign usb_fpga_bd_dn = 1'bz;
+    assign usb_fpga_pu_dp = 1'b0;
+    assign usb_fpga_pu_dn = 1'b0;
 
     assign sdram_clk  = 1'b0;
     assign sdram_cke  = 1'b0;
@@ -403,6 +439,47 @@ module fpga_top (
         .rx   (ftdi_txd),
         .data (uart_data),
         .valid(uart_valid)
+    );
+
+    // =========================================================================
+    // USB HID host — US2 low-speed keyboard input.
+    //
+    // ULX3S USB pull-control pins are diode-steered: HIGH selects the 1.1k
+    // device pull-up path; LOW selects the 15k host pull-down path. Keep both
+    // LOW for host mode.
+    // =========================================================================
+    assign usb_fpga_pu_dp = 1'b0;
+    assign usb_fpga_pu_dn = 1'b0;
+
+    logic [1:0] usb_rst_req_sync = 2'b11;
+    logic [2:0] usb_reset_release = 3'b000;
+    always_ff @(posedge clk_usb) begin
+        usb_rst_req_sync <= {usb_rst_req_sync[0], rst || !pll_usb_locked};
+        if (usb_rst_req_sync[1])
+            usb_reset_release <= 3'b000;
+        else
+            usb_reset_release <= {usb_reset_release[1:0], 1'b1};
+    end
+
+    wire usb_reset_n = usb_reset_release[2];
+    wire usb_key_valid;
+    wire [7:0] usb_key_data;
+    wire [1:0] usb_device_type;
+    wire usb_report_seen;
+    wire usb_connection_error;
+
+    usb_hid_keyboard usb_keyboard (
+        .clk_usb         (clk_usb),
+        .usb_reset_n     (usb_reset_n),
+        .clk_sys         (clk_pixel),
+        .sys_rst         (rst),
+        .usb_dm          (usb_fpga_bd_dn),
+        .usb_dp          (usb_fpga_bd_dp),
+        .key_valid       (usb_key_valid),
+        .key_data        (usb_key_data),
+        .device_type     (usb_device_type),
+        .report_seen     (usb_report_seen),
+        .connection_error(usb_connection_error)
     );
 
     // =========================================================================
@@ -577,9 +654,14 @@ module fpga_top (
         .host_status     (brg_host_status)
     );
 
-    // Key input: debug bridge overrides UART keyboard
-    wire       key_valid_mux = brg_key_valid ? 1'b1    : uart_valid;
-    wire [7:0] key_data_mux  = brg_key_valid ? brg_key_data : uart_data;
+    // Key input: NovaHost/debug injection wins, then direct USB keyboard,
+    // then legacy FTDI UART keyboard input.
+    wire       key_valid_mux = brg_key_valid ? 1'b1 :
+                               usb_key_valid ? 1'b1 :
+                               uart_valid;
+    wire [7:0] key_data_mux  = brg_key_valid ? brg_key_data :
+                               usb_key_valid ? usb_key_data :
+                               uart_data;
 
     // =========================================================================
     // Core system — 6502 + VGC + Blitter + SID

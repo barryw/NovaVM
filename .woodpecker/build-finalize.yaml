@@ -8,6 +8,7 @@ depends_on:
 
 labels:
   platform: linux/amd64
+  backend: kubernetes
 
 steps:
   - name: finalize

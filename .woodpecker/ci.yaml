@@ -4,6 +4,7 @@ when:
 
 labels:
   platform: linux/amd64
+  backend: kubernetes
 
 clone:
   git:

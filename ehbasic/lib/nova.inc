@@ -106,6 +106,19 @@ NOVA_SCREEN_SIZE  = NOVA_SCREEN_COLS * NOVA_SCREEN_ROWS
 .endif
 
 ; ---------------------------------------------------------------------
+; 6502 hardware vectors.
+; ---------------------------------------------------------------------
+.ifndef CPU_NMI_VECTOR
+CPU_NMI_VECTOR    = $FFFA
+.endif
+.ifndef CPU_RESET_VECTOR
+CPU_RESET_VECTOR  = $FFFC
+.endif
+.ifndef CPU_IRQ_VECTOR
+CPU_IRQ_VECTOR    = $FFFE
+.endif
+
+; ---------------------------------------------------------------------
 ; VGC core and text/VRAM port registers.
 ; ---------------------------------------------------------------------
 .ifndef VGC_MODE
@@ -149,6 +162,12 @@ VGC_COLLST        = $A00B
 .endif
 .ifndef VGC_COLLBG
 VGC_COLLBG        = $A00C
+.endif
+.ifndef VGC_COLLST_HI
+VGC_COLLST_HI     = $A0EB
+.endif
+.ifndef VGC_COLLBG_HI
+VGC_COLLBG_HI     = $A0EC
 .endif
 .ifndef VGC_BORDER
 VGC_BORDER        = $A00D
@@ -424,6 +443,18 @@ VGC_IRQ_FORCE     = $A0F2
 .endif
 .ifndef VGC_IRQ_VALID
 VGC_IRQ_VALID     = $A0F3
+.endif
+.ifndef VGC_IRQ_VBLANK
+VGC_IRQ_VBLANK    = $01
+.endif
+.ifndef VGC_IRQ_COPPER0
+VGC_IRQ_COPPER0   = $02
+.endif
+.ifndef VGC_IRQ_SPRCOLL
+VGC_IRQ_SPRCOLL   = $20
+.endif
+.ifndef VGC_IRQ_SPRBG
+VGC_IRQ_SPRBG     = $40
 .endif
 
 .ifndef VCMD_PLOT
@@ -734,6 +765,207 @@ FIO_NAMEEND       = $B9EF
 .ifndef META_BASE
 META_BASE         = $BAB0
 .endif
+.ifndef MATH_BASE
+MATH_BASE         = $BB20
+.endif
+.ifndef MATH_END
+MATH_END          = $BB4F
+.endif
+.ifndef MATH_MUL16_A_LO
+MATH_MUL16_A_LO   = $BB20
+.endif
+.ifndef MATH_MUL16_A_HI
+MATH_MUL16_A_HI   = $BB21
+.endif
+.ifndef MATH_MUL16_B_LO
+MATH_MUL16_B_LO   = $BB22
+.endif
+.ifndef MATH_MUL16_B_HI
+MATH_MUL16_B_HI   = $BB23
+.endif
+.ifndef MATH_MULFX_A_LO
+MATH_MULFX_A_LO   = $BB24
+.endif
+.ifndef MATH_MULFX_A_HI
+MATH_MULFX_A_HI   = $BB25
+.endif
+.ifndef MATH_MULFX_B_LO
+MATH_MULFX_B_LO   = $BB26
+.endif
+.ifndef MATH_MULFX_B_HI
+MATH_MULFX_B_HI   = $BB27
+.endif
+.ifndef MATH_DIV_N_LO
+MATH_DIV_N_LO     = $BB28
+.endif
+.ifndef MATH_DIV_N_1
+MATH_DIV_N_1      = $BB29
+.endif
+.ifndef MATH_DIV_N_2
+MATH_DIV_N_2      = $BB2A
+.endif
+.ifndef MATH_DIV_N_HI
+MATH_DIV_N_HI     = $BB2B
+.endif
+.ifndef MATH_DIV_D_LO
+MATH_DIV_D_LO     = $BB2C
+.endif
+.ifndef MATH_DIV_D_HI
+MATH_DIV_D_HI     = $BB2D
+.endif
+.ifndef MATH_SINCOS_ANGLE
+MATH_SINCOS_ANGLE = $BB2E
+.endif
+.ifndef MATH_ATAN_DY_LO
+MATH_ATAN_DY_LO   = $BB2F
+.endif
+.ifndef MATH_ATAN_DY_HI
+MATH_ATAN_DY_HI   = $BB30
+.endif
+.ifndef MATH_ATAN_DX_LO
+MATH_ATAN_DX_LO   = $BB31
+.endif
+.ifndef MATH_ATAN_DX_HI
+MATH_ATAN_DX_HI   = $BB32
+.endif
+.ifndef MATH_DIST_DX_LO
+MATH_DIST_DX_LO   = $BB33
+.endif
+.ifndef MATH_DIST_DX_HI
+MATH_DIST_DX_HI   = $BB34
+.endif
+.ifndef MATH_DIST_DY_LO
+MATH_DIST_DY_LO   = $BB35
+.endif
+.ifndef MATH_DIST_DY_HI
+MATH_DIST_DY_HI   = $BB36
+.endif
+.ifndef MATH_RNG
+MATH_RNG          = $BB37
+.endif
+.ifndef MATH_RES0
+MATH_RES0         = $BB38
+.endif
+.ifndef MATH_RES1
+MATH_RES1         = $BB39
+.endif
+.ifndef MATH_RES2
+MATH_RES2         = $BB3A
+.endif
+.ifndef MATH_RES3
+MATH_RES3         = $BB3B
+.endif
+.ifndef MATH_CAPS0
+MATH_CAPS0        = $BB3C
+.endif
+.ifndef MATH_CAPS1
+MATH_CAPS1        = $BB3D
+.endif
+.ifndef MATH_STATUS
+MATH_STATUS       = $BB3E
+.endif
+.ifndef MATH_VERSION
+MATH_VERSION      = $BB3F
+.endif
+.ifndef MATH_VEC_AX_LO
+MATH_VEC_AX_LO    = $BB40
+.endif
+.ifndef MATH_VEC_AX_HI
+MATH_VEC_AX_HI    = $BB41
+.endif
+.ifndef MATH_VEC_AY_LO
+MATH_VEC_AY_LO    = $BB42
+.endif
+.ifndef MATH_VEC_AY_HI
+MATH_VEC_AY_HI    = $BB43
+.endif
+.ifndef MATH_VEC_BX_LO
+MATH_VEC_BX_LO    = $BB44
+.endif
+.ifndef MATH_VEC_BX_HI
+MATH_VEC_BX_HI    = $BB45
+.endif
+.ifndef MATH_VEC_BY_LO
+MATH_VEC_BY_LO    = $BB46
+.endif
+.ifndef MATH_VEC_BY_HI
+MATH_VEC_BY_HI    = $BB47
+.endif
+.ifndef MATH_VEC_S_LO
+MATH_VEC_S_LO     = $BB48
+.endif
+.ifndef MATH_VEC_S_HI
+MATH_VEC_S_HI     = $BB49
+.endif
+.ifndef MATH_VEC_OP
+MATH_VEC_OP       = $BB4E
+.endif
+.ifndef MATH_VERSION_CURRENT
+MATH_VERSION_CURRENT = $02
+.endif
+.ifndef MATH_CAP_MUL16
+MATH_CAP_MUL16       = $01
+.endif
+.ifndef MATH_CAP_MULFX
+MATH_CAP_MULFX       = $02
+.endif
+.ifndef MATH_CAP_SINCOS
+MATH_CAP_SINCOS      = $04
+.endif
+.ifndef MATH_CAP_DIST_APPROX
+MATH_CAP_DIST_APPROX = $08
+.endif
+.ifndef MATH_CAP_RNG
+MATH_CAP_RNG         = $10
+.endif
+.ifndef MATH_CAP_DIV_S32_16
+MATH_CAP_DIV_S32_16  = $20
+.endif
+.ifndef MATH_CAP_ATAN2
+MATH_CAP_ATAN2       = $40
+.endif
+.ifndef MATH_CAP1_VEC_DOT_S16
+MATH_CAP1_VEC_DOT_S16   = $01
+.endif
+.ifndef MATH_CAP1_VEC_DOT_FX
+MATH_CAP1_VEC_DOT_FX    = $02
+.endif
+.ifndef MATH_CAP1_VEC_CROSS_S16
+MATH_CAP1_VEC_CROSS_S16 = $04
+.endif
+.ifndef MATH_CAP1_VEC_LEN2
+MATH_CAP1_VEC_LEN2      = $08
+.endif
+.ifndef MATH_CAP1_VEC_SCALE_FX
+MATH_CAP1_VEC_SCALE_FX  = $10
+.endif
+.ifndef MATH_VEC_OP_DOT_S16
+MATH_VEC_OP_DOT_S16     = $01
+.endif
+.ifndef MATH_VEC_OP_DOT_FX
+MATH_VEC_OP_DOT_FX      = $02
+.endif
+.ifndef MATH_VEC_OP_CROSS_S16
+MATH_VEC_OP_CROSS_S16   = $03
+.endif
+.ifndef MATH_VEC_OP_LEN2
+MATH_VEC_OP_LEN2        = $04
+.endif
+.ifndef MATH_VEC_OP_SCALE_FX
+MATH_VEC_OP_SCALE_FX    = $05
+.endif
+.ifndef MATH_STATUS_OK
+MATH_STATUS_OK       = $00
+.endif
+.ifndef MATH_STATUS_DIV_ZERO
+MATH_STATUS_DIV_ZERO = $01
+.endif
+.ifndef MATH_STATUS_OVERFLOW
+MATH_STATUS_OVERFLOW = $02
+.endif
+.ifndef MATH_STATUS_UNIMPL
+MATH_STATUS_UNIMPL   = $80
+.endif
 .ifndef AUTOBOOT_SKIP
 AUTOBOOT_SKIP     = $B9F0
 .endif
@@ -986,7 +1218,60 @@ EXT_CMD_DMACOPY   = $0F
 .ifndef EXT_CMD_BLITCOPY
 EXT_CMD_BLITCOPY  = $10
 .endif
-; $11-$22 reserved
+.ifndef EXT_CMD_MMUL16L
+EXT_CMD_MMUL16L   = $11
+.endif
+.ifndef EXT_CMD_MMUL16H
+EXT_CMD_MMUL16H   = $12
+.endif
+.ifndef EXT_CMD_MDOTS16L
+EXT_CMD_MDOTS16L  = $13
+.endif
+.ifndef EXT_CMD_MDOTS16H
+EXT_CMD_MDOTS16H  = $14
+.endif
+.ifndef EXT_CMD_MCROSSL
+EXT_CMD_MCROSSL   = $15
+.endif
+.ifndef EXT_CMD_MCROSSH
+EXT_CMD_MCROSSH   = $16
+.endif
+.ifndef EXT_CMD_MMULFX
+EXT_CMD_MMULFX    = $17
+.endif
+.ifndef EXT_CMD_MDIST
+EXT_CMD_MDIST     = $18
+.endif
+.ifndef EXT_CMD_MSIN
+EXT_CMD_MSIN      = $19
+.endif
+.ifndef EXT_CMD_MCOS
+EXT_CMD_MCOS      = $1A
+.endif
+.ifndef EXT_CMD_MRND
+EXT_CMD_MRND      = $1B
+.endif
+.ifndef EXT_CMD_MDIV
+EXT_CMD_MDIV      = $1C
+.endif
+.ifndef EXT_CMD_MREM
+EXT_CMD_MREM      = $1D
+.endif
+.ifndef EXT_CMD_MATAN2
+EXT_CMD_MATAN2    = $1E
+.endif
+.ifndef EXT_CMD_MDOTFX
+EXT_CMD_MDOTFX    = $1F
+.endif
+.ifndef EXT_CMD_MLEN2
+EXT_CMD_MLEN2     = $20
+.endif
+.ifndef EXT_CMD_MSCALX
+EXT_CMD_MSCALX    = $21
+.endif
+.ifndef EXT_CMD_MSCALY
+EXT_CMD_MSCALY    = $22
+.endif
 .ifndef EXT_CMD_ADDR
 EXT_CMD_ADDR      = $23
 .endif
@@ -1010,6 +1295,75 @@ EXT_CMD_XMAP      = $29
 .endif
 .ifndef EXT_CMD_XUNMAP
 EXT_CMD_XUNMAP    = $2A
+.endif
+.ifndef EXT_CMD_XPEEK
+EXT_CMD_XPEEK     = $2B
+.endif
+.ifndef EXT_CMD_PLAYING
+EXT_CMD_PLAYING   = $2C
+.endif
+.ifndef EXT_CMD_MNOTE
+EXT_CMD_MNOTE     = $2D
+.endif
+.ifndef EXT_CMD_NSTATUS
+EXT_CMD_NSTATUS   = $2E
+.endif
+.ifndef EXT_CMD_NREADY
+EXT_CMD_NREADY    = $2F
+.endif
+.ifndef EXT_CMD_DMASTATUS
+EXT_CMD_DMASTATUS = $30
+.endif
+.ifndef EXT_CMD_DMAERR
+EXT_CMD_DMAERR    = $31
+.endif
+.ifndef EXT_CMD_DMACOUNT
+EXT_CMD_DMACOUNT  = $32
+.endif
+.ifndef EXT_CMD_BLITSTATUS
+EXT_CMD_BLITSTATUS = $33
+.endif
+.ifndef EXT_CMD_BLITERR
+EXT_CMD_BLITERR   = $34
+.endif
+.ifndef EXT_CMD_BLITCOUNT
+EXT_CMD_BLITCOUNT = $35
+.endif
+.ifndef EXT_CMD_SPRCOLL
+EXT_CMD_SPRCOLL   = $36
+.endif
+.ifndef EXT_CMD_SPRBG
+EXT_CMD_SPRBG     = $37
+.endif
+.ifndef EXT_CMD_VPEEK
+EXT_CMD_VPEEK     = $38
+.endif
+.ifndef EXT_CMD_BITSET
+EXT_CMD_BITSET    = $39
+.endif
+.ifndef EXT_CMD_BITCLR
+EXT_CMD_BITCLR    = $3A
+.endif
+.ifndef EXT_CMD_BITTGL
+EXT_CMD_BITTGL    = $3B
+.endif
+.ifndef EXT_CMD_REVERSE
+EXT_CMD_REVERSE   = $3C
+.endif
+.ifndef EXT_CMD_REVERSEOFF
+EXT_CMD_REVERSEOFF = $3D
+.endif
+.ifndef EXT_CMD_FLASH
+EXT_CMD_FLASH     = $3E
+.endif
+.ifndef EXT_CMD_FLASHOFF
+EXT_CMD_FLASHOFF  = $3F
+.endif
+.ifndef EXT_CMD_VPOKE
+EXT_CMD_VPOKE     = $40
+.endif
+.ifndef EXT_CMD_FIOCLR
+EXT_CMD_FIOCLR    = $41
 .endif
 
 ; Music/SFX status registers.

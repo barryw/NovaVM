@@ -274,11 +274,9 @@ module test_custom_reset_top;
         check_eq8("CPU mutated XMC before reset", dut.xmc_regs[6'h00], 8'h56);
         check_eq8("CPU mutated DMA before reset", dut.dma_inst.regs[3], 8'h05);
         check_eq8("CPU mutated blitter before reset", dut.blt_inst.regs[3], 8'h06);
-        check_eq8("CPU mutated SID1 before reset",
-                  dut.sid1_inst.voice_freq[0][7:0], 8'h1B);
-        check_eq8("CPU mutated SID2 before reset",
-                  dut.sid2_inst.voice_freq[0][7:0], 8'h3D);
-        check_eq8("CPU mutated SID config before reset", dut.sid_cfg_reg, 8'h03);
+        check_eq8("CPU mutated SID before reset",
+                  dut.sid_inst.voice_freq[0][7:0], 8'h1B);
+        check("CPU mutated SID config before reset", dut.sid_mode_8580 == 1'b1);
 
         check_eq8("CPU VGC write does not shadow-write RAM",
                   dut.main_ram.mem[16'hA001], 8'h00);
@@ -316,11 +314,9 @@ module test_custom_reset_top;
         dut.vgc_inst.copper_active_list = 7'd2;
         dut.vgc_inst.copper_pending_list = 7'd3;
         dut.vgc_inst.copper_list_count[2] = 9'd1;
-        dut.vgc_inst.copper_list_pos[64] = 17'd456;
-        dut.vgc_inst.copper_list_reg[64] = 8'h02;
-        dut.vgc_inst.copper_list_val[64] = 8'h08;
-        dut.vgc_inst.sprite_inst.slb_mem[0][0] = 7'h7F;
-        dut.vgc_inst.sprite_inst.slb_mem[1][0] = 7'h7F;
+        dut.vgc_inst.copper_list_mem.mem[256] = {17'd456, 8'h02, 8'h08};
+        dut.vgc_inst.sprite_inst.slb_ram.mem[0] = 7'h7F;
+        dut.vgc_inst.sprite_inst.slb_ram.mem[512] = 7'h7F;
 
         dbg_system_reset = 1;
         repeat(8) @(posedge clk);
@@ -338,10 +334,9 @@ module test_custom_reset_top;
         check_eq8("XMC window control reset enabled", dut.xmc_regs[6'h16], 8'h0F);
         check_eq8("DMA srcspace reset", dut.dma_inst.regs[3], 8'h00);
         check_eq8("blitter srcspace reset", dut.blt_inst.regs[3], 8'h00);
-        check_eq8("SID config reset", dut.sid_cfg_reg, 8'h00);
-        check_eq8("SID1 freq reset", dut.sid1_inst.voice_freq[0][7:0], 8'h00);
-        check_eq8("SID1 voice volume default", {4'h0, dut.sid1_inst.voice_vol[0]}, 8'h0F);
-        check_eq8("SID2 freq reset", dut.sid2_inst.voice_freq[0][7:0], 8'h00);
+        check("SID config reset", dut.sid_mode_8580 == 1'b0);
+        check_eq8("SID freq reset", dut.sid_inst.voice_freq[0][7:0], 8'h00);
+        check_eq8("SID voice volume default", {4'h0, dut.sid_inst.voice_vol[0]}, 8'h0F);
         check_eq8("char RAM reset to space",
                   dut.vgc_inst.text_inst.char_mem.mem[0], 8'h20);
         check_eq8("color RAM reset to default fg",
@@ -352,10 +347,6 @@ module test_custom_reset_top;
                   dut.vgc_inst.sprite_inst.spr_mem0.mem[0], 8'h00);
         check_eq8("sprite shape RAM bank 1 reset",
                   dut.vgc_inst.sprite_inst.spr_mem1.mem[0], 8'h00);
-        check_eq8("sprite scanline bank 0 reset",
-                  {1'b0, dut.vgc_inst.sprite_inst.slb_mem[0][0]}, 8'h00);
-        check_eq8("sprite scanline bank 1 reset",
-                  {1'b0, dut.vgc_inst.sprite_inst.slb_mem[1][0]}, 8'h00);
         check("copper active state reset",
               dut.vgc_inst.copper_enabled == 0 &&
               dut.vgc_inst.copper_count == 0 &&
@@ -366,10 +357,7 @@ module test_custom_reset_top;
               dut.vgc_inst.copper_reg[0] == 0 &&
               dut.vgc_inst.copper_val[0] == 0);
         check("copper stored lists reset",
-              dut.vgc_inst.copper_list_count[2] == 0 &&
-              dut.vgc_inst.copper_list_pos[64] == 0 &&
-              dut.vgc_inst.copper_list_reg[64] == 0 &&
-              dut.vgc_inst.copper_list_val[64] == 0);
+              dut.vgc_inst.copper_list_count[2] == 0);
 
         // CPU-issued VGC SYSRESET must reset the CPU too. This catches the
         // BASIC `RESET` regression where the custom chips reset underneath

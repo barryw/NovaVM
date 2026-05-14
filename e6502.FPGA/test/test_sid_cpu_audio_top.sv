@@ -1,9 +1,9 @@
 // Top-level SID audio regression.
 //
 // Runs real 6502 code through the synthesized top.sv path and verifies that
-// CPU writes to the SID MMIO range ($D400/$D420) update both SID chips and
-// produce non-zero signed audio samples. This covers the path the BASIC POKE
-// program uses on hardware: CPU bus -> SID registers -> SID mixer output.
+// CPU writes to the SID MMIO range update the SID chip and produce non-zero
+// signed audio samples. This covers the path the BASIC POKE program uses on
+// hardware: CPU bus -> SID registers -> SID mixer output.
 
 `timescale 1ns/1ps
 
@@ -156,20 +156,19 @@ module test_sid_cpu_audio_top;
     endfunction
 
     // Program at $C000:
-    //   set volume on both SIDs
-    //   configure voice 1 ADSR/frequency on both SIDs
+    //   set SID volume
+    //   configure voice 1 ADSR/frequency
     //   gate voice 1 on with sawtooth waveform
     //   halt in a tight loop
-    localparam int PROG_LEN = 53;
+    localparam int PROG_LEN = 33;
     byte unsigned prog [PROG_LEN] = '{
-        8'hA9, 8'h0F, 8'h8D, 8'h18, 8'hD4, 8'h8D, 8'h38, 8'hD4,
-        8'hA9, 8'h00, 8'h8D, 8'h05, 8'hD4, 8'h8D, 8'h25, 8'hD4,
-        8'hA9, 8'hF0, 8'h8D, 8'h06, 8'hD4, 8'h8D, 8'h26, 8'hD4,
-        8'hA9, 8'h00, 8'h8D, 8'h00, 8'hD4, 8'h8D, 8'h20, 8'hD4,
+        8'hA9, 8'h0F, 8'h8D, 8'h18, 8'hD4,
+        8'hA9, 8'h00, 8'h8D, 8'h05, 8'hD4,
+        8'hA9, 8'hF0, 8'h8D, 8'h06, 8'hD4,
+        8'hA9, 8'h00, 8'h8D, 8'h00, 8'hD4,
         8'hA9, 8'h10, 8'h8D, 8'h01, 8'hD4,
-        8'hA9, 8'h20, 8'h8D, 8'h21, 8'hD4,
-        8'hA9, 8'h21, 8'h8D, 8'h04, 8'hD4, 8'h8D, 8'h24, 8'hD4,
-        8'h4C, 8'h32, 8'hC0
+        8'hA9, 8'h21, 8'h8D, 8'h04, 8'hD4,
+        8'h4C, 8'h1E, 8'hC0
     };
 
     initial begin
@@ -217,19 +216,13 @@ module test_sid_cpu_audio_top;
                  dbg_cpu_pc, dbg_cpu_ir, dbg_cpu_state, dbg_cpu_addr, dbg_cpu_dout);
 
         check("CPU reached halt loop",
-              (dbg_cpu_pc >= 16'hC032) && (dbg_cpu_pc <= 16'hC035));
+              (dbg_cpu_pc >= 16'hC01E) && (dbg_cpu_pc <= 16'hC021));
 
-        check_eq16("SID1 voice 1 frequency", dut.sid1_inst.voice_freq[0], 16'h1000);
-        check_eq8("SID1 voice 1 AD", dut.sid1_inst.voice_ad[0], 8'h00);
-        check_eq8("SID1 voice 1 SR", dut.sid1_inst.voice_sr[0], 8'hF0);
-        check_eq8("SID1 voice 1 control", dut.sid1_inst.voice_ctrl[0], 8'h21);
-        check_eq8("SID1 master volume", dut.sid1_inst.filter_mode_vol, 8'h0F);
-
-        check_eq16("SID2 voice 1 frequency", dut.sid2_inst.voice_freq[0], 16'h2000);
-        check_eq8("SID2 voice 1 AD", dut.sid2_inst.voice_ad[0], 8'h00);
-        check_eq8("SID2 voice 1 SR", dut.sid2_inst.voice_sr[0], 8'hF0);
-        check_eq8("SID2 voice 1 control", dut.sid2_inst.voice_ctrl[0], 8'h21);
-        check_eq8("SID2 master volume", dut.sid2_inst.filter_mode_vol, 8'h0F);
+        check_eq16("SID voice 1 frequency", dut.sid_inst.voice_freq[0], 16'h1000);
+        check_eq8("SID voice 1 AD", dut.sid_inst.voice_ad[0], 8'h00);
+        check_eq8("SID voice 1 SR", dut.sid_inst.voice_sr[0], 8'hF0);
+        check_eq8("SID voice 1 control", dut.sid_inst.voice_ctrl[0], 8'h21);
+        check_eq8("SID master volume", dut.sid_inst.filter_mode_vol, 8'h0F);
 
         max_abs_l = 0;
         max_abs_r = 0;
@@ -255,10 +248,12 @@ module test_sid_cpu_audio_top;
 
         $display("Audio peaks: L=%0d R=%0d ranges: L=%0d..%0d R=%0d..%0d",
                  max_abs_l, max_abs_r, min_l, max_l, min_r, max_r);
-        check("SID1 audio becomes non-zero", max_abs_l > 0);
-        check("SID2 audio becomes non-zero", max_abs_r > 0);
-        check("SID1 audio varies over time", max_l > min_l);
-        check("SID2 audio varies over time", max_r > min_r);
+        check("left audio becomes non-zero", max_abs_l > 0);
+        check("right audio becomes non-zero", max_abs_r > 0);
+        check("left audio varies over time", max_l > min_l);
+        check("right audio varies over time", max_r > min_r);
+        check("mono SID routes equally to left/right",
+              max_abs_l == max_abs_r && min_l == min_r && max_l == max_r);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

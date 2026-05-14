@@ -22,6 +22,10 @@ VGC_IMPLEMENTATION_INCLUDED = 1
       .export vgc_set_border
       .export vgc_display_on
       .export vgc_display_off
+      .export vgc_irq_install
+      .export vgc_irq_enable
+      .export vgc_irq_disable
+      .export vgc_irq_ack
       .export vgc_locate
       .export vgc_set_mode
       .export vgc_set_font
@@ -144,6 +148,51 @@ vgc_display_on:
 vgc_display_off:
       LDA   #$00
       STA   VGC_DIMMER
+      RTS
+
+; @label VGC.IRQ_INSTALL
+; @kind routine
+; @symbol vgc_irq_install
+; @summary Install the CPU IRQ vector used when enabled VGC IRQ sources fire.
+; @in A: Handler address high byte.
+; @in Y: Handler address low byte.
+vgc_irq_install:
+      PHP
+      SEI
+      STY   CPU_IRQ_VECTOR
+      STA   CPU_IRQ_VECTOR+1
+      PLP
+      RTS
+
+; @label VGC.IRQ_ENABLE
+; @kind routine
+; @symbol vgc_irq_enable
+; @summary Enable one or more VGC IRQ source bits and enable maskable CPU IRQs.
+; @in A: VGC IRQ source mask.
+vgc_irq_enable:
+      ORA   VGC_IRQ_ENABLE
+      STA   VGC_IRQ_ENABLE
+      CLI
+      RTS
+
+; @label VGC.IRQ_DISABLE
+; @kind routine
+; @symbol vgc_irq_disable
+; @summary Disable one or more VGC IRQ source bits.
+; @in A: VGC IRQ source mask.
+vgc_irq_disable:
+      EOR   #$FF
+      AND   VGC_IRQ_ENABLE
+      STA   VGC_IRQ_ENABLE
+      RTS
+
+; @label VGC.IRQ_ACK
+; @kind routine
+; @symbol vgc_irq_ack
+; @summary Acknowledge pending VGC IRQ source bits.
+; @in A: VGC IRQ source mask.
+vgc_irq_ack:
+      STA   VGC_IRQ_STATUS
       RTS
 
 ; @label VGC.LOCATE

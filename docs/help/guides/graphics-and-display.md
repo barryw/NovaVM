@@ -239,29 +239,26 @@ each other or touch non-transparent pixels on the background bitmap.
 
 | **Function** | **Returns** |
 | --- | --- |
-| COLLISION(n) | Bitmask of other sprites currently overlapping sprite `n`. |
-| BUMPED(n) | Bitmask indicating that sprite `n` has touched a non-transparent pixel in the graphics bitmap. |
+| SPRCOLL | 16-bit mask of sprites that collided with another sprite. |
+| SPRBG | 16-bit mask of sprites that touched a non-transparent graphics pixel. |
 
 Both functions return an integer bitmask. Bit `k` being set means sprite
-`k` is involved in the collision. For `COLLISION(n)`, if the result
-is non-zero then at least one other sprite overlaps sprite `n`; use
-`AND` with the appropriate bit to test for a specific sprite. For
-`BUMPED(n)`, a non-zero result means sprite `n` is touching a
-non-transparent pixel in the graphics bitmap.
+`k` is involved in that collision type. Use `AND` with the appropriate bit to
+test for a specific sprite.
 
 ::: warning
-Both collision registers clear automatically when read. Read each register
-exactly once per frame and store the result in a variable. If you call
-`COLLISION(n)` or `BUMPED(n)` a second time in the same frame you
-will get zero, missing collisions that occurred between reads.
+`SPRCOLL` and `SPRBG` clear their latched masks after reading them. Read each
+function once per frame and store the result in a variable. If you call the
+same function a second time in the same frame you will get zero, missing
+collisions that occurred between reads.
 :::
 
 A practical collision loop pattern:
 
 ```basic
 100 VSYNC
-110 C = COLLISION(0)
-120 B = BUMPED(0)
+110 C = SPRCOLL
+120 B = SPRBG
 130 IF C <> 0 THEN GOSUB 500
 140 IF B <> 0 THEN GOSUB 600
 150 REM UPDATE POSITIONS HERE
@@ -273,12 +270,12 @@ to handler routines only if a collision has occurred. All position updates
 happen after the collision check so that the same frame's register values are
 used consistently.
 
-To test whether sprite `n` specifically collided with sprite 2, check bit
-2 of the `COLLISION` result:
+To test whether sprite 2 participated in any sprite-sprite collision, check bit
+2 of the `SPRCOLL` result:
 
 ```basic
-200 C = COLLISION(0)
-210 IF (C AND 4) <> 0 THEN PRINT "HIT SPRITE 2"
+200 C = SPRCOLL
+210 IF (C AND 4) <> 0 THEN PRINT "SPRITE 2 COLLIDED"
 ```
 
 ## Color Palette

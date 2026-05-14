@@ -3,6 +3,7 @@ when:
 
 labels:
   platform: linux/amd64
+  backend: kubernetes
 
 steps:
   - name: build-and-test

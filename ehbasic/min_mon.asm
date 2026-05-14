@@ -10,12 +10,13 @@
 ; put the IRQ and NMI code in RAM so that it can be changed
 
 IRQ_vec     = VEC_SV+2        ; IRQ code vector
-NMI_vec     = IRQ_vec+$0A     ; NMI code vector
-; EXT_vec defined in basic.asm (= VEC_SV+$16 = $0221)
+NMI_vec     = IRQ_vec+$0F     ; NMI code vector
+; EXT_vec defined in basic.asm (= VEC_SV+$1B = $0226)
 EXT_RST     = EXT_vec+$12     ; extension ROM reset recovery in RAM
 EXT_GTBY    = EXT_RST+$08     ; bridge: extension → BASIC LAB_GTBY → extension
 EXT_GTWRD   = EXT_GTBY+$0E    ; bridge: extension → BASIC LAB_GTWRD → extension
-EXT_SNERR   = EXT_GTWRD+$0E   ; bridge: extension → BASIC LAB_15D9 (syntax error)
+EXT_GTSW    = EXT_GTWRD+$0E   ; bridge: extension → BASIC LAB_GTSW → extension
+EXT_SNERR   = EXT_GTSW+$0E    ; bridge: extension → BASIC LAB_15D9 (syntax error)
 
 ; setup for the 6502 simulator environment
 
@@ -41,6 +42,8 @@ IRQ_CODE
       LSR                     ; shift the set b7 to b6, and on down ...
       ORA   IrqBase           ; OR the original back in
       STA   IrqBase           ; save the new IRQ flag byte
+      LDA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_STATUS    ; edge-ack sprite collision IRQ; SPRCOLL reads mask later
       PLA                     ; restore A
       RTI
 
@@ -99,6 +102,14 @@ EXT_GTWRD_CODE
       LDA   #ROMSWAP_BASIC
       STA   REG_ROMSWAP
       JSR   LAB_GTWRD         ; parse 16-bit expression → FAC1_3 (lo), FAC1_2 (hi)
+      LDA   #ROMSWAP_EXTENSION
+      STA   REG_ROMSWAP
+      RTS
+
+EXT_GTSW_CODE
+      LDA   #ROMSWAP_BASIC
+      STA   REG_ROMSWAP
+      JSR   LAB_GTSW          ; parse signed 16-bit expression → FAC1_3/FAC1_2
       LDA   #ROMSWAP_EXTENSION
       STA   REG_ROMSWAP
       RTS

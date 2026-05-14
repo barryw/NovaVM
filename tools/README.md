@@ -62,6 +62,17 @@ from CPU RAM, then receives bytes back into CPU RAM:
 tools/check-nic-hardware.py --exercise-basic-dma
 ```
 
+# Sprite Multiplex Hardware Smoke
+
+`run-sprite-multiplex-hardware-smoke.py` builds the assembly sprite multiplex
+demo, loads it at `$9000` through NovaHost, starts it with `SYS $9000`, and
+verifies that all 16 sprite slots are enabled and moving. The demo displays 8
+rows of 16 distinct sprites using copper-driven Y multiplexing.
+
+```bash
+tools/run-sprite-multiplex-hardware-smoke.py
+```
+
 # Overlay Packager
 
 Fixed-address overlays are packaged by `e6502.Tools`:

@@ -116,6 +116,54 @@ module test_vgc_regs;
         release dut.gfx_b_dout;
     endtask
 
+    task automatic test_sprite_bg_collision_irq_gated_to_canvas();
+        $display("");
+        $display("Test: sprite-background collision IRQ is gated to Nova canvas");
+
+        dut.collision_bg = 16'h0000;
+        dut.irq_pending = 8'h00;
+        bus_write(VIRQ_ENABLE_A, 8'h40);
+        step(2);
+
+        force dut.in_text_area_d2 = 1'b0;
+        force dut.gfx_x_d2 = 9'd10;
+        force dut.spr_pixel_hit = 1'b1;
+        force dut.spr_pixel_owner = 4'd10;
+        force dut.gfx_b_dout = 4'd3;
+        force dut.gfx_trans_color = 4'd0;
+        #1;
+        check_eq("border-area collision predicate is false",
+                 int'(dut.sprite_bg_collision_now), 0);
+        step(1);
+        #1;
+        check_eq("border-area hit does not latch sprite-background collision",
+                 int'(dut.collision_bg), 16'h0000);
+        check_eq("border-area hit does not raise sprite-background IRQ",
+                 int'(dut.irq_pending), 8'h00);
+
+        force dut.in_text_area_d2 = 1'b1;
+        #1;
+        check_eq("canvas collision predicate is true",
+                 int'(dut.sprite_bg_collision_now), 1);
+        step(1);
+        #1;
+        check_eq("canvas hit latches the owning sprite bit",
+                 int'(dut.collision_bg), 16'h0400);
+        check_eq("canvas hit raises sprite-background IRQ",
+                 int'(dut.irq_pending), 8'h40);
+
+        release dut.in_text_area_d2;
+        release dut.gfx_x_d2;
+        release dut.spr_pixel_hit;
+        release dut.spr_pixel_owner;
+        release dut.gfx_b_dout;
+        release dut.gfx_trans_color;
+
+        bus_write(VIRQ_STATUS_A, 8'h40);
+        step(2);
+        dut.collision_bg = 16'h0000;
+    endtask
+
     task automatic test_sprite_scanline_read_prefetch();
         $display("");
         $display("Test: sprite scanline reader prefetches one physical pixel");
@@ -240,21 +288,74 @@ module test_vgc_regs;
         check_eq("$A00A debug readback sees debug-written cursor_enable=1", int'(rb), 1);
     endtask
 
+    task automatic test_cursor_draw_enable_tracks_text_modes();
+        $display("");
+        $display("Test: cursor draw enable follows text-visible modes");
+        bus_write(16'hA00A, 8'd1); step(2);
+
+        bus_write(16'hA000, 8'd0); step(2);
+        check_eq("cursor draws in text-only mode", int'(dut.cursor_draw_enable), 1);
+        bus_write(16'hA000, 8'd1); step(2);
+        check_eq("cursor draws in graphics-over-text mode", int'(dut.cursor_draw_enable), 1);
+        bus_write(16'hA000, 8'd2); step(2);
+        check_eq("cursor draws in text-over-graphics mode", int'(dut.cursor_draw_enable), 1);
+        bus_write(16'hA000, 8'd3); step(2);
+        check_eq("cursor hidden in graphics-only mode", int'(dut.cursor_draw_enable), 0);
+        bus_write(16'hA000, 8'd4); step(2);
+        check_eq("cursor hidden in sprites/graphics-only mode", int'(dut.cursor_draw_enable), 0);
+
+        bus_write(16'hA000, 8'd0); step(2);
+        bus_write(16'hA00A, 8'd0); step(2);
+        check_eq("cursor draw disabled when cursor register is off", int'(dut.cursor_draw_enable), 0);
+    endtask
+
     task automatic test_collision_clear_on_write();
+        logic [7:0] rb;
         $display("");
         $display("Test: collision_ss / collision_bg cleared on write");
         // Force some bits into the collision registers
-        dut.collision_ss = 8'hAA;
-        dut.collision_bg = 8'h55;
+        dut.collision_ss = 16'h55AA;
+        dut.collision_bg = 16'hAA55;
         step(2);
-        check_eq("pre-write: collision_ss=0xAA", int'(dut.collision_ss), 8'hAA);
-        check_eq("pre-write: collision_bg=0x55", int'(dut.collision_bg), 8'h55);
+        check_eq("pre-write: collision_ss=0x55AA", int'(dut.collision_ss), 16'h55AA);
+        check_eq("pre-write: collision_bg=0xAA55", int'(dut.collision_bg), 16'hAA55);
+        bus_read(16'hA00B, rb); step(2);
+        check_eq("$A00B reads collision_ss low byte", int'(rb), 8'hAA);
+        bus_read(REG_COLLST_HI_A, rb); step(2);
+        check_eq("$A0EB reads collision_ss high byte", int'(rb), 8'h55);
+        bus_read(16'hA00C, rb); step(2);
+        check_eq("$A00C reads collision_bg low byte", int'(rb), 8'h55);
+        bus_read(REG_COLLBG_HI_A, rb); step(2);
+        check_eq("$A0EC reads collision_bg high byte", int'(rb), 8'hAA);
+        dbg_read(16'hA00B, rb);
+        check_eq("$A00B debug reads collision_ss low byte", int'(rb), 8'hAA);
+        dbg_read(REG_COLLST_HI_A, rb);
+        check_eq("$A0EB debug reads collision_ss high byte", int'(rb), 8'h55);
+        dbg_read(16'hA00C, rb);
+        check_eq("$A00C debug reads collision_bg low byte", int'(rb), 8'h55);
+        dbg_read(REG_COLLBG_HI_A, rb);
+        check_eq("$A0EC debug reads collision_bg high byte", int'(rb), 8'hAA);
         bus_write(16'hA00B, 8'h00); step(2);
-        check_eq("after write $A00B: collision_ss cleared",
-                 int'(dut.collision_ss), 0);
+        check_eq("after write $A00B: collision_ss low byte cleared",
+                 int'(dut.collision_ss), 16'h5500);
+        bus_write(REG_COLLST_HI_A, 8'h00); step(2);
+        check_eq("after write $A0EB: collision_ss high byte cleared",
+                 int'(dut.collision_ss), 16'h0000);
         bus_write(16'hA00C, 8'h00); step(2);
-        check_eq("after write $A00C: collision_bg cleared",
-                 int'(dut.collision_bg), 0);
+        check_eq("after write $A00C: collision_bg low byte cleared",
+                 int'(dut.collision_bg), 16'hAA00);
+        bus_write(REG_COLLBG_HI_A, 8'h00); step(2);
+        check_eq("after write $A0EC: collision_bg high byte cleared",
+                 int'(dut.collision_bg), 16'h0000);
+        dut.collision_ss = 16'h5500;
+        dut.collision_bg = 16'hAA00;
+        step(2);
+        dbg_write(REG_COLLST_HI_A, 8'h00); step(2);
+        check_eq("debug write $A0EB clears collision_ss high byte",
+                 int'(dut.collision_ss), 16'h0000);
+        dbg_write(REG_COLLBG_HI_A, 8'h00); step(2);
+        check_eq("debug write $A0EC clears collision_bg high byte",
+                 int'(dut.collision_bg), 16'h0000);
     endtask
 
     task automatic test_irq_block();
@@ -263,9 +364,9 @@ module test_vgc_regs;
         $display("Test: flexible VGC IRQ block — enable, force, status W1C");
 
         bus_write(VIRQ_ENABLE_A, 8'hFF); step(2);
-        check_eq("irq_enable masks to valid sources", int'(dut.irq_enable), 8'h1F);
+        check_eq("irq_enable masks to valid sources", int'(dut.irq_enable), 8'h7F);
         bus_read(VIRQ_VALID_A, rb); step(2);
-        check_eq("$A0F3 reads valid IRQ source mask", int'(rb), 8'h1F);
+        check_eq("$A0F3 reads valid IRQ source mask", int'(rb), 8'h7F);
 
         bus_write(VIRQ_FORCE_A, 8'h02); step(2);
         check_eq("force sets pending copper source", int'(dut.irq_pending), 8'h02);
@@ -278,7 +379,7 @@ module test_vgc_regs;
         check("irq_out deasserts after ack", !irq_out);
 
         bus_write(REG_P14_A, 8'h03); step(2);
-        check_eq("$A01F is command parameter P14, not IRQ enable", int'(dut.irq_enable), 8'h1F);
+        check_eq("$A01F is command parameter P14, not IRQ enable", int'(dut.irq_enable), 8'h7F);
         bus_read(REG_P14_A, rb); step(2);
         check_eq("$A01F reads back P14", int'(rb), 8'h03);
     endtask
@@ -685,6 +786,71 @@ module test_vgc_regs;
         step(1);
     endtask
 
+    task automatic test_copper_sprite_register_writes();
+        $display("");
+        $display("Test: copper writes update active sprite registers");
+
+        for (int i = 0; i < 16; i++) begin
+            dut.spr_x[i] = 16'h0000;
+            dut.spr_y[i] = 8'h00;
+            dut.spr_shape[i] = 4'h0;
+            dut.spr_enable[i] = 1'b0;
+            dut.spr_flip_h[i] = 1'b0;
+            dut.spr_flip_v[i] = 1'b0;
+            dut.spr_pri[i] = 2'd0;
+            dut.spr_trans[i] = 4'h0;
+        end
+        dut.spr_next_x[0] = 16'hA533;
+        dut.spr_next_y[2] = 8'hA6;
+        step(1);
+
+        force dut.copper_fire = 1'b1;
+        force dut.copper_fire_reg = 8'h40; // SPRX(0) low
+        force dut.copper_fire_val = 8'h34;
+        step(1);
+        check_eq("copper SPRX(0) low updates active sprite x", int'(dut.spr_x[0][7:0]), 8'h34);
+        check_eq("copper SPRX(0) does not touch pending sprite x", int'(dut.spr_next_x[0][7:0]), 8'h33);
+
+        force dut.copper_fire_reg = 8'h41; // SPRX(0) high
+        force dut.copper_fire_val = 8'h01;
+        step(1);
+        check_eq("copper SPRX(0) high updates active sprite x", int'(dut.spr_x[0]), 16'h0134);
+
+        force dut.copper_fire_reg = 8'h52; // SPRY(2)
+        force dut.copper_fire_val = 8'h77;
+        step(1);
+        check_eq("copper SPRY(2) updates active sprite y", int'(dut.spr_y[2]), 8'h77);
+        check_eq("copper SPRY(2) leaves pending sprite y staged state alone",
+                 int'(dut.spr_next_y[2]), 8'hA6);
+
+        force dut.copper_fire_reg = 8'h5C; // SPRSHAPE(3)
+        force dut.copper_fire_val = 8'h0B;
+        step(1);
+        check_eq("copper SPRSHAPE(3) updates active shape", int'(dut.spr_shape[3]), 8'h0B);
+
+        force dut.copper_fire_reg = 8'h65; // SPRFLAGS(4)
+        force dut.copper_fire_val = 8'h83;
+        step(1);
+        check_eq("copper SPRFLAGS(4) sets active enable", int'(dut.spr_enable[4]), 1);
+        check_eq("copper SPRFLAGS(4) sets active flip_h", int'(dut.spr_flip_h[4]), 1);
+        check_eq("copper SPRFLAGS(4) sets active flip_v", int'(dut.spr_flip_v[4]), 1);
+
+        force dut.copper_fire_reg = 8'hBE; // SPRPRI(15)
+        force dut.copper_fire_val = 8'h02;
+        step(1);
+        check_eq("copper SPRPRI(15) updates active priority", int'(dut.spr_pri[15]), 2);
+
+        force dut.copper_fire_reg = 8'hBF; // SPRTRANS(15)
+        force dut.copper_fire_val = 8'h0E;
+        step(1);
+        check_eq("copper SPRTRANS(15) updates active transparent color", int'(dut.spr_trans[15]), 8'h0E);
+
+        release dut.copper_fire;
+        release dut.copper_fire_reg;
+        release dut.copper_fire_val;
+        step(1);
+    endtask
+
     // -----------------------------------------------------------------------
     // Runner
     // -----------------------------------------------------------------------
@@ -696,12 +862,14 @@ module test_vgc_regs;
         test_color_registers();
         test_border_masks_sprites();
         test_gfx_transparent_color_compositor();
+        test_sprite_bg_collision_irq_gated_to_canvas();
         test_sprite_scanline_read_prefetch();
         test_cursor_xy();
         test_scroll_registers();
         test_font_slot();
         test_gfx_color();
         test_cursor_enable();
+        test_cursor_draw_enable_tracks_text_modes();
         test_collision_clear_on_write();
         test_irq_block();
         test_display_dim_register();
@@ -724,6 +892,7 @@ module test_vgc_regs;
         test_blt_read_sprite();
         test_independent_registers();
         test_copper_scroll_register_writes();
+        test_copper_sprite_register_writes();
 
         summary();
         $finish;

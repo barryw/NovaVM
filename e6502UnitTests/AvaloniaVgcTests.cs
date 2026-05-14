@@ -59,6 +59,27 @@ public class AvaloniaVgcTests
     }
 
     [TestMethod]
+    public void CursorVisibleInCurrentMode_RequiresTextLayer()
+    {
+        _vgc.Write(VgcConstants.RegCursorEnable, 1);
+
+        _vgc.Write(VgcConstants.RegMode, 0);
+        Assert.IsTrue(_vgc.IsCursorVisibleInCurrentMode);
+        _vgc.Write(VgcConstants.RegMode, 1);
+        Assert.IsTrue(_vgc.IsCursorVisibleInCurrentMode);
+        _vgc.Write(VgcConstants.RegMode, 2);
+        Assert.IsTrue(_vgc.IsCursorVisibleInCurrentMode);
+        _vgc.Write(VgcConstants.RegMode, 3);
+        Assert.IsFalse(_vgc.IsCursorVisibleInCurrentMode);
+        _vgc.Write(VgcConstants.RegMode, 4);
+        Assert.IsFalse(_vgc.IsCursorVisibleInCurrentMode);
+
+        _vgc.Write(VgcConstants.RegMode, 0);
+        _vgc.Write(VgcConstants.RegCursorEnable, 0);
+        Assert.IsFalse(_vgc.IsCursorVisibleInCurrentMode);
+    }
+
+    [TestMethod]
     public void GfxTransparentColor_UsesLowNibbleOnly()
     {
         _vgc.Write(VgcConstants.RegGfxTransparentColor, 2);
@@ -451,18 +472,31 @@ public class AvaloniaVgcTests
         Assert.AreEqual(5, _vgc.GetGfxPixelColor(1, 0));
     }
 
-    // -- Collision registers still clear on read ------------------------------
+    // -- Collision registers --------------------------------------------------
 
     [TestMethod]
-    public void CollisionRegisters_ClearOnRead()
+    public void CollisionRegisters_Expose16BitMasksAndClearOnWrite()
     {
-        _vgc.SetCollisionRegisters(0xAB, 0xCD);
-        byte ss = _vgc.Read(VgcConstants.RegColSt);
-        byte sb = _vgc.Read(VgcConstants.RegColBg);
-        Assert.AreEqual(0xAB, ss);
-        Assert.AreEqual(0xCD, sb);
+        _vgc.SetCollisionRegisters(0x55AA, 0xAA55);
+
+        Assert.AreEqual(0xAA, _vgc.Read(VgcConstants.RegColSt));
+        Assert.AreEqual(0x55, _vgc.Read(VgcConstants.RegColStHi));
+        Assert.AreEqual(0x55, _vgc.Read(VgcConstants.RegColBg));
+        Assert.AreEqual(0xAA, _vgc.Read(VgcConstants.RegColBgHi));
+
+        Assert.AreEqual(0xAA, _vgc.Read(VgcConstants.RegColSt),
+            "Reading collision registers must not clear them; hardware clears on write.");
+        _vgc.Write(VgcConstants.RegColSt, 0);
         Assert.AreEqual(0, _vgc.Read(VgcConstants.RegColSt));
+        Assert.AreEqual(0x55, _vgc.Read(VgcConstants.RegColStHi));
+        _vgc.Write(VgcConstants.RegColStHi, 0);
+        Assert.AreEqual(0, _vgc.Read(VgcConstants.RegColStHi));
+
+        _vgc.Write(VgcConstants.RegColBg, 0);
         Assert.AreEqual(0, _vgc.Read(VgcConstants.RegColBg));
+        Assert.AreEqual(0xAA, _vgc.Read(VgcConstants.RegColBgHi));
+        _vgc.Write(VgcConstants.RegColBgHi, 0);
+        Assert.AreEqual(0, _vgc.Read(VgcConstants.RegColBgHi));
     }
 
     // -- OwnsAddress with new ranges ------------------------------------------
@@ -612,6 +646,26 @@ public class AvaloniaVgcTests
         vgc.Write(VgcConstants.RegIrqStatus, VgcConstants.IrqCopper0);
         Assert.AreEqual(0, vgc.Read(VgcConstants.RegIrqStatus));
         Assert.IsFalse(vgc.IrqPending);
+    }
+
+    [TestMethod]
+    public void Vgc_CollisionRegisters_RaiseEnabledIrqSources()
+    {
+        var vgc = new VirtualGraphicsController();
+
+        vgc.Write(VgcConstants.RegIrqEnable, (byte)(VgcConstants.IrqSpriteCollision | VgcConstants.IrqSpriteBackground));
+        vgc.SetCollisionRegisters(0x0203, 0x0404);
+
+        Assert.AreEqual(0x03, vgc.Read(VgcConstants.RegColSt));
+        Assert.AreEqual(0x02, vgc.Read(VgcConstants.RegColStHi));
+        Assert.AreEqual(0x04, vgc.Read(VgcConstants.RegColBg));
+        Assert.AreEqual(0x04, vgc.Read(VgcConstants.RegColBgHi));
+        Assert.AreEqual(
+            VgcConstants.IrqSpriteCollision | VgcConstants.IrqSpriteBackground,
+            vgc.Read(VgcConstants.RegIrqStatus));
+
+        vgc.Write(VgcConstants.RegIrqStatus, VgcConstants.IrqSpriteCollision);
+        Assert.AreEqual(VgcConstants.IrqSpriteBackground, vgc.Read(VgcConstants.RegIrqStatus));
     }
 
     [TestMethod]

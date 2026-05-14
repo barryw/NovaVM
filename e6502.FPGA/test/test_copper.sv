@@ -242,6 +242,31 @@ module test_copper;
         run_clocks(2);
         check("ack clears copper IRQ source", dut.irq_pending == 8'h00 && !irq_out);
 
+        // ----- Test 9: Copper can write sprite registers end-to-end -----
+        $display("Test: Copper sprite register write");
+        copper_clear();
+        dut.spr_y[5] = 8'h00;
+        copper_add(0, 30, 8'h6A, 8'd88); // $A06A = SPRY(5), low byte only
+        copper_enable();
+        run_to_scanline(480);
+        run_to_scanline(0);
+        check("sprite 5 y unchanged before copper sprite event", dut.spr_y[5] == 8'h00);
+        run_to_scanline(V_BORDER_TB + 30*2 + 2);
+        check("copper event updates active sprite 5 y", dut.spr_y[5] == 8'd88);
+
+        // ----- Test 10: Active copper list accepts 128 entries -----
+        $display("Test: Copper 128-entry capacity");
+        copper_clear();
+        for (int i = 0; i < 128; i++)
+            copper_add(0, i, 1, 8'(i));
+        run_clocks(4);
+        check("active copper count reaches 128 entries", dut.copper_count == 9'd128);
+        check("active copper list count reaches 128 entries",
+              dut.copper_list_count[dut.copper_active_list] == 9'd128);
+        copper_add(0, 129, 1, 8'hCC);
+        run_clocks(4);
+        check("129th copper add is ignored", dut.copper_count == 9'd128);
+
         // ---------------------------------------------------------------
         // Summary
         // ---------------------------------------------------------------

@@ -137,8 +137,8 @@ public class RomSwapTests
     {
         using var bus = new CompositeBusDevice(enableSound: false);
         bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
-        // NMI vector at $FFFA should point to $0217 (RAM NMI handler)
-        Assert.AreEqual(0x17, bus.Read(0xFFFA));
+        // NMI vector at $FFFA should point to $021C (RAM NMI handler)
+        Assert.AreEqual(0x1C, bus.Read(0xFFFA));
         Assert.AreEqual(0x02, bus.Read(0xFFFB));
         // IRQ vector at $FFFE should point to $020D (RAM IRQ handler)
         Assert.AreEqual(0x0D, bus.Read(0xFFFE));

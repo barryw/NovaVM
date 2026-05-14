@@ -240,6 +240,22 @@ module test_debug_peek;
         check_eq8("peek \$BA86 after debug poke == 5", peek_val, 8'h05);
         check_eq8("debug poke \$BA86 does not shadow RAM", dut.main_ram.mem[16'hBA86], 8'h00);
 
+        // Math coprocessor debug pokes must hit the coprocessor bank, not RAM.
+        // 300 * -7 = $FFFFF7CC; writing MUL16_B_HI is the trigger.
+        do_poke(16'hBB20, 8'h2C);
+        do_poke(16'hBB21, 8'h01);
+        do_poke(16'hBB22, 8'hF9);
+        do_poke(16'hBB23, 8'hFF);
+        do_peek(16'hBB38, peek_val);
+        check_eq8("peek math RES0 after debug MUL16", peek_val, 8'hCC);
+        do_peek(16'hBB39, peek_val);
+        check_eq8("peek math RES1 after debug MUL16", peek_val, 8'hF7);
+        do_peek(16'hBB3A, peek_val);
+        check_eq8("peek math RES2 after debug MUL16", peek_val, 8'hFF);
+        do_peek(16'hBB3B, peek_val);
+        check_eq8("peek math RES3 after debug MUL16", peek_val, 8'hFF);
+        check_eq8("debug poke \$BB20 does not shadow RAM", dut.main_ram.mem[16'hBB20], 8'h00);
+
         // Control: peek ROM — should return first opcode byte 0xA9
         do_peek(16'hC000, peek_val);
         check_eq8("peek \$C000 (ROM LDA opcode) == 0xA9", peek_val, 8'hA9);

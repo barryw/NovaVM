@@ -230,16 +230,16 @@ POKE $A00A,1  : REM show cursor
 
 % --- $A00B RegColSt ----------------------------------------------------------
 
-\mementry{A00B}{RegColSt}{R}{0}
+\mementry{A00B}{RegColSt}{R/WC}{0}
 
 Sprite-to-sprite collision bitmask.  After each frame, any sprite that
 overlaps with another sprite has its corresponding bit set.  Bit $N$ represents
-sprite $N$ (bit 0 = sprite 0, bit 7 = sprite 7).  For sprites 8--15 use the
-BASIC \texttt{COLLISION()} function.
+sprite $N$ for sprites 0--7.  The high byte for sprites 8--15 is exposed at
+\addr{A0EB}.
 
 \begin{warningbox}
-Reading this register \textbf{clears} it.  If you need to test multiple bits,
-read the value into a variable first.
+Writing any value to this register clears the low collision byte.  BASIC
+\texttt{SPRCOLL} reads and clears both bytes.
 \end{warningbox}
 
 \begin{lstlisting}
@@ -250,11 +250,11 @@ read the value into a variable first.
 
 % --- $A00C RegColBg ----------------------------------------------------------
 
-\mementry{A00C}{RegColBg}{R}{0}
+\mementry{A00C}{RegColBg}{R/WC}{0}
 
 Sprite-to-background collision bitmask.  Bit $N$ is set when sprite $N$
-overlaps a non-zero pixel in the graphics bitmap.  Reading clears the
-register, just like \addr{A00B}.
+overlaps a non-zero pixel in the graphics bitmap.  This register covers
+sprites 0--7; the high byte for sprites 8--15 is exposed at \addr{A0EC}.
 
 \begin{lstlisting}
 10 B = PEEK($A00C)
@@ -315,6 +315,20 @@ nibble is background and the low nibble is foreground.
 \begin{lstlisting}
 POKE $A0E7,$A3 : POKE $A0E6,3 : REM bg=10, fg=3
 \end{lstlisting}
+
+% --- $A0EB RegColStHi --------------------------------------------------------
+
+\mementry{A0EB}{RegColStHi}{R/WC}{0}
+
+High byte of the sprite-to-sprite collision bitmask.  Bit 0 represents sprite
+8, bit 7 represents sprite 15.  Writing any value clears this byte.
+
+% --- $A0EC RegColBgHi --------------------------------------------------------
+
+\mementry{A0EC}{RegColBgHi}{R/WC}{0}
+
+High byte of the sprite-to-background collision bitmask.  Bit 0 represents
+sprite 8, bit 7 represents sprite 15.  Writing any value clears this byte.
 
 % --- $A00F RegCharIn ---------------------------------------------------------
 
@@ -1183,7 +1197,8 @@ POKE $A010,$22 : REM target = active list
 \mementry{A0F0}{RegIrqEnable}{R/W}{0}
 
 Enabled IRQ source mask.  Bit 0 is vblank.  Bits 1--4 are copper/user event
-sources raised by copper pseudo-register \texttt{\$FE}.
+sources raised by copper pseudo-register \texttt{\$FE}.  Bit 5 is
+sprite-to-sprite collision and bit 6 is sprite-to-background collision.
 
 \mementry{A0F1}{RegIrqStatus}{R/W1C}{0}
 
@@ -1195,7 +1210,7 @@ handled sources.
 
 Sets enabled pending bits for diagnostics and test programs.
 
-\mementry{A0F3}{RegIrqValid}{R}{\$1F}
+\mementry{A0F3}{RegIrqValid}{R}{\$7F}
 
 Returns the implemented IRQ source mask.
 

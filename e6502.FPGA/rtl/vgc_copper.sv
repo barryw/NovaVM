@@ -4,7 +4,9 @@
 //
 // Active list arrays are passed as flat packed vectors for Yosys compatibility
 
-module vgc_copper (
+module vgc_copper #(
+    parameter int COPPER_MAX = 32
+) (
     input  logic        clk,
     input  logic        rst,
 
@@ -15,10 +17,10 @@ module vgc_copper (
     input  logic [8:0]  gfx_x,
     input  logic [7:0]  gfx_y,
 
-    // --- Active list arrays (packed: 32 entries per vector) ---
-    input  logic [32*17-1:0] copper_pos_flat,
-    input  logic [32*8-1:0]  copper_reg_flat,
-    input  logic [32*8-1:0]  copper_val_flat,
+    // --- Active list arrays ---
+    input  logic [COPPER_MAX*17-1:0] copper_pos_flat,
+    input  logic [COPPER_MAX*8-1:0]  copper_reg_flat,
+    input  logic [COPPER_MAX*8-1:0]  copper_val_flat,
     input  logic [8:0]       copper_count,
     input  logic             copper_enabled,
 
@@ -38,13 +40,13 @@ module vgc_copper (
         gfx_addr_xy = {1'b0, y, 8'b0} + {3'b0, y, 6'b0} + {8'b0, x};
     endfunction
 
-    // Unpack flat vectors into local arrays
-    logic [16:0] copper_pos [0:31];
-    logic [7:0]  copper_reg [0:31];
-    logic [7:0]  copper_val [0:31];
+    // Unpack flat vectors into local arrays.
+    logic [16:0] copper_pos [0:COPPER_MAX-1];
+    logic [7:0]  copper_reg [0:COPPER_MAX-1];
+    logic [7:0]  copper_val [0:COPPER_MAX-1];
 
     always_comb begin
-        for (int i = 0; i < 32; i++) begin
+        for (int i = 0; i < COPPER_MAX; i++) begin
             copper_pos[i] = copper_pos_flat[i*17 +: 17];
             copper_reg[i] = copper_reg_flat[i*8 +: 8];
             copper_val[i] = copper_val_flat[i*8 +: 8];

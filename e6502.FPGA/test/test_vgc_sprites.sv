@@ -12,9 +12,12 @@ module test_vgc_sprites;
 
 `ifdef VIDEO_720X480
     localparam int PROBE_SPRITE_PLANE_W = 360;
+    localparam int CANVAS_X0_TB = 40;
 `else
     localparam int PROBE_SPRITE_PLANE_W = 320;
+    localparam int CANVAS_X0_TB = 0;
 `endif
+    localparam int CANVAS_Y0_TB = 40;
 
     // VGC sprite command opcodes
     localparam logic [7:0] CMD_SPRDEF  = 8'h10;
@@ -52,7 +55,8 @@ module test_vgc_sprites;
     wire [3:0]        probe_spr_pixel;
     wire [1:0]        probe_spr_pixel_pri;
     wire              probe_spr_pixel_hit;
-    wire [7:0]        probe_collision_bg_bits;
+    wire [3:0]        probe_spr_pixel_owner;
+    wire [15:0]       probe_collision_ss_bits;
 
     vgc_sprites sprite_probe (
         .clk(clk), .rst(rst),
@@ -79,7 +83,8 @@ module test_vgc_sprites;
         .spr_pixel(probe_spr_pixel),
         .spr_pixel_pri(probe_spr_pixel_pri),
         .spr_pixel_hit(probe_spr_pixel_hit),
-        .collision_bg_bits(probe_collision_bg_bits)
+        .spr_pixel_owner(probe_spr_pixel_owner),
+        .collision_ss_bits(probe_collision_ss_bits)
     );
 
     // -----------------------------------------------------------------------
@@ -183,7 +188,7 @@ module test_vgc_sprites;
     task automatic probe_clear_line_buffers();
         for (int bank = 0; bank < 2; bank++)
             for (int x = 0; x < PROBE_SPRITE_PLANE_W; x++)
-                sprite_probe.slb_mem[bank][x] = 7'd0;
+                sprite_probe.slb_ram.mem[(bank << 9) + x] = 7'd0;
     endtask
 
     task automatic probe_config_solid_sprite(input int y);
@@ -211,6 +216,91 @@ module test_vgc_sprites;
                     sprite_probe.spr_mem0.mem[row * 8 + col_pair] = 8'hFF;
     endtask
 
+    task automatic probe_config_pattern_sprite(input int y);
+        logic [7:0] row_bytes[8];
+
+        row_bytes[0] = 8'h12;
+        row_bytes[1] = 8'h34;
+        row_bytes[2] = 8'h56;
+        row_bytes[3] = 8'h78;
+        row_bytes[4] = 8'h9A;
+        row_bytes[5] = 8'hBC;
+        row_bytes[6] = 8'hDE;
+        row_bytes[7] = 8'hF1;
+
+        probe_spr_x_flat = '0;
+        probe_spr_y_flat = '0;
+        probe_spr_enable_flat = '0;
+        probe_spr_flip_h_flat = '0;
+        probe_spr_flip_v_flat = '0;
+        probe_spr_pri_flat = '0;
+        probe_spr_shape_flat = '0;
+        probe_spr_trans_flat = '0;
+
+        probe_spr_x_flat[0 +: 16] = 16'd0;
+        probe_spr_y_flat[0 +: 16] = 16'(y);
+        probe_spr_enable_flat[0] = 1'b1;
+        probe_spr_pri_flat[0 +: 2] = 2'd2;
+        probe_spr_shape_flat[0 +: 4] = 4'd0;
+        probe_spr_trans_flat[0 +: 4] = 4'd0;
+
+        for (int row = 0; row < 16; row++) begin
+            for (int col_pair = 0; col_pair < 8; col_pair++) begin
+                logic [7:0] value;
+                value = (row == 0) ? row_bytes[col_pair] : 8'h00;
+                if (sprite_probe.active_shape_bank)
+                    sprite_probe.spr_mem1.mem[row * 8 + col_pair] = value;
+                else
+                    sprite_probe.spr_mem0.mem[row * 8 + col_pair] = value;
+            end
+        end
+    endtask
+
+    task automatic probe_config_overlapping_sprites(input int sprite_base, input int y);
+        probe_spr_x_flat = '0;
+        probe_spr_y_flat = '0;
+        probe_spr_enable_flat = '0;
+        probe_spr_flip_h_flat = '0;
+        probe_spr_flip_v_flat = '0;
+        probe_spr_pri_flat = '0;
+        probe_spr_shape_flat = '0;
+        probe_spr_trans_flat = '0;
+
+        probe_spr_x_flat[sprite_base * 16 +: 16] = 16'd0;
+        probe_spr_y_flat[sprite_base * 16 +: 16] = 16'(y);
+        probe_spr_enable_flat[sprite_base] = 1'b1;
+        probe_spr_pri_flat[sprite_base * 2 +: 2] = 2'd1;
+        probe_spr_shape_flat[sprite_base * 4 +: 4] = 4'd0;
+        probe_spr_trans_flat[sprite_base * 4 +: 4] = 4'd0;
+
+        probe_spr_x_flat[(sprite_base + 1) * 16 +: 16] = 16'd8;
+        probe_spr_y_flat[(sprite_base + 1) * 16 +: 16] = 16'(y);
+        probe_spr_enable_flat[sprite_base + 1] = 1'b1;
+        probe_spr_pri_flat[(sprite_base + 1) * 2 +: 2] = 2'd1;
+        probe_spr_shape_flat[(sprite_base + 1) * 4 +: 4] = 4'd1;
+        probe_spr_trans_flat[(sprite_base + 1) * 4 +: 4] = 4'd0;
+
+        for (int row = 0; row < 16; row++) begin
+            for (int col_pair = 0; col_pair < 8; col_pair++) begin
+                if (sprite_probe.active_shape_bank) begin
+                    sprite_probe.spr_mem1.mem[row * 8 + col_pair] = 8'hFF;
+                    sprite_probe.spr_mem1.mem[128 + row * 8 + col_pair] = 8'hEE;
+                end else begin
+                    sprite_probe.spr_mem0.mem[row * 8 + col_pair] = 8'hFF;
+                    sprite_probe.spr_mem0.mem[128 + row * 8 + col_pair] = 8'hEE;
+                end
+            end
+        end
+    endtask
+
+    task automatic probe_sample_pixel(input int x, output int hit, output int color);
+        probe_sprite_x_d2 <= x[8:0];
+        @(posedge clk);
+        @(posedge clk);
+        hit = int'(probe_spr_pixel_hit);
+        color = int'(probe_spr_pixel);
+    endtask
+
     task automatic probe_prepare_then_display(input int prep_v, input int display_v);
         probe_h_count <= 10'd0;
         probe_v_count <= prep_v[9:0];
@@ -228,6 +318,43 @@ module test_vgc_sprites;
         probe_sprite_x_d2 <= 9'd0;
         @(posedge clk);
         @(posedge clk);
+    endtask
+
+    task automatic probe_prepare_then_display_capture_collisions(
+        input int prep_v,
+        input int display_v,
+        output int mask
+    );
+        mask = 0;
+        probe_h_count <= 10'd0;
+        probe_v_count <= prep_v[9:0];
+        probe_sprite_x_d2 <= 9'd0;
+        @(posedge clk);
+
+        probe_h_count <= 10'd1;
+        for (int i = 0; i < 760; i++) begin
+            @(posedge clk);
+            mask |= int'(probe_collision_ss_bits);
+        end
+
+        probe_h_count <= 10'd0;
+        probe_v_count <= display_v[9:0];
+        @(posedge clk);
+
+        probe_h_count <= 10'd1;
+        probe_sprite_x_d2 <= 9'd0;
+        @(posedge clk);
+        @(posedge clk);
+    endtask
+
+    task automatic wait_top_timing_d2(input int h, input int v, input string label);
+        int timeout = 0;
+        while (!((dut.h_count_d2 == 10'(h)) && (dut.v_count_d2 == 10'(v))) &&
+               timeout < 900000) begin
+            @(posedge clk);
+            timeout++;
+        end
+        check($sformatf("reached top-level timing sample: %s", label), timeout < 900000);
     endtask
 
     // -----------------------------------------------------------------------
@@ -527,22 +654,74 @@ module test_vgc_sprites;
 
     task automatic test_sprite_probe_covers_full_sprite_plane();
         $display("");
-        $display("Test: PIXIE prepares top and bottom rows of the sprite plane");
+        $display("Test: PIXIE uses Nova canvas Y coordinates");
 
         probe_clear_line_buffers();
         probe_config_solid_sprite(0);
-        // Native line 479 prepares gfx/sprite row 0 for the next frame's
-        // native line 0. This catches the old 320x200/V_BORDER=40 evaluator.
-        probe_prepare_then_display(479, 0);
-        check_eq("probe top row pixel hit", int'(probe_spr_pixel_hit), 1);
-        check_eq("probe top row color", int'(probe_spr_pixel), 15);
+        // Native line 39 prepares the first Nova canvas line at physical line
+        // 40. Sprite Y is in canvas coordinates, matching graphics/copper Y.
+        probe_prepare_then_display(39, 40);
+        check_eq("probe canvas top row pixel hit", int'(probe_spr_pixel_hit), 1);
+        check_eq("probe canvas top row color", int'(probe_spr_pixel), 15);
 
         probe_clear_line_buffers();
-        probe_config_solid_sprite(239);
-        // Native line 478 prepares native line 479, which maps to sprite y=239.
-        probe_prepare_then_display(478, 479);
-        check_eq("probe bottom row pixel hit", int'(probe_spr_pixel_hit), 1);
-        check_eq("probe bottom row color", int'(probe_spr_pixel), 15);
+        probe_config_solid_sprite(199);
+        // Native line 438 prepares physical line 439, the final Nova canvas
+        // line. This keeps canvas bottom sprite Y aligned with gfx row 199.
+        probe_prepare_then_display(438, 439);
+        check_eq("probe canvas bottom row pixel hit", int'(probe_spr_pixel_hit), 1);
+        check_eq("probe canvas bottom row color", int'(probe_spr_pixel), 15);
+    endtask
+
+    task automatic test_sprite_probe_reads_shape_bytes_in_order();
+        int hit;
+        int color;
+        int expected[16];
+
+        $display("");
+        $display("Test: PIXIE reads asymmetric sprite shape bytes in order");
+
+        expected = '{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1};
+
+        probe_clear_line_buffers();
+        probe_config_pattern_sprite(0);
+        probe_prepare_then_display(39, 40);
+
+        for (int x = 0; x < 16; x++) begin
+            probe_sample_pixel(x, hit, color);
+            check_eq($sformatf("probe pattern pixel %0d hit", x), hit, 1);
+            check_eq($sformatf("probe pattern pixel %0d color", x), color, expected[x]);
+        end
+    endtask
+
+    task automatic test_sprite_probe_reports_sprite_sprite_collision_mask();
+        int mask;
+
+        $display("");
+        $display("Test: PIXIE reports 16-bit sprite-sprite collision mask");
+
+        probe_clear_line_buffers();
+        probe_config_overlapping_sprites(0, 0);
+        probe_prepare_then_display_capture_collisions(39, 40, mask);
+
+        check_eq("overlapping sprite 0/1 set both collision bits", mask, 8'h03);
+
+        probe_clear_line_buffers();
+        probe_config_overlapping_sprites(8, 0);
+        probe_prepare_then_display_capture_collisions(39, 40, mask);
+
+        check_eq("overlapping sprite 8/9 set both collision bits", mask, 16'h0300);
+    endtask
+
+    task automatic test_top_sprite_read_uses_canvas_x();
+        $display("");
+        $display("Test: top-level VGC samples sprite buffer in Nova canvas X coordinates");
+
+        wait_top_timing_d2(CANVAS_X0_TB, CANVAS_Y0_TB, "canvas left");
+        check_eq("sprite read x at canvas left edge", int'(dut.sprite_x_read_d2), 0);
+
+        wait_top_timing_d2(CANVAS_X0_TB + 40, CANVAS_Y0_TB, "20 logical pixels into canvas");
+        check_eq("sprite read x inside canvas", int'(dut.sprite_x_read_d2), 20);
     endtask
 
     // -----------------------------------------------------------------------
@@ -565,6 +744,9 @@ module test_vgc_sprites;
         test_oob_sprite_index();
         test_multiple_sprites_independent();
         test_sprite_probe_covers_full_sprite_plane();
+        test_sprite_probe_reads_shape_bytes_in_order();
+        test_sprite_probe_reports_sprite_sprite_collision_mask();
+        test_top_sprite_read_uses_canvas_x();
 
         summary();
         $finish;

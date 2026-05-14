@@ -64,9 +64,13 @@ RTL_VGC = $(DPRAM) $(RTLDIR)/vgc.sv $(RTLDIR)/vgc_timing.sv $(RTLDIR)/vgc_text.s
           $(RTLDIR)/thirdparty/sfifo.v
 RTL_BRIDGE = $(RTLDIR)/debug_byte_fifo.sv \
              $(RTLDIR)/debug_spi_slave.sv
+RTL_USB = $(RTLDIR)/usb_hid_keyboard.sv \
+          $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host.v \
+          $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host_rom.v
+USB_HID_ROM_HEX = $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host_rom.hex
 RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv \
-           $(RTLDIR)/sid_hdmi_audio.sv $(RTLDIR)/nic.sv fpga_top.sv \
-           uart_rx.sv $(RTL_BRIDGE)
+           $(RTLDIR)/sid_hdmi_audio.sv $(RTLDIR)/nic.sv $(RTLDIR)/math_copro.sv fpga_top.sv \
+           uart_rx.sv $(RTL_BRIDGE) $(RTL_USB)
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
            $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv \
@@ -114,7 +118,7 @@ $(PNR_ARGS): FORCE
 		rm -f $(BUILDDIR)/build_args.new; \
 	fi
 
-$(BUILDDIR)/$(PROJ).json: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
+$(BUILDDIR)/$(PROJ).json: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex $(USB_HID_ROM_HEX)
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -134,7 +138,7 @@ diag-vgc: $(BUILDDIR)/post_synth_vgc.v
 
 diag-sprites: $(BUILDDIR)/post_synth_sprites.v
 
-$(BUILDDIR)/post_synth.v: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex
+$(BUILDDIR)/post_synth.v: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex $(USB_HID_ROM_HEX)
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \

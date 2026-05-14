@@ -328,7 +328,7 @@ public class EmulatorCanvas : Control
         ReadOnlySpan<byte> shapeRam = _shapeRamSnapshot;
         int cursorX = _vgc.GetCursorX();
         int cursorY = _vgc.GetCursorY();
-        bool cursorEnabled = _cursorVisible && _vgc.IsCursorEnabled;
+        bool cursorEnabled = _cursorVisible && _vgc.IsCursorVisibleInCurrentMode;
         byte gfxTransparentColor = _vgc.GetGfxTransparentColor();
 
         ushort colSS = 0, colSB = 0;
@@ -404,7 +404,7 @@ public class EmulatorCanvas : Control
 
                         bool textOpaque = false;
                         uint textPixel = 0;
-                        if (state.Mode != 3 && state.Mode != 4)
+                        if (VirtualGraphicsController.IsTextLayerVisible(state.Mode))
                             textOpaque = TrySampleTextPixel(canvasPx, canvasPy, state, cursorX, cursorY, cursorEnabled, palette, out textPixel);
 
                         if (state.Mode == 3 || state.Mode == 4)
