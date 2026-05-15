@@ -423,6 +423,63 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void MetaSpriteStateUsesLinkerStorageAndStableRoutineAbi()
+    {
+        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "msprite.inc"));
+        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "msprite.s"));
+        IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
+
+        Assert.AreEqual(8, constants["MSPRITE_MAX_OBJECTS"]);
+        Assert.AreEqual(0, constants["MSPRITE_RESULT_OK"]);
+        Assert.AreEqual(0xFF, constants["MSPRITE_INVALID_HANDLE"]);
+        Assert.AreEqual(0x80, constants["MSPRITE_OBJ_FLAG_ACTIVE"]);
+        Assert.AreEqual(0x40, constants["MSPRITE_OBJ_FLAG_VISIBLE"]);
+        Assert.AreEqual(0x20, constants["MSPRITE_OBJ_FLAG_DIRTY"]);
+
+        string[] stateSymbols =
+        [
+            "MSPRITE_DESC_L",
+            "MSPRITE_DESC_H",
+            "MSPRITE_ANIM_L",
+            "MSPRITE_ANIM_H",
+            "MSPRITE_RESULT"
+        ];
+
+        foreach (string symbol in stateSymbols)
+        {
+            AssertNoNvrAlias(inc, symbol);
+            StringAssert.Contains(inc, $".global {symbol}");
+            StringAssert.Contains(impl, $"{symbol}:");
+        }
+
+        string[] routines =
+        [
+            "msprite_init",
+            "msprite_spawn",
+            "msprite_destroy",
+            "msprite_show",
+            "msprite_hide",
+            "msprite_set_pos",
+            "msprite_set_frame",
+            "msprite_set_anim",
+            "msprite_set_priority",
+            "msprite_set_transcolor",
+            "msprite_tick",
+            "msprite_commit",
+            "msprite_commit_one"
+        ];
+
+        foreach (string routine in routines)
+        {
+            StringAssert.Contains(inc, $".global {routine}");
+            StringAssert.Contains(impl, $".export {routine}");
+        }
+
+        StringAssert.Contains(impl, ".segment \"BSS\"");
+        StringAssert.Contains(impl, ".include \"sprite.s\"");
+    }
+
+    [TestMethod]
     public void ExtensionRomCodeSegmentUsesLinkerPlacement()
     {
         string source = File.ReadAllText(RepoPath("ehbasic", "extension.s"));
