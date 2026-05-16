@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/vgc.inc".
-.include "lib/vgc.inc"
+; Compatibility include. New code should include "runtime/asm/vgc.inc".
+.include "../runtime/asm/vgc.inc"

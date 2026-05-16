@@ -327,7 +327,7 @@ SYS addr[,a[,x[,y]]]
 
 Before jumping, NovaBASIC loads the 6502 `A`, `X`, and `Y` registers from those
 arguments. When the machine-code routine returns with `RTS`, the returned
-registers are stored in the SYS mailbox labels exported in `ehbasic/lib/nova.inc`:
+registers are stored in the SYS mailbox labels exported in `runtime/asm/nova.inc`:
 
 - `SYS_REGA`
 - `SYS_REGX`

@@ -835,11 +835,14 @@ module fpga_top (
         end
     end
 
+    wire audio_sample_strobe = !rst && !clk_audio && (clk_audio_div == 9'd1);
+
     logic [1:0][15:0] hdmi_audio_sample_word;
 
     sid_hdmi_audio sid_hdmi_audio_inst (
-        .clk              (clk_audio),
+        .clk              (clk_pixel),
         .rst              (rst),
+        .sample_en        (audio_sample_strobe),
         .sid_audio_l      (sid_audio_l),
         .sid_audio_r      (sid_audio_r),
         .audio_sample_word(hdmi_audio_sample_word)

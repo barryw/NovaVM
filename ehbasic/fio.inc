@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/fio.inc".
-.include "lib/fio.inc"
+; Compatibility include. New code should include "runtime/asm/fio.inc".
+.include "../runtime/asm/fio.inc"

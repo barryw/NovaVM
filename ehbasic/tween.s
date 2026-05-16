@@ -1,2 +1,2 @@
-; Compatibility source include. New code should include "lib/tween.s".
-.include "lib/tween.s"
+; Compatibility source include. New code should include "runtime/asm/tween.s".
+.include "../runtime/asm/tween.s"

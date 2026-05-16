@@ -1,7 +1,7 @@
 ; VTEXT shared-runtime integration fixture.
 ;
 ; Loaded at $7000 by tests/integration/vtext_asm.6502 and entered through
-; BASIC SYS. The fixture includes the same lib/vtext.inc/lib/vtext.s library
+; BASIC SYS. The fixture includes the same runtime/asm/vtext.inc/runtime/asm/vtext.s library
 ; that standalone assembly programs are expected to reuse.
 
 .setcpu "65c02"
@@ -10,6 +10,13 @@
 
 RESULT_BASE     = $2240
 REGION_TABLE    = $2400
+
+.segment "ZEROPAGE"
+
+str_ptr_l:      .res 1
+str_ptr_h:      .res 1
+read_addr_l:    .res 1
+read_addr_h:    .res 1
 
 .segment "CODE"
 
@@ -96,9 +103,9 @@ asm_vtext_region_test:
         jsr vtext_clear_region
         sta RESULT_BASE + 5
         lda #<story_text
-        sta VTEXT_TABLEL
+        sta str_ptr_l
         lda #>story_text
-        sta VTEXT_TABLEH
+        sta str_ptr_h
         jsr write_string
         sta RESULT_BASE + 6
         jsr set_table
@@ -109,19 +116,19 @@ asm_vtext_region_test:
         sta RESULT_BASE + 8
         lda VTEXT_CURX
         sta RESULT_BASE + 9
-        stz VTEXT_ADDRL
-        stz VTEXT_ADDRH
+        stz read_addr_l
+        stz read_addr_h
         lda #VTEXT_PLANE_COLOR
         jsr read_vram_byte
         sta RESULT_BASE + $10
         lda #80
-        sta VTEXT_ADDRL
-        stz VTEXT_ADDRH
+        sta read_addr_l
+        stz read_addr_h
         lda #VTEXT_PLANE_COLOR
         jsr read_vram_byte
         sta RESULT_BASE + $11
-        stz VTEXT_ADDRL
-        stz VTEXT_ADDRH
+        stz read_addr_l
+        stz read_addr_h
         lda #VTEXT_PLANE_TEXTATTR
         jsr read_vram_byte
         sta RESULT_BASE + $12
@@ -149,23 +156,23 @@ clear_results:
 write_string:
 @loop:
         ldy #0
-        lda (VTEXT_TABLEL),y
+        lda (str_ptr_l),y
         beq @done
         sta VTEXT_CHAR
         jsr vtext_put_char
         bne @done
-        inc VTEXT_TABLEL
+        inc str_ptr_l
         bne @loop
-        inc VTEXT_TABLEH
+        inc str_ptr_h
         bra @loop
 @done:
         rts
 
 read_vram_byte:
         sta VGC_VRAM_PLANE
-        lda VTEXT_ADDRL
+        lda read_addr_l
         sta VGC_VRAM_ADDRL
-        lda VTEXT_ADDRH
+        lda read_addr_h
         sta VGC_VRAM_ADDRH
         stz VGC_VRAM_CTRL
         lda VGC_VRAM_DATA       ; first read posts the BRAM-backed value

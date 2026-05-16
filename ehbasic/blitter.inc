@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/blitter.inc".
-.include "lib/blitter.inc"
+; Compatibility include. New code should include "runtime/asm/blitter.inc".
+.include "../runtime/asm/blitter.inc"

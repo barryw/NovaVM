@@ -2,7 +2,7 @@
 ; Run: sim6502 -s tests/integration/xram_asm.6502 --backend novavm
 ;
 ; The fixture is built from tests/integration/asm/xram_runtime.s. It links
-; ehbasic/lib/xram.s directly, then BASIC SYS enters the fixture so the same suite
+; runtime/asm/xram.s directly, then BASIC SYS enters the fixture so the same suite
 ; can run on Avalonia and live Nova hardware.
 ; The byte install block is intentionally inside each test after pause(): the
 ; NovaVM runner cold-starts before each test, so suite-level load() is too early.

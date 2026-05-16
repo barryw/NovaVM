@@ -79,6 +79,7 @@ private:
     static constexpr uint8_t CMD_GSAVE    = 0x06;
     static constexpr uint8_t CMD_GLOAD    = 0x07;
     static constexpr uint8_t CMD_SIDPLAY  = 0x08;
+    static constexpr uint8_t CMD_SIDSTOP  = 0x09;
     static constexpr uint8_t CMD_MIDPLAY  = 0x13;
     static constexpr uint8_t CMD_SFLOAD   = 0x15;
     static constexpr uint8_t CMD_XLOAD    = 0x18;
@@ -165,6 +166,8 @@ private:
     void handle_load_runtime();
     void handle_rng();
     void handle_nvgload();
+    void handle_sidplay();
+    void handle_sidstop();
     void handle_unsupported_sd_command(const char* name);
 
     // Directory-iterator state for DIR_OPEN/DIR_READ. Single iterator

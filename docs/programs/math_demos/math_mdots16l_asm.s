@@ -1,5 +1,5 @@
 ; MDOTS16L assembly sprite demo. Build with:
-; ca65 --cpu 65c02 -I docs/programs/math_demos -I ehbasic/lib -I ehbasic -o /tmp/math_mdots16l_asm.o docs/programs/math_demos/math_mdots16l_asm.s
+; ca65 --cpu 65c02 -I docs/programs/math_demos -I runtime/asm -I ehbasic -o /tmp/math_mdots16l_asm.o docs/programs/math_demos/math_mdots16l_asm.s
 ; ld65 -C docs/programs/diag9000_4k.cfg -o /tmp/math_mdots16l_asm.bin /tmp/math_mdots16l_asm.o
 
 .setcpu "65c02"

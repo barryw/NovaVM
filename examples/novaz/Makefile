@@ -4,7 +4,7 @@ DOTNET ?= dotnet
 
 BUILD_DIR := build
 DIST_DIR := dist
-NOVA_LIB := ../../ehbasic/lib
+NOVA_LIB := ../../runtime/asm
 PACKER := tools/Nova.NovaZ.Packer/Nova.NovaZ.Packer.csproj
 SMOKE := tools/Nova.NovaZ.Smoke/Nova.NovaZ.Smoke.csproj
 Z3_SPEC := tools/Nova.NovaZ.Z3SpecStory/Nova.NovaZ.Z3SpecStory.csproj

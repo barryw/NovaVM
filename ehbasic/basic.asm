@@ -59,7 +59,7 @@ Itempl            = $11       ; temporary integer low byte
 Itemph            = Itempl+1  ; temporary integer high byte
 ; end bulk initialize from StrTab at LAB_GMEM
 
-      .include "lib/nova.inc"
+      .include "nova.inc"
 
 nums_1            = Itempl    ; number to bin/hex string convert MSB
 nums_2            = nums_1+1  ; number to bin/hex string convert
@@ -8960,7 +8960,7 @@ PG2_TABS
 ;     .word xxxx              ; save vector           -     monitor to set this
 PG2_TABE
 
-; --- Nova hardware constants live in lib/nova.inc ---
+; --- Nova hardware constants live in runtime/asm/nova.inc ---
 
 ; --- VGC command handlers ---
 
@@ -9013,8 +9013,8 @@ LAB_BNR2
 VGC_NO_EXEC       = 1
 VGC_NO_PRIMITIVES = 1
 SPRITE_NO_EXTRA   = 1
-      .include "lib/vgc.s"
-      .include "lib/sprite.s"
+      .include "vgc.s"
+      .include "sprite.s"
 
 LAB_VGC_CMD_RTS = vgc_cmd
 LAB_VSYNC       = vgc_vsync
@@ -9485,8 +9485,8 @@ FIO_NO_STREAMING = 1
 ; Primary ROM is tight. NIC server entry points are library concerns, so omit
 ; those helper shims from the BASIC ROM build.
 NIC_SERVER_COMMANDS = 0
-      .include "lib/audio.s"
-      .include "lib/nic.s"
+      .include "audio.s"
+      .include "nic.s"
 
 LAB_FIO_CMD_RTS = fio_issue
 

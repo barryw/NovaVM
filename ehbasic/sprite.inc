@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/sprite.inc".
-.include "lib/sprite.inc"
+; Compatibility include. New code should include "runtime/asm/sprite.inc".
+.include "../runtime/asm/sprite.inc"

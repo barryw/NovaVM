@@ -1,2 +1,2 @@
-; Compatibility source include. New code should include "lib/vsprite.s".
-.include "lib/vsprite.s"
+; Compatibility source include. New code should include "runtime/asm/vsprite.s".
+.include "../runtime/asm/vsprite.s"

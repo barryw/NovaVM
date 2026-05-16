@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/rng.inc".
-.include "lib/rng.inc"
+; Compatibility include. New code should include "runtime/asm/rng.inc".
+.include "../runtime/asm/rng.inc"

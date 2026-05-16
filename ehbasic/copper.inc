@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/copper.inc".
-.include "lib/copper.inc"
+; Compatibility include. New code should include "runtime/asm/copper.inc".
+.include "../runtime/asm/copper.inc"

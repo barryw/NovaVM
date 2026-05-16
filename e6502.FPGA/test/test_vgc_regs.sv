@@ -364,9 +364,9 @@ module test_vgc_regs;
         $display("Test: flexible VGC IRQ block — enable, force, status W1C");
 
         bus_write(VIRQ_ENABLE_A, 8'hFF); step(2);
-        check_eq("irq_enable masks to valid sources", int'(dut.irq_enable), 8'h7F);
+        check_eq("irq_enable masks to valid sources", int'(dut.irq_enable), 8'hFF);
         bus_read(VIRQ_VALID_A, rb); step(2);
-        check_eq("$A0F3 reads valid IRQ source mask", int'(rb), 8'h7F);
+        check_eq("$A0F3 reads valid IRQ source mask", int'(rb), 8'hFF);
 
         bus_write(VIRQ_FORCE_A, 8'h02); step(2);
         check_eq("force sets pending copper source", int'(dut.irq_pending), 8'h02);
@@ -379,9 +379,47 @@ module test_vgc_regs;
         check("irq_out deasserts after ack", !irq_out);
 
         bus_write(REG_P14_A, 8'h03); step(2);
-        check_eq("$A01F is command parameter P14, not IRQ enable", int'(dut.irq_enable), 8'h7F);
+        check_eq("$A01F is command parameter P14, not IRQ enable", int'(dut.irq_enable), 8'hFF);
         bus_read(REG_P14_A, rb); step(2);
         check_eq("$A01F reads back P14", int'(rb), 8'h03);
+    endtask
+
+    task automatic test_timer_irq();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: programmable VGC timer IRQ source");
+
+        bus_write(VIRQ_ENABLE_A, 8'h00);
+        bus_write(VIRQ_TIMER_CTL_A, 8'h00);
+        bus_write(VIRQ_STATUS_A, 8'hFF);
+        bus_write(VIRQ_TIMER_LO_A, 8'd6);
+        bus_write(VIRQ_TIMER_MID_A, 8'h00);
+        bus_write(VIRQ_TIMER_HI_A, 8'h00);
+        bus_read(VIRQ_TIMER_LO_A, rb); step(2);
+        check_eq("$A0F4 reads timer period low", int'(rb), 6);
+        bus_read(VIRQ_TIMER_MID_A, rb); step(2);
+        check_eq("$A0F5 reads timer period mid", int'(rb), 0);
+        bus_read(VIRQ_TIMER_HI_A, rb); step(2);
+        check_eq("$A0F6 reads timer period high", int'(rb), 0);
+
+        step(10);
+        check_eq("disabled timer does not latch pending IRQ",
+                 int'(dut.irq_pending & 8'h80), 0);
+
+        bus_write(VIRQ_ENABLE_A, 8'h80);
+        bus_write(VIRQ_TIMER_CTL_A, 8'h01);
+        bus_read(VIRQ_TIMER_CTL_A, rb); step(2);
+        check_eq("$A0F7 reads timer enable bit", int'(rb), 1);
+        step(8);
+        check_eq("timer period expiration latches IRQ_TIMER",
+                 int'(dut.irq_pending & 8'h80), 8'h80);
+        check("timer IRQ asserts CPU IRQ output", irq_out);
+
+        bus_write(VIRQ_TIMER_CTL_A, 8'h00);
+        bus_write(VIRQ_STATUS_A, 8'h80);
+        check_eq("timer pending bit clears after timer is disabled and acked",
+                 int'(dut.irq_pending & 8'h80), 0);
+        check("timer IRQ deasserts after ack", !irq_out);
     endtask
 
     task automatic test_display_dim_register();
@@ -872,6 +910,7 @@ module test_vgc_regs;
         test_cursor_draw_enable_tracks_text_modes();
         test_collision_clear_on_write();
         test_irq_block();
+        test_timer_irq();
         test_display_dim_register();
         test_gfx_transparent_color_register();
         test_palette_mode_register();

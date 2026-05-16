@@ -58,6 +58,17 @@ bool has_extension(const char* name) {
     return name && strrchr(name, '.') != nullptr;
 }
 
+uint16_t read_be16(const uint8_t* data, size_t off) {
+    return ((uint16_t)data[off] << 8) | (uint16_t)data[off + 1];
+}
+
+uint32_t read_be32(const uint8_t* data, size_t off) {
+    return ((uint32_t)data[off] << 24) |
+           ((uint32_t)data[off + 1] << 16) |
+           ((uint32_t)data[off + 2] << 8) |
+            (uint32_t)data[off + 3];
+}
+
 int find_load_entry(ndi::NdiImage* img, const char* name, uint16_t parent,
                     ndi::DirEntry& entry, bool& is_bin) {
     if (!img || !name) return -1;
@@ -83,6 +94,29 @@ int find_load_entry(ndi::NdiImage* img, const char* name, uint16_t parent,
         is_bin = true;
         return idx;
     }
+
+    return -1;
+}
+
+int find_sid_entry(ndi::NdiImage* img, char* name, size_t name_size,
+                   uint16_t parent, ndi::DirEntry& entry) {
+    if (!img || !name) return -1;
+
+    int idx = img->find_entry(name, parent);
+    if (idx >= 0 && img->get_entry(idx, entry) && !entry.is_directory())
+        return idx;
+
+    if (has_extension(name))
+        return -1;
+
+    size_t used = strlen(name);
+    if (used + 4 >= name_size)
+        return -1;
+
+    strcat(name, ".sid");
+    idx = img->find_entry(name, parent);
+    if (idx >= 0 && img->get_entry(idx, entry) && !entry.is_directory())
+        return idx;
 
     return -1;
 }
@@ -156,6 +190,402 @@ private:
     uint32_t _cache_start = 0;
     size_t _cache_valid = 0;
 };
+
+constexpr uint16_t SID_IRQ_VECTOR_ADDR   = 0x020D;
+constexpr uint16_t SID_WORKSPACE_MIN     = 0x0400;
+constexpr uint16_t SID_WORKSPACE_TOP     = 0xA000;
+constexpr uint16_t SID_WORKSPACE_BYTES   = 0x0300;
+constexpr uint16_t SID_IRQ_ENTRY_OFFSET  = 0x0010;
+constexpr uint16_t SID_HOST_ZP_OFFSET    = 0x0100;
+constexpr uint16_t SID_PLAYER_ZP_OFFSET  = 0x0200;
+constexpr uint16_t VGC_IRQ_ENABLE_ADDR   = 0xA0F0;
+constexpr uint16_t VGC_IRQ_STATUS_ADDR   = 0xA0F1;
+constexpr uint16_t VGC_IRQ_TIMER_LO_ADDR = 0xA0F4;
+constexpr uint16_t VGC_IRQ_TIMER_MID_ADDR = 0xA0F5;
+constexpr uint16_t VGC_IRQ_TIMER_HI_ADDR = 0xA0F6;
+constexpr uint16_t VGC_IRQ_TIMER_CTL_ADDR = 0xA0F7;
+constexpr uint8_t  VGC_IRQ_TIMER         = 0x80;
+constexpr uint8_t  VGC_IRQ_NON_SID_MASK  = 0x7F;
+constexpr uint8_t  VGC_IRQ_SPRCOLL       = 0x20;
+constexpr uint8_t  IRQ_BASIC_IRQ_BASE_ZP = 0xDF;
+constexpr uint32_t SID_TIMER_PAL_PERIOD  = 540000; // 27 MHz / 50 Hz
+constexpr uint32_t SID_TIMER_NTSC_PERIOD = 450000; // 27 MHz / 60 Hz
+constexpr uint16_t SID1_BASE             = 0xD400;
+constexpr uint16_t SID2_BASE             = 0xD420;
+constexpr uint16_t SID_CFG_ADDR          = 0xD440;
+constexpr uint8_t  SID_CFG_MODEL_8580    = 0x01;
+constexpr uint8_t  SID_CFG_CLOCK_NTSC    = 0x02;
+
+constexpr uint8_t SID_CLOCK_NTSC    = 0x02;
+constexpr uint8_t SID_MODEL_8580    = 0x02;
+
+constexpr uint8_t BASIC_IRQ_CODE[] = {
+    0x48,                         // PHA
+    0xA5, IRQ_BASIC_IRQ_BASE_ZP,   // LDA IrqBase
+    0x4A,                         // LSR
+    0x05, IRQ_BASIC_IRQ_BASE_ZP,   // ORA IrqBase
+    0x85, IRQ_BASIC_IRQ_BASE_ZP,   // STA IrqBase
+    0xA9, VGC_IRQ_SPRCOLL,        // LDA #VGC_IRQ_SPRCOLL
+    0x8D, 0xF1, 0xA0,             // STA VGC_IRQ_STATUS
+    0x68,                         // PLA
+    0x40                          // RTI
+};
+
+struct SidInfo {
+    bool valid = false;
+    bool loadAddressInPayload = false;
+    char magic[5] = {};
+    uint16_t dataOffset = 0;
+    uint16_t loadAddress = 0;
+    uint16_t initAddress = 0;
+    uint16_t playAddress = 0;
+    uint16_t songs = 0;
+    uint16_t startSong = 0;
+    uint32_t speed = 0;
+    uint16_t flags = 0;
+    uint32_t payloadFileOffset = 0;
+    uint32_t payloadBytes = 0;
+};
+
+bool parse_sid_header(const uint8_t* header, uint32_t file_size, SidInfo& sid) {
+    if (file_size < 124)
+        return false;
+
+    if ((memcmp(header, "PSID", 4) != 0) && (memcmp(header, "RSID", 4) != 0))
+        return false;
+
+    memcpy(sid.magic, header, 4);
+    sid.magic[4] = 0;
+    sid.dataOffset = read_be16(header, 6);
+    sid.loadAddress = read_be16(header, 8);
+    sid.initAddress = read_be16(header, 10);
+    sid.playAddress = read_be16(header, 12);
+    sid.songs = read_be16(header, 14);
+    sid.startSong = read_be16(header, 16);
+    sid.speed = read_be32(header, 18);
+    sid.flags = sid.dataOffset >= 0x7C ? read_be16(header, 0x76) : 0;
+    sid.loadAddressInPayload = sid.loadAddress == 0;
+
+    if (sid.dataOffset < 124 || sid.dataOffset > file_size)
+        return false;
+    if (sid.loadAddressInPayload && sid.dataOffset + 2 > file_size)
+        return false;
+
+    sid.payloadFileOffset = sid.dataOffset + (sid.loadAddressInPayload ? 2 : 0);
+    if (sid.payloadFileOffset > file_size)
+        return false;
+
+    sid.payloadBytes = file_size - sid.payloadFileOffset;
+    sid.valid = true;
+    return true;
+}
+
+bool sid_uses_cia_timing(const SidInfo& sid, uint8_t song) {
+    if (song == 0)
+        return false;
+    return (sid.speed & (1UL << (song - 1))) != 0;
+}
+
+uint32_t sid_timer_period(const SidInfo& sid, uint8_t song) {
+    if (sid_uses_cia_timing(sid, song))
+        return SID_TIMER_NTSC_PERIOD;
+
+    uint8_t clock = (uint8_t)((sid.flags >> 2) & 0x03);
+    return clock == SID_CLOCK_NTSC ? SID_TIMER_NTSC_PERIOD : SID_TIMER_PAL_PERIOD;
+}
+
+uint8_t sid_config_for(const SidInfo& sid) {
+    uint8_t cfg = 0;
+    uint8_t clock = (uint8_t)((sid.flags >> 2) & 0x03);
+    uint8_t model = (uint8_t)((sid.flags >> 4) & 0x03);
+
+    if (clock == SID_CLOCK_NTSC)
+        cfg |= SID_CFG_CLOCK_NTSC;
+    if (model == SID_MODEL_8580)
+        cfg |= SID_CFG_MODEL_8580;
+
+    return cfg;
+}
+
+bool configure_sid(FpgaBridge& bridge, uint8_t config) {
+    return bridge.poke(SID_CFG_ADDR, config);
+}
+
+bool ranges_overlap(uint32_t a, uint32_t a_len, uint32_t b, uint32_t b_len) {
+    if (a_len == 0 || b_len == 0)
+        return false;
+    return a < b + b_len && b < a + a_len;
+}
+
+uint16_t choose_sid_workspace(uint16_t load, uint32_t payload_len) {
+    for (int base = SID_WORKSPACE_TOP - SID_WORKSPACE_BYTES;
+         base >= SID_WORKSPACE_MIN;
+         base -= 0x0100) {
+        if (!ranges_overlap((uint32_t)base, SID_WORKSPACE_BYTES,
+                            load, payload_len)) {
+            return (uint16_t)base;
+        }
+    }
+    return 0;
+}
+
+bool build_sid_irq_code(uint16_t workspace, uint16_t init_addr,
+                        uint16_t play_addr, uint8_t song_arg,
+                        uint8_t* page) {
+    memset(page, 0, 256);
+
+    uint16_t entry = workspace + SID_IRQ_ENTRY_OFFSET;
+    uint16_t host_zp = workspace + SID_HOST_ZP_OFFSET;
+    uint16_t sid_zp = workspace + SID_PLAYER_ZP_OFFSET;
+    uint16_t active_flag = workspace;
+    uint16_t init_flag = workspace + 1;
+    uint16_t song_value = workspace + 2;
+    uint16_t irq_status_save = workspace + 3;
+    uint16_t non_sid_status = workspace + 4;
+    uint16_t frame_counter = workspace + 5;
+    uint16_t play_counter = workspace + 7;
+    uint16_t init_counter = workspace + 9;
+    uint16_t irq_enable_save = workspace + 11;
+
+    page[0] = 1;          // active
+    page[1] = 1;          // init pending
+    page[2] = song_arg;   // PSID init takes zero-based song number in A
+
+    size_t n = SID_IRQ_ENTRY_OFFSET;
+    bool ok = true;
+    auto emit = [&](uint8_t v) {
+        if (n >= 256) {
+            ok = false;
+            return;
+        }
+        page[n++] = v;
+    };
+    auto emit16 = [&](uint16_t v) {
+        emit((uint8_t)(v & 0xFF));
+        emit((uint8_t)(v >> 8));
+    };
+    auto lda_abs = [&](uint16_t addr) { emit(0xAD); emit16(addr); };
+    auto sta_abs = [&](uint16_t addr) { emit(0x8D); emit16(addr); };
+    auto lda_abs_x = [&](uint16_t addr) { emit(0xBD); emit16(addr); };
+    auto sta_abs_x = [&](uint16_t addr) { emit(0x9D); emit16(addr); };
+    auto inc_abs = [&](uint16_t addr) { emit(0xEE); emit16(addr); };
+    auto beq_placeholder = [&]() -> size_t { emit(0xF0); size_t op = n; emit(0x00); return op; };
+    auto bne_placeholder = [&]() -> size_t { emit(0xD0); size_t op = n; emit(0x00); return op; };
+    auto jmp_abs_placeholder = [&]() -> size_t {
+        emit(0x4C);
+        size_t op = n;
+        emit(0x00);
+        emit(0x00);
+        return op;
+    };
+    auto patch_branch = [&](size_t operand, size_t target) {
+        int rel = (int)target - (int)(operand + 1);
+        if (rel < -128 || rel > 127) {
+            ok = false;
+            return;
+        }
+        page[operand] = (uint8_t)(int8_t)rel;
+    };
+    auto patch_jmp = [&](size_t operand, size_t target) {
+        if (operand + 1 >= 256) {
+            ok = false;
+            return;
+        }
+        uint16_t addr = (uint16_t)(workspace + target);
+        page[operand] = (uint8_t)(addr & 0xFF);
+        page[operand + 1] = (uint8_t)(addr >> 8);
+    };
+    auto inc_abs16 = [&](uint16_t addr) {
+        inc_abs(addr);
+        size_t no_carry_bne = bne_placeholder();
+        inc_abs((uint16_t)(addr + 1));
+        patch_branch(no_carry_bne, n);
+    };
+
+    emit(0x48);                    // PHA
+    emit(0x8A); emit(0x48);        // TXA / PHA
+    emit(0x98); emit(0x48);        // TYA / PHA
+    emit(0xD8);                    // CLD
+
+    lda_abs(VGC_IRQ_ENABLE_ADDR);
+    sta_abs(irq_enable_save);
+
+    lda_abs(VGC_IRQ_STATUS_ADDR);
+    sta_abs(irq_status_save);
+    emit(0x29); emit(VGC_IRQ_TIMER);        // AND #TIMER
+    size_t has_timer_bne = bne_placeholder();
+    size_t no_timer_jmp = jmp_abs_placeholder();
+    patch_branch(has_timer_bne, n);
+
+    lda_abs(irq_enable_save);
+    emit(0x29); emit((uint8_t)~VGC_IRQ_TIMER);
+    sta_abs(VGC_IRQ_ENABLE_ADDR);           // mask timer while SID IRQ is active
+    emit(0xA9); emit(VGC_IRQ_TIMER);        // LDA #TIMER
+    sta_abs(VGC_IRQ_STATUS_ADDR);           // ack SID-owned timer IRQ
+    inc_abs16(frame_counter);
+    lda_abs(active_flag);
+    size_t active_bne = bne_placeholder();
+    size_t inactive_jmp = jmp_abs_placeholder();
+    patch_branch(active_bne, n);
+
+    lda_abs(init_flag);
+    size_t init_pending_bne = bne_placeholder();
+    patch_branch(init_pending_bne, n);
+
+    emit(0xA2); emit(0x00);                 // LDX #0
+    size_t save_host_loop = n;
+    emit(0xB5); emit(0x00);                 // LDA $00,X
+    sta_abs_x(host_zp);
+    emit(0xE8);                             // INX
+    size_t save_host_bne = bne_placeholder();
+
+    emit(0xA2); emit(0x00);                 // LDX #0
+    size_t restore_sid_loop = n;
+    lda_abs_x(sid_zp);
+    emit(0x95); emit(0x00);                 // STA $00,X
+    emit(0xE8);                             // INX
+    size_t restore_sid_bne = bne_placeholder();
+
+    lda_abs(init_flag);
+    size_t skip_init_beq = beq_placeholder();
+    inc_abs(init_counter);
+    emit(0xA2); emit(0x00);                 // LDX #0
+    emit(0xA0); emit(0x00);                 // LDY #0
+    lda_abs(song_value);
+    emit(0x20); emit16(init_addr);          // JSR init
+    emit(0xA9); emit(0x00);                 // LDA #0
+    sta_abs(init_flag);
+
+    size_t call_play = n;
+    inc_abs16(play_counter);
+    emit(0xA2); emit(0x00);                 // LDX #0
+    emit(0xA0); emit(0x00);                 // LDY #0
+    emit(0x20); emit16(play_addr);          // JSR play
+
+    emit(0xA2); emit(0x00);                 // LDX #0
+    size_t save_sid_loop = n;
+    emit(0xB5); emit(0x00);                 // LDA $00,X
+    sta_abs_x(sid_zp);
+    emit(0xE8);                             // INX
+    size_t save_sid_bne = bne_placeholder();
+
+    emit(0xA2); emit(0x00);                 // LDX #0
+    size_t restore_host_loop = n;
+    lda_abs_x(host_zp);
+    emit(0x95); emit(0x00);                 // STA $00,X
+    emit(0xE8);                             // INX
+    size_t restore_host_bne = bne_placeholder();
+
+    size_t maybe_basic_irq = n;
+    lda_abs(irq_status_save);
+    emit(0x29); emit(VGC_IRQ_NON_SID_MASK);
+    size_t no_basic_irq_beq = beq_placeholder();
+    sta_abs(non_sid_status);
+    emit(0xA5); emit(IRQ_BASIC_IRQ_BASE_ZP); // LDA IrqBase
+    emit(0x4A);                              // LSR
+    emit(0x05); emit(IRQ_BASIC_IRQ_BASE_ZP); // ORA IrqBase
+    emit(0x85); emit(IRQ_BASIC_IRQ_BASE_ZP); // STA IrqBase
+    lda_abs(non_sid_status);
+    sta_abs(VGC_IRQ_STATUS_ADDR);            // ack non-vblank VGC sources
+
+    size_t done = n;
+    lda_abs(irq_enable_save);
+    sta_abs(VGC_IRQ_ENABLE_ADDR);
+    emit(0x68); emit(0xA8);        // PLA / TAY
+    emit(0x68); emit(0xAA);        // PLA / TAX
+    emit(0x68);                    // PLA
+    emit(0x40);                    // RTI
+
+    patch_jmp(no_timer_jmp, maybe_basic_irq);
+    patch_jmp(inactive_jmp, maybe_basic_irq);
+    patch_branch(save_host_bne, save_host_loop);
+    patch_branch(restore_sid_bne, restore_sid_loop);
+    patch_branch(skip_init_beq, call_play);
+    patch_branch(save_sid_bne, save_sid_loop);
+    patch_branch(restore_host_bne, restore_host_loop);
+    patch_branch(no_basic_irq_beq, done);
+
+    return ok && n <= 256 && entry == workspace + SID_IRQ_ENTRY_OFFSET;
+}
+
+bool set_sid_timer(FpgaBridge& bridge, uint32_t period, bool enabled) {
+    uint8_t mask = 0;
+    if (!bridge.peek(VGC_IRQ_ENABLE_ADDR, mask))
+        return false;
+
+    mask = enabled ? (uint8_t)(mask | VGC_IRQ_TIMER)
+                   : (uint8_t)(mask & (uint8_t)~VGC_IRQ_TIMER);
+
+    if (!bridge.poke(VGC_IRQ_TIMER_CTL_ADDR, 0))
+        return false;
+    if (!bridge.poke(VGC_IRQ_TIMER_LO_ADDR, (uint8_t)(period & 0xFF)))
+        return false;
+    if (!bridge.poke(VGC_IRQ_TIMER_MID_ADDR, (uint8_t)((period >> 8) & 0xFF)))
+        return false;
+    if (!bridge.poke(VGC_IRQ_TIMER_HI_ADDR, (uint8_t)((period >> 16) & 0xFF)))
+        return false;
+    if (!bridge.poke(VGC_IRQ_STATUS_ADDR, VGC_IRQ_TIMER))
+        return false;
+    if (!bridge.poke(VGC_IRQ_ENABLE_ADDR, mask))
+        return false;
+    if (enabled && !bridge.poke(VGC_IRQ_TIMER_CTL_ADDR, 1))
+        return false;
+    return true;
+}
+
+bool restore_basic_irq(FpgaBridge& bridge) {
+    return bridge.loadRam(SID_IRQ_VECTOR_ADDR, BASIC_IRQ_CODE,
+                          sizeof(BASIC_IRQ_CODE));
+}
+
+bool silence_sid_chips(FpgaBridge& bridge) {
+    for (uint16_t off = 0; off <= 0x18; off++) {
+        if (!bridge.poke((uint16_t)(SID1_BASE + off), 0))
+            return false;
+        if (!bridge.poke((uint16_t)(SID2_BASE + off), 0))
+            return false;
+    }
+    for (uint16_t off = 0x1D; off <= 0x1F; off++) {
+        if (!bridge.poke((uint16_t)(SID1_BASE + off), 0x0F))
+            return false;
+        if (!bridge.poke((uint16_t)(SID2_BASE + off), 0x0F))
+            return false;
+    }
+    return true;
+}
+
+bool disable_sid_player(FpgaBridge& bridge) {
+    return set_sid_timer(bridge, 0, false) &&
+           configure_sid(bridge, 0) &&
+           restore_basic_irq(bridge) &&
+           silence_sid_chips(bridge);
+}
+
+bool install_sid_player(FpgaBridge& bridge, uint16_t workspace,
+                        uint16_t init_addr, uint16_t play_addr,
+                        uint8_t song_arg, uint32_t timer_period,
+                        uint8_t sid_config) {
+    uint8_t page[256];
+    uint8_t zero_page[256];
+    uint8_t irq_jump[3] = {
+        0x4C,
+        (uint8_t)((workspace + SID_IRQ_ENTRY_OFFSET) & 0xFF),
+        (uint8_t)((workspace + SID_IRQ_ENTRY_OFFSET) >> 8)
+    };
+
+    if (!build_sid_irq_code(workspace, init_addr, play_addr, song_arg, page))
+        return false;
+
+    memset(zero_page, 0, sizeof(zero_page));
+    return bridge.loadRam(workspace, page, sizeof(page)) &&
+           bridge.loadRam((uint16_t)(workspace + SID_HOST_ZP_OFFSET),
+                          zero_page, sizeof(zero_page)) &&
+           bridge.loadRam((uint16_t)(workspace + SID_PLAYER_ZP_OFFSET),
+                          zero_page, sizeof(zero_page)) &&
+           bridge.loadRam(SID_IRQ_VECTOR_ADDR, irq_jump, sizeof(irq_jump)) &&
+           configure_sid(bridge, sid_config) &&
+           set_sid_timer(bridge, timer_period, true);
+}
 }
 
 void FioDispatcher::handle_event() {
@@ -194,7 +624,8 @@ void FioDispatcher::handle_event() {
         case CMD_DIR_OPEN: handle_dir_open(); break;
         case CMD_DIR_READ: handle_dir_read(); break;
         case CMD_DELETE:   handle_delete();   break;
-        case CMD_SIDPLAY:  handle_unsupported_sd_command("SIDPLAY"); break;
+        case CMD_SIDPLAY:  handle_sidplay();  break;
+        case CMD_SIDSTOP:  handle_sidstop();  break;
         case CMD_MIDPLAY:  handle_unsupported_sd_command("MIDPLAY"); break;
         case CMD_SFLOAD:   handle_unsupported_sd_command("SFLOAD");  break;
         case CMD_CD:       handle_cd();       break;
@@ -347,6 +778,157 @@ void FioDispatcher::handle_rng() {
 void FioDispatcher::handle_unsupported_sd_command(const char* name) {
     logLn("[fio] %s is not implemented on ESP SD host\n", name ? name : "command");
     respond_err(ERR_IO);
+}
+
+// ---------------------------------------------------------------------------
+// SIDPLAY / SIDSTOP
+// ---------------------------------------------------------------------------
+void FioDispatcher::handle_sidplay() {
+    char name[64];
+    copy_filename(name);
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        logLn("[fio] SIDPLAY resolve failed: %s\n", name);
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    auto* img = _dm.image(slot);
+    if (!img) {
+        respond_err(ERR_NO_MOUNT);
+        return;
+    }
+
+    ndi::DirEntry e;
+    int idx = find_sid_entry(img, scratch, sizeof(scratch), parent, e);
+    if (idx < 0) {
+        logLn("[fio] SIDPLAY: '%s' not found in dev=%s\n",
+              scratch, DeviceManager::prefix_for_slot(slot));
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    if (e.size_bytes < 124) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    int got = img->read_file_chunk_by_index(idx, 0, _transfer_buf, 124);
+    if (got != 124) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    SidInfo sid;
+    if (!parse_sid_header(_transfer_buf, e.size_bytes, sid)) {
+        logLn("[fio] SIDPLAY %s: invalid SID header\n", scratch);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    if (sid.loadAddressInPayload) {
+        got = img->read_file_chunk_by_index(idx, sid.dataOffset,
+                                            _transfer_buf, 2);
+        if (got != 2) {
+            respond_err(ERR_IO);
+            return;
+        }
+        sid.loadAddress = (uint16_t)_transfer_buf[0] |
+                          ((uint16_t)_transfer_buf[1] << 8);
+    }
+
+    uint8_t song = _bank[OFF_SRC_LO];
+    if (song < 1)
+        song = sid.startSong == 0 ? 1 : (uint8_t)sid.startSong;
+    if (sid.songs != 0 && song > sid.songs) {
+        logLn("[fio] SIDPLAY %s: song %u outside 1..%u\n",
+              scratch, (unsigned)song, (unsigned)sid.songs);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t load_end = (uint32_t)sid.loadAddress + sid.payloadBytes;
+    if (sid.payloadBytes == 0 ||
+        sid.loadAddress < SID_WORKSPACE_MIN ||
+        load_end > SID_WORKSPACE_TOP ||
+        sid.initAddress < sid.loadAddress ||
+        sid.initAddress >= load_end ||
+        sid.playAddress == 0 ||
+        sid.playAddress < sid.loadAddress ||
+        sid.playAddress >= load_end) {
+        logLn("[fio] SIDPLAY %s: unsupported memory layout load=$%04X size=%u init=$%04X play=$%04X\n",
+              scratch, (unsigned)sid.loadAddress, (unsigned)sid.payloadBytes,
+              (unsigned)sid.initAddress, (unsigned)sid.playAddress);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint16_t workspace = choose_sid_workspace(sid.loadAddress, sid.payloadBytes);
+    if (workspace == 0) {
+        logLn("[fio] SIDPLAY %s: no free IRQ-player workspace\n", scratch);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    bool ok = disable_sid_player(_bridge);
+    if (ok) {
+        uint32_t off = 0;
+        while (off < sid.payloadBytes) {
+            uint32_t remaining = sid.payloadBytes - off;
+            uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+            got = img->read_file_chunk_by_index(idx, sid.payloadFileOffset + off,
+                                                _transfer_buf, chunk);
+            if (got != (int)chunk) {
+                ok = false;
+                break;
+            }
+            if (!_bridge.loadRam((uint16_t)(sid.loadAddress + off),
+                                _transfer_buf, chunk)) {
+                ok = false;
+                break;
+            }
+            off += chunk;
+        }
+    }
+
+    if (ok) {
+        uint32_t timer_period = sid_timer_period(sid, song);
+        uint8_t sid_config = sid_config_for(sid);
+        ok = install_sid_player(_bridge, workspace, sid.initAddress,
+                                sid.playAddress, (uint8_t)(song - 1),
+                                timer_period, sid_config);
+    }
+
+    if (!ok) {
+        logLn("[fio] SIDPLAY %s failed\n", scratch);
+        respond_err(ERR_IO);
+        return;
+    }
+
+    write_size(sid.payloadBytes);
+    logLn("[fio] SIDPLAY %s %s load=$%04X init=$%04X play=$%04X song=%u workspace=$%04X speed=$%08lX flags=$%04X period=%lu cfg=$%02X OK\n",
+          scratch, sid.magic, (unsigned)sid.loadAddress,
+          (unsigned)sid.initAddress, (unsigned)sid.playAddress,
+          (unsigned)song, (unsigned)workspace,
+          (unsigned long)sid.speed, (unsigned)sid.flags,
+          (unsigned long)sid_timer_period(sid, song),
+          (unsigned)sid_config_for(sid));
+    respond_ok();
+}
+
+void FioDispatcher::handle_sidstop() {
+    bool ok = disable_sid_player(_bridge);
+
+    if (!ok) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    logLn("[fio] SIDSTOP OK\n");
+    respond_ok();
 }
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,8 @@ module test_sid_cpu_audio_top;
     wire  [3:0]  vid_r, vid_g, vid_b;
     wire         vid_hsync, vid_vsync, vid_de;
     wire signed [17:0] audio_l, audio_r;
+    logic       clk_audio = 1'b0;
+    logic [1:0][15:0] hdmi_audio_sample_word;
 
     logic        dbg_peek_en;
     logic [15:0] dbg_peek_addr;
@@ -46,6 +48,8 @@ module test_sid_cpu_audio_top;
     wire         dbg_cpu_waiting, dbg_cpu_stopped;
 
     wire fio_event;
+
+    always #11240 clk_audio = ~clk_audio;
 
     top dut (
         .clk(clk), .rst(rst),
@@ -92,6 +96,15 @@ module test_sid_cpu_audio_top;
         .sdram_doutB(8'h00),
         .fio_event(fio_event),
         .nic_event()
+    );
+
+    sid_hdmi_audio sid_hdmi_audio_inst (
+        .clk              (clk_audio),
+        .rst              (rst),
+        .sample_en        (1'b1),
+        .sid_audio_l      (audio_l),
+        .sid_audio_r      (audio_r),
+        .audio_sample_word(hdmi_audio_sample_word)
     );
 
     int pass_count = 0;
@@ -146,6 +159,15 @@ module test_sid_cpu_audio_top;
         dbg_rom_we   <= 0;
     endtask
 
+    task automatic debug_poke(input logic [15:0] addr, input logic [7:0] data);
+        @(posedge clk);
+        dbg_poke_addr <= addr;
+        dbg_poke_data <= data;
+        dbg_poke_en   <= 1;
+        @(posedge clk);
+        dbg_poke_en   <= 0;
+    endtask
+
     task automatic wait_vgc_ready();
         while (dut.vgc_rdy !== 1'b1) @(posedge clk);
         repeat(4) @(posedge clk);
@@ -155,20 +177,108 @@ module test_sid_cpu_audio_top;
         abs18 = (v < 0) ? -v : v;
     endfunction
 
+    function automatic int pcm16(input logic [15:0] v);
+        logic signed [15:0] s;
+        begin
+            s = v;
+            pcm16 = s;
+        end
+    endfunction
+
+    task automatic count_sid_ticks(input int cycles, output int ticks);
+        ticks = 0;
+        repeat(cycles) begin
+            @(posedge clk);
+            if (dut.sid_ce_1m)
+                ticks++;
+        end
+    endtask
+
+    task automatic rom_emit(inout int pc, input logic [7:0] data);
+        rom_write(1'b0, 14'(pc), data);
+        pc++;
+    endtask
+
+    task automatic emit_lda_sta(inout int pc, input logic [7:0] data,
+                                input logic [15:0] addr);
+        rom_emit(pc, 8'hA9);
+        rom_emit(pc, data);
+        rom_emit(pc, 8'h8D);
+        rom_emit(pc, addr[7:0]);
+        rom_emit(pc, addr[15:8]);
+    endtask
+
+    task automatic emit_jmp_self(inout int pc, input logic [15:0] base);
+        logic [15:0] target;
+        target = base + pc[15:0];
+        rom_emit(pc, 8'h4C);
+        rom_emit(pc, target[7:0]);
+        rom_emit(pc, target[15:8]);
+    endtask
+
     // Program at $C000:
-    //   set SID volume
-    //   configure voice 1 ADSR/frequency
-    //   gate voice 1 on with sawtooth waveform
+    //   configure all three SID1 voices at $D400
+    //   configure all three SID2 voices at $D420
+    //   write SID2 voice 1 frequency high through its legacy $D500 mirror
+    //   gate every oscillator on with distinct waveforms
     //   halt in a tight loop
-    localparam int PROG_LEN = 33;
-    byte unsigned prog [PROG_LEN] = '{
-        8'hA9, 8'h0F, 8'h8D, 8'h18, 8'hD4,
-        8'hA9, 8'h00, 8'h8D, 8'h05, 8'hD4,
-        8'hA9, 8'hF0, 8'h8D, 8'h06, 8'hD4,
-        8'hA9, 8'h00, 8'h8D, 8'h00, 8'hD4,
-        8'hA9, 8'h10, 8'h8D, 8'h01, 8'hD4,
-        8'hA9, 8'h21, 8'h8D, 8'h04, 8'hD4,
-        8'h4C, 8'h1E, 8'hC0
+    task automatic load_sid_register_program(output int program_len);
+        int pc;
+        pc = 0;
+
+        // SID1 voice 1
+        emit_lda_sta(pc, 8'h0F, 16'hD418);
+        emit_lda_sta(pc, 8'h00, 16'hD405);
+        emit_lda_sta(pc, 8'hF0, 16'hD406);
+        emit_lda_sta(pc, 8'h00, 16'hD400);
+        emit_lda_sta(pc, 8'h10, 16'hD401);
+        emit_lda_sta(pc, 8'h21, 16'hD404);
+
+        // SID1 voice 2
+        emit_lda_sta(pc, 8'h34, 16'hD407);
+        emit_lda_sta(pc, 8'h12, 16'hD408);
+        emit_lda_sta(pc, 8'h23, 16'hD40C);
+        emit_lda_sta(pc, 8'hE2, 16'hD40D);
+        emit_lda_sta(pc, 8'h41, 16'hD40B);
+
+        // SID1 voice 3
+        emit_lda_sta(pc, 8'h78, 16'hD40E);
+        emit_lda_sta(pc, 8'h56, 16'hD40F);
+        emit_lda_sta(pc, 8'h45, 16'hD413);
+        emit_lda_sta(pc, 8'hD3, 16'hD414);
+        emit_lda_sta(pc, 8'h81, 16'hD412);
+
+        // SID2 voice 1, with high byte overwritten through the legacy mirror.
+        emit_lda_sta(pc, 8'h0F, 16'hD438);
+        emit_lda_sta(pc, 8'h00, 16'hD425);
+        emit_lda_sta(pc, 8'hF0, 16'hD426);
+        emit_lda_sta(pc, 8'h00, 16'hD420);
+        emit_lda_sta(pc, 8'h18, 16'hD421);
+        emit_lda_sta(pc, 8'h20, 16'hD501);
+        emit_lda_sta(pc, 8'h21, 16'hD424);
+
+        // SID2 voice 2
+        emit_lda_sta(pc, 8'hCD, 16'hD427);
+        emit_lda_sta(pc, 8'hAB, 16'hD428);
+        emit_lda_sta(pc, 8'h67, 16'hD42C);
+        emit_lda_sta(pc, 8'hC4, 16'hD42D);
+        emit_lda_sta(pc, 8'h11, 16'hD42B);
+
+        // SID2 voice 3
+        emit_lda_sta(pc, 8'hEF, 16'hD42E);
+        emit_lda_sta(pc, 8'hBE, 16'hD42F);
+        emit_lda_sta(pc, 8'h89, 16'hD433);
+        emit_lda_sta(pc, 8'hB5, 16'hD434);
+        emit_lda_sta(pc, 8'h21, 16'hD432);
+
+        emit_jmp_self(pc, 16'hC000);
+        program_len = pc;
+    endtask
+
+    localparam int TONE_PROG_LEN = 8;
+    byte unsigned tone_prog [TONE_PROG_LEN] = '{
+        8'hA9, 8'h80, 8'h8D, 8'h40, 8'hD4,
+        8'h4C, 8'h05, 8'hC0
     };
 
     initial begin
@@ -178,6 +288,15 @@ module test_sid_cpu_audio_top;
         int max_l;
         int min_r;
         int max_r;
+        int min_pcm_l;
+        int max_pcm_l;
+        int min_pcm_r;
+        int max_pcm_r;
+        int cur_pcm_l;
+        int cur_pcm_r;
+        int pal_ticks;
+        int ntsc_ticks;
+        int program_len;
 
         $display("=== SID CPU-to-audio top-level regression ===");
 
@@ -198,8 +317,26 @@ module test_sid_cpu_audio_top;
         rst = 0;
         repeat(10) @(posedge clk);
 
-        for (int i = 0; i < PROG_LEN; i++)
-            rom_write(1'b0, 14'(i), prog[i]);
+        debug_poke(16'hD440, 8'h00);
+        repeat(4) @(posedge clk);
+        count_sid_ticks(27000, pal_ticks);
+        $display("SID PAL ticks per 27000 pixel clocks: %0d", pal_ticks);
+        check("SID PAL clock produces 985248 Hz cadence",
+              pal_ticks >= 984 && pal_ticks <= 986);
+        check("SID clock defaults to PAL", !dut.sid_clock_ntsc);
+
+        debug_poke(16'hD440, 8'h02);
+        repeat(4) @(posedge clk);
+        count_sid_ticks(27000, ntsc_ticks);
+        $display("SID NTSC ticks per 27000 pixel clocks: %0d", ntsc_ticks);
+        check("SID NTSC clock produces 1022727 Hz cadence",
+              ntsc_ticks >= 1022 && ntsc_ticks <= 1024);
+        check("SID clock config selects NTSC", dut.sid_clock_ntsc);
+
+        debug_poke(16'hD440, 8'h00);
+        repeat(4) @(posedge clk);
+
+        load_sid_register_program(program_len);
         rom_write(1'b0, 14'h3FFC, 8'h00);
         rom_write(1'b0, 14'h3FFD, 8'hC0);
 
@@ -216,13 +353,35 @@ module test_sid_cpu_audio_top;
                  dbg_cpu_pc, dbg_cpu_ir, dbg_cpu_state, dbg_cpu_addr, dbg_cpu_dout);
 
         check("CPU reached halt loop",
-              (dbg_cpu_pc >= 16'hC01E) && (dbg_cpu_pc <= 16'hC021));
+              (dbg_cpu_pc >= 16'hC000 + program_len - 3) &&
+              (dbg_cpu_pc <= 16'hC000 + program_len));
 
         check_eq16("SID voice 1 frequency", dut.sid_inst.voice_freq[0], 16'h1000);
         check_eq8("SID voice 1 AD", dut.sid_inst.voice_ad[0], 8'h00);
         check_eq8("SID voice 1 SR", dut.sid_inst.voice_sr[0], 8'hF0);
         check_eq8("SID voice 1 control", dut.sid_inst.voice_ctrl[0], 8'h21);
+        check_eq16("SID voice 2 frequency", dut.sid_inst.voice_freq[1], 16'h1234);
+        check_eq8("SID voice 2 AD", dut.sid_inst.voice_ad[1], 8'h23);
+        check_eq8("SID voice 2 SR", dut.sid_inst.voice_sr[1], 8'hE2);
+        check_eq8("SID voice 2 control", dut.sid_inst.voice_ctrl[1], 8'h41);
+        check_eq16("SID voice 3 frequency", dut.sid_inst.voice_freq[2], 16'h5678);
+        check_eq8("SID voice 3 AD", dut.sid_inst.voice_ad[2], 8'h45);
+        check_eq8("SID voice 3 SR", dut.sid_inst.voice_sr[2], 8'hD3);
+        check_eq8("SID voice 3 control", dut.sid_inst.voice_ctrl[2], 8'h81);
         check_eq8("SID master volume", dut.sid_inst.filter_mode_vol, 8'h0F);
+        check_eq16("SID2 voice 1 frequency via mirror", dut.sid2_inst.voice_freq[0], 16'h2000);
+        check_eq8("SID2 voice 1 AD", dut.sid2_inst.voice_ad[0], 8'h00);
+        check_eq8("SID2 voice 1 SR", dut.sid2_inst.voice_sr[0], 8'hF0);
+        check_eq8("SID2 voice 1 control", dut.sid2_inst.voice_ctrl[0], 8'h21);
+        check_eq16("SID2 voice 2 frequency", dut.sid2_inst.voice_freq[1], 16'hABCD);
+        check_eq8("SID2 voice 2 AD", dut.sid2_inst.voice_ad[1], 8'h67);
+        check_eq8("SID2 voice 2 SR", dut.sid2_inst.voice_sr[1], 8'hC4);
+        check_eq8("SID2 voice 2 control", dut.sid2_inst.voice_ctrl[1], 8'h11);
+        check_eq16("SID2 voice 3 frequency", dut.sid2_inst.voice_freq[2], 16'hBEEF);
+        check_eq8("SID2 voice 3 AD", dut.sid2_inst.voice_ad[2], 8'h89);
+        check_eq8("SID2 voice 3 SR", dut.sid2_inst.voice_sr[2], 8'hB5);
+        check_eq8("SID2 voice 3 control", dut.sid2_inst.voice_ctrl[2], 8'h21);
+        check_eq8("SID2 master volume", dut.sid2_inst.filter_mode_vol, 8'h0F);
 
         max_abs_l = 0;
         max_abs_r = 0;
@@ -252,8 +411,81 @@ module test_sid_cpu_audio_top;
         check("right audio becomes non-zero", max_abs_r > 0);
         check("left audio varies over time", max_l > min_l);
         check("right audio varies over time", max_r > min_r);
-        check("mono SID routes equally to left/right",
+        check("mixed SID audio routes equally to left/right",
               max_abs_l == max_abs_r && min_l == min_r && max_l == max_r);
+
+        min_pcm_l = 32767;
+        max_pcm_l = -32768;
+        min_pcm_r = 32767;
+        max_pcm_r = -32768;
+        repeat(1024) begin
+            @(posedge clk_audio);
+            cur_pcm_l = pcm16(hdmi_audio_sample_word[0]);
+            cur_pcm_r = pcm16(hdmi_audio_sample_word[1]);
+            if (cur_pcm_l < min_pcm_l)
+                min_pcm_l = cur_pcm_l;
+            if (cur_pcm_l > max_pcm_l)
+                max_pcm_l = cur_pcm_l;
+            if (cur_pcm_r < min_pcm_r)
+                min_pcm_r = cur_pcm_r;
+            if (cur_pcm_r > max_pcm_r)
+                max_pcm_r = cur_pcm_r;
+        end
+
+        $display("Conditioned HDMI PCM ranges: L=%0d..%0d R=%0d..%0d",
+                 min_pcm_l, max_pcm_l, min_pcm_r, max_pcm_r);
+        check("left conditioned PCM has audible movement", max_pcm_l - min_pcm_l > 4000);
+        check("right conditioned PCM has audible movement", max_pcm_r - min_pcm_r > 4000);
+
+        dbg_pause = 1;
+        dbg_cpu_reset = 1;
+        repeat(16) @(posedge clk);
+        for (int i = 0; i < TONE_PROG_LEN; i++)
+            rom_write(1'b0, 14'(i), tone_prog[i]);
+        rom_write(1'b0, 14'h3FFC, 8'h00);
+        rom_write(1'b0, 14'h3FFD, 8'hC0);
+
+        repeat(4) @(posedge clk);
+        dbg_cpu_reset = 0;
+        repeat(4) @(posedge clk);
+        dbg_pause = 0;
+        repeat(200000) @(posedge clk);
+
+        min_l = 262143;
+        max_l = -262144;
+        repeat(140000) begin
+            @(posedge clk);
+            if (audio_l < min_l)
+                min_l = audio_l;
+            if (audio_l > max_l)
+                max_l = audio_l;
+        end
+        $display("HDMI diagnostic tone range: L=%0d..%0d", min_l, max_l);
+        check("HDMI audio test tone register was enabled", dut.hdmi_audio_test_enable);
+        check("HDMI audio test tone drives negative samples", min_l < -60000);
+        check("HDMI audio test tone drives positive samples", max_l > 60000);
+
+        dbg_pause = 1;
+        debug_poke(16'hD440, 8'h00);
+        repeat(4) @(posedge clk);
+        check("debug poke disables HDMI audio test tone", !dut.hdmi_audio_test_enable);
+
+        debug_poke(16'hD440, 8'h80);
+        repeat(4) @(posedge clk);
+        check("debug poke enables HDMI audio test tone", dut.hdmi_audio_test_enable);
+
+        min_l = 262143;
+        max_l = -262144;
+        repeat(80000) begin
+            @(posedge clk);
+            if (audio_l < min_l)
+                min_l = audio_l;
+            if (audio_l > max_l)
+                max_l = audio_l;
+        end
+        $display("Debug-poked HDMI diagnostic tone range: L=%0d..%0d", min_l, max_l);
+        check("debug-poked HDMI tone drives negative samples", min_l < -60000);
+        check("debug-poked HDMI tone drives positive samples", max_l > 60000);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);
@@ -263,7 +495,7 @@ module test_sid_cpu_audio_top;
     end
 
     initial begin
-        #50000000;
+        #120000000;
         $display("FAIL: global timeout hit, PC=0x%04X", dbg_cpu_pc);
         $finish(1);
     end

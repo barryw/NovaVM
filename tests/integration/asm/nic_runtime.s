@@ -1,7 +1,7 @@
 ; NIC shared-runtime integration fixture.
 ;
 ; Loaded at $7000 by tests/integration/nic_asm.6502 and entered through
-; BASIC SYS. The fixture includes the same lib/nic.inc/lib/nic.s library that
+; BASIC SYS. The fixture includes the same runtime/asm/nic.inc/runtime/asm/nic.s library that
 ; standalone assembly programs are expected to reuse.
 
 .setcpu "65c02"

@@ -277,6 +277,7 @@ module test_custom_reset_top;
         check_eq8("CPU mutated SID before reset",
                   dut.sid_inst.voice_freq[0][7:0], 8'h1B);
         check("CPU mutated SID config before reset", dut.sid_mode_8580 == 1'b1);
+        check("CPU mutated SID clock before reset", dut.sid_clock_ntsc == 1'b1);
 
         check_eq8("CPU VGC write does not shadow-write RAM",
                   dut.main_ram.mem[16'hA001], 8'h00);
@@ -335,6 +336,7 @@ module test_custom_reset_top;
         check_eq8("DMA srcspace reset", dut.dma_inst.regs[3], 8'h00);
         check_eq8("blitter srcspace reset", dut.blt_inst.regs[3], 8'h00);
         check("SID config reset", dut.sid_mode_8580 == 1'b0);
+        check("SID clock reset", dut.sid_clock_ntsc == 1'b0);
         check_eq8("SID freq reset", dut.sid_inst.voice_freq[0][7:0], 8'h00);
         check_eq8("SID voice volume default", {4'h0, dut.sid_inst.voice_vol[0]}, 8'h0F);
         check_eq8("char RAM reset to space",

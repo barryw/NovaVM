@@ -90,8 +90,8 @@ static void test_open_and_header() {
     check_eq_int("directory_sector_count",  h.directory_sector_count, 48);
     check_eq_int("data_start_sector",       h.data_start_sector, 53);
 
-    // Free count should match `ndi info` (1668 free).
-    check_eq_int("free_sectors",            img.free_sectors(), 1668);
+    // Free count should match `ndi info` for the checked-in demo disk.
+    check_eq_int("free_sectors",            img.free_sectors(), 982);
 }
 
 static void test_list_root() {

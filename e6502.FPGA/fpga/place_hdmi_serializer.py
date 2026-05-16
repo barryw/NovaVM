@@ -9,40 +9,27 @@
 # checks both the packed cell name and the net names attached to its ports.
 
 REGIONS = [
-    # gpdi_dp[2] red+ is at X76/Y0.
+    # Keep the serializer load/shift flops and their cross-domain control close
+    # to the GPDI pins without forcing each lane into a tiny island. The old
+    # per-lane boxes were electrically attractive but over-constrained nextpnr's
+    # legalizer once the design grew.
     {
-        "name": "hdmi_ser_red",
-        "box": (70, 0, 84, 8),
+        "name": "hdmi_ser_gpdi",
+        "box": (64, 0, 126, 24),
         "enforce": True,
-        "match": ("lattice_ecp5_shift[2]", "load_channel[2]", "tmds_shift[2]", "tmds_pair[2]"),
-    },
-    # gpdi_dp[1] green+ is at X83/Y0.
-    {
-        "name": "hdmi_ser_green",
-        "box": (78, 0, 92, 8),
-        "enforce": True,
-        "match": ("lattice_ecp5_shift[1]", "load_channel[1]", "tmds_shift[1]", "tmds_pair[1]"),
-    },
-    # gpdi_dp[0] blue+ is at X110/Y0.
-    {
-        "name": "hdmi_ser_blue",
-        "box": (104, 0, 118, 8),
-        "enforce": True,
-        "match": ("lattice_ecp5_shift[0]", "load_channel[0]", "tmds_shift[0]", "tmds_pair[0]"),
-    },
-    # gpdi_dp[3] clock+ is at X116/Y0.
-    {
-        "name": "hdmi_ser_clock",
-        "box": (112, 0, 124, 8),
-        "enforce": True,
-        "match": ("ddr_tmds_clock", "load_clock", "tmds_clock_shift", "tmds_clock_pair"),
-    },
-    # Shared pixel-to-shift-domain synchronizer and edge detector.
-    {
-        "name": "hdmi_ser_control",
-        "box": (88, 1, 112, 8),
-        "enforce": True,
-        "match": ("tmds_control", "tmds_control_synchronizer_chain", "load_edge"),
+        "match": (
+            "lattice_ecp5_shift",
+            "load_channel",
+            "tmds_shift",
+            "tmds_pair",
+            "ddr_tmds_clock",
+            "load_clock",
+            "tmds_clock_shift",
+            "tmds_clock_pair",
+            "tmds_control",
+            "tmds_control_synchronizer_chain",
+            "load_edge",
+        ),
     },
 
     # Top-band HDMI encoder/packet logic. The serializer cells above remain
@@ -144,7 +131,7 @@ REGIONS = [
         "name": "sid_audio",
         "box": (8, 1, 82, 44),
         "enforce": False,
-        "match": ("sid_inst", "\\sid_inst", "sid_hdmi_audio_inst"),
+        "match": ("sid_inst", "\\sid_inst", "sid2_inst", "\\sid2_inst", "sid_hdmi_audio_inst"),
     },
 ]
 

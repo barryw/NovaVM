@@ -21,7 +21,7 @@ For the reusable assembly-facing runtime ABI, see `docs/assembly/xram.md`.
 
 ## Shared XRAM Runtime
 
-Assembly code should use `ehbasic/lib/xram.inc` and `ehbasic/lib/xram.s` instead of
+Assembly code should use `runtime/asm/xram.inc` and `runtime/asm/xram.s` instead of
 duplicating XMC/DMA register setup. BASIC still exposes banked 64K offsets with
 `XBANK`, but the shared runtime takes a flat 24-bit address in
 `XRAM_ADDRL/M/H`.

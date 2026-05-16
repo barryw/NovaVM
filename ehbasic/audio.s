@@ -1,2 +1,2 @@
-; Compatibility source include. New code should include "lib/audio.s".
-.include "lib/audio.s"
+; Compatibility source include. New code should include "runtime/asm/audio.s".
+.include "../runtime/asm/audio.s"

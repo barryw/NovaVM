@@ -24,6 +24,7 @@ TRACE_FLAGS = --main
 endif
 
 VFLAGS    = --cc --exe --build -j $(VJOBS) --timing $(TRACE_FLAGS) \
+            -I$(RTL)/vendor/redip_sid \
             -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM \
             -Wno-CASEINCOMPLETE -Wno-PROCASSINIT -Wno-UNOPTFLAT -Wno-LATCH \
             -Wno-PINCONNECTEMPTY -Wno-SYNCASYNCNET -Wno-INITIALDLY -Wno-TIMESCALEMOD \
@@ -37,8 +38,16 @@ BD      = $(BD_BASE)$(if $(filter 1,$(TRACE)),-trace,)
 VGC   = $(RTL)/dpram.sv $(RTL)/vgc_timing.sv $(RTL)/vgc_text.sv $(RTL)/vgc_gfx.sv \
         $(RTL)/artist.sv $(RTL)/vgc_sprites.sv $(RTL)/vgc_copper.sv $(RTL)/vgc.sv \
         $(RTL)/thirdparty/sfifo.v
-SID   = $(RTL)/sid/sid_chip.sv $(RTL)/sid/sid_voice.sv $(RTL)/sid/sid_envelope.sv \
-        $(RTL)/sid/sid_filter.sv $(RTL)/sid/sid_tables.sv $(RTL)/sid/sid_dac.sv \
+REDIP = $(RTL)/vendor/redip_sid/sid_pkg.sv \
+        $(RTL)/vendor/redip_sid/muladd.sv \
+        $(RTL)/vendor/redip_sid/sid_dac.sv \
+        $(RTL)/vendor/redip_sid/sid_control.sv \
+        $(RTL)/vendor/redip_sid/sid_waveform.sv \
+        $(RTL)/vendor/redip_sid/sid_envelope.sv \
+        $(RTL)/vendor/redip_sid/sid_voice.sv \
+        $(RTL)/vendor/redip_sid/sid_filter.sv \
+        $(RTL)/vendor/redip_sid/sid_pot.sv
+SID   = $(REDIP) $(RTL)/sid/nova_redip_sid_api.sv $(RTL)/sid/sid_chip.sv \
         $(RTL)/sid/sid_curve_reader.sv
 CPU   = $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v
 HDMI  = $(RTL)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
@@ -266,8 +275,8 @@ test_rom_over_sid: test_rom_over_sid.sv $(ROM_LOAD_RTL)
 
 # Top-level SID audio regression. Runs real CPU writes into both SID chips
 # and verifies signed audio output changes.
-test_sid_cpu_audio_top: test_sid_cpu_audio_top.sv $(ROM_LOAD_RTL)
-	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+test_sid_cpu_audio_top: test_sid_cpu_audio_top.sv $(ROM_LOAD_RTL) $(RTL)/sid_hdmi_audio.sv
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $(RTL)/sid_hdmi_audio.sv $< && $(RUN) test/$(BD)/$@/$@
 
 # Top-level XMC mapped-window decode regression. Verifies the synthesis path
 # keeps WnAL readable/writable but ignores it for 256-byte window translation.

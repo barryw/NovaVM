@@ -145,11 +145,16 @@ module vgc (
     localparam IRQ_ENABLE  = 4'h0;       // R/W: enabled source mask
     localparam IRQ_STATUS  = 4'h1;       // R/W1C: pending source mask
     localparam IRQ_FORCE   = 4'h2;       // W: set enabled pending bits
-    localparam IRQ_VALID   = 8'h7F;
+    localparam IRQ_VALID   = 8'hFF;
     localparam IRQ_VBLANK  = 8'h01;
     localparam IRQ_COPPER0 = 8'h02;
     localparam IRQ_SPRCOLL = 8'h20;
     localparam IRQ_SPRBG   = 8'h40;
+    localparam IRQ_TIMER   = 8'h80;
+    localparam IRQ_TIMER_LO   = 4'h4;       // R/W: programmable timer period bits 7:0
+    localparam IRQ_TIMER_MID  = 4'h5;       // R/W: programmable timer period bits 15:8
+    localparam IRQ_TIMER_HI   = 4'h6;       // R/W: programmable timer period bits 23:16
+    localparam IRQ_TIMER_CTRL = 4'h7;       // R/W: bit0=timer enable
     localparam COPPER_REG_IRQ = 8'hFE;
 
     // VDC-style VRAM port registers at $A0E0-$A0E4
@@ -791,6 +796,10 @@ module vgc (
     logic [15:0] collision_bg;
     logic [7:0]  irq_enable;
     logic [7:0]  irq_pending;
+    logic [23:0] irq_timer_period;
+    logic [23:0] irq_timer_counter;
+    logic        irq_timer_enable;
+    logic        irq_timer_pulse;
     logic        scroll_pending;
     logic        scroll_clearing;
     logic [6:0]  scroll_col;
@@ -800,8 +809,11 @@ module vgc (
         in_text_area_d2 && gfx_x_d2 < GFX_W &&
         spr_pixel_hit && gfx_b_dout != gfx_trans_color;
 
+    wire irq_timer_active = irq_timer_enable && (irq_timer_period != 24'd0);
+
     wire [7:0] irq_event_mask =
         ((vblank_start && irq_enable[0]) ? IRQ_VBLANK : 8'h00) |
+        ((irq_timer_pulse && irq_enable[7]) ? IRQ_TIMER : 8'h00) |
         ((copper_fire && copper_fire_reg == COPPER_REG_IRQ)
             ? (copper_fire_val & IRQ_VALID & irq_enable)
             : 8'h00) |
@@ -904,6 +916,7 @@ module vgc (
         key_fifo_rd = 0; charin_sel_prev = 0; cmd_busy = 0; cmd_op = 0;
         font_slot = 0; collision_ss = 0; collision_bg = 0;
         irq_enable = 0; irq_pending = 0;
+        irq_timer_period = 0; irq_timer_counter = 0; irq_timer_enable = 1'b0; irq_timer_pulse = 1'b0;
         sprrow_count = 0; sprrow_spr = 0; sprrow_row = 0;
         for (int i = 0; i < 8; i++) sprrow_data[i] = 0;
         sprcopy_phase = 0; sprcopy_data = 0; sprdef_wait = 0;
@@ -1139,6 +1152,10 @@ module vgc (
                 IRQ_ENABLE: cpu_rdata = irq_enable;
                 IRQ_STATUS: cpu_rdata = irq_pending;
                 4'h3:       cpu_rdata = IRQ_VALID;
+                IRQ_TIMER_LO:   cpu_rdata = irq_timer_period[7:0];
+                IRQ_TIMER_MID:  cpu_rdata = irq_timer_period[15:8];
+                IRQ_TIMER_HI:   cpu_rdata = irq_timer_period[23:16];
+                IRQ_TIMER_CTRL: cpu_rdata = {7'b0, irq_timer_enable};
                 default:    cpu_rdata = 8'h00;
             endcase
         end
@@ -1250,6 +1267,10 @@ module vgc (
                 IRQ_ENABLE: dbg_rdata = irq_enable;
                 IRQ_STATUS: dbg_rdata = irq_pending;
                 4'h3:       dbg_rdata = IRQ_VALID;
+                IRQ_TIMER_LO:   dbg_rdata = irq_timer_period[7:0];
+                IRQ_TIMER_MID:  dbg_rdata = irq_timer_period[15:8];
+                IRQ_TIMER_HI:   dbg_rdata = irq_timer_period[23:16];
+                IRQ_TIMER_CTRL: dbg_rdata = {7'b0, irq_timer_enable};
                 default:    dbg_rdata = 8'h00;
             endcase
         end
@@ -1318,6 +1339,7 @@ module vgc (
             key_fifo_rd <= 0;
             collision_ss <= 16'h0000; collision_bg <= 16'h0000;
             irq_enable <= 0; irq_pending <= 0;
+            irq_timer_period <= 24'd0; irq_timer_counter <= 24'd0; irq_timer_enable <= 1'b0; irq_timer_pulse <= 1'b0;
             copper_enabled <= 0; copper_count <= 0;
             copper_target_list <= 0; copper_active_list <= 0; copper_pending_list <= 0;
             copper_loading <= 0; copper_load_idx <= 0; copper_load_src <= 0;
@@ -1395,6 +1417,17 @@ module vgc (
             vgc_cmd_reset_req <= 1'b0;
             sys_reset_req <= 1'b0;
             irq_pending <= irq_pending | irq_event_mask;
+            irq_timer_pulse <= 1'b0;
+            if (irq_timer_active) begin
+                if (irq_timer_counter <= 24'd1) begin
+                    irq_timer_counter <= irq_timer_period;
+                    irq_timer_pulse <= 1'b1;
+                end else begin
+                    irq_timer_counter <= irq_timer_counter - 24'd1;
+                end
+            end else begin
+                irq_timer_counter <= 24'd0;
+            end
             collision_ss <= collision_ss | spr_collision_ss_bits;
 
             if (vram_data_read && vram_ctrl[0])
@@ -2128,6 +2161,26 @@ module vgc (
                         IRQ_FORCE:  irq_pending <= irq_pending |
                                                    (r_cpu_wdata_w & IRQ_VALID & irq_enable) |
                                                    irq_event_mask;
+                        IRQ_TIMER_LO: begin
+                            irq_timer_period[7:0] <= r_cpu_wdata_w;
+                            irq_timer_counter <= {irq_timer_period[23:8], r_cpu_wdata_w};
+                            irq_timer_pulse <= 1'b0;
+                        end
+                        IRQ_TIMER_MID: begin
+                            irq_timer_period[15:8] <= r_cpu_wdata_w;
+                            irq_timer_counter <= {irq_timer_period[23:16], r_cpu_wdata_w, irq_timer_period[7:0]};
+                            irq_timer_pulse <= 1'b0;
+                        end
+                        IRQ_TIMER_HI: begin
+                            irq_timer_period[23:16] <= r_cpu_wdata_w;
+                            irq_timer_counter <= {r_cpu_wdata_w, irq_timer_period[15:0]};
+                            irq_timer_pulse <= 1'b0;
+                        end
+                        IRQ_TIMER_CTRL: begin
+                            irq_timer_enable <= r_cpu_wdata_w[0];
+                            irq_timer_counter <= r_cpu_wdata_w[0] ? irq_timer_period : 24'd0;
+                            irq_timer_pulse <= 1'b0;
+                        end
                         default: ;
                     endcase
                 end
@@ -2174,6 +2227,26 @@ module vgc (
                     IRQ_FORCE:  irq_pending <= irq_pending |
                                                (dbg_wdata & IRQ_VALID & irq_enable) |
                                                irq_event_mask;
+                    IRQ_TIMER_LO: begin
+                        irq_timer_period[7:0] <= dbg_wdata;
+                        irq_timer_counter <= {irq_timer_period[23:8], dbg_wdata};
+                        irq_timer_pulse <= 1'b0;
+                    end
+                    IRQ_TIMER_MID: begin
+                        irq_timer_period[15:8] <= dbg_wdata;
+                        irq_timer_counter <= {irq_timer_period[23:16], dbg_wdata, irq_timer_period[7:0]};
+                        irq_timer_pulse <= 1'b0;
+                    end
+                    IRQ_TIMER_HI: begin
+                        irq_timer_period[23:16] <= dbg_wdata;
+                        irq_timer_counter <= {dbg_wdata, irq_timer_period[15:0]};
+                        irq_timer_pulse <= 1'b0;
+                    end
+                    IRQ_TIMER_CTRL: begin
+                        irq_timer_enable <= dbg_wdata[0];
+                        irq_timer_counter <= dbg_wdata[0] ? irq_timer_period : 24'd0;
+                        irq_timer_pulse <= 1'b0;
+                    end
                     default: ;
                 endcase
             end
@@ -2585,8 +2658,16 @@ module vgc (
     logic [3:0]  cur_gfx_d2;
     logic        pixel_on_d2;
     logic        text_flash_hidden_d2;
-    logic [11:0] text_pixel_d2, gfx_pixel_d2, pixel_color;
+    logic [3:0]  text_pixel_idx_d2;
+    logic [3:0]  pixel_color_idx;
     logic        reset_display_blank = 1'b1;
+
+`ifndef SYNTHESIS
+    logic [11:0] pixel_color;
+    always_comb begin
+        pixel_color = palette_rgb(pixel_color_idx);
+    end
+`endif
 
     // Reset scrubbers can complete mid-scanline or mid-frame. If we unblank
     // immediately, the HDMI sink shows a split frame: top/bottom portions from
@@ -2607,50 +2688,49 @@ module vgc (
         cur_bg_d2     = color_b_dout[7:4];
         text_flash_hidden_d2 = attr_b_dout[0] && !frame_counter[5];
         pixel_on_d2   = font_b_dout[3'd7 - font_pixel_d2] && !text_flash_hidden_d2;
-        text_pixel_d2 = pixel_on_d2 ? palette_rgb(cur_fg_d2) : palette_rgb(cur_bg_d2);
+        text_pixel_idx_d2 = pixel_on_d2 ? cur_fg_d2 : cur_bg_d2;
 
         cur_gfx_d2    = gfx_b_dout;
-        gfx_pixel_d2  = palette_rgb(cur_gfx_d2);
 
         // Layer compositing with sprite priorities. `visible_d2` is the
         // physical active-video window; `in_text_area_d2` is the Nova canvas.
         // In 720x480 mode the difference paints the active side borders.
         if (!visible_d2)
-            pixel_color = 12'h000;
+            pixel_color_idx = 4'h0;
         else if (reset_display_active)
             // Keep HDMI timing stable, but hide stale BRAM contents while the
             // reset scrubbers clear text/graphics/sprite memory.
-            pixel_color = 12'h000;
+            pixel_color_idx = 4'h0;
         else begin
             if (!in_text_area_d2) begin
-                pixel_color = palette_rgb(border_color);
+                pixel_color_idx = border_color;
             end else begin
                 case (mode)
-                    3'd0: pixel_color = text_pixel_d2;
-                    3'd1: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : text_pixel_d2;
-                    3'd2: pixel_color = pixel_on_d2 ? palette_rgb(cur_fg_d2) :
-                                        (cur_gfx_d2 != gfx_trans_color && cur_bg_d2 == bg_color) ? gfx_pixel_d2 : palette_rgb(cur_bg_d2);
-                    3'd3: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : palette_rgb(bg_color);
-                    3'd4: pixel_color = (cur_gfx_d2 != gfx_trans_color) ? gfx_pixel_d2 : palette_rgb(bg_color);
-                    default: pixel_color = text_pixel_d2;
+                    3'd0: pixel_color_idx = text_pixel_idx_d2;
+                    3'd1: pixel_color_idx = (cur_gfx_d2 != gfx_trans_color) ? cur_gfx_d2 : text_pixel_idx_d2;
+                    3'd2: pixel_color_idx = pixel_on_d2 ? cur_fg_d2 :
+                                             (cur_gfx_d2 != gfx_trans_color && cur_bg_d2 == bg_color) ? cur_gfx_d2 : cur_bg_d2;
+                    3'd3: pixel_color_idx = (cur_gfx_d2 != gfx_trans_color) ? cur_gfx_d2 : bg_color;
+                    3'd4: pixel_color_idx = (cur_gfx_d2 != gfx_trans_color) ? cur_gfx_d2 : bg_color;
+                    default: pixel_color_idx = text_pixel_idx_d2;
                 endcase
             end
 
             if (spr_pixel_hit && in_text_area_d2) begin
                 if (mode == 3'd4) begin
                     if (spr_pixel_pri == 2'd0) begin
-                        if (cur_gfx_d2 == gfx_trans_color) pixel_color = palette_rgb(spr_pixel);
+                        if (cur_gfx_d2 == gfx_trans_color) pixel_color_idx = spr_pixel;
                     end else if (spr_pixel_pri == 2'd1) begin
-                        pixel_color = palette_rgb(spr_pixel);
+                        pixel_color_idx = spr_pixel;
                     end else begin
-                        pixel_color = palette_rgb(spr_pixel);
+                        pixel_color_idx = spr_pixel;
                     end
                 end else begin
                     if (spr_pixel_pri == 2'd0) begin
                         if (!pixel_on_d2 && cur_gfx_d2 == gfx_trans_color)
-                            pixel_color = palette_rgb(spr_pixel);
+                            pixel_color_idx = spr_pixel;
                     end else begin
-                        pixel_color = palette_rgb(spr_pixel);
+                        pixel_color_idx = spr_pixel;
                     end
                 end
             end
@@ -2768,9 +2848,14 @@ module vgc (
     logic [3:0] vid_r_r     = 4'h0;
     logic [3:0] vid_g_r     = 4'h0;
     logic [3:0] vid_b_r     = 4'h0;
+    logic       vid_hsync_d3 = 1'b1;
+    logic       vid_vsync_d3 = 1'b1;
+    logic       vid_de_d3    = 1'b0;
+    logic [3:0] pixel_color_idx_d3 = 4'h0;
     logic [7:0] dim_r;
     logic [7:0] dim_g;
     logic [7:0] dim_b;
+    logic [3:0] post_cursor_color_idx;
     logic [11:0] post_cursor_color;
     logic [3:0] dimmed_r;
     logic [3:0] dimmed_g;
@@ -2784,7 +2869,8 @@ module vgc (
     assign vid_b     = vid_b_r;
 
     always_comb begin
-        post_cursor_color = (cursor_here && cursor_blink) ? palette_rgb(fg_color) : pixel_color;
+        post_cursor_color_idx = (cursor_here && cursor_blink) ? fg_color : pixel_color_idx;
+        post_cursor_color = palette_rgb(pixel_color_idx_d3);
         dim_r = post_cursor_color[11:8] * display_dim;
         dim_g = post_cursor_color[7:4] * display_dim;
         dim_b = post_cursor_color[3:0] * display_dim;
@@ -2801,10 +2887,19 @@ module vgc (
             vid_r_r     <= 4'h0;
             vid_g_r     <= 4'h0;
             vid_b_r     <= 4'h0;
+            vid_hsync_d3 <= 1'b1;
+            vid_vsync_d3 <= 1'b1;
+            vid_de_d3    <= 1'b0;
+            pixel_color_idx_d3 <= 4'h0;
         end else begin
-            vid_hsync_r <= ~h_sync_area_d2;
-            vid_vsync_r <= ~v_sync_area_d2;
-            vid_de_r    <= visible_d2;
+            vid_hsync_d3 <= ~h_sync_area_d2;
+            vid_vsync_d3 <= ~v_sync_area_d2;
+            vid_de_d3    <= visible_d2;
+            pixel_color_idx_d3 <= post_cursor_color_idx;
+
+            vid_hsync_r <= vid_hsync_d3;
+            vid_vsync_r <= vid_vsync_d3;
+            vid_de_r    <= vid_de_d3;
 
 `ifdef VGC_HW_MOTION_DIAG
             if (hwdiag_log_hit) begin

@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/dma.inc".
-.include "lib/dma.inc"
+; Compatibility include. New code should include "runtime/asm/dma.inc".
+.include "../runtime/asm/dma.inc"

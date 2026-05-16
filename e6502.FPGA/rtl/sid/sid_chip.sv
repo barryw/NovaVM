@@ -46,18 +46,28 @@ module sid_chip (
 
     reg  [7:0] last_written;        // bus data latch for read-back
 
-    // Voice outputs
-    wire signed [21:0] voice_out [3];
-    wire        osc_msb [3];
-    wire  [7:0] osc3_out;
-    wire  [7:0] env3_out;
+    // reDIP SID bus bridge. CPU/debug writes may arrive on any FPGA clock, so
+    // queue them and present one write per SID phi2-low window.
+    sid::bus_i_t bus_i;
+    sid::cs_t    redip_cs;
+    sid::pot_i_t redip_pot_i;
+    sid::pot_o_t redip_pot_o;
+    sid::audio_t redip_audio_i;
+    sid::audio_t redip_audio_o;
+    sid::reg8_t  redip_data_o;
+    sid::reg8_t  osc3_out;
+    sid::reg8_t  env3_out;
 
-    // Combined waveform table I/O (assigned procedurally from table mux)
-    reg   [7:0] _st_out [6];
-    reg   [7:0] p_t_out [6];
-    reg   [7:0] ps__out [6];
-    reg   [7:0] pst_out [6];
-    wire [11:0] acc_t   [3];
+    logic [4:0] write_fifo_addr [32];
+    logic [7:0] write_fifo_data [32];
+    logic [4:0] write_fifo_rd;
+    logic [4:0] write_fifo_wr;
+    logic [5:0] write_fifo_count;
+
+    logic [4:0] active_addr;
+    logic [7:0] active_data;
+    logic       write_active;
+    logic [4:0] sid_phase;
 
     // =========================================================================
     // Register write
@@ -168,136 +178,96 @@ module sid_chip (
     end
 
     // =========================================================================
-    // Voices
+    // reDIP SID engine
     // =========================================================================
-    // Sync chain: voice 3 MSB -> voice 1 -> voice 2 -> voice 3
-    sid_voice v1 (
-        .clock(clk), .ce_1m(ce_1m), .reset(rst), .mode(mode),
-        .freq(voice_freq[0]), .pw(voice_pw[0]),
-        .control(voice_ctrl[0]), .att_dec(voice_ad[0]), .sus_rel(voice_sr[0]),
-        .osc_msb_in(osc_msb[2]),
-        .osc_msb_out(osc_msb[0]),
-        .voice_out(voice_out[0]),
-        .osc_out(), .env_out(),
-        ._st_out(_st_out[0]), .p_t_out(p_t_out[0]),
-        .ps__out(ps__out[0]),  .pst_out(pst_out[0]),
-        .acc_t(acc_t[0])
-    );
+    localparam logic [4:0] SID_PHI2_LOW_CYCLES = 5'd12;
 
-    sid_voice v2 (
-        .clock(clk), .ce_1m(ce_1m), .reset(rst), .mode(mode),
-        .freq(voice_freq[1]), .pw(voice_pw[1]),
-        .control(voice_ctrl[1]), .att_dec(voice_ad[1]), .sus_rel(voice_sr[1]),
-        .osc_msb_in(osc_msb[0]),
-        .osc_msb_out(osc_msb[1]),
-        .voice_out(voice_out[1]),
-        .osc_out(), .env_out(),
-        ._st_out(_st_out[1]), .p_t_out(p_t_out[1]),
-        .ps__out(ps__out[1]),  .pst_out(pst_out[1]),
-        .acc_t(acc_t[1])
-    );
+    wire enqueue_write = cs && we && (write_fifo_count < 6'd32);
+    wire start_write = ce_1m && !write_active && (write_fifo_count != 0);
+    wire sid_phi2 = sid_phase >= SID_PHI2_LOW_CYCLES;
 
-    sid_voice v3 (
-        .clock(clk), .ce_1m(ce_1m), .reset(rst), .mode(mode),
-        .freq(voice_freq[2]), .pw(voice_pw[2]),
-        .control(voice_ctrl[2]), .att_dec(voice_ad[2]), .sus_rel(voice_sr[2]),
-        .osc_msb_in(osc_msb[1]),
-        .osc_msb_out(osc_msb[2]),
-        .voice_out(voice_out[2]),
-        .osc_out(osc3_out), .env_out(env3_out),
-        ._st_out(_st_out[2]), .p_t_out(p_t_out[2]),
-        .ps__out(ps__out[2]),  .pst_out(pst_out[2]),
-        .acc_t(acc_t[2])
-    );
-
-    // =========================================================================
-    // Combined waveform tables — time-multiplexed across 3 voices
-    // =========================================================================
-    wire [15:0] F0;
-    reg  [3:0]  tbl_state;
-    reg  [7:0]  f__st_out;
-    reg  [7:0]  f_p_t_out;
-    reg  [7:0]  f_ps__out;
-    reg  [7:0]  f_pst_out;
-    reg  [11:0] f_acc_t;
-
-    sid_tables tbl (
-        .clock(clk),
-        .mode(mode),
-        .acc_t(f_acc_t),
-        ._st_out(f__st_out),
-        .p_t_out(f_p_t_out),
-        .ps__out(f_ps__out),
-        .pst_out(f_pst_out),
-        .Fc(filter_fc),
-        .f0_in(filter_f0_in),
-        .F0(F0)
-    );
-
-    // Publish filter_fc so the top-level SDRAM curve reader can refresh
-    // filter_f0_in when it changes.
-    assign filter_fc_out = filter_fc;
-
-    // Time-multiplex table lookups across 3 voices
     always_ff @(posedge clk) begin
         if (rst) begin
-            tbl_state <= 0;
-            f_acc_t <= 0;
-            for (int i = 0; i < 6; i++) begin
-                _st_out[i] <= 0;
-                p_t_out[i] <= 0;
-                ps__out[i] <= 0;
-                pst_out[i] <= 0;
-            end
+            write_fifo_rd    <= 0;
+            write_fifo_wr    <= 0;
+            write_fifo_count <= 0;
+            active_addr      <= 0;
+            active_data      <= 0;
+            write_active     <= 1'b0;
+            if (ce_1m)
+                sid_phase <= 0;
+            else if (sid_phase != 5'd31)
+                sid_phase <= sid_phase + 5'd1;
         end else begin
-            if (~&tbl_state) tbl_state <= tbl_state + 1'd1;
-            if (ce_1m) tbl_state <= 0;
+            if (ce_1m)
+                sid_phase <= 0;
+            else if (sid_phase != 5'd31)
+                sid_phase <= sid_phase + 5'd1;
 
-            case (tbl_state)
-                1, 3, 5: f_acc_t <= acc_t[tbl_state[2:1]];
-            endcase
+            if (enqueue_write) begin
+                write_fifo_addr[write_fifo_wr] <= addr;
+                write_fifo_data[write_fifo_wr] <= din;
+                write_fifo_wr <= write_fifo_wr + 5'd1;
+            end
 
-            case (tbl_state)
-                3, 5, 7: begin
-                    _st_out[tbl_state[2:1] - 1] <= f__st_out;
-                    p_t_out[tbl_state[2:1] - 1] <= f_p_t_out;
-                    ps__out[tbl_state[2:1] - 1] <= f_ps__out;
-                    pst_out[tbl_state[2:1] - 1] <= f_pst_out;
-                end
+            if (start_write) begin
+                active_addr  <= write_fifo_addr[write_fifo_rd];
+                active_data  <= write_fifo_data[write_fifo_rd];
+                write_fifo_rd <= write_fifo_rd + 5'd1;
+                write_active <= 1'b1;
+            end else if (write_active && sid_phase == SID_PHI2_LOW_CYCLES) begin
+                write_active <= 1'b0;
+            end
+
+            unique case ({enqueue_write, start_write})
+                2'b10: write_fifo_count <= write_fifo_count + 6'd1;
+                2'b01: write_fifo_count <= write_fifo_count - 6'd1;
+                default: write_fifo_count <= write_fifo_count;
             endcase
         end
     end
 
-    // =========================================================================
-    // Filter + mixer
-    // =========================================================================
-    wire signed [17:0] filter_audio;
+    assign bus_i.addr = active_addr;
+    assign bus_i.data = active_data;
+    assign bus_i.phi2 = sid_phi2;
+    assign bus_i.r_w_n = ~(write_active && !sid_phi2);
+    assign bus_i.res = rst;
 
-    // Apply per-voice volume before filter
-    wire signed [21:0] v1_scaled = (voice_out[0] * $signed({1'b0, voice_vol[0]})) >>> 4;
-    wire signed [21:0] v2_scaled = (voice_out[1] * $signed({1'b0, voice_vol[1]})) >>> 4;
-    wire signed [21:0] v3_scaled = (voice_out[2] * $signed({1'b0, voice_vol[2]})) >>> 4;
+    assign redip_cs.cs_n = ~write_active;
+    assign redip_cs.cs_io1_n = 1'b1;
+    assign redip_cs.a8 = 1'b0;
+    assign redip_cs.a5 = 1'b0;
 
-    sid_filter flt (
-        .clk(clk),
-        .state(tbl_state[2:0]),
-        .mode(mode),
-        .F0(F0),
-        .Res_Filt(filter_res_filt),
-        .Mode_Vol(filter_mode_vol),
-        .voice1(v1_scaled),
-        .voice2(v2_scaled),
-        .voice3(v3_scaled),
-        .ext_in(22'sd0),
-        .audio(filter_audio)
+    assign redip_pot_i.charged = 2'b11;
+    assign redip_audio_i.left = 24'sd0;
+    assign redip_audio_i.right = 24'sd0;
+
+    nova_redip_sid_api redip (
+        .clk        (clk),
+        .bus_i      (bus_i),
+        .cs         (redip_cs),
+        .model_8580 (mode),
+        .voice0_vol (voice_vol[0]),
+        .voice1_vol (voice_vol[1]),
+        .voice2_vol (voice_vol[2]),
+        .data_o     (redip_data_o),
+        .osc3_o     (osc3_out),
+        .env3_o     (env3_out),
+        .pot_i      (redip_pot_i),
+        .pot_o      (redip_pot_o),
+        .audio_i    (redip_audio_i),
+        .audio_o    (redip_audio_o)
     );
 
-    // Latch audio on correct state
+    // Publish the shadowed Fc for legacy top-level wiring. reDIP computes its
+    // own filter curve internally, so filter_f0_in is intentionally unused.
+    assign filter_fc_out = filter_fc;
+
     always_ff @(posedge clk) begin
         if (rst)
             audio_out <= 18'sd0;
-        else if (tbl_state == 6)
-            audio_out <= filter_audio;
+        else
+            audio_out <= redip_audio_o.left >>> 6;
     end
 
 endmodule

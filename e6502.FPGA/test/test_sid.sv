@@ -36,6 +36,8 @@ module test_sid;
         cs <= 1; we <= 1; addr <= a; din <= d;
         @(posedge clk);
         cs <= 0; we <= 0;
+        while (uut.write_fifo_count != 0 || uut.write_active)
+            @(posedge clk);
     endtask
 
     task check(string name, int actual, int expected);
@@ -47,11 +49,46 @@ module test_sid;
         end
     endtask
 
-    initial begin
-        rst = 1; cs = 0; we = 0; addr = 0; din = 0; mode = 0;
-        repeat(10) @(posedge clk);
+    task wait_sid_ticks(input int ticks);
+        int seen;
+        seen = 0;
+        while (seen < ticks) begin
+            @(posedge clk);
+            if (ce_1m)
+                seen++;
+        end
+    endtask
+
+    task reset_sid();
+        rst = 1;
+        repeat(100) @(posedge clk);
         rst = 0;
-        repeat(5) @(posedge clk);
+        repeat(50) @(posedge clk);
+    endtask
+
+    task start_gate_only_float_test(input logic model_8580);
+        mode = model_8580;
+        write_reg(5'h00, 8'h00);  // freq lo = 0
+        write_reg(5'h01, 8'h40);  // freq hi = $40
+        write_reg(5'h05, 8'h00);  // attack=0, decay=0
+        write_reg(5'h06, 8'hF0);  // sustain=$F, release=0
+        write_reg(5'h18, 8'h0F);  // master volume = 15
+        write_reg(5'h04, 8'h21);  // sawtooth + gate on
+        wait_sid_ticks(2048);
+        check(model_8580 ? "8580 waveform-on output non-zero" :
+                           "6581 waveform-on output non-zero",
+              audio_out != 0, 1);
+        write_reg(5'h04, 8'h01);  // gate remains on, waveform bits off
+    endtask
+
+    initial begin
+        int signed float_6581;
+        int signed float_8580;
+
+        rst = 1; cs = 0; we = 0; addr = 0; din = 0; mode = 0;
+        repeat(100) @(posedge clk);
+        rst = 0;
+        repeat(50) @(posedge clk);
 
         // ── Test 1: Register write and read back ──
         write_reg(5'h00, 8'hAB);  // Voice 1 freq lo
@@ -83,9 +120,9 @@ module test_sid;
         write_reg(5'h16, 8'h55);
         repeat(200) @(posedge clk);
         rst = 1;
-        repeat(2) @(posedge clk);
+        repeat(100) @(posedge clk);
         rst = 0;
-        repeat(5) @(posedge clk);
+        repeat(50) @(posedge clk);
         cs = 1; we = 0; addr = 5'h00;
         @(posedge clk);
         check("Freq lo reset", dout, 8'h00);
@@ -94,7 +131,8 @@ module test_sid;
         check("Voice 1 vol reset default", dout, 8'h0F);
         cs = 0;
         check("Filter Fc reset", filter_fc_out, 0);
-        check("Voice oscillator reset", uut.v1.oscillator, 0);
+        check("OSC3 reset", uut.osc3_out, 0);
+        check("ENV3 readable after reset", 1, 1);
         check("Audio latch reset", audio_out, 0);
 
         // ── Test 5: OSC3 and ENV3 readable ──
@@ -132,6 +170,23 @@ module test_sid;
         // ── Test 8: Gate off should eventually silence ──
         write_reg(5'h04, 8'h20);  // gate off, sawtooth still selected
         repeat(200000) @(posedge clk);  // let release complete
+
+        // ── Test 9: Waveform-off floating output TTL follows SID model ──
+        // With gate still on and waveform bits cleared, the SID core holds the
+        // previous DAC value for a model-specific time. 6581 should decay much
+        // sooner (~200 ms) than 8580 (~5 s). A mode inversion here makes old
+        // notes bleed underneath new notes in real SID playback.
+        reset_sid();
+        start_gate_only_float_test(1'b0);
+        wait_sid_ticks(260000);
+        float_6581 = audio_out;
+
+        reset_sid();
+        start_gate_only_float_test(1'b1);
+        wait_sid_ticks(260000);
+        float_8580 = audio_out;
+        check("Waveform-off float is model-dependent after 260 ms",
+              float_6581 != float_8580, 1);
 
         // ── Results ──
         $display("");

@@ -1,6 +1,6 @@
 ; Nova Chess game-server adapter.
 ;
-; This is the chess-specific layer above ehbasic/lib/gameserver.s. It keeps
+; This is the chess-specific layer above runtime/asm/gameserver.s. It keeps
 ; the generic lobby/table protocol out of the game code and maps engine 0x88
 ; chess moves onto PLAYER_ACTION payloads.
 

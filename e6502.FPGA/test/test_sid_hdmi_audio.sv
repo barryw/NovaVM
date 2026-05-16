@@ -11,6 +11,7 @@ module test_sid_hdmi_audio;
     always #10 clk = ~clk;
 
     logic rst;
+    logic sample_en;
     logic signed [17:0] sid_audio_l;
     logic signed [17:0] sid_audio_r;
     logic [1:0][15:0] audio_sample_word;
@@ -18,6 +19,7 @@ module test_sid_hdmi_audio;
     sid_hdmi_audio dut (
         .clk(clk),
         .rst(rst),
+        .sample_en(sample_en),
         .sid_audio_l(sid_audio_l),
         .sid_audio_r(sid_audio_r),
         .audio_sample_word(audio_sample_word)
@@ -53,6 +55,7 @@ module test_sid_hdmi_audio;
     task automatic reset_dut();
         sid_audio_l = 18'sd0;
         sid_audio_r = 18'sd0;
+        sample_en = 1'b1;
         rst = 1'b1;
         repeat(4) @(posedge clk);
         rst = 1'b0;
@@ -93,6 +96,33 @@ module test_sid_hdmi_audio;
         check("right initial DC is visible to filter", abs_int(first_r) > 100);
         check("left sustained DC decays near zero", abs_int(final_l) <= 16);
         check("right sustained DC decays near zero", abs_int(final_r) <= 16);
+    endtask
+
+    task automatic test_sample_hold_between_enables();
+        logic [15:0] held_l;
+        logic [15:0] held_r;
+
+        $display("");
+        $display("Test: PCM updates only on sample strobe");
+        reset_dut();
+
+        sid_audio_l = -18'sd9255;
+        sid_audio_r = -18'sd1575;
+        @(posedge clk);
+        held_l = audio_sample_word[0];
+        held_r = audio_sample_word[1];
+
+        sample_en = 1'b0;
+        sid_audio_l = 18'sd131071;
+        sid_audio_r = -18'sd131072;
+        repeat(8) @(posedge clk);
+        check("left PCM holds while sample_en is low", audio_sample_word[0] == held_l);
+        check("right PCM holds while sample_en is low", audio_sample_word[1] == held_r);
+
+        sample_en = 1'b1;
+        @(posedge clk);
+        check("left PCM updates when sample_en returns", audio_sample_word[0] != held_l);
+        check("right PCM updates when sample_en returns", audio_sample_word[1] != held_r);
     endtask
 
     task automatic test_biased_waveform_survives();
@@ -148,6 +178,7 @@ module test_sid_hdmi_audio;
         $display("=== SID HDMI audio conditioning tests ===");
         test_reset_silence();
         test_constant_dc_decays_to_silence();
+        test_sample_hold_between_enables();
         test_biased_waveform_survives();
         test_transients_saturate();
 

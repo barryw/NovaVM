@@ -15,7 +15,7 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void GameServerAssemblyProtocolConstantsMatchServer()
     {
-        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "gameserver.inc"));
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "gameserver.inc"));
         IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
 
         Assert.AreEqual(NovaGameProtocol.ServerProtocolMajor, constants["NGS_SERVER_PROTO_MAJOR"]);
@@ -93,8 +93,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void GameServerAssemblyClientUsesLinkerStorageAndStableRoutineAbi()
     {
-        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "gameserver.inc"));
-        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "gameserver.s"));
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "gameserver.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "gameserver.s"));
 
         string[] stateSymbols =
         [
@@ -236,8 +236,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void VTextStateUsesLinkerStorageNotNvrMailbox()
     {
-        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "vtext.inc"));
-        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "vtext.s"));
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vtext.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
 
         string[] stateSymbols =
         [
@@ -268,8 +268,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void OverlayManagerUsesFixedHeaderAndLinkerStorage()
     {
-        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "overlay.inc"));
-        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "overlay.s"));
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "overlay.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "overlay.s"));
         IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
 
         Assert.AreEqual(0x20, constants["OVL_HEADER_SIZE"]);
@@ -342,7 +342,7 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void XmcPrivateStateUsesLinkerStorageNotNvrMailbox()
     {
-        string source = File.ReadAllText(RepoPath("ehbasic", "lib", "xmc.s"));
+        string source = File.ReadAllText(RepoPath("runtime", "asm", "xmc.s"));
 
         string[] privateStateSymbols =
         [
@@ -368,8 +368,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void TweenStateUsesLinkerStorageAndStableRoutineAbi()
     {
-        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "tween.inc"));
-        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "tween.s"));
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "tween.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "tween.s"));
 
         string[] stateSymbols =
         [
@@ -425,8 +425,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void MetaSpriteStateUsesLinkerStorageAndStableRoutineAbi()
     {
-        string inc = File.ReadAllText(RepoPath("ehbasic", "lib", "msprite.inc"));
-        string impl = File.ReadAllText(RepoPath("ehbasic", "lib", "msprite.s"));
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "msprite.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "msprite.s"));
         IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
 
         Assert.AreEqual(8, constants["MSPRITE_MAX_OBJECTS"]);
@@ -477,6 +477,83 @@ public class RuntimeLibraryAbiTests
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
         StringAssert.Contains(impl, ".include \"sprite.s\"");
+    }
+
+    [TestMethod]
+    public void AnimationStateUsesLinkerStorageAndStableRoutineAbi()
+    {
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "anim.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "anim.s"));
+        IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
+
+        Assert.AreEqual(8, constants["ANIM_MAX_TRACKS"]);
+        Assert.AreEqual(128, constants["ANIM_SHAPE_BYTES"]);
+        Assert.AreEqual(0xFF, constants["ANIM_INVALID_HANDLE"]);
+        Assert.AreEqual(0, constants["ANIM_TARGET_SPRITE"]);
+        Assert.AreEqual(1, constants["ANIM_TARGET_MSPRITE"]);
+        Assert.AreEqual(0, constants["ANIM_DESC_FRAME_COUNT"]);
+        Assert.AreEqual(1, constants["ANIM_DESC_TICKS"]);
+        Assert.AreEqual(2, constants["ANIM_DESC_FLAGS"]);
+        Assert.AreEqual(3, constants["ANIM_DESC_FIRST"]);
+        Assert.AreEqual(4, constants["ANIM_DESC_STRIDE"]);
+        Assert.AreEqual(6, constants["ANIM_DESC_FRAMES"]);
+        Assert.AreEqual(0x01, constants["ANIM_DESC_LOOP"]);
+        Assert.AreEqual(0x04, constants["ANIM_DESC_FRAME_TABLE"]);
+        Assert.AreEqual(0x08, constants["ANIM_DESC_DEFER_COMMIT"]);
+
+        string[] stateSymbols =
+        [
+            "ANIM_DESC_L",
+            "ANIM_DESC_H",
+            "ANIM_TARGET",
+            "ANIM_TARGET_TYPE",
+            "ANIM_RESULT",
+            "ANIM_SHAPE",
+            "ANIM_COUNT",
+            "ANIM_XADDRL",
+            "ANIM_XADDRM",
+            "ANIM_XADDRH",
+            "ANIM_FILEL",
+            "ANIM_FILEM",
+            "ANIM_FILEH",
+            "ANIM_NAMELEN",
+            "ANIM_NAMEPTR_L",
+            "ANIM_NAMEPTR_H"
+        ];
+
+        foreach (string symbol in stateSymbols)
+        {
+            AssertNoNvrAlias(inc, symbol);
+            StringAssert.Contains(inc, $".global {symbol}");
+            StringAssert.Contains(impl, $"{symbol}:");
+        }
+
+        string[] routines =
+        [
+            "anim_init",
+            "anim_start",
+            "anim_stop",
+            "anim_tick",
+            "anim_tick_one",
+            "anim_set_frame",
+            "anim_load_xram_shapes",
+            "anim_load_disk_shapes"
+        ];
+
+        foreach (string routine in routines)
+        {
+            StringAssert.Contains(inc, $".global {routine}");
+            StringAssert.Contains(impl, $".export {routine}");
+        }
+
+        StringAssert.Contains(impl, ".segment \"BSS\"");
+        StringAssert.Contains(impl, ".include \"dma.s\"");
+        StringAssert.Contains(impl, ".include \"fio.s\"");
+        StringAssert.Contains(impl, ".include \"pager.s\"");
+        StringAssert.Contains(impl, ".include \"msprite.s\"");
+        StringAssert.Contains(impl, "DMA_SPACE_XRAM");
+        StringAssert.Contains(impl, "DMA_SPACE_VGC_SPRITE");
+        StringAssert.Contains(impl, "PAGER_TARGET_VGC");
     }
 
     [TestMethod]

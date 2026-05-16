@@ -25,7 +25,7 @@ FPGALOAD = openFPGALoader
 #   gpdi_dn[*] because the LPF's LVCMOS33D pins must be constrained to the
 #   A side of a pseudo-differential pair.
 EXTRA_DEFINES ?= -DVIDEO_720X480 -DGPDI_P_ONLY -DLATTICE_ECP5
-SV = read_verilog -sv -DSYNTHESIS $(EXTRA_DEFINES)
+SV = read_verilog -sv -DSYNTHESIS -DYOSYS -I$(RTLDIR)/vendor/redip_sid $(EXTRA_DEFINES)
 VL = read_verilog -DSYNTHESIS $(EXTRA_DEFINES)
 SYNTH_ARGS = $(BUILDDIR)/synth_args.txt
 PNR_ARGS = $(BUILDDIR)/pnr_args.txt
@@ -38,11 +38,14 @@ SYNTH_ECP5_JSON = synth_ecp5 -top fpga_top -run begin:map_cells; techmap -map +/
 NEXTPNR_SEED ?= 1
 NEXTPNR_THREADS ?=
 NEXTPNR_PRE_PLACE ?= place_hdmi_serializer.py
+NEXTPNR_PLACER_CELL_TIMEOUT ?= 8
+NEXTPNR_EXTRA_FLAGS ?=
 NEXTPNR_REPORT = $(BUILDDIR)/nextpnr-report.json
 NEXTPNR_THREAD_FLAGS = $(if $(strip $(NEXTPNR_THREADS)),--threads $(NEXTPNR_THREADS),)
 NEXTPNR_PRE_PLACE_FLAGS = $(if $(strip $(NEXTPNR_PRE_PLACE)),--pre-place $(NEXTPNR_PRE_PLACE),)
 NEXTPNR_PRE_PLACE_DEPS = $(if $(strip $(NEXTPNR_PRE_PLACE)),$(NEXTPNR_PRE_PLACE),)
-NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed $(NEXTPNR_SEED) $(NEXTPNR_THREAD_FLAGS) $(NEXTPNR_PRE_PLACE_FLAGS) --report $(NEXTPNR_REPORT)
+NEXTPNR_PLACER_TIMEOUT_FLAGS = --placer-heap-cell-placement-timeout $(NEXTPNR_PLACER_CELL_TIMEOUT)
+NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed $(NEXTPNR_SEED) $(NEXTPNR_THREAD_FLAGS) $(NEXTPNR_PRE_PLACE_FLAGS) $(NEXTPNR_PLACER_TIMEOUT_FLAGS) $(NEXTPNR_EXTRA_FLAGS) --report $(NEXTPNR_REPORT)
 
 .PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag diag-vgc diag-sprites FORCE
 
@@ -72,8 +75,16 @@ RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv \
            $(RTLDIR)/sid_hdmi_audio.sv $(RTLDIR)/nic.sv $(RTLDIR)/math_copro.sv fpga_top.sv \
            uart_rx.sv $(RTL_BRIDGE) $(RTL_USB)
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
-RTL_SID  = $(RTLDIR)/sid/sid_chip.sv $(RTLDIR)/sid/sid_voice.sv $(RTLDIR)/sid/sid_envelope.sv \
-           $(RTLDIR)/sid/sid_filter.sv $(RTLDIR)/sid/sid_tables.sv $(RTLDIR)/sid/sid_dac.sv \
+RTL_REDIP = $(RTLDIR)/vendor/redip_sid/sid_pkg.sv \
+            $(RTLDIR)/vendor/redip_sid/muladd.sv \
+            $(RTLDIR)/vendor/redip_sid/sid_dac.sv \
+            $(RTLDIR)/vendor/redip_sid/sid_control.sv \
+            $(RTLDIR)/vendor/redip_sid/sid_waveform.sv \
+            $(RTLDIR)/vendor/redip_sid/sid_envelope.sv \
+            $(RTLDIR)/vendor/redip_sid/sid_voice.sv \
+            $(RTLDIR)/vendor/redip_sid/sid_filter.sv \
+            $(RTLDIR)/vendor/redip_sid/sid_pot.sv
+RTL_SID  = $(RTL_REDIP) $(RTLDIR)/sid/nova_redip_sid_api.sv $(RTLDIR)/sid/sid_chip.sv \
            $(RTLDIR)/sid/sid_curve_reader.sv
 RTL_HDMI = $(RTLDIR)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
            $(RTLDIR)/thirdparty/hdl-util-hdmi/audio_info_frame.sv \

@@ -114,9 +114,9 @@ task automatic do_reset();
     addr = 0;
     din  = 0;
     mode = 0;
-    repeat(20) @(posedge clk);
+    repeat(100) @(posedge clk);
     rst = 0;
-    repeat(10) @(posedge clk);
+    repeat(50) @(posedge clk);
 endtask
 
 task automatic step(input int n);
@@ -145,6 +145,8 @@ task automatic sid_write(input [4:0] a, input [7:0] d);
     @(posedge clk);
     cs <= 0;
     we <= 0;
+    while (dut.write_fifo_count != 0 || dut.write_active)
+        @(posedge clk);
 endtask
 
 task automatic sid_read(input [4:0] a, output logic [7:0] d);

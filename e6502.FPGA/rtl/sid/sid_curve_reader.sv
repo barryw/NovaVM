@@ -17,9 +17,12 @@ module sid_curve_reader #(
     input  logic        clk,          // pixel clock
     input  logic        rst,
 
-    // SID Fc input + cached f0 output
-    input  logic [10:0] sid_Fc,
-    output logic [15:0] sid_f0,
+    // SID Fc inputs + cached f0 outputs. A single SDRAM port services both
+    // chips because Fc changes are rare and the lookup result is cached.
+    input  logic [10:0] sid1_Fc,
+    output logic [15:0] sid1_f0,
+    input  logic [10:0] sid2_Fc,
+    output logic [15:0] sid2_f0,
 
     // SDRAM port B (pixel-clock domain; sdram.v synchronizes internally)
     output logic [24:0] sdram_addrB,
@@ -45,24 +48,28 @@ module sid_curve_reader #(
     state_t     state;
     logic [3:0] hold_cnt;
 
-    // Pending-refresh tracking: new Fc → raise flag, cleared when read completes
-    logic [10:0] sid_fc_prev;
-    logic        sid_pending;
+    // Pending-refresh tracking: new Fc -> raise flag, cleared when read completes.
+    logic [10:0] sid1_fc_prev;
+    logic [10:0] sid2_fc_prev;
+    logic [1:0]  sid_pending;
+    logic        active_sid;         // 0 = SID1, 1 = SID2
     logic [10:0] latched_fc;         // Fc for the in-flight request
+    logic [24:0] lo_addr_r;
+    logic [24:0] hi_addr_r;
 
     logic [7:0]  low_byte_r;
-    logic [15:0] sid_f0_r;
+    logic [15:0] sid1_f0_r;
+    logic [15:0] sid2_f0_r;
 
-    assign sid_f0 = sid_f0_r;
+    assign sid1_f0 = sid1_f0_r;
+    assign sid2_f0 = sid2_f0_r;
 
     // Output drives
     wire         is_reading  = (state == S_READ_LO) || (state == S_READ_HI);
-    wire [24:0]  lo_addr     = CURVE_BASE + {14'b0, latched_fc[10:1], 1'b0};
-    wire [24:0]  hi_addr     = CURVE_BASE + {14'b0, latched_fc[10:1], 1'b1};
-    assign sdram_addrB = (state == S_READ_LO)    ? lo_addr :
-                         (state == S_CAPTURE_LO) ? lo_addr :
-                         (state == S_READ_HI)    ? hi_addr :
-                         (state == S_CAPTURE_HI) ? hi_addr :
+    assign sdram_addrB = (state == S_READ_LO)    ? lo_addr_r :
+                         (state == S_CAPTURE_LO) ? lo_addr_r :
+                         (state == S_READ_HI)    ? hi_addr_r :
+                         (state == S_CAPTURE_HI) ? hi_addr_r :
                                                    25'd0;
     assign sdram_oeB   = is_reading;
     assign sdram_weB   = 1'b0;
@@ -72,24 +79,45 @@ module sid_curve_reader #(
         if (rst) begin
             state        <= S_IDLE;
             hold_cnt     <= 0;
-            sid_fc_prev  <= 11'h7FF;  // impossible initial value — forces first read
-            sid_pending  <= 1'b1;
-            sid_f0_r     <= 16'd0;
+            sid1_fc_prev <= 11'h7FF;  // impossible initial values force first reads
+            sid2_fc_prev <= 11'h7FE;
+            sid_pending  <= 2'b11;
+            active_sid   <= 1'b0;
+            sid1_f0_r    <= 16'd0;
+            sid2_f0_r    <= 16'd0;
             latched_fc   <= 0;
+            lo_addr_r    <= 25'd0;
+            hi_addr_r    <= 25'd0;
             low_byte_r   <= 0;
         end else begin
-            // Detect Fc changes — raise pending for a refresh.
-            if (sid_Fc != sid_fc_prev) begin
-                sid_pending <= 1'b1;
-                sid_fc_prev <= sid_Fc;
+            // Detect Fc changes and remember the newest requested value.
+            if (sid1_Fc != sid1_fc_prev) begin
+                sid_pending[0] <= 1'b1;
+                sid1_fc_prev <= sid1_Fc;
+            end
+            if (sid2_Fc != sid2_fc_prev) begin
+                sid_pending[1] <= 1'b1;
+                sid2_fc_prev <= sid2_Fc;
             end
 
             case (state)
                 S_IDLE: begin
-                    if (sid_pending) begin
-                        latched_fc <= sid_Fc;
-                        hold_cnt   <= HOLD_CYCLES - 1;
-                        state      <= S_READ_LO;
+                    if (sid_pending[0] || (sid1_Fc != sid1_fc_prev)) begin
+                        active_sid     <= 1'b0;
+                        latched_fc     <= sid1_Fc;
+                        lo_addr_r      <= CURVE_BASE + {14'b0, sid1_Fc[10:1], 1'b0};
+                        hi_addr_r      <= CURVE_BASE + {14'b0, sid1_Fc[10:1], 1'b1};
+                        sid_pending[0] <= 1'b0;
+                        hold_cnt       <= HOLD_CYCLES - 1;
+                        state          <= S_READ_LO;
+                    end else if (sid_pending[1] || (sid2_Fc != sid2_fc_prev)) begin
+                        active_sid     <= 1'b1;
+                        latched_fc     <= sid2_Fc;
+                        lo_addr_r      <= CURVE_BASE + {14'b0, sid2_Fc[10:1], 1'b0};
+                        hi_addr_r      <= CURVE_BASE + {14'b0, sid2_Fc[10:1], 1'b1};
+                        sid_pending[1] <= 1'b0;
+                        hold_cnt       <= HOLD_CYCLES - 1;
+                        state          <= S_READ_LO;
                     end
                 end
                 S_READ_LO: begin
@@ -112,8 +140,13 @@ module sid_curve_reader #(
                     end
                 end
                 S_CAPTURE_HI: begin
-                    sid_f0_r <= {sdram_doutB, low_byte_r};
-                    sid_pending <= (sid_Fc != latched_fc);
+                    if (active_sid == 1'b0) begin
+                        sid1_f0_r <= {sdram_doutB, low_byte_r};
+                        sid_pending[0] <= (sid1_Fc != latched_fc);
+                    end else begin
+                        sid2_f0_r <= {sdram_doutB, low_byte_r};
+                        sid_pending[1] <= (sid2_Fc != latched_fc);
+                    end
                     state <= S_IDLE;
                 end
                 default: state <= S_IDLE;

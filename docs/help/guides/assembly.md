@@ -133,7 +133,7 @@ REM jumps with A=60, X=10, Y=1
 ```
 
 When the routine returns, NovaBASIC stores the returned registers in the SYS
-mailbox bytes `SYS_REGA`, `SYS_REGX`, and `SYS_REGY` from `ehbasic/lib/nova.inc`.
+mailbox bytes `SYS_REGA`, `SYS_REGX`, and `SYS_REGY` from `runtime/asm/nova.inc`.
 These are intended as the stable bridge for small BASIC-to-assembly calls.
 
 Use `ADDR("LABEL")` when BASIC code needs one of the generated runtime labels
@@ -152,6 +152,10 @@ labels remain documented for assembly callers but are not valid `SYS` targets.
 Runtime labels are documented from `@label` comments in the assembly sources.
 See `docs/assembly/runtime-labels.md` for the generated routine and
 pseudo-register ABI reference.
+
+Reusable ca65 support code lives under `runtime/asm`. For the current
+library map, include/link rules, and pointers to sprite, animation, XRAM,
+audio, network, and UI helpers, see `docs/assembly/library-reference.md`.
 
 ### `USR(x)`
 
@@ -235,7 +239,7 @@ Assembly programs use two layers:
 - The CPU IRQ vector at `$FFFE/$FFFF` decides which routine runs.
 - `VGC_IRQ_ENABLE` selects which VGC IRQ sources can raise the CPU IRQ line.
 
-The shared runtime helpers in `ehbasic/lib/vgc.s` and `ehbasic/lib/sprite.s`
+The shared runtime helpers in `runtime/asm/vgc.s` and `runtime/asm/sprite.s`
 handle the common setup. Link those files into the program, or include them
 once from the program's build.
 
@@ -289,17 +293,17 @@ matching VGC IRQ source.
 
 ## XRAM Assembly Runtime
 
-NovaVM provides a reusable ca65 XRAM runtime in `ehbasic/lib/xram.inc` and
-`ehbasic/lib/xram.s`. BASIC keeps its `XBANK` plus 16-bit offset model, but assembly
+NovaVM provides a reusable ca65 XRAM runtime in `runtime/asm/xram.inc` and
+`runtime/asm/xram.s`. BASIC keeps its `XBANK` plus 16-bit offset model, but assembly
 code should use the runtime's flat 24-bit address registers:
 `XRAM_ADDRL`, `XRAM_ADDRM`, and `XRAM_ADDRH`.
 
-For standalone assembly programs, link `ehbasic/lib/xram.s` into the program or
+For standalone assembly programs, link `runtime/asm/xram.s` into the program or
 include it once after your own code. Do not copy the XMC, DMA, or FIO register
 sequences into each project; the runtime is the reusable boundary for byte
 access, DMA-backed bulk copies, fills, and direct `XLOAD`/`XSAVE` streaming.
 If a runtime needs BASIC's named-block allocator and XMC register command
-contract, link `ehbasic/lib/xmc.s` as well.
+contract, link `runtime/asm/xmc.s` as well.
 
 Standalone runtimes should use fixed XRAM workspaces rather than dynamic
 hardware allocation. `xram.inc` defines the shared high-XRAM bands used by
@@ -330,11 +334,11 @@ copy their XMC MMIO arguments into the same pseudo-register layout.
 | `xram_xload` | Stream a file directly into XRAM. |
 | `xram_xsave` | Stream XRAM directly to a file. |
 | `xram_wait_dma` | Wait for a DMA transfer and translate DMA errors into XMC status. |
-| `xmc_process` | Optional `lib/xmc.s` entry point for the XMC register command contract. |
+| `xmc_process` | Optional `runtime/asm/xmc.s` entry point for the XMC register command contract. |
 
 ## VTEXT Assembly Runtime
 
-`ehbasic/lib/vtext.inc` and `ehbasic/lib/vtext.s` provide reusable VGC text
+`runtime/asm/vtext.inc` and `runtime/asm/vtext.s` provide reusable VGC text
 regions for assembly programs and language runtimes. A caller defines a
 rectangle, local cursor, packed color, text attributes, and wrap/scroll flags;
 VTEXT handles clear, line clear, character output, and blitter-backed region
@@ -404,7 +408,7 @@ fixture-backed integration tests.
 
 ## Fixed-Address Overlays
 
-`ehbasic/lib/overlay.inc` and `ehbasic/lib/overlay.s` provide a reusable loader
+`runtime/asm/overlay.inc` and `runtime/asm/overlay.s` provide a reusable loader
 for fixed-address executable overlays. The resident application owns a CPU RAM
 slot, links each overlay for that exact slot address, and calls
 `overlay_load_fixed` to validate a `NOVO` header and stream the payload into RAM

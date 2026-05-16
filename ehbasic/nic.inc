@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/nic.inc".
-.include "lib/nic.inc"
+; Compatibility include. New code should include "runtime/asm/nic.inc".
+.include "../runtime/asm/nic.inc"

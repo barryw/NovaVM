@@ -1,2 +1,2 @@
-; Compatibility source include. New code should include "lib/gameserver.s".
-.include "lib/gameserver.s"
+; Compatibility source include. New code should include "runtime/asm/gameserver.s".
+.include "../runtime/asm/gameserver.s"

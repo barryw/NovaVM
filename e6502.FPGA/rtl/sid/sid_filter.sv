@@ -20,6 +20,7 @@
 module sid_filter
 (
 	input               clk,
+	input               reset,
 	input         [2:0] state,
 	input               mode,
 
@@ -87,8 +88,24 @@ always @(posedge clk) begin
 	reg signed [15:0] vi;
 	reg signed [15:0] vd;
 
-	case (state)
-		2:	begin
+	if (reset) begin
+		_1_Q_lsl10 <= 11'd0;
+		vi <= 16'sd0;
+		vd <= 16'sd0;
+		vlp <= 16'sd0;
+		vlp2 <= 16'sd0;
+		vbp <= 16'sd0;
+		vbp2 <= 16'sd0;
+		vhp <= 16'sd0;
+		vhp2 <= 16'sd0;
+		c <= 32'sd0;
+		s <= 1'b0;
+		a <= 16'sd0;
+		b <= 16'sd0;
+	end
+	else begin
+		case (state)
+			2:	begin
 				// MOS6581: 1/Q =~ ~res/8 (not used - op-amps are not ideal)
 				// MOS8580: 1/Q =~ 2^((4 - res)/8)
 				_1_Q_lsl10 <= _1_Q_lsl10_tbl[{mode, Res_Filt[7:4]}];
@@ -118,7 +135,7 @@ always @(posedge clk) begin
 				a <= F0;   // w0*T << 17
 				b <= vbp;  // vbp
 			end
-		3:	begin
+			3:	begin
 				// Result for vlp ready. See calculation of vlp_next above.
 				{ vlp, vlp2 } <= { vlp2, vlp_next };
 
@@ -129,7 +146,7 @@ always @(posedge clk) begin
 				// a <= a; // w0*T << 17
 				b <= vhp;  // vhp
 			end
-		4:	begin
+			4:	begin
 				// Result for vbp ready. See calculation of vbp_next above.
 				{ vbp, vbp2 } <= { vbp2, vbp_next };
 
@@ -139,7 +156,7 @@ always @(posedge clk) begin
 				a <= _1_Q_lsl10; // 1/Q << 10
 				b <= vbp_next;   // vbp
 			end
-		5: begin
+			5: begin
 				// Result for vbp ready. See calculation of vhp_next above.
 				{ vhp, vhp2 } <= { vhp2, vhp_next };
 
@@ -154,7 +171,8 @@ always @(posedge clk) begin
 						(Mode_Vol[5] ? 17'(vbp2)     : '0) +
 						(Mode_Vol[6] ? 17'(vhp_next) : '0));
 			end
-	endcase
+		endcase
+	end
 end
 
 assign audio = o[19:2];

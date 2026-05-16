@@ -74,7 +74,7 @@ always @(posedge clock) begin
 	else if(ce_1m) begin
 		osc_msb_in_prv <= osc_msb_in;
 		test_delay <= mode & test_ctrl;
-		oscillator <= (test_ctrl || test_delay || (sync_ctrl && ~osc_msb_in && osc_msb_in_prv)) ? 24'd0 : (oscillator + freq);
+		oscillator <= (test_ctrl || test_delay || (sync_ctrl && osc_msb_in && ~osc_msb_in_prv)) ? 24'd0 : (oscillator + freq);
 	end
 end
 
@@ -206,7 +206,7 @@ always @(posedge clock) begin
 	end
 	else if(ce_1m) begin
 		if(control[7:4]) begin
-			keep_cnt <= mode ? WF_0_TTL_6581 : WF_0_TTL_8580;
+			keep_cnt <= mode ? WF_0_TTL_8580 : WF_0_TTL_6581;
 			dac_out  <= 13'({1'b0, norm_dac | {comb, 4'b0}}) - (mode ? WAVEFORM_DC_8580 : WAVEFORM_DC_6581);
 		end
 		else if(keep_cnt) keep_cnt <= keep_cnt - 1'd1;

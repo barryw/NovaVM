@@ -28,7 +28,7 @@ CASTLE_IMAGE ?= dist/castle-test.ndi
 
 BUILD_DIR := build
 DIST_DIR := dist
-NOVA_LIB := ../../ehbasic/lib
+NOVA_LIB := ../../runtime/asm
 PACKER := ../novaz/tools/Nova.NovaZ.Packer/Nova.NovaZ.Packer.csproj
 OVERLAY_PACKER := ../../e6502.Tools/e6502.Tools.csproj
 SMOKE := ../novaz/tools/Nova.NovaZ.Smoke/Nova.NovaZ.Smoke.csproj

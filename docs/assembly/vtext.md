@@ -1,6 +1,6 @@
 # NovaVM VTEXT Runtime
 
-`ehbasic/lib/vtext.inc` and `ehbasic/lib/vtext.s` provide a shared ca65 text
+`runtime/asm/vtext.inc` and `runtime/asm/vtext.s` provide a shared ca65 text
 region layer over the VGC character, color, and text-attribute planes.
 
 VTEXT is deliberately not a window manager. It does not know about BASIC,
@@ -12,7 +12,7 @@ those regions mean.
 Include the interface:
 
 ```asm
-.include "lib/vtext.inc"
+.include "vtext.inc"
 ```
 
 Set the current region and attributes through the Nova pseudo-registers:

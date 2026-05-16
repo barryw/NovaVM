@@ -53,8 +53,8 @@ game-server envelope:
 Payload integers are little-endian. Strings are one-byte length plus UTF-8/ASCII
 bytes. One NIC frame can carry 252 bytes of message payload after the envelope.
 
-Nova assembly clients should use `ehbasic/lib/gameserver.inc` and
-`ehbasic/lib/gameserver.s`. That layer wraps `lib/nic.s`, builds request frames,
+Nova assembly clients should use `runtime/asm/gameserver.inc` and
+`runtime/asm/gameserver.s`. That layer wraps `runtime/asm/nic.s`, builds request frames,
 parses envelopes, and leaves game-specific payload bytes to each game's own
 adapter library.
 

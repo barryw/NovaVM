@@ -92,7 +92,7 @@ def build_demo(source: Path) -> bytes:
                 "--cpu",
                 "65c02",
                 "-I",
-                str(REPO_ROOT / "ehbasic/lib"),
+                str(REPO_ROOT / "runtime/asm"),
                 "-I",
                 str(REPO_ROOT / "ehbasic"),
                 "-o",

@@ -9,7 +9,7 @@
 
 .setcpu "65c02"
 
-.include "lib/xram.inc"
+.include "xram.inc"
 
 BUFFER      = $2300
 RESTORED    = $2310
@@ -100,4 +100,4 @@ message:
         .byte "NOVA XRAM"
 message_end:
 
-.include "lib/xram.s"
+.include "xram.s"

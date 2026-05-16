@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/tween.inc".
-.include "lib/tween.inc"
+; Compatibility include. New code should include "runtime/asm/tween.inc".
+.include "../runtime/asm/tween.inc"

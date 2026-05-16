@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/nova.inc".
-.include "lib/nova.inc"
+; Compatibility include. New code should include "runtime/asm/nova.inc".
+.include "../runtime/asm/nova.inc"

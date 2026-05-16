@@ -6,10 +6,12 @@
 // 16-bit PCM words for hdl-util/hdmi.
 
 module sid_hdmi_audio #(
-    parameter int PCM_SHIFT = 2
+    parameter int PCM_SHIFT = 0,
+    parameter int PCM_GAIN = 3
 ) (
     input  logic              clk,
     input  logic              rst,
+    input  logic              sample_en,
     input  logic signed [17:0] sid_audio_l,
     input  logic signed [17:0] sid_audio_r,
     output logic [1:0][15:0]  audio_sample_word
@@ -43,7 +45,7 @@ module sid_hdmi_audio #(
             sid_audio_r_prev <= 18'sd0;
             sid_audio_l_hp <= 26'sd0;
             sid_audio_r_hp <= 26'sd0;
-        end else begin
+        end else if (sample_en) begin
             sid_audio_l_prev <= sid_audio_l;
             sid_audio_r_prev <= sid_audio_r;
             sid_audio_l_hp <= dc_block_next(sid_audio_l_hp, sid_audio_l_delta);
@@ -52,12 +54,14 @@ module sid_hdmi_audio #(
     end
 
     function automatic logic [15:0] to_pcm16(input logic signed [25:0] sample);
-        logic signed [25:0] scaled;
+        logic signed [31:0] widened;
+        logic signed [31:0] scaled;
         begin
-            scaled = sample >>> PCM_SHIFT;
-            if (scaled > 26'sd32767)
+            widened = {{6{sample[25]}}, sample};
+            scaled = (widened * PCM_GAIN) >>> PCM_SHIFT;
+            if (scaled > 32'sd32767)
                 to_pcm16 = 16'h7fff;
-            else if (scaled < -26'sd32768)
+            else if (scaled < -32'sd32768)
                 to_pcm16 = 16'h8000;
             else
                 to_pcm16 = scaled[15:0];

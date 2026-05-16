@@ -22,6 +22,8 @@
 #   BEAST_CLEAN=0          # preserve remote build/ for faster iteration
 #   NEXTPNR_THREADS=8      # optional nextpnr thread count
 #   NEXTPNR_SEED=1         # deterministic by default
+#   NEXTPNR_EXTRA_FLAGS='--router router2'
+#                           optional extra nextpnr flags
 #   CHECK_TIMING=0         # skip local nextpnr report timing gate
 #   TIMING_MARGIN_MHZ=1.0  # require extra timing headroom
 #   BITSTREAM_RETENTION=7  # keep this many script-managed bitstreams
@@ -36,6 +38,7 @@ DEFAULT_EXTRA_DEFINES="-DVIDEO_720X480 -DGPDI_P_ONLY -DLATTICE_ECP5"
 BEAST_CLEAN="${BEAST_CLEAN:-1}"
 NEXTPNR_THREADS="${NEXTPNR_THREADS:-}"
 NEXTPNR_SEED="${NEXTPNR_SEED:-1}"
+NEXTPNR_EXTRA_FLAGS="${NEXTPNR_EXTRA_FLAGS:-}"
 CHECK_TIMING="${CHECK_TIMING:-1}"
 TIMING_MARGIN_MHZ="${TIMING_MARGIN_MHZ:-1.0}"
 BITSTREAM_RETENTION="${BITSTREAM_RETENTION:-7}"
@@ -121,6 +124,7 @@ echo "extra_defines: ${EXTRA_DEFINES:-none}"
 echo "clean_build:   $BEAST_CLEAN"
 echo "nextpnr_seed:  $NEXTPNR_SEED"
 echo "nextpnr_jobs:  ${NEXTPNR_THREADS:-default}"
+echo "nextpnr_extra: ${NEXTPNR_EXTRA_FLAGS:-none}"
 echo "check_timing:  $CHECK_TIMING"
 echo "retention:     $BITSTREAM_RETENTION"
 echo "commit:        $commit ($dirty_state)"
@@ -130,7 +134,7 @@ if [ "$BEAST_CLEAN" != "0" ]; then
 fi
 ssh "$BEAST_HOST" "cd $BEAST_WS/e6502.FPGA/fpga && \
     $remote_clean_cmd \
-    make OSS_CAD_SUITE_BIN=$YOSYS_BIN EXTRA_DEFINES='$EXTRA_DEFINES' NEXTPNR_SEED=$NEXTPNR_SEED NEXTPNR_THREADS='$NEXTPNR_THREADS' -o ehbasic $TARGET 2>&1 | tee /tmp/beast-synth.log | tail -200"
+    make OSS_CAD_SUITE_BIN=$YOSYS_BIN EXTRA_DEFINES='$EXTRA_DEFINES' NEXTPNR_SEED=$NEXTPNR_SEED NEXTPNR_THREADS='$NEXTPNR_THREADS' NEXTPNR_EXTRA_FLAGS='$NEXTPNR_EXTRA_FLAGS' -o ehbasic $TARGET 2>&1 | tee /tmp/beast-synth.log | tail -200"
 
 echo "=== [3/4] timing summary"
 ssh "$BEAST_HOST" "grep -E '(Max frequency|Info: Device utilisation|CCU2C|DP16KD|LUT4|MULT18X18D|PFUMX|TRELLIS_DPR16X4|TRELLIS_FF|Total)' /tmp/beast-synth.log | tail -40" || true
@@ -171,6 +175,7 @@ if [ "$TARGET" = "bitstream" ]; then
     export BITSTREAM_CLEAN_BUILD="$BEAST_CLEAN"
     export BITSTREAM_NEXTPNR_SEED="$NEXTPNR_SEED"
     export BITSTREAM_NEXTPNR_THREADS="${NEXTPNR_THREADS:-default}"
+    export BITSTREAM_NEXTPNR_EXTRA_FLAGS="${NEXTPNR_EXTRA_FLAGS:-}"
     export BITSTREAM_CHECK_TIMING="$CHECK_TIMING"
     export BITSTREAM_TIMING_MARGIN_MHZ="$TIMING_MARGIN_MHZ"
     export BITSTREAM_COMMIT="$commit"
@@ -279,6 +284,7 @@ metadata = {
         "clean_build": env("BITSTREAM_CLEAN_BUILD"),
         "nextpnr_seed": env("BITSTREAM_NEXTPNR_SEED"),
         "nextpnr_threads": env("BITSTREAM_NEXTPNR_THREADS"),
+        "nextpnr_extra_flags": env("BITSTREAM_NEXTPNR_EXTRA_FLAGS"),
         "check_timing": env("BITSTREAM_CHECK_TIMING"),
         "timing_margin_mhz": env("BITSTREAM_TIMING_MARGIN_MHZ"),
     },
@@ -319,6 +325,7 @@ PY
         echo "clean_build: $BEAST_CLEAN"
         echo "nextpnr_seed: $NEXTPNR_SEED"
         echo "nextpnr_threads: ${NEXTPNR_THREADS:-default}"
+        echo "nextpnr_extra: ${NEXTPNR_EXTRA_FLAGS:-none}"
         echo "check_timing: $CHECK_TIMING"
         echo "timing_margin_mhz: $TIMING_MARGIN_MHZ"
         echo "commit: $commit"

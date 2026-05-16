@@ -7,7 +7,7 @@
 ; --- Zero page communication ---
 ExtCmdId        = $E4           ; command ID (set by RAM trampoline)
 
-      .include "lib/nova.inc"
+      .include "nova.inc"
 
 ; Short-lived extension helper scratch. Library-owned persistent state lives in
 ; its own linker storage, not in the NVR mailbox.
@@ -55,7 +55,7 @@ TK_CLEAR_VAL    = $A2
 TK_GMODE_VAL    = $B5
 TK_OFF_VAL      = $CB
 
-; VGC register and command constants live in lib/nova.inc.
+; VGC register and command constants live in runtime/asm/nova.inc.
 
       .segment "CODE"
 
@@ -1357,12 +1357,12 @@ EXT_BLTFILL:
       STX   BLT_FILLVALUE
       JMP   blitter_fill
 
-      .include "lib/blitter.s"
-      .include "lib/copper.s"
-      .include "lib/audio.s"
-      .include "lib/rng.s"
-      .include "lib/xram.s"
-      .include "lib/xmc.s"
+      .include "blitter.s"
+      .include "copper.s"
+      .include "audio.s"
+      .include "rng.s"
+      .include "xram.s"
+      .include "xmc.s"
 
 ; =====================================================================
 ; XLOAD/XSAVE handlers — bridge BASIC's FIO-style arguments into the

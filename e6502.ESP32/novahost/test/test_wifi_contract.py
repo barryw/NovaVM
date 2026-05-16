@@ -208,8 +208,8 @@ def test_fpga_spi_bridge_contract() -> None:
 
 def test_fio_clear_error_contract() -> None:
     basic = read("ehbasic/basic.asm")
-    fio = read("ehbasic/lib/fio.s")
-    nova_inc = read("ehbasic/lib/nova.inc")
+    fio = read("runtime/asm/fio.s")
+    nova_inc = read("runtime/asm/nova.inc")
     dispatcher_h = read("e6502.ESP32/novahost/fio_dispatcher.h")
     dispatcher_cpp = read("e6502.ESP32/novahost/fio_dispatcher.cpp")
     constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
@@ -249,7 +249,7 @@ def test_fio_sd_dispatch_contract() -> None:
     novahost = read("e6502.ESP32/novahost/novahost.ino")
 
     for constant in [
-        "CMD_GSAVE", "CMD_GLOAD", "CMD_SIDPLAY", "CMD_MIDPLAY",
+        "CMD_GSAVE", "CMD_GLOAD", "CMD_SIDPLAY", "CMD_SIDSTOP", "CMD_MIDPLAY",
         "CMD_SFLOAD", "CMD_FORMAT", "CMD_PWD",
     ]:
         check(f"ESP dispatcher defines {constant}", constant in header)
@@ -258,7 +258,25 @@ def test_fio_sd_dispatch_contract() -> None:
         "ESP handles GSAVE": "case CMD_GSAVE" in dispatcher and "handle_gsave();" in dispatcher,
         "ESP handles GLOAD": "case CMD_GLOAD" in dispatcher and "handle_gload();" in dispatcher,
         "ESP handles PWD": "case CMD_PWD" in dispatcher and "handle_pwd();" in dispatcher,
-        "ESP registers SIDPLAY as deliberate SD command": 'handle_unsupported_sd_command("SIDPLAY")' in dispatcher,
+        "ESP handles SIDPLAY": "case CMD_SIDPLAY" in dispatcher and "handle_sidplay();" in dispatcher,
+        "ESP handles SIDSTOP": "case CMD_SIDSTOP" in dispatcher and "handle_sidstop();" in dispatcher,
+        "ESP SIDPLAY installs a 6502 IRQ player": "install_sid_player(_bridge" in dispatcher
+        and "SID_IRQ_VECTOR_ADDR" in dispatcher
+        and "VGC_IRQ_TIMER" in dispatcher,
+        "ESP SIDPLAY programs the VGC timer IRQ": "set_sid_timer(bridge, timer_period, true)" in dispatcher
+        and "VGC_IRQ_TIMER_LO_ADDR" in dispatcher
+        and "SID_TIMER_NTSC_PERIOD" in dispatcher,
+        "ESP SIDPLAY programs SID model/clock config": "sid_config_for(const SidInfo& sid)" in dispatcher
+        and "SID_CFG_CLOCK_NTSC" in dispatcher
+        and "SID_CFG_MODEL_8580" in dispatcher
+        and "configure_sid(bridge, sid_config)" in dispatcher,
+        "ESP SIDSTOP clears HDMI diagnostic tone": "configure_sid(bridge, 0)" in dispatcher
+        and "SID_CFG_ADDR" in dispatcher,
+        "ESP SIDPLAY streams SID payload into CPU RAM": "read_file_chunk_by_index(idx, sid.payloadFileOffset + off" in dispatcher
+        and "_bridge.loadRam((uint16_t)(sid.loadAddress + off)" in dispatcher,
+        "ESP SID silence preserves Nova per-voice volume": "off <= 0x18" in dispatcher
+        and "off = 0x1D" in dispatcher
+        and "SID1_BASE + off), 0x0F" in dispatcher,
         "ESP registers MIDPLAY as deliberate SD command": 'handle_unsupported_sd_command("MIDPLAY")' in dispatcher,
         "ESP registers SFLOAD as deliberate SD command": 'handle_unsupported_sd_command("SFLOAD")' in dispatcher,
         "ESP registers FORMAT as deliberate SD command": 'handle_unsupported_sd_command("FORMAT")' in dispatcher,
@@ -289,9 +307,9 @@ def test_fio_sd_dispatch_contract() -> None:
 
 
 def test_nic_command_sequence_contract() -> None:
-    nova_inc = read("ehbasic/lib/nova.inc")
-    nic_inc = read("ehbasic/lib/nic.inc")
-    nic_runtime = read("ehbasic/lib/nic.s")
+    nova_inc = read("runtime/asm/nova.inc")
+    nic_inc = read("runtime/asm/nic.inc")
+    nic_runtime = read("runtime/asm/nic.s")
     constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
     fpga_nic = read("e6502.FPGA/rtl/nic.sv")
     dispatcher_h = read("e6502.ESP32/novahost/nic_dispatcher.h")
@@ -343,10 +361,10 @@ def test_nic_command_sequence_contract() -> None:
 
 
 def test_runtime_autoboot_contract() -> None:
-    nova_inc = read("ehbasic/lib/nova.inc")
+    nova_inc = read("runtime/asm/nova.inc")
     basic = read("ehbasic/basic.asm")
-    fio = read("ehbasic/lib/fio.s")
-    rng = read("ehbasic/lib/rng.s")
+    fio = read("runtime/asm/fio.s")
+    rng = read("runtime/asm/rng.s")
     constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
     controller = read("e6502.Avalonia/Hardware/FileIoController.cs")
     composite = read("e6502.Avalonia/Hardware/CompositeBusDevice.cs")
@@ -365,9 +383,9 @@ def test_runtime_autoboot_contract() -> None:
     novaz_auto = read("examples/novaz/src/autoboot.s")
     novaz_runtime = read("examples/novaz/src/runtime.s")
     novaz_zstory = read("examples/novaz/src/zstory.s")
-    nvg_runtime = read("ehbasic/lib/nvg.s")
-    nvg_inc = read("ehbasic/lib/nvg.inc")
-    xram_inc = read("ehbasic/lib/xram.inc")
+    nvg_runtime = read("runtime/asm/nvg.s")
+    nvg_inc = read("runtime/asm/nvg.inc")
+    xram_inc = read("runtime/asm/xram.inc")
 
     checks = {
         "BASIC exposes primary runtime ROM swap label": "ROMSWAP_PRIMARY" in nova_inc
@@ -383,7 +401,7 @@ def test_runtime_autoboot_contract() -> None:
         "shared RNG library wraps host command": ".export rng_get32" in rng
         and "LDA   #FIO_CMD_RNG" in rng,
         "shared NVG library wraps host decode command": "FIO_CMD_NVGLOAD  = $2B" in nova_inc
-        and "lib/nvg.inc lib/nvg.s" in read("ehbasic/Makefile")
+        and "$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s" in read("ehbasic/Makefile")
         and ".export nvg_load" in nvg_runtime,
         "shared NVG library streams through host decode command": "streamed directly into the graphics" in nvg_inc
         and "LDA   #VGC_PLANE_GFX" in nvg_runtime

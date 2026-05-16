@@ -1,2 +1,2 @@
-; Compatibility include. New code should include "lib/vtext.s".
-.include "lib/vtext.s"
+; Compatibility source include. New code should include "runtime/asm/vtext.s".
+.include "../runtime/asm/vtext.s"

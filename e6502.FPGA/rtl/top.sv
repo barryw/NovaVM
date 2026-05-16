@@ -4,7 +4,7 @@
 // DMA performs 1D bulk copy/fill ($BA63-$BA75), stalls CPU via RDY
 // Blitter and DMA are mutually exclusive via RDY stall; top.sv muxes their
 // memory-port outputs into a single bus-master signal set (bm_*).
-// SID: single 6581/8580 sound chip, runtime model select via $D440
+// SID: dual 6581/8580 sound chips, runtime model/clock select via $D440
 // XMC bank switching: 4x256-byte windows at $BC00-$BFFF into 512KB XRAM
 //
 // All large memories use dpram instances for BRAM inference during synthesis.
@@ -137,9 +137,13 @@ module top (
     localparam MATH_END     = 16'hBB4F;
 
     // SID address map
-    localparam SID1_BASE    = 16'hD400;  // SID registers $D400-$D41F
-    localparam SID1_END     = 16'hD41F;
-    localparam SID_CFG      = 16'hD440;  // SID config: bit0=mode (0=6581, 1=8580)
+    localparam SID1_BASE       = 16'hD400;  // SID1 registers $D400-$D41F
+    localparam SID1_END        = 16'hD41F;
+    localparam SID2_BASE       = 16'hD420;  // SID2 registers $D420-$D43F
+    localparam SID2_END        = 16'hD43F;
+    localparam SID2_MIRROR_BASE = 16'hD500; // Legacy SID2 mirror $D500-$D51F
+    localparam SID2_MIRROR_END  = 16'hD51F;
+    localparam SID_CFG         = 16'hD440;  // bit0=mode (0=6581, 1=8580), bit1=clock (0=PAL, 1=NTSC), bit7=HDMI audio test tone
 
     // CPU bus
     wire [15:0] cpu_addr;
@@ -1163,57 +1167,146 @@ module top (
     );
 
     // =========================================================================
-    // SID — single legacy 6581/8580-compatible sound chip
+    // SID — dual legacy 6581/8580-compatible sound chips
     // =========================================================================
 
-    // ~1 MHz clock enable from pixel clock: 25.175 MHz / 25 ~ 1.007 MHz
-    logic [4:0] sid_clk_div;
+    // Fractional clock enable from the 27 MHz pixel clock. SID tune frequency
+    // registers assume a real C64 clock, not clk_pixel / 25.
+    localparam [25:0] SID_PIXEL_HZ = 26'd27000000;
+    localparam [25:0] SID_PAL_HZ   = 26'd985248;
+    localparam [25:0] SID_NTSC_HZ  = 26'd1022727;
+
+    logic       sid_clock_ntsc;
+    logic [25:0] sid_clk_acc;
     logic       sid_ce_1m;
+    wire [25:0] sid_clk_step = sid_clock_ntsc ? SID_NTSC_HZ : SID_PAL_HZ;
+    wire [26:0] sid_clk_next = {1'b0, sid_clk_acc} + {1'b0, sid_clk_step};
+
     always_ff @(posedge clk) begin
         if (custom_rst) begin
-            sid_clk_div <= 0;
+            sid_clk_acc <= 26'd0;
             sid_ce_1m   <= 0;
+        end else if (sid_clk_next >= {1'b0, SID_PIXEL_HZ}) begin
+            sid_clk_acc <= sid_clk_next - {1'b0, SID_PIXEL_HZ};
+            sid_ce_1m   <= 1'b1;
         end else begin
-            sid_ce_1m <= (sid_clk_div == 5'd24);
-            sid_clk_div <= (sid_clk_div == 5'd24) ? 5'd0 : sid_clk_div + 1'd1;
+            sid_clk_acc <= sid_clk_next[25:0];
+            sid_ce_1m   <= 1'b0;
         end
     end
 
-    // SID config register ($D440): bit 0 = mode (0 = 6581, 1 = 8580).
+    // SID config register ($D440):
+    //   bit 0 = SID model (0 = 6581, 1 = 8580)
+    //   bit 1 = SID clock (0 = PAL 985248 Hz, 1 = NTSC 1022727 Hz)
+    //   bit 7 = HDMI audio test tone, used to prove the board emits audio
+    wire dbg_poke_sid1 = dbg_poke_en &&
+                         (dbg_poke_addr >= SID1_BASE && dbg_poke_addr <= SID1_END);
+    wire dbg_poke_sid2 = dbg_poke_en &&
+                         ((dbg_poke_addr >= SID2_BASE && dbg_poke_addr <= SID2_END) ||
+                          (dbg_poke_addr >= SID2_MIRROR_BASE && dbg_poke_addr <= SID2_MIRROR_END));
+    wire dbg_poke_sid_cfg = dbg_poke_en && (dbg_poke_addr == SID_CFG);
+    wire dbg_poke_sid = dbg_poke_sid1 | dbg_poke_sid2 | dbg_poke_sid_cfg;
+    wire sid_cpu_we = cpu_we && cpu_active && !dbg_poke_sid;
+    wire [15:0] sid_bus_addr = dbg_poke_sid ? dbg_poke_addr : cpu_addr;
+    wire [7:0]  sid_bus_dout = dbg_poke_sid ? dbg_poke_data : cpu_dout;
+
     logic sid_mode_8580;
+    logic hdmi_audio_test_enable;
     always_ff @(posedge clk) begin
-        if (custom_rst)
+        if (custom_rst) begin
             sid_mode_8580 <= 1'b0;
-        else if (cpu_we && cpu_active && cpu_addr == SID_CFG)
-            sid_mode_8580 <= cpu_dout[0];
+            sid_clock_ntsc <= 1'b0;
+            hdmi_audio_test_enable <= 1'b0;
+        end else if ((sid_cpu_we && cpu_addr == SID_CFG) || dbg_poke_sid_cfg) begin
+            sid_mode_8580 <= sid_bus_dout[0];
+            sid_clock_ntsc <= sid_bus_dout[1];
+            hdmi_audio_test_enable <= sid_bus_dout[7];
+        end
     end
 
     // Chip select and address decode
-    wire sid_cs = cpu_we && cpu_active && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END);
-    wire [7:0] sid_dout;
-    logic signed [17:0] sid_audio_mono;
+    wire sid1_cs = dbg_poke_sid1 ||
+                   (sid_cpu_we && (cpu_addr >= SID1_BASE && cpu_addr <= SID1_END));
+    wire sid2_cs = dbg_poke_sid2 ||
+                   (sid_cpu_we &&
+                    ((cpu_addr >= SID2_BASE && cpu_addr <= SID2_END) ||
+                     (cpu_addr >= SID2_MIRROR_BASE && cpu_addr <= SID2_MIRROR_END)));
+    wire [7:0] sid1_dout;
+    wire [7:0] sid2_dout;
+    logic signed [17:0] sid1_audio_mono;
+    logic signed [17:0] sid2_audio_mono;
 
     // SID filter curve pulled from SDRAM (Phase 2.5 Step 3).
-    wire [10:0] sid_filter_fc;
-    wire [15:0] sid_filter_f0;
+    wire [10:0] sid1_filter_fc;
+    wire [10:0] sid2_filter_fc;
+    wire [15:0] sid1_filter_f0;
+    wire [15:0] sid2_filter_f0;
 
     sid_chip sid_inst (
         .clk        (clk),
         .rst        (custom_rst),
         .ce_1m      (sid_ce_1m),
         .mode       (sid_mode_8580),
-        .cs         (sid_cs),
+        .cs         (sid1_cs),
         .we         (1'b1),
-        .addr       (cpu_addr[4:0]),
-        .din        (cpu_dout),
-        .dout       (sid_dout),
-        .audio_out  (sid_audio_mono),
-        .filter_fc_out(sid_filter_fc),
-        .filter_f0_in (sid_filter_f0)
+        .addr       (sid_bus_addr[4:0]),
+        .din        (sid_bus_dout),
+        .dout       (sid1_dout),
+        .audio_out  (sid1_audio_mono),
+        .filter_fc_out(sid1_filter_fc),
+        .filter_f0_in (sid1_filter_f0)
     );
 
-    assign audio_l = sid_audio_mono;
-    assign audio_r = sid_audio_mono;
+    sid_chip sid2_inst (
+        .clk        (clk),
+        .rst        (custom_rst),
+        .ce_1m      (sid_ce_1m),
+        .mode       (sid_mode_8580),
+        .cs         (sid2_cs),
+        .we         (1'b1),
+        .addr       (sid_bus_addr[4:0]),
+        .din        (sid_bus_dout),
+        .dout       (sid2_dout),
+        .audio_out  (sid2_audio_mono),
+        .filter_fc_out(sid2_filter_fc),
+        .filter_f0_in (sid2_filter_f0)
+    );
+
+    function automatic logic signed [17:0] clip_sid_mix(input logic signed [18:0] sample);
+        begin
+            if (sample > 19'sd131071)
+                clip_sid_mix = 18'sd131071;
+            else if (sample < -19'sd131072)
+                clip_sid_mix = -18'sd131072;
+            else
+                clip_sid_mix = sample[17:0];
+        end
+    endfunction
+
+    wire signed [18:0] sid_audio_sum = {sid1_audio_mono[17], sid1_audio_mono} +
+                                       {sid2_audio_mono[17], sid2_audio_mono};
+    wire signed [17:0] sid_audio_mix = clip_sid_mix(sid_audio_sum);
+
+    // A simple square-wave diagnostic lets us prove HDMI audio output without
+    // depending on SID programming, envelope state, or game/application code.
+    localparam [15:0] HDMI_TEST_TONE_HALF_PERIOD = 16'd30682; // ~440 Hz at 27 MHz
+    logic [15:0] hdmi_test_tone_div;
+    logic        hdmi_test_tone_high;
+    always_ff @(posedge clk) begin
+        if (custom_rst || !hdmi_audio_test_enable) begin
+            hdmi_test_tone_div <= 16'd0;
+            hdmi_test_tone_high <= 1'b0;
+        end else if (hdmi_test_tone_div == HDMI_TEST_TONE_HALF_PERIOD) begin
+            hdmi_test_tone_div <= 16'd0;
+            hdmi_test_tone_high <= ~hdmi_test_tone_high;
+        end else begin
+            hdmi_test_tone_div <= hdmi_test_tone_div + 1'd1;
+        end
+    end
+
+    wire signed [17:0] hdmi_test_audio = hdmi_test_tone_high ? 18'sd65536 : -18'sd65536;
+    assign audio_l = hdmi_audio_test_enable ? hdmi_test_audio : sid_audio_mix;
+    assign audio_r = hdmi_audio_test_enable ? hdmi_test_audio : sid_audio_mix;
 
     // Curve reader SDRAM port B — muxed with bridge preload below. Held
     // in reset whenever NovaHost holds the CPU reset so that it doesn't
@@ -1226,8 +1319,10 @@ module top (
     sid_curve_reader curve_reader_inst (
         .clk         (clk),
         .rst         (custom_rst | dbg_cpu_reset),
-        .sid_Fc      (sid_filter_fc),
-        .sid_f0      (sid_filter_f0),
+        .sid1_Fc     (sid1_filter_fc),
+        .sid1_f0     (sid1_filter_f0),
+        .sid2_Fc     (sid2_filter_fc),
+        .sid2_f0     (sid2_filter_f0),
         .sdram_addrB (curve_addrB),
         .sdram_weB   (curve_weB),
         .sdram_dinB  (curve_dinB),
@@ -1235,15 +1330,14 @@ module top (
         .sdram_doutB (sdram_doutB)
     );
 
-    // Port B arbitration: bridge transfers win while active. The SID curve
-    // reader is held in reset during boot preload, and direct XRAM streaming
-    // uses short bridge-owned bursts while BASIC waits for FIO completion.
-    wire brg_sdram_b_active = brg_sdram_b_we | brg_sdram_b_oe;
-    assign sdram_addrB = brg_sdram_b_active ? brg_sdram_b_addr : curve_addrB;
-    assign sdram_weB   = brg_sdram_b_we     ? 1'b1             : curve_weB;
-    assign sdram_dinB  = brg_sdram_b_we     ? brg_sdram_b_din  : curve_dinB;
-    assign sdram_oeB   = brg_sdram_b_oe     ? 1'b1             :
-                         brg_sdram_b_we     ? 1'b0             : curve_oeB;
+    // Port B is owned by the SID curve reader inside the core. The FPGA wrapper
+    // arbitrates external debug transfers after crossing them into the SDRAM
+    // clock domain, so keeping a second bridge mux here only lengthens the
+    // pixel-domain path.
+    assign sdram_addrB = curve_addrB;
+    assign sdram_weB   = curve_weB;
+    assign sdram_dinB  = curve_dinB;
+    assign sdram_oeB   = curve_oeB;
 
     // =========================================================================
     // CPU

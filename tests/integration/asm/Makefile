@@ -2,7 +2,7 @@ CA65 ?= ca65
 LD65 ?= ld65
 BUILD_DIR ?= /tmp/e6502-asm-fixtures
 FIXTURE_DIR := ../fixtures
-NOVA_LIB := ../../../ehbasic/lib
+NOVA_LIB := ../../../runtime/asm
 
 all: $(FIXTURE_DIR)/xram_runtime.bin $(FIXTURE_DIR)/vtext_runtime.bin $(FIXTURE_DIR)/audio_runtime.bin $(FIXTURE_DIR)/nic_runtime.bin $(FIXTURE_DIR)/gameserver_runtime.bin $(FIXTURE_DIR)/gameserver_live_runtime.bin $(FIXTURE_DIR)/overlay_runtime.bin
 

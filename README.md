@@ -111,14 +111,14 @@ hardware surface:
 - TCP networking commands in the Avalonia host,
 - IRQ/NMI helpers and low-level `PEEK`/`POKE` access.
 
-Assembly code can use the shared XRAM runtime in `ehbasic/lib/xram.inc` and
-`ehbasic/lib/xram.s`. BASIC keeps a convenient `XBANK` plus 16-bit offset model,
+Assembly code can use the shared XRAM runtime in `runtime/asm/xram.inc` and
+`runtime/asm/xram.s`. BASIC keeps a convenient `XBANK` plus 16-bit offset model,
 while assembly routines can treat XRAM as a 24-bit flat address space.
 The optional XMC named-block command processor is shared in
-`ehbasic/lib/xmc.s`.
+`runtime/asm/xmc.s`.
 
-Shared text-region helpers live in `ehbasic/lib/vtext.inc` and
-`ehbasic/lib/vtext.s`. They provide reusable VGC text/color/attribute region
+Shared text-region helpers live in `runtime/asm/vtext.inc` and
+`runtime/asm/vtext.s`. They provide reusable VGC text/color/attribute region
 clear, output, and scroll primitives for assembly programs and language
 runtimes.
 

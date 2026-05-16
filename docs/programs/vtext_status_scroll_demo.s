@@ -8,7 +8,7 @@
 
 .setcpu "65c02"
 
-.include "lib/vtext.inc"
+.include "vtext.inc"
 
 REGION_TABLE = $2400
 STR_INDEX = $23FF
@@ -106,4 +106,4 @@ story_text:
         .byte "LINE 4",$0A
         .byte "LINE 5",$0A,0
 
-.include "lib/vtext.s"
+.include "vtext.s"

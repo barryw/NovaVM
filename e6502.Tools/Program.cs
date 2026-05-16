@@ -13,6 +13,8 @@ if (args[0] == "mid2bas")
     return RunMidToBas(args.Skip(1).ToArray());
 if (args[0] == "pack-overlay")
     return RunPackOverlay(args.Skip(1).ToArray());
+if (args[0] == "sidtrace")
+    return SidTraceCommand.Run(args.Skip(1).ToArray());
 
 // Legacy: sidreloc (no verb prefix)
 return RunSidReloc(args);

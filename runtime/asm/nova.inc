@@ -1,0 +1,2043 @@
+; Shared Nova hardware constants for BASIC, assembly, and runtime libraries.
+;
+; This include is deliberately guarded per symbol so it can coexist with older
+; source files that still define a subset of these names locally.
+
+.ifndef NOVA_INC_INCLUDED
+NOVA_INC_INCLUDED = 1
+
+; Nova pseudo-register mailbox. These bytes are available to callers and
+; runtime helpers as ephemeral argument/scratch storage only. A routine may
+; clobber them unless its documentation explicitly says otherwise; persistent
+; library state must be allocated in a linker segment such as BSS/ZEROPAGE.
+.ifndef NVR0L
+NVR0L             = $20
+.endif
+.ifndef NVR0H
+NVR0H             = $21
+.endif
+.ifndef NVR1L
+NVR1L             = $22
+.endif
+.ifndef NVR1H
+NVR1H             = $23
+.endif
+.ifndef NVR2L
+NVR2L             = $24
+.endif
+.ifndef NVR2H
+NVR2H             = $25
+.endif
+.ifndef NVR3L
+NVR3L             = $26
+.endif
+.ifndef NVR3H
+NVR3H             = $27
+.endif
+.ifndef NVR4L
+NVR4L             = $28
+.endif
+.ifndef NVR4H
+NVR4H             = $29
+.endif
+.ifndef NVR5L
+NVR5L             = $2A
+.endif
+.ifndef NVR5H
+NVR5H             = $2B
+.endif
+.ifndef NVR6L
+NVR6L             = $2C
+.endif
+.ifndef NVR6H
+NVR6H             = $2D
+.endif
+.ifndef NVR7L
+NVR7L             = $2E
+.endif
+.ifndef NVR7H
+NVR7H             = $2F
+.endif
+
+; BASIC SYS register bridge. SYS addr[,A[,X[,Y]]] loads A/X/Y from these
+; bytes before jumping and stores A/X/Y back here when the routine returns.
+; @label SYS.REGA
+; @kind u8
+; @symbol SYS_REGA
+; @summary Returned A register from the most recent SYS call.
+.ifndef SYS_REGA
+SYS_REGA          = $E7
+.endif
+; @label SYS.REGX
+; @kind u8
+; @symbol SYS_REGX
+; @summary Returned X register from the most recent SYS call.
+.ifndef SYS_REGX
+SYS_REGX          = $E8
+.endif
+; @label SYS.REGY
+; @kind u8
+; @symbol SYS_REGY
+; @summary Returned Y register from the most recent SYS call.
+.ifndef SYS_REGY
+SYS_REGY          = $E9
+.endif
+
+; Extension ROM argument mailbox used by small BASIC stubs that parse
+; BASIC-owned data before calling an extension handler.
+.ifndef EXT_ARG_LEN
+EXT_ARG_LEN       = $EA
+.endif
+.ifndef EXT_ARG_PTRL
+EXT_ARG_PTRL      = $EB
+.endif
+.ifndef EXT_ARG_PTRH
+EXT_ARG_PTRH      = $EC
+.endif
+
+.ifndef NOVA_SCREEN_COLS
+NOVA_SCREEN_COLS  = 80
+.endif
+.ifndef NOVA_SCREEN_ROWS
+NOVA_SCREEN_ROWS  = 50
+.endif
+.ifndef NOVA_SCREEN_SIZE
+NOVA_SCREEN_SIZE  = NOVA_SCREEN_COLS * NOVA_SCREEN_ROWS
+.endif
+
+; ---------------------------------------------------------------------
+; 6502 hardware vectors.
+; ---------------------------------------------------------------------
+.ifndef CPU_NMI_VECTOR
+CPU_NMI_VECTOR    = $FFFA
+.endif
+.ifndef CPU_RESET_VECTOR
+CPU_RESET_VECTOR  = $FFFC
+.endif
+.ifndef CPU_IRQ_VECTOR
+CPU_IRQ_VECTOR    = $FFFE
+.endif
+
+; ---------------------------------------------------------------------
+; VGC core and text/VRAM port registers.
+; ---------------------------------------------------------------------
+.ifndef VGC_MODE
+VGC_MODE          = $A000
+.endif
+.ifndef VGC_BGCOL
+VGC_BGCOL         = $A001
+.endif
+.ifndef VGC_FGCOL
+VGC_FGCOL         = $A002
+.endif
+.ifndef VGC_CURSX
+VGC_CURSX         = $A003
+.endif
+.ifndef VGC_CURSY
+VGC_CURSY         = $A004
+.endif
+.ifndef VGC_SCROLLX
+VGC_SCROLLX       = $A005
+.endif
+.ifndef VGC_SCROLLY
+VGC_SCROLLY       = $A006
+.endif
+.ifndef VGC_FONT
+VGC_FONT          = $A007
+.endif
+.ifndef VGC_FRAME
+VGC_FRAME         = $A008
+.endif
+.ifndef VGC_STATUS
+VGC_STATUS        = $A008
+.endif
+.ifndef VGC_SPRCOUNT
+VGC_SPRCOUNT      = $A009
+.endif
+.ifndef VGC_CURSEN
+VGC_CURSEN        = $A00A
+.endif
+.ifndef VGC_COLLST
+VGC_COLLST        = $A00B
+.endif
+.ifndef VGC_COLLBG
+VGC_COLLBG        = $A00C
+.endif
+.ifndef VGC_COLLST_HI
+VGC_COLLST_HI     = $A0EB
+.endif
+.ifndef VGC_COLLBG_HI
+VGC_COLLBG_HI     = $A0EC
+.endif
+.ifndef VGC_BORDER
+VGC_BORDER        = $A00D
+.endif
+.ifndef VGC_CHAROUT
+VGC_CHAROUT       = $A00E
+.endif
+.ifndef VGC_CHARIN
+VGC_CHARIN        = $A00F
+.endif
+
+.ifndef VGC_CMD
+VGC_CMD           = $A010
+.endif
+.ifndef VGC_P0
+VGC_P0            = $A011
+.endif
+.ifndef VGC_P1
+VGC_P1            = $A012
+.endif
+.ifndef VGC_P2
+VGC_P2            = $A013
+.endif
+.ifndef VGC_P3
+VGC_P3            = $A014
+.endif
+.ifndef VGC_P4
+VGC_P4            = $A015
+.endif
+.ifndef VGC_P5
+VGC_P5            = $A016
+.endif
+.ifndef VGC_P6
+VGC_P6            = $A017
+.endif
+.ifndef VGC_P7
+VGC_P7            = $A018
+.endif
+.ifndef VGC_P8
+VGC_P8            = $A019
+.endif
+.ifndef VGC_P9
+VGC_P9            = $A01A
+.endif
+.ifndef VGC_P10
+VGC_P10           = $A01B
+.endif
+.ifndef VGC_P11
+VGC_P11           = $A01C
+.endif
+.ifndef VGC_P12
+VGC_P12           = $A01D
+.endif
+.ifndef VGC_P13
+VGC_P13           = $A01E
+.endif
+.ifndef VGC_P14
+VGC_P14           = $A01F
+.endif
+
+.ifndef REG_HELP
+REG_HELP          = $A020
+.endif
+.ifndef HELP_BUF
+HELP_BUF          = $A021
+.endif
+.ifndef REG_ROMSWAP
+REG_ROMSWAP       = $A03F
+.endif
+.ifndef ROMSWAP_NCC
+ROMSWAP_NCC       = $01
+.endif
+.ifndef ROMSWAP_BASIC
+ROMSWAP_BASIC     = $02
+.endif
+.ifndef ROMSWAP_PRIMARY
+; @label ROMSWAP.PRIMARY
+; @kind const
+; @symbol ROMSWAP_PRIMARY
+; @summary Select the primary runtime ROM bank at $C000. At cold boot this is NovaBASIC; a RAM launcher may replace it with another runtime first.
+ROMSWAP_PRIMARY   = ROMSWAP_BASIC
+.endif
+.ifndef ROMSWAP_NCCEDIT
+ROMSWAP_NCCEDIT   = $03
+.endif
+.ifndef ROMSWAP_EXTENSION
+ROMSWAP_EXTENSION = $04
+.endif
+
+.ifndef VGC_SPR_BASE
+VGC_SPR_BASE      = $A040
+.endif
+.ifndef VGC_SPR_STRIDE
+VGC_SPR_STRIDE    = $08
+.endif
+.ifndef VGC_MAX_SPRITES
+VGC_MAX_SPRITES   = $10
+.endif
+.ifndef VGC_SPR_XL_OFF
+VGC_SPR_XL_OFF    = $00
+.endif
+.ifndef VGC_SPR_XH_OFF
+VGC_SPR_XH_OFF    = $01
+.endif
+.ifndef VGC_SPR_YL_OFF
+VGC_SPR_YL_OFF    = $02
+.endif
+.ifndef VGC_SPR_YH_OFF
+VGC_SPR_YH_OFF    = $03
+.endif
+.ifndef VGC_SPR_SHAPE_OFF
+VGC_SPR_SHAPE_OFF = $04
+.endif
+.ifndef VGC_SPR_FLAGS_OFF
+VGC_SPR_FLAGS_OFF = $05
+.endif
+.ifndef VGC_SPR_PRI_OFF
+VGC_SPR_PRI_OFF   = $06
+.endif
+.ifndef VGC_SPR_TRANS_OFF
+VGC_SPR_TRANS_OFF = $07
+.endif
+.ifndef VGC_SPR_XL
+VGC_SPR_XL        = VGC_SPR_BASE + VGC_SPR_XL_OFF
+.endif
+.ifndef VGC_SPR_XH
+VGC_SPR_XH        = VGC_SPR_BASE + VGC_SPR_XH_OFF
+.endif
+.ifndef VGC_SPR_YL
+VGC_SPR_YL        = VGC_SPR_BASE + VGC_SPR_YL_OFF
+.endif
+.ifndef VGC_SPR_YH
+VGC_SPR_YH        = VGC_SPR_BASE + VGC_SPR_YH_OFF
+.endif
+.ifndef VGC_SPR_SHAPE
+VGC_SPR_SHAPE     = VGC_SPR_BASE + VGC_SPR_SHAPE_OFF
+.endif
+.ifndef VGC_SPR_FLAGS
+VGC_SPR_FLAGS     = VGC_SPR_BASE + VGC_SPR_FLAGS_OFF
+.endif
+.ifndef VGC_SPR_PRI
+VGC_SPR_PRI       = VGC_SPR_BASE + VGC_SPR_PRI_OFF
+.endif
+.ifndef VGC_SPR_TRANS
+VGC_SPR_TRANS     = VGC_SPR_BASE + VGC_SPR_TRANS_OFF
+.endif
+.ifndef VGC_SPR_FLAG_XFLIP
+VGC_SPR_FLAG_XFLIP = $01
+.endif
+.ifndef VGC_SPR_FLAG_YFLIP
+VGC_SPR_FLAG_YFLIP = $02
+.endif
+.ifndef VGC_SPR_FLAG_FLIPMASK
+VGC_SPR_FLAG_FLIPMASK = $03
+.endif
+.ifndef VGC_SPR_FLAG_ENABLE
+VGC_SPR_FLAG_ENABLE = $80
+.endif
+.ifndef VGC_SPR_PRI_BEHIND
+VGC_SPR_PRI_BEHIND = $00
+.endif
+.ifndef VGC_SPR_PRI_BETWEEN
+VGC_SPR_PRI_BETWEEN = $01
+.endif
+.ifndef VGC_SPR_PRI_FRONT
+VGC_SPR_PRI_FRONT = $02
+.endif
+
+.ifndef VGC_VRAM_PLANE
+VGC_VRAM_PLANE    = $A0E0
+.endif
+.ifndef VGC_VRAM_ADDRL
+VGC_VRAM_ADDRL    = $A0E1
+.endif
+.ifndef VGC_VRAM_ADDRH
+VGC_VRAM_ADDRH    = $A0E2
+.endif
+.ifndef VGC_VRAM_DATA
+VGC_VRAM_DATA     = $A0E3
+.endif
+.ifndef VGC_VRAM_CTRL
+VGC_VRAM_CTRL     = $A0E4
+.endif
+.ifndef VGC_DIMMER
+VGC_DIMMER        = $A0E5
+.endif
+.ifndef VGC_TXTFLAGS
+VGC_TXTFLAGS      = $A0E6
+.endif
+.ifndef VGC_TXTREVATTR
+VGC_TXTREVATTR    = $A0E7
+.endif
+; @label VGC.GFXTRANS
+; @kind const
+; @symbol VGC_GFXTRANS
+; @summary Graphics-plane transparent color register. Defaults to 0; set to another palette index when graphics code needs visible palette-0 black pixels.
+.ifndef VGC_GFXTRANS
+VGC_GFXTRANS      = $A0E8
+.endif
+.ifndef VGC_PALETTE
+VGC_PALETTE       = $A0E9
+.endif
+.ifndef VGC_SCROLLCTL
+VGC_SCROLLCTL     = $A0EA
+.endif
+.ifndef VGC_SCROLLCTL_XHI
+VGC_SCROLLCTL_XHI = $01
+.endif
+.ifndef VGC_SCROLLCTL_GFX
+VGC_SCROLLCTL_GFX = $02
+.endif
+.ifndef VGC_SCROLLCTL_TEXT
+VGC_SCROLLCTL_TEXT = $04
+.endif
+
+.ifndef VGC_VPLANE
+VGC_VPLANE        = VGC_VRAM_PLANE
+.endif
+.ifndef VGC_VADDRL
+VGC_VADDRL        = VGC_VRAM_ADDRL
+.endif
+.ifndef VGC_VADDRH
+VGC_VADDRH        = VGC_VRAM_ADDRH
+.endif
+.ifndef VGC_VDATA
+VGC_VDATA         = VGC_VRAM_DATA
+.endif
+.ifndef VGC_VCTRL
+VGC_VCTRL         = VGC_VRAM_CTRL
+.endif
+
+.ifndef VGC_PLANE_CHAR
+VGC_PLANE_CHAR    = $01
+.endif
+.ifndef VGC_PLANE_COLOR
+VGC_PLANE_COLOR   = $02
+.endif
+.ifndef VGC_PLANE_GFX
+VGC_PLANE_GFX     = $03
+.endif
+.ifndef VGC_PLANE_SPRITE
+VGC_PLANE_SPRITE  = $04
+.endif
+.ifndef VGC_PLANE_TEXTATTR
+VGC_PLANE_TEXTATTR = $07
+.endif
+.ifndef VGC_VRAM_AUTOINC
+VGC_VRAM_AUTOINC  = $01
+.endif
+
+.ifndef VTXT_REV
+VTXT_REV          = $01
+.endif
+.ifndef VTXT_REVEX
+VTXT_REVEX        = $02
+.endif
+.ifndef VTXT_FLASH
+VTXT_FLASH        = $04
+.endif
+.ifndef VTXT_ATTR_FLASH
+VTXT_ATTR_FLASH   = $01
+.endif
+
+; VGC IRQ and command constants.
+.ifndef VGC_IRQ_ENABLE
+VGC_IRQ_ENABLE    = $A0F0
+.endif
+.ifndef VGC_IRQ_STATUS
+VGC_IRQ_STATUS    = $A0F1
+.endif
+.ifndef VGC_IRQ_FORCE
+VGC_IRQ_FORCE     = $A0F2
+.endif
+.ifndef VGC_IRQ_VALID
+VGC_IRQ_VALID     = $A0F3
+.endif
+.ifndef VGC_IRQ_VBLANK
+VGC_IRQ_VBLANK    = $01
+.endif
+.ifndef VGC_IRQ_COPPER0
+VGC_IRQ_COPPER0   = $02
+.endif
+.ifndef VGC_IRQ_SPRCOLL
+VGC_IRQ_SPRCOLL   = $20
+.endif
+.ifndef VGC_IRQ_SPRBG
+VGC_IRQ_SPRBG     = $40
+.endif
+
+.ifndef VCMD_PLOT
+VCMD_PLOT         = $01
+.endif
+.ifndef VCMD_UNPLOT
+VCMD_UNPLOT       = $02
+.endif
+.ifndef VCMD_LINE
+VCMD_LINE         = $03
+.endif
+.ifndef VCMD_CIRCLE
+VCMD_CIRCLE       = $04
+.endif
+.ifndef VCMD_RECT
+VCMD_RECT         = $05
+.endif
+.ifndef VCMD_FILL
+VCMD_FILL         = $06
+.endif
+.ifndef VCMD_GCLS
+VCMD_GCLS         = $07
+.endif
+.ifndef VCMD_GCOLOR
+VCMD_GCOLOR       = $08
+.endif
+.ifndef VCMD_PAINT
+VCMD_PAINT        = $09
+.endif
+.ifndef VCMD_GTEXT
+VCMD_GTEXT        = $0A
+.endif
+.ifndef VCMD_SPRDEF
+VCMD_SPRDEF       = $10
+.endif
+.ifndef VCMD_SPRROW
+VCMD_SPRROW       = $11
+.endif
+.ifndef VCMD_SPRCLR
+VCMD_SPRCLR       = $12
+.endif
+.ifndef VCMD_SPRCOPY
+VCMD_SPRCOPY      = $13
+.endif
+.ifndef VCMD_SPRPOS
+VCMD_SPRPOS       = $14
+.endif
+.ifndef VCMD_SPRENA
+VCMD_SPRENA       = $15
+.endif
+.ifndef VCMD_SPRDIS
+VCMD_SPRDIS       = $16
+.endif
+.ifndef VCMD_SPRFLIP
+VCMD_SPRFLIP      = $17
+.endif
+.ifndef VCMD_SPRPRI
+VCMD_SPRPRI       = $18
+.endif
+.ifndef VCMD_MEMREAD
+VCMD_MEMREAD      = $19
+.endif
+.ifndef VCMD_MEMWRITE
+VCMD_MEMWRITE     = $1A
+.endif
+.ifndef VCMD_COPPERADD
+VCMD_COPPERADD    = $1B
+.endif
+.ifndef VCMD_COPPERCLR
+VCMD_COPPERCLR    = $1C
+.endif
+.ifndef VCMD_COPPERENA
+VCMD_COPPERENA    = $1D
+.endif
+.ifndef VCMD_COPPERDIS
+VCMD_COPPERDIS    = $1E
+.endif
+.ifndef VCMD_SYSRESET
+VCMD_SYSRESET     = $1F
+.endif
+.ifndef VCMD_COPPERLIST
+VCMD_COPPERLIST   = $20
+.endif
+.ifndef VCMD_COPPERUSE
+VCMD_COPPERUSE    = $21
+.endif
+.ifndef VCMD_COPPEREND
+VCMD_COPPEREND    = $22
+.endif
+
+; ---------------------------------------------------------------------
+; NIC network interface controller.
+; ---------------------------------------------------------------------
+.ifndef NIC_CMD
+NIC_CMD           = $A100
+.endif
+.ifndef NIC_STATUS
+NIC_STATUS        = $A101
+.endif
+.ifndef NIC_SLOT
+NIC_SLOT          = $A102
+.endif
+.ifndef NIC_IRQCTRL
+NIC_IRQCTRL       = $A103
+.endif
+.ifndef NIC_IRQSTATUS
+NIC_IRQSTATUS     = $A104
+.endif
+.ifndef NIC_CMDSEQ
+NIC_CMDSEQ        = $A105
+.endif
+.ifndef NIC_CMDSHADOW
+NIC_CMDSHADOW     = $A106
+.endif
+.ifndef NIC_HOSTCTRL
+NIC_HOSTCTRL      = $A107
+.endif
+.ifndef NIC_RPORTL
+NIC_RPORTL        = $A108
+.endif
+.ifndef NIC_RPORTH
+NIC_RPORTH        = $A109
+.endif
+.ifndef NIC_LPORTL
+NIC_LPORTL        = $A10A
+.endif
+.ifndef NIC_LPORTH
+NIC_LPORTH        = $A10B
+.endif
+.ifndef NIC_DMAL
+NIC_DMAL          = $A110
+.endif
+.ifndef NIC_DMAH
+NIC_DMAH          = $A111
+.endif
+.ifndef NIC_DMALEN
+NIC_DMALEN        = $A112
+.endif
+.ifndef NIC_MSGLEN
+NIC_MSGLEN        = $A113
+.endif
+.ifndef NIC_DMASTATUS
+NIC_DMASTATUS     = $A114
+.endif
+.ifndef NIC_DMAERR
+NIC_DMAERR        = $A115
+.endif
+.ifndef NIC_SLOTST0
+NIC_SLOTST0       = $A118
+.endif
+.ifndef NIC_SLOTST1
+NIC_SLOTST1       = $A119
+.endif
+.ifndef NIC_SLOTST2
+NIC_SLOTST2       = $A11A
+.endif
+.ifndef NIC_SLOTST3
+NIC_SLOTST3       = $A11B
+.endif
+.ifndef NIC_NAMEBUF
+NIC_NAMEBUF       = $A120
+.endif
+.ifndef NIC_NAMEEND
+NIC_NAMEEND       = $A13F
+.endif
+
+.ifndef NIC_CMD_CONNECT
+NIC_CMD_CONNECT   = $01
+.endif
+.ifndef NIC_CMD_DISCONNECT
+NIC_CMD_DISCONNECT = $02
+.endif
+.ifndef NIC_CMD_SEND
+NIC_CMD_SEND      = $03
+.endif
+.ifndef NIC_CMD_RECV
+NIC_CMD_RECV      = $04
+.endif
+.ifndef NIC_CMD_LISTEN
+NIC_CMD_LISTEN    = $05
+.endif
+.ifndef NIC_CMD_ACCEPT
+NIC_CMD_ACCEPT    = $06
+.endif
+.ifndef NIC_ST_CONNECTED
+NIC_ST_CONNECTED  = $01
+.endif
+.ifndef NIC_ST_DATAREADY
+NIC_ST_DATAREADY  = $02
+.endif
+.ifndef NIC_ST_SENDREADY
+NIC_ST_SENDREADY  = $04
+.endif
+.ifndef NIC_ST_ERROR
+NIC_ST_ERROR      = $08
+.endif
+.ifndef NIC_ST_REMOTE_CLOSED
+NIC_ST_REMOTE_CLOSED = $10
+.endif
+.ifndef NIC_STATUS_READY
+NIC_STATUS_READY  = $01
+.endif
+.ifndef NIC_STATUS_ANYDATA
+NIC_STATUS_ANYDATA = $02
+.endif
+.ifndef NIC_STATUS_ANYERROR
+NIC_STATUS_ANYERROR = $80
+.endif
+.ifndef NIC_HOSTCTRL_RX_START
+NIC_HOSTCTRL_RX_START = $01
+.endif
+.ifndef NIC_DMAST_TX_READY
+NIC_DMAST_TX_READY = $01
+.endif
+.ifndef NIC_DMAST_RX_DONE
+NIC_DMAST_RX_DONE = $02
+.endif
+.ifndef NIC_DMAST_ERROR
+NIC_DMAST_ERROR  = $40
+.endif
+.ifndef NIC_DMAST_BUSY
+NIC_DMAST_BUSY   = $80
+.endif
+.ifndef NIC_DMAERR_NONE
+NIC_DMAERR_NONE  = $00
+.endif
+.ifndef NIC_DMAERR_RANGE
+NIC_DMAERR_RANGE = $01
+.endif
+.ifndef NIC_DMAERR_BUSY
+NIC_DMAERR_BUSY  = $02
+.endif
+.ifndef NIC_MAX_SLOTS
+NIC_MAX_SLOTS     = $04
+.endif
+.ifndef NIC_MAX_MSGSIZE
+NIC_MAX_MSGSIZE   = $0100
+.endif
+.ifndef NIC_MAX_QUEUE
+NIC_MAX_QUEUE     = $10
+.endif
+
+; ---------------------------------------------------------------------
+; File I/O coprocessor registers and command/status constants.
+; ---------------------------------------------------------------------
+.ifndef FIO_CMD
+FIO_CMD           = $B9A0
+.endif
+.ifndef FIO_STATUS
+FIO_STATUS        = $B9A1
+.endif
+.ifndef FIO_ERRCODE
+FIO_ERRCODE       = $B9A2
+.endif
+; @label FIO.NAMELEN
+; @kind u8
+; @symbol FIO_NAMELEN
+; @summary Length of the filename in FIO.NAME, 1..63 bytes.
+.ifndef FIO_NAMELEN
+FIO_NAMELEN       = $B9A3
+.endif
+.ifndef FIO_SRCL
+FIO_SRCL          = $B9A4
+.endif
+.ifndef FIO_SRCH
+FIO_SRCH          = $B9A5
+.endif
+.ifndef FIO_ENDL
+FIO_ENDL          = $B9A6
+.endif
+.ifndef FIO_ENDH
+FIO_ENDH          = $B9A7
+.endif
+.ifndef FIO_SIZEL
+FIO_SIZEL         = $B9A8
+.endif
+.ifndef FIO_SIZEH
+FIO_SIZEH         = $B9A9
+.endif
+.ifndef FIO_GSPACE
+FIO_GSPACE        = $B9AA
+.endif
+.ifndef FIO_GADDRL
+FIO_GADDRL        = $B9AB
+.endif
+.ifndef FIO_GADDRH
+FIO_GADDRH        = $B9AC
+.endif
+.ifndef FIO_GLENL
+FIO_GLENL         = $B9AD
+.endif
+.ifndef FIO_GLENH
+FIO_GLENH         = $B9AE
+.endif
+.ifndef FIO_DIRTYPE
+FIO_DIRTYPE       = $B9AF
+.endif
+; @label FIO.NAME
+; @kind buffer
+; @symbol FIO_NAME
+; @summary Filename buffer used by file-backed runtime routines.
+.ifndef FIO_NAME
+FIO_NAME          = $B9B0
+.endif
+.ifndef FIO_NAMEEND
+FIO_NAMEEND       = $B9EF
+.endif
+.ifndef META_BASE
+META_BASE         = $BAB0
+.endif
+.ifndef MATH_BASE
+MATH_BASE         = $BB20
+.endif
+.ifndef MATH_END
+MATH_END          = $BB4F
+.endif
+.ifndef MATH_MUL16_A_LO
+MATH_MUL16_A_LO   = $BB20
+.endif
+.ifndef MATH_MUL16_A_HI
+MATH_MUL16_A_HI   = $BB21
+.endif
+.ifndef MATH_MUL16_B_LO
+MATH_MUL16_B_LO   = $BB22
+.endif
+.ifndef MATH_MUL16_B_HI
+MATH_MUL16_B_HI   = $BB23
+.endif
+.ifndef MATH_MULFX_A_LO
+MATH_MULFX_A_LO   = $BB24
+.endif
+.ifndef MATH_MULFX_A_HI
+MATH_MULFX_A_HI   = $BB25
+.endif
+.ifndef MATH_MULFX_B_LO
+MATH_MULFX_B_LO   = $BB26
+.endif
+.ifndef MATH_MULFX_B_HI
+MATH_MULFX_B_HI   = $BB27
+.endif
+.ifndef MATH_DIV_N_LO
+MATH_DIV_N_LO     = $BB28
+.endif
+.ifndef MATH_DIV_N_1
+MATH_DIV_N_1      = $BB29
+.endif
+.ifndef MATH_DIV_N_2
+MATH_DIV_N_2      = $BB2A
+.endif
+.ifndef MATH_DIV_N_HI
+MATH_DIV_N_HI     = $BB2B
+.endif
+.ifndef MATH_DIV_D_LO
+MATH_DIV_D_LO     = $BB2C
+.endif
+.ifndef MATH_DIV_D_HI
+MATH_DIV_D_HI     = $BB2D
+.endif
+.ifndef MATH_SINCOS_ANGLE
+MATH_SINCOS_ANGLE = $BB2E
+.endif
+.ifndef MATH_ATAN_DY_LO
+MATH_ATAN_DY_LO   = $BB2F
+.endif
+.ifndef MATH_ATAN_DY_HI
+MATH_ATAN_DY_HI   = $BB30
+.endif
+.ifndef MATH_ATAN_DX_LO
+MATH_ATAN_DX_LO   = $BB31
+.endif
+.ifndef MATH_ATAN_DX_HI
+MATH_ATAN_DX_HI   = $BB32
+.endif
+.ifndef MATH_DIST_DX_LO
+MATH_DIST_DX_LO   = $BB33
+.endif
+.ifndef MATH_DIST_DX_HI
+MATH_DIST_DX_HI   = $BB34
+.endif
+.ifndef MATH_DIST_DY_LO
+MATH_DIST_DY_LO   = $BB35
+.endif
+.ifndef MATH_DIST_DY_HI
+MATH_DIST_DY_HI   = $BB36
+.endif
+.ifndef MATH_RNG
+MATH_RNG          = $BB37
+.endif
+.ifndef MATH_RES0
+MATH_RES0         = $BB38
+.endif
+.ifndef MATH_RES1
+MATH_RES1         = $BB39
+.endif
+.ifndef MATH_RES2
+MATH_RES2         = $BB3A
+.endif
+.ifndef MATH_RES3
+MATH_RES3         = $BB3B
+.endif
+.ifndef MATH_CAPS0
+MATH_CAPS0        = $BB3C
+.endif
+.ifndef MATH_CAPS1
+MATH_CAPS1        = $BB3D
+.endif
+.ifndef MATH_STATUS
+MATH_STATUS       = $BB3E
+.endif
+.ifndef MATH_VERSION
+MATH_VERSION      = $BB3F
+.endif
+.ifndef MATH_VEC_AX_LO
+MATH_VEC_AX_LO    = $BB40
+.endif
+.ifndef MATH_VEC_AX_HI
+MATH_VEC_AX_HI    = $BB41
+.endif
+.ifndef MATH_VEC_AY_LO
+MATH_VEC_AY_LO    = $BB42
+.endif
+.ifndef MATH_VEC_AY_HI
+MATH_VEC_AY_HI    = $BB43
+.endif
+.ifndef MATH_VEC_BX_LO
+MATH_VEC_BX_LO    = $BB44
+.endif
+.ifndef MATH_VEC_BX_HI
+MATH_VEC_BX_HI    = $BB45
+.endif
+.ifndef MATH_VEC_BY_LO
+MATH_VEC_BY_LO    = $BB46
+.endif
+.ifndef MATH_VEC_BY_HI
+MATH_VEC_BY_HI    = $BB47
+.endif
+.ifndef MATH_VEC_S_LO
+MATH_VEC_S_LO     = $BB48
+.endif
+.ifndef MATH_VEC_S_HI
+MATH_VEC_S_HI     = $BB49
+.endif
+.ifndef MATH_VEC_OP
+MATH_VEC_OP       = $BB4E
+.endif
+.ifndef MATH_VERSION_CURRENT
+MATH_VERSION_CURRENT = $02
+.endif
+.ifndef MATH_CAP_MUL16
+MATH_CAP_MUL16       = $01
+.endif
+.ifndef MATH_CAP_MULFX
+MATH_CAP_MULFX       = $02
+.endif
+.ifndef MATH_CAP_SINCOS
+MATH_CAP_SINCOS      = $04
+.endif
+.ifndef MATH_CAP_DIST_APPROX
+MATH_CAP_DIST_APPROX = $08
+.endif
+.ifndef MATH_CAP_RNG
+MATH_CAP_RNG         = $10
+.endif
+.ifndef MATH_CAP_DIV_S32_16
+MATH_CAP_DIV_S32_16  = $20
+.endif
+.ifndef MATH_CAP_ATAN2
+MATH_CAP_ATAN2       = $40
+.endif
+.ifndef MATH_CAP1_VEC_DOT_S16
+MATH_CAP1_VEC_DOT_S16   = $01
+.endif
+.ifndef MATH_CAP1_VEC_DOT_FX
+MATH_CAP1_VEC_DOT_FX    = $02
+.endif
+.ifndef MATH_CAP1_VEC_CROSS_S16
+MATH_CAP1_VEC_CROSS_S16 = $04
+.endif
+.ifndef MATH_CAP1_VEC_LEN2
+MATH_CAP1_VEC_LEN2      = $08
+.endif
+.ifndef MATH_CAP1_VEC_SCALE_FX
+MATH_CAP1_VEC_SCALE_FX  = $10
+.endif
+.ifndef MATH_VEC_OP_DOT_S16
+MATH_VEC_OP_DOT_S16     = $01
+.endif
+.ifndef MATH_VEC_OP_DOT_FX
+MATH_VEC_OP_DOT_FX      = $02
+.endif
+.ifndef MATH_VEC_OP_CROSS_S16
+MATH_VEC_OP_CROSS_S16   = $03
+.endif
+.ifndef MATH_VEC_OP_LEN2
+MATH_VEC_OP_LEN2        = $04
+.endif
+.ifndef MATH_VEC_OP_SCALE_FX
+MATH_VEC_OP_SCALE_FX    = $05
+.endif
+.ifndef MATH_STATUS_OK
+MATH_STATUS_OK       = $00
+.endif
+.ifndef MATH_STATUS_DIV_ZERO
+MATH_STATUS_DIV_ZERO = $01
+.endif
+.ifndef MATH_STATUS_OVERFLOW
+MATH_STATUS_OVERFLOW = $02
+.endif
+.ifndef MATH_STATUS_UNIMPL
+MATH_STATUS_UNIMPL   = $80
+.endif
+.ifndef AUTOBOOT_SKIP
+AUTOBOOT_SKIP     = $B9F0
+.endif
+.ifndef AUTOBOOT_ACTIVE
+AUTOBOOT_ACTIVE   = $B9F1
+.endif
+
+.ifndef FIO_CMD_SAVE
+FIO_CMD_SAVE      = $01
+.endif
+.ifndef FIO_CMD_LOAD
+FIO_CMD_LOAD      = $02
+.endif
+.ifndef FIO_CMD_DIROPEN
+FIO_CMD_DIROPEN   = $03
+.endif
+.ifndef FIO_CMD_DIRREAD
+FIO_CMD_DIRREAD   = $04
+.endif
+.ifndef FIO_CMD_DELETE
+FIO_CMD_DELETE    = $05
+.endif
+.ifndef FIO_CMD_GSAVE
+FIO_CMD_GSAVE     = $06
+.endif
+.ifndef FIO_CMD_GLOAD
+FIO_CMD_GLOAD     = $07
+.endif
+.ifndef FIO_CMD_SIDPLAY
+FIO_CMD_SIDPLAY   = $08
+.endif
+.ifndef FIO_CMD_SIDSTOP
+FIO_CMD_SIDSTOP   = $09
+.endif
+.ifndef FIO_CMD_INSTRUMENT
+FIO_CMD_INSTRUMENT = $0A
+.endif
+.ifndef FIO_CMD_SOUND
+FIO_CMD_SOUND     = $0B
+.endif
+.ifndef FIO_CMD_VOLUME
+FIO_CMD_VOLUME    = $0C
+.endif
+.ifndef FIO_CMD_MSEQ
+FIO_CMD_MSEQ      = $0D
+.endif
+.ifndef FIO_CMD_MPLAY
+FIO_CMD_MPLAY     = $0E
+.endif
+.ifndef FIO_CMD_MSTOP
+FIO_CMD_MSTOP     = $0F
+.endif
+.ifndef FIO_CMD_MTEMPO
+FIO_CMD_MTEMPO    = $10
+.endif
+.ifndef FIO_CMD_MLOOP
+FIO_CMD_MLOOP     = $11
+.endif
+.ifndef FIO_CMD_MPRI
+FIO_CMD_MPRI      = $12
+.endif
+.ifndef FIO_CMD_MIDPLAY
+FIO_CMD_MIDPLAY   = $13
+.endif
+.ifndef FIO_CMD_MIDSTOP
+FIO_CMD_MIDSTOP   = $14
+.endif
+.ifndef FIO_CMD_SFLOAD
+FIO_CMD_SFLOAD    = $15
+.endif
+.ifndef FIO_CMD_XLOAD
+FIO_CMD_XLOAD     = $18
+.endif
+.ifndef FIO_CMD_XSAVE
+FIO_CMD_XSAVE     = $19
+.endif
+.ifndef FIO_CMD_CD
+FIO_CMD_CD        = $20
+.endif
+.ifndef FIO_CMD_MKDIR
+FIO_CMD_MKDIR     = $21
+.endif
+.ifndef FIO_CMD_RMDIR
+FIO_CMD_RMDIR     = $22
+.endif
+.ifndef FIO_CMD_FORMAT
+FIO_CMD_FORMAT    = $23
+.endif
+.ifndef FIO_CMD_MOUNT
+FIO_CMD_MOUNT     = $24
+.endif
+.ifndef FIO_CMD_UNMOUNT
+FIO_CMD_UNMOUNT   = $25
+.endif
+.ifndef FIO_CMD_PWD
+FIO_CMD_PWD       = $26
+.endif
+.ifndef FIO_CMD_CLEARERR
+FIO_CMD_CLEARERR  = $27
+.endif
+.ifndef FIO_CMD_LOADRUNTIME
+; @label FIO.CMD_LOADRUNTIME
+; @kind const
+; @symbol FIO_CMD_LOADRUNTIME
+; @summary Host command that streams a 16K file into the primary runtime ROM bank. Callers must execute from RAM while issuing it.
+FIO_CMD_LOADRUNTIME = $28
+.endif
+.ifndef FIO_CMD_XPAGE
+; @label FIO.CMD_XPAGE
+; @kind const
+; @symbol FIO_CMD_XPAGE
+; @summary Host command that streams a file slice into XRAM using FIO_SRC/FIO_ENDL as a 24-bit file offset.
+FIO_CMD_XPAGE    = $29
+.endif
+.ifndef FIO_CMD_RNG
+; @label FIO.CMD_RNG
+; @kind const
+; @symbol FIO_CMD_RNG
+; @summary Host command that returns 32 bits from NovaHost's hardware-backed RNG.
+FIO_CMD_RNG      = $2A
+.endif
+.ifndef FIO_CMD_NVGLOAD
+; @label FIO.CMD_NVGLOAD
+; @kind const
+; @symbol FIO_CMD_NVGLOAD
+; @summary Host command that decodes a Nova NVG1 file into the graphics bitmap plane.
+FIO_CMD_NVGLOAD  = $2B
+.endif
+
+; Host RNG result byte aliases. FIO.CMD_RNG returns little-endian bytes here.
+; @label FIO.RNG0
+; @kind u8
+; @symbol FIO_RNG0
+; @summary Low byte returned by FIO.CMD_RNG.
+.ifndef FIO_RNG0
+FIO_RNG0         = FIO_SRCL
+.endif
+; @label FIO.RNG1
+; @kind u8
+; @symbol FIO_RNG1
+; @summary Second byte returned by FIO.CMD_RNG.
+.ifndef FIO_RNG1
+FIO_RNG1         = FIO_SRCH
+.endif
+; @label FIO.RNG2
+; @kind u8
+; @symbol FIO_RNG2
+; @summary Third byte returned by FIO.CMD_RNG.
+.ifndef FIO_RNG2
+FIO_RNG2         = FIO_ENDL
+.endif
+; @label FIO.RNG3
+; @kind u8
+; @symbol FIO_RNG3
+; @summary High byte returned by FIO.CMD_RNG.
+.ifndef FIO_RNG3
+FIO_RNG3         = FIO_ENDH
+.endif
+
+.ifndef FIO_OK
+FIO_OK            = $02
+.endif
+.ifndef FIO_STATUS_IDLE
+FIO_STATUS_IDLE   = $00
+.endif
+.ifndef FIO_STATUS_OK
+FIO_STATUS_OK     = FIO_OK
+.endif
+.ifndef FIO_ERR
+FIO_ERR           = $03
+.endif
+.ifndef FIO_STATUS_ERROR
+FIO_STATUS_ERROR  = $03
+.endif
+.ifndef FIO_ERR_NONE
+FIO_ERR_NONE      = $00
+.endif
+.ifndef FIO_ERR_NOTFOUND
+FIO_ERR_NOTFOUND  = $01
+.endif
+.ifndef FIO_ERR_IO
+FIO_ERR_IO        = $02
+.endif
+.ifndef FIO_ERR_EOD
+FIO_ERR_EOD       = $03
+.endif
+.ifndef FIO_ERR_DISKFULL
+FIO_ERR_DISKFULL  = $04
+.endif
+.ifndef FIO_ERR_NOTMOUNTED
+FIO_ERR_NOTMOUNTED = $05
+.endif
+.ifndef FIO_TYPE_SID
+FIO_TYPE_SID      = $01
+.endif
+.ifndef FIO_TYPE_BIN
+FIO_TYPE_BIN      = $02
+.endif
+.ifndef FIO_TYPE_MID
+FIO_TYPE_MID      = $03
+.endif
+.ifndef FIO_TYPE_DIR
+FIO_TYPE_DIR      = $05
+.endif
+
+; Extension ROM command IDs used by the BASIC-to-extension trampoline.
+.ifndef EXT_CMD_NCC
+EXT_CMD_NCC       = $00
+.endif
+.ifndef EXT_CMD_SFLOAD
+EXT_CMD_SFLOAD    = $01
+.endif
+.ifndef EXT_CMD_DIR
+EXT_CMD_DIR       = $02
+.endif
+.ifndef EXT_CMD_PWD
+EXT_CMD_PWD       = $03
+.endif
+.ifndef EXT_CMD_XMEM
+EXT_CMD_XMEM      = $04
+.endif
+.ifndef EXT_CMD_XDIR
+EXT_CMD_XDIR      = $05
+.endif
+; $06-$07 reserved
+.ifndef EXT_CMD_HELP
+EXT_CMD_HELP      = $08
+.endif
+.ifndef EXT_CMD_DMAFILL
+EXT_CMD_DMAFILL   = $09
+.endif
+.ifndef EXT_CMD_BLTFILL
+EXT_CMD_BLTFILL   = $0A
+.endif
+.ifndef EXT_CMD_XMCCMD
+EXT_CMD_XMCCMD    = $0B
+.endif
+.ifndef EXT_CMD_COPPER
+EXT_CMD_COPPER    = $0C
+.endif
+.ifndef EXT_CMD_XLOAD
+EXT_CMD_XLOAD     = $0D
+.endif
+.ifndef EXT_CMD_XSAVE
+EXT_CMD_XSAVE     = $0E
+.endif
+.ifndef EXT_CMD_DMACOPY
+EXT_CMD_DMACOPY   = $0F
+.endif
+.ifndef EXT_CMD_BLITCOPY
+EXT_CMD_BLITCOPY  = $10
+.endif
+.ifndef EXT_CMD_MMUL16L
+EXT_CMD_MMUL16L   = $11
+.endif
+.ifndef EXT_CMD_MMUL16H
+EXT_CMD_MMUL16H   = $12
+.endif
+.ifndef EXT_CMD_MDOTS16L
+EXT_CMD_MDOTS16L  = $13
+.endif
+.ifndef EXT_CMD_MDOTS16H
+EXT_CMD_MDOTS16H  = $14
+.endif
+.ifndef EXT_CMD_MCROSSL
+EXT_CMD_MCROSSL   = $15
+.endif
+.ifndef EXT_CMD_MCROSSH
+EXT_CMD_MCROSSH   = $16
+.endif
+.ifndef EXT_CMD_MMULFX
+EXT_CMD_MMULFX    = $17
+.endif
+.ifndef EXT_CMD_MDIST
+EXT_CMD_MDIST     = $18
+.endif
+.ifndef EXT_CMD_MSIN
+EXT_CMD_MSIN      = $19
+.endif
+.ifndef EXT_CMD_MCOS
+EXT_CMD_MCOS      = $1A
+.endif
+.ifndef EXT_CMD_MRND
+EXT_CMD_MRND      = $1B
+.endif
+.ifndef EXT_CMD_MDIV
+EXT_CMD_MDIV      = $1C
+.endif
+.ifndef EXT_CMD_MREM
+EXT_CMD_MREM      = $1D
+.endif
+.ifndef EXT_CMD_MATAN2
+EXT_CMD_MATAN2    = $1E
+.endif
+.ifndef EXT_CMD_MDOTFX
+EXT_CMD_MDOTFX    = $1F
+.endif
+.ifndef EXT_CMD_MLEN2
+EXT_CMD_MLEN2     = $20
+.endif
+.ifndef EXT_CMD_MSCALX
+EXT_CMD_MSCALX    = $21
+.endif
+.ifndef EXT_CMD_MSCALY
+EXT_CMD_MSCALY    = $22
+.endif
+.ifndef EXT_CMD_ADDR
+EXT_CMD_ADDR      = $23
+.endif
+.ifndef EXT_CMD_XBANK
+EXT_CMD_XBANK     = $24
+.endif
+.ifndef EXT_CMD_XPOKE
+EXT_CMD_XPOKE     = $25
+.endif
+.ifndef EXT_CMD_XFREE
+EXT_CMD_XFREE     = $26
+.endif
+.ifndef EXT_CMD_XRESET
+EXT_CMD_XRESET    = $27
+.endif
+.ifndef EXT_CMD_XALLOC
+EXT_CMD_XALLOC    = $28
+.endif
+.ifndef EXT_CMD_XMAP
+EXT_CMD_XMAP      = $29
+.endif
+.ifndef EXT_CMD_XUNMAP
+EXT_CMD_XUNMAP    = $2A
+.endif
+.ifndef EXT_CMD_XPEEK
+EXT_CMD_XPEEK     = $2B
+.endif
+.ifndef EXT_CMD_PLAYING
+EXT_CMD_PLAYING   = $2C
+.endif
+.ifndef EXT_CMD_MNOTE
+EXT_CMD_MNOTE     = $2D
+.endif
+.ifndef EXT_CMD_NSTATUS
+EXT_CMD_NSTATUS   = $2E
+.endif
+.ifndef EXT_CMD_NREADY
+EXT_CMD_NREADY    = $2F
+.endif
+.ifndef EXT_CMD_DMASTATUS
+EXT_CMD_DMASTATUS = $30
+.endif
+.ifndef EXT_CMD_DMAERR
+EXT_CMD_DMAERR    = $31
+.endif
+.ifndef EXT_CMD_DMACOUNT
+EXT_CMD_DMACOUNT  = $32
+.endif
+.ifndef EXT_CMD_BLITSTATUS
+EXT_CMD_BLITSTATUS = $33
+.endif
+.ifndef EXT_CMD_BLITERR
+EXT_CMD_BLITERR   = $34
+.endif
+.ifndef EXT_CMD_BLITCOUNT
+EXT_CMD_BLITCOUNT = $35
+.endif
+.ifndef EXT_CMD_SPRCOLL
+EXT_CMD_SPRCOLL   = $36
+.endif
+.ifndef EXT_CMD_SPRBG
+EXT_CMD_SPRBG     = $37
+.endif
+.ifndef EXT_CMD_VPEEK
+EXT_CMD_VPEEK     = $38
+.endif
+.ifndef EXT_CMD_BITSET
+EXT_CMD_BITSET    = $39
+.endif
+.ifndef EXT_CMD_BITCLR
+EXT_CMD_BITCLR    = $3A
+.endif
+.ifndef EXT_CMD_BITTGL
+EXT_CMD_BITTGL    = $3B
+.endif
+.ifndef EXT_CMD_REVERSE
+EXT_CMD_REVERSE   = $3C
+.endif
+.ifndef EXT_CMD_REVERSEOFF
+EXT_CMD_REVERSEOFF = $3D
+.endif
+.ifndef EXT_CMD_FLASH
+EXT_CMD_FLASH     = $3E
+.endif
+.ifndef EXT_CMD_FLASHOFF
+EXT_CMD_FLASHOFF  = $3F
+.endif
+.ifndef EXT_CMD_VPOKE
+EXT_CMD_VPOKE     = $40
+.endif
+.ifndef EXT_CMD_FIOCLR
+EXT_CMD_FIOCLR    = $41
+.endif
+
+; Music/SFX status registers.
+.ifndef MUSIC_STATUS
+MUSIC_STATUS      = $BA50
+.endif
+.ifndef MUSIC_NOTE1
+MUSIC_NOTE1       = $BA51
+.endif
+.ifndef MUSIC_NOTE2
+MUSIC_NOTE2       = $BA52
+.endif
+.ifndef MUSIC_NOTE3
+MUSIC_NOTE3       = $BA53
+.endif
+.ifndef MUSIC_NOTE4
+MUSIC_NOTE4       = $BA54
+.endif
+.ifndef MUSIC_NOTE5
+MUSIC_NOTE5       = $BA55
+.endif
+.ifndef MUSIC_NOTE6
+MUSIC_NOTE6       = $BA56
+.endif
+.ifndef MUSIC_NOTE7
+MUSIC_NOTE7       = $BA57
+.endif
+.ifndef MUSIC_NOTE8
+MUSIC_NOTE8       = $BA58
+.endif
+.ifndef MUSIC_NOTE9
+MUSIC_NOTE9       = $BA59
+.endif
+.ifndef MUSIC_NOTE10
+MUSIC_NOTE10      = $BA5A
+.endif
+.ifndef MUSIC_NOTE11
+MUSIC_NOTE11      = $BA5B
+.endif
+.ifndef MUSIC_NOTE12
+MUSIC_NOTE12      = $BA5C
+.endif
+.ifndef MUSIC_NOTE13
+MUSIC_NOTE13      = $BA5D
+.endif
+.ifndef MUSIC_NOTE14
+MUSIC_NOTE14      = $BA5E
+.endif
+.ifndef MUSIC_ELAPSEDL
+MUSIC_ELAPSEDL    = $BA5F
+.endif
+.ifndef MUSIC_ELAPSEDH
+MUSIC_ELAPSEDH    = $BA60
+.endif
+.ifndef MUSIC_TOTALL
+MUSIC_TOTALL      = $BA61
+.endif
+.ifndef MUSIC_TOTALH
+MUSIC_TOTALH      = $BA62
+.endif
+
+; SID register windows. CPU reads in this range still fetch ROM bytes on Nova;
+; these names are for writes and emulator/host-side register shadow APIs.
+.ifndef SID_BASE
+SID_BASE          = $D400
+.endif
+.ifndef SID_END
+SID_END           = $D41C
+.endif
+.ifndef SID2_BASE
+SID2_BASE         = $D420
+.endif
+.ifndef SID2_END
+SID2_END          = $D43C
+.endif
+.ifndef SID2_MIRROR_BASE
+SID2_MIRROR_BASE  = $D500
+.endif
+.ifndef SID2_MIRROR_END
+SID2_MIRROR_END   = $D51C
+.endif
+
+; Wavetable synthesizer registers.
+.ifndef WTS_BASE
+WTS_BASE          = $A140
+.endif
+.ifndef WTS_VOICE_BASE
+WTS_VOICE_BASE    = $A140
+.endif
+.ifndef WTS_VOICE_STRIDE
+WTS_VOICE_STRIDE  = $08
+.endif
+.ifndef WTS_VOICE_END
+WTS_VOICE_END     = $A17F
+.endif
+.ifndef WTS_VOICE_NOTE
+WTS_VOICE_NOTE    = $00
+.endif
+.ifndef WTS_VOICE_VELOCITY
+WTS_VOICE_VELOCITY = $01
+.endif
+.ifndef WTS_VOICE_INSTRUMENT
+WTS_VOICE_INSTRUMENT = $02
+.endif
+.ifndef WTS_VOICE_VOLUME
+WTS_VOICE_VOLUME  = $03
+.endif
+.ifndef WTS_VOICE_PANNING
+WTS_VOICE_PANNING = $04
+.endif
+.ifndef WTS_VOICE_PITCH_BEND_LO
+WTS_VOICE_PITCH_BEND_LO = $05
+.endif
+.ifndef WTS_VOICE_PITCH_BEND_HI
+WTS_VOICE_PITCH_BEND_HI = $06
+.endif
+.ifndef WTS_VOICE_STATUS
+WTS_VOICE_STATUS  = $07
+.endif
+.ifndef WTS_GLOBAL_BASE
+WTS_GLOBAL_BASE   = $A180
+.endif
+.ifndef WTS_REVERB_LEVEL
+WTS_REVERB_LEVEL  = $A180
+.endif
+.ifndef WTS_CHORUS_LEVEL
+WTS_CHORUS_LEVEL  = $A181
+.endif
+.ifndef WTS_MASTER_VOLUME
+WTS_MASTER_VOLUME = $A182
+.endif
+.ifndef WTS_SOUNDFONT_STATUS
+WTS_SOUNDFONT_STATUS = $A183
+.endif
+.ifndef WTS_INSTRUMENT_COUNT
+WTS_INSTRUMENT_COUNT = $A184
+.endif
+.ifndef WTS_COMMAND
+WTS_COMMAND       = $A185
+.endif
+.ifndef WTS_COMMAND_ARG
+WTS_COMMAND_ARG   = $A186
+.endif
+.ifndef WTS_ACTIVE_VOICES
+WTS_ACTIVE_VOICES = $A187
+.endif
+.ifndef WTS_ENUM_BASE
+WTS_ENUM_BASE     = $A1A0
+.endif
+.ifndef WTS_ENUM_INDEX
+WTS_ENUM_INDEX    = $A1A0
+.endif
+.ifndef WTS_ENUM_BANK
+WTS_ENUM_BANK     = $A1A1
+.endif
+.ifndef WTS_ENUM_PROGRAM
+WTS_ENUM_PROGRAM  = $A1A2
+.endif
+.ifndef WTS_ENUM_NAME
+WTS_ENUM_NAME     = $A1A3
+.endif
+.ifndef WTS_ENUM_END
+WTS_ENUM_END      = $A1DF
+.endif
+.ifndef WTS_END
+WTS_END           = $A1DF
+.endif
+.ifndef WTS_CMD_ALL_NOTES_OFF
+WTS_CMD_ALL_NOTES_OFF = $01
+.endif
+.ifndef WTS_CMD_RESET_EFFECTS
+WTS_CMD_RESET_EFFECTS = $02
+.endif
+
+; ---------------------------------------------------------------------
+; Expansion Memory Controller.
+; ---------------------------------------------------------------------
+.ifndef XMC_CMD
+XMC_CMD           = $BA00
+.endif
+.ifndef XMC_STATUS
+XMC_STATUS        = $BA01
+.endif
+.ifndef XMC_ERRCODE
+XMC_ERRCODE       = $BA02
+.endif
+.ifndef XMC_CFG
+XMC_CFG           = $BA03
+.endif
+.ifndef XMC_XAL
+XMC_XAL           = $BA04
+.endif
+.ifndef XMC_XAM
+XMC_XAM           = $BA05
+.endif
+.ifndef XMC_XAH
+XMC_XAH           = $BA06
+.endif
+.ifndef XMC_RAML
+XMC_RAML          = $BA07
+.endif
+.ifndef XMC_RAMH
+XMC_RAMH          = $BA08
+.endif
+.ifndef XMC_LENL
+XMC_LENL          = $BA09
+.endif
+.ifndef XMC_LENH
+XMC_LENH          = $BA0A
+.endif
+.ifndef XMC_DATA
+XMC_DATA          = $BA0B
+.endif
+.ifndef XMC_BANK
+XMC_BANK          = $BA0C
+.endif
+.ifndef XMC_BANKS
+XMC_BANKS         = $BA0D
+.endif
+.ifndef XMC_USEDL
+XMC_USEDL         = $BA0E
+.endif
+.ifndef XMC_USEDH
+XMC_USEDH         = $BA0F
+.endif
+.ifndef XMC_FREEL
+XMC_FREEL         = $BA10
+.endif
+.ifndef XMC_FREEH
+XMC_FREEH         = $BA11
+.endif
+.ifndef XMC_NAMELEN
+XMC_NAMELEN       = $BA12
+.endif
+.ifndef XMC_HANDLE
+XMC_HANDLE        = $BA13
+.endif
+.ifndef XMC_DIRCOUNTL
+XMC_DIRCOUNTL     = $BA14
+.endif
+.ifndef XMC_DIRCOUNTH
+XMC_DIRCOUNTH     = $BA15
+.endif
+.ifndef XMC_WINCTL
+XMC_WINCTL        = $BA16
+.endif
+.ifndef XMC_W0AL
+XMC_W0AL          = $BA18
+.endif
+.ifndef XMC_W0AM
+XMC_W0AM          = $BA19
+.endif
+.ifndef XMC_W0AH
+XMC_W0AH          = $BA1A
+.endif
+.ifndef XMC_W1AL
+XMC_W1AL          = $BA1B
+.endif
+.ifndef XMC_W1AM
+XMC_W1AM          = $BA1C
+.endif
+.ifndef XMC_W1AH
+XMC_W1AH          = $BA1D
+.endif
+.ifndef XMC_W2AL
+XMC_W2AL          = $BA1E
+.endif
+.ifndef XMC_W2AM
+XMC_W2AM          = $BA1F
+.endif
+.ifndef XMC_W2AH
+XMC_W2AH          = $BA20
+.endif
+.ifndef XMC_W3AL
+XMC_W3AL          = $BA21
+.endif
+.ifndef XMC_W3AM
+XMC_W3AM          = $BA22
+.endif
+.ifndef XMC_W3AH
+XMC_W3AH          = $BA23
+.endif
+.ifndef XMC_NAME
+XMC_NAME          = $BA24
+.endif
+.ifndef XMC_NAME_MAX
+XMC_NAME_MAX      = 28
+.endif
+
+.ifndef WIN3_LO
+WIN3_LO           = XMC_W3AL
+.endif
+.ifndef WIN3_MI
+WIN3_MI           = XMC_W3AM
+.endif
+.ifndef WIN3_HI
+WIN3_HI           = XMC_W3AH
+.endif
+.ifndef WIN3_BASE
+WIN3_BASE         = $BF00
+.endif
+
+.ifndef XMC_CMD_GET
+XMC_CMD_GET       = $01
+.endif
+.ifndef XMC_CMD_PUT
+XMC_CMD_PUT       = $02
+.endif
+.ifndef XMC_CMD_STASH
+XMC_CMD_STASH     = $03
+.endif
+.ifndef XMC_CMD_FETCH
+XMC_CMD_FETCH     = $04
+.endif
+.ifndef XMC_CMD_FILL
+XMC_CMD_FILL      = $05
+.endif
+.ifndef XMC_CMD_STATS
+XMC_CMD_STATS     = $07
+.endif
+.ifndef XMC_CMD_RSTUS
+XMC_CMD_RSTUS     = $08
+.endif
+.ifndef XMC_CMD_REL
+XMC_CMD_REL       = $09
+.endif
+.ifndef XMC_CMD_ALLOC
+XMC_CMD_ALLOC     = $0A
+.endif
+.ifndef XMC_CMD_NSTSH
+XMC_CMD_NSTSH     = $0B
+.endif
+.ifndef XMC_CMD_NFETC
+XMC_CMD_NFETC     = $0C
+.endif
+.ifndef XMC_CMD_NDEL
+XMC_CMD_NDEL      = $0D
+.endif
+.ifndef XMC_CMD_NDIRO
+XMC_CMD_NDIRO     = $0E
+.endif
+.ifndef XMC_CMD_NDIRR
+XMC_CMD_NDIRR     = $0F
+.endif
+
+.ifndef XMC_OK
+XMC_OK            = $02
+.endif
+.ifndef XMC_STATUS_ERROR
+XMC_STATUS_ERROR  = $03
+.endif
+.ifndef XMC_ERR_RANGE
+XMC_ERR_RANGE     = $01
+.endif
+.ifndef XMC_ERR_BADARGS
+XMC_ERR_BADARGS   = $02
+.endif
+.ifndef XMC_ERR_NF
+XMC_ERR_NF        = $03
+.endif
+.ifndef XMC_ERR_NOTFOUND
+XMC_ERR_NOTFOUND  = $03
+.endif
+.ifndef XMC_ERR_NOSPACE
+XMC_ERR_NOSPACE   = $04
+.endif
+.ifndef XMC_ERR_NAME
+XMC_ERR_NAME      = $05
+.endif
+.ifndef XMC_ERR_EOD
+XMC_ERR_EOD       = $06
+.endif
+
+; ---------------------------------------------------------------------
+; Unified DMA controller.
+; ---------------------------------------------------------------------
+.ifndef DMA_CMD_REG
+DMA_CMD_REG       = $BA63
+.endif
+.ifndef DMA_STATUS_REG
+DMA_STATUS_REG    = $BA64
+.endif
+.ifndef DMA_ERRCODE_REG
+DMA_ERRCODE_REG   = $BA65
+.endif
+.ifndef DMA_SRCSPACE
+DMA_SRCSPACE      = $BA66
+.endif
+.ifndef DMA_DSTSPACE
+DMA_DSTSPACE      = $BA67
+.endif
+.ifndef DMA_SRCL
+DMA_SRCL          = $BA68
+.endif
+.ifndef DMA_SRCM
+DMA_SRCM          = $BA69
+.endif
+.ifndef DMA_SRCH
+DMA_SRCH          = $BA6A
+.endif
+.ifndef DMA_DSTL
+DMA_DSTL          = $BA6B
+.endif
+.ifndef DMA_DSTM
+DMA_DSTM          = $BA6C
+.endif
+.ifndef DMA_DSTH
+DMA_DSTH          = $BA6D
+.endif
+.ifndef DMA_LENL
+DMA_LENL          = $BA6E
+.endif
+.ifndef DMA_LENM
+DMA_LENM          = $BA6F
+.endif
+.ifndef DMA_LENH
+DMA_LENH          = $BA70
+.endif
+.ifndef DMA_MODE_REG
+DMA_MODE_REG      = $BA71
+.endif
+.ifndef DMA_FILLVALUE
+DMA_FILLVALUE     = $BA72
+.endif
+.ifndef DMA_CNTL
+DMA_CNTL          = $BA73
+.endif
+.ifndef DMA_CNTM
+DMA_CNTM          = $BA74
+.endif
+.ifndef DMA_CNTH
+DMA_CNTH          = $BA75
+.endif
+
+.ifndef DMA_CMD
+DMA_CMD           = DMA_CMD_REG
+.endif
+.ifndef DMA_STATUS
+DMA_STATUS        = DMA_STATUS_REG
+.endif
+.ifndef DMA_ERRCODE
+DMA_ERRCODE       = DMA_ERRCODE_REG
+.endif
+.ifndef DMA_MODE
+DMA_MODE          = DMA_MODE_REG
+.endif
+.ifndef DMA_FILL
+DMA_FILL          = DMA_FILLVALUE
+.endif
+
+.ifndef DMA_CMD_START
+DMA_CMD_START     = $01
+.endif
+.ifndef DMA_STATUS_IDLE
+DMA_STATUS_IDLE   = $00
+.endif
+.ifndef DMA_STATUS_BUSY
+DMA_STATUS_BUSY   = $01
+.endif
+.ifndef DMA_STATUS_OK
+DMA_STATUS_OK     = $02
+.endif
+.ifndef DMA_STATUS_ERROR
+DMA_STATUS_ERROR  = $03
+.endif
+.ifndef DMA_BUSY
+DMA_BUSY          = DMA_STATUS_BUSY
+.endif
+.ifndef DMA_OK
+DMA_OK            = DMA_STATUS_OK
+.endif
+.ifndef DMA_ERR_BADCMD
+DMA_ERR_BADCMD    = $01
+.endif
+.ifndef DMA_ERR_BADSPACE
+DMA_ERR_BADSPACE  = $02
+.endif
+.ifndef DMA_ERR_RANGE
+DMA_ERR_RANGE     = $03
+.endif
+.ifndef DMA_ERR_BADARGS
+DMA_ERR_BADARGS   = $04
+.endif
+.ifndef DMA_ERR_WRITEPROT
+DMA_ERR_WRITEPROT = $05
+.endif
+.ifndef DMA_MODE_FILL
+DMA_MODE_FILL     = $01
+.endif
+.ifndef DMA_SPACE_CPU
+DMA_SPACE_CPU     = $00
+.endif
+.ifndef DMA_SPACE_VGC_CHAR
+DMA_SPACE_VGC_CHAR = $01
+.endif
+.ifndef DMA_SPACE_VGC_COLOR
+DMA_SPACE_VGC_COLOR = $02
+.endif
+.ifndef DMA_SPACE_VGC_GFX
+DMA_SPACE_VGC_GFX = $03
+.endif
+.ifndef DMA_SPACE_VGC_SPRITE
+DMA_SPACE_VGC_SPRITE = $04
+.endif
+.ifndef DMA_SPACE_XRAM
+DMA_SPACE_XRAM    = $05
+.endif
+.ifndef DMA_SPACE_VGC_TEXTATTR
+DMA_SPACE_VGC_TEXTATTR = $07
+.endif
+
+; ---------------------------------------------------------------------
+; Blitter controller.
+; ---------------------------------------------------------------------
+.ifndef BLT_CMD_REG
+BLT_CMD_REG       = $BA83
+.endif
+.ifndef BLT_STATUS_REG
+BLT_STATUS_REG    = $BA84
+.endif
+.ifndef BLT_ERRCODE_REG
+BLT_ERRCODE_REG   = $BA85
+.endif
+.ifndef BLT_SRCSPACE
+BLT_SRCSPACE      = $BA86
+.endif
+.ifndef BLT_DSTSPACE
+BLT_DSTSPACE      = $BA87
+.endif
+.ifndef BLT_SRCL
+BLT_SRCL          = $BA88
+.endif
+.ifndef BLT_SRCM
+BLT_SRCM          = $BA89
+.endif
+.ifndef BLT_SRCH
+BLT_SRCH          = $BA8A
+.endif
+.ifndef BLT_DSTL
+BLT_DSTL          = $BA8B
+.endif
+.ifndef BLT_DSTM
+BLT_DSTM          = $BA8C
+.endif
+.ifndef BLT_DSTH
+BLT_DSTH          = $BA8D
+.endif
+.ifndef BLT_WIDTHL
+BLT_WIDTHL        = $BA8E
+.endif
+.ifndef BLT_WIDTHH
+BLT_WIDTHH        = $BA8F
+.endif
+.ifndef BLT_HEIGHTL
+BLT_HEIGHTL       = $BA90
+.endif
+.ifndef BLT_HEIGHTH
+BLT_HEIGHTH       = $BA91
+.endif
+.ifndef BLT_SRCSTRL
+BLT_SRCSTRL       = $BA92
+.endif
+.ifndef BLT_SRCSTRH
+BLT_SRCSTRH       = $BA93
+.endif
+.ifndef BLT_DSTSTRL
+BLT_DSTSTRL       = $BA94
+.endif
+.ifndef BLT_DSTSTRH
+BLT_DSTSTRH       = $BA95
+.endif
+.ifndef BLT_DSTRH
+BLT_DSTRH         = BLT_DSTSTRH
+.endif
+.ifndef BLT_MODE_REG
+BLT_MODE_REG      = $BA96
+.endif
+.ifndef BLT_FILLVALUE
+BLT_FILLVALUE     = $BA97
+.endif
+.ifndef BLT_FILLVAL
+BLT_FILLVAL       = BLT_FILLVALUE
+.endif
+.ifndef BLT_CKEY
+BLT_CKEY          = $BA98
+.endif
+.ifndef BLT_CNTL
+BLT_CNTL          = $BA99
+.endif
+.ifndef BLT_CNTM
+BLT_CNTM          = $BA9A
+.endif
+.ifndef BLT_CNTH
+BLT_CNTH          = $BA9B
+.endif
+
+.ifndef BLT_CMD
+BLT_CMD           = BLT_CMD_REG
+.endif
+.ifndef BLT_STATUS
+BLT_STATUS        = BLT_STATUS_REG
+.endif
+.ifndef BLT_ERRCODE
+BLT_ERRCODE       = BLT_ERRCODE_REG
+.endif
+.ifndef BLT_MODE
+BLT_MODE          = BLT_MODE_REG
+.endif
+.ifndef BLT_FILL
+BLT_FILL          = BLT_FILLVALUE
+.endif
+
+.ifndef BLT_CMD_START
+BLT_CMD_START     = $01
+.endif
+.ifndef BLT_STATUS_IDLE
+BLT_STATUS_IDLE   = $00
+.endif
+.ifndef BLT_STATUS_BUSY
+BLT_STATUS_BUSY   = $01
+.endif
+.ifndef BLT_STATUS_OK
+BLT_STATUS_OK     = $02
+.endif
+.ifndef BLT_STATUS_ERROR
+BLT_STATUS_ERROR  = $03
+.endif
+.ifndef BLT_BUSY
+BLT_BUSY          = BLT_STATUS_BUSY
+.endif
+.ifndef BLT_OK
+BLT_OK            = BLT_STATUS_OK
+.endif
+.ifndef BLT_ERR_BADCMD
+BLT_ERR_BADCMD    = $01
+.endif
+.ifndef BLT_ERR_BADSPACE
+BLT_ERR_BADSPACE  = $02
+.endif
+.ifndef BLT_ERR_RANGE
+BLT_ERR_RANGE     = $03
+.endif
+.ifndef BLT_ERR_BADARGS
+BLT_ERR_BADARGS   = $04
+.endif
+.ifndef BLT_ERR_WRITEPROT
+BLT_ERR_WRITEPROT = $05
+.endif
+.ifndef BLT_MODE_FILL
+BLT_MODE_FILL     = $01
+.endif
+.ifndef BLT_MODE_COLORKEY
+BLT_MODE_COLORKEY = $02
+.endif
+.ifndef BLT_SPACE_CPU
+BLT_SPACE_CPU     = DMA_SPACE_CPU
+.endif
+.ifndef BLT_SPACE_VGC_CHAR
+BLT_SPACE_VGC_CHAR = DMA_SPACE_VGC_CHAR
+.endif
+.ifndef BLT_SPACE_VGC_COLOR
+BLT_SPACE_VGC_COLOR = DMA_SPACE_VGC_COLOR
+.endif
+.ifndef BLT_SPACE_VGC_GFX
+BLT_SPACE_VGC_GFX = DMA_SPACE_VGC_GFX
+.endif
+.ifndef BLT_SPACE_VGC_SPRITE
+BLT_SPACE_VGC_SPRITE = DMA_SPACE_VGC_SPRITE
+.endif
+.ifndef BLT_SPACE_XRAM
+BLT_SPACE_XRAM    = DMA_SPACE_XRAM
+.endif
+.ifndef BLT_SPACE_VGC_TEXTATTR
+BLT_SPACE_VGC_TEXTATTR = DMA_SPACE_VGC_TEXTATTR
+.endif
+
+.endif
