@@ -1,8 +1,8 @@
 ; Shared Nova audio/music helper routines.
 ;
-; These routines are BASIC-agnostic.  They wrap the FIO audio commands behind
-; named entry points so BASIC, assembly programs, and future runtimes share one
-; audio ABI.
+; Simple SID commands are handled here with direct memory-mapped SID writes.
+; File-backed playback and MML sequencing continue to use FIO because those
+; paths are hosted by the ESP/wavetable synth side of the system.
 
 .include "audio.inc"
 
@@ -20,6 +20,8 @@ AUDIO_FILE_COMMANDS = 1
       .export audio_sound
       .export audio_volume
       .export audio_instrument
+      .export audio_init
+      .export audio_tick
 .if AUDIO_FILE_COMMANDS
       .export audio_sidplay
       .export audio_sidstop
@@ -39,6 +41,27 @@ AUDIO_FILE_COMMANDS = 1
       .export audio_music_note
 
 .include "fio.s"
+
+AUDIO_INST_BASE     = $BB50   ; 16 slots * 3 bytes: waveform, AD, SR
+AUDIO_VOICE_DUR     = $BB80   ; six SID sound-effect countdowns
+AUDIO_VOICE_WAVE    = $BB86   ; six gate-clear control bytes
+AUDIO_NEXT_VOICE    = $BB8C
+AUDIO_INIT_FLAG     = $BB8D
+AUDIO_INIT_MAGIC    = $A5
+
+SID_REG_FREQ_LO     = $00
+SID_REG_FREQ_HI     = $01
+SID_REG_PW_LO       = $02
+SID_REG_PW_HI       = $03
+SID_REG_CTRL        = $04
+SID_REG_AD          = $05
+SID_REG_SR          = $06
+SID_REG_VOLUME      = $18
+SID_REG_VOICE_VOL   = $1D
+SID_DEFAULT_WAVE    = $40
+SID_DEFAULT_AD      = $09
+SID_DEFAULT_SR      = $06
+SID_DEFAULT_PW_HI   = $08
 
 ; @label AUDIO.PLAY_SOUND
 ; @kind routine
@@ -72,34 +95,272 @@ audio_set_volume:
 ; @kind routine
 ; @symbol audio_sound
 ; @abi pseudo-register
-; @summary Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
+; @summary Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
 ; @requires AUDIO.NOTE AUDIO.DURATION AUDIO.INSTRUMENT
 ; @out A: 0 on success, nonzero on error
 audio_sound:
-      LDA   #FIO_CMD_SOUND
-      JMP   fio_exec
+      JSR   audio_init
+      LDA   AUDIO_DURATION
+      BEQ   @done
+
+      LDX   AUDIO_NEXT_VOICE
+      CPX   #$06
+      BCC   @voice_ok
+      LDX   #$00
+@voice_ok:
+      TXA
+      INC   A
+      CMP   #$06
+      BCC   @store_next
+      LDA   #$00
+@store_next:
+      STA   AUDIO_NEXT_VOICE
+
+      PHX
+      JSR   audio_load_instrument
+      JSR   audio_note_to_sid
+      PLX
+      JSR   audio_voice_ptr
+
+      LDY   #SID_REG_FREQ_LO
+      LDA   NVR1L
+      STA   (NVR0L),Y
+      INY
+      LDA   NVR1H
+      STA   (NVR0L),Y
+      INY
+      LDA   #$00
+      STA   (NVR0L),Y
+      INY
+      LDA   #SID_DEFAULT_PW_HI
+      STA   (NVR0L),Y
+      LDY   #SID_REG_AD
+      LDA   NVR2H
+      STA   (NVR0L),Y
+      INY
+      LDA   NVR3L
+      STA   (NVR0L),Y
+      LDY   #SID_REG_CTRL
+      LDA   NVR2L
+      AND   #$FE
+      STA   AUDIO_VOICE_WAVE,X
+      ORA   #$01
+      STA   (NVR0L),Y
+      LDA   AUDIO_DURATION
+      STA   AUDIO_VOICE_DUR,X
+@done:
+      LDA   #$00
+      RTS
 
 ; @label AUDIO.VOLUME
 ; @kind routine
 ; @symbol audio_volume
 ; @abi pseudo-register
-; @summary Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
+; @summary Set SID master or per-voice volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
 ; @requires AUDIO.VOLUME_LEVEL AUDIO.VOICE
 ; @out A: 0 on success, nonzero on error
 audio_volume:
-      LDA   #FIO_CMD_VOLUME
-      JMP   fio_exec
+      LDA   AUDIO_VOLUME
+      AND   #$0F
+      STA   NVR1L
+      LDX   AUDIO_VOICE
+      BEQ   @master
+      DEX
+      CPX   #$06
+      BCS   @done
+      LDA   NVR1L
+      CPX   #$03
+      BCS   @sid2_voice
+      STA   SID_BASE + SID_REG_VOICE_VOL,X
+      BRA   @done
+@sid2_voice:
+      TXA
+      SEC
+      SBC   #$03
+      TAX
+      LDA   NVR1L
+      STA   SID2_BASE + SID_REG_VOICE_VOL,X
+      BRA   @done
+@master:
+      LDA   NVR1L
+      STA   SID_BASE + SID_REG_VOLUME
+      STA   SID2_BASE + SID_REG_VOLUME
+@done:
+      LDA   #$00
+      RTS
 
 ; @label AUDIO.INSTRUMENT_SET
 ; @kind routine
 ; @symbol audio_instrument
 ; @abi pseudo-register
-; @summary Define an instrument envelope and waveform.
+; @summary Define a simple SID sound-effect instrument envelope and waveform.
 ; @requires AUDIO.INST_ID AUDIO.WAVEFORM AUDIO.ATTACK AUDIO.DECAY AUDIO.SUSTAIN AUDIO.RELEASE
 ; @out A: 0 on success, nonzero on error
 audio_instrument:
-      LDA   #FIO_CMD_INSTRUMENT
-      JMP   fio_exec
+      JSR   audio_init
+      LDA   AUDIO_INST_ID
+      AND   #$0F
+      STA   NVR1L
+      ASL
+      CLC
+      ADC   NVR1L
+      TAX
+      LDA   AUDIO_WAVEFORM
+      AND   #$FE
+      STA   AUDIO_INST_BASE,X
+      LDA   AUDIO_ATTACK
+      AND   #$0F
+      ASL
+      ASL
+      ASL
+      ASL
+      STA   NVR1L
+      LDA   AUDIO_DECAY
+      AND   #$0F
+      ORA   NVR1L
+      STA   AUDIO_INST_BASE+1,X
+      LDA   AUDIO_SUSTAIN
+      AND   #$0F
+      ASL
+      ASL
+      ASL
+      ASL
+      STA   NVR1L
+      LDA   AUDIO_RELEASE
+      AND   #$0F
+      ORA   NVR1L
+      STA   AUDIO_INST_BASE+2,X
+      LDA   #$00
+      RTS
+
+; @label AUDIO.INIT
+; @kind routine
+; @symbol audio_init
+; @abi none
+; @summary Initialize the SID sound-effect instrument table and scheduler state.
+audio_init:
+      LDA   AUDIO_INIT_FLAG
+      CMP   #AUDIO_INIT_MAGIC
+      BEQ   @done
+      LDX   #$00
+@inst_loop:
+      LDA   #SID_DEFAULT_WAVE
+      STA   AUDIO_INST_BASE,X
+      INX
+      LDA   #SID_DEFAULT_AD
+      STA   AUDIO_INST_BASE,X
+      INX
+      LDA   #SID_DEFAULT_SR
+      STA   AUDIO_INST_BASE,X
+      INX
+      CPX   #$30
+      BNE   @inst_loop
+      LDX   #$05
+      LDA   #$00
+@voice_loop:
+      STA   AUDIO_VOICE_DUR,X
+      STA   AUDIO_VOICE_WAVE,X
+      DEX
+      BPL   @voice_loop
+      STZ   AUDIO_NEXT_VOICE
+      LDA   #AUDIO_INIT_MAGIC
+      STA   AUDIO_INIT_FLAG
+@done:
+      RTS
+
+; @label AUDIO.TICK
+; @kind routine
+; @symbol audio_tick
+; @abi none
+; @summary Advance fire-and-forget SID sound-effect durations by one frame.
+audio_tick:
+      LDA   AUDIO_INIT_FLAG
+      CMP   #AUDIO_INIT_MAGIC
+      BNE   @done
+      LDX   #$05
+@loop:
+      LDA   AUDIO_VOICE_DUR,X
+      BEQ   @next
+      DEC   AUDIO_VOICE_DUR,X
+      BNE   @next
+@gate_off:
+      JSR   audio_voice_ptr
+      LDY   #SID_REG_CTRL
+      LDA   AUDIO_VOICE_WAVE,X
+      AND   #$FE
+      STA   (NVR0L),Y
+@next:
+      DEX
+      BPL   @loop
+@done:
+      RTS
+
+audio_load_instrument:
+      LDA   AUDIO_INSTRUMENT
+      AND   #$0F
+      STA   NVR3H
+      ASL
+      CLC
+      ADC   NVR3H
+      TAY
+      LDA   AUDIO_INST_BASE,Y
+      AND   #$FE
+      STA   NVR2L
+      LDA   AUDIO_INST_BASE+1,Y
+      STA   NVR2H
+      LDA   AUDIO_INST_BASE+2,Y
+      STA   NVR3L
+      RTS
+
+audio_note_to_sid:
+      LDA   AUDIO_NOTE
+      LDX   #$00
+@div_loop:
+      CMP   #$0C
+      BCC   @have_note
+      SEC
+      SBC   #$0C
+      INX
+      BRA   @div_loop
+@have_note:
+      TAY
+      LDA   audio_sid_freq_lo,Y
+      STA   NVR1L
+      LDA   #$00
+      CPY   #$0B
+      BNE   @store_hi
+      LDA   #$01
+@store_hi:
+      STA   NVR1H
+      TXA
+      BEQ   @done
+      TAX
+@shift_loop:
+      ASL   NVR1L
+      ROL   NVR1H
+      BCS   @clamp
+      DEX
+      BNE   @shift_loop
+@done:
+      RTS
+@clamp:
+      LDA   #$FF
+      STA   NVR1L
+      STA   NVR1H
+      RTS
+
+audio_voice_ptr:
+      LDA   audio_voice_lo,X
+      STA   NVR0L
+      LDA   #>SID_BASE
+      STA   NVR0H
+      RTS
+
+audio_sid_freq_lo:
+      .byte $8B,$93,$9C,$A6,$AF,$BA,$C5,$D1,$DD,$EA,$F8,$07
+audio_voice_lo:
+      .byte <(SID_BASE), <(SID_BASE+7), <(SID_BASE+14)
+      .byte <(SID2_BASE), <(SID2_BASE+7), <(SID2_BASE+14)
 
 .if AUDIO_FILE_COMMANDS
 ; @label AUDIO.SIDPLAY
@@ -221,7 +482,7 @@ audio_music_loop:
 ; @kind routine
 ; @symbol audio_music_priority
 ; @abi pseudo-register
-; @summary Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.
+; @summary Set hosted MML priority from AUDIO.NOTE and following pseudo-register bytes.
 ; @requires AUDIO.NOTE
 ; @out A: 0 on success, nonzero on error
 audio_music_priority:
@@ -242,7 +503,7 @@ audio_status:
 ; @kind routine
 ; @symbol audio_sfx_playing
 ; @abi none
-; @summary Return nonzero if a sound effect is playing.
+; @summary Return nonzero if the hosted music engine reports a sound effect.
 ; @out A: 1 if playing, 0 if idle
 audio_sfx_playing:
       LDA   MUSIC_STATUS

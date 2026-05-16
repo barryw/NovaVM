@@ -276,7 +276,7 @@ module vgc_sprites (
     // next native VGA line. The dpram wrapper forces DP16KD mapping so the small
     // line buffer does not become distributed RAM with wide write muxes.
     // =========================================================================
-    localparam SLB_DEPTH = 1024; // 2 banks x up to 360 sprite-plane pixels
+    localparam SLB_DEPTH = 1024; // 2 banks x active-video sprite line buffer
 
     logic [8:0]  slb_a_addr;
     logic [10:0] slb_a_din;
@@ -395,10 +395,9 @@ module vgc_sprites (
     // =========================================================================
     // Scanline buffer read (port B, 1-cycle latency — address set in pipeline)
     // =========================================================================
-    // sprite_x_d2 is the full active-video sprite coordinate at pipeline d2.
-    // We keep the same 1-cycle line-buffer read behavior as the old canvas
-    // path. The parent VGC pipeline already delays the active-video flags.
-    // So we just wire slb_b_addr = sprite_x_d2 and the outputs are read next cycle.
+    // sprite_x_d2 is the Nova canvas sprite coordinate at pipeline d2. The
+    // parent VGC masks sprite pixels outside the canvas, so sprites never draw
+    // into the hardware border.
     assign slb_b_addr = sprite_x_d2;
 
     always_comb begin

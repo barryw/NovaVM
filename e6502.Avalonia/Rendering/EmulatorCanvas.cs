@@ -348,9 +348,9 @@ public class EmulatorCanvas : Control
                 }
             }
 
-            // Rasterize sprites for this scanline. Sprite coordinates cover the
-            // full 360x240 half-resolution active video plane; the 320x200
-            // Nova canvas starts at sprite coordinate 20,20.
+            // Rasterize sprites for this scanline. Sprite coordinates match
+            // the 320x200 Nova graphics canvas; hardware border pixels are
+            // outside the sprite-visible area.
             int spritePlaneY = y + VgcConstants.SpriteCanvasY;
             SpriteRenderer.RasterizeScanline(spritePlaneY, sprites, shapeRam,
                 _lineBehind, _lineBetween, _lineFront, _spriteMask);

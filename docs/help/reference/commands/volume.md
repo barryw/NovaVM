@@ -15,7 +15,9 @@ Set SID volume.
 Both master and per-voice volume share the same 0--15 range, matching the
 4-bit resolution of the original SID. Per-voice volume is a NovaBASIC
 extension not present on the real MOS 6581. Default per-voice volume is 15
-(full). Setting it to 0 silences that voice without affecting others.
+(full). The SID master volume powers on at 0, so set `VOLUME` before playing
+sound. Setting a per-voice volume to 0 silences that voice without affecting
+others.
 
 ```basic
 10 VOLUME 15           : REM MASTER VOLUME MAX

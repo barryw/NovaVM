@@ -32,7 +32,7 @@ module test_vgc_sprites;
 
     // Stand-alone PIXIE instance used for pixel/scanline-buffer regressions.
     // The top-level VGC tests above exercise command wiring; this instance
-    // lets us drive exact VGA line starts and verify the sprite plane itself.
+    // lets us drive exact VGA line starts and verify PIXIE itself.
     logic [10:0] probe_spr_a_addr = 0;
     logic [7:0]  probe_spr_a_din = 0;
     logic        probe_spr_a_we = 0;

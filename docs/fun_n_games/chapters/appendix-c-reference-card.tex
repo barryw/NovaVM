@@ -1,0 +1,43 @@
+\chapter{Reference Card}
+
+\section{Loading the Disk}
+
+\begin{lstlisting}
+DIR
+LOAD "COMMON"
+LIST 60000-60280
+LOAD "TINY-1"
+RUN
+\end{lstlisting}
+
+\section{Framework Variables}
+
+\begin{center}
+\begin{tabularx}{0.88\textwidth}{>{\ttfamily}lX}
+\toprule
+ZT\$ & Game title.\\
+ZA\$ & Author or series line.\\
+ZS\$ & Subtitle.\\
+ZP & Prompt mode: 0 for Enter or Space, 1 for Space.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Variable Rule}
+
+Only the first two characters of a NovaBASIC variable name are significant.
+Use one- or two-character names in printed listings. Avoid \texttt{Z*} in game
+code because the common framework owns that prefix.
+
+\section{Line Map}
+
+\begin{center}
+\begin{tabularx}{0.88\textwidth}{>{\ttfamily}lX}
+\toprule
+10 & Program setup.\\
+20-9999 & Game logic.\\
+60000 & Common title framework begins.\\
+60280 & Common title framework returns.\\
+\bottomrule
+\end{tabularx}
+\end{center}

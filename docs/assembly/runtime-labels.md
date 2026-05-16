@@ -26,6 +26,15 @@ Duration in 60 Hz frames for AUDIO.SOUND.
 - Symbol: `AUDIO_DURATION`
 - Address: `$B9A5`
 
+## AUDIO.INIT
+
+Initialize the SID sound-effect instrument table and scheduler state.
+
+- Kind: `routine`
+- Symbol: `audio_init`
+- Address: `$EFC5`
+- ABI: `none`
+
 ## AUDIO.INSTRUMENT
 
 Instrument slot for AUDIO.SOUND.
@@ -36,11 +45,11 @@ Instrument slot for AUDIO.SOUND.
 
 ## AUDIO.INSTRUMENT_SET
 
-Define an instrument envelope and waveform.
+Define a simple SID sound-effect instrument envelope and waveform.
 
 - Kind: `routine`
 - Symbol: `audio_instrument`
-- Address: `$EEF5`
+- Address: `$EF81`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -68,7 +77,7 @@ Play the MIDI file named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_midplay`
-- Address: `$EF08`
+- Address: `$F099`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -84,7 +93,7 @@ Stop MIDI file playback.
 
 - Kind: `routine`
 - Symbol: `audio_midstop`
-- Address: `$EF0D`
+- Address: `$F09E`
 - ABI: `none`
 
 Outputs:
@@ -96,7 +105,7 @@ Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.
 
 - Kind: `routine`
 - Symbol: `audio_music_loop`
-- Address: `$EF2F`
+- Address: `$F0C0`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -111,7 +120,7 @@ Return the current MIDI note for a music voice.
 
 - Kind: `routine`
 - Symbol: `audio_music_note`
-- Address: `$EF4D`
+- Address: `$F0DE`
 - ABI: `register`
 
 Inputs:
@@ -126,7 +135,7 @@ Start queued music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_play`
-- Address: `$EF1C`
+- Address: `$F0AD`
 - ABI: `none`
 
 Outputs:
@@ -138,7 +147,7 @@ Return nonzero if music is playing.
 
 - Kind: `routine`
 - Symbol: `audio_music_playing`
-- Address: `$EF43`
+- Address: `$F0D4`
 - ABI: `none`
 
 Outputs:
@@ -146,11 +155,11 @@ Outputs:
 
 ## AUDIO.MUSIC_PRIORITY
 
-Set voice-stealing priority from AUDIO.NOTE and following pseudo-register bytes.
+Set hosted MML priority from AUDIO.NOTE and following pseudo-register bytes.
 
 - Kind: `routine`
 - Symbol: `audio_music_priority`
-- Address: `$EF34`
+- Address: `$F0C5`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -165,7 +174,7 @@ Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.
 
 - Kind: `routine`
 - Symbol: `audio_music_sequence`
-- Address: `$EF17`
+- Address: `$F0A8`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -183,7 +192,7 @@ Stop music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_stop`
-- Address: `$EF25`
+- Address: `$F0B6`
 - ABI: `none`
 
 Outputs:
@@ -195,7 +204,7 @@ Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.
 
 - Kind: `routine`
 - Symbol: `audio_music_tempo`
-- Address: `$EF2A`
+- Address: `$F0BB`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -219,7 +228,7 @@ Play a one-shot note using A/X/Y register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_play_sound`
-- Address: `$EED8`
+- Address: `$EEDE`
 - ABI: `register`
 
 Inputs:
@@ -244,7 +253,7 @@ Set master or per-voice volume using A/X register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_set_volume`
-- Address: `$EEE3`
+- Address: `$EEE9`
 - ABI: `register`
 
 Inputs:
@@ -260,7 +269,7 @@ Load the soundfont named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_sfload`
-- Address: `$EF12`
+- Address: `$F0A3`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -272,11 +281,11 @@ Requires:
 
 ## AUDIO.SFX_PLAYING
 
-Return nonzero if a sound effect is playing.
+Return nonzero if the hosted music engine reports a sound effect.
 
 - Kind: `routine`
 - Symbol: `audio_sfx_playing`
-- Address: `$EF3D`
+- Address: `$F0CE`
 - ABI: `none`
 
 Outputs:
@@ -288,7 +297,7 @@ Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-b
 
 - Kind: `routine`
 - Symbol: `audio_sidplay`
-- Address: `$EEFA`
+- Address: `$F08B`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -305,7 +314,7 @@ Stop SID file playback.
 
 - Kind: `routine`
 - Symbol: `audio_sidstop`
-- Address: `$EF03`
+- Address: `$F094`
 - ABI: `none`
 
 Outputs:
@@ -313,11 +322,11 @@ Outputs:
 
 ## AUDIO.SOUND
 
-Play a one-shot note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
+Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
 
 - Kind: `routine`
 - Symbol: `audio_sound`
-- Address: `$EEEB`
+- Address: `$EEF1`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -334,7 +343,7 @@ Return raw music status bits.
 
 - Kind: `routine`
 - Symbol: `audio_status`
-- Address: `$EF39`
+- Address: `$F0CA`
 - ABI: `none`
 
 Outputs:
@@ -372,9 +381,18 @@ Sustain nibble for AUDIO.INSTRUMENT_SET.
 - Symbol: `AUDIO_SUSTAIN`
 - Address: `$B9A8`
 
+## AUDIO.TICK
+
+Advance fire-and-forget SID sound-effect durations by one frame.
+
+- Kind: `routine`
+- Symbol: `audio_tick`
+- Address: `$EFFA`
+- ABI: `none`
+
 ## AUDIO.VOICE
 
-Voice selector. Use 0 for master volume or 1..14 for music voices.
+Voice selector. Use 0 for SID master volume or 1..6 for SID voice volume.
 
 - Kind: `u8`
 - Symbol: `AUDIO_VOICE`
@@ -382,11 +400,11 @@ Voice selector. Use 0 for master volume or 1..14 for music voices.
 
 ## AUDIO.VOLUME
 
-Set volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
+Set SID master or per-voice volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
 
 - Kind: `routine`
 - Symbol: `audio_volume`
-- Address: `$EEF0`
+- Address: `$EF4E`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -730,7 +748,7 @@ Change directory to FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_cd`
-- Address: `$EEBA`
+- Address: `$EEC0`
 
 Requires:
 - `FIO_NAME`
@@ -742,7 +760,7 @@ Convert the current FIO status register to the shared A=0/1 result.
 
 - Kind: `routine`
 - Symbol: `fio_check`
-- Address: `$EE3B`
+- Address: `$EE41`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -753,7 +771,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$EE5B`
+- Address: `$EE61`
 
 Outputs:
 - `A`: 0 on success.
@@ -796,7 +814,7 @@ Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_copy_name`
-- Address: `$EE7A`
+- Address: `$EE80`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid name.
@@ -812,7 +830,7 @@ Delete the file named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_delete`
-- Address: `$EEAB`
+- Address: `$EEB1`
 
 Requires:
 - `FIO_NAME`
@@ -824,7 +842,7 @@ Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.
 
 - Kind: `routine`
 - Symbol: `fio_dir_open`
-- Address: `$EEA1`
+- Address: `$EEA7`
 
 ## FIO.DIR_READ
 
@@ -832,7 +850,7 @@ Read the next directory entry into the FIO directory result registers.
 
 - Kind: `routine`
 - Symbol: `fio_dir_read`
-- Address: `$EEA6`
+- Address: `$EEAC`
 
 ## FIO.EXEC
 
@@ -840,7 +858,7 @@ Issue an FIO command, wait for completion, and return A=0/1 status.
 
 - Kind: `routine`
 - Symbol: `fio_exec`
-- Address: `$EE48`
+- Address: `$EE4E`
 
 Inputs:
 - `A`: FIO command byte.
@@ -854,7 +872,7 @@ Load VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gload`
-- Address: `$EEB5`
+- Address: `$EEBB`
 
 Requires:
 - `FIO_NAME`
@@ -871,7 +889,7 @@ Save VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gsave`
-- Address: `$EEB0`
+- Address: `$EEB6`
 
 Requires:
 - `FIO_NAME`
@@ -888,7 +906,7 @@ Issue a raw FIO command without waiting for completion.
 
 - Kind: `routine`
 - Symbol: `fio_issue`
-- Address: `$EE37`
+- Address: `$EE3D`
 
 Inputs:
 - `A`: FIO command byte.
@@ -899,7 +917,7 @@ Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.
 
 - Kind: `routine`
 - Symbol: `fio_load`
-- Address: `$EE9C`
+- Address: `$EEA2`
 
 Requires:
 - `FIO_NAME`
@@ -913,7 +931,7 @@ Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runt
 
 - Kind: `routine`
 - Symbol: `fio_load_runtime`
-- Address: `$EECE`
+- Address: `$EED4`
 
 Requires:
 - `FIO_NAME`
@@ -925,7 +943,7 @@ Create the directory named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_mkdir`
-- Address: `$EEBF`
+- Address: `$EEC5`
 
 Requires:
 - `FIO_NAME`
@@ -970,7 +988,7 @@ Read the current directory into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_pwd`
-- Address: `$EEC9`
+- Address: `$EECF`
 
 ## FIO.RMDIR
 
@@ -978,7 +996,7 @@ Remove the directory named by FIO.NAME/FIO_NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_rmdir`
-- Address: `$EEC4`
+- Address: `$EECA`
 
 Requires:
 - `FIO_NAME`
@@ -990,7 +1008,7 @@ Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.
 
 - Kind: `routine`
 - Symbol: `fio_rng`
-- Address: `$EED3`
+- Address: `$EED9`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -1041,7 +1059,7 @@ Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.
 
 - Kind: `routine`
 - Symbol: `fio_save`
-- Address: `$EE97`
+- Address: `$EE9D`
 
 Requires:
 - `FIO_NAME`
@@ -1057,7 +1075,7 @@ Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.
 
 - Kind: `routine`
 - Symbol: `fio_set_io_error`
-- Address: `$EE6D`
+- Address: `$EE73`
 
 Outputs:
 - `A`: 1 on error.
@@ -1407,7 +1425,7 @@ Issue a raw NIC command.
 
 - Kind: `routine`
 - Symbol: `nic_command`
-- Address: `$EF59`
+- Address: `$F0EA`
 
 Inputs:
 - `A`: NIC command byte.
@@ -1418,7 +1436,7 @@ Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.
 
 - Kind: `routine`
 - Symbol: `nic_connect`
-- Address: `$EF7A`
+- Address: `$F10B`
 
 Requires:
 - `NIC_SLOT`
@@ -1432,7 +1450,7 @@ Copy a pointer-based host name to NIC_NAMEBUF and append NUL.
 
 - Kind: `routine`
 - Symbol: `nic_copy_name`
-- Address: `$EFA0`
+- Address: `$F131`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid length.
@@ -1448,7 +1466,7 @@ Disconnect NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_disconnect`
-- Address: `$EF7E`
+- Address: `$F10F`
 
 Requires:
 - `NIC_SLOT`
@@ -1459,7 +1477,7 @@ Read the most recent NIC message length.
 
 - Kind: `routine`
 - Symbol: `nic_length`
-- Address: `$EF9C`
+- Address: `$F12D`
 
 Outputs:
 - `A`: Message length byte.
@@ -1477,7 +1495,7 @@ Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.
 
 - Kind: `routine`
 - Symbol: `nic_ready`
-- Address: `$EF92`
+- Address: `$F123`
 
 Inputs:
 - `X`: Slot number.
@@ -1491,7 +1509,7 @@ Receive data for NIC_SLOT into NIC_DMAL/H.
 
 - Kind: `routine`
 - Symbol: `nic_recv`
-- Address: `$EF86`
+- Address: `$F117`
 
 Requires:
 - `NIC_SLOT`
@@ -1504,7 +1522,7 @@ Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_send`
-- Address: `$EF82`
+- Address: `$F113`
 
 Requires:
 - `NIC_SLOT`
@@ -1518,7 +1536,7 @@ Read clamped NIC slot status.
 
 - Kind: `routine`
 - Symbol: `nic_status`
-- Address: `$EF8A`
+- Address: `$F11B`
 
 Inputs:
 - `X`: Slot number.

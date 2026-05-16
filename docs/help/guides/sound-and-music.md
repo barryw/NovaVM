@@ -11,9 +11,9 @@ category: Sound
 NovaBASIC includes two SID chip emulators -- software recreations of the MOS
 6581 Sound Interface Device made famous by the Commodore 64. Six independent
 voices with four waveforms, ADSR envelopes, and a programmable filter deliver
-authentic chiptune sound. On top of the SID sits a six-voice MML music
-sequencer with per-frame effects including vibrato, portamento, arpeggios,
-pulse-width modulation, and filter sweeps.
+authentic chiptune sound. Simple `SOUND`, `VOLUME`, and `INSTRUMENT` commands
+write directly to those SID chips. `MUSIC` and MML are separate: they are
+handled by the ESP-hosted music path and wavetable synth support.
 
 This chapter covers every sound command from simple one-shot notes to
 full multi-voice compositions.
@@ -26,9 +26,8 @@ The sound system has three layers, each building on the one below:
 note number, duration in frames, and an optional instrument preset.
 2. **INSTRUMENT** -- define a reusable preset that sets the SID
 waveform and ADSR envelope. Up to 16 presets (slots 0--15).
-3. **MUSIC** -- load MML (Music Macro Language) sequences into up
-to six voices and play them back with tempo, looping, and
-per-frame effects.
+3. **MUSIC** -- load MML (Music Macro Language) sequences into the hosted
+music engine and play them back with tempo, looping, and per-frame effects.
 
 A minimal program that plays a note:
 
@@ -51,12 +50,13 @@ plays for one second; 30 plays for half a second.
 - `instrument` -- optional instrument preset (0--15). If omitted,
 instrument 0 is used.
 
-If `note` or `duration` is zero, the sound is stopped immediately.
+If `duration` is zero, no new sound is started.
 
 ::: note
-`SOUND` triggers a one-shot sound effect through the music engine's
-SFX channel. It does not interrupt music playback; the engine allocates a
-voice for the effect and restores it when the sound completes.
+`SOUND` is fire-and-forget. It starts a note on one of the six SID voices and
+returns immediately. NovaBASIC advances `SOUND` durations from the frame
+service used by `VSYNC`, so game loops should call `VSYNC` once per frame for
+reliable note lengths.
 :::
 
 ### Common MIDI note numbers
@@ -92,8 +92,9 @@ Each note plays for 15 frames ( 250 ms). The `VSYNC` loop
 holds the program for the same duration before the next note fires.
 
 ::: note
-`SOUND` does not block program execution. Use a `VSYNC` loop after
-each `SOUND` call to create the gap between notes.
+`SOUND` does not block program execution. Use a `VSYNC` loop after each
+`SOUND` call to create the gap between notes and to let the sound scheduler
+turn notes off at the requested duration.
 :::
 
 ## The INSTRUMENT Command
@@ -172,8 +173,9 @@ behavior.
 Sets the SID volume. When `voice` is omitted, sets the master volume
 (0--15). When `voice` is given (1--6), sets the per-voice volume (0--15)
 for that voice. Both use the same 4-bit range. See the Per-Voice Volume
-section below for details. The default master volume at boot is 12; the
-default per-voice volume is 15 (full).
+section below for details. The SID master volume powers up at 0, so BASIC
+programs should set `VOLUME` before playing sound. The default per-voice
+volume is 15 (full).
 
 ## Per-Voice Volume
 
@@ -214,10 +216,10 @@ not exist on the real MOS 6581/8580.
 
 ## The MUSIC Engine
 
-The music engine is a six-voice MML sequencer running on top of two SID
-chips. You write melodies and rhythms as text strings using Music Macro
-Language, load them into voices, and let the engine handle all the timing,
-instrument switching, and per-frame effects automatically.
+The music engine is the hosted MML path. You write melodies and rhythms as
+text strings using Music Macro Language, load them into voices, and let the
+engine handle timing, instrument switching, and per-frame effects
+automatically. This path is separate from the direct SID `SOUND` command.
 
 ### Loading and Playing Sequences
 
@@ -235,7 +237,7 @@ Additional subcommands control playback:
 | MUSIC TEMPO bpm | Set tempo in beats per minute. Default is 120. |
 | MUSIC LOOP ON | Enable looping; voices restart when all finish. |
 | MUSIC LOOP OFF | Disable looping (default). |
-| MUSIC PRIORITY v1[,...,v6] | Set voice-stealing priority for sound effects. Lower-numbered voices are stolen first. Default: 6, 5, 4, 3, 2, 1. |
+| MUSIC PRIORITY v1[,...,v6] | Set hosted MML voice priority on hosts that support priority routing. Simple SID `SOUND` uses its own round-robin scheduler. |
 
 ### A Complete Music Example
 
@@ -257,9 +259,9 @@ octave 4, ascending C major scale. Line 70 loads a bass line into voice 2:
 quarter notes, octave 3, alternating C and G. Line 100 starts playback;
 `MUSIC LOOP ON` on line 90 means the music repeats indefinitely.
 
-### Querying Music Status
+### Querying Hosted Music Status
 
-Two functions let you check what the music engine is doing:
+Two functions let you check what the hosted music engine is doing:
 
 | **Function** | **Returns** |
 | --- | --- |
@@ -481,8 +483,8 @@ File-backed playback is available as convenience BASIC commands:
 
 `SIDPLAY "name"[,song]` plays a SID file, defaulting to song 1.
 `SIDSTOP` stops SID playback. `MIDPLAY "name"` plays a MIDI file through the
-music engine, and `MIDSTOP` stops it. `SFLOAD "name"` loads a new soundfont for
-MIDI playback.
+hosted music engine, and `MIDSTOP` stops it. `SFLOAD "name"` loads a new
+soundfont for MIDI playback.
 
 ## Graphics File I/O
 
@@ -522,16 +524,10 @@ music and avoid common pitfalls.
 
 ### Voice allocation
 
-The music engine manages six music voices (voices 1--3 mapped to SID 1
-voices 0--2; voices 4--6 mapped to SID 2 voices 0--2) plus one shared SFX
-voice. When `SOUND` triggers a sound effect, the engine:
-
-1. Looks for a voice with no music sequence loaded.
-2. If all voices have sequences, steals a voice according to the
-priority order (default: voice 6 first, then 5, then 4, then 3,
-then 2, then 1).
-3. Plays the SFX on the stolen voice; when done, restores the music
-voice.
+Simple `SOUND` effects use a small round-robin scheduler over the six SID
+voices. The command starts the note and returns; `VSYNC` advances the
+countdowns and gates notes off when their duration expires. MML playback uses
+the hosted music path instead of this SID scheduler.
 
 ### The Second SID Chip
 

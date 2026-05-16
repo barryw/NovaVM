@@ -9,8 +9,8 @@
 ;   AUDIO_INSTRUMENT instrument slot
 ;
 ; Volume:
-;   AUDIO_VOLUME     volume level
-;   AUDIO_VOICE      0=master, 1..14=voice volume
+;   AUDIO_VOLUME     SID volume level
+;   AUDIO_VOICE      0=master, 1..6=SID voice volume
 ;
 ; Instrument:
 ;   AUDIO_INST_ID    instrument slot
@@ -21,7 +21,7 @@
 ;   AUDIO_RELEASE    release
 ;
 ; Music sequence:
-;   AUDIO_VOICE      voice number, 1..14
+;   AUDIO_VOICE      hosted MML voice number
 ;   AUDIO_STRLEN     MML byte length
 ;   AUDIO_STRL/H     pointer to MML bytes
 ;
@@ -61,7 +61,7 @@ AUDIO_VOLUME     = FIO_SRCL
 ; @label AUDIO.VOICE
 ; @kind u8
 ; @symbol AUDIO_VOICE
-; @summary Voice selector. Use 0 for master volume or 1..14 for music voices.
+; @summary Voice selector. Use 0 for SID master volume or 1..6 for SID voice volume.
 AUDIO_VOICE      = FIO_SRCH
 
 ; @label AUDIO.INST_ID

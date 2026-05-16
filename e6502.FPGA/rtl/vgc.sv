@@ -473,8 +473,9 @@ module vgc (
     logic [7:0]  spr_a_dout;
 
     // Sprite attributes — small register arrays (no dpram needed).
-    // Sprite X is an unsigned word. Sprite Y is an unsigned byte over the
-    // 240-line sprite plane; the register high byte is reserved/reads as 0.
+    // Sprite positions are Nova canvas coordinates. X is an unsigned word;
+    // Y is an unsigned byte. Visible drawing is clipped to the 320x200 gfx
+    // canvas, and the Y high register is reserved/reads as 0.
     logic [15:0] spr_x [0:15];
     logic [7:0]  spr_y [0:15];
     logic        spr_enable [0:15];

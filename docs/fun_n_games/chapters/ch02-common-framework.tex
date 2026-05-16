@@ -1,0 +1,56 @@
+\chapter{The Common Framework}
+
+Every program in this book begins by setting a few \texttt{Z} variables and
+calling line 60000:
+
+\begin{lstlisting}
+ZT$="ROADHOG":ZA$="NOVA PORT STUB":ZS$="CROOKED ROAD DRIVING":ZP=1
+GOSUB 60000
+\end{lstlisting}
+
+The common framework draws the opening screen, plays a short sound, waits for
+the player, clears the machine state, and returns to the game.
+
+\section{Framework Controls}
+
+\begin{center}
+\begin{tabularx}{0.92\textwidth}{>{\ttfamily}lX}
+\toprule
+ZT\$ & Title printed in the center of the splash screen.\\
+ZA\$ & Author or program-series line.\\
+ZS\$ & Short subtitle explaining the program.\\
+ZP & Prompt mode. Use 0 for Enter or Space, 1 for Space start.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{What It Does}
+
+The framework deliberately keeps to visible, beginner-friendly work:
+
+\begin{itemize}
+\item It clears Copper state and hides all hardware sprites.
+\item It enters graphics mode and draws a high-color title frame.
+\item It centers colorful bitmap titles with \texttt{GTEXT}, \texttt{LEN}, and \texttt{INT}.
+\item It plays a short sound cue.
+\item It waits for Enter or Space depending on \texttt{ZP}.
+\item It returns to text mode and hands control back to the game.
+\end{itemize}
+
+\begin{novabox}
+The framework is ordinary NovaBASIC. It is not a hidden ROM routine. Readers can
+list it, change it, or replace it with their own house style.
+\end{novabox}
+
+\section{Why This Belongs in the Book}
+
+A shared framework gives every program a little polish without making every
+listing repeat the same title-screen work. It also lets the book teach a real
+pattern: put common code in one place, keep its \texttt{Z} variables for
+itself, and call it from the individual programs.
+
+\begin{typeinbox}
+Keep program-specific code out of \commonlisting. Sprites, maps, levels, and
+special routines belong in the program that uses them, so each listing can be
+studied and changed on its own.
+\end{typeinbox}

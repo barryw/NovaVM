@@ -1,0 +1,122 @@
+\chapter{Tiny Programs}
+
+The first five listings are small demonstrations. Their job is not to be
+complete games. Their job is to teach the rhythm of NovaBASIC and give readers
+something they can finish quickly.
+
+\section{Demo Plan}
+
+\begin{longtable}{>{\ttfamily}p{0.18\textwidth}p{0.22\textwidth}p{0.48\textwidth}}
+\toprule
+File & Topic & Nova version\\
+\midrule
+\endhead
+tiny-1.bas & Sprites & Bounce one hardware sprite with gravity, frame timing,
+and sound.\\
+tiny-2.bas & Sound & Play simple effects and a short musical idea with Nova's
+sound commands.\\
+tiny-3.bas & Line Draw & Draw points, lines, and patterns on the 320 by 200
+graphics display.\\
+tiny-4.bas & Vsprites & Move a larger software sprite so readers see how Nova
+goes beyond 16 by 16 hardware shapes.\\
+tiny-5.bas & Copper & Change display colors while the screen is being drawn.\\
+\bottomrule
+\end{longtable}
+
+\section{Teaching Rule}
+
+Each tiny program should be short enough to type in one sitting. If a feature
+needs a long setup, it belongs in a later game.
+
+\begin{typeinbox}
+For printed listings, keep the first demo programs deliberately plain. A reader
+should be able to type one, run it, and understand why it works without needing
+the full hardware reference guide.
+\end{typeinbox}
+
+\programlesson{Tiny-1: Gravity Ball}{ball}{%
+\texttt{TINY-1} puts a shiny ball on the screen, lets gravity pull it down, and
+bounces it back up from the border. The program is short, but it already feels
+alive because Nova's sprite hardware, frame timing, and sound commands are all
+working together.}
+
+\begin{learnbox}
+\begin{itemize}
+\item A hardware sprite can move without redrawing the whole screen.
+\item \texttt{VSYNC} keeps the motion tied to the video frame.
+\item \texttt{DY=DY+1} is enough to make simple gravity.
+\item \texttt{SOUND} adds feedback without any POKEs.
+\end{itemize}
+\end{learnbox}
+
+\subsection*{The Listing}
+
+\begin{lstlisting}
+50 MODE 3:COLOR 1,0,14:GCLS:GOSUB 1000
+60 XL=0:XR=304:YT=0:YB=184:BV=14
+65 X=40:Y=20:DX=1:DY=0
+70 SPRITE 0,ON
+80 SPRITE 0,X,Y:VSYNC:VSYNC
+90 GET K:IF K=81 OR K=113 THEN 190
+100 DY=DY+1:NX=X+DX:NY=Y+DY
+120 IF NX<XL THEN NX=XL:DX=-DX:SOUND 50,2
+130 IF NX>XR THEN NX=XR:DX=-DX:SOUND 50,2
+140 IF NY<YT THEN NY=YT:DY=0:SOUND 60,2
+150 IF NY>YB THEN NY=YB:DY=-BV:SOUND 72,3
+160 X=NX:Y=NY
+170 GOTO 80
+190 SPRITE 0,OFF:MODE 0:COLOR 1,0,0:CLS:END
+1000 REM LOAD SHINY BALL SPRITE
+1010 FOR R=0 TO 15:READ A,B,C,D,E,F,H,J
+1020 SPRITEDATA 0,R,A,B,C,D,E,F,H,J:NEXT R
+1030 SPRITESHAPE 0,0:SPRITESET 0,6,2:SPRITESET 0,7,0:RETURN
+1040 DATA $00,$00,$0F,$FF,$FF,$00,$00,$00
+1050 DATA $00,$00,$FF,$FF,$FF,$FF,$00,$00
+1060 DATA $00,$0F,$FF,$FF,$FF,$FF,$F0,$00
+1070 DATA $00,$FF,$FF,$FF,$EE,$EE,$FF,$00
+1080 DATA $0F,$FF,$FF,$EE,$EE,$EE,$EE,$F0
+1090 DATA $FF,$FF,$EE,$EE,$EE,$EE,$EE,$FF
+1100 DATA $FF,$FE,$EE,$EE,$EE,$EE,$EE,$6F
+1110 DATA $FF,$EE,$EE,$EE,$EE,$EE,$66,$6F
+1120 DATA $FE,$EE,$EE,$EE,$EE,$66,$66,$6F
+1130 DATA $FE,$EE,$EE,$EE,$66,$66,$66,$BF
+1140 DATA $FE,$EE,$EE,$66,$66,$66,$BB,$BF
+1150 DATA $FF,$EE,$E6,$66,$66,$BB,$BB,$FF
+1160 DATA $0F,$EE,$E6,$66,$BB,$BB,$BB,$F0
+1170 DATA $00,$FE,$E6,$6B,$BB,$BB,$BF,$00
+1180 DATA $00,$0F,$66,$BB,$BB,$BB,$F0,$00
+1190 DATA $00,$0B,$BB,$BB,$BB,$BB,$B0,$00
+\end{lstlisting}
+
+\subsection*{How It Works}
+
+Line 50 switches to graphics mode, paints the border, clears the screen, and
+loads the ball sprite. Line 60 names the four walls. The screen is 320 pixels
+wide and 200 pixels tall. Because the ball is 16 by 16 pixels, the right wall
+is \texttt{304} and the bottom wall is \texttt{184}.
+
+Line 100 is the whole gravity trick. Add 1 to \texttt{DY}, and the ball falls
+faster. Then add \texttt{DX} to \texttt{X}, add \texttt{DY} to \texttt{Y}, and
+the ball moves.
+
+Lines 120 through 150 keep the ball inside the screen. If the next step would
+cross a wall, the program puts the ball exactly on that wall. At the floor it
+sets \texttt{DY=-BV}, which sends the ball upward again with the same bounce
+every time. The bottom bounce uses a higher \texttt{SOUND} note than the side
+bounce, so you can hear the collision without adding any POKEs.
+
+\begin{trythisbox}
+Change \texttt{BV} on line 60. A larger number makes the ball bounce higher.
+A smaller number makes it bounce lower. Then change \texttt{DX} on line 65 to
+make the ball drift sideways faster or slower.
+\end{trythisbox}
+
+\begin{novabox}
+\texttt{SPRITE 0,X,Y} only moves the sprite registers. The picture of the ball
+is already stored in sprite shape memory, so Nova does not have to redraw the
+ball every frame. That is why a small BASIC loop can still look smooth.
+\end{novabox}
+
+The ball itself is also a Nova lesson. Lines 1000 through 1190 load one 16 by
+16 sprite shape. The \texttt{DATA} values are the pixels. They use white, light
+grey, light blue, blue, and dark grey to fake a shiny round surface.

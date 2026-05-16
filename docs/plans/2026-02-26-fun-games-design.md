@@ -28,10 +28,11 @@ Following existing patterns from `docs/programs/`:
 - Line numbers increment by 10
 - `REM` comments with `=== SECTION ===` headers for major blocks
 - Structure: initialization → data loading → subroutines → game loop → data statements
-- Single/double letter variable names with consistent mnemonics
+- One- or two-character variable names with consistent mnemonics. NovaBASIC accepts longer names, but only the first two characters are significant.
+- Shared framework code reserves `Z*` variables. Game listings may use any other prefix.
 - GOSUB for modular subroutines
 - VSYNC for frame synchronization
-- Each game is a standalone `.bas` file, no shared libraries
+- Games are type-in BASIC listings that can be combined with the shared `COMMON` framework.
 
 ### Target Size
 100-300 lines per game. Typeable in an afternoon. Pac-Man (630 lines) is the upper bound of what's reasonable; these should be well under that.

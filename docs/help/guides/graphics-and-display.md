@@ -145,10 +145,11 @@ A sprite must be enabled before it becomes visible:
 ```
 
 `SPRITE n,ON` activates sprite `n`. `SPRITE n,x,y` sets its
-screen position. Sprite positions use the full half-resolution video plane:
-X is an unsigned word and Y is an unsigned byte. In 720x480 output this is
-X = 0--359 and Y = 0--239, including the border area. The 640x400 canvas is
-X = 20--339 and Y = 20--219 in that sprite coordinate space.
+screen position. Sprite positions use Nova canvas coordinates, matching
+the 320x200 graphics commands: X = 0--319 and Y = 0--199 are the visible
+canvas pixels. A 16x16 sprite is fully visible when its top-left position is
+X = 0--304 and Y = 0--184. Positions outside that range are accepted and
+clipped; sprites do not draw into the hardware border.
 
 To hide a sprite, use `SPRITE n,OFF`. This makes the sprite invisible
 without erasing its shape data. You can re-enable it later with
@@ -556,8 +557,8 @@ sprite `n` by reading directly from the sprite register block.
 
 | **Function** | **Returns** |
 | --- | --- |
-| SPRITEX(n) | Current X position of sprite `n` as an unsigned 16-bit value. |
-| SPRITEY(n) | Current Y position of sprite `n` as an unsigned 8-bit value. |
+| SPRITEX(n) | Current X position of sprite `n` as an unsigned 16-bit Nova canvas coordinate. |
+| SPRITEY(n) | Current Y position of sprite `n` as an unsigned 8-bit Nova canvas coordinate. |
 
 `SPRITEX` combines the X low/high registers. `SPRITEY` returns the Y low
 byte; the Y high register is reserved.

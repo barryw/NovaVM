@@ -1089,7 +1089,7 @@ static int DoImport(string[] args)
             var tokenizer = BasicTokenizer.FromJsonFile(tokensPath);
             string[] lines = Encoding.ASCII.GetString(data).ReplaceLineEndings("\n")
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            data = tokenizer.Tokenize(lines, 0x0401);
+            data = AddBasicLoadAddressPrefix(tokenizer.Tokenize(lines, 0x0301), 0x0301);
             fileType = NdiFileType.Bas;
         }
         catch (Exception ex)
@@ -1188,7 +1188,7 @@ static int DoExport(string[] args)
         try
         {
             var tokenizer = BasicTokenizer.FromJsonFile(tokensPath);
-            string[] lines = tokenizer.Detokenize(data);
+            string[] lines = tokenizer.Detokenize(StripBasicLoadAddressPrefix(data));
             data = Encoding.ASCII.GetBytes(string.Join("\n", lines) + "\n");
             if (Path.GetExtension(filename).Equals(".bas", StringComparison.OrdinalIgnoreCase))
                 filename = Path.ChangeExtension(filename, ".txt");
@@ -1341,6 +1341,28 @@ static int DoRmdir(string[] args)
     return 0;
 }
 
+static byte[] AddBasicLoadAddressPrefix(byte[] body, ushort baseAddr)
+{
+    var withHeader = new byte[2 + body.Length];
+    withHeader[0] = (byte)(baseAddr & 0xFF);
+    withHeader[1] = (byte)(baseAddr >> 8);
+    Array.Copy(body, 0, withHeader, 2, body.Length);
+    return withHeader;
+}
+
+static byte[] StripBasicLoadAddressPrefix(byte[] data)
+{
+    if (data.Length < 4)
+        return data;
+
+    ushort loadAddress = (ushort)(data[0] | (data[1] << 8));
+    ushort firstLinePointer = (ushort)(data[2] | (data[3] << 8));
+    if (firstLinePointer == 0 || (firstLinePointer > loadAddress && firstLinePointer - loadAddress <= data.Length - 2))
+        return data[2..];
+
+    return data;
+}
+
 // ---------------------------------------------------------------------------
 // tokenize <input.txt> <output.bas> [--base <addr>] [--tokens <path>]
 // ---------------------------------------------------------------------------
@@ -1354,7 +1376,7 @@ static int DoTokenize(string[] args)
 
     string inputPath = args[0];
     string outputPath = args[1];
-    ushort baseAddr = 0x0401;
+    ushort baseAddr = 0x0301;
     string? tokensPath = null;
 
     for (int i = 2; i < args.Length; i++)
@@ -1396,13 +1418,7 @@ static int DoTokenize(string[] args)
         string text = File.ReadAllText(inputPath);
         string[] lines = text.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        byte[] body = tokenizer.Tokenize(lines, baseAddr);
-
-        // Prepend 2-byte load address (little-endian)
-        var withHeader = new byte[2 + body.Length];
-        withHeader[0] = (byte)(baseAddr & 0xFF);
-        withHeader[1] = (byte)(baseAddr >> 8);
-        Array.Copy(body, 0, withHeader, 2, body.Length);
+        byte[] withHeader = AddBasicLoadAddressPrefix(tokenizer.Tokenize(lines, baseAddr), baseAddr);
 
         File.WriteAllBytes(outputPath, withHeader);
         Console.WriteLine($"Tokenized {inputPath} -> {outputPath}  ({withHeader.Length} bytes, base=${baseAddr:X4})");
@@ -1463,10 +1479,7 @@ static int DoDetokenize(string[] args)
         var tokenizer = BasicTokenizer.FromJsonFile(tokensPath);
         byte[] raw = File.ReadAllBytes(inputPath);
 
-        // Skip 2-byte load-address prefix if present
-        byte[] body = raw.Length >= 2 ? raw[2..] : raw;
-
-        string[] lines = tokenizer.Detokenize(body);
+        string[] lines = tokenizer.Detokenize(StripBasicLoadAddressPrefix(raw));
         string text = string.Join("\n", lines) + "\n";
 
         if (outputPath is null)

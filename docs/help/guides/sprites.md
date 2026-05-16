@@ -17,7 +17,12 @@ SPRITE 0,ON
 SPRITE 0,100,80
 ```
 
-The first command enables sprite 0. The second sets its position to x=100, y=80. Sprite coordinates use the full half-resolution video plane. In 720x480 output, X is 0-359 and Y is 0-239, including the border area; the centered 640x400 canvas starts at sprite coordinate 20,20.
+The first command enables sprite 0. The second sets its position to x=100,
+y=80. Sprite coordinates use the same 320x200 Nova canvas as the graphics
+commands. X=0 and Y=0 are the top-left visible canvas pixel. A 16x16 sprite is
+fully on screen when its top-left position is X=0--304 and Y=0--184. Positions
+outside that range are allowed, but the sprite is clipped by the visible canvas
+and never draws into the hardware border.
 
 ## Defining Shapes
 

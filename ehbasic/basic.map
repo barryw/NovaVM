@@ -1,7 +1,7 @@
 Modules list:
 -------------
 basic.o:
-    CODE              Offs=000000  Size=003E43  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=003FD4  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000000  Align=00001  Fill=0000
     BSS               Offs=000000  Size=000000  Align=00001  Fill=0000
     DATA              Offs=000000  Size=000000  Align=00001  Fill=0000
@@ -20,7 +20,7 @@ DATA                  000000  000000  000000  00001
 NULL                  000000  000000  000000  00001
 RODATA                000000  000000  000000  00001
 ZEROPAGE              000080  000080  000000  00001
-CODE                  00C000  00FE42  003E43  00001
+CODE                  00C000  00FFD3  003FD4  00001
 MONITOR               00FFD7  00FFF5  00001F  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 
@@ -29,30 +29,31 @@ Exports list by name:
 ---------------------
 __ZP_FILEOFFS__           000000  EA    __ZP_LAST__               000080  LA    
 __ZP_SIZE__               00001F  EA    __ZP_START__              000080  LA    
-audio_instrument          00EEF5  LA    audio_midplay             00EF08  LA    
-audio_midstop             00EF0D  LA    audio_music_loop          00EF2F  LA    
-audio_music_note          00EF4D  LA    audio_music_play          00EF1C  LA    
-audio_music_playing       00EF43  LA    audio_music_priority      00EF34  LA    
-audio_music_sequence      00EF17  LA    audio_music_stop          00EF25  LA    
-audio_music_tempo         00EF2A  LA    audio_play_sound          00EED8  LA    
-audio_set_volume          00EEE3  LA    audio_sfload              00EF12  LA    
-audio_sfx_playing         00EF3D  LA    audio_sidplay             00EEFA  LA    
-audio_sidstop             00EF03  LA    audio_sound               00EEEB  LA    
-audio_status              00EF39  LA    audio_volume              00EEF0  LA    
-fio_cd                    00EEBA  LA    fio_check                 00EE3B  LA    
-fio_clear_error           00EE5B  LA    fio_copy_name             00EE7A  LA    
-fio_delete                00EEAB  LA    fio_dir_open              00EEA1  LA    
-fio_dir_read              00EEA6  LA    fio_exec                  00EE48  LA    
-fio_gload                 00EEB5  LA    fio_gsave                 00EEB0  LA    
-fio_issue                 00EE37  LA    fio_load                  00EE9C  LA    
-fio_load_runtime          00EECE  LA    fio_mkdir                 00EEBF  LA    
-fio_pwd                   00EEC9  LA    fio_rmdir                 00EEC4  LA    
-fio_rng                   00EED3  LA    fio_save                  00EE97  LA    
-fio_set_io_error          00EE6D  LA    nic_command               00EF59  LA    
-nic_connect               00EF7A  LA    nic_copy_name             00EFA0  LA    
-nic_disconnect            00EF7E  LA    nic_length                00EF9C  LA    
-nic_ready                 00EF92  LA    nic_recv                  00EF86  LA    
-nic_send                  00EF82  LA    nic_status                00EF8A  LA    
+audio_init                00EFC5  LA    audio_instrument          00EF81  LA    
+audio_midplay             00F099  LA    audio_midstop             00F09E  LA    
+audio_music_loop          00F0C0  LA    audio_music_note          00F0DE  LA    
+audio_music_play          00F0AD  LA    audio_music_playing       00F0D4  LA    
+audio_music_priority      00F0C5  LA    audio_music_sequence      00F0A8  LA    
+audio_music_stop          00F0B6  LA    audio_music_tempo         00F0BB  LA    
+audio_play_sound          00EEDE  LA    audio_set_volume          00EEE9  LA    
+audio_sfload              00F0A3  LA    audio_sfx_playing         00F0CE  LA    
+audio_sidplay             00F08B  LA    audio_sidstop             00F094  LA    
+audio_sound               00EEF1  LA    audio_status              00F0CA  LA    
+audio_tick                00EFFA  LA    audio_volume              00EF4E  LA    
+fio_cd                    00EEC0  LA    fio_check                 00EE41  LA    
+fio_clear_error           00EE61  LA    fio_copy_name             00EE80  LA    
+fio_delete                00EEB1  LA    fio_dir_open              00EEA7  LA    
+fio_dir_read              00EEAC  LA    fio_exec                  00EE4E  LA    
+fio_gload                 00EEBB  LA    fio_gsave                 00EEB6  LA    
+fio_issue                 00EE3D  LA    fio_load                  00EEA2  LA    
+fio_load_runtime          00EED4  LA    fio_mkdir                 00EEC5  LA    
+fio_pwd                   00EECF  LA    fio_rmdir                 00EECA  LA    
+fio_rng                   00EED9  LA    fio_save                  00EE9D  LA    
+fio_set_io_error          00EE73  LA    nic_command               00F0EA  LA    
+nic_connect               00F10B  LA    nic_copy_name             00F131  LA    
+nic_disconnect            00F10F  LA    nic_length                00F12D  LA    
+nic_ready                 00F123  LA    nic_recv                  00F117  LA    
+nic_send                  00F113  LA    nic_status                00F11B  LA    
 sprite_background_clear   00EADC  LA    sprite_background_collision_mask 00EAD5  LA    
 sprite_background_collision_status 00EAD1  LA    sprite_background_irq_disable 00EAFE  LA    
 sprite_background_irq_enable 00EAF1  LA    sprite_background_read_clear 00EAE8  LA    
@@ -106,30 +107,31 @@ sprite_collision_irq_enable 00EAB9  LA    sprite_collision_irq_disable 00EAC6  L
 sprite_background_collision_status 00EAD1  LA    sprite_background_collision_mask 00EAD5  LA    
 sprite_background_clear   00EADC  LA    sprite_background_read_clear 00EAE8  LA    
 sprite_background_irq_enable 00EAF1  LA    sprite_background_irq_disable 00EAFE  LA    
-fio_issue                 00EE37  LA    fio_check                 00EE3B  LA    
-fio_exec                  00EE48  LA    fio_clear_error           00EE5B  LA    
-fio_set_io_error          00EE6D  LA    fio_copy_name             00EE7A  LA    
-fio_save                  00EE97  LA    fio_load                  00EE9C  LA    
-fio_dir_open              00EEA1  LA    fio_dir_read              00EEA6  LA    
-fio_delete                00EEAB  LA    fio_gsave                 00EEB0  LA    
-fio_gload                 00EEB5  LA    fio_cd                    00EEBA  LA    
-fio_mkdir                 00EEBF  LA    fio_rmdir                 00EEC4  LA    
-fio_pwd                   00EEC9  LA    fio_load_runtime          00EECE  LA    
-fio_rng                   00EED3  LA    audio_play_sound          00EED8  LA    
-audio_set_volume          00EEE3  LA    audio_sound               00EEEB  LA    
-audio_volume              00EEF0  LA    audio_instrument          00EEF5  LA    
-audio_sidplay             00EEFA  LA    audio_sidstop             00EF03  LA    
-audio_midplay             00EF08  LA    audio_midstop             00EF0D  LA    
-audio_sfload              00EF12  LA    audio_music_sequence      00EF17  LA    
-audio_music_play          00EF1C  LA    audio_music_stop          00EF25  LA    
-audio_music_tempo         00EF2A  LA    audio_music_loop          00EF2F  LA    
-audio_music_priority      00EF34  LA    audio_status              00EF39  LA    
-audio_sfx_playing         00EF3D  LA    audio_music_playing       00EF43  LA    
-audio_music_note          00EF4D  LA    nic_command               00EF59  LA    
-nic_connect               00EF7A  LA    nic_disconnect            00EF7E  LA    
-nic_send                  00EF82  LA    nic_recv                  00EF86  LA    
-nic_status                00EF8A  LA    nic_ready                 00EF92  LA    
-nic_length                00EF9C  LA    nic_copy_name             00EFA0  LA    
+fio_issue                 00EE3D  LA    fio_check                 00EE41  LA    
+fio_exec                  00EE4E  LA    fio_clear_error           00EE61  LA    
+fio_set_io_error          00EE73  LA    fio_copy_name             00EE80  LA    
+fio_save                  00EE9D  LA    fio_load                  00EEA2  LA    
+fio_dir_open              00EEA7  LA    fio_dir_read              00EEAC  LA    
+fio_delete                00EEB1  LA    fio_gsave                 00EEB6  LA    
+fio_gload                 00EEBB  LA    fio_cd                    00EEC0  LA    
+fio_mkdir                 00EEC5  LA    fio_rmdir                 00EECA  LA    
+fio_pwd                   00EECF  LA    fio_load_runtime          00EED4  LA    
+fio_rng                   00EED9  LA    audio_play_sound          00EEDE  LA    
+audio_set_volume          00EEE9  LA    audio_sound               00EEF1  LA    
+audio_volume              00EF4E  LA    audio_instrument          00EF81  LA    
+audio_init                00EFC5  LA    audio_tick                00EFFA  LA    
+audio_sidplay             00F08B  LA    audio_sidstop             00F094  LA    
+audio_midplay             00F099  LA    audio_midstop             00F09E  LA    
+audio_sfload              00F0A3  LA    audio_music_sequence      00F0A8  LA    
+audio_music_play          00F0AD  LA    audio_music_stop          00F0B6  LA    
+audio_music_tempo         00F0BB  LA    audio_music_loop          00F0C0  LA    
+audio_music_priority      00F0C5  LA    audio_status              00F0CA  LA    
+audio_sfx_playing         00F0CE  LA    audio_music_playing       00F0D4  LA    
+audio_music_note          00F0DE  LA    nic_command               00F0EA  LA    
+nic_connect               00F10B  LA    nic_disconnect            00F10F  LA    
+nic_send                  00F113  LA    nic_recv                  00F117  LA    
+nic_status                00F11B  LA    nic_ready                 00F123  LA    
+nic_length                00F12D  LA    nic_copy_name             00F131  LA    
 
 
 
@@ -139,6 +141,7 @@ __ZP_FILEOFFS__ ([linker generated]):
 __ZP_LAST__ ([linker generated]):
 __ZP_SIZE__ ([linker generated]):
 __ZP_START__ ([linker generated]):
+audio_init (basic.o):
 audio_instrument (basic.o):
 audio_midplay (basic.o):
 audio_midstop (basic.o):
@@ -158,6 +161,7 @@ audio_sidplay (basic.o):
 audio_sidstop (basic.o):
 audio_sound (basic.o):
 audio_status (basic.o):
+audio_tick (basic.o):
 audio_volume (basic.o):
 fio_cd (basic.o):
 fio_check (basic.o):

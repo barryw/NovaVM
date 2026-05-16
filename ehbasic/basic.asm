@@ -9017,7 +9017,10 @@ SPRITE_NO_EXTRA   = 1
       .include "sprite.s"
 
 LAB_VGC_CMD_RTS = vgc_cmd
-LAB_VSYNC       = vgc_vsync
+
+LAB_VSYNC
+      JSR   vgc_vsync
+      JMP   audio_tick
 
 ; perform CLS — clear screen, no arguments
 

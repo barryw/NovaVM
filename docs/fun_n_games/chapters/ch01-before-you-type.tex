@@ -1,0 +1,57 @@
+\chapter{Before You Type}
+
+Nova Fun \& Games is a book of small programs for NovaBASIC. It is meant to
+feel like a program book you can work through at the keyboard: type a little,
+run a little, change a little, and learn the machine by making it move.
+
+This first volume sets up the shared framework and the first Nova-native
+listings. Some programs are still short starter listings, but the shape is the
+same: type a small program, run it, and then change it until it feels like
+yours.
+
+\section{The Disk}
+
+The listings live on \diskname. The disk has no autoboot program. Mount it,
+load a program, and run it from BASIC:
+
+\begin{lstlisting}
+LOAD "ROADHOG"
+RUN
+\end{lstlisting}
+
+The image also includes \commonlisting, the shared code used by every program
+in the book. The generated disk copies the common framework into each game file
+so a reader can load and run a game directly. The separate \commonlisting\ file
+is still present for the type-in workflow.
+
+\begin{typeinbox}
+If you are typing from the printed book, type \commonlisting\ once and save it.
+Then type a game listing below it, starting at line 10. The game will call
+line 60000 when it wants the common title screen.
+\end{typeinbox}
+
+\section{Variable Names}
+
+NovaBASIC accepts longer variable names, but only the first two characters are
+significant. In this book, program variables use one or two characters.
+
+The shared framework owns names beginning with \texttt{Z}. Game listings should
+avoid \texttt{Z*} variables unless they are setting the framework controls:
+\texttt{ZT\$}, \texttt{ZA\$}, \texttt{ZS\$}, and \texttt{ZP}.
+
+\section{Line Numbers}
+
+The book uses a simple line-number map:
+
+\begin{center}
+\begin{tabularx}{0.88\textwidth}{>{\ttfamily}lX}
+\toprule
+10-9999 & Game code typed for the individual program.\\
+50000-59999 & Reserved for later helper routines local to a large game.\\
+60000-60280 & Shared Nova Fun \& Games common framework.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+This keeps the program easy to list on screen and easy to repair after a typing
+mistake.

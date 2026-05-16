@@ -27,6 +27,16 @@ Passing a value such as `-1` will raise an error rather than
 wrapping to `$FFFF`.
 :::
 
+## Variable Name Limits
+
+| **Topic** | **Behavior** |
+| --- | --- |
+| Significant characters | BASIC variable names may be written with more than two characters, but only the first two characters identify the variable. `SC`, `SCORE`, and `score` are the same numeric variable. |
+| Case | Variable names are case-insensitive outside quoted strings. |
+| Strings | A trailing `$` makes a string variable. `SC` and `SC$` are separate variables. |
+| Arrays and `DEF FN` | Array names, `DEF FN` names, and function parameters use the same two-character variable-name rule. |
+| Recommended style | Use one- or two-character mnemonics in listings. Reserve a prefix, such as `Z*`, for shared framework code that must not collide with a game program. |
+
 ## File Command Limits
 
 | **Topic** | **Behavior** |
@@ -53,7 +63,8 @@ wrapping to `$FFFF`.
 | `SPRITEDATA n,row,...` | Row must be 0--15. The `CmdSprRow` handler checks both sprite index and row; an invalid row causes the command to be silently ignored. |
 | `SPRITESHAPE` | Tokenised and recognised by the ROM parser; writes the shape slot field in the sprite register block at `$A044 + n*8`. |
 | `SPRITESET n,field,value` | Field must be 0--7. Field 0 accepts an unsigned 16-bit X value; other fields accept byte values. Sprite attribute writes are buffered by hardware and published at the frame boundary. |
-| `SPRITEX(n)`/`SPRITEY(n)` | `SPRITEX` returns the unsigned 16-bit X register; `SPRITEY` returns the unsigned 8-bit Y register. Y high is reserved and reads as 0. |
+| Sprite coordinates | Sprite positions are Nova canvas coordinates. X=0--319 and Y=0--199 are visible; a 16x16 sprite is fully visible at X=0--304, Y=0--184. Out-of-range positions are clipped and do not draw into the border. |
+| `SPRITEX(n)`/`SPRITEY(n)` | `SPRITEX` returns the unsigned 16-bit Nova canvas X register; `SPRITEY` returns the unsigned 8-bit Nova canvas Y register. Y high is reserved and reads as 0. |
 | `SPRCOLL`/`SPRBG` | The VGC updates 16-bit collision masks each frame. `RegColSt`/`RegColBg` hold sprites 0--7, and `RegColStHi`/`RegColBgHi` hold sprites 8--15. `SPRCOLL` and `SPRBG` read and clear the full masks. |
 | Default sprite priority | On reset all sprites default to priority 2 (in front of everything). This matches the `SpritePriInFront` constant. |
 | `CmdSprFlip` flags | Only bits 0--1 of the flags byte are used (`flags & 0x03`): bit 0 = horizontal flip, bit 1 = vertical flip. |
@@ -63,13 +74,13 @@ wrapping to `$FFFF`.
 
 | **Command / Feature** | **Limit and edge behavior** |
 | --- | --- |
-| `SOUND note,dur[,inst]` | *note* is a MIDI note number (0--127 byte range). *dur* is duration in 1/60-second frames (0--255 byte range). *inst* is instrument slot (0--15, default 0). If *note* or *dur* is 0, the sound is stopped. |
-| Master volume | Only the low nibble of the volume byte is used (`level & 0x0F`). The default master volume on power-on is 12. |
+| `SOUND note,dur[,inst]` | *note* is a MIDI note byte. *dur* is duration in video frames (0--255 byte range). *inst* is instrument slot (0--15, default 0). Duration 0 starts no new sound. Active `SOUND` durations advance when BASIC runs `VSYNC`. |
+| Master volume | Only the low nibble of the volume byte is used (`level & 0x0F`). The SID master volume powers on at 0, so programs should set `VOLUME` before playing sound. |
 | `INSTRUMENT` parameters | All six parameters are bytes (0--255). Waveform should be one of 10,20, 40,80. ADSR values 0--15 are meaningful; higher values use the low nibble only for sustain. |
 | `INSTRUMENT` slots | 16 slots (0--15). Slot 0 is pre-initialized at boot. All other slots start as copies of slot 0. |
 | `MUSIC voice,...` | Voice must be 1--6. The MML string is read from CPU memory via pointer; maximum practical length limited by available RAM. |
 | `MUSIC TEMPO` | BPM is a 16-bit value (0--65535). Default is 120. |
-| `MUSIC PRIORITY` | 1--6 voice numbers. Controls which voice is stolen first for SFX. |
+| `MUSIC PRIORITY` | 1--6 voice numbers. Applies to hosted MML playback on hosts that support priority routing; simple SID `SOUND` uses its own round-robin voice scheduler. |
 | MML pulse width | Range 0--4095. Default 2048. PWM sweep step: +/-32 per frame. |
 | MML filter cutoff | Range 0--2047. Resonance 0--15. Filter sweep step: +/-8 per frame. |
 | MML vibrato | Depth is any positive integer; 0 = off. Oscillates at 2.9 Hz. |

@@ -1,0 +1,67 @@
+\chapter*{How To Use This Book}
+\markboth{How To Use This Book}{How To Use This Book}
+\phantomsection
+\addcontentsline{toc}{chapter}{How To Use This Book}
+
+You can use this book in two ways. You can mount \diskname\ and run the
+programs that are already on the disk, or you can type the listings yourself.
+Typing is slower, but it teaches you more.
+
+\section*{If You Want To Run A Program}
+\phantomsection
+\addcontentsline{toc}{section}{If You Want To Run A Program}
+
+Mount \diskname, start NovaBASIC, and type:
+
+\begin{lstlisting}
+DIR
+LOAD "TINY-1"
+RUN
+\end{lstlisting}
+
+Use \texttt{DIR} when you want to see the programs on the disk. Use
+\texttt{LIST} when you want to see the lines inside a program.
+
+\section*{If You Want To Type A Program}
+\phantomsection
+\addcontentsline{toc}{section}{If You Want To Type A Program}
+
+Start with \commonlisting. It begins at line 60000 and gives every game a
+title screen. Type it once, save it, and keep it.
+
+\begin{lstlisting}
+NEW
+REM TYPE COMMON.BAS HERE
+SAVE "COMMON"
+\end{lstlisting}
+
+Then type a game listing. Game listings begin near line 10 and call the common
+framework with \texttt{GOSUB 60000}.
+
+\begin{typeinbox}
+NovaBASIC only cares about the first two characters of a variable name. This
+book uses short names on purpose. \texttt{SC} is a good score variable.
+\texttt{SCORE} looks nicer, but NovaBASIC treats it like \texttt{SC}.
+\end{typeinbox}
+
+\section*{How To Check Your Typing}
+\phantomsection
+\addcontentsline{toc}{section}{How To Check Your Typing}
+
+When a program will not run, do not erase it and start over. Check it in small
+pieces.
+
+\begin{enumerate}
+\item Use \texttt{LIST} to look at the lines near the error.
+\item Check every quote mark in a \texttt{PRINT} line.
+\item Check every comma, colon, and parenthesis.
+\item Make sure \texttt{FOR} has a matching \texttt{NEXT}.
+\item Make sure \texttt{GOSUB} has a matching \texttt{RETURN}.
+\end{enumerate}
+
+\section*{Make It Yours}
+\phantomsection
+\addcontentsline{toc}{section}{Make It Yours}
+
+After a program works, change it. Try a new color, a different sound, a faster
+enemy, or a bigger score. You learn the machine by giving it your own ideas.

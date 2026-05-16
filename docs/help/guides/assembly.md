@@ -34,13 +34,13 @@ The full 64 KB address space is partitioned as follows:
 | `B9A0`--`B9EF` | 80 B | File I/O Controller (FIO) | R/W |
 | `BA00`--`BA3F` | 64 B | Expansion Memory Controller (XMC) | R/W |
 | `BA40`--`BA4F` | 16 B | Timer Controller | R/W |
-| `BA50`--`BA56` | 7 B | Music Status (6 voices) | RO |
+| `BA50`--`BA56` | 7 B | Hosted Music Status (6 voices) | RO |
 | `BA60`--`BA7F` | 32 B | DMA Controller | R/W |
 | `BA80`--`BA9F` | 32 B | Blitter Controller | R/W |
 | `BC00`--`BFFF` | 1024 B | XRAM Windows (when mapped) | R/W |
 | `C000`--`FFFF` | 16 KB | ROM (NovaBASIC) | R only |
-| `D400`--`D41C` | 29 B | SID chip 1 (write-intercepted) | W only |
-| `D420`--`D43C` | 29 B | SID chip 2 (write-intercepted) | W only |
+| `D400`--`D41F` | 32 B | SID chip 1 (write-intercepted) | W only |
+| `D420`--`D43F` | 32 B | SID chip 2 (write-intercepted) | W only |
 
 Everything from `A000` upward through `BFFF` is hardware I/O or
 managed window space. Writing to ROM (`$C000`+) has no effect.
@@ -444,7 +444,7 @@ Appendix \refchap:memmap.
 
 ## SID Chip Access
 
-The SID chip registers at D400--D41C are write-intercepted within the ROM
+The SID chip registers at D400--D41F are write-intercepted within the ROM
 address range. Assembly code can write to them directly:
 
 ```
@@ -454,14 +454,14 @@ STA $D404
 ```
 
 The SID register layout matches the MOS 6581. Per-voice registers occupy 7
-bytes each (voice 0 at D400, voice 1 atD407, voice 2 at $D40E). Filter
+bytes each (voice 0 at $D400, voice 1 at $D407, voice 2 at $D40E). Filter
 and volume registers are at D415--D418. See Appendix \refchap:memmap
 for the full register map.
 
 ::: warning
-The BASIC `INSTRUMENT`, `SOUND`, and `MUSIC` commands manage
-SID registers automatically. Direct SID register writes from assembly will
-conflict with the music engine unless you stop all music and SFX first.
+The BASIC `INSTRUMENT`, `SOUND`, and `VOLUME` commands manage SID registers
+directly. Direct SID register writes from assembly can conflict with active
+BASIC sound effects unless you coordinate voice use yourself.
 :::
 
 ## Copper Programming from Assembly
@@ -506,6 +506,11 @@ multiplexing patterns.
 
 The sprite register block at A040--A0BF provides direct memory-mapped
 access to all 16 sprites. Each sprite occupies 8 bytes with a stride of 8:
+
+Sprite positions are Nova canvas coordinates. X = 0--319 and Y = 0--199 are
+the visible 320x200 graphics canvas; a 16x16 sprite is fully visible at
+top-left positions X = 0--304 and Y = 0--184. Values outside the visible
+range are useful for off-screen entry and exit and are clipped by the VGC.
 
 | **Offset** | **Field** | **Size** |
 | --- | --- | --- |

@@ -244,7 +244,7 @@ public class AvaloniaVgcTests
     }
 
     [TestMethod]
-    public void SprPos_UsesUnsignedSpritePlaneCoordinates()
+    public void SprPos_StoresUnsignedCanvasCoordinateRegisters()
     {
         _vgc.Write(VgcConstants.RegP0, 0);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);

@@ -1,0 +1,56 @@
+\chapter*{When Things Go Wrong}
+\markboth{When Things Go Wrong}{When Things Go Wrong}
+\phantomsection
+\addcontentsline{toc}{chapter}{When Things Go Wrong}
+
+Every programmer spends time fixing programs. That is not the bad part of
+programming. That is programming.
+
+\section*{The Program Stops With An Error}
+\phantomsection
+\addcontentsline{toc}{section}{The Program Stops With An Error}
+
+Read the line number first. Then list a few lines around it:
+
+\begin{lstlisting}
+LIST 80-120
+\end{lstlisting}
+
+Most beginner bugs are small: a missing quote, a wrong variable, a line number
+that points to the wrong place, or a \texttt{NEXT} without the right
+\texttt{FOR}.
+
+\section*{The Program Runs But Looks Wrong}
+\phantomsection
+\addcontentsline{toc}{section}{The Program Runs But Looks Wrong}
+
+If the program runs but the screen looks strange, check the setup lines. Look
+for \texttt{MODE}, \texttt{COLOR}, \texttt{GCOLOR}, \texttt{GCLS}, and
+\texttt{CLS}. A game that draws on the graphics screen needs the right mode and
+the right colors before it starts drawing.
+
+\section*{The Controls Do Nothing}
+\phantomsection
+\addcontentsline{toc}{section}{The Controls Do Nothing}
+
+Look for the \texttt{GET} line. A typical key loop looks like this:
+
+\begin{lstlisting}
+90 GET K:IF K=0 THEN 90
+\end{lstlisting}
+
+That means ``keep waiting until a key appears.'' If the program waits forever,
+check which key codes it accepts after that line.
+
+\section*{The Best Debugging Tool}
+\phantomsection
+\addcontentsline{toc}{section}{The Best Debugging Tool}
+
+Use \texttt{PRINT}. If you do not know what a variable contains, print it. If
+you do not know whether a line is being reached, print a short message there.
+
+\begin{lstlisting}
+210 PRINT "X=";X;" Y=";Y
+\end{lstlisting}
+
+You can remove the extra \texttt{PRINT} lines after the program works.

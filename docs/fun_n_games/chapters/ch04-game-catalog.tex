@@ -1,0 +1,57 @@
+\chapter{Game Catalog}
+
+This catalog records the Nova-native direction for each program on the disk.
+The goal is not to clone another machine's listing. The goal is to use the same
+small-program spirit while leaning into Nova hardware.
+
+\begin{longtable}{>{\ttfamily}p{0.16\textwidth}p{0.16\textwidth}p{0.23\textwidth}p{0.27\textwidth}}
+\toprule
+File & Kind & Nova focus & Direction\\
+\midrule
+\endhead
+roadhog.bas & Driving & Copper road, sprites & Curving road, smooth traffic, better pacing.\\
+piano.bas & Music & SID voices & Keyboard piano with simple recording.\\
+bets.bas & Odds & Text UI & Fast betting table with clear money display.\\
+safe.bas & Puzzle & Randomness & Combination puzzle with sound feedback.\\
+boswain.bas & Action & Sprites & Deck-side movement and hazards.\\
+hanoi.bas & Puzzle & Graphics & Animated disk moves using rectangles.\\
+miser.bas & Strategy & Text & Small resource game with readable turns.\\
+mad.bas & Word play & Strings & Fill-in story with cleaner prompts.\\
+godzilla.bas & Arcade & Sprites, sound & City stomper with destructible blocks.\\
+ratrun.bas & Maze & Tile graphics & Fast maze chase on the larger Nova screen.\\
+yahtzee.bas & Dice & Text UI & Dice boxes, scoring grid, optional sound.\\
+leap.bas & Timing & Keyboard & One-button timing challenge.\\
+box.bas & Puzzle & Graphics & Sliding or packing puzzle with visible board.\\
+lawn.bas & Action & Sprites & Mow a field while avoiding moving hazards.\\
+kalah.bas & Board & Text/graphics & Board layout with counters and hints.\\
+bonzo.bas & Arcade & Sprites & Character movement and simple animation.\\
+bjack.bas & Cards & Text UI & Clean blackjack table and betting.\\
+fire.bas & Action & Sprites & Fire control with expanding danger.\\
+zap.bas & Shooter & Sprites, sound & Quick target game with hardware sprites.\\
+everest.bas & Climb & Graphics & Better mountain, weather, and route logic.\\
+reversi.bas & Board & Graphics & 8 by 8 board with legal-move highlighting.\\
+bop.bas & Reflex & Sound & Sequence or timing game with tones.\\
+spot.bas & Memory & Graphics & Pattern matching on colored cells.\\
+dots.bas & Board & Lines & Dots-and-boxes with a clear grid.\\
+capture.bas & Strategy & Graphics & Territory game with fast redraws.\\
+dive.bas & Arcade & Sprites & Diving motion with water and scoring.\\
+stop.bas & Reflex & Timing & Stop-the-marker with frame-based timing.\\
+piegram.bas & Graphics & Shapes & Chart drawing and angle demos.\\
+bat.bas & Arcade & Sprites & Bat and ball motion using collision checks.\\
+rescue.bas & Action & Sprites & Rescue mission with scrolling pressure.\\
+\bottomrule
+\end{longtable}
+
+\section{Common Shape}
+
+Every game chapter should follow the same shape:
+
+\begin{enumerate}
+\item What the player sees.
+\item What Nova hardware the program uses.
+\item The listing.
+\item How the listing works.
+\item Experiments to try.
+\end{enumerate}
+
+That makes the book friendly for readers and maintainable for us.

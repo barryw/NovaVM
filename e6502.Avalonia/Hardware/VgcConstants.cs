@@ -29,18 +29,18 @@ public static class VgcConstants
     public const int VgcEnd            = 0xA0FF;
 
     // -------------------------------------------------------------------------
-    // SID chip registers ($D400-$D41C, inside ROM space — write-only via bus)
+    // SID chip registers ($D400-$D41F, inside ROM space — write-only via bus)
     // -------------------------------------------------------------------------
 
     public const int SidBase           = 0xD400;
-    public const int SidEnd            = 0xD41C;
+    public const int SidEnd            = 0xD41F;
 
     public const int Sid2Base          = 0xD420;
-    public const int Sid2End           = 0xD43C;
+    public const int Sid2End           = 0xD43F;
 
     // Legacy mirror — SID files targeting $D500 are transparently routed to SID2
     public const int Sid2MirrorBase    = 0xD500;
-    public const int Sid2MirrorEnd     = 0xD51C;
+    public const int Sid2MirrorEnd     = 0xD51F;
 
     // -------------------------------------------------------------------------
     // File I/O coprocessor registers ($B9A0-$B9EF)
@@ -116,8 +116,8 @@ public static class VgcConstants
     public const byte FioErrDiskFull   = 0x04;
     public const byte FioErrNotMounted = 0x05;
 
-    // Music/SFX status register
-    public const int  MusicStatus      = 0xBA50; // bit 0 = SFX playing, bit 1 = music playing
+    // Hosted music/SFX status register
+    public const int  MusicStatus      = 0xBA50; // bit 0 = hosted SFX playing, bit 1 = hosted music playing
     public const int  MusicNote1       = 0xBA51; // voice 1 current MIDI note (0=silent)
     public const int  MusicNote2       = 0xBA52; // voice 2 current MIDI note
     public const int  MusicNote3       = 0xBA53; // voice 3 current MIDI note
@@ -577,10 +577,10 @@ public static class VgcConstants
 
     public const int GfxWidth          = 320;
     public const int GfxHeight         = 200;
-    public const int SpritePlaneWidth  = VideoWidth / 2;       // 360
-    public const int SpritePlaneHeight = VideoHeight / 2;      // 240
-    public const int SpriteCanvasX     = CanvasOffsetX / 2;    // 20
-    public const int SpriteCanvasY     = CanvasOffsetY / 2;    // 20
+    public const int SpritePlaneWidth  = VideoWidth / 2;       // scanline buffer width; visible canvas uses 0..319
+    public const int SpritePlaneHeight = VideoHeight / 2;      // active-video line buffer; visible canvas uses 0..199
+    public const int SpriteCanvasX     = 0;                    // sprite coords match gfx coords
+    public const int SpriteCanvasY     = 0;                    // sprite coords match gfx coords
 
     public const int MaxSprites        = 16;
     public const int SpritePixelSize   = 16;       // 16x16 pixels

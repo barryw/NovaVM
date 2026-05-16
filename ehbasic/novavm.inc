@@ -20,13 +20,13 @@ VgcBase                 = $A000
 VgcRegsEnd              = $A01F
 VgcEnd                  = $A0FF
 
-; --- SID chip registers ($D400-$D41C, inside ROM space — write-only via bus) ---
+; --- SID chip registers ($D400-$D41F, inside ROM space — write-only via bus) ---
 SidBase                 = $D400
-SidEnd                  = $D41C
+SidEnd                  = $D41F
 Sid2Base                = $D420
-Sid2End                 = $D43C
+Sid2End                 = $D43F
 Sid2MirrorBase          = $D500
-Sid2MirrorEnd           = $D51C
+Sid2MirrorEnd           = $D51F
 
 ; --- File I/O coprocessor registers ($B9A0-$B9EF) ---
 FioBase                 = $B9A0
@@ -469,6 +469,8 @@ CanvasWidth             = $0280
 CanvasHeight            = $0190
 GfxWidth                = $0140
 GfxHeight               = $C8
+SpriteCanvasX           = $00
+SpriteCanvasY           = $00
 MaxSprites              = $10
 SpritePixelSize         = $10
 SpriteBytesPerRow       = $08

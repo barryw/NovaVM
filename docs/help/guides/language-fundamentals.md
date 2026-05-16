@@ -16,23 +16,29 @@ operators, built-in functions, and direct memory access.
 NovaBASIC has two kinds of variable: **numeric** and **string**.
 
 - **Numeric variables** hold floating-point numbers. Names begin with a
-letter and may contain letters and digits (e.g.\ `A`,
-`SCORE`, `X1`, `HITCOUNT`).
+letter and may contain letters and digits (e.g.\ `A`, `SC`, `X1`).
 - **String variables** hold text. Names end with a dollar sign
-(e.g.\ `N`, `NAME`, `MSG$`).
+(e.g.\ `N$`, `NM$`, `MS$`).
 
-Variable names are **case-insensitive**: `SCORE` and
-`score` refer to the same variable. Numeric variables default to
-`0`; string variables default to the empty string. You do not need to
-declare a variable before using it.
+Variable names are **case-insensitive**, and the first two characters are
+significant. `SC`, `SCORE`, and `score` all refer to the same numeric
+variable. For clear type-in programs, use one- or two-character names such
+as `SC` for score, `LV` for lives, and `PX`/`PY` for player position.
+String variables have their own type, so `SC` and `SC$` are separate
+variables. Numeric variables default to `0`; string variables default to the
+empty string. You do not need to declare a variable before using it.
+
+When writing shared BASIC framework code, reserve a prefix so games do not
+collide with it. The Nova Fun & Games common framework uses `Z*` variables,
+so game listings should avoid names beginning with `Z`.
 
 ```basic
-10 SCORE = 0
-20 NAME$ = "PLAYER ONE"
-30 LIVES = 3
-40 PRINT NAME$; " HAS "; LIVES; " LIVES"
-50 SCORE = SCORE + 100
-60 PRINT "SCORE: "; SCORE
+10 SC = 0
+20 NM$ = "PLAYER ONE"
+30 LV = 3
+40 PRINT NM$; " HAS "; LV; " LIVES"
+50 SC = SC + 100
+60 PRINT "SCORE: "; SC
 ```
 
 ## Arrays
@@ -54,17 +60,16 @@ is 0, so `DIM A(10)` creates 11 elements: `A(0)` through
 Two-dimensional arrays work the same way:
 
 ```basic
-10 DIM GRID(7,7)
+10 DIM GR(7,7)
 20 FOR R=0 TO 7
 30   FOR C=0 TO 7
-40     GRID(R,C) = R*8 + C
+40     GR(R,C) = R*8 + C
 50   NEXT C
 60 NEXT R
 ```
 
 ::: note
-String arrays are also supported: `DIM LABEL$(9)` creates ten
-string slots.
+String arrays are also supported: `DIM LB$(9)` creates ten string slots.
 :::
 
 ## Control Flow
@@ -142,11 +147,11 @@ a full assignment statement. They are faster and more readable than
 `X = X + 1`.
 
 ```basic
-10 SCORE = 0
-20 INC SCORE : INC SCORE : INC SCORE
-30 PRINT "SCORE: "; SCORE
-40 DEC SCORE
-50 PRINT "AFTER DEC: "; SCORE
+10 SC = 0
+20 INC SC : INC SC : INC SC
+30 PRINT "SCORE: "; SC
+40 DEC SC
+50 PRINT "AFTER DEC: "; SC
 ```
 
 ### WAIT
@@ -316,11 +321,12 @@ and debug.
 - **Group by function.** Put constants and configuration near
 the top (lines 10--90), input routines in the 100s, game logic in the
 200s--500s, display routines in the 600s, cleanup in the 900s.
-- **Name things meaningfully.** `LIVES` is clearer than
-`L`; `SCORE` is clearer than `S1`. NovaBASIC
-accepts long names.
+- **Name things meaningfully within two characters.** `LV` is a good
+short name for lives, `SC` for score, `PX`/`PY` for player position, and
+`DX`/`DY` for direction or velocity. Avoid long-looking names because only
+the first two characters identify the variable.
 - **Define constants up front.**
-`10 MAXLIVES=5 : STARTSPEED=2` at the top of the program means
+`10 ML=5 : SS=2` at the top of the program means
 you tune the game by changing one line, not hunting through hundreds.
 
 :::

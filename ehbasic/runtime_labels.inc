@@ -2,7 +2,7 @@
 ; Runtime label hash table for ADDR("LABEL") in the extension ROM.
 
 RUNTIME_LABEL_BUCKET_COUNT = 64
-RUNTIME_LABEL_COUNT = 177
+RUNTIME_LABEL_COUNT = 179
 
 RuntimeLabelBuckets:
       .word @bucket_00
@@ -90,10 +90,10 @@ RuntimeLabelBuckets:
 
 @bucket_02:
       .byte 20
-      .word $EF34
+      .word $F0C5
       .byte "AUDIO.MUSIC_PRIORITY"
       .byte 9
-      .word $EEB0
+      .word $EEB6
       .byte "FIO.GSAVE"
       .byte 10
       .word $B9A4
@@ -102,13 +102,13 @@ RuntimeLabelBuckets:
 
 @bucket_03:
       .byte 16
-      .word $EEE3
+      .word $EEE9
       .byte "AUDIO.SET_VOLUME"
       .byte 19
       .word $0028
       .byte "FIO.CMD_LOADRUNTIME"
       .byte 13
-      .word $EFA0
+      .word $F131
       .byte "NIC.COPY_NAME"
       .byte 10
       .word $B9A5
@@ -120,7 +120,7 @@ RuntimeLabelBuckets:
 
 @bucket_04:
       .byte 17
-      .word $EF3D
+      .word $F0CE
       .byte "AUDIO.SFX_PLAYING"
       .byte 11
       .word $0020
@@ -138,7 +138,7 @@ RuntimeLabelBuckets:
 
 @bucket_05:
       .byte 17
-      .word $EF2A
+      .word $F0BB
       .byte "AUDIO.MUSIC_TEMPO"
       .byte 10
       .word $B9A6
@@ -174,7 +174,7 @@ RuntimeLabelBuckets:
       .word $B9A8
       .byte "AUDIO.SUSTAIN"
       .byte 13
-      .word $EE7A
+      .word $EE80
       .byte "FIO.COPY_NAME"
       .byte 0
 
@@ -189,7 +189,7 @@ RuntimeLabelBuckets:
 
 @bucket_09:
       .byte 11
-      .word $EEEB
+      .word $EEF1
       .byte "AUDIO.SOUND"
       .byte 11
       .word $002B
@@ -246,7 +246,7 @@ RuntimeLabelBuckets:
       .word $B9A4
       .byte "AUDIO.VOLUME_LEVEL"
       .byte 16
-      .word $EECE
+      .word $EED4
       .byte "FIO.LOAD_RUNTIME"
       .byte 28
       .word $EAC6
@@ -270,7 +270,7 @@ RuntimeLabelBuckets:
 
 @bucket_11:
       .byte 8
-      .word $EE48
+      .word $EE4E
       .byte "FIO.EXEC"
       .byte 0
 
@@ -282,16 +282,19 @@ RuntimeLabelBuckets:
 
 @bucket_13:
       .byte 6
-      .word $EEBA
+      .word $EEC0
       .byte "FIO.CD"
       .byte 7
-      .word $EED3
+      .word $EED9
       .byte "FIO.RNG"
       .byte 0
 
 @bucket_14:
+      .byte 10
+      .word $EFC5
+      .byte "AUDIO.INIT"
       .byte 19
-      .word $EF43
+      .word $F0D4
       .byte "AUDIO.MUSIC_PLAYING"
       .byte 0
 
@@ -300,7 +303,7 @@ RuntimeLabelBuckets:
 
 @bucket_16:
       .byte 16
-      .word $EF4D
+      .word $F0DE
       .byte "AUDIO.MUSIC_NOTE"
       .byte 10
       .word $B9A4
@@ -321,7 +324,7 @@ RuntimeLabelBuckets:
       .word $B9A6
       .byte "AUDIO.ATTACK"
       .byte 12
-      .word $EEF0
+      .word $EF4E
       .byte "AUDIO.VOLUME"
       .byte 12
       .word $EA2D
@@ -333,7 +336,7 @@ RuntimeLabelBuckets:
       .word $B9A6
       .byte "AUDIO.INSTRUMENT"
       .byte 12
-      .word $EF12
+      .word $F0A3
       .byte "AUDIO.SFLOAD"
       .byte 14
       .word $EA4D
@@ -354,10 +357,10 @@ RuntimeLabelBuckets:
 
 @bucket_1C:
       .byte 15
-      .word $EE5B
+      .word $EE61
       .byte "FIO.CLEAR_ERROR"
       .byte 12
-      .word $EEA1
+      .word $EEA7
       .byte "FIO.DIR_OPEN"
       .byte 21
       .word $EA9D
@@ -369,7 +372,7 @@ RuntimeLabelBuckets:
 
 @bucket_1E:
       .byte 16
-      .word $EED8
+      .word $EEDE
       .byte "AUDIO.PLAY_SOUND"
       .byte 15
       .word $E9C6
@@ -381,7 +384,7 @@ RuntimeLabelBuckets:
 
 @bucket_1F:
       .byte 10
-      .word $EEAB
+      .word $EEB1
       .byte "FIO.DELETE"
       .byte 17
       .word $0022
@@ -390,7 +393,7 @@ RuntimeLabelBuckets:
 
 @bucket_20:
       .byte 13
-      .word $EF0D
+      .word $F09E
       .byte "AUDIO.MIDSTOP"
       .byte 22
       .word $0003
@@ -435,7 +438,7 @@ RuntimeLabelBuckets:
       .word $002A
       .byte "FIO.ARG_NAMEPTR_H"
       .byte 9
-      .word $EEBF
+      .word $EEC5
       .byte "FIO.MKDIR"
       .byte 8
       .word $B9A4
@@ -456,10 +459,10 @@ RuntimeLabelBuckets:
 
 @bucket_24:
       .byte 20
-      .word $EEF5
+      .word $EF81
       .byte "AUDIO.INSTRUMENT_SET"
       .byte 12
-      .word $EF39
+      .word $F0CA
       .byte "AUDIO.STATUS"
       .byte 8
       .word $B9A5
@@ -492,13 +495,13 @@ RuntimeLabelBuckets:
       .word $B9A5
       .byte "AUDIO.DURATION"
       .byte 16
-      .word $EF25
+      .word $F0B6
       .byte "AUDIO.MUSIC_STOP"
       .byte 13
-      .word $EF03
+      .word $F094
       .byte "AUDIO.SIDSTOP"
       .byte 12
-      .word $EEA6
+      .word $EEAC
       .byte "FIO.DIR_READ"
       .byte 8
       .word $B9A7
@@ -522,7 +525,7 @@ RuntimeLabelBuckets:
       .word $0029
       .byte "FIO.ARG_NAMEPTR_L"
       .byte 11
-      .word $EF59
+      .word $F0EA
       .byte "NIC.COMMAND"
       .byte 20
       .word $0080
@@ -558,13 +561,13 @@ RuntimeLabelBuckets:
       .word $B9A4
       .byte "AUDIO.INST_ID"
       .byte 9
-      .word $EE3B
+      .word $EE41
       .byte "FIO.CHECK"
       .byte 9
-      .word $EEC4
+      .word $EECA
       .byte "FIO.RMDIR"
       .byte 10
-      .word $EF9C
+      .word $F12D
       .byte "NIC.LENGTH"
       .byte 19
       .word $0002
@@ -575,6 +578,9 @@ RuntimeLabelBuckets:
       .byte 0
 
 @bucket_2B:
+      .byte 10
+      .word $EFFA
+      .byte "AUDIO.TICK"
       .byte 0
 
 @bucket_2C:
@@ -582,10 +588,10 @@ RuntimeLabelBuckets:
       .word $0020
       .byte "FIO.ARG_ADDRL"
       .byte 8
-      .word $EE9C
+      .word $EEA2
       .byte "FIO.LOAD"
       .byte 10
-      .word $EF8A
+      .word $F11B
       .byte "NIC.STATUS"
       .byte 13
       .word $EA48
@@ -624,7 +630,7 @@ RuntimeLabelBuckets:
 
 @bucket_30:
       .byte 13
-      .word $EF08
+      .word $F099
       .byte "AUDIO.MIDPLAY"
       .byte 22
       .word $EAD5
@@ -642,13 +648,13 @@ RuntimeLabelBuckets:
 
 @bucket_32:
       .byte 11
-      .word $EF7A
+      .word $F10B
       .byte "NIC.CONNECT"
       .byte 14
-      .word $EF7E
+      .word $F10F
       .byte "NIC.DISCONNECT"
       .byte 8
-      .word $EF82
+      .word $F113
       .byte "NIC.SEND"
       .byte 27
       .word $EAB0
@@ -657,7 +663,7 @@ RuntimeLabelBuckets:
 
 @bucket_33:
       .byte 9
-      .word $EEB5
+      .word $EEBB
       .byte "FIO.GLOAD"
       .byte 0
 
@@ -672,7 +678,7 @@ RuntimeLabelBuckets:
 
 @bucket_35:
       .byte 9
-      .word $EE37
+      .word $EE3D
       .byte "FIO.ISSUE"
       .byte 16
       .word $EA6F
@@ -681,10 +687,10 @@ RuntimeLabelBuckets:
 
 @bucket_36:
       .byte 16
-      .word $EF1C
+      .word $F0AD
       .byte "AUDIO.MUSIC_PLAY"
       .byte 13
-      .word $EEFA
+      .word $F08B
       .byte "AUDIO.SIDPLAY"
       .byte 28
       .word $EAF1
@@ -693,7 +699,7 @@ RuntimeLabelBuckets:
 
 @bucket_37:
       .byte 7
-      .word $EEC9
+      .word $EECF
       .byte "FIO.PWD"
       .byte 13
       .word $002A
@@ -717,16 +723,16 @@ RuntimeLabelBuckets:
       .word $B9A3
       .byte "AUDIO.STRLEN"
       .byte 16
-      .word $EE6D
+      .word $EE73
       .byte "FIO.SET_IO_ERROR"
       .byte 8
-      .word $EF86
+      .word $F117
       .byte "NIC.RECV"
       .byte 0
 
 @bucket_39:
       .byte 20
-      .word $EF17
+      .word $F0A8
       .byte "AUDIO.MUSIC_SEQUENCE"
       .byte 11
       .word $0028
@@ -735,13 +741,13 @@ RuntimeLabelBuckets:
 
 @bucket_3A:
       .byte 16
-      .word $EF2F
+      .word $F0C0
       .byte "AUDIO.MUSIC_LOOP"
       .byte 0
 
 @bucket_3B:
       .byte 8
-      .word $EE97
+      .word $EE9D
       .byte "FIO.SAVE"
       .byte 13
       .word $0029
@@ -771,7 +777,7 @@ RuntimeLabelBuckets:
 
 @bucket_3D:
       .byte 9
-      .word $EF92
+      .word $F123
       .byte "NIC.READY"
       .byte 13
       .word $0028

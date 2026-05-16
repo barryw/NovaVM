@@ -804,9 +804,11 @@ P1 & Destination sprite number \\
 
 \cmdentry{14}{CmdSprPos}{Set sprite position}
 
-Positions a sprite at the given screen coordinates.  Sprite X is an unsigned
-16-bit coordinate.  Sprite Y is an unsigned 8-bit coordinate over the
-240-line sprite plane.
+Positions a sprite at the given Nova canvas coordinates.  Sprite X is an
+unsigned 16-bit coordinate and sprite Y is an unsigned 8-bit coordinate.
+The visible canvas is X=0--319 and Y=0--199; a 16 by 16 sprite is fully visible
+at top-left positions X=0--304 and Y=0--184.  Values outside the visible canvas
+are clipped and do not draw into the hardware border.
 
 \begin{center}
 \small
@@ -1434,7 +1436,8 @@ the frame boundary, so immediate writes do not tear visible sprites.
 
 \begin{notebox}
 Y high is reserved.  Sprite X is an unsigned 16-bit value; sprite Y is an
-unsigned 8-bit value over the 0--239 sprite plane.
+unsigned 8-bit value.  The visible sprite coordinate space matches the
+320 by 200 Nova graphics canvas.
 \end{notebox}
 
 \begin{lstlisting}

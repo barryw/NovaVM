@@ -1,0 +1,91 @@
+% =============================================================================
+% Nova Fun & Games - Back Cover
+% =============================================================================
+\IfFileExists{assets/back-cover.png}{%
+\clearpage
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture, overlay]
+  \node[inner sep=0pt] at (current page.center)
+    {\includegraphics[height=\paperheight]{assets/back-cover.png}};
+\end{tikzpicture}
+\null
+\clearpage
+}{%
+\clearpage
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture, overlay]
+
+  \fill[ink] (current page.south west) rectangle (current page.north east);
+
+  \foreach \y/\c in {
+    78/novablue,84/novacyan,90/novagreen,96/novagold,102/novared,
+    108/novablue,114/novacyan,120/novagreen,126/novagold,132/novared}
+    \fill[\c] ([yshift=\y pt]current page.south west)
+      rectangle ([yshift=\y+3 pt]current page.south east);
+
+  \node[
+    anchor=north west,
+    xshift=54pt,
+    yshift=-56pt,
+    text=white,
+    font=\fontsize{30}{34}\selectfont\bfseries\sffamily,
+    align=left
+  ] at (current page.north west)
+    {TYPE IT.\\RUN IT.\\CHANGE IT.};
+
+  \node[
+    anchor=north west,
+    xshift=58pt,
+    yshift=-194pt,
+    text=novacyan,
+    font=\fontsize{13}{17}\selectfont\sffamily\bfseries,
+    align=left
+  ] at (current page.north west)
+    {Nova Fun \& Games is a friendly collection\\
+     of NovaBASIC type-in programs for curious\\
+     new programmers.};
+
+  \node[
+    anchor=north west,
+    xshift=58pt,
+    yshift=-286pt,
+    text=white,
+    font=\fontsize{11}{16}\selectfont\sffamily,
+    align=left
+  ] at (current page.north west)
+    {Inside you will find:\\[0.6em]
+     \textcolor{novagold}{\bfseries *} a shared title-screen framework\\
+     \textcolor{novagold}{\bfseries *} starter listings for every game\\
+     \textcolor{novagold}{\bfseries *} NovaBASIC notes and experiments\\
+     \textcolor{novagold}{\bfseries *} debugging help for first-time coders};
+
+  \node[
+    anchor=south west,
+    xshift=58pt,
+    yshift=178pt,
+    text=paper,
+    font=\fontsize{12}{17}\selectfont\sffamily,
+    align=left,
+    text width=0.70\paperwidth
+  ] at (current page.south west)
+    {Mount \diskname, load a program, and start typing. The games begin small,
+     because small programs are the easiest ones to understand, fix, and make
+     your own.};
+
+  \draw[novacyan, line width=1.5pt]
+    ([xshift=58pt,yshift=150pt]current page.south west)
+    -- ([xshift=-58pt,yshift=150pt]current page.south east);
+
+  \node[
+    anchor=south,
+    yshift=54pt,
+    text=novagold,
+    font=\fontsize{10}{14}\selectfont\ttfamily\bfseries,
+    align=center
+  ] at (current page.south)
+    {NOVA VM | NOVABASIC | FUN\_N\_GAMES.NDI};
+
+\end{tikzpicture}
+\null
+\clearpage
+}

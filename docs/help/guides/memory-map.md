@@ -29,24 +29,26 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | B9F0--B9FF | 16 B | Boot/runtime coordination flags |
 | BA00--BA3F | 64 B | Expansion Memory Controller (XMC) registers |
 | BA40--BA4F | 16 B | Timer Controller registers |
-| BA50--BA56 | 7 B | Music Status and Voice Note Readback (6 voices) |
+| BA50--BA56 | 7 B | Hosted Music Status and Voice Note Readback (6 voices) |
 | BA63--BA75 | 19 B | DMA Controller registers |
 | BA83--BA9B | 25 B | Blitter Controller registers |
 | BAB0--BB1F | 112 B | File metadata buffer |
 | BB20--BB4F | 48 B | Math Coprocessor registers |
+| BB50--BB8D | 62 B | SID sound-effect runtime state |
 | BC00--BFFF | 1,024 B | XMC Memory Windows (4 x 256-byte mapped pages) |
 | C000--FFFF | 16,384 B | ROM (NovaBASIC interpreter) |
-| D400--D41C | 29 B | SID chip registers (inside ROM range; writes intercepted) |
-| D420--D43C | 29 B | SID chip 2 registers (inside ROM range; writes intercepted) |
-| D500--D51C | 29 B | SID chip 2 mirror (transparently routes to $D420) |
+| D400--D41F | 32 B | SID chip registers (inside ROM range; writes intercepted) |
+| D420--D43F | 32 B | SID chip 2 registers (inside ROM range; writes intercepted) |
+| D500--D51F | 32 B | SID chip 2 mirror (transparently routes to $D420) |
 
 ::: note
 The address range A020--A03E is reserved for language/host services. Unlisted
 addresses in A0ED--A0EF and A140--A9FF are not claimed by any coprocessor and
 fall through to the underlying flat RAM.
-The range BA9C--BAAF and BB50--BBFF is similarly unallocated RAM. BAB0--BB1F
-is the file metadata buffer, and BB20--BB4F is the math coprocessor.
-SID registers at D400--D43C occupy space within the ROM address range
+The ranges BA9C--BAAF and BB8E--BBFF are similarly unallocated RAM.
+BAB0--BB1F is the file metadata buffer, BB20--BB4F is the math coprocessor,
+and BB50--BB8D is used by NovaBASIC's SID sound-effect scheduler.
+SID registers at D400--D43F occupy space within the ROM address range
 but are intercepted on write by the SID chip emulators.
 :::
 
@@ -244,7 +246,7 @@ A040--A0BF (all eight fields, including TransColor at offset +7).
 
 ## SID Chip Registers
 
-The SID chip occupies D400--D41C within the ROM address range. Writes
+The SID chip occupies D400--D41F within the ROM address range. Writes
 to these addresses are intercepted by the SID emulator; reads return the
 underlying ROM byte. The register layout matches the original MOS 6581.
 
@@ -271,23 +273,23 @@ Voice 0: D400--D406. Voice 1: D407--D40D. Voice 2: D40E--D414.
 | $D417 | Resonance (bits 7--4) / Filter route (bits 3--0, one bit per voice + external). |
 | $D418 | Volume (bits 3--0) / Filter mode (bit 4=LP, bit 5=BP, bit 6=HP). |
 
-### Second SID Chip (D420--D43C)
+### Second SID Chip (D420--D43F)
 
-A second SID chip is mapped at D420--D43C with an identical register
-layout offset by 20 from the primary. A legacy mirror atD500--$D51C
+A second SID chip is mapped at D420--D43F with an identical register
+layout offset by 20 from the primary. A legacy mirror at $D500--$D51F
 routes transparently to $D420.
 
 Voice mapping: voices 1--3 use SID 1 ($D400), voices 4--6 use SID 2
-($D420). The music engine addresses all six voices via
-`MUSIC voice,"mml"` where *voice* is 1--6.
+($D420). Simple BASIC `SOUND`, `VOLUME`, and `INSTRUMENT` write these
+SID registers directly. `MUSIC voice,"mml"` uses the hosted MML path.
 
 ::: note
-The BASIC commands `INSTRUMENT`, `SOUND`, and `MUSIC` manage
-SID registers automatically. Direct writes to D400+ orD420+ are for
-advanced use only and may conflict with the music engine.
+The BASIC commands `INSTRUMENT`, `SOUND`, and `VOLUME` manage SID registers
+automatically. Direct writes to $D400+ or $D420+ are for advanced use only and
+may conflict with active SID sound effects.
 :::
 
-## Timer Controller and Music Status
+## Timer Controller and Hosted Music Status
 
 ### Timer Controller (BA40--BA4F)
 
@@ -305,11 +307,11 @@ The timer fires an IRQ every *divisor* video frames (at 60 Hz).
 A divisor of 1 fires every frame; a divisor of 60 fires once per second.
 Reading `TimerStatus` clears the pending IRQ flag.
 
-### Music Status (BA50--BA56)
+### Hosted Music Status (BA50--BA56)
 
 | **Address** | **Access** | **Description** |
 | --- | --- | --- |
-| $BA50 | RO | Status flags: bit 0 = SFX playing, bit 1 = music playing. |
+| $BA50 | RO | Hosted music status flags: bit 0 = hosted SFX playing, bit 1 = hosted music playing. Direct BASIC `SOUND` is not reflected here. |
 | $BA51 | RO | Voice 1 current MIDI note (0 = silent). SID 1, voice 1. |
 | $BA52 | RO | Voice 2 current MIDI note (0 = silent). SID 1, voice 2. |
 | $BA53 | RO | Voice 3 current MIDI note (0 = silent). SID 1, voice 3. |
@@ -528,9 +530,9 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $07 | FioCmdGLoad | Load `.gfx` file into VGC memory space. FioGSpace=space, FioGAddrL/H=offset, FioGLenL/H=max length. |
 | $08 | FioCmdSidPlay | Load and play a `.sid` file. FioSrcL=song number (1-based). |
 | $09 | FioCmdSidStop | Stop SID file playback. |
-| $0A | FioCmdInstrument | Define instrument preset. FioSrcL=id, FioSrcH=waveform, FioEndL=A, FioEndH=D, FioSizeL=S, FioSizeH=R. |
-| $0B | FioCmdSound | Play SFX. FioSrcL=MIDI note, FioSrcH=duration (frames), FioEndL=instrument ID. |
-| $0C | FioCmdVolume | Set SID master volume. FioSrcL=level (0--15). |
+| $0A | FioCmdInstrument | Legacy/host audio ABI for instrument presets. NovaBASIC `INSTRUMENT` writes SID runtime state directly. |
+| $0B | FioCmdSound | Legacy/host audio ABI for simple SFX. NovaBASIC `SOUND` writes SID registers directly. |
+| $0C | FioCmdVolume | Legacy/host audio ABI for volume. NovaBASIC `VOLUME` writes SID registers directly. |
 | $0D | FioCmdMSeq | Load MML sequence. FioSrcL=voice (1--6), FioEndL/H=string pointer, FioNameLen=string length. |
 | $0E | FioCmdMPlay | Start music playback. |
 | $0F | FioCmdMStop | Stop music playback. |

@@ -7,7 +7,7 @@ syntax: "MIDPLAY \"filename\""
 see_also: [midstop, sfload, sound-and-music]
 ---
 
-Load and play a standard MIDI file through the SID music engine.
+Load and play a standard MIDI file through the hosted music engine.
 
 ```basic
 10 MIDPLAY "entertainer"
@@ -15,8 +15,7 @@ Load and play a standard MIDI file through the SID music engine.
 30 PRINT "DONE"
 ```
 
-The engine auto-selects the busiest MIDI channels, maps GM instruments to SID
-waveforms, and converts MIDI velocity to per-voice volume. Channel 10 drums use
-the noise waveform.
+The engine auto-selects the busiest MIDI channels, maps GM instruments to the
+available Nova audio voices, and converts MIDI velocity to per-voice volume.
 
 See the [Sound And Music](/docs/help/guides/sound-and-music.md) guide for more details.

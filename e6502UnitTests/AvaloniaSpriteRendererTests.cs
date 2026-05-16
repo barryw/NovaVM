@@ -256,7 +256,7 @@ public class AvaloniaSpriteRendererTests
     public void DetectCollisions_SpriteBgOverlap_SetsBits()
     {
         // Enable sprite 0 at the top-left visible canvas pixel. Sprite
-        // coordinates include the 20px logical border on each side.
+        // coordinates match graphics canvas coordinates.
         _vgc.Write(VgcConstants.RegP0, 0);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);
         _vgc.Write(VgcConstants.RegP0, 0);
@@ -376,7 +376,7 @@ public class AvaloniaSpriteRendererTests
     }
 
     [TestMethod]
-    public void RasterizeScanline_UsesFullSpritePlane()
+    public void RasterizeScanline_UsesCanvasCoordinates()
     {
         _vgc.Write(VgcConstants.RegP0, 0);
         _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdSprEna);

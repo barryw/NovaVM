@@ -1,0 +1,34 @@
+\chapter{Making It Nova}
+
+NovaBASIC can act like a simple home-computer BASIC, but it is sitting on a
+machine with useful hardware. The programs in this book should use that
+hardware when it makes the game clearer or more exciting.
+
+\section{Graphics}
+
+Use the graphics screen for boards, maps, roads, mountains, and charts. A
+larger screen means old cramped layouts can breathe. Prefer simple readable
+geometry over decorative clutter.
+
+\section{Sprites}
+
+Use sprites for objects that move every frame: cars, players, enemies, balls,
+and cursors. If an object is larger than 16 by 16, use a metasprite helper once
+that library is stable and available from BASIC.
+
+\section{Sound}
+
+Small sound cues matter. A short note for a correct move, a lower note for a
+mistake, and a short tune on the title screen can make a type-in game feel
+finished without making the listing hard to understand.
+
+\section{Expanded Memory}
+
+Use XRAM for tables, levels, and generated data when normal BASIC memory would
+make the program awkward. Keep the first versions simple, then move bulky data
+out only when the game needs it.
+
+\section{The Rule}
+
+If a Nova feature makes a game clearer, use it. If it only makes the listing
+harder to type, save it for an advanced version.

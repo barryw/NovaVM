@@ -1366,7 +1366,7 @@ EXT_CMD_VPOKE     = $40
 EXT_CMD_FIOCLR    = $41
 .endif
 
-; Music/SFX status registers.
+; Hosted music/SFX status registers.
 .ifndef MUSIC_STATUS
 MUSIC_STATUS      = $BA50
 .endif
@@ -1431,19 +1431,19 @@ MUSIC_TOTALH      = $BA62
 SID_BASE          = $D400
 .endif
 .ifndef SID_END
-SID_END           = $D41C
+SID_END           = $D41F
 .endif
 .ifndef SID2_BASE
 SID2_BASE         = $D420
 .endif
 .ifndef SID2_END
-SID2_END          = $D43C
+SID2_END          = $D43F
 .endif
 .ifndef SID2_MIRROR_BASE
 SID2_MIRROR_BASE  = $D500
 .endif
 .ifndef SID2_MIRROR_END
-SID2_MIRROR_END   = $D51C
+SID2_MIRROR_END   = $D51F
 .endif
 
 ; Wavetable synthesizer registers.
