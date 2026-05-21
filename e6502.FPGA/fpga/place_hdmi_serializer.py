@@ -8,6 +8,17 @@
 # Yosys/ABC may give packed FF/LUT cells auto-generated names, so classification
 # checks both the packed cell name and the net names attached to its ports.
 
+import os
+
+
+FLOORPLAN_MODE = os.environ.get("NOVA_FLOORPLAN_MODE", "critical").strip().lower()
+EXPLICIT_ENFORCE = {
+    item.strip()
+    for item in os.environ.get("NOVA_FLOORPLAN_ENFORCE", "").split(",")
+    if item.strip()
+}
+
+
 REGIONS = [
     # Keep the serializer load/shift flops and their cross-domain control close
     # to the GPDI pins without forcing each lane into a tiny island. The old
@@ -16,6 +27,7 @@ REGIONS = [
     {
         "name": "hdmi_ser_gpdi",
         "box": (64, 0, 126, 24),
+        "tier": "critical",
         "enforce": True,
         "match": (
             "lattice_ecp5_shift",
@@ -32,12 +44,13 @@ REGIONS = [
         ),
     },
 
-    # Top-band HDMI encoder/packet logic. The serializer cells above remain
-    # tightly constrained; this region only keeps the pixel/audio HDMI logic
-    # close enough to GPDI without forcing exact locations.
+    # Top-band HDMI encoder/packet logic. This stays report-only for now:
+    # matching HDMI nets can also catch upstream audio/video mix logic, and
+    # enforcing that broad cone over-constrains placement.
     {
         "name": "hdmi_pixel",
         "box": (52, 1, 124, 32),
+        "tier": "report",
         "enforce": False,
         "match": ("hdmi_inst", "\\hdmi_inst", "packet_picker", "packet_assembler"),
     },
@@ -47,6 +60,7 @@ REGIONS = [
     {
         "name": "sdram_edge",
         "box": (94, 8, 126, 95),
+        "tier": "edge",
         "enforce": False,
         "match": ("sdram_inst", "\\sdram_inst", "dbg_sdram_port_b_cdc", "xram_sdram_inst", "curve_reader_inst"),
     },
@@ -56,8 +70,17 @@ REGIONS = [
     {
         "name": "host_io",
         "box": (1, 28, 48, 95),
+        "tier": "edge",
         "enforce": False,
         "match": ("dbg_spi", "\\dbg_spi", "uart_inst", "\\uart_inst", "dbg_bridge", "\\dbg_bridge", "debug_bridge", "fio_inst", "nic_inst"),
+    },
+
+    {
+        "name": "math_copro",
+        "box": (8, 44, 58, 92),
+        "tier": "chip",
+        "enforce": False,
+        "match": ("math_inst", "\\math_inst"),
     },
 
     # VGC analysis regions. These are not enforced yet; they show how the giant
@@ -65,36 +88,49 @@ REGIONS = [
     {
         "name": "vgc_timing",
         "box": (50, 16, 72, 30),
+        "tier": "video",
         "enforce": False,
         "match": ("timing_inst", "\\timing_inst"),
     },
     {
         "name": "vgc_text",
         "box": (42, 26, 78, 58),
+        "tier": "video",
         "enforce": False,
         "match": ("text_inst", "\\text_inst", "char_mem", "color_mem", "attr_mem", "font_mem"),
     },
     {
         "name": "vgc_gfx_artist",
         "box": (62, 32, 106, 72),
+        "tier": "video",
         "enforce": False,
         "match": ("gfx_inst", "\\gfx_inst", "artist_inst", "\\artist_inst", "gfx_mem"),
     },
     {
         "name": "vgc_sprites",
         "box": (40, 54, 96, 86),
+        "tier": "video",
         "enforce": False,
         "match": ("sprite_inst", "\\sprite_inst", "spr_mem0", "spr_mem1", "slb_ram"),
     },
     {
         "name": "vgc_copper",
         "box": (74, 18, 104, 42),
+        "tier": "video",
         "enforce": False,
         "match": ("copper_inst", "\\copper_inst", "copper_list_mem"),
     },
     {
+        "name": "wts_audio",
+        "box": (58, 4, 126, 76),
+        "tier": "report",
+        "enforce": False,
+        "match": ("wts_inst", "\\wts_inst"),
+    },
+    {
         "name": "vgc_io_regs",
         "box": (30, 28, 78, 82),
+        "tier": "video",
         "enforce": False,
         "match": ("core.vgc_inst", "core.\\vgc_inst", "\\vgc_inst", "vgc_inst", "key_fifo_inst", "key_data_xlat"),
     },
@@ -104,6 +140,7 @@ REGIONS = [
     {
         "name": "vgc_video",
         "box": (42, 14, 112, 82),
+        "tier": "report",
         "enforce": False,
         "match": (),
     },
@@ -113,6 +150,7 @@ REGIONS = [
     {
         "name": "cpu_mem",
         "box": (12, 18, 76, 92),
+        "tier": "chip",
         "enforce": False,
         "match": ("core.cpu_inst", "core.\\cpu_inst", "\\cpu_inst", "cpu_inst", "main_ram", "basic_rom_inst", "ext_rom_inst", "xmc_regs"),
     },
@@ -121,6 +159,7 @@ REGIONS = [
     {
         "name": "bus_masters",
         "box": (28, 40, 86, 92),
+        "tier": "chip",
         "enforce": False,
         "match": ("blt_inst", "\\blt_inst", "dma_inst", "\\dma_inst"),
     },
@@ -130,10 +169,31 @@ REGIONS = [
     {
         "name": "sid_audio",
         "box": (8, 1, 82, 44),
+        "tier": "chip",
         "enforce": False,
         "match": ("sid_inst", "\\sid_inst", "sid2_inst", "\\sid2_inst", "sid_hdmi_audio_inst"),
     },
 ]
+
+
+def should_enforce(region):
+    name = region["name"]
+    tier = region.get("tier", "report")
+    if name in EXPLICIT_ENFORCE:
+        return True
+    if FLOORPLAN_MODE in ("off", "none", "report"):
+        return False
+    if region.get("enforce", False):
+        return True
+    if FLOORPLAN_MODE == "critical":
+        return tier == "critical"
+    if FLOORPLAN_MODE in ("edge", "chip"):
+        return tier in ("critical", "edge")
+    if FLOORPLAN_MODE == "core":
+        return tier in ("critical", "edge", "chip")
+    if FLOORPLAN_MODE in ("video", "aggressive", "all"):
+        return tier in ("critical", "edge", "chip", "video")
+    return region.get("enforce", False)
 
 
 def cell_net_names(cell):
@@ -211,9 +271,16 @@ for cell_name, cell in ctx.cells:
     cell_type = str(cell.type)
     bucket_demand[region_name][bucket] = bucket_demand[region_name].get(bucket, 0) + 1
     type_demand[region_name][cell_type] = type_demand[region_name].get(cell_type, 0) + 1
-    if next(region for region in REGIONS if region["name"] == region_name)["enforce"]:
+    region = next(region for region in REGIONS if region["name"] == region_name)
+    if should_enforce(region):
         ctx.constrainCellToRegion(cell_name, region_name)
 
+enforced_regions = [region["name"] for region in REGIONS if should_enforce(region)]
+print("Nova floorplan mode: %s; explicit=%s; enforced=%s" % (
+    FLOORPLAN_MODE,
+    ",".join(sorted(EXPLICIT_ENFORCE)) if EXPLICIT_ENFORCE else "-",
+    ",".join(enforced_regions) if enforced_regions else "-",
+))
 print("Nova floorplan constraints: " + ", ".join("%s=%d" % item for item in sorted(counts.items())))
 
 capacity = count_region_capacity(region_names)
@@ -229,5 +296,6 @@ for name in region_names:
 
     top_types = sorted(type_demand[name].items(), key=lambda item: (-item[1], item[0]))[:4]
     type_parts = ["%s=%d" % item for item in top_types]
-    print("Nova floorplan region %s: cells=%d; buckets: %s; top cell types: %s" %
-          (name, counts[name], ", ".join(bucket_parts), ", ".join(type_parts)))
+    enforced = "yes" if should_enforce(next(region for region in REGIONS if region["name"] == name)) else "no"
+    print("Nova floorplan region %s: enforced=%s; cells=%d; buckets: %s; top cell types: %s" %
+          (name, enforced, counts[name], ", ".join(bucket_parts), ", ".join(type_parts)))

@@ -57,7 +57,7 @@ module test_nic_top;
 
     top dut (
         .clk(clk), .rst(rst),
-        .key_valid(key_valid), .key_data(key_data),
+        .key_valid(key_valid), .key_data(key_data), .key_ready(),
         .irq_n(irq_n), .nmi_n(nmi_n),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
@@ -82,6 +82,8 @@ module test_nic_top;
         .dbg_cpu_resume(dbg_cpu_resume),
         .brg_sdram_b_we(1'b0), .brg_sdram_b_oe(1'b0),
         .brg_sdram_b_addr(25'd0), .brg_sdram_b_din(8'd0),
+        .host_wts_event_we(1'b0), .host_wts_event_data(8'd0),
+        .host_wts_event_ready(),
         .dbg_cpu_pc(dbg_cpu_pc),
         .dbg_cpu_a(dbg_cpu_a), .dbg_cpu_x(dbg_cpu_x),
         .dbg_cpu_y(dbg_cpu_y), .dbg_cpu_sp(dbg_cpu_sp),

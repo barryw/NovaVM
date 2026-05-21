@@ -4,7 +4,7 @@
 //     (or 720x480p: 27 MHz pixel + 135 MHz TMDS shift)
 //   - HDMI output via GPDI (hdl-util/hdmi with PCM audio)
 //   - UART keyboard input via FTDI serial
-//   - USB low-speed HID keyboard input via US2
+//   - Optional USB low-speed HID keyboard input via US2
 //   - SPI command bridge from ESP32/NovaHost
 //   - LEDs for debug, buttons for reset
 
@@ -168,6 +168,7 @@ module fpga_top (
 `endif
 
 `ifndef VIDEO_480P_TESTPATTERN
+`ifdef ENABLE_USB_HID
     wire [3:0] pll_usb_clk;
     wire       pll_usb_locked;
 
@@ -190,6 +191,7 @@ module fpga_top (
     );
 
     wire clk_usb = pll_usb_clk[0];  // 12 MHz required by usb_hid_host
+`endif
 `endif
 
     // =========================================================================
@@ -451,6 +453,7 @@ module fpga_top (
     assign usb_fpga_pu_dp = 1'b0;
     assign usb_fpga_pu_dn = 1'b0;
 
+`ifdef ENABLE_USB_HID
     logic [1:0] usb_rst_req_sync = 2'b11;
     logic [2:0] usb_reset_release = 3'b000;
     always_ff @(posedge clk_usb) begin
@@ -481,6 +484,13 @@ module fpga_top (
         .report_seen     (usb_report_seen),
         .connection_error(usb_connection_error)
     );
+`else
+    assign usb_fpga_bd_dp = 1'bz;
+    assign usb_fpga_bd_dn = 1'bz;
+
+    wire       usb_key_valid = 1'b0;
+    wire [7:0] usb_key_data = 8'h00;
+`endif
 
     // =========================================================================
     // Host debug bridge stream. NovaHost talks to the FPGA over SPI only; the
@@ -509,7 +519,8 @@ module fpga_top (
     wire       dbg_spi_selected_seen;
 
     debug_spi_slave #(
-        .ADDR_WIDTH(9),
+        .RX_ADDR_WIDTH(12),
+        .TX_ADDR_WIDTH(9),
         .IDLE_BYTE(8'hA5)
     ) dbg_spi (
         .clk          (clk_pixel),
@@ -576,6 +587,7 @@ module fpga_top (
     wire        brg_cpu_waiting, brg_cpu_stopped;
     wire        brg_key_valid;
     wire [7:0]  brg_key_data;
+    wire        brg_key_ready;
     wire        brg_sdram_b_we;
     wire        brg_sdram_b_oe;
     wire [24:0] brg_sdram_b_addr;
@@ -583,6 +595,14 @@ module fpga_top (
     wire [7:0]  brg_sdram_b_dout;
     wire        brg_sdram_b_done_toggle;
     wire [7:0]  brg_host_status;
+    wire        brg_audio_pcm_we;
+    wire [7:0]  brg_audio_pcm_data;
+    wire        brg_audio_pcm_ready;
+    wire        brg_wts_event_we;
+    wire [7:0]  brg_wts_event_data;
+    wire        brg_wts_event_ready;
+    wire [15:0] host_audio_byte_space;
+    wire [15:0] host_audio_underruns;
 
     // Host-service events — pulsed by core register banks on CPU command
     // writes. Bridge latches them and emits async event sequences to the ESP.
@@ -643,6 +663,7 @@ module fpga_top (
         .dbg_cpu_stopped (brg_cpu_stopped),
         .key_inject_valid(brg_key_valid),
         .key_inject_data (brg_key_data),
+        .key_inject_ready(brg_key_ready),
         .sdram_b_we      (brg_sdram_b_we),
         .sdram_b_oe      (brg_sdram_b_oe),
         .sdram_b_addr    (brg_sdram_b_addr),
@@ -651,7 +672,15 @@ module fpga_top (
         .sdram_b_done_toggle(brg_sdram_b_done_toggle),
         .fio_event       (core_fio_event),
         .nic_event       (core_nic_event),
-        .host_status     (brg_host_status)
+        .host_status     (brg_host_status),
+        .audio_pcm_we    (brg_audio_pcm_we),
+        .audio_pcm_data  (brg_audio_pcm_data),
+        .audio_pcm_ready (brg_audio_pcm_ready),
+        .audio_pcm_space (host_audio_byte_space),
+        .audio_pcm_underruns(host_audio_underruns),
+        .wts_event_we    (brg_wts_event_we),
+        .wts_event_data  (brg_wts_event_data),
+        .wts_event_ready (brg_wts_event_ready)
     );
 
     // Key input: NovaHost/debug injection wins, then direct USB keyboard,
@@ -676,6 +705,7 @@ module fpga_top (
 
         .key_valid  (key_valid_mux),
         .key_data   (key_data_mux),
+        .key_ready  (brg_key_ready),
 
         .irq_n      (1'b1),
         .nmi_n      (1'b1),
@@ -721,6 +751,9 @@ module fpga_top (
         .brg_sdram_b_oe  (1'b0),
         .brg_sdram_b_addr(25'd0),
         .brg_sdram_b_din (8'd0),
+        .host_wts_event_we(brg_wts_event_we),
+        .host_wts_event_data(brg_wts_event_data),
+        .host_wts_event_ready(brg_wts_event_ready),
         .dbg_cpu_pc   (brg_cpu_pc),
         .dbg_cpu_a    (brg_cpu_a),
         .dbg_cpu_x    (brg_cpu_x),
@@ -837,7 +870,10 @@ module fpga_top (
 
     wire audio_sample_strobe = !rst && !clk_audio && (clk_audio_div == 9'd1);
 
+    logic [1:0][15:0] sid_audio_sample_word;
+    logic [1:0][15:0] host_audio_sample_word;
     logic [1:0][15:0] hdmi_audio_sample_word;
+    wire              host_audio_sample_valid;
 
     sid_hdmi_audio sid_hdmi_audio_inst (
         .clk              (clk_pixel),
@@ -845,8 +881,56 @@ module fpga_top (
         .sample_en        (audio_sample_strobe),
         .sid_audio_l      (sid_audio_l),
         .sid_audio_r      (sid_audio_r),
-        .audio_sample_word(hdmi_audio_sample_word)
+        .audio_sample_word(sid_audio_sample_word)
     );
+
+    audio_pcm_fifo #(
+        .FRAME_ADDR_WIDTH(13)
+    ) host_audio_fifo (
+        .clk           (clk_pixel),
+        .rst           (rst),
+        .byte_we       (brg_audio_pcm_we),
+        .byte_data     (brg_audio_pcm_data),
+        .byte_ready    (brg_audio_pcm_ready),
+        .sample_en     (audio_sample_strobe),
+        .sample_word   (host_audio_sample_word),
+        .sample_valid  (host_audio_sample_valid),
+        .byte_space    (host_audio_byte_space),
+        .underrun_count(host_audio_underruns)
+    );
+
+    function automatic logic [15:0] mix_pcm16(
+        input logic [15:0] a,
+        input logic [15:0] b
+    );
+        logic signed [15:0] sa;
+        logic signed [15:0] sb;
+        logic signed [16:0] sum;
+        begin
+            sa = a;
+            sb = b;
+            sum = {sa[15], sa} + {sb[15], sb};
+            if (sum > 17'sd32767)
+                mix_pcm16 = 16'h7fff;
+            else if (sum < -17'sd32768)
+                mix_pcm16 = 16'h8000;
+            else
+                mix_pcm16 = sum[15:0];
+        end
+    endfunction
+
+    always_ff @(posedge clk_pixel) begin
+        if (rst) begin
+            hdmi_audio_sample_word <= '0;
+        end else begin
+            hdmi_audio_sample_word[0] <= mix_pcm16(
+                sid_audio_sample_word[0],
+                host_audio_sample_valid ? host_audio_sample_word[0] : 16'd0);
+            hdmi_audio_sample_word[1] <= mix_pcm16(
+                sid_audio_sample_word[1],
+                host_audio_sample_valid ? host_audio_sample_word[1] : 16'd0);
+        end
+    end
 
     wire [2:0] hdmi_tmds;
     wire       hdmi_tmds_clock;

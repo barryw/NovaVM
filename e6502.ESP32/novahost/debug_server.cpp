@@ -102,6 +102,21 @@ void DebugServer::handleCommand(const String& json) {
         return;
     }
 
+    if (cmd == "spi_status") {
+        char buf[192];
+        snprintf(buf, sizeof(buf),
+                 "{\"ok\":true,\"transport\":\"%s\","
+                 "\"requestedWriteHz\":%lu,\"actualWriteHz\":%lu,"
+                 "\"requestedReadHz\":%lu,\"actualReadHz\":%lu}",
+                 _bridge.transportName(),
+                 (unsigned long)_bridge.requestedWriteHz(),
+                 (unsigned long)_bridge.actualWriteHz(),
+                 (unsigned long)_bridge.requestedReadHz(),
+                 (unsigned long)_bridge.actualReadHz());
+        respond(buf);
+        return;
+    }
+
     if (!novaFpgaBridgeAvailable()) {
         char buf[160];
         snprintf(buf, sizeof(buf),
@@ -385,6 +400,8 @@ void DebugServer::cmdSendKey(const String& json) {
 void DebugServer::cmdTypeText(const String& json) {
     String text = extractString(json, "text");
     bool previousWasCr = false;
+    uint8_t chunk[256];
+    uint16_t chunkLen = 0;
     for (unsigned int i = 0; i < text.length(); i++) {
         char ch = text[i];
         if (ch == '\n') {
@@ -395,10 +412,19 @@ void DebugServer::cmdTypeText(const String& json) {
             ch = '\r';
         }
         previousWasCr = (ch == '\r');
-        if (!_bridge.sendKey((uint8_t)ch)) {
-            respondError("FPGA send_key failed");
-            return;
+        chunk[chunkLen++] = (uint8_t)ch;
+        if (chunkLen == sizeof(chunk)) {
+            if (!_bridge.sendKeys(chunk, chunkLen)) {
+                respondError("FPGA key stream failed");
+                return;
+            }
+            chunkLen = 0;
+            yield();
         }
+    }
+    if (chunkLen != 0 && !_bridge.sendKeys(chunk, chunkLen)) {
+        respondError("FPGA key stream failed");
+        return;
     }
     respondOk();
 }

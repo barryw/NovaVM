@@ -110,7 +110,7 @@ MusicElapsedH           = $BA60
 MusicTotalL             = $BA61
 MusicTotalH             = $BA62
 
-; --- Wavetable Synthesizer registers ($A140-$A1DF) ---
+; --- Wavetable Synthesizer registers ($A140-$A1FF) ---
 WtsBase                 = $A140
 WtsVoiceBase            = $A140
 WtsVoiceStride          = $08
@@ -138,9 +138,21 @@ WtsEnumBank             = $A1A1
 WtsEnumProgram          = $A1A2
 WtsEnumName             = $A1A3
 WtsEnumEnd              = $A1DF
-WtsEnd                  = $A1DF
+WtsEventStatus          = $A1E0
+WtsEventCountL          = $A1E1
+WtsEventCountH          = $A1E2
+WtsEventFreeL           = $A1E3
+WtsEventFreeH           = $A1E4
+WtsEventFrame0          = $A1E5
+WtsEventFrame1          = $A1E6
+WtsEventFrame2          = $A1E7
+WtsEventFrame3          = $A1E8
+WtsEnd                  = $A1FF
 WtsCmdAllNotesOff       = $01
 WtsCmdResetEffects      = $02
+WtsCmdEventReset        = $03
+WtsCmdEventStart        = $04
+WtsCmdEventStop         = $05
 FioStatusIdle           = $00
 FioStatusOk             = $02
 FioStatusError          = $03

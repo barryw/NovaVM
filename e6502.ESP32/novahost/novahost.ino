@@ -50,7 +50,11 @@ static const char* WIFI_PASSWORD = "";
 #define SD_SPI_MOSI_PIN 15
 #define SD_CS_PIN       13
 #define FPGA_SPI_CS_PIN 4
-#define FPGA_SPI_HZ     500000
+#ifndef FPGA_SPI_HZ
+// Bulk FPGA writes are timing-clean at 40MHz in the current ULX3S bitstream.
+// Reads are capped separately in FpgaBridge because GPIO-matrix MISO is slower.
+#define FPGA_SPI_HZ     40000000
+#endif
 
 // Debug log server — telnet-style TCP on port 23
 #define LOG_PORT 23
@@ -278,7 +282,7 @@ void novaHostFioActivityFinished(bool ok) {
 
 static const size_t BOOT_ROM_LEN       = 16 * 1024;
 static const size_t SID_CURVE_ROM_LEN  = 8 * 1024;
-static const uint32_t SID_CURVE_BASE   = 0x800000;
+static const uint32_t SID_CURVE_BASE   = 0x080000;
 static const size_t BOOT_LOGO_GFX_LEN  = 320UL * 200UL;
 static const size_t VGC_TEXT_LEN       = 80UL * 50UL;
 
@@ -574,7 +578,7 @@ bool streamSdramAsset(uint32_t base_addr, const char* label,
     }
 
     logLn("Streaming %s from %s (%u bytes)", label, path, (unsigned)actual);
-    uint8_t buf[256];
+    static uint8_t buf[4096];
     for (size_t off = 0; off < expected_len; ) {
         size_t want = (expected_len - off >= sizeof(buf))
             ? sizeof(buf)
@@ -585,8 +589,7 @@ bool streamSdramAsset(uint32_t base_addr, const char* label,
             f.close();
             return false;
         }
-        uint16_t wire_count = (got == 256) ? 0 : (uint16_t)got;
-        if (!fpgaBridge.pokeSdramBlock(base_addr + off, buf, wire_count)) {
+        if (!fpgaBridge.pokeSdramStream(base_addr + off, buf, (uint16_t)got)) {
             logLn("FPGA SDRAM stream failed: %s at offset %u", label, (unsigned)off);
             f.close();
             return false;
@@ -1140,7 +1143,7 @@ bool loadRomsToFPGA() {
         romsLoaded = true;
 
         // Stream the 6581 filter curve into SDRAM at the SID_CURVE_BASE offset
-        // hardcoded in rtl/sid/sid_curve_reader.sv (25'h0_8_00_00 = $800000).
+        // hardcoded in rtl/sid/sid_curve_reader.sv (25'h0_8_00_00 = $080000).
         // Done before resetRelease so sid_curve_reader (which is held in reset
         // by dbg_cpu_reset) sees valid data on its first read.
         // Not a hard dependency: only SID 6581 filter uses the curve. Log and
@@ -1282,9 +1285,14 @@ void setup() {
 
     initSharedSpiBus();
     fpgaBridge.beginSpi(SPI, FPGA_SPI_CS_PIN, FPGA_SPI_HZ, SD_CS_PIN);
-    Serial.printf("FPGA bridge initialized over SPI (SCK=%d MISO=%d MOSI=%d CS=%d, %lu Hz)\n",
+    Serial.printf("FPGA bridge initialized over SPI (SCK=%d MISO=%d MOSI=%d CS=%d, write %lu/%lu Hz, read %lu/%lu Hz)\n",
                   SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN,
-                  FPGA_SPI_CS_PIN, (unsigned long)FPGA_SPI_HZ);
+                  FPGA_SPI_CS_PIN,
+                  (unsigned long)fpgaBridge.requestedWriteHz(),
+                  (unsigned long)fpgaBridge.actualWriteHz(),
+                  (unsigned long)fpgaBridge.requestedReadHz(),
+                  (unsigned long)fpgaBridge.actualReadHz());
+    fioDispatcher.reserve_wts_sample_cache(32UL * 1024UL);
 
     // Give the FPGA debug bridge a moment to settle before we start poking it.
     delay(100);
@@ -1305,6 +1313,14 @@ void setup() {
     g_boot_phase = BOOT_PHASE_INFRA_READY;
     logLn("NovaHost infrastructure ready; starting SD/FPGA boot task.");
     startBootTask();
+}
+
+void novaAudioStatusJson(char* out, size_t out_len) {
+    fioDispatcher.write_audio_status_json(out, out_len);
+}
+
+void novaAudioStop() {
+    fioDispatcher.stop_audio();
 }
 
 // =========================================================================
@@ -1330,6 +1346,12 @@ void loop() {
         } else {
             novaWifiStateChanged();
         }
+    }
+
+    // Audio refill is timing-sensitive. Keep it independent from the slower
+    // guest command poll cadence so HDMI PCM has priority over debug/HTTP work.
+    if (novaFpgaBridgeAvailable()) {
+        fioDispatcher.pump_audio();
     }
 
     // Keep host-control services responsive before servicing guest-driven

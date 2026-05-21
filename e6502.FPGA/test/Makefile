@@ -12,6 +12,11 @@ TRACE_MAX_WIDTH ?= 4096
 CPU_DORMANN_ARGS ?=
 VJOBS ?= 0
 CLEAN_BUILD ?= 0
+TRACE_FILE ?=
+SID_MODE ?= 8580
+SID_FRAME_TICKS ?= 20000
+SID_METRICS ?=
+SID_HDMI_SAMPLE_DIV ?= 21
 
 ifeq ($(TRACE),1)
 TRACE_FLAGS = --prefix Vtrace_top --trace-fst --trace-structs --trace-params \
@@ -49,6 +54,7 @@ REDIP = $(RTL)/vendor/redip_sid/sid_pkg.sv \
         $(RTL)/vendor/redip_sid/sid_pot.sv
 SID   = $(REDIP) $(RTL)/sid/nova_redip_sid_api.sv $(RTL)/sid/sid_chip.sv \
         $(RTL)/sid/sid_curve_reader.sv
+WTS   = $(RTL)/wts_chip.sv
 CPU   = $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v
 HDMI  = $(RTL)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/audio_info_frame.sv \
@@ -61,7 +67,7 @@ HDMI  = $(RTL)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/serializer.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/hdmi.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_blitter test_blitter_xram_backpressure test_dma test_math_copro test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_hdmi_audio test_sid_hdmi_audio test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_nic test_fio_top test_nic_top test_rom_load test_debug_uart test_debug_spi_slave test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_sid_cpu_audio_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_blitter test_blitter_xram_backpressure test_dma test_math_copro test_wts_chip test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_hdmi_audio test_sid_hdmi_audio test_audio_pcm_fifo test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_nic test_fio_top test_nic_top test_rom_load test_debug_uart test_debug_spi_slave test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_sid_cpu_audio_top test_wts_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -120,6 +126,9 @@ test_dma: test_dma.sv $(RTL)/dma.sv
 test_math_copro: test_math_copro.sv $(RTL)/math_copro.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/math_copro.sv $< && $(RUN) test/$(BD)/$@/$@
 
+test_wts_chip: test_wts_chip.sv $(WTS)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(WTS) $< && $(RUN) test/$(BD)/$@/$@
+
 test_cpu_dormann_6502: test_cpu_dormann.sv $(CPU)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSIM --top-module test_cpu_dormann --Mdir $(BD)/$@ -o $@ $(CPU) test_cpu_dormann.sv && $(RUN) test/$(BD)/$@/$@ +NAME=6502_functional +BIN=../e6502UnitTests/Resources/6502_functional_test.bin +LOAD=0 +START=0400 +PASS=3399 +MAX_CYCLES=500000000 $(CPU_DORMANN_ARGS)
 
@@ -137,6 +146,9 @@ test_hdmi_audio: test_hdmi_audio.sv $(HDMI)
 
 test_sid_hdmi_audio: test_sid_hdmi_audio.sv $(RTL)/sid_hdmi_audio.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/sid_hdmi_audio.sv $< && $(RUN) test/$(BD)/$@/$@
+
+test_audio_pcm_fifo: test_audio_pcm_fifo.sv $(RTL)/audio_pcm_fifo.sv
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/audio_pcm_fifo.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_sid: test_sid.sv $(SID)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) $< && $(RUN) test/$(BD)/$@/$@
@@ -200,6 +212,10 @@ test_sid_pervoice_vol: test_sid_pervoice_vol.sv sid_tb.svh $(SID)
 test_sid_model: test_sid_model.sv sid_tb.svh $(SID)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) test_sid_model.sv && $(RUN) test/$(BD)/$@/$@
 
+test_sid_trace_replay: test_sid_trace_replay.sv sid_tb.svh $(SID) $(RTL)/sid_hdmi_audio.sv
+	@test -n "$(TRACE_FILE)" || (echo "TRACE_FILE=/path/to/file.rtltrace is required" >&2; exit 1)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -Wno-IMPLICITSTATIC -Wno-SELRANGE --top-module $@ --Mdir $(BD)/$@ -o $@ $(SID) $(RTL)/sid_hdmi_audio.sv test_sid_trace_replay.sv && $(RUN) test/$(BD)/$@/$@ +TRACE=$(TRACE_FILE) +MODE=$(SID_MODE) +FRAME_TICKS=$(SID_FRAME_TICKS) +HDMI_SAMPLE_DIV=$(SID_HDMI_SAMPLE_DIV) $(if $(SID_METRICS),+METRICS=$(SID_METRICS),)
+
 # FIO register bank — 80-byte file at $B9A0-$B9EF with fio_event pulse
 # on CPU writes to FioCmd. Stand-alone module test.
 test_fio: test_fio.sv $(RTL)/fio.sv
@@ -223,8 +239,8 @@ test_nic_top: test_nic_top.sv $(ROM_LOAD_RTL)
 test_debug_uart: test_debug_uart.sv $(RTL)/debug_uart_rx.sv $(RTL)/debug_uart_tx.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_uart_rx.sv $(RTL)/debug_uart_tx.sv $< && $(RUN) test/$(BD)/$@/$@
 
-test_debug_spi_slave: test_debug_spi_slave.sv $(RTL)/debug_spi_slave.sv $(RTL)/debug_byte_fifo.sv
-	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_byte_fifo.sv $(RTL)/debug_spi_slave.sv $< && $(RUN) test/$(BD)/$@/$@
+test_debug_spi_slave: test_debug_spi_slave.sv $(RTL)/debug_spi_slave.sv $(RTL)/debug_async_byte_fifo.sv
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_async_byte_fifo.sv $(RTL)/debug_spi_slave.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_debug_bridge: test_debug_bridge.sv $(RTL)/debug_bridge.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_bridge.sv $< && $(RUN) test/$(BD)/$@/$@
@@ -244,7 +260,7 @@ test_novaz_xram_roundtrip: test_novaz_xram_roundtrip.sv $(RTL)/debug_bridge.sv $
 
 # End-to-end test: instantiates full top.sv (CPU + VGC + SID + blitter + RAM/ROM),
 # streams a tiny 6502 program into basic_rom via dbg_rom_we, verifies execution.
-ROM_LOAD_RTL = $(VGC) $(SID) $(RTL)/blitter.sv $(RTL)/dma.sv $(RTL)/math_copro.sv $(RTL)/fio.sv $(RTL)/nic.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv $(RTL)/sdram/sdram.v $(RTL)/sdram/xram_sdram.sv
+ROM_LOAD_RTL = $(VGC) $(SID) $(WTS) $(RTL)/blitter.sv $(RTL)/dma.sv $(RTL)/math_copro.sv $(RTL)/fio.sv $(RTL)/nic.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv $(RTL)/sdram/sdram.v $(RTL)/sdram/xram_sdram.sv
 test_rom_load: test_rom_load.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
@@ -277,6 +293,11 @@ test_rom_over_sid: test_rom_over_sid.sv $(ROM_LOAD_RTL)
 # and verifies signed audio output changes.
 test_sid_cpu_audio_top: test_sid_cpu_audio_top.sv $(ROM_LOAD_RTL) $(RTL)/sid_hdmi_audio.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $(RTL)/sid_hdmi_audio.sv $< && $(RUN) test/$(BD)/$@/$@
+
+# Top-level WTS regression. Verifies the Nova WTS register range is routed
+# through the synthesized CPU/debug bus and contributes stereo audio.
+test_wts_top: test_wts_top.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
 # Top-level XMC mapped-window decode regression. Verifies the synthesis path
 # keeps WnAL readable/writable but ignores it for 256-byte window translation.

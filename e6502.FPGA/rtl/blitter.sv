@@ -106,7 +106,9 @@ module blitter (
         S_ROWBUF_WRITE_LOAD = 4'd9, // latch row_buf[buf_idx] before driving memory ports
         S_VALIDATE_SRC      = 4'd10,
         S_VALIDATE_DST      = 4'd11,
-        S_VALIDATE_START    = 4'd12
+        S_VALIDATE_START    = 4'd12,
+        S_VALIDATE_SRC_CHECK = 4'd13,
+        S_VALIDATE_DST_CHECK = 4'd14
     } state_t;
 
     state_t state;
@@ -127,7 +129,7 @@ module blitter (
     logic [15:0] validate_stride;
     logic [15:0] validate_width;
     logic        validate_base_in_range;
-    wire  [31:0] validate_last_byte = validate_row_start + {16'd0, validate_width};
+    logic [31:0] validate_last_byte;
 
     // Row buffer for same-space copies
     logic [7:0]  row_buf [0:ROW_BUF_SIZE-1];
@@ -148,6 +150,7 @@ module blitter (
         src_row_off = 0; dst_row_off = 0;
         validate_row_start = 0; validate_limit = 0;
         validate_remaining = 0; validate_stride = 0; validate_width = 0;
+        validate_last_byte = 0;
         validate_base_in_range = 0;
     end
 
@@ -314,6 +317,7 @@ module blitter (
             validate_remaining <= 0;
             validate_stride <= 0;
             validate_width <= 0;
+            validate_last_byte <= 0;
             validate_base_in_range <= 0;
         end else begin
 
@@ -358,7 +362,14 @@ module blitter (
                     if (validate_remaining != 0) begin
                         validate_row_start <= validate_row_start + {16'd0, validate_stride};
                         validate_remaining <= validate_remaining - 16'd1;
-                    end else if (!validate_base_in_range || validate_last_byte > validate_limit) begin
+                    end else begin
+                        validate_last_byte <= validate_row_start + {16'd0, validate_width};
+                        state <= S_VALIDATE_SRC_CHECK;
+                    end
+                end
+
+                S_VALIDATE_SRC_CHECK: begin
+                    if (!validate_base_in_range || validate_last_byte > validate_limit) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_RANGE;
                         state <= S_DONE;
@@ -377,7 +388,14 @@ module blitter (
                     if (validate_remaining != 0) begin
                         validate_row_start <= validate_row_start + {16'd0, validate_stride};
                         validate_remaining <= validate_remaining - 16'd1;
-                    end else if (!validate_base_in_range || validate_last_byte > validate_limit) begin
+                    end else begin
+                        validate_last_byte <= validate_row_start + {16'd0, validate_width};
+                        state <= S_VALIDATE_DST_CHECK;
+                    end
+                end
+
+                S_VALIDATE_DST_CHECK: begin
+                    if (!validate_base_in_range || validate_last_byte > validate_limit) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_RANGE;
                         state <= S_DONE;

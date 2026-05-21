@@ -54,6 +54,7 @@ module sid_filter #(
     localparam PI = $acos(-1)
 )(
     input  logic             clk,
+    input  logic             res,
     input  sid::cycle_t      cycle,
     input  sid::filter_reg_t freg,
     input  sid::cfg_t        cfg,
@@ -194,7 +195,12 @@ module sid_filter #(
     sid::s24_t  vd1  = 0;
 
     always_ff @(posedge clk) begin
-        if (`stage(1)) begin
+        if (res) begin
+            vd   <= 0;
+            vi   <= 0;
+            filt <= 0;
+            vd1  <= 0;
+        end else if (`stage(1)) begin
             vd   <= 0;
             vi   <= 0;
             filt <= freg.filt;
@@ -231,7 +237,10 @@ module sid_filter #(
 
     // Audio mixers.
     always_ff @(posedge clk) begin
-        if (`stage(4)) begin
+        if (res) begin
+            vf   <= 0;
+            mode <= 0;
+        end else if (`stage(4)) begin
             vf   <= 0;
             mode <= freg.mode;
         end else if (`stage_between(5, 7)) begin
@@ -266,80 +275,95 @@ module sid_filter #(
 
     // Calculation of filter outputs. TDM to use only one multiplier.
     always_ff @(posedge clk) begin
-        if (`stage_between(5, 7)) begin
-            // (vlp, vbp, vhp) x 2
-            { v5, v4, v3, v2, v1, v0 } <= { v4, v3, v2, v1, v0, v_next };
+        if (res) begin
+            { v5, v4, v3, v2, v1, v0 } <= '0;
+            w0_T_lsl17_6581_base <= 0;
+            w0_T_lsl17_8580      <= 0;
+            w0_T_lsl17_6581      <= 0;
+            _1_Q_lsl10           <= 0;
+            fc_x                 <= 0;
+            vol                  <= 0;
+            model                <= sid::MOS6581;
+            c                    <= 0;
+            s                    <= 1'b0;
+            a                    <= 0;
+            b                    <= 0;
+        end else begin
+            if (`stage_between(5, 7)) begin
+                // (vlp, vbp, vhp) x 2
+                { v5, v4, v3, v2, v1, v0 } <= { v4, v3, v2, v1, v0, v_next };
+            end
+
+            if (`stage(2)) begin
+                // MOS6581: w0 = filter curve
+                // 1.048576/8*fc_base is approximated by fc_base >> 3.
+                w0_T_lsl17_6581_base <= { 10'b0, cfg.fc_base[8:3] };
+                // We have to register fc_x in order to meet timing.
+                fc_x <= tanh_x_clamp(signed'(13'(fc_6581)) - fc_offset);
+
+                // MOS8580: w0 = 5*fc = 4*fc + fc
+                w0_T_lsl17_8580 <= { 3'b0, fc_8580, 2'b0 } + { 5'b0, fc_8580 };
+
+                // MOS6581: 1/Q =~ ~res/8 (not used - op-amps are not ideal)
+                // MOS8580: 1/Q =~ 2^((4 - res)/8)
+                _1_Q_lsl10 <= (cfg.model == sid::MOS6581) ?
+                              _1_Q_6581_lsl10[freg.res] :
+                              _1_Q_8580_lsl10[freg.res];
+            end
+
+            if (`stage(3)) begin
+                // Read from BRAM.
+                w0_T_lsl17_6581 <= w0_T_lsl17_6581_tanh[tanh_x_mirror(fc_x)];
+
+                // Save model and volume for later stages.
+                model <= cfg.model;
+                vol   <= freg.vol;
+            end
+
+            unique0 case (cycle)
+              4, 9: begin
+                  // vlp = vlp - w0*vbp
+                  // We first calculate -w0*vbp
+                  c <= 0;
+                  s <= 1'b1;
+                  a <= (model == sid::MOS6581) ?
+                       w0_T_lsl17_6581_base + w0_T_lsl17_6581_y0 + tanh_y_mirror(fc_x[10], w0_T_lsl17_6581) :
+                       w0_T_lsl17_8580;  // w0*T << 17
+                  b <= v4;               // vbp
+              end
+              5, 10: begin
+                  // Result for vlp ready.
+
+                  // vbp = vbp - w0*vhp
+                  // We first calculate -w0*vhp
+                  // c <= 0;
+                  // s <= 1'b1;
+                  // a <= ...
+                  b <= v3;               // vhp
+              end
+              6, 11: begin
+                  // Result for vbp ready.
+
+                  // vhp = 1/Q*vbp - vlp - vi
+                  // c <= -(32'(v0) + (32'(vi) >>> 7)) << 10;
+                  c <= -(((32'(v0) << 7) + 32'(vi)) << 3);
+                  s <= 1'b0;
+                  a <= 16'(_1_Q_lsl10);  // 1/Q << 10
+                  b <= v_next;           // vbp
+              end
+              // 7, 12: Result for vhp ready
+              8, 13: begin
+                  // Audio output: aout = vol*amix
+                  // In the real SID, the signal is inverted first in the mixer
+                  // op-amp, and then again in the volume control op-amp.
+                  c <= 0;
+                  // s <= 1'b0;
+                  a <= { 12'b0, vol };         // Master volume
+                  b <= clamp(17'(vd1 >>> 7) +  // Audio mixer / master volume input
+                             vf);
+              end
+            endcase
         end
-
-        if (`stage(2)) begin
-            // MOS6581: w0 = filter curve
-            // 1.048576/8*fc_base is approximated by fc_base >> 3.
-            w0_T_lsl17_6581_base <= { 10'b0, cfg.fc_base[8:3] };
-            // We have to register fc_x in order to meet timing.
-            fc_x <= tanh_x_clamp(signed'(13'(fc_6581)) - fc_offset);
-
-            // MOS8580: w0 = 5*fc = 4*fc + fc
-            w0_T_lsl17_8580 <= { 3'b0, fc_8580, 2'b0 } + { 5'b0, fc_8580 };
-
-            // MOS6581: 1/Q =~ ~res/8 (not used - op-amps are not ideal)
-            // MOS8580: 1/Q =~ 2^((4 - res)/8)
-            _1_Q_lsl10 <= (cfg.model == sid::MOS6581) ?
-                          _1_Q_6581_lsl10[freg.res] :
-                          _1_Q_8580_lsl10[freg.res];
-        end
-
-        if (`stage(3)) begin
-            // Read from BRAM.
-            w0_T_lsl17_6581 <= w0_T_lsl17_6581_tanh[tanh_x_mirror(fc_x)];
-
-            // Save model and volume for later stages.
-            model <= cfg.model;
-            vol   <= freg.vol;
-        end
-
-        unique0 case (cycle)
-          4, 9: begin
-              // vlp = vlp - w0*vbp
-              // We first calculate -w0*vbp
-              c <= 0;
-              s <= 1'b1;
-              a <= (model == sid::MOS6581) ?
-                   w0_T_lsl17_6581_base + w0_T_lsl17_6581_y0 + tanh_y_mirror(fc_x[10], w0_T_lsl17_6581) :
-                   w0_T_lsl17_8580;  // w0*T << 17
-              b <= v4;               // vbp
-          end
-          5, 10: begin
-              // Result for vlp ready.
-
-              // vbp = vbp - w0*vhp
-              // We first calculate -w0*vhp
-              // c <= 0;
-              // s <= 1'b1;
-              // a <= ...
-              b <= v3;               // vhp
-          end
-          6, 11: begin
-              // Result for vbp ready.
-
-              // vhp = 1/Q*vbp - vlp - vi
-              // c <= -(32'(v0) + (32'(vi) >>> 7)) << 10;
-              c <= -(((32'(v0) << 7) + 32'(vi)) << 3);
-              s <= 1'b0;
-              a <= 16'(_1_Q_lsl10);  // 1/Q << 10
-              b <= v_next;           // vbp
-          end
-          // 7, 12: Result for vhp ready
-          8, 13: begin
-              // Audio output: aout = vol*amix
-              // In the real SID, the signal is inverted first in the mixer
-              // op-amp, and then again in the volume control op-amp.
-              c <= 0;
-              // s <= 1'b0;
-              a <= { 12'b0, vol };         // Master volume
-              b <= clamp(17'(vd1 >>> 7) +  // Audio mixer / master volume input
-                         vf);
-          end
-        endcase
     end
 
 `ifdef VM_TRACE

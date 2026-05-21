@@ -15,6 +15,12 @@ ext_ptrL        = NVR0L
 ext_ptrH        = NVR0H
 ext_u16h        = NVR0L
 ext_u16l        = NVR0H
+ext_u32_0       = NVR4L
+ext_u32_1       = NVR4H
+ext_u32_2       = NVR5L
+ext_u32_3       = NVR5H
+ext_digit       = NVR2L
+ext_count       = NVR2H
 ext_dig0        = NVR1L
 ext_dig1        = NVR1H
 ext_dig2        = NVR2L
@@ -336,10 +342,15 @@ EXT_DIR:
       BNE   @dir_done         ; no files or error
       JSR   ext_crlf          ; blank line
 @dir_loop:
-      ; --- right-justified file size (5 columns) ---
+      ; --- right-justified file size (8 columns, 24-bit) ---
+      LDA   FIO_SIZEL
+      STA   ext_u32_0
       LDA   FIO_SIZEH
-      LDX   FIO_SIZEL
-      JSR   ext_print_u16     ; print AX as decimal, right-justified in 5 cols
+      STA   ext_u32_1
+      LDA   FIO_SIZE2
+      STA   ext_u32_2
+      STZ   ext_u32_3
+      JSR   ext_print_u24
       ; --- file type ---
       LDA   FIO_DIRTYPE
       ASL
@@ -382,6 +393,114 @@ EXT_DIR:
 @s_mid: .byte "  MID  ",0
 @s_gfx: .byte "  GFX  ",0
 @s_dir: .byte "  DIR  ",0
+
+; =====================================================================
+; ext_print_u24 — print 24-bit unsigned in ext_u32_2..0,
+;                 right-justified in an 8-character field.
+; =====================================================================
+ext_print_u24:
+      LDA   #<(ext_pow10+8)   ; 10^7 entry, skipping 10^9 and 10^8
+      STA   ext_ptrL
+      LDA   #>(ext_pow10+8)
+      STA   ext_ptrH
+      STZ   ext_firstdig
+      LDY   #8
+      BRA   ext_print_u32_digits
+
+; =====================================================================
+; ext_print_u32 — print 32-bit unsigned in ext_u32_3..0,
+;                 right-justified in a 10-character field.
+; =====================================================================
+ext_print_u32:
+      LDA   #<ext_pow10
+      STA   ext_ptrL
+      LDA   #>ext_pow10
+      STA   ext_ptrH
+      STZ   ext_firstdig
+      LDY   #10
+ext_print_u32_digits:
+@digit_loop:
+      STY   ext_count
+      STZ   ext_digit
+@sub_loop:
+      JSR   @cmp_pow
+      BCC   @emit_digit       ; value < current power
+      JSR   @sub_pow
+      INC   ext_digit
+      BRA   @sub_loop
+@emit_digit:
+      LDA   ext_digit
+      BNE   @emit_number
+      LDA   ext_firstdig
+      BNE   @emit_number
+      LDY   ext_count
+      CPY   #1                ; always print the ones digit
+      BEQ   @emit_number
+      LDA   #' '
+      BRA   @emit_char
+@emit_number:
+      LDA   #1
+      STA   ext_firstdig
+      LDA   ext_digit
+      CLC
+      ADC   #'0'
+@emit_char:
+      STA   VGC_CHAROUT
+      CLC
+      LDA   ext_ptrL
+      ADC   #4
+      STA   ext_ptrL
+      BCC   @ptr_ok
+      INC   ext_ptrH
+@ptr_ok:
+      LDY   ext_count
+      DEY
+      BNE   @digit_loop
+      RTS
+
+@cmp_pow:
+      LDY   #3
+@cmp_loop:
+      LDA   ext_u32_0,Y
+      CMP   (ext_ptrL),Y
+      BNE   @cmp_done         ; carry is set iff value byte >= power byte
+      DEY
+      BPL   @cmp_loop
+      SEC                     ; equal counts as >=
+@cmp_done:
+      RTS
+
+@sub_pow:
+      SEC
+      LDY   #0
+      LDA   ext_u32_0
+      SBC   (ext_ptrL),Y
+      STA   ext_u32_0
+      INY
+      LDA   ext_u32_1
+      SBC   (ext_ptrL),Y
+      STA   ext_u32_1
+      INY
+      LDA   ext_u32_2
+      SBC   (ext_ptrL),Y
+      STA   ext_u32_2
+      INY
+      LDA   ext_u32_3
+      SBC   (ext_ptrL),Y
+      STA   ext_u32_3
+      RTS
+
+ext_pow10:
+      .dword 1000000000
+      .dword 100000000
+      .dword 10000000
+      .dword 1000000
+      .dword 100000
+      .dword 10000
+      .dword 1000
+      .dword 100
+      .dword 10
+      .dword 1
 
 ; =====================================================================
 ; ext_print_u16 — print 16-bit unsigned in A(high) X(low),

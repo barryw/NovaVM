@@ -11,6 +11,7 @@
 //                                     or its persisted logical slot pointer
 //   POST   /drives/<slot>/unmount -> unmount slot and clear its persisted path
 //   GET    /sd-status    -> SD diagnostic JSON
+//   POST   /audio-stop   -> stop NovaHost-driven audio playback
 //   POST   /reboot       -> reboot NovaHost after responding
 //   GET    /sd/          -> JSON listing
 //   GET    /sd/<path>    -> file body, or listing if path is a directory

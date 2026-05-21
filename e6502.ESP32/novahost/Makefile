@@ -14,12 +14,14 @@
 #   ESPOTA     — path to espota.py; auto-detected from Arduino15 if unset
 #   SERIAL     — USB serial port for fallback flashing
 #   FQBN       — Arduino board FQBN; default keeps OTA and minimizes SPIFFS
+#   BUILD_FLAGS — extra Arduino build flags, for diagnostics/tuning
 
 NOVAHOST ?= 192.168.1.65
 OTA_PORT ?= 3232
 SERIAL   ?= /dev/cu.usbserial-D01457
 FQBN     ?= esp32:esp32:lolin32:PartitionScheme=min_spiffs
 OTA_BUILD ?= build/ota-direct
+BUILD_FLAGS ?=
 ESPOTA   ?= $(shell find "$$HOME/Library/Arduino15/packages/esp32/hardware/esp32" "$$HOME/.arduino15/packages/esp32/hardware/esp32" -path '*/tools/espota.py' -type f 2>/dev/null | sort | tail -n 1)
 
 REPO_ROOT := $(abspath ../..)
@@ -56,7 +58,7 @@ sd-assets: ehbasic build/f6581_curve.bin
 rom: sd-assets
 
 compile: sd-assets
-	arduino-cli compile --fqbn $(FQBN) .
+	arduino-cli compile --fqbn $(FQBN) --build-property build.extra_flags="$(BUILD_FLAGS)" .
 
 compact: sd-assets
 	arduino-cli compile --fqbn $(FQBN) --build-path $(COMPACT_BUILD) --build-property build.extra_flags="-DNOVA_ENABLE_OTA=0" .
@@ -65,7 +67,7 @@ upload: ota-direct
 
 ota-direct: sd-assets
 	@test -n "$(ESPOTA)" || (echo "error: espota.py not found; set ESPOTA=/path/to/espota.py" >&2; exit 1)
-	arduino-cli compile --fqbn $(FQBN) --build-path $(OTA_BUILD) .
+	arduino-cli compile --fqbn $(FQBN) --build-path $(OTA_BUILD) --build-property build.extra_flags="$(BUILD_FLAGS)" .
 	python3 "$(ESPOTA)" -i "$(NOVAHOST)" -p "$(OTA_PORT)" -f "$(OTA_BUILD)/novahost.ino.bin"
 
 upload-cli: sd-assets
@@ -73,7 +75,7 @@ upload-cli: sd-assets
 	arduino-cli upload --fqbn $(FQBN) --protocol network --port $(NOVAHOST) .
 
 serial: sd-assets
-	arduino-cli compile --fqbn $(FQBN) .
+	arduino-cli compile --fqbn $(FQBN) --build-property build.extra_flags="$(BUILD_FLAGS)" .
 	arduino-cli upload --fqbn $(FQBN) --protocol serial --port $(SERIAL) .
 
 clean:

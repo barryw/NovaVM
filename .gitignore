@@ -269,6 +269,8 @@ e6502.FPGA/fpga/.claude/
 
 # NovaHost host-side test binaries
 e6502.ESP32/novahost/test/test_ndi
+e6502.ESP32/novahost/test/test_midi_engine
+e6502.ESP32/novahost/test/test_sid_vm
 e6502.ESP32/novahost/test/*.dSYM/
 
 # Python test caches

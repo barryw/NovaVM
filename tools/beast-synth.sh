@@ -22,8 +22,17 @@
 #   BEAST_CLEAN=0          # preserve remote build/ for faster iteration
 #   NEXTPNR_THREADS=8      # optional nextpnr thread count
 #   NEXTPNR_SEED=1         # deterministic by default
+#   NEXTPNR_PLACER_CELL_TIMEOUT=8
+#                           placer retry budget per cell
 #   NEXTPNR_EXTRA_FLAGS='--router router2'
 #                           optional extra nextpnr flags
+#   PLACE_TIMING_GATE=0    # optionally run no-route timing before routing
+#   PLACE_TIMING_MARGIN_MHZ=0.5
+#                           placement gate headroom requirement
+#   NOVA_FLOORPLAN_MODE=critical
+#                           off/report, critical, edge/chip, core, video/aggressive/all
+#   NOVA_FLOORPLAN_ENFORCE=host_io,sdram_edge
+#                           comma-separated extra regions to enforce
 #   CHECK_TIMING=0         # skip local nextpnr report timing gate
 #   TIMING_MARGIN_MHZ=1.0  # require extra timing headroom
 #   BITSTREAM_RETENTION=7  # keep this many script-managed bitstreams
@@ -38,7 +47,12 @@ DEFAULT_EXTRA_DEFINES="-DVIDEO_720X480 -DGPDI_P_ONLY -DLATTICE_ECP5"
 BEAST_CLEAN="${BEAST_CLEAN:-1}"
 NEXTPNR_THREADS="${NEXTPNR_THREADS:-}"
 NEXTPNR_SEED="${NEXTPNR_SEED:-1}"
+NEXTPNR_PLACER_CELL_TIMEOUT="${NEXTPNR_PLACER_CELL_TIMEOUT:-8}"
 NEXTPNR_EXTRA_FLAGS="${NEXTPNR_EXTRA_FLAGS:-}"
+PLACE_TIMING_GATE="${PLACE_TIMING_GATE:-0}"
+PLACE_TIMING_MARGIN_MHZ="${PLACE_TIMING_MARGIN_MHZ:-0.5}"
+NOVA_FLOORPLAN_MODE="${NOVA_FLOORPLAN_MODE:-critical}"
+NOVA_FLOORPLAN_ENFORCE="${NOVA_FLOORPLAN_ENFORCE:-}"
 CHECK_TIMING="${CHECK_TIMING:-1}"
 TIMING_MARGIN_MHZ="${TIMING_MARGIN_MHZ:-1.0}"
 BITSTREAM_RETENTION="${BITSTREAM_RETENTION:-7}"
@@ -116,6 +130,9 @@ rsync -az --delete \
       --exclude='build/' --exclude='bit_backups/'
 rsync -az --delete \
       "$LOCAL_FPGA/rom/"  "$BEAST_HOST:$BEAST_WS/e6502.FPGA/rom/"
+ssh "$BEAST_HOST" "mkdir -p $BEAST_WS/tools"
+rsync -az \
+      "$REPO_ROOT/tools/check-fpga-timing.py" "$BEAST_HOST:$BEAST_WS/tools/check-fpga-timing.py"
 
 echo "=== [2/4] running 'make $TARGET' on $BEAST_HOST"
 echo "target:        $TARGET"
@@ -124,7 +141,12 @@ echo "extra_defines: ${EXTRA_DEFINES:-none}"
 echo "clean_build:   $BEAST_CLEAN"
 echo "nextpnr_seed:  $NEXTPNR_SEED"
 echo "nextpnr_jobs:  ${NEXTPNR_THREADS:-default}"
+echo "placer_retry:  $NEXTPNR_PLACER_CELL_TIMEOUT"
 echo "nextpnr_extra: ${NEXTPNR_EXTRA_FLAGS:-none}"
+echo "place_gate:    $PLACE_TIMING_GATE"
+echo "place_margin:  $PLACE_TIMING_MARGIN_MHZ"
+echo "floorplan:     $NOVA_FLOORPLAN_MODE"
+echo "floor_enforce: ${NOVA_FLOORPLAN_ENFORCE:-none}"
 echo "check_timing:  $CHECK_TIMING"
 echo "retention:     $BITSTREAM_RETENTION"
 echo "commit:        $commit ($dirty_state)"
@@ -132,9 +154,39 @@ remote_clean_cmd=""
 if [ "$BEAST_CLEAN" != "0" ]; then
     remote_clean_cmd="rm -rf build &&"
 fi
-ssh "$BEAST_HOST" "cd $BEAST_WS/e6502.FPGA/fpga && \
+remote_make_base="make OSS_CAD_SUITE_BIN=$YOSYS_BIN EXTRA_DEFINES='$EXTRA_DEFINES' NEXTPNR_SEED=$NEXTPNR_SEED NEXTPNR_THREADS='$NEXTPNR_THREADS' NEXTPNR_PLACER_CELL_TIMEOUT='$NEXTPNR_PLACER_CELL_TIMEOUT' NEXTPNR_EXTRA_FLAGS='$NEXTPNR_EXTRA_FLAGS' NEXTPNR_PLACE_MARGIN_MHZ='$PLACE_TIMING_MARGIN_MHZ' NOVA_FLOORPLAN_MODE='$NOVA_FLOORPLAN_MODE' NOVA_FLOORPLAN_ENFORCE='$NOVA_FLOORPLAN_ENFORCE' -o ehbasic"
+if [ "$TARGET" = "bitstream" ] && [ "$PLACE_TIMING_GATE" != "0" ]; then
+    remote_build_cmd="$remote_make_base placecheck && $remote_make_base bitstream"
+else
+    remote_build_cmd="$remote_make_base $TARGET"
+fi
+
+remote_status=0
+ssh "$BEAST_HOST" "set -o pipefail; cd $BEAST_WS/e6502.FPGA/fpga && \
     $remote_clean_cmd \
-    make OSS_CAD_SUITE_BIN=$YOSYS_BIN EXTRA_DEFINES='$EXTRA_DEFINES' NEXTPNR_SEED=$NEXTPNR_SEED NEXTPNR_THREADS='$NEXTPNR_THREADS' NEXTPNR_EXTRA_FLAGS='$NEXTPNR_EXTRA_FLAGS' -o ehbasic $TARGET 2>&1 | tee /tmp/beast-synth.log | tail -200"
+    { $remote_build_cmd; } 2>&1 | tee /tmp/beast-synth.log | tail -200" || remote_status=$?
+
+if [ "$remote_status" -ne 0 ]; then
+    echo
+    echo "remote build failed with status $remote_status"
+    echo "timing summary from failed run:"
+    ssh "$BEAST_HOST" "grep -E '(Max frequency|Timing failed|PASS:|FAIL:|Nova floorplan|Info: Device utilisation|CCU2C|DP16KD|LUT4|MULT18X18D|PFUMX|TRELLIS_DPR16X4|TRELLIS_FF|Total)' /tmp/beast-synth.log | tail -80" || true
+    mkdir -p "$BACKUP_DIR"
+    failed_log="$BACKUP_DIR/e6502.${ts}${label_part}.${TARGET}.failed.log"
+    rsync -az "$BEAST_HOST:/tmp/beast-synth.log" "$failed_log" || true
+    echo "failed_log: $failed_log"
+    if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.json"; then
+        failed_place_report="$BACKUP_DIR/e6502.${ts}${label_part}.failed.nextpnr-place-report.json"
+        rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.json" "$failed_place_report" || true
+        echo "failed_place_report: $failed_place_report"
+    fi
+    if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place.log"; then
+        failed_place_log="$BACKUP_DIR/e6502.${ts}${label_part}.failed.nextpnr-place.log"
+        rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place.log" "$failed_place_log" || true
+        echo "failed_place_log: $failed_place_log"
+    fi
+    exit "$remote_status"
+fi
 
 echo "=== [3/4] timing summary"
 ssh "$BEAST_HOST" "grep -E '(Max frequency|Info: Device utilisation|CCU2C|DP16KD|LUT4|MULT18X18D|PFUMX|TRELLIS_DPR16X4|TRELLIS_FF|Total)' /tmp/beast-synth.log | tail -40" || true
@@ -176,6 +228,10 @@ if [ "$TARGET" = "bitstream" ]; then
     export BITSTREAM_NEXTPNR_SEED="$NEXTPNR_SEED"
     export BITSTREAM_NEXTPNR_THREADS="${NEXTPNR_THREADS:-default}"
     export BITSTREAM_NEXTPNR_EXTRA_FLAGS="${NEXTPNR_EXTRA_FLAGS:-}"
+    export BITSTREAM_PLACE_TIMING_GATE="$PLACE_TIMING_GATE"
+    export BITSTREAM_PLACE_TIMING_MARGIN_MHZ="$PLACE_TIMING_MARGIN_MHZ"
+    export BITSTREAM_NOVA_FLOORPLAN_MODE="$NOVA_FLOORPLAN_MODE"
+    export BITSTREAM_NOVA_FLOORPLAN_ENFORCE="$NOVA_FLOORPLAN_ENFORCE"
     export BITSTREAM_CHECK_TIMING="$CHECK_TIMING"
     export BITSTREAM_TIMING_MARGIN_MHZ="$TIMING_MARGIN_MHZ"
     export BITSTREAM_COMMIT="$commit"
@@ -285,6 +341,10 @@ metadata = {
         "nextpnr_seed": env("BITSTREAM_NEXTPNR_SEED"),
         "nextpnr_threads": env("BITSTREAM_NEXTPNR_THREADS"),
         "nextpnr_extra_flags": env("BITSTREAM_NEXTPNR_EXTRA_FLAGS"),
+        "place_timing_gate": env("BITSTREAM_PLACE_TIMING_GATE"),
+        "place_timing_margin_mhz": env("BITSTREAM_PLACE_TIMING_MARGIN_MHZ"),
+        "nova_floorplan_mode": env("BITSTREAM_NOVA_FLOORPLAN_MODE"),
+        "nova_floorplan_enforce": env("BITSTREAM_NOVA_FLOORPLAN_ENFORCE"),
         "check_timing": env("BITSTREAM_CHECK_TIMING"),
         "timing_margin_mhz": env("BITSTREAM_TIMING_MARGIN_MHZ"),
     },
@@ -326,6 +386,10 @@ PY
         echo "nextpnr_seed: $NEXTPNR_SEED"
         echo "nextpnr_threads: ${NEXTPNR_THREADS:-default}"
         echo "nextpnr_extra: ${NEXTPNR_EXTRA_FLAGS:-none}"
+        echo "place_timing_gate: $PLACE_TIMING_GATE"
+        echo "place_timing_margin_mhz: $PLACE_TIMING_MARGIN_MHZ"
+        echo "nova_floorplan_mode: $NOVA_FLOORPLAN_MODE"
+        echo "nova_floorplan_enforce: ${NOVA_FLOORPLAN_ENFORCE:-}"
         echo "check_timing: $CHECK_TIMING"
         echo "timing_margin_mhz: $TIMING_MARGIN_MHZ"
         echo "commit: $commit"
@@ -356,6 +420,25 @@ PY
 else
     echo "=== [4/4] (skipped — target was '$TARGET', no bitstream)"
     case "$TARGET" in
+        placecheck)
+            mkdir -p "$BACKUP_DIR"
+            place_log="$BACKUP_DIR/e6502.${ts}${label_part}.placecheck.log"
+            place_report="$BACKUP_DIR/e6502.${ts}${label_part}.nextpnr-place-report.json"
+            rsync -az "$BEAST_HOST:/tmp/beast-synth.log" "$place_log" || true
+            if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.json"; then
+                rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.json" "$place_report"
+                echo "place_report: $place_report"
+            fi
+            if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place.log"; then
+                place_npnr_log="$BACKUP_DIR/e6502.${ts}${label_part}.nextpnr-place.log"
+                rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place.log" "$place_npnr_log"
+                echo "nextpnr_log:  $place_npnr_log"
+            fi
+            echo "log:          $place_log"
+            ;;
+        seed-sweep)
+            echo "seed reports on beast: $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.seed*.json"
+            ;;
         diag-sprites)
             echo "post_synth.v on beast: $BEAST_WS/e6502.FPGA/fpga/build/post_synth_sprites.v"
             ;;

@@ -11,6 +11,8 @@ if (args.Length < 1)
 // Verb-based routing
 if (args[0] == "mid2bas")
     return RunMidToBas(args.Skip(1).ToArray());
+if (args[0] == "sf2bank")
+    return NovaSoundBankCommand.Run(args.Skip(1).ToArray());
 if (args[0] == "pack-overlay")
     return RunPackOverlay(args.Skip(1).ToArray());
 if (args[0] == "sidtrace")
@@ -297,6 +299,7 @@ static void PrintUsage()
 {
     Console.Error.WriteLine("e6502 Tools");
     Console.Error.WriteLine("  mid2bas <input.mid> [-o output.bas] [--mml-only] [--wts] [--title T] [--subtitle S] [--voices 1=3,2=5] [--max-voices N]");
+    Console.Error.WriteLine("  sf2bank --sf2 soundfont.sf2 --midi song.mid --output bank.nsfb");
     Console.Error.WriteLine("  pack-overlay --input payload.bin --output module.ovl --load $7000 [--sym payload.sym] [--main symbol]");
     Console.Error.WriteLine("  <input.sid> [output.sid] --target 0x1000   (SID relocator)");
     Console.Error.WriteLine("  <input.sid> --info                         (SID info)");

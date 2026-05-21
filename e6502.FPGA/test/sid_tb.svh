@@ -101,7 +101,10 @@ task automatic summary();
     $display("=== Results: %0d passed, %0d failed ===",
              pass_count, fail_count);
     if (fail_count == 0) $display("ALL TESTS PASSED");
-    else                 $display("SOME TESTS FAILED");
+    else begin
+        $display("SOME TESTS FAILED");
+        $fatal(1, "SID test failed");
+    end
 endtask
 
 // ---------------------------------------------------------------------------

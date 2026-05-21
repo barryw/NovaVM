@@ -67,6 +67,7 @@ module test_debug_bridge_rx_fifo;
 
     wire        key_inject_valid;
     wire [7:0]  key_inject_data;
+    logic       key_inject_ready = 1'b1;
 
     wire        sdram_b_we;
     wire        sdram_b_oe;
@@ -76,6 +77,8 @@ module test_debug_bridge_rx_fifo;
     logic       sdram_b_done_toggle;
     logic       fio_event;
     wire [7:0]  host_status;
+    wire        wts_event_we;
+    wire [7:0]  wts_event_data;
 
     localparam int SDRAM_DELAY_CYCLES = 40;
     localparam int PACKET_BYTES = 5 + 256;
@@ -134,6 +137,7 @@ module test_debug_bridge_rx_fifo;
         .dbg_cpu_stopped(dbg_cpu_stopped),
         .key_inject_valid(key_inject_valid),
         .key_inject_data(key_inject_data),
+        .key_inject_ready(key_inject_ready),
         .sdram_b_we(sdram_b_we),
         .sdram_b_oe(sdram_b_oe),
         .sdram_b_addr(sdram_b_addr),
@@ -142,7 +146,15 @@ module test_debug_bridge_rx_fifo;
         .sdram_b_done_toggle(sdram_b_done_toggle),
         .fio_event(fio_event),
         .nic_event(1'b0),
-        .host_status(host_status)
+        .host_status(host_status),
+        .audio_pcm_we(),
+        .audio_pcm_data(),
+        .audio_pcm_ready(1'b1),
+        .audio_pcm_space(16'd4096),
+        .audio_pcm_underruns(16'd0),
+        .wts_event_we(wts_event_we),
+        .wts_event_data(wts_event_data),
+        .wts_event_ready(1'b1)
     );
 
     logic [7:0] sdram_shadow [0:255];

@@ -115,9 +115,9 @@ module test_debug_spi_slave;
         for (int i = 7; i >= 0; i--) begin
             spi_mosi <= din[i];
             repeat (10) @(posedge clk);
+            dout = {dout[6:0], spi_miso};
             spi_sck <= 1'b1;
             repeat (10) @(posedge clk);
-            dout = {dout[6:0], spi_miso};
             spi_sck <= 1'b0;
             repeat (10) @(posedge clk);
         end

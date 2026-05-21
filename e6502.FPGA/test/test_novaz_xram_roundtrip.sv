@@ -78,6 +78,7 @@ module test_novaz_xram_roundtrip;
 
     wire        key_inject_valid;
     wire [7:0]  key_inject_data;
+    logic       key_inject_ready = 1'b1;
 
     wire        brg_sdram_b_we;
     wire        brg_sdram_b_oe;
@@ -96,6 +97,8 @@ module test_novaz_xram_roundtrip;
 
     logic       fio_event;
     wire [7:0]  host_status;
+    wire        wts_event_we;
+    wire [7:0]  wts_event_data;
 
     debug_byte_fifo #(
         .ADDR_WIDTH(9)
@@ -151,6 +154,7 @@ module test_novaz_xram_roundtrip;
         .dbg_cpu_stopped(dbg_cpu_stopped),
         .key_inject_valid(key_inject_valid),
         .key_inject_data(key_inject_data),
+        .key_inject_ready(key_inject_ready),
         .sdram_b_we(brg_sdram_b_we),
         .sdram_b_oe(brg_sdram_b_oe),
         .sdram_b_addr(brg_sdram_b_addr),
@@ -159,7 +163,15 @@ module test_novaz_xram_roundtrip;
         .sdram_b_done_toggle(brg_sdram_b_done_toggle),
         .fio_event(fio_event),
         .nic_event(1'b0),
-        .host_status(host_status)
+        .host_status(host_status),
+        .audio_pcm_we(),
+        .audio_pcm_data(),
+        .audio_pcm_ready(1'b1),
+        .audio_pcm_space(16'd4096),
+        .audio_pcm_underruns(16'd0),
+        .wts_event_we(wts_event_we),
+        .wts_event_data(wts_event_data),
+        .wts_event_ready(1'b1)
     );
 
     debug_sdram_port_b_cdc sdram_cdc (

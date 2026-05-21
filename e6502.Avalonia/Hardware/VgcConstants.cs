@@ -64,6 +64,7 @@ public static class VgcConstants
     public const int FioSizeL          = 0xB9A8;   // loaded size low (set by host after LOAD)
     public const int FioSizeH          = 0xB9A9;   // loaded size high
     public const int FioGSpace         = 0xB9AA;   // graphics plane selector; XLOAD/XSAVE XRAM high byte
+    public const int FioSize2          = FioGSpace; // dir entry size byte 2 after DIRREAD
     public const int FioGAddrL         = 0xB9AB;   // graphics/XRAM offset low
     public const int FioGAddrH         = 0xB9AC;   // graphics/XRAM offset high
     public const int FioGLenL          = 0xB9AD;   // graphics/XRAM transfer length low
@@ -138,7 +139,7 @@ public static class VgcConstants
     public const int  MusicTotalH      = 0xBA62; // total frames high byte
 
     // -------------------------------------------------------------------------
-    // Wavetable Synthesizer registers ($A140-$A1DF)
+    // Wavetable Synthesizer registers ($A140-$A1FF)
     // -------------------------------------------------------------------------
 
     public const int WtsBase             = 0xA140;
@@ -177,11 +178,25 @@ public static class VgcConstants
     public const int WtsEnumName         = 0xA1A3; // R: null-terminated name (28 chars)
     public const int WtsEnumEnd          = 0xA1DF;
 
-    public const int WtsEnd              = 0xA1DF;
+    // Timestamped WTS event scheduler ($A1E0-$A1E8)
+    public const int WtsEventStatus      = 0xA1E0; // bit0=ready, bit1=full, bit2=empty, bit3=running, bit7=parser error
+    public const int WtsEventCountL      = 0xA1E1;
+    public const int WtsEventCountH      = 0xA1E2;
+    public const int WtsEventFreeL       = 0xA1E3;
+    public const int WtsEventFreeH       = 0xA1E4;
+    public const int WtsEventFrame0      = 0xA1E5;
+    public const int WtsEventFrame1      = 0xA1E6;
+    public const int WtsEventFrame2      = 0xA1E7;
+    public const int WtsEventFrame3      = 0xA1E8;
+
+    public const int WtsEnd              = 0xA1FF;
 
     // WTS commands (write to WtsCommand)
     public const byte WtsCmdAllNotesOff  = 0x01;
     public const byte WtsCmdResetEffects = 0x02;
+    public const byte WtsCmdEventReset   = 0x03;
+    public const byte WtsCmdEventStart   = 0x04;
+    public const byte WtsCmdEventStop    = 0x05;
 
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;

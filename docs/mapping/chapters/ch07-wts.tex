@@ -1,5 +1,5 @@
 % =============================================================================
-% Chapter 7 — The Wavetable Synthesizer ($A140–$A1DF)
+% Chapter 7 — The Wavetable Synthesizer ($A140–$A1FF)
 % =============================================================================
 \chapter{The Wavetable Synthesizer}
 
@@ -19,9 +19,10 @@ selection, volume, stereo panning, and pitch bend.  Two global effects ---
 reverb (Freeverb algorithm) and chorus (modulated delay) --- process the mixed
 output before the master volume stage.
 
-The WTS occupies the address range \$A140--\$A1DF, divided into three regions:
+The WTS occupies the address range \$A140--\$A1FF, divided into four regions:
 8 voice register blocks (\$A140--\$A17F), global control registers
-(\$A180--\$A187), and the instrument enumeration interface (\$A1A0--\$A1DF).
+(\$A180--\$A187), the instrument enumeration interface (\$A1A0--\$A1DF),
+and the host-fed timestamped event scheduler (\$A1E0--\$A1E8).
 
 
 % ═══════════════════════════════════════════════════════════════════════════════
@@ -272,6 +273,34 @@ sound (either playing or releasing).
 40   IF A AND (2^I) THEN PRINT "VOICE"; I; "ACTIVE"
 50 NEXT I
 \end{lstlisting}
+
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Event Scheduler (\$A1E0--\$A1E8)}
+\label{sec:wts-events}
+% ═══════════════════════════════════════════════════════════════════════════════
+
+The event scheduler is fed by NovaHost over the FPGA debug bridge.  Each queued
+record is six bytes: 32-bit sample-frame timestamp, WTS register offset, and
+byte value.  The scheduler applies due writes in hardware, so MIDI playback does
+not depend on real-time host register pokes.
+
+\mementry{A1E0}{WtsEventStatus}{R}{---}
+
+Bitfield: bit~0~= ready, bit~1~= FIFO full, bit~2~= FIFO empty,
+bit~3~= running, bit~7~= parser error.
+
+\memrange{A1E1}{A1E2}{WtsEventCount}{R}{---}
+
+Queued record count, little-endian.
+
+\memrange{A1E3}{A1E4}{WtsEventFree}{R}{---}
+
+Available FIFO record slots, little-endian.
+
+\memrange{A1E5}{A1E8}{WtsEventFrame}{R}{---}
+
+Current 48\,kHz scheduler frame counter, little-endian.
 
 
 % ═══════════════════════════════════════════════════════════════════════════════

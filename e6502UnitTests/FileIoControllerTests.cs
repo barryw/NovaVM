@@ -45,6 +45,14 @@ public class FileIoControllerTests
         return lo | (hi << 8);
     }
 
+    private static int ReadSize24(FileIoController fio)
+    {
+        int lo = fio.Read((ushort)VgcConstants.FioSizeL);
+        int hi = fio.Read((ushort)VgcConstants.FioSizeH);
+        int bank = fio.Read((ushort)VgcConstants.FioSize2);
+        return lo | (hi << 8) | (bank << 16);
+    }
+
     private static byte[] MakeNvg(int width, int height, params (ushort Address, byte[] Pixels)[] spans)
     {
         using var ms = new MemoryStream();
@@ -303,6 +311,35 @@ public class FileIoControllerTests
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
             Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual(VgcConstants.FioErrEndOfDir, fio.Read((ushort)VgcConstants.FioErrCode));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void DirOpen_Returns24BitFileSizeForLargeEntries()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            byte[] midi = new byte[161330];
+            midi[0] = (byte)'M';
+            midi[1] = (byte)'T';
+            midi[2] = (byte)'h';
+            midi[3] = (byte)'d';
+            File.WriteAllBytes(Path.Combine(dir, "stars.mid"), midi);
+
+            var fio = MakeController(dir);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("stars", ReadFilename(fio));
+            Assert.AreEqual(midi.Length & 0xFFFF, ReadSize(fio));
+            Assert.AreEqual(midi.Length, ReadSize24(fio));
         }
         finally
         {
@@ -942,6 +979,15 @@ public class FileIoControllerTests
         Assert.IsNull(result.DirectoryPath);
         Assert.AreEqual("BACH*", result.NamePattern);
         Assert.AreEqual(".mid", result.ExtFilter);
+    }
+
+    [TestMethod]
+    public void ParseFilterPattern_NmsExtension()
+    {
+        var result = FileIoController.ParseFilterPattern("*.nms");
+        Assert.AreEqual("*", result.NamePattern);
+        Assert.AreEqual(".nms", result.ExtFilter,
+            "Directory filters must recognize precompiled Nova music streams as a first-class music extension.");
     }
 
     [TestMethod]

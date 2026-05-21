@@ -6,7 +6,7 @@ namespace e6502.Storage;
 /// </summary>
 public sealed class HostDirectoryDevice : IStorageDevice
 {
-    private static readonly string[] SupportedExtensions = [".bas", ".sid", ".bin", ".mid", ".gfx", ".nvg", ".xram"];
+    private static readonly string[] SupportedExtensions = [".bas", ".sid", ".bin", ".mid", ".nms", ".gfx", ".nvg", ".xram"];
 
     private static readonly Dictionary<string, NdiFileType> ExtToType = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -14,6 +14,7 @@ public sealed class HostDirectoryDevice : IStorageDevice
         [".sid"] = NdiFileType.Sid,
         [".bin"] = NdiFileType.Bin,
         [".mid"] = NdiFileType.Mid,
+        [".nms"] = NdiFileType.Mid,
         [".gfx"] = NdiFileType.Gfx,
         [".nvg"] = NdiFileType.Gfx,
         [".xram"] = NdiFileType.Bin,

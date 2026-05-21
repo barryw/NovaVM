@@ -36,18 +36,29 @@ PNR_ARGS = $(BUILDDIR)/pnr_args.txt
 SYNTH_ECP5_JSON = synth_ecp5 -top fpga_top -run begin:map_cells; techmap -map +/lattice/cells_map_trellis.v; opt_lut_ins -tech lattice; clean; hierarchy -check; stat; check -noinit; blackbox =A:whitebox
 
 NEXTPNR_SEED ?= 1
+NEXTPNR_SEEDS ?= 1 2 3 4 5
 NEXTPNR_THREADS ?=
 NEXTPNR_PRE_PLACE ?= place_hdmi_serializer.py
 NEXTPNR_PLACER_CELL_TIMEOUT ?= 8
 NEXTPNR_EXTRA_FLAGS ?=
 NEXTPNR_REPORT = $(BUILDDIR)/nextpnr-report.json
+NEXTPNR_PLACE_REPORT = $(BUILDDIR)/nextpnr-place-report.json
+NEXTPNR_PLACE_LOG = $(BUILDDIR)/nextpnr-place.log
+NEXTPNR_PLACE_CONFIG = $(BUILDDIR)/$(PROJ).place.config
+NEXTPNR_PLACE_MARGIN_MHZ ?= 0.5
+TIMING_CHECKER ?= ../../tools/check-fpga-timing.py
+NOVA_FLOORPLAN_MODE ?= critical
+NOVA_FLOORPLAN_ENFORCE ?=
 NEXTPNR_THREAD_FLAGS = $(if $(strip $(NEXTPNR_THREADS)),--threads $(NEXTPNR_THREADS),)
 NEXTPNR_PRE_PLACE_FLAGS = $(if $(strip $(NEXTPNR_PRE_PLACE)),--pre-place $(NEXTPNR_PRE_PLACE),)
 NEXTPNR_PRE_PLACE_DEPS = $(if $(strip $(NEXTPNR_PRE_PLACE)),$(NEXTPNR_PRE_PLACE),)
 NEXTPNR_PLACER_TIMEOUT_FLAGS = --placer-heap-cell-placement-timeout $(NEXTPNR_PLACER_CELL_TIMEOUT)
-NEXTPNR_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed $(NEXTPNR_SEED) $(NEXTPNR_THREAD_FLAGS) $(NEXTPNR_PRE_PLACE_FLAGS) $(NEXTPNR_PLACER_TIMEOUT_FLAGS) $(NEXTPNR_EXTRA_FLAGS) --report $(NEXTPNR_REPORT)
+NEXTPNR_BASE_FLAGS = --$(DEVICE) --package $(PACKAGE) --freq 25 --seed $(NEXTPNR_SEED) $(NEXTPNR_THREAD_FLAGS) $(NEXTPNR_PRE_PLACE_FLAGS) $(NEXTPNR_PLACER_TIMEOUT_FLAGS) $(NEXTPNR_EXTRA_FLAGS)
+NEXTPNR_FLAGS = $(NEXTPNR_BASE_FLAGS) --report $(NEXTPNR_REPORT)
+NEXTPNR_PLACE_FLAGS = $(NEXTPNR_BASE_FLAGS) --no-route --log $(NEXTPNR_PLACE_LOG) --report $(NEXTPNR_PLACE_REPORT)
+NEXTPNR_ENV = NOVA_FLOORPLAN_MODE='$(NOVA_FLOORPLAN_MODE)' NOVA_FLOORPLAN_ENFORCE='$(NOVA_FLOORPLAN_ENFORCE)'
 
-.PHONY: all synth pnr bitstream prog prog_flash clean fast ehbasic diag diag-vgc diag-sprites FORCE
+.PHONY: all synth placecheck seed-sweep pnr bitstream prog prog_flash clean fast ehbasic diag diag-vgc diag-sprites FORCE
 
 all: ehbasic bitstream
 
@@ -66,13 +77,30 @@ RTL_VGC = $(DPRAM) $(RTLDIR)/vgc.sv $(RTLDIR)/vgc_timing.sv $(RTLDIR)/vgc_text.s
           $(RTLDIR)/dma.sv $(RTLDIR)/fio.sv \
           $(RTLDIR)/thirdparty/sfifo.v
 RTL_BRIDGE = $(RTLDIR)/debug_byte_fifo.sv \
+             $(RTLDIR)/debug_async_byte_fifo.sv \
              $(RTLDIR)/debug_spi_slave.sv
+# Production keeps the FPGA-side USB keyboard path enabled. Set
+# ENABLE_USB_HID=0 only for diagnostics when isolating routing pressure.
+ENABLE_USB_HID ?= 1
+ifeq ($(ENABLE_USB_HID),1)
+override EXTRA_DEFINES += -DENABLE_USB_HID
 RTL_USB = $(RTLDIR)/usb_hid_keyboard.sv \
           $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host.v \
           $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host_rom.v
+else
+RTL_USB =
+endif
 USB_HID_ROM_HEX = $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host_rom.hex
+ifeq ($(ENABLE_USB_HID),1)
+USB_HID_DEPS = $(USB_HID_ROM_HEX)
+else
+USB_HID_DEPS =
+endif
 RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv \
-           $(RTLDIR)/sid_hdmi_audio.sv $(RTLDIR)/nic.sv $(RTLDIR)/math_copro.sv fpga_top.sv \
+           $(RTLDIR)/sid_hdmi_audio.sv $(RTLDIR)/audio_pcm_fifo.sv \
+           $(RTLDIR)/wts_chip.sv \
+           $(RTLDIR)/nic.sv $(RTLDIR)/math_copro.sv \
+           fpga_top.sv \
            uart_rx.sv $(RTL_BRIDGE) $(RTL_USB)
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_REDIP = $(RTLDIR)/vendor/redip_sid/sid_pkg.sv \
@@ -121,7 +149,11 @@ $(PNR_ARGS): FORCE
 		'PIN_DEF=$(PIN_DEF)' \
 		'NEXTPNR_FLAGS=$(NEXTPNR_FLAGS)' \
 		'NEXTPNR_SEED=$(NEXTPNR_SEED)' \
+		'NEXTPNR_SEEDS=$(NEXTPNR_SEEDS)' \
 		'NEXTPNR_PRE_PLACE=$(NEXTPNR_PRE_PLACE)' \
+		'NEXTPNR_PLACE_MARGIN_MHZ=$(NEXTPNR_PLACE_MARGIN_MHZ)' \
+		'NOVA_FLOORPLAN_MODE=$(NOVA_FLOORPLAN_MODE)' \
+		'NOVA_FLOORPLAN_ENFORCE=$(NOVA_FLOORPLAN_ENFORCE)' \
 		> $(BUILDDIR)/build_args.new
 	@if ! cmp -s $(BUILDDIR)/build_args.new $@; then \
 		mv $(BUILDDIR)/build_args.new $@; \
@@ -129,7 +161,7 @@ $(PNR_ARGS): FORCE
 		rm -f $(BUILDDIR)/build_args.new; \
 	fi
 
-$(BUILDDIR)/$(PROJ).json: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex $(USB_HID_ROM_HEX)
+$(BUILDDIR)/$(PROJ).json: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex $(USB_HID_DEPS)
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -149,7 +181,7 @@ diag-vgc: $(BUILDDIR)/post_synth_vgc.v
 
 diag-sprites: $(BUILDDIR)/post_synth_sprites.v
 
-$(BUILDDIR)/post_synth.v: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex $(USB_HID_ROM_HEX)
+$(BUILDDIR)/post_synth.v: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex $(USB_HID_DEPS)
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -194,8 +226,29 @@ synth: ehbasic $(BUILDDIR)/$(PROJ).json
 # =========================================================================
 # Place & Route + Bitstream
 # =========================================================================
+placecheck: ehbasic $(BUILDDIR)/$(PROJ).json $(PIN_DEF) $(NEXTPNR_PRE_PLACE_DEPS)
+	@mkdir -p $(BUILDDIR)
+	$(NEXTPNR_ENV) $(NEXTPNR) $(NEXTPNR_PLACE_FLAGS) --textcfg $(NEXTPNR_PLACE_CONFIG) --json $(BUILDDIR)/$(PROJ).json --lpf $(PIN_DEF)
+	python3 $(TIMING_CHECKER) $(NEXTPNR_PLACE_REPORT) --log $(NEXTPNR_PLACE_LOG) --margin-mhz $(NEXTPNR_PLACE_MARGIN_MHZ)
+
+seed-sweep: ehbasic $(BUILDDIR)/$(PROJ).json $(PIN_DEF) $(NEXTPNR_PRE_PLACE_DEPS)
+	@mkdir -p $(BUILDDIR)
+	@failed=0; \
+	for seed in $(NEXTPNR_SEEDS); do \
+		echo "=== placement seed $$seed ==="; \
+		$(MAKE) --no-print-directory -o ehbasic NEXTPNR_SEED=$$seed placecheck; \
+		rc=$$?; \
+		if [ -f "$(NEXTPNR_PLACE_REPORT)" ]; then \
+			cp "$(NEXTPNR_PLACE_REPORT)" "$(BUILDDIR)/nextpnr-place-report.seed$$seed.json"; \
+		fi; \
+		if [ $$rc -ne 0 ]; then \
+			failed=1; \
+		fi; \
+	done; \
+	exit $$failed
+
 $(BUILDDIR)/$(PROJ).config: $(PNR_ARGS) $(BUILDDIR)/$(PROJ).json $(PIN_DEF) $(NEXTPNR_PRE_PLACE_DEPS)
-	$(NEXTPNR) $(NEXTPNR_FLAGS) --textcfg $@ --json $(BUILDDIR)/$(PROJ).json --lpf $(PIN_DEF)
+	$(NEXTPNR_ENV) $(NEXTPNR) $(NEXTPNR_FLAGS) --textcfg $@ --json $(BUILDDIR)/$(PROJ).json --lpf $(PIN_DEF)
 
 pnr: ehbasic $(BUILDDIR)/$(PROJ).config
 

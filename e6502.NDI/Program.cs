@@ -35,6 +35,7 @@ return verb switch
     "disk"       => DoDisk(args[1..], remoteHost),
     "rom"        => DoRom(args[1..], remoteHost),
     "soundfont"  => DoSoundfont(args[1..], remoteHost),
+    "music"      => DoMusic(args[1..], remoteHost),
     "asset"      => DoAsset(args[1..], remoteHost),
     _            => UnknownVerb(verb),
 };
@@ -226,6 +227,9 @@ static int DoRom(string[] args, string? host) =>
 static int DoSoundfont(string[] args, string? host) =>
     DoManagedRemoteAsset(args, host, "soundfont", "soundfonts", NormalizeSoundfontUploadName);
 
+static int DoMusic(string[] args, string? host) =>
+    DoManagedRemoteAsset(args, host, "music", "music", NormalizeMusicUploadName);
+
 static int DoAsset(string[] args, string? host)
 {
     host = ExtractRemoteHost(ref args, host);
@@ -240,6 +244,7 @@ static int DoAsset(string[] args, string? host)
     string? type = TakeOptionValue(rest, "--type", "--kind", "-t");
     string? nameOpt = TakeOptionValue(rest, "--name", "-n");
     string? pathOpt = TakeOptionValue(rest, "--path");
+    _ = TakeOptionValue(rest, "--bank", "--soundbank", "--soundfont");
 
     if (command is "list" or "ls" && type is null)
         return DoLs(new[] { "assets" }, host);
@@ -273,6 +278,7 @@ static int DoManagedRemoteAsset(
     var rest = args[1..].ToList();
     string? nameOpt = TakeOptionValue(rest, "--name", "-n");
     string? pathOpt = TakeOptionValue(rest, "--path");
+    _ = TakeOptionValue(rest, "--bank", "--soundbank", "--soundfont");
     return DoManagedRemoteAssetCore(command, rest, host, kind, baseDir, nameOpt, pathOpt, normalizeUploadName);
 }
 
@@ -305,6 +311,7 @@ static int DoManagedUpload(
     string? pathOpt,
     Func<string, string, (bool Ok, string Name, string? Error)> normalizeUploadName)
 {
+    _ = TakeOptionValue(args, "--bank", "--soundbank", "--soundfont");
     if (args.Count < 1)
     {
         PrintManagedAssetUsage(kind);
@@ -343,7 +350,7 @@ static int DoManagedUpload(
         }
     }
 
-    return DoPut(new[] { local, remote }, host);
+    return PutFile(local, remote, host);
 }
 
 static int DoManagedDownload(List<string> args, string? host, string kind, string baseDir, string? pathOpt)
@@ -444,21 +451,63 @@ static int DoLs(string[] args, string? host)
 
 static int DoPut(string[] args, string? host)
 {
-    if (host is null || args.Length < 1) {
+    var rest = args.ToList();
+    _ = TakeOptionValue(rest, "--bank", "--soundbank", "--soundfont");
+    if (host is null || rest.Count < 1) {
         Console.Error.WriteLine("Usage: ndi --remote=<host> put <local-path> [remote-path]");
         return 1;
     }
-    string local  = args[0];
-    string remote = (args.Length > 1) ? NormalizeSdRelativePath(args[1]) : Path.GetFileName(local);
+    string local  = rest[0];
+    string remote = (rest.Count > 1) ? NormalizeSdRelativePath(rest[1]) : Path.GetFileName(local);
+    return PutFile(local, remote, host);
+}
+
+static int PutFile(string local, string remote, string? host)
+{
+    if (host is null)
+    {
+        Console.Error.WriteLine("Usage: ndi --remote=<host> put <local-path> [remote-path]");
+        return 1;
+    }
     if (!File.Exists(local)) {
         Console.Error.WriteLine($"local file not found: {local}");
         return 1;
     }
+
+    byte[]? uploadBytes = null;
+    long uploadLength;
+    string displayLocal = local;
+    try
+    {
+        if (IsMidiPath(local))
+        {
+            var compiled = CompileMidiToNovaStream(local);
+            uploadBytes = compiled.Data;
+            uploadLength = uploadBytes.Length;
+            remote = NormalizeMusicRemotePath(remote);
+            displayLocal = $"{local} [compiled to .nms]";
+            Console.WriteLine(
+                $"Compiled MIDI {local} -> {remote} ({compiled.EventCount} events, {compiled.Data.Length} bytes)");
+        }
+        else
+        {
+            remote = NormalizeSdRelativePath(remote);
+            uploadLength = new FileInfo(local).Length;
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"music compile: {ex.Message}");
+        return 1;
+    }
+
     string url = SdUrl(host, remote);
     using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
     try {
-        using var fs = new FileStream(local, FileMode.Open, FileAccess.Read);
-        var content = new StreamContent(fs);
+        using Stream stream = uploadBytes is not null
+            ? new MemoryStream(uploadBytes)
+            : new FileStream(local, FileMode.Open, FileAccess.Read);
+        var content = new StreamContent(stream);
         // Mark the upload as opaque bytes so NovaHost stores the body exactly.
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
@@ -466,8 +515,7 @@ static int DoPut(string[] args, string? host)
             Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
             return 1;
         }
-        var info = new FileInfo(local);
-        Console.WriteLine($"PUT {local} → {url} ({info.Length} bytes) OK");
+        Console.WriteLine($"PUT {displayLocal} → {url} ({uploadLength} bytes) OK");
         return 0;
     } catch (Exception ex) {
         Console.Error.WriteLine($"put: {ex.Message}");
@@ -710,6 +758,39 @@ static string ResolveManagedReferencePath(string baseDir, string nameOrPath)
     return JoinRemotePath(baseDir, nameOrPath);
 }
 
+static bool IsMidiPath(string path)
+{
+    string ext = Path.GetExtension(path).ToLowerInvariant();
+    return ext is ".mid" or ".midi";
+}
+
+static string NormalizeMusicFilename(string filename)
+{
+    string ext = Path.GetExtension(filename).ToLowerInvariant();
+    if (ext.Length == 0)
+        return filename + ".nms";
+    if (ext is ".mid" or ".midi" or ".nms")
+        return Path.ChangeExtension(filename, ".nms") ?? filename + ".nms";
+
+    throw new InvalidOperationException("music upload target name must end in .nms, .mid, or .midi.");
+}
+
+static string NormalizeMusicRemotePath(string remotePath)
+{
+    string normalized = NormalizeSdRelativePath(remotePath);
+    if (normalized.Length == 0)
+        throw new InvalidOperationException("music upload target path is empty.");
+
+    return NormalizeMusicFilename(normalized);
+}
+
+static (byte[] Data, int EventCount, uint TotalFrames, NovaMusicStreamCompiler.Result Result)
+    CompileMidiToNovaStream(string midiPath)
+{
+    var result = NovaMusicStreamCompiler.Compile(midiPath);
+    return (result.Data, result.EventCount, result.TotalFrames, result);
+}
+
 static string AssetDirectoryFor(string type)
 {
     string normalized = NormalizeSdRelativePath(type).ToLowerInvariant();
@@ -721,6 +802,9 @@ static string AssetDirectoryFor(string type)
         "sid"           => "assets/sid",
         "sid-assets"    => "assets/sid",
         "sid_assets"    => "assets/sid",
+        "music"         => "music",
+        "mid"           => "music",
+        "midi"          => "music",
         ""              => "assets",
         _               => JoinRemotePath("assets", normalized),
     };
@@ -761,6 +845,27 @@ static (bool Ok, string Name, string? Error) NormalizeSoundfontUploadName(string
         requestedName += ".nsfb";
     else if (requestedExt != ".nsfb")
         return (false, requestedName, "soundfont upload target name must end in .nsfb.");
+
+    return (true, requestedName, null);
+}
+
+static (bool Ok, string Name, string? Error) NormalizeMusicUploadName(string localPath, string requestedName)
+{
+    if (IsMidiPath(localPath))
+    {
+        try { return (true, NormalizeMusicFilename(requestedName), null); }
+        catch (Exception ex) { return (false, requestedName, ex.Message); }
+    }
+
+    string localExt = Path.GetExtension(localPath).ToLowerInvariant();
+    if (localExt != ".nms")
+        return (false, requestedName, "music upload expects a .mid/.midi file or a precompiled .nms stream.");
+
+    string requestedExt = Path.GetExtension(requestedName).ToLowerInvariant();
+    if (requestedExt.Length == 0)
+        requestedName += ".nms";
+    else if (requestedExt != ".nms")
+        return (false, requestedName, "precompiled music upload target name must end in .nms.");
 
     return (true, requestedName, null);
 }
@@ -1056,6 +1161,9 @@ static int DoImport(string[] args)
             case "--tokens" when i + 1 < args.Length:
                 tokensPath = args[++i];
                 break;
+            case "--bank" or "--soundbank" or "--soundfont" when i + 1 < args.Length:
+                i++;
+                break;
             default:
                 if (args[i].StartsWith('/'))
                     destPath = args[i];
@@ -1073,8 +1181,36 @@ static int DoImport(string[] args)
     NdiFileType fileType = ExtensionToFileType(Path.GetExtension(hostFile));
 
     byte[] data;
-    try { data = File.ReadAllBytes(hostFile); }
-    catch (Exception ex) { Console.Error.WriteLine($"Error reading host file: {ex.Message}"); return 1; }
+    bool compiledMusic = false;
+    NovaMusicStreamCompiler.Result? musicResult = null;
+    if (IsMidiPath(hostFile))
+    {
+        if (doTokenize)
+        {
+            Console.Error.WriteLine("Cannot combine --tokenize with MIDI music compilation.");
+            return 1;
+        }
+
+        try
+        {
+            var compiled = CompileMidiToNovaStream(hostFile);
+            data = compiled.Data;
+            musicResult = compiled.Result;
+            filename = NormalizeMusicFilename(filename);
+            fileType = NdiFileType.Mid;
+            compiledMusic = true;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music compile: {ex.Message}");
+            return 1;
+        }
+    }
+    else
+    {
+        try { data = File.ReadAllBytes(hostFile); }
+        catch (Exception ex) { Console.Error.WriteLine($"Error reading host file: {ex.Message}"); return 1; }
+    }
 
     if (doTokenize)
     {
@@ -1113,7 +1249,15 @@ static int DoImport(string[] args)
         catch (Exception ex) { Console.Error.WriteLine($"Error writing file: {ex.Message}"); return 1; }
     }
 
-    Console.WriteLine($"Imported {hostFile} -> {destPath.TrimEnd('/')}/{filename}  ({data.Length} bytes, type={fileType})");
+    if (compiledMusic && musicResult is not null)
+    {
+        Console.WriteLine(
+            $"Imported {hostFile} -> {destPath.TrimEnd('/')}/{filename}  ({data.Length} bytes, type={fileType}, events={musicResult.EventCount})");
+    }
+    else
+    {
+        Console.WriteLine($"Imported {hostFile} -> {destPath.TrimEnd('/')}/{filename}  ({data.Length} bytes, type={fileType})");
+    }
     return 0;
 }
 
@@ -1562,7 +1706,7 @@ static NdiFileType ExtensionToFileType(string ext) =>
         ".bas"            => NdiFileType.Bas,
         ".sid"            => NdiFileType.Sid,
         ".bin"            => NdiFileType.Bin,
-        ".mid" or ".midi" => NdiFileType.Mid,
+        ".mid" or ".midi" or ".nms" => NdiFileType.Mid,
         ".gfx"            => NdiFileType.Gfx,
         _                 => NdiFileType.Bin,
     };
@@ -1626,6 +1770,7 @@ static void PrintUsage()
     Console.Error.WriteLine("  disk list|upload|download|delete ... --remote <host>");
     Console.Error.WriteLine("  rom list|upload|download|delete ... --remote <host>");
     Console.Error.WriteLine("  soundfont list|upload|download|delete ... --remote <host>");
+    Console.Error.WriteLine("  music list|upload|download|delete ... --remote <host>");
     Console.Error.WriteLine("  asset list|upload|download|delete ... --remote <host> --type <boot|fonts|sid|...>");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Raw SD commands, kept for compatibility:");

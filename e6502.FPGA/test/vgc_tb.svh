@@ -101,7 +101,7 @@ vgc dut (
     .cpu_ce(cpu_ce),
     .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
     .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
-    .key_valid(key_valid), .key_data(key_data),
+    .key_valid(key_valid), .key_data(key_data), .key_ready(),
     .blt_space(tb_blt_space), .blt_addr(tb_blt_addr), .blt_rdata(tb_blt_rdata),
     .blt_wdata(tb_blt_wdata), .blt_we(tb_blt_we), .blt_re(tb_blt_re),
     .video_blit_safe(),

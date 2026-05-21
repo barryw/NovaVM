@@ -24,6 +24,7 @@ module vgc (
     // Keyboard input
     input  logic        key_valid,
     input  logic [7:0]  key_data,
+    output logic        key_ready,
 
     // Blitter memory port — read/write access to VGC internal memories.
     // Width is 17 bits so bus masters can share one address shape. Current
@@ -777,6 +778,7 @@ module vgc (
     wire [7:0] key_data_xlat = (key_data == 8'h7F) ? 8'h08 : key_data;
     wire       key_data_accept = key_valid && !key_fifo_full &&
                                  key_data_xlat != 8'h00 && !key_data_xlat[7];
+    assign key_ready = !key_fifo_full;
 
     sfifo #(
         .BW(8),
@@ -960,13 +962,10 @@ module vgc (
     // cleared in the reset branch of that block).
 
     // =========================================================================
-    // Address decode — READ side uses live cpu_addr (combinational into
-    // cpu_rdata mux). WRITE side uses r_cpu_addr_w / r_cpu_we_w / r_cpu_wdata_w
-    // registered one pixel cycle to break the BRAM→CPU→cmd_*_addr critical
-    // path. Net: 41ns single-cycle path becomes two short paths in two pixel
-    // cycles. Writes still fire on the same cpu_ce=1 edge as before because
-    // CPU drives cpu_we/cpu_addr stably for 2 pixel cycles per CPU T-cycle —
-    // r_*_w lags by 1 cycle but the sampled value at the firing edge matches.
+    // Address decode — CPU-facing reads and writes are register-sliced one
+    // pixel cycle at the VGC boundary. Top-level already selects cpu_rdata one
+    // cycle after decode, so this preserves the bus contract while cutting the
+    // BRAM->CPU->VGC combinational path.
     // See feedback_register_slice_at_peripheral_writes.md.
     // =========================================================================
     // POR-determinism via DECLARATION init (not initial block + rst clause).
@@ -977,6 +976,7 @@ module vgc (
     // from the declaration `= 0` value at FPGA configuration time.
     // Diagnosed 2026-04-27 after rst-clause version caused total HW failure.
     logic [15:0] r_cpu_addr_w  = 16'h0;
+    logic [15:0] r_cpu_addr_r  = 16'h0;
     logic [7:0]  r_cpu_wdata_w = 8'h0;
     // `write_active` is the firing flag for the write-side block. It pulses
     // for one pixel cycle following any `cpu_we && cpu_ce` event. The block
@@ -984,28 +984,30 @@ module vgc (
     // the same cycle because they were captured at the previous posedge from
     // the same cpu_addr / cpu_wdata that produced the cpu_we&&cpu_ce event.
     logic        write_active = 1'b0;
+    logic        read_active = 1'b0;
     always_ff @(posedge clk) begin
         r_cpu_addr_w  <= cpu_addr;
         r_cpu_wdata_w <= cpu_wdata;
         write_active  <= cpu_we && cpu_ce;
+        read_active   <= cpu_re && cpu_ce;
+        if (cpu_re && cpu_ce)
+            r_cpu_addr_r <= cpu_addr;
     end
 
-    // READ-side decoders — combinational on live cpu_addr.
-    wire vgc_reg_sel   = (cpu_addr >= VGC_BASE && cpu_addr <= VGC_REGS_END);
-    wire vgc_irq_sel   = (cpu_addr >= VGC_IRQ_BASE && cpu_addr <= VGC_IRQ_END);
-    wire spr_reg_sel   = (cpu_addr >= SPR_REG_BASE && cpu_addr <= SPR_REG_END);
-    wire vram_reg_sel  = (cpu_addr >= VRAM_REG_BASE && cpu_addr <= VRAM_REG_END);
-    wire dim_reg_sel   = (cpu_addr == DIM_REG_ADDR);
-    wire text_reg_sel  = (cpu_addr == TEXT_FLAGS_ADDR || cpu_addr == TEXT_REVATTR_ADDR);
-    wire gfx_trans_sel = (cpu_addr == GFX_TRANS_ADDR);
-    wire palette_mode_sel = (cpu_addr == PALETTE_MODE_ADDR);
-    wire scroll_ctl_sel = (cpu_addr == SCROLL_CTL_ADDR);
-    wire collision_hi_sel = (cpu_addr == COLLST_HI_ADDR || cpu_addr == COLLBG_HI_ADDR);
-    wire fio_name_sel  = (cpu_addr >= FIO_NAME && cpu_addr <= 16'hB9EF);
-    wire fio_len_sel   = (cpu_addr == FIO_NAME_LEN);
-    wire [4:0]  reg_offset   = cpu_addr[4:0];
-    wire [3:0]  irq_offset   = cpu_addr[3:0];
-    wire [2:0]  vram_reg_off = cpu_addr[2:0];
+    // READ-side decoders — derived from r_cpu_addr_r (registered).
+    wire vgc_reg_sel   = (r_cpu_addr_r >= VGC_BASE && r_cpu_addr_r <= VGC_REGS_END);
+    wire vgc_irq_sel   = (r_cpu_addr_r >= VGC_IRQ_BASE && r_cpu_addr_r <= VGC_IRQ_END);
+    wire spr_reg_sel   = (r_cpu_addr_r >= SPR_REG_BASE && r_cpu_addr_r <= SPR_REG_END);
+    wire vram_reg_sel  = (r_cpu_addr_r >= VRAM_REG_BASE && r_cpu_addr_r <= VRAM_REG_END);
+    wire dim_reg_sel   = (r_cpu_addr_r == DIM_REG_ADDR);
+    wire text_reg_sel  = (r_cpu_addr_r == TEXT_FLAGS_ADDR || r_cpu_addr_r == TEXT_REVATTR_ADDR);
+    wire gfx_trans_sel = (r_cpu_addr_r == GFX_TRANS_ADDR);
+    wire palette_mode_sel = (r_cpu_addr_r == PALETTE_MODE_ADDR);
+    wire scroll_ctl_sel = (r_cpu_addr_r == SCROLL_CTL_ADDR);
+    wire collision_hi_sel = (r_cpu_addr_r == COLLST_HI_ADDR || r_cpu_addr_r == COLLBG_HI_ADDR);
+    wire [4:0]  reg_offset   = r_cpu_addr_r[4:0];
+    wire [3:0]  irq_offset   = r_cpu_addr_r[3:0];
+    wire [2:0]  vram_reg_off = r_cpu_addr_r[2:0];
     // Sprite register map starts at $A040 and spans $A040-$A0BF.
     // Offsets from the base are 0..127 = sprite (4 bits) << 3 | field (3 bits).
     // Earlier versions used `cpu_addr[6:3]` directly, which worked only as long
@@ -1015,7 +1017,7 @@ module vgc (
     // sprite number — SPRITESET-set state and SPRITE-command-set state land
     // in different sprites, and sprite register readback reports the wrong
     // sprite's state.
-    wire [6:0]  spr_offset   = cpu_addr[6:0] - 7'h40;
+    wire [6:0]  spr_offset   = r_cpu_addr_r[6:0] - 7'h40;
     wire [3:0]  spr_index    = spr_offset[6:3];
     wire [2:0]  spr_field    = spr_offset[2:0];
 
@@ -1081,7 +1083,7 @@ module vgc (
         normalize_scroll_y = (value >= 8'd200) ? 8'(value - 8'd200) : value;
     endfunction
 
-    wire vram_data_read = cpu_re && cpu_ce && vram_reg_sel && vram_reg_off == VR_DATA;
+    wire vram_data_read = read_active && vram_reg_sel && vram_reg_off == VR_DATA;
     wire vram_char_read = vram_port_read_active && vram_port_read_space == SPACE_CHAR   && vram_port_read_addr < TEXT_SIZE;
     wire vram_color_read= vram_port_read_active && vram_port_read_space == SPACE_COLOR  && vram_port_read_addr < TEXT_SIZE;
     wire vram_gfx_read  = vram_port_read_active && vram_port_read_space == SPACE_GFX    && vram_port_read_addr < GFX_SIZE;
@@ -1161,7 +1163,7 @@ module vgc (
             endcase
         end
         else if (collision_hi_sel) begin
-            case (cpu_addr)
+            case (r_cpu_addr_r)
                 COLLST_HI_ADDR: cpu_rdata = collision_ss[15:8];
                 COLLBG_HI_ADDR: cpu_rdata = collision_bg[15:8];
                 default:        cpu_rdata = 8'h00;
@@ -1181,7 +1183,7 @@ module vgc (
         else if (palette_mode_sel) cpu_rdata = {7'b0, palette_mode};
         else if (scroll_ctl_sel) cpu_rdata = {5'b0, scroll_ctl[2:0]};
         else if (text_reg_sel) begin
-            case (cpu_addr)
+            case (r_cpu_addr_r)
                 TEXT_FLAGS_ADDR:   cpu_rdata = text_flags;
                 TEXT_REVATTR_ADDR: cpu_rdata = text_reverse_attr;
                 default:           cpu_rdata = 8'h00;

@@ -45,6 +45,27 @@ public class NdiFloppyDeviceTests
         finally { File.Delete(path); }
     }
 
+    [TestMethod]
+    public void Save_NmsUsesMidFileType()
+    {
+        string path = TempNdi();
+        try
+        {
+            CreateDisk(path);
+
+            var dev = new NdiFloppyDevice("F");
+            dev.Mount(path);
+            dev.Save("SONG", [0x4E, 0x4D, 0x53, 0x31], ".nms");
+
+            StorageDirEntry entry = dev.ListDirectory(null).Single(e => e.Filename == "SONG");
+            Assert.AreEqual(NdiFileType.Mid, entry.FileType,
+                "Compiled music streams keep the MID file type so directory metadata stays compatible with existing clients.");
+
+            dev.Unmount();
+        }
+        finally { File.Delete(path); }
+    }
+
     // -------------------------------------------------------------------------
     // 2. Subdirectory: cd, save, list, cd back
     // -------------------------------------------------------------------------

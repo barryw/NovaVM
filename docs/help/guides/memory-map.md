@@ -25,6 +25,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | A0E6--A0EC | 7 B | VGC text, fixed-palette, scroll, and collision high-byte controls |
 | A0F0--A0FF | 16 B | VGC IRQ block |
 | A100--A13F | 64 B | Network Interface Controller (NIC) registers |
+| A140--A1FF | 192 B | Wavetable Synthesizer (WTS) registers and event scheduler |
 | B9A0--B9EF | 80 B | File I/O Controller (FIO) registers |
 | B9F0--B9FF | 16 B | Boot/runtime coordination flags |
 | BA00--BA3F | 64 B | Expansion Memory Controller (XMC) registers |
@@ -43,7 +44,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 
 ::: note
 The address range A020--A03E is reserved for language/host services. Unlisted
-addresses in A0ED--A0EF and A140--A9FF are not claimed by any coprocessor and
+addresses in A0ED--A0EF and A200--A9FF are not claimed by any coprocessor and
 fall through to the underlying flat RAM.
 The ranges BA9C--BAAF and BB8E--BBFF are similarly unallocated RAM.
 BAB0--BB1F is the file metadata buffer, BB20--BB4F is the math coprocessor,
@@ -507,9 +508,9 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $B9A5 | FioSrcH | R/W | Source/destination address, high byte; `NVGLOAD` XRAM staging address middle byte. |
 | $B9A6 | FioEndL | R/W | End address, low byte (used by `SAVE` to determine program extent); `NVGLOAD` XRAM staging address high byte. |
 | $B9A7 | FioEndH | R/W | End address, high byte. |
-| $B9A8 | FioSizeL | RO | Loaded data size, low byte (written by host after `LOAD` or `DIR` read). |
-| $B9A9 | FioSizeH | RO | Loaded data size, high byte. |
-| $B9AA | FioGSpace | R/W | Graphics memory space for `GSAVE`/`GLOAD`/`NVGLOAD`; XRAM address high byte for `XLOAD`/`XSAVE`. |
+| $B9A8 | FioSizeL | RO | Loaded data size low byte; directory-entry size byte 0 after `DIR` read. |
+| $B9A9 | FioSizeH | RO | Loaded data size high byte; directory-entry size byte 1. |
+| $B9AA | FioGSpace / FioSize2 | R/W | Graphics memory space for `GSAVE`/`GLOAD`/`NVGLOAD`; XRAM address high byte for `XLOAD`/`XSAVE`; directory-entry size byte 2 after `DIR` read. |
 | $B9AB | FioGAddrL | R/W | Graphics/XRAM offset, low byte; `NVGLOAD` bitmap destination low byte. |
 | $B9AC | FioGAddrH | R/W | Graphics/XRAM offset, high byte; `NVGLOAD` bitmap destination high byte. |
 | $B9AD | FioGLenL | R/W | Graphics/XRAM transfer length, low byte; ignored by `NVGLOAD`. |
@@ -523,8 +524,8 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | --- | --- | --- |
 | $01 | FioCmdSave | Save bytes from `FioSrcL/H` to `FioEndL/H` (exclusive) to disk; prepends a 2-byte load-address. |
 | $02 | FioCmdLoad | Load file into RAM at `FioSrcL/H`; skips the 2-byte load-address prefix; sets `FioSizeL/H`. |
-| $03 | FioCmdDirOpen | Open the program directory; populates `FioName` and `FioSizeL/H` with the first entry. |
-| $04 | FioCmdDirRead | Advance to the next directory entry; populates `FioName` and `FioSizeL/H`. |
+| $03 | FioCmdDirOpen | Open the program directory; populates `FioName`, `FioSizeL/H/2`, and `FioDirType` with the first entry. |
+| $04 | FioCmdDirRead | Advance to the next directory entry; populates `FioName`, `FioSizeL/H/2`, and `FioDirType`. |
 | $05 | FioCmdDelete | Delete the named program from disk. |
 | $06 | FioCmdGSave | Save VGC memory space to a `.gfx` file. FioGSpace=space, FioGAddrL/H=offset, FioGLenL/H=length. |
 | $07 | FioCmdGLoad | Load `.gfx` file into VGC memory space. FioGSpace=space, FioGAddrL/H=offset, FioGLenL/H=max length. |

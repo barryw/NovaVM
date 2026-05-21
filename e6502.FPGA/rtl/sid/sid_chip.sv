@@ -194,10 +194,7 @@ module sid_chip (
             active_addr      <= 0;
             active_data      <= 0;
             write_active     <= 1'b0;
-            if (ce_1m)
-                sid_phase <= 0;
-            else if (sid_phase != 5'd31)
-                sid_phase <= sid_phase + 5'd1;
+            sid_phase        <= 0;
         end else begin
             if (ce_1m)
                 sid_phase <= 0;
@@ -227,13 +224,13 @@ module sid_chip (
         end
     end
 
-    assign bus_i.addr = active_addr;
-    assign bus_i.data = active_data;
+    assign bus_i.addr = rst ? 5'd0 : active_addr;
+    assign bus_i.data = rst ? 8'd0 : active_data;
     assign bus_i.phi2 = sid_phi2;
-    assign bus_i.r_w_n = ~(write_active && !sid_phi2);
+    assign bus_i.r_w_n = rst ? 1'b1 : ~(write_active && !sid_phi2);
     assign bus_i.res = rst;
 
-    assign redip_cs.cs_n = ~write_active;
+    assign redip_cs.cs_n = rst ? 1'b1 : ~write_active;
     assign redip_cs.cs_io1_n = 1'b1;
     assign redip_cs.a8 = 1'b0;
     assign redip_cs.a5 = 1'b0;
@@ -263,11 +260,16 @@ module sid_chip (
     // own filter curve internally, so filter_f0_in is intentionally unused.
     assign filter_fc_out = filter_fc;
 
+    // reDIP's 24-bit mixer output is substantially hotter than VICE reSID's
+    // normalized output. Keep the SID core near reSID scale before it reaches
+    // the dual-SID/WTS mixers and HDMI PCM conditioner.
+    localparam int REDIP_AUDIO_SHIFT = 9;
+
     always_ff @(posedge clk) begin
         if (rst)
             audio_out <= 18'sd0;
         else
-            audio_out <= redip_audio_o.left >>> 6;
+            audio_out <= redip_audio_o.left >>> REDIP_AUDIO_SHIFT;
     end
 
 endmodule

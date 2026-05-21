@@ -24,7 +24,7 @@ module test_gtext;
         .cpu_ce(cpu_ce),
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
-        .key_valid(1'b0), .key_data(8'h00),
+        .key_valid(1'b0), .key_data(8'h00), .key_ready(),
         .blt_space(3'd0), .blt_addr(16'd0), .blt_rdata(),
         .blt_wdata(8'd0), .blt_we(1'b0), .blt_re(1'b0),
         .video_blit_safe(),

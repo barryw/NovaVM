@@ -737,6 +737,9 @@ FIO_SIZEH         = $B9A9
 .ifndef FIO_GSPACE
 FIO_GSPACE        = $B9AA
 .endif
+.ifndef FIO_SIZE2
+FIO_SIZE2         = $B9AA
+.endif
 .ifndef FIO_GADDRL
 FIO_GADDRL        = $B9AB
 .endif
@@ -1528,14 +1531,50 @@ WTS_ENUM_NAME     = $A1A3
 .ifndef WTS_ENUM_END
 WTS_ENUM_END      = $A1DF
 .endif
+.ifndef WTS_EVENT_STATUS
+WTS_EVENT_STATUS  = $A1E0
+.endif
+.ifndef WTS_EVENT_COUNT_L
+WTS_EVENT_COUNT_L = $A1E1
+.endif
+.ifndef WTS_EVENT_COUNT_H
+WTS_EVENT_COUNT_H = $A1E2
+.endif
+.ifndef WTS_EVENT_FREE_L
+WTS_EVENT_FREE_L  = $A1E3
+.endif
+.ifndef WTS_EVENT_FREE_H
+WTS_EVENT_FREE_H  = $A1E4
+.endif
+.ifndef WTS_EVENT_FRAME0
+WTS_EVENT_FRAME0  = $A1E5
+.endif
+.ifndef WTS_EVENT_FRAME1
+WTS_EVENT_FRAME1  = $A1E6
+.endif
+.ifndef WTS_EVENT_FRAME2
+WTS_EVENT_FRAME2  = $A1E7
+.endif
+.ifndef WTS_EVENT_FRAME3
+WTS_EVENT_FRAME3  = $A1E8
+.endif
 .ifndef WTS_END
-WTS_END           = $A1DF
+WTS_END           = $A1FF
 .endif
 .ifndef WTS_CMD_ALL_NOTES_OFF
 WTS_CMD_ALL_NOTES_OFF = $01
 .endif
 .ifndef WTS_CMD_RESET_EFFECTS
 WTS_CMD_RESET_EFFECTS = $02
+.endif
+.ifndef WTS_CMD_EVENT_RESET
+WTS_CMD_EVENT_RESET = $03
+.endif
+.ifndef WTS_CMD_EVENT_START
+WTS_CMD_EVENT_START = $04
+.endif
+.ifndef WTS_CMD_EVENT_STOP
+WTS_CMD_EVENT_STOP = $05
 .endif
 
 ; ---------------------------------------------------------------------

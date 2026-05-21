@@ -97,6 +97,7 @@ module debug_bridge #(
     // Key injection
     output logic        key_inject_valid,
     output logic [7:0]  key_inject_data,
+    input  logic        key_inject_ready,
 
     // SDRAM port B debug path (used during CPU-reset to preload tables like the
     // 6581 filter curve, and by NovaHost FIO XLOAD/XSAVE to stream XRAM).
@@ -119,7 +120,22 @@ module debug_bridge #(
     // Host status bits latched from NovaHost and exposed by fpga_top on
     // ULX3S LEDs. bit0=WiFi connected, bit1=FIO active, bit2=FIO error,
     // bit3=SD mounted, bit4=boot ready, bit5=boot degraded, bit7=host seen.
-    output logic [7:0]  host_status
+    output logic [7:0]  host_status,
+
+    // Host-rendered audio path. NovaHost streams little-endian signed
+    // 16-bit stereo PCM bytes; fpga_top buffers and mixes those with SID PCM.
+    output logic        audio_pcm_we,
+    output logic [7:0]  audio_pcm_data,
+    input  logic        audio_pcm_ready,
+    input  logic [15:0] audio_pcm_space,
+    input  logic [15:0] audio_pcm_underruns,
+
+    // Timestamped WTS event stream. NovaHost sends prepared event records
+    // into the FPGA-side scheduler instead of poking WTS registers in real
+    // time.
+    output logic        wts_event_we,
+    output logic [7:0]  wts_event_data,
+    input  logic        wts_event_ready
 );
 
     // =========================================================================
@@ -173,6 +189,29 @@ module debug_bridge #(
                                            // streams bytes from NIC TX buffer.
     localparam CMD_NIC_RX_WRITE_BLK=8'h1D; // [offset, count, ...data]
                                            // writes bytes to NIC RX buffer.
+    localparam CMD_POKE_SDRAM_STREAM=8'h1E; // [addr_hi, addr_mid, addr_lo,
+                                            //  count_hi, count_lo, ...data].
+                                            // 16-bit count; count=0 means
+                                            // 65536. Single ack at end.
+    localparam CMD_WRITE_AUDIO_PCM=8'h1F; // [count_hi, count_lo, ...data]
+                                          // Signed 16-bit stereo PCM bytes:
+                                          // Llo,Lhi,Rlo,Rhi. count=0 means
+                                          // 65536. Bridge backpressures when
+                                          // the audio FIFO is full.
+    localparam CMD_AUDIO_PCM_STATUS=8'h20; // returns free-byte and underrun
+                                           // counts, both big-endian.
+    localparam CMD_BRIDGE_CAPS=8'h21;    // returns feature flags.
+    localparam CMD_POKE_MULTI=8'h22;     // [count, addr_hi, addr_lo, data]...
+                                          // count must be non-zero. Single ack.
+    localparam CMD_WRITE_WTS_EVENTS=8'h23; // [count_hi, count_lo, ...bytes]
+                                           // Streams timestamped WTS event
+                                           // records into the FPGA scheduler.
+    localparam CMD_WRITE_KEYS=8'h24;     // [count, ...bytes]. count=0 means
+                                         // 256. Streams bytes into the VGC
+                                         // keyboard FIFO with ready backpressure.
+    localparam [7:0] CAP_POKE_MULTI=8'h01;
+    localparam [7:0] CAP_WTS_EVENT_STREAM=8'h02;
+    localparam [7:0] CAP_KEY_STREAM=8'h04;
 
     localparam [5:0] CPU_STATE_DECODE = 6'd12;
     localparam int TRACE_DEPTH = 64;
@@ -234,7 +273,13 @@ module debug_bridge #(
         S_SDRAM_READ_WAIT,// 30: wait for SDRAM read data
         S_NIC_BULK_WRITE,// 31: stream incoming bytes into NIC RX buffer
         S_NIC_BULK_READ, // 32: set NIC TX-buffer read address
-        S_NIC_BULK_WAIT  // 33: wait for NIC buffer read path
+        S_NIC_BULK_WAIT, // 33: wait for NIC buffer read path
+        S_AUDIO_BULK_WRITE,// 34: stream PCM bytes into HDMI audio FIFO
+        S_MULTI_POKE_ADDR_HI,// 35: sparse poke stream, address high byte
+        S_MULTI_POKE_ADDR_LO,// 36: sparse poke stream, address low byte
+        S_MULTI_POKE_DATA,   // 37: sparse poke stream, data byte + pulse
+        S_WTS_EVENT_WRITE,   // 38: stream timestamped WTS event bytes
+        S_KEY_BULK_WRITE     // 39: stream keyboard bytes into VGC FIFO
     } state_t;
 
     state_t state;
@@ -262,10 +307,12 @@ module debug_bridge #(
     // CPU state latches
     logic [15:0] cpu_pc_l;
     logic [7:0]  cpu_a_l, cpu_x_l, cpu_y_l, cpu_sp_l, cpu_flags_l, cpu_status_l;
+    logic [15:0] audio_pcm_space_l;
+    logic [15:0] audio_pcm_underruns_l;
 
     // Bulk read state
     logic [15:0] bulk_addr;
-    logic [10:0] bulk_remaining;   // 0-256 per wire command
+    logic [16:0] bulk_remaining;   // 0-65536 per wire command
 
     // SDRAM bulk-write state (port B)
     logic [24:0] sdram_bulk_addr;
@@ -402,6 +449,23 @@ module debug_bridge #(
                         default: tx_byte_mux = 8'h00;
                     endcase
                 end
+                CMD_AUDIO_PCM_STATUS: begin
+                    case (resp_idx)
+                        4'd1:    tx_byte_mux = audio_pcm_space_l[15:8];
+                        4'd2:    tx_byte_mux = audio_pcm_space_l[7:0];
+                        4'd3:    tx_byte_mux = audio_pcm_underruns_l[15:8];
+                        4'd4:    tx_byte_mux = audio_pcm_underruns_l[7:0];
+                        default: tx_byte_mux = 8'h00;
+                    endcase
+                end
+                CMD_BRIDGE_CAPS: begin
+                    case (resp_idx)
+                        4'd1:    tx_byte_mux = CAP_POKE_MULTI |
+                                                CAP_WTS_EVENT_STREAM |
+                                                CAP_KEY_STREAM;
+                        default: tx_byte_mux = 8'h00;
+                    endcase
+                end
                 default: tx_byte_mux = 8'h00;
             endcase
         end
@@ -465,6 +529,8 @@ module debug_bridge #(
             cpu_sp_l         <= 0;
             cpu_flags_l      <= 0;
             cpu_status_l     <= 0;
+            audio_pcm_space_l <= 0;
+            audio_pcm_underruns_l <= 0;
             bulk_addr        <= 0;
             bulk_remaining   <= 0;
             paused           <= 0;
@@ -518,6 +584,10 @@ module debug_bridge #(
             rx_buf_valid     <= 0;
             rx_buf_data      <= 0;
             host_status      <= 0;
+            audio_pcm_we     <= 0;
+            audio_pcm_data   <= 0;
+            wts_event_we     <= 0;
+            wts_event_data   <= 0;
         end else begin
             // Default: clear single-cycle pulses
             tx_start         <= 0;
@@ -529,6 +599,8 @@ module debug_bridge #(
             dbg_nic_buf_re   <= 0;
             dbg_cpu_resume   <= 1'b0;
             key_inject_valid <= 0;
+            audio_pcm_we     <= 0;
+            wts_event_we     <= 0;
             sdram_done_sync  <= {sdram_done_sync[1:0], sdram_b_done_toggle};
 
             if (dbg_cpu_reset && !boot_claimed_by_host) begin
@@ -586,6 +658,7 @@ module debug_bridge #(
                             CMD_POKE_ROM:    begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_ROM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_SDRAM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
+                            CMD_POKE_SDRAM_STREAM:begin recv_need <= 3'd5; state <= S_RECV; end
                             CMD_READ_SDRAM_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
                             CMD_POKE_BLOCK:  begin recv_need <= 3'd3; state <= S_RECV; end
                             CMD_POKE_VGC_BLK:begin recv_need <= 3'd4; state <= S_RECV; end
@@ -597,6 +670,24 @@ module debug_bridge #(
                             CMD_HOST_STATUS: begin recv_need <= 3'd1; state <= S_RECV; end
                             CMD_NIC_TX_READ_BLK: begin recv_need <= 3'd2; state <= S_RECV; end
                             CMD_NIC_RX_WRITE_BLK: begin recv_need <= 3'd2; state <= S_RECV; end
+                            CMD_WRITE_AUDIO_PCM: begin recv_need <= 3'd2; state <= S_RECV; end
+                            CMD_POKE_MULTI: begin recv_need <= 3'd1; state <= S_RECV; end
+                            CMD_WRITE_WTS_EVENTS: begin recv_need <= 3'd2; state <= S_RECV; end
+                            CMD_WRITE_KEYS: begin recv_need <= 3'd1; state <= S_RECV; end
+                            CMD_BRIDGE_CAPS: begin
+                                resp_idx       <= 0;
+                                resp_total     <= 2;
+                                bulk_remaining <= 0;
+                                state          <= S_TX_BYTE;
+                            end
+                            CMD_AUDIO_PCM_STATUS: begin
+                                audio_pcm_space_l     <= audio_pcm_space;
+                                audio_pcm_underruns_l <= audio_pcm_underruns;
+                                resp_idx              <= 0;
+                                resp_total            <= 4'd5;
+                                bulk_remaining        <= 0;
+                                state                 <= S_TX_BYTE;
+                            end
                             CMD_SYS_RESET_HOLD: begin
                                 dbg_cpu_reset          <= 1'b1;
                                 dbg_system_reset       <= 1'b1;
@@ -743,8 +834,13 @@ module debug_bridge #(
 
                                 CMD_SEND_KEY: begin
                                     key_inject_data  <= rx_buf_data;
-                                    key_inject_valid <= 1;
                                     state            <= S_KEY_DO;
+                                end
+
+                                CMD_WRITE_KEYS: begin
+                                    bulk_remaining <= (rx_buf_data == 0) ? 17'd256
+                                                                          : {9'd0, rx_buf_data};
+                                    state          <= S_KEY_BULK_WRITE;
                                 end
 
                                 CMD_PEEK_BLOCK: begin
@@ -776,6 +872,14 @@ module debug_bridge #(
                                     sdram_bulk_addr <= {1'b0, param0, param1, param2};
                                     bulk_remaining  <= (rx_buf_data == 0) ? 11'd256
                                                                           : {3'b0, rx_buf_data};
+                                    state           <= S_SDRAM_RECV;
+                                end
+
+                                CMD_POKE_SDRAM_STREAM: begin
+                                    sdram_bulk_addr <= {1'b0, param0, param1, param2};
+                                    bulk_remaining  <= ({param3, rx_buf_data} == 16'd0)
+                                                       ? 17'd65536
+                                                       : {1'b0, param3, rx_buf_data};
                                     state           <= S_SDRAM_RECV;
                                 end
 
@@ -884,6 +988,33 @@ module debug_bridge #(
                                     state          <= S_NIC_BULK_WRITE;
                                 end
 
+                                CMD_WRITE_AUDIO_PCM: begin
+                                    bulk_remaining <= ({param0, rx_buf_data} == 16'd0)
+                                                       ? 17'd65536
+                                                       : {1'b0, param0, rx_buf_data};
+                                    state          <= S_AUDIO_BULK_WRITE;
+                                end
+
+                                CMD_WRITE_WTS_EVENTS: begin
+                                    bulk_remaining <= ({param0, rx_buf_data} == 16'd0)
+                                                       ? 17'd65536
+                                                       : {1'b0, param0, rx_buf_data};
+                                    state          <= S_WTS_EVENT_WRITE;
+                                end
+
+                                CMD_POKE_MULTI: begin
+                                    if (rx_buf_data == 8'd0) begin
+                                        status_err     <= 1;
+                                        resp_idx       <= 0;
+                                        resp_total     <= 1;
+                                        bulk_remaining <= 0;
+                                        state          <= S_TX_BYTE;
+                                    end else begin
+                                        bulk_remaining <= {9'd0, rx_buf_data};
+                                        state          <= S_MULTI_POKE_ADDR_HI;
+                                    end
+                                end
+
                                 default: begin
                                     state <= S_IDLE;
                                 end
@@ -926,11 +1057,14 @@ module debug_bridge #(
                 end
 
                 // ---------------------------------------------------------
-                // KEY_DO: key_valid was pulsed on entry
+                // KEY_DO: wait for VGC keyboard FIFO space, then pulse
+                // key_valid for one cycle.
                 // ---------------------------------------------------------
                 S_KEY_DO: begin
-                    // key_inject_valid cleared by default pulse clear at top
-                    state      <= S_KEY_DONE;
+                    if (key_inject_ready) begin
+                        key_inject_valid <= 1;
+                        state            <= S_KEY_DONE;
+                    end
                 end
 
                 S_KEY_DONE: begin
@@ -938,6 +1072,26 @@ module debug_bridge #(
                     resp_total     <= 1;
                     bulk_remaining <= 0;
                     state          <= S_TX_BYTE;
+                end
+
+                // ---------------------------------------------------------
+                // KEY_BULK_WRITE: stream keyboard bytes into the VGC FIFO.
+                // Backpressure is intentional: while the FIFO is full, keep
+                // rx_buf_valid asserted so the SPI receive path stops
+                // accepting more payload until VGC makes room.
+                // ---------------------------------------------------------
+                S_KEY_BULK_WRITE: begin
+                    if (rx_buf_valid && key_inject_ready) begin
+                        rx_buf_valid      <= 0;
+                        key_inject_data   <= rx_buf_data;
+                        key_inject_valid  <= 1'b1;
+                        bulk_remaining   <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
+                        end
+                    end
                 end
 
                 // ---------------------------------------------------------
@@ -1233,6 +1387,84 @@ module debug_bridge #(
                             resp_idx   <= 0;
                             resp_total <= 1;
                             state      <= S_TX_BYTE;
+                        end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // AUDIO_BULK_WRITE: stream host-rendered PCM bytes into the
+                // HDMI audio FIFO. Backpressure is intentional: if the FIFO
+                // is full, keep rx_buf_valid set so the SPI RX path stops
+                // accepting more bytes until the audio strobe drains space.
+                // ---------------------------------------------------------
+                S_AUDIO_BULK_WRITE: begin
+                    if (rx_buf_valid && audio_pcm_ready) begin
+                        rx_buf_valid     <= 0;          // consume
+                        audio_pcm_data   <= rx_buf_data;
+                        audio_pcm_we     <= 1'b1;
+                        bulk_remaining  <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
+                        end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // WTS_EVENT_WRITE: stream prepared timestamped event bytes
+                // into the FPGA WTS scheduler. Backpressure is intentional:
+                // if the event FIFO is full, leave rx_buf_valid asserted so
+                // the SPI receive side stops accepting more payload.
+                // ---------------------------------------------------------
+                S_WTS_EVENT_WRITE: begin
+                    if (rx_buf_valid && wts_event_ready) begin
+                        rx_buf_valid    <= 0;          // consume
+                        wts_event_data  <= rx_buf_data;
+                        wts_event_we    <= 1'b1;
+                        bulk_remaining <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
+                        end
+                    end
+                end
+
+                // ---------------------------------------------------------
+                // MULTI_POKE: stream sparse CPU/MMIO pokes as addr/data
+                // triples. This keeps high-churn host services, especially
+                // WTS note setup, out of the per-byte command/ack path.
+                // ---------------------------------------------------------
+                S_MULTI_POKE_ADDR_HI: begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid      <= 0;
+                        bulk_addr[15:8]   <= rx_buf_data;
+                        state             <= S_MULTI_POKE_ADDR_LO;
+                    end
+                end
+
+                S_MULTI_POKE_ADDR_LO: begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid      <= 0;
+                        bulk_addr[7:0]    <= rx_buf_data;
+                        state             <= S_MULTI_POKE_DATA;
+                    end
+                end
+
+                S_MULTI_POKE_DATA: begin
+                    if (rx_buf_valid) begin
+                        rx_buf_valid   <= 0;
+                        dbg_poke_addr  <= bulk_addr;
+                        dbg_poke_data  <= rx_buf_data;
+                        dbg_poke_en    <= 1;
+                        bulk_remaining <= bulk_remaining - 1;
+                        if (bulk_remaining == 1) begin
+                            resp_idx   <= 0;
+                            resp_total <= 1;
+                            state      <= S_TX_BYTE;
+                        end else begin
+                            state      <= S_MULTI_POKE_ADDR_HI;
                         end
                     end
                 end

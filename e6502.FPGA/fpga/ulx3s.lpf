@@ -84,7 +84,8 @@ LOCATE COMP "esp_spi_cs_n" SITE "H1"; # ESP32 GPIO4  / SD D1
 IOBUF  PORT "esp_spi_sck"  PULLMODE=UP   IO_TYPE=LVCMOS33;
 IOBUF  PORT "esp_spi_mosi" PULLMODE=UP   IO_TYPE=LVCMOS33;
 IOBUF  PORT "esp_spi_cs_n" PULLMODE=UP   IO_TYPE=LVCMOS33;
-IOBUF  PORT "esp_spi_miso" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "esp_spi_miso" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=8 SLEWRATE=FAST;
+FREQUENCY PORT "esp_spi_sck" 40 MHZ;
 
 # Second USB port (US2) directly wired to the FPGA. The pull-control pins are
 # diode-steered pull-up/down controls; Nova drives them LOW for host pulldowns.

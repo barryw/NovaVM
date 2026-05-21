@@ -24,18 +24,16 @@ module serializer
                 tmds_control_synchronizer_chain <= {tmds_control, tmds_control_synchronizer_chain[3:1]};
 
             wire load_edge = tmds_control_synchronizer_chain[1] ^ tmds_control_synchronizer_chain[0];
-            // Replicate the 5x-domain load strobe so nextpnr can place each
-            // copy near the serializer lane it drives. One shared 135 MHz
-            // load net routes across the whole chip on ULX3S and fails timing.
-            (* keep = "true" *) logic [NUM_CHANNELS-1:0] load_channel = '0;
+            // Keep the 5x-domain load strobe replicated inside each lane so
+            // nextpnr can place the source flop next to the shift logic it
+            // drives. A vector register outside the generate block can still
+            // leave one bit far from GPDI after packing.
             (* keep = "true" *) logic load_clock = 1'b0;
             always_ff @(posedge clk_pixel_x5)
             begin
                 if (reset) begin
-                    load_channel <= '0;
                     load_clock <= 1'b0;
                 end else begin
-                    load_channel <= {NUM_CHANNELS{load_edge}};
                     load_clock <= load_edge;
                 end
             end
@@ -49,20 +47,23 @@ module serializer
             generate
                 for (i = 0; i < NUM_CHANNELS; i++)
                 begin: lattice_ecp5_shift
+                    (* keep = "true" *) logic load_lane = 1'b0;
                     logic [9:0] shift_word;
 
                     always_comb
-                        shift_word = load_channel[i] ? tmds_internal[i] : tmds_shift[i];
+                        shift_word = load_lane ? tmds_internal[i] : tmds_shift[i];
 
                     always_ff @(posedge clk_pixel_x5)
                     begin
                         if (reset)
                         begin
+                            load_lane <= 1'b0;
                             tmds_shift[i] <= 10'd0;
                             tmds_pair[i] <= 2'b00;
                         end
                         else
                         begin
+                            load_lane <= load_edge;
                             tmds_pair[i] <= shift_word[1:0];
                             tmds_shift[i] <= shift_word >> 2;
                         end

@@ -9,6 +9,8 @@ extern const char* novaBootPhaseName();
 extern bool novaFpgaBridgeAvailable();
 extern uint8_t novaHostStatusFlags();
 extern bool novaNicDispatcherAvailable();
+extern void novaAudioStatusJson(char* out, size_t out_len);
+extern void novaAudioStop();
 extern void novaWifiStateChanged();
 
 static bool persistDriveMountConfig(const char* prefix, const char* sd_path) {
@@ -158,6 +160,17 @@ void SdHttpServer::handle_client(WiFiClient& client) {
     }
     if (strcmp(method, "GET") == 0 && strcmp(url, "/sd-status") == 0) {
         handle_status(client);
+        return;
+    }
+    if (strcmp(method, "GET") == 0 && strcmp(url, "/audio-status") == 0) {
+        char body[2048];
+        novaAudioStatusJson(body, sizeof(body));
+        send_json(client, 200, body);
+        return;
+    }
+    if (strcmp(method, "POST") == 0 && strcmp(url, "/audio-stop") == 0) {
+        novaAudioStop();
+        send_json(client, 200, "{\"ok\":true,\"audioStopped\":true}");
         return;
     }
     if (strcmp(method, "POST") == 0 && strcmp(url, "/reboot") == 0) {

@@ -42,9 +42,9 @@ by default).  The FIO automatically appends the appropriate file extension
 \$B9A5 & FioSrcH     & R/W & 0    & Source/destination RAM address (high byte) \\
 \$B9A6 & FioEndL     & R/W & 0    & End address for SAVE (low byte) \\
 \$B9A7 & FioEndH     & R/W & 0    & End address for SAVE (high byte) \\
-\$B9A8 & FioSizeL    & R   & 0    & Loaded data size (low byte) \\
-\$B9A9 & FioSizeH    & R   & 0    & Loaded data size (high byte) \\
-\$B9AA & FioGSpace   & R/W & 0    & Graphics space selector \\
+\$B9A8 & FioSizeL    & R   & 0    & Loaded data size low byte; directory size byte 0 \\
+\$B9A9 & FioSizeH    & R   & 0    & Loaded data size high byte; directory size byte 1 \\
+\$B9AA & FioGSpace / FioSize2 & R/W & 0 & Graphics space selector; directory size byte 2 after DirRead \\
 \$B9AB & FioGAddrL   & R/W & 0    & Graphics offset (low byte) \\
 \$B9AC & FioGAddrH   & R/W & 0    & Graphics offset (high byte) \\
 \$B9AD & FioGLenL    & R/W & 0    & Graphics length (low byte) \\
@@ -173,15 +173,17 @@ High byte of the end address.
 \mementry{B9A8}{FioSizeL}{R}{0}
 
 Low byte of the loaded data size.  Set by the host after a successful
-\textbf{Load} command.
+\textbf{Load} command.  Directory reads use FioSizeL/FioSizeH/FioSize2 as a
+24-bit little-endian file size.
 
 \mementry{B9A9}{FioSizeH}{R}{0}
 
-High byte of the loaded data size.
+High byte of the loaded data size, or byte 1 of a directory entry's 24-bit
+file size.
 
 % --- $B9AA FioGSpace -------------------------------------------------------
 
-\mementry{B9AA}{FioGSpace}{R/W}{0}
+\mementry{B9AA}{FioGSpace / FioSize2}{R/W}{0}
 
 Graphics space selector for \textbf{GSave}/\textbf{GLoad} commands:
 
@@ -316,12 +318,15 @@ Resets the internal directory index to the first entry.
 \cmdentry{04}{DirRead}{Read next directory entry}
 
 Reads the next file in the directory.  The filename is placed in the FioName
-buffer and the file type in FioDirType (\$B9AF).  When all entries have been
-read, FioStatus is set to \$03 with ErrCode $=$ 3 (end of directory).
+buffer, the 24-bit file size in FioSizeL/FioSizeH/FioSize2
+(\$B9A8--\$B9AA), and the file type in FioDirType (\$B9AF).  When all entries
+have been read, FioStatus is set to \$03 with ErrCode $=$ 3 (end of
+directory).
 
 \textbf{Parameters:} None (directory must be opened with DirOpen first).
 
-\textbf{Result:} FioName and FioDirType populated, or ErrCode $=$ 3 at end.
+\textbf{Result:} FioName, 24-bit FioSize, and FioDirType populated, or
+ErrCode $=$ 3 at end.
 
 \medskip
 

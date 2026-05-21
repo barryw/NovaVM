@@ -691,6 +691,7 @@ public sealed partial class FileIoController
                       .Concat(dir.GetFiles("*.sid"))
                       .Concat(dir.GetFiles("*.bin"))
                       .Concat(dir.GetFiles("*.mid"))
+                      .Concat(dir.GetFiles("*.nms"))
                       .OrderBy(f => f.Name).ToList()
                 : [];
             _dirIndex = 0;
@@ -1770,7 +1771,7 @@ public sealed partial class FileIoController
     private static NdiFileType ExtToNdiType(string ext) => ext.ToLowerInvariant() switch
     {
         ".sid" => NdiFileType.Sid, ".bin" => NdiFileType.Bin,
-        ".mid" => NdiFileType.Mid, ".gfx" => NdiFileType.Gfx, _ => NdiFileType.Bas
+        ".mid" => NdiFileType.Mid, ".nms" => NdiFileType.Mid, ".gfx" => NdiFileType.Gfx, _ => NdiFileType.Bas
     };
 
     private static string NdiTypeToExt(NdiFileType type) => type switch
@@ -1930,6 +1931,7 @@ public sealed partial class FileIoController
         long dataSize = (type == 1 || type == 3) ? entry.SizeBytes : Math.Max(0, entry.SizeBytes - 2);
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
+        _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)((dataSize >> 16) & 0xFF);
     }
 
     private void PopulateDirEntry(FileInfo fi)
@@ -1938,7 +1940,7 @@ public sealed partial class FileIoController
         string ext = fi.Extension.ToLowerInvariant();
 
         // File type: 0=BAS, 1=SID, 2=BIN, 3=MID
-        int type = ext switch { ".sid" => 1, ".bin" => 2, ".mid" => 3, _ => 0 };
+        int type = ext switch { ".sid" => 1, ".bin" => 2, ".mid" or ".nms" => 3, _ => 0 };
         _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)type;
 
         // Build display name with addresses appended
@@ -1977,6 +1979,7 @@ public sealed partial class FileIoController
         long dataSize = (type == 1 || type == 3) ? fi.Length : Math.Max(0, fi.Length - 2);
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
+        _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)((dataSize >> 16) & 0xFF);
     }
 
     // -------------------------------------------------------------------------
@@ -2232,6 +2235,7 @@ public sealed partial class FileIoController
                 ext.Equals(".sid", StringComparison.OrdinalIgnoreCase) ||
                 ext.Equals(".bin", StringComparison.OrdinalIgnoreCase) ||
                 ext.Equals(".mid", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".nms", StringComparison.OrdinalIgnoreCase) ||
                 ext.Equals(".gfx", StringComparison.OrdinalIgnoreCase))
             {
                 extFilter = ext.ToLowerInvariant();

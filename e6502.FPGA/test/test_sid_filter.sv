@@ -121,7 +121,7 @@ module test_sid_filter;
         measure_filter(8'h01, 8'h1F, 512, peak_lp, ac_lp);
         $display("  D [v1→filt, LP on] peak=%0d ac_range=%0d",
                  peak_lp, ac_lp);
-        check("LP filter output has AC content", ac_lp > 200);
+        check("LP filter output restores AC content", ac_lp > ac_lost);
         check("LP AC content differs from direct path",
               ac_lp != ac_direct);
 

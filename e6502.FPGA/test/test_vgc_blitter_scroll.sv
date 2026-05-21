@@ -81,7 +81,7 @@ module test_vgc_blitter_scroll;
         .cpu_ce(vgc_cpu_ce),
         .cpu_addr(vgc_cpu_addr), .cpu_wdata(vgc_cpu_wdata),
         .cpu_rdata(vgc_cpu_rdata), .cpu_we(vgc_cpu_we), .cpu_re(vgc_cpu_re),
-        .key_valid(key_valid), .key_data(key_data),
+        .key_valid(key_valid), .key_data(key_data), .key_ready(),
         .blt_space(blt_vgc_space), .blt_addr(blt_vgc_addr),
         .blt_rdata(blt_vgc_rdata), .blt_wdata(blt_vgc_wdata),
         .blt_we(blt_vgc_we), .blt_re(blt_vgc_re),

@@ -159,7 +159,8 @@ def test_fpga_spi_bridge_contract() -> None:
         and "#define SD_SPI_MISO_PIN 2" in novahost
         and "#define SD_SPI_MOSI_PIN 15" in novahost
         and "#define SD_CS_PIN       13" in novahost
-        and "#define FPGA_SPI_CS_PIN 4" in novahost,
+        and "#define FPGA_SPI_CS_PIN 4" in novahost
+        and "#define FPGA_SPI_HZ     40000000" in novahost,
         "NovaHost initializes one shared SPI bus": "void initSharedSpiBus()" in novahost
         and "SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_CS_PIN)" in novahost,
         "NovaHost bridge is SPI-only": "FpgaBridge fpgaBridge;" in novahost
@@ -171,10 +172,23 @@ def test_fpga_spi_bridge_contract() -> None:
         and "digitalWrite(_spiPeerCsPin, HIGH);" in bridge,
         "ESP bridge writes use explicit SPI WRITE transaction": "SPI_WRITE_OP = 0x57" in bridge_h
         and "_spi->transfer(SPI_WRITE_OP);" in bridge,
+        "ESP bridge uses unpaced bulk SPI writes for payloads": "_spi->transferBytes(data, nullptr" in bridge
+        and "SDRAM_STREAM_MAX_BYTES = 3072" in bridge_h
+        and "pokeSdramStreamChunk" in bridge
+        and "writeBytesSdramPaced" not in bridge,
+        "ESP bridge chunks WTS event streams": "WTS_EVENT_STREAM_MAX_BYTES = 3072" in bridge_h
+        and "writeWtsEventsChunk" in bridge
+        and "writeBytesBulk(header, 3, data, count)" in bridge,
         "ESP bridge reads use token-framed SPI READ transaction": "SPI_READ_OP = 0x52" in bridge_h
         and "SPI_TOKEN_DATA = 0x01" in bridge_h
+        and "spiReadSettings()" in bridge_h
         and "_spi->transfer(SPI_READ_OP);" in bridge
         and "uint8_t token = _spi->transfer(0x00);" in bridge,
+        "ESP bridge can use separate write/read SPI clocks": "spiWriteSettings()" in bridge_h
+        and "spiControlWriteSettings()" in bridge_h
+        and "_spiReadHz" in bridge_h
+        and "#define FPGA_SPI_READ_HZ (80000000UL / 3UL)" in bridge_h
+        and "actualWriteHz" in bridge_h,
         "FIO/NIC event reader is transport-agnostic": "HardwareSerial" not in event_reader_h
         and "poll()" not in event_reader_h
         and "_serial" not in event_reader,
@@ -185,6 +199,8 @@ def test_fpga_spi_bridge_contract() -> None:
         and "sdHttpServer.loop();" in novahost,
         "FPGA board top routes debug bridge to SPI only": "assign dbg_rx_data = dbg_spi_rx_data;" in fpga_top
         and "assign dbg_rx_valid = dbg_spi_rx_valid;" in fpga_top
+        and ".RX_ADDR_WIDTH(12)" in fpga_top
+        and ".TX_ADDR_WIDTH(9)" in fpga_top
         and ".tx_start     (dbg_tx_start)" in fpga_top
         and "debug_uart_rx #(" not in fpga_top
         and "debug_uart_tx #(" not in fpga_top,
@@ -195,7 +211,8 @@ def test_fpga_spi_bridge_contract() -> None:
         "ULX3S SPI constraints use SD pins with FPGA CS on D1": 'SITE "H2"' in lpf
         and 'SITE "J1"' in lpf
         and 'SITE "J3"' in lpf
-        and 'SITE "H1"' in lpf,
+        and 'SITE "H1"' in lpf
+        and 'FREQUENCY PORT "esp_spi_sck" 40 MHZ;' in lpf,
         "FPGA SPI slave protocol is command-framed": "WRITE_OP = 8'h57" in spi_slave
         and "READ_OP = 8'h52" in spi_slave
         and "READ_TOKEN_DATA = 8'h01" in spi_slave,
@@ -250,7 +267,7 @@ def test_fio_sd_dispatch_contract() -> None:
 
     for constant in [
         "CMD_GSAVE", "CMD_GLOAD", "CMD_SIDPLAY", "CMD_SIDSTOP", "CMD_MIDPLAY",
-        "CMD_SFLOAD", "CMD_FORMAT", "CMD_PWD",
+        "CMD_MIDSTOP", "CMD_SFLOAD", "CMD_FORMAT", "CMD_PWD",
     ]:
         check(f"ESP dispatcher defines {constant}", constant in header)
 
@@ -260,25 +277,69 @@ def test_fio_sd_dispatch_contract() -> None:
         "ESP handles PWD": "case CMD_PWD" in dispatcher and "handle_pwd();" in dispatcher,
         "ESP handles SIDPLAY": "case CMD_SIDPLAY" in dispatcher and "handle_sidplay();" in dispatcher,
         "ESP handles SIDSTOP": "case CMD_SIDSTOP" in dispatcher and "handle_sidstop();" in dispatcher,
-        "ESP SIDPLAY installs a 6502 IRQ player": "install_sid_player(_bridge" in dispatcher
-        and "SID_IRQ_VECTOR_ADDR" in dispatcher
-        and "VGC_IRQ_TIMER" in dispatcher,
-        "ESP SIDPLAY programs the VGC timer IRQ": "set_sid_timer(bridge, timer_period, true)" in dispatcher
-        and "VGC_IRQ_TIMER_LO_ADDR" in dispatcher
-        and "SID_TIMER_NTSC_PERIOD" in dispatcher,
-        "ESP SIDPLAY programs SID model/clock config": "sid_config_for(const SidInfo& sid)" in dispatcher
-        and "SID_CFG_CLOCK_NTSC" in dispatcher
-        and "SID_CFG_MODEL_8580" in dispatcher
-        and "configure_sid(bridge, sid_config)" in dispatcher,
-        "ESP SIDSTOP clears HDMI diagnostic tone": "configure_sid(bridge, 0)" in dispatcher
+        "ESP SIDPLAY uses ESP-side SID VM": "nova_sid::SidVm _sid_vm" in header
+        and "runInit((uint8_t)(song - 1))" in dispatcher
+        and "runPlayFrame()" in dispatcher,
+        "ESP SIDPLAY uses sparse SID payload memory, not Nova CPU RAM": "_sid_vm.loadPayload" in dispatcher
+        and "_bridge.loadRam((uint16_t)(sid.loadAddress + off)" not in dispatcher,
+        "ESP SIDPLAY batches trapped SID register writes over SPI": "on_sid_write_static" in dispatcher
+        and "flush_sid_writes()" in dispatcher
+        and "_bridge.pokeMulti(_sid_write_addrs" in dispatcher,
+        "ESP SIDPLAY programs SID model/clock config": "nova_sid::sid_fpga_config(sid)" in dispatcher
+        and "configure_sid(_bridge, nova_sid::sid_fpga_config(sid))" in dispatcher,
+        "ESP SIDSTOP clears HDMI diagnostic tone": "configure_sid(_bridge, 0)" in dispatcher
         and "SID_CFG_ADDR" in dispatcher,
-        "ESP SIDPLAY streams SID payload into CPU RAM": "read_file_chunk_by_index(idx, sid.payloadFileOffset + off" in dispatcher
-        and "_bridge.loadRam((uint16_t)(sid.loadAddress + off)" in dispatcher,
         "ESP SID silence preserves Nova per-voice volume": "off <= 0x18" in dispatcher
         and "off = 0x1D" in dispatcher
         and "SID1_BASE + off), 0x0F" in dispatcher,
-        "ESP registers MIDPLAY as deliberate SD command": 'handle_unsupported_sd_command("MIDPLAY")' in dispatcher,
-        "ESP registers SFLOAD as deliberate SD command": 'handle_unsupported_sd_command("SFLOAD")' in dispatcher,
+        "ESP handles MIDPLAY": "case CMD_MIDPLAY" in dispatcher and "handle_midplay();" in dispatcher,
+        "ESP handles MIDSTOP": "case CMD_MIDSTOP" in dispatcher and "handle_midstop();" in dispatcher,
+        "ESP MIDPLAY requires timestamped WTS event streaming": "start_music_wts_event_stream()" in dispatcher
+        and "queue_music_wts_events()" in dispatcher
+        and "supportsWtsEventStream()" in bridge
+        and "writeWtsEvents" in bridge,
+        "ESP MIDPLAY bounds expanded WTS note events": "NMS_WTS_NOTE_ON_RECORDS = 41" in dispatcher
+        and "WTS event expansion overflow" in dispatcher
+        and "out_capacity" in dispatcher,
+        "ESP MIDPLAY batches NMS event reads": "_midi_read_cache" in header
+        and "cache_bytes = sizeof(_midi_read_cache)" in dispatcher
+        and "_midi_read_cache + cache_off" in dispatcher,
+        "ESP WTS sample window uses reclaimed SDRAM": "WTS_SAMPLE_SDRAM_BASE = 0x082000UL" in dispatcher
+        and "WTS_SAMPLE_SDRAM_LIMIT = 0x1000000UL" in dispatcher
+        and "SID_CURVE_BASE   = 0x080000" in novahost,
+        "ESP MIDPLAY consumes precompiled Nova music streams": "find_music_entry" in dispatcher
+        and '".nms"' in dispatcher
+        and "read_music_stream_header" in dispatcher
+        and "NMS_MAGIC" in dispatcher
+        and "build_music_wts_event" in dispatcher
+        and "soundfont missing instrument" in dispatcher,
+        "ESP MIDPLAY fails loud instead of falling back": "ensure_wts_bank_loaded(slot)" in dispatcher
+        and "Missing soundfont" in dispatcher
+        and "hardware WTS event stream unavailable" in dispatcher
+        and "resident wave fallback" not in dispatcher
+        and "loaded but not ESP-resident" not in dispatcher
+        and "fill_midi_audio_fifo" not in dispatcher
+        and "render_midi_pcm_frames" not in dispatcher
+        and "writeAudioPcm" not in dispatcher,
+        "ESP MIDPLAY uses hardware WTS only after probing the bitstream": "hardware_wts_available()" in dispatcher
+        and "WTS_SOUNDFONT_STATUS" in dispatcher
+        and "WTS_SIGNATURE" in dispatcher
+        and "NOVAHOST_ENABLE_HARDWARE_WTS" in dispatcher
+        and "hardware WTS unavailable in this bitstream" in dispatcher
+        and "WTS event stream unsupported in this bitstream" in dispatcher,
+        "ESP audio status exposes MIDI timing diagnostics": "pumpCalls" in dispatcher
+        and "maxPumpGapUs" in dispatcher
+        and "reset_midi_timing_metrics()" in dispatcher
+        and "musicEventBytes" in dispatcher
+        and "musicEventRead" in dispatcher
+        and "_midi_max_pump_gap_us" in header
+        and "_music_event_bytes" in header
+        and "_music_event_read" in header,
+        "ESP MIDPLAY runtime does not parse Standard MIDI files": "nova_midi" not in dispatcher
+        and '#include "midi_engine.h"' not in header
+        and "_midi_prefetch_timeline" not in header
+        and "midi_prefetch_task_main" not in dispatcher,
+        "ESP handles SFLOAD": "case CMD_SFLOAD:   handle_sfload();" in dispatcher,
         "ESP registers FORMAT as deliberate SD command": 'handle_unsupported_sd_command("FORMAT")' in dispatcher,
         "unsupported SD commands still finish through FIO error status": "void FioDispatcher::handle_unsupported_sd_command" in dispatcher
         and "respond_err(ERR_IO);" in dispatcher,
@@ -286,6 +347,12 @@ def test_fio_sd_dispatch_contract() -> None:
         and "write_file_chunk_by_index(new_idx" in dispatcher,
         "GLOAD reads NDI chunks and writes VGC memory": "read_file_chunk_by_index(idx" in dispatcher
         and "pokeVgcBlock(space" in dispatcher,
+        "DIROPEN populates the first directory entry": "bool FioDispatcher::write_next_dir_entry()" in dispatcher
+        and "void FioDispatcher::handle_dir_open()" in dispatcher
+        and "if (write_next_dir_entry())" in dispatcher,
+        "DIRREAD exposes 24-bit file sizes": "OFF_SIZE_2    = OFF_GSPACE" in header
+        and "OFF_SIZE_2" in dispatcher
+        and "(e.size_bytes >> 16)" in dispatcher,
         "VGC FIO validates canonical VGC spaces": "case 0x01: return 4000" in dispatcher
         and "case 0x02: return 4000" in dispatcher
         and "case 0x03: return 64000" in dispatcher
@@ -371,6 +438,7 @@ def test_runtime_autoboot_contract() -> None:
     storage_dm = read("e6502.Storage/DeviceManager.cs")
     dispatcher_h = read("e6502.ESP32/novahost/fio_dispatcher.h")
     dispatcher = read("e6502.ESP32/novahost/fio_dispatcher.cpp")
+    bridge = read("e6502.ESP32/novahost/fpga_bridge.cpp")
     debug = read("e6502.ESP32/novahost/debug_server.cpp")
     esp_dm_h = read("e6502.ESP32/novahost/device_manager.h")
     esp_dm = read("e6502.ESP32/novahost/device_manager.cpp")
@@ -386,6 +454,8 @@ def test_runtime_autoboot_contract() -> None:
     nvg_runtime = read("runtime/asm/nvg.s")
     nvg_inc = read("runtime/asm/nvg.inc")
     xram_inc = read("runtime/asm/xram.inc")
+    type_text = debug.split("void DebugServer::cmdTypeText", 1)[1]
+    type_text = type_text.split("void DebugServer::cmdReadScreen", 1)[0]
 
     checks = {
         "BASIC exposes primary runtime ROM swap label": "ROMSWAP_PRIMARY" in nova_inc
@@ -465,6 +535,10 @@ def test_runtime_autoboot_contract() -> None:
         "debug text injection normalizes LF to BASIC Enter": "void DebugServer::cmdTypeText" in debug
         and "ch == '\\n'" in debug
         and "ch = '\\r'" in debug,
+        "debug text injection streams through FPGA key FIFO": "void DebugServer::cmdTypeText" in debug
+        and "_bridge.sendKeys(chunk, chunkLen)" in type_text
+        and "delay(50);" not in type_text
+        and "supportsKeyStream()" in bridge,
         "unit tests cover boot order": "FindAutoboot_PrefersInsertedFloppyOverHardDrive" in unit_dm
         and "SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists" in unit_dm,
         "unit tests cover runtime load command": "LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime" in unit_fio,

@@ -8,6 +8,12 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+#ifndef FPGA_SPI_READ_HZ
+// Classic ESP32 full-duplex reads over GPIO matrix are only reliable through
+// the 80MHz/3 divider. Faster bulk writes can still use FPGA_SPI_HZ.
+#define FPGA_SPI_READ_HZ (80000000UL / 3UL)
+#endif
+
 class FpgaBridge {
 public:
     FpgaBridge() = default;
@@ -15,6 +21,14 @@ public:
     bool beginSpi(SPIClass& spi, uint8_t csPin, uint32_t hz,
                   uint8_t peerCsPin = 255);
     const char* transportName() const;
+    uint32_t requestedWriteHz() const { return _spiHz; }
+    uint32_t requestedReadHz() const { return _spiReadHz; }
+    uint32_t actualWriteHz() const;
+    uint32_t actualReadHz() const;
+    bool probeCapabilities();
+    bool supportsPokeMulti();
+    bool supportsWtsEventStream();
+    bool supportsKeyStream();
 
     using DrainByteHandler = void (*)(void* user, uint8_t value);
     void onDrainByte(DrainByteHandler handler, void* user) {
@@ -25,9 +39,11 @@ public:
     // Single-byte memory read/write
     bool peek(uint16_t addr, uint8_t& value);
     bool poke(uint16_t addr, uint8_t value);
+    bool pokeMulti(const uint16_t* addrs, const uint8_t* values, uint8_t count);
 
     // Key injection
     bool sendKey(uint8_t key);
+    bool sendKeys(const uint8_t* data, uint16_t count);
 
     // Bulk screen/color read (buf must hold 4000 bytes: 80x50)
     bool readScreen(uint8_t* buf);
@@ -107,6 +123,26 @@ public:
     // entire sequence for boot-time preloads.
     bool pokeSdramBlock(uint32_t addr, const uint8_t* data, uint16_t count);
 
+    // Stream-write a larger byte range into SDRAM with one bridge ack at the
+    // end. The FPGA bridge owns buffering/backpressure; the ESP side sends this
+    // as one unpaced bulk SPI write.
+    bool pokeSdramStream(uint32_t addr, const uint8_t* data, uint16_t count);
+
+    struct AudioPcmStatus {
+        uint16_t bytesFree;
+        uint16_t underruns;
+    };
+
+    // Host-rendered HDMI audio path. PCM bytes are signed 16-bit stereo,
+    // little-endian per frame: Llo,Lhi,Rlo,Rhi.
+    bool audioPcmStatus(AudioPcmStatus& status);
+    bool writeAudioPcm(const uint8_t* data, uint16_t count);
+    bool streamAudioPcm(const uint8_t* data, size_t len);
+
+    // Timestamped WTS event stream. Payload records are 6 bytes each:
+    // sample-frame uint32 little-endian, WTS register offset, byte value.
+    bool writeWtsEvents(const uint8_t* data, uint16_t count);
+
     // Block-read up to 256 bytes from SDRAM via debug-bridge port B.
     // count=0 means 256.
     bool readSdramBlock(uint32_t addr, uint8_t count, uint8_t* buf);
@@ -147,7 +183,12 @@ private:
     uint8_t _spiCsPin = 255;
     uint8_t _spiPeerCsPin = 255;
     uint32_t _spiHz = 500000;
+    uint32_t _spiReadHz = 500000;
     bool _spiEnabled = false;
+    bool _capabilitiesKnown = false;
+    bool _supportsPokeMulti = false;
+    bool _supportsWtsEventStream = false;
+    bool _supportsKeyStream = false;
 
     DrainByteHandler _drainHandler = nullptr;
     void* _drainUser = nullptr;
@@ -158,9 +199,15 @@ private:
     static constexpr uint8_t SPI_TOKEN_EMPTY = 0x00;
     static constexpr uint8_t SPI_TOKEN_DATA = 0x01;
     static constexpr int SPI_DRAIN_LIMIT = 512;
+    static constexpr uint8_t SPI_READ_POLL_BYTES = 8;
+    static constexpr uint16_t SDRAM_STREAM_MAX_BYTES = 3072;
+    static constexpr uint16_t WTS_EVENT_STREAM_MAX_BYTES = 3072;
 
     bool spiReady() const { return _spiEnabled && _spi != nullptr; }
-    SPISettings spiSettings() const { return SPISettings(_spiHz, MSBFIRST, SPI_MODE0); }
+    SPISettings spiWriteSettings() const { return SPISettings(_spiHz, MSBFIRST, SPI_MODE0); }
+    SPISettings spiControlWriteSettings() const { return SPISettings(_spiReadHz, MSBFIRST, SPI_MODE0); }
+    SPISettings spiReadSettings() const { return SPISettings(_spiReadHz, MSBFIRST, SPI_MODE0); }
+    uint32_t actualSpiHzFor(uint32_t hz) const;
 
     bool recvStatus();
     bool recvBytes(uint8_t* buf, int count);
@@ -170,6 +217,17 @@ private:
     int  recvSpiByte(bool wait);
     void writeByte(uint8_t value);
     void writeBytes(const uint8_t* data, size_t len);
+    void writeBytes(const uint8_t* first, size_t firstLen,
+                    const uint8_t* second, size_t secondLen);
+    void writeBytesWithSettings(const uint8_t* data, size_t len,
+                                const SPISettings& settings);
+    void writeBytesWithSettings(const uint8_t* first, size_t firstLen,
+                                const uint8_t* second, size_t secondLen,
+                                const SPISettings& settings);
+    void writeBytesBulk(const uint8_t* first, size_t firstLen,
+                        const uint8_t* second, size_t secondLen);
+    bool pokeSdramStreamChunk(uint32_t addr, const uint8_t* data, uint16_t count);
+    bool writeWtsEventsChunk(const uint8_t* data, uint16_t count);
 };
 
 #endif

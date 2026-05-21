@@ -16,6 +16,7 @@ module top (
     // Keyboard input
     input  logic        key_valid,
     input  logic [7:0]  key_data,
+    output logic        key_ready,
 
     input  logic        irq_n,
     input  logic        nmi_n,
@@ -68,6 +69,9 @@ module top (
     input  logic        brg_sdram_b_oe,
     input  logic [24:0] brg_sdram_b_addr,
     input  logic [7:0]  brg_sdram_b_din,
+    input  logic        host_wts_event_we,
+    input  logic [7:0]  host_wts_event_data,
+    output logic        host_wts_event_ready,
     output logic [15:0] dbg_cpu_pc,
     output logic [7:0]  dbg_cpu_a,
     output logic [7:0]  dbg_cpu_x,
@@ -135,7 +139,6 @@ module top (
     localparam XMC_WIN_END  = 16'hBFFF;
     localparam MATH_BASE    = 16'hBB20;  // Math coprocessor $BB20-$BB4F
     localparam MATH_END     = 16'hBB4F;
-
     // SID address map
     localparam SID1_BASE       = 16'hD400;  // SID1 registers $D400-$D41F
     localparam SID1_END        = 16'hD41F;
@@ -144,6 +147,9 @@ module top (
     localparam SID2_MIRROR_BASE = 16'hD500; // Legacy SID2 mirror $D500-$D51F
     localparam SID2_MIRROR_END  = 16'hD51F;
     localparam SID_CFG         = 16'hD440;  // bit0=mode (0=6581, 1=8580), bit1=clock (0=PAL, 1=NTSC), bit7=HDMI audio test tone
+    // Wavetable Synthesizer register bank
+    localparam WTS_BASE        = 16'hA140;
+    localparam WTS_END         = 16'hA1FF;
 
     // CPU bus
     wire [15:0] cpu_addr;
@@ -156,6 +162,14 @@ module top (
     wire  [7:0] cpu_dbg_ir;
     wire        cpu_dbg_waiting, cpu_dbg_stopped;
     wire        vgc_sys_reset_req;
+    wire [7:0]  wts_cpu_rdata;
+    wire [7:0]  wts_dbg_rdata;
+    wire [24:0] wts_addrB;
+    wire [7:0]  wts_dinB;
+    wire        wts_weB;
+    wire        wts_oeB;
+    wire signed [17:0] wts_audio_l;
+    wire signed [17:0] wts_audio_r;
 
     // A VGC SYSRESET command is a machine reset, not just a custom-chip
     // scrub request. Latch it long enough that the CPU and every custom
@@ -332,6 +346,7 @@ module top (
     wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B);
     wire math_reg_sel = (mem_addr >= MATH_BASE && mem_addr <= MATH_END);
     wire nic_reg_sel = (mem_addr >= 16'hA100 && mem_addr <= 16'hA13F);
+    wire wts_reg_sel = (mem_addr >= WTS_BASE && mem_addr <= WTS_END);
     wire fio_reg_sel = (mem_addr >= 16'hB9A0 && mem_addr <= 16'hB9EF);
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
@@ -345,6 +360,7 @@ module top (
     logic r_vgc_read_sel;
     logic r_fio_reg_sel;
     logic r_nic_reg_sel;
+    logic r_wts_reg_sel;
     logic [5:0] r_xmc_reg_off;
 
     // Register decode signals every cycle — they align with dpram outputs
@@ -361,6 +377,7 @@ module top (
         r_vgc_read_sel    <= vgc_read_sel;
         r_fio_reg_sel     <= fio_reg_sel;
         r_nic_reg_sel     <= nic_reg_sel;
+        r_wts_reg_sel     <= wts_reg_sel;
         r_xmc_reg_off     <= xmc_reg_off;
     end
 
@@ -498,15 +515,12 @@ module top (
         if (cpu_ce)
             r_math_cpu_rdata <= math_cpu_rdata;
 
-    // Registered VGC read data. Must be cpu_ce-gated like r_key_snapshot
-    // used to be — otherwise the value captured during cpu_ce=0 cycles
-    // (when Arlet has already moved cpu_addr past $A00F) overwrites the
-    // correct value before the CPU samples DI on its next cpu_ce=1 edge.
-    // See ASCII trace in project_key_fifo_in_progress.md.
+    // Registered VGC read data. VGC now holds read data from a registered
+    // address slice, so capture every pixel clock; this lets the cpu_ce=0 half
+    // cycle carry the peripheral result into the CPU's next enabled edge.
     logic [7:0] r_vgc_cpu_rdata;
     always_ff @(posedge clk)
-        if (cpu_ce)
-            r_vgc_cpu_rdata <= vgc_cpu_rdata;
+        r_vgc_cpu_rdata <= vgc_cpu_rdata;
 
     // ==========================================================================
     // Network Interface Controller register bank ($A100-$A13F). CPU writes to
@@ -566,6 +580,13 @@ module top (
         if (cpu_ce)
             r_nic_cpu_rdata <= nic_cpu_rdata;
 
+    // Registered WTS read data. WTS is a CPU-visible MMIO bank below ROM, so it
+    // must be captured with the same cpu_ce alignment as VGC/FIO/NIC.
+    logic [7:0] r_wts_cpu_rdata;
+    always_ff @(posedge clk)
+        if (cpu_ce)
+            r_wts_cpu_rdata <= wts_cpu_rdata;
+
     // ==========================================================================
     // File I/O register bank ($B9A0-$B9EF). CPU writes captured here;
     // fio_event pulses on CPU write of non-zero to $B9A0 (FioCmd).
@@ -594,6 +615,12 @@ module top (
     wire       dbg_peek_math = dbg_peek_en &&
                                (dbg_peek_addr >= MATH_BASE) &&
                                (dbg_peek_addr <= MATH_END);
+    wire       dbg_poke_wts = dbg_poke_en &&
+                              (dbg_poke_addr >= WTS_BASE) &&
+                              (dbg_poke_addr <= WTS_END);
+    wire       dbg_peek_wts = dbg_peek_en &&
+                              (dbg_peek_addr >= WTS_BASE) &&
+                              (dbg_peek_addr <= WTS_END);
 
     fio fio_inst (
         .clk       (clk),
@@ -644,7 +671,7 @@ module top (
                                                 r_math_cpu_rdata;
     wire xmc_group_sel = r_xmc_win_sel | r_xmc_reg_sel | r_bm_reg_sel | r_math_reg_sel;
 
-    // Group B — VGC register space. SID register reads DELIBERATELY fall
+    // Group B — low-memory custom chip register space. SID register reads DELIBERATELY fall
     // through to the ROM / RAM group: $D400-$D43F overlaps BASIC ROM
     // (EhBASIC's array-handling code — LAB_1F45/1F48/1F7B — happens to
     // land at $D3FF-$D430), so an unconditional SID-read intercept
@@ -662,9 +689,11 @@ module top (
     // interception would replace a live instruction with the config
     // register's stored byte. Fall through to ROM for all SID addresses.
     wire [7:0] io_group_data = r_nic_reg_sel ? r_nic_cpu_rdata :
+                               r_wts_reg_sel ? r_wts_cpu_rdata :
                                r_fio_reg_sel ? r_fio_cpu_rdata :
                                                r_vgc_cpu_rdata;
-    wire io_group_sel        = r_vgc_read_sel | r_fio_reg_sel | r_nic_reg_sel;
+    wire io_group_sel        = r_vgc_read_sel | r_fio_reg_sel |
+                               r_nic_reg_sel | r_wts_reg_sel;
 
     // Group C — ROM (active bank) + main RAM (default fallback).
     wire [7:0] mem_group_data =
@@ -694,14 +723,15 @@ module top (
             ram_a_addr = bm_ram_addr;
             ram_a_din  = bm_ram_wdata;
             ram_a_we   = 1'b1;
-        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_nic && !dbg_poke_fio && !dbg_poke_blt && !dbg_poke_math && dbg_poke_addr < ROM_BASE) begin
+        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_nic && !dbg_poke_wts && !dbg_poke_fio && !dbg_poke_blt && !dbg_poke_math && dbg_poke_addr < ROM_BASE) begin
             // Debug poke
             ram_a_addr = dbg_poke_addr;
             ram_a_din  = dbg_poke_data;
             ram_a_we   = 1'b1;
         end else if (cpu_we && cpu_active && cpu_addr < ROM_BASE &&
                      !xmc_win_sel && !xmc_reg_sel && !vgc_read_sel &&
-                     !nic_reg_sel && !fio_reg_sel && !dma_reg_sel && !blt_reg_sel && !math_reg_sel) begin
+                     !nic_reg_sel && !wts_reg_sel && !fio_reg_sel &&
+                     !dma_reg_sel && !blt_reg_sel && !math_reg_sel) begin
             // CPU write to RAM
             ram_a_we = 1'b1;
         end
@@ -820,6 +850,12 @@ module top (
     wire dbg_peek_math = dbg_peek_en &&
                          (dbg_peek_addr >= MATH_BASE) &&
                          (dbg_peek_addr <= MATH_END);
+    wire dbg_poke_wts = dbg_poke_en &&
+                        (dbg_poke_addr >= WTS_BASE) &&
+                        (dbg_poke_addr <= WTS_END);
+    wire dbg_peek_wts = dbg_peek_en &&
+                        (dbg_peek_addr >= WTS_BASE) &&
+                        (dbg_peek_addr <= WTS_END);
 
     initial begin
         for (int i = 0; i < 65536; i++)
@@ -886,6 +922,7 @@ module top (
     wire dma_reg_sel = (cpu_addr >= 16'hBA63 && cpu_addr <= 16'hBA75);
     wire blt_reg_sel = (cpu_addr >= 16'hBA83 && cpu_addr <= 16'hBA9B);
     wire math_reg_sel = (cpu_addr >= MATH_BASE && cpu_addr <= MATH_END);
+    wire wts_reg_sel = (cpu_addr >= WTS_BASE && cpu_addr <= WTS_END);
     wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
                         (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
                         (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0EC) ||
@@ -904,6 +941,8 @@ module top (
             cpu_din <= blt_cpu_rdata;
         else if (math_reg_sel)
             cpu_din <= math_cpu_rdata;
+        else if (wts_reg_sel)
+            cpu_din <= wts_cpu_rdata;
         else if (vgc_read_sel)
             cpu_din <= vgc_cpu_rdata;
         else if (cpu_in_rom)
@@ -931,7 +970,7 @@ module top (
             else if (xmc_reg_sel) begin
                 if (xmc_reg_off != XMC_BANKS_REG)
                     xmc_regs[xmc_reg_off] <= cpu_dout;
-            end else if (cpu_addr < ROM_BASE && !vgc_read_sel && !math_reg_sel)
+            end else if (cpu_addr < ROM_BASE && !vgc_read_sel && !math_reg_sel && !wts_reg_sel)
                 ram[cpu_addr] <= cpu_dout;
         end
 
@@ -1167,6 +1206,43 @@ module top (
     );
 
     // =========================================================================
+    // WTS — 8-voice wavetable/sample synthesizer. NovaHost writes parsed
+    // soundbank samples into SDRAM and drives this register bank with MIDI events.
+    // =========================================================================
+    wire wts_cpu_ce =
+`ifdef SYNTHESIS
+        cpu_ce;
+`else
+        1'b1;
+`endif
+    wire wts_cpu_we = cpu_we & cpu_active;
+
+    wts_chip wts_inst (
+        .clk         (clk),
+        .rst         (custom_rst | dbg_cpu_reset),
+        .cpu_ce      (wts_cpu_ce),
+        .cpu_addr    (cpu_addr),
+        .cpu_wdata   (cpu_dout),
+        .cpu_we      (wts_cpu_we),
+        .cpu_rdata   (wts_cpu_rdata),
+        .dbg_we      (dbg_poke_wts),
+        .dbg_addr    (dbg_poke_addr[7:0] - WTS_BASE[7:0]),
+        .dbg_wdata   (dbg_poke_data),
+        .dbg_raddr   (dbg_peek_addr[7:0] - WTS_BASE[7:0]),
+        .dbg_rdata   (wts_dbg_rdata),
+        .host_event_we    (host_wts_event_we),
+        .host_event_data  (host_wts_event_data),
+        .host_event_ready (host_wts_event_ready),
+        .sdram_addrB (wts_addrB),
+        .sdram_dinB  (wts_dinB),
+        .sdram_weB   (wts_weB),
+        .sdram_oeB   (wts_oeB),
+        .sdram_doutB (sdram_doutB),
+        .audio_l     (wts_audio_l),
+        .audio_r     (wts_audio_r)
+    );
+
+    // =========================================================================
     // SID — dual legacy 6581/8580-compatible sound chips
     // =========================================================================
 
@@ -1286,6 +1362,12 @@ module top (
     wire signed [18:0] sid_audio_sum = {sid1_audio_mono[17], sid1_audio_mono} +
                                        {sid2_audio_mono[17], sid2_audio_mono};
     wire signed [17:0] sid_audio_mix = clip_sid_mix(sid_audio_sum);
+    wire signed [18:0] music_audio_sum_l = {sid_audio_mix[17], sid_audio_mix} +
+                                           {wts_audio_l[17], wts_audio_l};
+    wire signed [18:0] music_audio_sum_r = {sid_audio_mix[17], sid_audio_mix} +
+                                           {wts_audio_r[17], wts_audio_r};
+    wire signed [17:0] music_audio_l = clip_sid_mix(music_audio_sum_l);
+    wire signed [17:0] music_audio_r = clip_sid_mix(music_audio_sum_r);
 
     // A simple square-wave diagnostic lets us prove HDMI audio output without
     // depending on SID programming, envelope state, or game/application code.
@@ -1305,12 +1387,13 @@ module top (
     end
 
     wire signed [17:0] hdmi_test_audio = hdmi_test_tone_high ? 18'sd65536 : -18'sd65536;
-    assign audio_l = hdmi_audio_test_enable ? hdmi_test_audio : sid_audio_mix;
-    assign audio_r = hdmi_audio_test_enable ? hdmi_test_audio : sid_audio_mix;
+    assign audio_l = hdmi_audio_test_enable ? hdmi_test_audio : music_audio_l;
+    assign audio_r = hdmi_audio_test_enable ? hdmi_test_audio : music_audio_r;
 
-    // Curve reader SDRAM port B — muxed with bridge preload below. Held
-    // in reset whenever NovaHost holds the CPU reset so that it doesn't
-    // issue reads while the bridge is preloading the filter curve.
+    // SDRAM port B is shared by the SID filter-curve reader and WTS sample
+    // fetches. WTS gets priority because active sample playback must not miss
+    // the 48 kHz audio cadence; the SID curve reader simply retries on later
+    // pixel clocks as cutoff values change.
     wire [24:0] curve_addrB;
     wire        curve_weB;
     wire [7:0]  curve_dinB;
@@ -1330,14 +1413,11 @@ module top (
         .sdram_doutB (sdram_doutB)
     );
 
-    // Port B is owned by the SID curve reader inside the core. The FPGA wrapper
-    // arbitrates external debug transfers after crossing them into the SDRAM
-    // clock domain, so keeping a second bridge mux here only lengthens the
-    // pixel-domain path.
-    assign sdram_addrB = curve_addrB;
-    assign sdram_weB   = curve_weB;
-    assign sdram_dinB  = curve_dinB;
-    assign sdram_oeB   = curve_oeB;
+    wire wts_sdram_active = wts_oeB | wts_weB;
+    assign sdram_addrB = wts_sdram_active ? wts_addrB : curve_addrB;
+    assign sdram_weB   = wts_sdram_active ? wts_weB   : curve_weB;
+    assign sdram_dinB  = wts_sdram_active ? wts_dinB  : curve_dinB;
+    assign sdram_oeB   = wts_sdram_active ? wts_oeB   : curve_oeB;
 
     // =========================================================================
     // CPU
@@ -1390,6 +1470,7 @@ module top (
         .cpu_re         (~cpu_we),
         .key_valid      (key_valid),
         .key_data       (key_data),
+        .key_ready      (key_ready),
         .blt_space      (bm_vgc_space),
         .blt_addr       (bm_vgc_addr),
         .blt_rdata      (bm_vgc_rdata),
@@ -1445,6 +1526,15 @@ module top (
     wire dbg_fio       = (dbg_peek_addr >= 16'hB9A0 && dbg_peek_addr <= 16'hB9EF);
     assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
 
+    // Math register reads are combinational on the selected address. Keep that
+    // decode out of the final debug peek mux; the bridge already waits long
+    // enough for this one-cycle staging register before sampling dbg_peek_data.
+    logic [7:0] dbg_math_rdata;
+    always_ff @(posedge clk) begin
+        if (dbg_peek_math)
+            dbg_math_rdata <= math_cpu_rdata;
+    end
+
     // For debug reads, RAM port B serves as the read port.
     // ROM reads use the same brom_b/erom_b ports (address set combinationally).
     // SID overlaps ROM and is write-only in the CPU-visible map, so debug reads
@@ -1452,12 +1542,15 @@ module top (
     // Keep the debug peek mux shallow. A nested priority chain makes the RAM
     // fallback walk through every MMIO branch before it reaches dbg_peek_data,
     // which turns debug readback into a clk_pixel critical path.
-    wire       dbg_mmio_owns = vgc_dbg_owns | dbg_peek_nic | dbg_fio | dbg_peek_blt | dbg_peek_math;
+    wire       dbg_mmio_owns = vgc_dbg_owns | dbg_peek_nic | dbg_peek_wts |
+                               dbg_fio | dbg_peek_blt | dbg_peek_math;
     wire [7:0] dbg_mmio_data = vgc_dbg_owns  ? vgc_dbg_rdata  :
                                dbg_peek_nic  ? nic_dbg_rdata  :
+                               dbg_peek_wts  ? wts_dbg_rdata  :
                                dbg_fio       ? fio_dbg_rdata  :
                                dbg_peek_blt  ? blt_cpu_rdata  :
-                                               math_cpu_rdata;
+                               dbg_peek_math ? dbg_math_rdata :
+                                               8'h00;
     wire [7:0] dbg_mem_data  = dbg_in_rom ? (ext_rom_active ? erom_b_dout : brom_b_dout)
                                           : ram_b_dout;
     wire [7:0] dbg_peek_data_mux = dbg_peek_en ? (dbg_mmio_owns ? dbg_mmio_data : dbg_mem_data)
@@ -1484,6 +1577,7 @@ module top (
     wire [7:0] dbg_peek_data_mux = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :
                                                   dbg_peek_blt     ? blt_cpu_rdata :
                                                   dbg_peek_math    ? math_cpu_rdata :
+                                                  dbg_peek_wts     ? wts_dbg_rdata :
                                                   dbg_in_rom       ? dbg_rom_read_data :
                                                                      ram[dbg_peek_addr]) : 8'h00;
 
@@ -1493,7 +1587,7 @@ module top (
 
     // Poke: write to main RAM on clock edge (ROM-protected)
     always_ff @(posedge clk) begin
-        if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_blt && !dbg_poke_math && dbg_poke_addr < ROM_BASE)
+        if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_blt && !dbg_poke_math && !dbg_poke_wts && dbg_poke_addr < ROM_BASE)
             ram[dbg_poke_addr] <= dbg_poke_data;
     end
 `endif

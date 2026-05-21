@@ -51,7 +51,7 @@ module test_vgc_frame_counter;
         .cpu_ce(cpu_ce),
         .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata), .cpu_rdata(cpu_rdata),
         .cpu_we(cpu_we), .cpu_re(cpu_re),
-        .key_valid(key_valid), .key_data(key_data),
+        .key_valid(key_valid), .key_data(key_data), .key_ready(),
         .blt_space(blt_space), .blt_addr(blt_addr),
         .blt_rdata(blt_rdata), .blt_wdata(blt_wdata),
         .blt_we(blt_we), .blt_re(blt_re),

@@ -10,7 +10,7 @@ An 8-voice memory-mapped wavetable synthesizer that sits alongside the two SID c
 
 **Integration with MusicEngine:** MusicEngine expands from 6 to 14 voices. Voices 0–5 route to SID (3+3 as today). Voices 6–13 route to the WTS. Each voice's target is fixed by index. MidiPlayback allocates voices to SID or WTS depending on a per-channel routing configuration.
 
-**Soundfont lifecycle:** A FileIoController command loads an SF2 file from `~/e6502-programs/soundfonts/`. The host parses it into an internal sample bank (PCM buffers, loop points, envelope parameters, key ranges). The 6502 enumerates and selects instruments via register reads/writes. Soundfont data never enters 6502 address space.
+**Soundfont lifecycle:** A FileIoController command loads an SF2 file from `~/e6502-programs/soundfonts/` or from the NovaHost SD card. The host/ESP side parses it into an internal sample bank (PCM buffers, loop points, envelope parameters, key ranges). The 6502 enumerates and selects instruments via register reads/writes. Soundfont data never enters 6502 address space, and the FPGA does not parse RIFF/SF2 structures; it consumes a compact parsed sample-bank layout prepared by NovaHost/ESP.
 
 ## Register Map ($A140–$A1FF)
 
@@ -51,12 +51,24 @@ Voice 0 at $A140–$A147, voice 1 at $A148–$A14F, etc.
 | $A1A2 | EnumProgram | R | MIDI program number. |
 | $A1A3–$A1DF | EnumName | R | Instrument name, null-terminated ASCII (28 chars max). |
 
+### Timestamped Event Scheduler ($A1E0–$A1E8)
+
+| Address | Register | R/W | Description |
+|---------|----------|-----|-------------|
+| $A1E0 | EventStatus | R | bit0=ready, bit1=full, bit2=empty, bit3=running, bit7=parser error. |
+| $A1E1–$A1E2 | EventCount | R | Queued event records. |
+| $A1E3–$A1E4 | EventFree | R | Free FIFO record slots. |
+| $A1E5–$A1E8 | EventFrame | R | Current 48 kHz scheduler frame. |
+
 ### Commands (write to $A185)
 
 | Value | Command | Description |
 |-------|---------|-------------|
 | $01 | AllNotesOff | Silence all voices immediately. |
 | $02 | ResetEffects | Reset reverb/chorus to defaults. |
+| $03 | EventReset | Clear queued timestamped WTS events and stop scheduler. |
+| $04 | EventStart | Reset scheduler frame counter and start playback. |
+| $05 | EventStop | Stop scheduler without changing voice state. |
 
 ## Internal Sample Engine
 
@@ -134,7 +146,7 @@ Voice stealing can draw from either pool. Priority prefers WTS for sample-based 
 
 ### SF2 Parsing
 
-SF2 files use RIFF structure with three chunks: INFO (metadata), sdta (raw PCM16 sample data), pdta (presets, instruments, sample headers, key zones). Parsed directly without third-party libraries.
+SF2 files use RIFF structure with three chunks: INFO (metadata), sdta (raw PCM16 sample data), pdta (presets, instruments, sample headers, key zones). Parsed directly without third-party libraries on the host/ESP side. Hardware receives only normalized sample-region descriptors and PCM pages.
 
 ### GM Soundfonts
 

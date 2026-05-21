@@ -72,6 +72,9 @@ module test_debug_bridge;
 
     wire        key_inject_valid;
     wire [7:0]  key_inject_data;
+    logic       key_inject_ready = 1'b1;
+    logic [7:0] key_seen [0:15];
+    int         key_seen_count = 0;
 
     wire        sdram_b_we;
     wire        sdram_b_oe;
@@ -80,6 +83,14 @@ module test_debug_bridge;
     logic [7:0] sdram_b_dout;
     logic       sdram_b_done_toggle;
     wire [7:0]  host_status;
+    wire        audio_pcm_we;
+    wire [7:0]  audio_pcm_data;
+    logic       audio_pcm_ready = 1'b1;
+    logic [15:0] audio_pcm_space = 16'd4096;
+    logic [15:0] audio_pcm_underruns = 16'd0;
+    wire        wts_event_we;
+    wire [7:0]  wts_event_data;
+    logic       wts_event_ready = 1'b1;
 
     // Host event inputs — pulse these to simulate CPU writes to MMIO command regs.
     logic       fio_event = 0;
@@ -134,6 +145,7 @@ module test_debug_bridge;
         .dbg_cpu_stopped(dbg_cpu_stopped),
         .key_inject_valid(key_inject_valid),
         .key_inject_data(key_inject_data),
+        .key_inject_ready(key_inject_ready),
         .sdram_b_we(sdram_b_we),
         .sdram_b_oe(sdram_b_oe),
         .sdram_b_addr(sdram_b_addr),
@@ -142,8 +154,23 @@ module test_debug_bridge;
         .sdram_b_done_toggle(sdram_b_done_toggle),
         .fio_event(fio_event),
         .nic_event(nic_event),
-        .host_status(host_status)
+        .host_status(host_status),
+        .audio_pcm_we(audio_pcm_we),
+        .audio_pcm_data(audio_pcm_data),
+        .audio_pcm_ready(audio_pcm_ready),
+        .audio_pcm_space(audio_pcm_space),
+        .audio_pcm_underruns(audio_pcm_underruns),
+        .wts_event_we(wts_event_we),
+        .wts_event_data(wts_event_data),
+        .wts_event_ready(wts_event_ready)
     );
+
+    always_ff @(posedge clk) begin
+        if (key_inject_valid && key_seen_count < 16) begin
+            key_seen[key_seen_count] <= key_inject_data;
+            key_seen_count <= key_seen_count + 1;
+        end
+    end
 
     // ------------------------------------------------------------------
     // ROM shadow — captures every byte the bridge writes via dbg_rom_we,
@@ -366,6 +393,26 @@ module test_debug_bridge;
             nic_rx_shadow[dbg_nic_buf_addr] <= dbg_nic_buf_data;
     end
 
+    logic [7:0] audio_shadow [0:31];
+    int audio_count = 0;
+    always_ff @(posedge clk) begin
+        if (audio_pcm_we) begin
+            if (audio_count < 32)
+                audio_shadow[audio_count] <= audio_pcm_data;
+            audio_count <= audio_count + 1;
+        end
+    end
+
+    logic [7:0] wts_event_shadow [0:31];
+    int wts_event_count = 0;
+    always_ff @(posedge clk) begin
+        if (wts_event_we) begin
+            if (wts_event_count < 32)
+                wts_event_shadow[wts_event_count] <= wts_event_data;
+            wts_event_count <= wts_event_count + 1;
+        end
+    end
+
     task automatic test_poke_block_ram();
         logic [7:0] ack;
         $display("");
@@ -393,6 +440,67 @@ module test_debug_bridge;
         check_eq8("ram[0x0506]", ram_shadow[16'h0506], 8'h11);
         check_eq8("ram[0x0507]", ram_shadow[16'h0507], 8'h22);
         check_eq8("ram[0x0508] untouched", ram_shadow[16'h0508], 8'hFF);
+    endtask
+
+    task automatic test_bridge_caps();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_BRIDGE_CAPS reports multi-poke support");
+        send_byte(8'h21);   // CMD_BRIDGE_CAPS
+        wait_tx(b); check_eq8("bridge caps status", b, 8'h00);
+        wait_tx(b); check_eq8("bridge caps poke_multi bit", b & 8'h01, 8'h01);
+        check_eq8("bridge caps wts_event_stream bit", b & 8'h02, 8'h02);
+        check_eq8("bridge caps key_stream bit", b & 8'h04, 8'h04);
+    endtask
+
+    task automatic test_key_stream();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_WRITE_KEYS streams bytes with VGC FIFO backpressure");
+        key_seen_count = 0;
+        key_inject_ready = 1'b1;
+        send_byte(8'h24);   // CMD_WRITE_KEYS
+        send_byte(8'h04);   // count = 4
+        send_byte(8'h41);
+        send_byte(8'h42);
+        send_byte(8'h0D);
+        send_byte(8'h43);
+        wait_tx(ack);
+        check_eq8("key stream ack status", ack, 8'h00);
+        check_eq8("key stream count", key_seen_count[7:0], 8'd4);
+        check_eq8("key stream byte 0", key_seen[0], 8'h41);
+        check_eq8("key stream byte 1", key_seen[1], 8'h42);
+        check_eq8("key stream byte 2", key_seen[2], 8'h0D);
+        check_eq8("key stream byte 3", key_seen[3], 8'h43);
+
+        key_seen_count = 0;
+        key_inject_ready = 1'b0;
+        send_byte(8'h24);   // CMD_WRITE_KEYS
+        send_byte(8'h01);   // one byte
+        send_byte(8'h5A);
+        repeat(10) @(posedge clk);
+        check_eq8("key stream waits while FIFO full", key_seen_count[7:0], 8'd0);
+        key_inject_ready = 1'b1;
+        wait_tx(ack);
+        check_eq8("key stream backpressure ack", ack, 8'h00);
+        check_eq8("key stream backpressure byte", key_seen[0], 8'h5A);
+    endtask
+
+    task automatic test_poke_multi_ram();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_POKE_MULTI sparse writes into RAM");
+        send_byte(8'h22);   // CMD_POKE_MULTI
+        send_byte(8'h03);   // three addr/data triples
+        send_byte(8'h06); send_byte(8'h00); send_byte(8'hA1);
+        send_byte(8'h06); send_byte(8'h05); send_byte(8'hB2);
+        send_byte(8'h07); send_byte(8'h10); send_byte(8'hC3);
+        wait_tx(ack);
+        check_eq8("poke_multi ack status", ack, 8'h00);
+        check_eq8("ram[0x0600]", ram_shadow[16'h0600], 8'hA1);
+        check_eq8("ram[0x0605]", ram_shadow[16'h0605], 8'hB2);
+        check_eq8("ram[0x0710]", ram_shadow[16'h0710], 8'hC3);
+        check_eq8("ram[0x0601] untouched", ram_shadow[16'h0601], 8'hFF);
     endtask
 
     task automatic test_bulk_poke_vgc();
@@ -491,6 +599,63 @@ module test_debug_bridge;
         check_eq8("nic rx byte 1", nic_rx_shadow[8'h21], 8'hA2);
         check_eq8("nic rx byte 2", nic_rx_shadow[8'h22], 8'hA3);
         check_eq8("nic rx boundary untouched", nic_rx_shadow[8'h23], 8'hFF);
+    endtask
+
+    task automatic test_audio_pcm_write_block();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_WRITE_AUDIO_PCM streams PCM bytes with FIFO backpressure");
+        audio_count = 0;
+        audio_pcm_ready = 1'b1;
+
+        send_byte(8'h1F);   // CMD_WRITE_AUDIO_PCM
+        send_byte(8'h00);   // count_hi
+        send_byte(8'h08);   // count_lo
+        for (int i = 0; i < 8; i++)
+            send_byte(8'h70 + 8'(i));
+
+        wait_tx(ack);
+        check_eq8("audio pcm ack status", ack, 8'h00);
+        check("audio byte count", audio_count == 8);
+        for (int i = 0; i < 8; i++)
+            check_eq8($sformatf("audio byte %0d", i),
+                      audio_shadow[i], 8'h70 + 8'(i));
+    endtask
+
+    task automatic test_audio_pcm_status();
+        logic [7:0] b;
+        $display("");
+        $display("Test: CMD_AUDIO_PCM_STATUS returns FIFO space and underruns");
+        audio_pcm_space = 16'h1234;
+        audio_pcm_underruns = 16'h00A5;
+
+        send_byte(8'h20);   // CMD_AUDIO_PCM_STATUS
+        wait_tx(b); check_eq8("audio status ack", b, 8'h00);
+        wait_tx(b); check_eq8("audio space hi", b, 8'h12);
+        wait_tx(b); check_eq8("audio space lo", b, 8'h34);
+        wait_tx(b); check_eq8("audio underruns hi", b, 8'h00);
+        wait_tx(b); check_eq8("audio underruns lo", b, 8'hA5);
+    endtask
+
+    task automatic test_wts_event_stream_write();
+        logic [7:0] ack;
+        $display("");
+        $display("Test: CMD_WRITE_WTS_EVENTS streams timestamped WTS records");
+        wts_event_count = 0;
+        wts_event_ready = 1'b1;
+
+        send_byte(8'h23);   // CMD_WRITE_WTS_EVENTS
+        send_byte(8'h00);   // count_hi
+        send_byte(8'h0C);   // count_lo = two 6-byte records
+        for (int i = 0; i < 12; i++)
+            send_byte(8'h90 + 8'(i));
+
+        wait_tx(ack);
+        check_eq8("wts event stream ack status", ack, 8'h00);
+        check("wts event byte count", wts_event_count == 12);
+        for (int i = 0; i < 12; i++)
+            check_eq8($sformatf("wts event byte %0d", i),
+                      wts_event_shadow[i], 8'h90 + 8'(i));
     endtask
 
     task automatic test_bulk_count_zero_means_256();
@@ -761,28 +926,31 @@ module test_debug_bridge;
     // SDRAM port B shadow — captures bytes the bridge writes via
     // sdram_b_we. Addresses are 25-bit byte addresses.
     // ------------------------------------------------------------------
-    logic [7:0] sdram_shadow [0:255];
+    logic [7:0] sdram_shadow [0:511];
     logic [7:0] sdram_prev_we;
     logic [7:0] sdram_prev_oe;
     logic [24:0] sdram_prev_addr;
+    int sdram_write_count;
 
     initial begin
         sdram_b_done_toggle = 1'b0;
         sdram_prev_we = 1'b0;
         sdram_prev_oe = 1'b0;
         sdram_prev_addr = 25'd0;
+        sdram_write_count = 0;
     end
 
     always_comb begin
-        sdram_b_dout = sdram_shadow[sdram_b_addr[7:0]];
+        sdram_b_dout = sdram_shadow[sdram_b_addr[8:0]];
     end
 
     always_ff @(posedge clk) begin
         // Capture on the first cycle of each bridge-owned port-B transfer,
         // then toggle done to match fpga_top's SDRAM-domain completion bridge.
         if (sdram_b_we && !sdram_prev_we) begin
-            if (sdram_b_addr < 25'd256)
-                sdram_shadow[sdram_b_addr[7:0]] <= sdram_b_din;
+            if (sdram_b_addr < 25'd512)
+                sdram_shadow[sdram_b_addr[8:0]] <= sdram_b_din;
+            sdram_write_count <= sdram_write_count + 1;
             sdram_b_done_toggle <= ~sdram_b_done_toggle;
         end
         if (sdram_b_oe && !sdram_prev_oe)
@@ -820,11 +988,42 @@ module test_debug_bridge;
         check_eq8("sdram_shadow[0x0018] untouched", sdram_shadow[24], 8'hFF);
     endtask
 
+    task automatic test_stream_poke_sdram();
+        logic [7:0] ack;
+        int base = 64;
+        int count = 300;
+        $display("");
+        $display("Test: CMD_POKE_SDRAM_STREAM — 300 bytes to addr 0x000040");
+        for (int i = 0; i < 512; i++) sdram_shadow[i] = 8'hFF;
+        sdram_write_count = 0;
+
+        send_byte(8'h1E);   // CMD_POKE_SDRAM_STREAM
+        send_byte(8'h00);   // addr_hi
+        send_byte(8'h00);   // addr_mid
+        send_byte(8'h40);   // addr_lo -> 0x000040
+        send_byte(8'h01);   // count_hi
+        send_byte(8'h2C);   // count_lo -> 300
+        for (int i = 0; i < count; i++) begin
+            send_byte(8'(i));
+            repeat(12) @(posedge clk);
+        end
+
+        wait_tx(ack);
+        check_eq8("sdram stream ack status", ack, 8'h00);
+        check("sdram stream write count is 300", sdram_write_count == count);
+        check_eq8("sdram stream first byte", sdram_shadow[base], 8'h00);
+        check_eq8("sdram stream byte 255", sdram_shadow[base + 255], 8'hFF);
+        check_eq8("sdram stream byte 256", sdram_shadow[base + 256], 8'h00);
+        check_eq8("sdram stream last byte", sdram_shadow[base + count - 1], 8'h2B);
+        check_eq8("sdram stream before untouched", sdram_shadow[base - 1], 8'hFF);
+        check_eq8("sdram stream after untouched", sdram_shadow[base + count], 8'hFF);
+    endtask
+
     task automatic test_bulk_read_sdram();
         logic [7:0] b;
         $display("");
         $display("Test: CMD_READ_SDRAM_BLK — 8 bytes from addr 0x000020");
-        for (int i = 0; i < 256; i++) sdram_shadow[i] = 8'h00;
+        for (int i = 0; i < 512; i++) sdram_shadow[i] = 8'h00;
         for (int i = 0; i < 8; i++) sdram_shadow[32 + i] = 8'h90 + 8'(i);
 
         send_byte(8'h1A);   // CMD_READ_SDRAM_BLK
@@ -979,13 +1178,20 @@ module test_debug_bridge;
         test_cmd_peek_block_latency();
         test_bulk_count_zero_means_256();
         test_bulk_poke_sdram();
+        test_stream_poke_sdram();
         test_bulk_read_sdram();
         test_poke_block_ram();
+        test_bridge_caps();
+        test_key_stream();
+        test_poke_multi_ram();
         test_bulk_poke_vgc();
         test_fill_vgc_block();
         test_bulk_read_vgc();
         test_nic_tx_read_block();
         test_nic_rx_write_block();
+        test_audio_pcm_write_block();
+        test_audio_pcm_status();
+        test_wts_event_stream_write();
         test_cpu_state_wait_stop_status();
         test_resume_pulses_cpu_resume();
         test_breakpoint_set_hit_list_clear();

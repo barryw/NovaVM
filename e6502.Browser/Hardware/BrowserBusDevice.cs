@@ -58,9 +58,9 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _cpuHz = cpuHz > 0 ? cpuHz : VgcConstants.DefaultCpuHz;
         _frameRateHz = frameRateHz > 0 ? frameRateHz : VgcConstants.FrameRateHz;
 
-        _sid = new SidChip(enableAudio: true);
-        _sid2 = new SidChip(enableAudio: true, baseAddress: 0xD420);
-        _wts = new WavetableSynth(enableAudio: true);
+        _sid = new SidChip(enableAudio: false);
+        _sid2 = new SidChip(enableAudio: false, baseAddress: 0xD420);
+        _wts = new WavetableSynth(enableAudio: false);
         _sidPlayer = new SidPlayer(this);
         _musicEngine = new MusicEngine(this);
         _midiPlayback = new MidiPlayback(_musicEngine, _frameRateHz);

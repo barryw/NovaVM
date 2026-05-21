@@ -7,7 +7,11 @@
 
 module sid_hdmi_audio #(
     parameter int PCM_SHIFT = 0,
-    parameter int PCM_GAIN = 3
+    parameter int PCM_GAIN = 3,
+    // Keep the DC blocker below the musical bass range. A 1/2048 leak at
+    // 48 kHz puts the pole around 3.7 Hz, removing SID bias without thinning
+    // kick drums and bass lines.
+    parameter int DC_BLOCK_SHIFT = 11
 ) (
     input  logic              clk,
     input  logic              rst,
@@ -32,7 +36,7 @@ module sid_hdmi_audio #(
     );
         logic signed [25:0] leak;
         begin
-            leak = value >>> 8;
+            leak = value >>> DC_BLOCK_SHIFT;
             if (value > 26'sd0 && leak == 26'sd0)
                 leak = 26'sd1;
             dc_block_next = value - leak + {{7{delta[18]}}, delta};
@@ -45,11 +49,14 @@ module sid_hdmi_audio #(
             sid_audio_r_prev <= 18'sd0;
             sid_audio_l_hp <= 26'sd0;
             sid_audio_r_hp <= 26'sd0;
+            audio_sample_word <= '0;
         end else if (sample_en) begin
             sid_audio_l_prev <= sid_audio_l;
             sid_audio_r_prev <= sid_audio_r;
             sid_audio_l_hp <= dc_block_next(sid_audio_l_hp, sid_audio_l_delta);
             sid_audio_r_hp <= dc_block_next(sid_audio_r_hp, sid_audio_r_delta);
+            audio_sample_word[0] <= to_pcm16(sid_audio_l_hp);
+            audio_sample_word[1] <= to_pcm16(sid_audio_r_hp);
         end
     end
 
@@ -68,6 +75,4 @@ module sid_hdmi_audio #(
         end
     endfunction
 
-    assign audio_sample_word[0] = to_pcm16(sid_audio_l_hp);
-    assign audio_sample_word[1] = to_pcm16(sid_audio_r_hp);
 endmodule

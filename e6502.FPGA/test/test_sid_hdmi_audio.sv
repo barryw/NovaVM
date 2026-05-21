@@ -82,11 +82,11 @@ module test_sid_hdmi_audio;
 
         sid_audio_l = -18'sd9255;
         sid_audio_r = -18'sd1575;
-        @(posedge clk);
+        repeat(2) @(posedge clk);
         first_l = pcm16(audio_sample_word[0]);
         first_r = pcm16(audio_sample_word[1]);
 
-        repeat(4096) @(posedge clk);
+        repeat(32768) @(posedge clk);
         final_l = pcm16(audio_sample_word[0]);
         final_r = pcm16(audio_sample_word[1]);
 
@@ -142,6 +142,12 @@ module test_sid_hdmi_audio;
         min_r = 32767;
         max_r = -32768;
 
+        for (int i = 0; i < 8192; i++) begin
+            sid_audio_l = (i[0] == 1'b0) ? -18'sd9255 : -18'sd1575;
+            sid_audio_r = (i[1] == 1'b0) ? -18'sd9255 : -18'sd1575;
+            @(posedge clk);
+        end
+
         for (int i = 0; i < 512; i++) begin
             sid_audio_l = (i[0] == 1'b0) ? -18'sd9255 : -18'sd1575;
             sid_audio_r = (i[1] == 1'b0) ? -18'sd9255 : -18'sd1575;
@@ -169,7 +175,7 @@ module test_sid_hdmi_audio;
 
         sid_audio_l = -18'sd131072;
         sid_audio_r = 18'sd131071;
-        @(posedge clk);
+        repeat(2) @(posedge clk);
         check("left negative transient saturates", audio_sample_word[0] == 16'h8000);
         check("right positive transient saturates", audio_sample_word[1] == 16'h7fff);
     endtask

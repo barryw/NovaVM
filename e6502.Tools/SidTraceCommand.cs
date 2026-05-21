@@ -33,6 +33,8 @@ public static class SidTraceCommand
         string path = args[0];
         int frames = 8;
         int song = 1;
+        string? dumpCsvPath = null;
+        string? dumpRtlPath = null;
 
         for (int i = 1; i < args.Length; i++)
         {
@@ -43,6 +45,12 @@ public static class SidTraceCommand
                     break;
                 case "--song" when i + 1 < args.Length:
                     song = int.Parse(args[++i]);
+                    break;
+                case "--dump-csv" when i + 1 < args.Length:
+                    dumpCsvPath = args[++i];
+                    break;
+                case "--dump-rtl" when i + 1 < args.Length:
+                    dumpRtlPath = args[++i];
                     break;
                 case "-h" or "--help":
                     PrintUsage();
@@ -80,6 +88,10 @@ public static class SidTraceCommand
 
         Console.WriteLine($"Avalonia writes: {avalonia.Writes.Count}");
         Console.WriteLine($"IRQ-player writes: {hardware.Writes.Count}");
+        if (dumpCsvPath is not null)
+            WriteCsvDump(dumpCsvPath, avalonia, hardware);
+        if (dumpRtlPath is not null)
+            WriteRtlDump(dumpRtlPath, hardware);
 
         int mismatch = FirstMismatch(avalonia.Writes, hardware.Writes);
         if (mismatch < 0 && avalonia.Writes.Count == hardware.Writes.Count)
@@ -96,7 +108,84 @@ public static class SidTraceCommand
     }
 
     private static void PrintUsage() =>
-        Console.Error.WriteLine("Usage: sidtrace <file.sid> [--frames N] [--song N]");
+        Console.Error.WriteLine("Usage: sidtrace <file.sid> [--frames N] [--song N] [--dump-csv PATH] [--dump-rtl PATH]");
+
+    private static void WriteCsvDump(string path, TraceResult avalonia, TraceResult hardware)
+    {
+        EnsureParentDirectory(path);
+        using var writer = new StreamWriter(path);
+        writer.WriteLine("source,ordinal,frame,phase,address,normalized_address,data");
+        WriteCsvRows(writer, avalonia.Name, avalonia.Writes);
+        WriteCsvRows(writer, hardware.Name, hardware.Writes);
+        Console.WriteLine($"Wrote CSV SID trace: {path}");
+    }
+
+    private static void WriteCsvRows(StreamWriter writer, string source, IReadOnlyList<SidWrite> writes)
+    {
+        foreach (var write in writes)
+        {
+            writer.Write(source);
+            writer.Write(',');
+            writer.Write(write.Ordinal);
+            writer.Write(',');
+            writer.Write(write.Frame);
+            writer.Write(',');
+            writer.Write(write.Phase);
+            writer.Write(',');
+            writer.Write($"0x{write.Address:X4}");
+            writer.Write(',');
+            writer.Write($"0x{write.NormalizedAddress:X4}");
+            writer.Write(',');
+            writer.WriteLine($"0x{write.Data:X2}");
+        }
+    }
+
+    private static void WriteRtlDump(string path, TraceResult hardware)
+    {
+        EnsureParentDirectory(path);
+        using var writer = new StreamWriter(path);
+        foreach (var write in hardware.Writes)
+        {
+            if (!TryMapSidRegister(write.NormalizedAddress, out int chip, out int register))
+                continue;
+
+            writer.Write(write.Frame);
+            writer.Write(' ');
+            writer.Write(chip);
+            writer.Write(' ');
+            writer.Write($"{register:X2}");
+            writer.Write(' ');
+            writer.WriteLine($"{write.Data:X2}");
+        }
+        Console.WriteLine($"Wrote RTL SID replay trace: {path}");
+    }
+
+    private static bool TryMapSidRegister(ushort address, out int chip, out int register)
+    {
+        if (address >= 0xD400 && address <= 0xD41F)
+        {
+            chip = 1;
+            register = address - 0xD400;
+            return true;
+        }
+        if (address >= 0xD420 && address <= 0xD43F)
+        {
+            chip = 2;
+            register = address - 0xD420;
+            return true;
+        }
+
+        chip = 0;
+        register = 0;
+        return false;
+    }
+
+    private static void EnsureParentDirectory(string path)
+    {
+        string? directory = Path.GetDirectoryName(Path.GetFullPath(path));
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+    }
 
     private static TraceResult TraceAvalonia(SidFileInfo info, int frames, int song)
     {

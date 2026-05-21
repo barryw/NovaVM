@@ -813,6 +813,9 @@ Current file: min_mon.asm
 000000r 4               .ifndef FIO_GSPACE
 000000r 4               FIO_GSPACE        = $B9AA
 000000r 4               .endif
+000000r 4               .ifndef FIO_SIZE2
+000000r 4               FIO_SIZE2         = $B9AA
+000000r 4               .endif
 000000r 4               .ifndef FIO_GADDRL
 000000r 4               FIO_GADDRL        = $B9AB
 000000r 4               .endif
@@ -1604,14 +1607,50 @@ Current file: min_mon.asm
 000000r 4               .ifndef WTS_ENUM_END
 000000r 4               WTS_ENUM_END      = $A1DF
 000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_STATUS
+000000r 4               WTS_EVENT_STATUS  = $A1E0
+000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_COUNT_L
+000000r 4               WTS_EVENT_COUNT_L = $A1E1
+000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_COUNT_H
+000000r 4               WTS_EVENT_COUNT_H = $A1E2
+000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_FREE_L
+000000r 4               WTS_EVENT_FREE_L  = $A1E3
+000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_FREE_H
+000000r 4               WTS_EVENT_FREE_H  = $A1E4
+000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_FRAME0
+000000r 4               WTS_EVENT_FRAME0  = $A1E5
+000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_FRAME1
+000000r 4               WTS_EVENT_FRAME1  = $A1E6
+000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_FRAME2
+000000r 4               WTS_EVENT_FRAME2  = $A1E7
+000000r 4               .endif
+000000r 4               .ifndef WTS_EVENT_FRAME3
+000000r 4               WTS_EVENT_FRAME3  = $A1E8
+000000r 4               .endif
 000000r 4               .ifndef WTS_END
-000000r 4               WTS_END           = $A1DF
+000000r 4               WTS_END           = $A1FF
 000000r 4               .endif
 000000r 4               .ifndef WTS_CMD_ALL_NOTES_OFF
 000000r 4               WTS_CMD_ALL_NOTES_OFF = $01
 000000r 4               .endif
 000000r 4               .ifndef WTS_CMD_RESET_EFFECTS
 000000r 4               WTS_CMD_RESET_EFFECTS = $02
+000000r 4               .endif
+000000r 4               .ifndef WTS_CMD_EVENT_RESET
+000000r 4               WTS_CMD_EVENT_RESET = $03
+000000r 4               .endif
+000000r 4               .ifndef WTS_CMD_EVENT_START
+000000r 4               WTS_CMD_EVENT_START = $04
+000000r 4               .endif
+000000r 4               .ifndef WTS_CMD_EVENT_STOP
+000000r 4               WTS_CMD_EVENT_STOP = $05
 000000r 4               .endif
 000000r 4               
 000000r 4               ; ---------------------------------------------------------------------
@@ -11970,6 +12009,9 @@ Current file: min_mon.asm
 00E999  6               .ifndef FIO_GSPACE
 00E999  6               FIO_GSPACE        = $B9AA
 00E999  6               .endif
+00E999  6               .ifndef FIO_SIZE2
+00E999  6               FIO_SIZE2         = $B9AA
+00E999  6               .endif
 00E999  6               .ifndef FIO_GADDRL
 00E999  6               FIO_GADDRL        = $B9AB
 00E999  6               .endif
@@ -12761,14 +12803,50 @@ Current file: min_mon.asm
 00E999  6               .ifndef WTS_ENUM_END
 00E999  6               WTS_ENUM_END      = $A1DF
 00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_STATUS
+00E999  6               WTS_EVENT_STATUS  = $A1E0
+00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_COUNT_L
+00E999  6               WTS_EVENT_COUNT_L = $A1E1
+00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_COUNT_H
+00E999  6               WTS_EVENT_COUNT_H = $A1E2
+00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_FREE_L
+00E999  6               WTS_EVENT_FREE_L  = $A1E3
+00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_FREE_H
+00E999  6               WTS_EVENT_FREE_H  = $A1E4
+00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_FRAME0
+00E999  6               WTS_EVENT_FRAME0  = $A1E5
+00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_FRAME1
+00E999  6               WTS_EVENT_FRAME1  = $A1E6
+00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_FRAME2
+00E999  6               WTS_EVENT_FRAME2  = $A1E7
+00E999  6               .endif
+00E999  6               .ifndef WTS_EVENT_FRAME3
+00E999  6               WTS_EVENT_FRAME3  = $A1E8
+00E999  6               .endif
 00E999  6               .ifndef WTS_END
-00E999  6               WTS_END           = $A1DF
+00E999  6               WTS_END           = $A1FF
 00E999  6               .endif
 00E999  6               .ifndef WTS_CMD_ALL_NOTES_OFF
 00E999  6               WTS_CMD_ALL_NOTES_OFF = $01
 00E999  6               .endif
 00E999  6               .ifndef WTS_CMD_RESET_EFFECTS
 00E999  6               WTS_CMD_RESET_EFFECTS = $02
+00E999  6               .endif
+00E999  6               .ifndef WTS_CMD_EVENT_RESET
+00E999  6               WTS_CMD_EVENT_RESET = $03
+00E999  6               .endif
+00E999  6               .ifndef WTS_CMD_EVENT_START
+00E999  6               WTS_CMD_EVENT_START = $04
+00E999  6               .endif
+00E999  6               .ifndef WTS_CMD_EVENT_STOP
+00E999  6               WTS_CMD_EVENT_STOP = $05
 00E999  6               .endif
 00E999  6               
 00E999  6               ; ---------------------------------------------------------------------
@@ -15350,6 +15428,9 @@ Current file: min_mon.asm
 00EE3D  7               .ifndef FIO_GSPACE
 00EE3D  7               FIO_GSPACE        = $B9AA
 00EE3D  7               .endif
+00EE3D  7               .ifndef FIO_SIZE2
+00EE3D  7               FIO_SIZE2         = $B9AA
+00EE3D  7               .endif
 00EE3D  7               .ifndef FIO_GADDRL
 00EE3D  7               FIO_GADDRL        = $B9AB
 00EE3D  7               .endif
@@ -16141,14 +16222,50 @@ Current file: min_mon.asm
 00EE3D  7               .ifndef WTS_ENUM_END
 00EE3D  7               WTS_ENUM_END      = $A1DF
 00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_STATUS
+00EE3D  7               WTS_EVENT_STATUS  = $A1E0
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_COUNT_L
+00EE3D  7               WTS_EVENT_COUNT_L = $A1E1
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_COUNT_H
+00EE3D  7               WTS_EVENT_COUNT_H = $A1E2
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_FREE_L
+00EE3D  7               WTS_EVENT_FREE_L  = $A1E3
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_FREE_H
+00EE3D  7               WTS_EVENT_FREE_H  = $A1E4
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_FRAME0
+00EE3D  7               WTS_EVENT_FRAME0  = $A1E5
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_FRAME1
+00EE3D  7               WTS_EVENT_FRAME1  = $A1E6
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_FRAME2
+00EE3D  7               WTS_EVENT_FRAME2  = $A1E7
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_EVENT_FRAME3
+00EE3D  7               WTS_EVENT_FRAME3  = $A1E8
+00EE3D  7               .endif
 00EE3D  7               .ifndef WTS_END
-00EE3D  7               WTS_END           = $A1DF
+00EE3D  7               WTS_END           = $A1FF
 00EE3D  7               .endif
 00EE3D  7               .ifndef WTS_CMD_ALL_NOTES_OFF
 00EE3D  7               WTS_CMD_ALL_NOTES_OFF = $01
 00EE3D  7               .endif
 00EE3D  7               .ifndef WTS_CMD_RESET_EFFECTS
 00EE3D  7               WTS_CMD_RESET_EFFECTS = $02
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_CMD_EVENT_RESET
+00EE3D  7               WTS_CMD_EVENT_RESET = $03
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_CMD_EVENT_START
+00EE3D  7               WTS_CMD_EVENT_START = $04
+00EE3D  7               .endif
+00EE3D  7               .ifndef WTS_CMD_EVENT_STOP
+00EE3D  7               WTS_CMD_EVENT_STOP = $05
 00EE3D  7               .endif
 00EE3D  7               
 00EE3D  7               ; ---------------------------------------------------------------------
@@ -18463,6 +18580,9 @@ Current file: min_mon.asm
 00F0EA  6               .ifndef FIO_GSPACE
 00F0EA  6               FIO_GSPACE        = $B9AA
 00F0EA  6               .endif
+00F0EA  6               .ifndef FIO_SIZE2
+00F0EA  6               FIO_SIZE2         = $B9AA
+00F0EA  6               .endif
 00F0EA  6               .ifndef FIO_GADDRL
 00F0EA  6               FIO_GADDRL        = $B9AB
 00F0EA  6               .endif
@@ -19254,14 +19374,50 @@ Current file: min_mon.asm
 00F0EA  6               .ifndef WTS_ENUM_END
 00F0EA  6               WTS_ENUM_END      = $A1DF
 00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_STATUS
+00F0EA  6               WTS_EVENT_STATUS  = $A1E0
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_COUNT_L
+00F0EA  6               WTS_EVENT_COUNT_L = $A1E1
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_COUNT_H
+00F0EA  6               WTS_EVENT_COUNT_H = $A1E2
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_FREE_L
+00F0EA  6               WTS_EVENT_FREE_L  = $A1E3
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_FREE_H
+00F0EA  6               WTS_EVENT_FREE_H  = $A1E4
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_FRAME0
+00F0EA  6               WTS_EVENT_FRAME0  = $A1E5
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_FRAME1
+00F0EA  6               WTS_EVENT_FRAME1  = $A1E6
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_FRAME2
+00F0EA  6               WTS_EVENT_FRAME2  = $A1E7
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_EVENT_FRAME3
+00F0EA  6               WTS_EVENT_FRAME3  = $A1E8
+00F0EA  6               .endif
 00F0EA  6               .ifndef WTS_END
-00F0EA  6               WTS_END           = $A1DF
+00F0EA  6               WTS_END           = $A1FF
 00F0EA  6               .endif
 00F0EA  6               .ifndef WTS_CMD_ALL_NOTES_OFF
 00F0EA  6               WTS_CMD_ALL_NOTES_OFF = $01
 00F0EA  6               .endif
 00F0EA  6               .ifndef WTS_CMD_RESET_EFFECTS
 00F0EA  6               WTS_CMD_RESET_EFFECTS = $02
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_CMD_EVENT_RESET
+00F0EA  6               WTS_CMD_EVENT_RESET = $03
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_CMD_EVENT_START
+00F0EA  6               WTS_CMD_EVENT_START = $04
+00F0EA  6               .endif
+00F0EA  6               .ifndef WTS_CMD_EVENT_STOP
+00F0EA  6               WTS_CMD_EVENT_STOP = $05
 00F0EA  6               .endif
 00F0EA  6               
 00F0EA  6               ; ---------------------------------------------------------------------

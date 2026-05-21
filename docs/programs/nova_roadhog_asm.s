@@ -84,6 +84,8 @@ crash_timer:        .res 1
 obj_active:         .res OBJ_COUNT
 obj_x:              .res OBJ_COUNT
 obj_y:              .res OBJ_COUNT
+obj_draw_x:         .res OBJ_COUNT
+obj_draw_y:         .res OBJ_COUNT
 obj_lane:           .res OBJ_COUNT
 obj_type:           .res OBJ_COUNT
 obj_speed:          .res OBJ_COUNT
@@ -114,10 +116,16 @@ rect_y1:            .res 1
 
 start:
       STZ   VGC_CURSEN
-      LDA   #$03
-      STA   VGC_MODE
+      STZ   VGC_CURSX
+      STZ   VGC_CURSY
       LDA   #COLOR_SKY
       STA   VGC_BGCOL
+      LDA   #COLOR_WHITE
+      STA   VGC_FGCOL
+      LDA   #$0C
+      STA   VGC_CHAROUT
+      LDA   #$03
+      STA   VGC_MODE
       LDA   #COLOR_HUD_DIM
       STA   VGC_BORDER
       LDA   #$0F
@@ -333,6 +341,7 @@ spawn_object:
       STA   obj_active,X
       LDA   #$1C
       STA   obj_y,X
+      STA   obj_draw_y,X
 
       MATHC_RNG_READ temp0
       LDA   temp0
@@ -341,6 +350,14 @@ spawn_object:
       LDA   lane_table,Y
       LDX   obj_index
       STA   obj_lane,X
+      LDA   obj_y,X
+      JSR   compute_road_center_for_y
+      LDX   obj_index
+      LDA   road_center
+      CLC
+      ADC   obj_lane,X
+      STA   obj_x,X
+      STA   obj_draw_x,X
 
       MATHC_RNG_READ temp0
       LDA   temp0
@@ -396,6 +413,7 @@ update_objects:
       CLC
       ADC   obj_lane,X
       STA   obj_x,X
+      JSR   smooth_object_motion
       JSR   publish_object
 
 @next:
@@ -424,11 +442,11 @@ publish_object:
       STA   spr_offset
       TAY
 
-      LDA   obj_x,X
+      LDA   obj_draw_x,X
       STA   VGC_SPR_BASE + VGC_SPR_XL_OFF,Y
       LDA   #$00
       STA   VGC_SPR_BASE + VGC_SPR_XH_OFF,Y
-      LDA   obj_y,X
+      LDA   obj_draw_y,X
       STA   VGC_SPR_BASE + VGC_SPR_YL_OFF,Y
       LDA   #$00
       STA   VGC_SPR_BASE + VGC_SPR_YH_OFF,Y
@@ -456,6 +474,115 @@ publish_object:
       STA   VGC_SPR_BASE + VGC_SPR_FLAGS_OFF,Y
       RTS
 
+smooth_object_motion:
+      LDX   obj_index
+      LDA   obj_x,X
+      STA   temp0
+      LDA   obj_draw_x,X
+      STA   temp1
+      JSR   ease_quarter
+      LDX   obj_index
+      STA   obj_draw_x,X
+
+      LDA   obj_y,X
+      STA   temp0
+      LDA   obj_draw_y,X
+      STA   temp1
+      JSR   ease_half
+      LDX   obj_index
+      STA   obj_draw_y,X
+      RTS
+
+ease_quarter:
+      LDA   temp0
+      CMP   temp1
+      BEQ   @same
+      BCS   @increase
+
+      LDA   temp1
+      SEC
+      SBC   temp0
+      LSR
+      LSR
+      BNE   @dec_step
+      LDA   #$01
+@dec_step:
+      STA   temp2
+      LDA   temp1
+      SEC
+      SBC   temp2
+      CMP   temp0
+      BCS   @done
+      LDA   temp0
+@done:
+      RTS
+
+@increase:
+      LDA   temp0
+      SEC
+      SBC   temp1
+      LSR
+      LSR
+      BNE   @inc_step
+      LDA   #$01
+@inc_step:
+      STA   temp2
+      LDA   temp1
+      CLC
+      ADC   temp2
+      CMP   temp0
+      BCC   @done
+      LDA   temp0
+      RTS
+
+@same:
+      LDA   temp1
+      RTS
+
+ease_half:
+      LDA   temp0
+      CMP   temp1
+      BEQ   @same
+      BCS   @increase
+
+      LDA   temp1
+      SEC
+      SBC   temp0
+      LSR
+      BNE   @dec_step
+      LDA   #$01
+@dec_step:
+      STA   temp2
+      LDA   temp1
+      SEC
+      SBC   temp2
+      CMP   temp0
+      BCS   @done
+      LDA   temp0
+@done:
+      RTS
+
+@increase:
+      LDA   temp0
+      SEC
+      SBC   temp1
+      LSR
+      BNE   @inc_step
+      LDA   #$01
+@inc_step:
+      STA   temp2
+      LDA   temp1
+      CLC
+      ADC   temp2
+      CMP   temp0
+      BCC   @done
+      LDA   temp0
+      RTS
+
+@same:
+      LDA   temp1
+      RTS
+
 disable_sprite_a:
       ASL
       ASL
@@ -472,13 +599,13 @@ check_collisions:
       LDA   obj_active,X
       BEQ   @next
 
-      LDA   obj_y,X
+      LDA   obj_draw_y,X
       CMP   #(PLAYER_Y - 12)
       BCC   @next
       CMP   #(PLAYER_Y + 30)
       BCS   @next
 
-      LDA   obj_x,X
+      LDA   obj_draw_x,X
       SEC
       SBC   player_x
       BCS   @abs_ok
@@ -547,6 +674,9 @@ crash_frame:
       RTS
 
 draw_scene:
+      STZ   VGC_CURSEN
+      LDA   #$03
+      STA   VGC_MODE
       JSR   wait_cmd
       LDA   #VCMD_GCLS
       STA   VGC_CMD
@@ -662,11 +792,12 @@ draw_road_edges:
       RTS
 
 maybe_draw_lane_marker:
-      LDA   road_phase
+      LDA   band_idx
       CLC
       ADC   band_idx
       ADC   band_idx
-      ADC   band_idx
+      SEC
+      SBC   road_phase
       AND   #$18
       BNE   @done
 
@@ -763,15 +894,34 @@ update_random_road:
 @new_target:
       MATHC_RNG_READ temp0
       LDA   temp0
-      AND   #$3F
-      SEC
-      SBC   #$20
+      AND   #$07
+      CMP   #$02
+      BCC   @straight
+      CMP   #$05
+      BCC   @left_curve
+
+@right_curve:
+      JSR   random_curve_magnitude
       STA   road_target
+      BRA   @new_timer
+
+@left_curve:
+      JSR   random_curve_magnitude
+      EOR   #$FF
+      CLC
+      ADC   #$01
+      STA   road_target
+      BRA   @new_timer
+
+@straight:
+      STZ   road_target
+
+@new_timer:
       MATHC_RNG_READ temp0
       LDA   temp0
-      AND   #$0F
+      AND   #$1F
       CLC
-      ADC   #$18
+      ADC   #$30
       STA   road_change_timer
 
 @ease:
@@ -790,6 +940,14 @@ update_random_road:
 @done:
       RTS
 
+random_curve_magnitude:
+      MATHC_RNG_READ temp0
+      LDA   temp0
+      AND   #$1F
+      CLC
+      ADC   #$28
+      RTS
+
 compute_road_center_for_y:
       CMP   #$40
       BCC   @far
@@ -797,16 +955,21 @@ compute_road_center_for_y:
       BCC   @mid_far
       CMP   #$90
       BCC   @mid_near
-      LDA   #$00
+      CMP   #$B0
+      BCC   @near
+      LDA   #$04
       BRA   compute_road_center
 @far:
-      LDA   #$03
+      LDA   #$00
       BRA   compute_road_center
 @mid_far:
-      LDA   #$02
+      LDA   #$01
       BRA   compute_road_center
 @mid_near:
-      LDA   #$01
+      LDA   #$02
+      BRA   compute_road_center
+@near:
+      LDA   #$03
 
 compute_road_center:
       TAX
@@ -1178,7 +1341,7 @@ band_y1:
 band_half_width:
       .byte 34,38,43,48,54,60,67,74,82,90,99,108,118,128
 band_curve_shift:
-      .byte 3,3,3,2,2,2,1,1,1,1,0,0,0,0
+      .byte 0,0,0,1,1,1,2,2,2,3,3,4,4,4
 
       .include "msprite.s"
       .include "audio.s"

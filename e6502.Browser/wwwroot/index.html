@@ -39,8 +39,8 @@
 
         #screen-container {
             position: relative;
-            width: 640px;
-            height: 400px;
+            width: 720px;
+            height: 480px;
             border: 2px solid #333;
             border-radius: 4px;
             background: #000;
@@ -48,19 +48,10 @@
 
         #screen {
             display: block;
-            width: 640px;
-            height: 400px;
+            width: 720px;
+            height: 480px;
             image-rendering: pixelated;
             image-rendering: crisp-edges;
-        }
-
-        /* Avalonia's #out div — hidden, exists only for keyboard focus */
-        #out {
-            width: 1px;
-            height: 1px;
-            position: absolute;
-            left: -9999px;
-            overflow: hidden;
         }
 
         #loading {
@@ -87,7 +78,7 @@
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        #audio-prompt {
+        #focus-prompt {
             display: none;
             position: fixed;
             bottom: 24px;
@@ -102,7 +93,7 @@
             transition: opacity 0.3s;
         }
 
-        #audio-prompt:hover {
+        #focus-prompt:hover {
             background: #252545;
         }
 
@@ -131,42 +122,22 @@
     </div>
 
     <div id="screen-container">
-        <canvas id="screen" width="640" height="400"></canvas>
+        <canvas id="screen" width="720" height="480"></canvas>
         <div id="loading">
             <span class="spinner"></span>Loading Nova VM...
         </div>
     </div>
 
-    <!-- Avalonia mount point — invisible, used only for keyboard focus -->
-    <div id="out"></div>
-
-    <div id="audio-prompt" onclick="enableAudio()">
-        Click here or press any key to enable audio
+    <div id="focus-prompt">
+        Click the screen, then type
     </div>
 
     <div id="footer">
         <a href="https://barrywalker.io">barrywalker.io</a> &mdash;
-        Built with .NET + Avalonia + WebAssembly
+        Built with .NET + WebAssembly
     </div>
 
-    <script>
-        let audioEnabled = false;
-
-        function enableAudio() {
-            if (audioEnabled) return;
-            audioEnabled = true;
-            document.getElementById('audio-prompt').style.display = 'none';
-
-            if (globalThis.novaAudio) {
-                globalThis.novaAudio.init(44100);
-            }
-        }
-
-        // Enable audio on first keypress or click
-        document.addEventListener('keydown', enableAudio, { once: true });
-        document.addEventListener('click', enableAudio, { once: true });
-    </script>
-    <!-- main.js bootstraps .NET WASM runtime + Avalonia + audio bridge + canvas renderer -->
+    <!-- main.js starts the worker-hosted .NET WASM VM + canvas renderer -->
     <script type="module" src="./main.js"></script>
 </body>
 </html>

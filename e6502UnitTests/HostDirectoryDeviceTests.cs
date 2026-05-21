@@ -34,6 +34,27 @@ public class HostDirectoryDeviceTests
     }
 
     [TestMethod]
+    public void ListDirectory_NmsFilesAreMidType()
+    {
+        string dir = MakeTempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var device = new HostDirectoryDevice(dir, "FD0");
+
+            File.WriteAllBytes(Path.Combine(dir, "SONG.nms"), [0x4E, 0x4D, 0x53, 0x31]);
+
+            StorageDirEntry entry = device.ListDirectory(null).Single(e => e.Filename == "SONG");
+            Assert.AreEqual(NdiFileType.Mid, entry.FileType,
+                "Precompiled Nova music streams must enumerate as MID-class files so FIO/MIDPLAY can use the existing file type.");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void Subdirectory_CdAndList()
     {
         string dir = MakeTempDir();

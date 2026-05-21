@@ -9,9 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.2" />
-    <PackageReference Include="Avalonia.Browser" Version="12.0.2" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.2" />
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
   </ItemGroup>
 
@@ -48,14 +45,13 @@
     <Compile Include="..\e6502.Avalonia\Hardware\VirtualTimerController.cs" Link="Hardware\VirtualTimerController.cs" />
     <Compile Include="..\e6502.Avalonia\Hardware\VirtualDmaController.cs" Link="Hardware\VirtualDmaController.cs" />
     <Compile Include="..\e6502.Avalonia\Hardware\VirtualBlitterController.cs" Link="Hardware\VirtualBlitterController.cs" />
-    <Compile Include="..\e6502.Avalonia\Hardware\VirtualNetworkController.cs" Link="Hardware\VirtualNetworkController.cs" />
     <Compile Include="..\e6502.Avalonia\Hardware\FileIoController.cs" Link="Hardware\FileIoController.cs" />
   </ItemGroup>
 
   <!-- Rendering (EmulatorCanvas replaced by browser-local DirectCanvas) -->
   <ItemGroup>
     <Compile Include="..\e6502.Avalonia\Rendering\BitmapFont.cs" Link="Rendering\BitmapFont.cs" />
-    <Compile Include="..\e6502.Avalonia\Rendering\ColorPalette.cs" Link="Rendering\ColorPalette.cs" />
+    <Compile Include="..\e6502.Avalonia\Rendering\TextPixelRenderer.cs" Link="Rendering\TextPixelRenderer.cs" />
     <Compile Include="..\e6502.Avalonia\Rendering\SpriteRenderer.cs" Link="Rendering\SpriteRenderer.cs" />
     <Compile Include="..\e6502.Avalonia\Rendering\SpriteRenderState.cs" Link="Rendering\SpriteRenderState.cs" />
     <Compile Include="..\e6502.Avalonia\Rendering\BlockGraphics.cs" Link="Rendering\BlockGraphics.cs" />

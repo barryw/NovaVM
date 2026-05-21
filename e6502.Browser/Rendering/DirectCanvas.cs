@@ -1,57 +1,76 @@
 // Direct framebuffer renderer for the browser.
 // Replicates EmulatorCanvas.RenderFramebuffer() pixel compositing logic
 // but writes RGBA bytes to a byte[] exposed to JS via [JSExport].
-// JS reads this buffer and pushes it to an HTML5 Canvas with putImageData().
 
 using System.Runtime.InteropServices.JavaScript;
-using e6502.Avalonia;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
 using e6502.Avalonia.Hardware;
-using e6502.Avalonia.Input;
 using e6502.Avalonia.Rendering;
 
 namespace e6502.Browser.Rendering;
 
 public static partial class DirectCanvas
 {
-    public const int NativeWidth = 640;
-    public const int NativeHeight = 400;
-    public const int FramebufferSize = NativeWidth * NativeHeight * 4; // RGBA
+    public const int NativeWidth = VgcConstants.VideoWidth;
+    public const int NativeHeight = VgcConstants.VideoHeight;
+    public const int FramebufferSize = NativeWidth * NativeHeight * 4;
+    private const int TextRowPixelHeight = BitmapFont.GlyphHeight;
+    private const int TextRowBytes = VgcConstants.CanvasWidth * TextRowPixelHeight * 4;
+    private const int ActiveCanvasBytes = VgcConstants.CanvasWidth * VgcConstants.CanvasHeight * 4;
+    private const int DirtyRowFullFrameThreshold = 24;
 
-    // RGBA framebuffer: 640x400x4 = 1,024,000 bytes
     private static readonly byte[] _framebuffer = new byte[FramebufferSize];
+    private static readonly byte[] _packetBuffer = new byte[FramebufferSize + 1];
+    private static readonly byte[] _emptyPacket = { 2 };
+    private static readonly uint[] _c64Palette = BuildRgbaPalette(0);
+    private static readonly uint[] _egaPalette = BuildRgbaPalette(1);
 
-    // Palette pre-computed as RGBA byte quads (R, G, B, A)
-    private static readonly uint[] _palette = BuildRgbaPalette();
-
-    // Scratch buffers for sprite rasterization (one scanline at native 320 resolution)
-    private static readonly byte[] _lineBehind = new byte[VgcConstants.GfxWidth];
-    private static readonly byte[] _lineBetween = new byte[VgcConstants.GfxWidth];
-    private static readonly byte[] _lineFront = new byte[VgcConstants.GfxWidth];
-    private static readonly ushort[] _spriteMask = new ushort[VgcConstants.GfxWidth];
+    private static readonly byte[] _lineBehind = new byte[VgcConstants.SpritePlaneWidth];
+    private static readonly byte[] _lineBetween = new byte[VgcConstants.SpritePlaneWidth];
+    private static readonly byte[] _lineFront = new byte[VgcConstants.SpritePlaneWidth];
+    private static readonly ushort[] _spriteMask = new ushort[VgcConstants.SpritePlaneWidth];
     private static readonly byte[] _shapeRamSnapshot = new byte[VgcConstants.ShapeRamSize];
     private static bool _shapeRamInitialized;
+    private static readonly byte[] _lastScreenChars = new byte[VgcConstants.ScreenSize];
+    private static readonly byte[] _lastScreenColors = new byte[VgcConstants.ScreenSize];
+    private static readonly byte[] _lastScreenAttrs = new byte[VgcConstants.ScreenSize];
+    private static readonly bool[] _dirtyRows = new bool[VgcConstants.ScreenRows];
+    private static bool _textSnapshotInitialized;
+    private static byte _lastTextFontIndex;
+    private static byte _lastTextDisplayDim;
+    private static byte _lastTextPaletteMode;
+    private static byte _lastTextBorderColor;
+    private static bool _lastFlashVisible;
+    private static int _lastCursorX;
+    private static int _lastCursorY;
+    private static bool _lastCursorEnabled;
 
-    // Cursor state
     private static bool _cursorVisible = true;
-
-    // References set at init
     private static VirtualGraphicsController? _vgc;
     private static BitmapFont? _font;
-
-    // CPU references — set at init, used by Tick()
     private static KDS.e6502.Cpu? _cpu;
     private static CompositeBusDevice? _bus;
-    private static int _cyclesPerTick;
+    private static int _promptCpuHz;
+    private static int _programCpuHz;
+    private static int _bootCpuHz;
     private static int _cursorCounter;
+    private static bool _basicReady;
 
-    public static void Initialize(VirtualGraphicsController vgc, BitmapFont font,
-        KDS.e6502.Cpu cpu, CompositeBusDevice bus, int cpuHz)
+    public static void Initialize(
+        VirtualGraphicsController vgc,
+        BitmapFont font,
+        KDS.e6502.Cpu cpu,
+        CompositeBusDevice bus,
+        int cpuHz)
     {
         _vgc = vgc;
         _font = font;
         _cpu = cpu;
         _bus = bus;
-        _cyclesPerTick = cpuHz / 60;
+        _promptCpuHz = cpuHz;
+        _programCpuHz = Math.Max(cpuHz, 4_000_000);
+        _bootCpuHz = VgcConstants.DefaultCpuHz;
     }
 
     public static void ToggleCursor()
@@ -59,45 +78,127 @@ public static partial class DirectCanvas
         _cursorVisible = !_cursorVisible;
     }
 
-    /// <summary>
-    /// Runs one frame of CPU + renders framebuffer. Called from JS requestAnimationFrame.
-    /// Single entry point — no timers, no dispatchers.
-    /// </summary>
+    [JSExport]
+    public static void ConfigureCpuHz(int promptCpuHz, int programCpuHz, int bootCpuHz)
+    {
+        _promptCpuHz = Math.Clamp(promptCpuHz, 100_000, VgcConstants.DefaultCpuHz);
+        _programCpuHz = Math.Clamp(programCpuHz, 100_000, VgcConstants.DefaultCpuHz);
+        _bootCpuHz = Math.Clamp(bootCpuHz, 100_000, VgcConstants.DefaultCpuHz);
+    }
+
     [JSExport]
     public static byte[] Tick()
     {
-        // Run CPU
+        RunCpuSlice(promptMilliseconds: 2, programMilliseconds: 6, bootMilliseconds: 33);
+        return Render();
+    }
+
+    [JSExport]
+    public static int RunCpuSlice(int promptMilliseconds, int programMilliseconds, int bootMilliseconds)
+    {
         if (_cpu != null && _bus != null)
         {
-            int remaining = _cyclesPerTick;
-            while (remaining > 0)
-            {
-                int cycles = _cpu.ClocksForNext();
-                _cpu.ExecuteNext();
-                _bus.AdvanceCycles(cycles);
+            bool promptInputMode = _basicReady && _bus.Vgc.IsCursorEnabled;
+            int budgetMs = !_basicReady
+                ? bootMilliseconds
+                : promptInputMode ? promptMilliseconds : programMilliseconds;
+            int targetHz = !_basicReady
+                ? _bootCpuHz
+                : promptInputMode ? _promptCpuHz : _programCpuHz;
+            int targetCycles = Math.Max(1, (int)Math.Min(int.MaxValue, (long)targetHz * Math.Max(1, budgetMs) / 1000));
+            int instructions = RunCpu(targetCycles, promptInputMode ? budgetMs : 0);
 
-                if (_bus.SidPlayer.HasPendingCall)
-                    _bus.SidPlayer.ExecutePendingCalls(_cpu);
-                if (_bus.Timer.IrqPending || _bus.Nic.IrqPending || _bus.VgcIrqPending)
-                    _cpu.IrqWaiting = true;
+            if (_vgc != null && !_basicReady)
+                _basicReady = DetectReadyPrompt(_vgc);
 
-                remaining -= cycles;
-            }
+            return instructions;
         }
 
-        // Cursor blink (~2Hz at 60fps)
+        return 0;
+    }
+
+    [JSExport]
+    public static byte[] Render()
+    {
+        AdvanceCursorBlink();
+
+        if (_vgc != null && _font != null)
+        {
+            if (!_basicReady)
+                _basicReady = DetectReadyPrompt(_vgc);
+            RenderFramebuffer();
+        }
+
+        return _framebuffer;
+    }
+
+    [JSExport]
+    public static byte[] RenderPacket()
+    {
+        AdvanceCursorBlink();
+
+        if (_vgc == null || _font == null)
+            return BuildFullPacket();
+
+        var vgc = _vgc;
+        if (!_basicReady)
+            _basicReady = DetectReadyPrompt(vgc);
+
+        ReadOnlySpan<VirtualGraphicsController.CopperEvent> copperProgram = vgc.GetCopperProgram();
+        bool copperEnabled = vgc.IsCopperEnabled && !copperProgram.IsEmpty;
+        var state = RenderVideoState.FromVgc(vgc);
+        if (CanUseTextFastPath(vgc, state, copperEnabled))
+            return RenderTextPacket(vgc, _font, state);
+
+        RenderFramebuffer();
+        _textSnapshotInitialized = false;
+        return BuildFullPacket();
+    }
+
+    private static void AdvanceCursorBlink()
+    {
         _cursorCounter++;
         if (_cursorCounter >= 30)
         {
             _cursorCounter = 0;
             _cursorVisible = !_cursorVisible;
         }
+    }
 
-        // Render
-        if (_vgc != null && _font != null)
-            RenderFramebuffer();
+    private static int RunCpu(int targetCycles, int maxMilliseconds)
+    {
+        var cpu = _cpu!;
+        var bus = _bus!;
+        int remaining = targetCycles;
+        long sliceStarted = Stopwatch.GetTimestamp();
+        bool limitByTime = maxMilliseconds > 0;
+        long maxSliceTicks = limitByTime
+            ? Stopwatch.Frequency * maxMilliseconds / 1000
+            : long.MaxValue;
+        int instructions = 0;
 
-        return _framebuffer;
+        while (remaining > 0)
+        {
+            int cycles = cpu.ClocksForNext();
+            cpu.ExecuteNext();
+            bus.AdvanceCycles(cycles);
+
+            if (bus.SidPlayer.HasPendingCall)
+                bus.SidPlayer.ExecutePendingCalls(cpu);
+            if (bus.Timer.IrqPending || bus.Nic.IrqPending || bus.VgcIrqPending)
+                cpu.IrqWaiting = true;
+
+            remaining -= cycles;
+            instructions++;
+            if (limitByTime &&
+                (instructions & 0x1FF) == 0 &&
+                Stopwatch.GetTimestamp() - sliceStarted >= maxSliceTicks)
+            {
+                break;
+            }
+        }
+
+        return instructions;
     }
 
     private static void RenderFramebuffer()
@@ -110,20 +211,33 @@ public static partial class DirectCanvas
         int copperIndex = 0;
 
         var state = RenderVideoState.FromVgc(vgc);
+        Span<uint> framebuffer = MemoryMarshal.Cast<byte, uint>(_framebuffer.AsSpan());
+        ReadOnlySpan<uint> palette = GetRgbaPalette(state.PaletteMode);
+        uint borderPixel = palette[state.BorderColor & 0x0F];
+        if (state.DisplayDim != 15)
+            borderPixel = DimColor(borderPixel, state.DisplayDim);
+        framebuffer.Fill(borderPixel);
+
+        if (CanUseTextFastPath(vgc, state, copperEnabled))
+        {
+            RenderTextOnlyFramebuffer(vgc, font, state, framebuffer, palette);
+            vgc.SetCollisionRegisters(0, 0);
+            return;
+        }
+
         var sprites = SpriteRenderState.FromVgc(vgc);
         if (vgc.SnapshotSpriteShapes(_shapeRamSnapshot) || !_shapeRamInitialized)
             _shapeRamInitialized = true;
         ReadOnlySpan<byte> shapeRam = _shapeRamSnapshot;
         int cursorX = vgc.GetCursorX();
         int cursorY = vgc.GetCursorY();
-        bool cursorEnabled = _cursorVisible && vgc.IsCursorEnabled;
+        bool cursorEnabled = _cursorVisible && vgc.IsCursorVisibleInCurrentMode;
+        byte gfxTransparentColor = vgc.GetGfxTransparentColor();
 
         ushort colSS = 0, colSB = 0;
-        byte gfxTransparentColor = vgc.GetGfxTransparentColor();
 
         for (int y = 0; y < VgcConstants.GfxHeight; y++)
         {
-            // Pre-fire copper events targeting sprite registers for this scanline
             if (copperEnabled)
             {
                 int scanlineEnd = (y + 1) * VgcConstants.GfxWidth;
@@ -136,68 +250,89 @@ public static partial class DirectCanvas
                 }
             }
 
-            // Rasterize sprites for this scanline
-            SpriteRenderer.RasterizeScanline(y, sprites, shapeRam,
+            int spritePlaneY = y + VgcConstants.SpriteCanvasY;
+            SpriteRenderer.RasterizeScanline(spritePlaneY, sprites, shapeRam,
                 _lineBehind, _lineBetween, _lineFront, _spriteMask);
 
-            // Accumulate collision data
-            SpriteRenderer.AccumulateCollisions(_spriteMask, vgc,
-                state.GfxScrollX, state.GfxScrollY, y, ref colSS, ref colSB);
+            SpriteRenderer.AccumulateCollisions(
+                _spriteMask.AsSpan(VgcConstants.SpriteCanvasX, VgcConstants.GfxWidth),
+                vgc,
+                state.GfxScrollX,
+                state.GfxScrollY,
+                y,
+                ref colSS,
+                ref colSB);
 
             for (int x = 0; x < VgcConstants.GfxWidth; x++)
             {
-                // Fire non-sprite copper events at exact pixel position
                 if (copperEnabled)
                 {
                     int position = y * VgcConstants.GfxWidth + x;
                     while (copperIndex < copperProgram.Length && copperProgram[copperIndex].Position == position)
                     {
-                        if (!SpriteRenderState.IsSpriteRegister(copperProgram[copperIndex].RegisterIndex))
+                        if (copperProgram[copperIndex].RegisterIndex == VgcConstants.CopperRegIrq)
+                            vgc.RaiseCopperIrq(copperProgram[copperIndex].Value);
+                        else if (!SpriteRenderState.IsSpriteRegister(copperProgram[copperIndex].RegisterIndex))
                             state.Apply(copperProgram[copperIndex].RegisterIndex, copperProgram[copperIndex].Value);
                         copperIndex++;
                     }
                 }
 
-                byte spriteBehind = _lineBehind[x];
-                byte spriteBetween = _lineBetween[x];
-                byte spriteFront = _lineFront[x];
+                int spritePlaneX = x + VgcConstants.SpriteCanvasX;
+                byte spriteBehind = _lineBehind[spritePlaneX];
+                byte spriteBetween = _lineBetween[spritePlaneX];
+                byte spriteFront = _lineFront[spritePlaneX];
 
                 int sampleGfxX = Wrap320(x + state.GfxScrollX);
                 int sampleGfxY = Wrap200(y + state.GfxScrollY);
                 byte gfxColorIndex = vgc.GetGfxPixelColor(sampleGfxX, sampleGfxY);
                 bool gfxOpaque = gfxColorIndex != gfxTransparentColor;
-                uint gfxPixel = gfxOpaque ? _palette[gfxColorIndex & 0x0F] : 0u;
+                uint gfxPixel = gfxOpaque ? palette[gfxColorIndex & 0x0F] : 0u;
 
                 for (int dy = 0; dy < 2; dy++)
                 {
-                    int py = y * 2 + dy;
+                    int canvasPy = y * 2 + dy;
+                    int py = VgcConstants.CanvasOffsetY + canvasPy;
                     int rowBase = py * NativeWidth;
                     for (int dx = 0; dx < 2; dx++)
                     {
-                        int px = x * 2 + dx;
-                        uint pixel = _palette[state.BgColor & 0x0F];
+                        int canvasPx = x * 2 + dx;
+                        int px = VgcConstants.CanvasOffsetX + canvasPx;
+                        uint pixel = palette[state.BgColor & 0x0F];
 
                         if (spriteBehind != 0)
-                            pixel = _palette[spriteBehind & 0x0F];
+                            pixel = palette[spriteBehind & 0x0F];
 
                         bool textOpaque = false;
                         uint textPixel = 0;
-                        if (state.Mode != 3 && state.Mode != 4)
-                            textOpaque = TrySampleTextPixel(px, py, state, cursorX, cursorY, cursorEnabled, font, vgc, out textPixel);
+                        if (VirtualGraphicsController.IsTextLayerVisible(state.Mode))
+                        {
+                            textOpaque = TrySampleTextPixel(
+                                canvasPx,
+                                canvasPy,
+                                state,
+                                cursorX,
+                                cursorY,
+                                cursorEnabled,
+                                font,
+                                vgc,
+                                palette,
+                                out textPixel);
+                        }
 
                         if (state.Mode == 3 || state.Mode == 4)
                         {
                             if (gfxOpaque)
                                 pixel = gfxPixel;
                             if (spriteBetween != 0)
-                                pixel = _palette[spriteBetween & 0x0F];
+                                pixel = palette[spriteBetween & 0x0F];
                         }
                         else if (state.Mode == 2)
                         {
                             if (gfxOpaque)
                                 pixel = gfxPixel;
                             if (spriteBetween != 0)
-                                pixel = _palette[spriteBetween & 0x0F];
+                                pixel = palette[spriteBetween & 0x0F];
                             if (textOpaque)
                                 pixel = textPixel;
                         }
@@ -206,26 +341,290 @@ public static partial class DirectCanvas
                             if (textOpaque)
                                 pixel = textPixel;
                             if (spriteBetween != 0)
-                                pixel = _palette[spriteBetween & 0x0F];
+                                pixel = palette[spriteBetween & 0x0F];
                             if (state.Mode >= 1 && gfxOpaque)
                                 pixel = gfxPixel;
                         }
 
                         if (spriteFront != 0)
-                            pixel = _palette[spriteFront & 0x0F];
+                            pixel = palette[spriteFront & 0x0F];
 
-                        // Write RGBA bytes
-                        int offset = (rowBase + px) * 4;
-                        _framebuffer[offset] = (byte)(pixel >> 24);         // R
-                        _framebuffer[offset + 1] = (byte)(pixel >> 16);     // G
-                        _framebuffer[offset + 2] = (byte)(pixel >> 8);      // B
-                        _framebuffer[offset + 3] = (byte)(pixel);           // A
+                        if (state.DisplayDim != 15)
+                            pixel = DimColor(pixel, state.DisplayDim);
+
+                        framebuffer[rowBase + px] = pixel;
                     }
                 }
             }
         }
 
         vgc.SetCollisionRegisters(colSS, colSB);
+    }
+
+    private static bool CanUseTextFastPath(
+        VirtualGraphicsController vgc,
+        RenderVideoState state,
+        bool copperEnabled)
+    {
+        if (state.Mode != 0 || copperEnabled || state.TextScrollX != 0 || state.TextScrollY != 0)
+            return false;
+
+        for (int i = 0; i < VgcConstants.MaxSprites; i++)
+        {
+            if (vgc.GetSpriteState(i).enabled)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static void RenderTextOnlyFramebuffer(
+        VirtualGraphicsController vgc,
+        BitmapFont font,
+        RenderVideoState state,
+        Span<uint> framebuffer,
+        ReadOnlySpan<uint> palette)
+    {
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+            RenderTextRow(vgc, font, state, framebuffer, palette, row);
+    }
+
+    private static void RenderTextRow(
+        VirtualGraphicsController vgc,
+        BitmapFont font,
+        RenderVideoState state,
+        Span<uint> framebuffer,
+        ReadOnlySpan<uint> palette,
+        int row)
+    {
+        int cursorX = vgc.GetCursorX();
+        int cursorY = vgc.GetCursorY();
+        bool cursorEnabled = _cursorVisible && vgc.IsCursorVisibleInCurrentMode;
+
+        for (int col = 0; col < VgcConstants.ScreenCols; col++)
+        {
+            byte ch = vgc.GetScreenChar(col, row);
+            byte colorAttr = vgc.GetScreenColor(col, row);
+            byte textAttr = vgc.GetScreenTextAttr(col, row);
+
+            byte fgColor = (byte)(colorAttr & 0x0F);
+            byte bgColor = (byte)((colorAttr >> 4) & 0x0F);
+
+            if (cursorEnabled && col == cursorX && row == cursorY)
+                (fgColor, bgColor) = (bgColor, fgColor);
+
+            uint fgPixel = palette[fgColor];
+            uint bgPixel = palette[bgColor];
+            if (state.DisplayDim != 15)
+            {
+                fgPixel = DimColor(fgPixel, state.DisplayDim);
+                bgPixel = DimColor(bgPixel, state.DisplayDim);
+            }
+
+            bool flashHidden = (textAttr & VgcConstants.TextAttrFlash) != 0 && !state.FlashVisible;
+            int baseX = VgcConstants.CanvasOffsetX + col * BitmapFont.GlyphWidth;
+            int baseY = VgcConstants.CanvasOffsetY + row * BitmapFont.GlyphHeight;
+
+            for (int glyphY = 0; glyphY < BitmapFont.GlyphHeight; glyphY++)
+            {
+                byte rowBits = flashHidden ? (byte)0 : font.GetRow(state.FontIndex, ch, glyphY);
+                int dest = (baseY + glyphY) * NativeWidth + baseX;
+                for (int glyphX = 0; glyphX < BitmapFont.GlyphWidth; glyphX++)
+                {
+                    framebuffer[dest + glyphX] =
+                        (rowBits & (0x80 >> glyphX)) != 0 ? fgPixel : bgPixel;
+                }
+            }
+        }
+    }
+
+    private static byte[] RenderTextPacket(
+        VirtualGraphicsController vgc,
+        BitmapFont font,
+        RenderVideoState state)
+    {
+        Span<uint> framebuffer = MemoryMarshal.Cast<byte, uint>(_framebuffer.AsSpan());
+        ReadOnlySpan<uint> palette = GetRgbaPalette(state.PaletteMode);
+        bool fullRedraw = !_textSnapshotInitialized
+            || _lastTextFontIndex != state.FontIndex
+            || _lastTextDisplayDim != state.DisplayDim
+            || _lastTextPaletteMode != state.PaletteMode
+            || _lastTextBorderColor != state.BorderColor;
+
+        if (fullRedraw)
+        {
+            uint borderPixel = palette[state.BorderColor & 0x0F];
+            if (state.DisplayDim != 15)
+                borderPixel = DimColor(borderPixel, state.DisplayDim);
+            framebuffer.Fill(borderPixel);
+            RenderTextOnlyFramebuffer(vgc, font, state, framebuffer, palette);
+            CaptureTextSnapshot(vgc);
+            SaveTextState(vgc, state);
+            return BuildFullPacket();
+        }
+
+        Array.Clear(_dirtyRows);
+        int dirtyCount = MarkDirtyTextRows(vgc, state);
+        if (dirtyCount == 0)
+        {
+            SaveTextState(vgc, state);
+            return _emptyPacket;
+        }
+
+        if (dirtyCount > DirtyRowFullFrameThreshold)
+        {
+            RenderTextOnlyFramebuffer(vgc, font, state, framebuffer, palette);
+            SaveTextState(vgc, state);
+            return BuildActiveCanvasPacket();
+        }
+
+        _packetBuffer[0] = 1;
+        _packetBuffer[1] = (byte)dirtyCount;
+
+        int rowHeader = 2;
+        int dataOffset = rowHeader + dirtyCount;
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+        {
+            if (!_dirtyRows[row])
+                continue;
+
+            _packetBuffer[rowHeader++] = (byte)row;
+            RenderTextRow(vgc, font, state, framebuffer, palette, row);
+            CopyTextRowToPacket(row, dataOffset);
+            dataOffset += TextRowBytes;
+        }
+
+        SaveTextState(vgc, state);
+        return _packetBuffer;
+    }
+
+    private static int MarkDirtyTextRows(VirtualGraphicsController vgc, RenderVideoState state)
+    {
+        int dirtyCount = 0;
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+        {
+            bool rowDirty = false;
+            int rowOffset = row * VgcConstants.ScreenCols;
+            for (int col = 0; col < VgcConstants.ScreenCols; col++)
+            {
+                int index = rowOffset + col;
+                byte ch = vgc.GetScreenChar(col, row);
+                byte color = vgc.GetScreenColor(col, row);
+                byte attr = vgc.GetScreenTextAttr(col, row);
+                if (_lastScreenChars[index] != ch ||
+                    _lastScreenColors[index] != color ||
+                    _lastScreenAttrs[index] != attr)
+                {
+                    _lastScreenChars[index] = ch;
+                    _lastScreenColors[index] = color;
+                    _lastScreenAttrs[index] = attr;
+                    rowDirty = true;
+                }
+            }
+
+            if (state.FlashVisible != _lastFlashVisible && RowHasFlashAttribute(row))
+                rowDirty = true;
+
+            if (rowDirty)
+                dirtyCount += MarkDirtyRow(row);
+        }
+
+        int cursorX = vgc.GetCursorX();
+        int cursorY = vgc.GetCursorY();
+        bool cursorEnabled = _cursorVisible && vgc.IsCursorVisibleInCurrentMode;
+        if (cursorEnabled != _lastCursorEnabled ||
+            cursorX != _lastCursorX ||
+            cursorY != _lastCursorY)
+        {
+            if (_lastCursorEnabled)
+                dirtyCount += MarkDirtyRow(_lastCursorY);
+            if (cursorEnabled)
+                dirtyCount += MarkDirtyRow(cursorY);
+        }
+
+        return dirtyCount;
+    }
+
+    private static int MarkDirtyRow(int row)
+    {
+        if ((uint)row >= VgcConstants.ScreenRows || _dirtyRows[row])
+            return 0;
+
+        _dirtyRows[row] = true;
+        return 1;
+    }
+
+    private static bool RowHasFlashAttribute(int row)
+    {
+        int rowOffset = row * VgcConstants.ScreenCols;
+        for (int col = 0; col < VgcConstants.ScreenCols; col++)
+        {
+            if ((_lastScreenAttrs[rowOffset + col] & VgcConstants.TextAttrFlash) != 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void CaptureTextSnapshot(VirtualGraphicsController vgc)
+    {
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+        {
+            int rowOffset = row * VgcConstants.ScreenCols;
+            for (int col = 0; col < VgcConstants.ScreenCols; col++)
+            {
+                int index = rowOffset + col;
+                _lastScreenChars[index] = vgc.GetScreenChar(col, row);
+                _lastScreenColors[index] = vgc.GetScreenColor(col, row);
+                _lastScreenAttrs[index] = vgc.GetScreenTextAttr(col, row);
+            }
+        }
+
+        _textSnapshotInitialized = true;
+    }
+
+    private static void SaveTextState(VirtualGraphicsController vgc, RenderVideoState state)
+    {
+        _lastTextFontIndex = (byte)state.FontIndex;
+        _lastTextDisplayDim = state.DisplayDim;
+        _lastTextPaletteMode = state.PaletteMode;
+        _lastTextBorderColor = state.BorderColor;
+        _lastFlashVisible = state.FlashVisible;
+        _lastCursorX = vgc.GetCursorX();
+        _lastCursorY = vgc.GetCursorY();
+        _lastCursorEnabled = _cursorVisible && vgc.IsCursorVisibleInCurrentMode;
+    }
+
+    private static byte[] BuildFullPacket()
+    {
+        _packetBuffer[0] = 0;
+        Buffer.BlockCopy(_framebuffer, 0, _packetBuffer, 1, FramebufferSize);
+        return _packetBuffer;
+    }
+
+    private static byte[] BuildActiveCanvasPacket()
+    {
+        _packetBuffer[0] = 3;
+        int dataOffset = 1;
+        for (int y = 0; y < VgcConstants.CanvasHeight; y++)
+        {
+            int sourceOffset = ((VgcConstants.CanvasOffsetY + y) * NativeWidth + VgcConstants.CanvasOffsetX) * 4;
+            Buffer.BlockCopy(_framebuffer, sourceOffset, _packetBuffer, dataOffset, VgcConstants.CanvasWidth * 4);
+            dataOffset += VgcConstants.CanvasWidth * 4;
+        }
+
+        return _packetBuffer;
+    }
+
+    private static void CopyTextRowToPacket(int row, int dataOffset)
+    {
+        for (int glyphY = 0; glyphY < TextRowPixelHeight; glyphY++)
+        {
+            int sourceOffset = ((VgcConstants.CanvasOffsetY + row * TextRowPixelHeight + glyphY)
+                * NativeWidth + VgcConstants.CanvasOffsetX) * 4;
+            Buffer.BlockCopy(_framebuffer, sourceOffset, _packetBuffer, dataOffset, VgcConstants.CanvasWidth * 4);
+            dataOffset += VgcConstants.CanvasWidth * 4;
+        }
     }
 
     private static bool TrySampleTextPixel(
@@ -237,36 +636,30 @@ public static partial class DirectCanvas
         bool cursorEnabled,
         BitmapFont font,
         VirtualGraphicsController vgc,
+        ReadOnlySpan<uint> palette,
         out uint pixel)
     {
-        int srcPx = Wrap640(px + (state.TextScrollX << 1));
-        int srcPy = Wrap400(py + (state.TextScrollY << 1));
-
-        int col = srcPx / BitmapFont.GlyphWidth;
-        int row = srcPy / (BitmapFont.GlyphHeight * 2);
-
-        byte ch = vgc.GetScreenChar(col, row);
-        byte fgColor = vgc.GetScreenColor(col, row);
-
-        uint fg = _palette[fgColor & 0x0F];
-        uint bg = _palette[state.BgColor & 0x0F];
-
-        bool isCursor = cursorEnabled && col == cursorX && row == cursorY;
-        if (isCursor)
-            (fg, bg) = (bg, fg);
-
-        int glyphX = srcPx % BitmapFont.GlyphWidth;
-        int glyphY = (srcPy % (BitmapFont.GlyphHeight * 2)) / 2;
-        byte rowBits = font.GetRow(state.FontIndex, ch, glyphY);
-        bool set = (rowBits & (0x80 >> glyphX)) != 0;
-
-        if (state.Mode == 2 && !set && !isCursor)
+        if (!TextPixelRenderer.TrySample(
+            vgc,
+            font,
+            px,
+            py,
+            state.Mode,
+            state.TextScrollX,
+            state.TextScrollY,
+            state.BgColor,
+            state.FontIndex,
+            state.FlashVisible,
+            cursorX,
+            cursorY,
+            cursorEnabled,
+            out byte colorIndex))
         {
             pixel = 0;
             return false;
         }
 
-        pixel = set ? fg : bg;
+        pixel = palette[colorIndex & 0x0F];
         return true;
     }
 
@@ -284,31 +677,52 @@ public static partial class DirectCanvas
         return value;
     }
 
-    private static int Wrap640(int value)
+    private static bool DetectReadyPrompt(VirtualGraphicsController vgc)
     {
-        if (value >= NativeWidth) value -= NativeWidth;
-        return value;
+        const string ready = "Ready";
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+        {
+            for (int col = 0; col <= VgcConstants.ScreenCols - ready.Length; col++)
+            {
+                int i = 0;
+                for (; i < ready.Length; i++)
+                {
+                    byte ch = vgc.GetScreenChar(col + i, row);
+                    if (ch != ready[i])
+                        break;
+                }
+
+                if (i == ready.Length)
+                    return true;
+            }
+        }
+
+        return false;
     }
 
-    private static int Wrap400(int value)
+    private static ReadOnlySpan<uint> GetRgbaPalette(byte paletteMode) =>
+        (paletteMode & 0x01) != 0 ? _egaPalette : _c64Palette;
+
+    private static uint DimColor(uint rgba, byte dim)
     {
-        if (value >= NativeHeight) value -= NativeHeight;
-        if (value >= NativeHeight) value -= NativeHeight;
-        return value;
+        if (dim == 0)
+            return 0xFF000000;
+
+        uint r = (rgba & 0xFF) * dim >> 4;
+        uint g = ((rgba >> 8) & 0xFF) * dim >> 4;
+        uint b = ((rgba >> 16) & 0xFF) * dim >> 4;
+        return r | (g << 8) | (b << 16) | 0xFF000000;
     }
 
-    /// <summary>
-    /// Builds palette as RGBA packed uint values.
-    /// Layout: R in bits 31-24, G in bits 23-16, B in bits 15-8, A in bits 7-0.
-    /// </summary>
-    private static uint[] BuildRgbaPalette()
+    private static uint[] BuildRgbaPalette(byte paletteMode)
     {
         var palette = new uint[16];
         for (byte i = 0; i < 16; i++)
         {
-            var c = ColorPalette.Get(i);
-            palette[i] = ((uint)c.R << 24) | ((uint)c.G << 16) | ((uint)c.B << 8) | 0xFF;
+            var c = ColorPalette.Get(i, paletteMode);
+            palette[i] = (uint)c.R | ((uint)c.G << 8) | ((uint)c.B << 16) | 0xFF000000;
         }
+
         return palette;
     }
 
@@ -319,7 +733,11 @@ public static partial class DirectCanvas
         public int ScrollY;
         public byte ScrollCtl;
         public byte BgColor;
+        public byte BorderColor;
         public int FontIndex;
+        public byte DisplayDim;
+        public byte PaletteMode;
+        public bool FlashVisible;
 
         public static RenderVideoState FromVgc(VirtualGraphicsController vgc) =>
             new()
@@ -329,7 +747,11 @@ public static partial class DirectCanvas
                 ScrollY = vgc.GetScrollY(),
                 ScrollCtl = vgc.GetScrollCtl(),
                 BgColor = vgc.GetBgColor(),
-                FontIndex = vgc.GetFontIndex()
+                BorderColor = vgc.GetBorderColor(),
+                FontIndex = vgc.GetFontIndex(),
+                DisplayDim = vgc.GetDisplayDim(),
+                PaletteMode = vgc.GetPaletteMode(),
+                FlashVisible = ((Environment.TickCount64 / 500) & 1) == 0
             };
 
         public void Apply(byte registerIndex, byte value)
@@ -341,6 +763,9 @@ public static partial class DirectCanvas
                     break;
                 case VgcConstants.RegBgCol - VgcConstants.VgcBase:
                     BgColor = (byte)(value & 0x0F);
+                    break;
+                case VgcConstants.RegBorder - VgcConstants.VgcBase:
+                    BorderColor = (byte)(value & 0x0F);
                     break;
                 case VgcConstants.RegScrollX - VgcConstants.VgcBase:
                     ScrollX = value;

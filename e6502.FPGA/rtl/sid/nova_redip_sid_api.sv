@@ -49,28 +49,34 @@ module nova_redip_sid_api (
     end
 
     always_ff @(posedge clk) begin
-        // Start voice pipeline after the falling edge of phi2.
-        // Pause voice pipeline at filter pipeline cycle 5 and 6, for the
-        // latter pipeline to catch up.
-        if (phi2_prev & ~bus_i.phi2) begin
-            // Jump directly from cycle 18 to cycle 1 if need be, just
-            // keeping within the 20 cycle budget described in
-            // Pipelining.md.
-            voice_cycle_count <= 1;
-        end else if (voice_cycle_count == 18) begin
-            // Wrap around to zero after cycle 18, which is the last cycle
-            // used in sid_control.sv
+        if (bus_i.res) begin
+            phi2_prev         <= 1'b0;
             voice_cycle_count <= 0;
-        end else if (voice_cycle_count != 0 && !voice_cycle_idle) begin
-            voice_cycle_count <= voice_cycle_count + 1;
+            filter_cycle      <= 0;
+        end else begin
+            // Start voice pipeline after the falling edge of phi2.
+            // Pause voice pipeline at filter pipeline cycle 5 and 6, for the
+            // latter pipeline to catch up.
+            if (phi2_prev & ~bus_i.phi2) begin
+                // Jump directly from cycle 18 to cycle 1 if need be, just
+                // keeping within the 20 cycle budget described in
+                // Pipelining.md.
+                voice_cycle_count <= 1;
+            end else if (voice_cycle_count == 18) begin
+                // Wrap around to zero after cycle 18, which is the last cycle
+                // used in sid_control.sv
+                voice_cycle_count <= 0;
+            end else if (voice_cycle_count != 0 && !voice_cycle_idle) begin
+                voice_cycle_count <= voice_cycle_count + 1;
+            end
+
+            // Start filter pipeline at voice pipeline cycle 7; one cycle
+            // before the first voice output is ready. Keep counting until the
+            // counter wraps around to zero.
+            filter_cycle <= filter_cycle + 4'(voice_cycle == 6 || filter_cycle != 0);
+
+            phi2_prev <= bus_i.phi2;
         end
-
-        // Start filter pipeline at voice pipeline cycle 7; one cycle before
-        // the first voice output is ready.
-        // Keep counting until the counter wraps around to zero.
-        filter_cycle <= filter_cycle + 4'(voice_cycle == 6 || filter_cycle != 0);
-
-        phi2_prev <= bus_i.phi2;
     end
 
     // Tick approximately every ms, for smaller counters in submodules.
@@ -86,7 +92,9 @@ module nova_redip_sid_api (
     end
 
     always_ff @(posedge clk) begin
-        if (voice_cycle == 1) begin
+        if (bus_i.res) begin
+            count_us <= 0;
+        end else if (voice_cycle == 1) begin
             // Update counter, discarding carry.
             count_us <= count_us_next[9:0];
         end
@@ -241,21 +249,27 @@ module nova_redip_sid_api (
     sid::s24_t audio_o1 = '0;
 
     always_ff @(posedge clk) begin
-        if (filter_cycle == 1) begin
+        if (bus_i.res) begin
+            ext_in_1 <= '0;
+            ext_in_2 <= '0;
+            audio_o1 <= '0;
+            audio_o  <= '0;
+        end else if (filter_cycle == 1) begin
             { ext_in_1, ext_in_2 } <= audio_i;
         end else if (filter_cycle == 6) begin
             ext_in_1 <= ext_in_2;
-        end
-
-        if (filter_cycle == 9) begin
-            audio_o1 <= { filter_o, 4'b0 };
-        end else if (filter_cycle == 14) begin
-            audio_o <= { audio_o1, filter_o, 4'b0 };
+        end else begin
+            if (filter_cycle == 9) begin
+                audio_o1 <= { filter_o, 4'b0 };
+            end else if (filter_cycle == 14) begin
+                audio_o <= { audio_o1, filter_o, 4'b0 };
+            end
         end
     end
 
     sid_filter filter (
         .clk     (clk),
+        .res     (bus_i.res),
         .cycle   (filter_cycle),
         .freg    (freg_1),
         .cfg     (filter_cycle <= 5 ? sid1_cfg : sid2_cfg),
