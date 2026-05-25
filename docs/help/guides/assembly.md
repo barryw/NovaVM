@@ -36,7 +36,8 @@ The full 64 KB address space is partitioned as follows:
 | `BA40`--`BA4F` | 16 B | Timer Controller | R/W |
 | `BA50`--`BA56` | 7 B | Hosted Music Status (6 voices) | RO |
 | `BA60`--`BA7F` | 32 B | DMA Controller | R/W |
-| `BA80`--`BA9F` | 32 B | Blitter Controller | R/W |
+| `BA83`--`BA9B` | 25 B | Blitter Controller | R/W |
+| `BA9C`--`BAA1` | 6 B | Board Input registers | R/W1C |
 | `BC00`--`BFFF` | 1024 B | XRAM Windows (when mapped) | R/W |
 | `C000`--`FFFF` | 16 KB | ROM (NovaBASIC) | R only |
 | `D400`--`D41F` | 32 B | SID chip 1 (write-intercepted) | W only |
@@ -211,6 +212,27 @@ Interrupt handlers run in the context of the BASIC interpreter. Keep them short.
 Avoid file I/O, heavy computation, or anything that re-enters the interpreter in
 an unexpected state. Long handlers can cause instability.
 :::
+
+### Board input change IRQs from BASIC
+
+ULX3S board buttons and DIP switches can raise IRQ when their debounced state
+changes. `$BA9C` and `$BA9D` remain the live polling registers; `$BA9E-$BAA1`
+are the opt-in IRQ/change latch registers.
+
+```basic
+10 IRQ 1000
+20 POKE $BA9F,3:POKE $BAA0,127:POKE $BAA1,15
+30 POKE $BA9E,3
+40 GOTO 40
+1000 S=PEEK($BA9F):B=PEEK($BA9C):W=PEEK($BA9D)
+1010 BM=PEEK($BAA0):WM=PEEK($BAA1)
+1020 POKE $BAA0,BM:POKE $BAA1,WM:POKE $BA9F,S
+1030 RETIRQ
+```
+
+Bit 0 of `$BA9E/$BA9F` is button changes; bit 1 is DIP-switch changes. `$BAA0`
+and `$BAA1` identify which button or switch bits changed and are cleared by
+writing `1` bits back.
 
 ### Sprite collision IRQs from BASIC
 

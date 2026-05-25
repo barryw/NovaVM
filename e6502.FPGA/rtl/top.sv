@@ -18,6 +18,10 @@ module top (
     input  logic [7:0]  key_data,
     output logic        key_ready,
 
+    // Board input state, active-high and already debounced by fpga_top.
+    input  logic [7:0]  board_buttons,
+    input  logic [7:0]  board_switches,
+
     input  logic        irq_n,
     input  logic        nmi_n,
 
@@ -150,6 +154,21 @@ module top (
     // Wavetable Synthesizer register bank
     localparam WTS_BASE        = 16'hA140;
     localparam WTS_END         = 16'hA1FF;
+    // Board input registers ($BA9C-$BAA1). Live state is read-only; IRQ
+    // control/status registers let software opt into change-triggered IRQs.
+    localparam BOARD_INPUT_BUTTONS        = 16'hBA9C;
+    localparam BOARD_INPUT_SWITCHES       = 16'hBA9D;
+    localparam BOARD_INPUT_IRQ_ENABLE     = 16'hBA9E;
+    localparam BOARD_INPUT_IRQ_STATUS     = 16'hBA9F;
+    localparam BOARD_INPUT_BUTTON_CHANGES = 16'hBAA0;
+    localparam BOARD_INPUT_SWITCH_CHANGES = 16'hBAA1;
+    localparam BOARD_INPUT_BASE           = BOARD_INPUT_BUTTONS;
+    localparam BOARD_INPUT_END            = BOARD_INPUT_SWITCH_CHANGES;
+    localparam [7:0] BOARD_BUTTON_MASK    = 8'h7F;
+    localparam [7:0] BOARD_SWITCH_MASK    = 8'h0F;
+    localparam [7:0] BOARD_INPUT_IRQ_BUTTONS  = 8'h01;
+    localparam [7:0] BOARD_INPUT_IRQ_SWITCHES = 8'h02;
+    localparam [7:0] BOARD_INPUT_IRQ_MASK     = 8'h03;
 
     // CPU bus
     wire [15:0] cpu_addr;
@@ -189,6 +208,122 @@ module top (
             vgc_sys_reset_hold <= vgc_sys_reset_hold - 1'b1;
         end
     end
+
+    wire [7:0] board_buttons_masked = board_buttons & BOARD_BUTTON_MASK;
+    wire [7:0] board_switches_masked = board_switches & BOARD_SWITCH_MASK;
+    wire       dbg_poke_board_input = dbg_poke_en &&
+                                      (dbg_poke_addr >= BOARD_INPUT_BASE) &&
+                                      (dbg_poke_addr <= BOARD_INPUT_END);
+    wire       dbg_peek_board_input = dbg_peek_en &&
+                                      (dbg_peek_addr >= BOARD_INPUT_BASE) &&
+                                      (dbg_peek_addr <= BOARD_INPUT_END);
+
+    logic [7:0] board_input_irq_enable;
+    logic [7:0] board_input_irq_status;
+    logic [7:0] board_input_button_changes;
+    logic [7:0] board_input_switch_changes;
+    logic [7:0] board_input_last_buttons;
+    logic [7:0] board_input_last_switches;
+
+    logic [7:0] board_input_irq_enable_next;
+    logic [7:0] board_input_irq_status_next;
+    logic [7:0] board_input_button_changes_next;
+    logic [7:0] board_input_switch_changes_next;
+    logic [7:0] board_input_last_buttons_next;
+    logic [7:0] board_input_last_switches_next;
+
+    wire       board_input_cpu_write = cpu_we && cpu_active &&
+                                      (cpu_addr >= BOARD_INPUT_BASE) &&
+                                      (cpu_addr <= BOARD_INPUT_END);
+    wire       board_input_write = dbg_poke_board_input | board_input_cpu_write;
+    wire [15:0] board_input_write_addr = dbg_poke_board_input ? dbg_poke_addr : cpu_addr;
+    wire [7:0]  board_input_write_data = dbg_poke_board_input ? dbg_poke_data : cpu_dout;
+    wire [7:0]  board_input_button_delta = board_buttons_masked ^ board_input_last_buttons;
+    wire [7:0]  board_input_switch_delta = board_switches_masked ^ board_input_last_switches;
+    wire        board_input_irq = ((board_input_irq_enable &
+                                    board_input_irq_status &
+                                    BOARD_INPUT_IRQ_MASK) != 8'h00);
+
+    always_comb begin
+        board_input_irq_enable_next = board_input_irq_enable;
+        board_input_irq_status_next = board_input_irq_status & BOARD_INPUT_IRQ_MASK;
+        board_input_button_changes_next = board_input_button_changes & BOARD_BUTTON_MASK;
+        board_input_switch_changes_next = board_input_switch_changes & BOARD_SWITCH_MASK;
+        board_input_last_buttons_next = board_input_last_buttons;
+        board_input_last_switches_next = board_input_last_switches;
+
+        if (board_input_write) begin
+            unique case (board_input_write_addr)
+                BOARD_INPUT_IRQ_ENABLE:
+                    board_input_irq_enable_next = board_input_write_data & BOARD_INPUT_IRQ_MASK;
+                BOARD_INPUT_IRQ_STATUS:
+                    board_input_irq_status_next =
+                        board_input_irq_status_next & ~(board_input_write_data & BOARD_INPUT_IRQ_MASK);
+                BOARD_INPUT_BUTTON_CHANGES:
+                    board_input_button_changes_next =
+                        board_input_button_changes_next & ~(board_input_write_data & BOARD_BUTTON_MASK);
+                BOARD_INPUT_SWITCH_CHANGES:
+                    board_input_switch_changes_next =
+                        board_input_switch_changes_next & ~(board_input_write_data & BOARD_SWITCH_MASK);
+                default: begin end
+            endcase
+        end
+
+        if (board_input_button_delta != 8'h00) begin
+            board_input_button_changes_next =
+                board_input_button_changes_next | (board_input_button_delta & BOARD_BUTTON_MASK);
+            board_input_irq_status_next =
+                board_input_irq_status_next | BOARD_INPUT_IRQ_BUTTONS;
+            board_input_last_buttons_next = board_buttons_masked;
+        end
+
+        if (board_input_switch_delta != 8'h00) begin
+            board_input_switch_changes_next =
+                board_input_switch_changes_next | (board_input_switch_delta & BOARD_SWITCH_MASK);
+            board_input_irq_status_next =
+                board_input_irq_status_next | BOARD_INPUT_IRQ_SWITCHES;
+            board_input_last_switches_next = board_switches_masked;
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (custom_rst) begin
+            board_input_irq_enable <= 8'h00;
+            board_input_irq_status <= 8'h00;
+            board_input_button_changes <= 8'h00;
+            board_input_switch_changes <= 8'h00;
+            board_input_last_buttons <= board_buttons_masked;
+            board_input_last_switches <= board_switches_masked;
+        end else begin
+            board_input_irq_enable <= board_input_irq_enable_next;
+            board_input_irq_status <= board_input_irq_status_next;
+            board_input_button_changes <= board_input_button_changes_next;
+            board_input_switch_changes <= board_input_switch_changes_next;
+            board_input_last_buttons <= board_input_last_buttons_next;
+            board_input_last_switches <= board_input_last_switches_next;
+        end
+    end
+
+    function automatic logic [7:0] board_input_read_data(input logic [15:0] addr);
+        begin
+            unique case (addr)
+                BOARD_INPUT_BUTTONS:
+                    board_input_read_data = board_buttons_masked;
+                BOARD_INPUT_SWITCHES:
+                    board_input_read_data = board_switches_masked;
+                BOARD_INPUT_IRQ_ENABLE:
+                    board_input_read_data = board_input_irq_enable & BOARD_INPUT_IRQ_MASK;
+                BOARD_INPUT_IRQ_STATUS:
+                    board_input_read_data = board_input_irq_status & BOARD_INPUT_IRQ_MASK;
+                BOARD_INPUT_BUTTON_CHANGES:
+                    board_input_read_data = board_input_button_changes & BOARD_BUTTON_MASK;
+                BOARD_INPUT_SWITCH_CHANGES:
+                    board_input_read_data = board_input_switch_changes & BOARD_SWITCH_MASK;
+                default:
+                    board_input_read_data = 8'h00;
+            endcase
+        end
+    endfunction
 
     // =========================================================================
     // 64KB main memory — dpram for BRAM inference
@@ -348,6 +483,7 @@ module top (
     wire nic_reg_sel = (mem_addr >= 16'hA100 && mem_addr <= 16'hA13F);
     wire wts_reg_sel = (mem_addr >= WTS_BASE && mem_addr <= WTS_END);
     wire fio_reg_sel = (mem_addr >= 16'hB9A0 && mem_addr <= 16'hB9EF);
+    wire board_input_sel = (mem_addr >= BOARD_INPUT_BASE && mem_addr <= BOARD_INPUT_END);
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
                         (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0EC) ||
@@ -361,6 +497,7 @@ module top (
     logic r_fio_reg_sel;
     logic r_nic_reg_sel;
     logic r_wts_reg_sel;
+    logic r_board_input_sel;
     logic [5:0] r_xmc_reg_off;
 
     // Register decode signals every cycle — they align with dpram outputs
@@ -378,6 +515,7 @@ module top (
         r_fio_reg_sel     <= fio_reg_sel;
         r_nic_reg_sel     <= nic_reg_sel;
         r_wts_reg_sel     <= wts_reg_sel;
+        r_board_input_sel <= board_input_sel;
         r_xmc_reg_off     <= xmc_reg_off;
     end
 
@@ -587,6 +725,14 @@ module top (
         if (cpu_ce)
             r_wts_cpu_rdata <= wts_cpu_rdata;
 
+    logic [7:0] r_board_input_data;
+    always_ff @(posedge clk) begin
+        if (board_input_sel)
+            r_board_input_data <= board_input_read_data(mem_addr);
+        else
+            r_board_input_data <= 8'h00;
+    end
+
     // ==========================================================================
     // File I/O register bank ($B9A0-$B9EF). CPU writes captured here;
     // fio_event pulses on CPU write of non-zero to $B9A0 (FioCmd).
@@ -621,6 +767,7 @@ module top (
     wire       dbg_peek_wts = dbg_peek_en &&
                               (dbg_peek_addr >= WTS_BASE) &&
                               (dbg_peek_addr <= WTS_END);
+    wire [7:0] dbg_board_input_data = board_input_read_data(dbg_peek_addr);
 
     fio fio_inst (
         .clk       (clk),
@@ -668,8 +815,10 @@ module top (
          r_xmc_win_sel                        ? 8'hFF        :
          r_xmc_reg_sel                        ? r_xmc_reg_data :
          r_bm_reg_sel                         ? r_bm_cpu_rdata :
+         r_board_input_sel                    ? r_board_input_data :
                                                 r_math_cpu_rdata;
-    wire xmc_group_sel = r_xmc_win_sel | r_xmc_reg_sel | r_bm_reg_sel | r_math_reg_sel;
+    wire xmc_group_sel = r_xmc_win_sel | r_xmc_reg_sel | r_bm_reg_sel |
+                         r_board_input_sel | r_math_reg_sel;
 
     // Group B — low-memory custom chip register space. SID register reads DELIBERATELY fall
     // through to the ROM / RAM group: $D400-$D43F overlaps BASIC ROM
@@ -723,7 +872,7 @@ module top (
             ram_a_addr = bm_ram_addr;
             ram_a_din  = bm_ram_wdata;
             ram_a_we   = 1'b1;
-        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_nic && !dbg_poke_wts && !dbg_poke_fio && !dbg_poke_blt && !dbg_poke_math && dbg_poke_addr < ROM_BASE) begin
+        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_nic && !dbg_poke_wts && !dbg_poke_fio && !dbg_poke_blt && !dbg_poke_math && !dbg_poke_board_input && dbg_poke_addr < ROM_BASE) begin
             // Debug poke
             ram_a_addr = dbg_poke_addr;
             ram_a_din  = dbg_poke_data;
@@ -731,7 +880,7 @@ module top (
         end else if (cpu_we && cpu_active && cpu_addr < ROM_BASE &&
                      !xmc_win_sel && !xmc_reg_sel && !vgc_read_sel &&
                      !nic_reg_sel && !wts_reg_sel && !fio_reg_sel &&
-                     !dma_reg_sel && !blt_reg_sel && !math_reg_sel) begin
+                     !dma_reg_sel && !blt_reg_sel && !board_input_sel && !math_reg_sel) begin
             // CPU write to RAM
             ram_a_we = 1'b1;
         end
@@ -923,6 +1072,7 @@ module top (
     wire blt_reg_sel = (cpu_addr >= 16'hBA83 && cpu_addr <= 16'hBA9B);
     wire math_reg_sel = (cpu_addr >= MATH_BASE && cpu_addr <= MATH_END);
     wire wts_reg_sel = (cpu_addr >= WTS_BASE && cpu_addr <= WTS_END);
+    wire board_input_sel = (cpu_addr >= BOARD_INPUT_BASE && cpu_addr <= BOARD_INPUT_END);
     wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
                         (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
                         (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0EC) ||
@@ -943,6 +1093,8 @@ module top (
             cpu_din <= math_cpu_rdata;
         else if (wts_reg_sel)
             cpu_din <= wts_cpu_rdata;
+        else if (board_input_sel)
+            cpu_din <= board_input_read_data(cpu_addr);
         else if (vgc_read_sel)
             cpu_din <= vgc_cpu_rdata;
         else if (cpu_in_rom)
@@ -1424,7 +1576,7 @@ module top (
     // =========================================================================
     wire vgc_rdy;
     wire vgc_irq;
-    wire cpu_irq = ~irq_n | vgc_irq | nic_irq;
+    wire cpu_irq = ~irq_n | vgc_irq | nic_irq | board_input_irq;
     wire cpu_nmi = ~nmi_n;
     wire cpu_rdy = blt_rdy & dma_rdy & math_rdy & nic_rdy & vgc_rdy & ~dbg_pause & cpu_active;
 
@@ -1543,12 +1695,14 @@ module top (
     // fallback walk through every MMIO branch before it reaches dbg_peek_data,
     // which turns debug readback into a clk_pixel critical path.
     wire       dbg_mmio_owns = vgc_dbg_owns | dbg_peek_nic | dbg_peek_wts |
-                               dbg_fio | dbg_peek_blt | dbg_peek_math;
+                               dbg_fio | dbg_peek_blt | dbg_peek_board_input |
+                               dbg_peek_math;
     wire [7:0] dbg_mmio_data = vgc_dbg_owns  ? vgc_dbg_rdata  :
                                dbg_peek_nic  ? nic_dbg_rdata  :
                                dbg_peek_wts  ? wts_dbg_rdata  :
                                dbg_fio       ? fio_dbg_rdata  :
                                dbg_peek_blt  ? blt_cpu_rdata  :
+                               dbg_peek_board_input ? dbg_board_input_data :
                                dbg_peek_math ? dbg_math_rdata :
                                                8'h00;
     wire [7:0] dbg_mem_data  = dbg_in_rom ? (ext_rom_active ? erom_b_dout : brom_b_dout)
@@ -1587,7 +1741,7 @@ module top (
 
     // Poke: write to main RAM on clock edge (ROM-protected)
     always_ff @(posedge clk) begin
-        if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_blt && !dbg_poke_math && !dbg_poke_wts && dbg_poke_addr < ROM_BASE)
+        if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_blt && !dbg_poke_math && !dbg_poke_wts && !dbg_poke_board_input && dbg_poke_addr < ROM_BASE)
             ram[dbg_poke_addr] <= dbg_poke_data;
     end
 `endif

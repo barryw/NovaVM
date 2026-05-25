@@ -2079,4 +2079,75 @@ BLT_SPACE_XRAM    = DMA_SPACE_XRAM
 BLT_SPACE_VGC_TEXTATTR = DMA_SPACE_VGC_TEXTATTR
 .endif
 
+; ---------------------------------------------------------------------
+; Board input ABI. The current FPGA build maps these to ULX3S buttons and DIP
+; switches. Values are active-high logical state, debounced by hardware.
+; ---------------------------------------------------------------------
+.ifndef BOARD_INPUT_BUTTONS
+BOARD_INPUT_BUTTONS = $BA9C
+.endif
+.ifndef BOARD_INPUT_SWITCHES
+BOARD_INPUT_SWITCHES = $BA9D
+.endif
+.ifndef BOARD_INPUT_IRQ_ENABLE
+BOARD_INPUT_IRQ_ENABLE = $BA9E
+.endif
+.ifndef BOARD_INPUT_IRQ_STATUS
+BOARD_INPUT_IRQ_STATUS = $BA9F
+.endif
+.ifndef BOARD_INPUT_BUTTON_CHANGES
+BOARD_INPUT_BUTTON_CHANGES = $BAA0
+.endif
+.ifndef BOARD_INPUT_SWITCH_CHANGES
+BOARD_INPUT_SWITCH_CHANGES = $BAA1
+.endif
+.ifndef BOARD_BTN_PWR
+BOARD_BTN_PWR    = $01
+.endif
+.ifndef BOARD_BTN_FIRE1
+BOARD_BTN_FIRE1  = $02
+.endif
+.ifndef BOARD_BTN_FIRE2
+BOARD_BTN_FIRE2  = $04
+.endif
+.ifndef BOARD_BTN_UP
+BOARD_BTN_UP     = $08
+.endif
+.ifndef BOARD_BTN_DOWN
+BOARD_BTN_DOWN   = $10
+.endif
+.ifndef BOARD_BTN_LEFT
+BOARD_BTN_LEFT   = $20
+.endif
+.ifndef BOARD_BTN_RIGHT
+BOARD_BTN_RIGHT  = $40
+.endif
+.ifndef BOARD_BTN_MASK
+BOARD_BTN_MASK   = $7F
+.endif
+.ifndef BOARD_SW1
+BOARD_SW1        = $01
+.endif
+.ifndef BOARD_SW2
+BOARD_SW2        = $02
+.endif
+.ifndef BOARD_SW3
+BOARD_SW3        = $04
+.endif
+.ifndef BOARD_SW4
+BOARD_SW4        = $08
+.endif
+.ifndef BOARD_SW_MASK
+BOARD_SW_MASK    = $0F
+.endif
+.ifndef BOARD_INPUT_IRQ_BUTTONS
+BOARD_INPUT_IRQ_BUTTONS = $01
+.endif
+.ifndef BOARD_INPUT_IRQ_SWITCHES
+BOARD_INPUT_IRQ_SWITCHES = $02
+.endif
+.ifndef BOARD_INPUT_IRQ_MASK
+BOARD_INPUT_IRQ_MASK = $03
+.endif
+
 .endif

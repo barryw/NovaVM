@@ -394,6 +394,39 @@ public static class VgcConstants
     public const byte BltModeFill      = 0x01;
     public const byte BltModeColorKey  = 0x02;
 
+    // -------------------------------------------------------------------------
+    // Board input registers ($BA9C-$BAA1)
+    // NovaVM board-input ABI. The current FPGA implementation maps these to
+    // ULX3S pushbuttons and DIP switches, debounced before software reads them.
+    // -------------------------------------------------------------------------
+
+    public const int BoardInputBase          = 0xBA9C;
+    public const int BoardInputEnd           = 0xBAA1;
+    public const int BoardInputButtons       = 0xBA9C;  // bit0=PWR, bit1=FIRE1, bit2=FIRE2, bit3=UP, bit4=DOWN, bit5=LEFT, bit6=RIGHT
+    public const int BoardInputSwitches      = 0xBA9D;  // bit0=SW1, bit1=SW2, bit2=SW3, bit3=SW4
+    public const int BoardInputIrqEnable     = 0xBA9E;  // bit0=button changes, bit1=switch changes
+    public const int BoardInputIrqStatus     = 0xBA9F;  // W1C: bit0=button changed, bit1=switch changed
+    public const int BoardInputButtonChanges = 0xBAA0;  // W1C mask of changed button bits
+    public const int BoardInputSwitchChanges = 0xBAA1;  // W1C mask of changed switch bits
+
+    public const byte BoardButtonPower  = 0x01;
+    public const byte BoardButtonFire1  = 0x02;
+    public const byte BoardButtonFire2  = 0x04;
+    public const byte BoardButtonUp     = 0x08;
+    public const byte BoardButtonDown   = 0x10;
+    public const byte BoardButtonLeft   = 0x20;
+    public const byte BoardButtonRight  = 0x40;
+    public const byte BoardButtonMask   = 0x7F;
+
+    public const byte BoardSwitch1      = 0x01;
+    public const byte BoardSwitch2      = 0x02;
+    public const byte BoardSwitch3      = 0x04;
+    public const byte BoardSwitch4      = 0x08;
+    public const byte BoardSwitchMask   = 0x0F;
+    public const byte BoardInputIrqButtons  = 0x01;
+    public const byte BoardInputIrqSwitches = 0x02;
+    public const byte BoardInputIrqMask     = 0x03;
+
     public const int FreeBase          = 0xBB50;
     public const int FreeEnd           = 0xBBFF;
 

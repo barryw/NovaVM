@@ -20,6 +20,7 @@ module fpga_top (
     // LEDs and buttons
     output logic [7:0]  leds,
     input  logic [6:0]  btn,
+    input  logic [3:0]  sw,
 
     // UART via FTDI
     input  logic        ftdi_txd,     // FPGA receives from FTDI
@@ -693,6 +694,54 @@ module fpga_top (
                                uart_data;
 
     // =========================================================================
+    // Board input — expose ULX3S pushbuttons and DIP switches to Nova software.
+    // Register layout is active-high logical state:
+    //   buttons bit0=PWR, bit1=FIRE1, bit2=FIRE2, bit3=UP,
+    //           bit4=DOWN, bit5=LEFT, bit6=RIGHT
+    //   switches bit0=SW1, bit1=SW2, bit2=SW3, bit3=SW4
+    // =========================================================================
+    localparam int BOARD_INPUT_COUNT = 11;
+    localparam int BOARD_INPUT_DEBOUNCE_BITS = 20;
+
+    wire [BOARD_INPUT_COUNT-1:0] board_input_raw = {sw[3:0], btn[6:1], ~btn[0]};
+    logic [BOARD_INPUT_COUNT-1:0] board_input_meta = '0;
+    logic [BOARD_INPUT_COUNT-1:0] board_input_sync = '0;
+    logic [BOARD_INPUT_COUNT-1:0] board_input_stable = '0;
+    logic [BOARD_INPUT_DEBOUNCE_BITS-1:0] board_input_debounce [0:BOARD_INPUT_COUNT-1];
+
+    initial begin
+        for (int i = 0; i < BOARD_INPUT_COUNT; i++)
+            board_input_debounce[i] = '0;
+    end
+
+    always_ff @(posedge clk_pixel) begin
+        if (!pll_locked_safe) begin
+            board_input_meta <= '0;
+            board_input_sync <= '0;
+            board_input_stable <= '0;
+            for (int i = 0; i < BOARD_INPUT_COUNT; i++)
+                board_input_debounce[i] <= '0;
+        end else begin
+            board_input_meta <= board_input_raw;
+            board_input_sync <= board_input_meta;
+
+            for (int i = 0; i < BOARD_INPUT_COUNT; i++) begin
+                if (board_input_sync[i] == board_input_stable[i]) begin
+                    board_input_debounce[i] <= '0;
+                end else if (&board_input_debounce[i]) begin
+                    board_input_stable[i] <= board_input_sync[i];
+                    board_input_debounce[i] <= '0;
+                end else begin
+                    board_input_debounce[i] <= board_input_debounce[i] + 1'b1;
+                end
+            end
+        end
+    end
+
+    wire [7:0] board_buttons = {1'b0, board_input_stable[6:0]};
+    wire [7:0] board_switches = {4'h0, board_input_stable[10:7]};
+
+    // =========================================================================
     // Core system — 6502 + VGC + Blitter + SID
     // =========================================================================
     wire [3:0]  vid_r, vid_g, vid_b;
@@ -706,6 +755,9 @@ module fpga_top (
         .key_valid  (key_valid_mux),
         .key_data   (key_data_mux),
         .key_ready  (brg_key_ready),
+
+        .board_buttons(board_buttons),
+        .board_switches(board_switches),
 
         .irq_n      (1'b1),
         .nmi_n      (1'b1),

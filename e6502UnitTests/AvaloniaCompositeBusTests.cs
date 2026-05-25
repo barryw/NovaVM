@@ -28,6 +28,75 @@ public class AvaloniaCompositeBusTests
         Assert.AreEqual(0x00, bus.Read(0x0200));
     }
 
+    [TestMethod]
+    public void BoardInputRegisters_AreReadOnlyLogicalState()
+    {
+        var bus = MakeBus();
+        bus.BoardButtonState = VgcConstants.BoardButtonFire1
+                             | VgcConstants.BoardButtonDown
+                             | VgcConstants.BoardButtonRight
+                             | 0x80;
+        bus.BoardSwitchState = VgcConstants.BoardSwitch1
+                             | VgcConstants.BoardSwitch4
+                             | 0xF0;
+
+        Assert.AreEqual(0x52, bus.Read((ushort)VgcConstants.BoardInputButtons));
+        Assert.AreEqual(0x09, bus.Read((ushort)VgcConstants.BoardInputSwitches));
+
+        bus.Write((ushort)VgcConstants.BoardInputButtons, 0x00);
+        bus.Write((ushort)VgcConstants.BoardInputSwitches, 0x00);
+
+        Assert.AreEqual(0x52, bus.Read((ushort)VgcConstants.BoardInputButtons));
+        Assert.AreEqual(0x09, bus.Read((ushort)VgcConstants.BoardInputSwitches));
+    }
+
+    [TestMethod]
+    public void BoardInputIrqRegisters_LatchChangesUntilAcknowledged()
+    {
+        var bus = MakeBus();
+
+        bus.BoardButtonState = VgcConstants.BoardButtonFire1 | 0x80;
+        Assert.AreEqual(VgcConstants.BoardInputIrqButtons,
+            bus.Read((ushort)VgcConstants.BoardInputIrqStatus),
+            "A button edge should latch a pending source even before software enables IRQ delivery.");
+        Assert.AreEqual(VgcConstants.BoardButtonFire1,
+            bus.Read((ushort)VgcConstants.BoardInputButtonChanges),
+            "The changed-bit mask lets the IRQ handler identify which button moved.");
+        Assert.IsFalse(bus.BoardInputIrqPending,
+            "Latched input changes should not assert CPU IRQ until the source is enabled.");
+
+        bus.Write((ushort)VgcConstants.BoardInputIrqEnable, VgcConstants.BoardInputIrqButtons);
+        Assert.IsTrue(bus.BoardInputIrqPending,
+            "Enabling a source with latched status should assert CPU IRQ so handlers can service missed edges.");
+
+        bus.BoardSwitchState = VgcConstants.BoardSwitch2 | 0xF0;
+        Assert.AreEqual(
+            VgcConstants.BoardInputIrqButtons | VgcConstants.BoardInputIrqSwitches,
+            bus.Read((ushort)VgcConstants.BoardInputIrqStatus));
+        Assert.AreEqual(VgcConstants.BoardSwitch2,
+            bus.Read((ushort)VgcConstants.BoardInputSwitchChanges));
+
+        bus.Write((ushort)VgcConstants.BoardInputIrqStatus, VgcConstants.BoardInputIrqButtons);
+        Assert.AreEqual(VgcConstants.BoardInputIrqSwitches,
+            bus.Read((ushort)VgcConstants.BoardInputIrqStatus),
+            "Board input IRQ status is write-one-to-clear per source.");
+        Assert.IsFalse(bus.BoardInputIrqPending,
+            "A disabled source may stay latched without holding the CPU IRQ line.");
+
+        bus.Write((ushort)VgcConstants.BoardInputIrqEnable,
+            VgcConstants.BoardInputIrqButtons | VgcConstants.BoardInputIrqSwitches);
+        Assert.IsTrue(bus.BoardInputIrqPending);
+
+        bus.Write((ushort)VgcConstants.BoardInputButtonChanges, VgcConstants.BoardButtonFire1);
+        bus.Write((ushort)VgcConstants.BoardInputSwitchChanges, VgcConstants.BoardSwitch2);
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.BoardInputButtonChanges));
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.BoardInputSwitchChanges));
+
+        bus.Write((ushort)VgcConstants.BoardInputIrqStatus, VgcConstants.BoardInputIrqSwitches);
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.BoardInputIrqStatus));
+        Assert.IsFalse(bus.BoardInputIrqPending);
+    }
+
     // -------------------------------------------------------------------------
     // VGC register access
     // -------------------------------------------------------------------------

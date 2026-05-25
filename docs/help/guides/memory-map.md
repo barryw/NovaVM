@@ -33,6 +33,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | BA50--BA56 | 7 B | Hosted Music Status and Voice Note Readback (6 voices) |
 | BA63--BA75 | 19 B | DMA Controller registers |
 | BA83--BA9B | 25 B | Blitter Controller registers |
+| BA9C--BAA1 | 6 B | Board Input registers |
 | BAB0--BB1F | 112 B | File metadata buffer |
 | BB20--BB4F | 48 B | Math Coprocessor registers |
 | BB50--BB8D | 62 B | SID sound-effect runtime state |
@@ -46,7 +47,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 The address range A020--A03E is reserved for language/host services. Unlisted
 addresses in A0ED--A0EF and A200--A9FF are not claimed by any coprocessor and
 fall through to the underlying flat RAM.
-The ranges BA9C--BAAF and BB8E--BBFF are similarly unallocated RAM.
+The ranges BAA2--BAAF and BB8E--BBFF are similarly unallocated RAM.
 BAB0--BB1F is the file metadata buffer, BB20--BB4F is the math coprocessor,
 and BB50--BB8D is used by NovaBASIC's SID sound-effect scheduler.
 SID registers at D400--D43F occupy space within the ROM address range
@@ -63,6 +64,57 @@ they explicitly implement the same boot ABI.
 | --- | --- | --- | --- |
 | $B9F0 | AutobootSkip | R/W | Non-zero disables the language's startup autoboot attempt. |
 | $B9F1 | AutobootActive | R/W | Non-zero while a startup autoboot program is being entered; runtimes use this to suppress broken-autoboot errors and fall back to `Ready`. |
+
+## Board Input Registers
+
+The board input registers expose physical board controls as active-high,
+debounced logical state. These addresses are the NovaVM software ABI for board
+inputs; the current FPGA implementation wires them to the ULX3S pushbuttons and
+DIP switches. Other boards, such as Arty, may use different physical pins or
+controls internally, but ports should keep these addresses for compatible
+application code where practical. Reads on hosts without physical board inputs
+return the host-provided state, which defaults to zero.
+
+| **Address** | **Name** | **Access** | **Description** |
+| --- | --- | --- | --- |
+| $BA9C | BoardInputButtons | RO | Bits 0--6: PWR, FIRE1, FIRE2, UP, DOWN, LEFT, RIGHT. Bit 7 is zero. |
+| $BA9D | BoardInputSwitches | RO | Bits 0--3: DIP switches SW1--SW4. Bits 4--7 are zero. |
+| $BA9E | BoardInputIrqEnable | R/W | IRQ enable mask: bit 0 = button changes, bit 1 = switch changes. |
+| $BA9F | BoardInputIrqStatus | R/W1C | Pending change sources: bit 0 = one or more button bits changed, bit 1 = one or more switch bits changed. Write `1` bits to acknowledge. |
+| $BAA0 | BoardInputButtonChanges | R/W1C | Latched mask of changed button bits since the last clear. Write `1` bits to clear. |
+| $BAA1 | BoardInputSwitchChanges | R/W1C | Latched mask of changed DIP-switch bits since the last clear. Write `1` bits to clear. |
+
+::: note
+On ULX3S, `$BA9C` maps bit 0 to PWR and bits 1--6 to FIRE1, FIRE2, UP,
+DOWN, LEFT, and RIGHT. PWR is also the FPGA reset input, so application code
+cannot normally poll it while it is held. `$BA9D` maps bits 0--3 to ULX3S DIP
+switches SW1--SW4. The six game-style buttons and four DIP switches are intended
+for application use.
+:::
+
+Board-input IRQs are opt-in. The CPU IRQ line is asserted while
+`(BoardInputIrqStatus & BoardInputIrqEnable) != 0`. Status and change masks
+latch after the debounced state changes, so handlers can read `$BA9C/$BA9D`,
+inspect `$BAA0/$BAA1`, then write `1` bits back to `$BA9F-$BAA1` before
+returning from the interrupt. Existing polling code can ignore `$BA9E-$BAA1`.
+
+Basic IRQ handler sketch:
+
+```basic
+10 IRQ 1000
+20 POKE $BA9F,3:POKE $BAA0,127:POKE $BAA1,15
+30 POKE $BA9E,3
+40 GOTO 40
+1000 S=PEEK($BA9F):B=PEEK($BA9C):W=PEEK($BA9D)
+1010 BM=PEEK($BAA0):WM=PEEK($BAA1)
+1020 POKE $BAA0,BM:POKE $BAA1,WM:POKE $BA9F,S
+1030 RETIRQ
+```
+
+The visual BASIC demo `docs/programs/board_input_demo.bas` reads these registers
+each frame and lights on-screen indicators for the live button and DIP-switch
+state. `docs/programs/board_input_irq_demo.bas` uses the IRQ registers so the
+visual state is refreshed only after a debounced input change.
 
 ## Math Coprocessor Registers
 

@@ -21,6 +21,8 @@ module test_mmio_bus_cycles_top;
     logic rst;
     logic        key_valid = 0;
     logic [7:0]  key_data  = 0;
+    logic [7:0]  board_buttons = 8'h55;
+    logic [7:0]  board_switches = 8'h0A;
     logic        irq_n = 1, nmi_n = 1;
 
     wire  [3:0]  vid_r, vid_g, vid_b;
@@ -52,10 +54,13 @@ module test_mmio_bus_cycles_top;
     wire         dbg_cpu_waiting, dbg_cpu_stopped;
 
     wire fio_event;
+    logic [7:0] peek_data;
 
     top dut (
         .clk(clk), .rst(rst),
         .key_valid(key_valid), .key_data(key_data), .key_ready(),
+        .board_buttons(board_buttons),
+        .board_switches(board_switches),
         .irq_n(irq_n), .nmi_n(nmi_n),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
@@ -159,12 +164,31 @@ module test_mmio_bus_cycles_top;
         dbg_rom_we   <= 0;
     endtask
 
+    task automatic dbg_peek(input logic [15:0] addr, output logic [7:0] data);
+        @(posedge clk);
+        dbg_peek_addr <= addr;
+        dbg_peek_en   <= 1;
+        repeat(4) @(posedge clk);
+        data = dbg_peek_data;
+        @(posedge clk);
+        dbg_peek_en   <= 0;
+    endtask
+
+    task automatic dbg_poke(input logic [15:0] addr, input logic [7:0] data);
+        @(posedge clk);
+        dbg_poke_addr <= addr;
+        dbg_poke_data <= data;
+        dbg_poke_en   <= 1;
+        @(posedge clk);
+        dbg_poke_en   <= 0;
+    endtask
+
     task automatic wait_vgc_ready();
         while (dut.vgc_rdy !== 1'b1) @(posedge clk);
         repeat(4) @(posedge clk);
     endtask
 
-    localparam int PROG_LEN = 102;
+    localparam int PROG_LEN = 114;
     byte unsigned prog [PROG_LEN] = '{
         8'hA9, 8'h9E, 8'h85, 8'h10,         // $10/$11 = $B99E
         8'hA9, 8'hB9, 8'h85, 8'h11,
@@ -195,7 +219,11 @@ module test_mmio_bus_cycles_top;
         8'hA2, 8'h03, 8'hA9, 8'h06,
         8'h9D, 8'h83, 8'hBA,               // STA $BA83,X -> blitter srcspace
         8'hEE, 8'h86, 8'hBA,               // INC $BA86
-        8'h4C, 8'h63, 8'hC0                // JMP $C063
+        8'hAD, 8'h9C, 8'hBA,               // LDA $BA9C -> board buttons
+        8'h8D, 8'h00, 8'h04,               // STA $0400
+        8'hAD, 8'h9D, 8'hBA,               // LDA $BA9D -> board switches
+        8'h8D, 8'h01, 8'h04,               // STA $0401
+        8'h4C, 8'h6F, 8'hC0                // JMP $C06F
     };
 
     initial begin
@@ -235,7 +263,7 @@ module test_mmio_bus_cycles_top;
                  dbg_cpu_pc, dbg_cpu_ir, dbg_cpu_state, dbg_cpu_addr, dbg_cpu_din, dbg_cpu_dout);
 
         check("CPU reached halt loop",
-              (dbg_cpu_pc >= 16'hC063) && (dbg_cpu_pc <= 16'hC066));
+              (dbg_cpu_pc >= 16'hC06F) && (dbg_cpu_pc <= 16'hC072));
 
         check_eq_int("FioCmd write fired exactly one event", event_count, 1);
         check_eq8("FioCmd via STA ($zp),Y", dut.fio_inst.bank[7'h00], 8'h21);
@@ -252,6 +280,27 @@ module test_mmio_bus_cycles_top;
                   dut.dma_inst.regs[3], 8'h06);
         check_eq8("Blitter srcspace via STA abs,X then INC",
                   dut.blt_inst.regs[3], 8'h07);
+        dbg_peek(16'h0400, peek_data);
+        check_eq8("Board buttons are CPU-visible", peek_data, 8'h55);
+        dbg_peek(16'h0401, peek_data);
+        check_eq8("Board switches are CPU-visible", peek_data, 8'h0A);
+
+        dbg_pause = 1;
+        board_buttons = 8'h54;
+        repeat(4) @(posedge clk);
+        dbg_peek(16'hBA9F, peek_data);
+        check_eq8("Board button change latches IRQ status", peek_data, 8'h01);
+        dbg_peek(16'hBAA0, peek_data);
+        check_eq8("Board button change mask latches changed bit", peek_data, 8'h01);
+        dbg_poke(16'hBA9E, 8'h01);
+        repeat(4) @(posedge clk);
+        check("Board input IRQ asserts when enabled", dbg_cpu_irq === 1'b1);
+        dbg_poke(16'hBAA0, 8'h01);
+        dbg_poke(16'hBA9F, 8'h01);
+        repeat(4) @(posedge clk);
+        dbg_peek(16'hBA9F, peek_data);
+        check_eq8("Board input IRQ status is W1C", peek_data, 8'h00);
+        check("Board input IRQ deasserts after ack", dbg_cpu_irq === 1'b0);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

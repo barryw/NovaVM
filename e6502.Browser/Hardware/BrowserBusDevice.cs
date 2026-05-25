@@ -35,6 +35,12 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private double _musicFrameAccum;
     private readonly byte[] _basicRom;
     private readonly byte[]? _extRom;
+    private byte _boardButtonState;
+    private byte _boardSwitchState;
+    private byte _boardInputIrqEnable;
+    private byte _boardInputIrqStatus;
+    private byte _boardButtonChanges;
+    private byte _boardSwitchChanges;
 
     public VirtualGraphicsController Vgc => _vgc;
     public SidChip Sid => _sid;
@@ -49,7 +55,19 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public int CpuHz => _cpuHz;
     public int FrameRateHz => _frameRateHz;
     public long TotalFrames => _totalFrames;
+    public byte BoardButtonState
+    {
+        get => _boardButtonState;
+        set => SetBoardButtonState(value);
+    }
+    public byte BoardSwitchState
+    {
+        get => _boardSwitchState;
+        set => SetBoardSwitchState(value);
+    }
     public bool VgcIrqPending => _vgc.IrqPending;
+    public bool BoardInputIrqPending =>
+        (_boardInputIrqStatus & _boardInputIrqEnable & VgcConstants.BoardInputIrqMask) != 0;
 
     public CompositeBusDevice(
         int cpuHz = VgcConstants.DefaultCpuHz,
@@ -193,6 +211,63 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         WriteWord(VgcConstants.VectorTableBase + 0x16, VgcConstants.BltBase);
     }
 
+    private void SetBoardButtonState(byte value)
+    {
+        byte next = (byte)(value & VgcConstants.BoardButtonMask);
+        byte delta = (byte)(next ^ _boardButtonState);
+        _boardButtonState = next;
+        if (delta == 0)
+            return;
+
+        _boardButtonChanges |= delta;
+        _boardInputIrqStatus |= VgcConstants.BoardInputIrqButtons;
+    }
+
+    private void SetBoardSwitchState(byte value)
+    {
+        byte next = (byte)(value & VgcConstants.BoardSwitchMask);
+        byte delta = (byte)(next ^ _boardSwitchState);
+        _boardSwitchState = next;
+        if (delta == 0)
+            return;
+
+        _boardSwitchChanges |= delta;
+        _boardInputIrqStatus |= VgcConstants.BoardInputIrqSwitches;
+    }
+
+    private byte ReadBoardInput(ushort address)
+    {
+        return address switch
+        {
+            VgcConstants.BoardInputButtons => _boardButtonState,
+            VgcConstants.BoardInputSwitches => _boardSwitchState,
+            VgcConstants.BoardInputIrqEnable => (byte)(_boardInputIrqEnable & VgcConstants.BoardInputIrqMask),
+            VgcConstants.BoardInputIrqStatus => (byte)(_boardInputIrqStatus & VgcConstants.BoardInputIrqMask),
+            VgcConstants.BoardInputButtonChanges => (byte)(_boardButtonChanges & VgcConstants.BoardButtonMask),
+            VgcConstants.BoardInputSwitchChanges => (byte)(_boardSwitchChanges & VgcConstants.BoardSwitchMask),
+            _ => 0
+        };
+    }
+
+    private void WriteBoardInput(ushort address, byte data)
+    {
+        switch (address)
+        {
+            case VgcConstants.BoardInputIrqEnable:
+                _boardInputIrqEnable = (byte)(data & VgcConstants.BoardInputIrqMask);
+                break;
+            case VgcConstants.BoardInputIrqStatus:
+                _boardInputIrqStatus &= (byte)~(data & VgcConstants.BoardInputIrqMask);
+                break;
+            case VgcConstants.BoardInputButtonChanges:
+                _boardButtonChanges &= (byte)~(data & VgcConstants.BoardButtonMask);
+                break;
+            case VgcConstants.BoardInputSwitchChanges:
+                _boardSwitchChanges &= (byte)~(data & VgcConstants.BoardSwitchMask);
+                break;
+        }
+    }
+
     public byte Read(ushort address)
     {
         if (address == VgcConstants.MusicStatus)
@@ -213,6 +288,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 _ => 0
             };
         }
+        if (address >= VgcConstants.BoardInputBase && address <= VgcConstants.BoardInputEnd)
+            return ReadBoardInput(address);
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
         if (_nic.OwnsAddress(address)) return _nic.Read(address);
         if (_dma.OwnsAddress(address)) return _dma.Read(address);
@@ -227,6 +304,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     public void Write(ushort address, byte data)
     {
+        if (address >= VgcConstants.BoardInputBase && address <= VgcConstants.BoardInputEnd)
+        {
+            WriteBoardInput(address, data);
+            return;
+        }
         if (_timer.OwnsAddress(address)) { _timer.Write(address, data); return; }
         if (_nic.OwnsAddress(address)) { _nic.Write(address, data); return; }
         if (_dma.OwnsAddress(address)) { _dma.Write(address, data); return; }
