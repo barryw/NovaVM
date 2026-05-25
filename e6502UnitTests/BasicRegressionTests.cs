@@ -426,6 +426,28 @@ public class BasicRegressionTests
     }
 
     [TestMethod]
+    public void XramXfreeReusesReleasedAllocationPages()
+    {
+        string screen = RunProgram(new[]
+        {
+            "10 XRESET",
+            "20 XALLOC 300",
+            "30 A=PEEK($BA05)+256*PEEK($BA06)",
+            "40 XALLOC 300",
+            "50 B=PEEK($BA05)+256*PEEK($BA06)",
+            "60 XFREE 0,512",
+            "70 XALLOC 300",
+            "80 C=PEEK($BA05)+256*PEEK($BA06)",
+            "90 IF A=0 AND B=2 AND C=0 THEN PRINT CHR$(79);CHR$(75):END",
+            "100 PRINT CHR$(66);CHR$(65);CHR$(68);A;B;C",
+            "RUN"
+        });
+
+        Assert.IsTrue(screen.Contains("OK", StringComparison.Ordinal),
+            $"XFREE should make the first two allocation pages reusable.\n{screen}");
+    }
+
+    [TestMethod]
     public void XramStash256ByteRoundtripRestoresAllBytes()
     {
         // Mirrors tests/integration/xram.6502 stash-fetch-roundtrip. STASH and

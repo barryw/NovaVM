@@ -38,9 +38,6 @@
 ; ---------------------------------------------------------------------
 ; XMC command processor and named-block metadata
 ; ---------------------------------------------------------------------
-.ifndef META_PAGES
-META_PAGES      = 5
-.endif
 .ifndef TOTAL_PAGES
 TOTAL_PAGES     = XRAM_USER_HEAP_PAGES
 .endif
@@ -84,7 +81,7 @@ xmc_jtab:
       .word xmc_ok-1             ; cmd $06: (unused)
       .word xmc_stats-1          ; cmd $07: Stats
       .word xmc_resetusage-1     ; cmd $08: ResetUsage
-      .word xmc_ok-1             ; cmd $09: Release (no-op in bump allocator)
+      .word xmc_release_range-1  ; cmd $09: Release
       .word xmc_alloc-1          ; cmd $0A: Alloc
       .word xmc_nstash-1         ; cmd $0B: NStash
       .word xmc_nfetch-1         ; cmd $0C: NFetch
@@ -110,14 +107,26 @@ xmc_getbyte:
 ; PutByte — write XMC_DATA to XRAM[XA]
 ; =====================================================================
 xmc_putbyte:
-      JMP   xram_xmc_write8
+      JSR   xram_xmc_write8
+      BNE   @done
+      JSR   xmc_mark_byte_used
+      JSR   xmc_refresh_stats
+      LDA   #$00
+@done:
+      RTS
 
 ; =====================================================================
 ; Stash — copy RAM → XRAM using the shared DMA-backed XRAM runtime
 ; XMC_RAML/H = source, XMC_XAL/M/H = dest, XMC_LENL/H = count
 ; =====================================================================
 xmc_stash:
-      JMP   xram_xmc_copy_from_ram
+      JSR   xram_xmc_copy_from_ram
+      BNE   @done
+      JSR   xmc_mark_range_used
+      JSR   xmc_refresh_stats
+      LDA   #$00
+@done:
+      RTS
 
 ; =====================================================================
 ; Fetch — copy XRAM → RAM using the shared DMA-backed XRAM runtime
@@ -131,28 +140,38 @@ xmc_fetch:
 ; XMC_XAL/M/H = start, XMC_LENL/H = count, XMC_DATA = fill byte
 ; =====================================================================
 xmc_fill:
-      JMP   xram_xmc_fill
+      JSR   xram_xmc_fill
+      BNE   @done
+      JSR   xmc_mark_range_used
+      JSR   xmc_refresh_stats
+      LDA   #$00
+@done:
+      RTS
 
 ; =====================================================================
-; XRAM metadata layout (bump allocator + directory)
+; XRAM metadata layout (page allocator + directory)
 ;
-; Page 0 ($000000): Control block
-;   $00-$02: next_free_addr (24-bit LE)
+; Metadata lives in the reserved high-XRAM band so the low 256KB BASIC/XMC heap
+; can be tracked without hiding allocator pages from user-visible stats.
+;
+; Page $07FA00: Control block
+;   $00-$02: reserved
 ;   $03:     next_handle (1-255)
 ;   $04:     dir_count (active named entries)
+;   $05-$06: used page count (low 256KB heap only)
 ;   $0F:     magic sentinel ($A5 = initialized)
+;   $10-$8F: 1024-bit heap page bitmap (1 bit per 256-byte page)
 ;
-; Pages 1-4 ($000100-$0004FF): Directory (32 entries × 32 bytes)
+; Pages $07FB00-$07FEFF: Directory (32 entries × 32 bytes)
 ;   Per entry: name[24], handle, xaddrL, xaddrM, xaddrH, lenL, lenH, pagesL, pagesH
-;
-; Data starts at $000500 (page 5). META_PAGES = 5.
 ; =====================================================================
 
 MAGIC_VAL       = $A5
-CTRL_NEXTFREE   = $00           ; 3 bytes
 CTRL_NEXTHDL    = $03           ; 1 byte
 CTRL_DIRCOUNT   = $04           ; 1 byte
+CTRL_USEDL      = $05           ; 2 bytes
 CTRL_MAGIC      = $0F           ; 1 byte
+CTRL_BITMAP     = $10           ; 128 bytes for TOTAL_PAGES=1024
 DIR_ENTRY_SIZE  = 32
 DIR_MAX_ENTRIES = 32
 DIR_NAME_LEN    = 24
@@ -164,9 +183,8 @@ DIR_OFF_LENL    = 28
 DIR_OFF_LENH    = 29
 DIR_OFF_PGSL    = 30
 DIR_OFF_PGSH    = 31
-DATA_START_LO   = $00
-DATA_START_MI   = $05
-DATA_START_HI   = $00
+META_BASE_MI    = $FA
+META_BASE_HI    = $07
 
       .segment "BSS"
 
@@ -178,6 +196,16 @@ xmc_npgL:       .res 1          ; pages needed low
 xmc_npgH:       .res 1          ; pages needed high
 xmc_tmp:        .res 1          ; scratch
 xmc_tmp2:       .res 1          ; scratch
+xmc_pageL:      .res 1          ; current heap page low
+xmc_pageH:      .res 1          ; current heap page high
+xmc_run_startL: .res 1          ; free-run / block-start page low
+xmc_run_startH: .res 1          ; free-run / block-start page high
+xmc_run_lenL:   .res 1          ; free-run length low
+xmc_run_lenH:   .res 1          ; free-run length high
+xmc_rel_startL: .res 1          ; release range start page low
+xmc_rel_startH: .res 1          ; release range start page high
+xmc_rel_endL:   .res 1          ; release range end page low, exclusive
+xmc_rel_endH:   .res 1          ; release range end page high, exclusive
 
       .segment "CODE"
 
@@ -447,22 +475,22 @@ xmc_map_w3_ax:
       STA   WIN3_LO
       RTS
 
-; --- Helper: map window 3 to control page (page 0) ---
+; --- Helper: map window 3 to the XMC metadata control page ---
 xmc_map_ctrl:
-      LDA   #$00
-      TAX
+      LDA   #META_BASE_MI
+      LDX   #META_BASE_HI
       JMP   xmc_map_w3_ax
 
 ; --- Helper: map window 3 to directory page for entry xmc_eidx ---
-; Entry N is at XRAM page (1 + N/8), offset (N%8)*32
+; Entry N is at XRAM page ($07FB + N/8), offset (N%8)*32
 xmc_map_dir_entry:
       LDA   xmc_eidx
       LSR
       LSR
       LSR                        ; A = N/8
       CLC
-      ADC   #$01                 ; page = 1 + N/8
-      LDX   #$00
+      ADC   #(META_BASE_MI + 1)
+      LDX   #META_BASE_HI
       JMP   xmc_map_w3_ax
 
 ; --- Helper: get window offset for entry xmc_eidx → Y ---
@@ -483,8 +511,8 @@ xmc_init_check:
       LDA   WIN3_BASE + CTRL_MAGIC
       CMP   #MAGIC_VAL
       BEQ   @init_done
-      ; First use — initialize metadata
-      ; Clear all of pages 0-4 (1280 bytes) via the shared DMA XRAM fill.
+      ; First use — initialize metadata.
+      ; Clear the reserved $07FA00-$07FEFF metadata pages via DMA.
       LDA   XMC_XAL
       PHA
       LDA   XMC_XAM
@@ -498,8 +526,10 @@ xmc_init_check:
       LDA   XMC_DATA
       PHA
       STZ   XMC_XAL
-      STZ   XMC_XAM
-      STZ   XMC_XAH
+      LDA   #META_BASE_MI
+      STA   XMC_XAM
+      LDA   #META_BASE_HI
+      STA   XMC_XAH
       LDA   #<1280
       STA   XMC_LENL
       LDA   #>1280
@@ -520,43 +550,30 @@ xmc_init_check:
       STA   XMC_XAL
       ; Set control block defaults
       JSR   xmc_map_ctrl
-      LDA   #DATA_START_LO
-      STA   WIN3_BASE + CTRL_NEXTFREE
-      LDA   #DATA_START_MI
-      STA   WIN3_BASE + CTRL_NEXTFREE + 1
-      LDA   #DATA_START_HI
-      STA   WIN3_BASE + CTRL_NEXTFREE + 2
       LDA   #$01
       STA   WIN3_BASE + CTRL_NEXTHDL
       LDA   #$00
       STA   WIN3_BASE + CTRL_DIRCOUNT
+      STA   WIN3_BASE + CTRL_USEDL
+      STA   WIN3_BASE + CTRL_USEDL + 1
       LDA   #MAGIC_VAL
       STA   WIN3_BASE + CTRL_MAGIC
 @init_done:
       RTS
 
 ; =====================================================================
-; Stats — compute XRAM usage from control block
+; Stats — expose allocator usage from the page bitmap counters
 ; =====================================================================
 xmc_stats:
       JSR   xmc_init_check
+      JSR   xmc_refresh_stats
+      JMP   xmc_ok
+
+xmc_refresh_stats:
       JSR   xmc_map_ctrl
-      ; used_pages = (next_free - $500) / 256 + META_PAGES
-      ; Since data starts at $500, next_free mid byte = pages used (+ $500 offset)
-      LDA   WIN3_BASE + CTRL_NEXTFREE + 1
-      SEC
-      SBC   #DATA_START_MI       ; subtract $05
+      LDA   WIN3_BASE + CTRL_USEDL
       STA   XMC_USEDL
-      LDA   WIN3_BASE + CTRL_NEXTFREE + 2
-      SBC   #DATA_START_HI
-      STA   XMC_USEDH
-      ; Add META_PAGES to used count
-      LDA   XMC_USEDL
-      CLC
-      ADC   #META_PAGES
-      STA   XMC_USEDL
-      LDA   XMC_USEDH
-      ADC   #$00
+      LDA   WIN3_BASE + CTRL_USEDL + 1
       STA   XMC_USEDH
       ; free = TOTAL_PAGES - used
       LDA   #<TOTAL_PAGES
@@ -571,7 +588,7 @@ xmc_stats:
       STA   XMC_DIRCOUNTL
       LDA   #$00
       STA   XMC_DIRCOUNTH
-      JMP   xmc_ok
+      RTS
 
 ; =====================================================================
 ; ResetUsage — clear all allocations and directory
@@ -582,59 +599,33 @@ xmc_resetusage:
       LDA   #$00
       STA   WIN3_BASE + CTRL_MAGIC
       JSR   xmc_init_check
+      JSR   xmc_refresh_stats
       JMP   xmc_ok
 
 ; =====================================================================
-; Alloc — allocate pages from bump pointer
+; Alloc — allocate pages from the low-XRAM page bitmap
 ; Input: XMC_LENL/H = bytes needed
 ; Output: XMC_XAL/M/H = allocated address, XMC_HANDLE
 ; =====================================================================
 xmc_alloc:
       JSR   xmc_init_check
-      ; Calculate pages = (len + 255) / 256 = (lenH) + (lenL > 0 ? 1 : 0)
-      LDA   XMC_LENH
-      STA   xmc_npgH
-      LDA   XMC_LENL
-      BEQ   @al_nornd
-      INC   xmc_npgH            ; round up if low byte nonzero
-      CLC                        ; but if lenH was $FF, this overflows — cap at $FF
-@al_nornd:
-      LDA   xmc_npgH
-      STA   xmc_npgL             ; pages low = npgH (since pages = bytes/256 rounded up)
-      LDA   #$00
-      STA   xmc_npgH             ; pages high = 0 for <=255 pages (max 64KB alloc)
-      ; Check we have space: next_free + pages*256 <= $080000 (512KB)
-      JSR   xmc_map_ctrl
-      ; Capture next_free as result address
-      LDA   WIN3_BASE + CTRL_NEXTFREE
-      STA   XMC_XAL
-      LDA   WIN3_BASE + CTRL_NEXTFREE + 1
-      STA   XMC_XAM
-      LDA   WIN3_BASE + CTRL_NEXTFREE + 2
-      STA   XMC_XAH
-      ; Advance: next_free += pages * 256 (= pages in mid byte)
-      LDA   WIN3_BASE + CTRL_NEXTFREE + 1
-      CLC
-      ADC   xmc_npgL
-      STA   WIN3_BASE + CTRL_NEXTFREE + 1
-      LDA   WIN3_BASE + CTRL_NEXTFREE + 2
-      ADC   #$00
-      STA   WIN3_BASE + CTRL_NEXTFREE + 2
-      ; Check overflow: if high byte >= $08, out of space (512KB = $080000)
-      CMP   #$08
+      JSR   xmc_calc_alloc_pages
+      BCS   @al_badargs
+      JSR   xmc_find_free_run
       BCS   @al_nospace
-      ; Allocate handle
-      LDA   WIN3_BASE + CTRL_NEXTHDL
-      STA   XMC_HANDLE
-      INC   WIN3_BASE + CTRL_NEXTHDL
-      LDA   WIN3_BASE + CTRL_NEXTHDL
-      BNE   @al_hdlok
-      LDA   #$01                 ; wrap from 0 to 1
-      STA   WIN3_BASE + CTRL_NEXTHDL
-@al_hdlok:
+      JSR   xmc_alloc_handle
+      BCS   @al_nospace
       ; Find free directory entry
       JSR   xmc_dir_find_free
       BCS   @al_nospace          ; no free entries
+      ; Capture result address and mark the page run.
+      STZ   XMC_XAL
+      LDA   xmc_run_startL
+      STA   XMC_XAM
+      LDA   xmc_run_startH
+      STA   XMC_XAH
+      STA   XMC_BANK
+      JSR   xmc_mark_alloc_pages_used
       ; Write directory entry
       JSR   xmc_map_dir_entry
       JSR   xmc_dir_offset       ; Y = offset within page
@@ -652,19 +643,412 @@ xmc_alloc:
       STA   WIN3_BASE + DIR_OFF_LENH,Y
       LDA   xmc_npgL
       STA   WIN3_BASE + DIR_OFF_PGSL,Y
-      LDA   #$00
+      LDA   xmc_npgH
       STA   WIN3_BASE + DIR_OFF_PGSH,Y
       ; Clear name (unnamed alloc)
+      LDA   #$00
       LDX   #DIR_NAME_LEN-1
 @al_clrnm:
       STA   WIN3_BASE,Y
       INY
       DEX
       BPL   @al_clrnm
+      JSR   xmc_refresh_stats
       JMP   xmc_ok
+@al_badargs:
+      LDA   #XMC_ERR_BADARGS
+      JMP   xmc_err
 @al_nospace:
       LDA   #XMC_ERR_NOSPACE
       JMP   xmc_err
+
+; --- Calculate allocation pages from XMC_LENL/H. Carry set if len=0. ---
+xmc_calc_alloc_pages:
+      LDA   XMC_LENL
+      ORA   XMC_LENH
+      BEQ   @cap_bad
+      LDA   XMC_LENH
+      STA   xmc_npgL
+      STZ   xmc_npgH
+      LDA   XMC_LENL
+      BEQ   @cap_done
+      INC   xmc_npgL
+      BNE   @cap_done
+      INC   xmc_npgH
+@cap_done:
+      CLC
+      RTS
+@cap_bad:
+      SEC
+      RTS
+
+; --- Calculate pages touched by XMC_XAL offset + XMC_LENL/H. Carry set if len=0. ---
+xmc_calc_range_pages:
+      LDA   XMC_LENL
+      ORA   XMC_LENH
+      BEQ   @crp_zero
+      LDA   XMC_LENH
+      STA   xmc_npgL
+      STZ   xmc_npgH
+      LDA   XMC_XAL
+      CLC
+      ADC   XMC_LENL
+      BCC   @crp_low_done
+      INC   xmc_npgL
+      BNE   @crp_low_done
+      INC   xmc_npgH
+@crp_low_done:
+      CMP   #$00
+      BEQ   @crp_done
+      INC   xmc_npgL
+      BNE   @crp_done
+      INC   xmc_npgH
+@crp_done:
+      CLC
+      RTS
+@crp_zero:
+      SEC
+      RTS
+
+; --- Return carry clear when xmc_page is inside the BASIC/XMC heap bitmap. ---
+xmc_page_in_heap:
+      LDA   xmc_pageH
+      CMP   #>TOTAL_PAGES
+      BCC   @pih_yes
+      BNE   @pih_no
+      LDA   xmc_pageL
+      CMP   #<TOTAL_PAGES
+      BCC   @pih_yes
+@pih_no:
+      SEC
+      RTS
+@pih_yes:
+      CLC
+      RTS
+
+xmc_inc_page:
+      INC   xmc_pageL
+      BNE   @ip_done
+      INC   xmc_pageH
+@ip_done:
+      RTS
+
+xmc_dec_run_len:
+      LDA   xmc_run_lenL
+      BNE   @drl_low
+      DEC   xmc_run_lenH
+@drl_low:
+      DEC   xmc_run_lenL
+      RTS
+
+; --- Locate bitmap byte and bit for xmc_page. Returns Y=byte offset, A=mask. ---
+xmc_page_bitmap_loc:
+      LDA   xmc_pageL
+      LSR
+      LSR
+      LSR
+      STA   xmc_tmp2
+      LDA   xmc_pageH
+      ASL
+      ASL
+      ASL
+      ASL
+      ASL
+      ORA   xmc_tmp2
+      CLC
+      ADC   #CTRL_BITMAP
+      TAY
+      LDA   xmc_pageL
+      AND   #$07
+      TAX
+      LDA   #$01
+@pbl_mask:
+      CPX   #$00
+      BEQ   @pbl_done
+      ASL
+      DEX
+      JMP   @pbl_mask
+@pbl_done:
+      RTS
+
+; --- Test xmc_page bitmap bit. A=0 means free; A!=0 means used. ---
+xmc_page_is_used:
+      JSR   xmc_map_ctrl
+      JSR   xmc_page_bitmap_loc
+      AND   WIN3_BASE,Y
+      RTS
+
+xmc_mark_page_used:
+      JSR   xmc_map_ctrl
+      JSR   xmc_page_bitmap_loc
+      STA   xmc_tmp2
+      AND   WIN3_BASE,Y
+      BNE   @mpu_done
+      LDA   xmc_tmp2
+      ORA   WIN3_BASE,Y
+      STA   WIN3_BASE,Y
+      INC   WIN3_BASE + CTRL_USEDL
+      BNE   @mpu_done
+      INC   WIN3_BASE + CTRL_USEDL + 1
+@mpu_done:
+      RTS
+
+xmc_mark_page_free:
+      JSR   xmc_map_ctrl
+      JSR   xmc_page_bitmap_loc
+      STA   xmc_tmp2
+      AND   WIN3_BASE,Y
+      BEQ   @mpf_done
+      LDA   xmc_tmp2
+      EOR   #$FF
+      AND   WIN3_BASE,Y
+      STA   WIN3_BASE,Y
+      LDA   WIN3_BASE + CTRL_USEDL
+      BNE   @mpf_dec_low
+      DEC   WIN3_BASE + CTRL_USEDL + 1
+@mpf_dec_low:
+      DEC   WIN3_BASE + CTRL_USEDL
+@mpf_done:
+      RTS
+
+; --- Find a contiguous free run of xmc_npg pages. Carry clear=found. ---
+xmc_find_free_run:
+      STZ   xmc_pageL
+      STZ   xmc_pageH
+      STZ   xmc_run_startL
+      STZ   xmc_run_startH
+      STZ   xmc_run_lenL
+      STZ   xmc_run_lenH
+@ffr_loop:
+      JSR   xmc_page_in_heap
+      BCS   @ffr_notfound
+      JSR   xmc_page_is_used
+      BNE   @ffr_used
+      LDA   xmc_run_lenL
+      ORA   xmc_run_lenH
+      BNE   @ffr_have_start
+      LDA   xmc_pageL
+      STA   xmc_run_startL
+      LDA   xmc_pageH
+      STA   xmc_run_startH
+@ffr_have_start:
+      INC   xmc_run_lenL
+      BNE   @ffr_cmp
+      INC   xmc_run_lenH
+@ffr_cmp:
+      LDA   xmc_run_lenH
+      CMP   xmc_npgH
+      BCC   @ffr_next
+      BNE   @ffr_found
+      LDA   xmc_run_lenL
+      CMP   xmc_npgL
+      BCS   @ffr_found
+@ffr_next:
+      JSR   xmc_inc_page
+      JMP   @ffr_loop
+@ffr_used:
+      STZ   xmc_run_lenL
+      STZ   xmc_run_lenH
+      JSR   xmc_inc_page
+      JMP   @ffr_loop
+@ffr_found:
+      CLC
+      RTS
+@ffr_notfound:
+      SEC
+      RTS
+
+xmc_mark_alloc_pages_used:
+      LDA   xmc_run_startL
+      STA   xmc_pageL
+      LDA   xmc_run_startH
+      STA   xmc_pageH
+      LDA   xmc_npgL
+      STA   xmc_run_lenL
+      LDA   xmc_npgH
+      STA   xmc_run_lenH
+@mapu_loop:
+      LDA   xmc_run_lenL
+      ORA   xmc_run_lenH
+      BEQ   @mapu_done
+      JSR   xmc_mark_page_used
+      JSR   xmc_inc_page
+      JSR   xmc_dec_run_len
+      JMP   @mapu_loop
+@mapu_done:
+      RTS
+
+xmc_mark_page_count_free:
+@mpcf_loop:
+      LDA   xmc_run_lenL
+      ORA   xmc_run_lenH
+      BEQ   @mpcf_done
+      JSR   xmc_page_in_heap
+      BCS   @mpcf_done
+      JSR   xmc_mark_page_free
+      JSR   xmc_inc_page
+      JSR   xmc_dec_run_len
+      JMP   @mpcf_loop
+@mpcf_done:
+      RTS
+
+xmc_mark_byte_used:
+      JSR   xmc_init_check
+      LDA   XMC_XAM
+      STA   xmc_pageL
+      LDA   XMC_XAH
+      STA   xmc_pageH
+      JSR   xmc_page_in_heap
+      BCS   @mbu_done
+      JMP   xmc_mark_page_used
+@mbu_done:
+      RTS
+
+xmc_mark_range_used:
+      JSR   xmc_init_check
+      JSR   xmc_calc_range_pages
+      BCS   @mru_done
+      LDA   XMC_XAM
+      STA   xmc_pageL
+      LDA   XMC_XAH
+      STA   xmc_pageH
+      LDA   xmc_npgL
+      STA   xmc_run_lenL
+      LDA   xmc_npgH
+      STA   xmc_run_lenH
+@mru_loop:
+      LDA   xmc_run_lenL
+      ORA   xmc_run_lenH
+      BEQ   @mru_done
+      JSR   xmc_page_in_heap
+      BCS   @mru_done
+      JSR   xmc_mark_page_used
+      JSR   xmc_inc_page
+      JSR   xmc_dec_run_len
+      JMP   @mru_loop
+@mru_done:
+      RTS
+
+xmc_mark_range_free:
+      JSR   xmc_calc_range_pages
+      BCS   @mrf_done
+      LDA   XMC_XAM
+      STA   xmc_pageL
+      LDA   XMC_XAH
+      STA   xmc_pageH
+      LDA   xmc_npgL
+      STA   xmc_run_lenL
+      LDA   xmc_npgH
+      STA   xmc_run_lenH
+      JMP   xmc_mark_page_count_free
+@mrf_done:
+      RTS
+
+; --- Allocate a handle that is not active in the directory. Carry clear=ok. ---
+xmc_alloc_handle:
+      LDA   #$FF
+      STA   xmc_tmp
+@ah_loop:
+      JSR   xmc_map_ctrl
+      LDA   WIN3_BASE + CTRL_NEXTHDL
+      BNE   @ah_have
+      LDA   #$01
+      STA   WIN3_BASE + CTRL_NEXTHDL
+@ah_have:
+      STA   XMC_HANDLE
+      INC   WIN3_BASE + CTRL_NEXTHDL
+      BNE   @ah_check
+      LDA   #$01
+      STA   WIN3_BASE + CTRL_NEXTHDL
+@ah_check:
+      JSR   xmc_dir_find_handle
+      BCS   @ah_ok
+      DEC   xmc_tmp
+      BNE   @ah_loop
+      SEC
+      RTS
+@ah_ok:
+      CLC
+      RTS
+
+; --- Release a raw XMC range and remove overlapping tracked blocks. ---
+xmc_release_range:
+      JSR   xmc_init_check
+      LDA   XMC_LENL
+      ORA   XMC_LENH
+      BEQ   @rel_ok
+      LDA   XMC_XAH
+      CMP   #XRAM_CAPACITY_HIGH
+      BCS   @rel_range
+      JSR   xmc_remove_overlapping_blocks
+      JSR   xmc_mark_range_free
+@rel_ok:
+      JSR   xmc_refresh_stats
+      JMP   xmc_ok
+@rel_range:
+      LDA   #XMC_ERR_RANGE
+      JMP   xmc_err
+
+xmc_remove_overlapping_blocks:
+      JSR   xmc_calc_range_pages
+      BCC   @rob_have_range
+      JMP   @rob_done
+@rob_have_range:
+      LDA   XMC_XAM
+      STA   xmc_rel_startL
+      LDA   XMC_XAH
+      STA   xmc_rel_startH
+      LDA   xmc_rel_startL
+      CLC
+      ADC   xmc_npgL
+      STA   xmc_rel_endL
+      LDA   xmc_rel_startH
+      ADC   xmc_npgH
+      STA   xmc_rel_endH
+      STZ   xmc_eidx
+@rob_loop:
+      LDA   xmc_eidx
+      CMP   #DIR_MAX_ENTRIES
+      BCS   @rob_done
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset
+      LDA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      BEQ   @rob_next
+      LDA   WIN3_BASE + DIR_OFF_XAM,Y
+      STA   xmc_run_startL
+      LDA   WIN3_BASE + DIR_OFF_XAH,Y
+      STA   xmc_run_startH
+      LDA   xmc_run_startL
+      CLC
+      ADC   WIN3_BASE + DIR_OFF_PGSL,Y
+      STA   xmc_pageL
+      LDA   xmc_run_startH
+      ADC   WIN3_BASE + DIR_OFF_PGSH,Y
+      STA   xmc_pageH              ; block end page, exclusive
+      ; release_start < block_end
+      LDA   xmc_rel_startH
+      CMP   xmc_pageH
+      BCC   @rob_first_ok
+      BNE   @rob_next
+      LDA   xmc_rel_startL
+      CMP   xmc_pageL
+      BCS   @rob_next
+@rob_first_ok:
+      ; block_start < release_end
+      LDA   xmc_run_startH
+      CMP   xmc_rel_endH
+      BCC   @rob_delete
+      BNE   @rob_next
+      LDA   xmc_run_startL
+      CMP   xmc_rel_endL
+      BCS   @rob_next
+@rob_delete:
+      JSR   xmc_dir_delete_entry
+@rob_next:
+      INC   xmc_eidx
+      JMP   @rob_loop
+@rob_done:
+      RTS
 
 ; --- Find free directory entry → xmc_eidx, carry clear=found ---
 xmc_dir_find_free:
@@ -682,6 +1066,26 @@ xmc_dir_find_free:
       SEC                        ; not found
       RTS
 @dff_found:
+      CLC
+      RTS
+
+; --- Find directory entry by XMC_HANDLE → xmc_eidx, carry clear=found ---
+xmc_dir_find_handle:
+      LDA   #$00
+      STA   xmc_eidx
+@dfh_loop:
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset
+      LDA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      CMP   XMC_HANDLE
+      BEQ   @dfh_found
+      INC   xmc_eidx
+      LDA   xmc_eidx
+      CMP   #DIR_MAX_ENTRIES
+      BCC   @dfh_loop
+      SEC
+      RTS
+@dfh_found:
       CLC
       RTS
 
@@ -737,6 +1141,7 @@ xmc_nstash:
       BCS   @ns_new              ; not found → allocate new
       ; Found existing — delete it first, then allocate fresh
       JSR   xmc_dir_delete_entry
+      JSR   xmc_refresh_stats
 @ns_new:
       ; Allocate block
       JSR   xmc_alloc
@@ -779,6 +1184,27 @@ xmc_nstash:
 xmc_dir_delete_entry:
       JSR   xmc_map_dir_entry
       JSR   xmc_dir_offset
+      LDA   WIN3_BASE + DIR_OFF_HANDLE,Y
+      BEQ   @dde_done
+      LDA   WIN3_BASE,Y
+      BEQ   @dde_unnamed
+      LDA   #$01
+      STA   xmc_tmp
+      JMP   @dde_load
+@dde_unnamed:
+      STZ   xmc_tmp
+@dde_load:
+      LDA   WIN3_BASE + DIR_OFF_XAM,Y
+      STA   xmc_pageL
+      LDA   WIN3_BASE + DIR_OFF_XAH,Y
+      STA   xmc_pageH
+      LDA   WIN3_BASE + DIR_OFF_PGSL,Y
+      STA   xmc_run_lenL
+      LDA   WIN3_BASE + DIR_OFF_PGSH,Y
+      STA   xmc_run_lenH
+      JSR   xmc_mark_page_count_free
+      JSR   xmc_map_dir_entry
+      JSR   xmc_dir_offset
       ; Clear the entry (32 bytes of zeros)
       LDX   #DIR_ENTRY_SIZE
 @dde_clr:
@@ -787,9 +1213,13 @@ xmc_dir_delete_entry:
       INY
       DEX
       BNE   @dde_clr
-      ; Decrement dir_count
+      LDA   xmc_tmp
+      BEQ   @dde_done
       JSR   xmc_map_ctrl
+      LDA   WIN3_BASE + CTRL_DIRCOUNT
+      BEQ   @dde_done
       DEC   WIN3_BASE + CTRL_DIRCOUNT
+@dde_done:
       RTS
 
 ; =====================================================================
@@ -842,6 +1272,7 @@ xmc_ndelete:
       JSR   xmc_dir_find_name
       BCS   @nd_notfound
       JSR   xmc_dir_delete_entry
+      JSR   xmc_refresh_stats
       JMP   xmc_ok
 @nd_notfound:
       LDA   #XMC_ERR_NF

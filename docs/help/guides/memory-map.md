@@ -633,7 +633,8 @@ shared runtimes reserve fixed bands by convention:
 | $054000--$05FFFF | NovaZ save/restore scratch workspace. |
 | $060000--$06FFFF | Reserved app/runtime workspace. |
 | $070000--$07F9FF | NVG decode staging buffer. |
-| $07FA00--$07FFFF | Reserved. |
+| $07FA00--$07FEFF | XMC allocator metadata (control page, page bitmap, and block directory). |
+| $07FF00--$07FFFF | Reserved. |
 
 ### XMC Registers
 

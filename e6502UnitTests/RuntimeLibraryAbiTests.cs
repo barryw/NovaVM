@@ -351,7 +351,17 @@ public class RuntimeLibraryAbiTests
             "xmc_npgL",
             "xmc_npgH",
             "xmc_tmp",
-            "xmc_tmp2"
+            "xmc_tmp2",
+            "xmc_pageL",
+            "xmc_pageH",
+            "xmc_run_startL",
+            "xmc_run_startH",
+            "xmc_run_lenL",
+            "xmc_run_lenH",
+            "xmc_rel_startL",
+            "xmc_rel_startH",
+            "xmc_rel_endL",
+            "xmc_rel_endH"
         ];
 
         foreach (string symbol in privateStateSymbols)

@@ -19,6 +19,18 @@ For the reusable assembly-facing runtime ABI, see `docs/assembly/xram.md`.
 - Allocator/named: `XALLOC len`, `STASH "name",ram,len`, `FETCH "name",ram`, `XDIR`, `XDEL "name"`
 - Window mapping: `XMAP win,off`, `XUNMAP win`
 
+## Allocator Behavior
+
+The ROM XMC allocator manages the low 256 KB XRAM heap with a 256-byte page
+bitmap. `XALLOC` and named `STASH` use first-fit contiguous allocation,
+`XFREE` releases the specified page range, and `XDEL` releases the pages owned
+by the named block. Raw `XPOKE`, `STASH`, and `FILL` operations mark touched
+low-heap pages as used so later allocations do not reuse them accidentally.
+
+Allocator metadata lives in the reserved high-XRAM range
+`$07FA00-$07FEFF`; user-visible `XmcPagesUsed`/`XmcPagesFree` counts describe
+only the low 256 KB heap.
+
 ## Shared XRAM Runtime
 
 Assembly code should use `runtime/asm/xram.inc` and `runtime/asm/xram.s` instead of

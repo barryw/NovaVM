@@ -284,7 +284,8 @@ XALLOC 4096
 
 Releases the XRAM range starting at *offset* with the given *length*.
 Any named or unnamed blocks that overlap that range are removed from the allocation
-table.
+table. `XFREE` operates on the low 256 KB BASIC/XMC heap; documented high-XRAM
+workspaces are fixed regions rather than heap allocations.
 
 Assembly applications should avoid heap-style XRAM allocation. Use the flat
 `xram.s` routines with a documented fixed workspace and clear that workspace at
