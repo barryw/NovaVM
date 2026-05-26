@@ -287,7 +287,7 @@ public sealed class MathCoprocessor
         return unchecked((byte)z);
     }
 
-    private static byte Sin1P7(byte angle)
+    internal static byte Sin1P7(byte angle)
     {
         int index;
         bool negate;

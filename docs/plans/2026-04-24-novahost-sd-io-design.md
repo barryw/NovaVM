@@ -17,7 +17,7 @@ contract ($B9A0-$B9EF) is identical to Avalonia.
   WTS architecture is chosen (ESP-side synth vs FPGA-side). Shape of this
   design does not preclude either; see "Future" below.
 - Creating `.ndi` images from within Nova. All images created offline via
-  the `e6502.NDI` CLI.
+  the `e6502.Nova` CLI.
 - Loose `.bas` / `.gfx` / `.mid` files on SD. Only `.ndi` containers and
   `.sf2` soundfonts live at the FAT32 layer.
 - Hot-swap SD detection, card encryption, or any form of tamper resistance.
@@ -133,7 +133,7 @@ minutes. `_ROM_BLK` precedent exists — generalize the block-write path.
   "FD0:","path/to/image"`. Argument is SD-relative path, `.ndi` extension
   implicit. Can be anywhere on SD including nested subdirs for
   organization.
-- **Creation**: only via `e6502.NDI` CLI. Nova itself can
+- **Creation**: only via `e6502.Nova` CLI. Nova itself can
   `LOAD`/`SAVE`/`MKDIR`/`RMDIR` inside existing images but cannot create
   new ones.
 - **Case**: SD filesystem is case-preserving but comparisons are
@@ -220,7 +220,7 @@ New error codes needed:
 Error reporting is by-value only — no error strings. Matches the existing
 thin-register contract.
 
-## CLI extensions (`e6502.NDI`)
+## CLI extensions (`e6502.Nova`)
 
 Current verbs (no changes needed): create, dir, info, validate, label,
 import, export, delete, mkdir, rmdir, tokenize, detokenize.
@@ -228,8 +228,8 @@ import, export, delete, mkdir, rmdir, tokenize, detokenize.
 Add:
 - `--size` accepts values up to at least 65536 (64 MB). Default floppy
   size stays at 800 KB. `--hd` is shorthand for 64MB:
-  `ndi create hd0.ndi --hd --label HOME`.
-- `autoboot` helper: `ndi set-autoboot image.ndi program.bas` — tokenizes
+  `nova create hd0.ndi --hd --label HOME`.
+- `autoboot` helper: `nova set-autoboot image.ndi program.bas` — tokenizes
   `program.bas` and imports it as file `autoboot` in the image. Saves a
   common two-step dance.
 - Nothing else; the existing verbs cover the rest.
@@ -316,7 +316,7 @@ ESP has direct access. No FPGA SD controller needed. Task list:
 - Autoboot test: HD with `autoboot` file boots into it.
 
 **Phase 5: CLI extensions.**
-- `--size` up to 64MB, `--hd` shorthand, `ndi set-autoboot`.
+- `--size` up to 64MB, `--hd` shorthand, `nova set-autoboot`.
 
 **Phase 6 (later): soundfont / SFLOAD / WTS.**
 Separate design doc.
@@ -365,4 +365,4 @@ Same `fs::FS` interface used everywhere in the ESP32 Arduino ecosystem.
 | Autoboot injector | ESP firmware | NEW |
 | Debug bridge | FPGA+ESP | EXTEND (add 5 packet types) |
 | BASIC tokens | `ehbasic/basic.asm` | UNCHANGED |
-| CLI | `e6502.NDI` | EXTEND (--size, set-autoboot) |
+| CLI | `e6502.Nova` | EXTEND (--size, set-autoboot) |

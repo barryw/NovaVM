@@ -3,7 +3,7 @@
 ; Hardware meta-sprite smoke demo.
 ;
 ; Build:
-;   ca65 --cpu 65c02 -I runtime/asm -I ehbasic -o /tmp/msprite_demo.o docs/programs/msprite_demo.s
+;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/msprite_demo.o docs/programs/msprite_demo.s
 ;   ld65 -C docs/programs/diag7000.cfg -o /tmp/msprite_demo.bin /tmp/msprite_demo.o
 ;
 ; Load at $7000 and run with: SYS $7000

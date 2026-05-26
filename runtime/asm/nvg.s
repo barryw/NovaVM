@@ -1,6 +1,9 @@
 ; Shared Nova NVG image loader routines.
 
 .include "nvg.inc"
+.ifndef FIO_EMIT_ALL_RUNTIME
+FIO_EMIT_ALL_RUNTIME = 1
+.endif
 .include "fio.s"
 
 .ifndef NVG_IMPLEMENTATION_INCLUDED

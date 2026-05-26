@@ -193,6 +193,8 @@ public sealed class MusicEngine
     }
 
     public bool IsMusicPlaying => _musicPlaying;
+    public bool UsesSidMusicVoices => _musicPlaying && UsesMusicVoices(0, SidVoiceCount);
+    public bool UsesWtsMusicVoices => _musicPlaying && UsesMusicVoices(SidVoiceCount, VoiceCount);
 
     public int ElapsedFrames => _elapsedFrames;
     public int TotalFrames => _musicTotalFrames;
@@ -210,6 +212,16 @@ public sealed class MusicEngine
         if (voiceIndex < 0 || voiceIndex >= VoiceCount) return 0;
         int midi = _voices[voiceIndex].CurrentMidi;
         return (byte)(midi > 0 ? midi : 0);
+    }
+
+    private bool UsesMusicVoices(int start, int end)
+    {
+        for (int i = start; i < end; i++)
+        {
+            if (_voices[i].CurrentMidi > 0 || _voices[i].Events is { Count: > 0 })
+                return true;
+        }
+        return false;
     }
 
     // -------------------------------------------------------------------------

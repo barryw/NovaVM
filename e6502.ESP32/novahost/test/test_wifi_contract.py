@@ -54,6 +54,7 @@ def test_serial_commands() -> None:
 def test_rest_routes() -> None:
     src = read("e6502.ESP32/novahost/sd_http_server.cpp")
     header = read("e6502.ESP32/novahost/sd_http_server.h")
+    novahost = read("e6502.ESP32/novahost/novahost.ino")
 
     for route in [
         'GET    /wifi',
@@ -69,13 +70,42 @@ def test_rest_routes() -> None:
         "PUT /wifi dispatch": 'strcmp(method, "PUT") == 0 && strcmp(url, "/wifi") == 0',
         "POST /wifi action dispatch": 'strcmp(method, "POST") == 0 && strncmp(url, "/wifi/", 6) == 0',
         "GET /health exposes host-status flags": '\\"hostStatusHex\\"',
+        "GET /health exposes HTTP task status": '\\"http\\":{\\"taskRunning\\"',
+        "HTTP request line timeout is bounded": "REQUEST_LINE_TIMEOUT_MS",
+        "HTTP header line timeout is bounded": "HEADER_LINE_TIMEOUT_MS",
         "connect action": 'strcmp(action, "connect") == 0',
         "disconnect action": 'strcmp(action, "disconnect") == 0',
         "reconnect action": 'strcmp(action, "reconnect") == 0',
         "forget action": 'strcmp(action, "forget") == 0',
+        "storage busy is reported as resource locked": 'send_error(client, 423, "storage busy")',
+        "HTTP has Locked reason phrase": 'case 423: return "Locked"',
+        "drive mount persistence preserves existing slots": 'doc["mounts"].as<JsonObject>()' in src
+        and 'if (mounts.isNull())' in src
+        and 'mounts = doc["mounts"].to<JsonObject>()' in src,
+        "HTTP PUT retries partial SD writes": "write_file_all(file, buf, got" in src
+        and "sd write stalled" in src
+        and "client read failed" in src
+        and "verifySdFileSize(path, expected" in src
+        and "CHECKPOINT_BYTES" in src
+        and 'SD.open(path, "r+b")' in src
+        and "file.seek(offset)" in src
+        and "checkpoint replay" in src
+        and "bytes_written" in src,
+        "SD HTTP mutations pause shared FPGA SPI traffic": "StorageMutationGuard" in src
+        and "novaBeginStorageMutation()" in src
+        and "lockSharedBus()" in novahost,
     }
     for name, needle in checks.items():
-        check(name, needle in src)
+        check(name, needle if isinstance(needle, bool) else needle in src)
+    check("HTTP response writes are bounded",
+          "RESPONSE_WRITE_TIMEOUT_MS" in header
+          and "availableForWrite()" in src
+          and "client.write(data + off, chunk)" in src
+          and "write_all(client, buf, got, false)" in src)
+    check("HTTP handlers avoid unbounded client print helpers",
+          "client.print(" not in src
+          and "client.printf(" not in src
+          and "client.flush(" not in src)
 
 
 def test_password_redaction() -> None:
@@ -173,10 +203,10 @@ def test_fpga_spi_bridge_contract() -> None:
         "ESP bridge writes use explicit SPI WRITE transaction": "SPI_WRITE_OP = 0x57" in bridge_h
         and "_spi->transfer(SPI_WRITE_OP);" in bridge,
         "ESP bridge uses unpaced bulk SPI writes for payloads": "_spi->transferBytes(data, nullptr" in bridge
-        and "SDRAM_STREAM_MAX_BYTES = 3072" in bridge_h
+        and "SDRAM_STREAM_MAX_BYTES = 256" in bridge_h
         and "pokeSdramStreamChunk" in bridge
         and "writeBytesSdramPaced" not in bridge,
-        "ESP bridge chunks WTS event streams": "WTS_EVENT_STREAM_MAX_BYTES = 3072" in bridge_h
+        "ESP bridge chunks WTS event streams": "WTS_EVENT_STREAM_MAX_BYTES = 60" in bridge_h
         and "writeWtsEventsChunk" in bridge
         and "writeBytesBulk(header, 3, data, count)" in bridge,
         "ESP bridge reads use token-framed SPI READ transaction": "SPI_READ_OP = 0x52" in bridge_h
@@ -313,6 +343,19 @@ def test_fio_sd_dispatch_contract() -> None:
         and "NMS_MAGIC" in dispatcher
         and "build_music_wts_event" in dispatcher
         and "soundfont missing instrument" in dispatcher,
+        "ESP mirrors hosted music state into Nova music registers": "MUSIC_MIRROR_BASE     = 0xBA50" in dispatcher
+        and "update_music_mirror(false)" in dispatcher
+        and "_bridge.pokeBlock(MUSIC_MIRROR_BASE" in dispatcher
+        and "MUSIC_STATUS_MUSIC | MUSIC_STATUS_WTS" in dispatcher
+        and "MUSIC_STATUS_MUSIC | MUSIC_STATUS_SID" in dispatcher,
+        "ESP mirrors SID notes from trapped writes": "capture_sid_mirror_write(addr, value)" in dispatcher
+        and "sid_freq_to_midi" in dispatcher
+        and "_sid_mirror_ctrl" in header,
+        "ESP mirrors WTS notes from the NMS event timeline": "enqueue_midi_visual_event" in dispatcher
+        and "update_midi_visual_notes" in dispatcher
+        and "_midi_visual_notes[event.voice]" in dispatcher
+        and "midi_elapsed_audio_frames" in dispatcher
+        and "MusicMirrorBytes = 19" in header,
         "ESP MIDPLAY fails loud instead of falling back": "ensure_wts_bank_loaded(slot)" in dispatcher
         and "Missing soundfont" in dispatcher
         and "hardware WTS event stream unavailable" in dispatcher
@@ -321,6 +364,14 @@ def test_fio_sd_dispatch_contract() -> None:
         and "fill_midi_audio_fifo" not in dispatcher
         and "render_midi_pcm_frames" not in dispatcher
         and "writeAudioPcm" not in dispatcher,
+        "ESP WTS auto-load uses only compact full-instrument defaults": "WTS_AUTO_SOUNDFONT_PRIORITY" in dispatcher
+        and "timgm6mb.nsfb" in dispatcher
+        and "florestan-basic.nsfb" in dispatcher
+        and "GeneralUser_GS.nsfb" in dispatcher
+        and "is_skipped_auto_soundfont" in dispatcher
+        and "MAX_REGIONS = 1408" in header
+        and "bohemian.nsfb" not in dispatcher
+        and "stars-timgm6mb.nsfb" not in dispatcher,
         "ESP MIDPLAY uses hardware WTS only after probing the bitstream": "hardware_wts_available()" in dispatcher
         and "WTS_SOUNDFONT_STATUS" in dispatcher
         and "WTS_SIGNATURE" in dispatcher
@@ -335,6 +386,8 @@ def test_fio_sd_dispatch_contract() -> None:
         and "_midi_max_pump_gap_us" in header
         and "_music_event_bytes" in header
         and "_music_event_read" in header,
+        "ESP audio status waits briefly for coherent snapshots":
+            "FioDispatcherStateGuard stateGuard(*this, pdMS_TO_TICKS(20));" in dispatcher,
         "ESP MIDPLAY runtime does not parse Standard MIDI files": "nova_midi" not in dispatcher
         and '#include "midi_engine.h"' not in header
         and "_midi_prefetch_timeline" not in header

@@ -133,6 +133,59 @@ static void test_vm_rejects_unknown_rom_call() {
     check("unsupported call count increments", vm.stats().unsupportedCalls == 1);
 }
 
+static void test_vm_executes_payload_at_kernal_vector_addresses() {
+    printf("\nTest: SID payload in KERNAL address range\n");
+    // Some PSIDs load real player code into $E000-$FFFF. $FF81 is also the
+    // C64 CINT vector, so this must execute as payload when the SID wrote it.
+    // $FF81: LDA #$2A / STA $D418 / RTS
+    uint8_t payload[] = {
+        0xA9, 0x2A,
+        0x8D, 0x18, 0xD4,
+        0x60
+    };
+
+    SidWriteLog log;
+    nova_sid::SidVm vm;
+    vm.setSidWriteHandler(record_sid_write, &log);
+    check("ROM-range payload loads", vm.loadPayload(0xFF81, payload, sizeof(payload)));
+    vm.setEntryPoints(0xFF81, 0);
+
+    nova_sid::RunResult init = vm.runInit(0);
+    check("ROM-range payload returns",
+          init.status == nova_sid::RunStatus::Ok);
+    check("ROM-range payload was not swallowed by CINT stub",
+          log.writes.size() == 1 &&
+          log.writes[0].addr == 0xD418 && log.writes[0].value == 0x2A);
+}
+
+static void test_vm_stubs_unwritten_kernal_vectors_on_loaded_rom_page() {
+    printf("\nTest: KERNAL stub on partially loaded ROM page\n");
+    // Page $FF may contain SID payload while an unwritten vector on that same
+    // page is still a real KERNAL call that should use the clean-room stub.
+    // $FF80: JSR $FFD2 / LDA #$55 / STA $D400 / RTS
+    uint8_t payload[] = {
+        0x20, 0xD2, 0xFF,
+        0xA9, 0x55,
+        0x8D, 0x00, 0xD4,
+        0x60
+    };
+
+    SidWriteLog log;
+    nova_sid::SidVm vm;
+    vm.setSidWriteHandler(record_sid_write, &log);
+    check("partial ROM page payload loads", vm.loadPayload(0xFF80, payload, sizeof(payload)));
+    vm.setEntryPoints(0xFF80, 0);
+
+    nova_sid::RunResult init = vm.runInit(0);
+    check("unwritten KERNAL vector still stubs",
+          init.status == nova_sid::RunStatus::Ok);
+    check("execution resumed after stub",
+          log.writes.size() == 1 &&
+          log.writes[0].addr == 0xD400 && log.writes[0].value == 0x55);
+    check("stubbed vector is not an unsupported ROM call",
+          vm.stats().unsupportedCalls == 0);
+}
+
 static void test_unofficial_opcode_smoke() {
     printf("\nTest: common unofficial opcodes\n");
     // $3000: LDA #$AA / TAX / SAX $20 / LAX $20 / RTS
@@ -157,6 +210,8 @@ int main() {
     test_sparse_memory_allocates_touched_pages_only();
     test_vm_runs_init_and_play_without_rom_blob();
     test_vm_rejects_unknown_rom_call();
+    test_vm_executes_payload_at_kernal_vector_addresses();
+    test_vm_stubs_unwritten_kernal_vectors_on_loaded_rom_page();
     test_unofficial_opcode_smoke();
 
     printf("\nSID VM tests: %d passed, %d failed\n", g_pass, g_fail);

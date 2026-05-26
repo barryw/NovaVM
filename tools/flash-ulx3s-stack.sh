@@ -27,6 +27,7 @@
 #   SD_SYNC_HOST=192.168.1.65      HTTP host for SD asset sync.
 #   SD_SYNC_TIMEOUT=45             Seconds to wait for SD HTTP server.
 #   SD_SYNC_RETRIES=8              Per-file HTTP PUT retry count.
+#   SD_SYNC_PUT_TIMEOUT=900        Per-file HTTP PUT timeout.
 #   ROM_RELOAD=1|0                 Reload ROMs from SD after SD sync.
 #   FPGA_WRITE_FLASH=1|0           Write FPGA config flash; 0 loads SRAM only.
 #   ALLOW_TIMING_FAIL=1            Flash even if nextpnr timing report fails.
@@ -60,6 +61,7 @@ SD_SYNC="${SD_SYNC:-1}"
 SD_SYNC_HOST="${SD_SYNC_HOST:-$NOVAHOST}"
 SD_SYNC_TIMEOUT="${SD_SYNC_TIMEOUT:-45}"
 SD_SYNC_RETRIES="${SD_SYNC_RETRIES:-8}"
+SD_SYNC_PUT_TIMEOUT="${SD_SYNC_PUT_TIMEOUT:-900}"
 ROM_RELOAD="${ROM_RELOAD:-1}"
 FPGA_WRITE_FLASH="${FPGA_WRITE_FLASH:-1}"
 ALLOW_TIMING_FAIL="${ALLOW_TIMING_FAIL:-0}"
@@ -167,7 +169,7 @@ http_put_with_retry() {
     local attempt=1
 
     while [ "$attempt" -le "$SD_SYNC_RETRIES" ]; do
-        if curl -fsS --max-time 30 -X PUT --data-binary "@$src" "$url" >/dev/null; then
+        if curl -fsS --max-time "$SD_SYNC_PUT_TIMEOUT" -X PUT --data-binary "@$src" "$url" >/dev/null; then
             return 0
         fi
         echo "warning: PUT failed (attempt $attempt/$SD_SYNC_RETRIES): $url" >&2

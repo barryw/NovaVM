@@ -3,8 +3,9 @@
 
 CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 NOVA_ASM := ../runtime/asm
+NOVAVM_INC := $(NOVA_ASM)/novavm.inc
 
-all: basic.bin extension.bin keyboard.bin demo.bin tokens.json
+all: basic.bin extension.bin ../assembly/apps/keyboard/keyboard.bin ../assembly/apps/demo/demo.bin tokens.json
 
 ABI_SOURCES = \
 	$(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s \
@@ -48,34 +49,35 @@ runtime_labels.json ../docs/assembly/runtime-labels.md runtime_labels.inc: basic
 runtime-labels: runtime_labels.json ../docs/assembly/runtime-labels.md runtime_labels.inc
 
 # Auto-generate hardware constants include
-novavm.inc: ../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym ../tools/gen_novavm_inc.py
-	python3 ../tools/gen_novavm_inc.py ../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym -o novavm.inc
+$(NOVAVM_INC): ../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym ../tools/gen_novavm_inc.py
+	python3 ../tools/gen_novavm_inc.py ../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym -o $(NOVAVM_INC)
 
-# Keyboard visualizer
+novavm.inc: $(NOVAVM_INC)
+	@echo "novavm.inc is generated at $(NOVAVM_INC)"
+
+# Standalone assembly applications
 keyboard: keyboard.bin
 
-keyboard.bin: keyboard.o keyboard.cfg
-	ld65 -C keyboard.cfg -o keyboard.bin keyboard.o
+keyboard.bin: ../assembly/apps/keyboard/keyboard.bin
 
-keyboard.o: keyboard.s novavm.inc
-	ca65 --cpu 65c02 keyboard.s -o keyboard.o
+../assembly/apps/keyboard/keyboard.bin: $(NOVAVM_INC)
+	$(MAKE) -C ../assembly keyboard
 
 install-keyboard: keyboard.bin
-	cp keyboard.bin ~/e6502-programs/keyboard.bin
+	cp ../assembly/apps/keyboard/keyboard.bin ~/e6502-programs/keyboard.bin
 
-# Demo disk player
 demo: demo.bin
 
-demo.bin: demo.o demo.cfg
-	ld65 -C demo.cfg -o demo.bin demo.o
+demo.bin: ../assembly/apps/demo/demo.bin
 
-demo.o: demo.s novavm.inc
-	ca65 --cpu 65c02 demo.s -o demo.o
+../assembly/apps/demo/demo.bin: $(NOVAVM_INC)
+	$(MAKE) -C ../assembly demo
 
 install-demo: demo.bin
-	cp demo.bin ~/e6502-programs/demo.bin
+	cp ../assembly/apps/demo/demo.bin ~/e6502-programs/demo.bin
 
 clean:
 	$(RM) *.o *.lst *.map *.bin *.sym
+	$(MAKE) -C ../assembly clean
 
 .PHONY: all runtime-labels keyboard install-keyboard demo install-demo clean

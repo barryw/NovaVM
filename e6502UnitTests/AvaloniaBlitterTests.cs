@@ -205,6 +205,132 @@ public class AvaloniaBlitterTests
     }
 
     [TestMethod]
+    public void Blitter_RotateMode_RotatesSquareIntoDestinationBuffer()
+    {
+        var bus = MakeBus();
+        int src = 0x3600;
+        int dst = 0x3700;
+        for (int row = 0; row < 3; row++)
+            for (int col = 0; col < 3; col++)
+                bus.Write((ushort)(src + row * 3 + col), (byte)(row * 3 + col + 1));
+
+        StartBlit(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceCpuRam,
+            srcAddr: src,
+            dstAddr: dst,
+            width: 3,
+            height: 3,
+            srcStride: 3,
+            dstStride: 3,
+            mode: VgcConstants.BltModeRotate,
+            rotateAngle: 64);
+
+        AssertBlitOk(bus, expectedCount: 9);
+        CollectionAssert.AreEqual(
+            new byte[] { 7, 4, 1, 8, 5, 2, 9, 6, 3 },
+            new byte[]
+            {
+                bus.Read((ushort)dst),
+                bus.Read((ushort)(dst + 1)),
+                bus.Read((ushort)(dst + 2)),
+                bus.Read((ushort)(dst + 3)),
+                bus.Read((ushort)(dst + 4)),
+                bus.Read((ushort)(dst + 5)),
+                bus.Read((ushort)(dst + 6)),
+                bus.Read((ushort)(dst + 7)),
+                bus.Read((ushort)(dst + 8))
+            });
+    }
+
+    [TestMethod]
+    public void Blitter_RotateMode_WritesColorKeyForOutOfBoundsSamples()
+    {
+        var bus = MakeBus();
+        int src = 0x3800;
+        int dst = 0x3900;
+        for (int row = 0; row < 5; row++)
+            for (int col = 0; col < 5; col++)
+                bus.Write((ushort)(src + row * 5 + col), (byte)(row * 5 + col + 1));
+
+        StartBlit(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceCpuRam,
+            srcAddr: src,
+            dstAddr: dst,
+            width: 5,
+            height: 5,
+            srcStride: 5,
+            dstStride: 5,
+            mode: VgcConstants.BltModeRotate,
+            colorKey: 0xFE,
+            rotateAngle: 32);
+
+        AssertBlitOk(bus, expectedCount: 25);
+        Assert.AreEqual(0xFE, bus.Read((ushort)dst));
+        Assert.AreEqual(0xFE, bus.Read((ushort)(dst + 4)));
+        Assert.AreEqual(0xFE, bus.Read((ushort)(dst + 20)));
+        Assert.AreEqual(0xFE, bus.Read((ushort)(dst + 24)));
+        Assert.AreEqual(13, bus.Read((ushort)(dst + 12)));
+    }
+
+    [TestMethod]
+    public void Blitter_RotateMode_RejectsNonSquareAndOverlappingRanges()
+    {
+        var bus = MakeBus();
+
+        StartBlit(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceCpuRam,
+            srcAddr: 0x3A00,
+            dstAddr: 0x3B00,
+            width: 3,
+            height: 2,
+            srcStride: 3,
+            dstStride: 3,
+            mode: VgcConstants.BltModeRotate,
+            rotateAngle: 64);
+
+        Assert.AreEqual(VgcConstants.BltStatusError, bus.Read((ushort)VgcConstants.BltStatus));
+        Assert.AreEqual(VgcConstants.BltErrBadArgs, bus.Read((ushort)VgcConstants.BltErrCode));
+
+        StartBlit(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceCpuRam,
+            srcAddr: 0x3A00,
+            dstAddr: 0x3B00,
+            width: 257,
+            height: 257,
+            srcStride: 257,
+            dstStride: 257,
+            mode: VgcConstants.BltModeRotate,
+            rotateAngle: 64);
+
+        Assert.AreEqual(VgcConstants.BltStatusError, bus.Read((ushort)VgcConstants.BltStatus));
+        Assert.AreEqual(VgcConstants.BltErrBadArgs, bus.Read((ushort)VgcConstants.BltErrCode));
+
+        StartBlit(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceCpuRam,
+            srcAddr: 0x3A00,
+            dstAddr: 0x3A01,
+            width: 3,
+            height: 3,
+            srcStride: 3,
+            dstStride: 3,
+            mode: VgcConstants.BltModeRotate,
+            rotateAngle: 64);
+
+        Assert.AreEqual(VgcConstants.BltStatusError, bus.Read((ushort)VgcConstants.BltStatus));
+        Assert.AreEqual(VgcConstants.BltErrBadArgs, bus.Read((ushort)VgcConstants.BltErrCode));
+    }
+
+    [TestMethod]
     public void Blitter_CpuRomDestination_IsWriteProtected()
     {
         var bus = MakeBus();
@@ -240,7 +366,8 @@ public class AvaloniaBlitterTests
         int dstStride,
         byte mode = 0,
         byte fillValue = 0,
-        byte colorKey = 0)
+        byte colorKey = 0,
+        byte rotateAngle = 0)
     {
         bus.Write((ushort)VgcConstants.BltSrcSpace, srcSpace);
         bus.Write((ushort)VgcConstants.BltDstSpace, dstSpace);
@@ -253,6 +380,7 @@ public class AvaloniaBlitterTests
         bus.Write((ushort)VgcConstants.BltMode, mode);
         bus.Write((ushort)VgcConstants.BltFillValue, fillValue);
         bus.Write((ushort)VgcConstants.BltColorKey, colorKey);
+        bus.Write((ushort)VgcConstants.BltRotateAngle, rotateAngle);
         bus.Write((ushort)VgcConstants.BltCmd, VgcConstants.BltCmdStart);
     }
 

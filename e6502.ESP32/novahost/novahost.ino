@@ -65,6 +65,26 @@ static const char* WIFI_PASSWORD = "";
 WiFiServer logServer(LOG_PORT);
 WiFiClient logClients[3];  // up to 3 simultaneous log viewers
 
+void writeLogClient(WiFiClient& client, const char* data, size_t len) {
+    if (!client || !client.connected() || !data || len == 0)
+        return;
+
+    int writable = client.availableForWrite();
+    if (writable < 0 || (size_t)writable < len) {
+        client.stop();
+        return;
+    }
+
+    size_t wrote = client.write((const uint8_t*)data, len);
+    if (wrote != len)
+        client.stop();
+}
+
+void writeLogClientLine(WiFiClient& client, const char* text) {
+    writeLogClient(client, text, strlen(text));
+    writeLogClient(client, "\r\n", 2);
+}
+
 void logMsg(const char* fmt, ...) {
     char buf[256];
     va_list args;
@@ -78,7 +98,7 @@ void logMsg(const char* fmt, ...) {
     // Stream to all connected TCP clients
     for (int i = 0; i < 3; i++) {
         if (logClients[i] && logClients[i].connected()) {
-            logClients[i].print(buf);
+            writeLogClient(logClients[i], buf, strlen(buf));
         }
     }
 }
@@ -93,7 +113,7 @@ void logLn(const char* fmt, ...) {
     Serial.println(buf);
     for (int i = 0; i < 3; i++) {
         if (logClients[i] && logClients[i].connected()) {
-            logClients[i].println(buf);
+            writeLogClientLine(logClients[i], buf);
         }
     }
 }
@@ -131,6 +151,46 @@ enum NovaBootPhase : uint8_t {
 volatile uint8_t g_boot_phase = BOOT_PHASE_POWER_ON;
 volatile bool g_fpga_bridge_owned_by_boot = false;
 TaskHandle_t g_boot_task = nullptr;
+TaskHandle_t g_audio_task = nullptr;
+TaskHandle_t g_http_task = nullptr;
+TaskHandle_t g_bridge_task = nullptr;
+TaskHandle_t g_system_task = nullptr;
+volatile uint32_t g_http_service_heartbeat_ms = 0;
+volatile uint32_t g_http_fallback_count = 0;
+volatile bool g_http_task_loop_seen = false;
+volatile uint32_t g_bridge_service_heartbeat_ms = 0;
+volatile uint32_t g_bridge_fallback_count = 0;
+volatile bool g_bridge_task_loop_seen = false;
+volatile uint32_t g_system_service_heartbeat_ms = 0;
+volatile bool g_system_task_loop_seen = false;
+
+constexpr UBaseType_t NOVA_HTTP_TASK_PRIORITY = 5;
+constexpr UBaseType_t NOVA_AUDIO_TASK_PRIORITY = 6;
+constexpr UBaseType_t NOVA_BRIDGE_TASK_PRIORITY = 3;
+constexpr UBaseType_t NOVA_SYSTEM_TASK_PRIORITY = 2;
+constexpr UBaseType_t NOVA_BOOT_TASK_PRIORITY = 1;
+
+constexpr uint32_t NOVA_BOOT_TASK_STACK = 12288;
+constexpr uint32_t NOVA_AUDIO_TASK_STACK = 4096;
+constexpr uint32_t NOVA_BRIDGE_TASK_STACK = 6144;
+constexpr uint32_t NOVA_HTTP_TASK_STACK = 8192;
+constexpr uint32_t NOVA_SYSTEM_TASK_STACK = 3072;
+
+#if CONFIG_FREERTOS_UNICORE
+constexpr BaseType_t NOVA_HTTP_TASK_CORE = ARDUINO_RUNNING_CORE;
+constexpr BaseType_t NOVA_AUDIO_TASK_CORE = ARDUINO_RUNNING_CORE;
+constexpr BaseType_t NOVA_BRIDGE_TASK_CORE = ARDUINO_RUNNING_CORE;
+constexpr BaseType_t NOVA_SYSTEM_TASK_CORE = ARDUINO_RUNNING_CORE;
+constexpr BaseType_t NOVA_BOOT_TASK_CORE = ARDUINO_RUNNING_CORE;
+#else
+constexpr BaseType_t NOVA_NETWORK_TASK_CORE =
+    (ARDUINO_RUNNING_CORE == 0) ? 1 : 0;
+constexpr BaseType_t NOVA_HTTP_TASK_CORE = NOVA_NETWORK_TASK_CORE;
+constexpr BaseType_t NOVA_AUDIO_TASK_CORE = ARDUINO_RUNNING_CORE;
+constexpr BaseType_t NOVA_BRIDGE_TASK_CORE = ARDUINO_RUNNING_CORE;
+constexpr BaseType_t NOVA_SYSTEM_TASK_CORE = NOVA_NETWORK_TASK_CORE;
+constexpr BaseType_t NOVA_BOOT_TASK_CORE = ARDUINO_RUNNING_CORE;
+#endif
 
 static constexpr uint8_t HOST_STATUS_WIFI_CONNECTED = 0x01;
 static constexpr uint8_t HOST_STATUS_FIO_ACTIVE     = 0x02;
@@ -145,6 +205,7 @@ volatile uint8_t g_host_status_flags = HOST_STATUS_HOST_SEEN;
 uint8_t g_last_host_status_flags = 0;
 bool g_host_status_sent = false;
 bool g_network_services_started = false;
+volatile bool g_storage_mutation_active = false;
 
 const char* bootPhaseName(uint8_t phase) {
     switch (phase) {
@@ -172,8 +233,91 @@ uint8_t novaHostStatusFlags() {
     return (uint8_t)g_host_status_flags;
 }
 
+bool novaHttpTaskRunning() {
+    return g_http_task != nullptr;
+}
+
+bool novaHttpTaskLoopSeen() {
+    return g_http_task_loop_seen;
+}
+
+uint32_t novaHttpServiceAgeMs() {
+    uint32_t heartbeat = g_http_service_heartbeat_ms;
+    if (heartbeat == 0)
+        return 0xFFFFFFFFUL;
+    return millis() - heartbeat;
+}
+
+uint32_t novaHttpFallbackCount() {
+    return g_http_fallback_count;
+}
+
+bool novaBridgeTaskRunning() {
+    return g_bridge_task != nullptr;
+}
+
+bool novaBridgeTaskLoopSeen() {
+    return g_bridge_task_loop_seen;
+}
+
+uint32_t novaBridgeServiceAgeMs() {
+    uint32_t heartbeat = g_bridge_service_heartbeat_ms;
+    if (heartbeat == 0)
+        return 0xFFFFFFFFUL;
+    return millis() - heartbeat;
+}
+
+uint32_t novaBridgeFallbackCount() {
+    return g_bridge_fallback_count;
+}
+
+bool novaSystemTaskRunning() {
+    return g_system_task != nullptr;
+}
+
+bool novaSystemTaskLoopSeen() {
+    return g_system_task_loop_seen;
+}
+
+uint32_t novaSystemServiceAgeMs() {
+    uint32_t heartbeat = g_system_service_heartbeat_ms;
+    if (heartbeat == 0)
+        return 0xFFFFFFFFUL;
+    return millis() - heartbeat;
+}
+
 bool novaNicDispatcherAvailable() {
     return true;
+}
+
+bool novaStorageBusy() {
+    return g_storage_mutation_active ||
+           !novaFpgaBridgeAvailable() ||
+           fioDispatcher.storage_busy();
+}
+
+void novaReleaseIdleAudioCacheForStorage() {
+    fioDispatcher.release_idle_wts_sample_cache();
+}
+
+bool novaBeginStorageMutation() {
+    if (g_storage_mutation_active ||
+        !novaFpgaBridgeAvailable() ||
+        fioDispatcher.storage_busy()) {
+        return false;
+    }
+    if (!fpgaBridge.lockSharedBus())
+        return false;
+    g_storage_mutation_active = true;
+    digitalWrite(FPGA_SPI_CS_PIN, HIGH);
+    return true;
+}
+
+void novaEndStorageMutation() {
+    if (!g_storage_mutation_active)
+        return;
+    g_storage_mutation_active = false;
+    fpgaBridge.unlockSharedBus();
 }
 
 void novaNicDebugJson(char* out, size_t out_size) {
@@ -350,13 +494,26 @@ bool writeBootConfig(JsonDocument& doc) {
     if (!SD.exists("/config") && !SD.mkdir("/config"))
         return false;
 
-    File out = SD.open("/config/boot.json", FILE_WRITE, true);
+    const char* tmp_path = "/config/boot.json.tmp";
+    if (SD.exists(tmp_path) && !SD.remove(tmp_path))
+        return false;
+
+    File out = SD.open(tmp_path, FILE_WRITE, true);
     if (!out)
         return false;
 
     serializeJsonPretty(doc, out);
     out.println();
     out.close();
+
+    if (SD.exists("/config/boot.json") && !SD.remove("/config/boot.json")) {
+        SD.remove(tmp_path);
+        return false;
+    }
+    if (!SD.rename(tmp_path, "/config/boot.json")) {
+        SD.remove(tmp_path);
+        return false;
+    }
     return true;
 }
 
@@ -578,26 +735,34 @@ bool streamSdramAsset(uint32_t base_addr, const char* label,
     }
 
     logLn("Streaming %s from %s (%u bytes)", label, path, (unsigned)actual);
-    static uint8_t buf[4096];
+    uint8_t* buf = (uint8_t*)malloc(4096);
+    if (!buf) {
+        logLn("Boot asset buffer allocation failed: %s", label);
+        f.close();
+        return false;
+    }
     for (size_t off = 0; off < expected_len; ) {
-        size_t want = (expected_len - off >= sizeof(buf))
-            ? sizeof(buf)
+        size_t want = (expected_len - off >= 4096)
+            ? 4096
             : expected_len - off;
         size_t got = f.read(buf, want);
         if (got != want) {
             logLn("Boot asset read failed: %s at offset %u", label, (unsigned)off);
             f.close();
+            free(buf);
             return false;
         }
         if (!fpgaBridge.pokeSdramStream(base_addr + off, buf, (uint16_t)got)) {
             logLn("FPGA SDRAM stream failed: %s at offset %u", label, (unsigned)off);
             f.close();
+            free(buf);
             return false;
         }
         off += got;
     }
 
     f.close();
+    free(buf);
     return true;
 }
 
@@ -1198,17 +1363,22 @@ void handleLogClients() {
         for (int i = 0; i < 3; i++) {
             if (!logClients[i] || !logClients[i].connected()) {
                 logClients[i] = logServer.available();
+                logClients[i].setNoDelay(true);
                 logLn("Log viewer connected from %s",
                     logClients[i].remoteIP().toString().c_str());
-                logClients[i].println("=== NovaHost Debug Log ===");
-                logClients[i].printf("Uptime: %lu ms\n", millis());
-                logClients[i].printf("Free heap: %d bytes\n", ESP.getFreeHeap());
+                char line[80];
+                writeLogClientLine(logClients[i], "=== NovaHost Debug Log ===");
+                snprintf(line, sizeof(line), "Uptime: %lu ms", millis());
+                writeLogClientLine(logClients[i], line);
+                snprintf(line, sizeof(line), "Free heap: %d bytes",
+                         ESP.getFreeHeap());
+                writeLogClientLine(logClients[i], line);
                 return;
             }
         }
         // No free slots — reject
         WiFiClient reject = logServer.available();
-        reject.println("Too many log viewers");
+        writeLogClientLine(reject, "Too many log viewers");
         reject.stop();
     }
 }
@@ -1261,17 +1431,205 @@ void startBootTask() {
     BaseType_t ok = xTaskCreatePinnedToCore(
         bootTaskMain,
         "nova-boot",
-        12288,
+        NOVA_BOOT_TASK_STACK,
         nullptr,
-        1,
+        NOVA_BOOT_TASK_PRIORITY,
         &g_boot_task,
-        ARDUINO_RUNNING_CORE);
+        NOVA_BOOT_TASK_CORE);
 
     if (ok != pdPASS) {
         g_boot_task = nullptr;
         g_fpga_bridge_owned_by_boot = false;
         g_boot_phase = BOOT_PHASE_FAILED;
         logLn("NovaHost boot sequence FAILED: could not create boot task");
+    }
+}
+
+void audioTaskMain(void*) {
+    const TickType_t period = pdMS_TO_TICKS(1);
+
+    while (true) {
+        vTaskDelay(period);
+        if (novaFpgaBridgeAvailable() && !g_storage_mutation_active) {
+            fioDispatcher.pump_audio();
+        }
+    }
+}
+
+void startAudioTask() {
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        audioTaskMain,
+        "nova-audio",
+        NOVA_AUDIO_TASK_STACK,
+        nullptr,
+        NOVA_AUDIO_TASK_PRIORITY,
+        &g_audio_task,
+        NOVA_AUDIO_TASK_CORE);
+
+    if (ok != pdPASS) {
+        g_audio_task = nullptr;
+        logLn("NovaHost audio task FAILED: could not create task");
+    }
+}
+
+void serviceBridgeControlPlane() {
+    g_bridge_service_heartbeat_ms = millis();
+
+    if (g_storage_mutation_active)
+        return;
+
+    if (novaWifi.connected() && g_network_services_started &&
+        novaFpgaBridgeAvailable()) {
+        debugServer.loop();
+    }
+
+    if (!novaFpgaBridgeAvailable())
+        return;
+
+    uint32_t now = millis();
+    bool audio_active = fioDispatcher.audio_active();
+
+    static uint32_t last_bridge_drain_ms = 0;
+    uint32_t drain_period_ms = audio_active ? 10 : 1;
+    if ((uint32_t)(now - last_bridge_drain_ms) >= drain_period_ms) {
+        last_bridge_drain_ms = now;
+        fpgaBridge.drain();
+    }
+
+    static uint32_t last_fio_poll_ms = 0;
+    uint32_t fio_poll_period_ms = audio_active ? 20 : 5;
+    if ((uint32_t)(now - last_fio_poll_ms) >= fio_poll_period_ms) {
+        last_fio_poll_ms = now;
+        fioDispatcher.poll_pending();
+    }
+
+    static uint32_t last_nic_poll_ms = 0;
+    uint32_t nic_poll_period_ms = audio_active ? 10 : 1;
+    if ((uint32_t)(now - last_nic_poll_ms) >= nic_poll_period_ms) {
+        last_nic_poll_ms = now;
+        nicDispatcher.poll();
+    }
+
+    static uint32_t lastHostStatusRefresh = 0;
+    if ((uint32_t)(now - lastHostStatusRefresh) > 1000) {
+        lastHostStatusRefresh = now;
+        publishHostStatusToFpga(true);
+    }
+}
+
+void bridgeTaskMain(void*) {
+    g_bridge_task_loop_seen = true;
+    while (true) {
+        serviceBridgeControlPlane();
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
+void startBridgeTask() {
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        bridgeTaskMain,
+        "nova-bridge",
+        NOVA_BRIDGE_TASK_STACK,
+        nullptr,
+        NOVA_BRIDGE_TASK_PRIORITY,
+        &g_bridge_task,
+        NOVA_BRIDGE_TASK_CORE);
+
+    if (ok != pdPASS) {
+        g_bridge_task = nullptr;
+        logLn("NovaHost bridge task FAILED: could not create task");
+    } else {
+        logLn("NovaHost bridge task started");
+    }
+}
+
+void serviceHttpControlPlane() {
+    g_http_service_heartbeat_ms = millis();
+
+    if (novaWifi.connected() && g_network_services_started) {
+#if NOVA_ENABLE_OTA
+        ArduinoOTA.handle();
+#endif
+        handleLogClients();
+        if (novaFpgaBridgeAvailable()) {
+            sdHttpServer.loop();
+        }
+    }
+}
+
+void httpTaskMain(void*) {
+    g_http_task_loop_seen = true;
+    while (true) {
+        serviceHttpControlPlane();
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
+void startHttpTask() {
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        httpTaskMain,
+        "nova-http",
+        NOVA_HTTP_TASK_STACK,
+        nullptr,
+        NOVA_HTTP_TASK_PRIORITY,
+        &g_http_task,
+        NOVA_HTTP_TASK_CORE);
+
+    if (ok != pdPASS) {
+        g_http_task = nullptr;
+        logLn("NovaHost HTTP task FAILED: could not create task");
+    } else {
+        logLn("NovaHost HTTP task started");
+    }
+}
+
+void serviceSystemControlPlane() {
+    g_system_service_heartbeat_ms = millis();
+
+    pollSerialConsole();
+
+    static uint32_t lastWifiCheck = 0;
+    novaWifi.loop();
+    if ((uint32_t)(millis() - lastWifiCheck) > 10000) {
+        lastWifiCheck = millis();
+        bool now_connected = novaWifi.connected();
+        if (now_connected != wifi_connected) {
+            novaWifiStateChanged();
+            if (now_connected) {
+                logLn("WiFi reconnected: %s",
+                      WiFi.localIP().toString().c_str());
+            } else {
+                logLn("WiFi lost");
+            }
+        } else {
+            novaWifiStateChanged();
+        }
+    }
+}
+
+void systemTaskMain(void*) {
+    g_system_task_loop_seen = true;
+    while (true) {
+        serviceSystemControlPlane();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+void startSystemTask() {
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        systemTaskMain,
+        "nova-system",
+        NOVA_SYSTEM_TASK_STACK,
+        nullptr,
+        NOVA_SYSTEM_TASK_PRIORITY,
+        &g_system_task,
+        NOVA_SYSTEM_TASK_CORE);
+
+    if (ok != pdPASS) {
+        g_system_task = nullptr;
+        logLn("NovaHost system task FAILED: could not create task");
+    } else {
+        logLn("NovaHost system task started");
     }
 }
 
@@ -1283,6 +1641,8 @@ void setup() {
     Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());
     Serial.printf("Flash: %d MB\n", ESP.getFlashChipSize() / (1024 * 1024));
 
+    fioDispatcher.reserve_wts_region_store();
+
     initSharedSpiBus();
     fpgaBridge.beginSpi(SPI, FPGA_SPI_CS_PIN, FPGA_SPI_HZ, SD_CS_PIN);
     Serial.printf("FPGA bridge initialized over SPI (SCK=%d MISO=%d MOSI=%d CS=%d, write %lu/%lu Hz, read %lu/%lu Hz)\n",
@@ -1292,8 +1652,6 @@ void setup() {
                   (unsigned long)fpgaBridge.actualWriteHz(),
                   (unsigned long)fpgaBridge.requestedReadHz(),
                   (unsigned long)fpgaBridge.actualReadHz());
-    fioDispatcher.reserve_wts_sample_cache(32UL * 1024UL);
-
     // Give the FPGA debug bridge a moment to settle before we start poking it.
     delay(100);
 
@@ -1312,7 +1670,11 @@ void setup() {
 
     g_boot_phase = BOOT_PHASE_INFRA_READY;
     logLn("NovaHost infrastructure ready; starting SD/FPGA boot task.");
+    startSystemTask();
+    startHttpTask();
+    startBridgeTask();
     startBootTask();
+    startAudioTask();
 }
 
 void novaAudioStatusJson(char* out, size_t out_len) {
@@ -1327,66 +1689,5 @@ void novaAudioStop() {
 // Main loop
 // =========================================================================
 void loop() {
-    pollSerialConsole();
-
-    // Track WiFi state changes and mirror them onto the FPGA user LEDs.
-    static unsigned long lastWifiCheck = 0;
-    novaWifi.loop();
-    if (millis() - lastWifiCheck > 10000) {
-        lastWifiCheck = millis();
-        bool now_connected = novaWifi.connected();
-        if (now_connected != wifi_connected) {
-            novaWifiStateChanged();
-            if (now_connected) {
-                logLn("WiFi reconnected: %s",
-                      WiFi.localIP().toString().c_str());
-            } else {
-                logLn("WiFi lost");
-            }
-        } else {
-            novaWifiStateChanged();
-        }
-    }
-
-    // Audio refill is timing-sensitive. Keep it independent from the slower
-    // guest command poll cadence so HDMI PCM has priority over debug/HTTP work.
-    if (novaFpgaBridgeAvailable()) {
-        fioDispatcher.pump_audio();
-    }
-
-    // Keep host-control services responsive before servicing guest-driven
-    // bridge work. Debug/HTTP touch the shared SD/FPGA SPI bus, so they stay
-    // out while the boot task owns that path for asset streaming.
-    if (novaWifi.connected() && g_network_services_started) {
-#if NOVA_ENABLE_OTA
-        ArduinoOTA.handle();
-#endif
-        handleLogClients();
-        if (novaFpgaBridgeAvailable()) {
-            debugServer.loop();
-            sdHttpServer.loop();
-        }
-    }
-
-    // Drain async FIO/NIC events only after the boot task is done with the
-    // bridge. The boot task streams ROM/assets over the same shared SPI bus,
-    // so polling during boot would corrupt that protocol.
-    if (novaFpgaBridgeAvailable()) {
-        fpgaBridge.drain();
-        static unsigned long lastFioPoll = 0;
-        if (millis() - lastFioPoll >= 5) {
-            lastFioPoll = millis();
-            fioDispatcher.poll_pending();
-        }
-        nicDispatcher.poll();
-    }
-
-    // The FPGA host-status latch resets whenever the bitstream is reloaded
-    // from flash. Force a lightweight refresh so LEDs recover even if the ESP
-    // flags themselves have not changed.
-    static unsigned long lastHostStatusRefresh = 0;
-    if (novaFpgaBridgeAvailable() && millis() - lastHostStatusRefresh > 1000) {
-        lastHostStatusRefresh = millis();
-        publishHostStatusToFpga(true);
-    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
 }

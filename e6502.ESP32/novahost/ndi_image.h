@@ -100,6 +100,7 @@ public:
     void close();
 
     bool is_open() const { return _stream != nullptr; }
+    const char* last_error() const { return _last_error; }
 
     const HeaderInfo& header() const { return _header; }
     int free_sectors() const         { return _free_count; }
@@ -164,6 +165,7 @@ public:
 private:
     IStream*    _stream;
     HeaderInfo  _header;
+    char        _last_error[96];
 
     // BAM bitmap — 1 bit per data sector. Allocated as
     // ceil(data_sectors / 8) bytes.
@@ -172,9 +174,13 @@ private:
     int         _data_sector_count;
     int         _free_count;
 
-    // Directory buffer — directory_sector_count * 256 bytes. 4 entries
-    // per sector × 64-byte entries.
-    uint8_t*    _dir_data;
+    // Directory sectors are read through a single-sector write-back cache.
+    // A full directory cache costs 12 KB per 800 KB floppy image, which is too
+    // expensive once NovaHost has dedicated RTOS tasks for HTTP/audio/bridge.
+    uint8_t*    _dir_sector_cache;
+    int         _dir_cached_sector;
+    bool        _dir_cache_dirty;
+    int         _dir_sector_count;
     int         _dir_entry_count;     // total slots = sectors × 4
 
     // Read sector 0 → _header.
@@ -183,7 +189,7 @@ private:
     // Read BAM into _bam_bits + _free_count.
     bool read_bam();
 
-    // Read directory into _dir_data.
+    // Read directory into sector-sized chunks.
     bool read_directory();
 
     // Flush header + BAM + dir back to the stream.
@@ -195,6 +201,10 @@ private:
     void bam_free(int start, int count);
 
     // Directory helpers.
+    void free_directory();
+    bool load_dir_sector(int sector);
+    bool flush_directory_cache();
+    uint8_t* dir_entry_ptr(int slot);
     int  dir_find_free_slot();
     void dir_write_entry(int slot, uint8_t flags, uint8_t type,
                          uint16_t parent, uint32_t start_sector,

@@ -118,7 +118,12 @@ public static class VgcConstants
     public const byte FioErrNotMounted = 0x05;
 
     // Hosted music/SFX status register
-    public const int  MusicStatus      = 0xBA50; // bit 0 = hosted SFX playing, bit 1 = hosted music playing
+    public const int  MusicStatus      = 0xBA50;
+    public const byte MusicStatusSfx   = 0x01;   // hosted sound effect playing
+    public const byte MusicStatusMusic = 0x02;   // hosted music playing
+    public const byte MusicStatusSid   = 0x04;   // current music source uses SID voices
+    public const byte MusicStatusWts   = 0x08;   // current music source uses WTS/MIDI voices
+    public const byte MusicStatusLoading = 0x10; // hosted music asset/soundfont load in progress
     public const int  MusicNote1       = 0xBA51; // voice 1 current MIDI note (0=silent)
     public const int  MusicNote2       = 0xBA52; // voice 2 current MIDI note
     public const int  MusicNote3       = 0xBA53; // voice 3 current MIDI note
@@ -345,7 +350,7 @@ public static class VgcConstants
     public const byte DmaSpaceVgcTextAttr = 0x07;
 
     // -------------------------------------------------------------------------
-    // Blitter controller registers ($BA83-$BA9B)
+    // Blitter controller registers ($BA83-$BA9B plus sparse $BAA2)
     // -------------------------------------------------------------------------
 
     public const int BltBase           = 0xBA83;
@@ -370,12 +375,13 @@ public static class VgcConstants
     public const int BltSrcStrideH     = 0xBA93;  // source stride high
     public const int BltDstStrideL     = 0xBA94;  // destination stride low
     public const int BltDstStrideH     = 0xBA95;  // destination stride high
-    public const int BltMode           = 0xBA96;  // bit0=fill, bit1=color-key
+    public const int BltMode           = 0xBA96;  // bit0=fill, bit1=color-key, bit2=rotate
     public const int BltFillValue      = 0xBA97;  // fill byte when mode bit0 set
-    public const int BltColorKey       = 0xBA98;  // transparent source color when bit1 set
+    public const int BltColorKey       = 0xBA98;  // transparent source color; rotate background byte
     public const int BltCountL         = 0xBA99;  // bytes written low
     public const int BltCountM         = 0xBA9A;  // bytes written mid
     public const int BltCountH         = 0xBA9B;  // bytes written high
+    public const int BltRotateAngle    = 0xBAA2;  // 8-bit angle, 0..255 is one turn
 
     public const byte BltCmdStart      = 0x01;
 
@@ -393,6 +399,7 @@ public static class VgcConstants
 
     public const byte BltModeFill      = 0x01;
     public const byte BltModeColorKey  = 0x02;
+    public const byte BltModeRotate    = 0x04;
 
     // -------------------------------------------------------------------------
     // Board input registers ($BA9C-$BAA1)
@@ -427,8 +434,31 @@ public static class VgcConstants
     public const byte BoardInputIrqSwitches = 0x02;
     public const byte BoardInputIrqMask     = 0x03;
 
+    // -------------------------------------------------------------------------
+    // USB HID diagnostic registers ($BAA3-$BAA8)
+    // ULX3S hardware bring-up registers for the US2 low-speed USB HID host.
+    // -------------------------------------------------------------------------
+
+    public const int UsbHidDiagBase       = 0xBAA3;
+    public const int UsbHidDiagEnd        = 0xBAA8;
+    public const int UsbHidStatus         = 0xBAA3;
+    public const int UsbHidDeviceType     = 0xBAA4;
+    public const int UsbHidLastScan       = 0xBAA5;
+    public const int UsbHidLastAscii      = 0xBAA6;
+    public const int UsbHidReportCount    = 0xBAA7;
+    public const int UsbHidKeyCount       = 0xBAA8;
+
+    public const byte UsbHidStatusResetReleased   = 0x01;
+    public const byte UsbHidStatusDmHigh          = 0x02;
+    public const byte UsbHidStatusDpHigh          = 0x04;
+    public const byte UsbHidStatusDevicePresent   = 0x08;
+    public const byte UsbHidStatusKeyboardPresent = 0x10;
+    public const byte UsbHidStatusReportSeen      = 0x20;
+    public const byte UsbHidStatusKeySeen         = 0x40;
+    public const byte UsbHidStatusError           = 0x80;
+
     public const int FreeBase          = 0xBB50;
-    public const int FreeEnd           = 0xBBFF;
+    public const int FreeEnd           = 0xBB8D;
 
     // -------------------------------------------------------------------------
     // File metadata buffer ($BAB0-$BB1F) — populated during filtered DIRREAD
@@ -454,10 +484,19 @@ public static class VgcConstants
     public const int MetaDurL       = 0xBB1A;   // duration seconds low (MID only)
     public const int MetaDurH       = 0xBB1B;   // duration seconds high
     public const int MetaGfxSpace   = 0xBB1C;   // GFX space type
+    public const int MusicMetaFlags = MetaGfxSpace; // SID/MIDI playback flags when MetaType is music
+    public const int MusicMetaSoundfont = 0xBB8E; // 64 bytes, null-padded ASCII
+    public const int MusicMetaSoundfontEnd = 0xBBCD;
 
     public const int MetaTitleLen   = 32;
     public const int MetaAuthorLen  = 32;
     public const int MetaCopyrightLen = 32;
+    public const int MusicMetaSoundfontLen = 64;
+
+    public const byte MusicMetaFlagSid6581 = 0x01;
+    public const byte MusicMetaFlagSid8580 = 0x02;
+    public const byte MusicMetaFlagStereo  = 0x04;
+    public const byte MusicMetaFlagNtsc    = 0x08;
 
     // -------------------------------------------------------------------------
     // Math coprocessor registers ($BB20-$BB4F)
@@ -849,7 +888,7 @@ public static class VgcConstants
     public const int RegRomSwap       = 0xA03F;
     public const byte RomSwapNcc      = 0x01;   // switch to NCC ROM
     public const byte RomSwapBasic    = 0x02;   // switch to BASIC ROM
-    public const byte RomSwapNccEdit  = 0x03;   // activate NCC editor (from BASIC NCC command)
+    public const byte RomSwapNccEdit  = 0x03;   // activate NCC editor
     public const byte RomSwapExtension = 0x04;  // switch to extension ROM
     public const byte RomSwapPrimary  = RomSwapBasic; // switch to the active primary runtime ROM
 

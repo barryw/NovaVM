@@ -47,11 +47,15 @@ public sealed class MidiPlayback
     private int _ppqn;
     private bool _playing;
     private int _activeVoiceCount;
+    private bool _usesSidVoices;
+    private bool _usesWtsVoices;
 
     // Display hold: when a note is on+off in the same tick, hold it for 1 frame
     private readonly bool[] _heldForDisplay = new bool[MaxVoices];
 
     public bool IsPlaying => _playing;
+    public bool UsesSidVoices => _playing && _usesSidVoices;
+    public bool UsesWtsVoices => _playing && _usesWtsVoices;
     public MidiRoutingMode RoutingMode { get; set; } = MidiRoutingMode.Auto;
     public int AvailableVoiceCount => RoutingMode == MidiRoutingMode.SidOnly ? SidVoiceCount : MaxVoices;
 
@@ -70,6 +74,8 @@ public sealed class MidiPlayback
     public void Play(MidiFile midi, int[] voiceToChannel, int[] instrumentSlots)
     {
         _activeVoiceCount = voiceToChannel.Length;
+        _usesSidVoices = UsesMappedVoiceRange(voiceToChannel, 0, SidVoiceCount);
+        _usesWtsVoices = UsesMappedVoiceRange(voiceToChannel, FirstWtsVoice, MaxVoices);
         _ppqn = ((TicksPerQuarterNoteTimeDivision)midi.TimeDivision).TicksPerQuarterNote;
         _timeline = BuildTimeline(midi, voiceToChannel, instrumentSlots);
         _timelineIndex = 0;
@@ -103,9 +109,22 @@ public sealed class MidiPlayback
         _midiTicksPerFrame = 0;
         _ppqn = 0;
         _activeVoiceCount = 0;
+        _usesSidVoices = false;
+        _usesWtsVoices = false;
         RoutingMode = MidiRoutingMode.Auto;
         Array.Clear(_heldForDisplay);
         _engine.ExitMidiMode();
+    }
+
+    private static bool UsesMappedVoiceRange(int[] voiceToChannel, int start, int end)
+    {
+        int count = Math.Min(end, voiceToChannel.Length);
+        for (int i = start; i < count; i++)
+        {
+            if (voiceToChannel[i] >= 0)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>Called at the system frame rate. Advance the timeline and fire events.</summary>

@@ -118,6 +118,7 @@ wrapping to `$FFFF`.
 | `DMACOPY`/`DMAFILL` | Length is 24-bit; zero-length transfers are rejected with `BadArgs` (04). Out-of-range addresses set `Range` (03). Writes to ROM space set `WriteProt` ($05). |
 | `BLITCOPY`/`BLITFILL` | Width and height are 16-bit (1--65535 each). Zero width or height is rejected with `BadArgs` ($04). Stride is the byte offset between row starts; it may be larger than width. |
 | Color-key mode (blitter) | When bit 1 of `BltMode` is set, source bytes matching `BltColorKey` are skipped. In fill mode, color-key is ignored. |
+| Rotate mode (blitter) | Register-level rotate uses `BltMode` bit 2 and `BltRotateAngle` ($BAA2). Width must equal height and may be at most 256 bytes. Out-of-bounds source samples write `BltColorKey`. Overlapping source/destination ranges in the same memory space are rejected with `BadArgs` ($04). |
 | Row buffer | When source and destination overlap in the same space, the blitter uses a temporary row buffer to prevent read-after-write corruption. |
 | `DMASTATUS`/`BLITSTATUS` | Returns the raw status register value: 0=idle, 1=busy, 2=ok, 3=error. BASIC commands check status automatically and raise a function-call error if the operation fails. |
 

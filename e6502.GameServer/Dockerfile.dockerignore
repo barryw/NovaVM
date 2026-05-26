@@ -6,7 +6,7 @@ TestResults/
 **/obj/
 **/.DS_Store
 NovaDraw/
-docs/manual/*.pdf
+docs/books/*/*.pdf
 e6502.FPGA/fpga/build/
 e6502.FPGA/test/obj_*/
 screenshots/

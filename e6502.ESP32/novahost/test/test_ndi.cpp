@@ -90,7 +90,7 @@ static void test_open_and_header() {
     check_eq_int("directory_sector_count",  h.directory_sector_count, 48);
     check_eq_int("data_start_sector",       h.data_start_sector, 53);
 
-    // Free count should match `ndi info` for the checked-in demo disk.
+    // Free count should match `nova info` for the checked-in demo disk.
     check_eq_int("free_sectors",            img.free_sectors(), 982);
 }
 
@@ -212,7 +212,7 @@ static void test_write_read_roundtrip() {
     // file ops, not initial format).
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "cd /Users/barry/Git/e6502/e6502.NDI && dotnet run -- create %s --size 64 --label TEST > /dev/null",
+        "cd /Users/barry/Git/e6502/e6502.Nova && dotnet run -- create %s --size 64 --label TEST > /dev/null",
         path);
     if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); return; }
 
@@ -269,7 +269,7 @@ static void test_delete_roundtrip() {
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "cd /Users/barry/Git/e6502/e6502.NDI && dotnet run -- create %s --size 64 --label DEL > /dev/null",
+        "cd /Users/barry/Git/e6502/e6502.Nova && dotnet run -- create %s --size 64 --label DEL > /dev/null",
         path);
     if (system(cmd) != 0) return;
 
@@ -301,7 +301,7 @@ static void test_mkdir_rmdir() {
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "cd /Users/barry/Git/e6502/e6502.NDI && dotnet run -- create %s --size 64 --label DIRT > /dev/null",
+        "cd /Users/barry/Git/e6502/e6502.Nova && dotnet run -- create %s --size 64 --label DIRT > /dev/null",
         path);
     if (system(cmd) != 0) return;
 

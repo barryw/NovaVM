@@ -116,29 +116,31 @@ void SparseMemory::clear() {
     _page_count = 0;
 }
 
-uint8_t* SparseMemory::ensure_page(uint8_t page) {
+SparseMemory::Page* SparseMemory::ensure_page(uint8_t page) {
     if (_pages[page])
         return _pages[page];
-    uint8_t* p = (uint8_t*)malloc(PageBytes);
+    Page* p = (Page*)malloc(sizeof(Page));
     if (!p)
         return nullptr;
-    memset(p, 0, PageBytes);
+    memset(p, 0, sizeof(Page));
     _pages[page] = p;
     _page_count++;
     return p;
 }
 
 bool SparseMemory::write(uint16_t addr, uint8_t value) {
-    uint8_t* page = ensure_page((uint8_t)(addr >> 8));
+    Page* page = ensure_page((uint8_t)(addr >> 8));
     if (!page)
         return false;
-    page[addr & 0xFF] = value;
+    uint8_t off = addr & 0xFF;
+    page->bytes[off] = value;
+    page->written[off >> 3] |= (uint8_t)(1u << (off & 7));
     return true;
 }
 
 uint8_t SparseMemory::read(uint16_t addr) const {
-    const uint8_t* page = _pages[addr >> 8];
-    return page ? page[addr & 0xFF] : 0;
+    const Page* page = _pages[addr >> 8];
+    return page ? page->bytes[addr & 0xFF] : 0;
 }
 
 bool SparseMemory::load(uint16_t addr, const uint8_t* data, size_t len) {
@@ -153,6 +155,14 @@ bool SparseMemory::load(uint16_t addr, const uint8_t* data, size_t len) {
 
 bool SparseMemory::pageAllocated(uint8_t page) const {
     return _pages[page] != nullptr;
+}
+
+bool SparseMemory::addressWritten(uint16_t addr) const {
+    const Page* page = _pages[addr >> 8];
+    if (!page)
+        return false;
+    uint8_t off = addr & 0xFF;
+    return (page->written[off >> 3] & (uint8_t)(1u << (off & 7))) != 0;
 }
 
 SidVm::SidVm() {
@@ -278,6 +288,11 @@ bool SidVm::handleRomStub(uint16_t pc, bool& handled, RunStatus& status) {
     handled = false;
     status = RunStatus::Ok;
 
+    bool rom_addr = (pc >= 0xA000 && pc <= 0xBFFF) ||
+                    (pc >= 0xE000 && pc <= 0xFFFF);
+    if (rom_addr && _mem.addressWritten(pc))
+        return true;
+
     auto clear_carry = [&]() { setFlag(FlagC, false); };
     auto set_zero_a = [&]() { _cpu.a = 0; setZN(_cpu.a); };
 
@@ -327,9 +342,7 @@ bool SidVm::handleRomStub(uint16_t pc, bool& handled, RunStatus& status) {
             break;
     }
 
-    if (((pc >= 0xA000 && pc <= 0xBFFF) ||
-         (pc >= 0xE000 && pc <= 0xFFFF)) &&
-        !_mem.pageAllocated((uint8_t)(pc >> 8))) {
+    if (rom_addr) {
         status = RunStatus::UnsupportedRomCall;
         _stats.unsupportedCalls++;
     }

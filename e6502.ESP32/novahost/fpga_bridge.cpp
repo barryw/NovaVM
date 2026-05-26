@@ -49,6 +49,31 @@
 #define VGC_SPACE_COLOR 0x02
 #define TEXT_BYTES      4000
 
+class FpgaBridgeCommandGuard {
+public:
+    explicit FpgaBridgeCommandGuard(FpgaBridge& bridge)
+        : _bridge(bridge), _locked(bridge.lockCommand()) {}
+
+    ~FpgaBridgeCommandGuard() {
+        if (_locked)
+            _bridge.unlockCommand();
+    }
+
+    bool locked() const { return _locked; }
+
+private:
+    FpgaBridge& _bridge;
+    bool _locked;
+};
+
+#define FPGA_LOCK_OR_RETURN_FALSE() \
+    FpgaBridgeCommandGuard fpgaLock(*this); \
+    if (!fpgaLock.locked()) return false
+
+#define FPGA_LOCK_OR_RETURN_VOID() \
+    FpgaBridgeCommandGuard fpgaLock(*this); \
+    if (!fpgaLock.locked()) return
+
 // =========================================================================
 // Low-level transport helpers
 // =========================================================================
@@ -70,6 +95,10 @@ bool FpgaBridge::beginSpi(SPIClass& spi, uint8_t csPin, uint32_t hz,
         pinMode(_spiPeerCsPin, OUTPUT);
         digitalWrite(_spiPeerCsPin, HIGH);
     }
+#if defined(ARDUINO)
+    if (!_commandMutex)
+        _commandMutex = xSemaphoreCreateRecursiveMutex();
+#endif
     _spiEnabled = true;
     return true;
 }
@@ -92,7 +121,33 @@ uint32_t FpgaBridge::actualReadHz() const {
     return actualSpiHzFor(_spiReadHz);
 }
 
+bool FpgaBridge::lockCommand() {
+#if defined(ARDUINO)
+    if (!_commandMutex)
+        return true;
+    return xSemaphoreTakeRecursive(_commandMutex, portMAX_DELAY) == pdTRUE;
+#else
+    return true;
+#endif
+}
+
+void FpgaBridge::unlockCommand() {
+#if defined(ARDUINO)
+    if (_commandMutex)
+        xSemaphoreGiveRecursive(_commandMutex);
+#endif
+}
+
+bool FpgaBridge::lockSharedBus() {
+    return lockCommand();
+}
+
+void FpgaBridge::unlockSharedBus() {
+    unlockCommand();
+}
+
 bool FpgaBridge::probeCapabilities() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     _capabilitiesKnown = true;
     _supportsPokeMulti = false;
     _supportsWtsEventStream = false;
@@ -114,24 +169,28 @@ bool FpgaBridge::probeCapabilities() {
 }
 
 bool FpgaBridge::supportsPokeMulti() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (!_capabilitiesKnown)
         probeCapabilities();
     return _supportsPokeMulti;
 }
 
 bool FpgaBridge::supportsWtsEventStream() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (!_capabilitiesKnown)
         probeCapabilities();
     return _supportsWtsEventStream;
 }
 
 bool FpgaBridge::supportsKeyStream() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (!_capabilitiesKnown)
         probeCapabilities();
     return _supportsKeyStream;
 }
 
 void FpgaBridge::drain() {
+    FPGA_LOCK_OR_RETURN_VOID();
     uint8_t value = 0;
     for (int i = 0; i < SPI_DRAIN_LIMIT; i++) {
         if (!tryRecvSpiByte(value))
@@ -301,6 +360,7 @@ bool FpgaBridge::recvStatus() {
 // =========================================================================
 
 bool FpgaBridge::peek(uint16_t addr, uint8_t& value) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t buf[3] = { CMD_PEEK, (uint8_t)(addr >> 8), (uint8_t)(addr & 0xFF) };
     writeBytes(buf, 3);
@@ -312,6 +372,7 @@ bool FpgaBridge::peek(uint16_t addr, uint8_t& value) {
 }
 
 bool FpgaBridge::poke(uint16_t addr, uint8_t value) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t buf[4] = { CMD_POKE, (uint8_t)(addr >> 8), (uint8_t)(addr & 0xFF), value };
     writeBytes(buf, 4);
@@ -320,6 +381,7 @@ bool FpgaBridge::poke(uint16_t addr, uint8_t value) {
 
 bool FpgaBridge::pokeMulti(const uint16_t* addrs, const uint8_t* values,
                            uint8_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (count == 0)
         return true;
     if (!addrs || !values || !supportsPokeMulti())
@@ -357,6 +419,7 @@ bool FpgaBridge::sendKey(uint8_t key) {
 }
 
 bool FpgaBridge::sendKeys(const uint8_t* data, uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (count == 0)
         return true;
     if (!data || !supportsKeyStream())
@@ -405,6 +468,7 @@ bool FpgaBridge::readColor(uint8_t* buf) {
 }
 
 bool FpgaBridge::cpuState(CpuState& st) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_CPU_STATE);
     if (!recvStatus()) return false;
@@ -426,6 +490,7 @@ bool FpgaBridge::cpuState(CpuState& st) {
 }
 
 bool FpgaBridge::step(CpuState& st) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_STEP);
     if (!recvStatus()) return false;
@@ -447,6 +512,7 @@ bool FpgaBridge::step(CpuState& st) {
 }
 
 bool FpgaBridge::breakSet(uint8_t slot, uint16_t addr, bool enabled) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (slot >= 4) return false;
     drain();
     uint8_t buf[5] = {
@@ -461,6 +527,7 @@ bool FpgaBridge::breakSet(uint8_t slot, uint16_t addr, bool enabled) {
 }
 
 bool FpgaBridge::breakClear(uint8_t slot) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (slot >= 4) return false;
     drain();
     uint8_t buf[2] = { CMD_BREAK_CLR, slot };
@@ -469,6 +536,7 @@ bool FpgaBridge::breakClear(uint8_t slot) {
 }
 
 bool FpgaBridge::breakList(BreakpointState& state) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_BREAK_LIST);
     if (!recvStatus()) return false;
@@ -485,6 +553,7 @@ bool FpgaBridge::breakList(BreakpointState& state) {
 }
 
 bool FpgaBridge::traceRead(uint8_t count, uint8_t* buf, uint16_t& bytesRead) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (count > TRACE_RECORDS) return false;
     drain();
     uint8_t cmd[2] = { CMD_TRACE_READ, count };
@@ -496,18 +565,21 @@ bool FpgaBridge::traceRead(uint8_t count, uint8_t* buf, uint16_t& bytesRead) {
 }
 
 bool FpgaBridge::pause() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_PAUSE);
     return recvStatus();
 }
 
 bool FpgaBridge::resume() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_RESUME);
     return recvStatus();
 }
 
 bool FpgaBridge::hostStatus(uint8_t flags) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t buf[2] = { CMD_HOST_STATUS, flags };
     writeBytes(buf, 2);
@@ -515,6 +587,7 @@ bool FpgaBridge::hostStatus(uint8_t flags) {
 }
 
 bool FpgaBridge::peekBlock(uint16_t addr, uint8_t count, uint8_t* buf) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t cmd[4] = { CMD_PEEK_BLOCK, (uint8_t)(addr >> 8), (uint8_t)(addr & 0xFF), count };
     writeBytes(cmd, 4);
@@ -524,6 +597,7 @@ bool FpgaBridge::peekBlock(uint16_t addr, uint8_t count, uint8_t* buf) {
 }
 
 bool FpgaBridge::nicReadTxBlock(uint8_t offset, uint8_t count, uint8_t* buf) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t cmd[3] = { CMD_NIC_TX_READ_BLK, offset, count };
     writeBytes(cmd, 3);
@@ -533,6 +607,7 @@ bool FpgaBridge::nicReadTxBlock(uint8_t offset, uint8_t count, uint8_t* buf) {
 }
 
 bool FpgaBridge::nicWriteRxBlock(uint8_t offset, const uint8_t* data, uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (count > 256) return false;
     drain();
     uint8_t header[3] = {
@@ -545,30 +620,35 @@ bool FpgaBridge::nicWriteRxBlock(uint8_t offset, const uint8_t* data, uint16_t c
 }
 
 bool FpgaBridge::resetHold() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_RESET_HOLD);
     return recvStatus();
 }
 
 bool FpgaBridge::resetRelease() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_RESET_REL);
     return recvStatus();
 }
 
 bool FpgaBridge::systemResetHold() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_SYS_RESET_HOLD);
     return recvStatus();
 }
 
 bool FpgaBridge::systemResetRelease() {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_SYS_RESET_REL);
     return recvStatus();
 }
 
 bool FpgaBridge::pokeRom(uint8_t idx, uint16_t addr, uint8_t value) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t buf[5] = {
         CMD_POKE_ROM,
@@ -583,6 +663,7 @@ bool FpgaBridge::pokeRom(uint8_t idx, uint16_t addr, uint8_t value) {
 
 bool FpgaBridge::pokeRomBlock(uint8_t idx, uint16_t start_addr,
                               const uint8_t* data, uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     // count==0 means 256 in the wire protocol; reject anything larger.
     if (count > 256) return false;
     drain();
@@ -610,6 +691,7 @@ bool FpgaBridge::loadRom(uint8_t idx, const uint8_t* data, size_t len) {
 }
 
 bool FpgaBridge::pokeSdramBlock(uint32_t addr, const uint8_t* data, uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     // count==0 means 256 in the wire protocol; reject anything larger.
     if (count > 256) return false;
     drain();
@@ -643,6 +725,7 @@ bool FpgaBridge::pokeSdramStream(uint32_t addr, const uint8_t* data, uint16_t co
 
 bool FpgaBridge::pokeSdramStreamChunk(uint32_t addr, const uint8_t* data,
                                       uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (!data || count == 0 || count > SDRAM_STREAM_MAX_BYTES)
         return false;
     drain();
@@ -659,6 +742,7 @@ bool FpgaBridge::pokeSdramStreamChunk(uint32_t addr, const uint8_t* data,
 }
 
 bool FpgaBridge::audioPcmStatus(AudioPcmStatus& status) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     writeByte(CMD_AUDIO_PCM_STATUS);
     if (!recvStatus())
@@ -674,6 +758,7 @@ bool FpgaBridge::audioPcmStatus(AudioPcmStatus& status) {
 }
 
 bool FpgaBridge::writeAudioPcm(const uint8_t* data, uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (!data || count == 0)
         return false;
 
@@ -749,6 +834,7 @@ bool FpgaBridge::writeWtsEvents(const uint8_t* data, uint16_t count) {
 }
 
 bool FpgaBridge::writeWtsEventsChunk(const uint8_t* data, uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (!data || count == 0 || count > WTS_EVENT_STREAM_MAX_BYTES ||
         (count % 6) != 0) {
         return false;
@@ -765,6 +851,7 @@ bool FpgaBridge::writeWtsEventsChunk(const uint8_t* data, uint16_t count) {
 }
 
 bool FpgaBridge::readSdramBlock(uint32_t addr, uint8_t count, uint8_t* buf) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t header[5] = {
         CMD_READ_SDRAM_BLK,
@@ -790,6 +877,7 @@ bool FpgaBridge::loadSdram(uint32_t base_addr, const uint8_t* data, size_t len) 
 }
 
 bool FpgaBridge::pokeBlock(uint16_t addr, const uint8_t* data, uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (count > 256) return false;
     drain();
     uint8_t header[4] = {
@@ -804,6 +892,7 @@ bool FpgaBridge::pokeBlock(uint16_t addr, const uint8_t* data, uint16_t count) {
 
 bool FpgaBridge::pokeVgcBlock(uint8_t space, uint16_t start_addr,
                               const uint8_t* data, uint16_t count) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     if (count > 256) return false;
     drain();
     uint8_t header[5] = {
@@ -818,6 +907,7 @@ bool FpgaBridge::pokeVgcBlock(uint8_t space, uint16_t start_addr,
 }
 
 bool FpgaBridge::fillVgcBlock(uint8_t space, uint16_t start_addr, uint8_t value) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t header[5] = {
         CMD_FILL_VGC_BLK,
@@ -832,6 +922,7 @@ bool FpgaBridge::fillVgcBlock(uint8_t space, uint16_t start_addr, uint8_t value)
 
 bool FpgaBridge::readVgcBlock(uint8_t space, uint16_t start_addr,
                               uint8_t count, uint8_t* buf) {
+    FPGA_LOCK_OR_RETURN_FALSE();
     drain();
     uint8_t header[5] = {
         CMD_READ_VGC_BLK,

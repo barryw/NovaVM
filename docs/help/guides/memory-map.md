@@ -30,13 +30,15 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | B9F0--B9FF | 16 B | Boot/runtime coordination flags |
 | BA00--BA3F | 64 B | Expansion Memory Controller (XMC) registers |
 | BA40--BA4F | 16 B | Timer Controller registers |
-| BA50--BA56 | 7 B | Hosted Music Status and Voice Note Readback (6 voices) |
+| BA50--BA62 | 19 B | Hosted Music Status and Voice Note Readback (14 voices) |
 | BA63--BA75 | 19 B | DMA Controller registers |
-| BA83--BA9B | 25 B | Blitter Controller registers |
+| BA83--BA9B, BAA2 | 26 B | Blitter Controller registers |
 | BA9C--BAA1 | 6 B | Board Input registers |
+| BAA3--BAA8 | 6 B | USB HID diagnostic registers (ULX3S US2) |
 | BAB0--BB1F | 112 B | File metadata buffer |
 | BB20--BB4F | 48 B | Math Coprocessor registers |
 | BB50--BB8D | 62 B | SID sound-effect runtime state |
+| BB8E--BBCD | 64 B | Active MIDI/WTS soundfont name metadata |
 | BC00--BFFF | 1,024 B | XMC Memory Windows (4 x 256-byte mapped pages) |
 | C000--FFFF | 16,384 B | ROM (NovaBASIC interpreter) |
 | D400--D41F | 32 B | SID chip registers (inside ROM range; writes intercepted) |
@@ -47,9 +49,10 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 The address range A020--A03E is reserved for language/host services. Unlisted
 addresses in A0ED--A0EF and A200--A9FF are not claimed by any coprocessor and
 fall through to the underlying flat RAM.
-The ranges BAA2--BAAF and BB8E--BBFF are similarly unallocated RAM.
+The range BAA9--BAAF is similarly unallocated RAM.
 BAB0--BB1F is the file metadata buffer, BB20--BB4F is the math coprocessor,
-and BB50--BB8D is used by NovaBASIC's SID sound-effect scheduler.
+BB50--BB8D is used by NovaBASIC's SID sound-effect scheduler, and
+BB8E--BBCD stores the active MIDI/WTS soundfont name.
 SID registers at D400--D43F occupy space within the ROM address range
 but are intercepted on write by the SID chip emulators.
 :::
@@ -115,6 +118,41 @@ The visual BASIC demo `docs/programs/board_input_demo.bas` reads these registers
 each frame and lights on-screen indicators for the live button and DIP-switch
 state. `docs/programs/board_input_irq_demo.bas` uses the IRQ registers so the
 visual state is refreshed only after a debounced input change.
+
+## USB HID Diagnostic Registers
+
+The USB HID diagnostic registers are for ULX3S hardware bring-up on the US2 USB
+port. They are not a general application input ABI; normal keyboard input still
+arrives through the VGC keyboard queue. The current FPGA host core supports
+low-speed USB HID devices only. Software-only hosts return zero for these
+registers.
+
+| **Address** | **Name** | **Access** | **Description** |
+| --- | --- | --- | --- |
+| $BAA3 | UsbHidStatus | RO | Status bitfield described below. |
+| $BAA4 | UsbHidDeviceType | RO | Device type reported by the host core; `1` means keyboard. |
+| $BAA5 | UsbHidLastScan | RO | Last HID scan code observed in a keyboard report. |
+| $BAA6 | UsbHidLastAscii | RO | Last ASCII byte emitted into Nova's keyboard stream. |
+| $BAA7 | UsbHidReportCount | RO | Wrapping count of keyboard HID reports received. |
+| $BAA8 | UsbHidKeyCount | RO | Wrapping count of key events emitted into Nova's keyboard stream. |
+
+`UsbHidStatus` bit layout:
+
+| Bit | Mask | Meaning |
+| --- | --- | --- |
+| 0 | $01 | USB host reset released. |
+| 1 | $02 | D- line sampled high. |
+| 2 | $04 | D+ line sampled high. |
+| 3 | $08 | Host core has reported a non-zero device type. |
+| 4 | $10 | Host core reports a keyboard device. |
+| 5 | $20 | At least one keyboard HID report has been received. |
+| 6 | $40 | At least one key byte has been emitted to Nova. |
+| 7 | $80 | Host core reported a connection or protocol error. |
+
+For line-state diagnosis, no attached device usually reads D-=0 and D+=0,
+low-speed USB idle reads D-=1 and D+=0, and full-speed USB idle reads D-=0 and
+D+=1. A full-speed-only keyboard can therefore electrically attach while still
+being unsupported by the current low-speed host core.
 
 ## Math Coprocessor Registers
 
@@ -360,23 +398,26 @@ The timer fires an IRQ every *divisor* video frames (at 60 Hz).
 A divisor of 1 fires every frame; a divisor of 60 fires once per second.
 Reading `TimerStatus` clears the pending IRQ flag.
 
-### Hosted Music Status (BA50--BA56)
+### Hosted Music Status (BA50--BA62)
 
 | **Address** | **Access** | **Description** |
 | --- | --- | --- |
-| $BA50 | RO | Hosted music status flags: bit 0 = hosted SFX playing, bit 1 = hosted music playing. Direct BASIC `SOUND` is not reflected here. |
+| $BA50 | RO | Hosted music status flags: bit 0 = hosted SFX playing, bit 1 = hosted music playing, bit 2 = SID source, bit 3 = WTS/MIDI source, bit 4 = hosted music or soundfont load in progress. Direct BASIC `SOUND` is not reflected here. |
 | $BA51 | RO | Voice 1 current MIDI note (0 = silent). SID 1, voice 1. |
 | $BA52 | RO | Voice 2 current MIDI note (0 = silent). SID 1, voice 2. |
 | $BA53 | RO | Voice 3 current MIDI note (0 = silent). SID 1, voice 3. |
 | $BA54 | RO | Voice 4 current MIDI note (0 = silent). SID 2, voice 1. |
 | $BA55 | RO | Voice 5 current MIDI note (0 = silent). SID 2, voice 2. |
 | $BA56 | RO | Voice 6 current MIDI note (0 = silent). SID 2, voice 3. |
+| $BA57--$BA5E | RO | Voices 7--14 current MIDI notes (0 = silent). WTS voices 1--8. |
+| $BA5F--$BA60 | RO | Elapsed hosted playback frames at 60 Hz, little-endian. |
+| $BA61--$BA62 | RO | Total hosted playback frames at 60 Hz, little-endian when known. |
 
 These registers are read by the `PLAYING` and `MNOTE()` functions.
 
 ## DMA Controller Register Map
 
-The DMA Controller occupies BA60--BA7F and provides bulk memory transfers
+The DMA Controller occupies BA63--BA75 and provides bulk memory transfers
 across six unified memory spaces. Writing $01 to `DmaCmd` triggers
 the configured operation; poll `DmaStatus` for completion.
 
@@ -419,45 +460,55 @@ the configured operation; poll `DmaStatus` for completion.
 
 ## Blitter Controller Register Map
 
-The Blitter Controller occupies BA80--BA9F and provides 2D rectangular
-copy and fill operations with configurable row stride. It shares the same
-six memory spaces as the DMA controller. Writing $01 to `BltCmd`
-triggers the configured operation.
+The Blitter Controller occupies BA83--BA9B plus the sparse rotate-angle
+register at BAA2. It provides 2D rectangular copy, fill, color-key, and
+square-region rotate operations with configurable row stride. It shares the
+same memory spaces as the DMA controller. Writing $01 to `BltCmd` triggers
+the configured operation.
 
 ### Blitter Registers
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
-| $BA80 | BltCmd | W | Command byte; write $01 to start blit. |
-| $BA81 | BltStatus | RO | Status: 00=idle,01=busy, 02=ok,03=error. |
-| $BA82 | BltErrCode | RO | Error detail code (see Appendix \refchap:limits). |
-| $BA83 | BltSrcSpace | R/W | Source memory space (0--5). |
-| $BA84 | BltDstSpace | R/W | Destination memory space (0--5). |
-| $BA85 | BltSrcL | R/W | Source base address low byte. |
-| $BA86 | BltSrcM | R/W | Source base address mid byte. |
-| $BA87 | BltSrcH | R/W | Source base address high byte. |
-| $BA88 | BltDstL | R/W | Destination base address low byte. |
-| $BA89 | BltDstM | R/W | Destination base address mid byte. |
-| $BA8A | BltDstH | R/W | Destination base address high byte. |
-| $BA8B | BltWidthL | R/W | Rectangle width low byte. |
-| $BA8C | BltWidthH | R/W | Rectangle width high byte. |
-| $BA8D | BltHeightL | R/W | Rectangle height low byte. |
-| $BA8E | BltHeightH | R/W | Rectangle height high byte. |
-| $BA8F | BltSrcStrideL | R/W | Source row stride low byte. |
-| $BA90 | BltSrcStrideH | R/W | Source row stride high byte. |
-| $BA91 | BltDstStrideL | R/W | Destination row stride low byte. |
-| $BA92 | BltDstStrideH | R/W | Destination row stride high byte. |
-| $BA93 | BltMode | R/W | Mode flags: bit 0 = fill, bit 1 = color-key. |
-| $BA94 | BltFillValue | R/W | Fill byte (when bit 0 of BltMode is set). |
-| $BA95 | BltColorKey | R/W | Transparent color (when bit 1 of BltMode is set). |
-| $BA96 | BltCountL | RO | Bytes written, low byte. |
-| $BA97 | BltCountM | RO | Bytes written, mid byte. |
-| $BA98 | BltCountH | RO | Bytes written, high byte. |
+| $BA83 | BltCmd | W | Command byte; write $01 to start blit. |
+| $BA84 | BltStatus | RO | Status: 00=idle, 01=busy, 02=ok, 03=error. |
+| $BA85 | BltErrCode | RO | Error detail code (see Appendix \refchap:limits). |
+| $BA86 | BltSrcSpace | R/W | Source memory space (0--5, 7). |
+| $BA87 | BltDstSpace | R/W | Destination memory space (0--5, 7). |
+| $BA88 | BltSrcL | R/W | Source base address low byte. |
+| $BA89 | BltSrcM | R/W | Source base address mid byte. |
+| $BA8A | BltSrcH | R/W | Source base address high byte. |
+| $BA8B | BltDstL | R/W | Destination base address low byte. |
+| $BA8C | BltDstM | R/W | Destination base address mid byte. |
+| $BA8D | BltDstH | R/W | Destination base address high byte. |
+| $BA8E | BltWidthL | R/W | Rectangle width low byte. |
+| $BA8F | BltWidthH | R/W | Rectangle width high byte. |
+| $BA90 | BltHeightL | R/W | Rectangle height low byte. |
+| $BA91 | BltHeightH | R/W | Rectangle height high byte. |
+| $BA92 | BltSrcStrideL | R/W | Source row stride low byte. |
+| $BA93 | BltSrcStrideH | R/W | Source row stride high byte. |
+| $BA94 | BltDstStrideL | R/W | Destination row stride low byte. |
+| $BA95 | BltDstStrideH | R/W | Destination row stride high byte. |
+| $BA96 | BltMode | R/W | Mode flags: bit 0 = fill, bit 1 = color-key, bit 2 = rotate. |
+| $BA97 | BltFillValue | R/W | Fill byte (when bit 0 of BltMode is set). |
+| $BA98 | BltColorKey | R/W | Transparent color for color-key mode; rotate background byte for out-of-bounds source samples. |
+| $BA99 | BltCountL | RO | Bytes written, low byte. |
+| $BA9A | BltCountM | RO | Bytes written, mid byte. |
+| $BA9B | BltCountH | RO | Bytes written, high byte. |
+| $BAA2 | BltRotateAngle | R/W | 8-bit rotate angle; 0..255 is one full turn. Used when BltMode bit 2 is set. |
 
 ::: note
 When color-key mode is active (bit 1 of `BltMode`), source pixels
 matching `BltColorKey` are skipped and the destination byte is left
 unchanged. This enables transparent sprite and graphics overlays.
+
+When rotate mode is active (bit 2 of `BltMode`), width must equal height and
+may be at most 256 bytes. The source is never modified; the blitter samples
+the source square and writes the rotated result directly to the destination
+square. Out-of-bounds source samples write `BltColorKey`, so callers can
+preselect the transparent color for the rotated buffer. Rotate mode rejects
+overlapping source and destination ranges in the same memory space; use a
+separate destination buffer.
 :::
 
 ## NIC Register Map

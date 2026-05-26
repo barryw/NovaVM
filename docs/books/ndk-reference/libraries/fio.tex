@@ -1,0 +1,257 @@
+\chapter{FIO Library}
+
+The FIO library is the assembly programmer's bridge to NovaHost storage and
+host-backed services. It is not a POSIX-style file API and it is not a normal
+6502 disk controller. It is a small command mailbox at \novacode{\$B9A0-\$B9EF}
+that NovaHost watches, executes, and reports through status registers.
+
+\begin{novanote}
+Use \novacode{fio.inc} for declarations and argument aliases. Include
+\novacode{fio.s} after the code that calls it. The implementation emits only
+referenced routines by default, so including it before the call sites can strip
+the routines you expected to link.
+\end{novanote}
+
+\begin{lstlisting}
+.include "fio.inc"
+
+      ; program code that calls fio_load, fio_gload, etc.
+
+.include "fio.s"
+\end{lstlisting}
+
+Define \novacode{NOVA\_EMIT\_ALL\_RUNTIME} or
+\novacode{FIO\_EMIT\_ALL\_RUNTIME} before including \novacode{fio.s} when a ROM
+or debugging build should keep the whole implementation.
+
+\section{What FIO Is}
+
+FIO is a hardware-facing command protocol plus a small set of assembly helpers.
+Your program fills filename, address, length, and mode registers, then issues a
+command. NovaHost performs the storage operation and writes back status, error,
+size, and directory metadata.
+
+\begin{center}
+\novasvg[width=\textwidth]{build/diagrams/fio-architecture}
+\end{center}
+
+There are four pieces to keep straight:
+
+\begin{description}
+\item[Command register] \novacode{FIO\_CMD} triggers work when written. The
+library helpers use the command constants from \novacode{nova.inc}.
+\item[Status and error registers] \novacode{FIO\_STATUS} becomes
+\novacode{FIO\_STATUS\_OK} or \novacode{FIO\_STATUS\_ERROR}. On error,
+\novacode{FIO\_ERRCODE} distinguishes not found, I/O failure, end of directory,
+disk full, and not mounted.
+\item[Filename buffer] \novacode{FIO\_NAME} holds up to 63 bytes and
+\novacode{FIO\_NAMELEN} tells the host how many bytes are valid.
+\item[Argument registers] The same register bytes are reused by different
+commands. For example, \novacode{FIO\_SRCL/H} can be a CPU address for
+\novacode{fio\_load}, RNG result bytes after \novacode{fio\_rng}, or the low 16
+bits of an \novacode{XPAGE} file offset.
+\end{description}
+
+This reuse is intentional. Treat FIO registers as a command mailbox, not as
+persistent application state.
+
+\section{Command Lifecycle}
+
+Most callers should use \novacode{fio\_exec} or one of the named wrappers such
+as \novacode{fio\_load}. \novacode{fio\_exec} clears the previous status and
+error, writes the command byte, waits until the host reports completion, and
+returns the shared runtime result: A is 0 for success and 1 for error.
+
+\begin{center}
+\novasvg[width=\textwidth]{build/diagrams/fio-command-flow}
+\end{center}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Helper} & \textbf{Use} \\
+\midrule
+\novacode{fio\_issue} & Write A to \novacode{FIO\_CMD} and return without
+waiting or checking status. Use this only when the caller owns the polling. \\
+\novacode{fio\_exec} & Issue A as a command, wait for completion, and return
+A=0 or A=1. \\
+\novacode{fio\_check} & Convert the current \novacode{FIO\_STATUS} value into
+the shared A=0/A=1 result. \\
+\novacode{fio\_clear\_error} & Clear the host-visible error latch before a retry
+or before returning to UI code that displays status. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The named wrappers all jump through \novacode{fio\_exec}. A failed command
+returns A=1, but the useful reason is still in \novacode{FIO\_ERRCODE}. Check it
+before preparing another FIO command, because the next command reuses the same
+registers.
+
+\section{Filename Handling}
+
+Every file command reads \novacode{FIO\_NAME} and \novacode{FIO\_NAMELEN}.
+Programs can write those registers directly, but pointer-based code should use
+\novacode{fio\_copy\_name}. It validates the length range 1..63, copies bytes
+from \novacode{FIO\_ARG\_NAMEPTR\_L/H}, and returns A=0 on success.
+
+\begin{lstlisting}
+copy_level_name:
+      LDA   #<level_name
+      STA   FIO_ARG_NAMEPTR_L
+      LDA   #>level_name
+      STA   FIO_ARG_NAMEPTR_H
+      LDA   #level_name_end - level_name
+      STA   FIO_ARG_NAMELEN
+      JSR   fio_copy_name
+      RTS
+
+level_name:
+      .byte "LEVEL1"
+level_name_end:
+\end{lstlisting}
+
+The host accepts simple host filenames and mounted-device paths. Explicit
+extensions matter for data files: if no extension is supplied, RAM program
+loads look for \novacode{.bas} and then \novacode{.bin}; graphics transfers use
+\novacode{.gfx}; XRAM transfers use \novacode{.xram}; paged slices use
+\novacode{.bin}.
+
+\section{CPU RAM Loads And Saves}
+
+\novacode{fio\_load} moves a \novacode{.bas} or \novacode{.bin} file into CPU
+RAM. For \novacode{.bas}, the destination comes from \novacode{FIO\_SRCL/H}.
+For \novacode{.bin}, the file's two-byte load-address prefix supplies the
+destination and NovaHost writes that address back to \novacode{FIO\_SRCL/H}.
+The transferred payload size is returned in \novacode{FIO\_SIZEL/H}.
+
+\begin{lstlisting}
+load_level:
+      LDA   #<level_name
+      STA   FIO_ARG_NAMEPTR_L
+      LDA   #>level_name
+      STA   FIO_ARG_NAMEPTR_H
+      LDA   #level_name_end - level_name
+      STA   FIO_ARG_NAMELEN
+      JSR   fio_copy_name
+      BNE   @error
+
+      LDA   #<$6000
+      STA   FIO_SRCL
+      LDA   #>$6000
+      STA   FIO_SRCH
+      JSR   fio_load
+      BNE   @error
+      RTS
+
+@error:
+      LDA   FIO_ERRCODE
+      RTS
+
+level_name:
+      .byte "LEVEL1"
+level_name_end:
+\end{lstlisting}
+
+\novacode{fio\_save} uses \novacode{FIO\_SRCL/H} as the first CPU address and
+\novacode{FIO\_ENDL/H} as the exclusive end address. NovaHost writes a two-byte
+load-address prefix before the saved bytes. A default \novacode{.bas} save still
+loads to the caller-supplied \novacode{FIO\_SRCL/H}; an explicitly saved
+\novacode{.bin} file uses the prefix as its load address.
+
+\section{VGC, XRAM, And Paged Transfers}
+
+Real Nova applications should avoid byte-copying large assets through the CPU
+when a bulk path exists. FIO can load directly into VGC memory, stream whole
+files to XRAM, or page slices of a file into XRAM, CPU RAM, or VGC memory.
+
+\begin{center}
+\novasvg[width=\textwidth]{build/diagrams/fio-transfer-paths}
+\end{center}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Path} & \textbf{When to use it} \\
+\midrule
+\novacode{fio\_gload}, \novacode{fio\_gsave} & Bulk load or save VGC memory.
+Set \novacode{FIO\_GSPACE}, \novacode{FIO\_GADDRL/H}, and
+\novacode{FIO\_GLENL/H}. A zero load length means the whole file. \\
+\novacode{FIO\_CMD\_XLOAD}, \novacode{FIO\_CMD\_XSAVE} & Stream a file to or
+from flat XRAM. Use \novacode{fio\_prepare\_xram\_transfer} to copy the
+pointer filename, 24-bit XRAM address, and length into FIO registers, then call
+\novacode{fio\_run}. XLOAD accepts length zero for the whole file; XSAVE
+requires a nonzero length. \\
+\novacode{FIO\_CMD\_XPAGE} & Load a slice of a \novacode{.bin} file. The pager
+library wraps this as \novacode{pager\_load\_file\_page}; target 0 is XRAM,
+target 1 is CPU RAM, and target 2 is VGC memory. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+For VGC transfers, \novacode{FIO\_GSPACE} is the VGC memory space and
+\novacode{FIO\_GADDRL/H} is the 16-bit offset inside that space. For XRAM
+transfers, the same bytes become a 24-bit address:
+\novacode{FIO\_GADDRL}, \novacode{FIO\_GADDRH}, then
+\novacode{FIO\_GSPACE}.
+
+\section{Directory And Filesystem Commands}
+
+\novacode{fio\_dir\_open} opens a listing and populates the first entry.
+\novacode{fio\_dir\_read} advances to the next entry. When there are no more
+entries, the host reports \novacode{FIO\_STATUS\_ERROR} with
+\novacode{FIO\_ERR\_EOD}; that is normal iteration termination, not a broken
+device.
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Result register} & \textbf{Directory meaning} \\
+\midrule
+\novacode{FIO\_DIRTYPE} & Entry type: 0 for BASIC/default, 1 for SID, 2 for
+BIN, 3 for MID, and 5 for directory. \\
+\novacode{FIO\_NAME}, \novacode{FIO\_NAMELEN} & Display name for the current
+entry. Some file types append useful load metadata to the display string. \\
+\novacode{FIO\_SIZEL/H}, \novacode{FIO\_SIZE2} & 24-bit data size for the
+entry. BASIC and BIN sizes exclude the two-byte load-address prefix. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\novacode{fio\_pwd}, \novacode{fio\_cd}, \novacode{fio\_mkdir}, and
+\novacode{fio\_rmdir} use the same filename buffer. \novacode{fio\_delete}
+routes through the host's program/file delete path; on hosted BASIC program
+files it also removes the companion \novacode{.md} document when present. Host
+directory devices allow paths and mounted-device prefixes; invalid names or
+missing mounted media report through the normal error registers.
+
+\section{Runtime Services}
+
+\novacode{fio\_load\_runtime} loads a 16K runtime ROM image into the primary
+\novacode{\$C000} ROM bank. Code issuing this command must be running from RAM,
+because the host can replace the ROM bank while the command is in progress.
+
+\novacode{fio\_rng} asks NovaHost for 32 random bits and returns them in
+\novacode{FIO\_RNG0} through \novacode{FIO\_RNG3}. These aliases overlap
+\novacode{FIO\_SRCL/H} and \novacode{FIO\_ENDL/H}, so consume the random value
+before preparing another command.
+
+\section{Using FIO Well}
+
+\begin{itemize}
+\item Always branch on the A result from the helper, then read
+\novacode{FIO\_ERRCODE} before issuing another command.
+\item Use \novacode{fio\_copy\_name} for pointer-based filenames; it catches the
+empty and too-long cases before the host sees them.
+\item Use the bulk paths for assets. Load graphics into VGC memory with
+\novacode{fio\_gload}, stage large data in XRAM with XLOAD, and use the pager
+when only one slice of a larger file is needed.
+\item Do not assume \novacode{FIO\_NAME} survives across subsystems. Directory
+reads, current-directory queries, and other host services all reuse the same
+buffer.
+\item Clear stale host-visible errors with \novacode{fio\_clear\_error} before
+returning to code that polls FIO status independently.
+\end{itemize}

@@ -14,8 +14,8 @@ for stub in "$SRC"/stubs/*.bas; do
     awk 'FNR==1 && NR!=1 { print "" } { print }' "$stub" "$SRC/common.bas" > "$BUILD/$name"
 done
 
-dotnet run --project "$ROOT/e6502.NDI" -- create "$IMAGE" --size 800 --label FUNNGAMES
+dotnet run --project "$ROOT/e6502.Nova" -- create "$IMAGE" --size 800 --label FUNNGAMES
 for source in "$BUILD"/*.bas; do
-    dotnet run --project "$ROOT/e6502.NDI" -- import "$IMAGE" "$source" / --tokenize >/dev/null
+    dotnet run --project "$ROOT/e6502.Nova" -- import "$IMAGE" "$source" / --tokenize >/dev/null
 done
-dotnet run --project "$ROOT/e6502.NDI" -- validate "$IMAGE"
+dotnet run --project "$ROOT/e6502.Nova" -- validate "$IMAGE"

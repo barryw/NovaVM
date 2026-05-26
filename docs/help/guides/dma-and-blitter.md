@@ -154,13 +154,27 @@ over five rows and an inner loop over twenty columns, each issuing a POKE.
 
 ### Color-key transparency
 
-At the register level, bit 1 of the blitter mode register (`$BA93`)
+At the register level, bit 1 of the blitter mode register (`$BA96`)
 enables **color-key** mode: source bytes that equal the color key value
-(stored in `$BA95`) are skipped, leaving the destination byte
+(stored in `$BA98`) are skipped, leaving the destination byte
 unchanged. This is sprite-style transparency for arbitrary memory regions.
-The `BLITCOPY` keyword does not expose this flag directly; use
-`POKE $BA93, 2` before issuing a raw blitter start
-(`POKE $BA80, 1`) to enable it.
+
+### Hardware rotate
+
+At the register level, bit 2 of `BltMode` (`$BA96`) enables rotate mode.
+`BltRotateAngle` (`$BAA2`) is an 8-bit angle where 0..255 is one full turn.
+Rotate mode requires `BltWidth == BltHeight`, with a maximum square size of
+256 bytes per side. It samples the source square and writes the rotated result
+to the destination square. The source is not modified. Out-of-bounds source
+samples are written as `BltColorKey` (`$BA98`), which lets a rotated
+virtual-sprite buffer keep its transparent background.
+
+Rotate mode is intended for distinct source and destination buffers. If the
+source and destination ranges overlap in the same memory space, the hardware
+rejects the operation with `BltErrBadArgs` ($04).
+The current BASIC `BLITCOPY` keyword does not expose rotate directly; use the
+raw blitter registers (`BltMode`=$BA96, `BltRotateAngle`=$BAA2, `BltCmd`=$BA83)
+or the vsprite rotation helper once the runtime wrapper is available.
 
 ### Status functions
 

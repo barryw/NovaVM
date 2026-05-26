@@ -144,9 +144,11 @@ card and exposes the current hardware management surface:
 - boot assets and staged configuration files,
 - HTTP and TCP management/debug endpoints.
 
-Today, command-line disk-image work lives in `e6502.NDI`. Broader `nova`
-device-manager tooling for disks, ROMs, soundfonts, boot assets, and hardware
-status is still planning work, not a finished CLI.
+Today, command-line disk-image and SD asset management work lives in
+`e6502.Nova`. The CLI is `nova`; NDI remains the disk-image format used for
+floppies and hard drives. Current command syntax and NativeAOT publish
+instructions are documented in `docs/books/nova-cli-guide`; the disk-image
+format itself is included in that same book.
 
 ## MCP Integration
 
@@ -177,7 +179,8 @@ Useful target-specific commands:
 dotnet run --project e6502.Avalonia       # Desktop reference host
 dotnet run --project e6502.CLI            # Headless BASIC host
 dotnet run --project e6502.MCP            # MCP bridge
-dotnet run --project e6502.NDI            # NDI image utility
+dotnet run --project e6502.Nova           # Nova CLI, development mode
+tools/publish-nova-cli.sh                 # NativeAOT single-binary Nova CLI
 make -C ehbasic                           # Rebuild NovaBASIC ROM artifacts
 make -C e6502.FPGA                        # Build the Verilator simulator
 make -C e6502.FPGA run                    # Run the Verilator simulator
@@ -197,15 +200,15 @@ ESP32 NovaHost builds use the Arduino ESP32 toolchain.
 | `e6502.Browser/` | Browser/WebAssembly host experiment sharing Avalonia hardware/rendering code |
 | `e6502.CLI/` | Terminal-hosted NovaBASIC runner |
 | `e6502.MCP/` | MCP server for external control of the Avalonia host |
-| `e6502.NDI/` | NDI disk-image command-line tooling |
+| `e6502.Nova/` | Nova command-line tooling for NDI images and NovaHost assets |
 | `e6502.Storage/` | NDI and host-directory storage abstractions |
 | `e6502.Tools/` | Host-side utilities such as SID relocation/conversion helpers |
 | `e6502Debugger/` | Windows Forms debugger project |
 | `e6502.FPGA/` | SystemVerilog RTL, Verilator simulation, ULX3S build flow, FPGA tests |
 | `e6502.ESP32/novahost/` | ESP32 companion firmware for SD, debug, ROM loading, and host services |
 | `ehbasic/` | NovaBASIC/EhBASIC source, extension ROM, XRAM runtime, token definitions |
-| `docs/help/` | User-facing NovaBASIC help book and command reference |
-| `docs/mapping/` | "Mapping the NovaVM" hardware/memory-map book sources |
+| `docs/books/` | PDF book source trees and build entry point |
+| `docs/help/` | User-facing NovaBASIC help content and command reference |
 | `docs/plans/` | Architecture, bring-up, and future feature planning docs |
 | `tests/integration/` | Assembly-level integration suites for simulator/hardware backends |
 | `e6502UnitTests/` | MSTest suite for CPU, devices, storage, editors, compiler, and host behavior |
@@ -218,8 +221,9 @@ The best current technical references are:
 - `docs/help/guides/assembly.md`
 - `docs/help/guides/expansion-memory.md`
 - `docs/help/guides/dma-and-blitter.md`
+- `docs/books/nova-cli-guide/`
 - `docs/fpga-debugging-workflow.md`
-- `docs/mapping/`
+- `docs/books/`
 - `docs/plans/`
 
 The docs are evolving along with the hardware. Recent planning documents are

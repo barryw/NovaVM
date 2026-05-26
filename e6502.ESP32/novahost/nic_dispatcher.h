@@ -33,7 +33,7 @@ private:
     static constexpr int BANK_SIZE = 64;
     static constexpr int MAX_SLOTS = 4;
     static constexpr int MAX_MSG_SIZE = 256;
-    static constexpr int MAX_QUEUE = 16;
+    static constexpr int MAX_QUEUE = 4;
 
     static constexpr int OFF_CMD       = 0x00;
     static constexpr int OFF_STATUS    = 0x01;

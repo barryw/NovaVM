@@ -486,6 +486,48 @@ File-backed playback is available as convenience BASIC commands:
 hosted music engine, and `MIDSTOP` stops it. `SFLOAD "name"` loads a new
 soundfont for MIDI playback.
 
+### Hosted Playback Status
+
+Assembly and NDK programs can poll `AUDIO_STATUS`/`MUSIC_STATUS` at `$BA50`.
+The status byte is updated during hosted SID/MIDI playback and during long
+asset loads such as soundfont loading:
+
+| **Symbol** | **Bit** | **Description** |
+| --- | --- | --- |
+| `AUDIO_STATUS_SFX` | `$01` | Hosted sound effect active. |
+| `AUDIO_STATUS_MUSIC` | `$02` | Hosted music playback active. |
+| `AUDIO_STATUS_SID` | `$04` | Current hosted music source uses SID voices. |
+| `AUDIO_STATUS_WTS` | `$08` | Current hosted music source uses WTS/MIDI voices. |
+| `AUDIO_STATUS_LOADING` | `$10` | Hosted music or soundfont assets are loading. |
+
+`SIDPLAY`, `MIDPLAY`, and `SFLOAD` in NovaBASIC are blocking commands, so the
+loading bit is primarily for assembly programs that issue FIO commands directly
+or otherwise keep a UI loop alive while the host finishes a load.
+
+### Hosted Playback Metadata
+
+When `SIDPLAY` or `MIDPLAY` starts playback, NovaHost publishes a single
+metadata block for the active song. SID and MIDI use the same ABI so players,
+visualizers, and other NDK programs do not need separate code paths.
+SID metadata comes from the SID header title, author, and copyright fields.
+MIDI/WTS metadata comes from the compiled `.nms` header when the stream was
+created by a metadata-aware Nova CLI; older streams fall back to the filename.
+
+| **Symbol** | **Address** | **Description** |
+| --- | --- | --- |
+| `AUDIO_META_TYPE` | `$BAB0` | `1` for SID, `3` for MIDI/WTS. |
+| `AUDIO_META_TITLE` | `$BAB3` | 32-byte null-padded title or filename fallback. |
+| `AUDIO_META_AUTHOR` | `$BAD3` | 32-byte null-padded author/composer when known. |
+| `AUDIO_META_COPYRIGHT` | `$BAF3` | 32-byte null-padded copyright/comment when known. |
+| `AUDIO_META_SONGS` | `$BB19` | SID subtune count or MIDI track count when known. |
+| `AUDIO_META_DURATION_L/H` | `$BB1A` | Duration in seconds when known. |
+| `AUDIO_META_FLAGS` | `$BB1C` | Music-specific flags. |
+| `AUDIO_META_SOUNDFONT` | `$BB8E` | 64-byte null-padded active MIDI/WTS soundfont name. Empty for SID playback. |
+
+SID flags currently include `AUDIO_META_FLAG_SID_6581`,
+`AUDIO_META_FLAG_SID_8580`, `AUDIO_META_FLAG_STEREO`, and
+`AUDIO_META_FLAG_NTSC`.
+
 ## Graphics File I/O
 
 NovaBASIC can save and load VGC memory spaces to disk:

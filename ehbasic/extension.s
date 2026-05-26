@@ -80,7 +80,7 @@ ExtEntry:
 
 ; --- Dispatch table (entries are handler_address - 1) ---
 ExtTable:
-      .word EXT_NCC-1         ; cmd 0: NCC confirmation dialog
+      .word EXT_UNSUPPORTED-1 ; cmd 0: reserved
       .word EXT_SFLOAD-1      ; cmd 1: SFLOAD soundfont
       .word EXT_DIR-1         ; cmd 2: DIR listing loop
       .word EXT_PWD-1         ; cmd 3: PWD print working directory
@@ -275,63 +275,6 @@ ext_upper:
       AND   #$DF
 @upper_done:
       RTS
-
-; =====================================================================
-; NCC handler — confirmation dialog then trigger NCC editor
-; =====================================================================
-EXT_NCC:
-      LDY   #$00
-@msg1:
-      LDA   @ncc_msg1,Y
-      BEQ   @msg1_done
-      STA   VGC_CHAROUT
-      INY
-      BNE   @msg1
-@msg1_done:
-      LDA   #$0D
-      STA   VGC_CHAROUT
-      LDA   #$0A
-      STA   VGC_CHAROUT
-
-      LDY   #$00
-@msg2:
-      LDA   @ncc_msg2,Y
-      BEQ   @msg2_done
-      STA   VGC_CHAROUT
-      INY
-      BNE   @msg2
-@msg2_done:
-
-@wait_key:
-      LDA   VGC_CHARIN
-      BEQ   @wait_key
-      CMP   #'Y'
-      BEQ   @do_ncc
-      CMP   #'y'
-      BEQ   @do_ncc
-
-      ; Not Y — echo char + CRLF, return
-      STA   VGC_CHAROUT
-      LDA   #$0D
-      STA   VGC_CHAROUT
-      LDA   #$0A
-      STA   VGC_CHAROUT
-      LDA   #$00
-      RTS
-
-@do_ncc:
-      STA   VGC_CHAROUT       ; echo Y
-      LDA   #$0D
-      STA   VGC_CHAROUT
-      LDA   #$0A
-      STA   VGC_CHAROUT
-      LDA   #ROMSWAP_NCCEDIT
-      STA   REG_ROMSWAP
-      LDA   #$00
-      RTS
-
-@ncc_msg1: .byte "THIS WILL CLEAR THE BASIC PROGRAM",0
-@ncc_msg2: .byte "ARE YOU SURE? (Y/N) ",0
 
 ; =====================================================================
 ; DIR handler — list directory entries
@@ -1478,6 +1421,8 @@ EXT_BLTFILL:
 
       .include "blitter.s"
       .include "copper.s"
+AUDIO_POINTER_FILE_HELPERS = 0
+NOVA_EMIT_ALL_RUNTIME = 1
       .include "audio.s"
       .include "rng.s"
       .include "xram.s"

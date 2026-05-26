@@ -34,7 +34,7 @@ public class MidiAutoSoundfontTests
             Assert.AreEqual(0, wts.InstrumentCount);
 
             var fio = MakeFio(dir, wts);
-            MidiAutoSoundfont.TryLoad(fio, wts);
+            Assert.IsTrue(MidiAutoSoundfont.TryLoad(fio, wts));
 
             Assert.IsTrue(wts.InstrumentCount > 0);
         }
@@ -59,10 +59,10 @@ public class MidiAutoSoundfontTests
             var wts = new WavetableSynth();
             var fio = MakeFio(dir, wts);
 
-            MidiAutoSoundfont.TryLoad(fio, wts);
+            Assert.IsTrue(MidiAutoSoundfont.TryLoad(fio, wts));
             int count1 = wts.InstrumentCount;
 
-            MidiAutoSoundfont.TryLoad(fio, wts);
+            Assert.IsFalse(MidiAutoSoundfont.TryLoad(fio, wts));
             Assert.AreEqual(count1, wts.InstrumentCount);
         }
         finally
@@ -82,7 +82,7 @@ public class MidiAutoSoundfontTests
             var wts = new WavetableSynth();
             var fio = MakeFio(dir, wts);
 
-            MidiAutoSoundfont.TryLoad(fio, wts);
+            Assert.IsFalse(MidiAutoSoundfont.TryLoad(fio, wts));
             Assert.AreEqual(0, wts.InstrumentCount);
         }
         finally

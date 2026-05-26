@@ -19,7 +19,8 @@ This plan captures direction only. It is not an immediate implementation task.
   64 MB or larger, so the ESP API and CLI must stream transfers without
   buffering entire files in RAM.
 - No live remote editing of mounted `.ndi` files.
-- The current `e6502.NDI` CLI has outgrown its name. The long-term tool should be `nova`.
+- The command-line tool is `nova` and lives in `e6502.Nova`. NDI remains the
+  disk-image format for floppies and hard drives.
 - Uploading a raw `.sf2` soundfont should automatically convert it to Nova-native format before transfer.
 - Converted soundfont banks are also whole-file assets. First-pass `.nsfb`
   banks should be expected to be roughly the same order of size as their
@@ -55,9 +56,9 @@ Wireless management flow:
 
 This keeps the ESP-side implementation simple and avoids corruption risk from concurrent BASIC file I/O and remote writes.
 
-### Rename `ndi` Tool To `nova`
+### Nova CLI
 
-`e6502.NDI` started as a disk-image CLI, but the scope is now broader:
+`e6502.Nova` started as a disk-image CLI, but the scope is now broader:
 
 - device status and logs,
 - disk image management,
@@ -65,7 +66,8 @@ This keeps the ESP-side implementation simple and avoids corruption risk from co
 - language/personality ROM management,
 - future configuration and deployment flows.
 
-The user-facing command should become `nova`. The existing `ndi` command can remain as a compatibility alias or legacy subcommand during transition.
+The user-facing command is `nova`. NDI is the image format name, not the tool
+name.
 
 Suggested command shape:
 
@@ -421,16 +423,16 @@ POST /api/roms/default
 
 The CLI should use the higher-level endpoints where policy matters.
 
-## CLI Rename And Compatibility
+## CLI Shape
 
-The current `e6502.NDI` project can evolve in place initially, but the installed command should become `nova`.
+The current `e6502.Nova` project owns the installed `nova` command.
 
-Migration plan:
+Command plan:
 
-1. Add `nova` as the primary executable/command name.
-2. Keep `ndi` as a compatibility alias for disk-image-only workflows.
-3. Move current verbs under `nova disk` where practical.
-4. Keep old `ndi create`, `ndi import`, etc. working until docs and scripts migrate.
+1. Keep `nova` as the primary executable/command name.
+2. Keep NDI as the disk-image format name for floppy and hard-drive images.
+3. Move current local image verbs under a grouped command only if that makes
+   the user experience cleaner.
 
 Proposed command groups:
 
@@ -476,8 +478,8 @@ Remote disk upload should refuse to overwrite a currently mounted image unless t
 
 ## Phased Implementation
 
-1. Rename/scaffold `nova` CLI while keeping `ndi` compatibility.
-2. Formalize SD layout and remote whole-file disk image commands. *(First-pass typed upload/download/list/delete commands exist in `e6502.NDI`; installed command rename is still pending.)*
+1. Keep hardening the `e6502.Nova` CLI and its NativeAOT publish path.
+2. Formalize SD layout and remote whole-file disk image commands. *(First-pass typed upload/download/list/delete commands exist in `e6502.Nova`.)*
 3. Add soundfont upload command that converts SF2 to `.nsfb`.
 4. Add ESP `/soundfonts` listing and `SFLOAD` handling for `.nsfb`.
 5. Implement FPGA WTS metadata/sample memory loader.

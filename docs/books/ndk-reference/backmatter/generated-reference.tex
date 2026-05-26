@@ -1,0 +1,15 @@
+\chapter*{About This Generated Reference}
+\addcontentsline{toc}{chapter}{About This Generated Reference}
+
+The library reference in this book is generated from `@label` documentation
+blocks in `runtime/asm`. The generated JSON file is written next to the LaTeX
+output so other tools can consume the same API description.
+
+Mermaid diagrams can be added under `diagrams/` as `.mmd` files. The book
+Makefile renders them to SVG under `build/diagrams/`; LaTeX can then include
+the SVG assets through the shared book style.
+
+The generated reference should fail loudly when required structured fields are
+missing. That keeps the NDK documentation useful for assembly programmers and
+prevents the book from drifting away from the code.
+

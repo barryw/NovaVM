@@ -1907,15 +1907,15 @@ If any codes are wrong, update the constants in demo.s.
 Build the demo and import to the demo disk:
 ```bash
 cd ehbasic && make demo
-dotnet run --project e6502.NDI -- delete docs/programs/demo.ndi /AUTOBOOT.bin 2>/dev/null; true
-dotnet run --project e6502.NDI -- import docs/programs/demo.ndi ehbasic/demo.bin / --name AUTOBOOT.bin
-dotnet run --project e6502.NDI -- delete docs/programs/demo.ndi /KEYBOARD.bin 2>/dev/null; true
-dotnet run --project e6502.NDI -- import docs/programs/demo.ndi ehbasic/keyboard.bin / --name KEYBOARD.bin
+dotnet run --project e6502.Nova -- delete docs/programs/demo.ndi /AUTOBOOT.bin 2>/dev/null; true
+dotnet run --project e6502.Nova -- import docs/programs/demo.ndi ehbasic/demo.bin / --name AUTOBOOT.bin
+dotnet run --project e6502.Nova -- delete docs/programs/demo.ndi /KEYBOARD.bin 2>/dev/null; true
+dotnet run --project e6502.Nova -- import docs/programs/demo.ndi ehbasic/keyboard.bin / --name KEYBOARD.bin
 ```
 
 Verify the file list shows both files:
 ```bash
-dotnet run --project e6502.NDI -- dir docs/programs/demo.ndi
+dotnet run --project e6502.Nova -- dir docs/programs/demo.ndi
 ```
 
 **Step 3: Commit any fixes**
@@ -1985,18 +1985,18 @@ Expected: `basic.bin`, `keyboard.bin`, `demo.bin`, `tokens.json` all built succe
 
 ```bash
 # Remove old versions if they exist
-dotnet run --project e6502.NDI -- delete docs/programs/demo.ndi /AUTOBOOT.bin 2>/dev/null; true
-dotnet run --project e6502.NDI -- delete docs/programs/demo.ndi /KEYBOARD.bin 2>/dev/null; true
+dotnet run --project e6502.Nova -- delete docs/programs/demo.ndi /AUTOBOOT.bin 2>/dev/null; true
+dotnet run --project e6502.Nova -- delete docs/programs/demo.ndi /KEYBOARD.bin 2>/dev/null; true
 
 # Import fresh copies
-dotnet run --project e6502.NDI -- import docs/programs/demo.ndi ehbasic/demo.bin / --name AUTOBOOT.bin
-dotnet run --project e6502.NDI -- import docs/programs/demo.ndi ehbasic/keyboard.bin / --name KEYBOARD.bin
+dotnet run --project e6502.Nova -- import docs/programs/demo.ndi ehbasic/demo.bin / --name AUTOBOOT.bin
+dotnet run --project e6502.Nova -- import docs/programs/demo.ndi ehbasic/keyboard.bin / --name KEYBOARD.bin
 ```
 
 **Step 3: Verify disk contents**
 
 ```bash
-dotnet run --project e6502.NDI -- dir docs/programs/demo.ndi
+dotnet run --project e6502.Nova -- dir docs/programs/demo.ndi
 ```
 
 Expected output should show AUTOBOOT.bin and KEYBOARD.bin in the root alongside the 5 category directories.

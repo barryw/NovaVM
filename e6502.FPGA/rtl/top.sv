@@ -1,6 +1,7 @@
 // Top-level: 6502 CPU + VGC + Blitter + DMA + SID + 64KB RAM + 512KB XRAM
 // VGC snoops bus for register/charout writes, generates video
-// Blitter performs 2D DMA across all memory spaces ($BA83-$BA9B), stalls CPU via RDY
+// Blitter performs 2D DMA across all memory spaces ($BA83-$BA9B plus $BAA2), stalls CPU via RDY
+// Hosted music visualizer/status registers live at $BA50-$BA62
 // DMA performs 1D bulk copy/fill ($BA63-$BA75), stalls CPU via RDY
 // Blitter and DMA are mutually exclusive via RDY stall; top.sv muxes their
 // memory-port outputs into a single bus-master signal set (bm_*).
@@ -21,6 +22,14 @@ module top (
     // Board input state, active-high and already debounced by fpga_top.
     input  logic [7:0]  board_buttons,
     input  logic [7:0]  board_switches,
+
+    // FPGA-side USB HID diagnostics, synchronized by fpga_top.
+    input  logic [7:0]  usb_hid_status,
+    input  logic [7:0]  usb_hid_device_type,
+    input  logic [7:0]  usb_hid_last_scan,
+    input  logic [7:0]  usb_hid_last_ascii,
+    input  logic [7:0]  usb_hid_report_count,
+    input  logic [7:0]  usb_hid_key_count,
 
     input  logic        irq_n,
     input  logic        nmi_n,
@@ -141,6 +150,9 @@ module top (
     localparam XMC_REG_END  = 16'hBA3F;
     localparam XMC_WIN_BASE = 16'hBC00;  // 4x256-byte windows
     localparam XMC_WIN_END  = 16'hBFFF;
+    localparam MUSIC_REG_BASE = 16'hBA50; // Hosted music status/notes $BA50-$BA62
+    localparam MUSIC_REG_END  = 16'hBA62;
+    localparam MUSIC_REG_COUNT = MUSIC_REG_END - MUSIC_REG_BASE + 1;
     localparam MATH_BASE    = 16'hBB20;  // Math coprocessor $BB20-$BB4F
     localparam MATH_END     = 16'hBB4F;
     // SID address map
@@ -169,6 +181,17 @@ module top (
     localparam [7:0] BOARD_INPUT_IRQ_BUTTONS  = 8'h01;
     localparam [7:0] BOARD_INPUT_IRQ_SWITCHES = 8'h02;
     localparam [7:0] BOARD_INPUT_IRQ_MASK     = 8'h03;
+    // USB HID diagnostics ($BAA3-$BAA8). These are intentionally read-only
+    // and primarily for board bring-up: the current host core supports only
+    // low-speed USB HID devices on the ULX3S US2 port.
+    localparam USB_HID_STATUS       = 16'hBAA3;
+    localparam USB_HID_DEVICE_TYPE  = 16'hBAA4;
+    localparam USB_HID_LAST_SCAN    = 16'hBAA5;
+    localparam USB_HID_LAST_ASCII   = 16'hBAA6;
+    localparam USB_HID_REPORT_COUNT = 16'hBAA7;
+    localparam USB_HID_KEY_COUNT    = 16'hBAA8;
+    localparam USB_HID_BASE         = USB_HID_STATUS;
+    localparam USB_HID_END          = USB_HID_KEY_COUNT;
 
     // CPU bus
     wire [15:0] cpu_addr;
@@ -217,6 +240,9 @@ module top (
     wire       dbg_peek_board_input = dbg_peek_en &&
                                       (dbg_peek_addr >= BOARD_INPUT_BASE) &&
                                       (dbg_peek_addr <= BOARD_INPUT_END);
+    wire       dbg_poke_usb_hid = dbg_poke_en &&
+                                  (dbg_poke_addr >= USB_HID_BASE) &&
+                                  (dbg_poke_addr <= USB_HID_END);
 
     logic [7:0] board_input_irq_enable;
     logic [7:0] board_input_irq_status;
@@ -321,6 +347,27 @@ module top (
                     board_input_read_data = board_input_switch_changes & BOARD_SWITCH_MASK;
                 default:
                     board_input_read_data = 8'h00;
+            endcase
+        end
+    endfunction
+
+    function automatic logic [7:0] usb_hid_read_data(input logic [15:0] addr);
+        begin
+            unique case (addr)
+                USB_HID_STATUS:
+                    usb_hid_read_data = usb_hid_status;
+                USB_HID_DEVICE_TYPE:
+                    usb_hid_read_data = usb_hid_device_type;
+                USB_HID_LAST_SCAN:
+                    usb_hid_read_data = usb_hid_last_scan;
+                USB_HID_LAST_ASCII:
+                    usb_hid_read_data = usb_hid_last_ascii;
+                USB_HID_REPORT_COUNT:
+                    usb_hid_read_data = usb_hid_report_count;
+                USB_HID_KEY_COUNT:
+                    usb_hid_read_data = usb_hid_key_count;
+                default:
+                    usb_hid_read_data = 8'h00;
             endcase
         end
     endfunction
@@ -444,6 +491,15 @@ module top (
         xmc_regs[XMC_WINCTL_REG] = 8'h0F;
     end
 
+    // NovaHost publishes active SID/MIDI state here for assembly UIs.
+    // Keep it off main RAM so frequent visualizer pokes cannot perturb
+    // the CPU instruction/data read port while music is playing.
+    logic [7:0] music_regs [0:MUSIC_REG_COUNT-1];
+    initial begin
+        for (int i = 0; i < MUSIC_REG_COUNT; i++)
+            music_regs[i] = 8'h00;
+    end
+
     // XMC address decode — use mem_addr (frozen during CPU stall)
     wire xmc_reg_sel = (mem_addr >= XMC_REG_BASE && mem_addr <= XMC_REG_END);
     wire xmc_win_sel = (mem_addr >= XMC_WIN_BASE && mem_addr <= XMC_WIN_END);
@@ -477,13 +533,17 @@ module top (
     // so dpram outputs don't get overwritten by the new address.
     // =========================================================================
     wire cpu_in_rom = (mem_addr >= ROM_BASE);
+    wire music_reg_sel = (mem_addr >= MUSIC_REG_BASE && mem_addr <= MUSIC_REG_END);
+    wire [$clog2(MUSIC_REG_COUNT)-1:0] music_reg_off = mem_addr - MUSIC_REG_BASE;
     wire dma_reg_sel = (mem_addr >= 16'hBA63 && mem_addr <= 16'hBA75);
-    wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B);
+    wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B) ||
+                       (mem_addr == 16'hBAA2);
     wire math_reg_sel = (mem_addr >= MATH_BASE && mem_addr <= MATH_END);
     wire nic_reg_sel = (mem_addr >= 16'hA100 && mem_addr <= 16'hA13F);
     wire wts_reg_sel = (mem_addr >= WTS_BASE && mem_addr <= WTS_END);
     wire fio_reg_sel = (mem_addr >= 16'hB9A0 && mem_addr <= 16'hB9EF);
     wire board_input_sel = (mem_addr >= BOARD_INPUT_BASE && mem_addr <= BOARD_INPUT_END);
+    wire usb_hid_sel = (mem_addr >= USB_HID_BASE && mem_addr <= USB_HID_END);
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
                         (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0EC) ||
@@ -492,12 +552,14 @@ module top (
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
     logic r_dma_reg_sel, r_blt_reg_sel, r_math_reg_sel;
+    logic r_music_reg_sel;
     logic r_cpu_in_rom, r_ext_rom_active;
     logic r_vgc_read_sel;
     logic r_fio_reg_sel;
     logic r_nic_reg_sel;
     logic r_wts_reg_sel;
     logic r_board_input_sel;
+    logic r_usb_hid_sel;
     logic [5:0] r_xmc_reg_off;
 
     // Register decode signals every cycle — they align with dpram outputs
@@ -506,6 +568,7 @@ module top (
         r_xmc_win_sel     <= xmc_win_sel;
         r_xmc_win_enabled <= xmc_win_enabled;
         r_xmc_reg_sel     <= xmc_reg_sel;
+        r_music_reg_sel   <= music_reg_sel;
         r_dma_reg_sel     <= dma_reg_sel;
         r_blt_reg_sel     <= blt_reg_sel;
         r_math_reg_sel    <= math_reg_sel;
@@ -516,6 +579,7 @@ module top (
         r_nic_reg_sel     <= nic_reg_sel;
         r_wts_reg_sel     <= wts_reg_sel;
         r_board_input_sel <= board_input_sel;
+        r_usb_hid_sel     <= usb_hid_sel;
         r_xmc_reg_off     <= xmc_reg_off;
     end
 
@@ -633,6 +697,14 @@ module top (
     always_ff @(posedge clk)
         r_xmc_reg_data <= xmc_regs[xmc_reg_off];
 
+    logic [7:0] r_music_reg_data;
+    always_ff @(posedge clk) begin
+        if (music_reg_sel)
+            r_music_reg_data <= music_regs[music_reg_off];
+        else
+            r_music_reg_data <= 8'h00;
+    end
+
     // Registered blitter register read. blt_cpu_rdata is combinational on
     // cpu_addr (blitter.sv uses cpu_addr directly for blt_sel + reg_off), so
     // this capture also needs cpu_ce gating — same bug class as r_vgc_cpu_rdata.
@@ -733,6 +805,14 @@ module top (
             r_board_input_data <= 8'h00;
     end
 
+    logic [7:0] r_usb_hid_data;
+    always_ff @(posedge clk) begin
+        if (usb_hid_sel)
+            r_usb_hid_data <= usb_hid_read_data(mem_addr);
+        else
+            r_usb_hid_data <= 8'h00;
+    end
+
     // ==========================================================================
     // File I/O register bank ($B9A0-$B9EF). CPU writes captured here;
     // fio_event pulses on CPU write of non-zero to $B9A0 (FioCmd).
@@ -744,17 +824,28 @@ module top (
     wire       dbg_poke_fio = dbg_poke_en &&
                               (dbg_poke_addr >= 16'hB9A0) &&
                               (dbg_poke_addr <= 16'hB9EF);
+    wire       dbg_poke_music = dbg_poke_en &&
+                                (dbg_poke_addr >= MUSIC_REG_BASE) &&
+                                (dbg_poke_addr <= MUSIC_REG_END);
+    wire       dbg_peek_music = dbg_peek_en &&
+                                (dbg_peek_addr >= MUSIC_REG_BASE) &&
+                                (dbg_peek_addr <= MUSIC_REG_END);
+    wire [$clog2(MUSIC_REG_COUNT)-1:0] dbg_music_reg_off =
+        dbg_poke_en ? (dbg_poke_addr - MUSIC_REG_BASE) :
+                      (dbg_peek_addr - MUSIC_REG_BASE);
     wire       dbg_poke_vgc = dbg_poke_en &&
                               (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                                ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
                                ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0EC)) ||
                                ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
     wire       dbg_poke_blt = dbg_poke_en &&
-                              (dbg_poke_addr >= 16'hBA83) &&
-                              (dbg_poke_addr <= 16'hBA9B);
+                              (((dbg_poke_addr >= 16'hBA83) &&
+                                (dbg_poke_addr <= 16'hBA9B)) ||
+                               (dbg_poke_addr == 16'hBAA2));
     wire       dbg_peek_blt = dbg_peek_en &&
-                              (dbg_peek_addr >= 16'hBA83) &&
-                              (dbg_peek_addr <= 16'hBA9B);
+                              (((dbg_peek_addr >= 16'hBA83) &&
+                                (dbg_peek_addr <= 16'hBA9B)) ||
+                               (dbg_peek_addr == 16'hBAA2));
     wire       dbg_poke_math = dbg_poke_en &&
                                (dbg_poke_addr >= MATH_BASE) &&
                                (dbg_poke_addr <= MATH_END);
@@ -768,6 +859,10 @@ module top (
                               (dbg_peek_addr >= WTS_BASE) &&
                               (dbg_peek_addr <= WTS_END);
     wire [7:0] dbg_board_input_data = board_input_read_data(dbg_peek_addr);
+    wire       dbg_peek_usb_hid = dbg_peek_en &&
+                                  (dbg_peek_addr >= USB_HID_BASE) &&
+                                  (dbg_peek_addr <= USB_HID_END);
+    wire [7:0] dbg_usb_hid_data = usb_hid_read_data(dbg_peek_addr);
 
     fio fio_inst (
         .clk       (clk),
@@ -794,7 +889,7 @@ module top (
 
     // Bus-master register reads share one slot in the cpu_din mux chain so
     // DMA doesn't add a LUT level to the already-long ram_a_dout path.
-    // DMA ($BA63-$BA75) and blitter ($BA83-$BA9B) disjoint, so the sub-mux
+    // DMA ($BA63-$BA75) and blitter ($BA83-$BA9B plus $BAA2) disjoint, so the sub-mux
     // is a simple 2:1 that resolves in parallel with the main chain.
     wire        r_bm_reg_sel   = r_dma_reg_sel | r_blt_reg_sel;
     wire [7:0]  r_bm_cpu_rdata = r_dma_reg_sel ? r_dma_cpu_rdata
@@ -809,16 +904,19 @@ module top (
     // Selects are mutually exclusive (disjoint address ranges), so the
     // within-group priority order is for readability only.
     //
-    // Group A — XMC window + XMC regs + bus-master + math ($BB20-$BB4F).
+    // Group A — XMC window/regs, music status, bus-master, and math.
     wire [7:0] xmc_group_data =
         (r_xmc_win_sel && r_xmc_win_enabled) ? xram_a_dout  :
          r_xmc_win_sel                        ? 8'hFF        :
          r_xmc_reg_sel                        ? r_xmc_reg_data :
+         r_music_reg_sel                      ? r_music_reg_data :
          r_bm_reg_sel                         ? r_bm_cpu_rdata :
          r_board_input_sel                    ? r_board_input_data :
+         r_usb_hid_sel                        ? r_usb_hid_data :
                                                 r_math_cpu_rdata;
-    wire xmc_group_sel = r_xmc_win_sel | r_xmc_reg_sel | r_bm_reg_sel |
-                         r_board_input_sel | r_math_reg_sel;
+    wire xmc_group_sel = r_xmc_win_sel | r_xmc_reg_sel | r_music_reg_sel |
+                         r_bm_reg_sel | r_board_input_sel | r_usb_hid_sel |
+                         r_math_reg_sel;
 
     // Group B — low-memory custom chip register space. SID register reads DELIBERATELY fall
     // through to the ROM / RAM group: $D400-$D43F overlaps BASIC ROM
@@ -872,7 +970,7 @@ module top (
             ram_a_addr = bm_ram_addr;
             ram_a_din  = bm_ram_wdata;
             ram_a_we   = 1'b1;
-        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_nic && !dbg_poke_wts && !dbg_poke_fio && !dbg_poke_blt && !dbg_poke_math && !dbg_poke_board_input && dbg_poke_addr < ROM_BASE) begin
+        end else if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_nic && !dbg_poke_wts && !dbg_poke_fio && !dbg_poke_music && !dbg_poke_blt && !dbg_poke_math && !dbg_poke_board_input && !dbg_poke_usb_hid && dbg_poke_addr < ROM_BASE) begin
             // Debug poke
             ram_a_addr = dbg_poke_addr;
             ram_a_din  = dbg_poke_data;
@@ -880,7 +978,8 @@ module top (
         end else if (cpu_we && cpu_active && cpu_addr < ROM_BASE &&
                      !xmc_win_sel && !xmc_reg_sel && !vgc_read_sel &&
                      !nic_reg_sel && !wts_reg_sel && !fio_reg_sel &&
-                     !dma_reg_sel && !blt_reg_sel && !board_input_sel && !math_reg_sel) begin
+                     !music_reg_sel && !dma_reg_sel && !blt_reg_sel &&
+                     !board_input_sel && !usb_hid_sel && !math_reg_sel) begin
             // CPU write to RAM
             ram_a_we = 1'b1;
         end
@@ -925,6 +1024,8 @@ module top (
             xmc_regs[XMC_WINCTL_REG] <= 8'h0F;
             xmc_regs[XMC_FREEL_REG] <= 8'h00;
             xmc_regs[XMC_FREEH_REG] <= 8'h04;
+            for (int i = 0; i < MUSIC_REG_COUNT; i++)
+                music_regs[i] <= 8'h00;
             ext_rom_active <= 0;
         end else begin
         if (cpu_we && cpu_active) begin
@@ -933,6 +1034,9 @@ module top (
                     xmc_regs[xmc_reg_off] <= cpu_dout;
             end
         end
+
+        if (dbg_poke_music)
+            music_regs[dbg_music_reg_off] <= dbg_poke_data;
 
         // ROM bank switching: write to $A03F toggles active ROM bank
         if (cpu_we && cpu_active && cpu_addr == REG_ROMSWAP) begin
@@ -988,11 +1092,13 @@ module top (
                          ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0EC)) ||
                          ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
     wire dbg_poke_blt = dbg_poke_en &&
-                        (dbg_poke_addr >= 16'hBA83) &&
-                        (dbg_poke_addr <= 16'hBA9B);
+                        (((dbg_poke_addr >= 16'hBA83) &&
+                          (dbg_poke_addr <= 16'hBA9B)) ||
+                         (dbg_poke_addr == 16'hBAA2));
     wire dbg_peek_blt = dbg_peek_en &&
-                        (dbg_peek_addr >= 16'hBA83) &&
-                        (dbg_peek_addr <= 16'hBA9B);
+                        (((dbg_peek_addr >= 16'hBA83) &&
+                          (dbg_peek_addr <= 16'hBA9B)) ||
+                         (dbg_peek_addr == 16'hBAA2));
     wire dbg_poke_math = dbg_poke_en &&
                          (dbg_poke_addr >= MATH_BASE) &&
                          (dbg_poke_addr <= MATH_END);
@@ -1005,6 +1111,16 @@ module top (
     wire dbg_peek_wts = dbg_peek_en &&
                         (dbg_peek_addr >= WTS_BASE) &&
                         (dbg_peek_addr <= WTS_END);
+    wire dbg_poke_music = dbg_poke_en &&
+                          (dbg_poke_addr >= MUSIC_REG_BASE) &&
+                          (dbg_poke_addr <= MUSIC_REG_END);
+    wire dbg_peek_music = dbg_peek_en &&
+                          (dbg_peek_addr >= MUSIC_REG_BASE) &&
+                          (dbg_peek_addr <= MUSIC_REG_END);
+    wire [7:0] dbg_board_input_data = board_input_read_data(dbg_peek_addr);
+    wire [$clog2(MUSIC_REG_COUNT)-1:0] dbg_music_reg_off =
+        dbg_poke_en ? (dbg_poke_addr - MUSIC_REG_BASE) :
+                      (dbg_peek_addr - MUSIC_REG_BASE);
 
     initial begin
         for (int i = 0; i < 65536; i++)
@@ -1039,6 +1155,12 @@ module top (
         xmc_regs[XMC_WINCTL_REG] = 8'h0F;
     end
 
+    logic [7:0] music_regs [0:MUSIC_REG_COUNT-1];
+    initial begin
+        for (int i = 0; i < MUSIC_REG_COUNT; i++)
+            music_regs[i] = 8'h00;
+    end
+
     // XMC address decode
     wire xmc_reg_sel = (cpu_addr >= XMC_REG_BASE && cpu_addr <= XMC_REG_END);
     wire xmc_win_sel = (cpu_addr >= XMC_WIN_BASE && cpu_addr <= XMC_WIN_END);
@@ -1068,11 +1190,15 @@ module top (
     // Memory read mux — registered (Arlet 6502 expects DI one cycle after AB)
     // =========================================================================
     wire cpu_in_rom = (cpu_addr >= ROM_BASE);
+    wire music_reg_sel = (cpu_addr >= MUSIC_REG_BASE && cpu_addr <= MUSIC_REG_END);
+    wire [$clog2(MUSIC_REG_COUNT)-1:0] music_reg_off = cpu_addr - MUSIC_REG_BASE;
     wire dma_reg_sel = (cpu_addr >= 16'hBA63 && cpu_addr <= 16'hBA75);
-    wire blt_reg_sel = (cpu_addr >= 16'hBA83 && cpu_addr <= 16'hBA9B);
+    wire blt_reg_sel = (cpu_addr >= 16'hBA83 && cpu_addr <= 16'hBA9B) ||
+                       (cpu_addr == 16'hBAA2);
     wire math_reg_sel = (cpu_addr >= MATH_BASE && cpu_addr <= MATH_END);
     wire wts_reg_sel = (cpu_addr >= WTS_BASE && cpu_addr <= WTS_END);
     wire board_input_sel = (cpu_addr >= BOARD_INPUT_BASE && cpu_addr <= BOARD_INPUT_END);
+    wire usb_hid_sel = (cpu_addr >= USB_HID_BASE && cpu_addr <= USB_HID_END);
     wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
                         (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
                         (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0EC) ||
@@ -1085,6 +1211,8 @@ module top (
             cpu_din <= 8'hFF;
         else if (xmc_reg_sel)
             cpu_din <= xmc_regs[xmc_reg_off];
+        else if (music_reg_sel)
+            cpu_din <= music_regs[music_reg_off];
         else if (dma_reg_sel)
             cpu_din <= dma_cpu_rdata;
         else if (blt_reg_sel)
@@ -1095,6 +1223,8 @@ module top (
             cpu_din <= wts_cpu_rdata;
         else if (board_input_sel)
             cpu_din <= board_input_read_data(cpu_addr);
+        else if (usb_hid_sel)
+            cpu_din <= usb_hid_read_data(cpu_addr);
         else if (vgc_read_sel)
             cpu_din <= vgc_cpu_rdata;
         else if (cpu_in_rom)
@@ -1114,6 +1244,8 @@ module top (
             xmc_regs[XMC_WINCTL_REG] <= 8'h0F;
             xmc_regs[XMC_FREEL_REG] <= 8'h00;
             xmc_regs[XMC_FREEH_REG] <= 8'h04;
+            for (int i = 0; i < MUSIC_REG_COUNT; i++)
+                music_regs[i] <= 8'h00;
             ext_rom_active <= 0;
         end else begin
         if (cpu_we) begin
@@ -1122,7 +1254,9 @@ module top (
             else if (xmc_reg_sel) begin
                 if (xmc_reg_off != XMC_BANKS_REG)
                     xmc_regs[xmc_reg_off] <= cpu_dout;
-            end else if (cpu_addr < ROM_BASE && !vgc_read_sel && !math_reg_sel && !wts_reg_sel)
+            end else if (cpu_addr < ROM_BASE && !vgc_read_sel && !math_reg_sel &&
+                         !wts_reg_sel && !board_input_sel && !usb_hid_sel &&
+                         !music_reg_sel)
                 ram[cpu_addr] <= cpu_dout;
         end
 
@@ -1695,14 +1829,17 @@ module top (
     // fallback walk through every MMIO branch before it reaches dbg_peek_data,
     // which turns debug readback into a clk_pixel critical path.
     wire       dbg_mmio_owns = vgc_dbg_owns | dbg_peek_nic | dbg_peek_wts |
-                               dbg_fio | dbg_peek_blt | dbg_peek_board_input |
+                               dbg_fio | dbg_peek_music | dbg_peek_blt |
+                               dbg_peek_board_input | dbg_peek_usb_hid |
                                dbg_peek_math;
     wire [7:0] dbg_mmio_data = vgc_dbg_owns  ? vgc_dbg_rdata  :
                                dbg_peek_nic  ? nic_dbg_rdata  :
                                dbg_peek_wts  ? wts_dbg_rdata  :
                                dbg_fio       ? fio_dbg_rdata  :
+                               dbg_peek_music ? music_regs[dbg_music_reg_off] :
                                dbg_peek_blt  ? blt_cpu_rdata  :
                                dbg_peek_board_input ? dbg_board_input_data :
+                               dbg_peek_usb_hid ? dbg_usb_hid_data :
                                dbg_peek_math ? dbg_math_rdata :
                                                8'h00;
     wire [7:0] dbg_mem_data  = dbg_in_rom ? (ext_rom_active ? erom_b_dout : brom_b_dout)
@@ -1732,6 +1869,9 @@ module top (
                                                   dbg_peek_blt     ? blt_cpu_rdata :
                                                   dbg_peek_math    ? math_cpu_rdata :
                                                   dbg_peek_wts     ? wts_dbg_rdata :
+                                                  dbg_peek_music   ? music_regs[dbg_music_reg_off] :
+                                                  dbg_peek_board_input ? dbg_board_input_data :
+                                                  dbg_peek_usb_hid ? dbg_usb_hid_data :
                                                   dbg_in_rom       ? dbg_rom_read_data :
                                                                      ram[dbg_peek_addr]) : 8'h00;
 
@@ -1741,7 +1881,10 @@ module top (
 
     // Poke: write to main RAM on clock edge (ROM-protected)
     always_ff @(posedge clk) begin
-        if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_blt && !dbg_poke_math && !dbg_poke_wts && !dbg_poke_board_input && dbg_poke_addr < ROM_BASE)
+        if (dbg_poke_music)
+            music_regs[dbg_music_reg_off] <= dbg_poke_data;
+
+        if (dbg_poke_en && !dbg_poke_vgc && !dbg_poke_blt && !dbg_poke_math && !dbg_poke_wts && !dbg_poke_music && !dbg_poke_board_input && !dbg_poke_usb_hid && dbg_poke_addr < ROM_BASE)
             ram[dbg_poke_addr] <= dbg_poke_data;
     end
 `endif

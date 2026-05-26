@@ -185,7 +185,10 @@ public static partial class DirectCanvas
 
             if (bus.SidPlayer.HasPendingCall)
                 bus.SidPlayer.ExecutePendingCalls(cpu);
-            if (bus.Timer.IrqPending || bus.Nic.IrqPending || bus.VgcIrqPending)
+            if (bus.Timer.IrqPending ||
+                bus.Nic.IrqPending ||
+                bus.VgcIrqPending ||
+                bus.BoardInputIrqPending)
                 cpu.IrqWaiting = true;
 
             remaining -= cycles;

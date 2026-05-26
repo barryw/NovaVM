@@ -27,6 +27,12 @@ module test_debug_peek;
 
     logic        key_valid;
     logic [7:0]  key_data;
+    logic [7:0]  usb_hid_status = 8'hA5;
+    logic [7:0]  usb_hid_device_type = 8'h01;
+    logic [7:0]  usb_hid_last_scan = 8'h04;
+    logic [7:0]  usb_hid_last_ascii = 8'h41;
+    logic [7:0]  usb_hid_report_count = 8'h11;
+    logic [7:0]  usb_hid_key_count = 8'h22;
     logic        irq_n = 1;
     logic        nmi_n = 1;
 
@@ -61,6 +67,14 @@ module test_debug_peek;
     top dut (
         .clk(clk), .rst(rst),
         .key_valid(key_valid), .key_data(key_data), .key_ready(),
+        .board_buttons(8'h00),
+        .board_switches(8'h00),
+        .usb_hid_status(usb_hid_status),
+        .usb_hid_device_type(usb_hid_device_type),
+        .usb_hid_last_scan(usb_hid_last_scan),
+        .usb_hid_last_ascii(usb_hid_last_ascii),
+        .usb_hid_report_count(usb_hid_report_count),
+        .usb_hid_key_count(usb_hid_key_count),
         .irq_n(irq_n), .nmi_n(nmi_n),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
@@ -153,12 +167,16 @@ module test_debug_peek;
         repeat(2) @(posedge clk);
     endtask
 
-    // Same program as test_rom_load.sv
-    localparam int PROG_LEN = 13;
+    // Same shape as test_rom_load.sv, plus one CPU read from the hosted-music
+    // register bank. That bank is host-poked while the CPU is paused; the CPU
+    // must read it through the normal bus without any main-RAM shadow.
+    localparam int PROG_LEN = 19;
     byte unsigned prog [PROG_LEN] = '{
         8'hA9, 8'h48, 8'h8D, 8'h0E, 8'hA0,  // LDA #'H'; STA $A00E
         8'hA9, 8'h49, 8'h8D, 8'h0E, 8'hA0,  // LDA #'I'; STA $A00E
-        8'h4C, 8'h0A, 8'hC0                  // JMP $C00A (halt)
+        8'hAD, 8'h50, 8'hBA,                  // LDA $BA50
+        8'h8D, 8'h00, 8'h02,                  // STA $0200
+        8'h4C, 8'h10, 8'hC0                   // JMP $C010 (halt)
     };
 
     logic [7:0] peek_val;
@@ -192,6 +210,7 @@ module test_debug_peek;
 
         repeat(4) @(posedge clk);
         wait_vgc_ready();
+        do_poke(16'hBA50, 8'h8A);
 
         // Release CPU, let program run
         dbg_cpu_reset = 0;
@@ -203,6 +222,8 @@ module test_debug_peek;
         $display("Final CPU PC = 0x%04X", dbg_cpu_pc);
         check_eq8("char_mem[0] == 'H'", dut.vgc_inst.text_inst.char_mem.mem[0], 8'h48);
         check_eq8("char_mem[1] == 'I'", dut.vgc_inst.text_inst.char_mem.mem[1], 8'h49);
+        check_eq8("CPU read $BA50 returns music status register", dut.main_ram.mem[16'h0200], 8'h8A);
+        check_eq8("debug poke $BA50 does not shadow RAM", dut.main_ram.mem[16'hBA50], 8'h00);
 
         // Pause CPU for clean peek conditions
         dbg_pause = 1;
@@ -241,6 +262,22 @@ module test_debug_peek;
         do_peek(16'hBA86, peek_val);
         check_eq8("peek \$BA86 after debug poke == 5", peek_val, 8'h05);
         check_eq8("debug poke \$BA86 does not shadow RAM", dut.main_ram.mem[16'hBA86], 8'h00);
+
+        // Hosted music visualizer/status is debug-written by NovaHost while the
+        // CPU is running. It must be real MMIO, not a debug write into RAM.
+        do_poke(16'hBA50, 8'h1A);
+        do_peek(16'hBA50, peek_val);
+        check_eq8("peek \$BA50 after music status debug poke", peek_val, 8'h1A);
+        check_eq8("debug poke \$BA50 still does not shadow RAM", dut.main_ram.mem[16'hBA50], 8'h00);
+
+        // USB HID diagnostics are read-only MMIO. They should be visible to
+        // NovaHost peeks and excluded from the main-RAM fallback.
+        do_peek(16'hBAA3, peek_val);
+        check_eq8("peek \$BAA3 returns USB HID status", peek_val, 8'hA5);
+        do_peek(16'hBAA8, peek_val);
+        check_eq8("peek \$BAA8 returns USB HID key count", peek_val, 8'h22);
+        do_poke(16'hBAA3, 8'h5A);
+        check_eq8("debug poke \$BAA3 does not shadow RAM", dut.main_ram.mem[16'hBAA3], 8'h00);
 
         // Math coprocessor debug pokes must hit the coprocessor bank, not RAM.
         // 300 * -7 = $FFFFF7CC; writing MUL16_B_HI is the trigger.

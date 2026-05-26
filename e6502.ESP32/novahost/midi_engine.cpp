@@ -9,6 +9,72 @@
 #endif
 
 namespace nova_midi {
+
+#if defined(ARDUINO)
+
+namespace {
+
+void set_error(char* error, size_t error_size, const char* msg) {
+    if (!error || error_size == 0)
+        return;
+    snprintf(error, error_size, "%s", msg);
+}
+
+} // namespace
+
+bool build_song(const uint8_t*, size_t, Song&, char* error,
+                size_t error_size) {
+    set_error(error, error_size, "raw MIDI parsing is not available on ESP");
+    return false;
+}
+
+bool build_song(Input&, Song&, char* error, size_t error_size) {
+    set_error(error, error_size, "raw MIDI parsing is not available on ESP");
+    return false;
+}
+
+bool build_song_plan(Input&, Song&, char* error, size_t error_size) {
+    set_error(error, error_size, "raw MIDI parsing is not available on ESP");
+    return false;
+}
+
+bool build_song_window(Input&, const Song&, uint32_t, uint32_t,
+                       std::vector<TimelineEvent>& timeline,
+                       bool& has_more, char* error, size_t error_size,
+                       size_t) {
+    timeline.clear();
+    has_more = false;
+    set_error(error, error_size, "raw MIDI parsing is not available on ESP");
+    return false;
+}
+
+void reset_song_window_stream() {
+}
+
+bool begin_song_window_stream(Input&, const Song&, char* error,
+                              size_t error_size) {
+    set_error(error, error_size, "raw MIDI parsing is not available on ESP");
+    return false;
+}
+
+bool build_song_stream_window(Input&, uint32_t, uint32_t,
+                              std::vector<TimelineEvent>& timeline,
+                              bool& has_more, char* error,
+                              size_t error_size, size_t) {
+    timeline.clear();
+    has_more = false;
+    set_error(error, error_size, "raw MIDI parsing is not available on ESP");
+    return false;
+}
+
+uint8_t hardware_instrument_for(uint8_t, uint8_t gm_program) {
+    return gm_program & 0x7F;
+}
+
+} // namespace nova_midi
+
+#else
+
 namespace {
 
 void midi_yield() {
@@ -1565,3 +1631,5 @@ bool build_song_stream_window(Input& input,
 }
 
 } // namespace nova_midi
+
+#endif

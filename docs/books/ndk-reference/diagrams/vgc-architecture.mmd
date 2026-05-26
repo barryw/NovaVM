@@ -1,0 +1,26 @@
+%%{init: {"theme": "base", "htmlLabels": false, "flowchart": {"curve": "linear"}}}%%
+flowchart TB
+    CPU["6502<br/>program"]
+    BUS["VGC<br/>registers<br/>A000-A0FF"]
+
+    CPU --> BUS
+
+    DIRECT["display<br/>state<br/>registers"]
+    CMD["command<br/>port"]
+    MEM["VRAM/sprite<br/>memory<br/>ports"]
+    IRQ["IRQ<br/>enable<br/>pending"]
+    ENGINES["render<br/>engines"]
+    COMP["Compositor"]
+    VIDEO["RGB/sync<br/>video"]
+
+    BUS --> DIRECT
+    BUS --> CMD
+    BUS --> MEM
+    BUS --> IRQ
+
+    DIRECT --> COMP
+    CMD --> ENGINES
+    MEM --> ENGINES
+    ENGINES --> COMP
+    COMP --> VIDEO
+    IRQ -. IRQ .-> CPU

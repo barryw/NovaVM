@@ -15,6 +15,7 @@ public:
 
     void begin();
     void loop();
+    bool readScreen();
 
 private:
     static constexpr int SCREEN_COLS = 80;
@@ -37,7 +38,7 @@ private:
     uint8_t       _asyncValue;       // watch: expected value
 
     // Shared screen buffer
-    uint8_t _screenBuf[SCREEN_BYTES];
+    uint8_t* _screenBuf;
 
     // Command dispatch
     void handleCommand(const String& json);
@@ -85,6 +86,7 @@ private:
     // Screen helpers
     int  findTextOnScreen(const char* text);
     void formatScreenLine(int row, char* out, int maxLen);
+    void releaseScreenBuffer();
 };
 
 #endif

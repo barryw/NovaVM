@@ -1,0 +1,305 @@
+\chapter{VGC Library}
+
+The VGC library is the assembly programmer's thin layer over Nova's Virtual
+Graphics Controller. It does not hide the hardware model. It gives names to the
+registers, exposes the command protocol, and provides small helper routines for
+the operations that almost every graphics program needs.
+
+\begin{novanote}
+Use \novacode{vgc.inc} for declarations and constants. Include
+\novacode{vgc.s} when the program wants the helper routines, or include
+\novacode{vgc\_wait.s} when an overlay only needs the command wait primitive.
+\end{novanote}
+
+\begin{lstlisting}
+.include "vgc.inc"
+
+      ; program code
+
+.include "vgc.s"
+\end{lstlisting}
+
+\section{What The VGC Is}
+
+The VGC is Nova's display custom chip. From the 6502 side it is a memory mapped
+device at \novacode{\$A000-\$A0FF}. Inside the device are separate engines for
+video timing, text, bitmap graphics, sprites, raster-time register writes, IRQs,
+and off-bus video memory.
+
+\begin{center}
+\novasvg[width=\textwidth]{build/diagrams/vgc-architecture}
+\end{center}
+
+The important mental model is that the CPU does not draw pixels directly into a
+linear framebuffer in main RAM. Instead, code talks to the VGC through three
+paths:
+
+\begin{itemize}
+\item Direct registers for state such as mode, color, cursor position, frame
+      counter, sprite attributes, palette mode, and IRQ latches.
+\item The command port at \novacode{\$A010-\$A01F} for drawing primitives,
+      sprite shape commands, copper list operations, and byte-level memory
+      commands.
+\item The VGC memory port, DMA, blitter, FIO, and pager paths for bulk access to
+      character RAM, color RAM, the graphics bitmap, sprite shape RAM, and text
+      attribute RAM.
+\end{itemize}
+
+\section{Components}
+
+\begin{description}
+\item[VESTA timing] owns the scan position, frame counter, vblank boundary, and
+video sync. The \novacode{vgc\_vsync} helper waits for \novacode{VGC\_FRAME} at
+\novacode{\$A008} to change.
+\item[SCRIBE text] renders the 80 by 50 character layer from character, color,
+font, and text-attribute memory. \novacode{VGC\_CHAROUT} accepts printable text
+and control bytes such as form feed, carriage return, line feed, home, and
+backspace.
+\item[CANVAS graphics] stores the 320 by 200, 16-color bitmap. Drawing commands
+such as \novacode{vgc\_line}, \novacode{vgc\_rect}, and \novacode{vgc\_paint}
+operate on this memory through the ARTIST engine.
+\item[ARTIST drawing] executes graphics commands from the command port. It uses
+the current graphics color set by \novacode{VGC.GCOLOR} and clips drawing to the
+bitmap.
+\item[PIXIE sprites] renders 16 hardware sprites. Each sprite has an 8-byte
+attribute block at \novacode{\$A040-\$A0BF}; shape pixels live in off-bus sprite
+shape RAM.
+\item[CONDUCTOR copper] stores raster events and writes selected VGC or sprite
+registers when scanout reaches the programmed position.
+\item[IRQ block] exposes enable, pending, force, and valid-source registers at
+\novacode{\$A0F0-\$A0F3}. The VGC can raise IRQs for vblank, copper events, and
+sprite collision sources.
+\end{description}
+
+\section{Command Helpers}
+
+The command protocol is always the same: load \novacode{VGC\_P0} through
+\novacode{VGC\_P14}, then write a command byte to \novacode{VGC\_CMD}. The
+helper routines in \novacode{vgc.s} save you from remembering the command byte.
+They do not all wait for completion.
+
+\begin{center}
+\novasvg[width=\textwidth]{build/diagrams/vgc-command-flow}
+\end{center}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Helper pattern} & \textbf{Use} \\
+\midrule
+\novacode{vgc\_cmd} & Write A to \novacode{VGC\_CMD} and return immediately. \\
+\novacode{vgc\_exec} & Write A to \novacode{VGC\_CMD}, then call
+\novacode{vgc\_wait\_cmd}. \\
+\novacode{vgc\_wait\_cmd} & Poll bit 0 of \novacode{VGC\_CMD} until the active
+command completes. \\
+\novacode{vgc\_mem\_read}, \novacode{vgc\_mem\_write} & Issue the memory
+command and wait, because the caller needs the byte result or address update. \\
+\novacode{vgc\_gcls}, \novacode{vgc\_line}, \novacode{vgc\_fill}, and other
+primitive helpers & Issue the drawing command and return. Wait explicitly when
+the next step depends on the result or reuses command parameters. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+This distinction matters most on FPGA builds, where a clear, flood fill, sprite
+clear, sprite copy, or text clear can span many pixel clocks. Avalonia's hosted
+VGC often completes commands immediately, but portable code should synchronize
+when it depends on command completion.
+
+\section{Drawing From Assembly}
+
+The following example selects graphics/sprite mode, clears the bitmap, sets a
+draw color, and draws a diagonal line. It waits after the clear and after the
+line because both operations modify the graphics plane.
+
+\begin{lstlisting}
+.include "vgc.inc"
+
+draw_demo:
+      LDX   #$03
+      JSR   vgc_set_mode
+
+      JSR   vgc_gcls
+      JSR   vgc_wait_cmd
+
+      LDA   #$07
+      STA   VGC_P0
+      JSR   vgc_gcolor
+
+      ; LINE 0,0,319,199
+      STZ   VGC_P0      ; x0 low
+      STZ   VGC_P1      ; x0 high
+      STZ   VGC_P2      ; y0 low
+      STZ   VGC_P3      ; y0 high
+      LDA   #$3F        ; x1 = $013F
+      STA   VGC_P4
+      LDA   #$01
+      STA   VGC_P5
+      LDA   #$C7        ; y1 = 199
+      STA   VGC_P6
+      STZ   VGC_P7
+      JSR   vgc_line
+      JSR   vgc_wait_cmd
+      RTS
+
+.include "vgc.s"
+\end{lstlisting}
+
+\section{Text And Display State}
+
+The text helpers are direct register writes and return immediately:
+\novacode{vgc\_cls}, \novacode{vgc\_locate}, \novacode{vgc\_set\_fg},
+\novacode{vgc\_set\_bg}, \novacode{vgc\_set\_border},
+\novacode{vgc\_set\_mode}, \novacode{vgc\_set\_font},
+\novacode{vgc\_display\_on}, and \novacode{vgc\_display\_off}.
+
+\novacode{vgc\_cls} writes form feed to \novacode{VGC\_CHAROUT}; it clears the
+text plane and homes the cursor. \novacode{vgc\_locate} copies
+\novacode{VGC\_P0} and \novacode{VGC\_P1} into the cursor X and Y registers.
+Foreground, background, and border helpers take their color in X.
+
+\begin{lstlisting}
+      LDX   #15
+      JSR   vgc_set_fg
+      LDX   #0
+      JSR   vgc_set_bg
+      LDX   #11
+      JSR   vgc_set_border
+
+      LDA   #10
+      STA   VGC_P0
+      LDA   #6
+      STA   VGC_P1
+      JSR   vgc_locate
+\end{lstlisting}
+
+\section{Off-Bus VGC Memory}
+
+Character RAM, color RAM, text attributes, graphics pixels, and sprite shapes
+are VGC memory spaces. They are not mapped into the 6502 address range as normal
+RAM. The library exposes \novacode{vgc\_mem\_read} and
+\novacode{vgc\_mem\_write} for byte-level access, while larger transfers should
+use the VRAM port, DMA, blitter, FIO graphics load/save, or pager routines.
+
+\begin{center}
+\novasvg[width=\textwidth]{build/diagrams/vgc-memory-paths}
+\end{center}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}cl>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Space} & \textbf{Name} & \textbf{Use} \\
+\midrule
+1 & Character RAM & 4000 character bytes for the 80 by 50 text layer. \\
+2 & Color RAM & 4000 packed background/foreground color bytes. \\
+3 & Graphics bitmap & 64000 pixels, one byte per pixel, low nibble is color. \\
+4 & Sprite shape RAM & 32768 bytes, 256 shapes at 128 bytes per shape. \\
+7 & Text attribute RAM & 4000 style bytes; bit 0 is flash. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+For isolated bytes, load \novacode{P0=space}, \novacode{P1/P2=offset},
+\novacode{P3=data}, and \novacode{P4=flags}. Bit 0 of \novacode{P4}
+auto-increments the offset after each read or write.
+
+\begin{lstlisting}
+      ; Write "OK" into character RAM at cell 0 using auto-increment.
+      LDA   #VGC_PLANE_CHAR
+      STA   VGC_P0
+      STZ   VGC_P1
+      STZ   VGC_P2
+      LDA   #VGC_VRAM_AUTOINC
+      STA   VGC_P4
+
+      LDA   #'O'
+      STA   VGC_P3
+      JSR   vgc_mem_write
+
+      LDA   #'K'
+      STA   VGC_P3
+      JSR   vgc_mem_write
+\end{lstlisting}
+
+For streams, prefer the VRAM data port. It uses the same space IDs and advances
+the address in hardware when \novacode{VGC\_VCTRL} has
+\novacode{VGC\_VRAM\_AUTOINC} set. Reads are latched: the first read from
+\novacode{VGC\_VDATA} posts the selected byte and the second read returns it, so
+read loops should prime the latch before consuming data.
+
+\begin{lstlisting}
+      LDA   #VGC_PLANE_GFX
+      STA   VGC_VPLANE
+      STZ   VGC_VADDRL
+      STZ   VGC_VADDRH
+      LDA   #VGC_VRAM_AUTOINC
+      STA   VGC_VCTRL
+
+      ; Stream pixels by writing VGC_VDATA.
+      LDA   #$05
+      STA   VGC_VDATA
+      STA   VGC_VDATA
+      STA   VGC_VDATA
+\end{lstlisting}
+
+\section{Interrupts}
+
+The VGC IRQ helpers install the CPU IRQ vector, enable or disable source masks,
+and acknowledge pending source bits. The source constants come from
+\novacode{nova.inc}; the common masks are \novacode{VGC\_IRQ\_VBLANK},
+\novacode{VGC\_IRQ\_COPPER0}, \novacode{VGC\_IRQ\_SPRCOLL}, and
+\novacode{VGC\_IRQ\_SPRBG}.
+
+\begin{lstlisting}
+install_vblank_irq:
+      LDA   #>vblank_irq
+      LDY   #<vblank_irq
+      JSR   vgc_irq_install
+
+      LDA   #VGC_IRQ_VBLANK
+      JSR   vgc_irq_enable
+      RTS
+
+vblank_irq:
+      PHA
+      LDA   VGC_IRQ_STATUS
+      AND   #VGC_IRQ_VBLANK
+      BEQ   @done
+
+      ; Do one-frame work here.
+
+      LDA   #VGC_IRQ_VBLANK
+      JSR   vgc_irq_ack
+@done:
+      PLA
+      RTI
+\end{lstlisting}
+
+Real handlers should preserve any registers they use and must acknowledge every
+VGC source they service before returning. If a source remains pending and
+enabled, the IRQ line remains asserted.
+
+\section{Getting The Most From VGC}
+
+Use \novacode{vgc\_vsync} as the frame boundary for animation. Update game
+state, write sprite attributes, and start large drawing work in a consistent
+order each frame.
+
+Use direct sprite registers for frequent movement. The command helpers are
+convenient, but \novacode{\$A040 + sprite * 8} is the faster path for X, Y,
+shape, flags, priority, and transparent color.
+
+Use the graphics primitives for small generated shapes and diagnostics. Use
+DMA, blitter, NVG loading, or pager transfers for large images, sprite banks,
+and full-screen changes.
+
+Set \novacode{VGC\_GFXTRANS} deliberately. It defaults to color 0 so black
+graphics pixels are transparent. If a program needs visible black pixels in the
+graphics layer, move the transparent color to a palette index that the art does
+not use and keep blitter color keys in sync with that choice.
+
+Use the copper for scanline work instead of tight CPU timing loops. Copper
+events are tied to the video beam and continue to run while the 6502 works on
+the next frame.

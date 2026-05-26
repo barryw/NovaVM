@@ -10,6 +10,27 @@
 
 ---
 
+## Current Status - 2026-05-21
+
+This design is partially implemented, but the hardware integration is not yet
+accepted. The latest handoff is:
+
+- `docs/handoff-2026-05-21-keyboard-music-visualizer.md`
+
+Important current facts:
+
+- The standalone keyboard drawing path reached a visually acceptable state.
+- The old BASIC `NCC` extension prompt was removed/reserved because it could
+  appear over stale visualizer graphics after the CPU escaped the app path.
+- The combined `MIDPLAY` plus `SYS $9000` flow is still broken on hardware:
+  the machine can fall back to BASIC `Ready`, and MIDI can wedge into a stuck
+  tone even when status appears active.
+- The next work should isolate `LOAD`/`SYS`/loop lifetime and MIDI playback
+  independently before adding more visualizer features.
+
+Do not add fallback behavior to hide failures. The intended path should work or
+fail loudly.
+
 ## 1. Register Layout
 
 Reorganized music status block at `$BA50`:

@@ -1,0 +1,81 @@
+\chapter{NDK Runtime Model}
+
+The Nova Developer Kit is a ca65 assembly library stack over Nova's
+memory-mapped hardware and NovaHost services. It is deliberately thin. Most
+helpers name registers, copy arguments into the hardware mailbox a subsystem
+expects, issue a command, and return a small status code.
+
+\begin{center}
+\novasvg[width=0.78\textwidth]{build/diagrams/ndk-runtime-stack}
+\end{center}
+
+\section{How Libraries Are Used}
+
+Most libraries have an interface file and an implementation file. Include the
+\novacode{.inc} file near the top of an application so symbols and
+pseudo-register aliases are visible. Include or link the \novacode{.s} file
+once after the code that calls it.
+
+\begin{lstlisting}
+.setcpu "65c02"
+
+.include "fio.inc"
+.include "vgc.inc"
+
+main:
+      JSR   fio_load
+      JSR   vgc_vsync
+      RTS
+
+.include "fio.s"
+.include "vgc.s"
+\end{lstlisting}
+
+Ordering matters for libraries that support size stripping. \novacode{fio.s}
+and \novacode{audio.s} emit only referenced public routines by default, plus the
+dependencies those routines need. If the implementation is included before the
+call sites, ca65 has not seen the references yet and the routines can be
+stripped. Define \novacode{NOVA\_EMIT\_ALL\_RUNTIME},
+\novacode{FIO\_EMIT\_ALL\_RUNTIME}, or \novacode{AUDIO\_EMIT\_ALL\_RUNTIME}
+for ROM and debug builds that intentionally keep full implementations.
+
+\section{Calling Convention}
+
+The runtime libraries share a small convention, but individual routines can
+override it in their API entry:
+
+\begin{itemize}
+\item A return value of A=0 means success. A return value of A=1 usually means a
+generic error, with detail in a library result byte or hardware error register.
+\item A, X, and Y are scratch unless the routine documents them as outputs.
+\item \novacode{NVR0L} through \novacode{NVR7H} are shared pseudo-register
+argument bytes. They are not persistent storage.
+\item Hardware-facing routines often leave detailed state in registers such as
+\novacode{FIO\_STATUS}, \novacode{FIO\_ERRCODE}, \novacode{XMC\_STATUS}, or VGC
+pending IRQ registers.
+\end{itemize}
+
+Treat pseudo-registers and hardware command registers as mailboxes. Load them
+immediately before the call that needs them and copy out any result before the
+next subsystem reuses the same bytes.
+
+\section{Hardware And Host Boundaries}
+
+\novacode{nova.inc} is the shared map for Nova hardware addresses and command
+constants. VGC, DMA, blitter, XMC, NIC, timer, math, and FIO registers are all
+memory mapped from the CPU's point of view, but they do not all behave like
+RAM.
+
+VGC memory spaces are off-bus display memories reached through VGC commands,
+the VRAM port, FIO graphics transfers, the pager, DMA, or the blitter. XRAM is a
+flat expansion memory device reached through XMC windows, XRAM helpers, DMA, or
+FIO streaming. FIO is a host-command mailbox; NovaHost resolves mounted devices,
+host files, media playback, runtime ROM loading, and random-number requests.
+
+\section{Generated Reference}
+
+The API chapter is generated from \novacode{@label} blocks in
+\novacode{runtime/asm}. If an API box is wrong, the fix belongs in the source
+comment next to the implementation, not in the generated LaTeX. Authored
+chapters in this book should explain workflows and caveats; generated entries
+should stay close to exact symbols, inputs, outputs, and required registers.

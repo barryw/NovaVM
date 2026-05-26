@@ -32,7 +32,7 @@ Initialize the SID sound-effect instrument table and scheduler state.
 
 - Kind: `routine`
 - Symbol: `audio_init`
-- Address: `$EFC5`
+- Address: `$EF24`
 - ABI: `none`
 
 ## AUDIO.INSTRUMENT
@@ -49,7 +49,7 @@ Define a simple SID sound-effect instrument envelope and waveform.
 
 - Kind: `routine`
 - Symbol: `audio_instrument`
-- Address: `$EF81`
+- Address: `$EEE0`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -71,13 +71,149 @@ Instrument slot to define for AUDIO.INSTRUMENT_SET.
 - Symbol: `AUDIO_INST_ID`
 - Address: `$B9A4`
 
+## AUDIO.META_AUTHOR
+
+32-byte null-padded active music author/composer.
+
+- Kind: `bytes`
+- Symbol: `AUDIO_META_AUTHOR`
+- Address: `$BAD3`
+
+## AUDIO.META_COPYRIGHT
+
+32-byte null-padded active music copyright/comment.
+
+- Kind: `bytes`
+- Symbol: `AUDIO_META_COPYRIGHT`
+- Address: `$BAF3`
+
+## AUDIO.META_DURATION_H
+
+Duration seconds high byte when known.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_DURATION_H`
+- Address: `$BB1B`
+
+## AUDIO.META_DURATION_L
+
+Duration seconds low byte when known.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_DURATION_L`
+- Address: `$BB1A`
+
+## AUDIO.META_FLAGS
+
+Music-specific flags for the active metadata block.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_FLAGS`
+- Address: `$BB1C`
+
+## AUDIO.META_INIT_H
+
+SID init address high byte when applicable.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_INIT_H`
+- Address: `$BB16`
+
+## AUDIO.META_INIT_L
+
+SID init address low byte when applicable.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_INIT_L`
+- Address: `$BB15`
+
+## AUDIO.META_LOAD_H
+
+SID load address high byte when applicable.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_LOAD_H`
+- Address: `$BB14`
+
+## AUDIO.META_LOAD_L
+
+SID load address low byte when applicable.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_LOAD_L`
+- Address: `$BB13`
+
+## AUDIO.META_PLAY_H
+
+SID play address high byte when applicable.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_PLAY_H`
+- Address: `$BB18`
+
+## AUDIO.META_PLAY_L
+
+SID play address low byte when applicable.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_PLAY_L`
+- Address: `$BB17`
+
+## AUDIO.META_SIZE_H
+
+High byte of active music file size.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_SIZE_H`
+- Address: `$BAB2`
+
+## AUDIO.META_SIZE_L
+
+Low byte of active music file size.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_SIZE_L`
+- Address: `$BAB1`
+
+## AUDIO.META_SONGS
+
+SID subtune count or MIDI track/song count when known.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_SONGS`
+- Address: `$BB19`
+
+## AUDIO.META_SOUNDFONT
+
+64-byte null-padded active MIDI/WTS soundfont name.
+
+- Kind: `bytes`
+- Symbol: `AUDIO_META_SOUNDFONT`
+- Address: `$BB8E`
+
+## AUDIO.META_TITLE
+
+32-byte null-padded active music title.
+
+- Kind: `bytes`
+- Symbol: `AUDIO_META_TITLE`
+- Address: `$BAB3`
+
+## AUDIO.META_TYPE
+
+Active music metadata file type: 1=SID, 3=MIDI/WTS.
+
+- Kind: `u8`
+- Symbol: `AUDIO_META_TYPE`
+- Address: `$BAB0`
+
 ## AUDIO.MIDPLAY
 
 Play the MIDI file named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_midplay`
-- Address: `$F099`
+- Address: `$EFF8`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -87,13 +223,29 @@ Requires:
 - `FIO.NAME`
 - `FIO.NAMELEN`
 
+## AUDIO.MIDPLAY_FILE
+
+Copy a pointer-based MIDI filename into FIO.NAME and start MIDI playback.
+
+- Kind: `routine`
+- Symbol: `audio_midplay_file`
+- ABI: `pseudo-register`
+
+Outputs:
+- `A`: 0 on success, nonzero on error
+
+Requires:
+- `FIO_ARG_NAMELEN`
+- `FIO_ARG_NAMEPTR_L`
+- `FIO_ARG_NAMEPTR_H`
+
 ## AUDIO.MIDSTOP
 
 Stop MIDI file playback.
 
 - Kind: `routine`
 - Symbol: `audio_midstop`
-- Address: `$F09E`
+- Address: `$EFFD`
 - ABI: `none`
 
 Outputs:
@@ -105,7 +257,7 @@ Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.
 
 - Kind: `routine`
 - Symbol: `audio_music_loop`
-- Address: `$F0C0`
+- Address: `$F01F`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -120,7 +272,7 @@ Return the current MIDI note for a music voice.
 
 - Kind: `routine`
 - Symbol: `audio_music_note`
-- Address: `$F0DE`
+- Address: `$F03D`
 - ABI: `register`
 
 Inputs:
@@ -135,7 +287,7 @@ Start queued music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_play`
-- Address: `$F0AD`
+- Address: `$F00C`
 - ABI: `none`
 
 Outputs:
@@ -147,7 +299,7 @@ Return nonzero if music is playing.
 
 - Kind: `routine`
 - Symbol: `audio_music_playing`
-- Address: `$F0D4`
+- Address: `$F033`
 - ABI: `none`
 
 Outputs:
@@ -159,7 +311,7 @@ Set hosted MML priority from AUDIO.NOTE and following pseudo-register bytes.
 
 - Kind: `routine`
 - Symbol: `audio_music_priority`
-- Address: `$F0C5`
+- Address: `$F024`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -174,7 +326,7 @@ Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.
 
 - Kind: `routine`
 - Symbol: `audio_music_sequence`
-- Address: `$F0A8`
+- Address: `$F007`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -192,7 +344,7 @@ Stop music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_stop`
-- Address: `$F0B6`
+- Address: `$F015`
 - ABI: `none`
 
 Outputs:
@@ -204,7 +356,7 @@ Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.
 
 - Kind: `routine`
 - Symbol: `audio_music_tempo`
-- Address: `$F0BB`
+- Address: `$F01A`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -228,7 +380,7 @@ Play a one-shot note using A/X/Y register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_play_sound`
-- Address: `$EEDE`
+- Address: `$EE3D`
 - ABI: `register`
 
 Inputs:
@@ -253,7 +405,7 @@ Set master or per-voice volume using A/X register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_set_volume`
-- Address: `$EEE9`
+- Address: `$EE48`
 - ABI: `register`
 
 Inputs:
@@ -269,7 +421,7 @@ Load the soundfont named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_sfload`
-- Address: `$F0A3`
+- Address: `$F002`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -279,13 +431,29 @@ Requires:
 - `FIO.NAME`
 - `FIO.NAMELEN`
 
+## AUDIO.SFLOAD_FILE
+
+Copy a pointer-based soundfont filename into FIO.NAME and load it.
+
+- Kind: `routine`
+- Symbol: `audio_sfload_file`
+- ABI: `pseudo-register`
+
+Outputs:
+- `A`: 0 on success, nonzero on error
+
+Requires:
+- `FIO_ARG_NAMELEN`
+- `FIO_ARG_NAMEPTR_L`
+- `FIO_ARG_NAMEPTR_H`
+
 ## AUDIO.SFX_PLAYING
 
 Return nonzero if the hosted music engine reports a sound effect.
 
 - Kind: `routine`
 - Symbol: `audio_sfx_playing`
-- Address: `$F0CE`
+- Address: `$F02D`
 - ABI: `none`
 
 Outputs:
@@ -297,7 +465,7 @@ Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-b
 
 - Kind: `routine`
 - Symbol: `audio_sidplay`
-- Address: `$F08B`
+- Address: `$EFEA`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -308,13 +476,30 @@ Requires:
 - `FIO.NAMELEN`
 - `AUDIO.NOTE`
 
+## AUDIO.SIDPLAY_FILE
+
+Copy a pointer-based SID filename into FIO.NAME and start SID playback.
+
+- Kind: `routine`
+- Symbol: `audio_sidplay_file`
+- ABI: `pseudo-register`
+
+Outputs:
+- `A`: 0 on success, nonzero on error
+
+Requires:
+- `FIO_ARG_NAMELEN`
+- `FIO_ARG_NAMEPTR_L`
+- `FIO_ARG_NAMEPTR_H`
+- `AUDIO_NOTE`
+
 ## AUDIO.SIDSTOP
 
 Stop SID file playback.
 
 - Kind: `routine`
 - Symbol: `audio_sidstop`
-- Address: `$F094`
+- Address: `$EFF3`
 - ABI: `none`
 
 Outputs:
@@ -326,7 +511,7 @@ Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INST
 
 - Kind: `routine`
 - Symbol: `audio_sound`
-- Address: `$EEF1`
+- Address: `$EE50`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -343,11 +528,51 @@ Return raw music status bits.
 
 - Kind: `routine`
 - Symbol: `audio_status`
-- Address: `$F0CA`
+- Address: `$F029`
 - ABI: `none`
 
 Outputs:
 - `A`: Raw MUSIC_STATUS byte
+
+## AUDIO.STATUS_LOADING
+
+MUSIC_STATUS bit set while hosted SID/MIDI/soundfont assets are loading.
+
+- Kind: `const`
+- Symbol: `AUDIO_STATUS_LOADING`
+- Address: `$10`
+
+## AUDIO.STATUS_MUSIC
+
+MUSIC_STATUS bit set while hosted music playback is active.
+
+- Kind: `const`
+- Symbol: `AUDIO_STATUS_MUSIC`
+- Address: `$02`
+
+## AUDIO.STATUS_SFX
+
+MUSIC_STATUS bit set while a hosted sound effect is active.
+
+- Kind: `const`
+- Symbol: `AUDIO_STATUS_SFX`
+- Address: `$01`
+
+## AUDIO.STATUS_SID
+
+MUSIC_STATUS bit set when the current music source uses SID voices.
+
+- Kind: `const`
+- Symbol: `AUDIO_STATUS_SID`
+- Address: `$04`
+
+## AUDIO.STATUS_WTS
+
+MUSIC_STATUS bit set when the current music source uses WTS/MIDI voices.
+
+- Kind: `const`
+- Symbol: `AUDIO_STATUS_WTS`
+- Address: `$08`
 
 ## AUDIO.STRH
 
@@ -387,7 +612,7 @@ Advance fire-and-forget SID sound-effect durations by one frame.
 
 - Kind: `routine`
 - Symbol: `audio_tick`
-- Address: `$EFFA`
+- Address: `$EF59`
 - ABI: `none`
 
 ## AUDIO.VOICE
@@ -404,7 +629,7 @@ Set SID master or per-voice volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
 
 - Kind: `routine`
 - Symbol: `audio_volume`
-- Address: `$EF4E`
+- Address: `$EEAD`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -748,7 +973,7 @@ Change directory to FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_cd`
-- Address: `$EEC0`
+- Address: `$F0CC`
 
 Requires:
 - `FIO_NAME`
@@ -760,7 +985,7 @@ Convert the current FIO status register to the shared A=0/1 result.
 
 - Kind: `routine`
 - Symbol: `fio_check`
-- Address: `$EE41`
+- Address: `$F04D`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -771,7 +996,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$EE61`
+- Address: `$F06D`
 
 Outputs:
 - `A`: 0 on success.
@@ -794,7 +1019,7 @@ Host command that decodes a Nova NVG1 file into the graphics bitmap plane.
 
 ## FIO.CMD_RNG
 
-Host command that returns 32 bits from NovaHost's hardware-backed RNG.
+Host command that returns 32 bits from NovaHost's host-backed RNG provider.
 
 - Kind: `const`
 - Symbol: `FIO_CMD_RNG`
@@ -802,7 +1027,7 @@ Host command that returns 32 bits from NovaHost's hardware-backed RNG.
 
 ## FIO.CMD_XPAGE
 
-Host command that streams a file slice into XRAM using FIO_SRC/FIO_ENDL as a 24-bit file offset.
+Host command that streams a file slice into XRAM, CPU RAM, or VGC memory using FIO_DIRTYPE as the target selector.
 
 - Kind: `const`
 - Symbol: `FIO_CMD_XPAGE`
@@ -814,7 +1039,7 @@ Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_copy_name`
-- Address: `$EE80`
+- Address: `$F08C`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid name.
@@ -826,11 +1051,11 @@ Requires:
 
 ## FIO.DELETE
 
-Delete the file named by FIO.NAME/FIO.NAMELEN.
+Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_delete`
-- Address: `$EEB1`
+- Address: `$F0BD`
 
 Requires:
 - `FIO_NAME`
@@ -842,7 +1067,7 @@ Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.
 
 - Kind: `routine`
 - Symbol: `fio_dir_open`
-- Address: `$EEA7`
+- Address: `$F0B3`
 
 ## FIO.DIR_READ
 
@@ -850,7 +1075,7 @@ Read the next directory entry into the FIO directory result registers.
 
 - Kind: `routine`
 - Symbol: `fio_dir_read`
-- Address: `$EEAC`
+- Address: `$F0B8`
 
 ## FIO.EXEC
 
@@ -858,7 +1083,7 @@ Issue an FIO command, wait for completion, and return A=0/1 status.
 
 - Kind: `routine`
 - Symbol: `fio_exec`
-- Address: `$EE4E`
+- Address: `$F05A`
 
 Inputs:
 - `A`: FIO command byte.
@@ -872,7 +1097,7 @@ Load VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gload`
-- Address: `$EEBB`
+- Address: `$F0C7`
 
 Requires:
 - `FIO_NAME`
@@ -889,7 +1114,7 @@ Save VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gsave`
-- Address: `$EEB6`
+- Address: `$F0C2`
 
 Requires:
 - `FIO_NAME`
@@ -906,7 +1131,7 @@ Issue a raw FIO command without waiting for completion.
 
 - Kind: `routine`
 - Symbol: `fio_issue`
-- Address: `$EE3D`
+- Address: `$F049`
 
 Inputs:
 - `A`: FIO command byte.
@@ -917,7 +1142,7 @@ Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.
 
 - Kind: `routine`
 - Symbol: `fio_load`
-- Address: `$EEA2`
+- Address: `$F0AE`
 
 Requires:
 - `FIO_NAME`
@@ -931,7 +1156,7 @@ Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runt
 
 - Kind: `routine`
 - Symbol: `fio_load_runtime`
-- Address: `$EED4`
+- Address: `$F0E0`
 
 Requires:
 - `FIO_NAME`
@@ -943,7 +1168,7 @@ Create the directory named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_mkdir`
-- Address: `$EEC5`
+- Address: `$F0D1`
 
 Requires:
 - `FIO_NAME`
@@ -988,7 +1213,7 @@ Read the current directory into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_pwd`
-- Address: `$EECF`
+- Address: `$F0DB`
 
 ## FIO.RMDIR
 
@@ -996,7 +1221,7 @@ Remove the directory named by FIO.NAME/FIO_NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_rmdir`
-- Address: `$EECA`
+- Address: `$F0D6`
 
 Requires:
 - `FIO_NAME`
@@ -1008,7 +1233,7 @@ Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.
 
 - Kind: `routine`
 - Symbol: `fio_rng`
-- Address: `$EED9`
+- Address: `$F0E5`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -1059,7 +1284,7 @@ Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.
 
 - Kind: `routine`
 - Symbol: `fio_save`
-- Address: `$EE9D`
+- Address: `$F0A9`
 
 Requires:
 - `FIO_NAME`
@@ -1075,7 +1300,7 @@ Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.
 
 - Kind: `routine`
 - Symbol: `fio_set_io_error`
-- Address: `$EE73`
+- Address: `$F07F`
 
 Outputs:
 - `A`: 1 on error.
@@ -2671,14 +2896,13 @@ Issue the VGC graphics clear command.
 
 ## VGC.GCOLOR
 
-Issue the VGC graphics colour command using VGC.P0/P1.
+Issue the VGC graphics colour command using VGC.P0.
 
 - Kind: `routine`
 - Symbol: `vgc_gcolor`
 
 Requires:
 - `VGC_P0`
-- `VGC_P1`
 
 ## VGC.GFXTRANS
 

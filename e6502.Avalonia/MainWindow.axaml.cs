@@ -281,14 +281,6 @@ public partial class MainWindow : Window
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        // Handle NCC activation confirmation (Y/N prompt on BASIC screen)
-        if (_awaitingNccConfirm)
-        {
-            HandleNccConfirmKey(e.Key);
-            e.Handled = true;
-            return;
-        }
-
         if (e.Key == Key.F1 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             // Shift+F1: open doc editor for current program
@@ -371,8 +363,6 @@ public partial class MainWindow : Window
         base.OnKeyDown(e);
     }
 
-    private bool _awaitingNccConfirm;
-
     private void ToggleNccEditor()
     {
         if (_nccEditor == null) return;
@@ -384,19 +374,8 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Show confirmation on BASIC screen
-            WriteToScreen(0, 24, "THIS WILL CLEAR THE BASIC PROGRAM.  ARE YOU SURE? (Y/N) ", 1);
-            _awaitingNccConfirm = true;
-        }
-    }
-
-    private void HandleNccConfirmKey(Key key)
-    {
-        _awaitingNccConfirm = false;
-        // Clear the prompt line
-        WriteToScreen(0, 24, new string(' ', 80), 1);
-        if (key == Key.Y && _nccEditor is { IsActive: false })
             _nccEditor.Activate();
+        }
     }
 
     private void WriteToScreen(int col, int row, string text, byte fg)

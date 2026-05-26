@@ -34,6 +34,7 @@ public sealed partial class FileIoController
     private IStorageDevice? _dirDevice;
     private int _dirIndex;
     private bool _dirFiltered;
+    private string _wtsBankName = string.Empty;
 
     public FileIoController(
         Func<ushort, byte> busRead,
@@ -78,7 +79,11 @@ public sealed partial class FileIoController
 
         // Wire up auto-soundfont loading for MML playback with WTS voices
         if (_musicEngine is not null && _wts is not null)
-            _musicEngine.OnWtsSoundfontNeeded = () => MidiAutoSoundfont.TryLoad(this, _wts);
+            _musicEngine.OnWtsSoundfontNeeded = () =>
+            {
+                if (MidiAutoSoundfont.TryLoad(this, _wts))
+                    SetCurrentSoundfontName(MidiAutoSoundfont.DefaultSoundfont);
+            };
     }
 
     private static uint DefaultRandomUInt32()
@@ -1337,6 +1342,7 @@ public sealed partial class FileIoController
             int song = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
             if (song < 1) song = info.StartSong;
 
+            PublishSidPlaybackMetadata(data, filename);
             _sidPlayer.Play(info, song);
             SetOk();
         }
@@ -1527,7 +1533,10 @@ public sealed partial class FileIoController
 
             // Auto-load soundfont if WTS is empty and not in SID-only mode
             if (mode != MidiRoutingMode.SidOnly && _wts is not null && _wts.InstrumentCount == 0)
-                MidiAutoSoundfont.TryLoad(this, _wts);
+            {
+                if (MidiAutoSoundfont.TryLoad(this, _wts))
+                    SetCurrentSoundfontName(MidiAutoSoundfont.DefaultSoundfont);
+            }
 
             bool sidOnly = mode == MidiRoutingMode.SidOnly || (_wts is null || _wts.InstrumentCount == 0);
             int maxVoices = sidOnly ? 6 : 14;
@@ -1539,6 +1548,9 @@ public sealed partial class FileIoController
                 mapping);
 
             _musicEngine.SetVolume(15);
+            PublishMidiPlaybackMetadata(midi, new FileInfo(path).Length,
+                Path.GetFileNameWithoutExtension(filename),
+                sidOnly ? null : _wtsBankName);
             _midiPlayback.Play(midi, routing.VoiceToChannel, routing.InstrumentSlots);
             SetOk();
         }
@@ -1623,6 +1635,7 @@ public sealed partial class FileIoController
             using var stream = File.OpenRead(path);
             var bank = Sf2Loader.Load(stream);
             _wts.LoadBank(bank);
+            SetCurrentSoundfontName(filename);
             SetOk();
         }
         catch
@@ -1768,6 +1781,76 @@ public sealed partial class FileIoController
     // Metadata buffer population
     // -------------------------------------------------------------------------
 
+    private void ClearMetadata()
+    {
+        for (int i = VgcConstants.MetaBase; i <= VgcConstants.MetaEnd; i++)
+            _busWrite((ushort)i, 0);
+    }
+
+    private void WriteMetadataHeader(int metaType, long size)
+    {
+        ClearMetadata();
+        _busWrite((ushort)VgcConstants.MetaType, (byte)metaType);
+        int clamped = (int)Math.Min(size, 0xFFFF);
+        _busWrite((ushort)VgcConstants.MetaSizeL, (byte)(clamped & 0xFF));
+        _busWrite((ushort)VgcConstants.MetaSizeH, (byte)((clamped >> 8) & 0xFF));
+    }
+
+    private static string NormalizeSoundfontName(string name)
+    {
+        string normalized = name.Replace('\\', '/');
+        int slash = normalized.LastIndexOf('/');
+        if (slash >= 0)
+            normalized = normalized[(slash + 1)..];
+        int colon = normalized.LastIndexOf(':');
+        if (colon >= 0)
+            normalized = normalized[(colon + 1)..];
+        string ext = Path.GetExtension(normalized);
+        if (!string.IsNullOrEmpty(ext))
+            normalized = normalized[..^ext.Length];
+        return normalized;
+    }
+
+    private void SetCurrentSoundfontName(string name)
+    {
+        _wtsBankName = NormalizeSoundfontName(name);
+        PublishSoundfontMetadata(_wtsBankName);
+    }
+
+    private void PublishSoundfontMetadata(string? name)
+    {
+        for (int i = 0; i < VgcConstants.MusicMetaSoundfontLen; i++)
+            _busWrite((ushort)(VgcConstants.MusicMetaSoundfont + i), 0);
+
+        if (string.IsNullOrEmpty(name))
+            return;
+
+        WriteMetaStringFromManaged(VgcConstants.MusicMetaSoundfont,
+            NormalizeSoundfontName(name), VgcConstants.MusicMetaSoundfontLen);
+    }
+
+    private void PublishSidPlaybackMetadata(byte[] data, string fallbackTitle)
+    {
+        WriteMetadataHeader(1, data.Length);
+        ExtractSidMetadata(data);
+        if (_busRead((ushort)VgcConstants.MetaTitle) == 0)
+            WriteMetaStringFromManaged(VgcConstants.MetaTitle, fallbackTitle,
+                VgcConstants.MetaTitleLen);
+        PublishSoundfontMetadata(null);
+    }
+
+    private void PublishMidiPlaybackMetadata(MidiFile midi, long size,
+        string fallbackTitle, string? soundfontName)
+    {
+        WriteMetadataHeader(3, size);
+        try { ExtractMidiMetadata(midi); }
+        catch { /* playback metadata is best-effort in the UI host */ }
+        if (_busRead((ushort)VgcConstants.MetaTitle) == 0)
+            WriteMetaStringFromManaged(VgcConstants.MetaTitle, fallbackTitle,
+                VgcConstants.MetaTitleLen);
+        PublishSoundfontMetadata(soundfontName);
+    }
+
     private static NdiFileType ExtToNdiType(string ext) => ext.ToLowerInvariant() switch
     {
         ".sid" => NdiFileType.Sid, ".bin" => NdiFileType.Bin,
@@ -1782,11 +1865,6 @@ public sealed partial class FileIoController
 
     private void PopulateMetadata(StorageDirEntry entry)
     {
-        // Zero the metadata buffer
-        for (int i = VgcConstants.MetaBase; i <= VgcConstants.MetaEnd; i++)
-            _busWrite((ushort)i, 0);
-
-        // Write type
         int metaType = entry.IsDirectory ? VgcConstants.FioDirTypeDir : entry.FileType switch
         {
             NdiFileType.Sid => 1,
@@ -1795,12 +1873,7 @@ public sealed partial class FileIoController
             NdiFileType.Gfx => 4,
             _ => 0
         };
-        _busWrite((ushort)VgcConstants.MetaType, (byte)metaType);
-
-        // Write size
-        int sz = entry.SizeBytes;
-        _busWrite((ushort)VgcConstants.MetaSizeL, (byte)(sz & 0xFF));
-        _busWrite((ushort)VgcConstants.MetaSizeH, (byte)((sz >> 8) & 0xFF));
+        WriteMetadataHeader(metaType, entry.SizeBytes);
 
         // Load file bytes and extract type-specific metadata
         if (_dirDevice is null || entry.IsDirectory) return;
@@ -1833,6 +1906,18 @@ public sealed partial class FileIoController
         _busWrite((ushort)VgcConstants.MetaPlayH, data[12]);
         int songs = (data[14] << 8) | data[15];
         _busWrite((ushort)VgcConstants.MetaSongs, (byte)Math.Min(songs, 255));
+
+        int flags = data.Length > 0x77 ? (data[0x76] << 8) | data[0x77] : 0;
+        int clock = (flags >> 2) & 0x03;
+        int model = (flags >> 4) & 0x03;
+        byte metaFlags = model == 2
+            ? VgcConstants.MusicMetaFlagSid8580
+            : VgcConstants.MusicMetaFlagSid6581;
+        if (clock == 2)
+            metaFlags |= VgcConstants.MusicMetaFlagNtsc;
+        if (data.Length > 0x7B && (data[0x7A] != 0 || data[0x7B] != 0))
+            metaFlags |= VgcConstants.MusicMetaFlagStereo;
+        _busWrite((ushort)VgcConstants.MusicMetaFlags, metaFlags);
     }
 
     private void ExtractMidiMetadata(byte[] data)
@@ -1841,38 +1926,43 @@ public sealed partial class FileIoController
         {
             using var stream = new MemoryStream(data);
             var midi = Melanchall.DryWetMidi.Core.MidiFile.Read(stream);
-            int trackCount = midi.GetTrackChunks().Count();
-            _busWrite((ushort)VgcConstants.MetaSongs, (byte)Math.Min(trackCount, 255));
-
-            string? title = null;
-            string? copyright = null;
-            foreach (var track in midi.GetTrackChunks())
-            {
-                foreach (var ev in track.Events)
-                {
-                    if (title is null && ev is Melanchall.DryWetMidi.Core.SequenceTrackNameEvent tn)
-                        title = tn.Text;
-                    if (copyright is null && ev is Melanchall.DryWetMidi.Core.CopyrightNoticeEvent cr)
-                        copyright = cr.Text;
-                    if (title is not null && copyright is not null) break;
-                }
-                if (title is not null && copyright is not null) break;
-            }
-
-            if (title is not null)
-                WriteMetaStringFromManaged(VgcConstants.MetaTitle, title, VgcConstants.MetaTitleLen);
-            if (copyright is not null)
-            {
-                WriteMetaStringFromManaged(VgcConstants.MetaAuthor, copyright, VgcConstants.MetaAuthorLen);
-                WriteMetaStringFromManaged(VgcConstants.MetaCopyright, copyright, VgcConstants.MetaCopyrightLen);
-            }
-
-            var duration = midi.GetDuration<Melanchall.DryWetMidi.Interaction.MetricTimeSpan>();
-            int durationSecs = (int)duration.TotalSeconds;
-            _busWrite((ushort)VgcConstants.MetaDurL, (byte)(durationSecs & 0xFF));
-            _busWrite((ushort)VgcConstants.MetaDurH, (byte)((durationSecs >> 8) & 0xFF));
+            ExtractMidiMetadata(midi);
         }
         catch { /* MIDI parsing failed — leave at defaults */ }
+    }
+
+    private void ExtractMidiMetadata(MidiFile midi)
+    {
+        int trackCount = midi.GetTrackChunks().Count();
+        _busWrite((ushort)VgcConstants.MetaSongs, (byte)Math.Min(trackCount, 255));
+
+        string? title = null;
+        string? copyright = null;
+        foreach (var track in midi.GetTrackChunks())
+        {
+            foreach (var ev in track.Events)
+            {
+                if (title is null && ev is SequenceTrackNameEvent tn)
+                    title = tn.Text;
+                if (copyright is null && ev is CopyrightNoticeEvent cr)
+                    copyright = cr.Text;
+                if (title is not null && copyright is not null) break;
+            }
+            if (title is not null && copyright is not null) break;
+        }
+
+        if (title is not null)
+            WriteMetaStringFromManaged(VgcConstants.MetaTitle, title, VgcConstants.MetaTitleLen);
+        if (copyright is not null)
+        {
+            WriteMetaStringFromManaged(VgcConstants.MetaAuthor, copyright, VgcConstants.MetaAuthorLen);
+            WriteMetaStringFromManaged(VgcConstants.MetaCopyright, copyright, VgcConstants.MetaCopyrightLen);
+        }
+
+        var duration = midi.GetDuration<MetricTimeSpan>();
+        int durationSecs = Math.Min((int)duration.TotalSeconds, 0xFFFF);
+        _busWrite((ushort)VgcConstants.MetaDurL, (byte)(durationSecs & 0xFF));
+        _busWrite((ushort)VgcConstants.MetaDurH, (byte)((durationSecs >> 8) & 0xFF));
     }
 
     private void ExtractBinMetadata(byte[] data)

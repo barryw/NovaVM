@@ -7,6 +7,12 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#if defined(ARDUINO)
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#endif
+
+class FpgaBridgeCommandGuard;
 
 #ifndef FPGA_SPI_READ_HZ
 // Classic ESP32 full-duplex reads over GPIO matrix are only reliable through
@@ -15,6 +21,8 @@
 #endif
 
 class FpgaBridge {
+    friend class FpgaBridgeCommandGuard;
+
 public:
     FpgaBridge() = default;
 
@@ -29,6 +37,8 @@ public:
     bool supportsPokeMulti();
     bool supportsWtsEventStream();
     bool supportsKeyStream();
+    bool lockSharedBus();
+    void unlockSharedBus();
 
     using DrainByteHandler = void (*)(void* user, uint8_t value);
     void onDrainByte(DrainByteHandler handler, void* user) {
@@ -189,6 +199,9 @@ private:
     bool _supportsPokeMulti = false;
     bool _supportsWtsEventStream = false;
     bool _supportsKeyStream = false;
+#if defined(ARDUINO)
+    SemaphoreHandle_t _commandMutex = nullptr;
+#endif
 
     DrainByteHandler _drainHandler = nullptr;
     void* _drainUser = nullptr;
@@ -200,14 +213,20 @@ private:
     static constexpr uint8_t SPI_TOKEN_DATA = 0x01;
     static constexpr int SPI_DRAIN_LIMIT = 512;
     static constexpr uint8_t SPI_READ_POLL_BYTES = 8;
-    static constexpr uint16_t SDRAM_STREAM_MAX_BYTES = 3072;
-    static constexpr uint16_t WTS_EVENT_STREAM_MAX_BYTES = 3072;
+    // The SPI slave has a 512-byte RX FIFO and MOSI cannot be backpressured.
+    // Keep each unpaced write transaction comfortably below that depth so
+    // SDRAM/WTS consumers can drain the FIFO after CS rises without losing
+    // bytes and desynchronizing the debug protocol.
+    static constexpr uint16_t SDRAM_STREAM_MAX_BYTES = 256;
+    static constexpr uint16_t WTS_EVENT_STREAM_MAX_BYTES = 60;  // 10 x 6-byte records
 
     bool spiReady() const { return _spiEnabled && _spi != nullptr; }
     SPISettings spiWriteSettings() const { return SPISettings(_spiHz, MSBFIRST, SPI_MODE0); }
     SPISettings spiControlWriteSettings() const { return SPISettings(_spiReadHz, MSBFIRST, SPI_MODE0); }
     SPISettings spiReadSettings() const { return SPISettings(_spiReadHz, MSBFIRST, SPI_MODE0); }
     uint32_t actualSpiHzFor(uint32_t hz) const;
+    bool lockCommand();
+    void unlockCommand();
 
     bool recvStatus();
     bool recvBytes(uint8_t* buf, int count);

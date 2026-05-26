@@ -314,8 +314,8 @@ vgc_gcls:
 ; @label VGC.GCOLOR
 ; @kind routine
 ; @symbol vgc_gcolor
-; @summary Issue the VGC graphics colour command using VGC.P0/P1.
-; @requires VGC_P0 VGC_P1
+; @summary Issue the VGC graphics colour command using VGC.P0.
+; @requires VGC_P0
 vgc_gcolor:
       LDA   #VCMD_GCOLOR
       JMP   vgc_cmd

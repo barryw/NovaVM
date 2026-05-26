@@ -4,7 +4,7 @@
 
 **Goal:** Replace flat ~/e6502-programs storage with a device-oriented system supporting NDI disk images (FD0:--FD3:), host directories (HD0:--HD1:), subdirectories, autoboot, a BASIC tokenizer, and a CLI tool.
 
-**Architecture:** New `e6502.Storage` class library holds NDI format code, device abstractions, and tokenizer. `FileIoController` delegates to `DeviceManager` instead of direct System.IO. New `e6502.NDI` console project provides CLI disk management. ROM gains ~220 bytes of new keywords and autoboot routine.
+**Architecture:** New `e6502.Storage` class library holds NDI format code, device abstractions, and tokenizer. `FileIoController` delegates to `DeviceManager` instead of direct System.IO. New `e6502.Nova` console project provides CLI disk management. ROM gains ~220 bytes of new keywords and autoboot routine.
 
 **Tech Stack:** C#/.NET 10, MSTest, Python 3 (build tooling), ca65/ld65 (6502 assembly)
 
@@ -1602,7 +1602,7 @@ public sealed class BasicTokenizer
 
 **Step 4: Embed tokens.json as a resource or ship alongside**
 
-For now, the tokenizer loads from a file path. The NDI CLI tool and tests will pass the path. Later, we can embed it as a resource if needed.
+For now, the tokenizer loads from a file path. The Nova CLI tool and tests will pass the path. Later, we can embed it as a resource if needed.
 
 **Step 5: Run tests to verify they pass**
 
@@ -2443,21 +2443,21 @@ git commit -m "feat: wire DeviceManager into CompositeBusDevice"
 
 ---
 
-## Phase 4: NDI CLI Tool
+## Phase 4: Nova CLI Tool
 
-### Task 13: Create e6502.NDI project with basic commands
+### Task 13: Create e6502.Nova project with basic commands
 
 **Files:**
-- Create: `e6502.NDI/e6502.NDI.csproj`
-- Create: `e6502.NDI/Program.cs`
+- Create: `e6502.Nova/e6502.Nova.csproj`
+- Create: `e6502.Nova/Program.cs`
 - Modify: `e6502.sln`
 
 **Step 1: Create project**
 
 ```bash
 cd /Users/barry/Git/e6502
-dotnet new console -n e6502.NDI --framework net10.0
-dotnet sln add e6502.NDI/e6502.NDI.csproj
+dotnet new console -n e6502.Nova --framework net10.0
+dotnet sln add e6502.Nova/e6502.Nova.csproj
 ```
 
 Add project reference to e6502.Storage in the .csproj.
@@ -2471,16 +2471,16 @@ Use simple arg parsing (no external library needed -- follow e6502.Tools pattern
 **Step 3: Test manually**
 
 ```bash
-dotnet run --project e6502.NDI -- create /tmp/test.ndi --size 800 --label TESTDISK
-dotnet run --project e6502.NDI -- info /tmp/test.ndi
-dotnet run --project e6502.NDI -- dir /tmp/test.ndi
+dotnet run --project e6502.Nova -- create /tmp/test.ndi --size 800 --label TESTDISK
+dotnet run --project e6502.Nova -- info /tmp/test.ndi
+dotnet run --project e6502.Nova -- dir /tmp/test.ndi
 ```
 
 **Step 4: Commit**
 
 ```bash
-git add e6502.NDI/ e6502.sln
-git commit -m "feat: e6502.NDI CLI tool for disk image management"
+git add e6502.Nova/ e6502.sln
+git commit -m "feat: e6502.Nova CLI tool for disk image management"
 ```
 
 ---
@@ -2488,12 +2488,12 @@ git commit -m "feat: e6502.NDI CLI tool for disk image management"
 ### Task 14: Import/export with tokenize/detokenize
 
 **Files:**
-- Modify: `e6502.NDI/Program.cs`
+- Modify: `e6502.Nova/Program.cs`
 
 **Step 1: Implement tokenize command**
 
 ```bash
-dotnet run --project e6502.NDI -- tokenize docs/programs/joplin-entertainer.bas /tmp/entertainer.bas
+dotnet run --project e6502.Nova -- tokenize docs/programs/joplin-entertainer.bas /tmp/entertainer.bas
 ```
 
 Read ASCII text, tokenize via BasicTokenizer, write with 2-byte load address prefix.
@@ -2505,7 +2505,7 @@ Read .bas binary, strip 2-byte prefix, detokenize, write ASCII text.
 **Step 3: Implement import --tokenize**
 
 ```bash
-dotnet run --project e6502.NDI -- import /tmp/test.ndi docs/programs/joplin-entertainer.bas / --tokenize
+dotnet run --project e6502.Nova -- import /tmp/test.ndi docs/programs/joplin-entertainer.bas / --tokenize
 ```
 
 **Step 4: Implement export --detokenize**
@@ -2514,9 +2514,9 @@ dotnet run --project e6502.NDI -- import /tmp/test.ndi docs/programs/joplin-ente
 
 ```bash
 # Create image, import tokenized, export detokenized, diff
-dotnet run --project e6502.NDI -- create /tmp/rt.ndi --size 800
-dotnet run --project e6502.NDI -- import /tmp/rt.ndi docs/programs/joplin-entertainer.bas /MUSIC --tokenize
-dotnet run --project e6502.NDI -- export /tmp/rt.ndi /MUSIC/joplin-entertainer /tmp/ --detokenize
+dotnet run --project e6502.Nova -- create /tmp/rt.ndi --size 800
+dotnet run --project e6502.Nova -- import /tmp/rt.ndi docs/programs/joplin-entertainer.bas /MUSIC --tokenize
+dotnet run --project e6502.Nova -- export /tmp/rt.ndi /MUSIC/joplin-entertainer /tmp/ --detokenize
 diff docs/programs/joplin-entertainer.bas /tmp/joplin-entertainer.txt
 ```
 
@@ -2750,15 +2750,15 @@ Expected: ALL tests pass.
 
 ```bash
 # Create a disk image with the CLI tool
-dotnet run --project e6502.NDI -- create ~/e6502-disks/fd0.ndi --size 800 --label "BOOT"
+dotnet run --project e6502.Nova -- create ~/e6502-disks/fd0.ndi --size 800 --label "BOOT"
 
 # Import an autoboot program
 echo '10 PRINT "HELLO FROM DISK!"' > /tmp/autoboot.txt
 echo '20 PRINT "AUTOBOOT WORKS!"' >> /tmp/autoboot.txt
-dotnet run --project e6502.NDI -- import ~/e6502-disks/fd0.ndi /tmp/autoboot.txt / --tokenize
+dotnet run --project e6502.Nova -- import ~/e6502-disks/fd0.ndi /tmp/autoboot.txt / --tokenize
 
 # Rename to AUTOBOOT
-dotnet run --project e6502.NDI -- dir ~/e6502-disks/fd0.ndi
+dotnet run --project e6502.Nova -- dir ~/e6502-disks/fd0.ndi
 
 # Run the emulator -- should autoboot from FD0
 dotnet run --project e6502.Avalonia

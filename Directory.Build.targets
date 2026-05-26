@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    .NET 10 NativeAOT publish hangs on this macOS SDK install when ILLink tasks
+    are launched through MSBuild's external TaskHostFactory. Running the same
+    ILLink tasks in-process reaches native code generation and produces a valid
+    Mach-O binary. Keep this scoped to macOS NativeAOT publishes.
+  -->
+  <UsingTask TaskName="ILLink"
+             AssemblyFile="$(ILLinkTasksAssembly)"
+             Condition="'$(PublishAot)' == 'true' and '$(ILLinkTasksAssembly)' != '' and $([MSBuild]::IsOSPlatform('OSX'))"
+             Override="true" />
+  <UsingTask TaskName="ComputeManagedAssemblies"
+             AssemblyFile="$(ILLinkTasksAssembly)"
+             Condition="'$(PublishAot)' == 'true' and '$(ILLinkTasksAssembly)' != '' and $([MSBuild]::IsOSPlatform('OSX'))"
+             Override="true" />
+</Project>

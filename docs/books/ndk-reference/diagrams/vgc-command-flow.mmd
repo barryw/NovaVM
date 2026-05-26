@@ -1,0 +1,17 @@
+%%{init: {"theme": "base", "htmlLabels": false, "flowchart": {"curve": "linear"}}}%%
+flowchart LR
+    PREP["load<br/>P0-P14"]
+    ISSUE["issue<br/>command"]
+    BUSY["busy<br/>bit<br/>set"]
+    NEED{"wait<br/>now"}
+    WAIT["poll<br/>bit 0"]
+    OVERLAP["overlap<br/>CPU<br/>work"]
+    DONE["done"]
+
+    PREP --> ISSUE
+    ISSUE --> BUSY
+    BUSY --> NEED
+    NEED -->|yes| WAIT
+    NEED -->|no| OVERLAP
+    OVERLAP --> WAIT
+    WAIT --> DONE

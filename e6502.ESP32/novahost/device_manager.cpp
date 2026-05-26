@@ -11,6 +11,7 @@ DeviceManager::DeviceManager()
         _current_dirs[i] = ndi::ROOT_PARENT;
         strcpy(_current_paths[i], "/");
     }
+    strcpy(_last_mount_error, "none");
 }
 
 DeviceManager::~DeviceManager() {
@@ -21,34 +22,64 @@ DeviceManager::~DeviceManager() {
 // Mount / unmount
 // ---------------------------------------------------------------------------
 bool DeviceManager::mount(int slot, const char* sd_path) {
-    if (slot < 0 || slot >= NUM_SLOTS || !sd_path) return false;
-    unmount(slot);
-
-    // "r+" — open existing file for read+write without truncation. NDI
-    // disk images must persist across mounts; FILE_WRITE ("w") would
-    // truncate them on every boot.
-    _files[slot] = SD.open(sd_path, "r+");
-    if (!_files[slot]) {
-        Serial.printf("[dm] mount %s: open failed\n", sd_path);
+    if (slot < 0 || slot >= NUM_SLOTS) {
+        strcpy(_last_mount_error, "bad slot");
         return false;
     }
+    if (!sd_path) {
+        strcpy(_last_mount_error, "bad path");
+        return false;
+    }
+    unmount(slot);
 
-    _streams[slot] = new SdStream(_files[slot]);
-    _images[slot]  = new ndi::NdiImage();
-    if (!_images[slot]->open(_streams[slot])) {
-        Serial.printf("[dm] mount %s: NdiImage::open failed (bad magic?)\n",
-                      sd_path);
+    // Open existing file for read+write without truncation. NDI disk images
+    // must persist across mounts; FILE_WRITE ("w") would truncate them.
+    static const char* const modes[] = { "rb+", "r+b", "r+" };
+    const char* opened_mode = nullptr;
+    for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+        _files[slot] = SD.open(sd_path, modes[i]);
+        if (!_files[slot])
+            continue;
+
+        _streams[slot] = new SdStream(_files[slot]);
+        _images[slot]  = new ndi::NdiImage();
+        if (!_streams[slot] || !_images[slot]) {
+            snprintf(_last_mount_error, sizeof(_last_mount_error),
+                     "allocation failed: %s", sd_path);
+            unmount(slot);
+            return false;
+        }
+
+        if (_images[slot]->open(_streams[slot])) {
+            opened_mode = modes[i];
+            break;
+        }
+
+        snprintf(_last_mount_error, sizeof(_last_mount_error),
+                 "NdiImage::open failed mode %s: %s",
+                 modes[i], _images[slot]->last_error());
+        Serial.printf("[dm] mount %s: NdiImage::open failed with mode %s\n",
+                      sd_path, modes[i]);
         unmount(slot);
+    }
+    if (!opened_mode) {
+        if (_last_mount_error[0] == 0 || strcmp(_last_mount_error, "none") == 0) {
+            snprintf(_last_mount_error, sizeof(_last_mount_error),
+                     "read/write open failed: %s", sd_path);
+            Serial.printf("[dm] mount %s: open failed\n", sd_path);
+        }
         return false;
     }
 
     _current_dirs[slot] = ndi::ROOT_PARENT;
     strcpy(_current_paths[slot], "/");
-    Serial.printf("[dm] %s ← %s (label=%s, total=%u, free=%d)\n",
+    Serial.printf("[dm] %s ← %s mode=%s (label=%s, total=%u, free=%d)\n",
                   prefix_for_slot(slot), sd_path,
+                  opened_mode,
                   _images[slot]->header().volume_label,
                   (unsigned)_images[slot]->header().total_sectors,
                   _images[slot]->free_sectors());
+    strcpy(_last_mount_error, "none");
     return true;
 }
 

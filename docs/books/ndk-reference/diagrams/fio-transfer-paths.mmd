@@ -1,0 +1,23 @@
+%%{init: {"theme": "base", "htmlLabels": false, "flowchart": {"curve": "linear"}}}%%
+flowchart TB
+    FILE["host<br/>file"]
+    FIO["FIO<br/>command"]
+    RAMCMD["fio_load<br/>fio_save"]
+    VGCCMD["fio_gload<br/>fio_gsave"]
+    XCMD["XLOAD<br/>XSAVE"]
+    PAGE["XPAGE<br/>pager"]
+    RAM["CPU<br/>RAM"]
+    VGC["VGC<br/>planes"]
+    XRAM["flat<br/>XRAM"]
+
+    FILE --> FIO
+    FIO --> RAMCMD
+    FIO --> VGCCMD
+    FIO --> XCMD
+    FIO --> PAGE
+    RAMCMD <--> RAM
+    VGCCMD <--> VGC
+    XCMD <--> XRAM
+    PAGE --> RAM
+    PAGE --> VGC
+    PAGE --> XRAM

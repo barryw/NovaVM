@@ -9,6 +9,11 @@ PAGER_IMPLEMENTATION_INCLUDED = 1
 
       .export pager_load_file_page
 
+.ifndef FIO_EMIT_ALL_RUNTIME
+FIO_EMIT_ALL_RUNTIME = 1
+.endif
+.include "fio.s"
+
 ; Stream a file slice directly into the selected target.
 ; @label PAGER.LOAD_FILE_PAGE
 ; @kind routine

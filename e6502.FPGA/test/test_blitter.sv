@@ -27,6 +27,8 @@ module test_blitter;
     wire  [18:0] blt_xram_addr;
     wire  [7:0]  blt_xram_wdata;
     wire         blt_xram_we;
+    wire         blt_xram_re;
+    logic        xram_busy;
 
     // VGC memory port
     wire  [2:0]  blt_vgc_space;
@@ -102,6 +104,7 @@ module test_blitter;
         .ram_wdata(blt_ram_wdata), .ram_we(blt_ram_we),
         .xram_addr(blt_xram_addr), .xram_rdata(blt_xram_rdata),
         .xram_wdata(blt_xram_wdata), .xram_we(blt_xram_we),
+        .xram_re(blt_xram_re), .xram_busy(xram_busy),
         .vgc_space(blt_vgc_space), .vgc_addr(blt_vgc_addr),
         .vgc_rdata(blt_vgc_rdata), .vgc_wdata(blt_vgc_wdata),
         .vgc_we(blt_vgc_we), .vgc_re(blt_vgc_re),
@@ -117,6 +120,7 @@ module test_blitter;
     // Register address helpers
     // ---------------------------------------------------------------
     localparam BLT = 16'hBA83;
+    localparam BLT_ROTANGLE = 16'hBAA2;
 
     task automatic write_reg(input logic [15:0] addr, input logic [7:0] data);
         @(posedge clk);
@@ -207,6 +211,19 @@ module test_blitter;
         blt_reg(19, 8'h00);                 // Mode = copy
     endtask
 
+    task automatic setup_rotate(
+        input int src_space, input int src_addr, input int src_stride,
+        input int dst_space, input int dst_addr, input int dst_stride,
+        input int size, input int angle, input int background
+    );
+        setup_copy(src_space, src_addr, src_stride,
+                   dst_space, dst_addr, dst_stride,
+                   size, size);
+        blt_reg(19, 8'h04);                 // Mode = rotate
+        blt_reg(21, background);            // out-of-bounds/background byte
+        write_reg(BLT_ROTANGLE, angle[7:0]);
+    endtask
+
     // ---------------------------------------------------------------
     // Tests
     // ---------------------------------------------------------------
@@ -216,6 +233,7 @@ module test_blitter;
 
         rst = 1; cpu_we = 0; cpu_re = 0;
         video_write_safe = 1;
+        xram_busy = 0;
         cpu_addr = 0; cpu_wdata = 0;
 
         for (int i = 0; i < 65536; i++) sim_ram[i] = 0;
@@ -242,12 +260,13 @@ module test_blitter;
         blt_reg(13, 8'h04);
         blt_reg(19, 8'h03);
         blt_reg(20, 8'hAA);
+        write_reg(BLT_ROTANGLE, 8'h40);
         rst = 1;
         repeat(2) @(posedge clk);
         rst = 0;
         repeat(5) @(posedge clk);
         all_regs_zero = 1;
-        for (int i = 0; i < 25; i++)
+        for (int i = 0; i < 26; i++)
             all_regs_zero &= (dut.regs[i] == 8'h00);
         check("all blitter regs reset to zero/idle", all_regs_zero);
         check("blitter state reset idle", dut.state == 0);
@@ -576,6 +595,79 @@ module test_blitter;
         check("rowbuf+ck: dst[1] = FF (skipped)", sim_ram[16'hA101] == 8'hFF);
         check("rowbuf+ck: dst[2] = 02", sim_ram[16'hA102] == 8'h02);
         check("rowbuf+ck: dst[3] = FF (skipped)", sim_ram[16'hA103] == 8'hFF);
+
+        // ----- Test 22: Rotate 90 degrees RAM to RAM -----
+        $display("Test: Rotate 90 degrees");
+        for (int r = 0; r < 3; r++)
+            for (int c = 0; c < 3; c++)
+                sim_ram[16'hA200 + (r * 3) + c] = (r * 3) + c + 1;
+        for (int i = 0; i < 9; i++)
+            sim_ram[16'hA300 + i] = 8'hEE;
+
+        setup_rotate(0, 16'hA200, 3, 0, 16'hA300, 3, 3, 64, 8'h00);
+        blt_start();
+        wait_blt_done();
+
+        check("rotate90: status ok", dut.regs[1] == 8'h02);
+        check("rotate90: count = 9", {dut.regs[24], dut.regs[23], dut.regs[22]} == 24'd9);
+        check("rotate90: row0 = 7,4,1",
+              sim_ram[16'hA300] == 8'd7 &&
+              sim_ram[16'hA301] == 8'd4 &&
+              sim_ram[16'hA302] == 8'd1);
+        check("rotate90: row1 = 8,5,2",
+              sim_ram[16'hA303] == 8'd8 &&
+              sim_ram[16'hA304] == 8'd5 &&
+              sim_ram[16'hA305] == 8'd2);
+        check("rotate90: row2 = 9,6,3",
+              sim_ram[16'hA306] == 8'd9 &&
+              sim_ram[16'hA307] == 8'd6 &&
+              sim_ram[16'hA308] == 8'd3);
+
+        // ----- Test 23: Rotate fills out-of-bounds samples with BltColorKey -----
+        $display("Test: Rotate background fill");
+        for (int r = 0; r < 5; r++)
+            for (int c = 0; c < 5; c++)
+                sim_ram[16'hA400 + (r * 5) + c] = (r * 5) + c + 1;
+        for (int i = 0; i < 25; i++)
+            sim_ram[16'hA500 + i] = 8'h00;
+
+        setup_rotate(0, 16'hA400, 5, 0, 16'hA500, 5, 5, 32, 8'hFE);
+        blt_start();
+        wait_blt_done();
+
+        check("rotate45: status ok", dut.regs[1] == 8'h02);
+        check("rotate45: corners use background",
+              sim_ram[16'hA500] == 8'hFE &&
+              sim_ram[16'hA504] == 8'hFE &&
+              sim_ram[16'hA514] == 8'hFE &&
+              sim_ram[16'hA518] == 8'hFE);
+        check("rotate45: center stays centered", sim_ram[16'hA50C] == 8'd13);
+
+        // ----- Test 24: Rotate rejects non-square regions -----
+        $display("Test: Rotate rejects non-square regions");
+        setup_copy(0, 16'hA200, 3, 0, 16'hA600, 3, 3, 2);
+        blt_reg(19, 8'h04);
+        write_reg(BLT_ROTANGLE, 8'h00);
+        blt_start();
+        wait_blt_done();
+        check("rotate non-square: status error", dut.regs[1] == 8'h03);
+        check("rotate non-square: errcode badargs", dut.regs[2] == 8'h04);
+
+        setup_copy(0, 16'hA200, 257, 0, 16'hA600, 257, 257, 257);
+        blt_reg(19, 8'h04);
+        write_reg(BLT_ROTANGLE, 8'h00);
+        blt_start();
+        wait_blt_done();
+        check("rotate too large: status error", dut.regs[1] == 8'h03);
+        check("rotate too large: errcode badargs", dut.regs[2] == 8'h04);
+
+        // ----- Test 25: Rotate rejects same-space overlap -----
+        $display("Test: Rotate rejects overlapping destination");
+        setup_rotate(0, 16'hA200, 3, 0, 16'hA201, 3, 3, 64, 8'h00);
+        blt_start();
+        wait_blt_done();
+        check("rotate overlap: status error", dut.regs[1] == 8'h03);
+        check("rotate overlap: errcode badargs", dut.regs[2] == 8'h04);
 
         // ---------------------------------------------------------------
         $display("");

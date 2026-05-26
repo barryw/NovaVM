@@ -22,11 +22,35 @@ extern void novaNicDebugJson(char* out, size_t out_size);
 
 DebugServer::DebugServer(FpgaBridge& bridge, uint16_t port)
     : _bridge(bridge), _server(port), _paused(false),
-      _asyncOp(ASYNC_NONE), _asyncDeadline(0), _asyncNextPoll(0) {}
+      _asyncOp(ASYNC_NONE), _asyncDeadline(0), _asyncNextPoll(0),
+      _screenBuf(nullptr) {}
 
 void DebugServer::begin() {
     _server.begin();
     logLn("Debug server listening on port 6503");
+}
+
+bool DebugServer::readScreen() {
+    if (!_screenBuf) {
+        _screenBuf = (uint8_t*)malloc(SCREEN_BYTES);
+        if (!_screenBuf) {
+            logLn("Debug screen buffer allocation failed (%u bytes)",
+                  (unsigned)SCREEN_BYTES);
+            return false;
+        }
+    }
+    if (!_bridge.readScreen(_screenBuf)) {
+        releaseScreenBuffer();
+        return false;
+    }
+    return true;
+}
+
+void DebugServer::releaseScreenBuffer() {
+    if (_screenBuf) {
+        free(_screenBuf);
+        _screenBuf = nullptr;
+    }
 }
 
 // =========================================================================
@@ -430,7 +454,7 @@ void DebugServer::cmdTypeText(const String& json) {
 }
 
 void DebugServer::cmdReadScreen() {
-    if (!_bridge.readScreen(_screenBuf)) {
+    if (!readScreen()) {
         respondError("FPGA read_screen failed");
         return;
     }
@@ -464,6 +488,7 @@ void DebugServer::cmdReadScreen() {
     snprintf(tail, sizeof(tail), "],\"cursor_x\":%d,\"cursor_y\":%d}", cx, cy);
     resp += tail;
 
+    releaseScreenBuffer();
     respond(resp.c_str());
 }
 
@@ -477,7 +502,7 @@ void DebugServer::cmdReadLine(const String& json) {
     }
     if (row < 0 || row >= SCREEN_ROWS) { respondError("Invalid row"); return; }
 
-    if (!_bridge.readScreen(_screenBuf)) {
+    if (!readScreen()) {
         respondError("FPGA read_screen failed");
         return;
     }
@@ -497,6 +522,7 @@ void DebugServer::cmdReadLine(const String& json) {
         else                 resp += ch;
     }
     resp += "\"}";
+    releaseScreenBuffer();
     respond(resp.c_str());
 }
 
@@ -790,8 +816,10 @@ void DebugServer::cmdColdStart(const String& json) {
         waitText = "Ready";
     unsigned long deadline = millis() + 10000;
     while (millis() < deadline) {
-        if (_bridge.readScreen(_screenBuf)) {
-            if (findTextOnScreen(waitText.c_str()) >= 0) {
+        if (readScreen()) {
+            bool found = findTextOnScreen(waitText.c_str()) >= 0;
+            releaseScreenBuffer();
+            if (found) {
                 respondOk();
                 return;
             }
@@ -832,8 +860,10 @@ void DebugServer::cmdVmReset(const String& json) {
         waitText = "Ready";
     unsigned long deadline = millis() + 10000;
     while (millis() < deadline) {
-        if (_bridge.readScreen(_screenBuf)) {
-            if (findTextOnScreen(waitText.c_str()) >= 0) {
+        if (readScreen()) {
+            bool found = findTextOnScreen(waitText.c_str()) >= 0;
+            releaseScreenBuffer();
+            if (found) {
                 respondOk();
                 return;
             }
@@ -853,8 +883,9 @@ void DebugServer::cmdWaitReady(const String& json) {
     int timeout = extractInt(json, "timeout_ms", 5000);
 
     // Check immediately
-    if (_bridge.readScreen(_screenBuf)) {
+    if (readScreen()) {
         int row = findTextOnScreen(text.c_str());
+        releaseScreenBuffer();
         if (row >= 0) {
             char buf[64];
             snprintf(buf, sizeof(buf), "{\"ok\":true,\"found\":true,\"row\":%d}", row);
@@ -935,8 +966,9 @@ void DebugServer::handleAsync() {
 
     switch (_asyncOp) {
         case ASYNC_WAIT_READY: {
-            if (_bridge.readScreen(_screenBuf)) {
+            if (readScreen()) {
                 int row = findTextOnScreen(_asyncText.c_str());
+                releaseScreenBuffer();
                 if (row >= 0) {
                     char buf[64];
                     snprintf(buf, sizeof(buf),

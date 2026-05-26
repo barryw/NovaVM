@@ -1,0 +1,23 @@
+%%{init: {"theme": "base", "htmlLabels": false, "flowchart": {"curve": "linear"}}}%%
+flowchart LR
+    CPU["6502<br/>code"]
+    BYTE["byte<br/>commands"]
+    BULK["bulk<br/>paths"]
+    SELECT["space<br/>and<br/>offset"]
+    MEMORY["off-bus<br/>VGC<br/>memory"]
+    CHAR["1<br/>character"]
+    COLOR["2<br/>color"]
+    GFX["3<br/>bitmap"]
+    SPR["4<br/>sprite<br/>shape"]
+    ATTR["7<br/>text<br/>attribute"]
+
+    CPU --> BYTE
+    CPU --> BULK
+    BYTE --> SELECT
+    BULK --> SELECT
+    SELECT --> MEMORY
+    MEMORY --> CHAR
+    MEMORY --> COLOR
+    MEMORY --> GFX
+    MEMORY --> SPR
+    MEMORY --> ATTR

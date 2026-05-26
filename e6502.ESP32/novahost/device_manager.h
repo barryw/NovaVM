@@ -34,6 +34,7 @@ public:
     // Mount an .ndi file into the given slot. sd_path is absolute on
     // the SD root, e.g. "/hd0.ndi". Returns true on success.
     bool mount(int slot, const char* sd_path);
+    const char* last_mount_error() const { return _last_mount_error; }
 
     // Unmount a slot, freeing all associated handles.
     void unmount(int slot);
@@ -90,6 +91,7 @@ private:
     uint16_t     _current_dirs[NUM_SLOTS];
     char         _current_paths[NUM_SLOTS][64];
     int          _default_slot;
+    char         _last_mount_error[96];
 
     // Helper: walk a "/-separated path under the given slot, returning
     // the resolved parent index for the directory containing the

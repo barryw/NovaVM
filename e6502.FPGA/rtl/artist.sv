@@ -105,7 +105,7 @@ module artist (
     logic [9:0]  fill_sp;
     logic [3:0]  fill_target;
     logic [2:0]  paint_phase;  // expanded for serialized pushes
-    logic [1:0]  paint_init;  // countdown: 2=issued read, 1=dpram done, 0=ready
+    logic [1:0]  paint_init;  // countdown: 3=issued read, 1=capture piped data, 0=ready
     logic [1:0]  push_count;   // 0-3: which neighbor to push
     logic [16:0] push_neighbors [0:3];  // latched neighbors to push
 
@@ -540,7 +540,10 @@ module artist (
                         x <= {1'b0, cmd_x0};
                         y <= {2'b0, cmd_y0};
                         if (cmd_x0 < GFX_W && cmd_y0 < GFX_H) begin
-                            // Issue first read to get fill_target
+                            // Issue first read to get fill_target.
+                            // gfx RAM is synchronous and gfx_rdata has one
+                            // additional pipeline register, so the seed color
+                            // is valid for capture three cycles later.
                             gfx_raddr <= gfx_addr_xy(cmd_x0, cmd_y0);
                             gfx_re <= 1;
                             fs_a_addr <= 9'd0;
@@ -548,7 +551,7 @@ module artist (
                             fs_a_we <= 1;
                             fill_sp <= 1;
                             paint_phase <= 3'd3; // skip to gfx read wait
-                            paint_init <= 2'd2;  // 2 cycles: dpram + pipeline reg
+                            paint_init <= 2'd3;  // dpram read + pipeline reg + capture
                             busy <= 1; op <= CMD_PAINT;
                         end
                     end

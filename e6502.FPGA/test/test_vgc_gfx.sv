@@ -330,6 +330,39 @@ module test_vgc_gfx;
                     if (peek_gfx(x, y) == 4'd5) n++;
             check_eq("PAINT: interior 171 pixels color 5", n, 171);
         end
+
+        gcls();
+        gcolor(11);
+        rect(60, 50, 76, 60);
+        gcolor(1);
+        fill_rect(61, 51, 75, 59);
+        gcolor(4);
+        paint(68, 55);
+        check_eq("PAINT: white seed pixel recolored", int'(peek_gfx(68, 55)), 4);
+        check_eq("PAINT: white region boundary retained", int'(peek_gfx(60, 50)), 11);
+        begin
+            int n = 0;
+            for (int y = 51; y <= 59; y++)
+                for (int x = 61; x <= 75; x++)
+                    if (peek_gfx(x, y) == 4'd4) n++;
+            check_eq("PAINT: white interior 135 pixels color 4", n, 135);
+        end
+
+        gcls();
+        gcolor(11);
+        rect(90, 20, 101, 59);
+        gcolor(1);
+        fill_rect(91, 21, 100, 58);
+        gcolor(8);
+        paint(96, 52);
+        check_eq("PAINT: white-key-scale seed pixel recolored", int'(peek_gfx(96, 52)), 8);
+        begin
+            int n = 0;
+            for (int y = 21; y <= 58; y++)
+                for (int x = 91; x <= 100; x++)
+                    if (peek_gfx(x, y) == 4'd8) n++;
+            check_eq("PAINT: white-key-scale interior 380 pixels color 8", n, 380);
+        end
     endtask
 
     task automatic test_gcls_full_coverage();

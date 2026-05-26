@@ -1,0 +1,21 @@
+%%{init: {"theme": "base", "htmlLabels": false, "flowchart": {"curve": "linear"}}}%%
+flowchart TB
+    APP["application<br/>assembly"]
+    INC["interface<br/>includes<br/>*.inc"]
+    IMPL["runtime<br/>helpers<br/>*.s"]
+    NVR["NVR<br/>pseudo-registers"]
+    HW["memory-mapped<br/>Nova<br/>hardware"]
+    HOST["NovaHost<br/>services"]
+    VGC["VGC"]
+    FIO["FIO"]
+    DMA["DMA<br/>blitter<br/>XMC"]
+
+    APP --> INC
+    APP --> IMPL
+    APP --> NVR
+    IMPL --> NVR
+    IMPL --> HW
+    HW --> VGC
+    HW --> FIO
+    HW --> DMA
+    FIO --> HOST

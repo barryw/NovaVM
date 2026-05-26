@@ -1,5 +1,6 @@
 #include "sd_http_server.h"
 #include <ArduinoJson.h>
+#include <stdarg.h>
 #include <string.h>
 
 extern void logLn(const char* fmt, ...);
@@ -8,7 +9,22 @@ extern bool g_sd_mounted;
 extern const char* novaBootPhaseName();
 extern bool novaFpgaBridgeAvailable();
 extern uint8_t novaHostStatusFlags();
+extern bool novaHttpTaskRunning();
+extern bool novaHttpTaskLoopSeen();
+extern uint32_t novaHttpServiceAgeMs();
+extern uint32_t novaHttpFallbackCount();
+extern bool novaBridgeTaskRunning();
+extern bool novaBridgeTaskLoopSeen();
+extern uint32_t novaBridgeServiceAgeMs();
+extern uint32_t novaBridgeFallbackCount();
+extern bool novaSystemTaskRunning();
+extern bool novaSystemTaskLoopSeen();
+extern uint32_t novaSystemServiceAgeMs();
 extern bool novaNicDispatcherAvailable();
+extern bool novaStorageBusy();
+extern bool novaBeginStorageMutation();
+extern void novaEndStorageMutation();
+extern void novaReleaseIdleAudioCacheForStorage();
 extern void novaAudioStatusJson(char* out, size_t out_len);
 extern void novaAudioStop();
 extern void novaWifiStateChanged();
@@ -29,19 +45,34 @@ static bool persistDriveMountConfig(const char* prefix, const char* sd_path) {
         }
     }
 
-    JsonObject mounts = doc["mounts"].to<JsonObject>();
+    JsonObject mounts = doc["mounts"].as<JsonObject>();
+    if (mounts.isNull())
+        mounts = doc["mounts"].to<JsonObject>();
     mounts[prefix] = sd_path ? sd_path : "";
 
     if (!SD.exists("/config") && !SD.mkdir("/config"))
         return false;
 
-    File out = SD.open("/config/boot.json", FILE_WRITE, true);
+    const char* tmp_path = "/config/boot.json.tmp";
+    if (SD.exists(tmp_path) && !SD.remove(tmp_path))
+        return false;
+
+    File out = SD.open(tmp_path, FILE_WRITE, true);
     if (!out)
         return false;
 
     serializeJsonPretty(doc, out);
     out.println();
     out.close();
+
+    if (SD.exists("/config/boot.json") && !SD.remove("/config/boot.json")) {
+        SD.remove(tmp_path);
+        return false;
+    }
+    if (!SD.rename(tmp_path, "/config/boot.json")) {
+        SD.remove(tmp_path);
+        return false;
+    }
     return true;
 }
 
@@ -77,6 +108,55 @@ static bool loadDriveMountConfig(const char* prefix, char* out,
     return true;
 }
 
+static String normalizedSdPath(const char* path) {
+    String value(path ? path : "");
+    value.trim();
+    value.toLowerCase();
+    while (value.startsWith("/"))
+        value.remove(0, 1);
+    return value;
+}
+
+class StorageMutationGuard {
+public:
+    StorageMutationGuard() : _locked(novaBeginStorageMutation()) {}
+    ~StorageMutationGuard() {
+        if (_locked)
+            novaEndStorageMutation();
+    }
+    bool locked() const { return _locked; }
+
+private:
+    bool _locked;
+};
+
+static size_t sdFileSize(const char* path) {
+    File verify = SD.open(path, FILE_READ);
+    size_t size = verify ? verify.size() : 0;
+    if (verify)
+        verify.close();
+    return size;
+}
+
+static bool verifySdFileSize(const char* path, uint32_t expected,
+                             char* error, size_t error_len) {
+    size_t committed_size = 0;
+    for (uint8_t attempt = 0; attempt < 10; attempt++) {
+        committed_size = sdFileSize(path);
+        if (committed_size == (size_t)expected)
+            return true;
+
+        delay(10);
+    }
+
+    if (error && error_len > 0) {
+        snprintf(error, error_len, "size mismatch after write: %lu/%lu bytes",
+                 (unsigned long)committed_size,
+                 (unsigned long)expected);
+    }
+    return false;
+}
+
 void SdHttpServer::begin() {
     if (_started) return;
     _started = true;
@@ -100,13 +180,16 @@ void SdHttpServer::loop() {
     WiFiClient client = _server.available();
     if (!client) return;
 
+    client.setNoDelay(true);
+    client.setTimeout(1000);
     handle_client(client);
     client.stop();
 }
 
 void SdHttpServer::handle_client(WiFiClient& client) {
     char line[LINE_BUF_BYTES];
-    if (!read_line(client, line, sizeof(line))) return;
+    if (!read_line(client, line, sizeof(line), REQUEST_LINE_TIMEOUT_MS))
+        return;
 
     char method[8] = {0};
     char url[256] = {0};
@@ -133,7 +216,7 @@ void SdHttpServer::handle_client(WiFiClient& client) {
 
     uint32_t content_len = 0;
     bool have_content_len = false;
-    while (read_line(client, line, sizeof(line))) {
+    while (read_line(client, line, sizeof(line), HEADER_LINE_TIMEOUT_MS)) {
         if (line[0] == 0) break;
         if (strncasecmp(line, "Content-Length:", 15) == 0) {
             content_len = (uint32_t)strtoul(line + 15, nullptr, 10);
@@ -143,17 +226,34 @@ void SdHttpServer::handle_client(WiFiClient& client) {
 
     if (strcmp(method, "GET") == 0 && strcmp(url, "/health") == 0) {
         uint8_t host_status_flags = novaHostStatusFlags();
-        char body[320];
+        char body[760];
         snprintf(body, sizeof(body),
                  "{\"ok\":true,\"bootPhase\":\"%s\",\"sdMounted\":%s,"
                  "\"fpgaBridgeAvailable\":%s,"
                  "\"hostStatusFlags\":%u,\"hostStatusHex\":\"0x%02X\","
+                 "\"http\":{\"taskRunning\":%s,\"taskLoopSeen\":%s,"
+                 "\"serviceAgeMs\":%lu,\"fallbackCount\":%lu},"
+                 "\"bridge\":{\"taskRunning\":%s,\"taskLoopSeen\":%s,"
+                 "\"serviceAgeMs\":%lu,\"fallbackCount\":%lu},"
+                 "\"system\":{\"taskRunning\":%s,\"taskLoopSeen\":%s,"
+                 "\"serviceAgeMs\":%lu},"
                  "\"capabilities\":{\"nicDispatcher\":%s}}",
                  novaBootPhaseName(),
                  g_sd_mounted ? "true" : "false",
                  novaFpgaBridgeAvailable() ? "true" : "false",
                  (unsigned)host_status_flags,
                  (unsigned)host_status_flags,
+                 novaHttpTaskRunning() ? "true" : "false",
+                 novaHttpTaskLoopSeen() ? "true" : "false",
+                 (unsigned long)novaHttpServiceAgeMs(),
+                 (unsigned long)novaHttpFallbackCount(),
+                 novaBridgeTaskRunning() ? "true" : "false",
+                 novaBridgeTaskLoopSeen() ? "true" : "false",
+                 (unsigned long)novaBridgeServiceAgeMs(),
+                 (unsigned long)novaBridgeFallbackCount(),
+                 novaSystemTaskRunning() ? "true" : "false",
+                 novaSystemTaskLoopSeen() ? "true" : "false",
+                 (unsigned long)novaSystemServiceAgeMs(),
                  novaNicDispatcherAvailable() ? "true" : "false");
         send_json(client, 200, body);
         return;
@@ -181,6 +281,18 @@ void SdHttpServer::handle_client(WiFiClient& client) {
         (url[5] == 0 || url[5] == '/')) {
         handle_wifi(client, method, url, have_content_len, content_len);
         return;
+    }
+    bool storage_mutation =
+        (strncmp(url, "/drives", 7) == 0 &&
+         (url[7] == 0 || url[7] == '/') &&
+         strcmp(method, "POST") == 0) ||
+        ((strncmp(url, "/sd/", 4) == 0 || strcmp(url, "/sd") == 0) &&
+         (strcmp(method, "PUT") == 0 || strcmp(method, "DELETE") == 0));
+    if (storage_mutation) {
+        if (novaStorageBusy()) {
+            send_error(client, 423, "storage busy");
+            return;
+        }
     }
     if (strncmp(url, "/drives", 7) == 0 &&
         (url[7] == 0 || url[7] == '/')) {
@@ -227,32 +339,201 @@ bool SdHttpServer::read_line(WiFiClient& client, char* out, size_t out_len,
     }
 
     out[n] = 0;
-    return n > 0;
+    return false;
 }
 
-bool SdHttpServer::read_body_to_file(WiFiClient& client, File& file,
-                                     uint32_t content_len) {
+bool SdHttpServer::read_body_to_file(WiFiClient& client, const char* path,
+                                     uint32_t content_len,
+                                     uint32_t& bytes_written,
+                                     char* error, size_t error_len) {
     uint8_t buf[IO_BUF_BYTES];
     uint32_t remaining = content_len;
     uint32_t deadline = millis() + 10000;
+    uint32_t checkpoint_start = 0;
+    size_t checkpoint_len = 0;
+    static constexpr uint32_t CHECKPOINT_BYTES = 32768UL;
+    static uint8_t checkpoint_buf[CHECKPOINT_BYTES];
+
+    bytes_written = 0;
+    if (error && error_len > 0)
+        error[0] = 0;
+
+    File file = SD.open(path, "wb", true);
+    if (!file) {
+        if (error && error_len > 0)
+            snprintf(error, error_len, "open failed");
+        return false;
+    }
+    file.setBufferSize(4096);
+    if (remaining == 0) {
+        file.close();
+        return verifySdFileSize(path, 0, error, error_len);
+    }
+
+    auto reopen_at = [&](uint32_t offset, const char* action) -> bool {
+        file = SD.open(path, "r+b");
+        if (!file) {
+            if (error && error_len > 0)
+                snprintf(error, error_len,
+                         "%s reopen failed at %lu/%lu bytes",
+                         action,
+                         (unsigned long)offset,
+                         (unsigned long)content_len);
+            return false;
+        }
+        file.setBufferSize(4096);
+        if (!file.seek(offset)) {
+            file.close();
+            if (error && error_len > 0)
+                snprintf(error, error_len,
+                         "%s seek failed at %lu/%lu bytes",
+                         action,
+                         (unsigned long)offset,
+                         (unsigned long)content_len);
+            return false;
+        }
+        return true;
+    };
+
+    auto commit_checkpoint = [&](bool reopen_after) -> bool {
+        uint32_t expected = bytes_written;
+        file.flush();
+        file.close();
+
+        if (!verifySdFileSize(path, expected, nullptr, 0)) {
+            size_t committed_size = sdFileSize(path);
+            if (committed_size < (size_t)checkpoint_start ||
+                committed_size > (size_t)expected) {
+                if (error && error_len > 0)
+                    snprintf(error, error_len,
+                             "size mismatch after write: %lu/%lu bytes",
+                             (unsigned long)committed_size,
+                             (unsigned long)expected);
+                return false;
+            }
+
+            size_t replay_offset = committed_size - (size_t)checkpoint_start;
+            size_t replay_len = (size_t)expected - committed_size;
+            if (replay_len > checkpoint_len || replay_offset > checkpoint_len) {
+                if (error && error_len > 0)
+                    snprintf(error, error_len,
+                             "checkpoint replay out of range: %lu/%lu bytes",
+                             (unsigned long)committed_size,
+                             (unsigned long)expected);
+                return false;
+            }
+
+            if (replay_len > 0) {
+                if (!reopen_at((uint32_t)committed_size, "repair"))
+                    return false;
+                uint32_t replay_written = (uint32_t)committed_size;
+                if (!write_file_all(file,
+                                    checkpoint_buf + replay_offset,
+                                    replay_len,
+                                    replay_written,
+                                    error,
+                                    error_len)) {
+                    file.close();
+                    return false;
+                }
+                file.flush();
+                file.close();
+                if (!verifySdFileSize(path, expected, error, error_len))
+                    return false;
+            }
+        }
+
+        checkpoint_start = expected;
+        checkpoint_len = 0;
+        if (reopen_after)
+            return reopen_at(expected, "append");
+        return true;
+    };
 
     while (remaining > 0) {
-        if (!client.connected() && !client.available()) return false;
+        if (!client.connected() && !client.available()) {
+            file.close();
+            if (error && error_len > 0)
+                snprintf(error, error_len, "client closed at %lu/%lu bytes",
+                         (unsigned long)bytes_written,
+                         (unsigned long)content_len);
+            return false;
+        }
         if (!client.available()) {
-            if (millis() > deadline) return false;
+            if (millis() > deadline) {
+                file.close();
+                if (error && error_len > 0)
+                    snprintf(error, error_len,
+                             "body timeout at %lu/%lu bytes",
+                             (unsigned long)bytes_written,
+                             (unsigned long)content_len);
+                return false;
+            }
             delay(1);
             continue;
         }
 
         size_t want = remaining > sizeof(buf) ? sizeof(buf) : remaining;
-        size_t got = client.read(buf, want);
+        int read_count = client.read(buf, want);
+        if (read_count < 0) {
+            file.close();
+            if (error && error_len > 0)
+                snprintf(error, error_len, "client read failed at %lu/%lu bytes",
+                         (unsigned long)bytes_written,
+                         (unsigned long)content_len);
+            return false;
+        }
+        size_t got = (size_t)read_count;
         if (got == 0) continue;
         deadline = millis() + 10000;
 
-        size_t wrote = file.write(buf, got);
-        if (wrote != got) return false;
+        if (checkpoint_len > 0 &&
+            checkpoint_len + got > CHECKPOINT_BYTES) {
+            if (!commit_checkpoint(true))
+                return false;
+        }
+
+        memcpy(checkpoint_buf + checkpoint_len, buf, got);
+        if (!write_file_all(file, buf, got, bytes_written, error, error_len)) {
+            file.close();
+            return false;
+        }
+        checkpoint_len += got;
         remaining -= (uint32_t)got;
+
+        if (checkpoint_len >= CHECKPOINT_BYTES || remaining == 0) {
+            if (!commit_checkpoint(remaining > 0))
+                return false;
+        }
         yield();
+    }
+
+    return true;
+}
+
+bool SdHttpServer::write_file_all(File& file, const uint8_t* data, size_t len,
+                                  uint32_t& bytes_written, char* error,
+                                  size_t error_len) {
+    size_t off = 0;
+    uint32_t deadline = millis() + 5000;
+
+    while (off < len) {
+        size_t wrote = file.write(data + off, len - off);
+        if (wrote > 0) {
+            off += wrote;
+            bytes_written += (uint32_t)wrote;
+            deadline = millis() + 5000;
+            yield();
+            continue;
+        }
+
+        if (millis() > deadline) {
+            if (error && error_len > 0)
+                snprintf(error, error_len, "sd write stalled at %lu bytes",
+                         (unsigned long)bytes_written);
+            return false;
+        }
+        delay(1);
     }
 
     return true;
@@ -285,22 +566,62 @@ bool SdHttpServer::read_body_to_string(WiFiClient& client, String& out,
 }
 
 bool SdHttpServer::write_all(WiFiClient& client, const uint8_t* data,
-                             size_t len) {
+                             size_t len, bool allow_probe_write) {
     size_t off = 0;
-    uint32_t deadline = millis() + 10000;
+    uint32_t deadline = millis() + RESPONSE_WRITE_TIMEOUT_MS;
     while (off < len) {
         if (!client.connected()) return false;
-        size_t wrote = client.write(data + off, len - off);
+        size_t chunk = len - off;
+        int writable = client.availableForWrite();
+        if (writable > 0 && chunk > (size_t)writable)
+            chunk = (size_t)writable;
+        else if (writable <= 0) {
+            if (!allow_probe_write) {
+                if (millis() > deadline) {
+                    client.stop();
+                    return false;
+                }
+                delay(1);
+                continue;
+            }
+            if (chunk > 64)
+                chunk = 64;
+        }
+        if (chunk > IO_BUF_BYTES)
+            chunk = IO_BUF_BYTES;
+
+        size_t wrote = client.write(data + off, chunk);
         if (wrote == 0) {
-            if (millis() > deadline) return false;
+            if (millis() > deadline) {
+                client.stop();
+                return false;
+            }
             delay(1);
             continue;
         }
-        deadline = millis() + 10000;
         off += wrote;
         yield();
     }
     return true;
+}
+
+bool SdHttpServer::write_str(WiFiClient& client, const char* value) {
+    if (!value)
+        return true;
+    return write_all(client, (const uint8_t*)value, strlen(value));
+}
+
+bool SdHttpServer::write_char(WiFiClient& client, char value) {
+    return write_all(client, (const uint8_t*)&value, 1);
+}
+
+bool SdHttpServer::write_fmt(WiFiClient& client, const char* fmt, ...) {
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    return write_str(client, buf);
 }
 
 void SdHttpServer::handle_wifi(WiFiClient& client, const char* method,
@@ -334,58 +655,59 @@ void SdHttpServer::handle_wifi_status(WiFiClient& client) {
     NovaWifiManager::Status st = _wifi.status();
 
     send_headers(client, 200, "application/json");
-    client.print("{\"configured\":");
-    client.print(st.configured ? "true" : "false");
-    client.print(",\"connected\":");
-    client.print(st.connected ? "true" : "false");
-    client.print(",\"wantConnected\":");
-    client.print(st.wantConnected ? "true" : "false");
-    client.print(",\"ssid\":");
+    write_str(client, "{\"configured\":");
+    write_str(client, st.configured ? "true" : "false");
+    write_str(client, ",\"connected\":");
+    write_str(client, st.connected ? "true" : "false");
+    write_str(client, ",\"wantConnected\":");
+    write_str(client, st.wantConnected ? "true" : "false");
+    write_str(client, ",\"ssid\":");
     write_json_string(client, st.ssid.c_str());
-    client.print(",\"passwordSet\":");
-    client.print(st.passwordSet ? "true" : "false");
-    client.print(",\"useStatic\":");
-    client.print(st.useStatic ? "true" : "false");
-    client.print(",\"staticIp\":");
+    write_str(client, ",\"passwordSet\":");
+    write_str(client, st.passwordSet ? "true" : "false");
+    write_str(client, ",\"useStatic\":");
+    write_str(client, st.useStatic ? "true" : "false");
+    write_str(client, ",\"staticIp\":");
     write_json_string(client, st.staticIp.c_str());
-    client.print(",\"gateway\":");
+    write_str(client, ",\"gateway\":");
     write_json_string(client, st.gateway.c_str());
-    client.print(",\"subnet\":");
+    write_str(client, ",\"subnet\":");
     write_json_string(client, st.subnet.c_str());
-    client.print(",\"dns\":");
+    write_str(client, ",\"dns\":");
     write_json_string(client, st.dns.c_str());
-    client.print(",\"localIp\":");
+    write_str(client, ",\"localIp\":");
     write_json_string(client, st.localIp.c_str());
-    client.print(",\"localGateway\":");
+    write_str(client, ",\"localGateway\":");
     write_json_string(client, st.localGateway.c_str());
-    client.print(",\"localSubnet\":");
+    write_str(client, ",\"localSubnet\":");
     write_json_string(client, st.localSubnet.c_str());
-    client.print(",\"localDns\":");
+    write_str(client, ",\"localDns\":");
     write_json_string(client, st.localDns.c_str());
-    client.print(",\"mac\":");
+    write_str(client, ",\"mac\":");
     write_json_string(client, st.mac.c_str());
-    client.printf(",\"rssi\":%ld,\"wifiStatus\":", (long)st.rssi);
+    write_fmt(client, ",\"rssi\":%ld,\"wifiStatus\":", (long)st.rssi);
     write_json_string(client, NovaWifiManager::statusName(st.wifiStatus));
-    client.print(",\"lastError\":");
+    write_str(client, ",\"lastError\":");
     write_json_string(client, st.lastError.c_str());
-    client.print('}');
+    write_char(client, '}');
 }
 
 void SdHttpServer::handle_wifi_scan(WiFiClient& client) {
     int count = WiFi.scanNetworks();
 
     send_headers(client, 200, "application/json");
-    client.print('[');
+    write_char(client, '[');
     for (int i = 0; i < count; i++) {
-        if (i > 0) client.print(',');
-        client.print("{\"ssid\":");
+        if (i > 0) write_char(client, ',');
+        write_str(client, "{\"ssid\":");
         write_json_string(client, WiFi.SSID(i).c_str());
-        client.printf(",\"rssi\":%ld,\"channel\":%d,\"encrypted\":%s}",
-                      (long)WiFi.RSSI(i),
-                      WiFi.channel(i),
-                      WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "false" : "true");
+        write_fmt(client,
+                  ",\"rssi\":%ld,\"channel\":%d,\"encrypted\":%s}",
+                  (long)WiFi.RSSI(i),
+                  WiFi.channel(i),
+                  WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "false" : "true");
     }
-    client.print(']');
+    write_char(client, ']');
     WiFi.scanDelete();
 }
 
@@ -463,7 +785,6 @@ void SdHttpServer::handle_wifi_put(WiFiClient& client, uint32_t content_len) {
 void SdHttpServer::handle_wifi_action(WiFiClient& client, const char* action) {
     if (strcmp(action, "connect") == 0) {
         send_json(client, 202, "{\"ok\":true,\"accepted\":true}");
-        client.flush();
         delay(100);
         _wifi.connect();
         novaWifiStateChanged();
@@ -471,7 +792,6 @@ void SdHttpServer::handle_wifi_action(WiFiClient& client, const char* action) {
     }
     if (strcmp(action, "disconnect") == 0) {
         send_json(client, 202, "{\"ok\":true,\"accepted\":true}");
-        client.flush();
         delay(100);
         _wifi.disconnect();
         novaWifiStateChanged();
@@ -479,7 +799,6 @@ void SdHttpServer::handle_wifi_action(WiFiClient& client, const char* action) {
     }
     if (strcmp(action, "reconnect") == 0) {
         send_json(client, 202, "{\"ok\":true,\"accepted\":true}");
-        client.flush();
         delay(100);
         _wifi.reconnect();
         novaWifiStateChanged();
@@ -487,7 +806,6 @@ void SdHttpServer::handle_wifi_action(WiFiClient& client, const char* action) {
     }
     if (strcmp(action, "forget") == 0) {
         send_json(client, 202, "{\"ok\":true,\"accepted\":true}");
-        client.flush();
         delay(100);
         _wifi.forget();
         novaWifiStateChanged();
@@ -543,28 +861,28 @@ void SdHttpServer::handle_drives_list(WiFiClient& client) {
     };
 
     send_headers(client, 200, "application/json");
-    client.print('[');
+    write_char(client, '[');
     for (int i = 0; i < DeviceManager::NUM_SLOTS; i++) {
         int slot = list_order[i];
         const char* prefix = DeviceManager::prefix_for_slot(slot);
         char configured_path[300];
 
-        if (i > 0) client.print(',');
-        client.print("{\"slot\":");
+        if (i > 0) write_char(client, ',');
+        write_str(client, "{\"slot\":");
         write_json_string(client, prefix);
-        client.print(",\"mounted\":");
-        client.print(_dm.is_mounted(slot) ? "true" : "false");
-        client.print(",\"currentPath\":");
+        write_str(client, ",\"mounted\":");
+        write_str(client, _dm.is_mounted(slot) ? "true" : "false");
+        write_str(client, ",\"currentPath\":");
         write_json_string(client, _dm.current_path(slot));
-        client.print(",\"configuredPath\":");
+        write_str(client, ",\"configuredPath\":");
         if (loadDriveMountConfig(prefix, configured_path,
                                  sizeof(configured_path)))
             write_json_string(client, configured_path);
         else
             write_json_string(client, "");
-        client.print('}');
+        write_char(client, '}');
     }
-    client.print(']');
+    write_char(client, ']');
 }
 
 void SdHttpServer::handle_drive_mount(WiFiClient& client, int slot,
@@ -639,8 +957,9 @@ void SdHttpServer::handle_drive_mount(WiFiClient& client, int slot,
     }
     entry.close();
 
+    novaReleaseIdleAudioCacheForStorage();
     if (!_dm.mount(slot, sd_path)) {
-        send_error(client, 500, "mount failed");
+        send_error(client, 500, _dm.last_mount_error());
         return;
     }
 
@@ -649,11 +968,11 @@ void SdHttpServer::handle_drive_mount(WiFiClient& client, int slot,
 
     logLn("[sdhttp] MOUNT %s -> %s", prefix, sd_path);
     send_headers(client, 200, "application/json");
-    client.print("{\"ok\":true,\"slot\":");
+    write_str(client, "{\"ok\":true,\"slot\":");
     write_json_string(client, prefix);
-    client.print(",\"mounted\":true,\"path\":");
+    write_str(client, ",\"mounted\":true,\"path\":");
     write_json_string(client, sd_path);
-    client.print('}');
+    write_char(client, '}');
 }
 
 void SdHttpServer::handle_drive_unmount(WiFiClient& client, int slot) {
@@ -665,9 +984,9 @@ void SdHttpServer::handle_drive_unmount(WiFiClient& client, int slot) {
 
     logLn("[sdhttp] UNMOUNT %s", prefix);
     send_headers(client, 200, "application/json");
-    client.print("{\"ok\":true,\"slot\":");
+    write_str(client, "{\"ok\":true,\"slot\":");
     write_json_string(client, prefix);
-    client.print(",\"mounted\":false}");
+    write_str(client, ",\"mounted\":false}");
 }
 
 void SdHttpServer::handle_get(WiFiClient& client, const char* path) {
@@ -708,6 +1027,13 @@ void SdHttpServer::handle_put(WiFiClient& client, const char* path,
         send_error(client, 400, "bad path");
         return;
     }
+
+    StorageMutationGuard storage_guard;
+    if (!storage_guard.locked()) {
+        send_error(client, 423, "storage busy");
+        return;
+    }
+
     if (!path_safe_for_write(path)) {
         send_error(client, 409, "file is mounted; UNMOUNT first");
         return;
@@ -720,16 +1046,43 @@ void SdHttpServer::handle_put(WiFiClient& client, const char* path,
         return;
     }
 
-    File file = SD.open(full, FILE_WRITE, true);
-    if (!file) {
-        send_error(client, 500, "open failed");
+    char tmp[320];
+    if (snprintf(tmp, sizeof(tmp), "%s.tmp", full) >= (int)sizeof(tmp)) {
+        send_error(client, 414, "path too long");
         return;
     }
 
-    bool ok = read_body_to_file(client, file, content_len);
-    file.close();
+    if (SD.exists(tmp) && !SD.remove(tmp)) {
+        send_error(client, 500, "temp remove failed");
+        return;
+    }
+
+    novaReleaseIdleAudioCacheForStorage();
+
+    uint32_t bytes_written = 0;
+    char write_error[96];
+    bool ok = read_body_to_file(client, tmp, content_len, bytes_written,
+                                write_error, sizeof(write_error));
     if (!ok) {
-        send_error(client, 500, "write failed");
+        logLn("[sdhttp] PUT %s failed after %lu/%lu bytes: %s",
+              full,
+              (unsigned long)bytes_written,
+              (unsigned long)content_len,
+              write_error[0] ? write_error : "write failed");
+        SD.remove(tmp);
+        send_error(client, 500, write_error[0] ? write_error : "write failed");
+        return;
+    }
+
+    if (SD.exists(full) && !SD.remove(full)) {
+        SD.remove(tmp);
+        send_error(client, 500, "replace remove failed");
+        return;
+    }
+
+    if (!SD.rename(tmp, full)) {
+        SD.remove(tmp);
+        send_error(client, 500, "replace rename failed");
         return;
     }
 
@@ -748,6 +1101,12 @@ void SdHttpServer::handle_delete(WiFiClient& client, const char* path) {
     }
     if (!path_safe_for_write(path)) {
         send_error(client, 409, "file is mounted; UNMOUNT first");
+        return;
+    }
+
+    StorageMutationGuard storage_guard;
+    if (!storage_guard.locked()) {
+        send_error(client, 423, "storage busy");
         return;
     }
 
@@ -784,24 +1143,24 @@ void SdHttpServer::handle_status(WiFiClient& client) {
         "UNKNOWN";
 
     send_headers(client, 200, "application/json");
-    client.print("{\"cardType\":");
+    write_str(client, "{\"cardType\":");
     write_json_string(client, type_name);
-    client.printf(",\"cardTypeId\":%u,\"mounted\":%s,\"bootPhase\":",
-                  (unsigned)ct,
-                  g_sd_mounted ? "true" : "false");
+    write_fmt(client, ",\"cardTypeId\":%u,\"mounted\":%s,\"bootPhase\":",
+              (unsigned)ct,
+              g_sd_mounted ? "true" : "false");
     write_json_string(client, novaBootPhaseName());
-    client.printf(",\"cardSize\":%llu,\"totalBytes\":%llu,\"usedBytes\":%llu,"
-                  "\"bootDiag\":",
-                  (unsigned long long)card_sz,
-                  (unsigned long long)total_sz,
-                  (unsigned long long)used_sz);
+    write_fmt(client,
+              ",\"cardSize\":%llu,\"totalBytes\":%llu,\"usedBytes\":%llu,"
+              "\"bootDiag\":",
+              (unsigned long long)card_sz,
+              (unsigned long long)total_sz,
+              (unsigned long long)used_sz);
     write_json_string(client, g_sd_diag.c_str());
-    client.print('}');
+    write_char(client, '}');
 }
 
 void SdHttpServer::handle_reboot(WiFiClient& client) {
     send_json(client, 200, "{\"ok\":true,\"rebooting\":true}");
-    client.flush();
     delay(100);
     ESP.restart();
 }
@@ -818,22 +1177,22 @@ void SdHttpServer::send_listing(WiFiClient& client, const char* path) {
     }
 
     send_headers(client, 200, "application/json");
-    client.print('[');
+    write_char(client, '[');
     bool first = true;
     File entry;
     while ((entry = dir.openNextFile())) {
-        if (!first) client.print(',');
+        if (!first) write_char(client, ',');
         first = false;
-        client.print("{\"name\":");
+        write_str(client, "{\"name\":");
         write_json_string(client, entry.name());
-        client.print(",\"size\":");
-        client.print((uint32_t)entry.size());
-        client.print(",\"dir\":");
-        client.print(entry.isDirectory() ? "true" : "false");
-        client.print('}');
+        write_fmt(client, ",\"size\":%lu",
+                  (unsigned long)entry.size());
+        write_str(client, ",\"dir\":");
+        write_str(client, entry.isDirectory() ? "true" : "false");
+        write_char(client, '}');
         entry.close();
     }
-    client.print(']');
+    write_char(client, ']');
     dir.close();
 }
 
@@ -850,7 +1209,7 @@ void SdHttpServer::send_file(WiFiClient& client, const char* path) {
     while (file.available()) {
         size_t got = file.read(buf, sizeof(buf));
         if (got == 0) break;
-        if (!write_all(client, buf, got)) break;
+        if (!write_all(client, buf, got, false)) break;
         yield();
     }
     file.close();
@@ -858,7 +1217,7 @@ void SdHttpServer::send_file(WiFiClient& client, const char* path) {
 
 void SdHttpServer::send_json(WiFiClient& client, int code, const char* body) {
     send_headers(client, code, "application/json", (int32_t)strlen(body));
-    client.print(body);
+    write_str(client, body);
 }
 
 void SdHttpServer::send_error(WiFiClient& client, int code,
@@ -871,38 +1230,58 @@ void SdHttpServer::send_error(WiFiClient& client, int code,
 void SdHttpServer::send_headers(WiFiClient& client, int code,
                                 const char* content_type,
                                 int32_t content_len) {
-    client.printf("HTTP/1.1 %d %s\r\n", code, reason_phrase(code));
-    client.printf("Content-Type: %s\r\n", content_type);
-    if (content_len >= 0) client.printf("Content-Length: %ld\r\n", (long)content_len);
-    client.print("Connection: close\r\n\r\n");
+    write_fmt(client, "HTTP/1.1 %d %s\r\n", code, reason_phrase(code));
+    write_fmt(client, "Content-Type: %s\r\n", content_type);
+    if (content_len >= 0)
+        write_fmt(client, "Content-Length: %ld\r\n", (long)content_len);
+    write_str(client, "Connection: close\r\n\r\n");
 }
 
 void SdHttpServer::write_json_string(WiFiClient& client, const char* value) {
     static const char hex[] = "0123456789ABCDEF";
-    client.print('"');
+    char out[96];
+    size_t n = 0;
+    auto flush = [&]() {
+        if (n == 0)
+            return;
+        write_all(client, (const uint8_t*)out, n);
+        n = 0;
+    };
+    auto append = [&](char ch) {
+        if (n >= sizeof(out))
+            flush();
+        out[n++] = ch;
+    };
+    auto append_str = [&](const char* text) {
+        while (*text)
+            append(*text++);
+    };
+
+    append('"');
     if (value) {
         for (const unsigned char* p = (const unsigned char*)value; *p; p++) {
             switch (*p) {
-                case '"':  client.print("\\\""); break;
-                case '\\': client.print("\\\\"); break;
-                case '\b': client.print("\\b");  break;
-                case '\f': client.print("\\f");  break;
-                case '\n': client.print("\\n");  break;
-                case '\r': client.print("\\r");  break;
-                case '\t': client.print("\\t");  break;
+                case '"':  append_str("\\\""); break;
+                case '\\': append_str("\\\\"); break;
+                case '\b': append_str("\\b");  break;
+                case '\f': append_str("\\f");  break;
+                case '\n': append_str("\\n");  break;
+                case '\r': append_str("\\r");  break;
+                case '\t': append_str("\\t");  break;
                 default:
                     if (*p < 0x20) {
-                        client.print("\\u00");
-                        client.write(hex[*p >> 4]);
-                        client.write(hex[*p & 0x0F]);
+                        append_str("\\u00");
+                        append(hex[*p >> 4]);
+                        append(hex[*p & 0x0F]);
                     } else {
-                        client.write(*p);
+                        append((char)*p);
                     }
                     break;
             }
         }
     }
-    client.print('"');
+    append('"');
+    flush();
 }
 
 bool SdHttpServer::path_sane(const char* path, bool allow_empty) {
@@ -915,14 +1294,20 @@ bool SdHttpServer::path_sane(const char* path, bool allow_empty) {
 }
 
 bool SdHttpServer::path_safe_for_write(const char* path) {
-    String lower(path);
-    lower.toLowerCase();
+    String lower = normalizedSdPath(path);
     if (!lower.endsWith(".ndi")) return true;
 
     for (int s = 0; s < DeviceManager::NUM_SLOTS; s++) {
         if (!_dm.is_mounted(s)) continue;
         const char* prefix = DeviceManager::prefix_for_slot(s);
         if (!prefix) continue;
+
+        char configured_path[300];
+        if (loadDriveMountConfig(prefix, configured_path,
+                                 sizeof(configured_path)) &&
+            lower == normalizedSdPath(configured_path))
+            return false;
+
         String needle = String(prefix) + ".ndi";
         if (lower.endsWith(needle)) return false;
     }
@@ -1000,6 +1385,7 @@ const char* SdHttpServer::reason_phrase(int code) {
         case 404: return "Not Found";
         case 405: return "Method Not Allowed";
         case 409: return "Conflict";
+        case 423: return "Locked";
         case 411: return "Length Required";
         case 503: return "Service Unavailable";
         case 500: return "Internal Server Error";

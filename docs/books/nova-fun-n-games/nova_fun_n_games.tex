@@ -1,0 +1,383 @@
+% =============================================================================
+% Nova Fun & Games
+% =============================================================================
+\documentclass[11pt,a4paper]{book}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper, top=2.35cm, bottom=2.45cm, left=2.65cm, right=2.35cm,
+            headheight=24pt]{geometry}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{calc,positioning}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{listings}
+\usepackage[skins,breakable]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[colorlinks=true, linkcolor=novablue, urlcolor=novablue,
+            citecolor=novablue, bookmarks=true]{hyperref}
+
+\definecolor{paper}{RGB}{251,248,239}
+\definecolor{ink}{RGB}{27,27,27}
+\definecolor{novablue}{RGB}{27,64,151}
+\definecolor{novared}{RGB}{176,42,47}
+\definecolor{novagold}{RGB}{224,172,47}
+\definecolor{novagreen}{RGB}{38,134,84}
+\definecolor{novacyan}{RGB}{31,154,188}
+\definecolor{pale}{RGB}{239,243,249}
+\definecolor{softgray}{RGB}{102,104,112}
+\definecolor{manualblue}{RGB}{32,66,158}
+\definecolor{manualcyan}{RGB}{70,184,207}
+\definecolor{manualrule}{RGB}{188,201,226}
+\definecolor{manualscreen}{RGB}{244,247,252}
+
+\pagecolor{paper}
+\color{ink}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE]{\small\ttfamily\color{manualblue}\thepage\quad\leftmark}
+\fancyhead[RO]{\small\ttfamily\color{manualblue}\rightmark\quad\thepage}
+\fancyfoot[C]{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\renewcommand{\headrule}{%
+  \hbox to\headwidth{\color{manualrule}\leaders\hrule height 0.8pt\hfill}}
+
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\color{manualblue}}
+  {\ttfamily\Large CHAPTER \thechapter}
+  {0.45ex}
+  {\titlerule[1.2pt]\vspace{0.8ex}\Huge}
+  [\vspace{0.5ex}{\color{manualcyan}\titlerule[0.8pt]}]
+\titlespacing*{\chapter}{0pt}{0pt}{22pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{manualblue}}
+  {\ttfamily\thesection}{0.65em}{}
+  [\vspace{-0.35ex}{\color{manualrule}\titlerule}]
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{ink}}
+  {\ttfamily\color{manualblue}\thesubsection}{0.6em}{}
+
+\lstdefinelanguage{NovaBASIC}{%
+  morekeywords=[1]{%
+    END,FOR,NEXT,DATA,INPUT,DIM,READ,LET,GOTO,RUN,IF,RESTORE,
+    GOSUB,RETURN,REM,STOP,ON,PRINT,CONT,LIST,NEW,THEN,ELSE,
+    TO,STEP,NOT,AND,OR,EOR,NULL,LOAD,SAVE,DEF,POKE,DOKE,DO,LOOP,
+    CLEAR,GET,SWAP,CLS,COLOR,LOCATE,PLOT,UNPLOT,LINE,CIRCLE,
+    RECT,FILL,PAINT,MODE,GCLS,GCOLOR,SPRITE,SPRITEDATA,COPPER,SOUND,
+    VOLUME,INSTRUMENT,VSYNC,DIR,DEL,XMEM,XBANK,XPOKE,STASH,FETCH,
+    XFREE,XRESET,XALLOC,XDIR,XDEL,XMAP,XUNMAP,DEC,INC,CALL,WIDTH,
+    BITSET,BITCLR,IRQ,NMI,UNTIL,WHILE,OFF,SPRITESHAPE,SPRITECOLOR,SPRITESET,
+    MUSIC,WAIT,SIDPLAY,SIDSTOP,GSAVE,GLOAD,RETIRQ,RETNMI,
+    NOPEN,NCLOSE,NLISTEN,NACCEPT,NSEND,DMACOPY,DMAFILL,
+    BLITCOPY,BLITFILL,RESET%
+  },
+  morekeywords=[2]{%
+    SGN,INT,ABS,USR,FRE,POS,SQR,RND,LOG,EXP,COS,SIN,TAN,ATN,PEEK,
+    DEEK,SADD,LEN,VAL,ASC,BITTST,MAX,MIN,PI,TWOPI,VARPTR,SPRITEX,
+    SPRITEY,COLLISION,BUMPED,XPEEK,TAB,SPC,FN,PLAYING,MNOTE,
+    NSTATUS,NREADY,NLEN,DMASTATUS,DMAERR,DMACOUNT,
+    BLITSTATUS,BLITERR,BLITCOUNT%
+  },
+  morecomment=[l]{REM},
+  sensitive=false,
+  morestring=[b]"%
+}
+
+\lstdefinestyle{typein}{%
+  language=NovaBASIC,
+  basicstyle=\ttfamily\small\color{ink},
+  backgroundcolor=\color{manualscreen},
+  frame=tb,
+  framerule=0.8pt,
+  rulecolor=\color{manualblue},
+  framesep=6pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  keywordstyle=[1]\bfseries,
+  keywordstyle=[2]\bfseries,
+  commentstyle=\color{softgray}\itshape,
+  stringstyle=\color{ink},
+  showstringspaces=false,
+  tabsize=2,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  numbers=none,
+  aboveskip=0.9em,
+  belowskip=0.9em,
+  captionpos=b%
+}
+\lstset{style=typein}
+
+\tcbset{manualbox/.style={%
+  enhanced,
+  sharp corners,
+  boxrule=0.8pt,
+  left=8pt,
+  right=8pt,
+  top=6pt,
+  bottom=6pt,
+  colback=paper,
+  fonttitle=\bfseries\ttfamily,
+  coltitle=white,
+  attach boxed title to top left={xshift=7pt,yshift=-2pt},
+  boxed title style={sharp corners, boxrule=0pt, left=5pt, right=5pt, top=2pt, bottom=2pt},
+  breakable%
+}}
+
+\newtcolorbox{typeinbox}[1][]{%
+  manualbox,
+  colframe=novagold!85!black,
+  colbacktitle=novagold!85!black,
+  title=Type-In Note,
+  #1%
+}
+
+\newtcolorbox{novabox}[1][]{%
+  manualbox,
+  colframe=manualblue,
+  colbacktitle=manualblue,
+  title=Nova Note,
+  #1%
+}
+
+\newtcolorbox{programteaser}[1][]{%
+  manualbox,
+  colframe=manualcyan!75!black,
+  colbacktitle=manualcyan!75!black,
+  title=What You'll See,
+  #1%
+}
+
+\newtcolorbox{learnbox}[1][]{%
+  manualbox,
+  colframe=novagreen!80!black,
+  colbacktitle=novagreen!80!black,
+  title=What It Teaches,
+  #1%
+}
+
+\newtcolorbox{trythisbox}[1][]{%
+  manualbox,
+  colframe=novared!85!black,
+  colbacktitle=novared!85!black,
+  title=Try This,
+  #1%
+}
+
+\newcommand{\diskname}{\texttt{fun\_n\_games.ndi}}
+\newcommand{\commonlisting}{\texttt{common.bas}}
+\newcommand{\stubpath}[1]{\texttt{stubs/#1}}
+
+\newcommand{\programrow}[5]{%
+  \texttt{#1} & #2 & #3 & #4 & #5\\
+}
+
+\newcommand{\manualprogrambanner}[3]{%
+  \noindent
+  \begin{tikzpicture}
+    \fill[manualblue] (0,0) rectangle (\linewidth,1.35);
+    \fill[manualcyan] (0,0) rectangle (0.18\linewidth,1.35);
+    \fill[paper] (0.012\linewidth,0.16) rectangle (0.168\linewidth,1.19);
+    \begin{scope}[shift={(0.03\linewidth,0.16)}]
+      \csname programart#2\endcsname
+    \end{scope}
+    \node[
+      anchor=west,
+      text=white,
+      font=\fontsize{23}{27}\selectfont\bfseries
+    ] at (0.205\linewidth,0.86) {#1};
+    \node[
+      anchor=west,
+      text=novagold,
+      font=\fontsize{9}{12}\selectfont\ttfamily\bfseries
+    ] at (0.205\linewidth,0.32) {#3};
+    \draw[novagold, line width=1.0pt] (0.205\linewidth,0.56) -- (0.96\linewidth,0.56);
+  \end{tikzpicture}
+  \par\vspace{0.8em}
+}
+
+\newcommand{\programlesson}[3]{%
+  \clearpage
+  \section{#1}
+  \manualprogrambanner{#1}{#2}{FEATURE DEMO}
+  \begin{programteaser}
+  #3
+  \end{programteaser}
+}
+
+\newcommand{\programartball}{%
+  \fill[novacyan] (1.0,0.75) circle (0.45);
+  \fill[white] (0.78,0.96) circle (0.13);
+  \draw[novagold, line width=1.2pt] (0.18,0.2) .. controls (0.7,0.0) and (1.2,0.0) .. (1.7,0.22);
+}
+\newcommand{\programartcolor}{%
+  \foreach \x/\y/\c in {0/0/novablue,0.45/0/novacyan,0.9/0/novagold,1.35/0/novared,
+                        0/0.45/novagreen,0.45/0.45/novared,0.9/0.45/novablue,1.35/0.45/novacyan}
+    \fill[\c] (\x,\y) rectangle ++(0.32,0.32);
+}
+\newcommand{\programartdraw}{%
+  \draw[novagold, line width=1.5pt] (0.1,0.15) -- (1.7,1.05);
+  \draw[novacyan, line width=1.5pt] (0.15,1.0) -- (1.65,0.15);
+  \draw[novared, line width=1.2pt] (0.9,0.58) circle (0.42);
+}
+\newcommand{\programartsound}{%
+  \draw[novacyan, line width=1.8pt] (0.55,0.15) -- (0.55,1.1) -- (1.15,0.95);
+  \fill[novacyan] (0.38,0.15) ellipse (0.25 and 0.14);
+  \draw[novagold, line width=1.1pt] (1.25,0.35) .. controls (1.75,0.55) and (1.75,0.8) .. (1.25,1.0);
+}
+\newcommand{\programartsprite}{%
+  \fill[novacyan] (0.9,1.15) -- (0.35,0.15) -- (0.9,0.4) -- (1.45,0.15) -- cycle;
+  \fill[novared] (0.72,0.25) rectangle ++(0.12,-0.25);
+  \fill[novagold] (0.98,0.25) rectangle ++(0.12,-0.25);
+}
+\newcommand{\programartroad}{%
+  \fill[softgray] (0.25,0.0) -- (1.55,0.0) -- (1.1,1.25) -- (0.7,1.25) -- cycle;
+  \draw[white, line width=1.0pt, dashed] (0.9,0.05) -- (0.9,1.15);
+  \fill[novared] (0.68,0.25) rectangle ++(0.44,0.25);
+}
+\newcommand{\programartpiano}{%
+  \fill[white] (0.15,0.2) rectangle (1.65,1.0);
+  \foreach \x in {0.15,0.45,0.75,1.05,1.35,1.65} \draw[ink] (\x,0.2) -- (\x,1.0);
+  \foreach \x in {0.35,0.65,1.15,1.45} \fill[ink] (\x,0.55) rectangle ++(0.16,0.45);
+}
+\newcommand{\programartdice}{%
+  \draw[novablue, fill=white, line width=1pt] (0.25,0.25) rectangle (0.9,0.9);
+  \draw[novared, fill=white, line width=1pt] (0.85,0.45) rectangle (1.5,1.1);
+  \foreach \x/\y in {0.42/0.42,0.72/0.72,1.02/0.62,1.32/0.92,1.32/0.62} \fill[ink] (\x,\y) circle (0.045);
+}
+\newcommand{\programartsafe}{%
+  \draw[novablue, fill=softgray!25!paper, line width=1.2pt] (0.25,0.2) rectangle (1.55,1.1);
+  \draw[ink, line width=1pt] (0.9,0.66) circle (0.22);
+  \fill[novared] (1.25,0.58) rectangle ++(0.13,0.13);
+}
+\newcommand{\programartship}{%
+  \fill[novacyan] (0.25,0.4) -- (1.55,0.4) -- (1.25,0.15) -- (0.45,0.15) -- cycle;
+  \draw[white, line width=1.2pt] (0.9,0.4) -- (0.9,1.2) -- (1.35,0.55);
+}
+\newcommand{\programarttower}{%
+  \foreach \y/\w/\c in {0.2/1.35/novablue,0.45/1.05/novacyan,0.7/0.75/novagold,0.95/0.45/novared}
+    \fill[\c] ({0.9-\w/2},\y) rectangle ({0.9+\w/2},{\y+0.16});
+  \draw[ink] (0.9,0.1) -- (0.9,1.25);
+}
+\newcommand{\programartmoney}{%
+  \foreach \x/\y in {0.45/0.35,0.75/0.55,1.05/0.35,1.25/0.7}
+    \fill[novagold] (\x,\y) circle (0.18);
+  \node[font=\bfseries\small, text=ink] at (0.9,0.55) {\$};
+}
+\newcommand{\programartwords}{%
+  \fill[white] (0.25,0.35) rectangle (1.35,1.0);
+  \fill[white] (0.55,0.18) -- (0.8,0.35) -- (0.62,0.35) -- cycle;
+  \draw[novablue, line width=1pt] (0.25,0.35) rectangle (1.35,1.0);
+  \draw[softgray] (0.42,0.78) -- (1.15,0.78);
+  \draw[softgray] (0.42,0.58) -- (1.0,0.58);
+}
+\newcommand{\programartmonster}{%
+  \fill[novagreen] (0.55,0.35) rectangle (1.25,1.05);
+  \fill[white] (0.72,0.82) circle (0.07);
+  \fill[white] (1.08,0.82) circle (0.07);
+  \fill[softgray] (0.15,0.15) rectangle (0.45,0.65);
+  \fill[softgray] (1.35,0.15) rectangle (1.65,0.55);
+}
+\newcommand{\programartmaze}{%
+  \draw[novacyan, line width=1.3pt] (0.2,0.2) rectangle (1.6,1.1);
+  \draw[novacyan, line width=1.3pt] (0.45,0.2) -- (0.45,0.85) -- (0.85,0.85);
+  \draw[novacyan, line width=1.3pt] (1.15,1.1) -- (1.15,0.45) -- (1.6,0.45);
+  \fill[novagold] (0.3,0.3) circle (0.06);
+}
+\newcommand{\programartboard}{%
+  \foreach \x in {0,0.35,0.7,1.05,1.4} \draw[novablue] (0.2+\x,0.2) -- (0.2+\x,1.2);
+  \foreach \y in {0,0.25,0.5,0.75,1.0} \draw[novablue] (0.2,0.2+\y) -- (1.6,0.2+\y);
+  \fill[novared] (0.55,0.45) circle (0.09);
+  \fill[novagold] (1.25,0.95) circle (0.09);
+}
+\newcommand{\programartfire}{%
+  \fill[novared] (0.9,0.1) .. controls (0.15,0.65) and (0.75,0.85) .. (0.8,1.25)
+    .. controls (1.35,0.9) and (1.55,0.45) .. (0.9,0.1);
+  \fill[novagold] (0.9,0.25) .. controls (0.55,0.55) and (0.85,0.75) .. (0.9,1.0)
+    .. controls (1.2,0.65) and (1.2,0.42) .. (0.9,0.25);
+}
+\newcommand{\programartmountain}{%
+  \fill[softgray] (0.05,0.15) -- (0.75,1.2) -- (1.05,0.65) -- (1.35,1.1) -- (1.75,0.15) -- cycle;
+  \fill[white] (0.75,1.2) -- (0.58,0.94) -- (0.9,0.94) -- cycle;
+}
+\newcommand{\programarttarget}{%
+  \draw[novared, line width=1.2pt] (0.9,0.65) circle (0.5);
+  \draw[novagold, line width=1.2pt] (0.9,0.65) circle (0.32);
+  \fill[novacyan] (0.9,0.65) circle (0.12);
+}
+\newcommand{\programartwater}{%
+  \draw[novacyan, line width=1.4pt] (0.15,0.4) .. controls (0.4,0.65) and (0.65,0.15) .. (0.9,0.4)
+    .. controls (1.15,0.65) and (1.4,0.15) .. (1.65,0.4);
+  \draw[novablue, line width=1.4pt] (0.15,0.75) .. controls (0.4,1.0) and (0.65,0.5) .. (0.9,0.75)
+    .. controls (1.15,1.0) and (1.4,0.5) .. (1.65,0.75);
+}
+\newcommand{\programartchart}{%
+  \fill[novagold] (0.9,0.65) -- (0.9,1.18) arc (90:210:0.53) -- cycle;
+  \fill[novared] (0.9,0.65) -- (0.44,0.39) arc (210:330:0.53) -- cycle;
+  \fill[novacyan] (0.9,0.65) -- (1.36,0.39) arc (330:450:0.53) -- cycle;
+}
+\newcommand{\programartpaddle}{%
+  \fill[novacyan] (0.35,0.2) rectangle (0.55,1.1);
+  \fill[novared] (1.25,0.35) circle (0.16);
+  \draw[novagold, line width=1.1pt] (0.62,0.65) -- (1.08,0.42);
+}
+\newcommand{\programartrescue}{%
+  \fill[novacyan] (0.25,0.75) rectangle (1.25,0.95);
+  \draw[novacyan, line width=1.2pt] (0.75,0.95) -- (0.75,1.2);
+  \draw[novacyan, line width=1.2pt] (0.25,1.2) -- (1.25,1.2);
+  \fill[novared] (1.35,0.25) rectangle (1.55,0.75);
+}
+
+\newcommand{\programlisting}[4]{%
+  \clearpage
+  \section{#1}
+  \manualprogrambanner{#1}{#3}{TYPE-IN LISTING}
+  \begin{programteaser}[title=Why Type This In?]
+  #4
+  \end{programteaser}
+  \vspace{0.3em}
+  \lstinputlisting[caption={#1 starter listing}]{../../programs/fun_n_games/stubs/#2}
+}
+
+\begin{document}
+
+\frontmatter
+\input{cover}
+\input{copyright}
+\input{frontmatter/dear-programmer}
+\input{frontmatter/how-to-use-this-book}
+\input{frontmatter/for-grownups}
+\tableofcontents
+
+\mainmatter
+\input{chapters/ch01-before-you-type}
+\input{chapters/ch02-common-framework}
+\input{chapters/ch03-tiny-programs}
+\input{chapters/ch04-game-catalog}
+\input{chapters/ch05-making-it-nova}
+
+\appendix
+\input{chapters/appendix-a-common-listing}
+\input{chapters/appendix-b-starter-listings}
+\input{chapters/appendix-c-reference-card}
+
+\backmatter
+\input{backmatter/when-things-go-wrong}
+\input{backmatter/words-to-know}
+\input{backmatter/where-to-go-next}
+\cleardoublepage
+\input{backcover}
+
+\end{document}

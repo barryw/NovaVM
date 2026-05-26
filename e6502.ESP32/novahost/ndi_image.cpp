@@ -5,10 +5,32 @@
 
 #include "ndi_image.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(ARDUINO)
+#include <esp_heap_caps.h>
+#endif
 
 namespace ndi {
+
+#if defined(ARDUINO)
+static void* ndi_malloc(size_t size) {
+    return heap_caps_malloc(size, MALLOC_CAP_8BIT);
+}
+
+static void ndi_free(void* p) {
+    heap_caps_free(p);
+}
+#else
+static void* ndi_malloc(size_t size) {
+    return malloc(size);
+}
+
+static void ndi_free(void* p) {
+    free(p);
+}
+#endif
 
 // ===========================================================================
 // On-disk layout constants
@@ -77,9 +99,13 @@ NdiImage::NdiImage()
       _bam_byte_count(0),
       _data_sector_count(0),
       _free_count(0),
-      _dir_data(nullptr),
+      _dir_sector_cache(nullptr),
+      _dir_cached_sector(-1),
+      _dir_cache_dirty(false),
+      _dir_sector_count(0),
       _dir_entry_count(0) {
     memset(&_header, 0, sizeof(_header));
+    strcpy(_last_error, "none");
 }
 
 NdiImage::~NdiImage() {
@@ -87,8 +113,8 @@ NdiImage::~NdiImage() {
 }
 
 void NdiImage::close() {
-    if (_bam_bits) { free(_bam_bits); _bam_bits = nullptr; }
-    if (_dir_data) { free(_dir_data); _dir_data = nullptr; }
+    if (_bam_bits) { ndi_free(_bam_bits); _bam_bits = nullptr; }
+    free_directory();
     _stream = nullptr;
     _bam_byte_count    = 0;
     _data_sector_count = 0;
@@ -101,9 +127,13 @@ void NdiImage::close() {
 // open()
 // ===========================================================================
 bool NdiImage::open(IStream* stream) {
-    if (!stream) return false;
+    if (!stream) {
+        strcpy(_last_error, "no stream");
+        return false;
+    }
     close();
     _stream = stream;
+    strcpy(_last_error, "none");
 
     if (!read_header())    { close(); return false; }
     if (!read_bam())       { close(); return false; }
@@ -116,11 +146,23 @@ bool NdiImage::open(IStream* stream) {
 // ===========================================================================
 bool NdiImage::read_header() {
     uint8_t buf[SECTOR_SIZE];
-    if (!_stream->seek(0)) return false;
-    if (_stream->read(buf, SECTOR_SIZE) != SECTOR_SIZE) return false;
-
-    if (buf[0] != 'N' || buf[1] != 'D' || buf[2] != 'I' || buf[3] != 0x1A)
+    if (!_stream->seek(0)) {
+        strcpy(_last_error, "header seek failed");
         return false;
+    }
+    int got = _stream->read(buf, SECTOR_SIZE);
+    if (got != SECTOR_SIZE) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "header read failed got %d", got);
+        return false;
+    }
+
+    if (buf[0] != 'N' || buf[1] != 'D' || buf[2] != 'I' || buf[3] != 0x1A) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "bad magic %02X %02X %02X %02X",
+                 buf[0], buf[1], buf[2], buf[3]);
+        return false;
+    }
 
     _header.format_version         = buf[4];
     _header.sector_size            = rd_u16(&buf[5]);
@@ -140,14 +182,40 @@ bool NdiImage::read_header() {
     _header.data_start_sector      = rd_u32(&buf[0x34]);
     _header.free_sector_count      = rd_u32(&buf[0x38]);
 
-    if (_header.format_version != FORMAT_VERSION) return false;
-    if (_header.sector_size != SECTOR_SIZE) return false;
-    if (_header.directory_start_sector < 1) return false;
-    if (_header.data_start_sector <= _header.directory_start_sector) return false;
-    if (_header.total_sectors < _header.data_start_sector) return false;
-    if (_header.total_sectors > 0x7FFFFFFFUL) return false;
-    if (_header.directory_start_sector > 0x7FFFFFFFUL) return false;
-    if (_header.directory_sector_count > 0x7FFFFFFFUL) return false;
+    if (_header.format_version != FORMAT_VERSION) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "bad format version %u", _header.format_version);
+        return false;
+    }
+    if (_header.sector_size != SECTOR_SIZE) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "bad sector size %u", _header.sector_size);
+        return false;
+    }
+    if (_header.directory_start_sector < 1) {
+        strcpy(_last_error, "bad directory start");
+        return false;
+    }
+    if (_header.data_start_sector <= _header.directory_start_sector) {
+        strcpy(_last_error, "bad data start");
+        return false;
+    }
+    if (_header.total_sectors < _header.data_start_sector) {
+        strcpy(_last_error, "bad total sectors");
+        return false;
+    }
+    if (_header.total_sectors > 0x7FFFFFFFUL) {
+        strcpy(_last_error, "total sectors too large");
+        return false;
+    }
+    if (_header.directory_start_sector > 0x7FFFFFFFUL) {
+        strcpy(_last_error, "directory start too large");
+        return false;
+    }
+    if (_header.directory_sector_count > 0x7FFFFFFFUL) {
+        strcpy(_last_error, "directory sector count too large");
+        return false;
+    }
 
     return true;
 }
@@ -157,26 +225,45 @@ bool NdiImage::read_header() {
 // ===========================================================================
 bool NdiImage::read_bam() {
     int bam_sectors      = (int)(_header.directory_start_sector - 1);
-    if (bam_sectors < 1) return false;
+    if (bam_sectors < 1) {
+        strcpy(_last_error, "bad bam sector count");
+        return false;
+    }
     _data_sector_count   = (int)(_header.total_sectors - _header.data_start_sector);
     _bam_byte_count      = (_data_sector_count + 7) >> 3;
 
     int payload_size     = bam_sectors * SECTOR_SIZE;
-    uint8_t* payload     = (uint8_t*)malloc(payload_size);
-    if (!payload) return false;
-
-    if (!_stream->seek(SECTOR_SIZE)) { free(payload); return false; }
-    if (_stream->read(payload, payload_size) != payload_size) {
-        free(payload); return false;
+    uint8_t* payload     = (uint8_t*)ndi_malloc(payload_size);
+    if (!payload) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "bam payload malloc failed %d", payload_size);
+        return false;
     }
 
-    _bam_bits = (uint8_t*)malloc(_bam_byte_count);
-    if (!_bam_bits) { free(payload); return false; }
+    if (!_stream->seek(SECTOR_SIZE)) {
+        strcpy(_last_error, "bam seek failed");
+        ndi_free(payload);
+        return false;
+    }
+    int got = _stream->read(payload, payload_size);
+    if (got != payload_size) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "bam read failed got %d want %d", got, payload_size);
+        ndi_free(payload); return false;
+    }
+
+    _bam_bits = (uint8_t*)ndi_malloc(_bam_byte_count);
+    if (!_bam_bits) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "bam bits malloc failed %d", _bam_byte_count);
+        ndi_free(payload);
+        return false;
+    }
     int copy_n = (payload_size < _bam_byte_count) ? payload_size : _bam_byte_count;
     memcpy(_bam_bits, payload, copy_n);
     if (copy_n < _bam_byte_count)
         memset(_bam_bits + copy_n, 0, _bam_byte_count - copy_n);
-    free(payload);
+    ndi_free(payload);
 
     // Recount free sectors from the bits — header value can drift if the
     // image was modified externally.
@@ -191,15 +278,22 @@ bool NdiImage::read_bam() {
 // Directory read
 // ===========================================================================
 bool NdiImage::read_directory() {
-    int dir_bytes = (int)_header.directory_sector_count * SECTOR_SIZE;
-    _dir_data = (uint8_t*)malloc(dir_bytes);
-    if (!_dir_data) return false;
+    _dir_sector_count = (int)_header.directory_sector_count;
+    if (_dir_sector_count <= 0) {
+        strcpy(_last_error, "bad directory sector count");
+        return false;
+    }
 
-    uint64_t offset = (uint64_t)_header.directory_start_sector * SECTOR_SIZE;
-    if (!_stream->seek(offset)) return false;
-    if (_stream->read(_dir_data, dir_bytes) != dir_bytes) return false;
+    _dir_sector_cache = (uint8_t*)ndi_malloc(SECTOR_SIZE);
+    if (!_dir_sector_cache) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "directory cache malloc failed %d", SECTOR_SIZE);
+        return false;
+    }
+    _dir_cached_sector = -1;
+    _dir_cache_dirty = false;
 
-    _dir_entry_count = (int)_header.directory_sector_count * ENTRIES_PER_SEC;
+    _dir_entry_count = _dir_sector_count * ENTRIES_PER_SEC;
     return true;
 }
 
@@ -236,23 +330,20 @@ bool NdiImage::flush_metadata() {
     // ----- BAM (padded to sector boundary) -----
     int bam_sectors = (int)(_header.directory_start_sector - 1);
     int bam_bytes_padded = bam_sectors * SECTOR_SIZE;
-    uint8_t* padded = (uint8_t*)malloc(bam_bytes_padded);
+    uint8_t* padded = (uint8_t*)ndi_malloc(bam_bytes_padded);
     if (!padded) return false;
     memset(padded, 0, bam_bytes_padded);
     int copy_n = (_bam_byte_count < bam_bytes_padded) ? _bam_byte_count
                                                        : bam_bytes_padded;
     memcpy(padded, _bam_bits, copy_n);
-    if (!_stream->seek(SECTOR_SIZE)) { free(padded); return false; }
+    if (!_stream->seek(SECTOR_SIZE)) { ndi_free(padded); return false; }
     if (_stream->write(padded, bam_bytes_padded) != bam_bytes_padded) {
-        free(padded); return false;
+        ndi_free(padded); return false;
     }
-    free(padded);
+    ndi_free(padded);
 
-    // ----- Directory -----
-    int dir_bytes = (int)_header.directory_sector_count * SECTOR_SIZE;
-    if (!_stream->seek((uint64_t)_header.directory_start_sector * SECTOR_SIZE))
+    if (!flush_directory_cache())
         return false;
-    if (_stream->write(_dir_data, dir_bytes) != dir_bytes) return false;
 
     _stream->flush();
     return true;
@@ -302,51 +393,132 @@ void NdiImage::bam_free(int start, int count) {
 // ===========================================================================
 // Directory helpers
 // ===========================================================================
+void NdiImage::free_directory() {
+    if (_dir_sector_cache) {
+        (void)flush_directory_cache();
+        ndi_free(_dir_sector_cache);
+    }
+    _dir_sector_cache = nullptr;
+    _dir_cached_sector = -1;
+    _dir_cache_dirty = false;
+    _dir_sector_count = 0;
+    _dir_entry_count = 0;
+}
+
+bool NdiImage::flush_directory_cache() {
+    if (!_stream || !_dir_sector_cache || !_dir_cache_dirty ||
+        _dir_cached_sector < 0) {
+        return true;
+    }
+
+    uint64_t offset = (uint64_t)(_header.directory_start_sector +
+                                (uint32_t)_dir_cached_sector) * SECTOR_SIZE;
+    if (!_stream->seek(offset)) {
+        strcpy(_last_error, "directory cache flush seek failed");
+        return false;
+    }
+    if (_stream->write(_dir_sector_cache, SECTOR_SIZE) != SECTOR_SIZE) {
+        strcpy(_last_error, "directory cache flush write failed");
+        return false;
+    }
+    _dir_cache_dirty = false;
+    return true;
+}
+
+bool NdiImage::load_dir_sector(int sector) {
+    if (!_stream || !_dir_sector_cache)
+        return false;
+    if (sector < 0 || sector >= _dir_sector_count)
+        return false;
+    if (_dir_cached_sector == sector)
+        return true;
+    if (!flush_directory_cache())
+        return false;
+
+    uint64_t offset = (uint64_t)(_header.directory_start_sector +
+                                (uint32_t)sector) * SECTOR_SIZE;
+    if (!_stream->seek(offset)) {
+        strcpy(_last_error, "directory cache seek failed");
+        return false;
+    }
+    int got = _stream->read(_dir_sector_cache, SECTOR_SIZE);
+    if (got != SECTOR_SIZE) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "directory cache read failed sector %d got %d", sector, got);
+        return false;
+    }
+    _dir_cached_sector = sector;
+    _dir_cache_dirty = false;
+    return true;
+}
+
+uint8_t* NdiImage::dir_entry_ptr(int slot) {
+    if (slot < 0 || slot >= _dir_entry_count)
+        return nullptr;
+    int sector = slot / ENTRIES_PER_SEC;
+    int entry = slot % ENTRIES_PER_SEC;
+    if (!load_dir_sector(sector))
+        return nullptr;
+    return _dir_sector_cache + entry * ENTRY_SIZE;
+}
+
 void NdiImage::dir_read_entry(int slot, DirEntry& out) {
-    int o = slot * ENTRY_SIZE;
+    uint8_t* p = dir_entry_ptr(slot);
+    if (!p) {
+        memset(&out, 0, sizeof(out));
+        out.index = slot;
+        return;
+    }
     out.index        = slot;
-    out.flags        = _dir_data[o + OFF_FLAGS];
-    out.file_type    = _dir_data[o + OFF_TYPE];
-    out.parent_index = rd_u16(&_dir_data[o + OFF_PARENT]);
-    out.start_sector = rd_u32(&_dir_data[o + OFF_START_SEC]);
-    out.size_bytes   = rd_u32(&_dir_data[o + OFF_SIZE]);
+    out.flags        = p[OFF_FLAGS];
+    out.file_type    = p[OFF_TYPE];
+    out.parent_index = rd_u16(&p[OFF_PARENT]);
+    out.start_sector = rd_u32(&p[OFF_START_SEC]);
+    out.size_bytes   = rd_u32(&p[OFF_SIZE]);
     int n = 0;
     for (; n < MAX_FILENAME_LEN; n++) {
-        char c = (char)_dir_data[o + OFF_FILENAME + n];
+        char c = (char)p[OFF_FILENAME + n];
         if (c == 0) break;
         out.filename[n] = c;
     }
     out.filename[n]  = 0;
-    out.sector_count = rd_u32(&_dir_data[o + OFF_SECCOUNT]);
+    out.sector_count = rd_u32(&p[OFF_SECCOUNT]);
 }
 
 void NdiImage::dir_write_entry(int slot, uint8_t flags, uint8_t type,
                                 uint16_t parent, uint32_t start_sector,
                                 uint32_t size, const char* name,
                                 uint32_t sector_count) {
-    int o = slot * ENTRY_SIZE;
-    _dir_data[o + OFF_FLAGS] = flags;
-    _dir_data[o + OFF_TYPE]  = type;
-    wr_u16(&_dir_data[o + OFF_PARENT],    parent);
-    wr_u32(&_dir_data[o + OFF_START_SEC], start_sector);
-    wr_u32(&_dir_data[o + OFF_SIZE],      size);
-    memset(&_dir_data[o + OFF_FILENAME], 0, MAX_FILENAME_LEN);
+    uint8_t* p = dir_entry_ptr(slot);
+    if (!p)
+        return;
+    p[OFF_FLAGS] = flags;
+    p[OFF_TYPE]  = type;
+    wr_u16(&p[OFF_PARENT],    parent);
+    wr_u32(&p[OFF_START_SEC], start_sector);
+    wr_u32(&p[OFF_SIZE],      size);
+    memset(&p[OFF_FILENAME], 0, MAX_FILENAME_LEN);
     int n = 0;
     while (name[n] != 0 && n < MAX_FILENAME_LEN) {
-        _dir_data[o + OFF_FILENAME + n] = (uint8_t)name[n];
+        p[OFF_FILENAME + n] = (uint8_t)name[n];
         n++;
     }
-    wr_u32(&_dir_data[o + OFF_SECCOUNT], sector_count);
+    wr_u32(&p[OFF_SECCOUNT], sector_count);
+    _dir_cache_dirty = true;
 }
 
 void NdiImage::dir_clear_slot(int slot) {
-    int o = slot * ENTRY_SIZE;
-    _dir_data[o + OFF_FLAGS] = 0;
+    uint8_t* p = dir_entry_ptr(slot);
+    if (p) {
+        p[OFF_FLAGS] = 0;
+        _dir_cache_dirty = true;
+    }
 }
 
 int NdiImage::dir_find_free_slot() {
     for (int i = 0; i < _dir_entry_count; i++) {
-        if (_dir_data[i * ENTRY_SIZE + OFF_FLAGS] == 0)
+        uint8_t* p = dir_entry_ptr(i);
+        if (p && p[OFF_FLAGS] == 0)
             return i;
     }
     return -1;

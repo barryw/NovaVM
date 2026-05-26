@@ -217,29 +217,29 @@ Auto-rebuilt during `dotnet build` like `novavm.inc`.
 - `string[] Detokenize(byte[] data)` -- binary .bas to ASCII
 - Handles quoted strings (literal), line numbers, both primary and extended tokens
 - Longest-match tokenization (e.g., "GOSUB" before "GO")
-- Shared by NDI CLI tool and emulator
+- Shared by Nova CLI tool and emulator
 
-## NDI CLI Tool
+## Nova CLI Tool
 
-### Project: e6502.NDI
+### Project: e6502.Nova
 
 New console project referencing `e6502.Storage`.
 
 ```
-ndi create <file.ndi> [--size <KB>|--hd] [--label <name>]
-ndi dir <file.ndi> [/path]
-ndi info <file.ndi>
-ndi validate <file.ndi>
-ndi label <file.ndi> <name>
+nova create <file.ndi> [--size <KB>|--hd] [--label <name>]
+nova dir <file.ndi> [/path]
+nova info <file.ndi>
+nova validate <file.ndi>
+nova label <file.ndi> <name>
 
-ndi import <file.ndi> <hostfile> [/dest] [--tokenize]
-ndi export <file.ndi> <path> [hostdir] [--detokenize]
-ndi delete <file.ndi> <path>
-ndi mkdir <file.ndi> <path>
-ndi rmdir <file.ndi> <path>
+nova import <file.ndi> <hostfile> [/dest] [--tokenize]
+nova export <file.ndi> <path> [hostdir] [--detokenize]
+nova delete <file.ndi> <path>
+nova mkdir <file.ndi> <path>
+nova rmdir <file.ndi> <path>
 
-ndi tokenize <input.txt> <output.bas> [--base <addr>]
-ndi detokenize <input.bas> [output.txt]
+nova tokenize <input.txt> <output.bas> [--base <addr>]
+nova detokenize <input.bas> [output.txt]
 ```
 
 ### Key Behaviors
@@ -247,12 +247,12 @@ ndi detokenize <input.bas> [output.txt]
 - `import --tokenize` reads ASCII BASIC, tokenizes via BasicTokenizer, writes as .bas entry
 - `export --detokenize` reads tokenized .bas, emits readable ASCII
 - `tokenize`/`detokenize` are standalone host-file converters (no NDI image involved)
-- Wildcard import: `ndi import disk.ndi *.bas /PROGRAMS`
-- Whole-directory export: `ndi export disk.ndi / ./dump`
+- Wildcard import: `nova import disk.ndi *.bas /PROGRAMS`
+- Whole-directory export: `nova export disk.ndi / ./dump`
 - `dir` output shows filename, type (BAS/SID/BIN/MID/GFX/DIR), size, free space summary
 - `validate` checks BAM consistency, directory integrity, orphaned sectors
 - `--base` defaults to $0801 (typical EhBASIC program start)
-- Future: `ndi shell <file.ndi>` interactive REPL mode
+- Future: `nova shell <file.ndi>` interactive REPL mode
 
 ### Shared Library: e6502.Storage
 
@@ -277,11 +277,11 @@ New class library containing:
 - File CRUD + subdirectory support within images
 - Unit tests (round-trip create/write/read, BAM consistency, subdirectories)
 
-### Phase 2: NDI CLI tool + tokenizer
+### Phase 2: Nova CLI tool + tokenizer
 
 - gen_tokens.py script + tokens.json extraction in Makefile
 - BasicTokenizer (tokenize/detokenize)
-- e6502.NDI console tool -- all commands
+- e6502.Nova console tool -- all commands
 - Integration tests: create image, import ASCII with --tokenize, export with --detokenize, verify round-trip
 
 ### Phase 3: Device layer + FileIoController integration

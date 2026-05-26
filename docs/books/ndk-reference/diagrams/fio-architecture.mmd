@@ -1,0 +1,20 @@
+%%{init: {"theme": "base", "htmlLabels": false, "flowchart": {"curve": "linear"}}}%%
+flowchart LR
+    APP["6502<br/>program"]
+    LIB["fio.s<br/>helpers"]
+    REGS["FIO<br/>registers<br/>B9A0-B9EF"]
+    HOST["NovaHost<br/>storage"]
+    DEV["mounted<br/>devices"]
+    RAM["CPU<br/>RAM"]
+    VGC["VGC<br/>memory"]
+    XRAM["XRAM"]
+
+    APP --> LIB
+    LIB --> REGS
+    APP -. direct .-> REGS
+    REGS --> HOST
+    HOST --> DEV
+    HOST --> RAM
+    HOST --> VGC
+    HOST --> XRAM
+    HOST --> REGS

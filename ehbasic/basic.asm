@@ -520,7 +520,7 @@ XTK_BLITERR       = $43              ; BLITERR — numeric function (no args)
 XTK_BLITCOUNT     = $44              ; BLITCOUNT — numeric function (no args)
 XTK_BITTGL        = $45              ; BITTGL addr,mask — toggle bits
 XTK_HELP           = $46              ; HELP [keyword] — open help panel
-XTK_NCC            = $47              ; NCC — activate NCC editor
+XTK_RESERVED47     = $47              ; reserved
 XTK_FONT           = $48              ; FONT n — select font slot (0-7)
 XTK_CD             = $49              ; CD "path"
 XTK_MKDIR          = $4A              ; MKDIR "path"
@@ -2047,7 +2047,7 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_BLITCOUNT  ($44) — function only
       .word LAB_BITTGL-1      ; XTK_BITTGL     ($45) — toggle bits
       .word LAB_HELP-1        ; XTK_HELP       ($46)
-      .word LAB_15D9-1        ; XTK_NCC        ($47) — editor launcher is not BASIC
+      .word LAB_15D9-1        ; reserved       ($47)
       .word LAB_FONT-1        ; XTK_FONT       ($48)
       .word LAB_CD-1          ; XTK_CD         ($49)
       .word LAB_MKDIR-1       ; XTK_MKDIR      ($4A)
@@ -9485,6 +9485,8 @@ LAB_ENVELOPE
       JMP   audio_instrument
 
 FIO_NO_STREAMING = 1
+AUDIO_POINTER_FILE_HELPERS = 0
+NOVA_EMIT_ALL_RUNTIME = 1
 ; Primary ROM is tight. NIC server entry points are library concerns, so omit
 ; those helper shims from the BASIC ROM build.
 NIC_SERVER_COMMANDS = 0

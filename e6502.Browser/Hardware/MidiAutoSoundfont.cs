@@ -6,8 +6,11 @@ namespace e6502.Avalonia.Hardware;
 /// </summary>
 public static class MidiAutoSoundfont
 {
-    public static void TryLoad(FileIoController fio, WavetableSynth wts)
+    public const string DefaultSoundfont = "GeneralUser_GS";
+
+    public static bool TryLoad(FileIoController fio, WavetableSynth wts)
     {
         // No-op in browser — soundfonts require filesystem access
+        return false;
     }
 }

@@ -1,0 +1,26 @@
+\chapter*{Preface}
+\addcontentsline{toc}{chapter}{Preface}
+
+The Nova Developer Kit Reference is the assembly programmer's companion to the
+Nova runtime libraries. It combines authored system chapters with a generated
+API reference built directly from structured comments in the runtime sources.
+
+\begin{novanote}
+The generated reference keeps symbol names, pseudo-registers, calling
+conventions, and result codes close to the code that implements them. Authored
+chapters explain the operating model, common paths, and caveats that are hard to
+understand from API boxes alone.
+\end{novanote}
+
+The normal assembly pattern is to include interface files near the top of a
+program, call the routines you need, and include implementation files near the
+end of the source file.
+
+\begin{lstlisting}
+.include "fio.inc"
+
+      jsr   fio_load
+      rts
+
+.include "fio.s"
+\end{lstlisting}

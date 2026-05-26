@@ -1,0 +1,20 @@
+%%{init: {"theme": "base", "htmlLabels": false, "flowchart": {"curve": "linear"}}}%%
+flowchart LR
+    PREP["load<br/>FIO<br/>arguments"]
+    EXEC["call<br/>fio_exec"]
+    CLEAR["clear<br/>status<br/>error"]
+    CMD["write<br/>FIO_CMD"]
+    WAIT["wait<br/>status"]
+    CHECK{"status<br/>OK"}
+    OK["return<br/>A=0"]
+    ERR["return<br/>A=1"]
+    CODE["read<br/>FIO_ERRCODE"]
+
+    PREP --> EXEC
+    EXEC --> CLEAR
+    CLEAR --> CMD
+    CMD --> WAIT
+    WAIT --> CHECK
+    CHECK -->|yes| OK
+    CHECK -->|no| ERR
+    ERR --> CODE

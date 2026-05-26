@@ -1,12 +1,14 @@
 namespace e6502.Avalonia.Hardware;
 
 /// <summary>
-/// 2D blitter for rectangular copies and fills across unified memory spaces.
-/// Registers are memory-mapped at $BA80-$BA9F.
+/// 2D blitter for rectangular copies, fills, and rotations across unified memory spaces.
+/// Registers are memory-mapped at $BA83-$BA9B plus $BAA2.
 /// </summary>
 public sealed class VirtualBlitterController
 {
-    private readonly byte[] _regs = new byte[VgcConstants.BltEnd - VgcConstants.BltBase + 1];
+    private const int BltRotateAngleIndex = VgcConstants.BltEnd - VgcConstants.BltBase + 1;
+
+    private readonly byte[] _regs = new byte[BltRotateAngleIndex + 1];
     private readonly Func<byte, int> _getSpaceLength;
     private readonly Func<byte, int, (bool ok, byte value)> _tryReadByte;
     private readonly Func<byte, int, byte, bool> _tryWriteByte;
@@ -15,6 +17,7 @@ public sealed class VirtualBlitterController
     private bool _busy;
     private bool _fillMode;
     private bool _colorKeyMode;
+    private bool _rotateMode;
     private bool _useRowBuffer;
     private byte _srcSpace;
     private byte _dstSpace;
@@ -51,7 +54,8 @@ public sealed class VirtualBlitterController
     }
 
     public bool OwnsAddress(ushort address) =>
-        address >= VgcConstants.BltBase && address <= VgcConstants.BltEnd;
+        (address >= VgcConstants.BltBase && address <= VgcConstants.BltEnd) ||
+        address == VgcConstants.BltRotateAngle;
 
     public byte Read(ushort address) => _regs[RegIndex(address)];
 
@@ -61,6 +65,7 @@ public sealed class VirtualBlitterController
         _busy = false;
         _fillMode = false;
         _colorKeyMode = false;
+        _rotateMode = false;
         _useRowBuffer = false;
         _srcSpace = 0;
         _dstSpace = 0;
@@ -116,6 +121,40 @@ public sealed class VirtualBlitterController
             {
                 int dstAddr = _dstBase + _row * _dstStride + _col;
                 if (!_tryWriteByte(_dstSpace, dstAddr, _fillValue))
+                {
+                    FailTransfer(VgcConstants.BltErrRange);
+                    break;
+                }
+
+                _wroteCount++;
+                AdvanceCursor();
+                opsBudget--;
+                opsUsed++;
+                if (_row >= _height)
+                {
+                    CompleteTransfer();
+                    break;
+                }
+                continue;
+            }
+
+            if (_rotateMode)
+            {
+                byte value = _colorKey;
+                if (TryGetRotatedSourceAddress(out int srcAddr))
+                {
+                    var read = _tryReadByte(_srcSpace, srcAddr);
+                    if (!read.ok)
+                    {
+                        FailTransfer(VgcConstants.BltErrRange);
+                        break;
+                    }
+
+                    value = read.value;
+                }
+
+                int dstAddr = _dstBase + _row * _dstStride + _col;
+                if (!_tryWriteByte(_dstSpace, dstAddr, value))
                 {
                     FailTransfer(VgcConstants.BltErrRange);
                     break;
@@ -249,7 +288,15 @@ public sealed class VirtualBlitterController
         byte mode = _regs[RegIndex(VgcConstants.BltMode)];
         bool fillMode = (mode & VgcConstants.BltModeFill) != 0;
         bool colorKeyMode = (mode & VgcConstants.BltModeColorKey) != 0;
+        bool rotateMode = (mode & VgcConstants.BltModeRotate) != 0;
         byte colorKey = _regs[RegIndex(VgcConstants.BltColorKey)];
+
+        if (rotateMode && (fillMode || width != height || width > 256))
+        {
+            SetCount(0);
+            SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrBadArgs);
+            return;
+        }
 
         byte srcSpace = _regs[RegIndex(VgcConstants.BltSrcSpace)];
         byte dstSpace = _regs[RegIndex(VgcConstants.BltDstSpace)];
@@ -306,12 +353,21 @@ public sealed class VirtualBlitterController
             return;
         }
 
+        if (rotateMode && srcSpace == dstSpace &&
+            RectLinearRangesOverlap(srcBase, width, height, srcStride, dstBase, width, height, dstStride))
+        {
+            SetCount(0);
+            SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrBadArgs);
+            return;
+        }
+
         SetCount(0);
         SetStatus(VgcConstants.BltStatusBusy, VgcConstants.BltErrNone);
         _busy = true;
         _fillMode = fillMode;
         _colorKeyMode = colorKeyMode;
-        _useRowBuffer = !fillMode && srcSpace == dstSpace;
+        _rotateMode = rotateMode;
+        _useRowBuffer = !fillMode && !rotateMode && srcSpace == dstSpace;
         _srcSpace = srcSpace;
         _dstSpace = dstSpace;
         _srcBase = srcBase;
@@ -377,6 +433,29 @@ public sealed class VirtualBlitterController
         return true;
     }
 
+    private bool TryGetRotatedSourceAddress(out int srcAddr)
+    {
+        int sin = unchecked((sbyte)MathCoprocessor.Sin1P7(_regs[RegIndex(VgcConstants.BltRotateAngle)]));
+        int cos = unchecked((sbyte)MathCoprocessor.Sin1P7((byte)(_regs[RegIndex(VgcConstants.BltRotateAngle)] + 64)));
+        long centerFp = ((long)_width - 1) << 7;
+        long dx = ((long)_col << 8) - centerFp;
+        long dy = ((long)_row << 8) - centerFp;
+
+        long srcXFp = centerFp + (((dx * cos) + (dy * sin)) >> 7);
+        long srcYFp = centerFp + (((dy * cos) - (dx * sin)) >> 7);
+        long srcX = (srcXFp + 128) >> 8;
+        long srcY = (srcYFp + 128) >> 8;
+
+        if (srcX < 0 || srcY < 0 || srcX >= _width || srcY >= _height)
+        {
+            srcAddr = 0;
+            return false;
+        }
+
+        srcAddr = _srcBase + (int)srcY * _srcStride + (int)srcX;
+        return true;
+    }
+
     private int Get16(int baseAddress)
     {
         int l = _regs[RegIndex(baseAddress)];
@@ -405,7 +484,22 @@ public sealed class VirtualBlitterController
         _regs[RegIndex(VgcConstants.BltErrCode)] = errCode;
     }
 
-    private static int RegIndex(int address) => address - VgcConstants.BltBase;
+    private static int RegIndex(int address) =>
+        address == VgcConstants.BltRotateAngle
+            ? BltRotateAngleIndex
+            : address - VgcConstants.BltBase;
+
+    private static bool RectLinearRangesOverlap(
+        int aBase, int aWidth, int aHeight, int aStride,
+        int bBase, int bWidth, int bHeight, int bStride)
+    {
+        long aEnd = RectLinearEnd(aBase, aWidth, aHeight, aStride);
+        long bEnd = RectLinearEnd(bBase, bWidth, bHeight, bStride);
+        return aBase < bEnd && bBase < aEnd;
+    }
+
+    private static long RectLinearEnd(int baseAddr, int width, int height, int stride) =>
+        (long)baseAddr + ((long)(height - 1) * stride) + width;
 
     private static bool RectFits(int baseAddr, int width, int height, int stride, int spaceLength)
     {

@@ -42,6 +42,9 @@ private:
     static constexpr size_t LINE_BUF_BYTES = 512;
     static constexpr size_t IO_BUF_BYTES   = 1024;
     static constexpr size_t JSON_BUF_BYTES = 1024;
+    static constexpr uint32_t REQUEST_LINE_TIMEOUT_MS = 750;
+    static constexpr uint32_t HEADER_LINE_TIMEOUT_MS = 1000;
+    static constexpr uint32_t RESPONSE_WRITE_TIMEOUT_MS = 750;
 
     DeviceManager& _dm;
     NovaWifiManager& _wifi;
@@ -52,11 +55,19 @@ private:
 
     bool read_line(WiFiClient& client, char* out, size_t out_len,
                    uint32_t timeout_ms = 5000);
-    bool read_body_to_file(WiFiClient& client, File& file,
-                           uint32_t content_len);
+    bool read_body_to_file(WiFiClient& client, const char* path,
+                           uint32_t content_len, uint32_t& bytes_written,
+                           char* error, size_t error_len);
+    bool write_file_all(File& file, const uint8_t* data, size_t len,
+                        uint32_t& bytes_written, char* error,
+                        size_t error_len);
     bool read_body_to_string(WiFiClient& client, String& out,
                              uint32_t content_len);
-    bool write_all(WiFiClient& client, const uint8_t* data, size_t len);
+    bool write_all(WiFiClient& client, const uint8_t* data, size_t len,
+                   bool allow_probe_write = true);
+    bool write_str(WiFiClient& client, const char* value);
+    bool write_char(WiFiClient& client, char value);
+    bool write_fmt(WiFiClient& client, const char* fmt, ...);
 
     void handle_wifi(WiFiClient& client, const char* method, const char* url,
                      bool have_content_len, uint32_t content_len);

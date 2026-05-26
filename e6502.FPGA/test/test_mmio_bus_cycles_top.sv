@@ -23,6 +23,12 @@ module test_mmio_bus_cycles_top;
     logic [7:0]  key_data  = 0;
     logic [7:0]  board_buttons = 8'h55;
     logic [7:0]  board_switches = 8'h0A;
+    logic [7:0]  usb_hid_status = 8'hA5;
+    logic [7:0]  usb_hid_device_type = 8'h01;
+    logic [7:0]  usb_hid_last_scan = 8'h04;
+    logic [7:0]  usb_hid_last_ascii = 8'h41;
+    logic [7:0]  usb_hid_report_count = 8'h11;
+    logic [7:0]  usb_hid_key_count = 8'h5A;
     logic        irq_n = 1, nmi_n = 1;
 
     wire  [3:0]  vid_r, vid_g, vid_b;
@@ -61,6 +67,12 @@ module test_mmio_bus_cycles_top;
         .key_valid(key_valid), .key_data(key_data), .key_ready(),
         .board_buttons(board_buttons),
         .board_switches(board_switches),
+        .usb_hid_status(usb_hid_status),
+        .usb_hid_device_type(usb_hid_device_type),
+        .usb_hid_last_scan(usb_hid_last_scan),
+        .usb_hid_last_ascii(usb_hid_last_ascii),
+        .usb_hid_report_count(usb_hid_report_count),
+        .usb_hid_key_count(usb_hid_key_count),
         .irq_n(irq_n), .nmi_n(nmi_n),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
@@ -188,7 +200,7 @@ module test_mmio_bus_cycles_top;
         repeat(4) @(posedge clk);
     endtask
 
-    localparam int PROG_LEN = 114;
+    localparam int PROG_LEN = 126;
     byte unsigned prog [PROG_LEN] = '{
         8'hA9, 8'h9E, 8'h85, 8'h10,         // $10/$11 = $B99E
         8'hA9, 8'hB9, 8'h85, 8'h11,
@@ -223,7 +235,11 @@ module test_mmio_bus_cycles_top;
         8'h8D, 8'h00, 8'h04,               // STA $0400
         8'hAD, 8'h9D, 8'hBA,               // LDA $BA9D -> board switches
         8'h8D, 8'h01, 8'h04,               // STA $0401
-        8'h4C, 8'h6F, 8'hC0                // JMP $C06F
+        8'hAD, 8'hA3, 8'hBA,               // LDA $BAA3 -> USB HID status
+        8'h8D, 8'h02, 8'h04,               // STA $0402
+        8'hAD, 8'hA8, 8'hBA,               // LDA $BAA8 -> USB HID key count
+        8'h8D, 8'h03, 8'h04,               // STA $0403
+        8'h4C, 8'h7B, 8'hC0                // JMP $C07B
     };
 
     initial begin
@@ -263,7 +279,7 @@ module test_mmio_bus_cycles_top;
                  dbg_cpu_pc, dbg_cpu_ir, dbg_cpu_state, dbg_cpu_addr, dbg_cpu_din, dbg_cpu_dout);
 
         check("CPU reached halt loop",
-              (dbg_cpu_pc >= 16'hC06F) && (dbg_cpu_pc <= 16'hC072));
+              (dbg_cpu_pc >= 16'hC07B) && (dbg_cpu_pc <= 16'hC07E));
 
         check_eq_int("FioCmd write fired exactly one event", event_count, 1);
         check_eq8("FioCmd via STA ($zp),Y", dut.fio_inst.bank[7'h00], 8'h21);
@@ -284,6 +300,10 @@ module test_mmio_bus_cycles_top;
         check_eq8("Board buttons are CPU-visible", peek_data, 8'h55);
         dbg_peek(16'h0401, peek_data);
         check_eq8("Board switches are CPU-visible", peek_data, 8'h0A);
+        dbg_peek(16'h0402, peek_data);
+        check_eq8("USB HID status is CPU-visible", peek_data, 8'hA5);
+        dbg_peek(16'h0403, peek_data);
+        check_eq8("USB HID key count is CPU-visible", peek_data, 8'h5A);
 
         dbg_pause = 1;
         board_buttons = 8'h54;

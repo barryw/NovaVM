@@ -34,10 +34,11 @@ The full 64 KB address space is partitioned as follows:
 | `B9A0`--`B9EF` | 80 B | File I/O Controller (FIO) | R/W |
 | `BA00`--`BA3F` | 64 B | Expansion Memory Controller (XMC) | R/W |
 | `BA40`--`BA4F` | 16 B | Timer Controller | R/W |
-| `BA50`--`BA56` | 7 B | Hosted Music Status (6 voices) | RO |
-| `BA60`--`BA7F` | 32 B | DMA Controller | R/W |
-| `BA83`--`BA9B` | 25 B | Blitter Controller | R/W |
+| `BA50`--`BA62` | 19 B | Hosted Music Status (14 voices) | RO |
+| `BA63`--`BA75` | 19 B | DMA Controller | R/W |
+| `BA83`--`BA9B`, `BAA2` | 26 B | Blitter Controller | R/W |
 | `BA9C`--`BAA1` | 6 B | Board Input registers | R/W1C |
+| `BAA3`--`BAA8` | 6 B | USB HID diagnostics (ULX3S US2) | R only |
 | `BC00`--`BFFF` | 1024 B | XRAM Windows (when mapped) | R/W |
 | `C000`--`FFFF` | 16 KB | ROM (NovaBASIC) | R only |
 | `D400`--`D41F` | 32 B | SID chip 1 (write-intercepted) | W only |
@@ -233,6 +234,24 @@ are the opt-in IRQ/change latch registers.
 Bit 0 of `$BA9E/$BA9F` is button changes; bit 1 is DIP-switch changes. `$BAA0`
 and `$BAA1` identify which button or switch bits changed and are cleared by
 writing `1` bits back.
+
+### USB HID diagnostics
+
+ULX3S builds expose read-only USB HID diagnostics at `$BAA3-$BAA8` for the US2
+port. These are bring-up registers, not the normal keyboard API. The current
+host core supports only low-speed USB HID devices.
+
+| Address | Symbol | Meaning |
+| --- | --- | --- |
+| `$BAA3` | `UsbHidStatus` / `USB_HID_STATUS` | Status bits: `$01` reset released, `$02` D- high, `$04` D+ high, `$08` device type present, `$10` keyboard, `$20` report seen, `$40` key emitted, `$80` error. |
+| `$BAA4` | `UsbHidDeviceType` / `USB_HID_DEVICE_TYPE` | Host device type; `1` means keyboard. |
+| `$BAA5` | `UsbHidLastScan` / `USB_HID_LAST_SCAN` | Last HID scan code in a keyboard report. |
+| `$BAA6` | `UsbHidLastAscii` / `USB_HID_LAST_ASCII` | Last ASCII byte emitted into Nova's keyboard stream. |
+| `$BAA7` | `UsbHidReportCount` / `USB_HID_REPORT_COUNT` | Wrapping keyboard report counter. |
+| `$BAA8` | `UsbHidKeyCount` / `USB_HID_KEY_COUNT` | Wrapping emitted-key counter. |
+
+For line-state diagnosis, no device usually reads D-=0 and D+=0, low-speed idle
+reads D-=1 and D+=0, and full-speed idle reads D-=0 and D+=1.
 
 ### Sprite collision IRQs from BASIC
 
@@ -563,7 +582,7 @@ command interface and is the preferred approach from assembly code.
 
 ## DMA Controller from Assembly
 
-The DMA controller at $BA60 transfers data between six unified memory
+The DMA controller at $BA63 transfers data between six unified memory
 spaces. The pattern is: load parameters into registers, then write $01
 to the command register to start.
 
@@ -578,7 +597,7 @@ to the command register to start.
 80 POKE $BA6B, $A0 : POKE $BA6C, $0F : POKE $BA6D, 0
 90 REM length = 4000 ($0FA0)
 100 POKE $BA6E, 0  : REM mode = copy (not fill)
-110 POKE $BA60, 1  : REM start!
+110 POKE $BA63, 1  : REM start!
 120 IF PEEK($BA61) = 1 THEN 120 : REM poll until not busy
 130 IF PEEK($BA61) <> 2 THEN PRINT "Error:"; PEEK($BA62)
 ```
@@ -588,31 +607,33 @@ into `DmaFillValue` ($BA6F).
 
 ## Blitter from Assembly
 
-The blitter at $BA80 performs 2D rectangular copies and fills with row
-stride. Set up source and destination addresses, width, height, and stride,
+The blitter at $BA83 performs 2D rectangular copies, fills, and square-region
+rotates with row stride. Set up source and destination addresses, width, height, and stride,
 then write $01 to `BltCmd`.
 
 ```basic
 10 REM -- Scroll color RAM up by 1 row using blitter --
 20 REM Source: row 1 (offset 80), Dest: row 0 (offset 0)
 30 REM Width: 80, Height: 24, Stride: 80
-40 POKE $BA83, 2  : POKE $BA84, 2   : REM src/dst = color RAM
-50 POKE $BA85, 80 : POKE $BA86, 0   : POKE $BA87, 0
+40 POKE $BA86, 2  : POKE $BA87, 2   : REM src/dst = color RAM
+50 POKE $BA88, 80 : POKE $BA89, 0   : POKE $BA8A, 0
 60 REM source offset = 80 (row 1)
-70 POKE $BA88, 0  : POKE $BA89, 0   : POKE $BA8A, 0
+70 POKE $BA8B, 0  : POKE $BA8C, 0   : POKE $BA8D, 0
 80 REM dest offset = 0 (row 0)
-90 POKE $BA8B, 80 : POKE $BA8C, 0   : REM width = 80
-100 POKE $BA8D, 24 : POKE $BA8E, 0  : REM height = 24
-110 POKE $BA8F, 80 : POKE $BA90, 0  : REM src stride = 80
-120 POKE $BA91, 80 : POKE $BA92, 0  : REM dst stride = 80
-130 POKE $BA93, 0  : REM mode = copy
-140 POKE $BA80, 1  : REM start!
-150 IF PEEK($BA81) = 1 THEN 150
+90 POKE $BA8E, 80 : POKE $BA8F, 0   : REM width = 80
+100 POKE $BA90, 24 : POKE $BA91, 0  : REM height = 24
+110 POKE $BA92, 80 : POKE $BA93, 0  : REM src stride = 80
+120 POKE $BA94, 80 : POKE $BA95, 0  : REM dst stride = 80
+130 POKE $BA96, 0  : REM mode = copy
+140 POKE $BA83, 1  : REM start!
+150 IF PEEK($BA84) = 1 THEN 150
 ```
 
-Color-key mode: set bit 1 of `BltMode` ($BA93) and load the
-transparent color into `BltColorKey` ($BA95). Source pixels
-matching the color key are skipped.
+Color-key mode: set bit 1 of `BltMode` ($BA96) and load the
+transparent color into `BltColorKey` ($BA98). Source pixels
+matching the color key are skipped. Rotate mode sets bit 2 of `BltMode`,
+stores the 8-bit angle in `BltRotateAngle` ($BAA2), and requires equal width
+and height, up to 256 bytes per side.
 
 ## Network Controller from Assembly
 

@@ -217,10 +217,10 @@ SEGMENTS {
 
 ```bash
 # Add autoboot program
-dotnet run --project e6502.NDI -- import docs/programs/demo.ndi AUTOBOOT.bin /
+dotnet run --project e6502.Nova -- import docs/programs/demo.ndi AUTOBOOT.bin /
 
 # Add keyboard visualizer
-dotnet run --project e6502.NDI -- import docs/programs/demo.ndi ehbasic/keyboard.bin /
+dotnet run --project e6502.Nova -- import docs/programs/demo.ndi ehbasic/keyboard.bin /
 ```
 
 ## File Inventory

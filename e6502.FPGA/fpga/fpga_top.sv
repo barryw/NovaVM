@@ -471,6 +471,12 @@ module fpga_top (
     wire [1:0] usb_device_type;
     wire usb_report_seen;
     wire usb_connection_error;
+    wire [7:0] usb_hid_status;
+    wire [7:0] usb_hid_device_type;
+    wire [7:0] usb_hid_last_scan;
+    wire [7:0] usb_hid_last_ascii;
+    wire [7:0] usb_hid_report_count;
+    wire [7:0] usb_hid_key_count;
 
     usb_hid_keyboard usb_keyboard (
         .clk_usb         (clk_usb),
@@ -483,7 +489,13 @@ module fpga_top (
         .key_data        (usb_key_data),
         .device_type     (usb_device_type),
         .report_seen     (usb_report_seen),
-        .connection_error(usb_connection_error)
+        .connection_error(usb_connection_error),
+        .dbg_status      (usb_hid_status),
+        .dbg_device_type (usb_hid_device_type),
+        .dbg_last_scan   (usb_hid_last_scan),
+        .dbg_last_ascii  (usb_hid_last_ascii),
+        .dbg_report_count(usb_hid_report_count),
+        .dbg_key_count   (usb_hid_key_count)
     );
 `else
     assign usb_fpga_bd_dp = 1'bz;
@@ -491,6 +503,12 @@ module fpga_top (
 
     wire       usb_key_valid = 1'b0;
     wire [7:0] usb_key_data = 8'h00;
+    wire [7:0] usb_hid_status = 8'h00;
+    wire [7:0] usb_hid_device_type = 8'h00;
+    wire [7:0] usb_hid_last_scan = 8'h00;
+    wire [7:0] usb_hid_last_ascii = 8'h00;
+    wire [7:0] usb_hid_report_count = 8'h00;
+    wire [7:0] usb_hid_key_count = 8'h00;
 `endif
 
     // =========================================================================
@@ -758,6 +776,12 @@ module fpga_top (
 
         .board_buttons(board_buttons),
         .board_switches(board_switches),
+        .usb_hid_status(usb_hid_status),
+        .usb_hid_device_type(usb_hid_device_type),
+        .usb_hid_last_scan(usb_hid_last_scan),
+        .usb_hid_last_ascii(usb_hid_last_ascii),
+        .usb_hid_report_count(usb_hid_report_count),
+        .usb_hid_key_count(usb_hid_key_count),
 
         .irq_n      (1'b1),
         .nmi_n      (1'b1),
@@ -984,6 +1008,19 @@ module fpga_top (
         end
     end
 
+    wire [7:0] music_leds;
+    wire       music_leds_active;
+
+    audio_led_meter music_led_meter (
+        .clk       (clk_pixel),
+        .rst       (rst),
+        .sample_en (audio_sample_strobe),
+        .sample_l  (hdmi_audio_sample_word[0]),
+        .sample_r  (hdmi_audio_sample_word[1]),
+        .leds      (music_leds),
+        .active    (music_leds_active)
+    );
+
     wire [2:0] hdmi_tmds;
     wire       hdmi_tmds_clock;
     wire [9:0] hdmi_cx, hdmi_cy;
@@ -1159,7 +1196,9 @@ module fpga_top (
         brg_pause
     };
 
-    assign leds = led_operator_mode ? operator_leds : user_leds;
+    assign leds = led_operator_mode ? operator_leds :
+                  music_leds_active ? music_leds :
+                                      user_leds;
 
     // =========================================================================
     // FTDI TX — unused for now, drive idle high

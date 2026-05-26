@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-tex2md.py — Convert NovaBASIC LaTeX documentation to Markdown with YAML frontmatter.
+tex2md.py — Convert legacy NovaBASIC LaTeX chapters to Markdown with YAML frontmatter.
 
 Usage:
-    python tools/tex2md.py
+    NOVA_TEX_SOURCE_DIR=/path/to/legacy/chapters python tools/tex2md.py
 
-Reads all .tex chapter files from docs/manual/chapters/ and writes:
+Reads all .tex chapter files from $NOVA_TEX_SOURCE_DIR and writes:
   - Guide files to docs/help/guides/
   - Individual command/function reference files to docs/help/reference/commands/ and functions/
+
+The current NovaBASIC User Guide book lives under docs/books/basic-user-guide
+and is assembled from docs/help Markdown. This script is only for one-off
+conversion from older LaTeX chapter trees.
 """
 
 import os
@@ -19,7 +23,7 @@ import sys
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEX_DIR = os.path.join(REPO_ROOT, "docs", "manual", "chapters")
+TEX_DIR = os.environ.get("NOVA_TEX_SOURCE_DIR", "")
 HELP_DIR = os.path.join(REPO_ROOT, "docs", "help")
 GUIDES_DIR = os.path.join(HELP_DIR, "guides")
 CMD_DIR = os.path.join(HELP_DIR, "reference", "commands")
@@ -990,6 +994,16 @@ def _escape_yaml(s: str) -> str:
 # ---------------------------------------------------------------------------
 
 def main():
+    if not TEX_DIR:
+        print(
+            "ERROR: NOVA_TEX_SOURCE_DIR is required for legacy LaTeX conversion.",
+            file=sys.stderr,
+        )
+        return 1
+    if not os.path.isdir(TEX_DIR):
+        print(f"ERROR: LaTeX source directory not found: {TEX_DIR}", file=sys.stderr)
+        return 1
+
     for d in [GUIDES_DIR, CMD_DIR, FN_DIR]:
         os.makedirs(d, exist_ok=True)
 
@@ -1012,7 +1026,8 @@ def main():
         print(f"  Wrote function files to {FN_DIR}")
 
     print("\nDone.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -1115,6 +1115,8 @@ public class FileIoControllerTests
             sid[12] = 0x10; sid[13] = 0x03; // play $1003
             sid[14] = 0x00; sid[15] = 0x03; // 3 songs
             sid[16] = 0x00; sid[17] = 0x01; // start song
+            sid[0x76] = 0x00; sid[0x77] = 0x28; // NTSC + 8580
+            sid[0x7A] = 0x42; // second SID address present
             var title = Encoding.ASCII.GetBytes("Test Song");
             Array.Copy(title, 0, sid, 22, title.Length);
             var author = Encoding.ASCII.GetBytes("Test Author");
@@ -1131,6 +1133,11 @@ public class FileIoControllerTests
             Assert.AreEqual(0x00, memory[VgcConstants.MetaLoadL]);
             Assert.AreEqual(0x10, memory[VgcConstants.MetaLoadH]);
             Assert.AreEqual(3, memory[VgcConstants.MetaSongs]);
+            Assert.AreEqual(
+                VgcConstants.MusicMetaFlagSid8580 |
+                VgcConstants.MusicMetaFlagNtsc |
+                VgcConstants.MusicMetaFlagStereo,
+                memory[VgcConstants.MusicMetaFlags]);
         }
         finally { Directory.Delete(tempDir, true); }
     }

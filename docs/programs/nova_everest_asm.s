@@ -5,7 +5,7 @@
 ; line-by-line conversion of the book listing.
 ;
 ; Build:
-;   ca65 --cpu 65c02 -I runtime/asm -I ehbasic -o /tmp/nova_everest_asm.o docs/programs/nova_everest_asm.s
+;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/nova_everest_asm.o docs/programs/nova_everest_asm.s
 ;   ld65 -C docs/programs/diag7000.cfg -o /tmp/nova_everest_asm.bin /tmp/nova_everest_asm.o
 ;
 ; Load at $7000 and run with: SYS $7000

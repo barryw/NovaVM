@@ -506,6 +506,37 @@ public class AvaloniaCompositeBusTests
         Assert.AreEqual(0, bus.Read((ushort)VgcConstants.MusicTotalH));
     }
 
+    [TestMethod]
+    public void MusicStatusRegister_ReportsSfxAndSourceBits()
+    {
+        var bus = MakeBus();
+
+        bus.Music.PlaySound(60, 10);
+        byte status = bus.Read((ushort)VgcConstants.MusicStatus);
+        Assert.AreEqual(VgcConstants.MusicStatusSfx, status & VgcConstants.MusicStatusSfx,
+            "SFX playback should be visible without marking hosted music active.");
+        Assert.AreEqual(0, status & VgcConstants.MusicStatusMusic);
+
+        bus.Music.MusicStop();
+        bus.Music.MusicReset();
+        bus.Music.SetSequence(0, "T120 L4 C");
+        bus.Music.MusicPlay();
+        status = bus.Read((ushort)VgcConstants.MusicStatus);
+        Assert.AreEqual(VgcConstants.MusicStatusMusic, status & VgcConstants.MusicStatusMusic);
+        Assert.AreEqual(VgcConstants.MusicStatusSid, status & VgcConstants.MusicStatusSid);
+        Assert.AreEqual(0, status & VgcConstants.MusicStatusWts);
+
+        bus.Music.MusicStop();
+        bus.Music.MusicReset();
+        bus.Music.OnWtsSoundfontNeeded = null;
+        bus.Music.SetSequence(6, "T120 L4 C");
+        bus.Music.MusicPlay();
+        status = bus.Read((ushort)VgcConstants.MusicStatus);
+        Assert.AreEqual(VgcConstants.MusicStatusMusic, status & VgcConstants.MusicStatusMusic);
+        Assert.AreEqual(VgcConstants.MusicStatusWts, status & VgcConstants.MusicStatusWts);
+        Assert.AreEqual(0, status & VgcConstants.MusicStatusSid);
+    }
+
     // -------------------------------------------------------------------------
     // NIC register routing
     // -------------------------------------------------------------------------

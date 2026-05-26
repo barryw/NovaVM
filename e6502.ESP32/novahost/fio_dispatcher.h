@@ -27,7 +27,11 @@
 #include <freertos/task.h>
 #endif
 
+class FioDispatcherStateGuard;
+
 class FioDispatcher {
+    friend class FioDispatcherStateGuard;
+
 public:
     FioDispatcher(FpgaBridge& bridge, DeviceManager& dm)
         : _bridge(bridge), _dm(dm) {}
@@ -42,8 +46,12 @@ public:
     void poll_pending();
     void pump_audio();
     void stop_audio();
+    bool audio_active();
+    bool storage_busy();
+    void release_idle_wts_sample_cache();
+    bool reserve_wts_region_store();
     bool reserve_wts_sample_cache(uint32_t bytes);
-    void write_audio_status_json(char* out, size_t out_len) const;
+    void write_audio_status_json(char* out, size_t out_len);
 
 private:
     FpgaBridge&    _bridge;
@@ -119,7 +127,7 @@ private:
     // Shared transfer buffer. Small CPU/VGC paths still use 256-byte protocol
     // blocks; FpgaBridge further slices SDRAM/XRAM streams to the safe FPGA SPI
     // RX FIFO burst size.
-    static constexpr int TRANSFER_BUF_BYTES = 4096;
+    static constexpr int TRANSFER_BUF_BYTES = 2048;
     static constexpr int RUNTIME_ROM_BYTES = 16 * 1024;
     static constexpr uint32_t XRAM_BYTES = 512UL * 1024UL;
 #ifndef NOVAHOST_WTS_RESIDENT_SAMPLE_LIMIT_BYTES
@@ -129,13 +137,13 @@ private:
 #define NOVAHOST_WTS_RESIDENT_HEAP_GUARD_BYTES (24UL * 1024UL)
 #endif
     static constexpr uint32_t WTS_RESIDENT_SAMPLE_CHUNK_BYTES =
-        16UL * 1024UL;
+        4UL * 1024UL;
     static constexpr uint32_t WTS_RESIDENT_SAMPLE_LIMIT =
         NOVAHOST_WTS_RESIDENT_SAMPLE_LIMIT_BYTES;
     static constexpr uint32_t WTS_RESIDENT_HEAP_GUARD =
         NOVAHOST_WTS_RESIDENT_HEAP_GUARD_BYTES;
     uint8_t _transfer_buf[TRANSFER_BUF_BYTES];
-    uint8_t _midi_read_cache[1024];
+    uint8_t _midi_read_cache[512];
 
     // Fast accessors.
     uint8_t  cmd()     const { return _bank[OFF_CMD]; }
@@ -214,6 +222,30 @@ private:
     bool flush_sid_writes();
     static bool on_sid_write_static(void* user, uint16_t addr, uint8_t value);
     bool on_sid_write(uint16_t addr, uint8_t value);
+    void capture_sid_mirror_write(uint16_t addr, uint8_t value);
+    void clear_sid_mirror_state();
+    uint8_t sid_mirror_note(uint8_t voice) const;
+    uint8_t sid_freq_to_midi(uint16_t sid_freq) const;
+    void update_music_mirror(bool force);
+    void clear_midi_visual_state();
+    void enqueue_midi_visual_event(const uint8_t* song_event);
+    void update_midi_visual_notes(uint32_t elapsed_audio_frames);
+    uint32_t midi_elapsed_audio_frames(uint32_t now_ms) const;
+    void publish_sid_metadata(const char* label, const uint8_t* header,
+                              uint32_t size,
+                              const nova_sid::SidFileInfo& sid);
+    void publish_midi_metadata(const char* label, uint32_t size,
+                               uint32_t total_audio_frames);
+    void publish_soundfont_metadata(const char* label);
+    uint8_t current_music_status_bits() const;
+    void publish_music_status();
+    void set_music_loading(bool loading);
+    static uint16_t clamp_music_frames(uint32_t frames);
+    static uint16_t audio_sample_frames_to_music_frames(uint32_t frames);
+#if defined(ARDUINO)
+    bool lock_state(TickType_t ticks = portMAX_DELAY);
+    void unlock_state();
+#endif
     void reset_midi_timing_metrics();
     void finish_midi_hardware_pump(uint32_t pump_start_us);
     bool read_music_stream_header(ndi::NdiImage* img, int idx,
@@ -263,6 +295,16 @@ private:
                                uint16_t& out_bytes);
 
     static constexpr uint8_t WtsVoiceCount = 8;
+    static constexpr uint8_t SidVoiceCount = 6;
+    static constexpr uint8_t MusicMirrorNoteCount = 14;
+    static constexpr uint8_t MusicMirrorBytes = 19;
+    static constexpr uint16_t MidiVisualQueueCapacity = 512;
+
+    struct MidiVisualEvent {
+        uint32_t frame;
+        uint8_t voice;
+        uint8_t note;
+    };
 
     bool     _midi_playing = false;
     int      _midi_slot = -1;
@@ -273,6 +315,15 @@ private:
     uint32_t _music_event_read = 0;
     uint32_t _music_event_count = 0;
     uint32_t _music_total_frames = 0;
+    uint8_t  _midi_visual_notes[WtsVoiceCount] = {};
+    MidiVisualEvent _midi_visual_queue[MidiVisualQueueCapacity] = {};
+    uint16_t _midi_visual_queue_head = 0;
+    uint16_t _midi_visual_queue_tail = 0;
+    uint16_t _midi_visual_queue_count = 0;
+    bool     _midi_visual_queue_overflow = false;
+    uint8_t  _midi_meta_title[32] = {};
+    uint8_t  _midi_meta_author[32] = {};
+    uint8_t  _midi_meta_copyright[32] = {};
     size_t   _midi_event_index = 0;
     double   _midi_tick_accum = 0.0;
     uint32_t _midi_note_ons = 0;
@@ -288,6 +339,7 @@ private:
     uint32_t _midi_max_pump_duration_us = 0;
     char     _midi_last_error[96] = {};
     bool     _midi_wts_all_events_queued = false;
+    uint32_t _midi_start_ms = 0;
 
     static constexpr uint8_t SID_WRITE_BATCH_MAX = 96;
     nova_sid::SidVm _sid_vm;
@@ -303,6 +355,19 @@ private:
     uint8_t  _sid_last_stop_reason = 0;
     char     _sid_last_error[96] = {};
     char     _sid_name[64] = {};
+    uint8_t  _sid_mirror_freq_lo[SidVoiceCount] = {};
+    uint8_t  _sid_mirror_freq_hi[SidVoiceCount] = {};
+    uint8_t  _sid_mirror_ctrl[SidVoiceCount] = {};
+
+    uint8_t  _music_mirror_last[MusicMirrorBytes] = {};
+    bool     _music_mirror_valid = false;
+    uint32_t _music_mirror_last_ms = 0;
+    bool     _music_loading = false;
+    uint8_t  _music_status_last = 0;
+    bool     _music_status_valid = false;
+#if defined(ARDUINO)
+    SemaphoreHandle_t _state_mutex = nullptr;
+#endif
 
     struct WtsBankInstrument {
         uint8_t bank = 0;
@@ -329,12 +394,13 @@ private:
         uint16_t sustain_level = 0xA000;
         uint16_t release_frames = 0;
     };
+    static_assert(sizeof(WtsBankRegion) == 36,
+                  "unexpected WTS region metadata size");
 
     struct WtsRegionStore {
-        static constexpr uint16_t CHUNK_SIZE = 64;
-        static constexpr uint16_t MAX_CHUNKS = 64;
+        static constexpr uint16_t MAX_REGIONS = 1408;
 
-        WtsBankRegion* chunks[MAX_CHUNKS] = {};
+        WtsBankRegion* regions = nullptr;
         uint16_t count = 0;
         uint16_t capacity = 0;
 
@@ -342,19 +408,15 @@ private:
         ~WtsRegionStore();
         WtsRegionStore(const WtsRegionStore&) = delete;
         WtsRegionStore& operator=(const WtsRegionStore&) = delete;
-        WtsRegionStore(WtsRegionStore&& other) noexcept;
-        WtsRegionStore& operator=(WtsRegionStore&& other) noexcept;
 
+        bool init();
         void clear();
         bool reserve(uint16_t requested);
         bool push_back(const WtsBankRegion& region);
         size_t size() const { return count; }
         const WtsBankRegion& operator[](uint16_t index) const {
-            return chunks[index / CHUNK_SIZE][index % CHUNK_SIZE];
+            return regions[index];
         }
-
-    private:
-        void move_from(WtsRegionStore& other);
     };
 
     std::vector<WtsBankInstrument> _wts_instruments;

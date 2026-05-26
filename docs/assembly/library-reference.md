@@ -18,10 +18,41 @@ The canonical libraries live in `runtime/asm`:
 | --- | --- | --- |
 | Interface | `runtime/asm/name.inc` | Constants, pseudo-register aliases, descriptor layouts, and `.global` declarations. |
 | Implementation | `runtime/asm/name.s` | Code and library-owned BSS/ZEROPAGE state. Include or link this once. |
-| Compatibility shim | `ehbasic/lib/name.*`, `ehbasic/name.*` | Thin includes for older source. New code should use `runtime/asm/name.*`. |
+| Hardware constants | `runtime/asm/novavm.inc` | Generated hardware constants plus ROM entry labels. |
 
 Macro-only libraries, such as `math_copro.inc`, `math_fixed8.inc`, and
 `nova.inc`, do not have a matching implementation source file.
+
+For distribution, run `make -C ndk package`. The generated Nova Developer Kit
+places these libraries under `dist/nova-ndk/asm` alongside documentation and
+example applications.
+
+Standalone assembly applications live in `assembly/apps`. They use the same
+runtime include root and are built with `make -C assembly`.
+
+## Size-Stripped Runtime Includes
+
+For resource-constrained binaries, runtime files that support stripping use it
+by default. Application code does not need an extra opt-in include. Include the
+implementation after code that references the routines:
+
+```asm
+.include "fio.inc"
+
+    jsr fio_load
+
+.include "fio.s"
+```
+
+This uses ca65 `.ifref`/`.refto` reference tracking. `fio.s` currently emits
+only referenced FIO routines plus required dependencies by default. For
+example, a program that calls only `fio_load` pulls in `fio_load`, `fio_exec`,
+and `fio_check`, not every FIO helper.
+
+Ordering matters: a stripped implementation included before its call sites has
+not seen those references yet. Define `NOVA_EMIT_ALL_RUNTIME = 1` before
+implementation includes for ROM/debug builds that intentionally need full
+runtime emission.
 
 ## Build Pattern
 
@@ -38,11 +69,10 @@ the implementation once after your code:
 .include "anim.s"
 ```
 
-Assemble with the shared runtime include root available. Keep `ehbasic` on the
-path only when a program also includes BASIC-specific shims or constants:
+Assemble with the shared runtime include root available:
 
 ```sh
-ca65 --cpu 65c02 -I runtime/asm -I ehbasic -o myprog.o myprog.s
+ca65 --cpu 65c02 -I runtime/asm -o myprog.o myprog.s
 ld65 -C myprog.cfg -o myprog.bin myprog.o
 ```
 
@@ -114,7 +144,7 @@ runtime state.
 
 | Library | Files | Use For | Key Symbols |
 | --- | --- | --- | --- |
-| Audio/music | `audio.inc`, `audio.s` | Sound effects, instruments, SID/MIDI playback, MML/music sequence control. | `audio_sound`, `audio_instrument`, `audio_sidplay`, `audio_music_sequence`, `audio_music_play` |
+| Audio/music | `audio.inc`, `audio.s` | Sound effects, instruments, SID/MIDI playback, MML/music sequence control. | `audio_sound`, `audio_instrument`, `audio_sidplay_file`, `audio_midplay_file`, `audio_music_play` |
 | NIC | `nic.inc`, `nic.s` | TCP-style network slots through NovaHost. | `nic_connect`, `nic_listen`, `nic_send`, `nic_recv`, `nic_status`, `nic_ready` |
 | Game server | `gameserver.inc`, `gameserver.s` | Compact binary protocol over NIC for lobbies, tables, actions, and game state. | `ngs_connect_default`, `ngs_build_hello`, `ngs_wait_kind`, `ngs_build_player_action` |
 

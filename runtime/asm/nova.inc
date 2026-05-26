@@ -1080,14 +1080,14 @@ FIO_CMD_LOADRUNTIME = $28
 ; @label FIO.CMD_XPAGE
 ; @kind const
 ; @symbol FIO_CMD_XPAGE
-; @summary Host command that streams a file slice into XRAM using FIO_SRC/FIO_ENDL as a 24-bit file offset.
+; @summary Host command that streams a file slice into XRAM, CPU RAM, or VGC memory using FIO_DIRTYPE as the target selector.
 FIO_CMD_XPAGE    = $29
 .endif
 .ifndef FIO_CMD_RNG
 ; @label FIO.CMD_RNG
 ; @kind const
 ; @symbol FIO_CMD_RNG
-; @summary Host command that returns 32 bits from NovaHost's hardware-backed RNG.
+; @summary Host command that returns 32 bits from NovaHost's host-backed RNG provider.
 FIO_CMD_RNG      = $2A
 .endif
 .ifndef FIO_CMD_NVGLOAD
@@ -1175,8 +1175,8 @@ FIO_TYPE_DIR      = $05
 .endif
 
 ; Extension ROM command IDs used by the BASIC-to-extension trampoline.
-.ifndef EXT_CMD_NCC
-EXT_CMD_NCC       = $00
+.ifndef EXT_CMD_RESERVED0
+EXT_CMD_RESERVED0 = $00
 .endif
 .ifndef EXT_CMD_SFLOAD
 EXT_CMD_SFLOAD    = $01
@@ -1372,6 +1372,21 @@ EXT_CMD_FIOCLR    = $41
 ; Hosted music/SFX status registers.
 .ifndef MUSIC_STATUS
 MUSIC_STATUS      = $BA50
+.endif
+.ifndef MUSIC_STATUS_SFX
+MUSIC_STATUS_SFX  = $01
+.endif
+.ifndef MUSIC_STATUS_MUSIC
+MUSIC_STATUS_MUSIC = $02
+.endif
+.ifndef MUSIC_STATUS_SID
+MUSIC_STATUS_SID  = $04
+.endif
+.ifndef MUSIC_STATUS_WTS
+MUSIC_STATUS_WTS  = $08
+.endif
+.ifndef MUSIC_STATUS_LOADING
+MUSIC_STATUS_LOADING = $10
 .endif
 .ifndef MUSIC_NOTE1
 MUSIC_NOTE1       = $BA51
@@ -1998,6 +2013,12 @@ BLT_CNTM          = $BA9A
 .ifndef BLT_CNTH
 BLT_CNTH          = $BA9B
 .endif
+.ifndef BLT_ROTANGLE
+BLT_ROTANGLE      = $BAA2
+.endif
+.ifndef BLT_ROT_ANGLE
+BLT_ROT_ANGLE     = BLT_ROTANGLE
+.endif
 
 .ifndef BLT_CMD
 BLT_CMD           = BLT_CMD_REG
@@ -2056,6 +2077,9 @@ BLT_MODE_FILL     = $01
 .endif
 .ifndef BLT_MODE_COLORKEY
 BLT_MODE_COLORKEY = $02
+.endif
+.ifndef BLT_MODE_ROTATE
+BLT_MODE_ROTATE   = $04
 .endif
 .ifndef BLT_SPACE_CPU
 BLT_SPACE_CPU     = DMA_SPACE_CPU
@@ -2148,6 +2172,53 @@ BOARD_INPUT_IRQ_SWITCHES = $02
 .endif
 .ifndef BOARD_INPUT_IRQ_MASK
 BOARD_INPUT_IRQ_MASK = $03
+.endif
+
+; ---------------------------------------------------------------------
+; USB HID diagnostics. These registers are currently implemented by the
+; ULX3S US2 low-speed USB HID host and read as zero in software-only hosts.
+; ---------------------------------------------------------------------
+.ifndef USB_HID_STATUS
+USB_HID_STATUS = $BAA3
+.endif
+.ifndef USB_HID_DEVICE_TYPE
+USB_HID_DEVICE_TYPE = $BAA4
+.endif
+.ifndef USB_HID_LAST_SCAN
+USB_HID_LAST_SCAN = $BAA5
+.endif
+.ifndef USB_HID_LAST_ASCII
+USB_HID_LAST_ASCII = $BAA6
+.endif
+.ifndef USB_HID_REPORT_COUNT
+USB_HID_REPORT_COUNT = $BAA7
+.endif
+.ifndef USB_HID_KEY_COUNT
+USB_HID_KEY_COUNT = $BAA8
+.endif
+.ifndef USB_HID_ST_RESET_RELEASED
+USB_HID_ST_RESET_RELEASED = $01
+.endif
+.ifndef USB_HID_ST_DM_HIGH
+USB_HID_ST_DM_HIGH = $02
+.endif
+.ifndef USB_HID_ST_DP_HIGH
+USB_HID_ST_DP_HIGH = $04
+.endif
+.ifndef USB_HID_ST_DEVICE_PRESENT
+USB_HID_ST_DEVICE_PRESENT = $08
+.endif
+.ifndef USB_HID_ST_KEYBOARD_PRESENT
+USB_HID_ST_KEYBOARD_PRESENT = $10
+.endif
+.ifndef USB_HID_ST_REPORT_SEEN
+USB_HID_ST_REPORT_SEEN = $20
+.endif
+.ifndef USB_HID_ST_KEY_SEEN
+USB_HID_ST_KEY_SEEN = $40
+.endif
+.ifndef USB_HID_ST_ERROR
+USB_HID_ST_ERROR = $80
 .endif
 
 .endif

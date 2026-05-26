@@ -8,14 +8,24 @@ namespace e6502UnitTests;
 [TestClass]
 public class FileIoSfLoadTests
 {
-    private static FileIoController MakeController(string saveDir, WavetableSynth? wts = null)
+    private static (FileIoController Fio, byte[] Memory) MakeController(
+        string saveDir, WavetableSynth? wts = null)
     {
         var memory = new byte[65536];
-        return new FileIoController(
+        var fio = new FileIoController(
             address => memory[address],
             (address, data) => memory[address] = data,
             saveDir,
             wts: wts);
+        return (fio, memory);
+    }
+
+    private static string ReadNullPaddedString(byte[] memory, int address, int maxLen)
+    {
+        int len = 0;
+        while (len < maxLen && memory[address + len] != 0)
+            len++;
+        return System.Text.Encoding.ASCII.GetString(memory, address, len);
     }
 
     private static void SetFilename(FileIoController fio, string filename)
@@ -38,7 +48,7 @@ public class FileIoSfLoadTests
             File.WriteAllBytes(Path.Combine(sfDir, "test.sf2"), sf2);
 
             var wts = new WavetableSynth();
-            var fio = MakeController(dir, wts);
+            var (fio, memory) = MakeController(dir, wts);
 
             SetFilename(fio, "test");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSfLoad);
@@ -46,6 +56,8 @@ public class FileIoSfLoadTests
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual(VgcConstants.FioErrNone, fio.Read((ushort)VgcConstants.FioErrCode));
             Assert.AreEqual(1, wts.InstrumentCount);
+            Assert.AreEqual("test", ReadNullPaddedString(memory,
+                VgcConstants.MusicMetaSoundfont, VgcConstants.MusicMetaSoundfontLen));
         }
         finally
         {
@@ -62,7 +74,7 @@ public class FileIoSfLoadTests
         try
         {
             var wts = new WavetableSynth();
-            var fio = MakeController(dir, wts);
+            var (fio, _) = MakeController(dir, wts);
 
             SetFilename(fio, "nonexistent");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSfLoad);
@@ -84,7 +96,7 @@ public class FileIoSfLoadTests
 
         try
         {
-            var fio = MakeController(dir, wts: null);
+            var (fio, _) = MakeController(dir, wts: null);
 
             SetFilename(fio, "test");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSfLoad);

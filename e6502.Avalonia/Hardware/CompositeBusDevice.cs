@@ -350,8 +350,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public byte Read(ushort address)
     {
         if (address == VgcConstants.MusicStatus)
-            return (byte)((_musicEngine.IsPlaying ? 1 : 0)
-                | (_musicEngine.IsMusicPlaying || _midiPlayback.IsPlaying || _sidPlayer.IsPlaying ? 2 : 0));
+            return ReadMusicStatus();
         if (address >= VgcConstants.MusicNote1 && address <= VgcConstants.MusicNote14)
             return _musicEngine.GetVoiceNote(address - VgcConstants.MusicNote1);
         if (address >= VgcConstants.MusicElapsedL && address <= VgcConstants.MusicTotalH)
@@ -369,6 +368,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         }
         if (address >= VgcConstants.BoardInputBase && address <= VgcConstants.BoardInputEnd)
             return ReadBoardInput(address);
+        if (address >= VgcConstants.UsbHidDiagBase && address <= VgcConstants.UsbHidDiagEnd)
+            return 0;
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
         if (_nic.OwnsAddress(address)) return _nic.Read(address);
         if (_dma.OwnsAddress(address)) return _dma.Read(address);
@@ -383,6 +384,24 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         return _ram[address];
     }
 
+    private byte ReadMusicStatus()
+    {
+        byte status = 0;
+        if (_musicEngine.IsPlaying)
+            status |= VgcConstants.MusicStatusSfx;
+
+        bool musicPlaying = _musicEngine.IsMusicPlaying || _midiPlayback.IsPlaying || _sidPlayer.IsPlaying;
+        if (musicPlaying)
+            status |= VgcConstants.MusicStatusMusic;
+
+        if (_sidPlayer.IsPlaying || _musicEngine.UsesSidMusicVoices || _midiPlayback.UsesSidVoices)
+            status |= VgcConstants.MusicStatusSid;
+        if (_musicEngine.UsesWtsMusicVoices || _midiPlayback.UsesWtsVoices)
+            status |= VgcConstants.MusicStatusWts;
+
+        return status;
+    }
+
     public void Write(ushort address, byte data)
     {
         if (address >= VgcConstants.BoardInputBase && address <= VgcConstants.BoardInputEnd)
@@ -390,6 +409,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             WriteBoardInput(address, data);
             return;
         }
+        if (address >= VgcConstants.UsbHidDiagBase && address <= VgcConstants.UsbHidDiagEnd)
+            return;
         if (_timer.OwnsAddress(address)) { _timer.Write(address, data); return; }
         if (_nic.OwnsAddress(address)) { _nic.Write(address, data); return; }
         if (_dma.OwnsAddress(address)) { _dma.Write(address, data); return; }

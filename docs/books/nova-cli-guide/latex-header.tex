@@ -1,0 +1,49 @@
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{hyperref}
+
+\definecolor{novablue}{HTML}{0057D8}
+\definecolor{novacyan}{HTML}{00A7C8}
+\definecolor{novagold}{HTML}{C49200}
+\definecolor{novaink}{HTML}{111111}
+\definecolor{novapaper}{HTML}{FFFFFF}
+\definecolor{novacode}{HTML}{F4F6F8}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=novablue,
+  urlcolor=novacyan,
+  citecolor=novagold
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Nova CLI Guide}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\titleformat{\chapter}
+  {\normalfont\huge\bfseries\color{novablue}}
+  {\thechapter}
+  {1em}
+  {}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{novacode},
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  framerule=0.2pt,
+  rulecolor=\color{black!30},
+  xleftmargin=0.5em,
+  xrightmargin=0.5em
+}
+
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}

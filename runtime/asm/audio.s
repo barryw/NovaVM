@@ -12,35 +12,145 @@ AUDIO_IMPLEMENTATION_INCLUDED = 1
 .ifndef AUDIO_FILE_COMMANDS
 AUDIO_FILE_COMMANDS = 1
 .endif
+.ifndef AUDIO_POINTER_FILE_HELPERS
+AUDIO_POINTER_FILE_HELPERS = 1
+.endif
+
+.ifdef NOVA_STRIP_UNUSED
+AUDIO_EMIT_ALL = 0
+.else
+.ifdef AUDIO_STRIP_UNUSED
+AUDIO_EMIT_ALL = 0
+.else
+.ifdef NOVA_EMIT_ALL_RUNTIME
+AUDIO_EMIT_ALL = 1
+.else
+.ifdef AUDIO_EMIT_ALL_RUNTIME
+AUDIO_EMIT_ALL = 1
+.else
+AUDIO_EMIT_ALL = 0
+.endif
+.endif
+.endif
+.endif
+
+.if AUDIO_EMIT_ALL = 0
+.if .referenced(audio_play_sound)
+      .refto audio_sound
+.endif
+.if .referenced(audio_set_volume)
+      .refto audio_volume
+.endif
+.if .referenced(audio_sound)
+      .refto audio_init
+      .refto audio_load_instrument
+      .refto audio_note_to_sid
+      .refto audio_voice_ptr
+.endif
+.if .referenced(audio_instrument)
+      .refto audio_init
+.endif
+.if .referenced(audio_tick)
+      .refto audio_voice_ptr
+.endif
+.if .referenced(audio_sidplay_file)
+      .refto audio_sidplay
+      .refto fio_copy_name
+.endif
+.if .referenced(audio_midplay_file)
+      .refto audio_midplay
+      .refto fio_copy_name
+.endif
+.if .referenced(audio_sfload_file)
+      .refto audio_sfload
+      .refto fio_copy_name
+.endif
+.if .referenced(audio_sidplay) .OR .referenced(audio_sidstop) .OR .referenced(audio_midplay) .OR .referenced(audio_midstop) .OR .referenced(audio_sfload) .OR .referenced(audio_music_sequence) .OR .referenced(audio_music_play) .OR .referenced(audio_music_stop) .OR .referenced(audio_music_tempo) .OR .referenced(audio_music_loop) .OR .referenced(audio_music_priority)
+      .refto fio_exec
+.endif
+.endif
 
       .segment "CODE"
 
+.if AUDIO_EMIT_ALL .OR .referenced(audio_play_sound)
       .export audio_play_sound
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_set_volume)
       .export audio_set_volume
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sound)
       .export audio_sound
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_volume)
       .export audio_volume
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_instrument)
       .export audio_instrument
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_init)
       .export audio_init
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tick)
       .export audio_tick
+.endif
 .if AUDIO_FILE_COMMANDS
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay)
       .export audio_sidplay
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidstop)
       .export audio_sidstop
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay)
       .export audio_midplay
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midstop)
       .export audio_midstop
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload)
       .export audio_sfload
 .endif
+.if AUDIO_POINTER_FILE_HELPERS
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay_file)
+      .export audio_sidplay_file
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay_file)
+      .export audio_midplay_file
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload_file)
+      .export audio_sfload_file
+.endif
+.endif
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_sequence)
       .export audio_music_sequence
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_play)
       .export audio_music_play
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_stop)
       .export audio_music_stop
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_tempo)
       .export audio_music_tempo
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_loop)
       .export audio_music_loop
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_priority)
       .export audio_music_priority
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_status)
       .export audio_status
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfx_playing)
       .export audio_sfx_playing
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_playing)
       .export audio_music_playing
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_note)
       .export audio_music_note
-
-.include "fio.s"
+.endif
 
 AUDIO_INST_BASE     = $BB50   ; 16 slots * 3 bytes: waveform, AD, SR
 AUDIO_VOICE_DUR     = $BB80   ; six SID sound-effect countdowns
@@ -72,11 +182,13 @@ SID_DEFAULT_PW_HI   = $08
 ; @in X: Duration in 60 Hz frames
 ; @in Y: Instrument slot
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_play_sound)
 audio_play_sound:
       STA   AUDIO_NOTE
       STX   AUDIO_DURATION
       STY   AUDIO_INSTRUMENT
       BRA   audio_sound
+.endif
 
 ; @label AUDIO.SET_VOLUME
 ; @kind routine
@@ -86,10 +198,12 @@ audio_play_sound:
 ; @in A: Volume level
 ; @in X: Voice selector, 0=master
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_set_volume)
 audio_set_volume:
       STA   AUDIO_VOLUME
       STX   AUDIO_VOICE
       BRA   audio_volume
+.endif
 
 ; @label AUDIO.SOUND
 ; @kind routine
@@ -98,6 +212,7 @@ audio_set_volume:
 ; @summary Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
 ; @requires AUDIO.NOTE AUDIO.DURATION AUDIO.INSTRUMENT
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sound)
 audio_sound:
       JSR   audio_init
       LDA   AUDIO_DURATION
@@ -151,6 +266,7 @@ audio_sound:
 @done:
       LDA   #$00
       RTS
+.endif
 
 ; @label AUDIO.VOLUME
 ; @kind routine
@@ -159,6 +275,7 @@ audio_sound:
 ; @summary Set SID master or per-voice volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
 ; @requires AUDIO.VOLUME_LEVEL AUDIO.VOICE
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_volume)
 audio_volume:
       LDA   AUDIO_VOLUME
       AND   #$0F
@@ -188,6 +305,7 @@ audio_volume:
 @done:
       LDA   #$00
       RTS
+.endif
 
 ; @label AUDIO.INSTRUMENT_SET
 ; @kind routine
@@ -196,6 +314,7 @@ audio_volume:
 ; @summary Define a simple SID sound-effect instrument envelope and waveform.
 ; @requires AUDIO.INST_ID AUDIO.WAVEFORM AUDIO.ATTACK AUDIO.DECAY AUDIO.SUSTAIN AUDIO.RELEASE
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_instrument)
 audio_instrument:
       JSR   audio_init
       LDA   AUDIO_INST_ID
@@ -232,12 +351,14 @@ audio_instrument:
       STA   AUDIO_INST_BASE+2,X
       LDA   #$00
       RTS
+.endif
 
 ; @label AUDIO.INIT
 ; @kind routine
 ; @symbol audio_init
 ; @abi none
 ; @summary Initialize the SID sound-effect instrument table and scheduler state.
+.if AUDIO_EMIT_ALL .OR .referenced(audio_init)
 audio_init:
       LDA   AUDIO_INIT_FLAG
       CMP   #AUDIO_INIT_MAGIC
@@ -267,12 +388,14 @@ audio_init:
       STA   AUDIO_INIT_FLAG
 @done:
       RTS
+.endif
 
 ; @label AUDIO.TICK
 ; @kind routine
 ; @symbol audio_tick
 ; @abi none
 ; @summary Advance fire-and-forget SID sound-effect durations by one frame.
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tick)
 audio_tick:
       LDA   AUDIO_INIT_FLAG
       CMP   #AUDIO_INIT_MAGIC
@@ -294,7 +417,9 @@ audio_tick:
       BPL   @loop
 @done:
       RTS
+.endif
 
+.if AUDIO_EMIT_ALL .OR .referenced(audio_load_instrument)
 audio_load_instrument:
       LDA   AUDIO_INSTRUMENT
       AND   #$0F
@@ -311,7 +436,9 @@ audio_load_instrument:
       LDA   AUDIO_INST_BASE+2,Y
       STA   NVR3L
       RTS
+.endif
 
+.if AUDIO_EMIT_ALL .OR .referenced(audio_note_to_sid)
 audio_note_to_sid:
       LDA   AUDIO_NOTE
       LDX   #$00
@@ -348,19 +475,26 @@ audio_note_to_sid:
       STA   NVR1L
       STA   NVR1H
       RTS
+.endif
 
+.if AUDIO_EMIT_ALL .OR .referenced(audio_voice_ptr)
 audio_voice_ptr:
       LDA   audio_voice_lo,X
       STA   NVR0L
       LDA   #>SID_BASE
       STA   NVR0H
       RTS
+.endif
 
+.if AUDIO_EMIT_ALL .OR .referenced(audio_note_to_sid)
 audio_sid_freq_lo:
       .byte $8B,$93,$9C,$A6,$AF,$BA,$C5,$D1,$DD,$EA,$F8,$07
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_voice_ptr)
 audio_voice_lo:
       .byte <(SID_BASE), <(SID_BASE+7), <(SID_BASE+14)
       .byte <(SID2_BASE), <(SID2_BASE+7), <(SID2_BASE+14)
+.endif
 
 .if AUDIO_FILE_COMMANDS
 ; @label AUDIO.SIDPLAY
@@ -370,6 +504,7 @@ audio_voice_lo:
 ; @summary Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.
 ; @requires FIO.NAME FIO.NAMELEN AUDIO.NOTE
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay)
 audio_sidplay:
       LDA   #FIO_CMD_SIDPLAY
       JSR   fio_exec
@@ -377,6 +512,7 @@ audio_sidplay:
       CLI                     ; playback needs timer IRQs active
 @done:
       RTS
+.endif
 
 ; @label AUDIO.SIDSTOP
 ; @kind routine
@@ -384,9 +520,11 @@ audio_sidplay:
 ; @abi none
 ; @summary Stop SID file playback.
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidstop)
 audio_sidstop:
       LDA   #FIO_CMD_SIDSTOP
       JMP   fio_exec
+.endif
 
 ; @label AUDIO.MIDPLAY
 ; @kind routine
@@ -395,9 +533,11 @@ audio_sidstop:
 ; @summary Play the MIDI file named by FIO.NAME/FIO.NAMELEN.
 ; @requires FIO.NAME FIO.NAMELEN
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay)
 audio_midplay:
       LDA   #FIO_CMD_MIDPLAY
       JMP   fio_exec
+.endif
 
 ; @label AUDIO.MIDSTOP
 ; @kind routine
@@ -405,9 +545,11 @@ audio_midplay:
 ; @abi none
 ; @summary Stop MIDI file playback.
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midstop)
 audio_midstop:
       LDA   #FIO_CMD_MIDSTOP
       JMP   fio_exec
+.endif
 
 ; @label AUDIO.SFLOAD
 ; @kind routine
@@ -416,9 +558,61 @@ audio_midstop:
 ; @summary Load the soundfont named by FIO.NAME/FIO.NAMELEN.
 ; @requires FIO.NAME FIO.NAMELEN
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload)
 audio_sfload:
       LDA   #FIO_CMD_SFLOAD
       JMP   fio_exec
+.endif
+
+.if AUDIO_POINTER_FILE_HELPERS
+; @label AUDIO.SIDPLAY_FILE
+; @kind routine
+; @symbol audio_sidplay_file
+; @abi pseudo-register
+; @summary Copy a pointer-based SID filename into FIO.NAME and start SID playback.
+; @requires FIO_ARG_NAMELEN FIO_ARG_NAMEPTR_L FIO_ARG_NAMEPTR_H AUDIO_NOTE
+; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay_file)
+audio_sidplay_file:
+      JSR   fio_copy_name
+      BNE   @done
+      JMP   audio_sidplay
+@done:
+      RTS
+.endif
+
+; @label AUDIO.MIDPLAY_FILE
+; @kind routine
+; @symbol audio_midplay_file
+; @abi pseudo-register
+; @summary Copy a pointer-based MIDI filename into FIO.NAME and start MIDI playback.
+; @requires FIO_ARG_NAMELEN FIO_ARG_NAMEPTR_L FIO_ARG_NAMEPTR_H
+; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay_file)
+audio_midplay_file:
+      JSR   fio_copy_name
+      BNE   @done
+      JMP   audio_midplay
+@done:
+      RTS
+.endif
+
+; @label AUDIO.SFLOAD_FILE
+; @kind routine
+; @symbol audio_sfload_file
+; @abi pseudo-register
+; @summary Copy a pointer-based soundfont filename into FIO.NAME and load it.
+; @requires FIO_ARG_NAMELEN FIO_ARG_NAMEPTR_L FIO_ARG_NAMEPTR_H
+; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload_file)
+audio_sfload_file:
+      JSR   fio_copy_name
+      BNE   @done
+      JMP   audio_sfload
+@done:
+      RTS
+.endif
+.endif
 .endif
 
 ; @label AUDIO.MUSIC_SEQUENCE
@@ -428,9 +622,11 @@ audio_sfload:
 ; @summary Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.
 ; @requires AUDIO.VOICE AUDIO.STRL AUDIO.STRH AUDIO.STRLEN
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_sequence)
 audio_music_sequence:
       LDA   #FIO_CMD_MSEQ
       JMP   fio_exec
+.endif
 
 ; @label AUDIO.MUSIC_PLAY
 ; @kind routine
@@ -438,6 +634,7 @@ audio_music_sequence:
 ; @abi none
 ; @summary Start queued music playback.
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_play)
 audio_music_play:
       LDA   #FIO_CMD_MPLAY
       JSR   fio_exec
@@ -445,6 +642,7 @@ audio_music_play:
       CLI                     ; playback needs timer IRQs active
 @done:
       RTS
+.endif
 
 ; @label AUDIO.MUSIC_STOP
 ; @kind routine
@@ -452,9 +650,11 @@ audio_music_play:
 ; @abi none
 ; @summary Stop music playback.
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_stop)
 audio_music_stop:
       LDA   #FIO_CMD_MSTOP
       JMP   fio_exec
+.endif
 
 ; @label AUDIO.MUSIC_TEMPO
 ; @kind routine
@@ -463,9 +663,11 @@ audio_music_stop:
 ; @summary Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.
 ; @requires AUDIO.NOTE AUDIO.DURATION
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_tempo)
 audio_music_tempo:
       LDA   #FIO_CMD_MTEMPO
       JMP   fio_exec
+.endif
 
 ; @label AUDIO.MUSIC_LOOP
 ; @kind routine
@@ -474,9 +676,11 @@ audio_music_tempo:
 ; @summary Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.
 ; @requires AUDIO.NOTE
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_loop)
 audio_music_loop:
       LDA   #FIO_CMD_MLOOP
       JMP   fio_exec
+.endif
 
 ; @label AUDIO.MUSIC_PRIORITY
 ; @kind routine
@@ -485,9 +689,11 @@ audio_music_loop:
 ; @summary Set hosted MML priority from AUDIO.NOTE and following pseudo-register bytes.
 ; @requires AUDIO.NOTE
 ; @out A: 0 on success, nonzero on error
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_priority)
 audio_music_priority:
       LDA   #FIO_CMD_MPRI
       JMP   fio_exec
+.endif
 
 ; @label AUDIO.STATUS
 ; @kind routine
@@ -495,9 +701,11 @@ audio_music_priority:
 ; @abi none
 ; @summary Return raw music status bits.
 ; @out A: Raw MUSIC_STATUS byte
+.if AUDIO_EMIT_ALL .OR .referenced(audio_status)
 audio_status:
       LDA   MUSIC_STATUS
       RTS
+.endif
 
 ; @label AUDIO.SFX_PLAYING
 ; @kind routine
@@ -505,10 +713,12 @@ audio_status:
 ; @abi none
 ; @summary Return nonzero if the hosted music engine reports a sound effect.
 ; @out A: 1 if playing, 0 if idle
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfx_playing)
 audio_sfx_playing:
       LDA   MUSIC_STATUS
-      AND   #$01
+      AND   #AUDIO_STATUS_SFX
       RTS
+.endif
 
 ; @label AUDIO.MUSIC_PLAYING
 ; @kind routine
@@ -516,13 +726,15 @@ audio_sfx_playing:
 ; @abi none
 ; @summary Return nonzero if music is playing.
 ; @out A: 1 if playing, 0 if idle
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_playing)
 audio_music_playing:
       LDA   MUSIC_STATUS
-      AND   #$02
+      AND   #AUDIO_STATUS_MUSIC
       BEQ   @off
       LDA   #$01
 @off:
       RTS
+.endif
 
 ; @label AUDIO.MUSIC_NOTE
 ; @kind routine
@@ -531,6 +743,7 @@ audio_music_playing:
 ; @summary Return the current MIDI note for a music voice.
 ; @in X: Voice number, 1..14
 ; @out A: Current MIDI note, or 0 if out of range or silent
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_note)
 audio_music_note:
       DEX
       CPX   #$0E
@@ -540,5 +753,11 @@ audio_music_note:
 @bad:
       LDA   #$00
       RTS
+.endif
+
+.ifndef FIO_EMIT_ALL_RUNTIME
+FIO_EMIT_ALL_RUNTIME = 1
+.endif
+.include "fio.s"
 
 .endif

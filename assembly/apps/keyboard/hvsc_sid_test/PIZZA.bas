@@ -1,0 +1,4 @@
+10 LOAD "FD0:KEYBOARD.BIN"
+20 SIDPLAY "FD1:A_Dry_Slice_of_Pizza_Diavolo.sid"
+30 SYS 36864
+40 END

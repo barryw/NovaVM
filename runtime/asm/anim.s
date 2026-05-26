@@ -2,6 +2,9 @@
 
 .include "anim.inc"
 .include "dma.s"
+.ifndef FIO_EMIT_ALL_RUNTIME
+FIO_EMIT_ALL_RUNTIME = 1
+.endif
 .include "fio.s"
 .include "pager.s"
 .include "msprite.s"

@@ -11,7 +11,13 @@ module usb_hid_keyboard (
     output logic [7:0] key_data,
     output logic [1:0] device_type,
     output logic       report_seen,
-    output logic       connection_error
+    output logic       connection_error,
+    output logic [7:0] dbg_status,
+    output logic [7:0] dbg_device_type,
+    output logic [7:0] dbg_last_scan,
+    output logic [7:0] dbg_last_ascii,
+    output logic [7:0] dbg_report_count,
+    output logic [7:0] dbg_key_count
 );
 
     wire       usb_report;
@@ -67,6 +73,14 @@ module usb_hid_keyboard (
     logic       ack_toggle_usb_meta;
     logic       ack_toggle_usb;
     logic       ack_toggle_sys;
+    logic [7:0] last_event_scan_usb;
+    logic       last_event_active_usb;
+    logic [1:0] last_event_release_reports_usb;
+    logic       report_toggle_usb;
+    logic [7:0] last_report_scan_usb;
+    logic [1:0] usb_lines_usb;
+
+    localparam logic [1:0] RELEASE_STABLE_REPORTS = 2'd2;
 
     function automatic logic key_was_down(
         input logic [7:0] key,
@@ -77,6 +91,17 @@ module usb_hid_keyboard (
     );
         key_was_down = key != 8'h00 &&
                        (key == old1 || key == old2 || key == old3 || key == old4);
+    endfunction
+
+    function automatic logic key_is_down(
+        input logic [7:0] key,
+        input logic [7:0] cur1,
+        input logic [7:0] cur2,
+        input logic [7:0] cur3,
+        input logic [7:0] cur4
+    );
+        key_is_down = key != 8'h00 &&
+                      (key == cur1 || key == cur2 || key == cur3 || key == cur4);
     endfunction
 
     function automatic logic [7:0] first_new_key(
@@ -178,6 +203,10 @@ module usb_hid_keyboard (
     );
     wire [7:0] new_ascii = hid_key_to_ascii(new_scan, key_modifiers);
     wire       event_busy_usb = event_toggle_usb != ack_toggle_usb;
+    wire       repeat_suppressed_usb =
+        last_event_active_usb && new_scan == last_event_scan_usb;
+    wire       last_event_still_down_usb =
+        key_is_down(last_event_scan_usb, key1, key2, key3, key4);
 
     always_ff @(posedge clk_usb) begin
         if (!usb_reset_n) begin
@@ -189,14 +218,38 @@ module usb_hid_keyboard (
             event_toggle_usb <= 1'b0;
             ack_toggle_usb_meta <= 1'b0;
             ack_toggle_usb <= 1'b0;
+            last_event_scan_usb <= 8'h00;
+            last_event_active_usb <= 1'b0;
+            last_event_release_reports_usb <= 2'd0;
+            report_toggle_usb <= 1'b0;
+            last_report_scan_usb <= 8'h00;
+            usb_lines_usb <= 2'b00;
         end else begin
             ack_toggle_usb_meta <= ack_toggle_sys;
             ack_toggle_usb <= ack_toggle_usb_meta;
+            usb_lines_usb <= {usb_dp, usb_dm};
 
             if (usb_report && device_type == 2'd1) begin
-                if (new_ascii != 8'h00 && !event_busy_usb) begin
+                report_toggle_usb <= ~report_toggle_usb;
+                last_report_scan_usb <= new_scan;
+
+                if (last_event_active_usb) begin
+                    if (last_event_still_down_usb) begin
+                        last_event_release_reports_usb <= 2'd0;
+                    end else if (last_event_release_reports_usb >= RELEASE_STABLE_REPORTS - 2'd1) begin
+                        last_event_active_usb <= 1'b0;
+                        last_event_release_reports_usb <= 2'd0;
+                    end else begin
+                        last_event_release_reports_usb <= last_event_release_reports_usb + 1'b1;
+                    end
+                end
+
+                if (new_ascii != 8'h00 && !event_busy_usb && !repeat_suppressed_usb) begin
                     pending_data_usb <= new_ascii;
                     event_toggle_usb <= ~event_toggle_usb;
+                    last_event_scan_usb <= new_scan;
+                    last_event_active_usb <= 1'b1;
+                    last_event_release_reports_usb <= 2'd0;
                 end
                 prev_key1 <= key1;
                 prev_key2 <= key2;
@@ -209,25 +262,92 @@ module usb_hid_keyboard (
     logic event_toggle_sys_meta;
     logic event_toggle_sys;
     logic event_toggle_sys_last;
+    logic report_toggle_sys_meta;
+    logic report_toggle_sys;
+    logic report_toggle_sys_last;
+    logic [1:0] device_type_meta;
+    logic [1:0] device_type_sys;
+    logic connection_error_meta;
+    logic connection_error_sys;
+    logic usb_reset_n_meta;
+    logic usb_reset_n_sys;
+    logic [1:0] usb_lines_meta;
+    logic [1:0] usb_lines_sys;
+    logic report_seen_latched;
+    logic key_seen_latched;
 
     always_ff @(posedge clk_sys) begin
         if (sys_rst) begin
             event_toggle_sys_meta <= 1'b0;
             event_toggle_sys <= 1'b0;
             event_toggle_sys_last <= 1'b0;
+            report_toggle_sys_meta <= 1'b0;
+            report_toggle_sys <= 1'b0;
+            report_toggle_sys_last <= 1'b0;
+            device_type_meta <= 2'b00;
+            device_type_sys <= 2'b00;
+            connection_error_meta <= 1'b0;
+            connection_error_sys <= 1'b0;
+            usb_reset_n_meta <= 1'b0;
+            usb_reset_n_sys <= 1'b0;
+            usb_lines_meta <= 2'b00;
+            usb_lines_sys <= 2'b00;
+            report_seen_latched <= 1'b0;
+            key_seen_latched <= 1'b0;
             ack_toggle_sys <= 1'b0;
             key_valid <= 1'b0;
             key_data <= 8'h00;
+            dbg_status <= 8'h00;
+            dbg_device_type <= 8'h00;
+            dbg_last_scan <= 8'h00;
+            dbg_last_ascii <= 8'h00;
+            dbg_report_count <= 8'h00;
+            dbg_key_count <= 8'h00;
         end else begin
             key_valid <= 1'b0;
             event_toggle_sys_meta <= event_toggle_usb;
             event_toggle_sys <= event_toggle_sys_meta;
+            report_toggle_sys_meta <= report_toggle_usb;
+            report_toggle_sys <= report_toggle_sys_meta;
+            device_type_meta <= device_type;
+            device_type_sys <= device_type_meta;
+            connection_error_meta <= connection_error;
+            connection_error_sys <= connection_error_meta;
+            usb_reset_n_meta <= usb_reset_n;
+            usb_reset_n_sys <= usb_reset_n_meta;
+            usb_lines_meta <= usb_lines_usb;
+            usb_lines_sys <= usb_lines_meta;
+
+            if (report_toggle_sys != report_toggle_sys_last) begin
+                report_toggle_sys_last <= report_toggle_sys;
+                report_seen_latched <= 1'b1;
+                dbg_report_count <= dbg_report_count + 1'b1;
+                dbg_last_scan <= last_report_scan_usb;
+            end
+
             if (event_toggle_sys != event_toggle_sys_last) begin
                 key_data <= pending_data_usb;
                 key_valid <= 1'b1;
                 event_toggle_sys_last <= event_toggle_sys;
                 ack_toggle_sys <= event_toggle_sys;
             end
+            if (key_valid) begin
+                key_seen_latched <= 1'b1;
+                dbg_key_count <= dbg_key_count + 1'b1;
+                dbg_last_ascii <= key_data;
+            end
+
+            dbg_device_type <= {6'h00, device_type_sys};
+            dbg_status <= {
+                connection_error_sys,
+                key_seen_latched,
+                report_seen_latched,
+                device_type_sys == 2'd1,
+                device_type_sys != 2'd0,
+                usb_lines_sys[1],
+                usb_lines_sys[0],
+                usb_reset_n_sys
+            };
         end
     end
 

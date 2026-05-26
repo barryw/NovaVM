@@ -31,6 +31,14 @@ uint8_t sid_fpga_config(const SidFileInfo& info);
 
 class SparseMemory {
 public:
+    static constexpr uint16_t PageBytes = 256;
+    static constexpr uint16_t PageCount = 256;
+
+    struct Page {
+        uint8_t bytes[PageBytes];
+        uint8_t written[PageBytes / 8];
+    };
+
     SparseMemory();
     ~SparseMemory();
 
@@ -42,16 +50,14 @@ public:
     uint8_t read(uint16_t addr) const;
     bool load(uint16_t addr, const uint8_t* data, size_t len);
     bool pageAllocated(uint8_t page) const;
+    bool addressWritten(uint16_t addr) const;
     uint16_t pageCount() const { return _page_count; }
     uint32_t bytesAllocated() const { return (uint32_t)_page_count * PageBytes; }
 
-    static constexpr uint16_t PageBytes = 256;
-    static constexpr uint16_t PageCount = 256;
-
 private:
-    uint8_t* ensure_page(uint8_t page);
+    Page* ensure_page(uint8_t page);
 
-    uint8_t* _pages[PageCount];
+    Page* _pages[PageCount];
     uint16_t _page_count = 0;
 };
 

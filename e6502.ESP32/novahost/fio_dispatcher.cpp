@@ -16,6 +16,10 @@ extern void novaHostFioActivityFinished(bool ok);
 #define NOVAHOST_XLOAD_VERIFY 0
 #endif
 
+#ifndef NOVAHOST_ENABLE_MUSIC_VISUALIZER_REGS
+#define NOVAHOST_ENABLE_MUSIC_VISUALIZER_REGS 1
+#endif
+
 namespace {
 constexpr uint32_t MIDI_DEBUG_MAGIC = 0x4D494442UL; // MIDB
 
@@ -34,6 +38,7 @@ struct MidiDebugState {
 };
 
 RTC_NOINIT_ATTR MidiDebugState g_midi_debug;
+uint32_t g_wts_region_reserve_failure_marker = 0;
 
 void midi_debug_init() {
     if (g_midi_debug.magic == MIDI_DEBUG_MAGIC)
@@ -206,6 +211,24 @@ bool has_extension_ci(const char* name, const char* ext) {
     return actual && strcasecmp(actual, ext) == 0;
 }
 
+const char* const WTS_AUTO_SOUNDFONT_PRIORITY[] = {
+    "timgm6mb.nsfb",
+    "TimGM6mb.nsfb",
+    "tim-gm6mb.nsfb",
+    "timidity-gm.nsfb",
+    "florestan.nsfb",
+    "florestan-basic.nsfb",
+};
+
+constexpr size_t WTS_AUTO_SOUNDFONT_PRIORITY_COUNT =
+    sizeof(WTS_AUTO_SOUNDFONT_PRIORITY) /
+    sizeof(WTS_AUTO_SOUNDFONT_PRIORITY[0]);
+
+bool is_skipped_auto_soundfont(const char* base_name) {
+    return base_name &&
+           strcasecmp(base_name, "GeneralUser_GS.nsfb") == 0;
+}
+
 uint16_t read_be16(const uint8_t* data, size_t off) {
     return ((uint16_t)data[off] << 8) | (uint16_t)data[off + 1];
 }
@@ -215,6 +238,88 @@ uint32_t read_be32(const uint8_t* data, size_t off) {
            ((uint32_t)data[off + 1] << 16) |
            ((uint32_t)data[off + 2] << 8) |
             (uint32_t)data[off + 3];
+}
+
+void write_le16(uint8_t* data, size_t off, uint16_t value) {
+    data[off] = (uint8_t)(value & 0xFF);
+    data[off + 1] = (uint8_t)(value >> 8);
+}
+
+void write_le16_clamped(uint8_t* data, size_t off, uint32_t value) {
+    write_le16(data, off, value > 0xFFFFUL ? 0xFFFF : (uint16_t)value);
+}
+
+void copy_cstr_padded(uint8_t* dest, size_t len, const char* text) {
+    memset(dest, 0, len);
+    if (!text)
+        return;
+
+    size_t out = 0;
+    while (out < len && text[out] != 0) {
+        dest[out] = (uint8_t)text[out];
+        out++;
+    }
+}
+
+void copy_soundfont_label_padded(uint8_t* dest, size_t len, const char* text) {
+    memset(dest, 0, len);
+    if (!text)
+        return;
+
+    const char* start = strrchr(text, '/');
+    start = start ? start + 1 : text;
+    const char* colon = strrchr(start, ':');
+    if (colon)
+        start = colon + 1;
+    const char* end = strrchr(start, '.');
+    if (!end || end == start)
+        end = start + strlen(start);
+
+    size_t out = 0;
+    while (out < len && start + out < end && start[out] != 0) {
+        dest[out] = (uint8_t)start[out];
+        out++;
+    }
+}
+
+bool copy_sid_padded(uint8_t* dest, size_t len, const uint8_t* sid_header,
+                     size_t off) {
+    memset(dest, 0, len);
+    if (!sid_header)
+        return false;
+
+    bool any = false;
+    for (size_t i = 0; i < len; i++) {
+        uint8_t ch = sid_header[off + i];
+        if (ch == 0)
+            break;
+        dest[i] = ch;
+        if (ch != ' ')
+            any = true;
+    }
+    return any;
+}
+
+bool buffer_has_text(const uint8_t* data, size_t len) {
+    if (!data)
+        return false;
+    for (size_t i = 0; i < len; i++) {
+        uint8_t ch = data[i];
+        if (ch == 0)
+            break;
+        if (ch != ' ')
+            return true;
+    }
+    return false;
+}
+
+void copy_padded_buffer(uint8_t* dest, size_t dest_len,
+                        const uint8_t* src, size_t src_len) {
+    memset(dest, 0, dest_len);
+    if (!src)
+        return;
+    size_t n = src_len < dest_len ? src_len : dest_len;
+    memcpy(dest, src, n);
 }
 
 int find_load_entry(ndi::NdiImage* img, const char* name, uint16_t parent,
@@ -436,11 +541,45 @@ constexpr uint16_t NSFB_SAMPLE_FORMAT_PCM16 = 2;
 constexpr uint32_t NMS_MAGIC             = 0x32534D4EUL; // "NMS2"
 constexpr uint16_t NMS_VERSION           = 2;
 constexpr uint16_t NMS_HEADER_SIZE       = 32;
+constexpr uint16_t NMS_META_HEADER_SIZE  = 128;
 constexpr uint16_t NMS_EVENT_RECORD_SIZE = 10;
+constexpr uint16_t NMS_META_TITLE_OFF    = 32;
+constexpr uint16_t NMS_META_AUTHOR_OFF   = 64;
+constexpr uint16_t NMS_META_COPY_OFF     = 96;
 constexpr uint8_t  NMS_EVENT_NOTE_OFF    = 0;
 constexpr uint8_t  NMS_EVENT_NOTE_ON     = 1;
 constexpr uint16_t NMS_WTS_NOTE_ON_RECORDS = 41;
 constexpr uint16_t NMS_WTS_NOTE_OFF_RECORDS = 1;
+constexpr uint16_t MUSIC_MIRROR_BASE     = 0xBA50;
+constexpr uint8_t  MUSIC_STATUS_SFX      = 0x01;
+constexpr uint8_t  MUSIC_STATUS_MUSIC    = 0x02;
+constexpr uint8_t  MUSIC_STATUS_SID      = 0x04;
+constexpr uint8_t  MUSIC_STATUS_WTS      = 0x08;
+constexpr uint8_t  MUSIC_STATUS_LOADING  = 0x10;
+constexpr uint32_t MUSIC_MIRROR_PERIOD_MS = 50;
+constexpr uint16_t MUSIC_META_BASE       = 0xBAB0;
+constexpr uint8_t  MUSIC_META_BYTES      = 112;
+constexpr uint8_t  MUSIC_META_TYPE_SID   = 1;
+constexpr uint8_t  MUSIC_META_TYPE_MIDI  = 3;
+constexpr uint8_t  MUSIC_META_TITLE_OFF  = 0x03;
+constexpr uint8_t  MUSIC_META_AUTHOR_OFF = 0x23;
+constexpr uint8_t  MUSIC_META_COPY_OFF   = 0x43;
+constexpr uint8_t  MUSIC_META_LOAD_OFF   = 0x63;
+constexpr uint8_t  MUSIC_META_INIT_OFF   = 0x65;
+constexpr uint8_t  MUSIC_META_PLAY_OFF   = 0x67;
+constexpr uint8_t  MUSIC_META_SONGS_OFF  = 0x69;
+constexpr uint8_t  MUSIC_META_DUR_OFF    = 0x6A;
+constexpr uint8_t  MUSIC_META_FLAGS_OFF  = 0x6C;
+constexpr uint8_t  MUSIC_META_TEXT_BYTES = 32;
+constexpr uint16_t MUSIC_META_SOUNDFONT_BASE = 0xBB8E;
+constexpr uint8_t  MUSIC_META_SOUNDFONT_BYTES = 64;
+constexpr uint8_t  MUSIC_META_FLAG_SID_6581 = 0x01;
+constexpr uint8_t  MUSIC_META_FLAG_SID_8580 = 0x02;
+constexpr uint8_t  MUSIC_META_FLAG_STEREO   = 0x04;
+constexpr uint8_t  MUSIC_META_FLAG_NTSC     = 0x08;
+constexpr double   SID_NOTE_CPU_CLOCK    = 985248.0;
+constexpr double   SID_FREQ_SCALE        = 16777216.0;
+constexpr double   LOG2_VALUE            = 0.69314718055994530942;
 
 constexpr uint8_t BASIC_IRQ_CODE[] = {
     0x48,                         // PHA
@@ -532,7 +671,42 @@ bool silence_sid_chips(FpgaBridge& bridge) {
 
 }
 
+class FioDispatcherStateGuard {
+public:
+    explicit FioDispatcherStateGuard(FioDispatcher& dispatcher,
+                                     TickType_t ticks = portMAX_DELAY)
+        : _dispatcher(dispatcher), _locked(dispatcher.lock_state(ticks)) {}
+
+    ~FioDispatcherStateGuard() {
+        if (_locked)
+            _dispatcher.unlock_state();
+    }
+
+    bool locked() const { return _locked; }
+
+private:
+    FioDispatcher& _dispatcher;
+    bool _locked;
+};
+
+bool FioDispatcher::lock_state(TickType_t ticks) {
+    if (!_state_mutex)
+        _state_mutex = xSemaphoreCreateRecursiveMutex();
+    if (!_state_mutex)
+        return false;
+    return xSemaphoreTakeRecursive(_state_mutex, ticks) == pdTRUE;
+}
+
+void FioDispatcher::unlock_state() {
+    if (_state_mutex)
+        xSemaphoreGiveRecursive(_state_mutex);
+}
+
 void FioDispatcher::handle_event() {
+    FioDispatcherStateGuard stateGuard(*this, 0);
+    if (!stateGuard.locked())
+        return;
+
     if (_handling) {
         return;
     }
@@ -593,8 +767,6 @@ void FioDispatcher::handle_event() {
 }
 
 void FioDispatcher::poll_pending() {
-    pump_audio();
-
     if (_handling) {
         return;
     }
@@ -609,14 +781,396 @@ void FioDispatcher::poll_pending() {
 }
 
 void FioDispatcher::pump_audio() {
+    FioDispatcherStateGuard stateGuard(*this);
+    if (!stateGuard.locked())
+        return;
+
     tick_midi_playback();
     tick_sid_playback();
+    update_music_mirror(false);
 }
 
 void FioDispatcher::stop_audio() {
+    FioDispatcherStateGuard stateGuard(*this);
+    if (!stateGuard.locked())
+        return;
+
     _midi_last_stop_reason = 4;
     stop_midi_playback(true);
     stop_sid_playback(true);
+    set_music_loading(false);
+}
+
+bool FioDispatcher::audio_active() {
+    FioDispatcherStateGuard stateGuard(*this, 0);
+    if (!stateGuard.locked())
+        return true;
+
+    return _music_loading || _midi_playing || _sid_playing;
+}
+
+bool FioDispatcher::storage_busy() {
+    FioDispatcherStateGuard stateGuard(*this, 0);
+    if (!stateGuard.locked())
+        return true;
+
+    return _handling || _music_loading || _midi_playing || _sid_playing;
+}
+
+void FioDispatcher::release_idle_wts_sample_cache() {
+    FioDispatcherStateGuard stateGuard(*this);
+    if (!stateGuard.locked())
+        return;
+    if (_midi_playing || _sid_playing || _wts_bank_loaded)
+        return;
+    if (_wts_sample_capacity > 0)
+        release_wts_sample_cache();
+}
+
+uint16_t FioDispatcher::clamp_music_frames(uint32_t frames) {
+    return frames > 0xFFFFUL ? 0xFFFF : (uint16_t)frames;
+}
+
+uint16_t FioDispatcher::audio_sample_frames_to_music_frames(uint32_t frames) {
+    constexpr uint32_t samples_per_music_frame = WTS_AUDIO_SAMPLE_RATE / 60UL;
+    if (samples_per_music_frame == 0)
+        return 0;
+    return clamp_music_frames(frames / samples_per_music_frame);
+}
+
+uint8_t FioDispatcher::sid_freq_to_midi(uint16_t sid_freq) const {
+    if (sid_freq == 0)
+        return 0;
+
+    double hz = ((double)sid_freq * SID_NOTE_CPU_CLOCK) / SID_FREQ_SCALE;
+    if (hz < 8.0)
+        return 0;
+
+    int midi = (int)round((12.0 * log(hz / 440.0) / LOG2_VALUE) + 69.0);
+    if (midi < 0)
+        return 0;
+    if (midi > 127)
+        return 127;
+    return (uint8_t)midi;
+}
+
+uint8_t FioDispatcher::sid_mirror_note(uint8_t voice) const {
+    if (voice >= SidVoiceCount || (_sid_mirror_ctrl[voice] & 0x01) == 0)
+        return 0;
+
+    uint16_t sid_freq = (uint16_t)_sid_mirror_freq_lo[voice] |
+                        ((uint16_t)_sid_mirror_freq_hi[voice] << 8);
+    return sid_freq_to_midi(sid_freq);
+}
+
+void FioDispatcher::clear_sid_mirror_state() {
+    memset(_sid_mirror_freq_lo, 0, sizeof(_sid_mirror_freq_lo));
+    memset(_sid_mirror_freq_hi, 0, sizeof(_sid_mirror_freq_hi));
+    memset(_sid_mirror_ctrl, 0, sizeof(_sid_mirror_ctrl));
+}
+
+void FioDispatcher::clear_midi_visual_state() {
+    memset(_midi_visual_notes, 0, sizeof(_midi_visual_notes));
+    _midi_visual_queue_head = 0;
+    _midi_visual_queue_tail = 0;
+    _midi_visual_queue_count = 0;
+    _midi_visual_queue_overflow = false;
+}
+
+uint32_t FioDispatcher::midi_elapsed_audio_frames(uint32_t now_ms) const {
+    if (_midi_start_ms == 0)
+        return 0;
+
+    uint32_t elapsed_ms = now_ms - _midi_start_ms;
+    uint64_t frames = ((uint64_t)elapsed_ms * WTS_AUDIO_SAMPLE_RATE) / 1000ULL;
+    return frames > 0xFFFFFFFFULL ? 0xFFFFFFFFUL : (uint32_t)frames;
+}
+
+void FioDispatcher::enqueue_midi_visual_event(const uint8_t* song_event) {
+    if (!song_event)
+        return;
+
+    uint8_t kind = song_event[4];
+    if (kind != NMS_EVENT_NOTE_ON && kind != NMS_EVENT_NOTE_OFF)
+        return;
+
+    uint8_t voice = song_event[5];
+    if (voice >= WtsVoiceCount)
+        return;
+
+    if (_midi_visual_queue_count >= MidiVisualQueueCapacity) {
+        _midi_visual_queue_overflow = true;
+        return;
+    }
+
+    MidiVisualEvent& event = _midi_visual_queue[_midi_visual_queue_tail];
+    event.frame = read_le32(song_event);
+    event.voice = voice;
+    event.note = kind == NMS_EVENT_NOTE_ON ? song_event[7] : 0;
+    _midi_visual_queue_tail =
+        (uint16_t)((_midi_visual_queue_tail + 1) %
+                   MidiVisualQueueCapacity);
+    _midi_visual_queue_count++;
+}
+
+void FioDispatcher::update_midi_visual_notes(uint32_t elapsed_audio_frames) {
+    if (!_midi_playing || !_midi_use_hardware_wts) {
+        return;
+    }
+
+    while (_midi_visual_queue_count > 0) {
+        MidiVisualEvent& event = _midi_visual_queue[_midi_visual_queue_head];
+        if (event.frame > elapsed_audio_frames)
+            break;
+
+        if (event.voice < WtsVoiceCount)
+            _midi_visual_notes[event.voice] = event.note;
+
+        _midi_visual_queue_head =
+            (uint16_t)((_midi_visual_queue_head + 1) %
+                       MidiVisualQueueCapacity);
+        _midi_visual_queue_count--;
+    }
+}
+
+uint8_t FioDispatcher::current_music_status_bits() const {
+    uint8_t status = 0;
+    if (_midi_playing)
+        status |= MUSIC_STATUS_MUSIC | MUSIC_STATUS_WTS;
+    if (_sid_playing)
+        status |= MUSIC_STATUS_MUSIC | MUSIC_STATUS_SID;
+    if (_music_loading)
+        status |= MUSIC_STATUS_LOADING;
+    return status;
+}
+
+void FioDispatcher::set_music_loading(bool loading) {
+    if (_music_loading == loading)
+        return;
+
+    _music_loading = loading;
+    publish_music_status();
+}
+
+void FioDispatcher::publish_music_status() {
+    uint8_t status = current_music_status_bits();
+    if (_music_status_valid && _music_status_last == status)
+        return;
+
+    if (_bridge.poke(MUSIC_MIRROR_BASE, status)) {
+        _music_status_last = status;
+        _music_status_valid = true;
+        if (_music_mirror_valid)
+            _music_mirror_last[0] = status;
+    }
+}
+
+void FioDispatcher::capture_sid_mirror_write(uint16_t addr, uint8_t value) {
+    uint8_t voice = 0;
+    uint8_t reg = 0;
+    if (addr >= SID1_BASE && addr < SID1_BASE + 0x20) {
+        uint8_t off = (uint8_t)(addr - SID1_BASE);
+        if (off >= 21)
+            return;
+        voice = off / 7;
+        reg = off % 7;
+    } else if (addr >= SID2_BASE && addr < SID2_BASE + 0x20) {
+        uint8_t off = (uint8_t)(addr - SID2_BASE);
+        if (off >= 21)
+            return;
+        voice = (uint8_t)(3 + off / 7);
+        reg = off % 7;
+    } else {
+        return;
+    }
+
+    if (voice >= SidVoiceCount)
+        return;
+    if (reg == 0)
+        _sid_mirror_freq_lo[voice] = value;
+    else if (reg == 1)
+        _sid_mirror_freq_hi[voice] = value;
+    else if (reg == 4)
+        _sid_mirror_ctrl[voice] = value;
+}
+
+void FioDispatcher::update_music_mirror(bool force) {
+#if !NOVAHOST_ENABLE_MUSIC_VISUALIZER_REGS
+    (void)force;
+    publish_music_status();
+    return;
+#else
+    static_assert(MusicMirrorBytes == 1 + MusicMirrorNoteCount + 4,
+                  "music mirror register block must be $BA50-$BA62");
+
+    bool playing = _midi_playing || _sid_playing;
+    if (!force && !playing && _music_mirror_valid &&
+        _music_mirror_last[0] == 0) {
+        return;
+    }
+
+    uint32_t now_ms = millis();
+    if (!force && playing && _music_mirror_valid &&
+        (uint32_t)(now_ms - _music_mirror_last_ms) <
+            MUSIC_MIRROR_PERIOD_MS) {
+        return;
+    }
+
+    uint32_t elapsed_audio_frames = 0;
+    if (_midi_playing)
+        elapsed_audio_frames = midi_elapsed_audio_frames(now_ms);
+
+    uint8_t mirror[MusicMirrorBytes] = {};
+    mirror[0] = current_music_status_bits();
+
+    if (_sid_playing) {
+        for (uint8_t v = 0; v < SidVoiceCount; v++)
+            mirror[1 + v] = sid_mirror_note(v);
+    }
+
+    if (_midi_playing && _midi_use_hardware_wts) {
+        update_midi_visual_notes(elapsed_audio_frames);
+        for (uint8_t v = 0; v < WtsVoiceCount; v++)
+            mirror[1 + SidVoiceCount + v] = _midi_visual_notes[v];
+    }
+
+    uint16_t elapsed = 0;
+    uint16_t total = 0;
+    if (_midi_playing) {
+        total = audio_sample_frames_to_music_frames(_music_total_frames);
+        elapsed = audio_sample_frames_to_music_frames(elapsed_audio_frames);
+        if (total != 0 && elapsed > total)
+            elapsed = total;
+    } else if (_sid_playing) {
+        elapsed = clamp_music_frames(_sid_frames);
+    }
+
+    mirror[15] = (uint8_t)(elapsed & 0xFF);
+    mirror[16] = (uint8_t)(elapsed >> 8);
+    mirror[17] = (uint8_t)(total & 0xFF);
+    mirror[18] = (uint8_t)(total >> 8);
+
+    if (!force && _music_mirror_valid &&
+        memcmp(mirror, _music_mirror_last, sizeof(mirror)) == 0) {
+        _music_mirror_last_ms = now_ms;
+        return;
+    }
+
+    if (_bridge.pokeBlock(MUSIC_MIRROR_BASE, mirror, sizeof(mirror))) {
+        memcpy(_music_mirror_last, mirror, sizeof(mirror));
+        _music_mirror_valid = true;
+        _music_status_last = mirror[0];
+        _music_status_valid = true;
+        _music_mirror_last_ms = now_ms;
+    }
+#endif
+}
+
+void FioDispatcher::publish_sid_metadata(const char* label,
+                                         const uint8_t* header,
+                                         uint32_t size,
+                                         const nova_sid::SidFileInfo& sid) {
+#if !NOVAHOST_ENABLE_MUSIC_VISUALIZER_REGS
+    (void)label;
+    (void)header;
+    (void)size;
+    (void)sid;
+    return;
+#else
+    uint8_t meta[MUSIC_META_BYTES] = {};
+    meta[0] = MUSIC_META_TYPE_SID;
+    write_le16_clamped(meta, 1, size);
+
+    if (!copy_sid_padded(meta + MUSIC_META_TITLE_OFF, MUSIC_META_TEXT_BYTES,
+                         header, 22)) {
+        copy_cstr_padded(meta + MUSIC_META_TITLE_OFF, MUSIC_META_TEXT_BYTES,
+                         label);
+    }
+    copy_sid_padded(meta + MUSIC_META_AUTHOR_OFF, MUSIC_META_TEXT_BYTES,
+                    header, 54);
+    copy_sid_padded(meta + MUSIC_META_COPY_OFF, MUSIC_META_TEXT_BYTES,
+                    header, 86);
+
+    write_le16(meta, MUSIC_META_LOAD_OFF, sid.loadAddress);
+    write_le16(meta, MUSIC_META_INIT_OFF, sid.initAddress);
+    write_le16(meta, MUSIC_META_PLAY_OFF, sid.playAddress);
+    meta[MUSIC_META_SONGS_OFF] =
+        sid.songs > 0xFF ? 0xFF : (uint8_t)sid.songs;
+
+    uint8_t flags = 0;
+    uint8_t clock = (uint8_t)((sid.flags >> 2) & 0x03);
+    uint8_t model = (uint8_t)((sid.flags >> 4) & 0x03);
+    if (model == 2)
+        flags |= MUSIC_META_FLAG_SID_8580;
+    else
+        flags |= MUSIC_META_FLAG_SID_6581;
+    if (clock == 2)
+        flags |= MUSIC_META_FLAG_NTSC;
+    if (sid.dataOffset >= 0x7C && header &&
+        (header[0x7A] != 0 || header[0x7B] != 0)) {
+        flags |= MUSIC_META_FLAG_STEREO;
+    }
+    meta[MUSIC_META_FLAGS_OFF] = flags;
+
+    if (!_bridge.pokeBlock(MUSIC_META_BASE, meta, sizeof(meta))) {
+        logLn("[fio] WARN: failed to publish SID metadata");
+    }
+    publish_soundfont_metadata(nullptr);
+#endif
+}
+
+void FioDispatcher::publish_midi_metadata(const char* label, uint32_t size,
+                                          uint32_t total_audio_frames) {
+#if !NOVAHOST_ENABLE_MUSIC_VISUALIZER_REGS
+    (void)label;
+    (void)size;
+    (void)total_audio_frames;
+    return;
+#else
+    uint8_t meta[MUSIC_META_BYTES] = {};
+    meta[0] = MUSIC_META_TYPE_MIDI;
+    write_le16_clamped(meta, 1, size);
+    if (buffer_has_text(_midi_meta_title, sizeof(_midi_meta_title))) {
+        copy_padded_buffer(meta + MUSIC_META_TITLE_OFF, MUSIC_META_TEXT_BYTES,
+                           _midi_meta_title, sizeof(_midi_meta_title));
+    } else {
+        copy_cstr_padded(meta + MUSIC_META_TITLE_OFF, MUSIC_META_TEXT_BYTES,
+                         label);
+    }
+    if (buffer_has_text(_midi_meta_author, sizeof(_midi_meta_author))) {
+        copy_padded_buffer(meta + MUSIC_META_AUTHOR_OFF, MUSIC_META_TEXT_BYTES,
+                           _midi_meta_author, sizeof(_midi_meta_author));
+    }
+    if (buffer_has_text(_midi_meta_copyright,
+                        sizeof(_midi_meta_copyright))) {
+        copy_padded_buffer(meta + MUSIC_META_COPY_OFF, MUSIC_META_TEXT_BYTES,
+                           _midi_meta_copyright,
+                           sizeof(_midi_meta_copyright));
+    }
+    meta[MUSIC_META_SONGS_OFF] = 1;
+    if (WTS_AUDIO_SAMPLE_RATE != 0) {
+        write_le16_clamped(meta, MUSIC_META_DUR_OFF,
+                           total_audio_frames / WTS_AUDIO_SAMPLE_RATE);
+    }
+
+    if (!_bridge.pokeBlock(MUSIC_META_BASE, meta, sizeof(meta))) {
+        logLn("[fio] WARN: failed to publish MIDI metadata");
+    }
+    publish_soundfont_metadata(_wts_bank_name);
+#endif
+}
+
+void FioDispatcher::publish_soundfont_metadata(const char* label) {
+#if !NOVAHOST_ENABLE_MUSIC_VISUALIZER_REGS
+    (void)label;
+    return;
+#else
+    uint8_t name[MUSIC_META_SOUNDFONT_BYTES] = {};
+    copy_soundfont_label_padded(name, sizeof(name), label);
+    if (!_bridge.pokeBlock(MUSIC_META_SOUNDFONT_BASE, name, sizeof(name))) {
+        logLn("[fio] WARN: failed to publish soundfont metadata");
+    }
+#endif
 }
 
 void FioDispatcher::clear_wts_bank_state() {
@@ -629,84 +1183,78 @@ void FioDispatcher::clear_wts_bank_state() {
     _wts_instruments.clear();
     _wts_regions.clear();
     release_wts_sample_cache();
-}
-
-FioDispatcher::WtsRegionStore::~WtsRegionStore() {
-    clear();
-}
-
-FioDispatcher::WtsRegionStore::WtsRegionStore(WtsRegionStore&& other)
-    noexcept {
-    move_from(other);
-}
-
-FioDispatcher::WtsRegionStore&
-FioDispatcher::WtsRegionStore::operator=(WtsRegionStore&& other) noexcept {
-    if (this != &other) {
-        clear();
-        move_from(other);
-    }
-    return *this;
+    publish_soundfont_metadata(nullptr);
 }
 
 void FioDispatcher::WtsRegionStore::clear() {
-    for (uint16_t i = 0; i < MAX_CHUNKS; i++) {
-        if (chunks[i]) {
-            heap_caps_free(chunks[i]);
-            chunks[i] = nullptr;
-        }
+    count = 0;
+    capacity = regions ? MAX_REGIONS : 0;
+}
+
+FioDispatcher::WtsRegionStore::~WtsRegionStore() {
+    if (regions) {
+        heap_caps_free(regions);
+        regions = nullptr;
     }
     count = 0;
     capacity = 0;
 }
 
-bool FioDispatcher::WtsRegionStore::reserve(uint16_t requested) {
-    if (requested <= capacity)
+bool FioDispatcher::WtsRegionStore::init() {
+    if (regions) {
+        capacity = MAX_REGIONS;
         return true;
-
-    uint16_t needed_chunks =
-        (requested + CHUNK_SIZE - 1) / CHUNK_SIZE;
-    if (needed_chunks > MAX_CHUNKS)
-        return false;
-
-    uint16_t have_chunks = capacity / CHUNK_SIZE;
-    for (uint16_t i = have_chunks; i < needed_chunks; i++) {
-        chunks[i] = (WtsBankRegion*)heap_caps_malloc(
-            CHUNK_SIZE * sizeof(FioDispatcher::WtsBankRegion),
-            MALLOC_CAP_8BIT);
-        if (!chunks[i]) {
-            for (uint16_t j = have_chunks; j < i; j++) {
-                heap_caps_free(chunks[j]);
-                chunks[j] = nullptr;
-            }
-            capacity = have_chunks * CHUNK_SIZE;
-            return false;
-        }
     }
 
-    capacity = needed_chunks * CHUNK_SIZE;
+    regions = (WtsBankRegion*)heap_caps_malloc(
+        MAX_REGIONS * sizeof(FioDispatcher::WtsBankRegion),
+        MALLOC_CAP_8BIT);
+    if (!regions) {
+        capacity = 0;
+        return false;
+    }
+
+    count = 0;
+    capacity = MAX_REGIONS;
+    return true;
+}
+
+bool FioDispatcher::WtsRegionStore::reserve(uint16_t requested) {
+    g_wts_region_reserve_failure_marker = 0;
+    if (requested > MAX_REGIONS) {
+        g_wts_region_reserve_failure_marker =
+            ((uint32_t)requested << 16) | MAX_REGIONS;
+        return false;
+    }
+    if (!init()) {
+        g_wts_region_reserve_failure_marker =
+            0x80000000UL | requested;
+        return false;
+    }
+    capacity = MAX_REGIONS;
     return true;
 }
 
 bool FioDispatcher::WtsRegionStore::push_back(
     const WtsBankRegion& region) {
-    if (count >= capacity && !reserve(count + 1))
+    if (count >= capacity)
         return false;
 
-    chunks[count / CHUNK_SIZE][count % CHUNK_SIZE] = region;
+    regions[count] = region;
     count++;
     return true;
 }
 
-void FioDispatcher::WtsRegionStore::move_from(WtsRegionStore& other) {
-    for (uint16_t i = 0; i < MAX_CHUNKS; i++) {
-        chunks[i] = other.chunks[i];
-        other.chunks[i] = nullptr;
-    }
-    count = other.count;
-    capacity = other.capacity;
-    other.count = 0;
-    other.capacity = 0;
+bool FioDispatcher::reserve_wts_region_store() {
+    bool ok = _wts_regions.init();
+    logLn("[fio] WTS region store reserve %s: capacity=%u bytes=%u "
+          "heapFree=%u heapLargest=%u",
+          ok ? "OK" : "FAILED",
+          ok ? (unsigned)_wts_regions.capacity : 0,
+          (unsigned)(WtsRegionStore::MAX_REGIONS * sizeof(WtsBankRegion)),
+          (unsigned)ESP.getFreeHeap(),
+          (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    return ok;
 }
 
 bool FioDispatcher::reserve_wts_sample_cache(uint32_t bytes) {
@@ -844,9 +1392,19 @@ bool FioDispatcher::write_wts_sample_chunk_to_sdram(uint32_t offset,
     return true;
 }
 
-void FioDispatcher::write_audio_status_json(char* out, size_t out_len) const {
+void FioDispatcher::write_audio_status_json(char* out, size_t out_len) {
     if (!out || out_len == 0)
         return;
+
+    FioDispatcherStateGuard stateGuard(*this, pdMS_TO_TICKS(20));
+    if (!stateGuard.locked()) {
+        snprintf(out, out_len,
+                 "{\"ok\":false,\"busy\":true,\"reason\":\"audio state busy\","
+                 "\"heapFree\":%u,\"heapLargest\":%u}",
+                 (unsigned)ESP.getFreeHeap(),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        return;
+    }
 
     midi_debug_init();
     snprintf(out, out_len,
@@ -1079,6 +1637,7 @@ bool FioDispatcher::on_sid_write(uint16_t addr, uint8_t value) {
     _sid_write_addrs[_sid_write_count] = addr;
     _sid_write_values[_sid_write_count] = value;
     _sid_write_count++;
+    capture_sid_mirror_write(addr, value);
     return true;
 }
 
@@ -1135,6 +1694,7 @@ void FioDispatcher::stop_sid_playback(bool silence) {
     _sid_write_overflow = false;
     _sid_vm.reset();
     _sid_vm.setSidWriteHandler(on_sid_write_static, this);
+    clear_sid_mirror_state();
 
     if (silence) {
         set_sid_timer(_bridge, 0, false);
@@ -1142,6 +1702,7 @@ void FioDispatcher::stop_sid_playback(bool silence) {
         configure_sid(_bridge, 0);
         silence_sid_chips(_bridge);
     }
+    update_music_mirror(true);
 }
 
 // ---------------------------------------------------------------------------
@@ -1185,9 +1746,11 @@ void FioDispatcher::handle_sidplay() {
         respond_err(ERR_IO);
         return;
     }
+    uint8_t sid_header[124];
+    memcpy(sid_header, _transfer_buf, sizeof(sid_header));
 
     nova_sid::SidFileInfo sid;
-    if (!nova_sid::parse_sid_header(_transfer_buf, e.size_bytes, sid)) {
+    if (!nova_sid::parse_sid_header(sid_header, e.size_bytes, sid)) {
         logLn("[fio] SIDPLAY %s: invalid SID header\n", scratch);
         respond_err(ERR_IO);
         return;
@@ -1225,6 +1788,7 @@ void FioDispatcher::handle_sidplay() {
         return;
     }
 
+    set_music_loading(true);
     stop_midi_playback(true);
     stop_sid_playback(true);
     _sid_vm.setSidWriteHandler(on_sid_write_static, this);
@@ -1272,6 +1836,7 @@ void FioDispatcher::handle_sidplay() {
     if (!ok) {
         logLn("[fio] SIDPLAY %s failed: %s\n", scratch, _sid_last_error);
         stop_sid_playback(true);
+        set_music_loading(false);
         respond_err(ERR_IO);
         return;
     }
@@ -1283,7 +1848,10 @@ void FioDispatcher::handle_sidplay() {
     _sid_last_error[0] = 0;
     _sid_frame_period_us = nova_sid::sid_frame_period_us(sid, song);
     _sid_next_frame_us = micros() + _sid_frame_period_us;
+    publish_sid_metadata(scratch, sid_header, e.size_bytes, sid);
     _sid_playing = sid.playAddress != 0;
+    set_music_loading(false);
+    update_music_mirror(true);
 
     write_size(sid.payloadBytes);
     logLn("[fio] SIDPLAY %s %s load=$%04X init=$%04X play=$%04X song=%u speed=$%08lX flags=$%04X period_us=%lu cfg=$%02X pages=%u OK\n",
@@ -1400,10 +1968,12 @@ bool FioDispatcher::load_wts_bank_from_entry(ndi::NdiImage* img, int idx,
     clear_wts_bank_state();
 
     std::vector<WtsBankInstrument> instruments;
-    WtsRegionStore regions;
     instruments.reserve(instrument_count);
-    if (!regions.reserve(region_count)) {
-        midi_debug_phase(594, region_count);
+    g_wts_region_reserve_failure_marker = 0;
+    if (!_wts_regions.reserve(region_count)) {
+        midi_debug_phase(594, g_wts_region_reserve_failure_marker
+            ? g_wts_region_reserve_failure_marker
+            : region_count);
         logLn("[fio] WTS bank %s: region metadata allocation failed "
               "regions=%u heapFree=%u heapLargest=%u",
               label ? label : "", (unsigned)region_count,
@@ -1473,7 +2043,7 @@ bool FioDispatcher::load_wts_bank_from_entry(ndi::NdiImage* img, int idx,
             sample_length_bytes > sample_data_bytes - sample_start_bytes) {
             return false;
         }
-        if (!regions.push_back(region)) {
+        if (!_wts_regions.push_back(region)) {
             midi_debug_phase(594, i);
             return false;
         }
@@ -1517,13 +2087,13 @@ bool FioDispatcher::load_wts_bank_from_entry(ndi::NdiImage* img, int idx,
     midi_debug_phase(456, sample_data_bytes);
     midi_debug_sample(sample_data_bytes, sample_data_bytes);
     _wts_instruments = std::move(instruments);
-    _wts_regions = std::move(regions);
     _wts_sample_bytes = sample_data_bytes;
     _wts_bank_loaded = true;
     _wts_samples_resident = keep_resident;
     _wts_sample_frame_bytes = sample_frame_bytes;
     _wts_bank_hash = bank_hash;
     snprintf(_wts_bank_name, sizeof(_wts_bank_name), "%s", label ? label : "");
+    publish_soundfont_metadata(_wts_bank_name);
     logLn("[fio] WTS bank %s loaded: instruments=%u regions=%u samples=%u "
           "frameBytes=%u resident=%u @ SDRAM $%06X",
           label ? label : "",
@@ -1684,11 +2254,13 @@ bool FioDispatcher::load_wts_bank_from_sd_path(const char* sd_path) {
     clear_wts_bank_state();
 
     std::vector<WtsBankInstrument> instruments;
-    WtsRegionStore regions;
     instruments.reserve(instrument_count);
-    if (!regions.reserve(region_count)) {
+    g_wts_region_reserve_failure_marker = 0;
+    if (!_wts_regions.reserve(region_count)) {
         f.close();
-        midi_debug_phase(499, region_count);
+        midi_debug_phase(499, g_wts_region_reserve_failure_marker
+            ? g_wts_region_reserve_failure_marker
+            : region_count);
         logLn("[fio] WTS bank %s: region metadata allocation failed "
               "regions=%u heapFree=%u heapLargest=%u",
               sd_path, (unsigned)region_count,
@@ -1813,7 +2385,7 @@ bool FioDispatcher::load_wts_bank_from_sd_path(const char* sd_path) {
                   (unsigned long)sample_data_bytes);
             return false;
         }
-        if (!regions.push_back(region)) {
+        if (!_wts_regions.push_back(region)) {
             f.close();
             midi_debug_phase(499, i);
             logLn("[fio] WTS bank %s: region metadata push failed at %u",
@@ -1888,13 +2460,13 @@ bool FioDispatcher::load_wts_bank_from_sd_path(const char* sd_path) {
     midi_debug_phase(408, sample_data_bytes);
     midi_debug_sample(sample_data_bytes, sample_data_bytes);
     _wts_instruments = std::move(instruments);
-    _wts_regions = std::move(regions);
     _wts_sample_bytes = sample_data_bytes;
     _wts_bank_loaded = true;
     _wts_samples_resident = keep_resident;
     _wts_sample_frame_bytes = sample_frame_bytes;
     _wts_bank_hash = bank_hash;
     snprintf(_wts_bank_name, sizeof(_wts_bank_name), "%s", sd_path);
+    publish_soundfont_metadata(_wts_bank_name);
     logLn("[fio] WTS bank %s loaded from SD: instruments=%u regions=%u "
           "samples=%u frameBytes=%u resident=%u @ SDRAM $%06X in %lu ms",
           sd_path,
@@ -1975,36 +2547,36 @@ bool FioDispatcher::load_first_wts_bank_from_sd_dir(const char* dir_path) {
     if (!dir_path || dir_path[0] == 0)
         return false;
 
-    File dir = SD.open(dir_path);
-    if (!dir || !dir.isDirectory()) {
-        if (dir)
-            dir.close();
-        return false;
-    }
-
-    bool loaded = false;
-    while (true) {
-        File entry = dir.openNextFile();
-        if (!entry)
-            break;
-
-        const char* entry_name = entry.name();
-        const char* base_name = strrchr(entry_name, '/');
-        base_name = base_name ? base_name + 1 : entry_name;
-        if (!entry.isDirectory() && has_extension_ci(base_name, ".nsfb")) {
-            char path[128];
-            snprintf(path, sizeof(path), "%s/%s", dir_path, base_name);
-            entry.close();
-            logLn("[fio] WTS auto-loading first soundfont: %s", path);
-            loaded = load_wts_bank_from_sd_path(path);
-            break;
+    auto try_base_name = [&](const char* base_name) -> bool {
+        if (!base_name || base_name[0] == 0)
+            return false;
+        if (is_skipped_auto_soundfont(base_name)) {
+            logLn("[fio] WTS auto-load skipping oversized soundfont: %s",
+                  base_name);
+            return false;
         }
-        entry.close();
+
+        char path[128];
+        int n = snprintf(path, sizeof(path), "%s/%s", dir_path, base_name);
+        if (n <= 0 || (size_t)n >= sizeof(path))
+            return false;
+        if (!SD.exists(path))
+            return false;
+
+        logLn("[fio] WTS auto-loading soundfont: %s", path);
+        bool loaded = load_wts_bank_from_sd_path(path);
+        if (!loaded)
+            logLn("[fio] WTS auto-load candidate failed, trying next");
         yield();
+        return loaded;
+    };
+
+    for (size_t i = 0; i < WTS_AUTO_SOUNDFONT_PRIORITY_COUNT; i++) {
+        if (try_base_name(WTS_AUTO_SOUNDFONT_PRIORITY[i]))
+            return true;
     }
 
-    dir.close();
-    return loaded;
+    return false;
 }
 
 bool FioDispatcher::load_first_wts_bank_from_slot(int slot) {
@@ -2023,17 +2595,38 @@ bool FioDispatcher::load_first_wts_bank_from_slot(int slot) {
     if (!img->get_entry(dir_idx, dir_entry) || !dir_entry.is_directory())
         return false;
 
-    for (int i = 0; i < img->directory_entry_count(); i++) {
-        ndi::DirEntry e;
-        if (!img->get_entry(i, e) || !e.is_active() || e.is_directory() ||
-            e.parent_index != (uint16_t)dir_idx ||
-            !has_extension_ci(e.filename, ".nsfb")) {
-            continue;
+    auto try_base_name = [&](const char* base_name) -> bool {
+        if (!base_name || base_name[0] == 0)
+            return false;
+        if (is_skipped_auto_soundfont(base_name)) {
+            logLn("[fio] WTS auto-load skipping oversized soundfont: %s",
+                  base_name);
+            return false;
         }
 
-        logLn("[fio] WTS auto-loading first soundfont from %s:soundfonts/%s",
+        int idx = img->find_entry(base_name, (uint16_t)dir_idx);
+        if (idx < 0)
+            return false;
+
+        ndi::DirEntry e;
+        if (!img->get_entry(idx, e) || e.is_directory() ||
+            !has_extension_ci(e.filename, ".nsfb")) {
+            return false;
+        }
+
+        logLn("[fio] WTS auto-loading soundfont from %s:soundfonts/%s",
               DeviceManager::prefix_for_slot(slot), e.filename);
-        return load_wts_bank_from_entry(img, i, e.size_bytes, e.filename);
+        bool loaded = load_wts_bank_from_entry(img, idx, e.size_bytes,
+                                               e.filename);
+        if (!loaded)
+            logLn("[fio] WTS auto-load candidate failed, trying next");
+        yield();
+        return loaded;
+    };
+
+    for (size_t i = 0; i < WTS_AUTO_SOUNDFONT_PRIORITY_COUNT; i++) {
+        if (try_base_name(WTS_AUTO_SOUNDFONT_PRIORITY[i]))
+            return true;
     }
 
     return false;
@@ -2335,6 +2928,9 @@ void FioDispatcher::stop_midi_playback(bool silence) {
     _midi_tick_accum = 0.0;
     _midi_use_hardware_wts = false;
     _midi_wts_all_events_queued = false;
+    _midi_start_ms = 0;
+    clear_midi_visual_state();
+    update_music_mirror(true);
 }
 
 bool FioDispatcher::read_wts_event_fifo_status(uint16_t& free_records,
@@ -2375,6 +2971,11 @@ bool FioDispatcher::read_music_stream_header(ndi::NdiImage* img, int idx,
     uint32_t total_frames = 0;
     uint32_t reserved = 0;
 
+    memset(_midi_meta_title, 0, sizeof(_midi_meta_title));
+    memset(_midi_meta_author, 0, sizeof(_midi_meta_author));
+    memset(_midi_meta_copyright, 0, sizeof(_midi_meta_copyright));
+    clear_midi_visual_state();
+
     if (!reader.read_u32(magic) ||
         !reader.read_u16(version) ||
         !reader.read_u16(header_size) ||
@@ -2409,6 +3010,17 @@ bool FioDispatcher::read_music_stream_header(ndi::NdiImage* img, int idx,
     _midi_event_index = 0;
     _midi_tick_accum = 0.0;
     _midi_wts_all_events_queued = event_bytes == 0;
+
+    if (header_size >= NMS_META_HEADER_SIZE &&
+        event_offset >= NMS_META_HEADER_SIZE &&
+        size >= NMS_META_HEADER_SIZE) {
+        if (reader.seek(NMS_META_TITLE_OFF)) {
+            (void)reader.read(_midi_meta_title, sizeof(_midi_meta_title));
+            (void)reader.read(_midi_meta_author, sizeof(_midi_meta_author));
+            (void)reader.read(_midi_meta_copyright,
+                              sizeof(_midi_meta_copyright));
+        }
+    }
     return true;
 }
 
@@ -2542,7 +3154,9 @@ bool FioDispatcher::queue_music_wts_events() {
 
     uint16_t out_bytes = 0;
     uint32_t consumed = 0;
-    uint16_t records_available = free_records;
+    uint16_t records_available = free_records > MIDI_WTS_EVENT_PUMP_RECORDS
+        ? MIDI_WTS_EVENT_PUMP_RECORDS
+        : free_records;
     uint8_t expanded[NMS_WTS_NOTE_ON_RECORDS * MIDI_WTS_EVENT_BYTES];
 
     while (_music_event_read + consumed < _music_event_bytes) {
@@ -2581,6 +3195,7 @@ bool FioDispatcher::queue_music_wts_events() {
             }
 
             memcpy(_transfer_buf + out_bytes, expanded, event_bytes);
+            enqueue_midi_visual_event(_midi_read_cache + cache_off);
             out_bytes += event_bytes;
             consumed += NMS_EVENT_RECORD_SIZE;
             records_available -= event_records;
@@ -2730,12 +3345,14 @@ void FioDispatcher::handle_midplay() {
     _midi_last_error[0] = 0;
     reset_midi_timing_metrics();
 
+    set_music_loading(true);
     if (!_wts_bank_loaded) {
         midi_debug_phase(103);
         if (!ensure_wts_bank_loaded(slot)) {
             logLn("[fio] MIDPLAY Missing soundfont");
             snprintf(_midi_last_error, sizeof(_midi_last_error),
                      "Missing soundfont");
+            set_music_loading(false);
             respond_err(ERR_IO);
             return;
         }
@@ -2764,6 +3381,7 @@ void FioDispatcher::handle_midplay() {
     if (!use_hardware_wts) {
         snprintf(_midi_last_error, sizeof(_midi_last_error),
                  "hardware WTS event stream unavailable");
+        set_music_loading(false);
         respond_err(ERR_IO);
         return;
     }
@@ -2772,6 +3390,7 @@ void FioDispatcher::handle_midplay() {
     midi_debug_phase(104);
     if (!read_music_stream_header(img, idx, e.size_bytes)) {
         logLn("[fio] MIDPLAY %s: %s\n", scratch, _midi_last_error);
+        set_music_loading(false);
         respond_err(ERR_IO);
         return;
     }
@@ -2790,18 +3409,24 @@ void FioDispatcher::handle_midplay() {
         logLn("[fio] MIDPLAY hardware-WTS setup failed");
         _midi_last_stop_reason = 5;
         stop_midi_playback(true);
+        set_music_loading(false);
         respond_err(ERR_IO);
         return;
     }
-    _midi_playing = true;
+    publish_midi_metadata(scratch, e.size_bytes, _music_total_frames);
     if (!start_music_wts_event_stream()) {
         logLn("[fio] MIDPLAY WTS event stream setup failed: %s",
               _midi_last_error);
         _midi_last_stop_reason = 10;
         stop_midi_playback(true);
+        set_music_loading(false);
         respond_err(ERR_IO);
         return;
     }
+    _midi_start_ms = millis();
+    _midi_playing = true;
+    set_music_loading(false);
+    update_music_mirror(true);
 
     write_size(e.size_bytes);
     midi_debug_phase(120);
@@ -2821,12 +3446,15 @@ void FioDispatcher::handle_sfload() {
     char name[64];
     copy_filename(name);
 
+    set_music_loading(true);
     if (load_wts_bank_by_name(name)) {
+        set_music_loading(false);
         logLn("[fio] SFLOAD %s OK\n", name);
         respond_ok();
         return;
     }
 
+    set_music_loading(false);
     logLn("[fio] SFLOAD %s failed\n", name);
     respond_err(ERR_NOT_FOUND);
 }

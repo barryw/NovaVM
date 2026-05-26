@@ -37,6 +37,155 @@ AUDIO_INC_INCLUDED = 1
 
 .include "fio.inc"
 
+; MUSIC_STATUS bit layout.
+; These bits are shared by BASIC, assembly apps, and hosted playback.
+.ifndef MUSIC_STATUS_SFX
+MUSIC_STATUS_SFX     = $01
+.endif
+.ifndef MUSIC_STATUS_MUSIC
+MUSIC_STATUS_MUSIC   = $02
+.endif
+.ifndef MUSIC_STATUS_SID
+MUSIC_STATUS_SID     = $04
+.endif
+.ifndef MUSIC_STATUS_WTS
+MUSIC_STATUS_WTS     = $08
+.endif
+.ifndef MUSIC_STATUS_LOADING
+MUSIC_STATUS_LOADING = $10
+.endif
+
+; @label AUDIO.STATUS_SFX
+; @kind const
+; @symbol AUDIO_STATUS_SFX
+; @summary MUSIC_STATUS bit set while a hosted sound effect is active.
+AUDIO_STATUS_SFX     = MUSIC_STATUS_SFX
+; @label AUDIO.STATUS_MUSIC
+; @kind const
+; @symbol AUDIO_STATUS_MUSIC
+; @summary MUSIC_STATUS bit set while hosted music playback is active.
+AUDIO_STATUS_MUSIC   = MUSIC_STATUS_MUSIC
+; @label AUDIO.STATUS_SID
+; @kind const
+; @symbol AUDIO_STATUS_SID
+; @summary MUSIC_STATUS bit set when the current music source uses SID voices.
+AUDIO_STATUS_SID     = MUSIC_STATUS_SID
+; @label AUDIO.STATUS_WTS
+; @kind const
+; @symbol AUDIO_STATUS_WTS
+; @summary MUSIC_STATUS bit set when the current music source uses WTS/MIDI voices.
+AUDIO_STATUS_WTS     = MUSIC_STATUS_WTS
+; @label AUDIO.STATUS_LOADING
+; @kind const
+; @symbol AUDIO_STATUS_LOADING
+; @summary MUSIC_STATUS bit set while hosted SID/MIDI/soundfont assets are loading.
+AUDIO_STATUS_LOADING = MUSIC_STATUS_LOADING
+
+; Hosted music metadata. NovaHost writes this unified block for both SID and
+; MIDI/WTS playback so visualizers and apps do not need per-player ABIs.
+; The first 0x6C bytes match the generic file metadata buffer; the final flag
+; byte is interpreted by music consumers.
+; @label AUDIO.META_TYPE
+; @kind u8
+; @symbol AUDIO_META_TYPE
+; @summary Active music metadata file type: 1=SID, 3=MIDI/WTS.
+AUDIO_META_TYPE       = $BAB0
+; @label AUDIO.META_SIZE_L
+; @kind u8
+; @symbol AUDIO_META_SIZE_L
+; @summary Low byte of active music file size.
+AUDIO_META_SIZE_L     = $BAB1
+; @label AUDIO.META_SIZE_H
+; @kind u8
+; @symbol AUDIO_META_SIZE_H
+; @summary High byte of active music file size.
+AUDIO_META_SIZE_H     = $BAB2
+; @label AUDIO.META_TITLE
+; @kind bytes
+; @symbol AUDIO_META_TITLE
+; @summary 32-byte null-padded active music title.
+AUDIO_META_TITLE      = $BAB3
+; @label AUDIO.META_AUTHOR
+; @kind bytes
+; @symbol AUDIO_META_AUTHOR
+; @summary 32-byte null-padded active music author/composer.
+AUDIO_META_AUTHOR     = $BAD3
+; @label AUDIO.META_COPYRIGHT
+; @kind bytes
+; @symbol AUDIO_META_COPYRIGHT
+; @summary 32-byte null-padded active music copyright/comment.
+AUDIO_META_COPYRIGHT  = $BAF3
+; @label AUDIO.META_LOAD_L
+; @kind u8
+; @symbol AUDIO_META_LOAD_L
+; @summary SID load address low byte when applicable.
+AUDIO_META_LOAD_L     = $BB13
+; @label AUDIO.META_LOAD_H
+; @kind u8
+; @symbol AUDIO_META_LOAD_H
+; @summary SID load address high byte when applicable.
+AUDIO_META_LOAD_H     = $BB14
+; @label AUDIO.META_INIT_L
+; @kind u8
+; @symbol AUDIO_META_INIT_L
+; @summary SID init address low byte when applicable.
+AUDIO_META_INIT_L     = $BB15
+; @label AUDIO.META_INIT_H
+; @kind u8
+; @symbol AUDIO_META_INIT_H
+; @summary SID init address high byte when applicable.
+AUDIO_META_INIT_H     = $BB16
+; @label AUDIO.META_PLAY_L
+; @kind u8
+; @symbol AUDIO_META_PLAY_L
+; @summary SID play address low byte when applicable.
+AUDIO_META_PLAY_L     = $BB17
+; @label AUDIO.META_PLAY_H
+; @kind u8
+; @symbol AUDIO_META_PLAY_H
+; @summary SID play address high byte when applicable.
+AUDIO_META_PLAY_H     = $BB18
+; @label AUDIO.META_SONGS
+; @kind u8
+; @symbol AUDIO_META_SONGS
+; @summary SID subtune count or MIDI track/song count when known.
+AUDIO_META_SONGS      = $BB19
+; @label AUDIO.META_DURATION_L
+; @kind u8
+; @symbol AUDIO_META_DURATION_L
+; @summary Duration seconds low byte when known.
+AUDIO_META_DURATION_L = $BB1A
+; @label AUDIO.META_DURATION_H
+; @kind u8
+; @symbol AUDIO_META_DURATION_H
+; @summary Duration seconds high byte when known.
+AUDIO_META_DURATION_H = $BB1B
+; @label AUDIO.META_FLAGS
+; @kind u8
+; @symbol AUDIO_META_FLAGS
+; @summary Music-specific flags for the active metadata block.
+AUDIO_META_FLAGS      = $BB1C
+; @label AUDIO.META_SOUNDFONT
+; @kind bytes
+; @symbol AUDIO_META_SOUNDFONT
+; @summary 64-byte null-padded active MIDI/WTS soundfont name.
+AUDIO_META_SOUNDFONT  = $BB8E
+
+AUDIO_META_TYPE_SID   = $01
+AUDIO_META_TYPE_MIDI  = $03
+AUDIO_META_TITLE_LEN  = $20
+AUDIO_META_AUTHOR_LEN = $20
+AUDIO_META_COPYRIGHT_LEN = $20
+AUDIO_META_SOUNDFONT_LEN = $40
+
+AUDIO_META_FLAG_SID_6581 = $01
+AUDIO_META_FLAG_SID_8580 = $02
+AUDIO_META_FLAG_STEREO   = $04
+AUDIO_META_FLAG_NTSC     = $08
+
+; Compatibility aliases matching the generated novavm.inc camel-case names.
+MusicMetaFlags = AUDIO_META_FLAGS
+
 ; @label AUDIO.NOTE
 ; @kind u8
 ; @symbol AUDIO_NOTE

@@ -4,7 +4,7 @@
     {
       "label": "AUDIO.ATTACK",
       "source": "../runtime/asm/audio.inc",
-      "line": 77,
+      "line": 226,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -16,7 +16,7 @@
     {
       "label": "AUDIO.DECAY",
       "source": "../runtime/asm/audio.inc",
-      "line": 82,
+      "line": 231,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -28,7 +28,7 @@
     {
       "label": "AUDIO.DURATION",
       "source": "../runtime/asm/audio.inc",
-      "line": 45,
+      "line": 194,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -40,7 +40,7 @@
     {
       "label": "AUDIO.INIT",
       "source": "../runtime/asm/audio.s",
-      "line": 236,
+      "line": 356,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -48,12 +48,12 @@
       "symbol": "audio_init",
       "abi": "none",
       "summary": "Initialize the SID sound-effect instrument table and scheduler state.",
-      "address": "$EFC5"
+      "address": "$EF24"
     },
     {
       "label": "AUDIO.INSTRUMENT",
       "source": "../runtime/asm/audio.inc",
-      "line": 50,
+      "line": 199,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -65,7 +65,7 @@
     {
       "label": "AUDIO.INSTRUMENT_SET",
       "source": "../runtime/asm/audio.s",
-      "line": 192,
+      "line": 310,
       "inputs": [],
       "outputs": [
         {
@@ -85,12 +85,12 @@
       "symbol": "audio_instrument",
       "abi": "pseudo-register",
       "summary": "Define a simple SID sound-effect instrument envelope and waveform.",
-      "address": "$EF81"
+      "address": "$EEE0"
     },
     {
       "label": "AUDIO.INST_ID",
       "source": "../runtime/asm/audio.inc",
-      "line": 67,
+      "line": 216,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -100,9 +100,213 @@
       "address": "$B9A4"
     },
     {
+      "label": "AUDIO.META_AUTHOR",
+      "source": "../runtime/asm/audio.inc",
+      "line": 108,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "bytes",
+      "symbol": "AUDIO_META_AUTHOR",
+      "summary": "32-byte null-padded active music author/composer.",
+      "address": "$BAD3"
+    },
+    {
+      "label": "AUDIO.META_COPYRIGHT",
+      "source": "../runtime/asm/audio.inc",
+      "line": 113,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "bytes",
+      "symbol": "AUDIO_META_COPYRIGHT",
+      "summary": "32-byte null-padded active music copyright/comment.",
+      "address": "$BAF3"
+    },
+    {
+      "label": "AUDIO.META_DURATION_H",
+      "source": "../runtime/asm/audio.inc",
+      "line": 158,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_DURATION_H",
+      "summary": "Duration seconds high byte when known.",
+      "address": "$BB1B"
+    },
+    {
+      "label": "AUDIO.META_DURATION_L",
+      "source": "../runtime/asm/audio.inc",
+      "line": 153,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_DURATION_L",
+      "summary": "Duration seconds low byte when known.",
+      "address": "$BB1A"
+    },
+    {
+      "label": "AUDIO.META_FLAGS",
+      "source": "../runtime/asm/audio.inc",
+      "line": 163,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_FLAGS",
+      "summary": "Music-specific flags for the active metadata block.",
+      "address": "$BB1C"
+    },
+    {
+      "label": "AUDIO.META_INIT_H",
+      "source": "../runtime/asm/audio.inc",
+      "line": 133,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_INIT_H",
+      "summary": "SID init address high byte when applicable.",
+      "address": "$BB16"
+    },
+    {
+      "label": "AUDIO.META_INIT_L",
+      "source": "../runtime/asm/audio.inc",
+      "line": 128,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_INIT_L",
+      "summary": "SID init address low byte when applicable.",
+      "address": "$BB15"
+    },
+    {
+      "label": "AUDIO.META_LOAD_H",
+      "source": "../runtime/asm/audio.inc",
+      "line": 123,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_LOAD_H",
+      "summary": "SID load address high byte when applicable.",
+      "address": "$BB14"
+    },
+    {
+      "label": "AUDIO.META_LOAD_L",
+      "source": "../runtime/asm/audio.inc",
+      "line": 118,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_LOAD_L",
+      "summary": "SID load address low byte when applicable.",
+      "address": "$BB13"
+    },
+    {
+      "label": "AUDIO.META_PLAY_H",
+      "source": "../runtime/asm/audio.inc",
+      "line": 143,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_PLAY_H",
+      "summary": "SID play address high byte when applicable.",
+      "address": "$BB18"
+    },
+    {
+      "label": "AUDIO.META_PLAY_L",
+      "source": "../runtime/asm/audio.inc",
+      "line": 138,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_PLAY_L",
+      "summary": "SID play address low byte when applicable.",
+      "address": "$BB17"
+    },
+    {
+      "label": "AUDIO.META_SIZE_H",
+      "source": "../runtime/asm/audio.inc",
+      "line": 98,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_SIZE_H",
+      "summary": "High byte of active music file size.",
+      "address": "$BAB2"
+    },
+    {
+      "label": "AUDIO.META_SIZE_L",
+      "source": "../runtime/asm/audio.inc",
+      "line": 93,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_SIZE_L",
+      "summary": "Low byte of active music file size.",
+      "address": "$BAB1"
+    },
+    {
+      "label": "AUDIO.META_SONGS",
+      "source": "../runtime/asm/audio.inc",
+      "line": 148,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_SONGS",
+      "summary": "SID subtune count or MIDI track/song count when known.",
+      "address": "$BB19"
+    },
+    {
+      "label": "AUDIO.META_SOUNDFONT",
+      "source": "../runtime/asm/audio.inc",
+      "line": 168,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "bytes",
+      "symbol": "AUDIO_META_SOUNDFONT",
+      "summary": "64-byte null-padded active MIDI/WTS soundfont name.",
+      "address": "$BB8E"
+    },
+    {
+      "label": "AUDIO.META_TITLE",
+      "source": "../runtime/asm/audio.inc",
+      "line": 103,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "bytes",
+      "symbol": "AUDIO_META_TITLE",
+      "summary": "32-byte null-padded active music title.",
+      "address": "$BAB3"
+    },
+    {
+      "label": "AUDIO.META_TYPE",
+      "source": "../runtime/asm/audio.inc",
+      "line": 88,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_META_TYPE",
+      "summary": "Active music metadata file type: 1=SID, 3=MIDI/WTS.",
+      "address": "$BAB0"
+    },
+    {
       "label": "AUDIO.MIDPLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 391,
+      "line": 529,
       "inputs": [],
       "outputs": [
         {
@@ -118,12 +322,33 @@
       "symbol": "audio_midplay",
       "abi": "pseudo-register",
       "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$F099"
+      "address": "$EFF8"
+    },
+    {
+      "label": "AUDIO.MIDPLAY_FILE",
+      "source": "../runtime/asm/audio.s",
+      "line": 584,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "FIO_ARG_NAMELEN",
+        "FIO_ARG_NAMEPTR_L",
+        "FIO_ARG_NAMEPTR_H"
+      ],
+      "kind": "routine",
+      "symbol": "audio_midplay_file",
+      "abi": "pseudo-register",
+      "summary": "Copy a pointer-based MIDI filename into FIO.NAME and start MIDI playback."
     },
     {
       "label": "AUDIO.MIDSTOP",
       "source": "../runtime/asm/audio.s",
-      "line": 402,
+      "line": 542,
       "inputs": [],
       "outputs": [
         {
@@ -136,12 +361,12 @@
       "symbol": "audio_midstop",
       "abi": "none",
       "summary": "Stop MIDI file playback.",
-      "address": "$F09E"
+      "address": "$EFFD"
     },
     {
       "label": "AUDIO.MUSIC_LOOP",
       "source": "../runtime/asm/audio.s",
-      "line": 470,
+      "line": 672,
       "inputs": [],
       "outputs": [
         {
@@ -156,12 +381,12 @@
       "symbol": "audio_music_loop",
       "abi": "pseudo-register",
       "summary": "Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.",
-      "address": "$F0C0"
+      "address": "$F01F"
     },
     {
       "label": "AUDIO.MUSIC_NOTE",
       "source": "../runtime/asm/audio.s",
-      "line": 527,
+      "line": 739,
       "inputs": [
         {
           "name": "X",
@@ -179,12 +404,12 @@
       "symbol": "audio_music_note",
       "abi": "register",
       "summary": "Return the current MIDI note for a music voice.",
-      "address": "$F0DE"
+      "address": "$F03D"
     },
     {
       "label": "AUDIO.MUSIC_PLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 435,
+      "line": 631,
       "inputs": [],
       "outputs": [
         {
@@ -197,12 +422,12 @@
       "symbol": "audio_music_play",
       "abi": "none",
       "summary": "Start queued music playback.",
-      "address": "$F0AD"
+      "address": "$F00C"
     },
     {
       "label": "AUDIO.MUSIC_PLAYING",
       "source": "../runtime/asm/audio.s",
-      "line": 513,
+      "line": 723,
       "inputs": [],
       "outputs": [
         {
@@ -215,12 +440,12 @@
       "symbol": "audio_music_playing",
       "abi": "none",
       "summary": "Return nonzero if music is playing.",
-      "address": "$F0D4"
+      "address": "$F033"
     },
     {
       "label": "AUDIO.MUSIC_PRIORITY",
       "source": "../runtime/asm/audio.s",
-      "line": 481,
+      "line": 685,
       "inputs": [],
       "outputs": [
         {
@@ -235,12 +460,12 @@
       "symbol": "audio_music_priority",
       "abi": "pseudo-register",
       "summary": "Set hosted MML priority from AUDIO.NOTE and following pseudo-register bytes.",
-      "address": "$F0C5"
+      "address": "$F024"
     },
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
       "source": "../runtime/asm/audio.s",
-      "line": 424,
+      "line": 618,
       "inputs": [],
       "outputs": [
         {
@@ -258,12 +483,12 @@
       "symbol": "audio_music_sequence",
       "abi": "pseudo-register",
       "summary": "Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.",
-      "address": "$F0A8"
+      "address": "$F007"
     },
     {
       "label": "AUDIO.MUSIC_STOP",
       "source": "../runtime/asm/audio.s",
-      "line": 449,
+      "line": 647,
       "inputs": [],
       "outputs": [
         {
@@ -276,12 +501,12 @@
       "symbol": "audio_music_stop",
       "abi": "none",
       "summary": "Stop music playback.",
-      "address": "$F0B6"
+      "address": "$F015"
     },
     {
       "label": "AUDIO.MUSIC_TEMPO",
       "source": "../runtime/asm/audio.s",
-      "line": 459,
+      "line": 659,
       "inputs": [],
       "outputs": [
         {
@@ -297,12 +522,12 @@
       "symbol": "audio_music_tempo",
       "abi": "pseudo-register",
       "summary": "Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.",
-      "address": "$F0BB"
+      "address": "$F01A"
     },
     {
       "label": "AUDIO.NOTE",
       "source": "../runtime/asm/audio.inc",
-      "line": 40,
+      "line": 189,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -314,7 +539,7 @@
     {
       "label": "AUDIO.PLAY_SOUND",
       "source": "../runtime/asm/audio.s",
-      "line": 66,
+      "line": 176,
       "inputs": [
         {
           "name": "A",
@@ -340,12 +565,12 @@
       "symbol": "audio_play_sound",
       "abi": "register",
       "summary": "Play a one-shot note using A/X/Y register arguments.",
-      "address": "$EEDE"
+      "address": "$EE3D"
     },
     {
       "label": "AUDIO.RELEASE",
       "source": "../runtime/asm/audio.inc",
-      "line": 92,
+      "line": 241,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -357,7 +582,7 @@
     {
       "label": "AUDIO.SET_VOLUME",
       "source": "../runtime/asm/audio.s",
-      "line": 81,
+      "line": 193,
       "inputs": [
         {
           "name": "A",
@@ -379,12 +604,12 @@
       "symbol": "audio_set_volume",
       "abi": "register",
       "summary": "Set master or per-voice volume using A/X register arguments.",
-      "address": "$EEE9"
+      "address": "$EE48"
     },
     {
       "label": "AUDIO.SFLOAD",
       "source": "../runtime/asm/audio.s",
-      "line": 412,
+      "line": 554,
       "inputs": [],
       "outputs": [
         {
@@ -400,12 +625,33 @@
       "symbol": "audio_sfload",
       "abi": "pseudo-register",
       "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0A3"
+      "address": "$F002"
+    },
+    {
+      "label": "AUDIO.SFLOAD_FILE",
+      "source": "../runtime/asm/audio.s",
+      "line": 600,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "FIO_ARG_NAMELEN",
+        "FIO_ARG_NAMEPTR_L",
+        "FIO_ARG_NAMEPTR_H"
+      ],
+      "kind": "routine",
+      "symbol": "audio_sfload_file",
+      "abi": "pseudo-register",
+      "summary": "Copy a pointer-based soundfont filename into FIO.NAME and load it."
     },
     {
       "label": "AUDIO.SFX_PLAYING",
       "source": "../runtime/asm/audio.s",
-      "line": 502,
+      "line": 710,
       "inputs": [],
       "outputs": [
         {
@@ -418,12 +664,12 @@
       "symbol": "audio_sfx_playing",
       "abi": "none",
       "summary": "Return nonzero if the hosted music engine reports a sound effect.",
-      "address": "$F0CE"
+      "address": "$F02D"
     },
     {
       "label": "AUDIO.SIDPLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 366,
+      "line": 500,
       "inputs": [],
       "outputs": [
         {
@@ -440,12 +686,34 @@
       "symbol": "audio_sidplay",
       "abi": "pseudo-register",
       "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.",
-      "address": "$F08B"
+      "address": "$EFEA"
+    },
+    {
+      "label": "AUDIO.SIDPLAY_FILE",
+      "source": "../runtime/asm/audio.s",
+      "line": 568,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, nonzero on error"
+        }
+      ],
+      "requires": [
+        "FIO_ARG_NAMELEN",
+        "FIO_ARG_NAMEPTR_L",
+        "FIO_ARG_NAMEPTR_H",
+        "AUDIO_NOTE"
+      ],
+      "kind": "routine",
+      "symbol": "audio_sidplay_file",
+      "abi": "pseudo-register",
+      "summary": "Copy a pointer-based SID filename into FIO.NAME and start SID playback."
     },
     {
       "label": "AUDIO.SIDSTOP",
       "source": "../runtime/asm/audio.s",
-      "line": 381,
+      "line": 517,
       "inputs": [],
       "outputs": [
         {
@@ -458,12 +726,12 @@
       "symbol": "audio_sidstop",
       "abi": "none",
       "summary": "Stop SID file playback.",
-      "address": "$F094"
+      "address": "$EFF3"
     },
     {
       "label": "AUDIO.SOUND",
       "source": "../runtime/asm/audio.s",
-      "line": 94,
+      "line": 208,
       "inputs": [],
       "outputs": [
         {
@@ -480,12 +748,12 @@
       "symbol": "audio_sound",
       "abi": "pseudo-register",
       "summary": "Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.",
-      "address": "$EEF1"
+      "address": "$EE50"
     },
     {
       "label": "AUDIO.STATUS",
       "source": "../runtime/asm/audio.s",
-      "line": 492,
+      "line": 698,
       "inputs": [],
       "outputs": [
         {
@@ -498,12 +766,72 @@
       "symbol": "audio_status",
       "abi": "none",
       "summary": "Return raw music status bits.",
-      "address": "$F0CA"
+      "address": "$F029"
+    },
+    {
+      "label": "AUDIO.STATUS_LOADING",
+      "source": "../runtime/asm/audio.inc",
+      "line": 78,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "AUDIO_STATUS_LOADING",
+      "summary": "MUSIC_STATUS bit set while hosted SID/MIDI/soundfont assets are loading.",
+      "address": "$10"
+    },
+    {
+      "label": "AUDIO.STATUS_MUSIC",
+      "source": "../runtime/asm/audio.inc",
+      "line": 63,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "AUDIO_STATUS_MUSIC",
+      "summary": "MUSIC_STATUS bit set while hosted music playback is active.",
+      "address": "$02"
+    },
+    {
+      "label": "AUDIO.STATUS_SFX",
+      "source": "../runtime/asm/audio.inc",
+      "line": 58,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "AUDIO_STATUS_SFX",
+      "summary": "MUSIC_STATUS bit set while a hosted sound effect is active.",
+      "address": "$01"
+    },
+    {
+      "label": "AUDIO.STATUS_SID",
+      "source": "../runtime/asm/audio.inc",
+      "line": 68,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "AUDIO_STATUS_SID",
+      "summary": "MUSIC_STATUS bit set when the current music source uses SID voices.",
+      "address": "$04"
+    },
+    {
+      "label": "AUDIO.STATUS_WTS",
+      "source": "../runtime/asm/audio.inc",
+      "line": 73,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "AUDIO_STATUS_WTS",
+      "summary": "MUSIC_STATUS bit set when the current music source uses WTS/MIDI voices.",
+      "address": "$08"
     },
     {
       "label": "AUDIO.STRH",
       "source": "../runtime/asm/audio.inc",
-      "line": 103,
+      "line": 252,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -515,7 +843,7 @@
     {
       "label": "AUDIO.STRL",
       "source": "../runtime/asm/audio.inc",
-      "line": 98,
+      "line": 247,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -527,7 +855,7 @@
     {
       "label": "AUDIO.STRLEN",
       "source": "../runtime/asm/audio.inc",
-      "line": 108,
+      "line": 257,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -539,7 +867,7 @@
     {
       "label": "AUDIO.SUSTAIN",
       "source": "../runtime/asm/audio.inc",
-      "line": 87,
+      "line": 236,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -551,7 +879,7 @@
     {
       "label": "AUDIO.TICK",
       "source": "../runtime/asm/audio.s",
-      "line": 271,
+      "line": 393,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -559,12 +887,12 @@
       "symbol": "audio_tick",
       "abi": "none",
       "summary": "Advance fire-and-forget SID sound-effect durations by one frame.",
-      "address": "$EFFA"
+      "address": "$EF59"
     },
     {
       "label": "AUDIO.VOICE",
       "source": "../runtime/asm/audio.inc",
-      "line": 61,
+      "line": 210,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -576,7 +904,7 @@
     {
       "label": "AUDIO.VOLUME",
       "source": "../runtime/asm/audio.s",
-      "line": 155,
+      "line": 271,
       "inputs": [],
       "outputs": [
         {
@@ -592,12 +920,12 @@
       "symbol": "audio_volume",
       "abi": "pseudo-register",
       "summary": "Set SID master or per-voice volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.",
-      "address": "$EF4E"
+      "address": "$EEAD"
     },
     {
       "label": "AUDIO.VOLUME_LEVEL",
       "source": "../runtime/asm/audio.inc",
-      "line": 56,
+      "line": 205,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -609,7 +937,7 @@
     {
       "label": "AUDIO.WAVEFORM",
       "source": "../runtime/asm/audio.inc",
-      "line": 72,
+      "line": 221,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1067,7 +1395,7 @@
     {
       "label": "FIO.CD",
       "source": "../runtime/asm/fio.s",
-      "line": 199,
+      "line": 303,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1077,12 +1405,12 @@
       "kind": "routine",
       "symbol": "fio_cd",
       "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
-      "address": "$EEC0"
+      "address": "$F0CC"
     },
     {
       "label": "FIO.CHECK",
       "source": "../runtime/asm/fio.s",
-      "line": 49,
+      "line": 129,
       "inputs": [],
       "outputs": [
         {
@@ -1094,12 +1422,12 @@
       "kind": "routine",
       "symbol": "fio_check",
       "summary": "Convert the current FIO status register to the shared A=0/1 result.",
-      "address": "$EE41"
+      "address": "$F04D"
     },
     {
       "label": "FIO.CLEAR_ERROR",
       "source": "../runtime/asm/fio.s",
-      "line": 83,
+      "line": 167,
       "inputs": [],
       "outputs": [
         {
@@ -1111,7 +1439,7 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$EE61"
+      "address": "$F06D"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
@@ -1146,7 +1474,7 @@
       "requires": [],
       "kind": "const",
       "symbol": "FIO_CMD_RNG",
-      "summary": "Host command that returns 32 bits from NovaHost's hardware-backed RNG.",
+      "summary": "Host command that returns 32 bits from NovaHost's host-backed RNG provider.",
       "address": "$2A"
     },
     {
@@ -1158,13 +1486,13 @@
       "requires": [],
       "kind": "const",
       "symbol": "FIO_CMD_XPAGE",
-      "summary": "Host command that streams a file slice into XRAM using FIO_SRC/FIO_ENDL as a 24-bit file offset.",
+      "summary": "Host command that streams a file slice into XRAM, CPU RAM, or VGC memory using FIO_DIRTYPE as the target selector.",
       "address": "$29"
     },
     {
       "label": "FIO.COPY_NAME",
       "source": "../runtime/asm/fio.s",
-      "line": 113,
+      "line": 201,
       "inputs": [],
       "outputs": [
         {
@@ -1180,12 +1508,12 @@
       "kind": "routine",
       "symbol": "fio_copy_name",
       "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE80"
+      "address": "$F08C"
     },
     {
       "label": "FIO.DELETE",
       "source": "../runtime/asm/fio.s",
-      "line": 172,
+      "line": 270,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1194,37 +1522,37 @@
       ],
       "kind": "routine",
       "symbol": "fio_delete",
-      "summary": "Delete the file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EEB1"
+      "summary": "Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN.",
+      "address": "$F0BD"
     },
     {
       "label": "FIO.DIR_OPEN",
       "source": "../runtime/asm/fio.s",
-      "line": 156,
+      "line": 250,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "fio_dir_open",
       "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
-      "address": "$EEA7"
+      "address": "$F0B3"
     },
     {
       "label": "FIO.DIR_READ",
       "source": "../runtime/asm/fio.s",
-      "line": 164,
+      "line": 260,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "fio_dir_read",
       "summary": "Read the next directory entry into the FIO directory result registers.",
-      "address": "$EEAC"
+      "address": "$F0B8"
     },
     {
       "label": "FIO.EXEC",
       "source": "../runtime/asm/fio.s",
-      "line": 65,
+      "line": 147,
       "inputs": [
         {
           "name": "A",
@@ -1241,12 +1569,12 @@
       "kind": "routine",
       "symbol": "fio_exec",
       "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
-      "address": "$EE4E"
+      "address": "$F05A"
     },
     {
       "label": "FIO.GLOAD",
       "source": "../runtime/asm/fio.s",
-      "line": 190,
+      "line": 292,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1261,12 +1589,12 @@
       "kind": "routine",
       "symbol": "fio_gload",
       "summary": "Load VGC/graphics memory using FIO graphics registers.",
-      "address": "$EEBB"
+      "address": "$F0C7"
     },
     {
       "label": "FIO.GSAVE",
       "source": "../runtime/asm/fio.s",
-      "line": 181,
+      "line": 281,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1281,12 +1609,12 @@
       "kind": "routine",
       "symbol": "fio_gsave",
       "summary": "Save VGC/graphics memory using FIO graphics registers.",
-      "address": "$EEB6"
+      "address": "$F0C2"
     },
     {
       "label": "FIO.ISSUE",
       "source": "../runtime/asm/fio.s",
-      "line": 39,
+      "line": 117,
       "inputs": [
         {
           "name": "A",
@@ -1298,12 +1626,12 @@
       "kind": "routine",
       "symbol": "fio_issue",
       "summary": "Issue a raw FIO command without waiting for completion.",
-      "address": "$EE3D"
+      "address": "$F049"
     },
     {
       "label": "FIO.LOAD",
       "source": "../runtime/asm/fio.s",
-      "line": 147,
+      "line": 239,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1315,12 +1643,12 @@
       "kind": "routine",
       "symbol": "fio_load",
       "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
-      "address": "$EEA2"
+      "address": "$F0AE"
     },
     {
       "label": "FIO.LOAD_RUNTIME",
       "source": "../runtime/asm/fio.s",
-      "line": 237,
+      "line": 349,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1330,12 +1658,12 @@
       "kind": "routine",
       "symbol": "fio_load_runtime",
       "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
-      "address": "$EED4"
+      "address": "$F0E0"
     },
     {
       "label": "FIO.MKDIR",
       "source": "../runtime/asm/fio.s",
-      "line": 208,
+      "line": 314,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1345,7 +1673,7 @@
       "kind": "routine",
       "symbol": "fio_mkdir",
       "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EEC5"
+      "address": "$F0D1"
     },
     {
       "label": "FIO.NAME",
@@ -1374,7 +1702,7 @@
     {
       "label": "FIO.PREPARE_XRAM_TRANSFER",
       "source": "../runtime/asm/fio.s",
-      "line": 267,
+      "line": 385,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1394,19 +1722,19 @@
     {
       "label": "FIO.PWD",
       "source": "../runtime/asm/fio.s",
-      "line": 226,
+      "line": 336,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "fio_pwd",
       "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
-      "address": "$EECF"
+      "address": "$F0DB"
     },
     {
       "label": "FIO.RMDIR",
       "source": "../runtime/asm/fio.s",
-      "line": 217,
+      "line": 325,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1416,12 +1744,12 @@
       "kind": "routine",
       "symbol": "fio_rmdir",
       "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
-      "address": "$EECA"
+      "address": "$F0D6"
     },
     {
       "label": "FIO.RNG",
       "source": "../runtime/asm/fio.s",
-      "line": 247,
+      "line": 361,
       "inputs": [],
       "outputs": [
         {
@@ -1437,7 +1765,7 @@
       "kind": "routine",
       "symbol": "fio_rng",
       "summary": "Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.",
-      "address": "$EED9"
+      "address": "$F0E5"
     },
     {
       "label": "FIO.RNG0",
@@ -1490,7 +1818,7 @@
     {
       "label": "FIO.RUN",
       "source": "../runtime/asm/fio.s",
-      "line": 259,
+      "line": 375,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1501,7 +1829,7 @@
     {
       "label": "FIO.SAVE",
       "source": "../runtime/asm/fio.s",
-      "line": 138,
+      "line": 228,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1515,12 +1843,12 @@
       "kind": "routine",
       "symbol": "fio_save",
       "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
-      "address": "$EE9D"
+      "address": "$F0A9"
     },
     {
       "label": "FIO.SET_IO_ERROR",
       "source": "../runtime/asm/fio.s",
-      "line": 99,
+      "line": 185,
       "inputs": [],
       "outputs": [
         {
@@ -1532,7 +1860,7 @@
       "kind": "routine",
       "symbol": "fio_set_io_error",
       "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
-      "address": "$EE73"
+      "address": "$F07F"
     },
     {
       "label": "NGS.BEGIN_MESSAGE",
@@ -2266,7 +2594,7 @@
     {
       "label": "NVG.LOAD",
       "source": "../runtime/asm/nvg.s",
-      "line": 18,
+      "line": 21,
       "inputs": [],
       "outputs": [
         {
@@ -2285,7 +2613,7 @@
     {
       "label": "NVG.LOAD_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 32,
+      "line": 35,
       "inputs": [],
       "outputs": [
         {
@@ -2306,7 +2634,7 @@
     {
       "label": "NVG.LOAD_NAMED",
       "source": "../runtime/asm/nvg.s",
-      "line": 48,
+      "line": 51,
       "inputs": [],
       "outputs": [
         {
@@ -2326,7 +2654,7 @@
     {
       "label": "NVG.LOAD_NAMED_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 62,
+      "line": 65,
       "inputs": [],
       "outputs": [
         {
@@ -2480,7 +2808,7 @@
     {
       "label": "PAGER.LOAD_FILE_PAGE",
       "source": "../runtime/asm/pager.s",
-      "line": 13,
+      "line": 18,
       "inputs": [],
       "outputs": [
         {
@@ -2593,7 +2921,7 @@
     {
       "label": "RNG.GET16",
       "source": "../runtime/asm/rng.s",
-      "line": 28,
+      "line": 31,
       "inputs": [],
       "outputs": [
         {
@@ -2613,7 +2941,7 @@
     {
       "label": "RNG.GET32",
       "source": "../runtime/asm/rng.s",
-      "line": 17,
+      "line": 20,
       "inputs": [],
       "outputs": [
         {
@@ -2633,7 +2961,7 @@
     {
       "label": "RNG.GET8",
       "source": "../runtime/asm/rng.s",
-      "line": 38,
+      "line": 41,
       "inputs": [],
       "outputs": [
         {
@@ -4012,12 +4340,11 @@
       "inputs": [],
       "outputs": [],
       "requires": [
-        "VGC_P0",
-        "VGC_P1"
+        "VGC_P0"
       ],
       "kind": "routine",
       "symbol": "vgc_gcolor",
-      "summary": "Issue the VGC graphics colour command using VGC.P0/P1."
+      "summary": "Issue the VGC graphics colour command using VGC.P0."
     },
     {
       "label": "VGC.GFXTRANS",
@@ -5213,7 +5540,7 @@
     {
       "label": "XMC.ALLOC",
       "source": "../runtime/asm/xmc.s",
-      "line": 267,
+      "line": 295,
       "inputs": [],
       "outputs": [
         {
@@ -5240,7 +5567,7 @@
     {
       "label": "XMC.COMMAND_STATUS",
       "source": "../runtime/asm/xmc.s",
-      "line": 188,
+      "line": 216,
       "inputs": [],
       "outputs": [
         {
@@ -5258,7 +5585,7 @@
     {
       "label": "XMC.DIR_OPEN",
       "source": "../runtime/asm/xmc.s",
-      "line": 306,
+      "line": 334,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5269,7 +5596,7 @@
     {
       "label": "XMC.DIR_READ",
       "source": "../runtime/asm/xmc.s",
-      "line": 314,
+      "line": 342,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5280,7 +5607,7 @@
     {
       "label": "XMC.FETCH_RAW",
       "source": "../runtime/asm/xmc.s",
-      "line": 241,
+      "line": 269,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5299,7 +5626,7 @@
     {
       "label": "XMC.MAP_WINDOW",
       "source": "../runtime/asm/xmc.s",
-      "line": 390,
+      "line": 418,
       "inputs": [
         {
           "name": "X",
@@ -5319,7 +5646,7 @@
     {
       "label": "XMC.NAMED_DELETE",
       "source": "../runtime/asm/xmc.s",
-      "line": 297,
+      "line": 325,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5333,7 +5660,7 @@
     {
       "label": "XMC.NAMED_FETCH",
       "source": "../runtime/asm/xmc.s",
-      "line": 288,
+      "line": 316,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5349,7 +5676,7 @@
     {
       "label": "XMC.NAMED_STASH",
       "source": "../runtime/asm/xmc.s",
-      "line": 279,
+      "line": 307,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5367,7 +5694,7 @@
     {
       "label": "XMC.PROCESS",
       "source": "../runtime/asm/xmc.s",
-      "line": 53,
+      "line": 50,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5380,7 +5707,7 @@
     {
       "label": "XMC.PUT_BYTE",
       "source": "../runtime/asm/xmc.s",
-      "line": 223,
+      "line": 251,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5396,7 +5723,7 @@
     {
       "label": "XMC.RELEASE",
       "source": "../runtime/asm/xmc.s",
-      "line": 250,
+      "line": 278,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5413,7 +5740,7 @@
     {
       "label": "XMC.RESET_USAGE",
       "source": "../runtime/asm/xmc.s",
-      "line": 259,
+      "line": 287,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5424,7 +5751,7 @@
     {
       "label": "XMC.SELECT_BANK",
       "source": "../runtime/asm/xmc.s",
-      "line": 209,
+      "line": 237,
       "inputs": [
         {
           "name": "X",
@@ -5445,7 +5772,7 @@
     {
       "label": "XMC.SET_WINDOW_ADDR",
       "source": "../runtime/asm/xmc.s",
-      "line": 345,
+      "line": 373,
       "inputs": [
         {
           "name": "X",
@@ -5465,7 +5792,7 @@
     {
       "label": "XMC.STASH_RAW",
       "source": "../runtime/asm/xmc.s",
-      "line": 232,
+      "line": 260,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5484,7 +5811,7 @@
     {
       "label": "XMC.UNMAP_WINDOW",
       "source": "../runtime/asm/xmc.s",
-      "line": 408,
+      "line": 436,
       "inputs": [
         {
           "name": "X",
@@ -5500,7 +5827,7 @@
     {
       "label": "XMC.WINDOW_BIT",
       "source": "../runtime/asm/xmc.s",
-      "line": 322,
+      "line": 350,
       "inputs": [
         {
           "name": "X",
@@ -5561,7 +5888,7 @@
     {
       "label": "XRAM.ADDR_IN_RANGE",
       "source": "../runtime/asm/xram.s",
-      "line": 212,
+      "line": 215,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5574,7 +5901,7 @@
     {
       "label": "XRAM.COPY_FROM_RAM",
       "source": "../runtime/asm/xram.s",
-      "line": 282,
+      "line": 285,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5593,7 +5920,7 @@
     {
       "label": "XRAM.COPY_TO_RAM",
       "source": "../runtime/asm/xram.s",
-      "line": 309,
+      "line": 312,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5624,7 +5951,7 @@
     {
       "label": "XRAM.FILL",
       "source": "../runtime/asm/xram.s",
-      "line": 336,
+      "line": 339,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5666,7 +5993,7 @@
     {
       "label": "XRAM.MAP_WINDOW3",
       "source": "../runtime/asm/xram.s",
-      "line": 230,
+      "line": 233,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5740,7 +6067,7 @@
     {
       "label": "XRAM.READ8",
       "source": "../runtime/asm/xram.s",
-      "line": 246,
+      "line": 249,
       "inputs": [],
       "outputs": [
         {
@@ -5760,7 +6087,7 @@
     {
       "label": "XRAM.SET_ERROR",
       "source": "../runtime/asm/xram.s",
-      "line": 49,
+      "line": 52,
       "inputs": [
         {
           "name": "A",
@@ -5781,7 +6108,7 @@
     {
       "label": "XRAM.SET_OK",
       "source": "../runtime/asm/xram.s",
-      "line": 37,
+      "line": 40,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5792,7 +6119,7 @@
     {
       "label": "XRAM.WAIT_DMA",
       "source": "../runtime/asm/xram.s",
-      "line": 371,
+      "line": 374,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5803,7 +6130,7 @@
     {
       "label": "XRAM.WRITE8",
       "source": "../runtime/asm/xram.s",
-      "line": 263,
+      "line": 266,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5819,7 +6146,7 @@
     {
       "label": "XRAM.XLOAD",
       "source": "../runtime/asm/xram.s",
-      "line": 161,
+      "line": 164,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5839,7 +6166,7 @@
     {
       "label": "XRAM.XMC_COPY_FROM_RAM",
       "source": "../runtime/asm/xram.s",
-      "line": 116,
+      "line": 119,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5858,7 +6185,7 @@
     {
       "label": "XRAM.XMC_COPY_TO_RAM",
       "source": "../runtime/asm/xram.s",
-      "line": 127,
+      "line": 130,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5877,7 +6204,7 @@
     {
       "label": "XRAM.XMC_FILL",
       "source": "../runtime/asm/xram.s",
-      "line": 138,
+      "line": 141,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5895,7 +6222,7 @@
     {
       "label": "XRAM.XMC_READ8",
       "source": "../runtime/asm/xram.s",
-      "line": 90,
+      "line": 93,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5910,7 +6237,7 @@
     {
       "label": "XRAM.XMC_WRITE8",
       "source": "../runtime/asm/xram.s",
-      "line": 105,
+      "line": 108,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5926,7 +6253,7 @@
     {
       "label": "XRAM.XSAVE",
       "source": "../runtime/asm/xram.s",
-      "line": 177,
+      "line": 180,
       "inputs": [],
       "outputs": [],
       "requires": [

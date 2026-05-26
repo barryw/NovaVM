@@ -52,6 +52,7 @@ sd-assets: ehbasic build/f6581_curve.bin
 	@cp build/f6581_curve.bin $(SD_ASSETS)/assets/sid/f6581_curve.bin
 	@cp assets/boot/novavm_logo.nvg $(SD_ASSETS)/assets/boot/novavm_logo.nvg
 	@cp assets/config/boot.json $(SD_ASSETS)/config/boot.json
+	@rm -f $(SD_ASSETS)/soundfonts/GeneralUser_GS.nsfb
 	@echo "SD assets staged under $(CURDIR)/$(SD_ASSETS)"
 	@find $(SD_ASSETS) -type f -print
 
