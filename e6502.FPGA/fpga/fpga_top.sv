@@ -1035,6 +1035,19 @@ module fpga_top (
     wire [9:0] hdmi_frame_width, hdmi_frame_height;
     wire [9:0] hdmi_screen_width, hdmi_screen_height;
 
+`ifdef VIDEO_720X480
+    // VGC scanout registers RGB/DE through a three-pixel output pipeline before
+    // fpga_top presents it to hdl-util/hdmi. Start the HDMI frame three pixels
+    // early so HDMI active pixel 0 samples VGC active pixel 0 instead of the
+    // black pre-active pipeline tail.
+    localparam int HDMI_VGC_LATENCY_PIXELS = 3;
+    localparam int HDMI_START_X = 858 - HDMI_VGC_LATENCY_PIXELS;
+    localparam int HDMI_START_Y = 525 - 1;
+`else
+    localparam int HDMI_START_X = 0;
+    localparam int HDMI_START_Y = 0;
+`endif
+
     hdmi #(
 `ifdef VIDEO_720X480
         .VIDEO_ID_CODE(2),
@@ -1043,6 +1056,8 @@ module fpga_top (
         .VIDEO_ID_CODE(1),
         .VIDEO_REFRESH_RATE_MILLIHZ(59940),
 `endif
+        .START_X(HDMI_START_X),
+        .START_Y(HDMI_START_Y),
         .AUDIO_RATE(48000),
         .AUDIO_BIT_WIDTH(16),
         .VENDOR_NAME({"Nova", 32'd0}),

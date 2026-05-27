@@ -161,6 +161,8 @@ module wts_chip (
     logic        dbg_write_pending;
     logic [7:0]  dbg_write_off;
     logic [7:0]  dbg_write_data;
+    logic        r_cpu_read_sel;
+    logic [7:0]  r_cpu_read_off;
 
     (* ram_style = "block" *) logic [47:0] event_fifo [0:EVENT_FIFO_DEPTH-1];
     logic [EVENT_FIFO_INDEX_BITS-1:0] event_wr_ptr;
@@ -935,7 +937,7 @@ module wts_chip (
         end
     endfunction
 
-    assign cpu_rdata = cpu_sel ? read_offset(cpu_off) : 8'h00;
+    assign cpu_rdata = r_cpu_read_sel ? read_offset(r_cpu_read_off) : 8'h00;
     assign dbg_rdata = (dbg_raddr <= 8'hBF) ? read_offset(dbg_raddr) : 8'h00;
 
     task automatic write_offset(input logic [7:0] off, input logic [7:0] data);
@@ -1081,6 +1083,8 @@ module wts_chip (
             cpu_write_pending <= 1'b0;
             cpu_write_off <= 8'd0;
             cpu_write_data <= 8'd0;
+            r_cpu_read_sel <= 1'b0;
+            r_cpu_read_off <= 8'd0;
             dbg_write_pending <= 1'b0;
             dbg_write_off <= 8'd0;
             dbg_write_data <= 8'd0;
@@ -1133,6 +1137,10 @@ module wts_chip (
             cpu_write_pending <= cpu_ce && cpu_we && cpu_sel;
             cpu_write_off <= cpu_off;
             cpu_write_data <= cpu_wdata;
+            if (cpu_ce) begin
+                r_cpu_read_sel <= !cpu_we && cpu_sel;
+                r_cpu_read_off <= cpu_off;
+            end
 
             if (sample_en && event_running)
                 event_frame <= event_frame + 32'd1;

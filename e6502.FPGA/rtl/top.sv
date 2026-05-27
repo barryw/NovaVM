@@ -808,12 +808,12 @@ module top (
         if (cpu_ce)
             r_nic_cpu_rdata <= nic_cpu_rdata;
 
-    // Registered WTS read data. WTS is a CPU-visible MMIO bank below ROM, so it
-    // must be captured with the same cpu_ce alignment as VGC/FIO/NIC.
+    // Registered WTS read data. WTS holds read data from a registered address
+    // slice, so capture every pixel clock; this lets the cpu_ce=0 half cycle
+    // carry the peripheral result into the CPU's next enabled edge.
     logic [7:0] r_wts_cpu_rdata;
     always_ff @(posedge clk)
-        if (cpu_ce)
-            r_wts_cpu_rdata <= wts_cpu_rdata;
+        r_wts_cpu_rdata <= wts_cpu_rdata;
 
     logic [7:0] r_board_input_data;
     always_ff @(posedge clk) begin

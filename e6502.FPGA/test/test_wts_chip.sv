@@ -109,9 +109,10 @@ module test_wts_chip;
     endtask
 
     task automatic cpu_read(input logic [15:0] addr, output logic [7:0] data);
-        @(posedge clk);
+        @(negedge clk);
         cpu_addr <= addr;
         cpu_we <= 1'b0;
+        @(posedge clk);
         #1;
         data = cpu_rdata;
     endtask
