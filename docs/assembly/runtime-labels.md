@@ -3261,7 +3261,7 @@ Requires:
 
 ## VSPRITE.COLORKEY
 
-Source byte skipped by color-keyed blits. For graphics-plane virtual sprites, normally match this to VGC.GFXTRANS.
+Source byte skipped by color-keyed blits. VSPRITE.ROTATE also uses this value to fill output pixels outside the rotated source bounds.
 
 - Kind: `u8`
 - Symbol: `VSPRITE_COLORKEY`
@@ -3447,6 +3447,33 @@ Requires:
 - `VSPRITE_BGADDR*`
 - `VSPRITE_BGSTR*`
 
+## VSPRITE.GFX_ROTATE_BLIT
+
+Rotate the configured virtual sprite offscreen, wait for the next frame, then copy the full rotated bounds to the graphics plane at X/Y.
+
+- Kind: `routine`
+- Symbol: `vsprite_gfx_rotate_blit`
+
+Inputs:
+- `VSPRITE_COLORKEY`: Fill value for rotated output pixels outside the source bounds; normally match this to VGC_GFXTRANS.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE_XL`
+- `VSPRITE_XH`
+- `VSPRITE_Y`
+- `VSPRITE_ORIGSPACE`
+- `VSPRITE_ORIGADDR*`
+- `VSPRITE_ORIGSTR*`
+- `VSPRITE_ROTSPACE`
+- `VSPRITE_ROTADDR*`
+- `VSPRITE_ROTSTR*`
+- `VSPRITE_WIDTH*`
+- `VSPRITE_HEIGHT*`
+- `VSPRITE_ROTANGLE`
+
 ## VSPRITE.GFX_SAVE_BG
 
 Save a graphics-plane rectangle under VSPRITE.X/Y into the caller-owned VSPRITE.BG* buffer.
@@ -3480,6 +3507,121 @@ Low byte of the rectangle height in rows.
 
 - Kind: `u8`
 - Symbol: `VSPRITE_HEIGHTL`
+
+## VSPRITE.ORIGADDRH
+
+High byte of the immutable source shape address used by VSPRITE.ROTATE. Use 0 for CPU RAM.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ORIGADDRH`
+
+## VSPRITE.ORIGADDRL
+
+Low byte of the immutable source shape address used by VSPRITE.ROTATE.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ORIGADDRL`
+
+## VSPRITE.ORIGADDRM
+
+Middle byte of the immutable source shape address used by VSPRITE.ROTATE.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ORIGADDRM`
+
+## VSPRITE.ORIGSPACE
+
+Blitter memory space for the immutable source shape used by VSPRITE.ROTATE.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ORIGSPACE`
+
+## VSPRITE.ORIGSTRH
+
+High byte of the immutable source shape row stride used by VSPRITE.ROTATE.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ORIGSTRH`
+
+## VSPRITE.ORIGSTRL
+
+Low byte of the immutable source shape row stride used by VSPRITE.ROTATE.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ORIGSTRL`
+
+## VSPRITE.ROTADDRH
+
+High byte of the caller-owned rotated output buffer address. Use 0 for CPU RAM.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ROTADDRH`
+
+## VSPRITE.ROTADDRL
+
+Low byte of the caller-owned rotated output buffer address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ROTADDRL`
+
+## VSPRITE.ROTADDRM
+
+Middle byte of the caller-owned rotated output buffer address.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ROTADDRM`
+
+## VSPRITE.ROTANGLE
+
+Hardware rotation angle, where 256 steps is one full turn.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ROTANGLE`
+
+## VSPRITE.ROTATE
+
+Rotate the configured square virtual sprite from immutable source into the caller-owned rotated buffer.
+
+- Kind: `routine`
+- Symbol: `vsprite_rotate`
+
+Inputs:
+- `VSPRITE_COLORKEY`: Fill value for rotated output pixels outside the source bounds.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE_ORIGSPACE`
+- `VSPRITE_ORIGADDR*`
+- `VSPRITE_ORIGSTR*`
+- `VSPRITE_ROTSPACE`
+- `VSPRITE_ROTADDR*`
+- `VSPRITE_ROTSTR*`
+- `VSPRITE_WIDTH*`
+- `VSPRITE_HEIGHT*`
+- `VSPRITE_ROTANGLE`
+
+## VSPRITE.ROTSPACE
+
+Blitter memory space for the caller-owned rotated output buffer used by VSPRITE.ROTATE.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ROTSPACE`
+
+## VSPRITE.ROTSTRH
+
+High byte of the caller-owned rotated output buffer row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ROTSTRH`
+
+## VSPRITE.ROTSTRL
+
+Low byte of the caller-owned rotated output buffer row stride.
+
+- Kind: `u8`
+- Symbol: `VSPRITE_ROTSTRL`
 
 ## VSPRITE.SCENE_ADDRH
 
@@ -3687,6 +3829,36 @@ Low byte of the source row stride.
 
 - Kind: `u8`
 - Symbol: `VSPRITE_SRCSTRL`
+
+## VSPRITE.USE_ORIGINAL
+
+Point VSPRITE.SRC* at the configured immutable source shape.
+
+- Kind: `routine`
+- Symbol: `vsprite_use_original`
+
+Outputs:
+- `A`: 0.
+
+Requires:
+- `VSPRITE_ORIGSPACE`
+- `VSPRITE_ORIGADDR*`
+- `VSPRITE_ORIGSTR*`
+
+## VSPRITE.USE_ROTATED
+
+Point VSPRITE.SRC* at the configured rotated output buffer.
+
+- Kind: `routine`
+- Symbol: `vsprite_use_rotated`
+
+Outputs:
+- `A`: 0.
+
+Requires:
+- `VSPRITE_ROTSPACE`
+- `VSPRITE_ROTADDR*`
+- `VSPRITE_ROTSTR*`
 
 ## VSPRITE.WIDTHH
 

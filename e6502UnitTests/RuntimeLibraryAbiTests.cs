@@ -266,6 +266,60 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void VSpriteRotateAbiUsesCallerOwnedBuffersAndStableRoutineSymbols()
+    {
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vsprite.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vsprite.s"));
+
+        string[] rotateStateSymbols =
+        [
+            "VSPRITE_ORIGSPACE",
+            "VSPRITE_ORIGADDRL",
+            "VSPRITE_ORIGADDRM",
+            "VSPRITE_ORIGADDRH",
+            "VSPRITE_ORIGSTRL",
+            "VSPRITE_ORIGSTRH",
+            "VSPRITE_ROTSPACE",
+            "VSPRITE_ROTADDRL",
+            "VSPRITE_ROTADDRM",
+            "VSPRITE_ROTADDRH",
+            "VSPRITE_ROTSTRL",
+            "VSPRITE_ROTSTRH",
+            "VSPRITE_ROTANGLE"
+        ];
+
+        foreach (string symbol in rotateStateSymbols)
+        {
+            AssertNoNvrAlias(inc, symbol);
+            StringAssert.Contains(inc, $".global {symbol}");
+            StringAssert.Contains(impl, $"{symbol}:");
+        }
+
+        string[] routines =
+        [
+            "vsprite_rotate",
+            "vsprite_gfx_rotate_blit",
+            "vsprite_use_original",
+            "vsprite_use_rotated"
+        ];
+
+        foreach (string routine in routines)
+        {
+            StringAssert.Contains(inc, $".global {routine}");
+            StringAssert.Contains(impl, $".export {routine}");
+        }
+
+        StringAssert.Contains(impl, "LDA   #BLT_MODE_ROTATE");
+        StringAssert.Contains(impl, "STA   BLT_ROTANGLE");
+        StringAssert.Contains(impl, "JSR   vsprite_use_rotated");
+        StringAssert.Contains(impl, "vsprite_gfx_rotate_blit:");
+        StringAssert.Contains(impl, "JSR   vsprite_wait_frame");
+        StringAssert.Contains(impl, "STZ   VSPRITE_FLAGS");
+        StringAssert.Contains(impl, "JSR   vsprite_gfx_blit");
+        StringAssert.Contains(impl, "LDA   VGC_FRAME");
+    }
+
+    [TestMethod]
     public void OverlayManagerUsesFixedHeaderAndLinkerStorage()
     {
         string inc = File.ReadAllText(RepoPath("runtime", "asm", "overlay.inc"));

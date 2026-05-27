@@ -30,6 +30,8 @@ module top (
     input  logic [7:0]  usb_hid_last_ascii,
     input  logic [7:0]  usb_hid_report_count,
     input  logic [7:0]  usb_hid_key_count,
+    input  logic [7:0]  usb_hid_core_status,
+    input  logic [63:0] usb_hid_regs,
 
     input  logic        irq_n,
     input  logic        nmi_n,
@@ -181,17 +183,19 @@ module top (
     localparam [7:0] BOARD_INPUT_IRQ_BUTTONS  = 8'h01;
     localparam [7:0] BOARD_INPUT_IRQ_SWITCHES = 8'h02;
     localparam [7:0] BOARD_INPUT_IRQ_MASK     = 8'h03;
-    // USB HID diagnostics ($BAA3-$BAA8). These are intentionally read-only
-    // and primarily for board bring-up: the current host core supports only
-    // low-speed USB HID devices on the ULX3S US2 port.
-    localparam USB_HID_STATUS       = 16'hBAA3;
-    localparam USB_HID_DEVICE_TYPE  = 16'hBAA4;
-    localparam USB_HID_LAST_SCAN    = 16'hBAA5;
-    localparam USB_HID_LAST_ASCII   = 16'hBAA6;
-    localparam USB_HID_REPORT_COUNT = 16'hBAA7;
-    localparam USB_HID_KEY_COUNT    = 16'hBAA8;
-    localparam USB_HID_BASE         = USB_HID_STATUS;
-    localparam USB_HID_END          = USB_HID_KEY_COUNT;
+    // USB HID diagnostics ($BAA3-$BAAF). These are intentionally read-only
+    // and primarily for board bring-up on the ULX3S US2 low/full-speed USB
+    // HID host path.
+    localparam USB_HID_STATUS              = 16'hBAA3;
+    localparam USB_HID_DEVICE_TYPE         = 16'hBAA4;
+    localparam USB_HID_LAST_SCAN           = 16'hBAA5;
+    localparam USB_HID_LAST_ASCII          = 16'hBAA6;
+    localparam USB_HID_REPORT_COUNT        = 16'hBAA7;
+    localparam USB_HID_KEY_COUNT           = 16'hBAA8;
+    localparam USB_HID_CORE_STATUS         = 16'hBAA9;
+    localparam USB_HID_REGS_BASE           = 16'hBAAA;
+    localparam USB_HID_BASE                = USB_HID_STATUS;
+    localparam USB_HID_END                 = 16'hBAAF;
 
     // CPU bus
     wire [15:0] cpu_addr;
@@ -366,6 +370,20 @@ module top (
                     usb_hid_read_data = usb_hid_report_count;
                 USB_HID_KEY_COUNT:
                     usb_hid_read_data = usb_hid_key_count;
+                USB_HID_CORE_STATUS:
+                    usb_hid_read_data = usb_hid_core_status;
+                16'hBAAA:
+                    usb_hid_read_data = usb_hid_regs[7:0];    // VID low
+                16'hBAAB:
+                    usb_hid_read_data = usb_hid_regs[15:8];   // VID high
+                16'hBAAC:
+                    usb_hid_read_data = usb_hid_regs[23:16];  // PID low
+                16'hBAAD:
+                    usb_hid_read_data = usb_hid_regs[31:24];  // PID high
+                16'hBAAE:
+                    usb_hid_read_data = usb_hid_regs[39:32];  // interface class
+                16'hBAAF:
+                    usb_hid_read_data = usb_hid_regs[55:48];  // interface protocol
                 default:
                     usb_hid_read_data = 8'h00;
             endcase

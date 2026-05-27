@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Text;
 using e6502.Storage;
 
@@ -41,6 +42,7 @@ return verb switch
     "drive" or "drives" => DoDrive(args[1..], remoteHost),
     "wifi"       => DoWifi(args[1..], remoteHost),
     "audio"      => DoAudio(args[1..], remoteHost),
+    "keyboard"   => DoKeyboard(args[1..], remoteHost),
     "disk"       => DoDisk(args[1..], remoteHost),
     "rom"        => DoRom(args[1..], remoteHost),
     "soundfont"  => DoSoundfont(args[1..], remoteHost),
@@ -428,6 +430,405 @@ static void PrintAudioUsage()
     Console.Error.WriteLine("Usage:");
     Console.Error.WriteLine("  nova audio status --remote <host>");
     Console.Error.WriteLine("  nova audio stop --remote <host>");
+}
+
+static int DoKeyboard(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    var rest = args.ToList();
+    bool help = rest.Count > 0 && rest[0].Equals("help", StringComparison.OrdinalIgnoreCase);
+    help |= TakeFlag(rest, "--help", "-h");
+    string? portOpt = TakeOptionValue(rest, "--port", "--debug-port");
+    bool echo = TakeFlag(rest, "--echo");
+    bool ctrlCQuits = TakeFlag(rest, "--ctrl-c-quits");
+
+    if (help)
+    {
+        PrintKeyboardUsage();
+        return 1;
+    }
+
+    if (host is null)
+    {
+        PrintKeyboardUsage();
+        return 1;
+    }
+
+    if (rest.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected keyboard argument: {rest[0]}");
+        PrintKeyboardUsage();
+        return 1;
+    }
+
+    int port = 6503;
+    if (portOpt is not null && (!int.TryParse(portOpt, out port) || port is < 1 or > 65535))
+    {
+        Console.Error.WriteLine($"Invalid debug TCP port: {portOpt}");
+        return 1;
+    }
+
+    return RunKeyboardBridge(host, port, echo, ctrlCQuits);
+}
+
+static int RunKeyboardBridge(string host, int port, bool echo, bool ctrlCQuits)
+{
+    if (Console.IsInputRedirected)
+    {
+        Console.Error.WriteLine("keyboard needs an interactive terminal.");
+        return 1;
+    }
+
+    bool oldTreatControlCAsInput = Console.TreatControlCAsInput;
+    string? oldTerminalMode = null;
+    Stream? input = null;
+    KeyboardInputReader? rawInput = null;
+    bool started = false;
+    try
+    {
+        using var client = new TcpClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        client.ConnectAsync(host, port, cts.Token).GetAwaiter().GetResult();
+
+        using NetworkStream stream = client.GetStream();
+        stream.ReadTimeout = 15000;
+        stream.WriteTimeout = 15000;
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false,
+                                            bufferSize: 4096, leaveOpen: true);
+        using var writer = new StreamWriter(stream, new UTF8Encoding(false), bufferSize: 4096,
+                                            leaveOpen: true)
+        {
+            AutoFlush = true,
+            NewLine = "\n",
+        };
+
+        Console.TreatControlCAsInput = true;
+        oldTerminalMode = TryEnterRawTerminalMode();
+        input = OpenKeyboardInput(oldTerminalMode is not null);
+        if (oldTerminalMode is not null)
+            rawInput = new KeyboardInputReader(input);
+        started = true;
+        Console.Error.WriteLine($"Nova WiFi keyboard bridge: {host}:{port}");
+        Console.Error.WriteLine("Type normally. Ctrl-] quits. Ctrl-C is sent to Nova.");
+
+        while (true)
+        {
+            bool mapped = oldTerminalMode is not null
+                ? TryMapRawInput(rawInput!, ctrlCQuits, out string text, out bool shouldQuit)
+                : TryMapConsoleKey(Console.ReadKey(intercept: true), ctrlCQuits, out text, out shouldQuit);
+            if (!mapped)
+                continue;
+
+            if (shouldQuit)
+                break;
+
+            SendDebugKey(writer, reader, text);
+            if (echo)
+                EchoKeyboardText(text);
+        }
+
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"keyboard: {ex.Message}");
+        return 1;
+    }
+    finally
+    {
+        rawInput?.Dispose();
+        input?.Dispose();
+        RestoreTerminalMode(oldTerminalMode);
+        Console.TreatControlCAsInput = oldTreatControlCAsInput;
+        if (started)
+            Console.Error.WriteLine("\nNova WiFi keyboard bridge closed.");
+    }
+}
+
+static bool TryMapConsoleKey(
+    ConsoleKeyInfo key,
+    bool ctrlCQuits,
+    out string text,
+    out bool shouldQuit)
+{
+    shouldQuit = false;
+    text = "";
+
+    bool control = key.Modifiers.HasFlag(ConsoleModifiers.Control);
+    if (key.KeyChar == '\x1D' ||
+        (control && key.KeyChar == ']') ||
+        (control && key.Key == ConsoleKey.Oem6) ||
+        (key.Key == ConsoleKey.Oem6 && key.KeyChar == '\0'))
+    {
+        shouldQuit = true;
+        return true;
+    }
+
+    if (ctrlCQuits && key.KeyChar == '\x03')
+    {
+        shouldQuit = true;
+        return true;
+    }
+
+    text = key.Key switch
+    {
+        ConsoleKey.Enter      => "\r",
+        ConsoleKey.Backspace  => "\b",
+        ConsoleKey.Tab        => "\t",
+        ConsoleKey.Delete     => "\x7F",
+        ConsoleKey.Escape     => "\x03",
+        ConsoleKey.F1         => "\x03",
+        ConsoleKey.LeftArrow  => "\x1C",
+        ConsoleKey.RightArrow => "\x1D",
+        ConsoleKey.UpArrow    => "\x1E",
+        ConsoleKey.DownArrow  => "\x1F",
+        _                     => "",
+    };
+
+    if (text.Length > 0)
+        return true;
+
+    if (key.KeyChar is >= '\x01' and <= '\x1F')
+    {
+        text = key.KeyChar.ToString();
+        return true;
+    }
+
+    if (key.KeyChar is >= ' ' and <= '~')
+    {
+        text = key.KeyChar.ToString();
+        return true;
+    }
+
+    return false;
+}
+
+static bool TryMapRawInput(
+    KeyboardInputReader input,
+    bool ctrlCQuits,
+    out string text,
+    out bool shouldQuit)
+{
+    shouldQuit = false;
+    text = "";
+
+    if (!input.TryRead(out int value))
+        return false;
+
+    byte b = (byte)value;
+    if (b == 0x1D)
+    {
+        shouldQuit = true;
+        return true;
+    }
+
+    if (ctrlCQuits && b == 0x03)
+    {
+        shouldQuit = true;
+        return true;
+    }
+
+    text = b switch
+    {
+        0x0A or 0x0D => "\r",
+        0x08 or 0x7F => "\b",
+        0x09         => "\t",
+        0x03         => "\x03",
+        0x1B         => ReadEscapeSequence(input),
+        >= 0x01 and <= 0x1F => ((char)b).ToString(),
+        >= 0x20 and <= 0x7E => ((char)b).ToString(),
+        _            => "",
+    };
+
+    return text.Length > 0;
+}
+
+static string ReadEscapeSequence(KeyboardInputReader input)
+{
+    if (!TryReadPendingInputByte(input, out int second))
+        return "\x03";
+
+    if (second == 'O')
+    {
+        return TryReadPendingInputByte(input, out int final)
+            ? MapArrowEscapeFinal(final)
+            : "\x03";
+    }
+
+    if (second != '[')
+        return "\x03";
+
+    for (int i = 0; i < 16; i++)
+    {
+        if (!TryReadPendingInputByte(input, out int value))
+            return "\x03";
+
+        if (value >= 0x40 && value <= 0x7E)
+            return MapArrowEscapeFinal(value);
+    }
+
+    return "\x03";
+}
+
+static string MapArrowEscapeFinal(int value)
+{
+    return value switch
+    {
+        'D' => "\x1C",
+        'C' => "\x1D",
+        'A' => "\x1E",
+        'B' => "\x1F",
+        _   => "\x03",
+    };
+}
+
+static bool TryReadPendingInputByte(KeyboardInputReader input, out int value)
+{
+    return input.TryRead(out value, timeoutMs: 100);
+}
+
+static string? TryEnterRawTerminalMode()
+{
+    if (OperatingSystem.IsWindows())
+        return null;
+
+    try
+    {
+        string mode = RunSttyCapture("-g").Trim();
+        if (string.IsNullOrWhiteSpace(mode))
+            return null;
+        RunStty("raw", "-echo", "min", "1", "time", "0");
+        return mode;
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+static void RestoreTerminalMode(string? mode)
+{
+    if (string.IsNullOrWhiteSpace(mode))
+        return;
+
+    try
+    {
+        RunStty(mode);
+    }
+    catch
+    {
+        // The bridge is exiting; there is no better recovery path here.
+    }
+}
+
+static Stream OpenKeyboardInput(bool useTerminal)
+{
+    if (useTerminal)
+    {
+        try
+        {
+            return new FileStream("/dev/tty", FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        }
+        catch
+        {
+            // Fall through to stdin; Console.ReadKey remains the mapper.
+        }
+    }
+
+    return Console.OpenStandardInput();
+}
+
+static string RunSttyCapture(params string[] args)
+{
+    using var process = StartStty(SttyTerminalArgs(args), redirectOutput: true);
+    string output = process.StandardOutput.ReadToEnd();
+    process.WaitForExit();
+    if (process.ExitCode != 0)
+        throw new InvalidOperationException("stty failed");
+    return output;
+}
+
+static void RunStty(params string[] args)
+{
+    using var process = StartStty(SttyTerminalArgs(args), redirectOutput: false);
+    process.WaitForExit();
+    if (process.ExitCode != 0)
+        throw new InvalidOperationException("stty failed");
+}
+
+static string[] SttyTerminalArgs(string[] args)
+{
+    string flag = OperatingSystem.IsMacOS() || OperatingSystem.IsFreeBSD()
+        ? "-f"
+        : "-F";
+    return [flag, "/dev/tty", .. args];
+}
+
+static System.Diagnostics.Process StartStty(string[] args, bool redirectOutput)
+{
+    var psi = new System.Diagnostics.ProcessStartInfo("stty")
+    {
+        RedirectStandardOutput = redirectOutput,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+    };
+    foreach (string arg in args)
+        psi.ArgumentList.Add(arg);
+    return System.Diagnostics.Process.Start(psi)
+           ?? throw new InvalidOperationException("could not start stty");
+}
+
+static void SendDebugKey(StreamWriter writer, StreamReader reader, string text)
+{
+    string key = text switch
+    {
+        "\r"   => "ENTER",
+        "\b"   => "BACKSPACE",
+        "\x7F" => "BACKSPACE",
+        "\x03" => "CTRL-C",
+        _      => text,
+    };
+    writer.WriteLine("{\"command\":\"send_key\",\"key\":" + JsonString(key) + "}");
+    string? response = reader.ReadLine();
+    if (string.IsNullOrWhiteSpace(response))
+        throw new IOException("empty response from NovaHost debug server");
+
+    if (!DebugResponseOk(response))
+        throw new IOException($"NovaHost rejected key input: {response}");
+}
+
+static bool DebugResponseOk(string response) =>
+    response.Contains("\"ok\":true", StringComparison.Ordinal) ||
+    response.Contains("\"ok\": true", StringComparison.Ordinal);
+
+static void EchoKeyboardText(string text)
+{
+    foreach (char ch in text)
+    {
+        switch (ch)
+        {
+            case '\r':
+                Console.WriteLine();
+                break;
+            case '\b':
+            case '\x7F':
+                Console.Write("\b \b");
+                break;
+            case '\t':
+                Console.Write('\t');
+                break;
+            default:
+                if (ch >= ' ')
+                    Console.Write(ch);
+                break;
+        }
+    }
+}
+
+static void PrintKeyboardUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova keyboard --remote <host> [--port 6503] [--echo] [--ctrl-c-quits]");
 }
 
 static int DoDisk(string[] args, string? host)
@@ -2283,6 +2684,7 @@ static void PrintUsage()
     Console.Error.WriteLine("  drive list|mount|unmount ... --remote <host>");
     Console.Error.WriteLine("  wifi status|scan|set|connect|disconnect|reconnect|forget ... --remote <host>");
     Console.Error.WriteLine("  audio status|stop --remote <host>");
+    Console.Error.WriteLine("  keyboard --remote <host> [--port 6503]");
     Console.Error.WriteLine("  disk list|upload|download|delete ... --remote <host>");
     Console.Error.WriteLine("  rom list|upload|download|delete ... --remote <host>");
     Console.Error.WriteLine("  soundfont list|upload|download|delete ... --remote <host>");
@@ -2294,4 +2696,70 @@ static void PrintUsage()
     Console.Error.WriteLine("  --remote <host> put <local-path> [remote-path]");
     Console.Error.WriteLine("  --remote <host> get <remote-path> [local-path]");
     Console.Error.WriteLine("  --remote <host> rm <remote-path>");
+}
+
+sealed class KeyboardInputReader : IDisposable
+{
+    private readonly Stream _input;
+    private readonly System.Collections.Concurrent.BlockingCollection<int> _queue = new();
+    private readonly Thread _thread;
+    private volatile bool _disposed;
+
+    public KeyboardInputReader(Stream input)
+    {
+        _input = input;
+        _thread = new Thread(ReadLoop)
+        {
+            IsBackground = true,
+            Name = "Nova keyboard input reader",
+        };
+        _thread.Start();
+    }
+
+    public bool TryRead(out int value, int timeoutMs = Timeout.Infinite)
+    {
+        value = -1;
+        try
+        {
+            return _queue.TryTake(out value, timeoutMs);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void ReadLoop()
+    {
+        while (!_disposed)
+        {
+            int value;
+            try
+            {
+                value = _input.ReadByte();
+            }
+            catch
+            {
+                break;
+            }
+
+            if (value < 0)
+                continue;
+
+            try
+            {
+                _queue.Add(value);
+            }
+            catch
+            {
+                break;
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _queue.CompleteAdding();
+    }
 }

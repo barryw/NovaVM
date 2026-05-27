@@ -34,7 +34,7 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 | BA63--BA75 | 19 B | DMA Controller registers |
 | BA83--BA9B, BAA2 | 26 B | Blitter Controller registers |
 | BA9C--BAA1 | 6 B | Board Input registers |
-| BAA3--BAA8 | 6 B | USB HID diagnostic registers (ULX3S US2) |
+| BAA3--BAAF | 13 B | USB HID diagnostic registers (ULX3S US2) |
 | BAB0--BB1F | 112 B | File metadata buffer |
 | BB20--BB4F | 48 B | Math Coprocessor registers |
 | BB50--BB8D | 62 B | SID sound-effect runtime state |
@@ -49,7 +49,6 @@ their assigned windows; all remaining space is RAM except the upper 16 KB
 The address range A020--A03E is reserved for language/host services. Unlisted
 addresses in A0ED--A0EF and A200--A9FF are not claimed by any coprocessor and
 fall through to the underlying flat RAM.
-The range BAA9--BAAF is similarly unallocated RAM.
 BAB0--BB1F is the file metadata buffer, BB20--BB4F is the math coprocessor,
 BB50--BB8D is used by NovaBASIC's SID sound-effect scheduler, and
 BB8E--BBCD stores the active MIDI/WTS soundfont name.
@@ -123,8 +122,8 @@ visual state is refreshed only after a debounced input change.
 
 The USB HID diagnostic registers are for ULX3S hardware bring-up on the US2 USB
 port. They are not a general application input ABI; normal keyboard input still
-arrives through the VGC keyboard queue. The current FPGA host core supports
-low-speed USB HID devices only. Software-only hosts return zero for these
+arrives through the VGC keyboard queue. The FPGA host core supports low-speed
+and full-speed boot HID devices. Software-only hosts return zero for these
 registers.
 
 | **Address** | **Name** | **Access** | **Description** |
@@ -135,6 +134,13 @@ registers.
 | $BAA6 | UsbHidLastAscii | RO | Last ASCII byte emitted into Nova's keyboard stream. |
 | $BAA7 | UsbHidReportCount | RO | Wrapping count of keyboard HID reports received. |
 | $BAA8 | UsbHidKeyCount | RO | Wrapping count of key events emitted into Nova's keyboard stream. |
+| $BAA9 | UsbHidCoreStatus | RO | Low-level USB core status bitfield described below. |
+| $BAAA | UsbHidVidL | RO | USB vendor ID, low byte, as captured during enumeration. |
+| $BAAB | UsbHidVidH | RO | USB vendor ID, high byte. |
+| $BAAC | UsbHidPidL | RO | USB product ID, low byte. |
+| $BAAD | UsbHidPidH | RO | USB product ID, high byte. |
+| $BAAE | UsbHidInterfaceClass | RO | Captured USB interface class byte. HID devices report `$03`. |
+| $BAAF | UsbHidInterfaceProtocol | RO | Captured USB interface protocol byte. Boot keyboards report `$01`. |
 
 `UsbHidStatus` bit layout:
 
@@ -143,16 +149,26 @@ registers.
 | 0 | $01 | USB host reset released. |
 | 1 | $02 | D- line sampled high. |
 | 2 | $04 | D+ line sampled high. |
-| 3 | $08 | Host core has reported a non-zero device type. |
+| 3 | $08 | Host core has reported a raw connected state. |
 | 4 | $10 | Host core reports a keyboard device. |
 | 5 | $20 | At least one keyboard HID report has been received. |
 | 6 | $40 | At least one key byte has been emitted to Nova. |
 | 7 | $80 | Host core reported a connection or protocol error. |
 
+`UsbHidCoreStatus` bit layout:
+
+| Bit | Mask | Meaning |
+| --- | --- | --- |
+| 0 | $01 | USB microsequencer is busy. |
+| 1-3 | $0E | Default interrupt IN endpoint currently being tried, shifted left by 1. |
+| 4 | $10 | Host core is using full-speed timing. |
+| 5 | $20 | Host core raw connected flag. |
+| 6 | $40 | Last transaction observed NAK. |
+| 7 | $80 | Last transaction observed STALL. |
+
 For line-state diagnosis, no attached device usually reads D-=0 and D+=0,
 low-speed USB idle reads D-=1 and D+=0, and full-speed USB idle reads D-=0 and
-D+=1. A full-speed-only keyboard can therefore electrically attach while still
-being unsupported by the current low-speed host core.
+D+=1.
 
 ## Math Coprocessor Registers
 

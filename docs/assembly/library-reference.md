@@ -225,6 +225,12 @@ For multiple moving objects, prefer scene descriptors and
 visible intermediate writes, use `vsprite_scene_commit_atomic` with a caller
 supplied dirty rectangle and work buffer.
 
+For in-place rotated virtual sprites, prefer `vsprite_gfx_rotate_blit`. It
+rotates into the caller-owned `VSPRITE.ROT*` buffer offscreen, waits for the
+next VGC frame tick, then copies the full rotated bounds to the graphics plane
+in one visible blit. That clears old pixels without making applications perform
+a separate visible erase.
+
 ## XRAM And File Loading Stack
 
 Use this stack for assets and large runtime data:

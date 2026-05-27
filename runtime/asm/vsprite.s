@@ -40,6 +40,19 @@ VSPRITE_BGADDRH:        .res 1
 VSPRITE_BGSTRL:         .res 1
 VSPRITE_BGSTRH:         .res 1
 VSPRITE_COLORKEY:       .res 1
+VSPRITE_ORIGSPACE:      .res 1
+VSPRITE_ORIGADDRL:      .res 1
+VSPRITE_ORIGADDRM:      .res 1
+VSPRITE_ORIGADDRH:      .res 1
+VSPRITE_ORIGSTRL:       .res 1
+VSPRITE_ORIGSTRH:       .res 1
+VSPRITE_ROTSPACE:       .res 1
+VSPRITE_ROTADDRL:       .res 1
+VSPRITE_ROTADDRM:       .res 1
+VSPRITE_ROTADDRH:       .res 1
+VSPRITE_ROTSTRL:        .res 1
+VSPRITE_ROTSTRH:        .res 1
+VSPRITE_ROTANGLE:       .res 1
 VSPRITE_FILLVALUE:      .res 1
 VSPRITE_FLAGS:          .res 1
 VSPRITE_XL:             .res 1
@@ -76,9 +89,13 @@ VSPRITE_DESC_PTR:       .res 2
       .export vsprite_fill
       .export vsprite_gfx_addr
       .export vsprite_gfx_blit
+      .export vsprite_gfx_rotate_blit
       .export vsprite_gfx_fill
       .export vsprite_gfx_save_bg
       .export vsprite_gfx_restore_bg
+      .export vsprite_rotate
+      .export vsprite_use_original
+      .export vsprite_use_rotated
       .export vsprite_scene_begin
       .export vsprite_scene_commit
       .export vsprite_scene_commit_atomic
@@ -172,6 +189,106 @@ vsprite_fill:
       STA   BLT_FILLVALUE
       JMP   blitter_fill
 
+; @label VSPRITE.USE_ORIGINAL
+; @kind routine
+; @symbol vsprite_use_original
+; @summary Point VSPRITE.SRC* at the configured immutable source shape.
+; @requires VSPRITE_ORIGSPACE VSPRITE_ORIGADDR* VSPRITE_ORIGSTR*
+; @out A: 0.
+vsprite_use_original:
+      LDA   VSPRITE_ORIGSPACE
+      STA   VSPRITE_SRCSPACE
+      LDA   VSPRITE_ORIGADDRL
+      STA   VSPRITE_SRCADDRL
+      LDA   VSPRITE_ORIGADDRM
+      STA   VSPRITE_SRCADDRM
+      LDA   VSPRITE_ORIGADDRH
+      STA   VSPRITE_SRCADDRH
+      LDA   VSPRITE_ORIGSTRL
+      STA   VSPRITE_SRCSTRL
+      LDA   VSPRITE_ORIGSTRH
+      STA   VSPRITE_SRCSTRH
+      LDA   #VSPRITE_RESULT_OK
+      RTS
+
+; @label VSPRITE.USE_ROTATED
+; @kind routine
+; @symbol vsprite_use_rotated
+; @summary Point VSPRITE.SRC* at the configured rotated output buffer.
+; @requires VSPRITE_ROTSPACE VSPRITE_ROTADDR* VSPRITE_ROTSTR*
+; @out A: 0.
+vsprite_use_rotated:
+      LDA   VSPRITE_ROTSPACE
+      STA   VSPRITE_SRCSPACE
+      LDA   VSPRITE_ROTADDRL
+      STA   VSPRITE_SRCADDRL
+      LDA   VSPRITE_ROTADDRM
+      STA   VSPRITE_SRCADDRM
+      LDA   VSPRITE_ROTADDRH
+      STA   VSPRITE_SRCADDRH
+      LDA   VSPRITE_ROTSTRL
+      STA   VSPRITE_SRCSTRL
+      LDA   VSPRITE_ROTSTRH
+      STA   VSPRITE_SRCSTRH
+      LDA   #VSPRITE_RESULT_OK
+      RTS
+
+; @label VSPRITE.ROTATE
+; @kind routine
+; @symbol vsprite_rotate
+; @summary Rotate the configured square virtual sprite from immutable source into the caller-owned rotated buffer.
+; @requires VSPRITE_ORIGSPACE VSPRITE_ORIGADDR* VSPRITE_ORIGSTR* VSPRITE_ROTSPACE VSPRITE_ROTADDR* VSPRITE_ROTSTR* VSPRITE_WIDTH* VSPRITE_HEIGHT* VSPRITE_ROTANGLE
+; @in VSPRITE_COLORKEY: Fill value for rotated output pixels outside the source bounds.
+; @desc On success, VSPRITE.SRC* is automatically repointed at VSPRITE.ROT* so VSPRITE.GFX_BLIT draws the rotated copy. Hardware requires WIDTH == HEIGHT and both dimensions <= 256.
+; @out A: 0 on success, 1 on error.
+vsprite_rotate:
+      LDA   VSPRITE_ORIGSPACE
+      STA   BLT_SRCSPACE
+      LDA   VSPRITE_ROTSPACE
+      STA   BLT_DSTSPACE
+      LDA   VSPRITE_ORIGADDRL
+      STA   BLT_SRCL
+      LDA   VSPRITE_ORIGADDRM
+      STA   BLT_SRCM
+      LDA   VSPRITE_ORIGADDRH
+      STA   BLT_SRCH
+      LDA   VSPRITE_ROTADDRL
+      STA   BLT_DSTL
+      LDA   VSPRITE_ROTADDRM
+      STA   BLT_DSTM
+      LDA   VSPRITE_ROTADDRH
+      STA   BLT_DSTH
+      LDA   VSPRITE_WIDTHL
+      STA   BLT_WIDTHL
+      LDA   VSPRITE_WIDTHH
+      STA   BLT_WIDTHH
+      LDA   VSPRITE_HEIGHTL
+      STA   BLT_HEIGHTL
+      LDA   VSPRITE_HEIGHTH
+      STA   BLT_HEIGHTH
+      LDA   VSPRITE_ORIGSTRL
+      STA   BLT_SRCSTRL
+      LDA   VSPRITE_ORIGSTRH
+      STA   BLT_SRCSTRH
+      LDA   VSPRITE_ROTSTRL
+      STA   BLT_DSTSTRL
+      LDA   VSPRITE_ROTSTRH
+      STA   BLT_DSTSTRH
+      LDA   VSPRITE_COLORKEY
+      STA   BLT_CKEY
+      LDA   VSPRITE_ROTANGLE
+      STA   BLT_ROTANGLE
+      LDA   #BLT_MODE_ROTATE
+      STA   BLT_MODE_REG
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD_REG
+      JSR   blitter_wait
+      CMP   #VSPRITE_RESULT_OK
+      BNE   @done
+      JSR   vsprite_use_rotated
+@done:
+      RTS
+
 ; @label VSPRITE.GFX_ADDR
 ; @kind routine
 ; @symbol vsprite_gfx_addr
@@ -233,6 +350,37 @@ vsprite_gfx_blit:
       LDA   #>VSPRITE_GFX_STRIDE
       STA   VSPRITE_DSTSTRH
       JMP   vsprite_blit
+
+; @label VSPRITE.GFX_ROTATE_BLIT
+; @kind routine
+; @symbol vsprite_gfx_rotate_blit
+; @summary Rotate the configured virtual sprite offscreen, wait for the next frame, then copy the full rotated bounds to the graphics plane at X/Y.
+; @requires VSPRITE_XL VSPRITE_XH VSPRITE_Y VSPRITE_ORIGSPACE VSPRITE_ORIGADDR* VSPRITE_ORIGSTR* VSPRITE_ROTSPACE VSPRITE_ROTADDR* VSPRITE_ROTSTR* VSPRITE_WIDTH* VSPRITE_HEIGHT* VSPRITE_ROTANGLE
+; @in VSPRITE_COLORKEY: Fill value for rotated output pixels outside the source bounds; normally match this to VGC_GFXTRANS.
+; @desc The final graphics blit is intentionally non-color-keyed so transparent pixels from the rotated buffer clear the previous frame in the same visible copy.
+; @out A: 0 on success, 1 on error.
+vsprite_gfx_rotate_blit:
+      JSR   vsprite_rotate
+      CMP   #VSPRITE_RESULT_OK
+      BNE   @done
+      JSR   vsprite_wait_frame
+      LDA   VSPRITE_FLAGS
+      PHA
+      STZ   VSPRITE_FLAGS
+      JSR   vsprite_gfx_blit
+      STA   VSPRITE_TMP
+      PLA
+      STA   VSPRITE_FLAGS
+      LDA   VSPRITE_TMP
+@done:
+      RTS
+
+vsprite_wait_frame:
+      LDA   VGC_FRAME
+@wait:
+      CMP   VGC_FRAME
+      BEQ   @wait
+      RTS
 
 ; @label VSPRITE.GFX_FILL
 ; @kind routine

@@ -85,12 +85,12 @@ ENABLE_USB_HID ?= 1
 ifeq ($(ENABLE_USB_HID),1)
 override EXTRA_DEFINES += -DENABLE_USB_HID
 RTL_USB = $(RTLDIR)/usb_hid_keyboard.sv \
-          $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host.v \
-          $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host_rom.v
+          $(RTLDIR)/thirdparty/usb_hid_host_fs/usb_hid_host.v \
+          $(RTLDIR)/thirdparty/usb_hid_host_fs/usb_hid_host_rom.v
 else
 RTL_USB =
 endif
-USB_HID_ROM_HEX = $(RTLDIR)/thirdparty/usb_hid_host/usb_hid_host_rom.hex
+USB_HID_ROM_HEX = $(RTLDIR)/thirdparty/usb_hid_host_fs/usb_hid_host_rom.mem
 ifeq ($(ENABLE_USB_HID),1)
 USB_HID_DEPS = $(USB_HID_ROM_HEX)
 else

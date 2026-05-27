@@ -2176,7 +2176,7 @@ BOARD_INPUT_IRQ_MASK = $03
 
 ; ---------------------------------------------------------------------
 ; USB HID diagnostics. These registers are currently implemented by the
-; ULX3S US2 low-speed USB HID host and read as zero in software-only hosts.
+; ULX3S US2 low/full-speed USB HID host and read as zero in software-only hosts.
 ; ---------------------------------------------------------------------
 .ifndef USB_HID_STATUS
 USB_HID_STATUS = $BAA3
@@ -2195,6 +2195,27 @@ USB_HID_REPORT_COUNT = $BAA7
 .endif
 .ifndef USB_HID_KEY_COUNT
 USB_HID_KEY_COUNT = $BAA8
+.endif
+.ifndef USB_HID_CORE_STATUS
+USB_HID_CORE_STATUS = $BAA9
+.endif
+.ifndef USB_HID_VID_L
+USB_HID_VID_L = $BAAA
+.endif
+.ifndef USB_HID_VID_H
+USB_HID_VID_H = $BAAB
+.endif
+.ifndef USB_HID_PID_L
+USB_HID_PID_L = $BAAC
+.endif
+.ifndef USB_HID_PID_H
+USB_HID_PID_H = $BAAD
+.endif
+.ifndef USB_HID_INTERFACE_CLASS
+USB_HID_INTERFACE_CLASS = $BAAE
+.endif
+.ifndef USB_HID_INTERFACE_PROTOCOL
+USB_HID_INTERFACE_PROTOCOL = $BAAF
 .endif
 .ifndef USB_HID_ST_RESET_RELEASED
 USB_HID_ST_RESET_RELEASED = $01
@@ -2219,6 +2240,27 @@ USB_HID_ST_KEY_SEEN = $40
 .endif
 .ifndef USB_HID_ST_ERROR
 USB_HID_ST_ERROR = $80
+.endif
+.ifndef USB_HID_CORE_BUSY
+USB_HID_CORE_BUSY = $01
+.endif
+.ifndef USB_HID_CORE_ENDPOINT_MASK
+USB_HID_CORE_ENDPOINT_MASK = $0E
+.endif
+.ifndef USB_HID_CORE_ENDPOINT_SHIFT
+USB_HID_CORE_ENDPOINT_SHIFT = 1
+.endif
+.ifndef USB_HID_CORE_FULL_SPEED
+USB_HID_CORE_FULL_SPEED = $10
+.endif
+.ifndef USB_HID_CORE_CONNECTED
+USB_HID_CORE_CONNECTED = $20
+.endif
+.ifndef USB_HID_CORE_NAK
+USB_HID_CORE_NAK = $40
+.endif
+.ifndef USB_HID_CORE_STALL
+USB_HID_CORE_STALL = $80
 .endif
 
 .endif

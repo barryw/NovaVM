@@ -6,20 +6,32 @@
 
 `timescale 1ns/1ps
 
-module usb_hid_host (
-    input  wire       usbclk,
-    input  wire       usbrst_n,
-    inout  wire       usb_dm,
-    inout  wire       usb_dp,
+module usb_hid_host #(
+    parameter FULL_SPEED = 1,
+    parameter KEYBOARD_SUPPORT = 1,
+    parameter MOUSE_SUPPORT = 1,
+    parameter GAME_SUPPORT = 1
+) (
+    input  wire       clk,
+    input  wire       reset,
+    input  wire       cs,
+    input  wire       usb_dm_i,
+    input  wire       usb_dp_i,
+    output wire       usb_dm_o,
+    output wire       usb_dp_o,
+    output wire       usb_oe,
     output reg [1:0]  typ,
-    output reg        report,
-    output reg        conerr,
+    output reg        full_report,
+    output reg        connerr,
+    output reg        busy,
     output reg [7:0]  key_modifiers,
-    output reg [7:0]  key1,
-    output reg [7:0]  key2,
-    output reg [7:0]  key3,
-    output reg [7:0]  key4,
-    output reg [7:0]  mouse_btn,
+    output reg [7:0]  key_0,
+    output reg [7:0]  key_1,
+    output reg [7:0]  key_2,
+    output reg [7:0]  key_3,
+    output reg [7:0]  key_4,
+    output reg [7:0]  key_5,
+    output reg [2:0]  mouse_btn,
     output reg signed [7:0] mouse_dx,
     output reg signed [7:0] mouse_dy,
     output reg        game_l,
@@ -32,22 +44,36 @@ module usb_hid_host (
     output reg        game_y,
     output reg        game_sel,
     output reg        game_sta,
-    output wire [63:0] dbg_hid_report
+    output reg [3:0]  game_extra,
+    output wire [63:0] dbg_hid_report,
+    output wire [63:0] dbg_hid_regs,
+    output wire [7:0]  dbg_core_status,
+    output wire [9:0]  rom_addr,
+    input  wire [3:0]  rom_dout,
+    output wire        rom_en
 );
-    assign usb_dm = 1'bz;
-    assign usb_dp = 1'bz;
+    assign usb_dm_o = 1'b0;
+    assign usb_dp_o = 1'b0;
+    assign usb_oe = 1'b0;
     assign dbg_hid_report = 64'h0;
+    assign dbg_hid_regs = 64'h0;
+    assign dbg_core_status = 8'h00;
+    assign rom_addr = 10'h0;
+    assign rom_en = 1'b0;
 
     initial begin
         typ = 2'd0;
-        report = 1'b0;
-        conerr = 1'b0;
+        full_report = 1'b0;
+        connerr = 1'b0;
+        busy = 1'b0;
         key_modifiers = 8'h00;
-        key1 = 8'h00;
-        key2 = 8'h00;
-        key3 = 8'h00;
-        key4 = 8'h00;
-        mouse_btn = 8'h00;
+        key_0 = 8'h00;
+        key_1 = 8'h00;
+        key_2 = 8'h00;
+        key_3 = 8'h00;
+        key_4 = 8'h00;
+        key_5 = 8'h00;
+        mouse_btn = 3'b000;
         mouse_dx = 8'sh00;
         mouse_dy = 8'sh00;
         game_l = 1'b0;
@@ -60,6 +86,7 @@ module usb_hid_host (
         game_y = 1'b0;
         game_sel = 1'b0;
         game_sta = 1'b0;
+        game_extra = 4'h0;
     end
 endmodule
 
@@ -84,6 +111,7 @@ module test_usb_hid_keyboard;
     wire [7:0] dbg_last_ascii;
     wire [7:0] dbg_report_count;
     wire [7:0] dbg_key_count;
+    wire [7:0] dbg_core_status;
 
     int pass_count = 0;
     int fail_count = 0;
@@ -108,7 +136,8 @@ module test_usb_hid_keyboard;
         .dbg_last_scan(dbg_last_scan),
         .dbg_last_ascii(dbg_last_ascii),
         .dbg_report_count(dbg_report_count),
-        .dbg_key_count(dbg_key_count)
+        .dbg_key_count(dbg_key_count),
+        .dbg_core_status(dbg_core_status)
     );
 
     always_ff @(posedge clk_sys) begin
@@ -148,13 +177,16 @@ module test_usb_hid_keyboard;
         @(negedge clk_usb);
         dut.usb_host.typ = 2'd1;
         dut.usb_host.key_modifiers = 8'h00;
-        dut.usb_host.key1 = scan;
-        dut.usb_host.key2 = 8'h00;
-        dut.usb_host.key3 = 8'h00;
-        dut.usb_host.key4 = 8'h00;
-        dut.usb_host.report = 1'b1;
+        dut.usb_host.key_0 = scan;
+        dut.usb_host.key_1 = 8'h00;
+        dut.usb_host.key_2 = 8'h00;
+        dut.usb_host.key_3 = 8'h00;
+        dut.usb_host.key_4 = 8'h00;
+        dut.usb_host.key_5 = 8'h00;
+        dut.usb_host.full_report = 1'b1;
         @(negedge clk_usb);
-        dut.usb_host.report = 1'b0;
+        dut.usb_host.full_report = 1'b0;
+        repeat (8) @(posedge clk_usb);
         repeat (8) @(posedge clk_sys);
     endtask
 

@@ -5,9 +5,11 @@ NOVA_ASM := ../runtime/asm
 
 KEYBOARD_DIR := apps/keyboard
 DEMO_DIR     := apps/demo
+ROTATE_DIR   := apps/vsprite_rotate
+TURTLE_DIR   := apps/turtle
 VGC_WAIT_OBJ := $(KEYBOARD_DIR)/vgc_wait.o
 
-all: keyboard keyboard-test keyboard-harness demo
+all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle
 
 keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
@@ -54,6 +56,34 @@ $(DEMO_DIR)/demo.o: $(DEMO_DIR)/demo.s $(NOVA_ASM)/novavm.inc
 install-demo: demo
 	cp $(DEMO_DIR)/demo.bin ~/e6502-programs/demo.bin
 
+vsprite-rotate: $(ROTATE_DIR)/vsprite_rotate.bin
+
+$(ROTATE_DIR)/vsprite_rotate.bin: $(ROTATE_DIR)/vsprite_rotate.o $(ROTATE_DIR)/vsprite.o $(ROTATE_DIR)/vsprite_rotate.cfg
+	ld65 -C $(ROTATE_DIR)/vsprite_rotate.cfg -o $@ $(ROTATE_DIR)/vsprite_rotate.o $(ROTATE_DIR)/vsprite.o
+
+$(ROTATE_DIR)/vsprite_rotate.o: $(ROTATE_DIR)/vsprite_rotate.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/blitter.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $< -o $@
+
+$(ROTATE_DIR)/vsprite.o: $(NOVA_ASM)/vsprite.s $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/blitter.s $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/nova.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $< -o $@
+
+install-vsprite-rotate: vsprite-rotate
+	cp $(ROTATE_DIR)/vsprite_rotate.bin ~/e6502-programs/vsprite_rotate.bin
+
+turtle: $(TURTLE_DIR)/turtle.bin
+
+$(TURTLE_DIR)/turtle.bin: $(TURTLE_DIR)/turtle.o $(TURTLE_DIR)/vsprite.o $(TURTLE_DIR)/turtle.cfg
+	ld65 -C $(TURTLE_DIR)/turtle.cfg -o $@ $(TURTLE_DIR)/turtle.o $(TURTLE_DIR)/vsprite.o
+
+$(TURTLE_DIR)/turtle.o: $(TURTLE_DIR)/turtle.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/blitter.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $< -o $@
+
+$(TURTLE_DIR)/vsprite.o: $(NOVA_ASM)/vsprite.s $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/blitter.s $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/nova.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $< -o $@
+
+install-turtle: turtle
+	cp $(TURTLE_DIR)/turtle.bin ~/e6502-programs/turtle.bin
+
 clean:
 	$(RM) $(KEYBOARD_DIR)/keyboard.o $(KEYBOARD_DIR)/keyboard.bin
 	$(RM) $(KEYBOARD_DIR)/kbdtest.o $(KEYBOARD_DIR)/kbdtest.bin
@@ -61,5 +91,9 @@ clean:
 	$(RM) $(KEYBOARD_DIR)/test_music_status.o $(KEYBOARD_DIR)/test_music_status.bin
 	$(RM) $(VGC_WAIT_OBJ)
 	$(RM) $(DEMO_DIR)/demo.o $(DEMO_DIR)/demo.bin $(DEMO_DIR)/demo.dbg
+	$(RM) $(ROTATE_DIR)/vsprite_rotate.o $(ROTATE_DIR)/vsprite_rotate.bin
+	$(RM) $(ROTATE_DIR)/vsprite.o
+	$(RM) $(TURTLE_DIR)/turtle.o $(TURTLE_DIR)/turtle.bin
+	$(RM) $(TURTLE_DIR)/vsprite.o
 
-.PHONY: all keyboard keyboard-test install-keyboard demo install-demo clean
+.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle clean

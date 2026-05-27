@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module usb_hid_keyboard (
     input  logic       clk_usb,
     input  logic       usb_reset_n,
@@ -17,35 +19,72 @@ module usb_hid_keyboard (
     output logic [7:0] dbg_last_scan,
     output logic [7:0] dbg_last_ascii,
     output logic [7:0] dbg_report_count,
-    output logic [7:0] dbg_key_count
+    output logic [7:0] dbg_key_count,
+    output logic [7:0] dbg_core_status,
+    output logic [63:0] dbg_hid_regs
 );
 
     wire       usb_report;
+    wire       usb_busy;
+    wire       usb_oe;
+    wire       usb_dm_o;
+    wire       usb_dp_o;
+    wire [9:0] usb_rom_addr;
+    wire [3:0] usb_rom_dout;
+    wire       usb_rom_en;
     wire [7:0] key_modifiers;
+    wire [7:0] key0;
     wire [7:0] key1;
     wire [7:0] key2;
     wire [7:0] key3;
     wire [7:0] key4;
-    wire [7:0] mouse_btn;
+    wire [7:0] key5;
+    wire [2:0] mouse_btn;
     wire signed [7:0] mouse_dx;
     wire signed [7:0] mouse_dy;
     wire game_l, game_r, game_u, game_d;
     wire game_a, game_b, game_x, game_y, game_sel, game_sta;
-    wire [63:0] dbg_hid_report;
+    wire [7:0] dbg_core_status_usb;
+    wire [63:0] dbg_hid_regs_usb;
 
-    usb_hid_host usb_host (
-        .usbclk       (clk_usb),
-        .usbrst_n     (usb_reset_n),
-        .usb_dm       (usb_dm),
-        .usb_dp       (usb_dp),
+    assign usb_dm = usb_oe ? usb_dm_o : 1'bz;
+    assign usb_dp = usb_oe ? usb_dp_o : 1'bz;
+
+`ifndef USB_HID_HOST_EXTERNAL_STUB
+    usb_hid_host_rom usb_rom (
+        .clk (clk_usb),
+        .addr(usb_rom_addr),
+        .dout(usb_rom_dout),
+        .en  (usb_rom_en)
+    );
+`else
+    assign usb_rom_dout = 4'h0;
+`endif
+
+    usb_hid_host #(
+        .KEYBOARD_SUPPORT(1),
+        .MOUSE_SUPPORT   (0),
+        .GAME_SUPPORT    (0)
+    ) usb_host (
+        .clk          (clk_usb),
+        .reset        (!usb_reset_n),
+        .cs           (1'b1),
+        .usb_dm_i     (usb_dm),
+        .usb_dp_i     (usb_dp),
+        .usb_dm_o     (usb_dm_o),
+        .usb_dp_o     (usb_dp_o),
+        .usb_oe       (usb_oe),
         .typ          (device_type),
-        .report       (usb_report),
-        .conerr       (connection_error),
+        .full_report  (usb_report),
+        .connerr      (connection_error),
+        .busy         (usb_busy),
         .key_modifiers(key_modifiers),
-        .key1         (key1),
-        .key2         (key2),
-        .key3         (key3),
-        .key4         (key4),
+        .key_0        (key0),
+        .key_1        (key1),
+        .key_2        (key2),
+        .key_3        (key3),
+        .key_4        (key4),
+        .key_5        (key5),
         .mouse_btn    (mouse_btn),
         .mouse_dx     (mouse_dx),
         .mouse_dy     (mouse_dy),
@@ -59,15 +98,23 @@ module usb_hid_keyboard (
         .game_y       (game_y),
         .game_sel     (game_sel),
         .game_sta     (game_sta),
-        .dbg_hid_report(dbg_hid_report)
+        .game_extra   (),
+        .dbg_hid_report(),
+        .dbg_hid_regs (dbg_hid_regs_usb),
+        .dbg_core_status(dbg_core_status_usb),
+        .rom_addr     (usb_rom_addr),
+        .rom_dout     (usb_rom_dout),
+        .rom_en       (usb_rom_en)
     );
 
     assign report_seen = usb_report;
 
+    logic [7:0] prev_key0;
     logic [7:0] prev_key1;
     logic [7:0] prev_key2;
     logic [7:0] prev_key3;
     logic [7:0] prev_key4;
+    logic [7:0] prev_key5;
     logic [7:0] pending_data_usb;
     logic       event_toggle_usb;
     logic       ack_toggle_usb_meta;
@@ -79,51 +126,81 @@ module usb_hid_keyboard (
     logic       report_toggle_usb;
     logic [7:0] last_report_scan_usb;
     logic [1:0] usb_lines_usb;
+    logic       report_stage_valid_usb;
+    logic [7:0] report_modifiers_usb;
+    logic [7:0] report_key0_usb;
+    logic [7:0] report_key1_usb;
+    logic [7:0] report_key2_usb;
+    logic [7:0] report_key3_usb;
+    logic [7:0] report_key4_usb;
+    logic [7:0] report_key5_usb;
+    logic       scan_stage_valid_usb;
+    logic [7:0] scan_stage_usb;
+    logic [7:0] scan_modifiers_stage_usb;
+    logic       scan_last_event_still_down_usb;
+    logic       ascii_stage_valid_usb;
+    logic [7:0] ascii_scan_stage_usb;
+    logic [7:0] ascii_stage_usb;
+    logic       ascii_last_event_still_down_usb;
 
     localparam logic [1:0] RELEASE_STABLE_REPORTS = 2'd2;
 
     function automatic logic key_was_down(
         input logic [7:0] key,
+        input logic [7:0] old0,
         input logic [7:0] old1,
         input logic [7:0] old2,
         input logic [7:0] old3,
-        input logic [7:0] old4
+        input logic [7:0] old4,
+        input logic [7:0] old5
     );
         key_was_down = key != 8'h00 &&
-                       (key == old1 || key == old2 || key == old3 || key == old4);
+                       (key == old0 || key == old1 || key == old2 ||
+                        key == old3 || key == old4 || key == old5);
     endfunction
 
     function automatic logic key_is_down(
         input logic [7:0] key,
-        input logic [7:0] cur1,
-        input logic [7:0] cur2,
-        input logic [7:0] cur3,
-        input logic [7:0] cur4
-    );
-        key_is_down = key != 8'h00 &&
-                      (key == cur1 || key == cur2 || key == cur3 || key == cur4);
-    endfunction
-
-    function automatic logic [7:0] first_new_key(
+        input logic [7:0] cur0,
         input logic [7:0] cur1,
         input logic [7:0] cur2,
         input logic [7:0] cur3,
         input logic [7:0] cur4,
+        input logic [7:0] cur5
+    );
+        key_is_down = key != 8'h00 &&
+                      (key == cur0 || key == cur1 || key == cur2 ||
+                       key == cur3 || key == cur4 || key == cur5);
+    endfunction
+
+    function automatic logic [7:0] first_new_key(
+        input logic [7:0] cur0,
+        input logic [7:0] cur1,
+        input logic [7:0] cur2,
+        input logic [7:0] cur3,
+        input logic [7:0] cur4,
+        input logic [7:0] cur5,
+        input logic [7:0] old0,
         input logic [7:0] old1,
         input logic [7:0] old2,
         input logic [7:0] old3,
-        input logic [7:0] old4
+        input logic [7:0] old4,
+        input logic [7:0] old5
     );
         begin
             first_new_key = 8'h00;
-            if (cur1 != 8'h00 && !key_was_down(cur1, old1, old2, old3, old4))
+            if (cur0 != 8'h00 && !key_was_down(cur0, old0, old1, old2, old3, old4, old5))
+                first_new_key = cur0;
+            else if (cur1 != 8'h00 && !key_was_down(cur1, old0, old1, old2, old3, old4, old5))
                 first_new_key = cur1;
-            else if (cur2 != 8'h00 && !key_was_down(cur2, old1, old2, old3, old4))
+            else if (cur2 != 8'h00 && !key_was_down(cur2, old0, old1, old2, old3, old4, old5))
                 first_new_key = cur2;
-            else if (cur3 != 8'h00 && !key_was_down(cur3, old1, old2, old3, old4))
+            else if (cur3 != 8'h00 && !key_was_down(cur3, old0, old1, old2, old3, old4, old5))
                 first_new_key = cur3;
-            else if (cur4 != 8'h00 && !key_was_down(cur4, old1, old2, old3, old4))
+            else if (cur4 != 8'h00 && !key_was_down(cur4, old0, old1, old2, old3, old4, old5))
                 first_new_key = cur4;
+            else if (cur5 != 8'h00 && !key_was_down(cur5, old0, old1, old2, old3, old4, old5))
+                first_new_key = cur5;
         end
     endfunction
 
@@ -197,23 +274,30 @@ module usb_hid_keyboard (
         end
     endfunction
 
-    wire [7:0] new_scan = first_new_key(
-        key1, key2, key3, key4,
-        prev_key1, prev_key2, prev_key3, prev_key4
+    wire [7:0] report_new_scan_usb = first_new_key(
+        report_key0_usb, report_key1_usb, report_key2_usb,
+        report_key3_usb, report_key4_usb, report_key5_usb,
+        prev_key0, prev_key1, prev_key2, prev_key3, prev_key4, prev_key5
     );
-    wire [7:0] new_ascii = hid_key_to_ascii(new_scan, key_modifiers);
+    wire [7:0] scan_ascii_usb = hid_key_to_ascii(scan_stage_usb, scan_modifiers_stage_usb);
     wire       event_busy_usb = event_toggle_usb != ack_toggle_usb;
-    wire       repeat_suppressed_usb =
-        last_event_active_usb && new_scan == last_event_scan_usb;
-    wire       last_event_still_down_usb =
-        key_is_down(last_event_scan_usb, key1, key2, key3, key4);
+    wire       report_last_event_still_down_usb =
+        key_is_down(
+            last_event_scan_usb,
+            report_key0_usb, report_key1_usb, report_key2_usb,
+            report_key3_usb, report_key4_usb, report_key5_usb
+        );
+    wire       ascii_repeat_suppressed_usb =
+        last_event_active_usb && ascii_scan_stage_usb == last_event_scan_usb;
 
     always_ff @(posedge clk_usb) begin
         if (!usb_reset_n) begin
+            prev_key0 <= 8'h00;
             prev_key1 <= 8'h00;
             prev_key2 <= 8'h00;
             prev_key3 <= 8'h00;
             prev_key4 <= 8'h00;
+            prev_key5 <= 8'h00;
             pending_data_usb <= 8'h00;
             event_toggle_usb <= 1'b0;
             ack_toggle_usb_meta <= 1'b0;
@@ -224,37 +308,80 @@ module usb_hid_keyboard (
             report_toggle_usb <= 1'b0;
             last_report_scan_usb <= 8'h00;
             usb_lines_usb <= 2'b00;
+            report_stage_valid_usb <= 1'b0;
+            report_modifiers_usb <= 8'h00;
+            report_key0_usb <= 8'h00;
+            report_key1_usb <= 8'h00;
+            report_key2_usb <= 8'h00;
+            report_key3_usb <= 8'h00;
+            report_key4_usb <= 8'h00;
+            report_key5_usb <= 8'h00;
+            scan_stage_valid_usb <= 1'b0;
+            scan_stage_usb <= 8'h00;
+            scan_modifiers_stage_usb <= 8'h00;
+            scan_last_event_still_down_usb <= 1'b0;
+            ascii_stage_valid_usb <= 1'b0;
+            ascii_scan_stage_usb <= 8'h00;
+            ascii_stage_usb <= 8'h00;
+            ascii_last_event_still_down_usb <= 1'b0;
         end else begin
             ack_toggle_usb_meta <= ack_toggle_sys;
             ack_toggle_usb <= ack_toggle_usb_meta;
             usb_lines_usb <= {usb_dp, usb_dm};
 
-            if (usb_report && device_type == 2'd1) begin
-                report_toggle_usb <= ~report_toggle_usb;
-                last_report_scan_usb <= new_scan;
+            report_stage_valid_usb <= usb_report && device_type == 2'd1;
+            scan_stage_valid_usb <= report_stage_valid_usb;
+            ascii_stage_valid_usb <= scan_stage_valid_usb;
 
-                if (last_event_active_usb) begin
-                    if (last_event_still_down_usb) begin
-                        last_event_release_reports_usb <= 2'd0;
-                    end else if (last_event_release_reports_usb >= RELEASE_STABLE_REPORTS - 2'd1) begin
-                        last_event_active_usb <= 1'b0;
-                        last_event_release_reports_usb <= 2'd0;
-                    end else begin
-                        last_event_release_reports_usb <= last_event_release_reports_usb + 1'b1;
-                    end
+            if (usb_report && device_type == 2'd1) begin
+                report_modifiers_usb <= key_modifiers;
+                report_key0_usb <= key0;
+                report_key1_usb <= key1;
+                report_key2_usb <= key2;
+                report_key3_usb <= key3;
+                report_key4_usb <= key4;
+                report_key5_usb <= key5;
+            end
+
+            if (report_stage_valid_usb) begin
+                scan_stage_usb <= report_new_scan_usb;
+                scan_modifiers_stage_usb <= report_modifiers_usb;
+                scan_last_event_still_down_usb <= report_last_event_still_down_usb;
+                prev_key0 <= report_key0_usb;
+                prev_key1 <= report_key1_usb;
+                prev_key2 <= report_key2_usb;
+                prev_key3 <= report_key3_usb;
+                prev_key4 <= report_key4_usb;
+                prev_key5 <= report_key5_usb;
+            end
+
+            if (scan_stage_valid_usb) begin
+                ascii_scan_stage_usb <= scan_stage_usb;
+                ascii_stage_usb <= scan_ascii_usb;
+                ascii_last_event_still_down_usb <= scan_last_event_still_down_usb;
+            end
+
+            if (ascii_stage_valid_usb) begin
+                report_toggle_usb <= ~report_toggle_usb;
+                last_report_scan_usb <= ascii_scan_stage_usb;
+
+                if (last_event_active_usb && !ascii_last_event_still_down_usb &&
+                    last_event_release_reports_usb >= RELEASE_STABLE_REPORTS - 2'd1) begin
+                    last_event_active_usb <= 1'b0;
+                    last_event_release_reports_usb <= 2'd0;
+                end else if (last_event_active_usb && !ascii_last_event_still_down_usb) begin
+                    last_event_release_reports_usb <= last_event_release_reports_usb + 1'b1;
+                end else if (last_event_active_usb) begin
+                    last_event_release_reports_usb <= 2'd0;
                 end
 
-                if (new_ascii != 8'h00 && !event_busy_usb && !repeat_suppressed_usb) begin
-                    pending_data_usb <= new_ascii;
+                if (ascii_stage_usb != 8'h00 && !event_busy_usb && !ascii_repeat_suppressed_usb) begin
+                    pending_data_usb <= ascii_stage_usb;
                     event_toggle_usb <= ~event_toggle_usb;
-                    last_event_scan_usb <= new_scan;
+                    last_event_scan_usb <= ascii_scan_stage_usb;
                     last_event_active_usb <= 1'b1;
                     last_event_release_reports_usb <= 2'd0;
                 end
-                prev_key1 <= key1;
-                prev_key2 <= key2;
-                prev_key3 <= key3;
-                prev_key4 <= key4;
             end
         end
     end
@@ -273,6 +400,10 @@ module usb_hid_keyboard (
     logic usb_reset_n_sys;
     logic [1:0] usb_lines_meta;
     logic [1:0] usb_lines_sys;
+    logic [7:0] core_status_meta;
+    logic [7:0] core_status_sys;
+    logic [63:0] hid_regs_meta;
+    logic [63:0] hid_regs_sys;
     logic report_seen_latched;
     logic key_seen_latched;
 
@@ -292,6 +423,10 @@ module usb_hid_keyboard (
             usb_reset_n_sys <= 1'b0;
             usb_lines_meta <= 2'b00;
             usb_lines_sys <= 2'b00;
+            core_status_meta <= 8'h00;
+            core_status_sys <= 8'h00;
+            hid_regs_meta <= 64'h0;
+            hid_regs_sys <= 64'h0;
             report_seen_latched <= 1'b0;
             key_seen_latched <= 1'b0;
             ack_toggle_sys <= 1'b0;
@@ -303,6 +438,8 @@ module usb_hid_keyboard (
             dbg_last_ascii <= 8'h00;
             dbg_report_count <= 8'h00;
             dbg_key_count <= 8'h00;
+            dbg_core_status <= 8'h00;
+            dbg_hid_regs <= 64'h0;
         end else begin
             key_valid <= 1'b0;
             event_toggle_sys_meta <= event_toggle_usb;
@@ -317,6 +454,10 @@ module usb_hid_keyboard (
             usb_reset_n_sys <= usb_reset_n_meta;
             usb_lines_meta <= usb_lines_usb;
             usb_lines_sys <= usb_lines_meta;
+            core_status_meta <= dbg_core_status_usb;
+            core_status_sys <= core_status_meta;
+            hid_regs_meta <= dbg_hid_regs_usb;
+            hid_regs_sys <= hid_regs_meta;
 
             if (report_toggle_sys != report_toggle_sys_last) begin
                 report_toggle_sys_last <= report_toggle_sys;
@@ -338,12 +479,14 @@ module usb_hid_keyboard (
             end
 
             dbg_device_type <= {6'h00, device_type_sys};
+            dbg_core_status <= core_status_sys;
+            dbg_hid_regs <= hid_regs_sys;
             dbg_status <= {
                 connection_error_sys,
                 key_seen_latched,
                 report_seen_latched,
                 device_type_sys == 2'd1,
-                device_type_sys != 2'd0,
+                core_status_sys[5],
                 usb_lines_sys[1],
                 usb_lines_sys[0],
                 usb_reset_n_sys

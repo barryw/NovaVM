@@ -435,18 +435,25 @@ public static class VgcConstants
     public const byte BoardInputIrqMask     = 0x03;
 
     // -------------------------------------------------------------------------
-    // USB HID diagnostic registers ($BAA3-$BAA8)
-    // ULX3S hardware bring-up registers for the US2 low-speed USB HID host.
+    // USB HID diagnostic registers ($BAA3-$BAAF)
+    // ULX3S hardware bring-up registers for the US2 low/full-speed USB HID host.
     // -------------------------------------------------------------------------
 
     public const int UsbHidDiagBase       = 0xBAA3;
-    public const int UsbHidDiagEnd        = 0xBAA8;
+    public const int UsbHidDiagEnd        = 0xBAAF;
     public const int UsbHidStatus         = 0xBAA3;
     public const int UsbHidDeviceType     = 0xBAA4;
     public const int UsbHidLastScan       = 0xBAA5;
     public const int UsbHidLastAscii      = 0xBAA6;
     public const int UsbHidReportCount    = 0xBAA7;
     public const int UsbHidKeyCount       = 0xBAA8;
+    public const int UsbHidCoreStatus     = 0xBAA9;
+    public const int UsbHidVidL           = 0xBAAA;
+    public const int UsbHidVidH           = 0xBAAB;
+    public const int UsbHidPidL           = 0xBAAC;
+    public const int UsbHidPidH           = 0xBAAD;
+    public const int UsbHidInterfaceClass = 0xBAAE;
+    public const int UsbHidInterfaceProtocol = 0xBAAF;
 
     public const byte UsbHidStatusResetReleased   = 0x01;
     public const byte UsbHidStatusDmHigh          = 0x02;
@@ -456,6 +463,13 @@ public static class VgcConstants
     public const byte UsbHidStatusReportSeen      = 0x20;
     public const byte UsbHidStatusKeySeen         = 0x40;
     public const byte UsbHidStatusError           = 0x80;
+    public const byte UsbHidCoreStatusBusy        = 0x01;
+    public const byte UsbHidCoreStatusEndpointMask = 0x0E;
+    public const int UsbHidCoreStatusEndpointShift = 1;
+    public const byte UsbHidCoreStatusFullSpeed   = 0x10;
+    public const byte UsbHidCoreStatusConnected   = 0x20;
+    public const byte UsbHidCoreStatusNak         = 0x40;
+    public const byte UsbHidCoreStatusStall       = 0x80;
 
     public const int FreeBase          = 0xBB50;
     public const int FreeEnd           = 0xBB8D;

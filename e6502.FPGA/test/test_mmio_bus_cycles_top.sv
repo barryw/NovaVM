@@ -29,6 +29,7 @@ module test_mmio_bus_cycles_top;
     logic [7:0]  usb_hid_last_ascii = 8'h41;
     logic [7:0]  usb_hid_report_count = 8'h11;
     logic [7:0]  usb_hid_key_count = 8'h5A;
+    logic [7:0]  usb_hid_core_status = 8'hD3;
     logic        irq_n = 1, nmi_n = 1;
 
     wire  [3:0]  vid_r, vid_g, vid_b;
@@ -73,6 +74,8 @@ module test_mmio_bus_cycles_top;
         .usb_hid_last_ascii(usb_hid_last_ascii),
         .usb_hid_report_count(usb_hid_report_count),
         .usb_hid_key_count(usb_hid_key_count),
+        .usb_hid_core_status(usb_hid_core_status),
+        .usb_hid_regs(64'h1122334455667788),
         .irq_n(irq_n), .nmi_n(nmi_n),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
@@ -304,6 +307,12 @@ module test_mmio_bus_cycles_top;
         check_eq8("USB HID status is CPU-visible", peek_data, 8'hA5);
         dbg_peek(16'h0403, peek_data);
         check_eq8("USB HID key count is CPU-visible", peek_data, 8'h5A);
+        dbg_peek(16'hBAA9, peek_data);
+        check_eq8("USB HID core status is debug-visible", peek_data, 8'hD3);
+        dbg_peek(16'hBAAA, peek_data);
+        check_eq8("USB HID VID low is debug-visible", peek_data, 8'h88);
+        dbg_peek(16'hBAAF, peek_data);
+        check_eq8("USB HID protocol is debug-visible", peek_data, 8'h22);
 
         dbg_pause = 1;
         board_buttons = 8'h54;

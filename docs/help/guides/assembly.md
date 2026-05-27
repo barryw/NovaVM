@@ -38,7 +38,7 @@ The full 64 KB address space is partitioned as follows:
 | `BA63`--`BA75` | 19 B | DMA Controller | R/W |
 | `BA83`--`BA9B`, `BAA2` | 26 B | Blitter Controller | R/W |
 | `BA9C`--`BAA1` | 6 B | Board Input registers | R/W1C |
-| `BAA3`--`BAA8` | 6 B | USB HID diagnostics (ULX3S US2) | R only |
+| `BAA3`--`BAAF` | 13 B | USB HID diagnostics (ULX3S US2) | R only |
 | `BC00`--`BFFF` | 1024 B | XRAM Windows (when mapped) | R/W |
 | `C000`--`FFFF` | 16 KB | ROM (NovaBASIC) | R only |
 | `D400`--`D41F` | 32 B | SID chip 1 (write-intercepted) | W only |
@@ -237,18 +237,22 @@ writing `1` bits back.
 
 ### USB HID diagnostics
 
-ULX3S builds expose read-only USB HID diagnostics at `$BAA3-$BAA8` for the US2
-port. These are bring-up registers, not the normal keyboard API. The current
-host core supports only low-speed USB HID devices.
+ULX3S builds expose read-only USB HID diagnostics at `$BAA3-$BAAF` for the US2
+port. These are bring-up registers, not the normal keyboard API. The FPGA host
+core supports low-speed and full-speed boot HID devices.
 
 | Address | Symbol | Meaning |
 | --- | --- | --- |
-| `$BAA3` | `UsbHidStatus` / `USB_HID_STATUS` | Status bits: `$01` reset released, `$02` D- high, `$04` D+ high, `$08` device type present, `$10` keyboard, `$20` report seen, `$40` key emitted, `$80` error. |
+| `$BAA3` | `UsbHidStatus` / `USB_HID_STATUS` | Status bits: `$01` reset released, `$02` D- high, `$04` D+ high, `$08` raw connected, `$10` keyboard, `$20` report seen, `$40` key emitted, `$80` error. |
 | `$BAA4` | `UsbHidDeviceType` / `USB_HID_DEVICE_TYPE` | Host device type; `1` means keyboard. |
 | `$BAA5` | `UsbHidLastScan` / `USB_HID_LAST_SCAN` | Last HID scan code in a keyboard report. |
 | `$BAA6` | `UsbHidLastAscii` / `USB_HID_LAST_ASCII` | Last ASCII byte emitted into Nova's keyboard stream. |
 | `$BAA7` | `UsbHidReportCount` / `USB_HID_REPORT_COUNT` | Wrapping keyboard report counter. |
 | `$BAA8` | `UsbHidKeyCount` / `USB_HID_KEY_COUNT` | Wrapping emitted-key counter. |
+| `$BAA9` | `UsbHidCoreStatus` / `USB_HID_CORE_STATUS` | Core bits: `$01` busy, bits 1-3 current IN endpoint probe (`($BAA9 & $0E) >> 1`), `$10` full-speed timing, `$20` raw connected, `$40` NAK, `$80` STALL. |
+| `$BAAA`--`$BAAD` | `USB_HID_VID_L/H`, `USB_HID_PID_L/H` | Captured USB vendor and product IDs from enumeration. |
+| `$BAAE` | `USB_HID_INTERFACE_CLASS` | Captured interface class; HID devices report `$03`. |
+| `$BAAF` | `USB_HID_INTERFACE_PROTOCOL` | Captured interface protocol; boot keyboards report `$01`. |
 
 For line-state diagnosis, no device usually reads D-=0 and D+=0, low-speed idle
 reads D-=1 and D+=0, and full-speed idle reads D-=0 and D+=1.
@@ -634,6 +638,29 @@ transparent color into `BltColorKey` ($BA98). Source pixels
 matching the color key are skipped. Rotate mode sets bit 2 of `BltMode`,
 stores the 8-bit angle in `BltRotateAngle` ($BAA2), and requires equal width
 and height, up to 256 bytes per side.
+
+## Virtual Sprite Helpers from Assembly
+
+Assembly programs can include `vsprite.inc` and link `runtime/asm/vsprite.s`
+to use blitter-backed virtual sprites without hand-loading every blitter
+register. Rotation is handled by `vsprite_gfx_rotate_blit`: set
+`VSPRITE_ORIG*` to the immutable square source shape, `VSPRITE_ROT*` to a
+caller-owned square output buffer, `VSPRITE_WIDTH*`/`VSPRITE_HEIGHT*`,
+`VSPRITE_ROTANGLE`, `VSPRITE_COLORKEY`, and `VSPRITE.X/Y`, then call the helper.
+It rotates into the offscreen buffer, waits for the next VGC frame tick, and
+copies the full rotated bounds to the graphics plane in one visible blit. That
+keeps the rotate itself offscreen and lets transparent pixels clear the previous
+frame without a separate visible erase. `VSPRITE_COLORKEY` should normally match
+`VGC_GFXTRANS`.
+
+Lower-level code can call `vsprite_rotate` directly. On success,
+`vsprite_rotate` automatically repoints `VSPRITE_SRC*` to the rotated buffer,
+so a following `vsprite_gfx_blit` draws the rotated copy.
+
+The original shape is never modified. Programs that want several independently
+rotating virtual sprites should allocate one rotated buffer per live sprite.
+The standalone example at `assembly/apps/vsprite_rotate` demonstrates a 64x64
+virtual sprite controlled by the arrow keys.
 
 ## Network Controller from Assembly
 

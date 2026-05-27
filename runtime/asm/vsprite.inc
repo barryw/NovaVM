@@ -36,6 +36,11 @@
 ; sprites into that offscreen buffer, then copies the completed rectangle to
 ; the graphics plane as one visible blit. For a truly atomic visual update, the
 ; final dirty rectangle must be small enough to fit in one vblank window.
+;
+; For in-place rotated virtual sprites on the transparent graphics plane, use
+; VSPRITE.GFX_ROTATE_BLIT. It rotates into VSPRITE.ROT* offscreen, then copies
+; the full rotated rectangle to graphics memory in one blit so old pixels are
+; cleared without a separate visible erase.
 
 .ifndef VSPRITE_INC_INCLUDED
 VSPRITE_INC_INCLUDED = 1
@@ -214,8 +219,73 @@ VSPRITE_DESC_SIZE        = $18
 ; @label VSPRITE.COLORKEY
 ; @kind u8
 ; @symbol VSPRITE_COLORKEY
-; @summary Source byte skipped by color-keyed blits. For graphics-plane virtual sprites, normally match this to VGC.GFXTRANS.
+; @summary Source byte skipped by color-keyed blits. VSPRITE.ROTATE also uses this value to fill output pixels outside the rotated source bounds.
 .global VSPRITE_COLORKEY
+; @label VSPRITE.ORIGSPACE
+; @kind u8
+; @symbol VSPRITE_ORIGSPACE
+; @summary Blitter memory space for the immutable source shape used by VSPRITE.ROTATE.
+.global VSPRITE_ORIGSPACE
+; @label VSPRITE.ORIGADDRL
+; @kind u8
+; @symbol VSPRITE_ORIGADDRL
+; @summary Low byte of the immutable source shape address used by VSPRITE.ROTATE.
+.global VSPRITE_ORIGADDRL
+; @label VSPRITE.ORIGADDRM
+; @kind u8
+; @symbol VSPRITE_ORIGADDRM
+; @summary Middle byte of the immutable source shape address used by VSPRITE.ROTATE.
+.global VSPRITE_ORIGADDRM
+; @label VSPRITE.ORIGADDRH
+; @kind u8
+; @symbol VSPRITE_ORIGADDRH
+; @summary High byte of the immutable source shape address used by VSPRITE.ROTATE. Use 0 for CPU RAM.
+.global VSPRITE_ORIGADDRH
+; @label VSPRITE.ORIGSTRL
+; @kind u8
+; @symbol VSPRITE_ORIGSTRL
+; @summary Low byte of the immutable source shape row stride used by VSPRITE.ROTATE.
+.global VSPRITE_ORIGSTRL
+; @label VSPRITE.ORIGSTRH
+; @kind u8
+; @symbol VSPRITE_ORIGSTRH
+; @summary High byte of the immutable source shape row stride used by VSPRITE.ROTATE.
+.global VSPRITE_ORIGSTRH
+; @label VSPRITE.ROTSPACE
+; @kind u8
+; @symbol VSPRITE_ROTSPACE
+; @summary Blitter memory space for the caller-owned rotated output buffer used by VSPRITE.ROTATE.
+.global VSPRITE_ROTSPACE
+; @label VSPRITE.ROTADDRL
+; @kind u8
+; @symbol VSPRITE_ROTADDRL
+; @summary Low byte of the caller-owned rotated output buffer address.
+.global VSPRITE_ROTADDRL
+; @label VSPRITE.ROTADDRM
+; @kind u8
+; @symbol VSPRITE_ROTADDRM
+; @summary Middle byte of the caller-owned rotated output buffer address.
+.global VSPRITE_ROTADDRM
+; @label VSPRITE.ROTADDRH
+; @kind u8
+; @symbol VSPRITE_ROTADDRH
+; @summary High byte of the caller-owned rotated output buffer address. Use 0 for CPU RAM.
+.global VSPRITE_ROTADDRH
+; @label VSPRITE.ROTSTRL
+; @kind u8
+; @symbol VSPRITE_ROTSTRL
+; @summary Low byte of the caller-owned rotated output buffer row stride.
+.global VSPRITE_ROTSTRL
+; @label VSPRITE.ROTSTRH
+; @kind u8
+; @symbol VSPRITE_ROTSTRH
+; @summary High byte of the caller-owned rotated output buffer row stride.
+.global VSPRITE_ROTSTRH
+; @label VSPRITE.ROTANGLE
+; @kind u8
+; @symbol VSPRITE_ROTANGLE
+; @summary Hardware rotation angle, where 256 steps is one full turn.
+.global VSPRITE_ROTANGLE
 ; @label VSPRITE.FILLVALUE
 ; @kind u8
 ; @symbol VSPRITE_FILLVALUE
@@ -323,5 +393,22 @@ VSPRITE_DESC_SIZE        = $18
 ; @symbol VSPRITE_SCENE_WORKSTRH
 ; @summary High byte of the atomic scene work buffer row stride.
 .global VSPRITE_SCENE_WORKSTRH
+
+; Public helper routines.
+.global vsprite_blit
+.global vsprite_fill
+.global vsprite_gfx_addr
+.global vsprite_gfx_blit
+.global vsprite_gfx_rotate_blit
+.global vsprite_gfx_fill
+.global vsprite_gfx_save_bg
+.global vsprite_gfx_restore_bg
+.global vsprite_rotate
+.global vsprite_use_original
+.global vsprite_use_rotated
+.global vsprite_scene_begin
+.global vsprite_scene_commit
+.global vsprite_scene_commit_atomic
+.global vsprite_scene_draw
 
 .endif

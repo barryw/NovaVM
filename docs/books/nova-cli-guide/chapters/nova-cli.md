@@ -94,19 +94,23 @@ Drive mount state is stored on the SD card in:
 ```
 
 The CLI uploads images and files, manages mounted drive slots, updates WiFi
-settings, stops NovaHost-driven audio, and reboots NovaHost. The low-level
-NovaHost HTTP API still exists underneath, but normal users should not need to
-type raw HTTP requests.
+settings, stops NovaHost-driven audio, reboots NovaHost, and can forward local
+terminal keypresses to the running NovaVM over WiFi. The low-level NovaHost HTTP
+API still exists underneath, but normal users should not need to type raw HTTP
+requests.
 
 ## Build The CLI
 
-Managed build:
+Development build:
 
 ```bash
 dotnet build e6502.Nova/e6502.Nova.csproj -c Release
 ```
 
-Publish a single native binary for the current machine:
+`dotnet build` is for fast local compilation. `dotnet publish` for the Nova CLI
+defaults to NativeAOT and produces the binary users should run.
+
+Publish a single NativeAOT binary for the current machine:
 
 ```bash
 tools/publish-nova-cli.sh
@@ -130,7 +134,7 @@ artifacts/nova-cli/linux-arm64/nova
 artifacts/nova-cli/win-x64/nova.exe
 ```
 
-The NativeAOT build may report trim warnings for DryWetMidi. MIDI import and
+The NativeAOT publish may report trim warnings for DryWetMidi. MIDI import and
 upload are still expected to work; verify with a `.mid` to `.nms` import/upload.
 
 ## Remote Host Syntax
@@ -627,6 +631,35 @@ nova audio status --remote 192.168.1.65
 nova audio stop --remote 192.168.1.65
 ```
 
+## Remote Keyboard Command
+
+`nova keyboard` forwards keypresses from the local terminal to the running
+NovaVM through NovaHost's debug TCP service. This is a WiFi keyboard stopgap for
+hardware sessions where the board-side USB keyboard path is not usable.
+
+```bash
+nova keyboard --remote <host> [--port 6503] [--echo] [--ctrl-c-quits]
+```
+
+Example:
+
+```bash
+nova keyboard --remote 192.168.1.65
+```
+
+Control keys:
+
+- `Ctrl-]` exits the local bridge.
+- `Ctrl-C` is sent to Nova as byte `$03`; pass `--ctrl-c-quits` to make it
+  exit the bridge instead.
+- Escape and F1 also send Nova's `$03` break byte.
+- Enter, Backspace, Tab, Delete, printable ASCII, and arrow keys are forwarded.
+  Arrow keys use the same `$1C` through `$1F` bytes as the desktop emulator;
+  the active Nova editor or program decides what those bytes mean.
+
+This command uses TCP port `6503`, not NovaHost's HTTP port. Use `--port` only
+when the debug service is exposed on a non-default port.
+
 ## Raw Remote SD Commands
 
 Raw remote commands map directly to NovaHost `/sd/<path>`.
@@ -890,6 +923,7 @@ nova wifi scan --remote 192.168.1.65
 nova wifi set --remote 192.168.1.65 --ssid NovaLab --password secret --dhcp
 nova audio status --remote 192.168.1.65
 nova audio stop --remote 192.168.1.65
+nova keyboard --remote 192.168.1.65
 nova device reboot --remote 192.168.1.65
 ```
 

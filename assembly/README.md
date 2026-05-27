@@ -17,3 +17,5 @@ Current apps:
 | --- | --- | --- |
 | `apps/keyboard` | `$9000` | Piano keyboard visualizer for SID/MIDI/WTS playback. |
 | `apps/demo` | `$7200` | Demo disk music browser/player. |
+| `apps/vsprite_rotate` | `$7200` | 64x64 virtual-sprite hardware rotation demo driven by arrow keys. |
+| `apps/turtle` | `$7200` | 16x16 white turtle virtual-sprite rotation demo driven by arrow keys. |

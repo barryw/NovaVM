@@ -4,7 +4,7 @@
 //     (or 720x480p: 27 MHz pixel + 135 MHz TMDS shift)
 //   - HDMI output via GPDI (hdl-util/hdmi with PCM audio)
 //   - UART keyboard input via FTDI serial
-//   - Optional USB low-speed HID keyboard input via US2
+//   - Optional USB low/full-speed HID keyboard input via US2
 //   - SPI command bridge from ESP32/NovaHost
 //   - LEDs for debug, buttons for reset
 
@@ -38,7 +38,7 @@ module fpga_top (
     input  logic        esp_spi_cs_n,
     inout  wire         esp_spi_miso,
 
-    // FPGA-side USB port (US2) for low-speed HID host devices.
+    // FPGA-side USB port (US2) for low/full-speed HID host devices.
     inout  wire         usb_fpga_bd_dn,
     inout  wire         usb_fpga_bd_dp,
     output logic        usb_fpga_pu_dn,
@@ -175,7 +175,7 @@ module fpga_top (
 
     ecp5pll #(
         .in_hz  (100000000),
-        .out0_hz(12000000),
+        .out0_hz(48000000),
         .out1_hz(0),
         .out2_hz(0),
         .out3_hz(0)
@@ -191,7 +191,7 @@ module fpga_top (
         .phaseloadreg(1'b0)
     );
 
-    wire clk_usb = pll_usb_clk[0];  // 12 MHz required by usb_hid_host
+    wire clk_usb = pll_usb_clk[0];  // 48 MHz for full-speed usb_hid_host
 `endif
 `endif
 
@@ -445,7 +445,7 @@ module fpga_top (
     );
 
     // =========================================================================
-    // USB HID host — US2 low-speed keyboard input.
+    // USB HID host — US2 low/full-speed keyboard input.
     //
     // ULX3S USB pull-control pins are diode-steered: HIGH selects the 1.1k
     // device pull-up path; LOW selects the 15k host pull-down path. Keep both
@@ -477,6 +477,8 @@ module fpga_top (
     wire [7:0] usb_hid_last_ascii;
     wire [7:0] usb_hid_report_count;
     wire [7:0] usb_hid_key_count;
+    wire [7:0] usb_hid_core_status;
+    wire [63:0] usb_hid_regs;
 
     usb_hid_keyboard usb_keyboard (
         .clk_usb         (clk_usb),
@@ -495,7 +497,9 @@ module fpga_top (
         .dbg_last_scan   (usb_hid_last_scan),
         .dbg_last_ascii  (usb_hid_last_ascii),
         .dbg_report_count(usb_hid_report_count),
-        .dbg_key_count   (usb_hid_key_count)
+        .dbg_key_count   (usb_hid_key_count),
+        .dbg_core_status (usb_hid_core_status),
+        .dbg_hid_regs    (usb_hid_regs)
     );
 `else
     assign usb_fpga_bd_dp = 1'bz;
@@ -509,6 +513,8 @@ module fpga_top (
     wire [7:0] usb_hid_last_ascii = 8'h00;
     wire [7:0] usb_hid_report_count = 8'h00;
     wire [7:0] usb_hid_key_count = 8'h00;
+    wire [7:0] usb_hid_core_status = 8'h00;
+    wire [63:0] usb_hid_regs = 64'h0;
 `endif
 
     // =========================================================================
@@ -782,6 +788,8 @@ module fpga_top (
         .usb_hid_last_ascii(usb_hid_last_ascii),
         .usb_hid_report_count(usb_hid_report_count),
         .usb_hid_key_count(usb_hid_key_count),
+        .usb_hid_core_status(usb_hid_core_status),
+        .usb_hid_regs(usb_hid_regs),
 
         .irq_n      (1'b1),
         .nmi_n      (1'b1),

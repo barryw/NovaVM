@@ -33,6 +33,7 @@ module test_debug_peek;
     logic [7:0]  usb_hid_last_ascii = 8'h41;
     logic [7:0]  usb_hid_report_count = 8'h11;
     logic [7:0]  usb_hid_key_count = 8'h22;
+    logic [7:0]  usb_hid_core_status = 8'hD3;
     logic        irq_n = 1;
     logic        nmi_n = 1;
 
@@ -75,6 +76,8 @@ module test_debug_peek;
         .usb_hid_last_ascii(usb_hid_last_ascii),
         .usb_hid_report_count(usb_hid_report_count),
         .usb_hid_key_count(usb_hid_key_count),
+        .usb_hid_core_status(usb_hid_core_status),
+        .usb_hid_regs(64'h1122334455667788),
         .irq_n(irq_n), .nmi_n(nmi_n),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
@@ -276,6 +279,12 @@ module test_debug_peek;
         check_eq8("peek \$BAA3 returns USB HID status", peek_val, 8'hA5);
         do_peek(16'hBAA8, peek_val);
         check_eq8("peek \$BAA8 returns USB HID key count", peek_val, 8'h22);
+        do_peek(16'hBAA9, peek_val);
+        check_eq8("peek \$BAA9 returns USB HID core status", peek_val, 8'hD3);
+        do_peek(16'hBAAA, peek_val);
+        check_eq8("peek \$BAAA returns USB HID VID low", peek_val, 8'h88);
+        do_peek(16'hBAAF, peek_val);
+        check_eq8("peek \$BAAF returns USB HID interface protocol", peek_val, 8'h22);
         do_poke(16'hBAA3, 8'h5A);
         check_eq8("debug poke \$BAA3 does not shadow RAM", dut.main_ram.mem[16'hBAA3], 8'h00);
 

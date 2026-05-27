@@ -4757,7 +4757,7 @@
     {
       "label": "VSPRITE.BGADDRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 199,
+      "line": 204,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4768,7 +4768,7 @@
     {
       "label": "VSPRITE.BGADDRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 189,
+      "line": 194,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4779,7 +4779,7 @@
     {
       "label": "VSPRITE.BGADDRM",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 194,
+      "line": 199,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4790,7 +4790,7 @@
     {
       "label": "VSPRITE.BGSPACE",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 184,
+      "line": 189,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4801,7 +4801,7 @@
     {
       "label": "VSPRITE.BGSTRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 209,
+      "line": 214,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4812,7 +4812,7 @@
     {
       "label": "VSPRITE.BGSTRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 204,
+      "line": 209,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4823,7 +4823,7 @@
     {
       "label": "VSPRITE.BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 87,
+      "line": 104,
       "inputs": [
         {
           "name": "VSPRITE_FLAGS",
@@ -4861,18 +4861,18 @@
     {
       "label": "VSPRITE.COLORKEY",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 214,
+      "line": 219,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "u8",
       "symbol": "VSPRITE_COLORKEY",
-      "summary": "Source byte skipped by color-keyed blits. For graphics-plane virtual sprites, normally match this to VGC.GFXTRANS."
+      "summary": "Source byte skipped by color-keyed blits. VSPRITE.ROTATE also uses this value to fill output pixels outside the rotated source bounds."
     },
     {
       "label": "VSPRITE.DESC_FLAG_COLORKEY",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 55,
+      "line": 60,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4884,7 +4884,7 @@
     {
       "label": "VSPRITE.DESC_SAVED",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 61,
+      "line": 66,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4896,7 +4896,7 @@
     {
       "label": "VSPRITE.DESC_VISIBLE",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 67,
+      "line": 72,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4908,7 +4908,7 @@
     {
       "label": "VSPRITE.DSTADDRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 139,
+      "line": 144,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4919,7 +4919,7 @@
     {
       "label": "VSPRITE.DSTADDRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 129,
+      "line": 134,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4930,7 +4930,7 @@
     {
       "label": "VSPRITE.DSTADDRM",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 134,
+      "line": 139,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4941,7 +4941,7 @@
     {
       "label": "VSPRITE.DSTSPACE",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 109,
+      "line": 114,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4952,7 +4952,7 @@
     {
       "label": "VSPRITE.DSTSTRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 179,
+      "line": 184,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4963,7 +4963,7 @@
     {
       "label": "VSPRITE.DSTSTRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 174,
+      "line": 179,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4974,7 +4974,7 @@
     {
       "label": "VSPRITE.FILL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 144,
+      "line": 161,
       "inputs": [],
       "outputs": [
         {
@@ -4996,7 +4996,7 @@
     {
       "label": "VSPRITE.FILLVALUE",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 219,
+      "line": 289,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5007,7 +5007,7 @@
     {
       "label": "VSPRITE.FLAGS",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 224,
+      "line": 294,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5018,7 +5018,7 @@
     {
       "label": "VSPRITE.FLAG_COLORKEY",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 49,
+      "line": 54,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5030,7 +5030,7 @@
     {
       "label": "VSPRITE.GFX_ADDR",
       "source": "../runtime/asm/vsprite.s",
-      "line": 175,
+      "line": 292,
       "inputs": [],
       "outputs": [
         {
@@ -5050,7 +5050,7 @@
     {
       "label": "VSPRITE.GFX_BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 220,
+      "line": 337,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5080,7 +5080,7 @@
     {
       "label": "VSPRITE.GFX_FILL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 237,
+      "line": 385,
       "inputs": [],
       "outputs": [
         {
@@ -5103,7 +5103,7 @@
     {
       "label": "VSPRITE.GFX_RESTORE_BG",
       "source": "../runtime/asm/vsprite.s",
-      "line": 295,
+      "line": 443,
       "inputs": [],
       "outputs": [
         {
@@ -5126,9 +5126,44 @@
       "summary": "Restore a caller-owned VSPRITE.BG* buffer into the graphics plane at VSPRITE.X/Y."
     },
     {
+      "label": "VSPRITE.GFX_ROTATE_BLIT",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 354,
+      "inputs": [
+        {
+          "name": "VSPRITE_COLORKEY",
+          "description": "Fill value for rotated output pixels outside the source bounds; normally match this to VGC_GFXTRANS."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VSPRITE_XL",
+        "VSPRITE_XH",
+        "VSPRITE_Y",
+        "VSPRITE_ORIGSPACE",
+        "VSPRITE_ORIGADDR*",
+        "VSPRITE_ORIGSTR*",
+        "VSPRITE_ROTSPACE",
+        "VSPRITE_ROTADDR*",
+        "VSPRITE_ROTSTR*",
+        "VSPRITE_WIDTH*",
+        "VSPRITE_HEIGHT*",
+        "VSPRITE_ROTANGLE"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_gfx_rotate_blit",
+      "summary": "Rotate the configured virtual sprite offscreen, wait for the next frame, then copy the full rotated bounds to the graphics plane at X/Y.",
+      "desc": "The final graphics blit is intentionally non-color-keyed so transparent pixels from the rotated buffer clear the previous frame in the same visible copy."
+    },
+    {
       "label": "VSPRITE.GFX_SAVE_BG",
       "source": "../runtime/asm/vsprite.s",
-      "line": 253,
+      "line": 401,
       "inputs": [],
       "outputs": [
         {
@@ -5153,7 +5188,7 @@
     {
       "label": "VSPRITE.HEIGHTH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 159,
+      "line": 164,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5164,7 +5199,7 @@
     {
       "label": "VSPRITE.HEIGHTL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 154,
+      "line": 159,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5173,9 +5208,184 @@
       "summary": "Low byte of the rectangle height in rows."
     },
     {
+      "label": "VSPRITE.ORIGADDRH",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 239,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ORIGADDRH",
+      "summary": "High byte of the immutable source shape address used by VSPRITE.ROTATE. Use 0 for CPU RAM."
+    },
+    {
+      "label": "VSPRITE.ORIGADDRL",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 229,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ORIGADDRL",
+      "summary": "Low byte of the immutable source shape address used by VSPRITE.ROTATE."
+    },
+    {
+      "label": "VSPRITE.ORIGADDRM",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 234,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ORIGADDRM",
+      "summary": "Middle byte of the immutable source shape address used by VSPRITE.ROTATE."
+    },
+    {
+      "label": "VSPRITE.ORIGSPACE",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 224,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ORIGSPACE",
+      "summary": "Blitter memory space for the immutable source shape used by VSPRITE.ROTATE."
+    },
+    {
+      "label": "VSPRITE.ORIGSTRH",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 249,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ORIGSTRH",
+      "summary": "High byte of the immutable source shape row stride used by VSPRITE.ROTATE."
+    },
+    {
+      "label": "VSPRITE.ORIGSTRL",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 244,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ORIGSTRL",
+      "summary": "Low byte of the immutable source shape row stride used by VSPRITE.ROTATE."
+    },
+    {
+      "label": "VSPRITE.ROTADDRH",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 269,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ROTADDRH",
+      "summary": "High byte of the caller-owned rotated output buffer address. Use 0 for CPU RAM."
+    },
+    {
+      "label": "VSPRITE.ROTADDRL",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 259,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ROTADDRL",
+      "summary": "Low byte of the caller-owned rotated output buffer address."
+    },
+    {
+      "label": "VSPRITE.ROTADDRM",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 264,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ROTADDRM",
+      "summary": "Middle byte of the caller-owned rotated output buffer address."
+    },
+    {
+      "label": "VSPRITE.ROTANGLE",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 284,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ROTANGLE",
+      "summary": "Hardware rotation angle, where 256 steps is one full turn."
+    },
+    {
+      "label": "VSPRITE.ROTATE",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 236,
+      "inputs": [
+        {
+          "name": "VSPRITE_COLORKEY",
+          "description": "Fill value for rotated output pixels outside the source bounds."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VSPRITE_ORIGSPACE",
+        "VSPRITE_ORIGADDR*",
+        "VSPRITE_ORIGSTR*",
+        "VSPRITE_ROTSPACE",
+        "VSPRITE_ROTADDR*",
+        "VSPRITE_ROTSTR*",
+        "VSPRITE_WIDTH*",
+        "VSPRITE_HEIGHT*",
+        "VSPRITE_ROTANGLE"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_rotate",
+      "summary": "Rotate the configured square virtual sprite from immutable source into the caller-owned rotated buffer.",
+      "desc": "On success, VSPRITE.SRC* is automatically repointed at VSPRITE.ROT* so VSPRITE.GFX_BLIT draws the rotated copy. Hardware requires WIDTH == HEIGHT and both dimensions <= 256."
+    },
+    {
+      "label": "VSPRITE.ROTSPACE",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 254,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ROTSPACE",
+      "summary": "Blitter memory space for the caller-owned rotated output buffer used by VSPRITE.ROTATE."
+    },
+    {
+      "label": "VSPRITE.ROTSTRH",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 279,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ROTSTRH",
+      "summary": "High byte of the caller-owned rotated output buffer row stride."
+    },
+    {
+      "label": "VSPRITE.ROTSTRL",
+      "source": "../runtime/asm/vsprite.inc",
+      "line": 274,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "VSPRITE_ROTSTRL",
+      "summary": "Low byte of the caller-owned rotated output buffer row stride."
+    },
+    {
       "label": "VSPRITE.SCENE_ADDRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 250,
+      "line": 320,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5186,7 +5396,7 @@
     {
       "label": "VSPRITE.SCENE_ADDRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 245,
+      "line": 315,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5197,7 +5407,7 @@
     {
       "label": "VSPRITE.SCENE_BEGIN",
       "source": "../runtime/asm/vsprite.s",
-      "line": 337,
+      "line": 485,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5213,7 +5423,7 @@
     {
       "label": "VSPRITE.SCENE_COMMIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 364,
+      "line": 512,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5229,7 +5439,7 @@
     {
       "label": "VSPRITE.SCENE_COMMIT_ATOMIC",
       "source": "../runtime/asm/vsprite.s",
-      "line": 396,
+      "line": 544,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5250,7 +5460,7 @@
     {
       "label": "VSPRITE.SCENE_COUNT",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 255,
+      "line": 325,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5261,7 +5471,7 @@
     {
       "label": "VSPRITE.SCENE_DRAW",
       "source": "../runtime/asm/vsprite.s",
-      "line": 374,
+      "line": 522,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5276,7 +5486,7 @@
     {
       "label": "VSPRITE.SCENE_HEIGHTH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 291,
+      "line": 361,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5287,7 +5497,7 @@
     {
       "label": "VSPRITE.SCENE_HEIGHTL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 286,
+      "line": 356,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5298,7 +5508,7 @@
     {
       "label": "VSPRITE.SCENE_WIDTHH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 281,
+      "line": 351,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5309,7 +5519,7 @@
     {
       "label": "VSPRITE.SCENE_WIDTHL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 276,
+      "line": 346,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5320,7 +5530,7 @@
     {
       "label": "VSPRITE.SCENE_WORKADDRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 311,
+      "line": 381,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5331,7 +5541,7 @@
     {
       "label": "VSPRITE.SCENE_WORKADDRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 301,
+      "line": 371,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5342,7 +5552,7 @@
     {
       "label": "VSPRITE.SCENE_WORKADDRM",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 306,
+      "line": 376,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5353,7 +5563,7 @@
     {
       "label": "VSPRITE.SCENE_WORKSPACE",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 296,
+      "line": 366,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5364,7 +5574,7 @@
     {
       "label": "VSPRITE.SCENE_WORKSTRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 321,
+      "line": 391,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5375,7 +5585,7 @@
     {
       "label": "VSPRITE.SCENE_WORKSTRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 316,
+      "line": 386,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5386,7 +5596,7 @@
     {
       "label": "VSPRITE.SCENE_XH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 266,
+      "line": 336,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5397,7 +5607,7 @@
     {
       "label": "VSPRITE.SCENE_XL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 261,
+      "line": 331,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5408,7 +5618,7 @@
     {
       "label": "VSPRITE.SCENE_Y",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 271,
+      "line": 341,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5419,7 +5629,7 @@
     {
       "label": "VSPRITE.SRCADDRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 124,
+      "line": 129,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5430,7 +5640,7 @@
     {
       "label": "VSPRITE.SRCADDRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 114,
+      "line": 119,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5441,7 +5651,7 @@
     {
       "label": "VSPRITE.SRCADDRM",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 119,
+      "line": 124,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5452,7 +5662,7 @@
     {
       "label": "VSPRITE.SRCSPACE",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 104,
+      "line": 109,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5463,7 +5673,7 @@
     {
       "label": "VSPRITE.SRCSTRH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 169,
+      "line": 174,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5474,7 +5684,7 @@
     {
       "label": "VSPRITE.SRCSTRL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 164,
+      "line": 169,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5483,9 +5693,49 @@
       "summary": "Low byte of the source row stride."
     },
     {
+      "label": "VSPRITE.USE_ORIGINAL",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 192,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0."
+        }
+      ],
+      "requires": [
+        "VSPRITE_ORIGSPACE",
+        "VSPRITE_ORIGADDR*",
+        "VSPRITE_ORIGSTR*"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_use_original",
+      "summary": "Point VSPRITE.SRC* at the configured immutable source shape."
+    },
+    {
+      "label": "VSPRITE.USE_ROTATED",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 214,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0."
+        }
+      ],
+      "requires": [
+        "VSPRITE_ROTSPACE",
+        "VSPRITE_ROTADDR*",
+        "VSPRITE_ROTSTR*"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_use_rotated",
+      "summary": "Point VSPRITE.SRC* at the configured rotated output buffer."
+    },
+    {
       "label": "VSPRITE.WIDTHH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 149,
+      "line": 154,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5496,7 +5746,7 @@
     {
       "label": "VSPRITE.WIDTHL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 144,
+      "line": 149,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5507,7 +5757,7 @@
     {
       "label": "VSPRITE.XH",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 234,
+      "line": 304,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5518,7 +5768,7 @@
     {
       "label": "VSPRITE.XL",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 229,
+      "line": 299,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5529,7 +5779,7 @@
     {
       "label": "VSPRITE.Y",
       "source": "../runtime/asm/vsprite.inc",
-      "line": 239,
+      "line": 309,
       "inputs": [],
       "outputs": [],
       "requires": [],

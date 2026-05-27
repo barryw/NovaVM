@@ -246,7 +246,7 @@ test_debug_spi_slave: test_debug_spi_slave.sv $(RTL)/debug_spi_slave.sv $(RTL)/d
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_async_byte_fifo.sv $(RTL)/debug_spi_slave.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_usb_hid_keyboard: test_usb_hid_keyboard.sv $(RTL)/usb_hid_keyboard.sv
-	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/usb_hid_keyboard.sv $< && $(RUN) test/$(BD)/$@/$@
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DUSB_HID_HOST_EXTERNAL_STUB --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/usb_hid_keyboard.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_debug_bridge: test_debug_bridge.sv $(RTL)/debug_bridge.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_bridge.sv $< && $(RUN) test/$(BD)/$@/$@

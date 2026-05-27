@@ -147,7 +147,7 @@ card and exposes the current hardware management surface:
 Today, command-line disk-image and SD asset management work lives in
 `e6502.Nova`. The CLI is `nova`; NDI remains the disk-image format used for
 floppies and hard drives. Current command syntax and NativeAOT publish
-instructions are documented in `docs/books/nova-cli-guide`; the disk-image
+output are documented in `docs/books/nova-cli-guide`; the disk-image
 format itself is included in that same book.
 
 ## MCP Integration
