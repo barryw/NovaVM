@@ -657,6 +657,10 @@ public static class VgcConstants
     public const int NicMaxQueueDepth     = 16;
 
     public const int AutobootSkip      = 0xB9F0;
+    public const int TextWindowLeft    = 0xB9F2;
+    public const int TextWindowTop     = 0xB9F3;
+    public const int TextWindowWidth   = 0xB9F4;
+    public const int TextWindowHeight  = 0xB9F5;
     public const int RomBase           = 0xC000;
     public const int RomEnd            = 0xFFFF;
     public const int RomSize           = 0x4000;
@@ -904,6 +908,7 @@ public static class VgcConstants
     public const byte RomSwapBasic    = 0x02;   // switch to BASIC ROM
     public const byte RomSwapNccEdit  = 0x03;   // activate NCC editor
     public const byte RomSwapExtension = 0x04;  // switch to extension ROM
+    public const byte RomSwapLogo     = 0x05;   // switch to Logo ROM
     public const byte RomSwapPrimary  = RomSwapBasic; // switch to the active primary runtime ROM
 
     // -------------------------------------------------------------------------

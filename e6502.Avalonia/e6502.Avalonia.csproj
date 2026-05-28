@@ -90,6 +90,7 @@
         <MakeDir Directories="$(OutputPath)Resources" />
         <Copy SourceFiles="Resources/ehbasic.bin" DestinationFolder="$(OutputPath)Resources" />
         <Copy SourceFiles="Resources/extension.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/extension.bin')" />
+        <Copy SourceFiles="Resources/novalogo.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo.bin')" />
     </Target>
 
     <ItemGroup>
@@ -113,6 +114,9 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\extension.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\novalogo.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>

@@ -6,7 +6,7 @@ using KDS.e6502;
 
 public class CompositeBusDevice : IBusDevice, IDisposable
 {
-    public enum ActiveRom { Basic, Ncc, Extension }
+    public enum ActiveRom { Basic, Ncc, Extension, Logo }
 
     private readonly byte[] _ram = new byte[65536];
     private readonly VirtualGraphicsController _vgc = new();
@@ -34,6 +34,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly byte[] _basicRom;
     private readonly byte[] _nccRom;
     private readonly byte[]? _extRom;
+    private readonly byte[]? _logoRom;
     private byte _boardButtonState;
     private byte _boardSwitchState;
     private byte _boardInputIrqEnable;
@@ -85,7 +86,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public CompositeBusDevice(
         bool enableSound = false,
         int cpuHz = VgcConstants.DefaultCpuHz,
-        int frameRateHz = VgcConstants.FrameRateHz)
+        int frameRateHz = VgcConstants.FrameRateHz,
+        ActiveRom bootRom = ActiveRom.Basic)
     {
         _cpuHz = cpuHz > 0 ? cpuHz : VgcConstants.DefaultCpuHz;
         _frameRateHz = frameRateHz > 0 ? frameRateHz : VgcConstants.FrameRateHz;
@@ -191,6 +193,22 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _extRom = new byte[16384];
             byte[] extData = File.ReadAllBytes(extPath);
             Array.Copy(extData, _extRom, Math.Min(extData.Length, 16384));
+        }
+
+        // Load Logo ROM if available.
+        string logoPath = Path.Combine(AppContext.BaseDirectory, "Resources", "novalogo.bin");
+        if (File.Exists(logoPath))
+        {
+            byte[] logoData = File.ReadAllBytes(logoPath);
+            _logoRom = new byte[16384];
+            Array.Copy(logoData, _logoRom, Math.Min(logoData.Length, 16384));
+        }
+
+        // Override boot ROM if requested.
+        if (bootRom == ActiveRom.Logo && _logoRom != null)
+        {
+            Array.Copy(_logoRom, 0, _ram, VgcConstants.RomBase, 16384);
+            CurrentRom = ActiveRom.Logo;
         }
 
         InitVectorTable();
@@ -469,6 +487,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 Array.Copy(_extRom, 0, _ram, VgcConstants.RomBase, 16384);
                 CurrentRom = ActiveRom.Extension;
                 // No event — extension swaps are transient, managed by RAM trampoline.
+            }
+            else if (data == VgcConstants.RomSwapLogo && _logoRom != null && CurrentRom != ActiveRom.Logo)
+            {
+                Array.Copy(_logoRom, 0, _ram, VgcConstants.RomBase, 16384);
+                CurrentRom = ActiveRom.Logo;
             }
             else if (data == VgcConstants.RomSwapNccEdit)
             {
