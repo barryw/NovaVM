@@ -80,6 +80,21 @@ ext_dispatch:
       .word ext_st-1            ; cmd $17: ST
       .word ext_ht-1            ; cmd $18: HT
       .word ext_home-1          ; cmd $19: HOME
+      .word ext_ts-1            ; cmd $1A: TEXTSCREEN
+      .word ext_ss-1            ; cmd $1B: SPLITSCREEN
+      .word ext_fs-1            ; cmd $1C: FULLSCREEN
+      .word ext_setxy-1         ; cmd $1D: SETXY
+      .word ext_setx-1          ; cmd $1E: SETX
+      .word ext_sety-1          ; cmd $1F: SETY
+      .word ext_seth-1          ; cmd $20: SETHEADING
+      .word ext_xcor-1          ; cmd $21: XCOR
+      .word ext_ycor-1          ; cmd $22: YCOR
+      .word ext_heading-1       ; cmd $23: HEADING
+      .word ext_pendownp-1      ; cmd $24: PENDOWN?
+      .word ext_shownp-1        ; cmd $25: SHOWN?
+      .word ext_setpc-1         ; cmd $26: SETPC
+      .word ext_setbg-1         ; cmd $27: SETBG
+      .word ext_towards-1       ; cmd $28: TOWARDS
 
 ; =====================================================================
 ; ext_unsupported — unknown command, just return
@@ -795,6 +810,308 @@ wait_vgc:
       LDA   VGC_CMD
       AND   #$01
       BNE   wait_vgc
+      RTS
+
+; =====================================================================
+; ext_ts — TEXTSCREEN: full text mode, disable copper, mode=0
+; =====================================================================
+ext_ts:
+      JSR   wait_vgc
+      LDA   #VCMD_COPPERDIS
+      STA   VGC_CMD
+      STZ   VGC_MODE
+      RTS
+
+; =====================================================================
+; ext_ss — SPLITSCREEN: copper split (gfx+sprites top, text bottom)
+; =====================================================================
+ext_ss:
+      JSR   setup_copper
+      RTS
+
+; =====================================================================
+; ext_fs — FULLSCREEN: full graphics mode, no text area
+; =====================================================================
+ext_fs:
+      ; Disable copper first
+      JSR   wait_vgc
+      LDA   #VCMD_COPPERDIS
+      STA   VGC_CMD
+      ; Set mode to graphics + sprites
+      LDA   #MODE_GFX_SPRITES
+      STA   VGC_MODE
+      RTS
+
+; =====================================================================
+; ext_setxy — move to (x, y). Draw line if pen down.
+;   ARG0 = x, ARG1 = y
+; =====================================================================
+ext_setxy:
+      ; Ensure turtle is initialized
+      LDA   TURTLE_INITED
+      BNE   @go
+      JSR   turtle_init
+@go:
+      ; Save old position for line drawing
+      LDA   TURTLE_X_LO
+      STA   old_x_lo
+      LDA   TURTLE_X_HI
+      STA   old_x_hi
+      LDA   TURTLE_Y_LO
+      STA   old_y_lo
+      LDA   TURTLE_Y_HI
+      STA   old_y_hi
+
+      ; Set new position
+      LDA   EXT_ARG0_LO
+      STA   TURTLE_X_LO
+      LDA   EXT_ARG0_HI
+      STA   TURTLE_X_HI
+      STZ   TURTLE_X_FRAC
+      LDA   EXT_ARG1_LO
+      STA   TURTLE_Y_LO
+      LDA   EXT_ARG1_HI
+      STA   TURTLE_Y_HI
+      STZ   TURTLE_Y_FRAC
+
+      ; Draw line if pen down
+      LDA   TURTLE_PEN
+      BNE   @skip_draw
+      JSR   draw_line
+@skip_draw:
+      JSR   update_sprite_pos
+      RTS
+
+; =====================================================================
+; ext_setx — set X only. Draw line if pen down.
+;   ARG0 = x
+; =====================================================================
+ext_setx:
+      LDA   TURTLE_INITED
+      BNE   @go
+      JSR   turtle_init
+@go:
+      ; Save old position
+      LDA   TURTLE_X_LO
+      STA   old_x_lo
+      LDA   TURTLE_X_HI
+      STA   old_x_hi
+      LDA   TURTLE_Y_LO
+      STA   old_y_lo
+      LDA   TURTLE_Y_HI
+      STA   old_y_hi
+
+      ; Update X only
+      LDA   EXT_ARG0_LO
+      STA   TURTLE_X_LO
+      LDA   EXT_ARG0_HI
+      STA   TURTLE_X_HI
+      STZ   TURTLE_X_FRAC
+
+      ; Draw line if pen down
+      LDA   TURTLE_PEN
+      BNE   @skip_draw
+      JSR   draw_line
+@skip_draw:
+      JSR   update_sprite_pos
+      RTS
+
+; =====================================================================
+; ext_sety — set Y only. Draw line if pen down.
+;   ARG0 = y
+; =====================================================================
+ext_sety:
+      LDA   TURTLE_INITED
+      BNE   @go
+      JSR   turtle_init
+@go:
+      ; Save old position
+      LDA   TURTLE_X_LO
+      STA   old_x_lo
+      LDA   TURTLE_X_HI
+      STA   old_x_hi
+      LDA   TURTLE_Y_LO
+      STA   old_y_lo
+      LDA   TURTLE_Y_HI
+      STA   old_y_hi
+
+      ; Update Y only
+      LDA   EXT_ARG0_LO
+      STA   TURTLE_Y_LO
+      LDA   EXT_ARG0_HI
+      STA   TURTLE_Y_HI
+      STZ   TURTLE_Y_FRAC
+
+      ; Draw line if pen down
+      LDA   TURTLE_PEN
+      BNE   @skip_draw
+      JSR   draw_line
+@skip_draw:
+      JSR   update_sprite_pos
+      RTS
+
+; =====================================================================
+; ext_seth — set heading to degrees. Normalize mod 360.
+;   ARG0 = degrees
+; =====================================================================
+ext_seth:
+      LDA   EXT_ARG0_LO
+      STA   TURTLE_HEADING_LO
+      LDA   EXT_ARG0_HI
+      STA   TURTLE_HEADING_HI
+
+      ; Handle negative heading by adding 360 until positive
+      LDA   TURTLE_HEADING_HI
+      BMI   @add360
+      JSR   heading_mod360
+      JMP   @update
+@add360:
+      CLC
+      LDA   TURTLE_HEADING_LO
+      ADC   #<360
+      STA   TURTLE_HEADING_LO
+      LDA   TURTLE_HEADING_HI
+      ADC   #>360
+      STA   TURTLE_HEADING_HI
+      BMI   @add360
+      JSR   heading_mod360
+@update:
+      JSR   update_sprite_rotation
+      RTS
+
+; =====================================================================
+; ext_xcor — return turtle X position (integer part)
+; =====================================================================
+ext_xcor:
+      LDA   TURTLE_X_LO
+      STA   EXT_RESULT_LO
+      LDA   TURTLE_X_HI
+      STA   EXT_RESULT_HI
+      STZ   EXT_RESULT_FRAC
+      STZ   EXT_RESULT_TYPE      ; VAL_NUMBER
+      RTS
+
+; =====================================================================
+; ext_ycor — return turtle Y position (integer part)
+; =====================================================================
+ext_ycor:
+      LDA   TURTLE_Y_LO
+      STA   EXT_RESULT_LO
+      LDA   TURTLE_Y_HI
+      STA   EXT_RESULT_HI
+      STZ   EXT_RESULT_FRAC
+      STZ   EXT_RESULT_TYPE      ; VAL_NUMBER
+      RTS
+
+; =====================================================================
+; ext_heading — return current heading in degrees
+; =====================================================================
+ext_heading:
+      LDA   TURTLE_HEADING_LO
+      STA   EXT_RESULT_LO
+      LDA   TURTLE_HEADING_HI
+      STA   EXT_RESULT_HI
+      STZ   EXT_RESULT_FRAC
+      STZ   EXT_RESULT_TYPE      ; VAL_NUMBER
+      RTS
+
+; =====================================================================
+; ext_pendownp — return 1 if pen is down, 0 if up
+; =====================================================================
+ext_pendownp:
+      LDA   TURTLE_PEN
+      BNE   @up
+      ; Pen down ($00) → return 1
+      LDA   #1
+      STA   EXT_RESULT_LO
+      BRA   @done
+@up:
+      ; Pen up ($01) → return 0
+      STZ   EXT_RESULT_LO
+@done:
+      STZ   EXT_RESULT_HI
+      STZ   EXT_RESULT_FRAC
+      STZ   EXT_RESULT_TYPE
+      RTS
+
+; =====================================================================
+; ext_shownp — return 1 if turtle shown, 0 if hidden
+; =====================================================================
+ext_shownp:
+      LDA   TURTLE_SHOWN
+      STA   EXT_RESULT_LO
+      STZ   EXT_RESULT_HI
+      STZ   EXT_RESULT_FRAC
+      STZ   EXT_RESULT_TYPE
+      RTS
+
+; =====================================================================
+; ext_setpc — set pen color (palette index)
+;   ARG0 = color
+; =====================================================================
+ext_setpc:
+      LDA   EXT_ARG0_LO
+      STA   TURTLE_COLOR
+      RTS
+
+; =====================================================================
+; ext_setbg — set background color (VGC background)
+;   ARG0 = color
+; =====================================================================
+ext_setbg:
+      LDA   EXT_ARG0_LO
+      STA   VGC_BGCOL
+      ; Also clear graphics plane to this color
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   #VCMD_GCLS
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_towards — return heading angle towards point (x, y)
+;   ARG0 = target_x, ARG1 = target_y
+;   Uses ATAN2 coprocessor
+; =====================================================================
+ext_towards:
+      ; dx = target_x - turtle_x (signed 16-bit)
+      SEC
+      LDA   EXT_ARG0_LO
+      SBC   TURTLE_X_LO
+      STA   MATH_ATAN_DX_LO
+      LDA   EXT_ARG0_HI
+      SBC   TURTLE_X_HI
+      STA   MATH_ATAN_DX_HI
+
+      ; dy = -(target_y - turtle_y) (negate because screen Y is inverted)
+      SEC
+      LDA   TURTLE_Y_LO
+      SBC   EXT_ARG1_LO
+      STA   MATH_ATAN_DY_LO
+      LDA   TURTLE_Y_HI
+      SBC   EXT_ARG1_HI
+      STA   MATH_ATAN_DY_HI      ; writing DY_HI triggers ATAN2
+
+      ; Result in MATH_RES0 is a u8 angle (0-255)
+      ; Convert to degrees: degrees = u8 * 360 / 256 ≈ u8 * 45 / 32
+      ; Or more precisely: u8 * 360 / 256 = u8 * 1.40625
+      ; Use MUL16: u8 * 360, then take hi byte of result (>>8)
+      LDA   MATH_RES0
+      STA   MATH_MUL16_A_LO
+      STZ   MATH_MUL16_A_HI
+      LDA   #<360
+      STA   MATH_MUL16_B_LO
+      LDA   #>360
+      STA   MATH_MUL16_B_HI      ; triggers multiply
+
+      ; Result is u8*360, which is 16-bit. >> 8 = MATH_RES1
+      LDA   MATH_RES1
+      STA   EXT_RESULT_LO
+      LDA   MATH_RES2
+      STA   EXT_RESULT_HI
+      STZ   EXT_RESULT_FRAC
+      STZ   EXT_RESULT_TYPE
       RTS
 
 ; =====================================================================

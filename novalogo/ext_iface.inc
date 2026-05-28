@@ -47,6 +47,21 @@ EXT_CMD_PD      = $16           ; PD — pen down
 EXT_CMD_ST      = $17           ; ST — show turtle
 EXT_CMD_HT      = $18           ; HT — hide turtle
 EXT_CMD_HOME    = $19           ; HOME — move to center, heading 0
+EXT_CMD_TS      = $1A           ; TEXTSCREEN — full text mode
+EXT_CMD_SS      = $1B           ; SPLITSCREEN — copper split
+EXT_CMD_FS      = $1C           ; FULLSCREEN — full graphics mode
+EXT_CMD_SETXY   = $1D           ; SETXY x y — move to position
+EXT_CMD_SETX    = $1E           ; SETX x — set X only
+EXT_CMD_SETY    = $1F           ; SETY y — set Y only
+EXT_CMD_SETH    = $20           ; SETHEADING — set heading degrees
+EXT_CMD_XCOR    = $21           ; XCOR — report turtle X
+EXT_CMD_YCOR    = $22           ; YCOR — report turtle Y
+EXT_CMD_HEADING = $23           ; HEADING — report heading degrees
+EXT_CMD_PENDOWNP = $24          ; PENDOWN? — report pen state
+EXT_CMD_SHOWNP  = $25           ; SHOWN? — report visibility
+EXT_CMD_SETPC   = $26           ; SETPC color — set pen color
+EXT_CMD_SETBG   = $27           ; SETBG color — set background color
+EXT_CMD_TOWARDS = $28           ; TOWARDS x y — heading towards point
 
 ; --- Value types (match eval_type in eval.s) ---
 .ifndef VAL_NUMBER

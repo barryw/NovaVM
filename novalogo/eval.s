@@ -151,11 +151,12 @@ eval_loop:
 @unknown:
       ; Try user-defined procedures before erroring
       JSR   proc_lookup
-      BCS   @truly_unknown
+      BCS   @try_ext_cmd
       ; Found a procedure — invoke it (proc_stopped restored internally)
       JSR   proc_invoke
       JMP   eval_loop
 
+@try_ext_cmd:
       ; Try extension command table before giving up
       JSR   lookup_ext_cmd
       BCS   @truly_unknown
@@ -345,10 +346,11 @@ eval_body:
 @unknown:
       ; Try user-defined procedures before erroring (inside body)
       JSR   proc_lookup
-      BCS   @truly_unknown
+      BCS   @try_ext_cmd
       JSR   proc_invoke
       JMP   eval_body
 
+@try_ext_cmd:
       ; Try extension command table before giving up (inside body)
       JSR   lookup_ext_cmd
       BCS   @truly_unknown
@@ -1433,6 +1435,68 @@ ext_cmd_table:
       .word str_ext_home
       .byte EXT_CMD_HOME
       .byte 0
+      ; --- Screen modes ---
+      .word str_ext_textscreen
+      .byte EXT_CMD_TS
+      .byte 0
+      .word str_ext_ts
+      .byte EXT_CMD_TS
+      .byte 0
+      .word str_ext_splitscreen
+      .byte EXT_CMD_SS
+      .byte 0
+      .word str_ext_ss
+      .byte EXT_CMD_SS
+      .byte 0
+      .word str_ext_fullscreen
+      .byte EXT_CMD_FS
+      .byte 0
+      .word str_ext_fs
+      .byte EXT_CMD_FS
+      .byte 0
+      ; --- Turtle position ---
+      .word str_ext_setxy
+      .byte EXT_CMD_SETXY
+      .byte 2                    ; arity: 2 (x, y)
+      .word str_ext_setx
+      .byte EXT_CMD_SETX
+      .byte 1                    ; arity: 1 (x)
+      .word str_ext_sety
+      .byte EXT_CMD_SETY
+      .byte 1                    ; arity: 1 (y)
+      .word str_ext_setheading
+      .byte EXT_CMD_SETH
+      .byte 1                    ; arity: 1 (degrees)
+      .word str_ext_seth
+      .byte EXT_CMD_SETH
+      .byte 1                    ; SETH alias
+      ; --- Turtle query reporters ---
+      .word str_ext_xcor
+      .byte EXT_CMD_XCOR
+      .byte 0                    ; arity: 0 (reporter)
+      .word str_ext_ycor
+      .byte EXT_CMD_YCOR
+      .byte 0
+      .word str_ext_heading
+      .byte EXT_CMD_HEADING
+      .byte 0
+      .word str_ext_pendownp
+      .byte EXT_CMD_PENDOWNP
+      .byte 0
+      .word str_ext_shownp
+      .byte EXT_CMD_SHOWNP
+      .byte 0
+      ; --- Pen commands ---
+      .word str_ext_setpc
+      .byte EXT_CMD_SETPC
+      .byte 1                    ; arity: 1 (color)
+      .word str_ext_setbg
+      .byte EXT_CMD_SETBG
+      .byte 1
+      ; --- TOWARDS reporter ---
+      .word str_ext_towards
+      .byte EXT_CMD_TOWARDS
+      .byte 2                    ; arity: 2 (x, y)
       .word $0000               ; end sentinel
 
 str_ext_test_name:
@@ -1457,6 +1521,44 @@ str_ext_ht:
       .byte 2, "HT"
 str_ext_home:
       .byte 4, "HOME"
+str_ext_textscreen:
+      .byte 10, "TEXTSCREEN"
+str_ext_ts:
+      .byte 2, "TS"
+str_ext_splitscreen:
+      .byte 11, "SPLITSCREEN"
+str_ext_ss:
+      .byte 2, "SS"
+str_ext_fullscreen:
+      .byte 10, "FULLSCREEN"
+str_ext_fs:
+      .byte 2, "FS"
+str_ext_setxy:
+      .byte 5, "SETXY"
+str_ext_setx:
+      .byte 4, "SETX"
+str_ext_sety:
+      .byte 4, "SETY"
+str_ext_setheading:
+      .byte 10, "SETHEADING"
+str_ext_seth:
+      .byte 4, "SETH"
+str_ext_xcor:
+      .byte 4, "XCOR"
+str_ext_ycor:
+      .byte 4, "YCOR"
+str_ext_heading:
+      .byte 7, "HEADING"
+str_ext_pendownp:
+      .byte 8, "PENDOWN?"
+str_ext_shownp:
+      .byte 6, "SHOWN?"
+str_ext_setpc:
+      .byte 5, "SETPC"
+str_ext_setbg:
+      .byte 5, "SETBG"
+str_ext_towards:
+      .byte 7, "TOWARDS"
 
       .segment "RODATA"
 

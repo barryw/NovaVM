@@ -1272,6 +1272,61 @@ public class NovaLogoTests
         Assert.IsTrue(found, $"Expected '666' after PU + FD 50.\n{screen}");
     }
 
+    [TestMethod]
+    public void TurtlePositionQueries()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "SETXY 100 50");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT XCOR");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT YCOR");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool has100 = false, has50 = false;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "100") has100 = true;
+            if (t == "50") has50 = true;
+        }
+        Assert.IsTrue(has100, $"Expected '100' from XCOR.\n{screen}");
+        Assert.IsTrue(has50, $"Expected '50' from YCOR.\n{screen}");
+    }
+
+    [TestMethod]
+    public void SetHeadingAndQuery()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "SETH 90");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT HEADING");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "90") found = true;
+        Assert.IsTrue(found, $"Expected '90' from HEADING after SETH 90.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)
