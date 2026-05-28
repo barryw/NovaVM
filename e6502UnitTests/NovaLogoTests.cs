@@ -270,6 +270,85 @@ public class NovaLogoTests
             $"Expected '15' from PRINT :X + 5.\n{screen}");
     }
 
+    [TestMethod]
+    public void IfTrueExecutesBody()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "IF 10 > 5 [PRINT \"YES]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("YES", StringComparison.Ordinal),
+            $"Expected 'YES' from IF 10 > 5.\n{screen}");
+    }
+
+    [TestMethod]
+    public void IfFalseSkipsBody()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "IF 3 > 5 [PRINT 777]");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT \"DONE");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // 777 should NOT appear on its own line (only as part of the echoed input)
+        int count777 = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.TrimEnd();
+            if (t.EndsWith("777") && !t.Contains("IF"))
+                count777++;
+        }
+        Assert.AreEqual(0, count777,
+            $"Expected no output line '777' from IF 3 > 5.\n{screen}");
+        Assert.IsTrue(screen.Contains("DONE", StringComparison.Ordinal),
+            $"Expected DONE after skipped IF.\n{screen}");
+    }
+
+    [TestMethod]
+    public void IfElseSelectsBranch()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "IFELSE 10 > 5 [PRINT 111] [PRINT 222]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // 111 should appear as output on its own line, 222 should not
+        int count111 = 0;
+        int count222 = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.TrimEnd();
+            if (t.EndsWith("111") && !t.Contains("IFELSE"))
+                count111++;
+            if (t.EndsWith("222") && !t.Contains("IFELSE"))
+                count222++;
+        }
+        Assert.IsTrue(count111 >= 1,
+            $"Expected output '111' from IFELSE 10 > 5 true branch.\n{screen}");
+        Assert.AreEqual(0, count222,
+            $"Expected no output '222' from IFELSE 10 > 5 false branch.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

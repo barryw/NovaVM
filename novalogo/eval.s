@@ -447,6 +447,16 @@ eval_check_infix:
       BEQ   @do_mul
       CMP   #'/'
       BEQ   @do_div
+      CMP   #'>'
+      BNE   :+
+      JMP   @do_gt
+:     CMP   #'<'
+      BNE   :+
+      JMP   @do_lt
+:     CMP   #'='
+      BNE   :+
+      JMP   @do_eq
+:
       ; Unknown operator — return left value unchanged
       LDA   eval_left_hi
       STA   eval_val_hi
@@ -552,6 +562,92 @@ eval_check_infix:
       LDA   MATH_RES1
       STA   eval_val_hi
       STZ   eval_val_frac
+      CLC
+      RTS
+
+      ; ----- Equality: left = right (all 3 bytes must match) -----
+@do_eq:
+      LDA   eval_left_hi
+      CMP   eval_val_hi
+      BNE   @set_false
+      LDA   eval_left_lo
+      CMP   eval_val_lo
+      BNE   @set_false
+      LDA   eval_left_frac
+      CMP   eval_val_frac
+      BNE   @set_false
+      BRA   @set_true
+
+      ; ----- Greater than: left > right (signed 24-bit) -----
+@do_gt:
+      ; Compare hi bytes (signed)
+      LDA   eval_left_hi
+      SEC
+      SBC   eval_val_hi
+      BVC   @gt_sign_ok           ; no overflow — N flag valid
+      EOR   #$80                  ; overflow — invert N to get true sign
+@gt_sign_ok:
+      BMI   @set_false            ; left_hi < right_hi → false
+      ; If the subtraction was nonzero and positive, left > right
+      LDA   eval_left_hi
+      CMP   eval_val_hi
+      BNE   @set_true             ; hi bytes differ, and left > right
+      ; Hi bytes equal — compare lo bytes (unsigned)
+      LDA   eval_left_lo
+      CMP   eval_val_lo
+      BNE   @gt_lo_diff
+      ; Lo bytes equal — compare frac bytes (unsigned)
+      LDA   eval_left_frac
+      CMP   eval_val_frac
+      BEQ   @set_false            ; all equal → not greater
+      BCS   @set_true
+      BRA   @set_false
+@gt_lo_diff:
+      BCS   @set_true
+      BRA   @set_false
+
+      ; ----- Less than: left < right (signed 24-bit) -----
+@do_lt:
+      ; Compare hi bytes (signed)
+      LDA   eval_left_hi
+      SEC
+      SBC   eval_val_hi
+      BVC   @lt_sign_ok
+      EOR   #$80
+@lt_sign_ok:
+      BMI   @set_true             ; left_hi < right_hi → true
+      LDA   eval_left_hi
+      CMP   eval_val_hi
+      BNE   @set_false            ; left_hi > right_hi → false
+      ; Hi bytes equal — compare lo bytes (unsigned)
+      LDA   eval_left_lo
+      CMP   eval_val_lo
+      BNE   @lt_lo_diff
+      ; Lo bytes equal — compare frac (unsigned)
+      LDA   eval_left_frac
+      CMP   eval_val_frac
+      BEQ   @set_false            ; equal → not less
+      BCC   @set_true
+      BRA   @set_false
+@lt_lo_diff:
+      BCC   @set_true
+      BRA   @set_false
+
+      ; ----- Set result to TRUE (1) or FALSE (0) -----
+@set_true:
+      STZ   eval_val_hi
+      LDA   #1
+      STA   eval_val_lo
+      STZ   eval_val_frac
+      STZ   eval_type
+      CLC
+      RTS
+
+@set_false:
+      STZ   eval_val_hi
+      STZ   eval_val_lo
+      STZ   eval_val_frac
+      STZ   eval_type
       CLC
       RTS
 

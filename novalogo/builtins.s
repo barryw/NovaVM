@@ -487,6 +487,274 @@ print_byte_hex:
       STA   VGC_CHAROUT
       RTS
 
+; ---------------------------------------------------------------------
+; skip_list_body — advance eval_cur past a [...] block without executing
+;   Entry: eval_cur must point at a TOK_LBRACKET token
+;   Exit:  eval_cur points at the token after the matching TOK_RBRACKET
+;          Carry clear = success, Carry set = missing bracket
+;   Clobbers: A, X, Y, ptr_lo/hi
+; ---------------------------------------------------------------------
+skip_list_body:
+      ; Verify current token is TOK_LBRACKET
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BEQ   @err
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BNE   @err
+
+      ; Advance past the [
+      JSR   eval_advance
+      LDX   #1                    ; depth = 1
+
+@scan:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BEQ   @err                  ; ran out of tokens
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+
+      CMP   #TOK_LBRACKET
+      BNE   @not_lb
+      INX
+      BRA   @scan_next
+@not_lb:
+      CMP   #TOK_RBRACKET
+      BNE   @scan_next
+      DEX
+      BEQ   @found                 ; depth == 0 -> matched
+@scan_next:
+      PHX
+      JSR   eval_advance
+      PLX
+      BRA   @scan
+
+@found:
+      ; eval_cur is at the matching ]. Advance past it.
+      JSR   eval_advance
+      CLC
+      RTS
+
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; exec_body_block — execute a [...] body once
+;   Entry: eval_cur must point at a TOK_LBRACKET token
+;   Exit:  eval_cur points past the matching ], carry clear = ok
+;          Carry set = bracket error
+;   Saves/restores body_resume, eval_in_body for nesting.
+;   Clobbers: A, X, Y, ptr_lo/hi, body_start/resume, eval_in_body
+; ---------------------------------------------------------------------
+exec_body_block:
+      ; Verify current token is [
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BEQ   @err
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BNE   @err
+
+      ; Advance past [
+      JSR   eval_advance
+
+      ; Save outer state for nesting
+      LDA   body_resume_lo
+      PHA
+      LDA   body_resume_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+
+      ; Save body start
+      LDA   eval_cur_lo
+      PHA
+      LDA   eval_cur_hi
+      PHA
+
+      ; Scan forward for matching ]
+      LDX   #1
+@scan:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BEQ   @err_pop5
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BNE   @not_lb
+      INX
+      BRA   @scan_next
+@not_lb:
+      CMP   #TOK_RBRACKET
+      BNE   @scan_next
+      DEX
+      BEQ   @found
+@scan_next:
+      PHX
+      JSR   eval_advance
+      PLX
+      BRA   @scan
+
+@found:
+      ; Advance past ] for resume point
+      JSR   eval_advance
+      LDA   eval_cur_lo
+      STA   body_resume_lo
+      LDA   eval_cur_hi
+      STA   body_resume_hi
+
+      ; Restore body start
+      PLA
+      STA   eval_cur_hi
+      PLA
+      STA   eval_cur_lo
+
+      ; Execute the body
+      LDA   #$01
+      STA   eval_in_body
+      JSR   eval_body
+
+      ; Restore outer state
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   body_resume_hi
+      PLA
+      STA   body_resume_lo
+
+      ; Set eval_cur past the ]
+      LDA   body_resume_lo
+      STA   eval_cur_lo
+      LDA   body_resume_hi
+      STA   eval_cur_hi
+      CLC
+      RTS
+
+@err_pop5:
+      PLA
+      PLA
+      PLA
+      PLA
+      PLA
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_if — IF condition [body]
+;   Arity 0 — handles its own argument parsing
+; ---------------------------------------------------------------------
+do_if:
+      JSR   eval_expr
+      BCS   @err
+
+      ; Nonzero integer part = true
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BNE   @true
+
+      ; False — skip the body
+      JSR   skip_list_body
+      BCS   @err_bracket
+      JMP   eval_continue
+
+@true:
+      JSR   exec_body_block
+      BCS   @err_bracket
+      JMP   eval_continue
+
+@err_bracket:
+      LDX   #<str_if_bracket
+      LDY   #>str_if_bracket
+      BRA   if_print_err
+@err:
+      LDX   #<str_if_err
+      LDY   #>str_if_err
+      ; fall through
+
+if_print_err:
+      STX   ptr_lo
+      STY   ptr_hi
+      LDY   #0
+@lp:
+      LDA   (ptr_lo),Y
+      BEQ   @done
+      STA   VGC_CHAROUT
+      INY
+      BNE   @lp
+@done:
+      JSR   eval_newline
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_ifelse — IFELSE condition [true-body] [false-body]
+;   Arity 0 — handles its own argument parsing
+; ---------------------------------------------------------------------
+do_ifelse:
+      JSR   eval_expr
+      BCS   @err
+
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BNE   @is_true
+
+      ; FALSE: skip first body, execute second
+      JSR   skip_list_body
+      BCS   @err_bracket
+      JSR   exec_body_block
+      BCS   @err_bracket
+      JMP   eval_continue
+
+@is_true:
+      ; TRUE: execute first body, skip second
+      JSR   exec_body_block
+      BCS   @err_bracket
+      JSR   skip_list_body
+      BCS   @err_bracket
+      JMP   eval_continue
+
+@err_bracket:
+      LDX   #<str_ifelse_bracket
+      LDY   #>str_ifelse_bracket
+      BRA   ifelse_print_err
+@err:
+      LDX   #<str_ifelse_err
+      LDY   #>str_ifelse_err
+      ; fall through
+
+ifelse_print_err:
+      STX   ptr_lo
+      STY   ptr_hi
+      LDY   #0
+@lp:
+      LDA   (ptr_lo),Y
+      BEQ   @done
+      STA   VGC_CHAROUT
+      INY
+      BNE   @lp
+@done:
+      JSR   eval_newline
+      JMP   eval_continue
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
@@ -501,6 +769,18 @@ str_repeat_err:
 str_repeat_bracket:
       .byte "REPEAT NEEDS [ BODY ]", 0
 
+str_if_err:
+      .byte "NOT ENOUGH INPUTS TO IF", 0
+
+str_if_bracket:
+      .byte "IF NEEDS [ BODY ]", 0
+
+str_ifelse_err:
+      .byte "NOT ENOUGH INPUTS TO IFELSE", 0
+
+str_ifelse_bracket:
+      .byte "IFELSE NEEDS [ BODY ]", 0
+
 ; Name strings: length-prefixed
 str_print_name:
       .byte 5, "PRINT"
@@ -510,6 +790,10 @@ str_make_name:
       .byte 4, "MAKE"
 str_repeat_name:
       .byte 6, "REPEAT"
+str_if_name:
+      .byte 2, "IF"
+str_ifelse_name:
+      .byte 6, "IFELSE"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -528,5 +812,13 @@ builtin_table:
       .word str_repeat_name
       .word do_repeat
       .byte 0                    ; arity 0: do_repeat handles its own args
+
+      .word str_ifelse_name
+      .word do_ifelse
+      .byte 0                    ; arity 0: do_ifelse handles its own args
+
+      .word str_if_name
+      .word do_if
+      .byte 0                    ; arity 0: do_if handles its own args
 
       .word $0000               ; end sentinel
