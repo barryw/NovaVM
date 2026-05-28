@@ -741,6 +741,64 @@ public class NovaLogoTests
         Assert.IsTrue(found, $"Expected '[1 2 3]' from SHOW [1 2 3].\n{screen}");
     }
 
+    [TestMethod]
+    public void FputConstructsList()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "SHOW FPUT 1 [2 3]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("[1 2 3]", StringComparison.Ordinal),
+            $"Expected '[1 2 3]' from SHOW FPUT 1 [2 3].\n{screen}");
+    }
+
+    [TestMethod]
+    public void RunEvaluatesListAsCode()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "MAKE \"CMD [PRINT 777]");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "RUN :CMD");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "777") found = true;
+        Assert.IsTrue(found, $"Expected '777' from RUN :CMD.\n{screen}");
+    }
+
+    [TestMethod]
+    public void WordConcatenates()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT WORD \"HEL \"LO");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("HELLO", StringComparison.Ordinal),
+            $"Expected 'HELLO' from PRINT WORD \"HEL \"LO.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

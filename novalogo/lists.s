@@ -1125,6 +1125,1206 @@ list_print_err:
       JSR   eval_newline
       JMP   eval_continue
 
+; ---------------------------------------------------------------------
+; do_fput — FPUT value list: prepend value to front of list
+;   Arity 0: evaluates its own arguments
+; ---------------------------------------------------------------------
+do_fput:
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err
+:
+      ; Save value on stack (type, hi, lo, frac)
+      LDA   eval_type
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_frac
+      PHA
+
+      ; Evaluate second arg: must be a list
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err_pop4
+:
+      LDA   eval_type
+      CMP   #VAL_LIST
+      BNE   @err_type_pop4
+
+      ; Save the list pointer (will be cdr of new cell)
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_hi
+      PHA
+
+      ; Allocate cons pair
+      LDA   #CONS_SIZE
+      JSR   heap_alloc
+      BCS   @oom_pop6
+
+      ; Pop list pointer → cdr
+      PLA
+      STA   num_tmp_hi              ; list_hi
+      PLA
+      STA   num_tmp_lo              ; list_lo
+
+      ; Pop value → car
+      PLA
+      STA   eval_val_frac
+      PLA
+      STA   eval_val_lo
+      PLA
+      STA   eval_val_hi
+      PLA
+      STA   eval_type
+
+      ; Fill the cons pair
+      LDY   #CONS_TAG
+      LDA   #CONS_PAIR
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_TYPE
+      LDA   eval_type
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_HI
+      LDA   eval_val_hi
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_LO
+      LDA   eval_val_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_FRAC
+      LDA   eval_val_frac
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_LO
+      LDA   num_tmp_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      LDA   num_tmp_hi
+      STA   (ptr_lo),Y
+
+      ; Return the new list
+      LDA   #VAL_LIST
+      STA   eval_type
+      LDA   ptr_lo
+      STA   eval_val_lo
+      LDA   ptr_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JMP   eval_continue
+
+@oom_pop6:
+      PLA
+      PLA
+@err_type_pop4:
+@err_pop4:
+      PLA
+      PLA
+      PLA
+      PLA
+@err:
+      LDX   #<str_fput_err
+      LDY   #>str_fput_err
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_lput — LPUT value list: append value to end of list
+;   Arity 0: evaluates its own arguments
+; ---------------------------------------------------------------------
+do_lput:
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err
+:
+      ; Save value on stack
+      LDA   eval_type
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_frac
+      PHA
+
+      ; Evaluate second arg: must be a list
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err_pop4
+:
+      LDA   eval_type
+      CMP   #VAL_LIST
+      BEQ   :+
+      JMP   @err_type_pop4
+:
+      ; Save list pointer
+      LDA   eval_val_lo
+      STA   list_head_lo
+      LDA   eval_val_hi
+      STA   list_head_hi
+
+      ; Pop value back
+      PLA
+      STA   eval_val_frac
+      PLA
+      STA   eval_val_lo
+      PLA
+      STA   eval_val_hi
+      PLA
+      STA   eval_type
+
+      ; Allocate new tail cons pair for the value
+      LDA   eval_type
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_frac
+      PHA
+
+      LDA   #CONS_SIZE
+      JSR   heap_alloc
+      BCC   :+
+      JMP   @oom2_pop4
+:
+
+      ; Pop value
+      PLA
+      STA   eval_val_frac
+      PLA
+      STA   eval_val_lo
+      PLA
+      STA   eval_val_hi
+      PLA
+      STA   eval_type
+
+      ; Fill the new tail cell
+      LDY   #CONS_TAG
+      LDA   #CONS_PAIR
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_TYPE
+      LDA   eval_type
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_HI
+      LDA   eval_val_hi
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_LO
+      LDA   eval_val_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_FRAC
+      LDA   eval_val_frac
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_LO
+      LDA   #0
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      STA   (ptr_lo),Y
+
+      ; Save new cell pointer
+      LDA   ptr_lo
+      STA   list_tail_lo
+      LDA   ptr_hi
+      STA   list_tail_hi
+
+      ; If list was empty, new cell IS the list
+      LDA   list_head_lo
+      ORA   list_head_hi
+      BEQ   @lput_single
+
+      ; Walk to last cell of existing list
+      LDA   list_head_lo
+      STA   list_ptr_lo
+      LDA   list_head_hi
+      STA   list_ptr_hi
+@lput_walk:
+      LDA   list_ptr_lo
+      STA   ptr_lo
+      LDA   list_ptr_hi
+      STA   ptr_hi
+      LDY   #CONS_CDR_LO
+      LDA   (ptr_lo),Y
+      TAX
+      LDY   #CONS_CDR_HI
+      LDA   (ptr_lo),Y
+      ORA   #0
+      BNE   @lput_next
+      CPX   #0
+      BEQ   @lput_found_last
+@lput_next:
+      STA   list_ptr_hi
+      STX   list_ptr_lo
+      BRA   @lput_walk
+
+@lput_found_last:
+      ; Patch last cell's cdr to point to new tail
+      LDY   #CONS_CDR_LO
+      LDA   list_tail_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      LDA   list_tail_hi
+      STA   (ptr_lo),Y
+
+      ; Return original list head
+      LDA   #VAL_LIST
+      STA   eval_type
+      LDA   list_head_lo
+      STA   eval_val_lo
+      LDA   list_head_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JMP   eval_continue
+
+@lput_single:
+      ; Empty list → just return the new cell
+      LDA   #VAL_LIST
+      STA   eval_type
+      LDA   list_tail_lo
+      STA   eval_val_lo
+      LDA   list_tail_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JMP   eval_continue
+
+@oom2_pop4:
+      PLA
+      PLA
+      PLA
+      PLA
+@err_type_pop4:
+@err_pop4:
+      PLA
+      PLA
+      PLA
+      PLA
+@err:
+      LDX   #<str_lput_err
+      LDY   #>str_lput_err
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_list — LIST val1 val2: create a two-element list
+;   Arity 0: evaluates its own arguments
+; ---------------------------------------------------------------------
+do_list:
+      ; Evaluate first arg
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err
+:
+      ; Save first value
+      LDA   eval_type
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_frac
+      PHA
+
+      ; Evaluate second arg
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err_pop4
+:
+      ; Save second value
+      LDA   eval_type
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_frac
+      PHA
+
+      ; Allocate second cell first (it has cdr=null)
+      LDA   #CONS_SIZE
+      JSR   heap_alloc
+      BCC   :+
+      JMP   @oom_pop8
+:
+
+      ; Pop second value into cell
+      PLA
+      PHA                           ; keep frac on stack briefly
+      LDY   #CONS_TAG
+      LDA   #CONS_PAIR
+      STA   (ptr_lo),Y
+      ; type
+      LDY   #8                      ; stack offset for second type
+      TSX
+      LDA   $0104,X                 ; second val type (stack: frac,lo,hi,type,...)
+      LDY   #CONS_CAR_TYPE
+      STA   (ptr_lo),Y
+      ; hi
+      TSX
+      LDA   $0103,X
+      LDY   #CONS_CAR_HI
+      STA   (ptr_lo),Y
+      ; lo
+      TSX
+      LDA   $0102,X
+      LDY   #CONS_CAR_LO
+      STA   (ptr_lo),Y
+      ; frac
+      PLA                           ; restore frac
+      LDY   #CONS_CAR_FRAC
+      STA   (ptr_lo),Y
+      ; cdr = null
+      LDY   #CONS_CDR_LO
+      LDA   #0
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      STA   (ptr_lo),Y
+
+      ; Clean remaining 3 bytes of second value from stack
+      PLA
+      PLA
+      PLA
+
+      ; Save second cell pointer
+      LDA   ptr_lo
+      STA   list_tail_lo
+      LDA   ptr_hi
+      STA   list_tail_hi
+
+      ; Allocate first cell
+      LDA   #CONS_SIZE
+      JSR   heap_alloc
+      BCS   @oom_pop4
+
+      ; Pop first value into cell
+      PLA
+      STA   eval_val_frac
+      PLA
+      STA   eval_val_lo
+      PLA
+      STA   eval_val_hi
+      PLA
+      STA   eval_type
+
+      LDY   #CONS_TAG
+      LDA   #CONS_PAIR
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_TYPE
+      LDA   eval_type
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_HI
+      LDA   eval_val_hi
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_LO
+      LDA   eval_val_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_FRAC
+      LDA   eval_val_frac
+      STA   (ptr_lo),Y
+      ; cdr = second cell
+      LDY   #CONS_CDR_LO
+      LDA   list_tail_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      LDA   list_tail_hi
+      STA   (ptr_lo),Y
+
+      ; Return first cell as list head
+      LDA   #VAL_LIST
+      STA   eval_type
+      LDA   ptr_lo
+      STA   eval_val_lo
+      LDA   ptr_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JMP   eval_continue
+
+@oom_pop8:
+      PLA
+      PLA
+      PLA
+      PLA
+@oom_pop4:
+@err_pop4:
+      PLA
+      PLA
+      PLA
+      PLA
+@err:
+      LDX   #<str_list_err
+      LDY   #>str_list_err
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_sentence — SENTENCE val1 val2: concatenate two values as flat list
+;   Non-list args are wrapped as single-element lists first.
+;   Arity 0: evaluates its own arguments
+; ---------------------------------------------------------------------
+do_sentence:
+      ; Evaluate first arg
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err
+:
+      ; Save first value
+      LDA   eval_type
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_frac
+      PHA
+
+      ; Evaluate second arg
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err_pop4
+:
+      ; Save second value
+      LDA   eval_type
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_frac
+      PHA
+
+      ; Process first arg: if not list, wrap in single-element list
+      ; First value is at stack offset 4..7 (under second value)
+      TSX
+      LDA   $0108,X                 ; first type
+      CMP   #VAL_LIST
+      BEQ   @first_is_list
+
+      ; Wrap first value as single-element list
+      LDA   #CONS_SIZE
+      JSR   heap_alloc
+      BCC   :+
+      JMP   @oom_pop8
+:
+      LDY   #CONS_TAG
+      LDA   #CONS_PAIR
+      STA   (ptr_lo),Y
+      TSX
+      LDA   $0108,X                 ; first type
+      LDY   #CONS_CAR_TYPE
+      STA   (ptr_lo),Y
+      LDA   $0107,X                 ; first hi
+      LDY   #CONS_CAR_HI
+      STA   (ptr_lo),Y
+      LDA   $0106,X                 ; first lo
+      LDY   #CONS_CAR_LO
+      STA   (ptr_lo),Y
+      LDA   $0105,X                 ; first frac
+      LDY   #CONS_CAR_FRAC
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_LO
+      LDA   #0
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      STA   (ptr_lo),Y
+      ; Update first value on stack to be VAL_LIST
+      LDA   #VAL_LIST
+      STA   $0108,X                 ; type = list
+      LDA   ptr_hi
+      STA   $0107,X                 ; hi = ptr_hi
+      LDA   ptr_lo
+      STA   $0106,X                 ; lo = ptr_lo
+      LDA   #0
+      STA   $0105,X                 ; frac = 0
+
+@first_is_list:
+      ; Process second arg: if not list, wrap it
+      TSX
+      LDA   $0104,X                 ; second type
+      CMP   #VAL_LIST
+      BEQ   @second_is_list
+
+      ; Wrap second value
+      LDA   #CONS_SIZE
+      JSR   heap_alloc
+      BCC   :+
+      JMP   @oom_pop8
+:
+      LDY   #CONS_TAG
+      LDA   #CONS_PAIR
+      STA   (ptr_lo),Y
+      TSX
+      LDA   $0104,X                 ; second type
+      LDY   #CONS_CAR_TYPE
+      STA   (ptr_lo),Y
+      LDA   $0103,X                 ; second hi
+      LDY   #CONS_CAR_HI
+      STA   (ptr_lo),Y
+      LDA   $0102,X                 ; second lo
+      LDY   #CONS_CAR_LO
+      STA   (ptr_lo),Y
+      LDA   $0101,X                 ; second frac
+      LDY   #CONS_CAR_FRAC
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_LO
+      LDA   #0
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      STA   (ptr_lo),Y
+      ; Update second value on stack
+      LDA   #VAL_LIST
+      STA   $0104,X
+      LDA   ptr_hi
+      STA   $0103,X
+      LDA   ptr_lo
+      STA   $0102,X
+      LDA   #0
+      STA   $0101,X
+
+@second_is_list:
+      ; Pop second list pointer
+      PLA                           ; frac (unused)
+      PLA                           ; lo
+      STA   list_tail_lo
+      PLA                           ; hi
+      STA   list_tail_hi
+      PLA                           ; type (unused, known VAL_LIST)
+
+      ; Pop first list pointer
+      PLA                           ; frac (unused)
+      PLA                           ; lo
+      STA   list_head_lo
+      PLA                           ; hi
+      STA   list_head_hi
+      PLA                           ; type (unused)
+
+      ; If first list is empty, return second
+      LDA   list_head_lo
+      ORA   list_head_hi
+      BEQ   @se_return_second
+
+      ; Walk to end of first list, patch cdr to second
+      LDA   list_head_lo
+      STA   list_ptr_lo
+      LDA   list_head_hi
+      STA   list_ptr_hi
+@se_walk:
+      LDA   list_ptr_lo
+      STA   ptr_lo
+      LDA   list_ptr_hi
+      STA   ptr_hi
+      LDY   #CONS_CDR_LO
+      LDA   (ptr_lo),Y
+      TAX
+      LDY   #CONS_CDR_HI
+      LDA   (ptr_lo),Y
+      ORA   #0
+      BNE   @se_next
+      CPX   #0
+      BEQ   @se_found_last
+@se_next:
+      STA   list_ptr_hi
+      STX   list_ptr_lo
+      BRA   @se_walk
+
+@se_found_last:
+      ; Patch last cell's cdr to second list
+      LDY   #CONS_CDR_LO
+      LDA   list_tail_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      LDA   list_tail_hi
+      STA   (ptr_lo),Y
+
+      ; Return first list head
+      LDA   #VAL_LIST
+      STA   eval_type
+      LDA   list_head_lo
+      STA   eval_val_lo
+      LDA   list_head_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JMP   eval_continue
+
+@se_return_second:
+      LDA   #VAL_LIST
+      STA   eval_type
+      LDA   list_tail_lo
+      STA   eval_val_lo
+      LDA   list_tail_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JMP   eval_continue
+
+@oom_pop8:
+      PLA
+      PLA
+      PLA
+      PLA
+@err_pop4:
+      PLA
+      PLA
+      PLA
+      PLA
+@err:
+      LDX   #<str_sentence_err
+      LDY   #>str_sentence_err
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_word — WORD val1 val2: concatenate two words into one
+;   Arity 0: evaluates its own arguments
+; ---------------------------------------------------------------------
+do_word:
+      ; Evaluate first arg (must be a word)
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err
+:
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BEQ   :+
+      JMP   @err_type
+:
+      ; Save first word pointer
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_hi
+      PHA
+
+      ; Evaluate second arg (must be a word)
+      JSR   eval_expr
+      BCC   :+
+      PLA
+      PLA
+      JMP   @err
+:
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BEQ   :+
+      JMP   @err_type_pop2
+:
+
+      ; eval_val = second word, stack has first word ptr
+      ; Read lengths
+      LDA   eval_val_lo
+      STA   ptr2_lo
+      LDA   eval_val_hi
+      STA   ptr2_hi
+      LDY   #0
+      LDA   (ptr2_lo),Y            ; second word length
+      STA   list_count_lo           ; save len2
+
+      ; Read first word length from stack
+      PLA
+      STA   list_head_hi            ; first word ptr hi
+      PLA
+      STA   list_head_lo            ; first word ptr lo
+      LDA   list_head_lo
+      STA   ptr_lo
+      LDA   list_head_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y             ; first word length
+      STA   list_count_hi           ; save len1
+
+      ; Allocate new string: 1 (length byte) + len1 + len2
+      CLC
+      ADC   list_count_lo
+      INC                           ; +1 for length byte
+      JSR   heap_alloc
+      BCS   @err_oom
+
+      ; Write combined length
+      LDA   list_count_hi
+      CLC
+      ADC   list_count_lo
+      LDY   #0
+      STA   (ptr_lo),Y
+
+      ; Copy first word's chars
+      LDX   list_count_hi           ; len1
+      BEQ   @w_copy2
+      LDA   list_head_lo
+      STA   ptr2_lo
+      LDA   list_head_hi
+      STA   ptr2_hi
+      LDY   #1                     ; dest offset in new string
+      STZ   num_tmp_lo              ; source offset
+@w_c1:
+      PHX
+      PHY
+      LDA   num_tmp_lo
+      INC                           ; skip length byte in source
+      TAY
+      LDA   (ptr2_lo),Y            ; source char
+      PLY
+      STA   (ptr_lo),Y             ; dest char
+      INY
+      INC   num_tmp_lo
+      PLX
+      DEX
+      BNE   @w_c1
+
+      ; Y is already at the next dest offset
+      BRA   @w_copy2_start
+
+@w_copy2:
+      LDY   #1                     ; start at offset 1 if len1 was 0
+@w_copy2_start:
+      ; Copy second word's chars
+      LDX   list_count_lo           ; len2
+      BEQ   @w_done
+      LDA   eval_val_lo
+      STA   ptr2_lo
+      LDA   eval_val_hi
+      STA   ptr2_hi
+      STZ   num_tmp_lo
+@w_c2:
+      PHX
+      PHY
+      LDA   num_tmp_lo
+      INC
+      TAY
+      LDA   (ptr2_lo),Y
+      PLY
+      STA   (ptr_lo),Y
+      INY
+      INC   num_tmp_lo
+      PLX
+      DEX
+      BNE   @w_c2
+
+@w_done:
+      ; Return the new word
+      LDA   #VAL_WORD
+      STA   eval_type
+      LDA   ptr_lo
+      STA   eval_val_lo
+      LDA   ptr_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JMP   eval_continue
+
+@err_type_pop2:
+      PLA
+      PLA
+@err_type:
+      LDX   #<str_word_type
+      LDY   #>str_word_type
+      JMP   list_print_err
+@err_oom:
+@err:
+      LDX   #<str_word_err
+      LDY   #>str_word_err
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_run — RUN list: evaluate a list as Logo code
+;   Arity 0: evaluates its own argument
+;
+;   Strategy: convert list to text in input_buf, then save evaluator
+;   state, tokenize_line + eval_line, restore state.
+; ---------------------------------------------------------------------
+do_run:
+      JSR   eval_expr
+      BCC   :+
+      JMP   @err
+:
+      LDA   eval_type
+      CMP   #VAL_LIST
+      BNE   @err_type
+
+      ; Save eval_cur on stack (we'll resume here after RUN)
+      LDA   eval_cur_lo
+      PHA
+      LDA   eval_cur_hi
+      PHA
+
+      ; Render the list into input_buf as text
+      ; eval_val_lo/hi = list head
+      STZ   z:buf_idx               ; reset write position
+      JSR   render_list_to_buf
+
+      ; Null-terminate input_buf
+      LDX   z:buf_idx
+      STZ   input_buf,X
+
+      ; Save tokenizer and eval state (same pattern as proc_invoke)
+      LDA   tok_head_lo
+      PHA
+      LDA   tok_head_hi
+      PHA
+      LDA   tok_tail_lo
+      PHA
+      LDA   tok_tail_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+      LDA   eval_reporter
+      PHA
+
+      ; Tokenize the reconstructed line
+      JSR   tokenize_line
+
+      ; Evaluate it
+      JSR   eval_line
+
+      ; Restore tokenizer/eval state
+      PLA
+      STA   eval_reporter
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   tok_tail_hi
+      PLA
+      STA   tok_tail_lo
+      PLA
+      STA   tok_head_hi
+      PLA
+      STA   tok_head_lo
+
+      ; Restore eval_cur
+      PLA
+      STA   eval_cur_hi
+      PLA
+      STA   eval_cur_lo
+
+      JMP   eval_continue
+
+@err_type:
+      LDX   #<str_run_type
+      LDY   #>str_run_type
+      JMP   list_print_err
+@err:
+      LDX   #<str_run_err
+      LDY   #>str_run_err
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; render_list_to_buf — render list elements into input_buf as text
+;   Entry: eval_val_lo/hi = list head pointer
+;          buf_idx = current write position in input_buf
+;   Exit:  buf_idx updated
+;   Clobbers: A, X, Y, ptr_lo/hi, ptr2_lo/hi, list_ptr, list_count
+; ---------------------------------------------------------------------
+render_list_to_buf:
+      LDA   eval_val_lo
+      STA   list_ptr_lo
+      LDA   eval_val_hi
+      STA   list_ptr_hi
+      LDX   #0                     ; 0 = first element (no leading space)
+
+@rl_loop:
+      LDA   list_ptr_lo
+      ORA   list_ptr_hi
+      BNE   :+
+      RTS                           ; end of list
+:
+      ; Add space before non-first elements
+      CPX   #0
+      BEQ   @rl_no_space
+      LDA   z:buf_idx
+      CMP   #126
+      BCC   :+
+      RTS                           ; buffer full — truncate
+:
+      TAY
+      LDA   #' '
+      STA   input_buf,Y
+      INC   z:buf_idx
+@rl_no_space:
+      LDX   #1                     ; subsequent elements get space
+
+      ; Read car type
+      LDA   list_ptr_lo
+      STA   ptr_lo
+      LDA   list_ptr_hi
+      STA   ptr_hi
+      LDY   #CONS_CAR_TYPE
+      LDA   (ptr_lo),Y
+
+      CMP   #VAL_LIST
+      BEQ   @rl_sublist
+      CMP   #VAL_WORD
+      BEQ   @rl_word
+
+      ; Number: render to input_buf
+      PHX
+      LDA   list_ptr_lo
+      PHA
+      LDA   list_ptr_hi
+      PHA
+      ; Load the number value
+      LDY   #CONS_CAR_HI
+      LDA   (ptr_lo),Y
+      STA   eval_val_hi
+      LDY   #CONS_CAR_LO
+      LDA   (ptr_lo),Y
+      STA   eval_val_lo
+      LDY   #CONS_CAR_FRAC
+      LDA   (ptr_lo),Y
+      STA   eval_val_frac
+      JSR   render_number_to_buf
+      PLA
+      STA   list_ptr_hi
+      PLA
+      STA   list_ptr_lo
+      PLX
+      BRA   @rl_advance
+
+@rl_word:
+      PHX
+      LDA   list_ptr_lo
+      PHA
+      LDA   list_ptr_hi
+      PHA
+      ; Get word string pointer
+      LDY   #CONS_CAR_LO
+      LDA   (ptr_lo),Y
+      STA   ptr2_lo
+      LDY   #CONS_CAR_HI
+      LDA   (ptr_lo),Y
+      STA   ptr2_hi
+      ; Copy word chars to buf
+      LDY   #0
+      LDA   (ptr2_lo),Y            ; length
+      TAX
+      BEQ   @rl_word_done
+      INY
+@rl_wch:
+      LDA   z:buf_idx
+      CMP   #126
+      BCS   @rl_word_done
+      LDA   (ptr2_lo),Y
+      PHY
+      LDY   z:buf_idx
+      STA   input_buf,Y
+      INC   z:buf_idx
+      PLY
+      INY
+      DEX
+      BNE   @rl_wch
+@rl_word_done:
+      PLA
+      STA   list_ptr_hi
+      PLA
+      STA   list_ptr_lo
+      PLX
+      BRA   @rl_advance
+
+@rl_sublist:
+      PHX
+      LDA   list_ptr_lo
+      PHA
+      LDA   list_ptr_hi
+      PHA
+      ; Write '[' to buf
+      LDA   z:buf_idx
+      CMP   #126
+      BCS   @rl_sub_done
+      TAY
+      LDA   #'['
+      STA   input_buf,Y
+      INC   z:buf_idx
+      ; Get sublist pointer and recurse
+      LDY   #CONS_CAR_LO
+      LDA   (ptr_lo),Y
+      STA   eval_val_lo
+      LDY   #CONS_CAR_HI
+      LDA   (ptr_lo),Y
+      STA   eval_val_hi
+      JSR   render_list_to_buf
+      ; Write ']' to buf
+      LDA   z:buf_idx
+      CMP   #126
+      BCS   @rl_sub_done
+      TAY
+      LDA   #']'
+      STA   input_buf,Y
+      INC   z:buf_idx
+@rl_sub_done:
+      PLA
+      STA   list_ptr_hi
+      PLA
+      STA   list_ptr_lo
+      PLX
+
+@rl_advance:
+      ; Follow cdr
+      LDA   list_ptr_lo
+      STA   ptr_lo
+      LDA   list_ptr_hi
+      STA   ptr_hi
+      LDY   #CONS_CDR_LO
+      LDA   (ptr_lo),Y
+      TAX
+      LDY   #CONS_CDR_HI
+      LDA   (ptr_lo),Y
+      STA   list_ptr_hi
+      STX   list_ptr_lo
+      LDX   #1                     ; always space after first element
+      JMP   @rl_loop
+
+@rl_trunc:
+      RTS
+
+; ---------------------------------------------------------------------
+; render_number_to_buf — render eval_val as decimal into input_buf
+;   Entry: eval_val_hi/lo/frac = number value
+;          buf_idx = current write position
+;   Exit:  buf_idx updated
+;   Clobbers: A, X, Y, num_val, num_tmp, pn_buf
+; ---------------------------------------------------------------------
+render_number_to_buf:
+      ; Handle sign
+      LDA   eval_val_hi
+      BPL   @rn_positive
+      ; Write '-'
+      LDY   z:buf_idx
+      LDA   #'-'
+      STA   input_buf,Y
+      INC   z:buf_idx
+      ; Negate
+      LDA   eval_val_frac
+      EOR   #$FF
+      CLC
+      ADC   #1
+      STA   eval_val_frac
+      LDA   eval_val_lo
+      EOR   #$FF
+      ADC   #0
+      STA   eval_val_lo
+      LDA   eval_val_hi
+      EOR   #$FF
+      ADC   #0
+      STA   eval_val_hi
+
+@rn_positive:
+      ; Render integer part using power-of-10 subtraction
+      LDA   eval_val_lo
+      STA   num_val_lo
+      LDA   eval_val_hi
+      STA   num_val_hi
+
+      LDX   #0                     ; digit buffer index
+      LDY   #0                     ; power-of-10 index
+@rn_div:
+      STZ   num_tmp_lo
+@rn_sub:
+      SEC
+      LDA   num_val_lo
+      SBC   pow10_lo,Y
+      PHA
+      LDA   num_val_hi
+      SBC   pow10_hi,Y
+      BCC   @rn_sub_done
+      STA   num_val_hi
+      PLA
+      STA   num_val_lo
+      INC   num_tmp_lo
+      BRA   @rn_sub
+@rn_sub_done:
+      PLA
+      LDA   num_tmp_lo
+      STA   pn_buf,X
+      INX
+      INY
+      CPY   #5
+      BCC   @rn_div
+
+      ; Write digits suppressing leading zeros
+      LDY   #0                     ; suppress flag
+      LDX   #0
+@rn_print:
+      LDA   pn_buf,X
+      BNE   @rn_nonzero
+      CPY   #0
+      BEQ   @rn_skip
+@rn_nonzero:
+      LDY   #1
+      ORA   #'0'
+      PHX
+      LDX   z:buf_idx
+      STA   input_buf,X
+      INC   z:buf_idx
+      PLX
+@rn_skip:
+      INX
+      CPX   #4
+      BCC   @rn_print
+      ; Always write ones digit
+      LDA   pn_buf+4
+      ORA   #'0'
+      LDX   z:buf_idx
+      STA   input_buf,X
+      INC   z:buf_idx
+
+      ; Fractional part
+      LDA   eval_val_frac
+      BNE   @rn_has_frac
+      RTS
+@rn_has_frac:
+      ; Write '.'
+      LDX   z:buf_idx
+      LDA   #'.'
+      STA   input_buf,X
+      INC   z:buf_idx
+      ; First frac digit
+      LDA   eval_val_frac
+      STA   num_tmp_lo
+      STZ   num_tmp_hi
+      LDA   num_tmp_lo
+      ASL
+      STA   num_val_lo
+      LDA   num_tmp_hi
+      ROL
+      STA   num_val_hi
+      ASL   num_val_lo
+      ROL   num_val_hi
+      ASL   num_val_lo
+      ROL   num_val_hi
+      CLC
+      LDA   num_tmp_lo
+      ASL
+      ADC   num_val_lo
+      STA   num_val_lo
+      LDA   num_tmp_hi
+      ROL
+      ADC   num_val_hi
+      STA   num_val_hi
+      ; High byte = digit
+      LDA   num_val_hi
+      ORA   #'0'
+      LDX   z:buf_idx
+      STA   input_buf,X
+      INC   z:buf_idx
+      ; Second frac digit
+      LDA   num_val_lo
+      STA   num_tmp_lo
+      STZ   num_tmp_hi
+      LDA   num_tmp_lo
+      ASL
+      STA   num_val_lo
+      LDA   num_tmp_hi
+      ROL
+      STA   num_val_hi
+      ASL   num_val_lo
+      ROL   num_val_hi
+      ASL   num_val_lo
+      ROL   num_val_hi
+      CLC
+      LDA   num_tmp_lo
+      ASL
+      ADC   num_val_lo
+      STA   num_val_lo
+      LDA   num_tmp_hi
+      ROL
+      ADC   num_val_hi
+      STA   num_val_hi
+      LDA   num_val_hi
+      BEQ   @rn_done                ; skip trailing zero
+      ORA   #'0'
+      LDX   z:buf_idx
+      STA   input_buf,X
+      INC   z:buf_idx
+@rn_done:
+      RTS
+
 ; =====================================================================
 ; RODATA — list error strings
 ; =====================================================================
@@ -1181,6 +2381,23 @@ str_memberp_type:
 str_show_err:
       .byte "NOT ENOUGH INPUTS TO SHOW", 0
 
+str_fput_err:
+      .byte "NOT ENOUGH INPUTS TO FPUT", 0
+str_lput_err:
+      .byte "NOT ENOUGH INPUTS TO LPUT", 0
+str_list_err:
+      .byte "NOT ENOUGH INPUTS TO LIST", 0
+str_sentence_err:
+      .byte "NOT ENOUGH INPUTS TO SENTENCE", 0
+str_word_err:
+      .byte "NOT ENOUGH INPUTS TO WORD", 0
+str_word_type:
+      .byte "WORD DOESN'T LIKE THIS INPUT", 0
+str_run_err:
+      .byte "NOT ENOUGH INPUTS TO RUN", 0
+str_run_type:
+      .byte "RUN NEEDS A LIST", 0
+
 ; Builtin name strings for list operations
 str_first_name:
       .byte 5, "FIRST"
@@ -1204,3 +2421,17 @@ str_memberp_name:
       .byte 7, "MEMBER?"
 str_show_name:
       .byte 4, "SHOW"
+str_fput_name:
+      .byte 4, "FPUT"
+str_lput_name:
+      .byte 4, "LPUT"
+str_list_name:
+      .byte 4, "LIST"
+str_sentence_name:
+      .byte 8, "SENTENCE"
+str_se_name:
+      .byte 2, "SE"
+str_word_name:
+      .byte 4, "WORD"
+str_run_name:
+      .byte 3, "RUN"

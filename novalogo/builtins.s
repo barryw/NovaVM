@@ -916,4 +916,32 @@ builtin_table:
       .word do_show
       .byte 0
 
+      .word str_fput_name
+      .word do_fput
+      .byte 0
+
+      .word str_lput_name
+      .word do_lput
+      .byte 0
+
+      .word str_list_name
+      .word do_list
+      .byte 0
+
+      .word str_sentence_name
+      .word do_sentence
+      .byte 0
+
+      .word str_se_name
+      .word do_sentence
+      .byte 0                    ; SE = alias for SENTENCE
+
+      .word str_word_name
+      .word do_word
+      .byte 0
+
+      .word str_run_name
+      .word do_run
+      .byte 0
+
       .word $0000               ; end sentinel
