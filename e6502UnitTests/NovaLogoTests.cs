@@ -523,6 +523,84 @@ public class NovaLogoTests
         Assert.IsTrue(count >= 1, $"Expected '10' from PRINT DOUBLE 5.\n{screen}");
     }
 
+    [TestMethod]
+    public void RecursiveProcedure()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Define recursive countdown
+        QueueLine(editor, "TO COUNTDOWN :N");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "IF :N = 0 [STOP]");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "PRINT :N");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "COUNTDOWN :N - 1");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        // Call it
+        QueueLine(editor, "COUNTDOWN 5");
+        RunSteps(cpu, bus, 10_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // Should see 5, 4, 3, 2, 1 on separate lines
+        bool has5 = false, has4 = false, has3 = false, has2 = false, has1 = false;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "5") has5 = true;
+            if (t == "4") has4 = true;
+            if (t == "3") has3 = true;
+            if (t == "2") has2 = true;
+            if (t == "1") has1 = true;
+        }
+        Assert.IsTrue(has5 && has4 && has3 && has2 && has1,
+            $"Expected countdown 5,4,3,2,1 from recursive COUNTDOWN 5.\n{screen}");
+    }
+
+    [TestMethod]
+    public void RecursiveOutputFunction()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Define recursive factorial (simplified: just multiply down)
+        // FACT 1 = 1, FACT N = N * FACT N-1
+        QueueLine(editor, "TO FACT :N");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "IF :N = 1 [OUTPUT 1]");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "OUTPUT :N * FACT :N - 1");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "PRINT FACT 5");
+        RunSteps(cpu, bus, 15_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // 5! = 120
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "120") count++;
+        }
+        Assert.IsTrue(count >= 1,
+            $"Expected '120' from PRINT FACT 5.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

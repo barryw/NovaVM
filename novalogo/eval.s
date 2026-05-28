@@ -510,9 +510,31 @@ eval_check_infix:
       ; Advance past the infix token
       JSR   eval_advance
 
+      ; Push left operand and operator onto hardware stack so recursive
+      ; proc_invoke calls (which may evaluate their own infix expressions)
+      ; cannot clobber them.
+      LDA   eval_left_hi
+      PHA
+      LDA   eval_left_lo
+      PHA
+      LDA   eval_left_frac
+      PHA
+      LDA   eval_op
+      PHA
+
       ; Evaluate the right operand (recursive call)
       JSR   eval_expr
-      BCS   @err_rhs
+      BCS   @err_rhs_pop
+
+      ; Restore left operand and operator from stack
+      PLA
+      STA   eval_op
+      PLA
+      STA   eval_left_frac
+      PLA
+      STA   eval_left_lo
+      PLA
+      STA   eval_left_hi
 
       ; Dispatch based on operator character
       LDA   eval_op
@@ -546,6 +568,12 @@ eval_check_infix:
       CLC
       RTS
 
+@err_rhs_pop:
+      ; Discard saved left operand + operator (4 bytes)
+      PLA
+      PLA
+      PLA
+      PLA
 @err_rhs:
       SEC
       RTS

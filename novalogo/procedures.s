@@ -800,7 +800,9 @@ proc_invoke:
       ; Any body text remaining?
       LDA   proc_body_len_lo
       ORA   proc_body_len_hi
-      BEQ   @exec_done
+      BNE   @have_body
+      JMP   @exec_done
+@have_body:
 
       ; Reset heap for this line's tokens (reuse token heap each line)
       LDA   save_heap_ptr_lo
@@ -854,14 +856,52 @@ proc_invoke:
       ; Tokenize this line
       JSR   tokenize_line
 
+      ; Save body-loop state that recursive proc_invoke would clobber.
+      ; BSS save areas (save_heap_ptr, save_eval_cur) plus ZP body-loop
+      ; variables (proc_ptr, proc_body_len) all need protection.
+      LDA   proc_ptr_lo
+      PHA
+      LDA   proc_ptr_hi
+      PHA
+      LDA   proc_body_len_lo
+      PHA
+      LDA   proc_body_len_hi
+      PHA
+      LDA   save_heap_ptr_lo
+      PHA
+      LDA   save_heap_ptr_hi
+      PHA
+      LDA   save_eval_cur_lo
+      PHA
+      LDA   save_eval_cur_hi
+      PHA
+
       ; Eval this line (full eval — not body mode)
       JSR   eval_line
+
+      ; Restore body-loop state
+      PLA
+      STA   save_eval_cur_hi
+      PLA
+      STA   save_eval_cur_lo
+      PLA
+      STA   save_heap_ptr_hi
+      PLA
+      STA   save_heap_ptr_lo
+      PLA
+      STA   proc_body_len_hi
+      PLA
+      STA   proc_body_len_lo
+      PLA
+      STA   proc_ptr_hi
+      PLA
+      STA   proc_ptr_lo
 
       ; Check if STOP or OUTPUT was called — stop processing lines
       LDA   proc_stopped
       BNE   @exec_done
 
-      BRA   @exec_line
+      JMP   @exec_line
 
 @exec_done:
       ; Restore heap pointer (procedures stay, but per-line tokens freed)
