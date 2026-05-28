@@ -794,6 +794,271 @@ do_output:
       ; eval_type/eval_val holds the return value
       JMP   eval_continue
 
+; ---------------------------------------------------------------------
+; do_catch — CATCH "tag [body]: execute body, catching errors/throws
+;   Arity 0 — handles its own argument parsing
+;   1. Evaluate tag argument (quoted word)
+;   2. Save current catch frame (for nesting) on the 6502 stack
+;   3. Set up new catch frame with tag and stack pointer
+;   4. Execute the body
+;   5. On normal completion: restore previous catch frame, continue
+;   On THROW match: try_throw_error or do_throw restores SP from
+;   catch frame, which unwinds back to step 5's stack context.
+; ---------------------------------------------------------------------
+do_catch:
+      ; Evaluate tag argument (e.g., "ERROR)
+      JSR   eval_expr
+      BCC   @tag_ok
+      JMP   @err_tag
+@tag_ok:
+
+      ; Must be a word
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BEQ   @type_ok
+      JMP   @err_tag
+@type_ok:
+
+      ; Save tag pointer and eval_in_body temporarily (3 bytes)
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+
+      ; Push previous catch frame onto the 6502 stack (6 bytes)
+      LDA   catch_active
+      PHA
+      LDA   catch_tag_lo
+      PHA
+      LDA   catch_tag_hi
+      PHA
+      LDA   catch_sp
+      PHA
+      LDA   catch_resume_lo
+      PHA
+      LDA   catch_resume_hi
+      PHA
+
+      ; Set up the tag pointer from saved values
+      ; Stack (top to bottom): prev_frame(6), eval_in_body, eval_val_hi, eval_val_lo
+      ; $0101+X = SP+1 = top. eval_in_body at SP+7, eval_val_hi at SP+8, eval_val_lo at SP+9
+      TSX
+      LDA   $0108,X               ; eval_val_hi = tag ptr high
+      STA   catch_tag_hi
+      LDA   $0109,X               ; eval_val_lo = tag ptr low
+      STA   catch_tag_lo
+
+      ; Save stack pointer NOW — this is the unwind target.
+      ; When a THROW matches, TXS restores to this SP, and the
+      ; 6 PLA instructions below will pop the previous frame.
+      TSX
+      STX   catch_sp
+
+      ; Activate the catch
+      LDA   #$01
+      STA   catch_active
+
+      ; We need to find the resume point PAST the body's ].
+      ; Scan ahead to find it, then come back and execute the body.
+      ; Save body start location first.
+      LDA   eval_cur_lo
+      PHA                         ; save body-start lo
+      LDA   eval_cur_hi
+      PHA                         ; save body-start hi
+
+      ; Scan past the body [...] to find resume point
+      JSR   skip_list_body
+      BCS   @err_bracket_pop
+
+      ; eval_cur is now past the ]. Save as resume point.
+      LDA   eval_cur_lo
+      STA   catch_resume_lo
+      LDA   eval_cur_hi
+      STA   catch_resume_hi
+
+      ; Restore body start
+      PLA
+      STA   eval_cur_hi
+      PLA
+      STA   eval_cur_lo
+
+      ; Execute the body
+      JSR   exec_body_block
+
+      ; Body completed normally — restore previous catch frame
+      ; (Stack still has: prev_frame(6), tag_hi, tag_lo at the bottom)
+      PLA
+      STA   catch_resume_hi
+      PLA
+      STA   catch_resume_lo
+      PLA
+      STA   catch_sp
+      PLA
+      STA   catch_tag_hi
+      PLA
+      STA   catch_tag_lo
+      PLA
+      STA   catch_active
+
+      ; Discard saved eval_in_body + tag ptr (3 bytes)
+      PLA                         ; eval_in_body
+      PLA                         ; tag_hi
+      PLA                         ; tag_lo
+
+      ; Set eval_cur past the body
+      LDA   catch_resume_lo
+      STA   eval_cur_lo
+      LDA   catch_resume_hi
+      STA   eval_cur_hi
+      JMP   eval_continue
+
+@err_bracket_pop:
+      ; Clean up: body-start was partially popped by skip_list_body error
+      PLA                         ; body_start_hi
+      PLA                         ; body_start_lo
+      ; Restore previous catch frame
+      PLA
+      STA   catch_resume_hi
+      PLA
+      STA   catch_resume_lo
+      PLA
+      STA   catch_sp
+      PLA
+      STA   catch_tag_hi
+      PLA
+      STA   catch_tag_lo
+      PLA
+      STA   catch_active
+      ; Discard saved eval_in_body + tag ptr (3 bytes)
+      PLA
+      PLA
+      PLA
+      ; Print bracket error
+      LDX   #<str_catch_bracket
+      LDY   #>str_catch_bracket
+      BRA   catch_print_err
+
+@err_tag:
+      LDX   #<str_catch_err
+      LDY   #>str_catch_err
+      ; fall through
+
+catch_print_err:
+      STX   ptr_lo
+      STY   ptr_hi
+      LDY   #0
+@lp:
+      LDA   (ptr_lo),Y
+      BEQ   @done
+      STA   VGC_CHAROUT
+      INY
+      BNE   @lp
+@done:
+      JSR   eval_newline
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_throw — THROW "tag: unwind to matching CATCH
+;   Arity 0 — handles its own argument parsing
+;   1. Evaluate tag argument
+;   2. If catch is active and tags match: unwind via TXS
+;   3. If no match: print error
+; ---------------------------------------------------------------------
+do_throw:
+      ; Evaluate tag argument
+      JSR   eval_expr
+      BCS   @err_tag
+
+      ; Must be a word
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BNE   @err_tag
+
+      ; Is a catch frame active?
+      LDA   catch_active
+      BEQ   @no_catch
+
+      ; Compare tags: eval_val_lo/hi vs catch_tag_lo/hi
+      LDA   eval_val_lo
+      STA   ptr_lo
+      LDA   eval_val_hi
+      STA   ptr_hi
+      LDA   catch_tag_lo
+      STA   ptr2_lo
+      LDA   catch_tag_hi
+      STA   ptr2_hi
+      JSR   catch_tags_equal
+      BCC   @no_catch
+
+      ; Match! Unwind stack to catch point.
+      LDX   catch_sp
+      TXS
+
+      ; Restore previous catch frame from the restored stack
+      PLA
+      STA   catch_resume_hi
+      PLA
+      STA   catch_resume_lo
+      PLA
+      STA   catch_sp
+      PLA
+      STA   catch_tag_hi
+      PLA
+      STA   catch_tag_lo
+      PLA
+      STA   catch_active
+
+      ; Restore eval_in_body and discard saved tag pointer (3 bytes)
+      PLA
+      STA   eval_in_body
+      PLA                         ; tag_hi
+      PLA                         ; tag_lo
+
+      ; Set eval_cur to resume point (past the caught body)
+      LDA   catch_resume_lo
+      STA   eval_cur_lo
+      LDA   catch_resume_hi
+      STA   eval_cur_hi
+
+      JMP   eval_continue
+
+@no_catch:
+      ; Print "CAN'T FIND CATCH TAG " + the tag
+      LDX   #0
+@nc_lp:
+      LDA   str_catch_notag,X
+      BEQ   @nc_word
+      STA   VGC_CHAROUT
+      INX
+      BNE   @nc_lp
+@nc_word:
+      ; Print the tag word
+      LDA   eval_val_lo
+      STA   ptr_lo
+      LDA   eval_val_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y           ; length
+      TAX
+      BEQ   @nc_done
+      INY
+@nc_ch:
+      LDA   (ptr_lo),Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BNE   @nc_ch
+@nc_done:
+      JSR   eval_newline
+      JMP   eval_continue
+
+@err_tag:
+      LDX   #<str_throw_err
+      LDY   #>str_throw_err
+      JMP   catch_print_err
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
@@ -820,6 +1085,15 @@ str_ifelse_err:
 str_ifelse_bracket:
       .byte "IFELSE NEEDS [ BODY ]", 0
 
+str_catch_err:
+      .byte "NOT ENOUGH INPUTS TO CATCH", 0
+
+str_catch_bracket:
+      .byte "CATCH NEEDS TAG [BODY]", 0
+
+str_throw_err:
+      .byte "NOT ENOUGH INPUTS TO THROW", 0
+
 ; Name strings: length-prefixed
 str_print_name:
       .byte 5, "PRINT"
@@ -837,6 +1111,10 @@ str_stop_name:
       .byte 4, "STOP"
 str_output_name:
       .byte 6, "OUTPUT"
+str_catch_name:
+      .byte 5, "CATCH"
+str_throw_name:
+      .byte 5, "THROW"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -943,5 +1221,13 @@ builtin_table:
       .word str_run_name
       .word do_run
       .byte 0
+
+      .word str_catch_name
+      .word do_catch
+      .byte 0                    ; arity 0: do_catch handles its own args
+
+      .word str_throw_name
+      .word do_throw
+      .byte 0                    ; arity 0: do_throw handles its own args
 
       .word $0000               ; end sentinel

@@ -828,6 +828,69 @@ public class NovaLogoTests
             $"Got OOM error — GC didn't reclaim enough.\n{screen}");
     }
 
+    [TestMethod]
+    public void CatchPreventsErrorAbort()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CATCH \"ERROR [PRINT THING \"NOPE]");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT 999");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found999 = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "999") found999 = true;
+        Assert.IsTrue(found999,
+            $"Expected '999' after CATCH — error should not abort.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ThrowUnwindsToCatch()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO BOOM");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "PRINT 111");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "THROW \"DONE");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "PRINT 222");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "CATCH \"DONE [BOOM]");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 333");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool has111 = false, has222 = false, has333 = false;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "111") has111 = true;
+            if (t == "222") has222 = true;
+            if (t == "333") has333 = true;
+        }
+        Assert.IsTrue(has111, $"Expected '111' before THROW.\n{screen}");
+        Assert.IsFalse(has222, $"Should NOT see '222' after THROW.\n{screen}");
+        Assert.IsTrue(has333, $"Expected '333' after CATCH completes.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

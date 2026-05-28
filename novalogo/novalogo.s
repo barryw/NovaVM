@@ -35,6 +35,7 @@ cold_start:
       JSR   heap_init
       JSR   var_init
       JSR   proc_init
+      STZ   catch_active
       ; Print banner
       LDX   #0
 @banner:

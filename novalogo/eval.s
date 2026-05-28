@@ -21,6 +21,14 @@ eval_in_body:   .res 1    ; $00 = normal eval_loop, $01 = in body
 proc_stopped:   .res 1    ; $00 = running, $01 = STOP, $02 = OUTPUT
 eval_reporter:  .res 1    ; $00 = normal, $01 = reporter mode (return from eval_continue)
 
+; --- Catch frame for CATCH/THROW error handling ---
+catch_active:   .res 1    ; $00 = no catch, $01 = catch active
+catch_tag_lo:   .res 1    ; pointer to tag word (length-prefixed)
+catch_tag_hi:   .res 1
+catch_sp:       .res 1    ; saved 6502 stack pointer for unwinding
+catch_resume_lo: .res 1   ; eval_cur to resume at (past the body's ])
+catch_resume_hi: .res 1
+
 ; =====================================================================
 ; BSS segment — scratch for number printing
 ; =====================================================================
@@ -137,6 +145,7 @@ eval_loop:
       BNE   @ae_lp
 @ae_done:
       JSR   eval_newline
+      JSR   try_throw_error
       RTS
 
 @unknown:
@@ -173,6 +182,7 @@ eval_loop:
       DEX
       BNE   @unk_ch
       JSR   eval_newline
+      JSR   try_throw_error
       RTS
 
 @done:
@@ -288,6 +298,7 @@ eval_body:
       BNE   @ae_lp
 @ae_done:
       JSR   eval_newline
+      JSR   try_throw_error
       ; fall through to @done — abort body on error
 
 @done:
@@ -325,6 +336,7 @@ eval_body:
       DEX
       BNE   @unk_ch
       JSR   eval_newline
+      JSR   try_throw_error
       RTS
 
 ; ---------------------------------------------------------------------
@@ -535,6 +547,7 @@ eval_expr:
       BNE   @vr_msg
 @vr_done:
       JSR   eval_newline
+      JSR   try_throw_error
       JSR   eval_advance
       SEC
       RTS
@@ -1012,6 +1025,116 @@ print_uint16:
       STA   VGC_CHAROUT
       RTS
 
+; ---------------------------------------------------------------------
+; try_throw_error — if a CATCH with tag "ERROR" is active, unwind to it
+;   Called after error messages are printed. If no catch is active or
+;   the tag doesn't match "ERROR", this is a no-op (returns normally).
+;   If a match is found, this NEVER RETURNS — it unwinds the stack
+;   via TXS and jumps to the catch resume point.
+; ---------------------------------------------------------------------
+try_throw_error:
+      LDA   catch_active
+      BEQ   @no_catch
+
+      ; Compare catch_tag against "ERROR" (5 chars, uppercased)
+      LDA   catch_tag_lo
+      STA   ptr2_lo
+      LDA   catch_tag_hi
+      STA   ptr2_hi
+      LDA   #<str_error_tag
+      STA   ptr_lo
+      LDA   #>str_error_tag
+      STA   ptr_hi
+      JSR   catch_tags_equal
+      BCC   @no_catch
+
+      ; Match! Unwind stack to catch point and resume.
+      LDX   catch_sp
+      TXS
+
+      ; Restore previous catch frame from the restored stack
+      PLA
+      STA   catch_resume_hi
+      PLA
+      STA   catch_resume_lo
+      PLA
+      STA   catch_sp
+      PLA
+      STA   catch_tag_hi
+      PLA
+      STA   catch_tag_lo
+      PLA
+      STA   catch_active
+
+      ; Restore eval_in_body and discard saved tag pointer (3 bytes)
+      PLA
+      STA   eval_in_body
+      PLA                         ; tag_hi
+      PLA                         ; tag_lo
+
+      ; Set eval_cur to resume point (past the caught body)
+      LDA   catch_resume_lo
+      STA   eval_cur_lo
+      LDA   catch_resume_hi
+      STA   eval_cur_hi
+
+      JMP   eval_continue
+
+@no_catch:
+      RTS
+
+; ---------------------------------------------------------------------
+; catch_tags_equal — compare two length-prefixed strings (case-insensitive)
+;   Input: ptr_lo/hi = string A, ptr2_lo/hi = string B
+;   Output: carry set = equal, carry clear = not equal
+;   Clobbers: A, X, Y
+; ---------------------------------------------------------------------
+catch_tags_equal:
+      LDY   #0
+      LDA   (ptr_lo),Y           ; length of A
+      STA   num_tmp_lo            ; temp: len A
+      LDA   (ptr2_lo),Y          ; length of B
+      CMP   num_tmp_lo
+      BNE   @ne
+
+      ; Lengths match — compare chars
+      TAX                         ; X = length
+      BEQ   @eq                   ; both zero = equal
+      LDY   #1
+@cmp:
+      LDA   (ptr_lo),Y
+      ; Uppercase A char
+      CMP   #'a'
+      BCC   @a_up
+      CMP   #'z'+1
+      BCS   @a_up
+      SEC
+      SBC   #$20
+@a_up:
+      STA   num_tmp_lo            ; uppercased A char
+
+      LDA   (ptr2_lo),Y
+      ; Uppercase B char
+      CMP   #'a'
+      BCC   @b_up
+      CMP   #'z'+1
+      BCS   @b_up
+      SEC
+      SBC   #$20
+@b_up:
+      CMP   num_tmp_lo
+      BNE   @ne
+      INY
+      DEX
+      BNE   @cmp
+
+@eq:
+      SEC
+      RTS
+@ne:
+      CLC
+      RTS
+
 ; =====================================================================
 ; RODATA — evaluator strings and tables
 ; =====================================================================
@@ -1025,6 +1148,12 @@ str_notenough:
 
 str_no_value:
       .byte " HAS NO VALUE", 0
+
+str_error_tag:
+      .byte 5, "ERROR"
+
+str_catch_notag:
+      .byte "CAN'T FIND CATCH TAG ", 0
 
 ; Powers of 10 table (16-bit): 10000, 1000, 100, 10, 1
 pow10_lo:
