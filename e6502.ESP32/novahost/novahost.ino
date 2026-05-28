@@ -444,6 +444,13 @@ static const uint8_t  VGC_SPACE_GFX     = 0x03;
 static const uint8_t  VGC_SPACE_TEXTATTR = 0x07;
 static const uint8_t  VGC_MODE_GFX_ONLY = 0x03;
 
+struct RuntimeConfig {
+    char romPath[128];
+    char extRomPath[128];
+    bool valid;
+};
+static RuntimeConfig readRuntimeConfig();
+
 static const char* const BASIC_ROM_PATHS[] = {
     "/roms/novabasic.bin",
     "/roms/basic.bin",
@@ -1234,12 +1241,6 @@ void pollSerialConsole() {
 // =========================================================================
 // Runtime config from boot.json
 // =========================================================================
-struct RuntimeConfig {
-    char romPath[128];
-    char extRomPath[128];
-    bool valid;
-};
-
 static RuntimeConfig readRuntimeConfig() {
     RuntimeConfig cfg = {};
 

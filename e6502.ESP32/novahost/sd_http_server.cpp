@@ -1209,7 +1209,7 @@ void SdHttpServer::send_file(WiFiClient& client, const char* path) {
     while (file.available()) {
         size_t got = file.read(buf, sizeof(buf));
         if (got == 0) break;
-        if (!write_all(client, buf, got, false)) break;
+        if (!write_all(client, buf, got, true)) break;
         yield();
     }
     file.close();
