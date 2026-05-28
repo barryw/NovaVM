@@ -1618,10 +1618,456 @@ wu_err_bracket:
       JSR   eval_newline
       JMP   eval_continue
 
+; ---------------------------------------------------------------------
+; do_readchar — READCHAR: wait for keypress, return as 1-char word
+;   Arity 0, no arguments. Reporter.
+; ---------------------------------------------------------------------
+do_readchar:
+      ; Poll until a key is pressed
+@wait:
+      LDA   VGC_CHARIN
+      BEQ   @wait
+      ; A = character — fall through to alloc_one_char_word
+
+; ---------------------------------------------------------------------
+; alloc_one_char_word — allocate a 1-char word on heap from A
+;   Input: A = character byte
+;   Output: eval_type=VAL_WORD, eval_val=pointer to len+char
+;   Jumps to eval_continue
+; ---------------------------------------------------------------------
+alloc_one_char_word:
+      PHA                       ; save character
+      LDA   #2                  ; 1 byte length + 1 byte char
+      LDX   #ATYPE_STRING
+      JSR   heap_alloc
+      PLA
+      BCS   @oom
+      LDY   #1
+      STA   (ptr_lo),Y          ; store char
+      LDA   #1
+      LDY   #0
+      STA   (ptr_lo),Y          ; store length = 1
+      LDA   ptr_lo
+      STA   eval_val_lo
+      LDA   ptr_hi
+      STA   eval_val_hi
+      LDA   #VAL_WORD
+      STA   eval_type
+      STZ   eval_val_frac
+      JMP   eval_continue
+@oom:
+      LDX   #<str_oom
+      LDY   #>str_oom
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_readword — READWORD: read chars until space/CR, return as word
+;   Arity 0, no arguments. Reporter.
+;   Uses input_buf as scratch (safe — main input already consumed).
+; ---------------------------------------------------------------------
+do_readword:
+      STZ   z:buf_idx
+@rw_poll:
+      LDA   VGC_CHARIN
+      BEQ   @rw_poll
+      ; Check for CR
+      CMP   #$0D
+      BEQ   @rw_done
+      ; Check for space
+      CMP   #' '
+      BEQ   @rw_done
+      ; Check for backspace
+      CMP   #$08
+      BEQ   @rw_bs
+      CMP   #$14
+      BEQ   @rw_bs
+      CMP   #$7F
+      BEQ   @rw_bs
+      ; Store and echo
+      LDX   z:buf_idx
+      CPX   #126
+      BCS   @rw_poll             ; buffer full
+      STA   input_buf,X
+      STA   VGC_CHAROUT
+      INC   z:buf_idx
+      BRA   @rw_poll
+
+@rw_bs:
+      LDX   z:buf_idx
+      BEQ   @rw_poll
+      DEX
+      STX   z:buf_idx
+      LDA   #$08
+      STA   VGC_CHAROUT
+      BRA   @rw_poll
+
+@rw_done:
+      ; Echo CR/LF
+      PHA
+      LDA   #$0D
+      STA   VGC_CHAROUT
+      LDA   #$0A
+      STA   VGC_CHAROUT
+      PLA
+      ; Allocate word: 1 (len) + buf_idx (chars)
+      LDA   z:buf_idx
+      INC                        ; +1 for length byte
+      LDX   #ATYPE_STRING
+      JSR   heap_alloc
+      BCS   @rw_oom
+      ; Write length
+      LDA   z:buf_idx
+      LDY   #0
+      STA   (ptr_lo),Y
+      ; Copy chars
+      TAX
+      BEQ   @rw_set
+      LDY   #1
+      STZ   num_tmp_lo
+@rw_copy:
+      PHY
+      LDY   num_tmp_lo
+      LDA   input_buf,Y
+      PLY
+      STA   (ptr_lo),Y
+      INY
+      INC   num_tmp_lo
+      DEX
+      BNE   @rw_copy
+@rw_set:
+      LDA   ptr_lo
+      STA   eval_val_lo
+      LDA   ptr_hi
+      STA   eval_val_hi
+      LDA   #VAL_WORD
+      STA   eval_type
+      STZ   eval_val_frac
+      JMP   eval_continue
+@rw_oom:
+      LDX   #<str_oom
+      LDY   #>str_oom
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_readlist — READLIST: read a line, return as a list
+;   Arity 0, no arguments. Reporter.
+;   Calls read_line, tokenize_line, then walks tokens building a list.
+; ---------------------------------------------------------------------
+do_readlist:
+      ; Save tokenizer state (we'll overwrite tok_head/tok_tail)
+      LDA   tok_head_lo
+      PHA
+      LDA   tok_head_hi
+      PHA
+      LDA   tok_tail_lo
+      PHA
+      LDA   tok_tail_hi
+      PHA
+      LDA   eval_cur_lo
+      PHA
+      LDA   eval_cur_hi
+      PHA
+
+      ; Read a line from keyboard into input_buf
+      JSR   read_line
+      ; Tokenize it
+      JSR   tokenize_line
+
+      ; Walk tokens and build a list
+      STZ   z:list_head_lo
+      STZ   z:list_head_hi
+      STZ   z:list_tail_lo
+      STZ   z:list_tail_hi
+
+      LDA   tok_head_lo
+      STA   eval_cur_lo
+      LDA   tok_head_hi
+      STA   eval_cur_hi
+
+@rl_next:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   @rl_have_tok
+      JMP   @rl_build_done
+@rl_have_tok:
+
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+
+      CMP   #TOK_NUMBER
+      BNE   :+
+      JMP   @rl_number
+:     CMP   #TOK_WORD
+      BEQ   @rl_word_jmp
+      CMP   #TOK_QUOTE
+      BEQ   @rl_word_jmp
+      CMP   #TOK_LBRACKET
+      BNE   :+
+      JMP   @rl_sublist
+:     ; Skip other tokens (brackets, infix, etc.)
+      JSR   eval_advance
+      BRA   @rl_next
+
+@rl_word_jmp:
+      JMP   @rl_word
+
+@rl_number:
+      LDY   #TOK_PAYLOAD
+      LDA   (ptr_lo),Y
+      STA   eval_val_hi
+      INY
+      LDA   (ptr_lo),Y
+      STA   eval_val_lo
+      INY
+      LDA   (ptr_lo),Y
+      STA   eval_val_frac
+      LDA   #VAL_NUMBER
+      STA   eval_type
+      JSR   eval_advance
+      JMP   @rl_alloc_cell
+
+@rl_word:
+      ; Allocate string on heap and copy word from token payload
+      LDY   #TOK_PAYLOAD
+      LDA   (ptr_lo),Y           ; length
+      PHA
+      INC                        ; +1 for length byte
+      LDX   #ATYPE_STRING
+      JSR   heap_alloc
+      BCC   :+
+      PLA
+      JMP   @rl_oom
+:     ; Re-read source token (ptr_lo clobbered by heap_alloc)
+      LDA   eval_cur_lo
+      STA   ptr2_lo
+      LDA   eval_cur_hi
+      STA   ptr2_hi
+      PLA
+      PHA
+      LDY   #0
+      STA   (ptr_lo),Y           ; store length
+      PLA
+      TAX
+      BEQ   @rl_word_done
+      LDY   #1
+      STZ   num_tmp_lo
+@rl_wch:
+      PHX
+      PHY
+      LDA   num_tmp_lo
+      CLC
+      ADC   #TOK_PAYLOAD+1
+      TAY
+      LDA   (ptr2_lo),Y
+      PLY
+      STA   (ptr_lo),Y
+      INY
+      INC   num_tmp_lo
+      PLX
+      DEX
+      BNE   @rl_wch
+@rl_word_done:
+      LDA   ptr_lo
+      STA   eval_val_lo
+      LDA   ptr_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      LDA   #VAL_WORD
+      STA   eval_type
+      JSR   eval_advance
+      JMP   @rl_alloc_cell
+
+@rl_sublist:
+      ; Use eval_list to build the sublist (advances past matching ])
+      JSR   eval_advance
+      LDA   z:list_head_lo
+      PHA
+      LDA   z:list_head_hi
+      PHA
+      LDA   z:list_tail_lo
+      PHA
+      LDA   z:list_tail_hi
+      PHA
+      JSR   eval_list
+      PLA
+      STA   z:list_tail_hi
+      PLA
+      STA   z:list_tail_lo
+      PLA
+      STA   z:list_head_hi
+      PLA
+      STA   z:list_head_lo
+      ; eval_type = VAL_LIST, eval_val = sublist head
+      JMP   @rl_alloc_cell
+
+@rl_alloc_cell:
+      LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
+      JSR   heap_alloc
+      BCC   @rl_alloc_ok
+      JMP   @rl_oom
+@rl_alloc_ok:
+      LDY   #CONS_TAG
+      LDA   #CONS_PAIR
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_TYPE
+      LDA   eval_type
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_HI
+      LDA   eval_val_hi
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_LO
+      LDA   eval_val_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_FRAC
+      LDA   eval_val_frac
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_LO
+      LDA   #0
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      STA   (ptr_lo),Y
+
+      ; Link into list
+      LDA   z:list_head_lo
+      ORA   z:list_head_hi
+      BNE   @rl_link_tail
+      LDA   ptr_lo
+      STA   z:list_head_lo
+      STA   z:list_tail_lo
+      LDA   ptr_hi
+      STA   z:list_head_hi
+      STA   z:list_tail_hi
+      JMP   @rl_next
+
+@rl_link_tail:
+      LDA   z:list_tail_lo
+      STA   ptr2_lo
+      LDA   z:list_tail_hi
+      STA   ptr2_hi
+      LDY   #CONS_CDR_LO
+      LDA   ptr_lo
+      STA   (ptr2_lo),Y
+      LDY   #CONS_CDR_HI
+      LDA   ptr_hi
+      STA   (ptr2_lo),Y
+      LDA   ptr_lo
+      STA   z:list_tail_lo
+      LDA   ptr_hi
+      STA   z:list_tail_hi
+      JMP   @rl_next
+
+@rl_build_done:
+      ; Restore tokenizer state
+      PLA
+      STA   eval_cur_hi
+      PLA
+      STA   eval_cur_lo
+      PLA
+      STA   tok_tail_hi
+      PLA
+      STA   tok_tail_lo
+      PLA
+      STA   tok_head_hi
+      PLA
+      STA   tok_head_lo
+
+      ; Return the list
+      LDA   #VAL_LIST
+      STA   eval_type
+      LDA   z:list_head_lo
+      STA   eval_val_lo
+      LDA   z:list_head_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JMP   eval_continue
+
+@rl_oom:
+      ; Restore tokenizer state before error
+      PLA
+      STA   eval_cur_hi
+      PLA
+      STA   eval_cur_lo
+      PLA
+      STA   tok_tail_hi
+      PLA
+      STA   tok_tail_lo
+      PLA
+      STA   tok_head_hi
+      PLA
+      STA   tok_head_lo
+      LDX   #<str_oom
+      LDY   #>str_oom
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_char — CHAR n: convert ASCII code to 1-char word
+;   Arity 0: evaluates its own argument
+; ---------------------------------------------------------------------
+do_char:
+      JSR   eval_expr
+      BCS   @err
+      ; Must be a number
+      LDA   eval_type
+      BNE   @err
+      ; Low byte of number is the ASCII code
+      LDA   eval_val_lo
+      JMP   alloc_one_char_word
+@err:
+      LDX   #<str_char_err
+      LDY   #>str_char_err
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_ascii — ASCII word: return ASCII code of first character
+;   Arity 0: evaluates its own argument
+; ---------------------------------------------------------------------
+do_ascii:
+      JSR   eval_expr
+      BCS   @err
+      ; Must be a word
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BNE   @err_type
+      ; eval_val_lo/hi points at length-prefixed string
+      LDA   eval_val_lo
+      STA   ptr_lo
+      LDA   eval_val_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y           ; length
+      BEQ   @err_empty            ; empty word
+      LDY   #1
+      LDA   (ptr_lo),Y           ; first character
+      STA   eval_val_lo
+      STZ   eval_val_hi
+      STZ   eval_val_frac
+      STZ   eval_type             ; VAL_NUMBER
+      JMP   eval_continue
+@err_type:
+@err_empty:
+@err:
+      LDX   #<str_ascii_err
+      LDY   #>str_ascii_err
+      JMP   list_print_err
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
       .segment "RODATA"
+
+str_oom:
+      .byte "OUT OF MEMORY", 0
+
+str_char_err:
+      .byte "NOT ENOUGH INPUTS TO CHAR", 0
+
+str_ascii_err:
+      .byte "NOT ENOUGH INPUTS TO ASCII", 0
 
 str_for_err:
       .byte "FOR NEEDS [VAR START END]", 0
@@ -1691,6 +2137,16 @@ str_while_name:
       .byte 5, "WHILE"
 str_until_name:
       .byte 5, "UNTIL"
+str_readchar_name:
+      .byte 8, "READCHAR"
+str_readword_name:
+      .byte 8, "READWORD"
+str_readlist_name:
+      .byte 8, "READLIST"
+str_char_name:
+      .byte 4, "CHAR"
+str_ascii_name:
+      .byte 5, "ASCII"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -1821,5 +2277,25 @@ builtin_table:
       .word str_until_name
       .word do_until
       .byte 0                    ; arity 0: do_until handles its own args
+
+      .word str_readchar_name
+      .word do_readchar
+      .byte 0                    ; arity 0: reporter
+
+      .word str_readword_name
+      .word do_readword
+      .byte 0                    ; arity 0: reporter
+
+      .word str_readlist_name
+      .word do_readlist
+      .byte 0                    ; arity 0: reporter
+
+      .word str_char_name
+      .word do_char
+      .byte 0                    ; arity 0: handles its own arg
+
+      .word str_ascii_name
+      .word do_ascii
+      .byte 0                    ; arity 0: handles its own arg
 
       .word $0000               ; end sentinel

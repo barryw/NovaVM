@@ -953,6 +953,70 @@ public class NovaLogoTests
         Assert.IsTrue(has333, $"Expected '333' after CATCH completes.\n{screen}");
     }
 
+    [TestMethod]
+    public void CharAndAscii()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT ASCII \"A");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "65") found = true;
+        Assert.IsTrue(found, $"Expected '65' from PRINT ASCII \"A.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ReadCharReturnsKeypress()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Queue the READCHAR command, then a key to be read
+        QueueLine(editor, "PRINT ASCII READCHAR");
+        RunSteps(cpu, bus, 1_000_000);
+        // READCHAR is now blocking waiting for input — feed it a key
+        editor.QueueInput((byte)'Z');
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "90") found = true;  // 'Z' = 90
+        Assert.IsTrue(found, $"Expected '90' (ASCII Z) from READCHAR.\n{screen}");
+    }
+
+    [TestMethod]
+    public void CharConvertsNumberToWord()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT CHAR 66");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "B") found = true;
+        Assert.IsTrue(found, $"Expected 'B' from PRINT CHAR 66.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)
