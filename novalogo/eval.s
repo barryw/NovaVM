@@ -15,6 +15,8 @@ eval_left_hi:   .res 1    ; saved left operand high byte
 eval_left_lo:   .res 1    ; saved left operand low byte
 eval_left_frac: .res 1    ; saved left operand fractional byte
 eval_op:        .res 1    ; infix operator character
+handler_lo:     .res 1    ; saved handler address for JMP
+handler_hi:     .res 1
 
 ; =====================================================================
 ; BSS segment — scratch for number printing
@@ -68,6 +70,11 @@ eval_loop:
       BCS   @unknown
 
       ; Found: handler addr is in ptr2_lo/hi, arity in A
+      ; Save handler address — eval_expr may clobber ptr2
+      LDX   ptr2_lo
+      STX   handler_lo
+      LDX   ptr2_hi
+      STX   handler_hi
       ; Save arity across eval_advance (which clobbers X)
       TAX
       PHX
@@ -88,7 +95,7 @@ eval_loop:
 
 @call_handler:
       ; Call the handler via indirect JMP
-      JMP   (ptr2_lo)
+      JMP   (handler_lo)
       ; handlers must JMP back to eval_loop via eval_continue
 
 @arg_error:
@@ -186,6 +193,8 @@ eval_expr:
       BEQ   @number
       CMP   #TOK_QUOTE
       BEQ   @quote
+      CMP   #TOK_VARREF
+      BEQ   @varref
       ; For now, anything else is an error
       SEC
       RTS
@@ -221,6 +230,53 @@ eval_expr:
       JSR   eval_advance
       CLC
       RTS
+
+@varref:
+      ; Variable reference — :NAME
+      ; Payload is length-prefixed name at token + TOK_PAYLOAD
+      CLC
+      LDA   ptr_lo
+      ADC   #TOK_PAYLOAD
+      STA   ptr_lo
+      LDA   ptr_hi
+      ADC   #0
+      STA   ptr_hi
+      JSR   var_get
+      BCC   @var_ok
+
+      ; Not found — print "NAME has no value"
+      ; ptr_lo/hi was clobbered by var_get, reload from eval_cur
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_PAYLOAD          ; length byte
+      LDA   (ptr_lo),Y
+      TAX                         ; X = name length
+      LDY   #TOK_PAYLOAD+1
+@vr_name:
+      LDA   (ptr_lo),Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BNE   @vr_name
+      LDX   #0
+@vr_msg:
+      LDA   str_no_value,X
+      BEQ   @vr_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @vr_msg
+@vr_done:
+      JSR   eval_newline
+      JSR   eval_advance
+      SEC
+      RTS
+
+@var_ok:
+      ; eval_type and eval_val already set by var_get
+      JSR   eval_advance
+      JMP   eval_check_infix      ; allow :X + 5 etc.
 
 ; ---------------------------------------------------------------------
 ; eval_newline — print CR+LF
@@ -576,6 +632,9 @@ str_idk:
 
 str_notenough:
       .byte "NOT ENOUGH INPUTS", 0
+
+str_no_value:
+      .byte " HAS NO VALUE", 0
 
 ; Powers of 10 table (16-bit): 10000, 1000, 100, 10, 1
 pow10_lo:

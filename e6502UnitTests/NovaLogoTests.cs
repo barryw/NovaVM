@@ -158,6 +158,47 @@ public class NovaLogoTests
             $"Expected '5' from PRINT 20 / 4.\n{screen}");
     }
 
+    [TestMethod]
+    public void MakeAndPrintVariable()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "MAKE \"X 42");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "PRINT :X");
+        RunSteps(cpu, bus, 2_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("42", StringComparison.Ordinal),
+            $"Expected '42' from PRINT :X after MAKE \"X 42.\n{screen}");
+    }
+
+    [TestMethod]
+    public void VariableInExpression()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "MAKE \"X 10");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "PRINT :X + 5");
+        RunSteps(cpu, bus, 2_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("15", StringComparison.Ordinal),
+            $"Expected '15' from PRINT :X + 5.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

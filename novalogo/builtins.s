@@ -177,16 +177,74 @@ do_type:
       BNE   @wch
       JMP   eval_continue
 
+; ---------------------------------------------------------------------
+; do_make — MAKE "name value: store a variable
+;   Arity 0 — we do our own argument evaluation
+;   1. eval_expr → name (must be TOK_QUOTE → word type)
+;   2. save name pointer
+;   3. eval_expr → value
+;   4. var_set(saved name, current value)
+; ---------------------------------------------------------------------
+do_make:
+      ; Evaluate first argument: the name (a quoted word)
+      JSR   eval_expr
+      BCS   @err
+
+      ; Must be a word (type $01)
+      LDA   eval_type
+      CMP   #$01
+      BNE   @err
+
+      ; Save the name pointer (points into token payload: len + chars)
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_hi
+      PHA
+
+      ; Evaluate second argument: the value
+      JSR   eval_expr
+      BCS   @err_pop
+
+      ; Set up ptr_lo/hi → saved name, eval_val holds value
+      PLA
+      STA   ptr_hi
+      PLA
+      STA   ptr_lo
+
+      JSR   var_set
+      JMP   eval_continue
+
+@err_pop:
+      PLA
+      PLA
+@err:
+      ; Print error
+      LDX   #0
+@ep:
+      LDA   str_make_err,X
+      BEQ   @ep_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @ep
+@ep_done:
+      JSR   eval_newline
+      JMP   eval_continue
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
       .segment "RODATA"
+
+str_make_err:
+      .byte "NOT ENOUGH INPUTS TO MAKE", 0
 
 ; Name strings: length-prefixed
 str_print_name:
       .byte 5, "PRINT"
 str_type_name:
       .byte 4, "TYPE"
+str_make_name:
+      .byte 4, "MAKE"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -197,5 +255,9 @@ builtin_table:
       .word str_type_name
       .word do_type
       .byte 1
+
+      .word str_make_name
+      .word do_make
+      .byte 0                    ; arity 0: do_make handles its own args
 
       .word $0000               ; end sentinel

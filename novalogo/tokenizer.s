@@ -36,7 +36,6 @@ num_tmp_hi:   .res 1          ; temp for multiply / frac raw
 ;   Clobbers: A, X, Y, ptr_lo/hi, ptr2_lo/hi
 ; ---------------------------------------------------------------------
 tokenize_line:
-      JSR   heap_init            ; fresh heap per line
       STZ   tok_head_lo
       STZ   tok_head_hi
       STZ   tok_tail_lo

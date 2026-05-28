@@ -7,6 +7,7 @@
       .include "tokenizer.s"
       .include "eval.s"
       .include "builtins.s"
+      .include "vars.s"
 
 ; =====================================================================
 ; ZEROPAGE segment — interpreter zero-page variables
@@ -29,6 +30,7 @@ input_buf:    .res 128        ; input line buffer
 
 cold_start:
       JSR   heap_init
+      JSR   var_init
       ; Print banner
       LDX   #0
 @banner:
