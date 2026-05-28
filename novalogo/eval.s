@@ -11,6 +11,10 @@ eval_val_lo:    .res 1    ; number low byte or word ptr low
 eval_val_frac:  .res 1    ; number fractional byte
 eval_cur_lo:    .res 1    ; current token pointer (low)
 eval_cur_hi:    .res 1    ; current token pointer (high)
+eval_left_hi:   .res 1    ; saved left operand high byte
+eval_left_lo:   .res 1    ; saved left operand low byte
+eval_left_frac: .res 1    ; saved left operand fractional byte
+eval_op:        .res 1    ; infix operator character
 
 ; =====================================================================
 ; BSS segment — scratch for number printing
@@ -64,10 +68,12 @@ eval_loop:
       BCS   @unknown
 
       ; Found: handler addr is in ptr2_lo/hi, arity in A
-      ; Save arity
+      ; Save arity across eval_advance (which clobbers X)
       TAX
+      PHX
       ; Advance past the command word token
       JSR   eval_advance
+      PLX
 
       ; Evaluate arguments (X = arity count)
       CPX   #0
@@ -197,8 +203,7 @@ eval_expr:
       STA   eval_val_frac
       STZ   eval_type           ; $00 = number
       JSR   eval_advance
-      CLC
-      RTS
+      JMP   eval_check_infix    ; check for infix operator
 
 @quote:
       ; Point eval_val at the payload (length byte + chars)
@@ -225,6 +230,165 @@ eval_newline:
       STA   VGC_CHAROUT
       LDA   #$0A
       STA   VGC_CHAROUT
+      RTS
+
+; ---------------------------------------------------------------------
+; eval_check_infix — if next token is TOK_INFIX, evaluate binary op
+;   Entry: eval_val holds the left operand (primary value)
+;   Exit:  eval_val holds the result, carry clear = success
+; ---------------------------------------------------------------------
+eval_check_infix:
+      ; Is there a next token?
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BEQ   @no_infix
+
+      ; Peek at the next token's tag
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_INFIX
+      BNE   @no_infix
+
+      ; Save the left operand to ZP scratch
+      LDA   eval_val_hi
+      STA   eval_left_hi
+      LDA   eval_val_lo
+      STA   eval_left_lo
+      LDA   eval_val_frac
+      STA   eval_left_frac
+
+      ; Read operator character from payload
+      LDY   #TOK_PAYLOAD
+      LDA   (ptr_lo),Y
+      STA   eval_op
+
+      ; Advance past the infix token
+      JSR   eval_advance
+
+      ; Evaluate the right operand (recursive call)
+      JSR   eval_expr
+      BCS   @err_rhs
+
+      ; Dispatch based on operator character
+      LDA   eval_op
+      CMP   #'+'
+      BEQ   @do_add
+      CMP   #'-'
+      BEQ   @do_sub
+      CMP   #'*'
+      BEQ   @do_mul
+      CMP   #'/'
+      BEQ   @do_div
+      ; Unknown operator — return left value unchanged
+      LDA   eval_left_hi
+      STA   eval_val_hi
+      LDA   eval_left_lo
+      STA   eval_val_lo
+      LDA   eval_left_frac
+      STA   eval_val_frac
+
+@no_infix:
+      CLC
+      RTS
+
+@err_rhs:
+      SEC
+      RTS
+
+      ; ----- Addition: left + right (24-bit: frac, lo, hi) -----
+@do_add:
+      CLC
+      LDA   eval_left_frac
+      ADC   eval_val_frac
+      STA   eval_val_frac
+      LDA   eval_left_lo
+      ADC   eval_val_lo
+      STA   eval_val_lo
+      LDA   eval_left_hi
+      ADC   eval_val_hi
+      STA   eval_val_hi
+      CLC
+      RTS
+
+      ; ----- Subtraction: left - right (24-bit) -----
+@do_sub:
+      SEC
+      LDA   eval_left_frac
+      SBC   eval_val_frac
+      STA   eval_val_frac
+      LDA   eval_left_lo
+      SBC   eval_val_lo
+      STA   eval_val_lo
+      LDA   eval_left_hi
+      SBC   eval_val_hi
+      STA   eval_val_hi
+      CLC
+      RTS
+
+      ; ----- Multiplication: left * right via coprocessor -----
+      ; Integer-only for this pass (frac ignored)
+@do_mul:
+      LDA   eval_left_lo
+      STA   MATH_MUL16_A_LO
+      LDA   eval_left_hi
+      STA   MATH_MUL16_A_HI
+      LDA   eval_val_lo
+      STA   MATH_MUL16_B_LO
+      LDA   eval_val_hi
+      STA   MATH_MUL16_B_HI     ; write triggers multiply
+      LDA   MATH_RES0
+      STA   eval_val_lo
+      LDA   MATH_RES1
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      CLC
+      RTS
+
+      ; ----- Division: left / right via coprocessor -----
+      ; Signed 32÷16: dividend = sign-extended left integer, divisor = right integer
+@do_div:
+      ; Check for divide by zero
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BNE   @div_ok
+      ; Division by zero — return 0
+      STZ   eval_val_frac
+      STZ   eval_val_lo
+      STZ   eval_val_hi
+      CLC
+      RTS
+@div_ok:
+      ; Write 32-bit dividend (sign-extend left integer to 32 bits)
+      LDA   eval_left_lo
+      STA   MATH_DIV_N_LO
+      LDA   eval_left_hi
+      STA   MATH_DIV_N_1
+      ; Sign-extend high word
+      LDA   eval_left_hi
+      ORA   #$7F                 ; set bits 0-6
+      BMI   @neg_ext             ; if bit 7 was set, A=$FF (negative)
+      LDA   #$00                 ; positive: extend with $00
+      BRA   @write_ext
+@neg_ext:                        ; A is already $FF
+@write_ext:
+      STA   MATH_DIV_N_2
+      STA   MATH_DIV_N_HI
+      ; Write 16-bit divisor (right operand integer)
+      LDA   eval_val_lo
+      STA   MATH_DIV_D_LO
+      LDA   eval_val_hi
+      STA   MATH_DIV_D_HI       ; write triggers divide
+      ; Read quotient from result
+      LDA   MATH_RES0
+      STA   eval_val_lo
+      LDA   MATH_RES1
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      CLC
       RTS
 
 ; ---------------------------------------------------------------------

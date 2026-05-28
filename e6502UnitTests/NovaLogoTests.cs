@@ -87,13 +87,12 @@ public class NovaLogoTests
 
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        foreach (char ch in "PRINT 42")
-            editor.QueueInput((byte)ch);
-        editor.QueueInput(0x0D);
-
+        QueueLine(editor, "PRINT 42");
         RunSteps(cpu, bus, 2_000_000);
 
         string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("NOT ENOUGH", StringComparison.Ordinal),
+            $"Got spurious NOT ENOUGH INPUTS.\n{screen}");
         Assert.IsTrue(screen.Contains("42", StringComparison.Ordinal),
             $"Expected '42' from PRINT 42.\n{screen}");
     }
@@ -118,6 +117,52 @@ public class NovaLogoTests
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsTrue(screen.Contains("HELLO", StringComparison.Ordinal),
             $"Expected 'HELLO' from PRINT \"HELLO.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ArithmeticOperations()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Test addition
+        QueueLine(editor, "PRINT 3 + 4");
+        RunSteps(cpu, bus, 2_000_000);
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("7", StringComparison.Ordinal),
+            $"Expected '7' from PRINT 3 + 4.\n{screen}");
+
+        // Test subtraction
+        QueueLine(editor, "PRINT 10 - 3");
+        RunSteps(cpu, bus, 2_000_000);
+        screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("7", StringComparison.Ordinal),
+            $"Expected '7' from PRINT 10 - 3.\n{screen}");
+
+        // Test multiplication
+        QueueLine(editor, "PRINT 10 * 5");
+        RunSteps(cpu, bus, 2_000_000);
+        screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("50", StringComparison.Ordinal),
+            $"Expected '50' from PRINT 10 * 5.\n{screen}");
+
+        // Test division
+        QueueLine(editor, "PRINT 20 / 4");
+        RunSteps(cpu, bus, 2_000_000);
+        screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("5", StringComparison.Ordinal),
+            $"Expected '5' from PRINT 20 / 4.\n{screen}");
+    }
+
+    private static void QueueLine(ScreenEditor editor, string line)
+    {
+        foreach (char ch in line)
+            editor.QueueInput((byte)ch);
+        editor.QueueInput(0x0D);
     }
 
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
