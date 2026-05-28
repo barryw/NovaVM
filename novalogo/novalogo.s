@@ -1,7 +1,21 @@
 ; NovaLogo v1.0 — Logo interpreter for the Nova 6502 platform
-; Task 1.1: skeleton ROM — boots, prints banner, echoes input
+; Task 1.4: line input buffer with backspace handling
 
       .include "nova.inc"
+
+; =====================================================================
+; ZEROPAGE segment — interpreter zero-page variables
+; =====================================================================
+      .segment "ZEROPAGE"
+
+buf_idx:      .res 1          ; current position in input_buf
+
+; =====================================================================
+; BSS segment — runtime buffers
+; =====================================================================
+      .segment "BSS"
+
+input_buf:    .res 128        ; input line buffer
 
 ; =====================================================================
 ; CODE segment — cold start and main loop
@@ -22,31 +36,60 @@ cold_start:
       JSR   print_prompt
 
 main_loop:
+      JSR   read_line
+      ; TODO: tokenize and execute input_buf contents here
+      BRA   main_loop
+
+; ---------------------------------------------------------------------
+; read_line — read a line of input into input_buf, null-terminated
+;   On return: input_buf contains the line, buf_idx = length
+; ---------------------------------------------------------------------
+read_line:
+      STZ   buf_idx            ; reset buffer index to 0
+
+@poll:
       LDA   VGC_CHARIN         ; poll keyboard
-      BEQ   main_loop          ; no key waiting — spin
+      BEQ   @poll              ; no key waiting — spin
 
       ; --- handle CR ($0D) ---
       CMP   #$0D
       BNE   @not_cr
+      LDX   buf_idx
+      STZ   input_buf,X        ; null-terminate
       LDA   #$0D
       STA   VGC_CHAROUT        ; carriage return
       LDA   #$0A
       STA   VGC_CHAROUT        ; line feed
-      JSR   print_prompt
-      BRA   main_loop
+      RTS
 
 @not_cr:
-      ; --- ignore backspace/delete for now (Task 1.4) ---
+      ; --- handle backspace ($08, $14, $7F) ---
       CMP   #$08
-      BEQ   main_loop
+      BEQ   @backspace
       CMP   #$14
-      BEQ   main_loop
+      BEQ   @backspace
       CMP   #$7F
-      BEQ   main_loop
+      BEQ   @backspace
 
-      ; --- printable character: echo it ---
-      STA   VGC_CHAROUT
-      BRA   main_loop
+      ; --- buffer full? ---
+      LDX   buf_idx
+      CPX   #127
+      BCS   @poll              ; at capacity — ignore keystroke
+
+      ; --- store and echo printable character ---
+      STA   input_buf,X        ; store in buffer
+      STA   VGC_CHAROUT        ; echo to screen
+      INC   buf_idx
+      BRA   @poll
+
+@backspace:
+      LDX   buf_idx
+      BEQ   @poll              ; nothing to delete — ignore
+      DEX
+      STX   buf_idx
+      LDA   #$08
+      STA   VGC_CHAROUT        ; move cursor left and erase
+      BRA   @poll
 
 ; ---------------------------------------------------------------------
 ; print_prompt — prints "? " to the screen

@@ -49,6 +49,33 @@ public class NovaLogoTests
             $"Expected typed text HELLO on screen.\n{screen}");
     }
 
+    [TestMethod]
+    public void BackspaceDeletesCharacter()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Type "HELXO" then backspace twice and retype "LO"
+        foreach (byte b in new byte[] {
+            (byte)'H', (byte)'E', (byte)'L', (byte)'X', (byte)'O',
+            0x08, 0x08,  // two backspaces
+            (byte)'L', (byte)'O',
+            0x0D  // Enter
+        })
+            editor.QueueInput(b);
+
+        RunSteps(cpu, bus, 1_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("HELLO", StringComparison.Ordinal),
+            $"Expected HELLO after backspace correction.\n{screen}");
+    }
+
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
     {
         RunUntil(cpu, bus, maxSteps,
