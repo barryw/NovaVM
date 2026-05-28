@@ -63,6 +63,16 @@ EXT_CMD_SETPC   = $26           ; SETPC color — set pen color
 EXT_CMD_SETBG   = $27           ; SETBG color — set background color
 EXT_CMD_TOWARDS = $28           ; TOWARDS x y — heading towards point
 
+; --- VGC graphics commands ---
+EXT_CMD_SETCOLOR = $30          ; SETCOLOR color — set VGC draw color
+EXT_CMD_PLOT     = $31          ; PLOT x y — plot pixel
+EXT_CMD_UNPLOT   = $32          ; UNPLOT x y — clear pixel
+EXT_CMD_LINE     = $33          ; LINE x1 y1 x2 y2 — draw line
+EXT_CMD_CIRCLE   = $34          ; CIRCLE x y r — draw circle
+EXT_CMD_RECT     = $35          ; RECT x1 y1 x2 y2 — draw rectangle
+EXT_CMD_FILLRECT = $36          ; FILL x1 y1 x2 y2 — filled rectangle
+EXT_CMD_PAINT    = $37          ; PAINT x y — flood fill
+
 ; --- Value types (match eval_type in eval.s) ---
 .ifndef VAL_NUMBER
 VAL_NUMBER      = $00
@@ -89,6 +99,12 @@ TURTLE_SHOWN    = $9B           ; $00 = hidden, $01 = shown
 TURTLE_COLOR    = $9C           ; pen color (VGC palette index)
 TURTLE_SPRITE   = $9D           ; sprite slot (default 15)
 TURTLE_INITED   = $9E           ; $00 = not initialized, $01 = initialized
+
+; --- Argument 3 (for 4+ arg commands like LINE, RECT, FILL) ---
+EXT_ARG3_TYPE   = $9F
+EXT_ARG3_HI     = $A0
+EXT_ARG3_LO     = $A1
+EXT_ARG3_FRAC   = $A2
 
 ; --- Trampoline location in RAM ---
 EXT_TRAMPOLINE  = $0270         ; RAM address where trampoline code is copied

@@ -1198,6 +1198,118 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void PlotAndLine()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "SETCOLOR 1");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "LINE 10 10 100 80");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PLOT 50 50");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT 555");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "555") found = true;
+        Assert.IsTrue(found, $"Expected '555' after drawing commands.\n{screen}");
+    }
+
+    [TestMethod]
+    public void CircleAndRect()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "CIRCLE 160 100 50");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "RECT 20 20 80 60");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 444");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "444") found = true;
+        Assert.IsTrue(found, $"Expected '444' after CIRCLE + RECT.\n{screen}");
+    }
+
+    [TestMethod]
+    public void FillAndPaint()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "SETCOLOR 2");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "FILL 10 10 50 50");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "SETCOLOR 3");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PAINT 100 100");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 333");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "333") found = true;
+        Assert.IsTrue(found, $"Expected '333' after FILL + PAINT.\n{screen}");
+    }
+
+    [TestMethod]
+    public void UnplotClearsPixel()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "SETCOLOR 1");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PLOT 50 50");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "UNPLOT 50 50");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT 222");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "222") found = true;
+        Assert.IsTrue(found, $"Expected '222' after PLOT + UNPLOT.\n{screen}");
+    }
+
+    [TestMethod]
     public void ClearScreenAndForward()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);

@@ -95,6 +95,21 @@ ext_dispatch:
       .word ext_setpc-1         ; cmd $26: SETPC
       .word ext_setbg-1         ; cmd $27: SETBG
       .word ext_towards-1       ; cmd $28: TOWARDS
+      .word ext_unsupported-1   ; cmd $29
+      .word ext_unsupported-1   ; cmd $2A
+      .word ext_unsupported-1   ; cmd $2B
+      .word ext_unsupported-1   ; cmd $2C
+      .word ext_unsupported-1   ; cmd $2D
+      .word ext_unsupported-1   ; cmd $2E
+      .word ext_unsupported-1   ; cmd $2F
+      .word ext_setcolor-1      ; cmd $30: SETCOLOR
+      .word ext_plot-1          ; cmd $31: PLOT
+      .word ext_unplot-1        ; cmd $32: UNPLOT
+      .word ext_line-1          ; cmd $33: LINE
+      .word ext_circle-1        ; cmd $34: CIRCLE
+      .word ext_rect-1          ; cmd $35: RECT
+      .word ext_fillrect-1      ; cmd $36: FILL
+      .word ext_paint-1         ; cmd $37: PAINT
 
 ; =====================================================================
 ; ext_unsupported — unknown command, just return
@@ -1112,6 +1127,174 @@ ext_towards:
       STA   EXT_RESULT_HI
       STZ   EXT_RESULT_FRAC
       STZ   EXT_RESULT_TYPE
+      RTS
+
+; =====================================================================
+; ext_setcolor — set VGC drawing color
+;   ARG0 = color (palette index 0-15)
+; =====================================================================
+ext_setcolor:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   #VCMD_GCOLOR
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_plot — plot a pixel at (x, y) in current draw color
+;   ARG0 = x, ARG1 = y
+; =====================================================================
+ext_plot:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG0_HI
+      STA   VGC_P1
+      LDA   EXT_ARG1_LO
+      STA   VGC_P2
+      LDA   EXT_ARG1_HI
+      STA   VGC_P3
+      LDA   #VCMD_PLOT
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_unplot — clear a pixel at (x, y)
+;   ARG0 = x, ARG1 = y
+; =====================================================================
+ext_unplot:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG0_HI
+      STA   VGC_P1
+      LDA   EXT_ARG1_LO
+      STA   VGC_P2
+      LDA   EXT_ARG1_HI
+      STA   VGC_P3
+      LDA   #VCMD_UNPLOT
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_line — draw line from (x1,y1) to (x2,y2)
+;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
+; =====================================================================
+ext_line:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG0_HI
+      STA   VGC_P1
+      LDA   EXT_ARG1_LO
+      STA   VGC_P2
+      LDA   EXT_ARG1_HI
+      STA   VGC_P3
+      LDA   EXT_ARG2_LO
+      STA   VGC_P4
+      LDA   EXT_ARG2_HI
+      STA   VGC_P5
+      LDA   EXT_ARG3_LO
+      STA   VGC_P6
+      LDA   EXT_ARG3_HI
+      STA   VGC_P7
+      LDA   #VCMD_LINE
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_circle — draw circle at (x, y) with radius r
+;   ARG0 = x, ARG1 = y, ARG2 = r
+; =====================================================================
+ext_circle:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG0_HI
+      STA   VGC_P1
+      LDA   EXT_ARG1_LO
+      STA   VGC_P2
+      LDA   EXT_ARG1_HI
+      STA   VGC_P3
+      LDA   EXT_ARG2_LO
+      STA   VGC_P4
+      LDA   EXT_ARG2_HI
+      STA   VGC_P5
+      STZ   VGC_P6              ; ry_lo = 0 → use rx as both radii
+      STZ   VGC_P7              ; ry_hi = 0
+      LDA   #VCMD_CIRCLE
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_rect — draw rectangle outline from (x1,y1) to (x2,y2)
+;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
+; =====================================================================
+ext_rect:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG0_HI
+      STA   VGC_P1
+      LDA   EXT_ARG1_LO
+      STA   VGC_P2
+      LDA   EXT_ARG1_HI
+      STA   VGC_P3
+      LDA   EXT_ARG2_LO
+      STA   VGC_P4
+      LDA   EXT_ARG2_HI
+      STA   VGC_P5
+      LDA   EXT_ARG3_LO
+      STA   VGC_P6
+      LDA   EXT_ARG3_HI
+      STA   VGC_P7
+      LDA   #VCMD_RECT
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_fillrect — draw filled rectangle from (x1,y1) to (x2,y2)
+;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
+; =====================================================================
+ext_fillrect:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG0_HI
+      STA   VGC_P1
+      LDA   EXT_ARG1_LO
+      STA   VGC_P2
+      LDA   EXT_ARG1_HI
+      STA   VGC_P3
+      LDA   EXT_ARG2_LO
+      STA   VGC_P4
+      LDA   EXT_ARG2_HI
+      STA   VGC_P5
+      LDA   EXT_ARG3_LO
+      STA   VGC_P6
+      LDA   EXT_ARG3_HI
+      STA   VGC_P7
+      LDA   #VCMD_FILL
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_paint — flood fill at (x, y) with current draw color
+;   ARG0 = x, ARG1 = y
+; =====================================================================
+ext_paint:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG0_HI
+      STA   VGC_P1
+      LDA   EXT_ARG1_LO
+      STA   VGC_P2
+      LDA   EXT_ARG1_HI
+      STA   VGC_P3
+      LDA   #VCMD_PAINT
+      STA   VGC_CMD
       RTS
 
 ; =====================================================================

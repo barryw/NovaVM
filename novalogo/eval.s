@@ -1389,6 +1389,22 @@ ext_eval_args:
       STA   EXT_ARG2_LO
       LDA   eval_val_frac
       STA   EXT_ARG2_FRAC
+      DEX
+      BEQ   @done
+
+      ; Evaluate arg 3 (for LINE, RECT, FILL etc.)
+      PHX
+      JSR   eval_expr
+      PLX
+      BCS   @err
+      LDA   eval_type
+      STA   EXT_ARG3_TYPE
+      LDA   eval_val_hi
+      STA   EXT_ARG3_HI
+      LDA   eval_val_lo
+      STA   EXT_ARG3_LO
+      LDA   eval_val_frac
+      STA   EXT_ARG3_FRAC
 
 @done:
       CLC
@@ -1497,6 +1513,31 @@ ext_cmd_table:
       .word str_ext_towards
       .byte EXT_CMD_TOWARDS
       .byte 2                    ; arity: 2 (x, y)
+      ; --- VGC graphics commands ---
+      .word str_ext_setcolor
+      .byte EXT_CMD_SETCOLOR
+      .byte 1                    ; arity: 1 (color)
+      .word str_ext_plot
+      .byte EXT_CMD_PLOT
+      .byte 2                    ; arity: 2 (x, y)
+      .word str_ext_unplot
+      .byte EXT_CMD_UNPLOT
+      .byte 2                    ; arity: 2 (x, y)
+      .word str_ext_line
+      .byte EXT_CMD_LINE
+      .byte 4                    ; arity: 4 (x1, y1, x2, y2)
+      .word str_ext_circle
+      .byte EXT_CMD_CIRCLE
+      .byte 3                    ; arity: 3 (x, y, r)
+      .word str_ext_rect
+      .byte EXT_CMD_RECT
+      .byte 4                    ; arity: 4 (x1, y1, x2, y2)
+      .word str_ext_fill
+      .byte EXT_CMD_FILLRECT
+      .byte 4                    ; arity: 4 (x1, y1, x2, y2)
+      .word str_ext_paint
+      .byte EXT_CMD_PAINT
+      .byte 2                    ; arity: 2 (x, y)
       .word $0000               ; end sentinel
 
 str_ext_test_name:
@@ -1559,6 +1600,22 @@ str_ext_setbg:
       .byte 5, "SETBG"
 str_ext_towards:
       .byte 7, "TOWARDS"
+str_ext_setcolor:
+      .byte 8, "SETCOLOR"
+str_ext_plot:
+      .byte 4, "PLOT"
+str_ext_unplot:
+      .byte 6, "UNPLOT"
+str_ext_line:
+      .byte 4, "LINE"
+str_ext_circle:
+      .byte 6, "CIRCLE"
+str_ext_rect:
+      .byte 4, "RECT"
+str_ext_fill:
+      .byte 4, "FILL"
+str_ext_paint:
+      .byte 5, "PAINT"
 
       .segment "RODATA"
 
