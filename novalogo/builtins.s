@@ -360,6 +360,10 @@ do_repeat:
 
       ; --- Execute the body repeat_count times ---
 @loop:
+      ; Check if STOP/OUTPUT was signaled
+      LDA   proc_stopped
+      BNE   @loop_done
+
       ; Check if count is zero
       LDA   repeat_count_lo
       ORA   repeat_count_hi
@@ -755,6 +759,26 @@ ifelse_print_err:
       JSR   eval_newline
       JMP   eval_continue
 
+; ---------------------------------------------------------------------
+; do_stop — STOP: exit current procedure immediately (no return value)
+;   Arity 0, no arguments
+; ---------------------------------------------------------------------
+do_stop:
+      LDA   #$01
+      STA   proc_stopped
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_output — OUTPUT expr: exit procedure with a return value
+;   Arity 0 — handles its own argument evaluation
+; ---------------------------------------------------------------------
+do_output:
+      JSR   eval_expr           ; evaluate the expression
+      LDA   #$02
+      STA   proc_stopped        ; signal OUTPUT
+      ; eval_type/eval_val holds the return value
+      JMP   eval_continue
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
@@ -794,6 +818,10 @@ str_if_name:
       .byte 2, "IF"
 str_ifelse_name:
       .byte 6, "IFELSE"
+str_stop_name:
+      .byte 4, "STOP"
+str_output_name:
+      .byte 6, "OUTPUT"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -820,5 +848,13 @@ builtin_table:
       .word str_if_name
       .word do_if
       .byte 0                    ; arity 0: do_if handles its own args
+
+      .word str_stop_name
+      .word do_stop
+      .byte 0                    ; arity 0: no arguments
+
+      .word str_output_name
+      .word do_output
+      .byte 0                    ; arity 0: do_output handles its own args
 
       .word $0000               ; end sentinel

@@ -65,6 +65,7 @@ param_name_tmp:   .res 32
 proc_init:
       STZ   proc_head_lo
       STZ   proc_head_hi
+      STZ   proc_stopped
       RTS
 
 ; ---------------------------------------------------------------------
@@ -627,7 +628,8 @@ proc_names_equal:
 ; ---------------------------------------------------------------------
 proc_invoke:
       ; Save outer tokenizer and eval state on the hardware stack.
-      ; We push: tok_head(2), tok_tail(2), eval_in_body(1) = 5 bytes.
+      ; We push: tok_head(2), tok_tail(2), eval_in_body(1),
+      ;          proc_stopped(1) = 6 bytes.
       ; input_buf is saved to BSS (128 bytes too large for stack).
       LDA   tok_head_lo
       PHA
@@ -638,6 +640,8 @@ proc_invoke:
       LDA   tok_tail_hi
       PHA
       LDA   eval_in_body
+      PHA
+      LDA   proc_stopped
       PHA
 
       ; Save input_buf to BSS save area
@@ -789,6 +793,9 @@ proc_invoke:
       ; proc_ptr = current position in body text
       ; proc_body_len = remaining bytes
 
+      ; Clear STOP/OUTPUT flag before executing body
+      STZ   proc_stopped
+
 @exec_line:
       ; Any body text remaining?
       LDA   proc_body_len_lo
@@ -850,6 +857,10 @@ proc_invoke:
       ; Eval this line (full eval — not body mode)
       JSR   eval_line
 
+      ; Check if STOP or OUTPUT was called — stop processing lines
+      LDA   proc_stopped
+      BNE   @exec_done
+
       BRA   @exec_line
 
 @exec_done:
@@ -874,7 +885,14 @@ proc_invoke:
       LDA   save_eval_cur_hi
       STA   eval_cur_hi
 
-      ; Restore outer tokenizer state from stack
+      ; Restore outer state from stack.
+      ; X returns this invocation's proc_stopped to the caller.
+      ; Stack layout (top to bottom):
+      ;   saved_proc_stopped, eval_in_body, tok_tail_hi, tok_tail_lo,
+      ;   tok_head_hi, tok_head_lo
+      LDX   proc_stopped          ; X = this proc's exit state
+      PLA                         ; pop saved outer proc_stopped
+      STA   proc_stopped          ; restore outer proc_stopped
       PLA
       STA   eval_in_body
       PLA
@@ -886,12 +904,8 @@ proc_invoke:
       PLA
       STA   tok_head_lo
 
-      ; Continue with caller's eval loop
-      LDA   eval_in_body
-      BNE   @in_body
-      JMP   eval_loop
-@in_body:
-      JMP   eval_body
+      ; Return with X = exit status ($00=normal, $01=STOP, $02=OUTPUT)
+      RTS
 
 @bind_err:
       PLX                         ; discard remaining param count
@@ -905,8 +919,29 @@ proc_invoke:
       BNE   @be_lp
 @be_done:
       JSR   eval_newline
-      ; Restore state and abort
-      JMP   @exec_done
+      ; Restore input_buf and stack, skip body execution
+      LDX   #0
+@be_rest_ib:
+      LDA   save_input_buf,X
+      STA   input_buf,X
+      INX
+      CPX   #128
+      BNE   @be_rest_ib
+      ; Restore stack (6 bytes: proc_stopped, eval_in_body, tok_tail, tok_head)
+      LDX   #$00                  ; X = normal exit status
+      PLA                         ; saved proc_stopped
+      STA   proc_stopped
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   tok_tail_hi
+      PLA
+      STA   tok_tail_lo
+      PLA
+      STA   tok_head_hi
+      PLA
+      STA   tok_head_lo
+      RTS
 
 ; =====================================================================
 ; RODATA — procedure strings

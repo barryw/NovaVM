@@ -454,6 +454,75 @@ public class NovaLogoTests
             $"Expected '30' from ADD2 10 20.\n{screen}");
     }
 
+    [TestMethod]
+    public void StopExitsProcedureEarly()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO HALF :N");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "IF :N < 2 [STOP]");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "PRINT :N");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "HALF 1");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "HALF 5");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT 99");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // HALF 1 should not print (STOP fires), HALF 5 should print 5
+        int count5 = 0, count99 = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "5") count5++;
+            if (t == "99") count99++;
+        }
+        Assert.IsTrue(count5 >= 1, $"Expected '5' from HALF 5.\n{screen}");
+        Assert.IsTrue(count99 >= 1, $"Expected '99' after both HALF calls.\n{screen}");
+    }
+
+    [TestMethod]
+    public void OutputReturnValue()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO DOUBLE :N");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "OUTPUT :N * 2");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "PRINT DOUBLE 5");
+        RunSteps(cpu, bus, 4_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "10") count++;
+        }
+        Assert.IsTrue(count >= 1, $"Expected '10' from PRINT DOUBLE 5.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

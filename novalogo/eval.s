@@ -18,6 +18,7 @@ eval_op:        .res 1    ; infix operator character
 handler_lo:     .res 1    ; saved handler address for JMP
 handler_hi:     .res 1
 eval_in_body:   .res 1    ; $00 = normal eval_loop, $01 = in body
+proc_stopped:   .res 1    ; $00 = running, $01 = STOP, $02 = OUTPUT
 
 ; =====================================================================
 ; BSS segment — scratch for number printing
@@ -38,16 +39,21 @@ pn_buf:         .res 8    ; decimal digit buffer for print_number
 ; ---------------------------------------------------------------------
 eval_line:
       STZ   eval_in_body
+      STZ   proc_stopped
       LDA   tok_head_lo
       STA   eval_cur_lo
       LDA   tok_head_hi
       STA   eval_cur_hi
 
 eval_loop:
+      ; Check if STOP/OUTPUT was signaled — bail out
+      LDA   proc_stopped
+      BNE   @bail_out
+
       ; Check for end of list
       LDA   eval_cur_lo
       ORA   eval_cur_hi
-      BEQ   @done
+      BEQ   @bail_out
 
       ; Read tag of current token
       LDA   eval_cur_lo
@@ -65,6 +71,9 @@ eval_loop:
       ; Advance to next token
       JSR   eval_advance
       BRA   eval_loop
+
+@bail_out:
+      RTS
 
 @do_command:
       ; Look up the word in the builtin table
@@ -87,6 +96,12 @@ eval_loop:
       ; Evaluate arguments (X = arity count)
       CPX   #0
       BEQ   @call_handler
+      ; Save handler address — eval_expr may invoke proc_invoke which
+      ; clobbers handler_lo/hi via inner eval_loop dispatch
+      LDA   handler_hi
+      PHA
+      LDA   handler_lo
+      PHA
 @eval_args:
       PHX                   ; save remaining arg count
       JSR   eval_expr
@@ -94,6 +109,11 @@ eval_loop:
       PLX
       DEX
       BNE   @eval_args
+      ; Restore handler address
+      PLA
+      STA   handler_lo
+      PLA
+      STA   handler_hi
 
 @call_handler:
       ; Call the handler via indirect JMP
@@ -102,6 +122,9 @@ eval_loop:
 
 @arg_error:
       PLX                   ; discard saved arity counter
+      ; Discard saved handler address
+      PLA
+      PLA
       ; Print error and abort line
       LDX   #0
 @ae_lp:
@@ -118,8 +141,9 @@ eval_loop:
       ; Try user-defined procedures before erroring
       JSR   proc_lookup
       BCS   @truly_unknown
-      ; Found a procedure — invoke it
-      JMP   proc_invoke
+      ; Found a procedure — invoke it (proc_stopped restored internally)
+      JSR   proc_invoke
+      JMP   eval_loop
 
 @truly_unknown:
       ; Print "I don't know how to " + the word
@@ -168,6 +192,10 @@ eval_continue:
 ;   eval_in_body must be $01 on entry
 ; ---------------------------------------------------------------------
 eval_body:
+      ; Check if STOP/OUTPUT was signaled — bail out immediately
+      LDA   proc_stopped
+      BNE   @done
+
       ; Check for end of list (safety — malformed input)
       LDA   eval_cur_lo
       ORA   eval_cur_hi
@@ -209,6 +237,11 @@ eval_body:
 
       CPX   #0
       BEQ   @call_handler
+      ; Save handler address — eval_expr may invoke proc_invoke
+      LDA   handler_hi
+      PHA
+      LDA   handler_lo
+      PHA
 @eval_args:
       PHX
       JSR   eval_expr
@@ -216,6 +249,11 @@ eval_body:
       PLX
       DEX
       BNE   @eval_args
+      ; Restore handler address
+      PLA
+      STA   handler_lo
+      PLA
+      STA   handler_hi
 
 @call_handler:
       JMP   (handler_lo)
@@ -223,6 +261,8 @@ eval_body:
 
 @arg_error:
       PLX
+      PLA
+      PLA
       LDX   #0
 @ae_lp:
       LDA   str_notenough,X
@@ -241,7 +281,8 @@ eval_body:
       ; Try user-defined procedures before erroring (inside body)
       JSR   proc_lookup
       BCS   @truly_unknown
-      JMP   proc_invoke
+      JSR   proc_invoke
+      JMP   eval_body
 
 @truly_unknown:
       ; Print "I don't know how to " + the word (inside body)
@@ -316,7 +357,30 @@ eval_expr:
       BEQ   @quote
       CMP   #TOK_VARREF
       BEQ   @varref
-      ; For now, anything else is an error
+      CMP   #TOK_WORD
+      BEQ   @word_expr
+      ; Anything else is an error
+      SEC
+      RTS
+
+@word_expr:
+      ; Could be a reporter procedure (returns a value via OUTPUT)
+      JSR   proc_lookup
+      BCS   @word_not_proc        ; not a procedure — error
+      ; It's a procedure — invoke it
+      JSR   proc_invoke
+      ; X = exit status: $02 = OUTPUT (eval_val has value), else no value
+      CPX   #$02
+      BEQ   @word_has_val
+      ; No OUTPUT — set result to 0
+      STZ   eval_val_hi
+      STZ   eval_val_lo
+      STZ   eval_val_frac
+      STZ   eval_type
+@word_has_val:
+      JMP   eval_check_infix      ; allow DOUBLE 5 + 3 etc.
+
+@word_not_proc:
       SEC
       RTS
 
