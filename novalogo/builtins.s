@@ -265,6 +265,13 @@ body_start_lo:    .res 1       ; first token after [
 body_start_hi:    .res 1
 body_resume_lo:   .res 1       ; token after ]
 body_resume_hi:   .res 1
+repcount:         .res 1       ; 1-based REPCOUNT within REPEAT loop
+for_cur_lo:       .res 1       ; FOR loop current value low
+for_cur_hi:       .res 1       ; FOR loop current value high
+for_end_lo:       .res 1       ; FOR loop end value low
+for_end_hi:       .res 1       ; FOR loop end value high
+cond_start_lo:    .res 1       ; WHILE/UNTIL condition start low
+cond_start_hi:    .res 1       ; WHILE/UNTIL condition start high
 
       .segment "CODE"
 
@@ -281,6 +288,8 @@ do_repeat:
 @type_ok:
 
       ; --- Save outer repeat state for nesting ---
+      LDA   repcount
+      PHA
       LDA   repeat_count_lo
       PHA
       LDA   repeat_count_hi
@@ -373,7 +382,9 @@ do_repeat:
       LDA   eval_cur_hi
       STA   body_resume_hi
 
-      ; --- Execute the body repeat_count times ---
+      ; --- Initialize repcount and execute the body repeat_count times ---
+      LDA   #1
+      STA   repcount
 @loop:
       ; Check if STOP/OUTPUT was signaled
       LDA   proc_stopped
@@ -395,6 +406,12 @@ do_repeat:
       STA   eval_in_body
       JSR   eval_body
 
+      ; Increment repcount (capped at 255)
+      LDA   repcount
+      CMP   #$FF
+      BCS   :+
+      INC   repcount
+:
       ; Decrement count (16-bit)
       LDA   repeat_count_lo
       BNE   @dec_lo
@@ -447,16 +464,7 @@ do_repeat:
 ;   Must be called via JSR (uses return address on stack correctly)
 ; ---------------------------------------------------------------------
 repeat_restore_state:
-      ; The JSR pushes 2 bytes (return address). We need to pop our
-      ; return address first, then the 7 saved bytes, then re-push
-      ; the return address. Simpler: store RA in ZP temporaries.
-      ; Actually, use a different approach: pull RA, pull state, push RA back.
-      ; But that's awkward. Let's just inline the restore... no, better:
-      ; Pull our return address, then do the pops, then JMP indirect.
-      ;
-      ; Actually simplest: the 7 bytes are deeper on the stack below our
-      ; JSR return address. Pull RA into handler_lo/hi temp, do pops, push RA, RTS.
-
+      ; Pull our return address, pop 8 saved bytes, push RA, RTS.
       PLA
       STA   handler_lo            ; save return address low
       PLA
@@ -476,6 +484,8 @@ repeat_restore_state:
       STA   repeat_count_hi
       PLA
       STA   repeat_count_lo
+      PLA
+      STA   repcount
 
       LDA   handler_hi
       PHA
@@ -1059,10 +1069,568 @@ do_throw:
       LDY   #>str_throw_err
       JMP   catch_print_err
 
+; ---------------------------------------------------------------------
+; do_repcount — REPCOUNT: reporter returning current 1-based repeat index
+;   Arity 0, no arguments. Returns repcount as a number.
+; ---------------------------------------------------------------------
+do_repcount:
+      STZ   eval_val_hi
+      LDA   repcount
+      STA   eval_val_lo
+      STZ   eval_val_frac
+      STZ   eval_type              ; VAL_NUMBER
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_for — FOR [var start end] [body]
+;   Arity 0 — handles its own argument parsing
+;   1. Parse control list [varname start end]
+;   2. Parse body [...]
+;   3. Loop: set var=current, execute body, increment, check end
+; ---------------------------------------------------------------------
+do_for:
+      ; Current token must be [ for the control list
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   for_err_ctrl
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BEQ   :+
+      JMP   for_err_ctrl
+:
+      ; Advance past [
+      JSR   eval_advance
+
+      ; Read variable name token (must be TOK_WORD)
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   for_err_ctrl
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_WORD
+      BEQ   :+
+      JMP   for_err_ctrl
+:
+      ; Save variable name pointer (points at TOK_PAYLOAD = len+chars)
+      CLC
+      LDA   eval_cur_lo
+      ADC   #TOK_PAYLOAD
+      PHA                           ; name ptr lo
+      LDA   eval_cur_hi
+      ADC   #0
+      PHA                           ; name ptr hi
+
+      ; Advance past variable name
+      JSR   eval_advance
+
+      ; Evaluate start expression
+      JSR   eval_expr
+      BCC   :+
+      JMP   for_err_ctrl_pop2
+:     LDA   eval_type
+      BEQ   :+
+      JMP   for_err_ctrl_pop2
+:
+      ; Save start value
+      LDA   eval_val_lo
+      STA   for_cur_lo
+      LDA   eval_val_hi
+      STA   for_cur_hi
+
+      ; Evaluate end expression
+      JSR   eval_expr
+      BCC   :+
+      JMP   for_err_ctrl_pop2
+:     LDA   eval_type
+      BEQ   :+
+      JMP   for_err_ctrl_pop2
+:
+      ; Save end value
+      LDA   eval_val_lo
+      STA   for_end_lo
+      LDA   eval_val_hi
+      STA   for_end_hi
+
+      ; Current token should be ] closing the control list
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   for_err_ctrl_pop2
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_RBRACKET
+      BEQ   :+
+      JMP   for_err_ctrl_pop2
+:
+      ; Advance past ]
+      JSR   eval_advance
+
+      ; --- Save outer loop state for nesting ---
+      LDA   body_start_lo
+      PHA
+      LDA   body_start_hi
+      PHA
+      LDA   body_resume_lo
+      PHA
+      LDA   body_resume_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+
+      ; --- Locate the body [...] ---
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   for_err_bracket_pop7
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BEQ   :+
+      JMP   for_err_bracket_pop7
+:
+      ; Advance past [
+      JSR   eval_advance
+      LDA   eval_cur_lo
+      STA   body_start_lo
+      LDA   eval_cur_hi
+      STA   body_start_hi
+
+      ; Scan for matching ]
+      LDX   #1
+@for_scan:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   for_err_bracket_pop7
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BNE   @for_not_lb
+      INX
+      BRA   @for_scan_next
+@for_not_lb:
+      CMP   #TOK_RBRACKET
+      BNE   @for_scan_next
+      DEX
+      BEQ   @for_scan_found
+@for_scan_next:
+      PHX
+      JSR   eval_advance
+      PLX
+      BRA   @for_scan
+
+@for_scan_found:
+      JSR   eval_advance
+      LDA   eval_cur_lo
+      STA   body_resume_lo
+      LDA   eval_cur_hi
+      STA   body_resume_hi
+
+      ; --- Loop: for_cur from start to end ---
+@for_loop:
+      LDA   proc_stopped
+      BNE   @for_done
+
+      ; Check if for_cur > for_end (signed 16-bit)
+      LDA   for_cur_hi
+      SEC
+      SBC   for_end_hi
+      BVC   @for_sign_ok
+      EOR   #$80
+@for_sign_ok:
+      BMI   @for_in_range            ; for_cur < for_end
+      LDA   for_cur_hi
+      CMP   for_end_hi
+      BNE   @for_done                ; hi differs and cur > end
+      LDA   for_cur_lo
+      CMP   for_end_lo
+      BEQ   @for_in_range            ; equal = last iteration
+      BCS   @for_done                ; cur_lo > end_lo = done
+
+@for_in_range:
+      ; Set the variable to for_cur value
+      ; Name pointer on stack under 5 saved state bytes + 2 name ptr bytes
+      TSX
+      LDA   $0106,X                 ; name ptr hi
+      STA   ptr_hi
+      LDA   $0107,X                 ; name ptr lo
+      STA   ptr_lo
+
+      LDA   for_cur_lo
+      STA   eval_val_lo
+      LDA   for_cur_hi
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      STZ   eval_type                ; VAL_NUMBER
+      JSR   var_set
+
+      ; Execute body
+      LDA   body_start_lo
+      STA   eval_cur_lo
+      LDA   body_start_hi
+      STA   eval_cur_hi
+      LDA   #$01
+      STA   eval_in_body
+      JSR   eval_body
+
+      ; Increment for_cur (16-bit)
+      INC   for_cur_lo
+      BNE   @for_loop
+      INC   for_cur_hi
+      BRA   @for_loop
+
+@for_done:
+      ; Restore outer state
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   body_resume_hi
+      PLA
+      STA   body_resume_lo
+      PLA
+      STA   body_start_hi
+      PLA
+      STA   body_start_lo
+      PLA                           ; name_hi
+      PLA                           ; name_lo
+
+      LDA   body_resume_lo
+      STA   eval_cur_lo
+      LDA   body_resume_hi
+      STA   eval_cur_hi
+      JMP   eval_continue
+
+for_err_ctrl_pop2:
+      PLA
+      PLA
+for_err_ctrl:
+      LDX   #0
+@ec_lp:
+      LDA   str_for_err,X
+      BEQ   @ec_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @ec_lp
+@ec_done:
+      JSR   eval_newline
+      JMP   eval_continue
+
+for_err_bracket_pop7:
+      PLA
+      STA   eval_in_body
+      PLA
+      PLA
+      PLA
+      PLA
+      PLA
+      PLA
+      LDX   #0
+@eb_lp:
+      LDA   str_for_bracket,X
+      BEQ   @eb_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @eb_lp
+@eb_done:
+      JSR   eval_newline
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_while — WHILE [condition] [body]
+;   Arity 0 — loop while condition is nonzero
+; ---------------------------------------------------------------------
+do_while:
+      LDA   #0                      ; 0 = WHILE (loop while true)
+      BRA   while_until_common
+
+; ---------------------------------------------------------------------
+; do_until — UNTIL [condition] [body]
+;   Arity 0 — loop until condition becomes nonzero
+; ---------------------------------------------------------------------
+do_until:
+      LDA   #1                      ; 1 = UNTIL (loop until true)
+      ; fall through
+
+; ---------------------------------------------------------------------
+; while_until_common — shared logic for WHILE/UNTIL
+;   Entry: A = 0 for WHILE, 1 for UNTIL
+; ---------------------------------------------------------------------
+while_until_common:
+      PHA                           ; save mode (0=WHILE, 1=UNTIL)
+
+      ; --- Save outer loop state ---
+      LDA   body_start_lo
+      PHA
+      LDA   body_start_hi
+      PHA
+      LDA   body_resume_lo
+      PHA
+      LDA   body_resume_hi
+      PHA
+      LDA   cond_start_lo
+      PHA
+      LDA   cond_start_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+
+      ; --- Locate condition [...] ---
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   wu_err_bracket
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BEQ   :+
+      JMP   wu_err_bracket
+:
+      ; Advance past [
+      JSR   eval_advance
+      LDA   eval_cur_lo
+      STA   cond_start_lo
+      LDA   eval_cur_hi
+      STA   cond_start_hi
+
+      ; Scan forward past condition [...] to find body
+      LDX   #1
+@wu_cscan:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   wu_err_bracket
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BNE   @wu_cscan_nlb
+      INX
+      BRA   @wu_cscan_next
+@wu_cscan_nlb:
+      CMP   #TOK_RBRACKET
+      BNE   @wu_cscan_next
+      DEX
+      BEQ   @wu_cscan_found
+@wu_cscan_next:
+      PHX
+      JSR   eval_advance
+      PLX
+      BRA   @wu_cscan
+
+@wu_cscan_found:
+      ; Advance past ] of condition
+      JSR   eval_advance
+
+      ; --- Locate body [...] ---
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   wu_err_bracket
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BEQ   :+
+      JMP   wu_err_bracket
+:
+      ; Advance past [
+      JSR   eval_advance
+      LDA   eval_cur_lo
+      STA   body_start_lo
+      LDA   eval_cur_hi
+      STA   body_start_hi
+
+      ; Scan for matching ] of body
+      LDX   #1
+@wu_bscan:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   :+
+      JMP   wu_err_bracket
+:     LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BNE   @wu_bscan_nlb
+      INX
+      BRA   @wu_bscan_next
+@wu_bscan_nlb:
+      CMP   #TOK_RBRACKET
+      BNE   @wu_bscan_next
+      DEX
+      BEQ   @wu_bscan_found
+@wu_bscan_next:
+      PHX
+      JSR   eval_advance
+      PLX
+      BRA   @wu_bscan
+
+@wu_bscan_found:
+      JSR   eval_advance
+      LDA   eval_cur_lo
+      STA   body_resume_lo
+      LDA   eval_cur_hi
+      STA   body_resume_hi
+
+      ; --- Main loop ---
+@wu_loop:
+      LDA   proc_stopped
+      BNE   @wu_done
+
+      ; Evaluate condition: set eval_cur to cond_start, run body
+      LDA   cond_start_lo
+      STA   eval_cur_lo
+      LDA   cond_start_hi
+      STA   eval_cur_hi
+      LDA   #$01
+      STA   eval_in_body
+
+      ; We need to evaluate an expression from the condition body.
+      ; The condition block contains an expression, so use eval_expr.
+      JSR   eval_expr
+      BCS   @wu_done                ; eval error = stop
+
+      ; Check result: nonzero integer = true
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      ; Result in A: nonzero = true condition
+
+      ; Read mode from stack to decide behavior
+      ; Mode is at the bottom of our saved state block.
+      ; Stack layout (top-down): eval_in_body, cond_start_hi/lo,
+      ;   body_resume_hi/lo, body_start_hi/lo, mode
+      ; That's 8 bytes deep from current SP.
+      TSX
+      LDY   $0108,X                 ; mode: 0=WHILE, 1=UNTIL
+
+      CPY   #0
+      BNE   @wu_until_check
+
+      ; WHILE: if condition is false (zero), stop
+      CMP   #0                      ; A still has lo|hi result
+      BEQ   @wu_done
+      BRA   @wu_exec_body
+
+@wu_until_check:
+      ; UNTIL: if condition is true (nonzero), stop
+      CMP   #0
+      BNE   @wu_done
+
+@wu_exec_body:
+      ; Execute body
+      LDA   body_start_lo
+      STA   eval_cur_lo
+      LDA   body_start_hi
+      STA   eval_cur_hi
+      LDA   #$01
+      STA   eval_in_body
+      JSR   eval_body
+
+      BRA   @wu_loop
+
+@wu_done:
+      ; Restore outer state
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   cond_start_hi
+      PLA
+      STA   cond_start_lo
+      PLA
+      STA   body_resume_hi
+      PLA
+      STA   body_resume_lo
+      PLA
+      STA   body_start_hi
+      PLA
+      STA   body_start_lo
+      PLA                           ; discard mode byte
+
+      ; Resume past the body
+      LDA   body_resume_lo
+      STA   eval_cur_lo
+      LDA   body_resume_hi
+      STA   eval_cur_hi
+      JMP   eval_continue
+
+wu_err_bracket:
+      ; Restore whatever state we pushed + discard mode
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   cond_start_hi
+      PLA
+      STA   cond_start_lo
+      PLA
+      STA   body_resume_hi
+      PLA
+      STA   body_resume_lo
+      PLA
+      STA   body_start_hi
+      PLA
+      STA   body_start_lo
+      PLA                           ; discard mode
+
+      LDX   #0
+@wu_eb_lp:
+      LDA   str_while_bracket,X
+      BEQ   @wu_eb_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @wu_eb_lp
+@wu_eb_done:
+      JSR   eval_newline
+      JMP   eval_continue
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
       .segment "RODATA"
+
+str_for_err:
+      .byte "FOR NEEDS [VAR START END]", 0
+
+str_for_bracket:
+      .byte "FOR NEEDS [BODY]", 0
+
+str_while_bracket:
+      .byte "WHILE/UNTIL NEEDS [COND] [BODY]", 0
 
 str_make_err:
       .byte "NOT ENOUGH INPUTS TO MAKE", 0
@@ -1115,6 +1683,14 @@ str_catch_name:
       .byte 5, "CATCH"
 str_throw_name:
       .byte 5, "THROW"
+str_repcount_name:
+      .byte 8, "REPCOUNT"
+str_for_name:
+      .byte 3, "FOR"
+str_while_name:
+      .byte 5, "WHILE"
+str_until_name:
+      .byte 5, "UNTIL"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -1229,5 +1805,21 @@ builtin_table:
       .word str_throw_name
       .word do_throw
       .byte 0                    ; arity 0: do_throw handles its own args
+
+      .word str_repcount_name
+      .word do_repcount
+      .byte 0                    ; arity 0: reporter
+
+      .word str_for_name
+      .word do_for
+      .byte 0                    ; arity 0: do_for handles its own args
+
+      .word str_while_name
+      .word do_while
+      .byte 0                    ; arity 0: do_while handles its own args
+
+      .word str_until_name
+      .word do_until
+      .byte 0                    ; arity 0: do_until handles its own args
 
       .word $0000               ; end sentinel

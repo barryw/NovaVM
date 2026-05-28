@@ -829,6 +829,68 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void ForLoopCountsUp()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "FOR [I 1 5] [TYPE :I]");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT \"X");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("12345", StringComparison.Ordinal),
+            $"Expected '12345' from FOR loop.\n{screen}");
+    }
+
+    [TestMethod]
+    public void RepcountInRepeat()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "REPEAT 3 [TYPE REPCOUNT]");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT \"X");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("123", StringComparison.Ordinal),
+            $"Expected '123' from REPCOUNT in REPEAT.\n{screen}");
+    }
+
+    [TestMethod]
+    public void WhileLoop()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "MAKE \"X 1");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "WHILE [:X < 4] [TYPE :X MAKE \"X :X + 1]");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT \"X");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("123", StringComparison.Ordinal),
+            $"Expected '123' from WHILE loop.\n{screen}");
+    }
+
+    [TestMethod]
     public void CatchPreventsErrorAbort()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
