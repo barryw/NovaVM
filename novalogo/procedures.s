@@ -307,6 +307,99 @@ print_cont_prompt:
       RTS
 
 ; ---------------------------------------------------------------------
+; heap_alloc_big — allocate for procedure records (16-bit payload)
+;   Input:  proc_ptr_lo/hi = record data size (16-bit)
+;   Output: proc_entry_lo/hi = pointer to record data (payload+2)
+;           Carry clear = success, Carry set = OOM
+;
+;   Layout: [GC_HDR_TAG, GC_HDR_SIZE=0, total_lo, total_hi, ...data...]
+;   GC header (2 bytes) + 16-bit size (2 bytes) + record data.
+;   Total allocation = record_data_size + 4.
+;   GC_HDR_SIZE = 0 tells GC to read 16-bit total from payload[0..1].
+;   proc_entry points to data (base+4).
+;
+;   Clobbers: A, Y, ptr_lo/hi
+; ---------------------------------------------------------------------
+heap_alloc_big:
+      ; Total allocation = data_size + 4 (2 hdr + 2 size field)
+      CLC
+      LDA   proc_ptr_lo
+      ADC   #4
+      PHA                        ; save total_lo
+      LDA   proc_ptr_hi
+      ADC   #0
+      PHA                        ; save total_hi
+
+      ; Save current heap_ptr as base
+      LDA   heap_ptr
+      STA   proc_entry_lo
+      LDA   heap_ptr+1
+      STA   proc_entry_hi
+
+      ; Advance heap_ptr by total
+      TSX
+      CLC
+      LDA   heap_ptr
+      ADC   $0102,X              ; total_lo
+      STA   heap_ptr
+      LDA   heap_ptr+1
+      ADC   $0101,X              ; total_hi
+      STA   heap_ptr+1
+
+      ; OOM check
+      CMP   #>HEAP_END
+      BCC   @big_ok
+      BNE   @big_oom
+      LDA   heap_ptr
+      CMP   #<HEAP_END
+      BCC   @big_ok
+      BEQ   @big_ok
+@big_oom:
+      LDA   proc_entry_lo
+      STA   heap_ptr
+      LDA   proc_entry_hi
+      STA   heap_ptr+1
+      PLA
+      PLA
+      SEC
+      RTS
+@big_ok:
+      ; Write header at base (proc_entry = base here)
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+
+      LDY   #GC_HDR_TAG
+      LDA   #ATYPE_PROC
+      STA   (ptr_lo),Y
+
+      LDY   #GC_HDR_SIZE
+      LDA   #0                    ; 0 = 16-bit size at payload[0..1]
+      STA   (ptr_lo),Y
+
+      ; Write 16-bit total at payload offsets 0,1 (base+2, base+3)
+      PLA                        ; total_hi
+      LDY   #GC_HDR_BYTES+1       ; base+3
+      STA   (ptr_lo),Y
+      PLA                        ; total_lo
+      LDY   #GC_HDR_BYTES         ; base+2
+      STA   (ptr_lo),Y
+
+      ; Advance proc_entry to point past header+size field = base+4
+      ; This is where the record data starts
+      CLC
+      LDA   proc_entry_lo
+      ADC   #4
+      STA   proc_entry_lo
+      LDA   proc_entry_hi
+      ADC   #0
+      STA   proc_entry_hi
+
+      CLC
+      RTS
+
+; ---------------------------------------------------------------------
 ; proc_build_record — allocate and populate a procedure heap record
 ;   Uses: proc_name_buf, proc_param_buf/proc_param_end,
 ;         proc_body_buf/proc_body_len
@@ -353,34 +446,11 @@ proc_build_record:
       ADC   proc_body_len_hi
       STA   proc_ptr_hi
 
-      ; Manual heap bump (heap_alloc only handles 8-bit sizes)
-      LDA   heap_ptr
-      STA   proc_entry_lo
-      LDA   heap_ptr+1
-      STA   proc_entry_hi
-
-      CLC
-      LDA   heap_ptr
-      ADC   proc_ptr_lo
-      STA   heap_ptr
-      LDA   heap_ptr+1
-      ADC   proc_ptr_hi
-      STA   heap_ptr+1
-
-      ; OOM check
-      CMP   #>HEAP_END
+      ; Allocate with GC header (16-bit size via heap_alloc_big)
+      ; proc_ptr_lo/hi = payload size
+      JSR   heap_alloc_big
       BCC   @ok
-      BNE   @oom
-      LDA   heap_ptr
-      CMP   #<HEAP_END
-      BCC   @ok
-      BEQ   @ok
-@oom:
-      LDA   proc_entry_lo
-      STA   heap_ptr
-      LDA   proc_entry_hi
-      STA   heap_ptr+1
-      RTS
+      RTS                        ; OOM
 @ok:
       ; Fill the record using (ptr_lo),Y indirect addressing
       ; We track Y as the write offset. For records > 256 bytes

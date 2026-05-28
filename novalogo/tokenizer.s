@@ -158,6 +158,7 @@ tok_scan_next:
 tok_emit_simple:
       PHA                        ; save tag
       LDA   #3
+      LDX   #ATYPE_TOKEN
       JSR   heap_alloc
       BCS   @oom
       PLA
@@ -181,6 +182,7 @@ tok_emit_simple:
 tok_emit_infix:
       PHA                        ; save operator char
       LDA   #4
+      LDX   #ATYPE_TOKEN
       JSR   heap_alloc
       BCS   @oom
       LDY   #TOK_TAG
@@ -220,6 +222,7 @@ tok_scan_word:
       PHA                        ; save length
       CLC
       ADC   #4                   ; node = 3 header + 1 length + chars
+      LDX   #ATYPE_TOKEN
       JSR   heap_alloc
       BCS   @oom
       ; tag
@@ -293,6 +296,7 @@ tok_scan_varref:
       PHA
       CLC
       ADC   #4
+      LDX   #ATYPE_TOKEN
       JSR   heap_alloc
       BCS   @oom
       LDY   #TOK_TAG
@@ -361,6 +365,7 @@ tok_scan_quote:
       PHA
       CLC
       ADC   #4
+      LDX   #ATYPE_TOKEN
       JSR   heap_alloc
       BCS   @oom
       LDY   #TOK_TAG
@@ -561,6 +566,7 @@ tok_parse_number:
 @emit_num:
       ; Allocate 6-byte node
       LDA   #6
+      LDX   #ATYPE_TOKEN
       JSR   heap_alloc
       BCS   @oom
       LDY   #TOK_TAG

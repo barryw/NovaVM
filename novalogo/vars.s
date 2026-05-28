@@ -129,6 +129,7 @@ var_set:
       PHA                         ; save name_len
       CLC
       ADC   #8                    ; total entry size
+      LDX   #ATYPE_VAR
       JSR   heap_alloc
       BCS   @oom
 

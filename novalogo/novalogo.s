@@ -10,6 +10,7 @@
       .include "lists.s"
       .include "vars.s"
       .include "procedures.s"
+      .include "gc.s"
 
 ; =====================================================================
 ; ZEROPAGE segment — interpreter zero-page variables
@@ -53,6 +54,8 @@ main_loop:
       BCS   @was_to               ; carry set = TO was handled
       JSR   eval_line
 @was_to:
+      ; Reclaim dead heap objects (tokens, list cells, etc.)
+      JSR   gc_collect
       JSR   print_prompt
       BRA   main_loop
 

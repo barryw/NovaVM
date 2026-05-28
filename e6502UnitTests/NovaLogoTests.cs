@@ -799,6 +799,35 @@ public class NovaLogoTests
             $"Expected 'HELLO' from PRINT WORD \"HEL \"LO.\n{screen}");
     }
 
+    [TestMethod]
+    public void GarbageCollectionFreesMemory()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // This would exhaust ~39KB heap without GC.
+        // Each iteration allocates 2 cons pairs (18 bytes with headers).
+        // 2500 * 18 = 45000 bytes > 39KB heap → OOM without GC.
+        // With GC, the previous iteration's list cells are reclaimed.
+        QueueLine(editor, "REPEAT 2500 [MAKE \"X LIST 1 2]");
+        RunSteps(cpu, bus, 200_000_000);
+        QueueLine(editor, "PRINT \"DONE");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "DONE") found = true;
+        Assert.IsTrue(found,
+            $"Expected 'DONE' — program should not OOM with GC.\n{screen}");
+        Assert.IsFalse(screen.Contains("OUT OF MEMORY", StringComparison.OrdinalIgnoreCase),
+            $"Got OOM error — GC didn't reclaim enough.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

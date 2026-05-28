@@ -112,6 +112,7 @@ eval_list:
       LDA   (ptr_lo),Y
       PHA
       INC
+      LDX   #ATYPE_STRING
       JSR   heap_alloc
       BCC   :+
       PLA
@@ -188,6 +189,7 @@ eval_list:
 
 @alloc_cell:
       LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCS   @oom
       LDY   #CONS_TAG
@@ -720,6 +722,7 @@ do_butlast:
 :
       ; Allocate new cons pair and copy car
       LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCC   :+
       JMP   @err_args           ; OOM
@@ -1161,6 +1164,7 @@ do_fput:
 
       ; Allocate cons pair
       LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCS   @oom_pop6
 
@@ -1283,6 +1287,7 @@ do_lput:
       PHA
 
       LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCC   :+
       JMP   @oom2_pop4
@@ -1438,6 +1443,7 @@ do_list:
 
       ; Allocate second cell first (it has cdr=null)
       LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCC   :+
       JMP   @oom_pop8
@@ -1489,6 +1495,7 @@ do_list:
 
       ; Allocate first cell
       LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCS   @oom_pop4
 
@@ -1596,6 +1603,7 @@ do_sentence:
 
       ; Wrap first value as single-element list
       LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCC   :+
       JMP   @oom_pop8
@@ -1640,6 +1648,7 @@ do_sentence:
 
       ; Wrap second value
       LDA   #CONS_SIZE
+      LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCC   :+
       JMP   @oom_pop8
@@ -1826,6 +1835,7 @@ do_word:
       CLC
       ADC   list_count_lo
       INC                           ; +1 for length byte
+      LDX   #ATYPE_STRING
       JSR   heap_alloc
       BCS   @err_oom
 
