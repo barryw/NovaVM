@@ -37,6 +37,16 @@ EXT_RESULT_FRAC = $91           ; return value fractional byte
 
 ; --- Command IDs ---
 EXT_CMD_TEST    = $01           ; test command: returns arg0 + 1
+EXT_CMD_FD      = $10           ; FD distance — move forward
+EXT_CMD_BK      = $11           ; BK distance — move backward
+EXT_CMD_RT      = $12           ; RT degrees — turn right
+EXT_CMD_LT      = $13           ; LT degrees — turn left
+EXT_CMD_CS      = $14           ; CS — clear screen, init turtle
+EXT_CMD_PU      = $15           ; PU — pen up
+EXT_CMD_PD      = $16           ; PD — pen down
+EXT_CMD_ST      = $17           ; ST — show turtle
+EXT_CMD_HT      = $18           ; HT — hide turtle
+EXT_CMD_HOME    = $19           ; HOME — move to center, heading 0
 
 ; --- Value types (match eval_type in eval.s) ---
 .ifndef VAL_NUMBER
@@ -48,6 +58,22 @@ VAL_WORD        = $01
 .ifndef VAL_LIST
 VAL_LIST        = $02
 .endif
+
+; --- Turtle state — fixed ZP addresses ---
+; 24-bit position (hi:lo:frac) for sub-pixel precision
+TURTLE_X_FRAC   = $92
+TURTLE_X_LO     = $93
+TURTLE_X_HI     = $94
+TURTLE_Y_FRAC   = $95
+TURTLE_Y_LO     = $96
+TURTLE_Y_HI     = $97
+TURTLE_HEADING_LO = $98         ; degrees 0-359 (16-bit)
+TURTLE_HEADING_HI = $99
+TURTLE_PEN      = $9A           ; $00 = down, $01 = up
+TURTLE_SHOWN    = $9B           ; $00 = hidden, $01 = shown
+TURTLE_COLOR    = $9C           ; pen color (VGC palette index)
+TURTLE_SPRITE   = $9D           ; sprite slot (default 15)
+TURTLE_INITED   = $9E           ; $00 = not initialized, $01 = initialized
 
 ; --- Trampoline location in RAM ---
 EXT_TRAMPOLINE  = $0270         ; RAM address where trampoline code is copied

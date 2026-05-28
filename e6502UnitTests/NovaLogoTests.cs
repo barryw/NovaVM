@@ -1197,6 +1197,81 @@ public class NovaLogoTests
         Assert.IsTrue(found, $"Expected '50' from EXT.TEST 41 + 8.\n{screen}");
     }
 
+    [TestMethod]
+    public void ClearScreenAndForward()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "FD 50");
+        RunSteps(cpu, bus, 5_000_000);
+
+        // Verify no crash and prompt returns
+        QueueLine(editor, "PRINT 888");
+        RunSteps(cpu, bus, 3_000_000);
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "888") found = true;
+        Assert.IsTrue(found, $"Expected '888' after CS + FD 50.\n{screen}");
+    }
+
+    [TestMethod]
+    public void TurtleDrawsSquare()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "REPEAT 4 [FD 40 RT 90]");
+        RunSteps(cpu, bus, 10_000_000);
+        QueueLine(editor, "PRINT 777");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "777") found = true;
+        Assert.IsTrue(found, $"Expected '777' after drawing a square.\n{screen}");
+    }
+
+    [TestMethod]
+    public void PenUpDoesNotDraw()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PU");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "FD 50");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 666");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "666") found = true;
+        Assert.IsTrue(found, $"Expected '666' after PU + FD 50.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

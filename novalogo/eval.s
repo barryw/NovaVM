@@ -1403,10 +1403,60 @@ ext_cmd_table:
       .word str_ext_test_name
       .byte EXT_CMD_TEST
       .byte 1                    ; arity: 1 argument
+      .word str_ext_fd
+      .byte EXT_CMD_FD
+      .byte 1                    ; arity: 1 (distance)
+      .word str_ext_bk
+      .byte EXT_CMD_BK
+      .byte 1                    ; arity: 1 (distance)
+      .word str_ext_rt
+      .byte EXT_CMD_RT
+      .byte 1                    ; arity: 1 (degrees)
+      .word str_ext_lt
+      .byte EXT_CMD_LT
+      .byte 1                    ; arity: 1 (degrees)
+      .word str_ext_cs
+      .byte EXT_CMD_CS
+      .byte 0                    ; arity: 0
+      .word str_ext_pu
+      .byte EXT_CMD_PU
+      .byte 0
+      .word str_ext_pd
+      .byte EXT_CMD_PD
+      .byte 0
+      .word str_ext_st
+      .byte EXT_CMD_ST
+      .byte 0
+      .word str_ext_ht
+      .byte EXT_CMD_HT
+      .byte 0
+      .word str_ext_home
+      .byte EXT_CMD_HOME
+      .byte 0
       .word $0000               ; end sentinel
 
 str_ext_test_name:
       .byte 8, "EXT.TEST"
+str_ext_fd:
+      .byte 2, "FD"
+str_ext_bk:
+      .byte 2, "BK"
+str_ext_rt:
+      .byte 2, "RT"
+str_ext_lt:
+      .byte 2, "LT"
+str_ext_cs:
+      .byte 2, "CS"
+str_ext_pu:
+      .byte 2, "PU"
+str_ext_pd:
+      .byte 2, "PD"
+str_ext_st:
+      .byte 2, "ST"
+str_ext_ht:
+      .byte 2, "HT"
+str_ext_home:
+      .byte 4, "HOME"
 
       .segment "RODATA"
 
