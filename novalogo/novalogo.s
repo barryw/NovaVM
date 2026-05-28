@@ -29,7 +29,9 @@ main_loop:
       CMP   #$0D
       BNE   @not_cr
       LDA   #$0D
-      STA   VGC_CHAROUT        ; newline
+      STA   VGC_CHAROUT        ; carriage return
+      LDA   #$0A
+      STA   VGC_CHAROUT        ; line feed
       JSR   print_prompt
       BRA   main_loop
 
@@ -65,8 +67,8 @@ print_prompt:
       .segment "RODATA"
 
 str_banner:
-      .byte "NOVALOGO v1.0", $0D
-      .byte "39934 BYTES FREE", $0D, $0D
+      .byte "NOVALOGO v1.0", $0D, $0A
+      .byte "39934 BYTES FREE", $0D, $0A, $0D, $0A
       .byte 0
 
 str_prompt:
