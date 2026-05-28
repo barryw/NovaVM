@@ -7,6 +7,7 @@
       .include "tokenizer.s"
       .include "eval.s"
       .include "builtins.s"
+      .include "lists.s"
       .include "vars.s"
       .include "procedures.s"
 

@@ -601,6 +601,146 @@ public class NovaLogoTests
             $"Expected '120' from PRINT FACT 5.\n{screen}");
     }
 
+    [TestMethod]
+    public void FirstOfList()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT FIRST [10 20 30]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "10") found = true;
+        Assert.IsTrue(found, $"Expected '10' from PRINT FIRST [10 20 30].\n{screen}");
+    }
+
+    [TestMethod]
+    public void CountOfList()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT COUNT [1 2 3]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "3") found = true;
+        Assert.IsTrue(found, $"Expected '3' from PRINT COUNT [1 2 3].\n{screen}");
+    }
+
+    [TestMethod]
+    public void EmptyListTest()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT EMPTY? []");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "1") found = true;
+        Assert.IsTrue(found, $"Expected '1' (TRUE) from PRINT EMPTY? [].\n{screen}");
+    }
+
+    [TestMethod]
+    public void LastOfList()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT LAST [10 20 30]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "30") found = true;
+        Assert.IsTrue(found, $"Expected '30' from PRINT LAST [10 20 30].\n{screen}");
+    }
+
+    [TestMethod]
+    public void ButFirstOfList()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT BUTFIRST [10 20 30]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "[20 30]") found = true;
+        Assert.IsTrue(found, $"Expected '[20 30]' from PRINT BUTFIRST [10 20 30].\n{screen}");
+    }
+
+    [TestMethod]
+    public void ItemOfList()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT ITEM 2 [10 20 30]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "20") found = true;
+        Assert.IsTrue(found, $"Expected '20' from PRINT ITEM 2 [10 20 30].\n{screen}");
+    }
+
+    [TestMethod]
+    public void ShowList()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "SHOW [1 2 3]");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "[1 2 3]") found = true;
+        Assert.IsTrue(found, $"Expected '[1 2 3]' from SHOW [1 2 3].\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

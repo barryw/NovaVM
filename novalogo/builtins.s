@@ -123,10 +123,18 @@ lookup_builtin:
 ; ---------------------------------------------------------------------
 do_print:
       LDA   eval_type
-      BNE   @word
+      CMP   #VAL_LIST
+      BEQ   @list
+      CMP   #VAL_WORD
+      BEQ   @word
 
       ; Print number
       JSR   print_number
+      JSR   eval_newline
+      JMP   eval_continue
+
+@list:
+      JSR   print_list
       JSR   eval_newline
       JMP   eval_continue
 
@@ -154,10 +162,17 @@ do_print:
 ; ---------------------------------------------------------------------
 do_type:
       LDA   eval_type
-      BNE   @word
+      CMP   #VAL_LIST
+      BEQ   @list
+      CMP   #VAL_WORD
+      BEQ   @word
 
       ; Print number (no newline)
       JSR   print_number
+      JMP   eval_continue
+
+@list:
+      JSR   print_list
       JMP   eval_continue
 
 @word:
@@ -856,5 +871,49 @@ builtin_table:
       .word str_output_name
       .word do_output
       .byte 0                    ; arity 0: do_output handles its own args
+
+      .word str_first_name
+      .word do_first
+      .byte 0                    ; arity 0: handles its own args
+
+      .word str_butfirst_name
+      .word do_butfirst
+      .byte 0
+
+      .word str_bf_name
+      .word do_butfirst
+      .byte 0                    ; BF = alias for BUTFIRST
+
+      .word str_count_name
+      .word do_count
+      .byte 0
+
+      .word str_emptyp_name
+      .word do_emptyp
+      .byte 0
+
+      .word str_last_name
+      .word do_last
+      .byte 0
+
+      .word str_butlast_name
+      .word do_butlast
+      .byte 0
+
+      .word str_bl_name
+      .word do_butlast
+      .byte 0                    ; BL = alias for BUTLAST
+
+      .word str_item_name
+      .word do_item
+      .byte 0
+
+      .word str_memberp_name
+      .word do_memberp
+      .byte 0
+
+      .word str_show_name
+      .word do_show
+      .byte 0
 
       .word $0000               ; end sentinel

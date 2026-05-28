@@ -19,6 +19,7 @@ handler_lo:     .res 1    ; saved handler address for JMP
 handler_hi:     .res 1
 eval_in_body:   .res 1    ; $00 = normal eval_loop, $01 = in body
 proc_stopped:   .res 1    ; $00 = running, $01 = STOP, $02 = OUTPUT
+eval_reporter:  .res 1    ; $00 = normal, $01 = reporter mode (return from eval_continue)
 
 ; =====================================================================
 ; BSS segment — scratch for number printing
@@ -40,6 +41,7 @@ pn_buf:         .res 8    ; decimal digit buffer for print_number
 eval_line:
       STZ   eval_in_body
       STZ   proc_stopped
+      STZ   eval_reporter
       LDA   tok_head_lo
       STA   eval_cur_lo
       LDA   tok_head_hi
@@ -180,10 +182,24 @@ eval_loop:
 ; eval_continue — handlers JMP here to resume the eval loop
 ;   If eval_in_body != 0, resumes body execution instead
 ; ---------------------------------------------------------------------
+; ---------------------------------------------------------------------
+; jmp_handler — trampoline for calling builtins from reporter position
+; ---------------------------------------------------------------------
+jmp_handler:
+      JMP   (handler_lo)
+
 eval_continue:
+      ; If in reporter mode, return to eval_expr instead of looping
+      LDA   eval_reporter
+      BNE   @reporter_return
       LDA   eval_in_body
       BNE   eval_body
       JMP   eval_loop
+
+@reporter_return:
+      STZ   eval_reporter
+      CLC
+      RTS
 
 ; ---------------------------------------------------------------------
 ; eval_body — execute tokens within a body until TOK_RBRACKET at depth 0
@@ -354,11 +370,15 @@ eval_expr:
       CMP   #TOK_NUMBER
       BEQ   @number
       CMP   #TOK_QUOTE
-      BEQ   @quote
-      CMP   #TOK_VARREF
-      BEQ   @varref
-      CMP   #TOK_WORD
+      BNE   :+
+      JMP   @quote
+:     CMP   #TOK_VARREF
+      BNE   :+
+      JMP   @varref
+:     CMP   #TOK_WORD
       BEQ   @word_expr
+      CMP   #TOK_LBRACKET
+      BEQ   @list_literal
       ; Anything else is an error
       SEC
       RTS
@@ -366,7 +386,7 @@ eval_expr:
 @word_expr:
       ; Could be a reporter procedure (returns a value via OUTPUT)
       JSR   proc_lookup
-      BCS   @word_not_proc        ; not a procedure — error
+      BCS   @word_not_proc        ; not a procedure — try builtins
       ; It's a procedure — invoke it
       JSR   proc_invoke
       ; X = exit status: $02 = OUTPUT (eval_val has value), else no value
@@ -380,7 +400,68 @@ eval_expr:
 @word_has_val:
       JMP   eval_check_infix      ; allow DOUBLE 5 + 3 etc.
 
+@list_literal:
+      ; Advance past the [
+      JSR   eval_advance
+      ; Build list from tokens until ]
+      JSR   eval_list
+      ; eval_type = VAL_LIST, eval_val = head pointer
+      ; Carry already set/clear from eval_list
+      RTS
+
 @word_not_proc:
+      ; Not a user proc — try built-in reporter
+      JSR   lookup_builtin
+      BCS   @word_unknown
+      ; Found: ptr2_lo/hi = handler addr, A = arity
+      ; Save handler address
+      LDX   ptr2_lo
+      STX   handler_lo
+      LDX   ptr2_hi
+      STX   handler_hi
+      TAX                       ; X = arity
+      PHX                       ; save arity across eval_advance
+      ; Advance past the command word
+      JSR   eval_advance
+      PLX                       ; restore arity
+      ; Evaluate arguments (X = arity count)
+      CPX   #0
+      BEQ   @call_reporter
+      ; Save handler address — eval_expr may clobber it
+      LDA   handler_hi
+      PHA
+      LDA   handler_lo
+      PHA
+@rpt_eval_args:
+      PHX
+      JSR   eval_expr
+      BCS   @rpt_arg_error
+      PLX
+      DEX
+      BNE   @rpt_eval_args
+      ; Restore handler address
+      PLA
+      STA   handler_lo
+      PLA
+      STA   handler_hi
+@call_reporter:
+      ; Set reporter mode so eval_continue returns here instead of looping
+      LDA   #$01
+      STA   eval_reporter
+      ; Call via JSR to trampoline — handler JMPs to eval_continue
+      ; which sees eval_reporter and does CLC + RTS back here.
+      JSR   jmp_handler
+      ; eval_val now set by the handler
+      JMP   eval_check_infix
+
+@rpt_arg_error:
+      PLX                       ; discard saved arity counter
+      PLA
+      PLA                       ; discard saved handler address
+      SEC
+      RTS
+
+@word_unknown:
       SEC
       RTS
 
