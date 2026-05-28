@@ -5,6 +5,8 @@
       .include "heap.s"
       .include "tokens.s"
       .include "tokenizer.s"
+      .include "eval.s"
+      .include "builtins.s"
 
 ; =====================================================================
 ; ZEROPAGE segment — interpreter zero-page variables
@@ -42,7 +44,7 @@ cold_start:
 main_loop:
       JSR   read_line
       JSR   tokenize_line
-      JSR   print_token_count
+      JSR   eval_line
       JSR   print_prompt
       BRA   main_loop
 

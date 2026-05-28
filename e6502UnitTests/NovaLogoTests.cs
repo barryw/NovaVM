@@ -77,7 +77,7 @@ public class NovaLogoTests
     }
 
     [TestMethod]
-    public void TokenizerCountsTokens()
+    public void PrintNumber()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
@@ -87,7 +87,6 @@ public class NovaLogoTests
 
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        // Type "PRINT 42" + Enter — should produce 2 tokens (PRINT, 42)
         foreach (char ch in "PRINT 42")
             editor.QueueInput((byte)ch);
         editor.QueueInput(0x0D);
@@ -95,8 +94,30 @@ public class NovaLogoTests
         RunSteps(cpu, bus, 2_000_000);
 
         string screen = SnapshotScreen(bus.Vgc);
-        Assert.IsTrue(screen.Contains("2 TOKENS", StringComparison.Ordinal),
-            $"Expected '2 TOKENS' for 'PRINT 42'.\n{screen}");
+        Assert.IsTrue(screen.Contains("42", StringComparison.Ordinal),
+            $"Expected '42' from PRINT 42.\n{screen}");
+    }
+
+    [TestMethod]
+    public void PrintQuotedWord()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        foreach (char ch in "PRINT \"HELLO")
+            editor.QueueInput((byte)ch);
+        editor.QueueInput(0x0D);
+
+        RunSteps(cpu, bus, 2_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("HELLO", StringComparison.Ordinal),
+            $"Expected 'HELLO' from PRINT \"HELLO.\n{screen}");
     }
 
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
