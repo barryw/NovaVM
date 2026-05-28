@@ -2,6 +2,8 @@
 ; Task 1.4: line input buffer with backspace handling
 
       .include "nova.inc"
+      .include "heap.s"
+      .include "tokens.s"
 
 ; =====================================================================
 ; ZEROPAGE segment — interpreter zero-page variables
@@ -23,6 +25,7 @@ input_buf:    .res 128        ; input line buffer
       .segment "CODE"
 
 cold_start:
+      JSR   heap_init
       ; Print banner
       LDX   #0
 @banner:
