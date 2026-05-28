@@ -1299,6 +1299,7 @@ bool loadRomsToFPGA() {
     // Resolve ROM paths: prefer boot.json config, fall back to hardcoded arrays
     RuntimeConfig rtCfg = readRuntimeConfig();
 
+
     const char* romPaths[3];
     size_t romPathCount;
     const char* extPaths[2];

@@ -45,6 +45,8 @@ cold_start:
       JSR   var_init
       JSR   proc_init
       STZ   catch_active
+      LDA   #$01
+      STA   VGC_CURSEN            ; enable flashing cursor
       ; Print banner
       LDX   #0
 @banner:
