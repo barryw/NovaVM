@@ -73,6 +73,23 @@ EXT_CMD_RECT     = $35          ; RECT x1 y1 x2 y2 — draw rectangle
 EXT_CMD_FILLRECT = $36          ; FILL x1 y1 x2 y2 — filled rectangle
 EXT_CMD_PAINT    = $37          ; PAINT x y — flood fill
 
+; --- Sprite commands ---
+EXT_CMD_SPRITE   = $40          ; SPRITE n x y — position and enable
+EXT_CMD_SPRITEPOS = $41         ; SPRITEPOS n x y — reposition
+EXT_CMD_SPRITEON = $42          ; SPRITEON n — enable sprite
+EXT_CMD_SPRITEOFF = $43         ; SPRITEOFF n — disable sprite
+EXT_CMD_SPRCOLLP = $44          ; SPRITECOLLISION? n — collision query
+
+; --- Sound commands ---
+EXT_CMD_TONE     = $45          ; TONE freq dur — play tone
+EXT_CMD_NOISE    = $46          ; NOISE dur — noise burst
+EXT_CMD_VOLUME   = $47          ; VOLUME vol — set SID master volume
+
+; --- Timing commands ---
+EXT_CMD_WAIT     = $48          ; WAIT n — wait N frames
+EXT_CMD_WAITVBL  = $49          ; WAITVBL — wait for next VBL
+EXT_CMD_TIMER    = $4A          ; TIMER — return frame counter
+
 ; --- Value types (match eval_type in eval.s) ---
 .ifndef VAL_NUMBER
 VAL_NUMBER      = $00

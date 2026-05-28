@@ -1439,6 +1439,169 @@ public class NovaLogoTests
         Assert.IsTrue(found, $"Expected '90' from HEADING after SETH 90.\n{screen}");
     }
 
+    [TestMethod]
+    public void SpriteOnAndOff()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "SPRITE 0 100 50");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "SPRITEOFF 0");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT 333");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "333") found = true;
+        Assert.IsTrue(found, $"Expected '333' after sprite commands.\n{screen}");
+    }
+
+    [TestMethod]
+    public void WaitAndTimer()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT TIMER");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // TIMER should return a number (frame counter)
+        // Just verify it doesn't crash and prompt reappears
+        Assert.IsTrue(screen.Contains("?", StringComparison.Ordinal),
+            $"Expected prompt after PRINT TIMER.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ToneDoesNotCrash()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // TONE with very short duration so test doesn't hang
+        QueueLine(editor, "TONE 440 1");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 222");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "222") found = true;
+        Assert.IsTrue(found, $"Expected '222' after TONE.\n{screen}");
+    }
+
+    [TestMethod]
+    public void VolumeCommand()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "VOLUME 10");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT 444");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "444") found = true;
+        Assert.IsTrue(found, $"Expected '444' after VOLUME.\n{screen}");
+    }
+
+    [TestMethod]
+    public void NoiseDoesNotCrash()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "NOISE 1");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 555");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "555") found = true;
+        Assert.IsTrue(found, $"Expected '555' after NOISE.\n{screen}");
+    }
+
+    [TestMethod]
+    public void WaitvblDoesNotHang()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "WAITVBL");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 666");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "666") found = true;
+        Assert.IsTrue(found, $"Expected '666' after WAITVBL.\n{screen}");
+    }
+
+    [TestMethod]
+    public void SpritePositionAndReposition()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "SPRITE 0 50 50");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "SPRITEPOS 0 100 75");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "SPRITEON 0");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "PRINT 777");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "777") found = true;
+        Assert.IsTrue(found, $"Expected '777' after sprite reposition.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

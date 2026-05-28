@@ -1538,6 +1538,42 @@ ext_cmd_table:
       .word str_ext_paint
       .byte EXT_CMD_PAINT
       .byte 2                    ; arity: 2 (x, y)
+      ; --- Sprite commands ---
+      .word str_ext_sprite
+      .byte EXT_CMD_SPRITE
+      .byte 3                    ; arity: 3 (n, x, y)
+      .word str_ext_spritepos
+      .byte EXT_CMD_SPRITEPOS
+      .byte 3                    ; arity: 3 (n, x, y)
+      .word str_ext_spriteon
+      .byte EXT_CMD_SPRITEON
+      .byte 1                    ; arity: 1 (n)
+      .word str_ext_spriteoff
+      .byte EXT_CMD_SPRITEOFF
+      .byte 1                    ; arity: 1 (n)
+      .word str_ext_sprcollp
+      .byte EXT_CMD_SPRCOLLP
+      .byte 1                    ; arity: 1 (n) — reporter
+      ; --- Sound commands ---
+      .word str_ext_tone
+      .byte EXT_CMD_TONE
+      .byte 2                    ; arity: 2 (freq, dur)
+      .word str_ext_noise
+      .byte EXT_CMD_NOISE
+      .byte 1                    ; arity: 1 (dur)
+      .word str_ext_volume
+      .byte EXT_CMD_VOLUME
+      .byte 1                    ; arity: 1 (vol)
+      ; --- Timing commands ---
+      .word str_ext_wait
+      .byte EXT_CMD_WAIT
+      .byte 1                    ; arity: 1 (n)
+      .word str_ext_waitvbl
+      .byte EXT_CMD_WAITVBL
+      .byte 0                    ; arity: 0
+      .word str_ext_timer
+      .byte EXT_CMD_TIMER
+      .byte 0                    ; arity: 0 — reporter
       .word $0000               ; end sentinel
 
 str_ext_test_name:
@@ -1616,6 +1652,28 @@ str_ext_fill:
       .byte 4, "FILL"
 str_ext_paint:
       .byte 5, "PAINT"
+str_ext_sprite:
+      .byte 6, "SPRITE"
+str_ext_spritepos:
+      .byte 9, "SPRITEPOS"
+str_ext_spriteon:
+      .byte 8, "SPRITEON"
+str_ext_spriteoff:
+      .byte 9, "SPRITEOFF"
+str_ext_sprcollp:
+      .byte 16, "SPRITECOLLISION?"
+str_ext_tone:
+      .byte 4, "TONE"
+str_ext_noise:
+      .byte 5, "NOISE"
+str_ext_volume:
+      .byte 6, "VOLUME"
+str_ext_wait:
+      .byte 4, "WAIT"
+str_ext_waitvbl:
+      .byte 7, "WAITVBL"
+str_ext_timer:
+      .byte 5, "TIMER"
 
       .segment "RODATA"
 

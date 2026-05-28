@@ -110,6 +110,25 @@ ext_dispatch:
       .word ext_rect-1          ; cmd $35: RECT
       .word ext_fillrect-1      ; cmd $36: FILL
       .word ext_paint-1         ; cmd $37: PAINT
+      .word ext_unsupported-1   ; cmd $38
+      .word ext_unsupported-1   ; cmd $39
+      .word ext_unsupported-1   ; cmd $3A
+      .word ext_unsupported-1   ; cmd $3B
+      .word ext_unsupported-1   ; cmd $3C
+      .word ext_unsupported-1   ; cmd $3D
+      .word ext_unsupported-1   ; cmd $3E
+      .word ext_unsupported-1   ; cmd $3F
+      .word ext_sprite-1        ; cmd $40: SPRITE
+      .word ext_spritepos-1     ; cmd $41: SPRITEPOS
+      .word ext_spriteon-1      ; cmd $42: SPRITEON
+      .word ext_spriteoff-1     ; cmd $43: SPRITEOFF
+      .word ext_sprcollp-1      ; cmd $44: SPRITECOLLISION?
+      .word ext_tone-1          ; cmd $45: TONE
+      .word ext_noise-1         ; cmd $46: NOISE
+      .word ext_volume-1        ; cmd $47: VOLUME
+      .word ext_wait-1          ; cmd $48: WAIT
+      .word ext_waitvbl-1       ; cmd $49: WAITVBL
+      .word ext_timer-1         ; cmd $4A: TIMER
 
 ; =====================================================================
 ; ext_unsupported — unknown command, just return
@@ -1295,6 +1314,225 @@ ext_paint:
       STA   VGC_P3
       LDA   #VCMD_PAINT
       STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_sprite — SPRITE n x y: position and enable sprite N
+;   ARG0 = slot, ARG1 = x (16-bit), ARG2 = y (16-bit)
+; =====================================================================
+ext_sprite:
+      ; SPRPOS: P0=slot, P1=x_lo, P2=x_hi, P3=y_lo, P4=y_hi
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG1_LO
+      STA   VGC_P1
+      LDA   EXT_ARG1_HI
+      STA   VGC_P2
+      LDA   EXT_ARG2_LO
+      STA   VGC_P3
+      LDA   EXT_ARG2_HI
+      STA   VGC_P4
+      LDA   #VCMD_SPRPOS
+      STA   VGC_CMD
+      ; SPRENA: P0=slot
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   #VCMD_SPRENA
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_spritepos — SPRITEPOS n x y: reposition sprite N
+;   ARG0 = slot, ARG1 = x, ARG2 = y
+; =====================================================================
+ext_spritepos:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   EXT_ARG1_LO
+      STA   VGC_P1
+      LDA   EXT_ARG1_HI
+      STA   VGC_P2
+      LDA   EXT_ARG2_LO
+      STA   VGC_P3
+      LDA   EXT_ARG2_HI
+      STA   VGC_P4
+      LDA   #VCMD_SPRPOS
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_spriteon — SPRITEON n: enable sprite N
+;   ARG0 = slot
+; =====================================================================
+ext_spriteon:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   #VCMD_SPRENA
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_spriteoff — SPRITEOFF n: disable sprite N
+;   ARG0 = slot
+; =====================================================================
+ext_spriteoff:
+      JSR   wait_vgc
+      LDA   EXT_ARG0_LO
+      STA   VGC_P0
+      LDA   #VCMD_SPRDIS
+      STA   VGC_CMD
+      RTS
+
+; =====================================================================
+; ext_sprcollp — SPRITECOLLISION? n: return 1 if sprite N collided
+;   ARG0 = slot (0-15)
+;   Reads VGC_COLLST (bits 0-7) / VGC_COLLST_HI (bits 8-15)
+; =====================================================================
+ext_sprcollp:
+      LDA   EXT_ARG0_LO
+      CMP   #8
+      BCS   @hi_byte
+      ; Sprite 0-7: read low byte, test bit
+      TAX
+      LDA   VGC_COLLST
+      BRA   @test_bit
+@hi_byte:
+      ; Sprite 8-15: read high byte, adjust bit index
+      SEC
+      SBC   #8
+      TAX
+      LDA   VGC_COLLST_HI
+@test_bit:
+      ; Shift right X times to get bit into carry
+      CPX   #0
+      BEQ   @check
+@shift:
+      LSR
+      DEX
+      BNE   @shift
+@check:
+      AND   #$01
+      STA   EXT_RESULT_LO
+      STZ   EXT_RESULT_HI
+      STZ   EXT_RESULT_FRAC
+      STZ   EXT_RESULT_TYPE
+      RTS
+
+; =====================================================================
+; ext_tone — TONE freq dur: play a tone on SID voice 0
+;   ARG0 = frequency (16-bit SID freq word), ARG1 = duration (frames)
+; =====================================================================
+ext_tone:
+      ; Set SID master volume to max
+      LDA   #$0F
+      STA   SID_BASE + $18         ; $D418 filter/volume, bits 0-3 = volume
+      ; Set frequency
+      LDA   EXT_ARG0_LO
+      STA   SID_BASE + $00         ; freq lo
+      LDA   EXT_ARG0_HI
+      STA   SID_BASE + $01         ; freq hi
+      ; Set ADSR: attack=0, decay=9, sustain=$A, release=0
+      LDA   #$09
+      STA   SID_BASE + $05         ; attack/decay
+      LDA   #$A0
+      STA   SID_BASE + $06         ; sustain/release
+      ; Gate on with sawtooth waveform
+      LDA   #$21                   ; sawtooth ($20) + gate ($01)
+      STA   SID_BASE + $04         ; control register
+      ; Wait duration frames
+      LDA   EXT_ARG1_LO
+      JSR   wait_frames
+      ; Gate off
+      LDA   #$20                   ; sawtooth, no gate
+      STA   SID_BASE + $04
+      RTS
+
+; =====================================================================
+; ext_noise — NOISE dur: noise burst on SID voice 0
+;   ARG0 = duration (frames)
+; =====================================================================
+ext_noise:
+      ; Set SID master volume to max
+      LDA   #$0F
+      STA   SID_BASE + $18
+      ; Set a mid-range frequency for noise
+      LDA   #$00
+      STA   SID_BASE + $00
+      LDA   #$20
+      STA   SID_BASE + $01
+      ; ADSR: fast attack, medium sustain
+      LDA   #$09
+      STA   SID_BASE + $05
+      LDA   #$A0
+      STA   SID_BASE + $06
+      ; Gate on with noise waveform
+      LDA   #$81                   ; noise ($80) + gate ($01)
+      STA   SID_BASE + $04
+      ; Wait duration frames
+      LDA   EXT_ARG0_LO
+      JSR   wait_frames
+      ; Gate off
+      LDA   #$80                   ; noise, no gate
+      STA   SID_BASE + $04
+      RTS
+
+; =====================================================================
+; ext_volume — VOLUME vol: set SID master volume (0-15)
+;   ARG0 = volume
+; =====================================================================
+ext_volume:
+      LDA   EXT_ARG0_LO
+      AND   #$0F                   ; clamp to 0-15
+      STA   SID_BASE + $18
+      RTS
+
+; =====================================================================
+; ext_wait — WAIT n: wait N video frames
+;   ARG0 = count
+; =====================================================================
+ext_wait:
+      LDA   EXT_ARG0_LO
+      JSR   wait_frames
+      RTS
+
+; =====================================================================
+; ext_waitvbl — WAITVBL: wait for next vertical blank (1 frame)
+; =====================================================================
+ext_waitvbl:
+      LDA   VGC_FRAME
+@w:   CMP   VGC_FRAME
+      BEQ   @w
+      RTS
+
+; =====================================================================
+; ext_timer — TIMER: return current frame counter (8-bit)
+; =====================================================================
+ext_timer:
+      LDA   VGC_FRAME
+      STA   EXT_RESULT_LO
+      STZ   EXT_RESULT_HI
+      STZ   EXT_RESULT_FRAC
+      STZ   EXT_RESULT_TYPE
+      RTS
+
+; =====================================================================
+; wait_frames — wait A video frames. Reused by TONE, NOISE, WAIT.
+; =====================================================================
+wait_frames:
+      TAX
+      BEQ   @done
+      LDA   VGC_FRAME
+@wait:
+      CMP   VGC_FRAME
+      BEQ   @wait
+      LDA   VGC_FRAME
+      DEX
+      BNE   @wait
+@done:
       RTS
 
 ; =====================================================================
