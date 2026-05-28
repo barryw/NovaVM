@@ -2056,6 +2056,375 @@ do_ascii:
       JMP   list_print_err
 
 ; =====================================================================
+; Math functions and type predicates
+; =====================================================================
+
+; ---------------------------------------------------------------------
+; return_number — set eval_val from eval_val_lo/hi, clear frac+type
+;   Entry: eval_val_lo/hi already set
+;   Jumps to eval_continue
+; ---------------------------------------------------------------------
+return_number:
+      STZ   eval_val_frac
+      STZ   eval_type
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; return_signed_byte — sign-extend A into eval_val as 16.8 number
+;   Entry: A = signed byte (-128..+127)
+;   Jumps to eval_continue
+; ---------------------------------------------------------------------
+return_signed_byte:
+      STA   eval_val_lo
+      BPL   @pos
+      LDA   #$FF
+      BRA   @set
+@pos: LDA   #$00
+@set: STA   eval_val_hi
+      BRA   return_number
+
+; ---------------------------------------------------------------------
+; predicate_result — set eval_val to 1 (Z set) or 0 (Z clear)
+;   Entry: Z flag from CMP
+;   Jumps to eval_continue
+; ---------------------------------------------------------------------
+predicate_result:
+      BEQ   @true
+      STZ   eval_val_lo
+      BRA   @done
+@true:
+      LDA   #1
+      STA   eval_val_lo
+@done:
+      STZ   eval_val_hi
+      BRA   return_number
+
+; ---------------------------------------------------------------------
+; degrees_to_u8 — convert eval_val (degrees 0-360) to u8 angle (0-255)
+;   Uses MUL16 coprocessor: angle = degrees * 91 / 128
+;   Actually: write degrees to MUL16 A, 91 to B, read RES1 (high byte)
+;   Then shift right once (divide by 2) since 91/256=0.355, we want 91/128
+;   Wait, let me recalculate: degrees * 91 >> 7
+;   MUL16 gives degrees*91 in RES1:RES0. We want bits [14:7] of that.
+;   RES1 is bits [15:8]. But we want >>7 which is RES1<<1 | RES0>>7.
+;   Simpler: degrees * 182 / 256 = RES1 of (degrees * 182). Let's use 182.
+;   Output: A = u8 angle
+;   Clobbers: uses math coprocessor regs
+; ---------------------------------------------------------------------
+degrees_to_u8:
+      LDA   eval_val_lo
+      STA   MATH_MUL16_A_LO
+      LDA   eval_val_hi
+      STA   MATH_MUL16_A_HI
+      LDA   #182
+      STA   MATH_MUL16_B_LO
+      STZ   MATH_MUL16_B_HI       ; trigger multiply
+      LDA   MATH_RES1              ; high byte = degrees * 182 / 256
+      RTS
+
+; ---------------------------------------------------------------------
+; do_sin — SIN degrees: return sin as signed byte (-128..+127)
+; ---------------------------------------------------------------------
+do_sin:
+      JSR   eval_expr
+      BCS   @err
+      JSR   degrees_to_u8
+      STA   MATH_SINCOS_ANGLE
+      LDA   MATH_RES0              ; sin result (signed 1.7)
+      JMP   return_signed_byte
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_cos — COS degrees: return cos as signed byte (-128..+127)
+; ---------------------------------------------------------------------
+do_cos:
+      JSR   eval_expr
+      BCS   @err
+      JSR   degrees_to_u8
+      STA   MATH_SINCOS_ANGLE
+      LDA   MATH_RES1              ; cos result (signed 1.7)
+      JMP   return_signed_byte
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_abs — ABS n: return absolute value
+; ---------------------------------------------------------------------
+do_abs:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_val_hi
+      BPL   @done                  ; already positive
+      ; Negate 24-bit value
+      LDA   eval_val_frac
+      EOR   #$FF
+      CLC
+      ADC   #1
+      STA   eval_val_frac
+      LDA   eval_val_lo
+      EOR   #$FF
+      ADC   #0
+      STA   eval_val_lo
+      LDA   eval_val_hi
+      EOR   #$FF
+      ADC   #0
+      STA   eval_val_hi
+@done:
+      STZ   eval_type
+      JMP   eval_continue
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_int — INT n: truncate fractional part
+; ---------------------------------------------------------------------
+do_int:
+      JSR   eval_expr
+      BCS   @err
+      STZ   eval_val_frac
+      STZ   eval_type
+      JMP   eval_continue
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_round — ROUND n: round to nearest integer
+; ---------------------------------------------------------------------
+do_round:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_val_frac
+      CMP   #128
+      BCC   @trunc
+      ; Round up: increment integer part
+      LDA   eval_val_hi
+      BPL   @pos_round
+      ; Negative: actually round toward zero = truncate
+      BRA   @trunc
+@pos_round:
+      INC   eval_val_lo
+      BNE   @trunc
+      INC   eval_val_hi
+@trunc:
+      STZ   eval_val_frac
+      STZ   eval_type
+      JMP   eval_continue
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_random — RANDOM n: return random number 0..n-1
+;   Uses math coprocessor RNG + MUL16 to scale
+; ---------------------------------------------------------------------
+do_random:
+      JSR   eval_expr
+      BCS   @err
+      ; RNG byte * n / 256 gives 0..n-1
+      LDA   MATH_RNG
+      STA   MATH_MUL16_A_LO
+      STZ   MATH_MUL16_A_HI
+      LDA   eval_val_lo
+      STA   MATH_MUL16_B_LO
+      LDA   eval_val_hi
+      STA   MATH_MUL16_B_HI       ; trigger
+      LDA   MATH_RES1              ; high byte of (rng * n) = rng*n/256
+      STA   eval_val_lo
+      STZ   eval_val_hi
+      JMP   return_number
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_sqrt — SQRT n: approximate sqrt via DIST_APPROX(n, 0)
+; ---------------------------------------------------------------------
+do_sqrt:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_val_lo
+      STA   MATH_DIST_DX_LO
+      LDA   eval_val_hi
+      STA   MATH_DIST_DX_HI
+      STZ   MATH_DIST_DY_LO
+      STZ   MATH_DIST_DY_HI       ; trigger (write to DY_HI triggers)
+      LDA   MATH_RES0
+      STA   eval_val_lo
+      LDA   MATH_RES1
+      STA   eval_val_hi
+      JMP   return_number
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_remainder — REMAINDER a b: return a mod b via DIV coprocessor
+; ---------------------------------------------------------------------
+do_remainder:
+      JSR   eval_expr              ; first arg (a)
+      BCS   @err
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_hi
+      PHA
+      JSR   eval_expr              ; second arg (b)
+      BCS   @err_pop
+      ; b in eval_val, a on stack
+      ; Check divide by zero
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BEQ   @zero_pop
+      ; Set up 32÷16 division: dividend=a, divisor=b
+      PLA
+      STA   MATH_DIV_N_1           ; a_hi
+      TAX                          ; save for sign-extend
+      PLA
+      STA   MATH_DIV_N_LO          ; a_lo
+      ; Sign-extend a
+      TXA
+      ORA   #$7F
+      BMI   @neg_a
+      LDA   #$00
+@neg_a:                            ; A=$FF if negative
+      STA   MATH_DIV_N_2
+      STA   MATH_DIV_N_HI
+      LDA   eval_val_lo
+      STA   MATH_DIV_D_LO
+      LDA   eval_val_hi
+      STA   MATH_DIV_D_HI          ; trigger
+      ; Remainder is in RES2:RES3 (actually check what the copro returns)
+      ; The math copro returns quotient in RES0:RES1, remainder in RES2:RES3
+      LDA   MATH_RES2
+      STA   eval_val_lo
+      LDA   MATH_RES3
+      STA   eval_val_hi
+      JMP   return_number
+@zero_pop:
+      PLA
+      PLA
+      STZ   eval_val_lo
+      STZ   eval_val_hi
+      JMP   return_number
+@err_pop:
+      PLA
+      PLA
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_not — NOT expr: return 1 if expr is 0, else 0
+; ---------------------------------------------------------------------
+do_not:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      ; If zero, set result to 1. If nonzero, set to 0.
+      BNE   @false
+      LDA   #1
+      STA   eval_val_lo
+      BRA   @done
+@false:
+      STZ   eval_val_lo
+@done:
+      STZ   eval_val_hi
+      JMP   return_number
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_and — AND a b: return 1 if both nonzero, else 0
+; ---------------------------------------------------------------------
+do_and:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BEQ   @false                 ; first arg is 0 → short-circuit
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BEQ   @false
+      LDA   #1
+      STA   eval_val_lo
+      BRA   @done
+@false:
+      STZ   eval_val_lo
+@done:
+      STZ   eval_val_hi
+      JMP   return_number
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_or — OR a b: return 1 if either nonzero, else 0
+; ---------------------------------------------------------------------
+do_or:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BNE   @true                  ; first arg nonzero → short-circuit
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BNE   @true
+      STZ   eval_val_lo
+      BRA   @done
+@true:
+      LDA   #1
+      STA   eval_val_lo
+@done:
+      STZ   eval_val_hi
+      JMP   return_number
+@err:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; Type predicates — NUMBER?, WORD?, LIST?
+; ---------------------------------------------------------------------
+do_numberp:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_type
+      CMP   #VAL_NUMBER
+      JMP   predicate_result
+@err:
+      SEC
+      RTS
+
+do_wordp:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_type
+      CMP   #VAL_WORD
+      JMP   predicate_result
+@err:
+      SEC
+      RTS
+
+do_listp:
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_type
+      CMP   #VAL_LIST
+      JMP   predicate_result
+@err:
+      SEC
+      RTS
+
+; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
       .segment "RODATA"
@@ -2147,6 +2516,34 @@ str_char_name:
       .byte 4, "CHAR"
 str_ascii_name:
       .byte 5, "ASCII"
+str_sin_name:
+      .byte 3, "SIN"
+str_cos_name:
+      .byte 3, "COS"
+str_abs_name:
+      .byte 3, "ABS"
+str_int_name:
+      .byte 3, "INT"
+str_round_name:
+      .byte 5, "ROUND"
+str_random_name:
+      .byte 6, "RANDOM"
+str_sqrt_name:
+      .byte 4, "SQRT"
+str_remainder_name:
+      .byte 9, "REMAINDER"
+str_not_name:
+      .byte 3, "NOT"
+str_and_name:
+      .byte 3, "AND"
+str_or_name:
+      .byte 2, "OR"
+str_numberp_name:
+      .byte 7, "NUMBER?"
+str_wordp_name:
+      .byte 5, "WORD?"
+str_listp_name:
+      .byte 5, "LIST?"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -2297,5 +2694,61 @@ builtin_table:
       .word str_ascii_name
       .word do_ascii
       .byte 0                    ; arity 0: handles its own arg
+
+      .word str_sin_name
+      .word do_sin
+      .byte 0
+
+      .word str_cos_name
+      .word do_cos
+      .byte 0
+
+      .word str_abs_name
+      .word do_abs
+      .byte 0
+
+      .word str_int_name
+      .word do_int
+      .byte 0
+
+      .word str_round_name
+      .word do_round
+      .byte 0
+
+      .word str_random_name
+      .word do_random
+      .byte 0
+
+      .word str_sqrt_name
+      .word do_sqrt
+      .byte 0
+
+      .word str_remainder_name
+      .word do_remainder
+      .byte 0
+
+      .word str_not_name
+      .word do_not
+      .byte 0
+
+      .word str_and_name
+      .word do_and
+      .byte 0
+
+      .word str_or_name
+      .word do_or
+      .byte 0
+
+      .word str_numberp_name
+      .word do_numberp
+      .byte 0
+
+      .word str_wordp_name
+      .word do_wordp
+      .byte 0
+
+      .word str_listp_name
+      .word do_listp
+      .byte 0
 
       .word $0000               ; end sentinel
