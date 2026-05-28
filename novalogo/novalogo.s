@@ -2,6 +2,7 @@
 ; Task 1.4: line input buffer with backspace handling
 
       .include "nova.inc"
+      .include "ext_iface.inc"
       .include "heap.s"
       .include "tokens.s"
       .include "tokenizer.s"
@@ -32,6 +33,14 @@ input_buf:    .res 128        ; input line buffer
       .segment "CODE"
 
 cold_start:
+      ; Copy extension ROM trampoline to RAM
+      LDX   #EXT_TRAMP_SIZE-1
+@copy_tramp:
+      LDA   ext_tramp_src,X
+      STA   EXT_TRAMPOLINE,X
+      DEX
+      BPL   @copy_tramp
+
       JSR   heap_init
       JSR   var_init
       JSR   proc_init
@@ -185,6 +194,16 @@ str_banner:
 
 str_prompt:
       .byte "? ", 0
+
+; Extension ROM trampoline — copied to RAM at $0270 during cold_start.
+; Swaps to extension ROM, calls entry, swaps back to Logo ROM.
+ext_tramp_src:
+      .byte $A9, ROMSWAP_EXTENSION  ; LDA #ROMSWAP_EXTENSION
+      .byte $8D, <REG_ROMSWAP, >REG_ROMSWAP  ; STA REG_ROMSWAP
+      .byte $20, $00, $C0          ; JSR $C000
+      .byte $A9, ROMSWAP_LOGO      ; LDA #ROMSWAP_LOGO
+      .byte $8D, <REG_ROMSWAP, >REG_ROMSWAP  ; STA REG_ROMSWAP
+      .byte $60                     ; RTS
 
 ; =====================================================================
 ; MONITOR segment — reset handler at $FFD7

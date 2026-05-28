@@ -156,6 +156,44 @@ eval_loop:
       JSR   proc_invoke
       JMP   eval_loop
 
+      ; Try extension command table before giving up
+      JSR   lookup_ext_cmd
+      BCS   @truly_unknown
+      ; Found: A = arity, ext_cmd set.
+      ; Advance past the command word token.
+      TAX                       ; X = arity
+      PHX
+      JSR   eval_advance
+      PLX
+      ; Evaluate arguments and copy to ext_arg slots
+      JSR   ext_eval_args
+      BCS   @ext_arg_err
+      ; Call extension via RAM trampoline
+      JSR   EXT_TRAMPOLINE
+      ; Copy result back to eval_val
+      LDA   EXT_RESULT_TYPE
+      STA   eval_type
+      LDA   EXT_RESULT_HI
+      STA   eval_val_hi
+      LDA   EXT_RESULT_LO
+      STA   eval_val_lo
+      LDA   EXT_RESULT_FRAC
+      STA   eval_val_frac
+      JMP   eval_continue
+
+@ext_arg_err:
+      LDX   #0
+@eae_lp:
+      LDA   str_notenough,X
+      BEQ   @eae_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @eae_lp
+@eae_done:
+      JSR   eval_newline
+      JSR   try_throw_error
+      RTS
+
 @truly_unknown:
       ; Print "I don't know how to " + the word
       LDX   #0
@@ -311,6 +349,39 @@ eval_body:
       JSR   proc_invoke
       JMP   eval_body
 
+      ; Try extension command table before giving up (inside body)
+      JSR   lookup_ext_cmd
+      BCS   @truly_unknown
+      TAX
+      PHX
+      JSR   eval_advance
+      PLX
+      JSR   ext_eval_args
+      BCS   @body_ext_err
+      JSR   EXT_TRAMPOLINE
+      LDA   EXT_RESULT_TYPE
+      STA   eval_type
+      LDA   EXT_RESULT_HI
+      STA   eval_val_hi
+      LDA   EXT_RESULT_LO
+      STA   eval_val_lo
+      LDA   EXT_RESULT_FRAC
+      STA   eval_val_frac
+      JMP   eval_continue
+
+@body_ext_err:
+      LDX   #0
+@bee_lp:
+      LDA   str_notenough,X
+      BEQ   @bee_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @bee_lp
+@bee_done:
+      JSR   eval_newline
+      JSR   try_throw_error
+      RTS
+
 @truly_unknown:
       ; Print "I don't know how to " + the word (inside body)
       LDX   #0
@@ -380,8 +451,9 @@ eval_expr:
       LDA   (ptr_lo),Y
 
       CMP   #TOK_NUMBER
-      BEQ   @number
-      CMP   #TOK_QUOTE
+      BNE   :+
+      JMP   @number
+:     CMP   #TOK_QUOTE
       BNE   :+
       JMP   @quote
 :     CMP   #TOK_VARREF
@@ -474,6 +546,30 @@ eval_expr:
       RTS
 
 @word_unknown:
+      ; Try extension command table as reporter
+      JSR   lookup_ext_cmd
+      BCS   @word_really_unknown
+      ; Found: A = arity, EXT_CMD set
+      TAX
+      PHX
+      JSR   eval_advance
+      PLX
+      JSR   ext_eval_args
+      BCS   @word_really_unknown
+      JSR   EXT_TRAMPOLINE
+      ; Copy result back to eval_val
+      LDA   EXT_RESULT_TYPE
+      STA   eval_type
+      LDA   EXT_RESULT_HI
+      STA   eval_val_hi
+      LDA   EXT_RESULT_LO
+      STA   eval_val_lo
+      LDA   EXT_RESULT_FRAC
+      STA   eval_val_frac
+      CLC
+      JMP   eval_check_infix
+
+@word_really_unknown:
       SEC
       RTS
 
@@ -1138,6 +1234,180 @@ catch_tags_equal:
 ; =====================================================================
 ; RODATA — evaluator strings and tables
 ; =====================================================================
+; ---------------------------------------------------------------------
+; lookup_ext_cmd — search ext_cmd_table for the current TOK_WORD
+;   Input: eval_cur_lo/hi points to a TOK_WORD token
+;   Output: Carry clear = found, A = arity, EXT_CMD set
+;           Carry set = not found
+;   Clobbers: A, X, Y, num_tmp_lo/hi
+; ---------------------------------------------------------------------
+lookup_ext_cmd:
+      ; Save table pointer in num_tmp_lo/hi
+      LDA   #<ext_cmd_table
+      STA   num_tmp_lo
+      LDA   #>ext_cmd_table
+      STA   num_tmp_hi
+
+@scan:
+      ; Read name pointer from table
+      LDA   num_tmp_lo
+      STA   ptr2_lo
+      LDA   num_tmp_hi
+      STA   ptr2_hi
+      LDY   #0
+      LDA   (ptr2_lo),Y        ; name_ptr low
+      TAX
+      INY
+      LDA   (ptr2_lo),Y        ; name_ptr high
+      BNE   @have_entry
+      CPX   #0
+      BNE   @have_entry
+      ; Null pointer — end of table
+      SEC
+      RTS
+
+@have_entry:
+      ; X = name_ptr_lo, A = name_ptr_hi
+      STA   ptr2_hi
+      STX   ptr2_lo             ; ptr2 now points to table name string
+
+      ; Get token payload pointer
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+
+      ; Compare length bytes
+      LDY   #0
+      LDA   (ptr2_lo),Y        ; table name length
+      LDY   #TOK_PAYLOAD
+      CMP   (ptr_lo),Y         ; token payload length
+      BNE   @next
+
+      ; Lengths match — compare chars
+      TAX                       ; X = length
+      LDY   #1                  ; offset into table name string (after length)
+      STZ   tok_sign            ; reuse as token char offset counter
+@cmp_loop:
+      LDA   (ptr2_lo),Y        ; table name char
+      PHY
+      LDA   tok_sign
+      CLC
+      ADC   #TOK_PAYLOAD+1
+      TAY
+      LDA   (ptr_lo),Y         ; token char
+      PLY
+      CMP   (ptr2_lo),Y        ; compare
+      BNE   @next
+      INY
+      INC   tok_sign
+      DEX
+      BNE   @cmp_loop
+
+      ; Match found — read cmd_id and arity
+      ; Table entry: name_ptr(2) + cmd_id(1) + arity(1)
+      LDA   num_tmp_lo
+      STA   ptr_lo
+      LDA   num_tmp_hi
+      STA   ptr_hi
+      LDY   #2
+      LDA   (ptr_lo),Y         ; cmd_id
+      STA   EXT_CMD
+      INY
+      LDA   (ptr_lo),Y         ; arity
+      CLC                       ; found
+      RTS
+
+@next:
+      STZ   tok_sign
+      ; Advance to next entry: +4 bytes (2 name + 1 cmd_id + 1 arity)
+      CLC
+      LDA   num_tmp_lo
+      ADC   #4
+      STA   num_tmp_lo
+      BCC   :+
+      INC   num_tmp_hi
+:
+      JMP   @scan
+
+; ---------------------------------------------------------------------
+; ext_eval_args — evaluate X arguments and copy to EXT_ARG0..2 slots
+;   Input: X = argument count (0-3)
+;   Output: Carry clear = success, Carry set = error
+;           EXT_ARGC set, EXT_ARG0..2 populated
+;   Clobbers: A, X, Y
+; ---------------------------------------------------------------------
+ext_eval_args:
+      STX   EXT_ARGC
+      CPX   #0
+      BEQ   @done
+
+      ; Evaluate arg 0
+      PHX
+      JSR   eval_expr
+      PLX
+      BCS   @err
+      LDA   eval_type
+      STA   EXT_ARG0_TYPE
+      LDA   eval_val_hi
+      STA   EXT_ARG0_HI
+      LDA   eval_val_lo
+      STA   EXT_ARG0_LO
+      LDA   eval_val_frac
+      STA   EXT_ARG0_FRAC
+      DEX
+      BEQ   @done
+
+      ; Evaluate arg 1
+      PHX
+      JSR   eval_expr
+      PLX
+      BCS   @err
+      LDA   eval_type
+      STA   EXT_ARG1_TYPE
+      LDA   eval_val_hi
+      STA   EXT_ARG1_HI
+      LDA   eval_val_lo
+      STA   EXT_ARG1_LO
+      LDA   eval_val_frac
+      STA   EXT_ARG1_FRAC
+      DEX
+      BEQ   @done
+
+      ; Evaluate arg 2
+      PHX
+      JSR   eval_expr
+      PLX
+      BCS   @err
+      LDA   eval_type
+      STA   EXT_ARG2_TYPE
+      LDA   eval_val_hi
+      STA   EXT_ARG2_HI
+      LDA   eval_val_lo
+      STA   EXT_ARG2_LO
+      LDA   eval_val_frac
+      STA   EXT_ARG2_FRAC
+
+@done:
+      CLC
+      RTS
+@err:
+      SEC
+      RTS
+
+      .segment "RODATA"
+
+; Extension command table: name_ptr(2) + cmd_id(1) + arity(1)
+; Terminated by $0000 sentinel.
+ext_cmd_table:
+      .word str_ext_test_name
+      .byte EXT_CMD_TEST
+      .byte 1                    ; arity: 1 argument
+      .word $0000               ; end sentinel
+
+str_ext_test_name:
+      .byte 8, "EXT.TEST"
+
       .segment "RODATA"
 
 str_idk:

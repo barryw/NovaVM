@@ -35,6 +35,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly byte[] _nccRom;
     private readonly byte[]? _extRom;
     private readonly byte[]? _logoRom;
+    private readonly byte[]? _logoExtRom;
     private byte _boardButtonState;
     private byte _boardSwitchState;
     private byte _boardInputIrqEnable;
@@ -202,6 +203,15 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             byte[] logoData = File.ReadAllBytes(logoPath);
             _logoRom = new byte[16384];
             Array.Copy(logoData, _logoRom, Math.Min(logoData.Length, 16384));
+        }
+
+        // Load Logo extension ROM if available.
+        string logoExtPath = Path.Combine(AppContext.BaseDirectory, "Resources", "novalogo_ext.bin");
+        if (File.Exists(logoExtPath))
+        {
+            _logoExtRom = new byte[16384];
+            byte[] logoExtData = File.ReadAllBytes(logoExtPath);
+            Array.Copy(logoExtData, _logoExtRom, Math.Min(logoExtData.Length, 16384));
         }
 
         // Override boot ROM if requested.
@@ -482,10 +492,16 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 if (prev == ActiveRom.Ncc)
                     RomSwapRequested?.Invoke(this, EventArgs.Empty);
             }
-            else if (data == VgcConstants.RomSwapExtension && _extRom != null && CurrentRom != ActiveRom.Extension)
+            else if (data == VgcConstants.RomSwapExtension && CurrentRom != ActiveRom.Extension)
             {
-                Array.Copy(_extRom, 0, _ram, VgcConstants.RomBase, 16384);
-                CurrentRom = ActiveRom.Extension;
+                // Use Logo's extension ROM when Logo was the active primary,
+                // otherwise fall back to BASIC's extension ROM.
+                var ext = (CurrentRom == ActiveRom.Logo ? _logoExtRom : _extRom);
+                if (ext != null)
+                {
+                    Array.Copy(ext, 0, _ram, VgcConstants.RomBase, 16384);
+                    CurrentRom = ActiveRom.Extension;
+                }
                 // No event — extension swaps are transient, managed by RAM trampoline.
             }
             else if (data == VgcConstants.RomSwapLogo && _logoRom != null && CurrentRom != ActiveRom.Logo)

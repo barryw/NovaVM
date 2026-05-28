@@ -1155,6 +1155,48 @@ public class NovaLogoTests
             $"Expected error after ERASE.\n{screen}");
     }
 
+    [TestMethod]
+    public void ExtensionCommandWorks()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // EXT.TEST is a test command: returns arg + 1
+        QueueLine(editor, "PRINT EXT.TEST 41");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "42") found = true;
+        Assert.IsTrue(found, $"Expected '42' from EXT.TEST 41.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ExtensionCommandInExpression()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Use EXT.TEST as a reporter in an arithmetic expression
+        QueueLine(editor, "PRINT EXT.TEST 41 + 8");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "50") found = true;
+        Assert.IsTrue(found, $"Expected '50' from EXT.TEST 41 + 8.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

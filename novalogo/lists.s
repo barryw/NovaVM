@@ -13,9 +13,15 @@ CONS_PAIR  = $10
 CONS_SIZE  = 7
 
 ; Value type constants
+.ifndef VAL_NUMBER
 VAL_NUMBER = $00
+.endif
+.ifndef VAL_WORD
 VAL_WORD   = $01
+.endif
+.ifndef VAL_LIST
 VAL_LIST   = $02
+.endif
 
 ; Cons pair field offsets
 CONS_TAG      = 0

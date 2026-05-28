@@ -256,6 +256,9 @@ ROMSWAP_NCCEDIT   = $03
 .ifndef ROMSWAP_EXTENSION
 ROMSWAP_EXTENSION = $04
 .endif
+.ifndef ROMSWAP_LOGO
+ROMSWAP_LOGO      = $05
+.endif
 
 .ifndef VGC_SPR_BASE
 VGC_SPR_BASE      = $A040
@@ -975,6 +978,18 @@ AUTOBOOT_SKIP     = $B9F0
 .ifndef AUTOBOOT_ACTIVE
 AUTOBOOT_ACTIVE   = $B9F1
 .endif
+.ifndef TEXTWIN_LEFT
+TEXTWIN_LEFT      = $B9F2
+.endif
+.ifndef TEXTWIN_TOP
+TEXTWIN_TOP       = $B9F3
+.endif
+.ifndef TEXTWIN_WIDTH
+TEXTWIN_WIDTH     = $B9F4
+.endif
+.ifndef TEXTWIN_HEIGHT
+TEXTWIN_HEIGHT    = $B9F5
+.endif
 
 .ifndef FIO_CMD_SAVE
 FIO_CMD_SAVE      = $01
@@ -1367,6 +1382,9 @@ EXT_CMD_VPOKE     = $40
 .endif
 .ifndef EXT_CMD_FIOCLR
 EXT_CMD_FIOCLR    = $41
+.endif
+.ifndef EXT_CMD_CLS
+EXT_CMD_CLS       = $42
 .endif
 
 ; Hosted music/SFX status registers.
