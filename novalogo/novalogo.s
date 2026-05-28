@@ -4,6 +4,7 @@
       .include "nova.inc"
       .include "heap.s"
       .include "tokens.s"
+      .include "tokenizer.s"
 
 ; =====================================================================
 ; ZEROPAGE segment — interpreter zero-page variables
@@ -40,7 +41,9 @@ cold_start:
 
 main_loop:
       JSR   read_line
-      ; TODO: tokenize and execute input_buf contents here
+      JSR   tokenize_line
+      JSR   print_token_count
+      JSR   print_prompt
       BRA   main_loop
 
 ; ---------------------------------------------------------------------
