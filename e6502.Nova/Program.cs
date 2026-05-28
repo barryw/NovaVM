@@ -1,5 +1,7 @@
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using e6502.Storage;
 
 if (args.Length < 1)
@@ -48,6 +50,7 @@ return verb switch
     "soundfont"  => DoSoundfont(args[1..], remoteHost),
     "music"      => DoMusic(args[1..], remoteHost),
     "asset"      => DoAsset(args[1..], remoteHost),
+    "runtime"    => DoRuntime(args[1..], remoteHost),
     _            => UnknownVerb(verb),
 };
 
@@ -510,17 +513,24 @@ static int RunKeyboardBridge(string host, int port, bool echo, bool ctrlCQuits)
         started = true;
         Console.Error.WriteLine($"Nova WiFi keyboard bridge: {host}:{port}");
         Console.Error.WriteLine("Type normally. Ctrl-] quits. Ctrl-C is sent to Nova.");
+        Console.Error.WriteLine("Menus: use Alt+letter if your terminal supports Meta, Esc then letter, or Esc to close.");
+
+        var repeatFilter = new KeyboardRepeatFilter();
+        bool suppressNextRawLf = false;
 
         while (true)
         {
             bool mapped = oldTerminalMode is not null
-                ? TryMapRawInput(rawInput!, ctrlCQuits, out string text, out bool shouldQuit)
+                ? TryMapRawInput(rawInput!, ctrlCQuits, ref suppressNextRawLf, out string text, out bool shouldQuit)
                 : TryMapConsoleKey(Console.ReadKey(intercept: true), ctrlCQuits, out text, out shouldQuit);
             if (!mapped)
                 continue;
 
             if (shouldQuit)
                 break;
+
+            if (!repeatFilter.ShouldSend(text))
+                continue;
 
             SendDebugKey(writer, reader, text);
             if (echo)
@@ -570,13 +580,19 @@ static bool TryMapConsoleKey(
         return true;
     }
 
+    if (key.Modifiers.HasFlag(ConsoleModifiers.Alt) && TryMapAltKey(key, out char altChar))
+    {
+        text = "\x1B" + altChar;
+        return true;
+    }
+
     text = key.Key switch
     {
         ConsoleKey.Enter      => "\r",
         ConsoleKey.Backspace  => "\b",
         ConsoleKey.Tab        => "\t",
         ConsoleKey.Delete     => "\x7F",
-        ConsoleKey.Escape     => "\x03",
+        ConsoleKey.Escape     => "\x1B",
         ConsoleKey.F1         => "\x03",
         ConsoleKey.LeftArrow  => "\x1C",
         ConsoleKey.RightArrow => "\x1D",
@@ -606,6 +622,7 @@ static bool TryMapConsoleKey(
 static bool TryMapRawInput(
     KeyboardInputReader input,
     bool ctrlCQuits,
+    ref bool suppressNextLf,
     out string text,
     out bool shouldQuit)
 {
@@ -628,9 +645,29 @@ static bool TryMapRawInput(
         return true;
     }
 
+    if (b == 0x0D)
+    {
+        suppressNextLf = true;
+        text = "\r";
+        return true;
+    }
+
+    if (b == 0x0A)
+    {
+        if (suppressNextLf)
+        {
+            suppressNextLf = false;
+            return false;
+        }
+
+        text = "\r";
+        return true;
+    }
+
+    suppressNextLf = false;
+
     text = b switch
     {
-        0x0A or 0x0D => "\r",
         0x08 or 0x7F => "\b",
         0x09         => "\t",
         0x03         => "\x03",
@@ -646,17 +683,21 @@ static bool TryMapRawInput(
 static string ReadEscapeSequence(KeyboardInputReader input)
 {
     if (!TryReadPendingInputByte(input, out int second))
-        return "\x03";
+        return "\x1B";
 
     if (second == 'O')
     {
         return TryReadPendingInputByte(input, out int final)
             ? MapArrowEscapeFinal(final)
-            : "\x03";
+            : "\x1B";
     }
 
     if (second != '[')
-        return "\x03";
+    {
+        if (second >= 0x20 && second <= 0x7E)
+            return "\x1B" + NormalizeAltChar((char)second);
+        return "\x1B";
+    }
 
     for (int i = 0; i < 16; i++)
     {
@@ -667,8 +708,30 @@ static string ReadEscapeSequence(KeyboardInputReader input)
             return MapArrowEscapeFinal(value);
     }
 
-    return "\x03";
+    return "\x1B";
 }
+
+static bool TryMapAltKey(ConsoleKeyInfo key, out char altChar)
+{
+    altChar = '\0';
+
+    if (key.KeyChar is >= ' ' and <= '~')
+    {
+        altChar = NormalizeAltChar(key.KeyChar);
+        return true;
+    }
+
+    if (key.Key is >= ConsoleKey.A and <= ConsoleKey.Z)
+    {
+        altChar = (char)('a' + (key.Key - ConsoleKey.A));
+        return true;
+    }
+
+    return false;
+}
+
+static char NormalizeAltChar(char ch) =>
+    ch is >= 'A' and <= 'Z' ? (char)(ch + 0x20) : ch;
 
 static string MapArrowEscapeFinal(int value)
 {
@@ -678,13 +741,13 @@ static string MapArrowEscapeFinal(int value)
         'C' => "\x1D",
         'A' => "\x1E",
         'B' => "\x1F",
-        _   => "\x03",
+        _   => "\x1B",
     };
 }
 
 static bool TryReadPendingInputByte(KeyboardInputReader input, out int value)
 {
-    return input.TryRead(out value, timeoutMs: 100);
+    return input.TryRead(out value, timeoutMs: 650);
 }
 
 static string? TryEnterRawTerminalMode()
@@ -780,15 +843,25 @@ static System.Diagnostics.Process StartStty(string[] args, bool redirectOutput)
 
 static void SendDebugKey(StreamWriter writer, StreamReader reader, string text)
 {
-    string key = text switch
+    string request;
+    if (text.Length > 1)
     {
-        "\r"   => "ENTER",
-        "\b"   => "BACKSPACE",
-        "\x7F" => "BACKSPACE",
-        "\x03" => "CTRL-C",
-        _      => text,
-    };
-    writer.WriteLine("{\"command\":\"send_key\",\"key\":" + JsonString(key) + "}");
+        request = "{\"command\":\"type_text\",\"text\":" + JsonString(text) + "}";
+    }
+    else
+    {
+        string key = text switch
+        {
+            "\r"   => "ENTER",
+            "\b"   => "BACKSPACE",
+            "\x7F" => "BACKSPACE",
+            "\x03" => "CTRL-C",
+            _      => text,
+        };
+        request = "{\"command\":\"send_key\",\"key\":" + JsonString(key) + "}";
+    }
+
+    writer.WriteLine(request);
     string? response = reader.ReadLine();
     if (string.IsNullOrWhiteSpace(response))
         throw new IOException("empty response from NovaHost debug server");
@@ -829,6 +902,7 @@ static void PrintKeyboardUsage()
 {
     Console.Error.WriteLine("Usage:");
     Console.Error.WriteLine("  nova keyboard --remote <host> [--port 6503] [--echo] [--ctrl-c-quits]");
+    Console.Error.WriteLine("  Menus: use Alt+letter if your terminal supports Meta, or press Esc then the letter.");
 }
 
 static int DoDisk(string[] args, string? host)
@@ -1137,6 +1211,337 @@ static void PrintAssetUsage()
     Console.Error.WriteLine("  nova asset upload <file> --remote <host> --type <boot|fonts|sid|...> [--name <name>]");
     Console.Error.WriteLine("  nova asset download <name-or-path> --remote <host> [--type <boot|fonts|sid|...>] [local-path]");
     Console.Error.WriteLine("  nova asset delete <name-or-path> --remote <host> [--type <boot|fonts|sid|...>]");
+}
+
+// ===========================================================================
+// runtime — read/modify /config/boot.json on the remote NovaHost SD card
+// ===========================================================================
+
+static int DoRuntime(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintRuntimeUsage();
+        return 1;
+    }
+
+    return args[0].ToLowerInvariant() switch
+    {
+        "list" or "ls" => DoRuntimeList(host),
+        "status"       => DoRuntimeStatus(host),
+        "set"          => DoRuntimeSet(args[1..], host),
+        "add"          => DoRuntimeAdd(args[1..], host),
+        "remove" or "rm" => DoRuntimeRemove(args[1..], host),
+        "deploy"       => DoRuntimeDeploy(args[1..], host),
+        _              => UnknownRuntimeCommand(args[0]),
+    };
+}
+
+static JsonNode? ReadBootConfig(string host)
+{
+    string url = $"http://{host}/sd/config/boot.json";
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    try
+    {
+        var resp = http.GetAsync(url).GetAwaiter().GetResult();
+        if (!resp.IsSuccessStatusCode)
+        {
+            Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            return null;
+        }
+        string json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonNode.Parse(json);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"boot config read: {ex.Message}");
+        return null;
+    }
+}
+
+static bool WriteBootConfig(string host, JsonNode config)
+{
+    string url = $"http://{host}/sd/config/boot.json";
+    string json = config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    try
+    {
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
+        if (!resp.IsSuccessStatusCode)
+        {
+            Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            return false;
+        }
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"boot config write: {ex.Message}");
+        return false;
+    }
+}
+
+static int DoRuntimeList(string? host)
+{
+    if (host is null) { PrintRuntimeUsage(); return 1; }
+
+    var config = ReadBootConfig(host);
+    if (config is null) return 1;
+
+    string defaultRt = config["vm"]?["defaultRuntime"]?.GetValue<string>() ?? "";
+    var langs = config["languages"]?.AsObject();
+    if (langs is null)
+    {
+        Console.WriteLine("No runtimes configured.");
+        return 0;
+    }
+
+    Console.WriteLine($"{"Name",-20} {"ROM",-32} {"Extension",-32} Default");
+    Console.WriteLine(new string('-', 90));
+    foreach (var (name, node) in langs)
+    {
+        string rom = node?["rom"]?.GetValue<string>() ?? "";
+        string ext = node?["extensionRom"]?.GetValue<string>() ?? "";
+        string def = name == defaultRt ? "*" : "";
+        Console.WriteLine($"{name,-20} {rom,-32} {ext,-32} {def}");
+    }
+    return 0;
+}
+
+static int DoRuntimeStatus(string? host)
+{
+    if (host is null) { PrintRuntimeUsage(); return 1; }
+
+    var config = ReadBootConfig(host);
+    if (config is null) return 1;
+
+    string defaultRt = config["vm"]?["defaultRuntime"]?.GetValue<string>() ?? "(not set)";
+    Console.WriteLine($"Default runtime: {defaultRt}");
+
+    var langs = config["languages"]?.AsObject();
+    if (langs is not null && langs.ContainsKey(defaultRt))
+    {
+        var node = langs[defaultRt];
+        string rom = node?["rom"]?.GetValue<string>() ?? "(not set)";
+        string ext = node?["extensionRom"]?.GetValue<string>() ?? "(none)";
+        Console.WriteLine($"  ROM:           {rom}");
+        Console.WriteLine($"  Extension ROM: {ext}");
+    }
+    else if (defaultRt != "(not set)")
+    {
+        Console.WriteLine($"  Warning: runtime '{defaultRt}' not found in languages section.");
+    }
+    return 0;
+}
+
+static int DoRuntimeSet(string[] args, string? host)
+{
+    if (host is null || args.Length < 1) { PrintRuntimeUsage(); return 1; }
+
+    string name = args[0];
+    var config = ReadBootConfig(host);
+    if (config is null) return 1;
+
+    var langs = config["languages"]?.AsObject();
+    if (langs is null || !langs.ContainsKey(name))
+    {
+        Console.Error.WriteLine($"Runtime '{name}' not found. Use 'nova runtime list' to see available runtimes.");
+        return 1;
+    }
+
+    var vm = config["vm"];
+    if (vm is null)
+    {
+        Console.Error.WriteLine("boot.json has no 'vm' section.");
+        return 1;
+    }
+    vm["defaultRuntime"] = name;
+
+    if (!WriteBootConfig(host, config)) return 1;
+
+    Console.WriteLine($"Default runtime set to '{name}'. Reboot to apply.");
+    return 0;
+}
+
+static int DoRuntimeAdd(string[] args, string? host)
+{
+    if (host is null) { PrintRuntimeUsage(); return 1; }
+
+    var rest = args.ToList();
+    string? romPath = TakeOptionValue(rest, "--rom");
+    string? extPath = TakeOptionValue(rest, "--ext", "--extension");
+
+    if (rest.Count < 1 || romPath is null)
+    {
+        PrintRuntimeUsage();
+        return 1;
+    }
+
+    string name = rest[0];
+
+    var config = ReadBootConfig(host);
+    if (config is null) return 1;
+
+    var langs = config["languages"]?.AsObject();
+    if (langs is null)
+    {
+        Console.Error.WriteLine("boot.json has no 'languages' section.");
+        return 1;
+    }
+
+    var entry = new JsonObject();
+    entry["rom"] = romPath;
+    if (extPath is not null)
+        entry["extensionRom"] = extPath;
+
+    langs[name] = entry;
+
+    if (!WriteBootConfig(host, config)) return 1;
+
+    Console.WriteLine($"Runtime '{name}' added (rom={romPath}{(extPath is not null ? $", ext={extPath}" : "")}).");
+    return 0;
+}
+
+static int DoRuntimeRemove(string[] args, string? host)
+{
+    if (host is null || args.Length < 1) { PrintRuntimeUsage(); return 1; }
+
+    string name = args[0];
+    var config = ReadBootConfig(host);
+    if (config is null) return 1;
+
+    string defaultRt = config["vm"]?["defaultRuntime"]?.GetValue<string>() ?? "";
+    if (name == defaultRt)
+    {
+        Console.Error.WriteLine($"Cannot remove the active default runtime '{name}'. Use 'nova runtime set' to change the default first.");
+        return 1;
+    }
+
+    var langs = config["languages"]?.AsObject();
+    if (langs is null || !langs.ContainsKey(name))
+    {
+        Console.Error.WriteLine($"Runtime '{name}' not found.");
+        return 1;
+    }
+
+    langs.Remove(name);
+
+    if (!WriteBootConfig(host, config)) return 1;
+
+    Console.WriteLine($"Runtime '{name}' removed.");
+    return 0;
+}
+
+static int DoRuntimeDeploy(string[] args, string? host)
+{
+    if (host is null) { PrintRuntimeUsage(); return 1; }
+
+    var rest = args.ToList();
+    string? localRom = TakeOptionValue(rest, "--rom");
+    string? localExt = TakeOptionValue(rest, "--ext", "--extension");
+
+    if (rest.Count < 1 || localRom is null)
+    {
+        PrintRuntimeUsage();
+        return 1;
+    }
+
+    string name = rest[0];
+
+    if (!File.Exists(localRom))
+    {
+        Console.Error.WriteLine($"ROM file not found: {localRom}");
+        return 1;
+    }
+
+    if (localExt is not null && !File.Exists(localExt))
+    {
+        Console.Error.WriteLine($"Extension ROM file not found: {localExt}");
+        return 1;
+    }
+
+    // Upload ROM files to /roms/ on SD
+    string romFilename = Path.GetFileName(localRom);
+    string remoteRomPath = $"/roms/{romFilename}";
+    int rc = UploadRomFile(host, localRom, remoteRomPath);
+    if (rc != 0) return rc;
+
+    string? remoteExtPath = null;
+    if (localExt is not null)
+    {
+        string extFilename = Path.GetFileName(localExt);
+        remoteExtPath = $"/roms/{extFilename}";
+        rc = UploadRomFile(host, localExt, remoteExtPath);
+        if (rc != 0) return rc;
+    }
+
+    // Add/update the runtime entry in boot.json
+    var config = ReadBootConfig(host);
+    if (config is null) return 1;
+
+    var langs = config["languages"]?.AsObject();
+    if (langs is null)
+    {
+        Console.Error.WriteLine("boot.json has no 'languages' section.");
+        return 1;
+    }
+
+    var entry = new JsonObject();
+    entry["rom"] = remoteRomPath;
+    if (remoteExtPath is not null)
+        entry["extensionRom"] = remoteExtPath;
+
+    langs[name] = entry;
+
+    if (!WriteBootConfig(host, config)) return 1;
+
+    Console.WriteLine($"Deployed runtime '{name}': rom={remoteRomPath}{(remoteExtPath is not null ? $", ext={remoteExtPath}" : "")}.");
+    return 0;
+}
+
+static int UploadRomFile(string host, string localPath, string remoteSdPath)
+{
+    string url = SdUrl(host, remoteSdPath);
+    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+    try
+    {
+        byte[] data = File.ReadAllBytes(localPath);
+        using var content = new ByteArrayContent(data);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
+        if (!resp.IsSuccessStatusCode)
+        {
+            Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            return 1;
+        }
+        Console.WriteLine($"PUT {localPath} -> {url} ({data.Length} bytes) OK");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"upload {localPath}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int UnknownRuntimeCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown runtime command: {command}");
+    PrintRuntimeUsage();
+    return 1;
+}
+
+static void PrintRuntimeUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova runtime list --remote <host>");
+    Console.Error.WriteLine("  nova runtime status --remote <host>");
+    Console.Error.WriteLine("  nova runtime set <name> --remote <host>");
+    Console.Error.WriteLine("  nova runtime add <name> --rom <sd-path> [--ext <sd-path>] --remote <host>");
+    Console.Error.WriteLine("  nova runtime remove <name> --remote <host>");
+    Console.Error.WriteLine("  nova runtime deploy <name> --rom <local-file> [--ext <local-file>] --remote <host>");
 }
 
 static int DoLs(string[] args, string? host)
@@ -2690,12 +3095,75 @@ static void PrintUsage()
     Console.Error.WriteLine("  soundfont list|upload|download|delete ... --remote <host>");
     Console.Error.WriteLine("  music list|upload|download|delete ... --remote <host>");
     Console.Error.WriteLine("  asset list|upload|download|delete ... --remote <host> --type <boot|fonts|sid|...>");
+    Console.Error.WriteLine("  runtime list|status|set|add|remove|deploy ... --remote <host>");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Raw SD commands, kept for compatibility:");
     Console.Error.WriteLine("  --remote <host> ls [path]");
     Console.Error.WriteLine("  --remote <host> put <local-path> [remote-path]");
     Console.Error.WriteLine("  --remote <host> get <remote-path> [local-path]");
     Console.Error.WriteLine("  --remote <host> rm <remote-path>");
+}
+
+sealed class KeyboardRepeatFilter
+{
+    private const int DebounceMs = 120;
+    private const int InitialRepeatDelayMs = 1000;
+    private const int RepeatIntervalMs = 80;
+    private const int SameKeyIdleResetMs = 180;
+
+    private string? _activeText;
+    private long _activeStartMs;
+    private long _lastSeenMs;
+    private long _lastSentMs;
+
+    public bool ShouldSend(string text)
+    {
+        if (!IsFilteredKey(text))
+        {
+            Reset();
+            return true;
+        }
+
+        long now = Environment.TickCount64;
+        if (_activeText != text || now - _lastSeenMs > SameKeyIdleResetMs)
+        {
+            _activeText = text;
+            _activeStartMs = now;
+            _lastSeenMs = now;
+            _lastSentMs = now;
+            return true;
+        }
+
+        _lastSeenMs = now;
+        if (now - _lastSentMs < DebounceMs)
+            return false;
+
+        if (now - _activeStartMs < InitialRepeatDelayMs)
+            return false;
+
+        if (now - _lastSentMs < RepeatIntervalMs)
+            return false;
+
+        _lastSentMs = now;
+        return true;
+    }
+
+    private static bool IsFilteredKey(string text)
+    {
+        if (text.Length != 1)
+            return false;
+
+        char ch = text[0];
+        return ch < ' ' || ch == '\x7F';
+    }
+
+    private void Reset()
+    {
+        _activeText = null;
+        _activeStartMs = 0;
+        _lastSeenMs = 0;
+        _lastSentMs = 0;
+    }
 }
 
 sealed class KeyboardInputReader : IDisposable

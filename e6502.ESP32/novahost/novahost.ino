@@ -1232,6 +1232,56 @@ void pollSerialConsole() {
 }
 
 // =========================================================================
+// Runtime config from boot.json
+// =========================================================================
+struct RuntimeConfig {
+    char romPath[128];
+    char extRomPath[128];
+    bool valid;
+};
+
+static RuntimeConfig readRuntimeConfig() {
+    RuntimeConfig cfg = {};
+
+    File f = SD.open("/config/boot.json", FILE_READ);
+    if (!f) {
+        logLn("Runtime config: boot.json not found, using defaults");
+        return cfg;
+    }
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if (err) {
+        logLn("Runtime config: parse failed (%s), using defaults", err.c_str());
+        return cfg;
+    }
+
+    const char* runtime = doc["vm"]["defaultRuntime"] | "novabasic";
+
+    JsonObjectConst lang = doc["languages"][runtime].as<JsonObjectConst>();
+    if (lang.isNull()) {
+        logLn("Runtime config: language '%s' not found, using defaults", runtime);
+        return cfg;
+    }
+
+    const char* rom = lang["rom"] | (const char*)nullptr;
+    const char* ext = lang["extensionRom"] | (const char*)nullptr;
+
+    if (rom) {
+        strlcpy(cfg.romPath, rom, sizeof(cfg.romPath));
+    }
+    if (ext) {
+        strlcpy(cfg.extRomPath, ext, sizeof(cfg.extRomPath));
+    }
+
+    cfg.valid = (rom != nullptr);
+    logLn("Runtime config: loading '%s' (rom=%s, ext=%s)", runtime,
+          cfg.romPath, cfg.extRomPath[0] ? cfg.extRomPath : "<none>");
+    return cfg;
+}
+
+// =========================================================================
 // Boot-time ROM/assets load into FPGA via debug bridge
 // =========================================================================
 // Bulk bridge commands keep ROM loading to one ack per 256-byte block.
@@ -1245,15 +1295,41 @@ bool loadRomsToFPGA() {
         return false;
     }
 
-    bool haveBasic = bootAssetAvailable("basic ROM", BASIC_ROM_PATHS,
-                                        sizeof(BASIC_ROM_PATHS) / sizeof(BASIC_ROM_PATHS[0]),
-                                        BOOT_ROM_LEN);
-    bool haveExt = bootAssetAvailable("extension ROM", EXTENSION_ROM_PATHS,
-                                      sizeof(EXTENSION_ROM_PATHS) / sizeof(EXTENSION_ROM_PATHS[0]),
-                                      BOOT_ROM_LEN);
+    // Resolve ROM paths: prefer boot.json config, fall back to hardcoded arrays
+    RuntimeConfig rtCfg = readRuntimeConfig();
 
-    if (!haveBasic || !haveExt) {
-        logLn("Boot assets skipped: required ROM file(s) missing; using bitstream ROM fallback");
+    const char* romPaths[3];
+    size_t romPathCount;
+    const char* extPaths[2];
+    size_t extPathCount;
+
+    if (rtCfg.valid) {
+        romPaths[0] = rtCfg.romPath;
+        romPathCount = 1;
+        if (rtCfg.extRomPath[0]) {
+            extPaths[0] = rtCfg.extRomPath;
+            extPathCount = 1;
+        } else {
+            extPathCount = 0;
+        }
+    } else {
+        for (size_t i = 0; i < sizeof(BASIC_ROM_PATHS) / sizeof(BASIC_ROM_PATHS[0]); i++)
+            romPaths[i] = BASIC_ROM_PATHS[i];
+        romPathCount = sizeof(BASIC_ROM_PATHS) / sizeof(BASIC_ROM_PATHS[0]);
+        for (size_t i = 0; i < sizeof(EXTENSION_ROM_PATHS) / sizeof(EXTENSION_ROM_PATHS[0]); i++)
+            extPaths[i] = EXTENSION_ROM_PATHS[i];
+        extPathCount = sizeof(EXTENSION_ROM_PATHS) / sizeof(EXTENSION_ROM_PATHS[0]);
+    }
+
+    bool haveBasic = bootAssetAvailable("basic ROM", romPaths, romPathCount,
+                                        BOOT_ROM_LEN);
+    bool haveExt = (extPathCount > 0)
+        ? bootAssetAvailable("extension ROM", extPaths, extPathCount,
+                             BOOT_ROM_LEN)
+        : false;
+
+    if (!haveBasic) {
+        logLn("Boot assets skipped: base ROM not found; using bitstream ROM fallback");
         fpgaBridge.resetRelease();
         return false;
     }
@@ -1287,8 +1363,7 @@ bool loadRomsToFPGA() {
         if (!clearVgcText())
             logLn("WARN: ROM load text clear failed before asset streaming");
 
-        if (!streamRomAsset(0, "basic ROM", BASIC_ROM_PATHS,
-                            sizeof(BASIC_ROM_PATHS) / sizeof(BASIC_ROM_PATHS[0]),
+        if (!streamRomAsset(0, "basic ROM", romPaths, romPathCount,
                             BOOT_ROM_LEN)) {
             logLn("ROM load attempt %d/%d FAILED: basic_rom streaming aborted",
                   loadAttempt, LOAD_ATTEMPTS);
@@ -1296,9 +1371,8 @@ bool loadRomsToFPGA() {
             continue;
         }
 
-        if (!streamRomAsset(1, "extension ROM", EXTENSION_ROM_PATHS,
-                            sizeof(EXTENSION_ROM_PATHS) / sizeof(EXTENSION_ROM_PATHS[0]),
-                            BOOT_ROM_LEN)) {
+        if (haveExt && !streamRomAsset(1, "extension ROM", extPaths,
+                                        extPathCount, BOOT_ROM_LEN)) {
             logLn("ROM load attempt %d/%d FAILED: ext_rom streaming aborted",
                   loadAttempt, LOAD_ATTEMPTS);
             delay(250);
@@ -1349,7 +1423,7 @@ bool loadRomsToFPGA() {
         logLn("ROM load FAILED after retries, but ROMs reached FPGA; attempting reset release for recovery");
         fpgaBridge.resetRelease();
     } else {
-        logLn("ROM load FAILED after retries before both ROMs completed; CPU remains held to avoid booting partial ROM");
+        logLn("ROM load FAILED after retries before ROM streaming completed; CPU remains held to avoid booting partial ROM");
     }
     return false;
 }
