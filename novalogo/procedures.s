@@ -1053,6 +1053,613 @@ proc_invoke:
       STA   tok_head_lo
       RTS
 
+; ---------------------------------------------------------------------
+; proc_find_by_name — search proc_head for a procedure by name string
+;   Input: ptr_lo/hi = length-prefixed name string (e.g. from eval_val)
+;   Output: carry clear = found, proc_entry_lo/hi = record
+;           carry set = not found
+;   Clobbers: A, X, Y, proc_entry, proc_name_len, proc_rec_off
+; ---------------------------------------------------------------------
+proc_find_by_name:
+      ; Save search name pointer
+      LDA   ptr_lo
+      STA   var_name_lo             ; reuse var scratch as search ptr
+      LDA   ptr_hi
+      STA   var_name_hi
+
+      LDA   proc_head_lo
+      STA   proc_entry_lo
+      LDA   proc_head_hi
+      STA   proc_entry_hi
+
+@walk:
+      LDA   proc_entry_lo
+      ORA   proc_entry_hi
+      BEQ   @not_found
+
+      ; Compare name lengths
+      LDA   var_name_lo
+      STA   ptr_lo
+      LDA   var_name_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y             ; search name length
+      STA   proc_name_len
+
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #2
+      LDA   (ptr_lo),Y             ; record name length
+      CMP   proc_name_len
+      BNE   @next
+
+      ; Lengths match — compare chars
+      TAX                           ; X = length
+      BEQ   @found                  ; both zero = match
+      LDY   #0
+@cmp:
+      PHX
+      PHY
+      ; Search char
+      LDA   var_name_lo
+      STA   ptr_lo
+      LDA   var_name_hi
+      STA   ptr_hi
+      INY                           ; +1 for length byte
+      LDA   (ptr_lo),Y
+      STA   proc_rec_off            ; temp: search char
+
+      ; Record char
+      PLY
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      PHY
+      TYA
+      CLC
+      ADC   #3                      ; record name starts at offset 3
+      TAY
+      LDA   (ptr_lo),Y
+      PLY
+      CMP   proc_rec_off
+      BNE   @ne_pop
+      PLX
+      INY
+      DEX
+      BNE   @cmp
+
+@found:
+      CLC
+      RTS
+
+@ne_pop:
+      PLX
+@next:
+      ; Follow next pointer
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y
+      TAX
+      INY
+      LDA   (ptr_lo),Y
+      STA   proc_entry_hi
+      STX   proc_entry_lo
+      BRA   @walk
+
+@not_found:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; do_pots — POTS: print all procedure names
+;   Arity 0, no arguments.
+; ---------------------------------------------------------------------
+do_pots:
+      LDA   proc_head_lo
+      STA   proc_entry_lo
+      LDA   proc_head_hi
+      STA   proc_entry_hi
+
+@walk:
+      LDA   proc_entry_lo
+      ORA   proc_entry_hi
+      BEQ   @done
+
+      ; Print name
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #2
+      LDA   (ptr_lo),Y             ; name_len
+      TAX
+      BEQ   @skip_name
+      LDY   #3
+@pch:
+      LDA   (ptr_lo),Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BNE   @pch
+@skip_name:
+      LDA   #' '
+      STA   VGC_CHAROUT
+
+      ; Follow next
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y
+      TAX
+      INY
+      LDA   (ptr_lo),Y
+      STA   proc_entry_hi
+      STX   proc_entry_lo
+      BRA   @walk
+
+@done:
+      JSR   eval_newline
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_po — PO "name: print procedure definition
+;   Arity 0 — evaluates its own argument
+; ---------------------------------------------------------------------
+do_po:
+      JSR   eval_expr
+      BCC   @po_type_ok
+      JMP   @err
+@po_type_ok:
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BEQ   @po_word_ok
+      JMP   @err
+@po_word_ok:
+
+      ; Look up by name
+      LDA   eval_val_lo
+      STA   ptr_lo
+      LDA   eval_val_hi
+      STA   ptr_hi
+      JSR   proc_find_by_name
+      BCC   @po_found
+      JMP   @err_notfound
+@po_found:
+
+      ; proc_entry_lo/hi = record
+      ; Print "TO "
+      LDA   #'T'
+      STA   VGC_CHAROUT
+      LDA   #'O'
+      STA   VGC_CHAROUT
+      LDA   #' '
+      STA   VGC_CHAROUT
+
+      ; Print name
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #2
+      LDA   (ptr_lo),Y             ; name_len
+      TAX
+      STA   proc_name_len
+      BEQ   @po_params
+      LDY   #3
+@po_name_ch:
+      LDA   (ptr_lo),Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BNE   @po_name_ch
+
+@po_params:
+      ; Y = 3 + name_len = offset to param_count
+      LDA   proc_name_len
+      CLC
+      ADC   #3
+      TAY
+      LDA   (ptr_lo),Y             ; param_count
+      STA   proc_param_cnt
+      INY                           ; offset to first param
+      STY   proc_rec_off
+
+      LDA   proc_param_cnt
+      BEQ   @po_header_done
+
+      LDX   proc_param_cnt
+@po_param:
+      ; Print " :"
+      LDA   #' '
+      STA   VGC_CHAROUT
+      LDA   #':'
+      STA   VGC_CHAROUT
+
+      ; Read param name length
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   proc_rec_off
+      LDA   (ptr_lo),Y             ; param name length
+      PHX
+      TAX                           ; X = chars to print
+      INY
+@po_pch:
+      CPX   #0
+      BEQ   @po_param_done
+      LDA   (ptr_lo),Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BRA   @po_pch
+@po_param_done:
+      STY   proc_rec_off
+      PLX
+      DEX
+      BNE   @po_param
+
+@po_header_done:
+      JSR   eval_newline
+
+      ; Read body_len
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   proc_rec_off
+      LDA   (ptr_lo),Y             ; body_len_lo
+      STA   proc_body_len_lo
+      INY
+      LDA   (ptr_lo),Y             ; body_len_hi
+      STA   proc_body_len_hi
+      INY                           ; Y = offset to body text
+
+      ; Compute absolute pointer to body
+      STY   proc_rec_off
+      CLC
+      LDA   proc_entry_lo
+      ADC   proc_rec_off
+      STA   proc_ptr_lo
+      LDA   proc_entry_hi
+      ADC   #0
+      STA   proc_ptr_hi
+
+      ; Print body text, converting $0A to CR+LF
+@po_body:
+      LDA   proc_body_len_lo
+      ORA   proc_body_len_hi
+      BEQ   @po_end
+
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      CMP   #$0A
+      BNE   @po_char
+      JSR   eval_newline
+      BRA   @po_advance
+@po_char:
+      STA   VGC_CHAROUT
+@po_advance:
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     LDA   proc_body_len_lo
+      BNE   :+
+      DEC   proc_body_len_hi
+:     DEC   proc_body_len_lo
+      BRA   @po_body
+
+@po_end:
+      ; Print "END"
+      LDA   #'E'
+      STA   VGC_CHAROUT
+      LDA   #'N'
+      STA   VGC_CHAROUT
+      LDA   #'D'
+      STA   VGC_CHAROUT
+      JSR   eval_newline
+      JMP   eval_continue
+
+@err:
+      LDX   #<str_po_err
+      LDY   #>str_po_err
+      JMP   list_print_err
+@err_notfound:
+      LDX   #<str_idk
+      LDY   #>str_idk
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_erase — ERASE "name: remove procedure from directory
+;   Arity 0 — evaluates its own argument
+; ---------------------------------------------------------------------
+do_erase:
+      JSR   eval_expr
+      BCC   @er_type_ok
+      JMP   @err
+@er_type_ok:
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BEQ   @er_word_ok
+      JMP   @err
+@er_word_ok:
+
+      ; Save name pointer
+      LDA   eval_val_lo
+      STA   var_name_lo
+      LDA   eval_val_hi
+      STA   var_name_hi
+
+      ; Walk proc_head with prev tracking
+      ; prev = address of "next" pointer to patch (starts as &proc_head)
+      LDA   #<proc_head_lo
+      STA   proc_ptr_lo             ; prev_ptr_lo
+      LDA   #>proc_head_lo
+      STA   proc_ptr_hi             ; prev_ptr_hi (ZP, so high byte = 0)
+
+      LDA   proc_head_lo
+      STA   proc_entry_lo
+      LDA   proc_head_hi
+      STA   proc_entry_hi
+
+@walk:
+      LDA   proc_entry_lo
+      ORA   proc_entry_hi
+      BNE   @walk_ok
+      JMP   @not_found
+@walk_ok:
+
+      ; Compare name
+      LDA   var_name_lo
+      STA   ptr_lo
+      LDA   var_name_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y             ; search name len
+      STA   proc_name_len
+
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #2
+      LDA   (ptr_lo),Y             ; record name len
+      CMP   proc_name_len
+      BNE   @erase_next
+
+      TAX
+      BEQ   @erase_match            ; both empty = match
+      LDY   #0
+@ecmp:
+      PHX
+      PHY
+      LDA   var_name_lo
+      STA   ptr_lo
+      LDA   var_name_hi
+      STA   ptr_hi
+      INY
+      LDA   (ptr_lo),Y             ; search char
+      STA   proc_rec_off
+
+      PLY
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      PHY
+      TYA
+      CLC
+      ADC   #3
+      TAY
+      LDA   (ptr_lo),Y             ; record char
+      PLY
+      CMP   proc_rec_off
+      BNE   @ecmp_ne
+      PLX
+      INY
+      DEX
+      BNE   @ecmp
+      BRA   @erase_match
+
+@ecmp_ne:
+      PLX
+
+@erase_next:
+      ; prev = &current->next (proc_entry + 0)
+      LDA   proc_entry_lo
+      STA   proc_ptr_lo
+      LDA   proc_entry_hi
+      STA   proc_ptr_hi
+      ; current = current->next
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y
+      TAX
+      INY
+      LDA   (ptr_lo),Y
+      STA   proc_entry_hi
+      STX   proc_entry_lo
+      BRA   @walk
+
+@erase_match:
+      ; Unlink: *prev = current->next
+      ; Read current->next
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y             ; next_lo
+      TAX
+      INY
+      LDA   (ptr_lo),Y             ; next_hi
+
+      ; Write to prev
+      LDY   #0
+      LDA   proc_ptr_lo
+      STA   ptr_lo
+      LDA   proc_ptr_hi
+      STA   ptr_hi
+      TXA
+      STA   (ptr_lo),Y             ; prev->next_lo = next_lo
+      INY
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #1
+      LDA   (ptr_lo),Y             ; re-read next_hi
+      LDY   #1
+      LDA   proc_ptr_lo
+      STA   ptr_lo
+      LDA   proc_ptr_hi
+      STA   ptr_hi
+      LDA   proc_entry_lo
+      STA   ptr2_lo
+      LDA   proc_entry_hi
+      STA   ptr2_hi
+      LDY   #1
+      LDA   (ptr2_lo),Y            ; next_hi
+      STA   (ptr_lo),Y             ; prev->next_hi = next_hi
+
+      JMP   eval_continue
+
+@not_found:
+      LDX   #<str_idk
+      LDY   #>str_idk
+      JMP   list_print_err
+@err:
+      LDX   #<str_erase_err
+      LDY   #>str_erase_err
+      JMP   list_print_err
+
+; ---------------------------------------------------------------------
+; do_apply — APPLY "proc [args]: call procedure with args from list
+;   Arity 0 — evaluates its own arguments
+;   Strategy: build "name arg1 arg2 ..." in input_buf, tokenize+eval.
+; ---------------------------------------------------------------------
+do_apply:
+      ; Evaluate first arg: procedure name (quoted word)
+      JSR   eval_expr
+      BCC   @ap_type_ok
+      JMP   @err
+@ap_type_ok:
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BEQ   @ap_word_ok
+      JMP   @err
+@ap_word_ok:
+
+      ; Copy proc name to input_buf
+      LDA   eval_val_lo
+      STA   ptr_lo
+      LDA   eval_val_hi
+      STA   ptr_hi
+      STZ   z:buf_idx
+      LDY   #0
+      LDA   (ptr_lo),Y             ; name length
+      TAX
+      BEQ   @apply_args
+      INY
+@apply_name:
+      LDA   (ptr_lo),Y
+      PHY
+      LDY   z:buf_idx
+      STA   input_buf,Y
+      INC   z:buf_idx
+      PLY
+      INY
+      DEX
+      BNE   @apply_name
+
+@apply_args:
+      ; Evaluate second arg: list of arguments
+      JSR   eval_expr
+      BCS   @err
+      LDA   eval_type
+      CMP   #VAL_LIST
+      BNE   @err
+
+      ; Render list elements to input_buf (after name)
+      ; eval_val_lo/hi = list head
+      LDA   eval_val_lo
+      ORA   eval_val_hi
+      BEQ   @apply_run              ; empty arg list, just run name
+
+      ; Use render_list_to_buf — it prepends space before elements
+      ; but we need a space before the first arg too
+      LDA   z:buf_idx
+      CMP   #126
+      BCS   @apply_run
+      TAY
+      LDA   #' '
+      STA   input_buf,Y
+      INC   z:buf_idx
+
+      ; render_list_to_buf expects eval_val set
+      JSR   render_list_to_buf
+
+@apply_run:
+      ; Null-terminate
+      LDX   z:buf_idx
+      STZ   input_buf,X
+
+      ; Save eval state and tokenize+eval (same pattern as do_run)
+      LDA   eval_cur_lo
+      PHA
+      LDA   eval_cur_hi
+      PHA
+      LDA   tok_head_lo
+      PHA
+      LDA   tok_head_hi
+      PHA
+      LDA   tok_tail_lo
+      PHA
+      LDA   tok_tail_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+      LDA   eval_reporter
+      PHA
+
+      JSR   tokenize_line
+      JSR   eval_line
+
+      PLA
+      STA   eval_reporter
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   tok_tail_hi
+      PLA
+      STA   tok_tail_lo
+      PLA
+      STA   tok_head_hi
+      PLA
+      STA   tok_head_lo
+      PLA
+      STA   eval_cur_hi
+      PLA
+      STA   eval_cur_lo
+
+      JMP   eval_continue
+
+@err:
+      LDX   #<str_apply_err
+      LDY   #>str_apply_err
+      JMP   list_print_err
+
 ; =====================================================================
 ; RODATA — procedure strings
 ; =====================================================================
@@ -1063,3 +1670,22 @@ str_defined:
 
 str_to_needs_name:
       .byte "TO NEEDS A NAME", 0
+
+str_po_err:
+      .byte "NOT ENOUGH INPUTS TO PO", 0
+
+str_erase_err:
+      .byte "NOT ENOUGH INPUTS TO ERASE", 0
+
+str_apply_err:
+      .byte "NOT ENOUGH INPUTS TO APPLY", 0
+
+; Builtin name strings for workspace commands
+str_po_name:
+      .byte 2, "PO"
+str_pots_name:
+      .byte 4, "POTS"
+str_erase_name:
+      .byte 5, "ERASE"
+str_apply_name:
+      .byte 5, "APPLY"

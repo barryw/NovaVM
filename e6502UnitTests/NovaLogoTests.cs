@@ -1099,6 +1099,62 @@ public class NovaLogoTests
         Assert.IsTrue(ones >= 2, $"Expected at least two '1' outputs from predicates.\n{screen}");
     }
 
+    [TestMethod]
+    public void PotsListsProcedures()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO FOO");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "TO BAR");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "POTS");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("FOO", StringComparison.Ordinal),
+            $"Expected FOO in POTS output.\n{screen}");
+        Assert.IsTrue(screen.Contains("BAR", StringComparison.Ordinal),
+            $"Expected BAR in POTS output.\n{screen}");
+    }
+
+    [TestMethod]
+    public void EraseProcedure()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO ZAP");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "PRINT 1");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "ERASE \"ZAP");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "ZAP");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("I DON'T KNOW HOW TO", StringComparison.Ordinal),
+            $"Expected error after ERASE.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

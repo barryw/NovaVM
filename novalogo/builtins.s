@@ -2751,4 +2751,20 @@ builtin_table:
       .word do_listp
       .byte 0
 
+      .word str_po_name
+      .word do_po
+      .byte 0
+
+      .word str_pots_name
+      .word do_pots
+      .byte 0
+
+      .word str_erase_name
+      .word do_erase
+      .byte 0
+
+      .word str_apply_name
+      .word do_apply
+      .byte 0
+
       .word $0000               ; end sentinel
