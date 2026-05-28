@@ -17,6 +17,7 @@ eval_left_frac: .res 1    ; saved left operand fractional byte
 eval_op:        .res 1    ; infix operator character
 handler_lo:     .res 1    ; saved handler address for JMP
 handler_hi:     .res 1
+eval_in_body:   .res 1    ; $00 = normal eval_loop, $01 = in body
 
 ; =====================================================================
 ; BSS segment — scratch for number printing
@@ -36,6 +37,7 @@ pn_buf:         .res 8    ; decimal digit buffer for print_number
 ;   Output: commands executed, errors printed
 ; ---------------------------------------------------------------------
 eval_line:
+      STZ   eval_in_body
       LDA   tok_head_lo
       STA   eval_cur_lo
       LDA   tok_head_hi
@@ -145,9 +147,115 @@ eval_loop:
 
 ; ---------------------------------------------------------------------
 ; eval_continue — handlers JMP here to resume the eval loop
+;   If eval_in_body != 0, resumes body execution instead
 ; ---------------------------------------------------------------------
 eval_continue:
+      LDA   eval_in_body
+      BNE   eval_body
       JMP   eval_loop
+
+; ---------------------------------------------------------------------
+; eval_body — execute tokens within a body until TOK_RBRACKET at depth 0
+;   Entry: eval_cur is at the next token to execute inside the body
+;   Exit:  eval_cur points at the TOK_RBRACKET that ended the body
+;   eval_in_body must be $01 on entry
+; ---------------------------------------------------------------------
+eval_body:
+      ; Check for end of list (safety — malformed input)
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BEQ   @done
+
+      ; Read tag of current token
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+
+      ; Hit the closing bracket? We're done with this body pass.
+      CMP   #TOK_RBRACKET
+      BEQ   @done
+
+      ; Dispatch command words (same as eval_loop)
+      CMP   #TOK_WORD
+      BEQ   @do_command
+
+      ; Skip non-word tokens (bare numbers, brackets inside expressions, etc.)
+      JSR   eval_advance
+      BRA   eval_body
+
+@do_command:
+      ; Same dispatch as eval_loop — look up builtin, eval args, call handler
+      JSR   lookup_builtin
+      BCS   @unknown
+
+      LDX   ptr2_lo
+      STX   handler_lo
+      LDX   ptr2_hi
+      STX   handler_hi
+      TAX
+      PHX
+      JSR   eval_advance
+      PLX
+
+      CPX   #0
+      BEQ   @call_handler
+@eval_args:
+      PHX
+      JSR   eval_expr
+      BCS   @arg_error
+      PLX
+      DEX
+      BNE   @eval_args
+
+@call_handler:
+      JMP   (handler_lo)
+      ; handler JMPs to eval_continue, which routes back here
+
+@arg_error:
+      PLX
+      LDX   #0
+@ae_lp:
+      LDA   str_notenough,X
+      BEQ   @ae_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @ae_lp
+@ae_done:
+      JSR   eval_newline
+      ; fall through to @done — abort body on error
+
+@done:
+      RTS
+
+@unknown:
+      ; Print "I don't know how to " + the word (inside body)
+      LDX   #0
+@unk_lp:
+      LDA   str_idk,X
+      BEQ   @unk_word
+      STA   VGC_CHAROUT
+      INX
+      BNE   @unk_lp
+@unk_word:
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_PAYLOAD
+      LDA   (ptr_lo),Y
+      TAX
+      LDY   #TOK_PAYLOAD+1
+@unk_ch:
+      LDA   (ptr_lo),Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BNE   @unk_ch
+      JSR   eval_newline
+      RTS
 
 ; ---------------------------------------------------------------------
 ; eval_advance — advance eval_cur to the next token in the list

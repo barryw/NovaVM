@@ -180,6 +180,77 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void RepeatPrintsMultipleTimes()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "REPEAT 3 [PRINT 42]");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // Count occurrences of "42" on separate lines
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+            if (line.TrimEnd().EndsWith("42")) count++;
+        Assert.IsTrue(count >= 3,
+            $"Expected at least 3 lines ending with '42' from REPEAT 3 [PRINT 42].\n{screen}");
+    }
+
+    [TestMethod]
+    public void RepeatZeroTimesDoesNothing()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "REPEAT 0 [PRINT 99]");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // Count lines where "99" appears alone (not part of the input echo)
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string trimmed = line.TrimEnd();
+            if (trimmed.EndsWith("99") && !trimmed.Contains("REPEAT"))
+                count++;
+        }
+        Assert.AreEqual(0, count,
+            $"Expected no output lines ending with '99' from REPEAT 0 [PRINT 99].\n{screen}");
+    }
+
+    [TestMethod]
+    public void RepeatWithMultipleCommands()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Two commands in one body
+        QueueLine(editor, "REPEAT 2 [TYPE 7 PRINT 8]");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // Should see "78" printed as "7" then "8\n" twice
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+            if (line.TrimEnd().EndsWith("78")) count++;
+        Assert.IsTrue(count >= 2,
+            $"Expected at least 2 lines ending with '78' from REPEAT 2 [TYPE 7 PRINT 8].\n{screen}");
+    }
+
+    [TestMethod]
     public void VariableInExpression()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);

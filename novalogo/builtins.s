@@ -230,6 +230,263 @@ do_make:
       JSR   eval_newline
       JMP   eval_continue
 
+; ---------------------------------------------------------------------
+; do_repeat — REPEAT count [body]
+;   Arity 0 — handles its own argument parsing
+;   1. Evaluate count expression
+;   2. Locate the bracketed body [...]
+;   3. Execute the body count times
+;   4. Resume after the closing ]
+;
+;   Nesting: saves/restores repeat state (body_start, body_resume,
+;   repeat_count, eval_in_body) on the hardware stack so nested
+;   REPEAT works correctly.
+; ---------------------------------------------------------------------
+
+      .segment "ZEROPAGE"
+repeat_count_lo:  .res 1
+repeat_count_hi:  .res 1
+body_start_lo:    .res 1       ; first token after [
+body_start_hi:    .res 1
+body_resume_lo:   .res 1       ; token after ]
+body_resume_hi:   .res 1
+
+      .segment "CODE"
+
+do_repeat:
+      ; --- Evaluate the count argument ---
+      JSR   eval_expr
+      BCC   @count_ok
+      JMP   @err_args             ; carry set = no token
+@count_ok:
+      ; Count must be a number
+      LDA   eval_type
+      BEQ   @type_ok
+      JMP   @err_args
+@type_ok:
+
+      ; --- Save outer repeat state for nesting ---
+      LDA   repeat_count_lo
+      PHA
+      LDA   repeat_count_hi
+      PHA
+      LDA   body_start_lo
+      PHA
+      LDA   body_start_hi
+      PHA
+      LDA   body_resume_lo
+      PHA
+      LDA   body_resume_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+
+      ; Store count (integer part only, clamped to 0 if negative)
+      LDA   eval_val_hi
+      BMI   @zero_count           ; negative = treat as 0
+      STA   repeat_count_hi
+      LDA   eval_val_lo
+      STA   repeat_count_lo
+      BRA   @find_body
+
+@zero_count:
+      STZ   repeat_count_lo
+      STZ   repeat_count_hi
+
+@find_body:
+      ; --- Current token must be TOK_LBRACKET ---
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   @have_tok
+      JMP   @err_bracket_pop
+@have_tok:
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_LBRACKET
+      BEQ   @is_bracket
+      JMP   @err_bracket_pop
+@is_bracket:
+
+      ; Advance past the [
+      JSR   eval_advance
+
+      ; Save body start (first token after [)
+      LDA   eval_cur_lo
+      STA   body_start_lo
+      LDA   eval_cur_hi
+      STA   body_start_hi
+
+      ; --- Scan forward to find the matching ] ---
+      LDX   #1                    ; depth (we've consumed the [)
+@scan:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   @scan_ok
+      JMP   @err_bracket_pop
+@scan_ok:
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+
+      CMP   #TOK_LBRACKET
+      BNE   @scan_not_lb
+      INX
+      BRA   @scan_next
+@scan_not_lb:
+      CMP   #TOK_RBRACKET
+      BNE   @scan_next
+      DEX
+      BEQ   @scan_found           ; depth == 0, found matching ]
+@scan_next:
+      PHX                        ; save depth across eval_advance
+      JSR   eval_advance
+      PLX
+      BRA   @scan
+
+@scan_found:
+      ; eval_cur is at the matching ]. Save resume point (token after ]).
+      JSR   eval_advance
+      LDA   eval_cur_lo
+      STA   body_resume_lo
+      LDA   eval_cur_hi
+      STA   body_resume_hi
+
+      ; --- Execute the body repeat_count times ---
+@loop:
+      ; Check if count is zero
+      LDA   repeat_count_lo
+      ORA   repeat_count_hi
+      BEQ   @loop_done
+
+      ; Set eval_cur to body start
+      LDA   body_start_lo
+      STA   eval_cur_lo
+      LDA   body_start_hi
+      STA   eval_cur_hi
+
+      ; Set body mode and call eval_body
+      LDA   #$01
+      STA   eval_in_body
+      JSR   eval_body
+
+      ; Decrement count (16-bit)
+      LDA   repeat_count_lo
+      BNE   @dec_lo
+      DEC   repeat_count_hi
+@dec_lo:
+      DEC   repeat_count_lo
+      BRA   @loop
+
+@loop_done:
+      ; --- Restore outer state and resume after ] ---
+      JSR   repeat_restore_state
+
+      ; Set eval_cur past the ] to resume
+      LDA   body_resume_lo
+      STA   eval_cur_lo
+      LDA   body_resume_hi
+      STA   eval_cur_hi
+      JMP   eval_continue
+
+@err_bracket_pop:
+      ; Restore stack before printing error
+      JSR   repeat_restore_state
+      ; Fall through to error message
+      LDX   #0
+@eb_lp:
+      LDA   str_repeat_bracket,X
+      BEQ   @eb_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @eb_lp
+@eb_done:
+      JSR   eval_newline
+      JMP   eval_continue
+
+@err_args:
+      LDX   #0
+@ea_lp:
+      LDA   str_repeat_err,X
+      BEQ   @ea_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @ea_lp
+@ea_done:
+      JSR   eval_newline
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; repeat_restore_state — pop 7 saved bytes from stack to ZP
+;   Restores eval_in_body, body_resume, body_start, repeat_count
+;   Must be called via JSR (uses return address on stack correctly)
+; ---------------------------------------------------------------------
+repeat_restore_state:
+      ; The JSR pushes 2 bytes (return address). We need to pop our
+      ; return address first, then the 7 saved bytes, then re-push
+      ; the return address. Simpler: store RA in ZP temporaries.
+      ; Actually, use a different approach: pull RA, pull state, push RA back.
+      ; But that's awkward. Let's just inline the restore... no, better:
+      ; Pull our return address, then do the pops, then JMP indirect.
+      ;
+      ; Actually simplest: the 7 bytes are deeper on the stack below our
+      ; JSR return address. Pull RA into handler_lo/hi temp, do pops, push RA, RTS.
+
+      PLA
+      STA   handler_lo            ; save return address low
+      PLA
+      STA   handler_hi            ; save return address high
+
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   body_resume_hi
+      PLA
+      STA   body_resume_lo
+      PLA
+      STA   body_start_hi
+      PLA
+      STA   body_start_lo
+      PLA
+      STA   repeat_count_hi
+      PLA
+      STA   repeat_count_lo
+
+      LDA   handler_hi
+      PHA
+      LDA   handler_lo
+      PHA
+      RTS
+
+; ---------------------------------------------------------------------
+; print_byte_hex — print A as 2 hex digits
+; ---------------------------------------------------------------------
+print_byte_hex:
+      PHA
+      LSR
+      LSR
+      LSR
+      LSR
+      JSR   @nibble
+      PLA
+      AND   #$0F
+      JSR   @nibble
+      RTS
+@nibble:
+      CMP   #$0A
+      BCC   @digit
+      ADC   #$06               ; carry is set, so adds 7
+@digit:
+      ADC   #'0'
+      STA   VGC_CHAROUT
+      RTS
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
@@ -238,6 +495,12 @@ do_make:
 str_make_err:
       .byte "NOT ENOUGH INPUTS TO MAKE", 0
 
+str_repeat_err:
+      .byte "NOT ENOUGH INPUTS TO REPEAT", 0
+
+str_repeat_bracket:
+      .byte "REPEAT NEEDS [ BODY ]", 0
+
 ; Name strings: length-prefixed
 str_print_name:
       .byte 5, "PRINT"
@@ -245,6 +508,8 @@ str_type_name:
       .byte 4, "TYPE"
 str_make_name:
       .byte 4, "MAKE"
+str_repeat_name:
+      .byte 6, "REPEAT"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -259,5 +524,9 @@ builtin_table:
       .word str_make_name
       .word do_make
       .byte 0                    ; arity 0: do_make handles its own args
+
+      .word str_repeat_name
+      .word do_repeat
+      .byte 0                    ; arity 0: do_repeat handles its own args
 
       .word $0000               ; end sentinel
