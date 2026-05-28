@@ -349,6 +349,111 @@ public class NovaLogoTests
             $"Expected no output '222' from IFELSE 10 > 5 false branch.\n{screen}");
     }
 
+    [TestMethod]
+    public void DefineAndCallNoParamProcedure()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Define a no-param procedure
+        QueueLine(editor, "TO HI");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "PRINT 99");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        string screenAfterDef = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screenAfterDef.Contains("DEFINED", StringComparison.Ordinal),
+            $"Expected 'DEFINED' confirmation.\n{screenAfterDef}");
+
+        // Call it
+        QueueLine(editor, "HI");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "99") count++;
+        }
+        Assert.IsTrue(count >= 1,
+            $"Expected at least one line of just '99' from HI.\n{screen}");
+    }
+
+    [TestMethod]
+    public void DefineAndCallProcedure()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Define procedure
+        QueueLine(editor, "TO SQUARE :SIZE");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "PRINT :SIZE");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        string screenAfterDef = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screenAfterDef.Contains("DEFINED", StringComparison.Ordinal),
+            $"Expected 'DEFINED' confirmation.\n{screenAfterDef}");
+
+        // Call it
+        QueueLine(editor, "SQUARE 42");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "42") count++;
+        }
+        Assert.IsTrue(count >= 1,
+            $"Expected at least one line of just '42' from SQUARE 42.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ProcedureWithTwoParams()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO ADD2 :A :B");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "PRINT :A + :B");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "ADD2 10 20");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+        {
+            string t = line.Trim();
+            if (t == "30") count++;
+        }
+        Assert.IsTrue(count >= 1,
+            $"Expected '30' from ADD2 10 20.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

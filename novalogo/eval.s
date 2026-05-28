@@ -115,6 +115,13 @@ eval_loop:
       RTS
 
 @unknown:
+      ; Try user-defined procedures before erroring
+      JSR   proc_lookup
+      BCS   @truly_unknown
+      ; Found a procedure — invoke it
+      JMP   proc_invoke
+
+@truly_unknown:
       ; Print "I don't know how to " + the word
       LDX   #0
 @unk_lp:
@@ -231,6 +238,12 @@ eval_body:
       RTS
 
 @unknown:
+      ; Try user-defined procedures before erroring (inside body)
+      JSR   proc_lookup
+      BCS   @truly_unknown
+      JMP   proc_invoke
+
+@truly_unknown:
       ; Print "I don't know how to " + the word (inside body)
       LDX   #0
 @unk_lp:

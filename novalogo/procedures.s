@@ -1,0 +1,920 @@
+; procedures.s — user-defined procedure storage and invocation
+;
+; Procedure record layout (heap-allocated linked list):
+;   +0: next_lo
+;   +1: next_hi    (pointer to next procedure, or $0000)
+;   +2: name_len   (1 byte)
+;   +3..3+NL-1: name chars (uppercased)
+;   +3+NL: param_count (1 byte)
+;   For each param:
+;     1 byte: param_name_len
+;     N bytes: param_name chars (uppercased)
+;   After all params:
+;     2 bytes: body_len_lo, body_len_hi (16-bit)
+;     body_len bytes: body text (lines separated by $0A)
+
+; =====================================================================
+; ZEROPAGE segment — procedure variables
+; =====================================================================
+      .segment "ZEROPAGE"
+
+proc_head_lo:     .res 1        ; head of procedure directory
+proc_head_hi:     .res 1
+proc_entry_lo:    .res 1        ; current entry pointer (walk scratch)
+proc_entry_hi:    .res 1
+proc_ptr_lo:      .res 1        ; scratch pointer for proc operations
+proc_ptr_hi:      .res 1
+proc_body_len_lo: .res 1        ; body length during collection / invocation
+proc_body_len_hi: .res 1
+proc_param_cnt:   .res 1        ; param count during define / invoke
+proc_name_len:    .res 1        ; name length scratch
+proc_rec_off:     .res 1        ; offset into record during invoke
+
+; =====================================================================
+; BSS segment — temporary buffers
+; =====================================================================
+      .segment "BSS"
+
+proc_body_buf:    .res 2048     ; temporary buffer for body during TO/END
+proc_name_buf:    .res 32       ; procedure name: length-prefixed
+proc_param_buf:   .res 128      ; packed: count, [len,chars]... each param
+proc_param_end:   .res 1        ; write offset into proc_param_buf
+
+; Save area for eval state during procedure invocation
+save_eval_cur_lo: .res 1
+save_eval_cur_hi: .res 1
+save_tok_head_lo: .res 1
+save_tok_head_hi: .res 1
+save_tok_tail_lo: .res 1
+save_tok_tail_hi: .res 1
+save_input_buf:   .res 128      ; save outer input_buf during proc body exec
+save_heap_ptr_lo: .res 1        ; save heap for token re-use
+save_heap_ptr_hi: .res 1
+
+; Param-binding scratch: length-prefixed name built here for var_set
+param_name_tmp:   .res 32
+
+; =====================================================================
+; CODE segment — procedure routines
+; =====================================================================
+      .segment "CODE"
+
+; ---------------------------------------------------------------------
+; proc_init — initialize procedure directory to empty
+; ---------------------------------------------------------------------
+proc_init:
+      STZ   proc_head_lo
+      STZ   proc_head_hi
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_collect — enter TO/END multi-line collection mode
+;   Called from main_loop after detecting TO as first token.
+;   eval_cur_lo/hi has been advanced past the TO token.
+; ---------------------------------------------------------------------
+proc_collect:
+      ; Next token should be the procedure name (TOK_WORD)
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BNE   @have_name
+      JMP   @err_noname
+@have_name:
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_WORD
+      BEQ   @name_ok
+      JMP   @err_noname
+@name_ok:
+      ; Copy procedure name to proc_name_buf (length-prefixed)
+      LDY   #TOK_PAYLOAD
+      LDA   (ptr_lo),Y           ; name length
+      STA   proc_name_buf
+      STA   proc_name_len
+      TAX                         ; X = char count
+      LDY   #TOK_PAYLOAD+1
+      LDA   #0
+      STA   proc_rec_off          ; dest index in name_buf
+@copy_name:
+      CPX   #0
+      BEQ   @name_copied
+      LDA   (ptr_lo),Y           ; already uppercased by tokenizer
+      PHY
+      LDY   proc_rec_off
+      STA   proc_name_buf+1,Y
+      INC   proc_rec_off
+      PLY
+      INY
+      DEX
+      BRA   @copy_name
+@name_copied:
+
+      ; Advance past the name token
+      JSR   eval_advance
+
+      ; Parse parameter names (TOK_VARREF tokens: :SIZE :COLOR etc.)
+      STZ   proc_param_cnt
+      LDA   #1                    ; dest offset (skip count byte at [0])
+      STA   proc_param_end
+
+@parse_params:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BEQ   @params_done
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_TAG
+      LDA   (ptr_lo),Y
+      CMP   #TOK_VARREF
+      BNE   @params_done
+
+      INC   proc_param_cnt
+      LDY   #TOK_PAYLOAD
+      LDA   (ptr_lo),Y           ; param name length
+      LDX   proc_param_end
+      STA   proc_param_buf,X     ; store length
+      INX
+      TAY                         ; Y = char count to copy
+      STZ   proc_rec_off          ; source char index
+
+@copy_param_ch:
+      CPY   #0
+      BEQ   @param_ch_done
+      ; Read source char from token
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      PHY
+      LDA   proc_rec_off
+      CLC
+      ADC   #TOK_PAYLOAD+1
+      TAY
+      LDA   (ptr_lo),Y           ; already uppercased
+      PLY
+      ; Write to proc_param_buf
+      STA   proc_param_buf,X
+      INX
+      INC   proc_rec_off
+      DEY
+      BRA   @copy_param_ch
+@param_ch_done:
+      STX   proc_param_end
+
+      JSR   eval_advance
+      BRA   @parse_params
+
+@params_done:
+      LDA   proc_param_cnt
+      STA   proc_param_buf        ; count byte at [0]
+
+      ; Initialize body buffer
+      STZ   proc_body_len_lo
+      STZ   proc_body_len_hi
+
+      ; Read body lines until END
+@read_body_line:
+      JSR   print_cont_prompt
+      JSR   read_line
+
+      ; Check if line is just "END"
+      JSR   check_end_line
+      BCS   @body_done
+
+      ; Append input_buf chars to proc_body_buf, then $0A
+      LDX   #0
+@copy_body_ch:
+      CPX   z:buf_idx
+      BCS   @append_nl
+
+      ; Compute dest address: proc_body_buf + body_len
+      PHX
+      CLC
+      LDA   proc_body_len_lo
+      ADC   #<proc_body_buf
+      STA   proc_ptr_lo
+      LDA   proc_body_len_hi
+      ADC   #>proc_body_buf
+      STA   proc_ptr_hi
+      PLX
+
+      LDA   input_buf,X
+      LDY   #0
+      STA   (proc_ptr_lo),Y
+
+      INC   proc_body_len_lo
+      BNE   :+
+      INC   proc_body_len_hi
+:     INX
+      BRA   @copy_body_ch
+
+@append_nl:
+      ; Add $0A separator
+      CLC
+      LDA   proc_body_len_lo
+      ADC   #<proc_body_buf
+      STA   proc_ptr_lo
+      LDA   proc_body_len_hi
+      ADC   #>proc_body_buf
+      STA   proc_ptr_hi
+      LDA   #$0A
+      LDY   #0
+      STA   (proc_ptr_lo),Y
+      INC   proc_body_len_lo
+      BNE   :+
+      INC   proc_body_len_hi
+:     BRA   @read_body_line
+
+@body_done:
+      ; Build the heap record
+      JSR   proc_build_record
+
+      ; Print "NAME DEFINED\n"
+      LDX   proc_name_len
+      LDY   #0
+@print_name:
+      CPX   #0
+      BEQ   @print_def
+      LDA   proc_name_buf+1,Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BRA   @print_name
+@print_def:
+      LDX   #0
+@pd_lp:
+      LDA   str_defined,X
+      BEQ   @pd_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @pd_lp
+@pd_done:
+      JSR   eval_newline
+      RTS
+
+@err_noname:
+      LDX   #0
+@en_lp:
+      LDA   str_to_needs_name,X
+      BEQ   @en_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @en_lp
+@en_done:
+      JSR   eval_newline
+      RTS
+
+; ---------------------------------------------------------------------
+; check_end_line — check if input_buf == "END" (case-insensitive)
+;   Returns: carry set = yes, carry clear = no
+; ---------------------------------------------------------------------
+check_end_line:
+      LDA   z:buf_idx
+      CMP   #3
+      BNE   @no
+      LDA   input_buf
+      AND   #$DF
+      CMP   #'E'
+      BNE   @no
+      LDA   input_buf+1
+      AND   #$DF
+      CMP   #'N'
+      BNE   @no
+      LDA   input_buf+2
+      AND   #$DF
+      CMP   #'D'
+      BNE   @no
+      SEC
+      RTS
+@no:
+      CLC
+      RTS
+
+; ---------------------------------------------------------------------
+; print_cont_prompt — print "> "
+; ---------------------------------------------------------------------
+print_cont_prompt:
+      LDA   #'>'
+      STA   VGC_CHAROUT
+      LDA   #' '
+      STA   VGC_CHAROUT
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_build_record — allocate and populate a procedure heap record
+;   Uses: proc_name_buf, proc_param_buf/proc_param_end,
+;         proc_body_buf/proc_body_len
+; ---------------------------------------------------------------------
+proc_build_record:
+      ; Calculate total record size
+      ; 2 (next) + 1 (name_len) + name_len
+      ; + 1 (param_count) + (proc_param_end - 1) param packed bytes
+      ; + 2 (body_len) + body_len
+      ;
+      ; We build the total in proc_ptr_lo:proc_ptr_hi (16-bit)
+
+      LDA   #4                    ; 2(next) + 1(name_len) + 1(param_count)
+      CLC
+      ADC   proc_name_buf         ; + name_len
+      STA   proc_ptr_lo
+      LDA   #0
+      STA   proc_ptr_hi
+
+      ; + param packed bytes (proc_param_end - 1)
+      LDA   proc_param_end
+      SEC
+      SBC   #1
+      CLC
+      ADC   proc_ptr_lo
+      STA   proc_ptr_lo
+      BCC   :+
+      INC   proc_ptr_hi
+:
+      ; + 2 (body_len field)
+      CLC
+      LDA   proc_ptr_lo
+      ADC   #2
+      STA   proc_ptr_lo
+      BCC   :+
+      INC   proc_ptr_hi
+:
+      ; + body_len
+      CLC
+      LDA   proc_ptr_lo
+      ADC   proc_body_len_lo
+      STA   proc_ptr_lo
+      LDA   proc_ptr_hi
+      ADC   proc_body_len_hi
+      STA   proc_ptr_hi
+
+      ; Manual heap bump (heap_alloc only handles 8-bit sizes)
+      LDA   heap_ptr
+      STA   proc_entry_lo
+      LDA   heap_ptr+1
+      STA   proc_entry_hi
+
+      CLC
+      LDA   heap_ptr
+      ADC   proc_ptr_lo
+      STA   heap_ptr
+      LDA   heap_ptr+1
+      ADC   proc_ptr_hi
+      STA   heap_ptr+1
+
+      ; OOM check
+      CMP   #>HEAP_END
+      BCC   @ok
+      BNE   @oom
+      LDA   heap_ptr
+      CMP   #<HEAP_END
+      BCC   @ok
+      BEQ   @ok
+@oom:
+      LDA   proc_entry_lo
+      STA   heap_ptr
+      LDA   proc_entry_hi
+      STA   heap_ptr+1
+      RTS
+@ok:
+      ; Fill the record using (ptr_lo),Y indirect addressing
+      ; We track Y as the write offset. For records > 256 bytes
+      ; we bump ptr_hi when Y wraps.
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+
+      ; +0,+1: next pointer = current proc_head
+      LDY   #0
+      LDA   proc_head_lo
+      STA   (ptr_lo),Y
+      INY
+      LDA   proc_head_hi
+      STA   (ptr_lo),Y
+
+      ; +2: name_len
+      INY
+      LDA   proc_name_buf
+      STA   (ptr_lo),Y
+
+      ; +3..+3+NL-1: name chars
+      LDX   proc_name_buf         ; X = char count
+      STZ   proc_rec_off          ; source index
+@bld_name:
+      CPX   #0
+      BEQ   @bld_name_done
+      INY
+      BNE   :+
+      INC   ptr_hi
+:     PHX
+      LDX   proc_rec_off
+      LDA   proc_name_buf+1,X
+      PLX
+      STA   (ptr_lo),Y
+      INC   proc_rec_off
+      DEX
+      BRA   @bld_name
+@bld_name_done:
+
+      ; +3+NL: param_count
+      INY
+      BNE   :+
+      INC   ptr_hi
+:     LDA   proc_param_cnt
+      STA   (ptr_lo),Y
+
+      ; Copy packed param data from proc_param_buf[1..proc_param_end-1]
+      LDA   proc_param_end
+      CMP   #2                    ; at least 1 = there are params
+      BCC   @bld_params_done
+      LDX   #1                    ; source index (skip count byte)
+@bld_param:
+      CPX   proc_param_end
+      BCS   @bld_params_done
+      INY
+      BNE   :+
+      INC   ptr_hi
+:     LDA   proc_param_buf,X
+      STA   (ptr_lo),Y
+      INX
+      BRA   @bld_param
+@bld_params_done:
+
+      ; body_len_lo, body_len_hi
+      INY
+      BNE   :+
+      INC   ptr_hi
+:     LDA   proc_body_len_lo
+      STA   (ptr_lo),Y
+      INY
+      BNE   :+
+      INC   ptr_hi
+:     LDA   proc_body_len_hi
+      STA   (ptr_lo),Y
+
+      ; Copy body text
+      LDA   proc_body_len_lo
+      ORA   proc_body_len_hi
+      BEQ   @bld_body_done
+
+      LDA   #<proc_body_buf
+      STA   proc_ptr_lo
+      LDA   #>proc_body_buf
+      STA   proc_ptr_hi
+      ; 16-bit counter
+      LDA   proc_body_len_lo
+      STA   num_tmp_lo
+      LDA   proc_body_len_hi
+      STA   num_tmp_hi
+
+@bld_body:
+      INY
+      BNE   :+
+      INC   ptr_hi
+:     PHY
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      PLY
+      STA   (ptr_lo),Y
+      ; Advance source
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     ; Decrement counter
+      LDA   num_tmp_lo
+      BNE   @bld_dec_lo
+      DEC   num_tmp_hi
+@bld_dec_lo:
+      DEC   num_tmp_lo
+      LDA   num_tmp_lo
+      ORA   num_tmp_hi
+      BNE   @bld_body
+
+@bld_body_done:
+      ; Prepend to directory
+      LDA   proc_entry_lo
+      STA   proc_head_lo
+      LDA   proc_entry_hi
+      STA   proc_head_hi
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_lookup — search for a procedure by name
+;   Input: eval_cur_lo/hi points to a TOK_WORD token
+;   Output: carry clear = found, proc_entry_lo/hi = record
+;           carry set = not found
+; ---------------------------------------------------------------------
+proc_lookup:
+      LDA   proc_head_lo
+      STA   proc_entry_lo
+      LDA   proc_head_hi
+      STA   proc_entry_hi
+
+@walk:
+      LDA   proc_entry_lo
+      ORA   proc_entry_hi
+      BEQ   @not_found
+
+      JSR   proc_names_equal
+      BCS   @found
+
+      ; Follow next pointer
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y
+      TAX
+      INY
+      LDA   (ptr_lo),Y
+      STA   proc_entry_hi
+      STX   proc_entry_lo
+      BRA   @walk
+
+@found:
+      CLC
+      RTS
+@not_found:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_names_equal — compare token word vs record name
+;   Input: eval_cur_lo/hi = TOK_WORD, proc_entry_lo/hi = record
+;   Returns: carry set = equal, carry clear = not equal
+; ---------------------------------------------------------------------
+proc_names_equal:
+      ; Token name length
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_PAYLOAD
+      LDA   (ptr_lo),Y
+      STA   proc_name_len         ; token name length
+
+      ; Record name length
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #2
+      LDA   (ptr_lo),Y
+
+      CMP   proc_name_len
+      BNE   @ne
+
+      ; Lengths match — compare chars
+      TAX                         ; X = length
+      BEQ   @eq
+      LDY   #0                    ; char index
+@cmp:
+      PHX
+      PHY
+      ; Token char at eval_cur + TOK_PAYLOAD + 1 + charIdx
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      TYA
+      CLC
+      ADC   #TOK_PAYLOAD+1
+      TAY
+      LDA   (ptr_lo),Y
+      STA   proc_rec_off          ; temp: token char
+
+      ; Record char at proc_entry + 3 + charIdx
+      PLY
+      PHY
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      TYA
+      CLC
+      ADC   #3
+      TAY
+      LDA   (ptr_lo),Y
+
+      CMP   proc_rec_off
+      BNE   @ne_pop
+      PLY
+      PLX
+      INY
+      DEX
+      BNE   @cmp
+@eq:
+      SEC
+      RTS
+@ne_pop:
+      PLY
+      PLX
+@ne:
+      CLC
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_invoke — invoke a user-defined procedure
+;   Input: eval_cur_lo/hi = TOK_WORD token (the procedure name)
+;          proc_entry_lo/hi = matching procedure record
+;   On exit: JMPs to eval_loop or eval_body to continue.
+; ---------------------------------------------------------------------
+proc_invoke:
+      ; Save outer tokenizer and eval state on the hardware stack.
+      ; We push: tok_head(2), tok_tail(2), eval_in_body(1) = 5 bytes.
+      ; input_buf is saved to BSS (128 bytes too large for stack).
+      LDA   tok_head_lo
+      PHA
+      LDA   tok_head_hi
+      PHA
+      LDA   tok_tail_lo
+      PHA
+      LDA   tok_tail_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+
+      ; Save input_buf to BSS save area
+      LDX   #0
+@save_ib:
+      LDA   input_buf,X
+      STA   save_input_buf,X
+      INX
+      CPX   #128
+      BNE   @save_ib
+
+      ; Advance eval_cur past the procedure name token
+      JSR   eval_advance
+
+      ; --- Bind parameters ---
+      ; Navigate to param_count in the record:
+      ;   offset = 3 + name_len
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   #2
+      LDA   (ptr_lo),Y           ; name_len
+      CLC
+      ADC   #3
+      TAY                         ; Y = offset to param_count
+      LDA   (ptr_lo),Y           ; param_count
+      STA   proc_param_cnt
+      INY                         ; Y = offset to first param name
+      STY   proc_rec_off          ; save record offset
+
+      LDA   proc_param_cnt
+      BEQ   @bind_done
+
+      LDX   proc_param_cnt
+@bind_loop:
+      PHX                         ; save remaining param count
+
+      ; First: evaluate the next argument from the caller's token stream.
+      ; eval_cur still points into the caller's token list.
+      JSR   eval_expr
+      BCC   @arg_ok
+      JMP   @bind_err
+@arg_ok:
+
+      ; eval_val now holds the argument value.
+      ; Push value onto stack (type + 3 value bytes = 4 bytes)
+      LDA   eval_val_frac
+      PHA
+      LDA   eval_val_lo
+      PHA
+      LDA   eval_val_hi
+      PHA
+      LDA   eval_type
+      PHA
+
+      ; Build the param name as a length-prefixed string in param_name_tmp
+      ; Read from record at proc_entry + proc_rec_off
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   proc_rec_off
+      LDA   (ptr_lo),Y           ; param name length
+      STA   param_name_tmp        ; length byte
+      TAX                         ; X = char count
+      LDA   #0
+      STA   proc_name_len         ; dest offset in param_name_tmp
+@bind_ch:
+      CPX   #0
+      BEQ   @bind_ch_done
+      INY
+      LDA   (ptr_lo),Y
+      PHX
+      LDX   proc_name_len
+      STA   param_name_tmp+1,X
+      INC   proc_name_len
+      PLX
+      DEX
+      BRA   @bind_ch
+@bind_ch_done:
+      ; Advance proc_rec_off past this param
+      INY
+      STY   proc_rec_off
+
+      ; Pop value from stack back into eval_val
+      PLA
+      STA   eval_type
+      PLA
+      STA   eval_val_hi
+      PLA
+      STA   eval_val_lo
+      PLA
+      STA   eval_val_frac
+
+      ; Call var_set with ptr_lo/hi → param_name_tmp
+      LDA   #<param_name_tmp
+      STA   ptr_lo
+      LDA   #>param_name_tmp
+      STA   ptr_hi
+      JSR   var_set
+
+      PLX                         ; restore remaining count
+      DEX
+      BNE   @bind_loop
+
+@bind_done:
+      ; Save heap pointer AFTER param binding so var_set allocations persist.
+      ; Body tokenization will reuse heap from this point each line.
+      LDA   heap_ptr
+      STA   save_heap_ptr_lo
+      LDA   heap_ptr+1
+      STA   save_heap_ptr_hi
+
+      ; Save eval_cur (resume point after all args consumed from caller)
+      LDA   eval_cur_lo
+      STA   save_eval_cur_lo
+      LDA   eval_cur_hi
+      STA   save_eval_cur_hi
+
+      ; --- Execute the body ---
+      ; Navigate to body in the record:
+      ;   proc_rec_off now points past all params.
+      ;   Next 2 bytes = body_len, then body text.
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      LDY   proc_rec_off
+      LDA   (ptr_lo),Y           ; body_len_lo
+      STA   proc_body_len_lo
+      INY
+      LDA   (ptr_lo),Y           ; body_len_hi
+      STA   proc_body_len_hi
+      INY                         ; Y = offset to body text start
+      STY   proc_rec_off
+
+      ; Compute absolute pointer to body text start
+      CLC
+      LDA   proc_entry_lo
+      ADC   proc_rec_off
+      STA   proc_ptr_lo
+      LDA   proc_entry_hi
+      ADC   #0
+      STA   proc_ptr_hi
+
+      ; Process body line by line: find each $0A, copy line to input_buf,
+      ; tokenize, eval, repeat.
+      ; proc_ptr = current position in body text
+      ; proc_body_len = remaining bytes
+
+@exec_line:
+      ; Any body text remaining?
+      LDA   proc_body_len_lo
+      ORA   proc_body_len_hi
+      BEQ   @exec_done
+
+      ; Reset heap for this line's tokens (reuse token heap each line)
+      LDA   save_heap_ptr_lo
+      STA   heap_ptr
+      LDA   save_heap_ptr_hi
+      STA   heap_ptr+1
+
+      ; Copy characters from body to input_buf until $0A or end
+      LDX   #0                    ; input_buf index
+@line_ch:
+      LDA   proc_body_len_lo
+      ORA   proc_body_len_hi
+      BEQ   @line_end             ; no more body text
+
+      LDY   #0
+      LDA   (proc_ptr_lo),Y      ; read body char
+      CMP   #$0A
+      BEQ   @line_nl
+
+      ; Store in input_buf
+      STA   input_buf,X
+      INX
+
+      ; Advance body pointer
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     ; Decrement remaining
+      LDA   proc_body_len_lo
+      BNE   @ln_dec_lo
+      DEC   proc_body_len_hi
+@ln_dec_lo:
+      DEC   proc_body_len_lo
+      BRA   @line_ch
+
+@line_nl:
+      ; Skip the $0A
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     LDA   proc_body_len_lo
+      BNE   @ln2_dec_lo
+      DEC   proc_body_len_hi
+@ln2_dec_lo:
+      DEC   proc_body_len_lo
+
+@line_end:
+      ; Null-terminate input_buf
+      STZ   input_buf,X
+
+      ; Tokenize this line
+      JSR   tokenize_line
+
+      ; Eval this line (full eval — not body mode)
+      JSR   eval_line
+
+      BRA   @exec_line
+
+@exec_done:
+      ; Restore heap pointer (procedures stay, but per-line tokens freed)
+      LDA   save_heap_ptr_lo
+      STA   heap_ptr
+      LDA   save_heap_ptr_hi
+      STA   heap_ptr+1
+
+      ; Restore input_buf
+      LDX   #0
+@rest_ib:
+      LDA   save_input_buf,X
+      STA   input_buf,X
+      INX
+      CPX   #128
+      BNE   @rest_ib
+
+      ; Restore eval_cur to the resume point in the caller's token stream
+      LDA   save_eval_cur_lo
+      STA   eval_cur_lo
+      LDA   save_eval_cur_hi
+      STA   eval_cur_hi
+
+      ; Restore outer tokenizer state from stack
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   tok_tail_hi
+      PLA
+      STA   tok_tail_lo
+      PLA
+      STA   tok_head_hi
+      PLA
+      STA   tok_head_lo
+
+      ; Continue with caller's eval loop
+      LDA   eval_in_body
+      BNE   @in_body
+      JMP   eval_loop
+@in_body:
+      JMP   eval_body
+
+@bind_err:
+      PLX                         ; discard remaining param count
+      ; Print error
+      LDX   #0
+@be_lp:
+      LDA   str_notenough,X
+      BEQ   @be_done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @be_lp
+@be_done:
+      JSR   eval_newline
+      ; Restore state and abort
+      JMP   @exec_done
+
+; =====================================================================
+; RODATA — procedure strings
+; =====================================================================
+      .segment "RODATA"
+
+str_defined:
+      .byte " DEFINED", 0
+
+str_to_needs_name:
+      .byte "TO NEEDS A NAME", 0
