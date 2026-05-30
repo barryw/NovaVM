@@ -70,4 +70,22 @@ VTEXT_REGION_FLAGS = 8
 VTEXT_REGION_RESERVED = 9
 VTEXT_REGION_SIZE = 10
 
+; Public helper routines.
+.global vtext_define_region
+.global vtext_select_region
+.global vtext_store_region
+.global vtext_validate_region
+.global vtext_set_cursor
+.global vtext_sync_cursor
+.global vtext_home
+.global vtext_put_char
+.global vtext_puts
+.global vtext_put_hex_nibble
+.global vtext_put_hex_byte
+.global vtext_newline
+.global vtext_clear_region
+.global vtext_clear_line
+.global vtext_scroll_up
+.global vtext_wait_blitter
+
 .endif

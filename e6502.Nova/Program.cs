@@ -45,6 +45,7 @@ return verb switch
     "wifi"       => DoWifi(args[1..], remoteHost),
     "audio"      => DoAudio(args[1..], remoteHost),
     "keyboard"   => DoKeyboard(args[1..], remoteHost),
+    "vm" or "emulator" => DoVm(args[1..], remoteHost),
     "disk"       => DoDisk(args[1..], remoteHost),
     "rom"        => DoRom(args[1..], remoteHost),
     "soundfont"  => DoSoundfont(args[1..], remoteHost),
@@ -905,6 +906,338 @@ static void PrintKeyboardUsage()
     Console.Error.WriteLine("  Menus: use Alt+letter if your terminal supports Meta, or press Esc then the letter.");
 }
 
+static int DoVm(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    var rest = args.ToList();
+    bool missingCommand = rest.Count == 0;
+    bool help = missingCommand || rest[0].Equals("help", StringComparison.OrdinalIgnoreCase);
+    help |= TakeFlag(rest, "--help", "-h");
+    string? portOpt = TakeOptionValue(rest, "--port", "--debug-port");
+    bool pretty = TakeFlag(rest, "--pretty");
+    bool json = TakeFlag(rest, "--json");
+    bool allowError = TakeFlag(rest, "--allow-error");
+
+    if (help)
+    {
+        PrintVmUsage();
+        return missingCommand ? 1 : 0;
+    }
+
+    string targetHost = host ?? "127.0.0.1";
+    int port = host is null ? 6502 : 6503;
+    if (portOpt is not null && (!int.TryParse(portOpt, out port) || port is < 1 or > 65535))
+    {
+        Console.Error.WriteLine($"Invalid debug TCP port: {portOpt}");
+        return 1;
+    }
+
+    string command = rest[0].ToLowerInvariant();
+    rest.RemoveAt(0);
+
+    try
+    {
+        JsonObject request = command switch
+        {
+            "raw" => BuildVmRawRequest(rest),
+            "cold-start" or "coldstart" => BuildVmColdStartRequest(rest),
+            "reset" or "vm-reset" => BuildVmResetRequest(rest),
+            "wait" or "wait-ready" => BuildVmWaitRequest(rest),
+            "screen" => new JsonObject { ["command"] = "read_screen" },
+            "line" => BuildVmLineRequest(rest),
+            "cursor" => new JsonObject { ["command"] = "get_cursor" },
+            "type" or "type-text" => BuildVmTypeTextRequest(rest),
+            "line-input" or "enter" => BuildVmLineInputRequest(rest),
+            "key" => BuildVmKeyRequest(rest),
+            "peek" => BuildVmPeekRequest(rest),
+            "peek-block" => BuildVmPeekBlockRequest(rest),
+            "poke" => BuildVmPokeRequest(rest),
+            "read-vram" => BuildVmReadVramRequest(rest),
+            "fill-vram" => BuildVmFillVramRequest(rest),
+            "run-cycles" => BuildVmRunCyclesRequest(rest),
+            "state" => new JsonObject { ["command"] = "dbg_state" },
+            "pause" => new JsonObject { ["command"] = "dbg_pause" },
+            "resume" => new JsonObject { ["command"] = "dbg_resume" },
+            "step" => new JsonObject { ["command"] = "dbg_step" },
+            "break-list" => new JsonObject { ["command"] = "dbg_break_list" },
+            "break-clear-all" => new JsonObject { ["command"] = "dbg_break_clear_all" },
+            _ => throw new ArgumentException($"Unknown vm command: {command}")
+        };
+
+        if (rest.Count > 0)
+            throw new ArgumentException($"Unexpected vm argument: {rest[0]}");
+
+        JsonNode response = SendVmRequest(targetHost, port, request);
+        bool ok = response["ok"]?.GetValue<bool>() == true;
+        if (!allowError && !ok)
+        {
+            Console.Error.WriteLine(response["error"]?.ToString() ?? response.ToJsonString());
+            return 1;
+        }
+
+        PrintVmResponse(command, response, json || command == "raw", pretty);
+        return ok || allowError ? 0 : 1;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"vm: {ex.Message}");
+        return 1;
+    }
+}
+
+static JsonObject BuildVmRawRequest(List<string> args)
+{
+    if (args.Count < 1)
+        throw new ArgumentException("vm raw requires a JSON object");
+
+    var node = JsonNode.Parse(args[0]) as JsonObject
+        ?? throw new ArgumentException("vm raw payload must be a JSON object");
+    args.RemoveAt(0);
+    if (node["command"] is null)
+        throw new ArgumentException("vm raw payload must include command");
+    return node;
+}
+
+static JsonObject BuildVmColdStartRequest(List<string> args)
+{
+    string? runtime = TakeOptionValue(args, "--runtime", "-r");
+    string? text = TakeOptionValue(args, "--text");
+    bool noWait = TakeFlag(args, "--no-wait");
+
+    var req = new JsonObject
+    {
+        ["command"] = "cold_start",
+        ["wait_ready"] = noWait ? 0 : 1
+    };
+    if (!string.IsNullOrWhiteSpace(runtime))
+        req["runtime"] = runtime;
+    if (!string.IsNullOrWhiteSpace(text))
+        req["text"] = text;
+    return req;
+}
+
+static JsonObject BuildVmResetRequest(List<string> args)
+{
+    string? text = TakeOptionValue(args, "--text");
+    bool noWait = TakeFlag(args, "--no-wait");
+    var req = new JsonObject
+    {
+        ["command"] = "vm_reset",
+        ["wait_ready"] = noWait ? 0 : 1
+    };
+    if (!string.IsNullOrWhiteSpace(text))
+        req["text"] = text;
+    return req;
+}
+
+static JsonObject BuildVmWaitRequest(List<string> args)
+{
+    string? timeout = TakeOptionValue(args, "--timeout-ms");
+    string text = args.Count > 0 ? args[0] : "Ready";
+    if (args.Count > 0)
+        args.RemoveAt(0);
+    var req = new JsonObject
+    {
+        ["command"] = "wait_ready",
+        ["text"] = text
+    };
+    if (timeout is not null)
+        req["timeout_ms"] = ParseVmNumber(timeout);
+    return req;
+}
+
+static JsonObject BuildVmLineRequest(List<string> args)
+{
+    if (args.Count < 1)
+        throw new ArgumentException("vm line requires a row number");
+    int row = ParseVmNumber(args[0]);
+    args.RemoveAt(0);
+    return new JsonObject { ["command"] = "read_line", ["row"] = row };
+}
+
+static JsonObject BuildVmTypeTextRequest(List<string> args)
+{
+    if (args.Count < 1)
+        throw new ArgumentException("vm type-text requires text");
+    string text = args[0];
+    args.RemoveAt(0);
+    return new JsonObject { ["command"] = "type_text", ["text"] = text };
+}
+
+static JsonObject BuildVmLineInputRequest(List<string> args)
+{
+    if (args.Count < 1)
+        throw new ArgumentException("vm enter requires text");
+    string text = args[0];
+    args.RemoveAt(0);
+    return new JsonObject { ["command"] = "type_text", ["text"] = text + "\r" };
+}
+
+static JsonObject BuildVmKeyRequest(List<string> args)
+{
+    if (args.Count < 1)
+        throw new ArgumentException("vm key requires a key name");
+    string key = args[0];
+    args.RemoveAt(0);
+    return new JsonObject { ["command"] = "send_key", ["key"] = key };
+}
+
+static JsonObject BuildVmPeekRequest(List<string> args)
+{
+    if (args.Count < 1)
+        throw new ArgumentException("vm peek requires an address");
+    int address = ParseVmNumber(args[0]);
+    args.RemoveAt(0);
+    return new JsonObject { ["command"] = "peek", ["address"] = address };
+}
+
+static JsonObject BuildVmPeekBlockRequest(List<string> args)
+{
+    if (args.Count < 2)
+        throw new ArgumentException("vm peek-block requires address and count");
+    int address = ParseVmNumber(args[0]);
+    int count = ParseVmNumber(args[1]);
+    args.RemoveRange(0, 2);
+    return new JsonObject { ["command"] = "peek_block", ["address"] = address, ["count"] = count };
+}
+
+static JsonObject BuildVmPokeRequest(List<string> args)
+{
+    if (args.Count < 2)
+        throw new ArgumentException("vm poke requires address and value");
+    int address = ParseVmNumber(args[0]);
+    int value = ParseVmNumber(args[1]);
+    args.RemoveRange(0, 2);
+    return new JsonObject { ["command"] = "poke", ["address"] = address, ["value"] = value };
+}
+
+static JsonObject BuildVmReadVramRequest(List<string> args)
+{
+    if (args.Count < 3)
+        throw new ArgumentException("vm read-vram requires space, address, and length");
+    int space = ParseVmNumber(args[0]);
+    int address = ParseVmNumber(args[1]);
+    int length = ParseVmNumber(args[2]);
+    args.RemoveRange(0, 3);
+    return new JsonObject { ["command"] = "read_vram", ["space"] = space, ["address"] = address, ["length"] = length };
+}
+
+static JsonObject BuildVmFillVramRequest(List<string> args)
+{
+    if (args.Count < 4)
+        throw new ArgumentException("vm fill-vram requires space, address, value, and length");
+    int space = ParseVmNumber(args[0]);
+    int address = ParseVmNumber(args[1]);
+    int value = ParseVmNumber(args[2]);
+    int length = ParseVmNumber(args[3]);
+    args.RemoveRange(0, 4);
+    return new JsonObject { ["command"] = "fill_vram", ["space"] = space, ["address"] = address, ["value"] = value, ["length"] = length };
+}
+
+static JsonObject BuildVmRunCyclesRequest(List<string> args)
+{
+    if (args.Count < 1)
+        throw new ArgumentException("vm run-cycles requires a cycle count");
+    int cycles = ParseVmNumber(args[0]);
+    args.RemoveAt(0);
+    return new JsonObject { ["command"] = "run_cycles", ["cycles"] = cycles };
+}
+
+static JsonNode SendVmRequest(string host, int port, JsonObject request)
+{
+    using var client = new TcpClient();
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+    client.ConnectAsync(host, port, cts.Token).GetAwaiter().GetResult();
+
+    using NetworkStream stream = client.GetStream();
+    stream.ReadTimeout = 15000;
+    stream.WriteTimeout = 15000;
+    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false,
+                                        bufferSize: 65536, leaveOpen: true);
+    using var writer = new StreamWriter(stream, new UTF8Encoding(false), bufferSize: 4096,
+                                        leaveOpen: true)
+    {
+        AutoFlush = true,
+        NewLine = "\n",
+    };
+
+    writer.WriteLine(request.ToJsonString());
+    string? line = reader.ReadLine();
+    if (string.IsNullOrWhiteSpace(line))
+        throw new IOException("empty response from VM debug server");
+
+    return JsonNode.Parse(line)
+        ?? throw new IOException("invalid JSON response from VM debug server");
+}
+
+static void PrintVmResponse(string command, JsonNode response, bool json, bool pretty)
+{
+    if (json)
+    {
+        Console.WriteLine(response.ToJsonString(new JsonSerializerOptions { WriteIndented = pretty }));
+        return;
+    }
+
+    switch (command)
+    {
+        case "screen":
+            if (response["lines"] is JsonArray lines)
+                foreach (var line in lines)
+                    Console.WriteLine(line?.GetValue<string>() ?? "");
+            else
+                Console.WriteLine(response.ToJsonString());
+            break;
+        case "line":
+            Console.WriteLine(response["text"]?.GetValue<string>() ?? "");
+            break;
+        case "peek":
+            Console.WriteLine($"${(response["value"]?.GetValue<int>() ?? 0) & 0xFF:X2}");
+            break;
+        default:
+            Console.WriteLine(response.ToJsonString(new JsonSerializerOptions { WriteIndented = pretty }));
+            break;
+    }
+}
+
+static int ParseVmNumber(string value)
+{
+    string text = value.Trim();
+    if (text.StartsWith('$'))
+        return Convert.ToInt32(text[1..], 16);
+    if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        return Convert.ToInt32(text[2..], 16);
+    return int.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+}
+
+static void PrintVmUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova vm [--remote <host>] [--port <port>] <command>");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("Defaults:");
+    Console.Error.WriteLine("  no --remote: 127.0.0.1:6502 (Avalonia)");
+    Console.Error.WriteLine("  with --remote: <host>:6503 (NovaHost hardware debug)");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("Commands:");
+    Console.Error.WriteLine("  cold-start [--runtime basic|logo|ncc] [--text <text>] [--no-wait]");
+    Console.Error.WriteLine("  reset [--text <text>] [--no-wait]");
+    Console.Error.WriteLine("  wait [text] [--timeout-ms <ms>]");
+    Console.Error.WriteLine("  screen [--json]");
+    Console.Error.WriteLine("  line <row>");
+    Console.Error.WriteLine("  cursor");
+    Console.Error.WriteLine("  type-text <text>");
+    Console.Error.WriteLine("  enter <text>");
+    Console.Error.WriteLine("  key <key>");
+    Console.Error.WriteLine("  peek <addr>");
+    Console.Error.WriteLine("  peek-block <addr> <count> [--json]");
+    Console.Error.WriteLine("  poke <addr> <value>");
+    Console.Error.WriteLine("  read-vram <space> <addr> <length> [--json]");
+    Console.Error.WriteLine("  fill-vram <space> <addr> <value> <length>");
+    Console.Error.WriteLine("  run-cycles <count>");
+    Console.Error.WriteLine("  state|pause|resume|step|break-list|break-clear-all");
+    Console.Error.WriteLine("  raw '<json>' [--json] [--allow-error]");
+}
+
 static int DoDisk(string[] args, string? host)
 {
     host = ExtractRemoteHost(ref args, host);
@@ -1245,19 +1578,37 @@ static JsonNode? ReadBootConfig(string host)
     try
     {
         var resp = http.GetAsync(url).GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode)
+        if (resp.IsSuccessStatusCode)
         {
-            Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return null;
+            string json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            if (!string.IsNullOrWhiteSpace(json))
+                return JsonNode.Parse(json);
         }
-        string json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        return JsonNode.Parse(json);
     }
-    catch (Exception ex)
+    catch { }
+
+    Console.Error.WriteLine("No boot config found — creating default.");
+    return CreateDefaultBootConfig();
+}
+
+static JsonNode CreateDefaultBootConfig()
+{
+    return JsonNode.Parse("""
     {
-        Console.Error.WriteLine($"boot config read: {ex.Message}");
-        return null;
+      "vm": {
+        "defaultRuntime": "novabasic"
+      },
+      "languages": {
+        "novabasic": {
+          "rom": "/roms/novabasic.bin",
+          "extensionRom": "/roms/extension.bin",
+          "autoboot": true
+        }
+      },
+      "mounts": {},
+      "network": {}
     }
+    """)!;
 }
 
 static bool WriteBootConfig(string host, JsonNode config)

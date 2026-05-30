@@ -86,10 +86,14 @@ VSPRITE_DESC_PTR:       .res 2
       .segment "CODE"
 
       .export vsprite_blit
+      .export vsprite_blit_start
       .export vsprite_fill
       .export vsprite_gfx_addr
       .export vsprite_gfx_blit
+      .export vsprite_gfx_blit_start
       .export vsprite_gfx_rotate_blit
+      .export vsprite_gfx_rotate_blit_keyed
+      .export vsprite_gfx_rotate_blit_nowait
       .export vsprite_gfx_fill
       .export vsprite_gfx_save_bg
       .export vsprite_gfx_restore_bg
@@ -111,6 +115,22 @@ VSPRITE_DESC_PTR:       .res 2
 ; @in VGC_GFXTRANS: Graphics-plane color treated as transparent by display composition; set this to a non-black color when blitting visible palette-0 black pixels.
 ; @out A: 0 on success, 1 on error.
 vsprite_blit:
+      JSR   vsprite_blit_start
+      CMP   #VSPRITE_RESULT_OK
+      BNE   @done
+      JMP   blitter_wait
+@done:
+      RTS
+
+; @label VSPRITE.BLIT_START
+; @kind routine
+; @symbol vsprite_blit_start
+; @summary Start the configured virtual sprite blit without waiting for completion.
+; @requires VSPRITE_SRCSPACE VSPRITE_DSTSPACE VSPRITE_SRCADDR* VSPRITE_DSTADDR* VSPRITE_WIDTH* VSPRITE_HEIGHT* VSPRITE_SRCSTR* VSPRITE_DSTSTR*
+; @in VSPRITE_FLAGS: Set bit 0 to enable color-key transparency.
+; @in VSPRITE_COLORKEY: Source byte skipped when color-key mode is enabled.
+; @out A: 0 after the blit command is issued.
+vsprite_blit_start:
       LDA   VSPRITE_SRCSPACE
       STA   BLT_SRCSPACE
       LDA   VSPRITE_DSTSPACE
@@ -156,7 +176,8 @@ vsprite_blit:
       STA   BLT_MODE_REG
       LDA   #BLT_CMD_START
       STA   BLT_CMD_REG
-      JMP   blitter_wait
+      LDA   #VSPRITE_RESULT_OK
+      RTS
 
 ; @label VSPRITE.FILL
 ; @kind routine
@@ -351,6 +372,22 @@ vsprite_gfx_blit:
       STA   VSPRITE_DSTSTRH
       JMP   vsprite_blit
 
+; @label VSPRITE.GFX_BLIT_START
+; @kind routine
+; @symbol vsprite_gfx_blit_start
+; @summary Start copying the configured virtual sprite to the VGC graphics plane at X/Y without waiting for completion.
+; @requires VSPRITE_XL VSPRITE_XH VSPRITE_Y VSPRITE_SRCSPACE VSPRITE_SRCADDR* VSPRITE_WIDTH* VSPRITE_HEIGHT* VSPRITE_SRCSTR*
+; @out A: 0 after the blit command is issued.
+vsprite_gfx_blit_start:
+      JSR   vsprite_gfx_addr
+      LDA   #BLT_SPACE_VGC_GFX
+      STA   VSPRITE_DSTSPACE
+      LDA   #<VSPRITE_GFX_STRIDE
+      STA   VSPRITE_DSTSTRL
+      LDA   #>VSPRITE_GFX_STRIDE
+      STA   VSPRITE_DSTSTRH
+      JMP   vsprite_blit_start
+
 ; @label VSPRITE.GFX_ROTATE_BLIT
 ; @kind routine
 ; @symbol vsprite_gfx_rotate_blit
@@ -364,6 +401,49 @@ vsprite_gfx_rotate_blit:
       CMP   #VSPRITE_RESULT_OK
       BNE   @done
       JSR   vsprite_wait_frame
+      JMP   vsprite_gfx_blit_rotated
+@done:
+      RTS
+
+; @label VSPRITE.GFX_ROTATE_BLIT_KEYED
+; @kind routine
+; @symbol vsprite_gfx_rotate_blit_keyed
+; @summary Rotate the configured virtual sprite, wait for the next frame, then blit it with the caller's VSPRITE.FLAGS.
+; @requires VSPRITE.X/Y VSPRITE.ORIG* VSPRITE.ROT* VSPRITE.WIDTH/HEIGHT VSPRITE.ROTANGLE
+; @in VSPRITE_FLAGS: Set VSPRITE_FLAG_COLORKEY to preserve existing graphics-plane pixels where the rotated sprite is transparent.
+; @out A: 0 on success, 1 on error.
+vsprite_gfx_rotate_blit_keyed:
+      JSR   vsprite_rotate
+      CMP   #VSPRITE_RESULT_OK
+      BNE   @done
+      JSR   vsprite_wait_frame
+      JMP   vsprite_gfx_blit
+@done:
+      RTS
+
+; @label VSPRITE.GFX_ROTATE_BLIT_NOWAIT
+; @kind routine
+; @symbol vsprite_gfx_rotate_blit_nowait
+; @summary Rotate the configured virtual sprite offscreen, then start copying the full rotated bounds to graphics memory without waiting for VGC.FRAME or final blit completion.
+; @requires VSPRITE_XL VSPRITE_XH VSPRITE_Y VSPRITE_ORIGSPACE VSPRITE_ORIGADDR* VSPRITE_ORIGSTR* VSPRITE_ROTSPACE VSPRITE_ROTADDR* VSPRITE_ROTSTR* VSPRITE_WIDTH* VSPRITE_HEIGHT* VSPRITE_ROTANGLE
+; @in VSPRITE_COLORKEY: Fill value for rotated output pixels outside the source bounds; normally match this to VGC_GFXTRANS.
+; @desc Use this in command/REPL paths or runtimes that already own frame pacing.
+; @out A: 0 on success, 1 on error.
+vsprite_gfx_rotate_blit_nowait:
+      JSR   vsprite_rotate
+      CMP   #VSPRITE_RESULT_OK
+      BNE   vsprite_gfx_rotate_done
+      LDA   VSPRITE_FLAGS
+      PHA
+      STZ   VSPRITE_FLAGS
+      JSR   vsprite_gfx_blit_start
+      STA   VSPRITE_TMP
+      PLA
+      STA   VSPRITE_FLAGS
+      LDA   VSPRITE_TMP
+      RTS
+
+vsprite_gfx_blit_rotated:
       LDA   VSPRITE_FLAGS
       PHA
       STZ   VSPRITE_FLAGS
@@ -372,7 +452,7 @@ vsprite_gfx_rotate_blit:
       PLA
       STA   VSPRITE_FLAGS
       LDA   VSPRITE_TMP
-@done:
+vsprite_gfx_rotate_done:
       RTS
 
 vsprite_wait_frame:

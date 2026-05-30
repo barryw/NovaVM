@@ -39,6 +39,9 @@ jsr vtext_validate_region
 jsr vtext_set_cursor
 jsr vtext_home
 jsr vtext_put_char
+jsr vtext_puts       ; A/Y = zero-terminated string pointer
+jsr vtext_put_hex_nibble
+jsr vtext_put_hex_byte
 jsr vtext_newline
 jsr vtext_clear_region
 jsr vtext_clear_line

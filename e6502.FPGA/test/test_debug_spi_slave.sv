@@ -172,6 +172,20 @@ module test_debug_spi_slave;
         end
     endtask
 
+    task automatic expect_no_rx(input string name);
+        repeat (80) begin
+            @(posedge clk);
+            if (rx_valid) begin
+                check(name, 1'b0);
+                rx_ready <= 1'b1;
+                @(posedge clk);
+                rx_ready <= 1'b0;
+                return;
+            end
+        end
+        check(name, 1'b1);
+    endtask
+
     initial begin
         rst       = 1'b1;
         spi_sck   = 1'b0;
@@ -208,6 +222,7 @@ module test_debug_spi_slave;
         $display("Test: WRITE transaction captures payload bytes only");
         spi_write_byte(8'h5A);
         expect_rx(8'h5A);
+        expect_no_rx("single-byte write produces no duplicate RX byte");
 
         $display("Test: READ transaction returns token-framed payload bytes");
         queue_tx(8'hC3);
@@ -228,6 +243,7 @@ module test_debug_spi_slave;
         spi_write_two(8'h12, 8'h34);
         expect_rx(8'h12);
         expect_rx(8'h34);
+        expect_no_rx("multi-byte write produces no duplicate RX byte after tail");
 
         check("RX FIFO did not overflow", !rx_overflow);
         check("TX FIFO did not overflow", !tx_overflow);

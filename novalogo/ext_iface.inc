@@ -62,6 +62,7 @@ EXT_CMD_SHOWNP  = $25           ; SHOWN? — report visibility
 EXT_CMD_SETPC   = $26           ; SETPC color — set pen color
 EXT_CMD_SETBG   = $27           ; SETBG color — set background color
 EXT_CMD_TOWARDS = $28           ; TOWARDS x y — heading towards point
+EXT_CMD_SETPOS  = $29           ; SETPOS [x y] — move to position from list
 
 ; --- VGC graphics commands ---
 EXT_CMD_SETCOLOR = $30          ; SETCOLOR color — set VGC draw color
@@ -101,21 +102,24 @@ VAL_WORD        = $01
 VAL_LIST        = $02
 .endif
 
-; --- Turtle state — fixed ZP addresses ---
-; 24-bit position (hi:lo:frac) for sub-pixel precision
+; --- Legacy turtle state ZP addresses ---
+; Extension ROMs that define NOVALOGO_TURTLE_STATE_EXTERNAL provide their own
+; persistent turtle storage and only use this file for the mailbox ABI.
+.ifndef NOVALOGO_TURTLE_STATE_EXTERNAL
 TURTLE_X_FRAC   = $92
 TURTLE_X_LO     = $93
 TURTLE_X_HI     = $94
 TURTLE_Y_FRAC   = $95
 TURTLE_Y_LO     = $96
 TURTLE_Y_HI     = $97
-TURTLE_HEADING_LO = $98         ; degrees 0-359 (16-bit)
+TURTLE_HEADING_LO = $98
 TURTLE_HEADING_HI = $99
-TURTLE_PEN      = $9A           ; $00 = down, $01 = up
-TURTLE_SHOWN    = $9B           ; $00 = hidden, $01 = shown
-TURTLE_COLOR    = $9C           ; pen color (VGC palette index)
-TURTLE_SPRITE   = $9D           ; sprite slot (default 15)
-TURTLE_INITED   = $9E           ; $00 = not initialized, $01 = initialized
+TURTLE_PEN      = $9A
+TURTLE_SHOWN    = $9B
+TURTLE_COLOR    = $9C
+TURTLE_SPRITE   = $9D
+TURTLE_INITED   = $9E
+.endif
 
 ; --- Argument 3 (for 4+ arg commands like LINE, RECT, FILL) ---
 EXT_ARG3_TYPE   = $9F

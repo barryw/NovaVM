@@ -125,6 +125,7 @@ runtime state.
 | Animation | `anim.inc`, `anim.s` | Timed shape/frame animation for sprites and meta-sprites, plus bulk shape loading. | `anim_start`, `anim_tick`, `anim_set_frame`, `anim_load_xram_shapes`, `anim_load_disk_shapes` |
 | Virtual sprites | `vsprite.inc`, `vsprite.s` | Blitter-backed rectangular software sprites and saved-background scenes. | `vsprite_gfx_save_bg`, `vsprite_gfx_blit`, `vsprite_scene_commit`, `vsprite_scene_commit_atomic` |
 | VTEXT | `vtext.inc`, `vtext.s` | Rectangular text regions over VGC character/color/attribute planes. | `vtext_put_char`, `vtext_clear_region`, `vtext_scroll_up`, `vtext_select_region` |
+| EDITUI | `editui.inc`, `editui.s` | Turbo-style TUI shell for native tools: default File/Edit/Help menus, title/help band, shortcut row, CP437 framed panels, and clipped panel body regions. | `editui_init`, `editui_draw_shell`, `editui_menu_open_hotkey`, `editui_select_box_body` |
 | NUI | `nui.inc`, `nui.s` | First-pass modal dialogs over VTEXT and virtual sprites. | `nui_dialog_defaults`, `nui_show_dialog`, `nui_show_error`, `nui_wait_key` |
 | NVG loader | `nvg.inc`, `nvg.s` | Load NovaDraw NVG1 images through NovaHost into graphics bitmap memory. | `nvg_load`, `nvg_load_at`, `nvg_load_named`, `nvg_load_named_at` |
 | DMA | `dma.inc`, `dma.s` | Raw DMA copy/fill setup and wait/status handling. | `dma_copy`, `dma_fill`, `dma_wait` |
@@ -287,6 +288,7 @@ keeps subpixel motion smooth while still writing integer coordinates to the VGC.
 | XMC notes | `docs/assembly/xmc.md` |
 | Fixed-address overlays | `docs/assembly/overlay.md` |
 | VTEXT runtime | `docs/assembly/vtext.md` |
+| EDITUI runtime | `docs/assembly/editui.md` |
 | Memory map and hardware registers | `docs/help/guides/memory-map.md` |
 | DMA and blitter guide | `docs/help/guides/dma-and-blitter.md` |
 | Graphics and display guide | `docs/help/guides/graphics-and-display.md` |

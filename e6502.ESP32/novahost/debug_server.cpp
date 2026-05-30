@@ -8,6 +8,7 @@
 // VGC register addresses
 #define REG_CURSOR_X 0xA003
 #define REG_CURSOR_Y 0xA004
+#define REG_CURSOR_ENABLE 0xA00A
 
 // Logging (defined in novahost.ino)
 extern void logLn(const char* fmt, ...);
@@ -410,10 +411,23 @@ void DebugServer::cmdFillVram(const String& json) {
 
 void DebugServer::cmdSendKey(const String& json) {
     String key = extractString(json, "key");
+    String upperKey = key;
+    upperKey.toUpperCase();
     uint8_t code = 0;
-    if (key == "ENTER" || key == "CR" || key == "RETURN") code = 0x0D;
-    else if (key == "BACKSPACE" || key == "BS")           code = 0x08;
-    else if (key == "CTRL-C" || key == "BREAK")           code = 0x03;
+    if (upperKey == "ENTER" || upperKey == "CR" || upperKey == "RETURN") code = 0x0D;
+    else if (upperKey == "BACKSPACE" || upperKey == "BS")                code = 0x08;
+    else if (upperKey == "CTRL-C" || upperKey == "BREAK")                code = 0x03;
+    else if (upperKey.length() == 5 && upperKey.substring(0, 4) == "ALT-") {
+        uint8_t alt = upperKey[4];
+        if (alt < 'A' || alt > 'Z') { respondOk(); return; }
+        alt = alt + 0x20;
+        if (!_bridge.sendKey(0x1B) || !_bridge.sendKey(alt)) {
+            respondError("FPGA send_key failed");
+            return;
+        }
+        respondOk();
+        return;
+    }
     else if (key.length() == 1)                           code = key[0];
     else { respondOk(); return; }  // unknown key name — ignore
 
@@ -527,11 +541,13 @@ void DebugServer::cmdReadLine(const String& json) {
 }
 
 void DebugServer::cmdGetCursor() {
-    uint8_t cx = 0, cy = 0;
+    uint8_t cx = 0, cy = 0, enabled = 0;
     _bridge.peek(REG_CURSOR_X, cx);
     _bridge.peek(REG_CURSOR_Y, cy);
-    char buf[48];
-    snprintf(buf, sizeof(buf), "{\"ok\":true,\"x\":%d,\"y\":%d}", cx, cy);
+    _bridge.peek(REG_CURSOR_ENABLE, enabled);
+    char buf[72];
+    snprintf(buf, sizeof(buf), "{\"ok\":true,\"x\":%d,\"y\":%d,\"enabled\":%s}",
+             cx, cy, (enabled & 0x01) ? "true" : "false");
     respond(buf);
 }
 
@@ -719,6 +735,8 @@ void DebugServer::cmdDbgBreakList() {
 
 void DebugServer::cmdDbgTrace(const String& json) {
     int count = extractInt(json, "count", FpgaBridge::TRACE_RECORDS);
+    String format = extractString(json, "format");
+    bool hexMode = (extractInt(json, "hex", 0) != 0) || (format == "hex");
     if (count < 1 || count > FpgaBridge::TRACE_RECORDS) {
         respondError("'count' must be 1..64");
         return;
@@ -733,6 +751,23 @@ void DebugServer::cmdDbgTrace(const String& json) {
 
     uint16_t records = bytesRead / FpgaBridge::TRACE_RECORD_BYTES;
     String resp;
+    if (hexMode) {
+        static const char hex[] = "0123456789ABCDEF";
+        resp.reserve(96 + (uint32_t)bytesRead * 2);
+        resp = "{\"ok\":true,\"record_bytes\":";
+        resp += String(FpgaBridge::TRACE_RECORD_BYTES);
+        resp += ",\"count\":";
+        resp += String(records);
+        resp += ",\"hex\":\"";
+        for (uint16_t i = 0; i < bytesRead; i++) {
+            resp += hex[buf[i] >> 4];
+            resp += hex[buf[i] & 0x0F];
+        }
+        resp += "\"}";
+        respond(resp.c_str());
+        return;
+    }
+
     resp.reserve(96 + records * 160);
     resp = "{\"ok\":true,\"record_bytes\":";
     resp += String(FpgaBridge::TRACE_RECORD_BYTES);
@@ -770,6 +805,8 @@ void DebugServer::cmdDbgTrace(const String& json) {
         resp += (buf[base + 11] & 0x04) ? "true" : "false";
         resp += ",\"nmi\":";
         resp += (buf[base + 11] & 0x08) ? "true" : "false";
+        resp += ",\"decode\":";
+        resp += (buf[base + 11] & 0x10) ? "true" : "false";
         resp += "}";
     }
     resp += "]}";

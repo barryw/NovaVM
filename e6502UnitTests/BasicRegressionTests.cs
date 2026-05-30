@@ -139,6 +139,35 @@ public class BasicRegressionTests
     }
 
     [TestMethod]
+    public void ClsClearsActiveTextWindowOnly()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            $"VPOKE 1,{39 * VgcConstants.ScreenCols},84",
+            $"VPOKE 1,{40 * VgcConstants.ScreenCols},87",
+            $"POKE {VgcConstants.TextWindowLeft},0",
+            $"POKE {VgcConstants.TextWindowTop},40",
+            $"POKE {VgcConstants.TextWindowWidth},80",
+            $"POKE {VgcConstants.TextWindowHeight},10",
+            "CLS",
+        ]);
+
+        Assert.AreEqual((byte)'T', bus.Vgc.GetScreenChar(0, 39),
+            "CLS in a split-screen text window must not clear rows above the active window.");
+        Assert.AreNotEqual((byte)'W', bus.Vgc.GetScreenChar(0, 40),
+            "CLS should clear content inside the active text window before BASIC prints Ready.");
+        Assert.IsTrue(bus.Vgc.GetCursorY() >= 40,
+            $"CLS should leave the cursor inside the active text window, got row {bus.Vgc.GetCursorY()}.");
+    }
+
+    [TestMethod]
     public void SpriteCollisionFunctionsAndEventSyntaxAreAvailableFromBasic()
     {
         string screen = RunProgram(new[]

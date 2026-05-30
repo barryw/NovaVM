@@ -26,6 +26,7 @@
 #include "nic_dispatcher.h"
 #include "sd_http_server.h"
 #include "nova_wifi.h"
+#include "boot_config_parser.h"
 // Boot ROMs and bulky assets live on the SD card. The FPGA bitstream still
 // carries fallback ROM init data, but NovaHost no longer embeds those blobs.
 
@@ -444,12 +445,8 @@ static const uint8_t  VGC_SPACE_GFX     = 0x03;
 static const uint8_t  VGC_SPACE_TEXTATTR = 0x07;
 static const uint8_t  VGC_MODE_GFX_ONLY = 0x03;
 
-struct RuntimeConfig {
-    char romPath[128];
-    char extRomPath[128];
-    bool valid;
-};
-static RuntimeConfig readRuntimeConfig();
+static BootRuntimeConfig g_runtime_config = {};
+static void parseRuntimeConfigFromFile();
 
 static const char* const BASIC_ROM_PATHS[] = {
     "/roms/novabasic.bin",
@@ -1241,45 +1238,46 @@ void pollSerialConsole() {
 // =========================================================================
 // Runtime config from boot.json
 // =========================================================================
-static RuntimeConfig readRuntimeConfig() {
-    RuntimeConfig cfg = {};
+// Parse runtime config from boot.json using string search (no heap allocation).
+// Called from loadRomsToFPGA after heap-heavy operations have freed.
+static void parseRuntimeConfigFromFile() {
+    g_runtime_config = {};
 
     File f = SD.open("/config/boot.json", FILE_READ);
     if (!f) {
         logLn("Runtime config: boot.json not found, using defaults");
-        return cfg;
+        return;
     }
 
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, f);
+    size_t len = f.size();
+    if (len == 0 || len > BOOT_CONFIG_MAX_BYTES) {
+        logLn("Runtime config: boot.json size %u unsupported, using defaults",
+              (unsigned)len);
+        f.close();
+        return;
+    }
+
+    char buf[BOOT_CONFIG_MAX_BYTES + 1];
+    size_t got = f.read((uint8_t*)buf, len);
     f.close();
-    if (err) {
-        logLn("Runtime config: parse failed (%s), using defaults", err.c_str());
-        return cfg;
+    if (got != len) {
+        logLn("Runtime config: read failed (%u/%u bytes), using defaults",
+              (unsigned)got, (unsigned)len);
+        return;
+    }
+    buf[len] = '\0';
+
+    if (!parseBootRuntimeConfigText(buf, len, g_runtime_config)) {
+        logLn("Runtime config: default runtime '%s' unavailable, using defaults",
+              g_runtime_config.runtime[0] ? g_runtime_config.runtime : "novabasic");
+        g_runtime_config = {};
+        return;
     }
 
-    const char* runtime = doc["vm"]["defaultRuntime"] | "novabasic";
-
-    JsonObjectConst lang = doc["languages"][runtime].as<JsonObjectConst>();
-    if (lang.isNull()) {
-        logLn("Runtime config: language '%s' not found, using defaults", runtime);
-        return cfg;
-    }
-
-    const char* rom = lang["rom"] | (const char*)nullptr;
-    const char* ext = lang["extensionRom"] | (const char*)nullptr;
-
-    if (rom) {
-        strlcpy(cfg.romPath, rom, sizeof(cfg.romPath));
-    }
-    if (ext) {
-        strlcpy(cfg.extRomPath, ext, sizeof(cfg.extRomPath));
-    }
-
-    cfg.valid = (rom != nullptr);
-    logLn("Runtime config: loading '%s' (rom=%s, ext=%s)", runtime,
-          cfg.romPath, cfg.extRomPath[0] ? cfg.extRomPath : "<none>");
-    return cfg;
+    logLn("Runtime config: loading '%s' rom=%s ext=%s",
+          g_runtime_config.runtime,
+          g_runtime_config.romPath,
+          g_runtime_config.extRomPath[0] ? g_runtime_config.extRomPath : "<none>");
 }
 
 // =========================================================================
@@ -1296,8 +1294,9 @@ bool loadRomsToFPGA() {
         return false;
     }
 
-    // Resolve ROM paths: prefer boot.json config, fall back to hardcoded arrays
-    RuntimeConfig rtCfg = readRuntimeConfig();
+    // Parse runtime config directly from file (no ArduinoJson heap allocation)
+    parseRuntimeConfigFromFile();
+    BootRuntimeConfig& rtCfg = g_runtime_config;
 
 
     const char* romPaths[3];

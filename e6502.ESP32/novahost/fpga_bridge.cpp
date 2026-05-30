@@ -422,25 +422,19 @@ bool FpgaBridge::sendKeys(const uint8_t* data, uint16_t count) {
     FPGA_LOCK_OR_RETURN_FALSE();
     if (count == 0)
         return true;
-    if (!data || !supportsKeyStream())
+    if (!data)
         return false;
 
-    uint16_t off = 0;
-    while (off < count) {
-        uint16_t chunk = count - off;
-        if (chunk > 256)
-            chunk = 256;
-
-        uint8_t header[2] = {
-            CMD_WRITE_KEYS,
-            (uint8_t)((chunk == 256) ? 0 : chunk)
+    for (uint16_t off = 0; off < count; off++) {
+        uint8_t cmd[2] = {
+            CMD_SEND_KEY,
+            data[off]
         };
 
         drain();
-        writeBytes(header, sizeof(header), data + off, chunk);
+        writeBytes(cmd, sizeof(cmd));
         if (!recvStatus())
             return false;
-        off += chunk;
     }
     return true;
 }

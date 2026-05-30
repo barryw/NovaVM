@@ -1206,10 +1206,13 @@ void SdHttpServer::send_file(WiFiClient& client, const char* path) {
     send_headers(client, 200, "application/octet-stream",
                  (int32_t)file.size());
     uint8_t buf[IO_BUF_BYTES];
-    while (file.available()) {
-        size_t got = file.read(buf, sizeof(buf));
+    size_t remaining = file.size();
+    while (remaining > 0) {
+        size_t want = remaining < sizeof(buf) ? remaining : sizeof(buf);
+        size_t got = file.read(buf, want);
         if (got == 0) break;
-        if (!write_all(client, buf, got, true)) break;
+        if (!write_all(client, buf, got)) break;
+        remaining -= got;
         yield();
     }
     file.close();

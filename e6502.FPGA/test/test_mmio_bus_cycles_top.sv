@@ -203,7 +203,7 @@ module test_mmio_bus_cycles_top;
         repeat(4) @(posedge clk);
     endtask
 
-    localparam int PROG_LEN = 126;
+    localparam int PROG_LEN = 143;
     byte unsigned prog [PROG_LEN] = '{
         8'hA9, 8'h9E, 8'h85, 8'h10,         // $10/$11 = $B99E
         8'hA9, 8'hB9, 8'h85, 8'h11,
@@ -242,7 +242,13 @@ module test_mmio_bus_cycles_top;
         8'h8D, 8'h02, 8'h04,               // STA $0402
         8'hAD, 8'hA8, 8'hBA,               // LDA $BAA8 -> USB HID key count
         8'h8D, 8'h03, 8'h04,               // STA $0403
-        8'h4C, 8'h7B, 8'hC0                // JMP $C07B
+        8'hAD, 8'h08, 8'hA0,               // LDA VGC_FRAME
+        8'h8D, 8'h04, 8'h04,               // STA $0404
+        8'hCD, 8'h08, 8'hA0,               // CMP VGC_FRAME
+        8'hF0, 8'hFB,                       // BEQ back to CMP until frame changes
+        8'hAD, 8'h08, 8'hA0,               // LDA VGC_FRAME
+        8'h8D, 8'h05, 8'h04,               // STA $0405
+        8'h4C, 8'h8C, 8'hC0                // JMP $C08C
     };
 
     initial begin
@@ -276,13 +282,14 @@ module test_mmio_bus_cycles_top;
         repeat(4) @(posedge clk);
         dbg_pause = 0;
 
-        repeat(100000) @(posedge clk);
+        repeat(1000000) @(posedge clk);
 
         $display("Final CPU PC = 0x%04X IR=0x%02X state=%0d addr=0x%04X din=0x%02X dout=0x%02X",
                  dbg_cpu_pc, dbg_cpu_ir, dbg_cpu_state, dbg_cpu_addr, dbg_cpu_din, dbg_cpu_dout);
+        $display("VGC frame_counter = 0x%02X", dut.vgc_inst.frame_counter);
 
         check("CPU reached halt loop",
-              (dbg_cpu_pc >= 16'hC07B) && (dbg_cpu_pc <= 16'hC07E));
+              (dbg_cpu_pc >= 16'hC08C) && (dbg_cpu_pc <= 16'hC08F));
 
         check_eq_int("FioCmd write fired exactly one event", event_count, 1);
         check_eq8("FioCmd via STA ($zp),Y", dut.fio_inst.bank[7'h00], 8'h21);
@@ -307,6 +314,17 @@ module test_mmio_bus_cycles_top;
         check_eq8("USB HID status is CPU-visible", peek_data, 8'hA5);
         dbg_peek(16'h0403, peek_data);
         check_eq8("USB HID key count is CPU-visible", peek_data, 8'h5A);
+        begin
+            logic [7:0] frame_a;
+            logic [7:0] frame_b;
+            dbg_peek(16'h0404, frame_a);
+            dbg_peek(16'h0405, frame_b);
+            $display("CPU-sampled VGC_FRAME values: first=0x%02X second=0x%02X",
+                     frame_a, frame_b);
+            check("CPU VGC_FRAME wait observed a tick", frame_a !== frame_b);
+            check("CPU VGC_FRAME read did not fall through to ROM fill",
+                  frame_a !== 8'hFF && frame_b !== 8'hFF);
+        end
         dbg_peek(16'hBAA9, peek_data);
         check_eq8("USB HID core status is debug-visible", peek_data, 8'hD3);
         dbg_peek(16'hBAAA, peek_data);

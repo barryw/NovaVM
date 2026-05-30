@@ -9012,6 +9012,7 @@ LAB_BNR2
 
 VGC_NO_EXEC       = 1
 VGC_NO_PRIMITIVES = 1
+VGC_CLS_EXT       = 1
 SPRITE_NO_EXTRA   = 1
       .include "vgc.s"
       .include "sprite.s"

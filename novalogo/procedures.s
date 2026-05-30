@@ -1683,8 +1683,12 @@ str_apply_err:
 ; Builtin name strings for workspace commands
 str_po_name:
       .byte 2, "PO"
+str_printout_name:
+      .byte 8, "PRINTOUT"
 str_pots_name:
       .byte 4, "POTS"
+str_printtitles_name:
+      .byte 11, "PRINTTITLES"
 str_erase_name:
       .byte 5, "ERASE"
 str_apply_name:

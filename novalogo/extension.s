@@ -6,20 +6,35 @@
 ; results in EXT_RESULT. No callbacks into the base ROM interpreter.
 
       .include "nova.inc"
+NOVALOGO_TURTLE_STATE_EXTERNAL = 1
       .include "ext_iface.inc"
+      .include "vgc.inc"
+      .include "copper.inc"
+      .include "copper_split.inc"
+      .include "vsprite.inc"
 
-; --- Fixed BSS addresses (extension has no linker BSS segment) ---
-TURTLE_SHAPE_BUF  = $7E00      ; 256 bytes: source shape copied from RODATA
-TURTLE_ROT_BUF    = $7F00      ; 256 bytes: rotated shape output
-
-; --- Sprite configuration ---
-TURTLE_SPR_SLOT   = 15
+; --- Turtle virtual-sprite configuration ---
 TURTLE_SPR_SIZE   = 16
+TURTLE_SPR_HALF   = 8
+TURTLE_MAX_X      = 304        ; 320 - 16
+TURTLE_MAX_Y      = 184        ; 200 - 16
 TURTLE_CENTER_X   = 160        ; center of 320-wide graphics
-TURTLE_CENTER_Y   = 100        ; center of 200-high graphics
+TURTLE_CENTER_Y   = 80         ; center of split graphics viewport
 SPLIT_Y           = 160        ; copper split: gfx rows 0-159, text below
+SPLIT_TEXT_ROW    = 40         ; 160px / 4px text cell height
+SPLIT_TEXT_HEIGHT = 10
 MODE_GFX_SPRITES  = 3          ; VGC mode: graphics + sprites
 MODE_TEXT_ONLY    = 0
+COL_WHITE         = 1
+COL_RED           = 2
+COL_GREEN         = 5
+
+; --- Base-ROM list cell format, used by SETPOS [x y] ---
+CONS_CAR_TYPE     = 1
+CONS_CAR_HI       = 2
+CONS_CAR_LO       = 3
+CONS_CDR_LO       = 5
+CONS_CDR_HI       = 6
 
 ; --- Local ZP temporaries (reuse NVR scratch) ---
 tmp0              = NVR0L
@@ -37,12 +52,56 @@ dy_hi             = NVR5H
 sin_val           = NVR6L
 cos_val           = NVR6H
 
+      .segment "BSS"
+
+turtle_source_shape:
+      .res TURTLE_SPR_SIZE * TURTLE_SPR_SIZE
+turtle_rotated_shape:
+      .res TURTLE_SPR_SIZE * TURTLE_SPR_SIZE
+turtle_saved_bg:
+      .res TURTLE_SPR_SIZE * TURTLE_SPR_SIZE
+TURTLE_X_FRAC:
+      .res 1
+TURTLE_X_LO:
+      .res 1
+TURTLE_X_HI:
+      .res 1
+TURTLE_Y_FRAC:
+      .res 1
+TURTLE_Y_LO:
+      .res 1
+TURTLE_Y_HI:
+      .res 1
+TURTLE_HEADING_LO:
+      .res 1
+TURTLE_HEADING_HI:
+      .res 1
+TURTLE_PEN:
+      .res 1
+TURTLE_SHOWN:
+      .res 1
+TURTLE_COLOR:
+      .res 1
+TURTLE_SPRITE:
+      .res 1
+TURTLE_INITED:
+      .res 1
+turtle_bg_x_lo:
+      .res 1
+turtle_bg_x_hi:
+      .res 1
+turtle_bg_y:
+      .res 1
+turtle_bg_saved:
+      .res 1
+
       .segment "CODE"
 
 ; =====================================================================
 ; Extension entry point — called via JSR $C000 from RAM trampoline
 ; =====================================================================
 ext_entry:
+      CLD                       ; all extension math is binary, never BCD
       LDA   EXT_CMD
       ASL                       ; * 2 for word-sized table
       TAX
@@ -95,7 +154,7 @@ ext_dispatch:
       .word ext_setpc-1         ; cmd $26: SETPC
       .word ext_setbg-1         ; cmd $27: SETBG
       .word ext_towards-1       ; cmd $28: TOWARDS
-      .word ext_unsupported-1   ; cmd $29
+      .word ext_setpos-1        ; cmd $29: SETPOS
       .word ext_unsupported-1   ; cmd $2A
       .word ext_unsupported-1   ; cmd $2B
       .word ext_unsupported-1   ; cmd $2C
@@ -156,21 +215,27 @@ ext_test:
 ; ext_cs — clear screen, set up graphics mode, init turtle
 ; =====================================================================
 ext_cs:
-      ; Clear graphics plane
-      JSR   wait_vgc
-      STZ   VGC_P0              ; color 0 = black
-      LDA   #VCMD_GCLS
-      STA   VGC_CMD
+      STZ   VGC_BGCOL
+      LDA   #COL_WHITE
+      STA   VGC_FGCOL
+      STZ   VGC_BORDER
+      STZ   VGC_GFXTRANS
+      STZ   VGC_SCROLLX
+      STZ   VGC_SCROLLY
+      STZ   VGC_SCROLLCTL
+      LDA   #MODE_TEXT_ONLY
+      STA   VGC_MODE
+      JSR   clear_gfx_plane
 
       ; Set up copper split: graphics+sprites top, text bottom
       JSR   setup_copper
+      JSR   prepare_split_text
 
       ; Initialize turtle state
       JSR   turtle_init
 
-      ; Show turtle sprite
-      JSR   update_sprite_pos
-      JSR   update_sprite_rotation
+      ; Show centered virtual sprite
+      JSR   draw_turtle_sprite
 
       RTS
 
@@ -192,26 +257,11 @@ ext_fd:
       STA   old_y_lo
       LDA   TURTLE_Y_HI
       STA   old_y_hi
+      JSR   erase_turtle_sprite
 
-      ; Convert heading (degrees 0-359) to u8 angle (0-255)
-      ; u8_angle = heading * 256 / 360 ≈ heading * 91 / 128
-      ; Use MUL16: heading * 91
-      LDA   TURTLE_HEADING_LO
-      STA   MATH_MUL16_A_LO
-      LDA   TURTLE_HEADING_HI
-      STA   MATH_MUL16_A_HI
-      LDA   #91
-      STA   MATH_MUL16_B_LO
-      STZ   MATH_MUL16_B_HI    ; triggers multiply
-
-      ; u8_angle = byte 1 of result (effectively >> 7, close to /128)
-      ; Actually: (heading*91) / 128 = result >> 7
-      ; Result byte 0 >> 7 gives carry bit, byte 1 = main value
-      LDA   MATH_RES0
-      ASL                       ; bit 7 of byte 0 → carry
-      LDA   MATH_RES1
-      ROL                       ; result / 128 with rounding bit
-      STA   tmp0                ; u8_angle
+      ; Convert heading degrees to the exact NDK/blitter angle byte.
+      JSR   turtle_heading_u8
+      STA   tmp0
 
       ; Get sin/cos from coprocessor
       ; Logo heading: 0=north, 90=east, 180=south, 270=west
@@ -241,13 +291,24 @@ ext_fd:
 @sin_ext:
       STA   MATH_MUL16_B_HI    ; triggers multiply
 
-      ; dx = result / 128 (shift right 7, preserving sign)
+      ; dx = round(result / 128). The math coprocessor exposes 1.7 signed
+      ; sin/cos, so +1.0 is 127/128; rounding keeps cardinal moves exact.
+      CLC
       LDA   MATH_RES0
-      ASL                       ; bit 7 → carry
+      ADC   #64
+      STA   tmp2
       LDA   MATH_RES1
+      ADC   #0
+      STA   tmp3
+      LDA   MATH_RES2
+      ADC   #0
+      STA   tmp1
+      LDA   tmp2
+      ASL                       ; bit 7 → carry
+      LDA   tmp3
       ROL
       STA   dx_lo
-      LDA   MATH_RES2
+      LDA   tmp1
       ROL
       STA   dx_hi
 
@@ -269,13 +330,23 @@ ext_fd:
 @cos_ext:
       STA   MATH_MUL16_B_HI    ; triggers multiply
 
-      ; raw_dy = result / 128
+      ; raw_dy = round(result / 128)
+      CLC
       LDA   MATH_RES0
-      ASL
+      ADC   #64
+      STA   tmp2
       LDA   MATH_RES1
+      ADC   #0
+      STA   tmp3
+      LDA   MATH_RES2
+      ADC   #0
+      STA   tmp1
+      LDA   tmp2
+      ASL
+      LDA   tmp3
       ROL
       STA   tmp2                ; raw_dy lo
-      LDA   MATH_RES2
+      LDA   tmp1
       ROL
       STA   tmp3                ; raw_dy hi
 
@@ -313,8 +384,8 @@ ext_fd:
       JSR   draw_line
 @skip_draw:
 
-      ; Update sprite position
-      JSR   update_sprite_pos
+      ; Redraw virtual sprite at the new position
+      JSR   draw_turtle_sprite
       RTS
 
 ; =====================================================================
@@ -350,8 +421,8 @@ ext_rt:
       ; Reduce mod 360
       JSR   heading_mod360
 
-      ; Update sprite rotation
-      JSR   update_sprite_rotation
+      ; Redraw virtual sprite with the new heading
+      JSR   draw_turtle_sprite
       RTS
 
 ; =====================================================================
@@ -372,7 +443,7 @@ ext_lt:
       BMI   @add360
       ; Also do mod 360 in case it's >=360
       JSR   heading_mod360
-      JSR   update_sprite_rotation
+      JSR   draw_turtle_sprite
       RTS
 
 @add360:
@@ -386,7 +457,7 @@ ext_lt:
       ; Could still be negative if turned more than 360, recurse
       BMI   @add360
       JSR   heading_mod360
-      JSR   update_sprite_rotation
+      JSR   draw_turtle_sprite
       RTS
 
 ; =====================================================================
@@ -410,25 +481,14 @@ ext_pd:
 ext_st:
       LDA   #$01
       STA   TURTLE_SHOWN
-      ; Enable hardware sprite
-      JSR   wait_vgc
-      LDA   TURTLE_SPRITE
-      STA   VGC_P0
-      LDA   #VCMD_SPRENA
-      STA   VGC_CMD
-      RTS
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_ht — hide turtle sprite
 ; =====================================================================
 ext_ht:
+      JSR   erase_turtle_sprite
       STZ   TURTLE_SHOWN
-      ; Disable hardware sprite
-      JSR   wait_vgc
-      LDA   TURTLE_SPRITE
-      STA   VGC_P0
-      LDA   #VCMD_SPRDIS
-      STA   VGC_CMD
       RTS
 
 ; =====================================================================
@@ -439,6 +499,7 @@ ext_home:
       LDA   TURTLE_INITED
       BNE   @go
       JSR   turtle_init
+      JSR   draw_turtle_sprite
       RTS
 @go:
       ; Save old position
@@ -450,6 +511,7 @@ ext_home:
       STA   old_y_lo
       LDA   TURTLE_Y_HI
       STA   old_y_hi
+      JSR   erase_turtle_sprite
 
       ; Move to center
       LDA   #TURTLE_CENTER_X
@@ -470,8 +532,7 @@ ext_home:
       BNE   @no_draw
       JSR   draw_line
 @no_draw:
-      JSR   update_sprite_pos
-      JSR   update_sprite_rotation
+      JSR   draw_turtle_sprite
       RTS
 
 ; =====================================================================
@@ -496,32 +557,18 @@ turtle_init:
       STA   TURTLE_SHOWN
       LDA   #1                  ; white in Nova palette
       STA   TURTLE_COLOR
-      LDA   #TURTLE_SPR_SLOT
-      STA   TURTLE_SPRITE
+      STZ   TURTLE_SPRITE
       LDA   #$01
       STA   TURTLE_INITED
 
-      ; Copy source shape from RODATA to RAM buffer
       LDX   #0
 @copy_shape:
       LDA   turtle_shape_data,X
-      STA   TURTLE_SHAPE_BUF,X
+      STA   turtle_source_shape,X
       INX
-      BNE   @copy_shape         ; 256 bytes
+      BNE   @copy_shape
 
-      ; Define hardware sprite shape from the source buffer
-      JSR   define_sprite_shape
-
-      ; Position and enable sprite
-      JSR   update_sprite_pos
-
-      ; Enable it
-      JSR   wait_vgc
-      LDA   TURTLE_SPRITE
-      STA   VGC_P0
-      LDA   #VCMD_SPRENA
-      STA   VGC_CMD
-
+      STZ   turtle_bg_saved
       RTS
 
 ; =====================================================================
@@ -532,14 +579,10 @@ heading_mod360:
       ; If heading >= 360, subtract 360
       LDA   TURTLE_HEADING_HI
       BNE   @check_hi
-      LDA   TURTLE_HEADING_LO
-      CMP   #<360               ; 360 = $0168
-      BCC   @done               ; < 360, done
-      BRA   @subtract
+      BRA   @done               ; hi = 0 is always < 360
 @check_hi:
       ; hi > 1 → definitely >= 360 (since 360 = $0168)
       CMP   #>360               ; >360 hi = $01
-      BCC   @done               ; hi = 0, already handled above
       BNE   @subtract           ; hi > 1
       ; hi = 1, compare lo
       LDA   TURTLE_HEADING_LO
@@ -562,14 +605,13 @@ heading_mod360:
 ; =====================================================================
 draw_line:
       ; Set color
-      JSR   wait_vgc
+      JSR   vgc_wait_cmd
       LDA   TURTLE_COLOR
       STA   VGC_P0
-      LDA   #VCMD_GCOLOR
-      STA   VGC_CMD
+      JSR   vgc_gcolor
 
       ; Draw line
-      JSR   wait_vgc
+      JSR   vgc_wait_cmd
       LDA   old_x_lo
       STA   VGC_P0
       LDA   old_x_hi
@@ -586,273 +628,208 @@ draw_line:
       STA   VGC_P6
       LDA   TURTLE_Y_HI
       STA   VGC_P7
-      LDA   #VCMD_LINE
-      STA   VGC_CMD
+      JSR   vgc_line
       RTS
 
 ; =====================================================================
-; update_sprite_pos — position the turtle hardware sprite
+; clear_gfx_plane — clear full graphics plane through the NDK VGC helper
 ; =====================================================================
-update_sprite_pos:
-      LDA   TURTLE_SHOWN
-      BEQ   @done
-      JSR   wait_vgc
-      LDA   TURTLE_SPRITE
-      STA   VGC_P0
-      ; Sprite X needs centering offset: sprite is 16px wide, center at X-8
+clear_gfx_plane:
+      JSR   vgc_wait_cmd
+      JSR   vgc_gcls
+      JMP   vgc_wait_cmd
+
+; =====================================================================
+; configure_turtle_vsprite — configure NDK virtual-sprite state
+; =====================================================================
+configure_turtle_vsprite:
+      LDA   #TURTLE_SPR_SIZE
+      STA   VSPRITE_WIDTHL
+      STZ   VSPRITE_WIDTHH
+      STA   VSPRITE_HEIGHTL
+      STZ   VSPRITE_HEIGHTH
+      STA   VSPRITE_ORIGSTRL
+      STZ   VSPRITE_ORIGSTRH
+      STA   VSPRITE_ROTSTRL
+      STZ   VSPRITE_ROTSTRH
+      STA   VSPRITE_BGSTRL
+      STZ   VSPRITE_BGSTRH
+
+      LDA   #BLT_SPACE_CPU
+      STA   VSPRITE_ORIGSPACE
+      STA   VSPRITE_ROTSPACE
+      STA   VSPRITE_BGSPACE
+
+      LDA   #<turtle_source_shape
+      STA   VSPRITE_ORIGADDRL
+      LDA   #>turtle_source_shape
+      STA   VSPRITE_ORIGADDRM
+      STZ   VSPRITE_ORIGADDRH
+
+      LDA   #<turtle_rotated_shape
+      STA   VSPRITE_ROTADDRL
+      LDA   #>turtle_rotated_shape
+      STA   VSPRITE_ROTADDRM
+      STZ   VSPRITE_ROTADDRH
+
+      LDA   #<turtle_saved_bg
+      STA   VSPRITE_BGADDRL
+      LDA   #>turtle_saved_bg
+      STA   VSPRITE_BGADDRM
+      STZ   VSPRITE_BGADDRH
+
+      STZ   VSPRITE_COLORKEY
+      LDA   #VSPRITE_FLAG_COLORKEY
+      STA   VSPRITE_FLAGS
+      RTS
+
+; =====================================================================
+; set_turtle_vsprite_pos — center the 16x16 sprite on the turtle position
+; =====================================================================
+set_turtle_vsprite_pos:
       SEC
       LDA   TURTLE_X_LO
-      SBC   #8
-      STA   VGC_P1
+      SBC   #TURTLE_SPR_HALF
+      STA   tmp0
       LDA   TURTLE_X_HI
       SBC   #0
-      STA   VGC_P2
-      ; Sprite Y: center at Y-8
+      STA   tmp1
+      BMI   @x_zero
+      CMP   #>TURTLE_MAX_X
+      BCC   @x_ok
+      BNE   @x_max
+      LDA   tmp0
+      CMP   #<TURTLE_MAX_X
+      BCC   @x_ok
+      BEQ   @x_ok
+@x_max:
+      LDA   #<TURTLE_MAX_X
+      STA   VSPRITE_XL
+      LDA   #>TURTLE_MAX_X
+      STA   VSPRITE_XH
+      BRA   @y
+@x_zero:
+      STZ   VSPRITE_XL
+      STZ   VSPRITE_XH
+      BRA   @y
+@x_ok:
+      LDA   tmp0
+      STA   VSPRITE_XL
+      LDA   tmp1
+      STA   VSPRITE_XH
+
+@y:
       SEC
       LDA   TURTLE_Y_LO
-      SBC   #8
-      STA   VGC_P3
+      SBC   #TURTLE_SPR_HALF
+      STA   tmp0
       LDA   TURTLE_Y_HI
       SBC   #0
-      STA   VGC_P4
-      LDA   #VCMD_SPRPOS
-      STA   VGC_CMD
+      BMI   @y_zero
+      BNE   @y_max
+      LDA   tmp0
+      CMP   #(TURTLE_MAX_Y + 1)
+      BCC   @y_ok
+@y_max:
+      LDA   #TURTLE_MAX_Y
+      STA   VSPRITE_Y
+      RTS
+@y_zero:
+      STZ   VSPRITE_Y
+      RTS
+@y_ok:
+      LDA   tmp0
+      STA   VSPRITE_Y
+      RTS
+
+; =====================================================================
+; turtle_heading_u8 — convert Logo degrees to the NDK/blitter angle byte.
+;   A = floor((heading * 256) / 360). Cardinal headings must land exactly:
+;   90 -> 64, 180 -> 128, 270 -> 192.
+; =====================================================================
+turtle_heading_u8:
+      STZ   MATH_DIV_N_LO
+      LDA   TURTLE_HEADING_LO
+      STA   MATH_DIV_N_1
+      LDA   TURTLE_HEADING_HI
+      STA   MATH_DIV_N_2
+      STZ   MATH_DIV_N_HI
+      LDA   #<360
+      STA   MATH_DIV_D_LO
+      LDA   #>360
+      STA   MATH_DIV_D_HI
+      LDA   MATH_RES0
+      RTS
+
+; =====================================================================
+; erase_turtle_sprite — restore the background saved by the NDK vsprite path
+; =====================================================================
+erase_turtle_sprite:
+      LDA   turtle_bg_saved
+      BEQ   @done
+      JSR   configure_turtle_vsprite
+      LDA   turtle_bg_x_lo
+      STA   VSPRITE_XL
+      LDA   turtle_bg_x_hi
+      STA   VSPRITE_XH
+      LDA   turtle_bg_y
+      STA   VSPRITE_Y
+      JSR   vsprite_gfx_restore_bg
+      STZ   turtle_bg_saved
 @done:
       RTS
 
 ; =====================================================================
-; update_sprite_rotation — rotate sprite shape and update
-; Uses the blitter hardware rotation
+; draw_turtle_sprite — draw rotated NDK virtual sprite
 ; =====================================================================
-update_sprite_rotation:
+draw_turtle_sprite:
       LDA   TURTLE_SHOWN
       BEQ   @done
-
-      ; Convert heading to u8 angle for the blitter
-      ; u8 = heading * 91 / 128
-      LDA   TURTLE_HEADING_LO
-      STA   MATH_MUL16_A_LO
-      LDA   TURTLE_HEADING_HI
-      STA   MATH_MUL16_A_HI
-      LDA   #91
-      STA   MATH_MUL16_B_LO
-      STZ   MATH_MUL16_B_HI    ; triggers
-      LDA   MATH_RES0
-      ASL
-      LDA   MATH_RES1
-      ROL
-      STA   tmp0                ; u8 angle
-
-      ; Use blitter rotate: src=TURTLE_SHAPE_BUF, dst=TURTLE_ROT_BUF
-      ; Configure blitter for rotation
-      LDA   #BLT_SPACE_CPU
-      STA   BLT_SRCSPACE
-      STA   BLT_DSTSPACE
-      LDA   #<TURTLE_SHAPE_BUF
-      STA   BLT_SRCL
-      LDA   #>TURTLE_SHAPE_BUF
-      STA   BLT_SRCM
-      STZ   BLT_SRCH
-      LDA   #<TURTLE_ROT_BUF
-      STA   BLT_DSTL
-      LDA   #>TURTLE_ROT_BUF
-      STA   BLT_DSTM
-      STZ   BLT_DSTH
-      LDA   #TURTLE_SPR_SIZE
-      STA   BLT_WIDTHL
-      STZ   BLT_WIDTHH
-      LDA   #TURTLE_SPR_SIZE
-      STA   BLT_HEIGHTL
-      STZ   BLT_HEIGHTH
-      LDA   #TURTLE_SPR_SIZE
-      STA   BLT_SRCSTRL
-      STZ   BLT_SRCSTRH
-      LDA   #TURTLE_SPR_SIZE
-      STA   BLT_DSTSTRL
-      STZ   BLT_DSTSTRH
-      LDA   tmp0
-      STA   BLT_ROTANGLE
-      LDA   #BLT_MODE_ROTATE
-      STA   BLT_MODE
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD
-
-      ; Wait for blitter to finish
-@wait_blt:
-      LDA   BLT_STATUS
-      CMP   #BLT_STATUS_BUSY
-      BEQ   @wait_blt
-
-      ; Now copy rotated shape to sprite hardware via SPRDEF/SPRROW
-      JSR   define_sprite_from_rot
-
+      JSR   erase_turtle_sprite
+      JSR   configure_turtle_vsprite
+      JSR   set_turtle_vsprite_pos
+      LDA   VSPRITE_XL
+      STA   turtle_bg_x_lo
+      LDA   VSPRITE_XH
+      STA   turtle_bg_x_hi
+      LDA   VSPRITE_Y
+      STA   turtle_bg_y
+      JSR   vsprite_gfx_save_bg
+      CMP   #VSPRITE_RESULT_OK
+      BNE   @done
+      LDA   #$01
+      STA   turtle_bg_saved
+      JSR   turtle_heading_u8
+      STA   VSPRITE_ROTANGLE
+      JSR   vsprite_gfx_rotate_blit_keyed
 @done:
-      RTS
-
-; =====================================================================
-; define_sprite_shape — define sprite from TURTLE_SHAPE_BUF
-; =====================================================================
-define_sprite_shape:
-      ; SPRDEF slot, width=16, height=16
-      JSR   wait_vgc
-      LDA   TURTLE_SPRITE
-      STA   VGC_P0
-      LDA   #TURTLE_SPR_SIZE
-      STA   VGC_P1              ; width
-      STA   VGC_P2              ; height
-      LDA   #VCMD_SPRDEF
-      STA   VGC_CMD
-
-      ; Send 16 rows via SPRROW
-      LDX   #0                  ; row counter
-      STZ   tmp0                ; source offset low
-      STZ   tmp1                ; source offset high (starts at 0)
-@row_loop:
-      JSR   wait_vgc
-      LDA   TURTLE_SPRITE
-      STA   VGC_P0              ; slot
-      STX   VGC_P1              ; row index
-      ; Copy 16 pixels to P2..P14 and use MEMWRITE via SPRROW
-      ; SPRROW takes: P0=slot, P1=row, P2=src_addr_lo, P3=src_addr_hi
-      CLC
-      LDA   #<TURTLE_SHAPE_BUF
-      ADC   tmp0
-      STA   VGC_P2
-      LDA   #>TURTLE_SHAPE_BUF
-      ADC   tmp1
-      STA   VGC_P3
-      LDA   #VCMD_SPRROW
-      STA   VGC_CMD
-
-      ; Advance source offset by 16
-      CLC
-      LDA   tmp0
-      ADC   #TURTLE_SPR_SIZE
-      STA   tmp0
-      LDA   tmp1
-      ADC   #0
-      STA   tmp1
-
-      INX
-      CPX   #TURTLE_SPR_SIZE
-      BCC   @row_loop
-      RTS
-
-; =====================================================================
-; define_sprite_from_rot — define sprite from TURTLE_ROT_BUF
-; =====================================================================
-define_sprite_from_rot:
-      ; SPRDEF slot
-      JSR   wait_vgc
-      LDA   TURTLE_SPRITE
-      STA   VGC_P0
-      LDA   #TURTLE_SPR_SIZE
-      STA   VGC_P1
-      STA   VGC_P2
-      LDA   #VCMD_SPRDEF
-      STA   VGC_CMD
-
-      ; Send 16 rows from rotated buffer
-      LDX   #0
-      STZ   tmp0
-      STZ   tmp1
-@row_loop:
-      JSR   wait_vgc
-      LDA   TURTLE_SPRITE
-      STA   VGC_P0
-      STX   VGC_P1
-      CLC
-      LDA   #<TURTLE_ROT_BUF
-      ADC   tmp0
-      STA   VGC_P2
-      LDA   #>TURTLE_ROT_BUF
-      ADC   tmp1
-      STA   VGC_P3
-      LDA   #VCMD_SPRROW
-      STA   VGC_CMD
-
-      CLC
-      LDA   tmp0
-      ADC   #TURTLE_SPR_SIZE
-      STA   tmp0
-      LDA   tmp1
-      ADC   #0
-      STA   tmp1
-
-      INX
-      CPX   #TURTLE_SPR_SIZE
-      BCC   @row_loop
       RTS
 
 ; =====================================================================
 ; setup_copper — copper split for gfx+sprites top, text bottom
 ; =====================================================================
 setup_copper:
-      JSR   wait_vgc
-      LDA   #VCMD_COPPERDIS
-      STA   VGC_CMD
-
-      JSR   wait_vgc
       STZ   VGC_P0
-      LDA   #VCMD_COPPERLIST
-      STA   VGC_CMD
-
-      JSR   wait_vgc
-      LDA   #VCMD_COPPERCLR
-      STA   VGC_CMD
-
-      ; Rule 1: at line 0, mode = gfx+sprites
-      STZ   VGC_P0
-      STZ   VGC_P1
-      STZ   VGC_P2
-      STZ   VGC_P3
-      STZ   VGC_P4
-      LDA   #MODE_GFX_SPRITES
-      STA   VGC_P5
-      JSR   wait_vgc
-      LDA   #VCMD_COPPERADD
-      STA   VGC_CMD
-
-      ; Rule 2: at SPLIT_Y, mode = text only
-      STZ   VGC_P0
-      STZ   VGC_P1
       LDA   #SPLIT_Y
+      STA   VGC_P1
+      LDA   #MODE_GFX_SPRITES
       STA   VGC_P2
-      STZ   VGC_P3
-      STZ   VGC_P4
       LDA   #MODE_TEXT_ONLY
-      STA   VGC_P5
-      JSR   wait_vgc
-      LDA   #VCMD_COPPERADD
-      STA   VGC_CMD
-
-      ; Use list 0 and enable copper
-      JSR   wait_vgc
-      STZ   VGC_P0
-      LDA   #VCMD_COPPERUSE
-      STA   VGC_CMD
-
-      JSR   wait_vgc
-      LDA   #VCMD_COPPERENA
-      STA   VGC_CMD
-      RTS
+      STA   VGC_P3
+      JMP   copper_split_mode
 
 ; =====================================================================
 ; wait_vgc — wait until VGC is not busy
 ; =====================================================================
 wait_vgc:
-      LDA   VGC_CMD
-      AND   #$01
-      BNE   wait_vgc
-      RTS
+      JMP   vgc_wait_cmd
 
 ; =====================================================================
 ; ext_ts — TEXTSCREEN: full text mode, disable copper, mode=0
 ; =====================================================================
 ext_ts:
-      JSR   wait_vgc
-      LDA   #VCMD_COPPERDIS
-      STA   VGC_CMD
+      JSR   vgc_wait_cmd
+      JSR   copper_off
       STZ   VGC_MODE
       RTS
 
@@ -861,6 +838,7 @@ ext_ts:
 ; =====================================================================
 ext_ss:
       JSR   setup_copper
+      JSR   prepare_split_text
       RTS
 
 ; =====================================================================
@@ -874,6 +852,26 @@ ext_fs:
       ; Set mode to graphics + sprites
       LDA   #MODE_GFX_SPRITES
       STA   VGC_MODE
+      RTS
+
+; =====================================================================
+; prepare_split_text — keep Logo's prompt in the visible split text area
+; =====================================================================
+prepare_split_text:
+      LDA   #$0C
+      STA   VGC_CHAROUT
+      JSR   wait_vgc
+      STZ   TEXTWIN_LEFT
+      LDA   #SPLIT_TEXT_ROW
+      STA   TEXTWIN_TOP
+      LDA   #80
+      STA   TEXTWIN_WIDTH
+      LDA   #SPLIT_TEXT_HEIGHT
+      STA   TEXTWIN_HEIGHT
+      STZ   VGC_CURSX
+      LDA   #SPLIT_TEXT_ROW
+      STA   VGC_CURSY
+      STZ   VGC_CURSEN
       RTS
 
 ; =====================================================================
@@ -895,6 +893,7 @@ ext_setxy:
       STA   old_y_lo
       LDA   TURTLE_Y_HI
       STA   old_y_hi
+      JSR   erase_turtle_sprite
 
       ; Set new position
       LDA   EXT_ARG0_LO
@@ -913,7 +912,67 @@ ext_setxy:
       BNE   @skip_draw
       JSR   draw_line
 @skip_draw:
-      JSR   update_sprite_pos
+      JSR   draw_turtle_sprite
+      RTS
+
+; =====================================================================
+; ext_setpos — move to position from a Logo list. Draw line if pen down.
+;   ARG0 = [x y]
+; =====================================================================
+ext_setpos:
+      LDA   EXT_ARG0_TYPE
+      CMP   #VAL_LIST
+      BNE   @done
+
+      LDA   EXT_ARG0_LO
+      STA   tmp0
+      LDA   EXT_ARG0_HI
+      STA   tmp1
+      ORA   tmp0
+      BEQ   @done
+
+      ; First list element is X.
+      LDY   #CONS_CAR_TYPE
+      LDA   (tmp0),Y
+      CMP   #VAL_NUMBER
+      BNE   @done
+      LDY   #CONS_CAR_LO
+      LDA   (tmp0),Y
+      STA   EXT_ARG0_LO
+      LDY   #CONS_CAR_HI
+      LDA   (tmp0),Y
+      STA   EXT_ARG0_HI
+      STZ   EXT_ARG0_FRAC
+
+      ; Second list element is Y.
+      LDY   #CONS_CDR_LO
+      LDA   (tmp0),Y
+      STA   tmp2
+      LDY   #CONS_CDR_HI
+      LDA   (tmp0),Y
+      STA   tmp3
+      ORA   tmp2
+      BEQ   @done
+
+      LDA   tmp2
+      STA   tmp0
+      LDA   tmp3
+      STA   tmp1
+      LDY   #CONS_CAR_TYPE
+      LDA   (tmp0),Y
+      CMP   #VAL_NUMBER
+      BNE   @done
+      LDY   #CONS_CAR_LO
+      LDA   (tmp0),Y
+      STA   EXT_ARG1_LO
+      LDY   #CONS_CAR_HI
+      LDA   (tmp0),Y
+      STA   EXT_ARG1_HI
+      STZ   EXT_ARG1_FRAC
+
+      JMP   ext_setxy
+
+@done:
       RTS
 
 ; =====================================================================
@@ -934,6 +993,7 @@ ext_setx:
       STA   old_y_lo
       LDA   TURTLE_Y_HI
       STA   old_y_hi
+      JSR   erase_turtle_sprite
 
       ; Update X only
       LDA   EXT_ARG0_LO
@@ -947,7 +1007,7 @@ ext_setx:
       BNE   @skip_draw
       JSR   draw_line
 @skip_draw:
-      JSR   update_sprite_pos
+      JSR   draw_turtle_sprite
       RTS
 
 ; =====================================================================
@@ -968,6 +1028,7 @@ ext_sety:
       STA   old_y_lo
       LDA   TURTLE_Y_HI
       STA   old_y_hi
+      JSR   erase_turtle_sprite
 
       ; Update Y only
       LDA   EXT_ARG0_LO
@@ -981,7 +1042,7 @@ ext_sety:
       BNE   @skip_draw
       JSR   draw_line
 @skip_draw:
-      JSR   update_sprite_pos
+      JSR   draw_turtle_sprite
       RTS
 
 ; =====================================================================
@@ -1010,7 +1071,7 @@ ext_seth:
       BMI   @add360
       JSR   heading_mod360
 @update:
-      JSR   update_sprite_rotation
+      JSR   draw_turtle_sprite
       RTS
 
 ; =====================================================================
@@ -1093,6 +1154,7 @@ ext_setpc:
 ;   ARG0 = color
 ; =====================================================================
 ext_setbg:
+      JSR   erase_turtle_sprite
       LDA   EXT_ARG0_LO
       STA   VGC_BGCOL
       ; Also clear graphics plane to this color
@@ -1101,7 +1163,9 @@ ext_setbg:
       STA   VGC_P0
       LDA   #VCMD_GCLS
       STA   VGC_CMD
-      RTS
+      JSR   wait_vgc
+      STZ   turtle_bg_saved
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_towards — return heading angle towards point (x, y)
@@ -1165,6 +1229,7 @@ ext_setcolor:
 ;   ARG0 = x, ARG1 = y
 ; =====================================================================
 ext_plot:
+      JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1176,13 +1241,15 @@ ext_plot:
       STA   VGC_P3
       LDA   #VCMD_PLOT
       STA   VGC_CMD
-      RTS
+      JSR   wait_vgc
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_unplot — clear a pixel at (x, y)
 ;   ARG0 = x, ARG1 = y
 ; =====================================================================
 ext_unplot:
+      JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1194,13 +1261,15 @@ ext_unplot:
       STA   VGC_P3
       LDA   #VCMD_UNPLOT
       STA   VGC_CMD
-      RTS
+      JSR   wait_vgc
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_line — draw line from (x1,y1) to (x2,y2)
 ;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
 ; =====================================================================
 ext_line:
+      JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1220,13 +1289,15 @@ ext_line:
       STA   VGC_P7
       LDA   #VCMD_LINE
       STA   VGC_CMD
-      RTS
+      JSR   wait_vgc
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_circle — draw circle at (x, y) with radius r
 ;   ARG0 = x, ARG1 = y, ARG2 = r
 ; =====================================================================
 ext_circle:
+      JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1244,13 +1315,15 @@ ext_circle:
       STZ   VGC_P7              ; ry_hi = 0
       LDA   #VCMD_CIRCLE
       STA   VGC_CMD
-      RTS
+      JSR   wait_vgc
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_rect — draw rectangle outline from (x1,y1) to (x2,y2)
 ;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
 ; =====================================================================
 ext_rect:
+      JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1270,13 +1343,15 @@ ext_rect:
       STA   VGC_P7
       LDA   #VCMD_RECT
       STA   VGC_CMD
-      RTS
+      JSR   wait_vgc
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_fillrect — draw filled rectangle from (x1,y1) to (x2,y2)
 ;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
 ; =====================================================================
 ext_fillrect:
+      JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1296,13 +1371,15 @@ ext_fillrect:
       STA   VGC_P7
       LDA   #VCMD_FILL
       STA   VGC_CMD
-      RTS
+      JSR   wait_vgc
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_paint — flood fill at (x, y) with current draw color
 ;   ARG0 = x, ARG1 = y
 ; =====================================================================
 ext_paint:
+      JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1314,7 +1391,8 @@ ext_paint:
       STA   VGC_P3
       LDA   #VCMD_PAINT
       STA   VGC_CMD
-      RTS
+      JSR   wait_vgc
+      JMP   draw_turtle_sprite
 
 ; =====================================================================
 ; ext_sprite — SPRITE n x y: position and enable sprite N
@@ -1540,23 +1618,43 @@ wait_frames:
 ; =====================================================================
       .segment "RODATA"
 
-; 16x16 turtle arrow shape pointing UP (north).
-; Colors: 0=transparent, 1=white(outline), 5=green(fill)
+; 16x16 turtle arrow shape pointing UP (north), matching the NDK turtle demo.
 turtle_shape_data:
-      ;         0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
-      .byte     0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0  ; row 0
-      .byte     0, 0, 0, 0, 0, 0, 1, 5, 5, 1, 0, 0, 0, 0, 0, 0  ; row 1
-      .byte     0, 0, 0, 0, 0, 0, 1, 5, 5, 1, 0, 0, 0, 0, 0, 0  ; row 2
-      .byte     0, 0, 0, 0, 0, 1, 5, 5, 5, 5, 1, 0, 0, 0, 0, 0  ; row 3
-      .byte     0, 0, 0, 0, 0, 1, 5, 5, 5, 5, 1, 0, 0, 0, 0, 0  ; row 4
-      .byte     0, 0, 0, 0, 1, 5, 5, 5, 5, 5, 5, 1, 0, 0, 0, 0  ; row 5
-      .byte     0, 0, 0, 0, 1, 5, 5, 5, 5, 5, 5, 1, 0, 0, 0, 0  ; row 6
-      .byte     0, 0, 0, 1, 5, 5, 5, 5, 5, 5, 5, 5, 1, 0, 0, 0  ; row 7
-      .byte     0, 0, 0, 1, 5, 5, 5, 5, 5, 5, 5, 5, 1, 0, 0, 0  ; row 8
-      .byte     0, 0, 1, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 0, 0  ; row 9
-      .byte     0, 0, 1, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 0, 0  ; row 10
-      .byte     0, 1, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 0  ; row 11
-      .byte     0, 1, 1, 1, 1, 1, 1, 5, 5, 1, 1, 1, 1, 1, 1, 0  ; row 12
-      .byte     0, 0, 0, 0, 0, 0, 1, 5, 5, 1, 0, 0, 0, 0, 0, 0  ; row 13
-      .byte     0, 0, 0, 0, 0, 0, 1, 5, 5, 1, 0, 0, 0, 0, 0, 0  ; row 14
-      .byte     0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0  ; row 15
+.repeat 16, yy
+  .repeat 16, xx
+    .if yy < 1
+      .byte 0
+    .elseif yy > 14
+      .byte 0
+    .elseif yy = 14
+      .if xx >= 1 && xx <= 5
+        .byte COL_RED
+      .elseif xx >= 10 && xx <= 14
+        .byte COL_GREEN
+      .elseif xx >= 1 && xx <= 14
+        .byte COL_WHITE
+      .else
+        .byte 0
+      .endif
+    .elseif xx = (8 - ((((yy - 1) * 7) + 6) / 13))
+      .if yy >= 9
+        .byte COL_RED
+      .else
+        .byte COL_WHITE
+      .endif
+    .elseif xx = (8 + ((((yy - 1) * 6) + 6) / 13))
+      .if yy >= 9
+        .byte COL_GREEN
+      .else
+        .byte COL_WHITE
+      .endif
+    .else
+      .byte 0
+    .endif
+  .endrepeat
+.endrepeat
+
+      .include "vgc.s"
+      .include "copper.s"
+      .include "copper_split.s"
+      .include "vsprite.s"

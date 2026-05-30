@@ -726,6 +726,7 @@ module test_debug_bridge;
         $display("");
         $display("Test: CMD_CPU_STATE reports WAI/STP status bits");
 
+        dbg_cpu_state   <= 6'd62; // WAI
         dbg_cpu_waiting <= 1'b1;
         dbg_cpu_stopped <= 1'b0;
         send_byte(8'h06);   // CMD_CPU_STATE
@@ -740,6 +741,7 @@ module test_debug_bridge;
         wait_tx(b); check_eq8("waiting status bit", b, 8'b0000_0001);
 
         dbg_cpu_waiting <= 1'b0;
+        dbg_cpu_state   <= 6'd63; // STP
         dbg_cpu_stopped <= 1'b1;
         send_byte(8'h06);   // CMD_CPU_STATE
         wait_tx(b); check_eq8("cpu state status 2", b, 8'h00);
@@ -749,6 +751,7 @@ module test_debug_bridge;
 
         dbg_cpu_waiting <= 1'b0;
         dbg_cpu_stopped <= 1'b0;
+        dbg_cpu_state   <= 6'd12; // DECODE
     endtask
 
     task automatic test_resume_pulses_cpu_resume();
@@ -768,7 +771,7 @@ module test_debug_bridge;
     task automatic test_breakpoint_set_hit_list_clear();
         logic [7:0] b;
         $display("");
-        $display("Test: PC breakpoint set/list/hit/clear");
+        $display("Test: source-PC breakpoint set/list/hit/clear");
 
         send_byte(8'h13);   // CMD_BREAK_SET
         send_byte(8'h00);   // slot 0
@@ -777,7 +780,7 @@ module test_debug_bridge;
         send_byte(8'h01);   // enable
         wait_tx(b); check_eq8("break_set ack", b, 8'h00);
 
-        dbg_cpu_pc    <= 16'hC000;
+        dbg_cpu_pc    <= 16'hC001; // CPU raw PC is post-fetch while in DECODE
         dbg_cpu_state <= 6'd12; // DECODE
         dbg_cpu_rdy   <= 1'b1;
         @(posedge clk);
@@ -804,7 +807,7 @@ module test_debug_bridge;
         $display("");
         $display("Test: CMD_STEP runs one instruction and returns CPU state");
 
-        dbg_cpu_pc    <= 16'hC100;
+        dbg_cpu_pc    <= 16'hC101; // source PC $C100 at DECODE
         dbg_cpu_state <= 6'd12; // DECODE
         dbg_cpu_ir    <= 8'hEA; // NOP
         dbg_cpu_a     <= 8'h42;
@@ -823,6 +826,7 @@ module test_debug_bridge;
         dbg_cpu_pc    <= 16'hC101;
         @(posedge clk);
         dbg_cpu_state <= 6'd12; // next DECODE boundary
+        dbg_cpu_pc    <= 16'hC102; // source PC $C101
         @(posedge clk);
         dbg_cpu_rdy   <= 1'b0;
 
@@ -845,7 +849,7 @@ module test_debug_bridge;
         $display("Test: CMD_TRACE_READ returns last CPU records oldest-to-newest");
 
         for (int i = 0; i < 3; i++) begin
-            dbg_cpu_pc    <= 16'h8000 + 16'(i);
+            dbg_cpu_pc    <= 16'h8001 + 16'(i);
             dbg_cpu_addr  <= 16'h2000 + 16'(i);
             dbg_cpu_din   <= 8'hA0 + 8'(i);
             dbg_cpu_dout  <= 8'hB0 + 8'(i);
@@ -876,6 +880,7 @@ module test_debug_bridge;
         check_eq8("trace rec0 addr hi", rec[2], 8'h20);
         check_eq8("trace rec0 addr lo", rec[3], 8'h00);
         check_eq8("trace rec0 din", rec[4], 8'hA0);
+        check_eq8("trace rec0 decode bit", rec[11] & 8'h10, 8'h10);
         check_eq8("trace rec1 irq bit", rec[23] & 8'h04, 8'h04);
         check_eq8("trace rec2 nmi bit", rec[35] & 8'h08, 8'h08);
 

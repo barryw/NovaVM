@@ -346,7 +346,7 @@ module debug_bridge #(
 
     // Pause register
     logic paused;
-    assign dbg_pause = paused;
+    assign dbg_pause = paused | bp_hold;
 
     // PC breakpoints and single-step state.
     logic [3:0]  bp_en;
@@ -358,13 +358,18 @@ module debug_bridge #(
     logic        step_seen_non_decode;
     logic [19:0] step_timeout;
     logic [15:0] step_start_pc;
+    logic [15:0] bp_suppress_pc;
 
     wire cpu_decode_boundary = dbg_cpu_rdy && (dbg_cpu_state == CPU_STATE_DECODE);
-    wire bp0_match = bp_en[0] && (dbg_cpu_pc == bp_addr[0]);
-    wire bp1_match = bp_en[1] && (dbg_cpu_pc == bp_addr[1]);
-    wire bp2_match = bp_en[2] && (dbg_cpu_pc == bp_addr[2]);
-    wire bp3_match = bp_en[3] && (dbg_cpu_pc == bp_addr[3]);
+    wire cpu_decode_state = (dbg_cpu_state == CPU_STATE_DECODE);
+    wire [15:0] dbg_exec_pc = cpu_decode_state ? (dbg_cpu_pc - 16'd1) : dbg_cpu_pc;
+    wire bp0_match = bp_en[0] && (dbg_exec_pc == bp_addr[0]);
+    wire bp1_match = bp_en[1] && (dbg_exec_pc == bp_addr[1]);
+    wire bp2_match = bp_en[2] && (dbg_exec_pc == bp_addr[2]);
+    wire bp3_match = bp_en[3] && (dbg_exec_pc == bp_addr[3]);
     wire bp_any_match = bp0_match | bp1_match | bp2_match | bp3_match;
+    wire bp_hold = !paused && !step_active && !dbg_cpu_reset &&
+                   cpu_decode_state && bp_any_match && !bp_suppress;
     wire [1:0] bp_match_slot =
         bp0_match ? 2'd0 :
         bp1_match ? 2'd1 :
@@ -477,7 +482,7 @@ module debug_bridge #(
             trace_count  <= 0;
         end else if (dbg_cpu_rdy && !dbg_cpu_reset) begin
             trace_mem[trace_wr_ptr] <= {
-                dbg_cpu_pc,
+                dbg_exec_pc,
                 dbg_cpu_addr,
                 dbg_cpu_din,
                 dbg_cpu_dout,
@@ -486,7 +491,7 @@ module debug_bridge #(
                 dbg_cpu_flags,
                 2'b00, dbg_cpu_state,
                 dbg_cpu_ir,
-                4'b0, dbg_cpu_nmi, dbg_cpu_irq, dbg_cpu_we, dbg_cpu_rdy
+                3'b0, cpu_decode_state, dbg_cpu_nmi, dbg_cpu_irq, dbg_cpu_we, dbg_cpu_rdy
             };
             trace_wr_ptr <= trace_wr_ptr + 1'b1;
             if (trace_count < 7'd64)
@@ -542,6 +547,7 @@ module debug_bridge #(
             bp_hit_latched   <= 0;
             bp_hit_slot      <= 0;
             bp_suppress      <= 0;
+            bp_suppress_pc   <= 0;
             step_active      <= 0;
             step_seen_non_decode <= 0;
             step_timeout     <= 0;
@@ -623,11 +629,10 @@ module debug_bridge #(
                 rx_buf_data  <= rx_data;
             end
 
-            if (cpu_decode_boundary && bp_suppress && !bp_any_match)
+            if (bp_suppress && (dbg_exec_pc != bp_suppress_pc))
                 bp_suppress <= 0;
 
-            if (!paused && !step_active && !dbg_cpu_reset && cpu_decode_boundary &&
-                bp_any_match && !bp_suppress) begin
+            if (bp_hold) begin
                 paused         <= 1;
                 bp_hit_latched <= 1;
                 bp_hit_slot    <= bp_match_slot;
@@ -743,6 +748,7 @@ module debug_bridge #(
                             CMD_RESUME: begin
                                 paused     <= 0;
                                 bp_suppress <= 1;
+                                bp_suppress_pc <= dbg_exec_pc;
                                 dbg_cpu_resume <= 1'b1;
                                 resp_idx   <= 0;
                                 resp_total <= 1;
@@ -762,7 +768,8 @@ module debug_bridge #(
                                 step_active          <= 1;
                                 step_seen_non_decode <= 0;
                                 step_timeout         <= 0;
-                                step_start_pc        <= dbg_cpu_pc;
+                                step_start_pc        <= dbg_exec_pc;
+                                bp_suppress_pc       <= dbg_exec_pc;
                                 status_err           <= 0;
                                 state                <= S_STEP_WAIT;
                             end
@@ -1098,7 +1105,7 @@ module debug_bridge #(
                 // CPU_LATCH: snapshot all CPU registers
                 // ---------------------------------------------------------
                 S_CPU_LATCH: begin
-                    cpu_pc_l    <= dbg_cpu_pc;
+                    cpu_pc_l    <= dbg_exec_pc;
                     cpu_a_l     <= dbg_cpu_a;
                     cpu_x_l     <= dbg_cpu_x;
                     cpu_y_l     <= dbg_cpu_y;
@@ -1264,7 +1271,7 @@ module debug_bridge #(
                             paused               <= 1;
                             step_active          <= 0;
                             step_seen_non_decode <= 0;
-                            cpu_pc_l             <= dbg_cpu_pc;
+                            cpu_pc_l             <= dbg_exec_pc;
                             cpu_a_l              <= dbg_cpu_a;
                             cpu_x_l              <= dbg_cpu_x;
                             cpu_y_l              <= dbg_cpu_y;

@@ -16,6 +16,7 @@ module vgc (
     // CPU bus
     input  logic        cpu_ce,     // CPU clock enable
     input  logic [15:0] cpu_addr,
+    input  logic [15:0] cpu_raddr,
     input  logic [7:0]  cpu_wdata,
     output logic [7:0]  cpu_rdata,
     input  logic        cpu_we,
@@ -767,7 +768,6 @@ module vgc (
     wire [7:0]  key_fifo_head;   // head byte (valid when !empty)
     wire [8:0]  key_fifo_fill;   // 0..256
     logic       key_fifo_rd;     // pulsed high for one cycle to pop head
-    logic       charin_sel_prev; // previous cycle's "CPU addressing CHARIN" state (for edge detect)
 
     // "char_in_reg" — legacy head-read wire so existing register-mux code
     // keeps working. Returns 0 when empty (matches original behavior).
@@ -807,7 +807,8 @@ module vgc (
     logic        scroll_clearing;
     logic [6:0]  scroll_col;
 
-    assign rdy_out = !(vgc_reset_pending || scroll_pending || reset_clear_busy);
+    wire txtcls_pending = cmd_busy && (cmd_op == CMD_TXTCLS);
+    assign rdy_out = !(vgc_reset_pending || scroll_pending || reset_clear_busy || txtcls_pending);
     wire sprite_bg_collision_now =
         in_text_area_d2 && gfx_x_d2 < GFX_W &&
         spr_pixel_hit && gfx_b_dout != gfx_trans_color;
@@ -916,7 +917,7 @@ module vgc (
         scroll_x = 0; scroll_y = 0; scroll_ctl = SCROLL_CTL_DEFAULT;
         scroll_x_fetch = 0; scroll_y_fetch = 0;
         scroll_offset = 0; scroll_pending = 0; scroll_clearing = 0; scroll_col = 0;
-        key_fifo_rd = 0; charin_sel_prev = 0; cmd_busy = 0; cmd_op = 0;
+        key_fifo_rd = 0; cmd_busy = 0; cmd_op = 0;
         font_slot = 0; collision_ss = 0; collision_bg = 0;
         irq_enable = 0; irq_pending = 0;
         irq_timer_period = 0; irq_timer_counter = 0; irq_timer_enable = 1'b0; irq_timer_pulse = 1'b0;
@@ -994,20 +995,24 @@ module vgc (
             r_cpu_addr_r <= cpu_addr;
     end
 
-    // READ-side decoders — derived from r_cpu_addr_r (registered).
-    wire vgc_reg_sel   = (r_cpu_addr_r >= VGC_BASE && r_cpu_addr_r <= VGC_REGS_END);
-    wire vgc_irq_sel   = (r_cpu_addr_r >= VGC_IRQ_BASE && r_cpu_addr_r <= VGC_IRQ_END);
-    wire spr_reg_sel   = (r_cpu_addr_r >= SPR_REG_BASE && r_cpu_addr_r <= SPR_REG_END);
-    wire vram_reg_sel  = (r_cpu_addr_r >= VRAM_REG_BASE && r_cpu_addr_r <= VRAM_REG_END);
-    wire dim_reg_sel   = (r_cpu_addr_r == DIM_REG_ADDR);
-    wire text_reg_sel  = (r_cpu_addr_r == TEXT_FLAGS_ADDR || r_cpu_addr_r == TEXT_REVATTR_ADDR);
-    wire gfx_trans_sel = (r_cpu_addr_r == GFX_TRANS_ADDR);
-    wire palette_mode_sel = (r_cpu_addr_r == PALETTE_MODE_ADDR);
-    wire scroll_ctl_sel = (r_cpu_addr_r == SCROLL_CTL_ADDR);
-    wire collision_hi_sel = (r_cpu_addr_r == COLLST_HI_ADDR || r_cpu_addr_r == COLLBG_HI_ADDR);
-    wire [4:0]  reg_offset   = r_cpu_addr_r[4:0];
-    wire [3:0]  irq_offset   = r_cpu_addr_r[3:0];
-    wire [2:0]  vram_reg_off = r_cpu_addr_r[2:0];
+    // READ-side decoders — CPU-visible register data is combinational from
+    // the current CPU address. top.sv captures this on the cpu_ce=0 half-cycle
+    // and presents it to the Arlet core on the next active edge. Using the
+    // registered read address here adds one extra cycle and makes tight MMIO
+    // loops (LDA reg / CMP reg / BEQ) compare stale non-MMIO bytes forever.
+    wire vgc_reg_sel   = (cpu_raddr >= VGC_BASE && cpu_raddr <= VGC_REGS_END);
+    wire vgc_irq_sel   = (cpu_raddr >= VGC_IRQ_BASE && cpu_raddr <= VGC_IRQ_END);
+    wire spr_reg_sel   = (cpu_raddr >= SPR_REG_BASE && cpu_raddr <= SPR_REG_END);
+    wire vram_reg_sel  = (cpu_raddr >= VRAM_REG_BASE && cpu_raddr <= VRAM_REG_END);
+    wire dim_reg_sel   = (cpu_raddr == DIM_REG_ADDR);
+    wire text_reg_sel  = (cpu_raddr == TEXT_FLAGS_ADDR || cpu_raddr == TEXT_REVATTR_ADDR);
+    wire gfx_trans_sel = (cpu_raddr == GFX_TRANS_ADDR);
+    wire palette_mode_sel = (cpu_raddr == PALETTE_MODE_ADDR);
+    wire scroll_ctl_sel = (cpu_raddr == SCROLL_CTL_ADDR);
+    wire collision_hi_sel = (cpu_raddr == COLLST_HI_ADDR || cpu_raddr == COLLBG_HI_ADDR);
+    wire [4:0]  reg_offset   = cpu_raddr[4:0];
+    wire [3:0]  irq_offset   = cpu_raddr[3:0];
+    wire [2:0]  vram_reg_off = cpu_raddr[2:0];
     // Sprite register map starts at $A040 and spans $A040-$A0BF.
     // Offsets from the base are 0..127 = sprite (4 bits) << 3 | field (3 bits).
     // Earlier versions used `cpu_addr[6:3]` directly, which worked only as long
@@ -1017,9 +1022,10 @@ module vgc (
     // sprite number — SPRITESET-set state and SPRITE-command-set state land
     // in different sprites, and sprite register readback reports the wrong
     // sprite's state.
-    wire [6:0]  spr_offset   = r_cpu_addr_r[6:0] - 7'h40;
+    wire [6:0]  spr_offset   = cpu_raddr[6:0] - 7'h40;
     wire [3:0]  spr_index    = spr_offset[6:3];
     wire [2:0]  spr_field    = spr_offset[2:0];
+    wire        charin_read_fire = read_active && vgc_reg_sel && reg_offset == REG_CHARIN;
 
     // WRITE-side decoders — derived from r_cpu_addr_w (registered). The wide
     // direct memory-window subtractors used to live here; removing the
@@ -1163,7 +1169,7 @@ module vgc (
             endcase
         end
         else if (collision_hi_sel) begin
-            case (r_cpu_addr_r)
+            case (cpu_raddr)
                 COLLST_HI_ADDR: cpu_rdata = collision_ss[15:8];
                 COLLBG_HI_ADDR: cpu_rdata = collision_bg[15:8];
                 default:        cpu_rdata = 8'h00;
@@ -1183,7 +1189,7 @@ module vgc (
         else if (palette_mode_sel) cpu_rdata = {7'b0, palette_mode};
         else if (scroll_ctl_sel) cpu_rdata = {5'b0, scroll_ctl[2:0]};
         else if (text_reg_sel) begin
-            case (r_cpu_addr_r)
+            case (cpu_raddr)
                 TEXT_FLAGS_ADDR:   cpu_rdata = text_flags;
                 TEXT_REVATTR_ADDR: cpu_rdata = text_reverse_attr;
                 default:           cpu_rdata = 8'h00;
@@ -1352,7 +1358,6 @@ module vgc (
             copper_list_wr_we <= 1'b0;
             sprrow_count <= 0; sprrow_spr <= 0; sprrow_row <= 0;
             sprcopy_phase <= 0; sprcopy_data <= 0; sprdef_wait <= 0;
-            charin_sel_prev <= 1'b0;
             memread_pending <= 2'd0;
             memread_space <= SPACE_CHAR;
             memcmd_pending <= 1'b0;
@@ -1493,15 +1498,12 @@ module vgc (
                 endcase
             end else begin
 
-            // Keyboard input — pop FIFO head exactly once per CPU read of
-            // REG_CHARIN, on the RISING edge of the CPU's address-match.
-            // cpu_addr stays at $A00F for ~2 cycles (cpu_ce alternates half
-            // rate), so we must not pop every cycle. Rising-edge detection
-            // via charin_sel_prev.
-            charin_sel_prev <= (cpu_re && cpu_addr == (VGC_BASE + REG_CHARIN));
-            key_fifo_rd <= (cpu_re && cpu_addr == (VGC_BASE + REG_CHARIN))
-                        && !charin_sel_prev
-                        && !key_fifo_empty;
+            // Keyboard input: pop FIFO once for the same registered read
+            // event/address slice that drives cpu_rdata. In synthesis,
+            // cpu_raddr is the held MMIO address while live cpu_addr may
+            // already have advanced, so using cpu_addr here can return a
+            // CHARIN byte without popping it and duplicate keystrokes.
+            key_fifo_rd <= charin_read_fire && !key_fifo_empty;
 
             // Text scroll state machine. CHAROUT requests a scroll immediately
             // but the visible row-map changes only during vblank. While this

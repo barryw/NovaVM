@@ -1,0 +1,32 @@
+Modules list:
+-------------
+extension.o:
+    CODE              Offs=000000  Size=001228  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000100  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=00034D  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000003  Align=00001  Fill=0000
+
+
+Segment list:
+-------------
+Name                   Start     End    Size  Align
+----------------------------------------------------
+ZEROPAGE              0000A3  0000A5  000003  00001
+BSS                   009C00  009F4C  00034D  00001
+CODE                  00C000  00D227  001228  00001
+RODATA                00D228  00D327  000100  00001
+
+
+Exports list by name:
+---------------------
+
+
+
+Exports list by value:
+----------------------
+
+
+
+Imports list:
+-------------
+

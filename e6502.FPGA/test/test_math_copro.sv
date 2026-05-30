@@ -65,6 +65,7 @@ module test_math_copro;
         .clk(clk),
         .rst(rst),
         .cpu_addr(cpu_addr),
+        .cpu_raddr(cpu_addr),
         .cpu_wdata(cpu_wdata),
         .cpu_we(cpu_we),
         .cpu_re(cpu_re),

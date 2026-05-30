@@ -10,6 +10,7 @@ module blitter (
 
     // CPU bus (snooped for register writes)
     input  logic [15:0] cpu_addr,
+    input  logic [15:0] cpu_raddr,
     input  logic [7:0]  cpu_wdata,
     input  logic        cpu_we,
     output logic [7:0]  cpu_rdata,
@@ -193,14 +194,19 @@ module blitter (
     // =========================================================================
     // Address decode + CPU read
     // =========================================================================
-    wire blt_core_sel = (cpu_addr >= BLT_BASE && cpu_addr <= BLT_END);
-    wire blt_rot_sel = (cpu_addr == BLT_ROTANGLE_ADDR);
-    wire blt_sel = blt_core_sel || blt_rot_sel;
-    wire [4:0] reg_off = blt_rot_sel ? 5'(R_ROTANGLE) : (cpu_addr - BLT_BASE);
+    wire blt_core_sel_r = (cpu_raddr >= BLT_BASE && cpu_raddr <= BLT_END);
+    wire blt_rot_sel_r = (cpu_raddr == BLT_ROTANGLE_ADDR);
+    wire blt_sel_r = blt_core_sel_r || blt_rot_sel_r;
+    wire [4:0] reg_off_r = blt_rot_sel_r ? 5'(R_ROTANGLE) : (cpu_raddr - BLT_BASE);
+
+    wire blt_core_sel_w = (cpu_addr >= BLT_BASE && cpu_addr <= BLT_END);
+    wire blt_rot_sel_w = (cpu_addr == BLT_ROTANGLE_ADDR);
+    wire blt_sel_w = blt_core_sel_w || blt_rot_sel_w;
+    wire [4:0] reg_off_w = blt_rot_sel_w ? 5'(R_ROTANGLE) : (cpu_addr - BLT_BASE);
 
     always_comb begin
         cpu_rdata = 8'h00;
-        if (blt_sel) cpu_rdata = regs[reg_off];
+        if (blt_sel_r) cpu_rdata = regs[reg_off_r];
     end
 
     // =========================================================================
@@ -829,12 +835,12 @@ module blitter (
             endcase
 
             // CPU register writes
-            if (cpu_we && blt_sel) begin
-                if (reg_off != R_STATUS && reg_off != R_ERRCODE &&
-                    reg_off != R_COUNTL && reg_off != R_COUNTM && reg_off != R_COUNTH)
-                    regs[reg_off] <= cpu_wdata;
+            if (cpu_we && blt_sel_w) begin
+                if (reg_off_w != R_STATUS && reg_off_w != R_ERRCODE &&
+                    reg_off_w != R_COUNTL && reg_off_w != R_COUNTM && reg_off_w != R_COUNTH)
+                    regs[reg_off_w] <= cpu_wdata;
 
-                if (reg_off == R_CMD) begin
+                if (reg_off_w == R_CMD) begin
                     if (cpu_wdata == 8'h01) begin
                         if (state == S_IDLE) begin
                             src_space  <= regs[R_SRCSPACE][2:0];

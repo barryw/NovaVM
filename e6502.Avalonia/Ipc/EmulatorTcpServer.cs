@@ -78,7 +78,7 @@ public sealed class EmulatorTcpServer : IDisposable
             using (client)
             await using (var stream = client.GetStream())
             using (var reader = new StreamReader(stream, Encoding.UTF8))
-            await using (var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true })
+            await using (var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true })
             {
                 while (!ct.IsCancellationRequested)
                 {
@@ -134,7 +134,10 @@ public sealed class EmulatorTcpServer : IDisposable
                 "cold_start" => CmdColdStart(req),
                 "warm_start" => CmdWarmStart(),
                 "peek" => CmdPeek(req),
+                "peek_block" => CmdPeekBlock(req),
                 "poke" => CmdPoke(req),
+                "read_vram" => CmdReadVram(req),
+                "fill_vram" => CmdFillVram(req),
                 "read_graphics" => CmdReadGraphics(),
                 "read_sprites" => CmdReadSprites(),
                 "save_program" => CmdSaveProgram(req),
@@ -257,6 +260,14 @@ public sealed class EmulatorTcpServer : IDisposable
         string? key = req["key"]?.GetValue<string>();
         if (key is null) return Error("Missing 'key'");
 
+        if (TryMapAltKeyName(key, out byte altKey))
+        {
+            _editor.QueueInput(0x1B);
+            _editor.QueueInput(altKey);
+            _lastInputQueuedUtc = DateTime.UtcNow;
+            return Ok();
+        }
+
         byte code = key.ToUpperInvariant() switch
         {
             "ENTER" or "CR" or "RETURN" => 0x0D,
@@ -273,6 +284,22 @@ public sealed class EmulatorTcpServer : IDisposable
         _editor.QueueInput(code);
         _lastInputQueuedUtc = DateTime.UtcNow;
         return Ok();
+    }
+
+    private static bool TryMapAltKeyName(string key, out byte altKey)
+    {
+        altKey = 0;
+        if (!key.StartsWith("ALT-", StringComparison.OrdinalIgnoreCase) || key.Length != 5)
+            return false;
+
+        char ch = key[4];
+        if (ch is >= 'A' and <= 'Z')
+            ch = (char)(ch + 0x20);
+        if (ch is < 'a' or > 'z')
+            return false;
+
+        altKey = (byte)ch;
+        return true;
     }
 
     private string CmdReadScreen()
@@ -336,7 +363,8 @@ public sealed class EmulatorTcpServer : IDisposable
         {
             ["ok"] = true,
             ["x"] = vgc.GetCursorX(),
-            ["y"] = vgc.GetCursorY()
+            ["y"] = vgc.GetCursorY(),
+            ["enabled"] = vgc.IsCursorEnabled
         };
         return result.ToJsonString();
     }
@@ -399,11 +427,17 @@ public sealed class EmulatorTcpServer : IDisposable
 
     private string CmdColdStart(JsonNode req)
     {
+        if (!TryParseRuntime(req["runtime"]?.GetValue<string>(), out var bootRom, out string? error))
+            return Error(error ?? "Invalid runtime");
+
         bool wasPaused = _debugger.IsPaused;
         if (!wasPaused) _debugger.Pause();
         Thread.Sleep(5); // let CPU thread reach the pause gate
 
-        _bus.ResetCustomChips();
+        _bus.ResetCustomChips(bootRom, notifyRomChange: false);
+        if (_bus.CurrentRom != bootRom)
+            return Error($"Runtime ROM is not available: {bootRom.ToString().ToLowerInvariant()}");
+
         _editor.ClearInputQueue();
         _cpu.Boot();
 
@@ -412,7 +446,39 @@ public sealed class EmulatorTcpServer : IDisposable
         if (req["wait_ready"]?.GetValue<int>() == 0)
             return Ok();
 
-        return Ok();
+        return CmdWaitReady(req);
+    }
+
+    private bool TryParseRuntime(string? runtime, out CompositeBusDevice.ActiveRom bootRom, out string? error)
+    {
+        bootRom = _bus.CurrentRom switch
+        {
+            CompositeBusDevice.ActiveRom.Logo => CompositeBusDevice.ActiveRom.Logo,
+            CompositeBusDevice.ActiveRom.Ncc => CompositeBusDevice.ActiveRom.Ncc,
+            _ => CompositeBusDevice.ActiveRom.Basic
+        };
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(runtime))
+            return true;
+
+        switch (runtime.Trim().ToLowerInvariant())
+        {
+            case "basic":
+            case "novabasic":
+                bootRom = CompositeBusDevice.ActiveRom.Basic;
+                return true;
+            case "logo":
+            case "novalogo":
+                bootRom = CompositeBusDevice.ActiveRom.Logo;
+                return true;
+            case "ncc":
+                bootRom = CompositeBusDevice.ActiveRom.Ncc;
+                return true;
+            default:
+                error = $"Unknown runtime: {runtime}";
+                return false;
+        }
     }
 
     private string CmdWarmStart()
@@ -444,6 +510,28 @@ public sealed class EmulatorTcpServer : IDisposable
         return result.ToJsonString();
     }
 
+    private string CmdPeekBlock(JsonNode req)
+    {
+        int? address = req["address"]?.GetValue<int>();
+        int? count = req["count"]?.GetValue<int>();
+        if (address is null) return Error("Missing 'address'");
+        if (count is null) return Error("Missing 'count'");
+        if (count < 0 || count > 4096) return Error("Count out of range");
+
+        var values = new JsonArray();
+        for (int i = 0; i < count; i++)
+            values.Add((JsonNode?)JsonValue.Create(_bus.Read((ushort)((address.Value + i) & 0xFFFF))));
+
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["address"] = address.Value & 0xFFFF,
+            ["count"] = count.Value,
+            ["values"] = values
+        };
+        return result.ToJsonString();
+    }
+
     private string CmdPoke(JsonNode req)
     {
         int? address = req["address"]?.GetValue<int>();
@@ -452,6 +540,56 @@ public sealed class EmulatorTcpServer : IDisposable
         if (value is null) return Error("Missing 'value'");
 
         _bus.Write((ushort)address.Value, (byte)value.Value);
+        return Ok();
+    }
+
+    private string CmdReadVram(JsonNode req)
+    {
+        int? space = req["space"]?.GetValue<int>();
+        int? address = req["address"]?.GetValue<int>();
+        int? length = req["length"]?.GetValue<int>();
+        if (space is null) return Error("Missing 'space'");
+        if (address is null) return Error("Missing 'address'");
+        if (length is null) return Error("Missing 'length'");
+        if (length < 0 || length > 65536) return Error("Length out of range");
+
+        var values = new JsonArray();
+        for (int i = 0; i < length; i++)
+        {
+            if (!_bus.Vgc.TryReadMemorySpace((byte)space.Value, address.Value + i, out byte value))
+                return Error("VRAM read out of range");
+            values.Add((JsonNode?)JsonValue.Create(value));
+        }
+
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["space"] = space.Value,
+            ["address"] = address.Value,
+            ["length"] = length.Value,
+            ["values"] = values
+        };
+        return result.ToJsonString();
+    }
+
+    private string CmdFillVram(JsonNode req)
+    {
+        int? space = req["space"]?.GetValue<int>();
+        int? address = req["address"]?.GetValue<int>();
+        int? value = req["value"]?.GetValue<int>();
+        int? length = req["length"]?.GetValue<int>();
+        if (space is null) return Error("Missing 'space'");
+        if (address is null) return Error("Missing 'address'");
+        if (value is null) return Error("Missing 'value'");
+        if (length is null) return Error("Missing 'length'");
+        if (length < 0 || length > 65536) return Error("Length out of range");
+
+        for (int i = 0; i < length; i++)
+        {
+            if (!_bus.Vgc.TryWriteMemorySpace((byte)space.Value, address.Value + i, (byte)value.Value))
+                return Error("VRAM write out of range");
+        }
+
         return Ok();
     }
 

@@ -116,6 +116,15 @@ public class EmulatorCanvas : Control
             return;
         }
 
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt) && TryMapAltMenuKey(e.Key, out byte altKey))
+        {
+            _editor.QueueInput(0x1B);
+            _editor.QueueInput(altKey);
+            e.Handled = true;
+            base.OnKeyDown(e);
+            return;
+        }
+
         // Check for font keymap graphic character input
         if (e.Key >= Key.A && e.Key <= Key.Z)
         {
@@ -273,6 +282,16 @@ public class EmulatorCanvas : Control
     private void QueuePrintableChar(byte ch)
     {
         _editor.QueueInput(ch);
+    }
+
+    private static bool TryMapAltMenuKey(Key key, out byte ch)
+    {
+        ch = 0;
+        if (key is < Key.A or > Key.Z)
+            return false;
+
+        ch = (byte)('a' + (key - Key.A));
+        return true;
     }
 
     public override void Render(DrawingContext context)

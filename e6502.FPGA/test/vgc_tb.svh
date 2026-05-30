@@ -99,7 +99,7 @@ wire         vgc_sys_reset_req;
 vgc dut (
     .clk(clk), .rst(rst), .video_rst(rst),
     .cpu_ce(cpu_ce),
-    .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
+    .cpu_addr(cpu_addr), .cpu_raddr(cpu_addr), .cpu_wdata(cpu_wdata),
     .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
     .key_valid(key_valid), .key_data(key_data), .key_ready(),
     .blt_space(tb_blt_space), .blt_addr(tb_blt_addr), .blt_rdata(tb_blt_rdata),
@@ -411,7 +411,7 @@ task automatic wait_vgc_ready();
             @(posedge clk);
             timeout++;
         end
-        check("VGC released RDY after vblank-safe scroll", vgc_rdy);
+        check("VGC released RDY after busy operation", vgc_rdy);
         // The scroll-clear FSM writes the last cell on the cycle before RDY
         // rises; give the dpram one edge to commit before tests inspect RAM.
         @(posedge clk);

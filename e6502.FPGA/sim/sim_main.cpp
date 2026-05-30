@@ -193,9 +193,18 @@ static bool sim_decode_boundary() {
     return top && top->dbg_cpu_rdy && ((int)top->dbg_cpu_state == CPU_STATE_DECODE);
 }
 
+static bool sim_decode_state() {
+    return top && ((int)top->dbg_cpu_state == CPU_STATE_DECODE);
+}
+
+static uint16_t sim_exec_pc() {
+    uint16_t pc = top ? (uint16_t)top->dbg_cpu_pc : 0;
+    return sim_decode_state() ? (uint16_t)(pc - 1) : pc;
+}
+
 static int sim_matching_breakpoint() {
-    if (!sim_decode_boundary()) return -1;
-    uint16_t pc = (uint16_t)top->dbg_cpu_pc;
+    if (!sim_decode_state()) return -1;
+    uint16_t pc = sim_exec_pc();
     for (int i=0; i<SIM_BREAKPOINTS; i++) {
         if (sim_breakpoints[i].enabled && sim_breakpoints[i].address == pc)
             return i;
@@ -208,7 +217,7 @@ static void sim_after_posedge() {
 
     if (top->dbg_cpu_rdy && !top->rst) {
         SimTraceRecord &r = sim_trace[sim_trace_wr];
-        r.pc = (uint16_t)top->dbg_cpu_pc;
+        r.pc = sim_exec_pc();
         r.addr = (uint16_t)top->dbg_cpu_addr;
         r.din = (uint8_t)top->dbg_cpu_din;
         r.dout = (uint8_t)top->dbg_cpu_dout;
@@ -220,15 +229,16 @@ static void sim_after_posedge() {
         r.ctrl = (top->dbg_cpu_rdy ? 0x01 : 0)
                | (top->dbg_cpu_we  ? 0x02 : 0)
                | (top->dbg_cpu_irq ? 0x04 : 0)
-               | (top->dbg_cpu_nmi ? 0x08 : 0);
+               | (top->dbg_cpu_nmi ? 0x08 : 0)
+               | (sim_decode_state() ? 0x10 : 0);
         sim_trace_wr = (sim_trace_wr + 1) % SIM_TRACE_DEPTH;
         if (sim_trace_count < SIM_TRACE_DEPTH) sim_trace_count++;
     }
 
-    if (!sim_decode_boundary()) return;
-
-    if (sim_bp_suppress && top->dbg_cpu_pc != sim_bp_suppress_pc)
+    if (sim_bp_suppress && sim_exec_pc() != sim_bp_suppress_pc)
         sim_bp_suppress = false;
+
+    if (!sim_decode_state()) return;
 
     int slot = sim_matching_breakpoint();
     if (slot >= 0 && !sim_bp_suppress) {
@@ -313,12 +323,12 @@ static uint8_t sim_status_byte() {
 static std::string sim_cpu_state_json() {
     char buf[768];
     uint8_t status = sim_status_byte();
-    snprintf(buf,sizeof(buf),"{\"ok\":true,\"a\":%d,\"x\":%d,\"y\":%d,\"sp\":%d,\"pc\":%d,"
+    snprintf(buf,sizeof(buf),"{\"ok\":true,\"a\":%d,\"x\":%d,\"y\":%d,\"sp\":%d,\"pc\":%d,\"raw_pc\":%d,"
         "\"nf\":%d,\"vf\":%d,\"df\":%d,\"if\":%d,\"zf\":%d,\"cf\":%d,"
         "\"waiting\":%s,\"stopped\":%s,\"paused\":%s,"
         "\"breakpoint_hit\":%s,\"step_active\":%s,\"status\":%d,"
         "\"state\":%d,\"ir\":%d,\"addr\":%d,\"din\":%d,\"dout\":%d,\"we\":%s,\"rdy\":%s,\"irq\":%s,\"nmi\":%s}\n",
-        top->dbg_cpu_a,top->dbg_cpu_x,top->dbg_cpu_y,top->dbg_cpu_sp,top->dbg_cpu_pc,
+        top->dbg_cpu_a,top->dbg_cpu_x,top->dbg_cpu_y,top->dbg_cpu_sp,sim_exec_pc(),top->dbg_cpu_pc,
         (top->dbg_cpu_flags>>7)&1,(top->dbg_cpu_flags>>6)&1,(top->dbg_cpu_flags>>3)&1,
         (top->dbg_cpu_flags>>2)&1,(top->dbg_cpu_flags>>1)&1,(top->dbg_cpu_flags>>0)&1,
         top->dbg_cpu_waiting ? "true" : "false",
@@ -395,9 +405,46 @@ static std::string sim_trace_json(int requested) {
           <<",\"we\":"<<((r.ctrl & 0x02) ? "true" : "false")
           <<",\"irq\":"<<((r.ctrl & 0x04) ? "true" : "false")
           <<",\"nmi\":"<<((r.ctrl & 0x08) ? "true" : "false")
+          <<",\"decode\":"<<((r.ctrl & 0x10) ? "true" : "false")
           <<"}";
     }
     ss<<"]}\n";
+    return ss.str();
+}
+
+static void sim_append_hex_byte(std::ostringstream &ss, uint8_t value) {
+    static const char hex[] = "0123456789ABCDEF";
+    ss << hex[value >> 4] << hex[value & 0x0F];
+}
+
+static std::string sim_trace_hex_json(int requested) {
+    if (requested <= 0 || requested > SIM_TRACE_DEPTH)
+        requested = SIM_TRACE_DEPTH;
+    if (requested > sim_trace_count)
+        requested = sim_trace_count;
+
+    int start = (sim_trace_wr - requested + SIM_TRACE_DEPTH) % SIM_TRACE_DEPTH;
+    std::ostringstream ss;
+    ss<<"{\"ok\":true,\"record_bytes\":"<<SIM_TRACE_RECORD_BYTES
+      <<",\"count\":"<<requested
+      <<",\"hex\":\"";
+    for (int i=0; i<requested; i++) {
+        int idx = (start + i) % SIM_TRACE_DEPTH;
+        const SimTraceRecord &r = sim_trace[idx];
+        sim_append_hex_byte(ss, (uint8_t)(r.pc >> 8));
+        sim_append_hex_byte(ss, (uint8_t)(r.pc & 0xFF));
+        sim_append_hex_byte(ss, (uint8_t)(r.addr >> 8));
+        sim_append_hex_byte(ss, (uint8_t)(r.addr & 0xFF));
+        sim_append_hex_byte(ss, r.din);
+        sim_append_hex_byte(ss, r.dout);
+        sim_append_hex_byte(ss, r.a);
+        sim_append_hex_byte(ss, r.sp);
+        sim_append_hex_byte(ss, r.flags);
+        sim_append_hex_byte(ss, r.state);
+        sim_append_hex_byte(ss, r.ir);
+        sim_append_hex_byte(ss, r.ctrl);
+    }
+    ss<<"\"}\n";
     return ss.str();
 }
 
@@ -484,6 +531,13 @@ static std::string process_command(const std::string &json) {
         if (k=="ENTER"||k=="CR"||k=="RETURN") key_queue.push(0x0D);
         else if (k=="BACKSPACE"||k=="BS") key_queue.push(0x08);
         else if (k=="CTRL-C"||k=="BREAK") key_queue.push(0x03);
+        else if (k.size()==5 && (k.rfind("ALT-",0)==0 || k.rfind("alt-",0)==0)) {
+            uint8_t alt=(uint8_t)k[4];
+            if (alt>='A'&&alt<='Z') alt=(uint8_t)(alt+0x20);
+            if (alt<'a'||alt>'z') return "{\"ok\":true}\n";
+            key_queue.push(0x1B);
+            key_queue.push(alt);
+        }
         else if (k.size()==1) key_queue.push((uint8_t)k[0]);
         return "{\"ok\":true}\n";
     }
@@ -526,7 +580,7 @@ static std::string process_command(const std::string &json) {
         top->dbg_pause=0;
         sim_bp_hit_latched=false;
         sim_bp_suppress=true;
-        sim_bp_suppress_pc=(uint16_t)top->dbg_cpu_pc;
+        sim_bp_suppress_pc=sim_exec_pc();
         top->dbg_cpu_resume=1;
         step_clock();
         top->dbg_cpu_resume=0;
@@ -536,7 +590,7 @@ static std::string process_command(const std::string &json) {
         top->dbg_pause=0;
         sim_bp_hit_latched=false;
         sim_bp_suppress=true;
-        sim_bp_suppress_pc=(uint16_t)top->dbg_cpu_pc;
+        sim_bp_suppress_pc=sim_exec_pc();
         sim_step_active=true;
         top->dbg_cpu_resume=1;
         step_clock();
@@ -604,6 +658,9 @@ static std::string process_command(const std::string &json) {
     if (cmd=="dbg_trace") {
         int count=jgi(json,"count",SIM_TRACE_DEPTH);
         if (count < 1 || count > SIM_TRACE_DEPTH) return "{\"ok\":false,\"error\":\"'count' must be 1..64\"}\n";
+        std::string format = jgs(json, "format");
+        if (jgi(json, "hex", 0) != 0 || format == "hex")
+            return sim_trace_hex_json(count);
         return sim_trace_json(count);
     }
     if (cmd=="dbg_read_memory") {
@@ -625,7 +682,7 @@ static std::string process_command(const std::string &json) {
         top->dbg_pause=0; top->dbg_cpu_resume=0; for (int i=0;i<cy;i++) step_clock(); top->dbg_pause=1;
         snprintf(buf,sizeof(buf),"{\"ok\":true,\"cycles_executed\":%d,\"a\":%d,\"x\":%d,\"y\":%d,"
             "\"sp\":%d,\"pc\":%d,\"paused\":true}\n",cy,
-            top->dbg_cpu_a,top->dbg_cpu_x,top->dbg_cpu_y,top->dbg_cpu_sp,top->dbg_cpu_pc);
+            top->dbg_cpu_a,top->dbg_cpu_x,top->dbg_cpu_y,top->dbg_cpu_sp,sim_exec_pc());
         return buf;
     }
     // Async commands: wait_ready and watch — start polling, respond later

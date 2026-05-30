@@ -20,6 +20,7 @@
 #   ESPOTA=/path/to/espota.py      Override espota.py path if auto-detect fails.
 #   SERIAL=/dev/cu.usbserial-...   Serial target when ESP_UPLOAD=serial.
 #   FPGA_FTDI_SERIAL=D01457        FTDI serial used by openFPGALoader.
+#                                  Set to auto/none/detect to omit --ftdi-serial.
 #   OPENFPGALOADER_EXTRA_ARGS='...' Extra arguments passed to openFPGALoader.
 #   SERIAL_VIA_PASSTHRU=1          Load FPGA passthru SRAM image for serial ESP upload.
 #   SERIAL_REBOOT_AFTER_FPGA=1     Reboot ESP after FPGA exits passthru.
@@ -30,8 +31,14 @@
 #   SD_SYNC_PUT_TIMEOUT=900        Per-file HTTP PUT timeout.
 #   ROM_RELOAD=1|0                 Reload ROMs from SD after SD sync.
 #   FPGA_WRITE_FLASH=1|0           Write FPGA config flash; 0 loads SRAM only.
+#   BITSTREAM_FRESHNESS=1|0        Refuse stale bitstream metadata by default.
+#   ALLOW_STALE_BITSTREAM=1        Flash even if metadata doesn't match checkout.
 #   ALLOW_TIMING_FAIL=1            Flash even if nextpnr timing report fails.
 #   TIMING_MARGIN_MHZ=0.0          Extra fmax headroom required before flashing.
+#   NOVALOGO_SMOKE=1               Run NovaLogo DRAW smoke after deploy.
+#   NOVALOGO_SMOKE_TIMEOUT=60      Timeout for the post-deploy Logo smoke.
+#   NOVALOGO_SMOKE_LEAVE_BOOT_CONFIG=1
+#                                  Leave /config/boot.json set to NovaLogo after smoke.
 
 set -euo pipefail
 
@@ -64,8 +71,15 @@ SD_SYNC_RETRIES="${SD_SYNC_RETRIES:-8}"
 SD_SYNC_PUT_TIMEOUT="${SD_SYNC_PUT_TIMEOUT:-900}"
 ROM_RELOAD="${ROM_RELOAD:-1}"
 FPGA_WRITE_FLASH="${FPGA_WRITE_FLASH:-1}"
+BITSTREAM_FRESHNESS="${BITSTREAM_FRESHNESS:-1}"
+ALLOW_STALE_BITSTREAM="${ALLOW_STALE_BITSTREAM:-0}"
 ALLOW_TIMING_FAIL="${ALLOW_TIMING_FAIL:-0}"
 TIMING_MARGIN_MHZ="${TIMING_MARGIN_MHZ:-0.0}"
+NOVALOGO_SMOKE="${NOVALOGO_SMOKE:-0}"
+NOVALOGO_SMOKE_TIMEOUT="${NOVALOGO_SMOKE_TIMEOUT:-60}"
+NOVALOGO_SMOKE_REVIEW_DELAY="${NOVALOGO_SMOKE_REVIEW_DELAY:-0}"
+NOVALOGO_SMOKE_LEAVE_BOOT_CONFIG="${NOVALOGO_SMOKE_LEAVE_BOOT_CONFIG:-0}"
+NOVALOGO_SMOKE_SKIP_ROM_UPLOAD="${NOVALOGO_SMOKE_SKIP_ROM_UPLOAD:-$SD_SYNC}"
 
 latest_bitstream() {
     python3 - "$BIT_BACKUPS" <<'PY'
@@ -97,9 +111,13 @@ PY
 openfpga_loader() {
     local args=(--board ulx3s)
 
-    if [ -n "$FPGA_FTDI_SERIAL" ]; then
-        args+=(--ftdi-serial "$FPGA_FTDI_SERIAL")
-    fi
+    case "$FPGA_FTDI_SERIAL" in
+        ""|auto|none|detect)
+            ;;
+        *)
+            args+=(--ftdi-serial "$FPGA_FTDI_SERIAL")
+            ;;
+    esac
 
     if [ -n "$OPENFPGALOADER_EXTRA_ARGS" ]; then
         # shellcheck disable=SC2206
@@ -208,6 +226,22 @@ reload_rom_from_sd() {
     "$REPO_ROOT/tools/novahostctl.py" --host "$host" --timeout 30 reload-rom
 }
 
+run_novalogo_smoke() {
+    local host="$1"
+    local args=(--host "$host" --timeout "$NOVALOGO_SMOKE_TIMEOUT" --review-delay "$NOVALOGO_SMOKE_REVIEW_DELAY")
+
+    if [ "$NOVALOGO_SMOKE_SKIP_ROM_UPLOAD" = "1" ]; then
+        args+=(--skip-rom-upload)
+    fi
+    if [ "$NOVALOGO_SMOKE_LEAVE_BOOT_CONFIG" = "1" ]; then
+        args+=(--leave-boot-config)
+    fi
+
+    echo "=== [6/6] running NovaLogo hardware smoke"
+    wait_for_fpga_bridge_available "$host"
+    "$REPO_ROOT/tools/run-novalogo-hardware-smoke.py" "${args[@]}"
+}
+
 find_espota() {
     local candidate=""
 
@@ -295,6 +329,27 @@ check_timing_before_flash() {
     fi
 }
 
+check_bitstream_freshness_before_flash() {
+    local bitstream="$1"
+
+    if [ "$BITSTREAM_FRESHNESS" != "1" ]; then
+        return 0
+    fi
+
+    if python3 "$REPO_ROOT/tools/check-bitstream-freshness.py" \
+        "$bitstream" --repo-root "$REPO_ROOT"; then
+        return 0
+    fi
+
+    if [ "$ALLOW_STALE_BITSTREAM" = "1" ]; then
+        echo "warning: stale bitstream metadata, continuing because ALLOW_STALE_BITSTREAM=1" >&2
+        return 0
+    fi
+
+    echo "error: refusing to flash stale bitstream; synthesize a fresh one or set ALLOW_STALE_BITSTREAM=1" >&2
+    exit 1
+}
+
 echo "=== [1/5] refreshing ROM hex"
 make --no-print-directory -C "$FPGA_DIR" hex
 
@@ -321,6 +376,7 @@ if [ -z "$BITSTREAM" ] || [ ! -f "$BITSTREAM" ]; then
 fi
 
 echo "bitstream: $BITSTREAM"
+check_bitstream_freshness_before_flash "$BITSTREAM"
 check_timing_before_flash "$BITSTREAM" "$TIMING_REPORT"
 
 if [ "$FPGA_WRITE_FLASH" = "1" ]; then
@@ -376,6 +432,12 @@ if [ "$SD_SYNC" = "1" ]; then
     reload_rom_from_sd "$SD_SYNC_HOST"
 else
     echo "SD asset sync skipped"
+fi
+
+if [ "$NOVALOGO_SMOKE" = "1" ]; then
+    run_novalogo_smoke "$SD_SYNC_HOST"
+else
+    echo "NovaLogo hardware smoke skipped"
 fi
 
 echo "ULX3S stack deploy complete"

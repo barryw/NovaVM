@@ -77,6 +77,39 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void CmosStzStoresZeroForAllAddressingModes()
+        {
+            var program = new byte[]
+            {
+                0xA9, 0xA0,             // LDA #$A0
+                0x8D, 0x00, 0x02,       // STA $0200
+                0x9C, 0x01, 0x02,       // STZ $0201
+                0xA2, 0x02,             // LDX #$02
+                0xA9, 0x55,             // LDA #$55
+                0x9E, 0x00, 0x02,       // STZ $0200,X
+                0xA9, 0x77,             // LDA #$77
+                0x64, 0x23,             // STZ $23
+                0xA9, 0x99,             // LDA #$99
+                0x74, 0x22,             // STZ $22,X
+                0xEA,                   // NOP
+            };
+            var bus = new BusDevice(program, 0x0400);
+            foreach (ushort address in new ushort[] { 0x0200, 0x0201, 0x0202, 0x0023, 0x0024 })
+                bus.Write(address, 0xFF);
+
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            cpu.Boot(0x0400);
+            for (int i = 0; i < 10; i++)
+                cpu.ExecuteNext();
+
+            Assert.AreEqual(0xA0, bus.Read(0x0200), "STA baseline proves the program wrote to RAM.");
+            Assert.AreEqual(0x00, bus.Read(0x0201), "STZ absolute must assert the store path and write zero.");
+            Assert.AreEqual(0x00, bus.Read(0x0202), "STZ absolute,X must assert the store path and write zero.");
+            Assert.AreEqual(0x00, bus.Read(0x0023), "STZ zero-page must write zero.");
+            Assert.AreEqual(0x00, bus.Read(0x0024), "STZ zero-page,X must write zero.");
+        }
+
+        [TestMethod]
         public void RunFuncTestProgram()
         {
             /*

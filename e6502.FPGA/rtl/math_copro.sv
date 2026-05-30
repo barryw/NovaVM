@@ -7,6 +7,7 @@ module math_copro (
     input  logic        rst,
 
     input  logic [15:0] cpu_addr,
+    input  logic [15:0] cpu_raddr,
     input  logic [7:0]  cpu_wdata,
     input  logic        cpu_we,
     input  logic        cpu_re,
@@ -129,6 +130,8 @@ module math_copro (
 
     wire math_sel = (cpu_addr >= MATH_BASE) && (cpu_addr <= MATH_END);
     wire [5:0] reg_off = cpu_addr[5:0] - MATH_BASE[5:0];
+    wire math_sel_r = (cpu_raddr >= MATH_BASE) && (cpu_raddr <= MATH_END);
+    wire [5:0] reg_off_r = cpu_raddr[5:0] - MATH_BASE[5:0];
     wire readonly_reg = (reg_off == R_CAPS0) ||
                         (reg_off == R_CAPS1) ||
                         (reg_off == R_STATUS) ||
@@ -291,14 +294,14 @@ module math_copro (
 
     always_comb begin
         cpu_rdata = 8'h00;
-        if (math_sel) begin
-            unique case (reg_off)
+        if (math_sel_r) begin
+            unique case (reg_off_r)
                 R_RNG:     cpu_rdata = rng_next[7:0];
                 R_CAPS0:   cpu_rdata = MATH_CAPS0;
                 R_CAPS1:   cpu_rdata = MATH_CAPS1;
                 R_STATUS:  cpu_rdata = regs[R_STATUS];
                 R_VERSION: cpu_rdata = MATH_VERSION;
-                default:   cpu_rdata = regs[reg_off];
+                default:   cpu_rdata = regs[reg_off_r];
             endcase
         end
     end

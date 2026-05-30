@@ -29,7 +29,7 @@ module test_copper;
     vgc dut (
         .clk(clk), .rst(rst), .video_rst(rst),
         .cpu_ce(cpu_ce),
-        .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
+        .cpu_addr(cpu_addr), .cpu_raddr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_rdata(cpu_rdata), .cpu_we(cpu_we), .cpu_re(cpu_re),
         .key_valid(1'b0), .key_data(8'h00), .key_ready(),
         .blt_space(3'd0), .blt_addr(16'd0), .blt_rdata(),

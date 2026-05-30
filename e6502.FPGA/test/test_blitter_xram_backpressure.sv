@@ -101,7 +101,7 @@ module test_blitter_xram_backpressure;
 
     blitter dut (
         .clk(clk), .rst(rst),
-        .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
+        .cpu_addr(cpu_addr), .cpu_raddr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_we(cpu_we), .cpu_rdata(blt_cpu_rdata), .cpu_re(cpu_re),
         .rdy_out(blt_rdy),
         .ram_addr(blt_ram_addr), .ram_rdata(blt_ram_rdata),

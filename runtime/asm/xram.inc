@@ -99,4 +99,22 @@ XRAM_NVG_STAGE_L     = $00      ; $070000-$07F9FF, 64,000-byte NVG stage.
 XRAM_NVG_STAGE_M     = $00
 XRAM_NVG_STAGE_H     = $07
 
+.global xram_set_ok
+.global xram_set_error
+.global xram_addr_is_in_range
+.global xram_map_window3
+.global xram_read8
+.global xram_write8
+.global xram_copy_from_ram
+.global xram_copy_to_ram
+.global xram_fill
+.global xram_xload
+.global xram_xsave
+.global xram_wait_dma
+.global xram_xmc_read8
+.global xram_xmc_write8
+.global xram_xmc_copy_from_ram
+.global xram_xmc_copy_to_ram
+.global xram_xmc_fill
+
 .endif

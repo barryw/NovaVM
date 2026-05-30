@@ -606,7 +606,9 @@
       "Bash(/Users/barry/Git/e6502/e6502.NDI/bin/Release/net10.0/nova import *)",
       "Bash(/Users/barry/Git/e6502/e6502.NDI/bin/Release/net10.0/nova dir *)",
       "Bash(/Users/barry/Git/e6502/e6502.Nova/bin/Release/net10.0/osx-arm64/native/nova)",
-      "Bash($NOVA device *)"
+      "Bash($NOVA device *)",
+      "Bash(e6502.Nova/bin/Release/net10.0/nova runtime *)",
+      "Bash(OTA_BUILD=build/ota-direct make)"
     ]
   },
   "enableAllProjectMcpServers": true,

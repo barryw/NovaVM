@@ -134,6 +134,35 @@ class NovaHostClient:
     def resume(self) -> dict[str, Any]:
         return self.command("dbg_resume", require_ok=True)
 
+    def step(self) -> dict[str, Any]:
+        return self.command("dbg_step", require_ok=True)
+
+    def break_set(self, address: int, slot: int | None = None, enabled: bool = True) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"address": address & 0xFFFF, "enabled": 1 if enabled else 0}
+        if slot is not None:
+            kwargs["slot"] = slot
+        return self.command("dbg_break_set", require_ok=True, **kwargs)
+
+    def break_clear(self, slot: int | None = None, address: int | None = None) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {}
+        if slot is not None:
+            kwargs["slot"] = slot
+        if address is not None:
+            kwargs["address"] = address & 0xFFFF
+        return self.command("dbg_break_clear", require_ok=True, **kwargs)
+
+    def break_clear_all(self) -> dict[str, Any]:
+        return self.command("dbg_break_clear_all", require_ok=True)
+
+    def break_list(self) -> dict[str, Any]:
+        return self.command("dbg_break_list", require_ok=True)
+
+    def trace(self, count: int = 16, hex_mode: bool = True) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"count": count}
+        if hex_mode:
+            kwargs["format"] = "hex"
+        return self.command("dbg_trace", require_ok=True, **kwargs)
+
     def cold_start(self, wait_ready: bool = True, text: str | None = None) -> dict[str, Any]:
         kwargs: dict[str, Any] = {"wait_ready": 1 if wait_ready else 0}
         if text:
@@ -182,6 +211,13 @@ class NovaHostClient:
     def poke(self, address: int, value: int) -> dict[str, Any]:
         return self.command("poke", require_ok=True, address=address, value=value & 0xFF)
 
+    def peek_block(self, address: int, count: int) -> list[int]:
+        response = self.command("peek_block", require_ok=True, address=address & 0xFFFF, count=count)
+        values = response.get("values")
+        if not isinstance(values, list):
+            raise NovaHostError(f"peek_block returned no values for 0x{address & 0xFFFF:04X}")
+        return [int(value) & 0xFF for value in values]
+
     def read_range_bytewise(self, start: int, length: int) -> dict[str, Any]:
         values: list[int | None] = []
         errors: list[dict[str, Any]] = []
@@ -195,13 +231,16 @@ class NovaHostClient:
         return {"start": start & 0xFFFF, "length": length, "values": values, "errors": errors}
 
     def read_vram(self, space: int, address: int, length: int) -> dict[str, Any]:
-        return self.command(
+        response = self.command(
             "read_vram",
             require_ok=True,
             space=space,
             address=address,
             length=length,
         )
+        if "values" not in response and "data" in response:
+            response["values"] = response["data"]
+        return response
 
     def fill_vram(self, space: int, address: int, value: int, length: int) -> dict[str, Any]:
         return self.command(

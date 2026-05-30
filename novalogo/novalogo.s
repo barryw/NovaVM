@@ -45,22 +45,13 @@ cold_start:
       JSR   var_init
       JSR   proc_init
       STZ   catch_active
-      LDA   #$01
-      STA   VGC_CURSEN            ; enable flashing cursor
-      ; Print banner
-      LDX   #0
-@banner:
-      LDA   str_banner,X
-      BEQ   @prompt            ; null terminator — done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @banner            ; always taken (string < 256)
-
-@prompt:
+      STZ   VGC_CURSEN
+      JSR   print_banner
       JSR   print_prompt
 
 main_loop:
       JSR   read_line
+      STZ   VGC_CURSEN
       JSR   tokenize_line
       JSR   check_to_command
       BCS   @was_to               ; carry set = TO was handled
@@ -126,6 +117,8 @@ check_to_command:
 ; ---------------------------------------------------------------------
 read_line:
       STZ   buf_idx            ; reset buffer index to 0
+      LDA   #$01
+      STA   VGC_CURSEN
 
 @poll:
       LDA   VGC_CHARIN         ; poll keyboard
@@ -182,6 +175,48 @@ print_prompt:
       INX
       BNE   @lp
 @done:
+      LDA   #$01
+      STA   VGC_CURSEN
+      RTS
+
+; ---------------------------------------------------------------------
+; print_banner — prints title and current available heap bytes
+; ---------------------------------------------------------------------
+print_banner:
+      LDX   #0
+@title:
+      LDA   str_banner_title,X
+      BEQ   @free
+      STA   VGC_CHAROUT
+      INX
+      BNE   @title
+
+@free:
+      SEC
+      LDA   #<HEAP_END
+      SBC   heap_ptr
+      STA   eval_val_lo
+      LDA   #>HEAP_END
+      SBC   heap_ptr+1
+      STA   eval_val_hi
+      SEC
+      LDA   eval_val_lo
+      SBC   #GC_HDR_BYTES
+      STA   eval_val_lo
+      LDA   eval_val_hi
+      SBC   #0
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      JSR   print_uint16
+
+      LDX   #0
+@suffix:
+      LDA   str_bytes_free,X
+      BEQ   @done
+      STA   VGC_CHAROUT
+      INX
+      BNE   @suffix
+@done:
       RTS
 
 ; =====================================================================
@@ -189,9 +224,11 @@ print_prompt:
 ; =====================================================================
       .segment "RODATA"
 
-str_banner:
-      .byte "NOVALOGO v1.0", $0D, $0A
-      .byte "39934 BYTES FREE", $0D, $0A, $0D, $0A
+str_banner_title:
+      .byte "Nova LOGO v1.0", $0D, $0A
+      .byte 0
+str_bytes_free:
+      .byte " BYTES FREE", $0D, $0A, $0D, $0A
       .byte 0
 
 str_prompt:

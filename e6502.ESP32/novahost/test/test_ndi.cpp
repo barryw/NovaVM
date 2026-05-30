@@ -84,14 +84,14 @@ static void test_open_and_header() {
     const ndi::HeaderInfo& h = img.header();
     check_eq_int("format_version",          h.format_version, 2);
     check_eq_int("sector_size",             h.sector_size, 256);
-    check_eq_int("total_sectors",           h.total_sectors, 8192);
-    check_eq_str("volume_label",            h.volume_label, "DEMO DISK");
-    check_eq_int("directory_start_sector",  h.directory_start_sector, 5);
+    check_eq_int("total_sectors",           h.total_sectors, 16384);
+    check_eq_str("volume_label",            h.volume_label, "SHOWCASE");
+    check_eq_int("directory_start_sector",  h.directory_start_sector, 9);
     check_eq_int("directory_sector_count",  h.directory_sector_count, 48);
-    check_eq_int("data_start_sector",       h.data_start_sector, 53);
+    check_eq_int("data_start_sector",       h.data_start_sector, 57);
 
     // Free count should match `nova info` for the checked-in demo disk.
-    check_eq_int("free_sectors",            img.free_sectors(), 982);
+    check_eq_int("free_sectors",            img.free_sectors(), 12384);
 }
 
 static void test_list_root() {
@@ -109,48 +109,53 @@ static void test_list_root() {
 
     // Verify expected names exist (order = slot order, so deterministic
     // for an unmodified demo image).
-    bool saw_classical = false, saw_movies = false, saw_tv = false,
-         saw_games = false, saw_sid = false, saw_demo_bin = false;
+    bool saw_featured = false, saw_2sid = false, saw_sid = false,
+         saw_wts = false, saw_arcade = false, saw_autoboot_bin = false,
+         saw_keyboard_bin = false;
     for (int i = 0; i < n; i++) {
         const ndi::DirEntry& e = entries[i];
-        if (strcmp(e.filename, "classical") == 0 && e.is_directory()) saw_classical = true;
-        if (strcmp(e.filename, "movies")    == 0 && e.is_directory()) saw_movies    = true;
-        if (strcmp(e.filename, "tv")        == 0 && e.is_directory()) saw_tv        = true;
-        if (strcmp(e.filename, "games")     == 0 && e.is_directory()) saw_games     = true;
-        if (strcmp(e.filename, "sid")       == 0 && e.is_directory()) saw_sid       = true;
-        if (strcmp(e.filename, "demo.bin")  == 0 && !e.is_directory()
-                                                  && e.size_bytes == 2438)
-            saw_demo_bin = true;
+        if (strcmp(e.filename, "featured")     == 0 && e.is_directory()) saw_featured = true;
+        if (strcmp(e.filename, "2sid")         == 0 && e.is_directory()) saw_2sid     = true;
+        if (strcmp(e.filename, "sid")          == 0 && e.is_directory()) saw_sid      = true;
+        if (strcmp(e.filename, "wts")          == 0 && e.is_directory()) saw_wts      = true;
+        if (strcmp(e.filename, "arcade")       == 0 && e.is_directory()) saw_arcade   = true;
+        if (strcmp(e.filename, "AUTOBOOT.bin") == 0 && !e.is_directory()
+                                                     && e.size_bytes == 3487)
+            saw_autoboot_bin = true;
+        if (strcmp(e.filename, "KEYBOARD.bin") == 0 && !e.is_directory()
+                                                     && e.size_bytes == 2888)
+            saw_keyboard_bin = true;
     }
-    check("classical dir present",       saw_classical);
-    check("movies dir present",          saw_movies);
-    check("tv dir present",              saw_tv);
-    check("games dir present",           saw_games);
-    check("sid dir present",             saw_sid);
-    check("demo.bin (2438 bytes) present", saw_demo_bin);
+    check("featured dir present",          saw_featured);
+    check("2sid dir present",              saw_2sid);
+    check("sid dir present",               saw_sid);
+    check("wts dir present",               saw_wts);
+    check("arcade dir present",            saw_arcade);
+    check("AUTOBOOT.bin (3487 bytes) present", saw_autoboot_bin);
+    check("KEYBOARD.bin (2888 bytes) present", saw_keyboard_bin);
 }
 
-static void test_find_and_read_demo_bin() {
-    printf("\nTest: find + read demo.bin\n");
+static void test_find_and_read_autoboot_bin() {
+    printf("\nTest: find + read AUTOBOOT.bin\n");
     FILE* f = fopen(DEMO_PATH, "rb+");
     if (!f) return;
     FileStream stream(f);
     ndi::NdiImage img;
     if (!img.open(&stream)) { printf("  SKIP (demo.ndi is not current NDI v2)\n"); return; }
 
-    int idx = img.find_entry("demo.bin", ndi::ROOT_PARENT);
-    check("find_entry demo.bin", idx >= 0);
+    int idx = img.find_entry("AUTOBOOT.bin", ndi::ROOT_PARENT);
+    check("find_entry AUTOBOOT.bin", idx >= 0);
 
     ndi::DirEntry e;
     check("get_entry by index", img.get_entry(idx, e));
-    check_eq_int("demo.bin size_bytes", e.size_bytes, 2438);
-    check_eq_int("demo.bin file_type=BIN", e.file_type, ndi::FT_BIN);
-    check("demo.bin is active",          e.is_active());
-    check("demo.bin is not directory",  !e.is_directory());
+    check_eq_int("AUTOBOOT.bin size_bytes", e.size_bytes, 3487);
+    check_eq_int("AUTOBOOT.bin file_type=BIN", e.file_type, ndi::FT_BIN);
+    check("AUTOBOOT.bin is active",          e.is_active());
+    check("AUTOBOOT.bin is not directory",  !e.is_directory());
 
     uint8_t buf[4096];
     int got = img.read_file_by_index(idx, buf, sizeof(buf));
-    check_eq_int("read_file_by_index returns size", got, 2438);
+    check_eq_int("read_file_by_index returns size", got, 3487);
 
     // Sanity: BIN should be non-zero (not all zeros).
     int nonzero = 0;
@@ -168,13 +173,13 @@ static void test_find_in_subdir() {
     ndi::NdiImage img;
     if (!img.open(&stream)) { printf("  SKIP (demo.ndi is not current NDI v2)\n"); return; }
 
-    int games_idx = img.find_entry("games", ndi::ROOT_PARENT);
-    check("find games dir", games_idx >= 0);
+    int featured_idx = img.find_entry("featured", ndi::ROOT_PARENT);
+    check("find featured dir", featured_idx >= 0);
 
     ndi::DirEntry kids[64];
     int kn = 0;
-    img.list_entries((uint16_t)games_idx, kids, 64, kn);
-    printf("  games/ has %d active entries\n", kn);
+    img.list_entries((uint16_t)featured_idx, kids, 64, kn);
+    printf("  featured/ has %d active entries\n", kn);
     check("list_entries doesn't crash", true);
 }
 
@@ -186,10 +191,10 @@ static void test_case_insensitive_lookup() {
     ndi::NdiImage img;
     if (!img.open(&stream)) return;
 
-    int a = img.find_entry("demo.bin", ndi::ROOT_PARENT);
-    int b = img.find_entry("DEMO.BIN", ndi::ROOT_PARENT);
-    int c = img.find_entry("Demo.Bin", ndi::ROOT_PARENT);
-    check_eq_int("lowercase match",  a, a);
+    int a = img.find_entry("autoboot.bin", ndi::ROOT_PARENT);
+    int b = img.find_entry("AUTOBOOT.BIN", ndi::ROOT_PARENT);
+    int c = img.find_entry("AutoBoot.Bin", ndi::ROOT_PARENT);
+    check("lowercase match", a >= 0);
     check_eq_int("uppercase = lowercase",  b, a);
     check_eq_int("mixed-case = lowercase", c, a);
 
@@ -333,7 +338,7 @@ int main() {
     printf("=== ndi_image host tests ===\n");
     test_open_and_header();
     test_list_root();
-    test_find_and_read_demo_bin();
+    test_find_and_read_autoboot_bin();
     test_find_in_subdir();
     test_case_insensitive_lookup();
     test_write_read_roundtrip();

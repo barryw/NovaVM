@@ -48,7 +48,7 @@
       "symbol": "audio_init",
       "abi": "none",
       "summary": "Initialize the SID sound-effect instrument table and scheduler state.",
-      "address": "$EF24"
+      "address": "$EF23"
     },
     {
       "label": "AUDIO.INSTRUMENT",
@@ -85,7 +85,7 @@
       "symbol": "audio_instrument",
       "abi": "pseudo-register",
       "summary": "Define a simple SID sound-effect instrument envelope and waveform.",
-      "address": "$EEE0"
+      "address": "$EEDF"
     },
     {
       "label": "AUDIO.INST_ID",
@@ -322,7 +322,7 @@
       "symbol": "audio_midplay",
       "abi": "pseudo-register",
       "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EFF8"
+      "address": "$EFF7"
     },
     {
       "label": "AUDIO.MIDPLAY_FILE",
@@ -361,7 +361,7 @@
       "symbol": "audio_midstop",
       "abi": "none",
       "summary": "Stop MIDI file playback.",
-      "address": "$EFFD"
+      "address": "$EFFC"
     },
     {
       "label": "AUDIO.MUSIC_LOOP",
@@ -381,7 +381,7 @@
       "symbol": "audio_music_loop",
       "abi": "pseudo-register",
       "summary": "Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.",
-      "address": "$F01F"
+      "address": "$F01E"
     },
     {
       "label": "AUDIO.MUSIC_NOTE",
@@ -404,7 +404,7 @@
       "symbol": "audio_music_note",
       "abi": "register",
       "summary": "Return the current MIDI note for a music voice.",
-      "address": "$F03D"
+      "address": "$F03C"
     },
     {
       "label": "AUDIO.MUSIC_PLAY",
@@ -422,7 +422,7 @@
       "symbol": "audio_music_play",
       "abi": "none",
       "summary": "Start queued music playback.",
-      "address": "$F00C"
+      "address": "$F00B"
     },
     {
       "label": "AUDIO.MUSIC_PLAYING",
@@ -440,7 +440,7 @@
       "symbol": "audio_music_playing",
       "abi": "none",
       "summary": "Return nonzero if music is playing.",
-      "address": "$F033"
+      "address": "$F032"
     },
     {
       "label": "AUDIO.MUSIC_PRIORITY",
@@ -460,7 +460,7 @@
       "symbol": "audio_music_priority",
       "abi": "pseudo-register",
       "summary": "Set hosted MML priority from AUDIO.NOTE and following pseudo-register bytes.",
-      "address": "$F024"
+      "address": "$F023"
     },
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
@@ -483,7 +483,7 @@
       "symbol": "audio_music_sequence",
       "abi": "pseudo-register",
       "summary": "Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.",
-      "address": "$F007"
+      "address": "$F006"
     },
     {
       "label": "AUDIO.MUSIC_STOP",
@@ -501,7 +501,7 @@
       "symbol": "audio_music_stop",
       "abi": "none",
       "summary": "Stop music playback.",
-      "address": "$F015"
+      "address": "$F014"
     },
     {
       "label": "AUDIO.MUSIC_TEMPO",
@@ -522,7 +522,7 @@
       "symbol": "audio_music_tempo",
       "abi": "pseudo-register",
       "summary": "Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.",
-      "address": "$F01A"
+      "address": "$F019"
     },
     {
       "label": "AUDIO.NOTE",
@@ -565,7 +565,7 @@
       "symbol": "audio_play_sound",
       "abi": "register",
       "summary": "Play a one-shot note using A/X/Y register arguments.",
-      "address": "$EE3D"
+      "address": "$EE3C"
     },
     {
       "label": "AUDIO.RELEASE",
@@ -604,7 +604,7 @@
       "symbol": "audio_set_volume",
       "abi": "register",
       "summary": "Set master or per-voice volume using A/X register arguments.",
-      "address": "$EE48"
+      "address": "$EE47"
     },
     {
       "label": "AUDIO.SFLOAD",
@@ -625,7 +625,7 @@
       "symbol": "audio_sfload",
       "abi": "pseudo-register",
       "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$F002"
+      "address": "$F001"
     },
     {
       "label": "AUDIO.SFLOAD_FILE",
@@ -664,7 +664,7 @@
       "symbol": "audio_sfx_playing",
       "abi": "none",
       "summary": "Return nonzero if the hosted music engine reports a sound effect.",
-      "address": "$F02D"
+      "address": "$F02C"
     },
     {
       "label": "AUDIO.SIDPLAY",
@@ -686,7 +686,7 @@
       "symbol": "audio_sidplay",
       "abi": "pseudo-register",
       "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.",
-      "address": "$EFEA"
+      "address": "$EFE9"
     },
     {
       "label": "AUDIO.SIDPLAY_FILE",
@@ -726,7 +726,7 @@
       "symbol": "audio_sidstop",
       "abi": "none",
       "summary": "Stop SID file playback.",
-      "address": "$EFF3"
+      "address": "$EFF2"
     },
     {
       "label": "AUDIO.SOUND",
@@ -748,7 +748,7 @@
       "symbol": "audio_sound",
       "abi": "pseudo-register",
       "summary": "Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.",
-      "address": "$EE50"
+      "address": "$EE4F"
     },
     {
       "label": "AUDIO.STATUS",
@@ -766,7 +766,7 @@
       "symbol": "audio_status",
       "abi": "none",
       "summary": "Return raw music status bits.",
-      "address": "$F029"
+      "address": "$F028"
     },
     {
       "label": "AUDIO.STATUS_LOADING",
@@ -887,7 +887,7 @@
       "symbol": "audio_tick",
       "abi": "none",
       "summary": "Advance fire-and-forget SID sound-effect durations by one frame.",
-      "address": "$EF59"
+      "address": "$EF58"
     },
     {
       "label": "AUDIO.VOICE",
@@ -920,7 +920,7 @@
       "symbol": "audio_volume",
       "abi": "pseudo-register",
       "summary": "Set SID master or per-voice volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.",
-      "address": "$EEAD"
+      "address": "$EEAC"
     },
     {
       "label": "AUDIO.VOLUME_LEVEL",
@@ -1405,7 +1405,7 @@
       "kind": "routine",
       "symbol": "fio_cd",
       "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0CC"
+      "address": "$F0CB"
     },
     {
       "label": "FIO.CHECK",
@@ -1422,7 +1422,7 @@
       "kind": "routine",
       "symbol": "fio_check",
       "summary": "Convert the current FIO status register to the shared A=0/1 result.",
-      "address": "$F04D"
+      "address": "$F04C"
     },
     {
       "label": "FIO.CLEAR_ERROR",
@@ -1439,12 +1439,12 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$F06D"
+      "address": "$F06C"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
       "source": "../runtime/asm/nova.inc",
-      "line": 1073,
+      "line": 1088,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1456,7 +1456,7 @@
     {
       "label": "FIO.CMD_NVGLOAD",
       "source": "../runtime/asm/nova.inc",
-      "line": 1094,
+      "line": 1109,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1468,7 +1468,7 @@
     {
       "label": "FIO.CMD_RNG",
       "source": "../runtime/asm/nova.inc",
-      "line": 1087,
+      "line": 1102,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1480,7 +1480,7 @@
     {
       "label": "FIO.CMD_XPAGE",
       "source": "../runtime/asm/nova.inc",
-      "line": 1080,
+      "line": 1095,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1508,7 +1508,7 @@
       "kind": "routine",
       "symbol": "fio_copy_name",
       "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
-      "address": "$F08C"
+      "address": "$F08B"
     },
     {
       "label": "FIO.DELETE",
@@ -1523,7 +1523,7 @@
       "kind": "routine",
       "symbol": "fio_delete",
       "summary": "Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0BD"
+      "address": "$F0BC"
     },
     {
       "label": "FIO.DIR_OPEN",
@@ -1535,7 +1535,7 @@
       "kind": "routine",
       "symbol": "fio_dir_open",
       "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
-      "address": "$F0B3"
+      "address": "$F0B2"
     },
     {
       "label": "FIO.DIR_READ",
@@ -1547,7 +1547,7 @@
       "kind": "routine",
       "symbol": "fio_dir_read",
       "summary": "Read the next directory entry into the FIO directory result registers.",
-      "address": "$F0B8"
+      "address": "$F0B7"
     },
     {
       "label": "FIO.EXEC",
@@ -1569,7 +1569,7 @@
       "kind": "routine",
       "symbol": "fio_exec",
       "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
-      "address": "$F05A"
+      "address": "$F059"
     },
     {
       "label": "FIO.GLOAD",
@@ -1589,7 +1589,7 @@
       "kind": "routine",
       "symbol": "fio_gload",
       "summary": "Load VGC/graphics memory using FIO graphics registers.",
-      "address": "$F0C7"
+      "address": "$F0C6"
     },
     {
       "label": "FIO.GSAVE",
@@ -1609,7 +1609,7 @@
       "kind": "routine",
       "symbol": "fio_gsave",
       "summary": "Save VGC/graphics memory using FIO graphics registers.",
-      "address": "$F0C2"
+      "address": "$F0C1"
     },
     {
       "label": "FIO.ISSUE",
@@ -1626,7 +1626,7 @@
       "kind": "routine",
       "symbol": "fio_issue",
       "summary": "Issue a raw FIO command without waiting for completion.",
-      "address": "$F049"
+      "address": "$F048"
     },
     {
       "label": "FIO.LOAD",
@@ -1643,7 +1643,7 @@
       "kind": "routine",
       "symbol": "fio_load",
       "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
-      "address": "$F0AE"
+      "address": "$F0AD"
     },
     {
       "label": "FIO.LOAD_RUNTIME",
@@ -1658,7 +1658,7 @@
       "kind": "routine",
       "symbol": "fio_load_runtime",
       "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
-      "address": "$F0E0"
+      "address": "$F0DF"
     },
     {
       "label": "FIO.MKDIR",
@@ -1673,12 +1673,12 @@
       "kind": "routine",
       "symbol": "fio_mkdir",
       "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0D1"
+      "address": "$F0D0"
     },
     {
       "label": "FIO.NAME",
       "source": "../runtime/asm/nova.inc",
-      "line": 758,
+      "line": 761,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1690,7 +1690,7 @@
     {
       "label": "FIO.NAMELEN",
       "source": "../runtime/asm/nova.inc",
-      "line": 712,
+      "line": 715,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1729,7 +1729,7 @@
       "kind": "routine",
       "symbol": "fio_pwd",
       "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0DB"
+      "address": "$F0DA"
     },
     {
       "label": "FIO.RMDIR",
@@ -1744,7 +1744,7 @@
       "kind": "routine",
       "symbol": "fio_rmdir",
       "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
-      "address": "$F0D6"
+      "address": "$F0D5"
     },
     {
       "label": "FIO.RNG",
@@ -1765,12 +1765,12 @@
       "kind": "routine",
       "symbol": "fio_rng",
       "summary": "Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.",
-      "address": "$F0E5"
+      "address": "$F0E4"
     },
     {
       "label": "FIO.RNG0",
       "source": "../runtime/asm/nova.inc",
-      "line": 1102,
+      "line": 1117,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1782,7 +1782,7 @@
     {
       "label": "FIO.RNG1",
       "source": "../runtime/asm/nova.inc",
-      "line": 1109,
+      "line": 1124,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1794,7 +1794,7 @@
     {
       "label": "FIO.RNG2",
       "source": "../runtime/asm/nova.inc",
-      "line": 1116,
+      "line": 1131,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1806,7 +1806,7 @@
     {
       "label": "FIO.RNG3",
       "source": "../runtime/asm/nova.inc",
-      "line": 1123,
+      "line": 1138,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1843,7 +1843,7 @@
       "kind": "routine",
       "symbol": "fio_save",
       "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
-      "address": "$F0A9"
+      "address": "$F0A8"
     },
     {
       "label": "FIO.SET_IO_ERROR",
@@ -1860,7 +1860,7 @@
       "kind": "routine",
       "symbol": "fio_set_io_error",
       "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
-      "address": "$F07F"
+      "address": "$F07E"
     },
     {
       "label": "NGS.BEGIN_MESSAGE",
@@ -2408,7 +2408,7 @@
       "kind": "routine",
       "symbol": "nic_command",
       "summary": "Issue a raw NIC command.",
-      "address": "$F0EA"
+      "address": "$F0E9"
     },
     {
       "label": "NIC.CONNECT",
@@ -2425,7 +2425,7 @@
       "kind": "routine",
       "symbol": "nic_connect",
       "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
-      "address": "$F10B"
+      "address": "$F10A"
     },
     {
       "label": "NIC.COPY_NAME",
@@ -2446,7 +2446,7 @@
       "kind": "routine",
       "symbol": "nic_copy_name",
       "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
-      "address": "$F131"
+      "address": "$F130"
     },
     {
       "label": "NIC.DISCONNECT",
@@ -2460,7 +2460,7 @@
       "kind": "routine",
       "symbol": "nic_disconnect",
       "summary": "Disconnect NIC_SLOT.",
-      "address": "$F10F"
+      "address": "$F10E"
     },
     {
       "label": "NIC.LENGTH",
@@ -2477,7 +2477,7 @@
       "kind": "routine",
       "symbol": "nic_length",
       "summary": "Read the most recent NIC message length.",
-      "address": "$F12D"
+      "address": "$F12C"
     },
     {
       "label": "NIC.LISTEN",
@@ -2510,7 +2510,7 @@
       "kind": "routine",
       "symbol": "nic_ready",
       "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
-      "address": "$F123"
+      "address": "$F122"
     },
     {
       "label": "NIC.RECV",
@@ -2526,7 +2526,7 @@
       "kind": "routine",
       "symbol": "nic_recv",
       "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
-      "address": "$F117"
+      "address": "$F116"
     },
     {
       "label": "NIC.SEND",
@@ -2543,7 +2543,7 @@
       "kind": "routine",
       "symbol": "nic_send",
       "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
-      "address": "$F113"
+      "address": "$F112"
     },
     {
       "label": "NIC.STATUS",
@@ -2565,7 +2565,7 @@
       "kind": "routine",
       "symbol": "nic_status",
       "summary": "Read clamped NIC slot status.",
-      "address": "$F11B"
+      "address": "$F11A"
     },
     {
       "label": "NVG.ADDRH",
@@ -3053,7 +3053,7 @@
       "kind": "routine",
       "symbol": "sprite_background_clear",
       "summary": "Clear the sprite-background collision mask and acknowledge its IRQ source.",
-      "address": "$EADC"
+      "address": "$EADB"
     },
     {
       "label": "SPRITE.BACKGROUND_IRQ_DISABLE",
@@ -3065,7 +3065,7 @@
       "kind": "routine",
       "symbol": "sprite_background_irq_disable",
       "summary": "Disable the VGC sprite-background IRQ source.",
-      "address": "$EAFE"
+      "address": "$EAFD"
     },
     {
       "label": "SPRITE.BACKGROUND_IRQ_ENABLE",
@@ -3077,7 +3077,7 @@
       "kind": "routine",
       "symbol": "sprite_background_irq_enable",
       "summary": "Clear stale sprite-background collisions, enable the VGC sprite-background IRQ source, and enable CPU IRQs.",
-      "address": "$EAF1"
+      "address": "$EAF0"
     },
     {
       "label": "SPRITE.BACKGROUND_MASK",
@@ -3098,7 +3098,7 @@
       "kind": "routine",
       "symbol": "sprite_background_collision_mask",
       "summary": "Read the 16-bit sprite-background collision status mask without clearing it.",
-      "address": "$EAD5"
+      "address": "$EAD4"
     },
     {
       "label": "SPRITE.BACKGROUND_READ_CLEAR",
@@ -3119,7 +3119,7 @@
       "kind": "routine",
       "symbol": "sprite_background_read_clear",
       "summary": "Read the 16-bit sprite-background collision mask, clear it, and acknowledge its IRQ source.",
-      "address": "$EAE8"
+      "address": "$EAE7"
     },
     {
       "label": "SPRITE.BACKGROUND_STATUS",
@@ -3136,7 +3136,7 @@
       "kind": "routine",
       "symbol": "sprite_background_collision_status",
       "summary": "Read the low byte of the sprite-background collision status register.",
-      "address": "$EAD1"
+      "address": "$EAD0"
     },
     {
       "label": "SPRITE.CLEAR",
@@ -3166,7 +3166,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_clear",
       "summary": "Clear the sprite-sprite collision mask and acknowledge its IRQ source.",
-      "address": "$EAA4"
+      "address": "$EAA3"
     },
     {
       "label": "SPRITE.COLLISION_IRQ_DISABLE",
@@ -3178,7 +3178,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_irq_disable",
       "summary": "Disable the VGC sprite collision IRQ source.",
-      "address": "$EAC6"
+      "address": "$EAC5"
     },
     {
       "label": "SPRITE.COLLISION_IRQ_ENABLE",
@@ -3190,7 +3190,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_irq_enable",
       "summary": "Clear stale sprite-sprite collisions, enable the VGC sprite collision IRQ source, and enable CPU IRQs.",
-      "address": "$EAB9"
+      "address": "$EAB8"
     },
     {
       "label": "SPRITE.COLLISION_MASK",
@@ -3211,7 +3211,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_mask",
       "summary": "Read the 16-bit sprite-sprite collision status mask without clearing it.",
-      "address": "$EA9D"
+      "address": "$EA9C"
     },
     {
       "label": "SPRITE.COLLISION_READ_CLEAR",
@@ -3232,7 +3232,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_read_clear",
       "summary": "Read the 16-bit sprite-sprite collision mask, clear it, and acknowledge its IRQ source.",
-      "address": "$EAB0"
+      "address": "$EAAF"
     },
     {
       "label": "SPRITE.COLLISION_STATUS",
@@ -3249,7 +3249,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_status",
       "summary": "Read the low byte of the sprite-sprite collision status register.",
-      "address": "$EA99"
+      "address": "$EA98"
     },
     {
       "label": "SPRITE.COMMAND",
@@ -3266,7 +3266,7 @@
       "kind": "routine",
       "symbol": "sprite_command",
       "summary": "Issue a raw sprite VGC command without waiting for completion.",
-      "address": "$EA3F"
+      "address": "$EA3E"
     },
     {
       "label": "SPRITE.COPY",
@@ -3294,7 +3294,7 @@
       "kind": "routine",
       "symbol": "sprite_disable",
       "summary": "Disable the sprite in VGC.P0.",
-      "address": "$EA4D"
+      "address": "$EA4C"
     },
     {
       "label": "SPRITE.ENABLE",
@@ -3308,7 +3308,7 @@
       "kind": "routine",
       "symbol": "sprite_enable",
       "summary": "Enable the sprite in VGC.P0.",
-      "address": "$EA48"
+      "address": "$EA47"
     },
     {
       "label": "SPRITE.FLIP",
@@ -3348,7 +3348,7 @@
       "kind": "routine",
       "symbol": "sprite_get_x",
       "summary": "Read a sprite's 16-bit X coordinate.",
-      "address": "$EA7E"
+      "address": "$EA7D"
     },
     {
       "label": "SPRITE.GET_Y",
@@ -3370,7 +3370,7 @@
       "kind": "routine",
       "symbol": "sprite_get_y",
       "summary": "Read a sprite's Y coordinate.",
-      "address": "$EA8F"
+      "address": "$EA8E"
     },
     {
       "label": "SPRITE.POS",
@@ -3387,7 +3387,7 @@
       "kind": "routine",
       "symbol": "sprite_pos",
       "summary": "Move a sprite using VGC.P0=sprite, VGC.P1/P2=x, VGC.P3=y.",
-      "address": "$EA43"
+      "address": "$EA42"
     },
     {
       "label": "SPRITE.PRIORITY",
@@ -3427,7 +3427,7 @@
       "kind": "routine",
       "symbol": "sprite_reg_offset",
       "summary": "Compute the VGC sprite attribute block offset for a sprite field.",
-      "address": "$EA57"
+      "address": "$EA56"
     },
     {
       "label": "SPRITE.ROW",
@@ -3450,7 +3450,7 @@
       "kind": "routine",
       "symbol": "sprite_row",
       "summary": "Write one sprite bitmap row using VGC.P0..VGC.P9.",
-      "address": "$EA52"
+      "address": "$EA51"
     },
     {
       "label": "SPRITE.SET_REG16",
@@ -3479,7 +3479,7 @@
       "kind": "routine",
       "symbol": "sprite_set_reg16",
       "summary": "Write one 16-bit sprite attribute field.",
-      "address": "$EA6F"
+      "address": "$EA6E"
     },
     {
       "label": "SPRITE.SET_REG8",
@@ -3504,7 +3504,7 @@
       "kind": "routine",
       "symbol": "sprite_set_reg8",
       "summary": "Write one 8-bit sprite attribute field.",
-      "address": "$EA64"
+      "address": "$EA63"
     },
     {
       "label": "SPRITE.SET_SHAPE",
@@ -3525,7 +3525,7 @@
       "kind": "routine",
       "symbol": "sprite_set_shape",
       "summary": "Set a sprite's shape index.",
-      "address": "$EA62"
+      "address": "$EA61"
     },
     {
       "label": "SYS.REGA",
@@ -4192,7 +4192,7 @@
     {
       "label": "VGC.CIRCLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 350,
+      "line": 355,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4218,7 +4218,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_cls",
-      "summary": "Clear the text screen through the VGC character output register.",
+      "summary": "Clear the text screen through the VGC character output register and wait for completion.",
       "address": "$E9AE"
     },
     {
@@ -4241,26 +4241,26 @@
     {
       "label": "VGC.DISPLAY_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 144,
+      "line": 149,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_display_off",
       "summary": "Blank VGC output while keeping video timing active.",
-      "address": "$E9C6"
+      "address": "$E9C5"
     },
     {
       "label": "VGC.DISPLAY_ON",
       "source": "../runtime/asm/vgc.s",
-      "line": 135,
+      "line": 140,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_display_on",
       "summary": "Restore full VGC output brightness.",
-      "address": "$E9C0"
+      "address": "$E9BF"
     },
     {
       "label": "VGC.EXEC",
@@ -4281,7 +4281,7 @@
     {
       "label": "VGC.FILL",
       "source": "../runtime/asm/vgc.s",
-      "line": 377,
+      "line": 382,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4301,31 +4301,31 @@
     {
       "label": "VGC.FLASH_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 295,
+      "line": 300,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_flash_off",
       "summary": "Disable flashing text.",
-      "address": "$EA36"
+      "address": "$EA35"
     },
     {
       "label": "VGC.FLASH_ON",
       "source": "../runtime/asm/vgc.s",
-      "line": 285,
+      "line": 290,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_flash_on",
       "summary": "Enable flashing text.",
-      "address": "$EA2D"
+      "address": "$EA2C"
     },
     {
       "label": "VGC.GCLS",
       "source": "../runtime/asm/vgc.s",
-      "line": 306,
+      "line": 311,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4336,7 +4336,7 @@
     {
       "label": "VGC.GCOLOR",
       "source": "../runtime/asm/vgc.s",
-      "line": 314,
+      "line": 319,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4349,7 +4349,7 @@
     {
       "label": "VGC.GFXTRANS",
       "source": "../runtime/asm/nova.inc",
-      "line": 363,
+      "line": 366,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4361,7 +4361,7 @@
     {
       "label": "VGC.GTEXT",
       "source": "../runtime/asm/vgc.s",
-      "line": 359,
+      "line": 364,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4381,7 +4381,7 @@
     {
       "label": "VGC.IRQ_ACK",
       "source": "../runtime/asm/vgc.s",
-      "line": 189,
+      "line": 194,
       "inputs": [
         {
           "name": "A",
@@ -4393,12 +4393,12 @@
       "kind": "routine",
       "symbol": "vgc_irq_ack",
       "summary": "Acknowledge pending VGC IRQ source bits.",
-      "address": "$E9E7"
+      "address": "$E9E6"
     },
     {
       "label": "VGC.IRQ_DISABLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 178,
+      "line": 183,
       "inputs": [
         {
           "name": "A",
@@ -4410,12 +4410,12 @@
       "kind": "routine",
       "symbol": "vgc_irq_disable",
       "summary": "Disable one or more VGC IRQ source bits.",
-      "address": "$E9DE"
+      "address": "$E9DD"
     },
     {
       "label": "VGC.IRQ_ENABLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 167,
+      "line": 172,
       "inputs": [
         {
           "name": "A",
@@ -4427,12 +4427,12 @@
       "kind": "routine",
       "symbol": "vgc_irq_enable",
       "summary": "Enable one or more VGC IRQ source bits and enable maskable CPU IRQs.",
-      "address": "$E9D6"
+      "address": "$E9D5"
     },
     {
       "label": "VGC.IRQ_INSTALL",
       "source": "../runtime/asm/vgc.s",
-      "line": 153,
+      "line": 158,
       "inputs": [
         {
           "name": "A",
@@ -4448,12 +4448,12 @@
       "kind": "routine",
       "symbol": "vgc_irq_install",
       "summary": "Install the CPU IRQ vector used when enabled VGC IRQ sources fire.",
-      "address": "$E9CC"
+      "address": "$E9CB"
     },
     {
       "label": "VGC.LINE",
       "source": "../runtime/asm/vgc.s",
-      "line": 341,
+      "line": 346,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4473,7 +4473,7 @@
     {
       "label": "VGC.LOCATE",
       "source": "../runtime/asm/vgc.s",
-      "line": 198,
+      "line": 203,
       "inputs": [
         {
           "name": "VGC_P0",
@@ -4489,12 +4489,12 @@
       "kind": "routine",
       "symbol": "vgc_locate",
       "summary": "Set the text cursor position from VGC.P0/VGC.P1.",
-      "address": "$E9EB"
+      "address": "$E9EA"
     },
     {
       "label": "VGC.MEM_READ",
       "source": "../runtime/asm/vgc.s",
-      "line": 229,
+      "line": 234,
       "inputs": [],
       "outputs": [
         {
@@ -4511,12 +4511,12 @@
       "kind": "routine",
       "symbol": "vgc_mem_read",
       "summary": "Read one byte from VGC memory using VGC.P0..VGC.P4.",
-      "address": "$EA00"
+      "address": "$E9FF"
     },
     {
       "label": "VGC.MEM_WRITE",
       "source": "../runtime/asm/vgc.s",
-      "line": 239,
+      "line": 244,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4529,12 +4529,12 @@
       "kind": "routine",
       "symbol": "vgc_mem_write",
       "summary": "Write one byte to VGC memory using VGC.P0..VGC.P4.",
-      "address": "$EA03"
+      "address": "$EA02"
     },
     {
       "label": "VGC.PAINT",
       "source": "../runtime/asm/vgc.s",
-      "line": 386,
+      "line": 391,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4550,7 +4550,7 @@
     {
       "label": "VGC.PLOT",
       "source": "../runtime/asm/vgc.s",
-      "line": 323,
+      "line": 328,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4566,7 +4566,7 @@
     {
       "label": "VGC.RECT",
       "source": "../runtime/asm/vgc.s",
-      "line": 368,
+      "line": 373,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4586,19 +4586,19 @@
     {
       "label": "VGC.REVERSE",
       "source": "../runtime/asm/vgc.s",
-      "line": 250,
+      "line": 255,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_default",
       "summary": "Enable reverse text using the current foreground/background colours.",
-      "address": "$EA0B"
+      "address": "$EA0A"
     },
     {
       "label": "VGC.REVERSE_EXPLICIT",
       "source": "../runtime/asm/vgc.s",
-      "line": 262,
+      "line": 267,
       "inputs": [
         {
           "name": "A",
@@ -4610,24 +4610,24 @@
       "kind": "routine",
       "symbol": "vgc_reverse_explicit",
       "summary": "Enable reverse text with explicit packed foreground/background colours.",
-      "address": "$EA16"
+      "address": "$EA15"
     },
     {
       "label": "VGC.REVERSE_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 275,
+      "line": 280,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_off",
       "summary": "Disable reverse text.",
-      "address": "$EA24"
+      "address": "$EA23"
     },
     {
       "label": "VGC.SET_BG",
       "source": "../runtime/asm/vgc.s",
-      "line": 117,
+      "line": 122,
       "inputs": [
         {
           "name": "X",
@@ -4639,12 +4639,12 @@
       "kind": "routine",
       "symbol": "vgc_set_bg",
       "summary": "Set the current text background colour.",
-      "address": "$E9B8"
+      "address": "$E9B7"
     },
     {
       "label": "VGC.SET_BORDER",
       "source": "../runtime/asm/vgc.s",
-      "line": 126,
+      "line": 131,
       "inputs": [
         {
           "name": "X",
@@ -4656,12 +4656,12 @@
       "kind": "routine",
       "symbol": "vgc_set_border",
       "summary": "Set the VGC border colour.",
-      "address": "$E9BC"
+      "address": "$E9BB"
     },
     {
       "label": "VGC.SET_FG",
       "source": "../runtime/asm/vgc.s",
-      "line": 108,
+      "line": 113,
       "inputs": [
         {
           "name": "X",
@@ -4673,12 +4673,12 @@
       "kind": "routine",
       "symbol": "vgc_set_fg",
       "summary": "Set the current text foreground colour.",
-      "address": "$E9B4"
+      "address": "$E9B3"
     },
     {
       "label": "VGC.SET_FONT",
       "source": "../runtime/asm/vgc.s",
-      "line": 220,
+      "line": 225,
       "inputs": [
         {
           "name": "X",
@@ -4690,12 +4690,12 @@
       "kind": "routine",
       "symbol": "vgc_set_font",
       "summary": "Select the active text font slot.",
-      "address": "$E9FC"
+      "address": "$E9FB"
     },
     {
       "label": "VGC.SET_MODE",
       "source": "../runtime/asm/vgc.s",
-      "line": 211,
+      "line": 216,
       "inputs": [
         {
           "name": "X",
@@ -4707,12 +4707,12 @@
       "kind": "routine",
       "symbol": "vgc_set_mode",
       "summary": "Set the active VGC graphics/text mode.",
-      "address": "$E9F8"
+      "address": "$E9F7"
     },
     {
       "label": "VGC.UNPLOT",
       "source": "../runtime/asm/vgc.s",
-      "line": 332,
+      "line": 337,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4823,7 +4823,7 @@
     {
       "label": "VSPRITE.BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 104,
+      "line": 108,
       "inputs": [
         {
           "name": "VSPRITE_FLAGS",
@@ -4857,6 +4857,40 @@
       "kind": "routine",
       "symbol": "vsprite_blit",
       "summary": "Copy the configured virtual sprite rectangle with the blitter."
+    },
+    {
+      "label": "VSPRITE.BLIT_START",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 125,
+      "inputs": [
+        {
+          "name": "VSPRITE_FLAGS",
+          "description": "Set bit 0 to enable color-key transparency."
+        },
+        {
+          "name": "VSPRITE_COLORKEY",
+          "description": "Source byte skipped when color-key mode is enabled."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 after the blit command is issued."
+        }
+      ],
+      "requires": [
+        "VSPRITE_SRCSPACE",
+        "VSPRITE_DSTSPACE",
+        "VSPRITE_SRCADDR*",
+        "VSPRITE_DSTADDR*",
+        "VSPRITE_WIDTH*",
+        "VSPRITE_HEIGHT*",
+        "VSPRITE_SRCSTR*",
+        "VSPRITE_DSTSTR*"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_blit_start",
+      "summary": "Start the configured virtual sprite blit without waiting for completion."
     },
     {
       "label": "VSPRITE.COLORKEY",
@@ -4974,7 +5008,7 @@
     {
       "label": "VSPRITE.FILL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 161,
+      "line": 182,
       "inputs": [],
       "outputs": [
         {
@@ -5030,7 +5064,7 @@
     {
       "label": "VSPRITE.GFX_ADDR",
       "source": "../runtime/asm/vsprite.s",
-      "line": 292,
+      "line": 313,
       "inputs": [],
       "outputs": [
         {
@@ -5050,7 +5084,7 @@
     {
       "label": "VSPRITE.GFX_BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 337,
+      "line": 358,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5078,9 +5112,34 @@
       "summary": "Copy the configured virtual sprite to the VGC graphics plane at X/Y."
     },
     {
+      "label": "VSPRITE.GFX_BLIT_START",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 375,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 after the blit command is issued."
+        }
+      ],
+      "requires": [
+        "VSPRITE_XL",
+        "VSPRITE_XH",
+        "VSPRITE_Y",
+        "VSPRITE_SRCSPACE",
+        "VSPRITE_SRCADDR*",
+        "VSPRITE_WIDTH*",
+        "VSPRITE_HEIGHT*",
+        "VSPRITE_SRCSTR*"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_gfx_blit_start",
+      "summary": "Start copying the configured virtual sprite to the VGC graphics plane at X/Y without waiting for completion."
+    },
+    {
       "label": "VSPRITE.GFX_FILL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 385,
+      "line": 465,
       "inputs": [],
       "outputs": [
         {
@@ -5103,7 +5162,7 @@
     {
       "label": "VSPRITE.GFX_RESTORE_BG",
       "source": "../runtime/asm/vsprite.s",
-      "line": 443,
+      "line": 523,
       "inputs": [],
       "outputs": [
         {
@@ -5128,7 +5187,7 @@
     {
       "label": "VSPRITE.GFX_ROTATE_BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 354,
+      "line": 391,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5161,9 +5220,71 @@
       "desc": "The final graphics blit is intentionally non-color-keyed so transparent pixels from the rotated buffer clear the previous frame in the same visible copy."
     },
     {
+      "label": "VSPRITE.GFX_ROTATE_BLIT_KEYED",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 408,
+      "inputs": [
+        {
+          "name": "VSPRITE_FLAGS",
+          "description": "Set VSPRITE_FLAG_COLORKEY to preserve existing graphics-plane pixels where the rotated sprite is transparent."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VSPRITE.X/Y",
+        "VSPRITE.ORIG*",
+        "VSPRITE.ROT*",
+        "VSPRITE.WIDTH/HEIGHT",
+        "VSPRITE.ROTANGLE"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_gfx_rotate_blit_keyed",
+      "summary": "Rotate the configured virtual sprite, wait for the next frame, then blit it with the caller's VSPRITE.FLAGS."
+    },
+    {
+      "label": "VSPRITE.GFX_ROTATE_BLIT_NOWAIT",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 424,
+      "inputs": [
+        {
+          "name": "VSPRITE_COLORKEY",
+          "description": "Fill value for rotated output pixels outside the source bounds; normally match this to VGC_GFXTRANS."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VSPRITE_XL",
+        "VSPRITE_XH",
+        "VSPRITE_Y",
+        "VSPRITE_ORIGSPACE",
+        "VSPRITE_ORIGADDR*",
+        "VSPRITE_ORIGSTR*",
+        "VSPRITE_ROTSPACE",
+        "VSPRITE_ROTADDR*",
+        "VSPRITE_ROTSTR*",
+        "VSPRITE_WIDTH*",
+        "VSPRITE_HEIGHT*",
+        "VSPRITE_ROTANGLE"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_gfx_rotate_blit_nowait",
+      "summary": "Rotate the configured virtual sprite offscreen, then start copying the full rotated bounds to graphics memory without waiting for VGC.FRAME or final blit completion.",
+      "desc": "Use this in command/REPL paths or runtimes that already own frame pacing."
+    },
+    {
       "label": "VSPRITE.GFX_SAVE_BG",
       "source": "../runtime/asm/vsprite.s",
-      "line": 401,
+      "line": 481,
       "inputs": [],
       "outputs": [
         {
@@ -5320,7 +5441,7 @@
     {
       "label": "VSPRITE.ROTATE",
       "source": "../runtime/asm/vsprite.s",
-      "line": 236,
+      "line": 257,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5407,7 +5528,7 @@
     {
       "label": "VSPRITE.SCENE_BEGIN",
       "source": "../runtime/asm/vsprite.s",
-      "line": 485,
+      "line": 565,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5423,7 +5544,7 @@
     {
       "label": "VSPRITE.SCENE_COMMIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 512,
+      "line": 592,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5439,7 +5560,7 @@
     {
       "label": "VSPRITE.SCENE_COMMIT_ATOMIC",
       "source": "../runtime/asm/vsprite.s",
-      "line": 544,
+      "line": 624,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5471,7 +5592,7 @@
     {
       "label": "VSPRITE.SCENE_DRAW",
       "source": "../runtime/asm/vsprite.s",
-      "line": 522,
+      "line": 602,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5695,7 +5816,7 @@
     {
       "label": "VSPRITE.USE_ORIGINAL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 192,
+      "line": 213,
       "inputs": [],
       "outputs": [
         {
@@ -5715,7 +5836,7 @@
     {
       "label": "VSPRITE.USE_ROTATED",
       "source": "../runtime/asm/vsprite.s",
-      "line": 214,
+      "line": 235,
       "inputs": [],
       "outputs": [
         {

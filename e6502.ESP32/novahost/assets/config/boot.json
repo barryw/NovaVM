@@ -24,6 +24,19 @@
       "banner": {
         "startRow": 1
       }
+    },
+    "novalogo": {
+      "rom": "/roms/novalogo.bin",
+      "extensionRom": "/roms/novalogo_ext.bin",
+      "autoboot": false,
+      "theme": {
+        "background": 0,
+        "foreground": 15,
+        "border": 0
+      },
+      "banner": {
+        "startRow": 0
+      }
     }
   },
   "mounts": {

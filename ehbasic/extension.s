@@ -27,6 +27,9 @@ ext_dig2        = NVR2L
 ext_dig3        = NVR2H
 ext_dig4        = NVR3L
 ext_firstdig    = NVR3H
+txt_addrL       = ext_u32_0
+txt_addrH       = ext_u32_1
+txt_tmp         = ext_u32_2
 
 addr_entryL     = ext_ptrL
 addr_entryH     = ext_ptrH
@@ -48,6 +51,7 @@ LAB_IGBY        = $BC           ; advance + skip-spaces + return byte (A)
 LAB_GBYT        = $C2           ; peek current + skip-spaces + return byte (A)
 
 ; --- BASIC ZP scratch / FAC1 ---
+TPos            = $0E           ; BASIC terminal column, relative to active text window
 Bpntrl          = $C3           ; BASIC execute pointer low (alias of Bpntrl_ext)
 Bpntrh          = $C4
 FAC1_2          = $AE           ; FAC1 mantissa2 (16-bit hi after LAB_GTWRD)
@@ -146,6 +150,7 @@ ExtTable:
       .word EXT_FLASHOFF-1    ; cmd 3F: FLASHOFF
       .word EXT_VPOKE-1       ; cmd 40: VPOKE plane,addr,value
       .word EXT_FIOCLR-1      ; cmd 41: FIOCLR
+      .word EXT_CLS-1         ; cmd 42: CLS active text window
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -1249,6 +1254,236 @@ EXT_VPOKE:
 
 EXT_FIOCLR:
       JMP   fio_clear_error
+
+EXT_CLS:
+      JSR   ext_text_window_valid
+      BNE   @full
+      LDA   TEXTWIN_LEFT
+      BNE   @window
+      LDA   TEXTWIN_TOP
+      BNE   @window
+      LDA   TEXTWIN_WIDTH
+      CMP   #80
+      BNE   @window
+      LDA   TEXTWIN_HEIGHT
+      CMP   #50
+      BNE   @window
+@full:
+      LDA   #$0C
+      STA   VGC_CHAROUT
+      JSR   ext_vgc_wait_cmd
+      STZ   TPos
+      LDA   #$00
+      RTS
+@window:
+      JSR   ext_cls_charout_window
+      JSR   ext_text_window_addr
+
+      LDA   #$20
+      STA   txt_tmp
+      LDA   #VGC_PLANE_CHAR
+      JSR   ext_cls_fill_plane
+
+      JSR   ext_current_text_color
+      STA   txt_tmp
+      LDA   #VGC_PLANE_COLOR
+      JSR   ext_cls_fill_plane
+
+      JSR   ext_current_text_attr
+      STA   txt_tmp
+      LDA   #VGC_PLANE_TEXTATTR
+      JSR   ext_cls_fill_plane
+
+      LDA   TEXTWIN_LEFT
+      STA   VGC_CURSX
+      LDA   TEXTWIN_TOP
+      STA   VGC_CURSY
+      STZ   TPos
+      LDA   #$00
+      RTS
+
+ext_text_window_valid:
+      LDA   TEXTWIN_WIDTH
+      BEQ   @bad
+      LDA   TEXTWIN_HEIGHT
+      BEQ   @bad
+      LDA   TEXTWIN_LEFT
+      CMP   #80
+      BCS   @bad
+      CLC
+      ADC   TEXTWIN_WIDTH
+      BCS   @bad
+      CMP   #81
+      BCS   @bad
+      LDA   TEXTWIN_TOP
+      CMP   #50
+      BCS   @bad
+      CLC
+      ADC   TEXTWIN_HEIGHT
+      BCS   @bad
+      CMP   #51
+      BCS   @bad
+      LDA   #$00
+      RTS
+@bad:
+      LDA   #$01
+      RTS
+
+ext_text_window_addr:
+      LDA   TEXTWIN_TOP
+      STA   txt_tmp
+      ASL
+      ASL
+      CLC
+      ADC   txt_tmp           ; row * 5
+      STA   txt_addrL
+      STZ   txt_addrH
+      ASL   txt_addrL
+      ROL   txt_addrH
+      ASL   txt_addrL
+      ROL   txt_addrH
+      ASL   txt_addrL
+      ROL   txt_addrH
+      ASL   txt_addrL
+      ROL   txt_addrH         ; row * 80
+      LDA   TEXTWIN_LEFT
+      CLC
+      ADC   txt_addrL
+      STA   txt_addrL
+      BCC   @done
+      INC   txt_addrH
+@done:
+      RTS
+
+ext_cls_fill_plane:
+      STA   BLT_DSTSPACE
+      STZ   BLT_SRCSPACE
+      STZ   BLT_SRCL
+      STZ   BLT_SRCM
+      STZ   BLT_SRCH
+      STZ   BLT_SRCSTRL
+      STZ   BLT_SRCSTRH
+      STZ   BLT_CKEY
+      LDA   txt_addrL
+      STA   BLT_DSTL
+      LDA   txt_addrH
+      STA   BLT_DSTM
+      STZ   BLT_DSTH
+      LDA   TEXTWIN_WIDTH
+      STA   BLT_WIDTHL
+      STZ   BLT_WIDTHH
+      LDA   TEXTWIN_HEIGHT
+      STA   BLT_HEIGHTL
+      STZ   BLT_HEIGHTH
+      LDA   #80
+      STA   BLT_DSTSTRL
+      STZ   BLT_DSTSTRH
+      LDA   txt_tmp
+      STA   BLT_FILLVALUE
+      LDA   #BLT_MODE_FILL
+      STA   BLT_MODE_REG
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD_REG
+@wait:
+      LDA   BLT_STATUS_REG
+      CMP   #BLT_STATUS_BUSY
+      BEQ   @wait
+      RTS
+
+ext_cls_charout_window:
+      LDA   TEXTWIN_TOP
+      STA   txt_addrL         ; current logical row
+      LDA   TEXTWIN_HEIGHT
+      STA   txt_addrH         ; rows remaining
+@row:
+      LDA   TEXTWIN_LEFT
+      STA   VGC_CURSX
+      LDA   txt_addrL
+      STA   VGC_CURSY
+      LDA   TEXTWIN_WIDTH
+      STA   txt_tmp           ; columns remaining
+
+      LDA   txt_addrL
+      CMP   #49
+      BNE   @chars
+      LDA   TEXTWIN_LEFT
+      CLC
+      ADC   TEXTWIN_WIDTH
+      CMP   #80
+      BNE   @chars
+      DEC   txt_tmp           ; avoid printing bottom-right and scrolling
+@chars:
+      LDA   txt_tmp
+      BEQ   @bottom_right
+@char:
+      LDA   #$20
+      STA   VGC_CHAROUT
+      DEC   txt_tmp
+      BNE   @char
+@bottom_right:
+      LDA   txt_addrL
+      CMP   #49
+      BNE   @next
+      LDA   TEXTWIN_LEFT
+      CLC
+      ADC   TEXTWIN_WIDTH
+      CMP   #80
+      BNE   @next
+      LDA   #80
+      STA   VGC_CURSX
+      LDA   #49
+      STA   VGC_CURSY
+      LDA   #$08              ; backspace erases cell 79 without scrolling
+      STA   VGC_CHAROUT
+@next:
+      INC   txt_addrL
+      DEC   txt_addrH
+      BNE   @row
+      RTS
+
+ext_current_text_color:
+      LDA   VGC_TXTFLAGS
+      AND   #VTXT_REV
+      BEQ   @normal
+      LDA   VGC_TXTFLAGS
+      AND   #VTXT_REVEX
+      BEQ   @swap
+      LDA   VGC_TXTREVATTR
+      RTS
+@normal:
+      LDA   VGC_BGCOL
+      AND   #$0F
+      ASL
+      ASL
+      ASL
+      ASL
+      STA   txt_tmp
+      LDA   VGC_FGCOL
+      AND   #$0F
+      ORA   txt_tmp
+      RTS
+@swap:
+      LDA   VGC_FGCOL
+      AND   #$0F
+      ASL
+      ASL
+      ASL
+      ASL
+      STA   txt_tmp
+      LDA   VGC_BGCOL
+      AND   #$0F
+      ORA   txt_tmp
+      RTS
+
+ext_current_text_attr:
+      LDA   VGC_TXTFLAGS
+      AND   #VTXT_FLASH
+      BEQ   @plain
+      LDA   #VTXT_ATTR_FLASH
+      RTS
+@plain:
+      LDA   #$00
+      RTS
 
 ext_parse_addr_mask:
       JSR   EXT_GTWRD_VEC

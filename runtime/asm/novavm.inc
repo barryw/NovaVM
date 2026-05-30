@@ -538,6 +538,10 @@ NicMaxSlots                   = $04
 NicMaxMessageSize             = $0100
 NicMaxQueueDepth              = $10
 AutobootSkip                  = $B9F0
+TextWindowLeft                = $B9F2
+TextWindowTop                 = $B9F3
+TextWindowWidth               = $B9F4
+TextWindowHeight              = $B9F5
 RomBase                       = $C000
 RomEnd                        = $FFFF
 RomSize                       = $4000
@@ -714,6 +718,7 @@ RomSwapNcc                    = $01
 RomSwapBasic                  = $02
 RomSwapNccEdit                = $03
 RomSwapExtension              = $04
+RomSwapLogo                   = $05
 
 ; --- Compiler Controller registers ($A031-$A03E) ---
 CmpBase                       = $A031

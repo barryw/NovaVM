@@ -31,6 +31,8 @@ VTEXT_REGION_ID:  .res 1
 VTEXT_ADDRL:      .res 1
 VTEXT_ADDRH:      .res 1
 VTEXT_TMP:        .res 1
+VTEXT_STRL:       .res 1
+VTEXT_STRH:       .res 1
 
       .segment "CODE"
 
@@ -42,6 +44,9 @@ VTEXT_TMP:        .res 1
       .export vtext_sync_cursor
       .export vtext_home
       .export vtext_put_char
+      .export vtext_puts
+      .export vtext_put_hex_nibble
+      .export vtext_put_hex_byte
       .export vtext_newline
       .export vtext_clear_region
       .export vtext_clear_line
@@ -367,6 +372,68 @@ vtext_advance_char:
 @ok:
       JMP   vtext_set_cursor
 
+; @label VTEXT.PUTS
+; @kind routine
+; @symbol vtext_puts
+; @summary Print a zero-terminated string into the current VTEXT region.
+; @in A/Y: Pointer to the zero-terminated string, low byte in A and high byte in Y.
+; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY VTEXT_COLOR VTEXT_ATTR
+; @out A: 0 on success, 1 on error.
+vtext_puts:
+      STA   VTEXT_STRL
+      STY   VTEXT_STRH
+@loop:
+      LDY   #$00
+      LDA   (VTEXT_STRL),Y
+      BEQ   @ok
+      STA   VTEXT_CHAR
+      JSR   vtext_put_char
+      BNE   @done
+      INC   VTEXT_STRL
+      BNE   @loop
+      INC   VTEXT_STRH
+      BRA   @loop
+@ok:
+      LDA   #VTEXT_OK
+@done:
+      RTS
+
+; @label VTEXT.PUT_HEX_NIBBLE
+; @kind routine
+; @symbol vtext_put_hex_nibble
+; @summary Print the low nibble of A as one uppercase hexadecimal digit.
+; @in A: Value whose low nibble should be printed.
+; @requires Current VTEXT region and cursor.
+; @out A: 0 on success, 1 on error.
+vtext_put_hex_nibble:
+      AND   #$0F
+      TAX
+      LDA   vtext_hex_digits,X
+      STA   VTEXT_CHAR
+      JMP   vtext_put_char
+
+; @label VTEXT.PUT_HEX_BYTE
+; @kind routine
+; @symbol vtext_put_hex_byte
+; @summary Print A as two uppercase hexadecimal digits.
+; @in A: Byte value to print.
+; @requires Current VTEXT region and cursor.
+; @out A: 0 on success, 1 on error.
+vtext_put_hex_byte:
+      PHA
+      LSR
+      LSR
+      LSR
+      LSR
+      JSR   vtext_put_hex_nibble
+      BNE   @fail
+      PLA
+      JMP   vtext_put_hex_nibble
+@fail:
+      PLA
+      LDA   #VTEXT_ERR
+      RTS
+
 vtext_newline:
       JSR   vtext_validate_region
       BNE   @done
@@ -588,5 +655,8 @@ vtext_blitter_result:
       JMP   vtext_err
 @ok:
       JMP   vtext_ok
+
+vtext_hex_digits:
+      .byte "0123456789ABCDEF"
 
 .endif

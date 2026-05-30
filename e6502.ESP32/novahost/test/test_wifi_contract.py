@@ -101,7 +101,14 @@ def test_rest_routes() -> None:
           "RESPONSE_WRITE_TIMEOUT_MS" in header
           and "availableForWrite()" in src
           and "client.write(data + off, chunk)" in src
-          and "write_all(client, buf, got, false)" in src)
+          and "write_all(client, buf, got)" in src)
+    send_file = src.split("void SdHttpServer::send_file", 1)[1]
+    send_file = send_file.split("void SdHttpServer::send_json", 1)[0]
+    check("SD HTTP file downloads send exactly Content-Length bytes",
+          "size_t remaining = file.size();" in send_file
+          and "while (remaining > 0)" in send_file
+          and "remaining -= got;" in send_file
+          and "while (file.available())" not in send_file)
     check("HTTP handlers avoid unbounded client print helpers",
           "client.print(" not in src
           and "client.printf(" not in src
@@ -159,7 +166,9 @@ def test_host_status_led_contract() -> None:
     )
     check(
         "FPGA LED panel drives active-high ULX3S LEDs directly",
-        "assign leds = led_operator_mode ? operator_leds : user_leds;" in fpga,
+        "assign leds = led_operator_mode ? operator_leds :" in fpga
+        and "music_leds_active ? music_leds :" in fpga
+        and "user_leds;" in fpga,
     )
     check(
         "operator LED page button is initialized idle-low",
@@ -497,6 +506,11 @@ def test_runtime_autoboot_contract() -> None:
     esp_dm = read("e6502.ESP32/novahost/device_manager.cpp")
     novahost = read("e6502.ESP32/novahost/novahost.ino")
     sd_http = read("e6502.ESP32/novahost/sd_http_server.cpp")
+    boot_json = read("e6502.ESP32/novahost/assets/config/boot.json")
+    novahost_make = read("e6502.ESP32/novahost/Makefile")
+    flash_stack = read("tools/flash-ulx3s-stack.sh")
+    client = read("tools/novahost_client.py")
+    logo_smoke = read("tools/run-novalogo-hardware-smoke.py")
     unit_dm = read("e6502UnitTests/DeviceManagerTests.cs")
     unit_fio = read("e6502UnitTests/FileIoControllerTests.cs")
     unit_rom = read("e6502UnitTests/RomSwapTests.cs")
@@ -571,6 +585,37 @@ def test_runtime_autoboot_contract() -> None:
         and "select_boot_slot() const" in esp_dm_h
         and "int DeviceManager::select_boot_slot() const" in esp_dm
         and "FD0, FD1, FD2, FD3, HD0, HD1" in esp_dm,
+        "staged boot config defines NovaLogo runtime": '"novalogo"' in boot_json
+        and '"/roms/novalogo.bin"' in boot_json
+        and '"/roms/novalogo_ext.bin"' in boot_json,
+        "staged SD assets include NovaLogo ROMs": "$(NOVALOGO)/novalogo.bin" in novahost_make
+        and "$(NOVALOGO)/novalogo_ext.bin" in novahost_make
+        and "sd-assets: ehbasic novalogo" in novahost_make,
+        "stack deploy exposes NovaLogo post-deploy smoke gate": "NOVALOGO_SMOKE=1" in flash_stack
+        and "run_novalogo_smoke" in flash_stack
+        and "tools/run-novalogo-hardware-smoke.py" in flash_stack,
+        "stack deploy refuses stale FPGA bitstreams by default": "BITSTREAM_FRESHNESS" in flash_stack
+        and "ALLOW_STALE_BITSTREAM" in flash_stack
+        and "check-bitstream-freshness.py" in flash_stack,
+        "NovaLogo smoke covers DRAW corruption and turn-forward regressions": "I DON'T KNOW HOW TO DRAW" in logo_smoke
+        and "expected only the turtle in graphics plane after DRAW" in logo_smoke
+        and "FORWARD 20" in logo_smoke
+        and "RIGHT 45" in logo_smoke
+        and "FD 50 south after the second relative RT 90" in logo_smoke
+        and "cardinal=x" in logo_smoke
+        and "SETPOS [100 50]" in logo_smoke
+        and "isolated pen-down move redrew from old center" in logo_smoke,
+        "NovaLogo smoke chunks VGC reads to the hardware limit": "chunk = min(256, width - offset)" in logo_smoke
+        and "offset += chunk" in logo_smoke,
+        "NovaLogo smoke waits for command effects and a real prompt": "def run_logo_line_until" in logo_smoke
+        and "wait_for_condition(description" in logo_smoke
+        and "cursor_on_prompt" in logo_smoke
+        and "cursor_x == 2" in logo_smoke
+        and 'cursor_line.strip() == "?"' in logo_smoke
+        and '"enabled" in cursor' in logo_smoke,
+        "shared NovaHost client normalizes hardware/Avalonia VRAM response names": '"values" not in response' in client
+        and '"data" in response' in client
+        and 'response["values"] = response["data"]' in client,
         "ESP boot config uses FD-before-HD mount order": "DeviceManager::FD0, DeviceManager::FD1" in novahost
         and "DeviceManager::FD2, DeviceManager::FD3" in novahost
         and "DeviceManager::HD0, DeviceManager::HD1" in novahost,
@@ -588,10 +633,12 @@ def test_runtime_autoboot_contract() -> None:
         "debug text injection normalizes LF to BASIC Enter": "void DebugServer::cmdTypeText" in debug
         and "ch == '\\n'" in debug
         and "ch = '\\r'" in debug,
-        "debug text injection streams through FPGA key FIFO": "void DebugServer::cmdTypeText" in debug
+        "debug text injection uses acked per-key commands": "void DebugServer::cmdTypeText" in debug
         and "_bridge.sendKeys(chunk, chunkLen)" in type_text
         and "delay(50);" not in type_text
-        and "supportsKeyStream()" in bridge,
+        and "CMD_SEND_KEY" in bridge
+        and "writeBytes(cmd, sizeof(cmd))" in bridge
+        and "CMD_WRITE_KEYS" not in bridge.split("bool FpgaBridge::sendKeys", 1)[1].split("bool FpgaBridge::readScreen", 1)[0],
         "unit tests cover boot order": "FindAutoboot_PrefersInsertedFloppyOverHardDrive" in unit_dm
         and "SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists" in unit_dm,
         "unit tests cover runtime load command": "LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime" in unit_fio,

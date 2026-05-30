@@ -7,9 +7,10 @@ KEYBOARD_DIR := apps/keyboard
 DEMO_DIR     := apps/demo
 ROTATE_DIR   := apps/vsprite_rotate
 TURTLE_DIR   := apps/turtle
+EDITUI_SHELL_DIR := apps/editui_shell
 VGC_WAIT_OBJ := $(KEYBOARD_DIR)/vgc_wait.o
 
-all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle
+all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell
 
 keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
@@ -84,6 +85,20 @@ $(TURTLE_DIR)/vsprite.o: $(NOVA_ASM)/vsprite.s $(NOVA_ASM)/vsprite.inc $(NOVA_AS
 install-turtle: turtle
 	cp $(TURTLE_DIR)/turtle.bin ~/e6502-programs/turtle.bin
 
+editui-shell: $(EDITUI_SHELL_DIR)/editui_shell.bin
+
+$(EDITUI_SHELL_DIR)/editui_shell.bin: $(EDITUI_SHELL_DIR)/editui_shell.o $(EDITUI_SHELL_DIR)/editui.o $(EDITUI_SHELL_DIR)/editui_shell.cfg
+	ld65 -C $(EDITUI_SHELL_DIR)/editui_shell.cfg -o $@ $(EDITUI_SHELL_DIR)/editui_shell.o $(EDITUI_SHELL_DIR)/editui.o
+
+$(EDITUI_SHELL_DIR)/editui_shell.o: $(EDITUI_SHELL_DIR)/editui_shell.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/editui.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $< -o $@
+
+$(EDITUI_SHELL_DIR)/editui.o: $(NOVA_ASM)/editui.s $(NOVA_ASM)/editui.inc $(NOVA_ASM)/vtext.s $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/blitter.s $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/nova.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $< -o $@
+
+install-editui-shell: editui-shell
+	cp $(EDITUI_SHELL_DIR)/editui_shell.bin ~/e6502-programs/editui_shell.bin
+
 clean:
 	$(RM) $(KEYBOARD_DIR)/keyboard.o $(KEYBOARD_DIR)/keyboard.bin
 	$(RM) $(KEYBOARD_DIR)/kbdtest.o $(KEYBOARD_DIR)/kbdtest.bin
@@ -95,5 +110,7 @@ clean:
 	$(RM) $(ROTATE_DIR)/vsprite.o
 	$(RM) $(TURTLE_DIR)/turtle.o $(TURTLE_DIR)/turtle.bin
 	$(RM) $(TURTLE_DIR)/vsprite.o
+	$(RM) $(EDITUI_SHELL_DIR)/editui_shell.o $(EDITUI_SHELL_DIR)/editui_shell.bin
+	$(RM) $(EDITUI_SHELL_DIR)/editui.o
 
-.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle clean
+.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell clean

@@ -26,18 +26,22 @@ ESPOTA   ?= $(shell find "$$HOME/Library/Arduino15/packages/esp32/hardware/esp32
 
 REPO_ROOT := $(abspath ../..)
 EHBASIC   := $(REPO_ROOT)/ehbasic
+NOVALOGO  := $(REPO_ROOT)/novalogo
 FPGA_ROM  := $(REPO_ROOT)/e6502.FPGA/rom
 HEX16TOBIN:= python3 $(REPO_ROOT)/tools/hex16_to_bin.py
 SD_ASSETS := build/sd
 
 COMPACT_BUILD ?= build/compact
 
-.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic
+.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic novalogo
 
 all: upload
 
 ehbasic:
 	@$(MAKE) --no-print-directory -C $(EHBASIC)
+
+novalogo:
+	@$(MAKE) --no-print-directory -C $(NOVALOGO)
 
 # 6581 filter curve — 4096 × 16-bit entries. Streamed to SDRAM at boot so
 # the FPGA's sid_curve_reader can fetch Fc→f0 lookups.
@@ -45,10 +49,12 @@ build/f6581_curve.bin: $(FPGA_ROM)/f6581_curve.hex
 	@mkdir -p build
 	@$(HEX16TOBIN) $< $@
 
-sd-assets: ehbasic build/f6581_curve.bin
+sd-assets: ehbasic novalogo build/f6581_curve.bin
 	@mkdir -p $(SD_ASSETS)/roms $(SD_ASSETS)/assets/sid $(SD_ASSETS)/assets/boot $(SD_ASSETS)/config
 	@cp $(EHBASIC)/basic.bin $(SD_ASSETS)/roms/novabasic.bin
 	@cp $(EHBASIC)/extension.bin $(SD_ASSETS)/roms/extension.bin
+	@cp $(NOVALOGO)/novalogo.bin $(SD_ASSETS)/roms/novalogo.bin
+	@cp $(NOVALOGO)/novalogo_ext.bin $(SD_ASSETS)/roms/novalogo_ext.bin
 	@cp build/f6581_curve.bin $(SD_ASSETS)/assets/sid/f6581_curve.bin
 	@cp assets/boot/novavm_logo.nvg $(SD_ASSETS)/assets/boot/novavm_logo.nvg
 	@cp assets/config/boot.json $(SD_ASSETS)/config/boot.json

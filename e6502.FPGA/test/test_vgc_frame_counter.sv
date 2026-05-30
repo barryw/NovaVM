@@ -49,7 +49,7 @@ module test_vgc_frame_counter;
     vgc dut (
         .clk(clk), .rst(rst), .video_rst(rst),
         .cpu_ce(cpu_ce),
-        .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata), .cpu_rdata(cpu_rdata),
+        .cpu_addr(cpu_addr), .cpu_raddr(cpu_addr), .cpu_wdata(cpu_wdata), .cpu_rdata(cpu_rdata),
         .cpu_we(cpu_we), .cpu_re(cpu_re),
         .key_valid(key_valid), .key_data(key_data), .key_ready(),
         .blt_space(blt_space), .blt_addr(blt_addr),

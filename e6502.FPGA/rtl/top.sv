@@ -143,9 +143,12 @@ module top (
     localparam CHARIN    = 16'hA00F;
 
     // ROM bank switching
-    localparam REG_ROMSWAP  = 16'hA03F;
-    localparam ROMSWAP_BASIC = 8'h02;
-    localparam ROMSWAP_EXT   = 8'h04;
+    localparam REG_ROMSWAP    = 16'hA03F;
+    localparam ROMSWAP_NCC    = 8'h01;
+    localparam ROMSWAP_BASIC  = 8'h02;
+    localparam ROMSWAP_NCCEDIT = 8'h03;
+    localparam ROMSWAP_EXT    = 8'h04;
+    localparam ROMSWAP_LOGO   = 8'h05;
 
     // XMC address map
     localparam XMC_REG_BASE = 16'hBA00;  // XMC registers $BA00-$BA3F
@@ -420,6 +423,10 @@ module top (
     end
     // Use held address for all dpram reads and decode during stall
     wire [15:0] mem_addr = cpu_ce ? cpu_addr : held_cpu_addr;
+    // MMIO read data is sampled on the cpu_ce=0 half-cycle; drive peripheral
+    // read decoders from the registered address to avoid a RAM->CPU->MMIO
+    // combinational feedback path while keeping writes on the live CPU bus.
+    wire [15:0] mmio_read_addr = held_cpu_addr;
 
     // Main RAM: 64KB
     logic [15:0] ram_a_addr;
@@ -723,25 +730,25 @@ module top (
             r_music_reg_data <= 8'h00;
     end
 
-    // Registered blitter register read. blt_cpu_rdata is combinational on
-    // cpu_addr (blitter.sv uses cpu_addr directly for blt_sel + reg_off), so
-    // this capture also needs cpu_ce gating — same bug class as r_vgc_cpu_rdata.
+    // Registered bus-master/math read data. These LOGO-critical peripherals
+    // decode from mem_addr, which is held stable across the cpu_ce=0
+    // half-cycle; capture every pixel clock so the staged cpu_din mux sees
+    // the peripheral result on the CPU's next enabled edge.
     logic [7:0] r_blt_cpu_rdata;
     always_ff @(posedge clk)
-        if (cpu_ce)
-            r_blt_cpu_rdata <= blt_cpu_rdata;
+        r_blt_cpu_rdata <= blt_cpu_rdata;
 
-    // Registered DMA register read — same rationale as r_blt_cpu_rdata.
+    // Registered DMA register read. DMA is not on the LOGO turtle path, so
+    // keep its original cpu_ce-gated capture to avoid adding fanout to the
+    // already-tight pixel-clock route.
     logic [7:0] r_dma_cpu_rdata;
     always_ff @(posedge clk)
         if (cpu_ce)
             r_dma_cpu_rdata <= dma_cpu_rdata;
 
-    // Registered math coprocessor read — same rationale as bus-master regs.
     logic [7:0] r_math_cpu_rdata;
     always_ff @(posedge clk)
-        if (cpu_ce)
-            r_math_cpu_rdata <= math_cpu_rdata;
+        r_math_cpu_rdata <= math_cpu_rdata;
 
     // Registered VGC read data. VGC now holds read data from a registered
     // address slice, so capture every pixel clock; this lets the cpu_ce=0 half
@@ -898,8 +905,6 @@ module top (
         .fio_event (fio_event)
     );
 
-    // Registered FIO read data. Same cpu_ce gating as the other
-    // combinational MMIO reads.
     logic [7:0] r_fio_cpu_rdata;
     always_ff @(posedge clk)
         if (cpu_ce)
@@ -1056,11 +1061,15 @@ module top (
         if (dbg_poke_music)
             music_regs[dbg_music_reg_off] <= dbg_poke_data;
 
-        // ROM bank switching: write to $A03F toggles active ROM bank
+        // ROM bank switching: write to $A03F toggles active ROM bank.
+        // The FPGA has one primary ROM bank plus one extension bank; NovaHost
+        // chooses which runtime occupies the primary bank at boot. Runtime
+        // values for BASIC/NCC/LOGO all mean "return to primary".
         if (cpu_we && cpu_active && cpu_addr == REG_ROMSWAP) begin
             if (cpu_dout == ROMSWAP_EXT)
                 ext_rom_active <= 1;
-            else if (cpu_dout == ROMSWAP_BASIC)
+            else if (cpu_dout == ROMSWAP_BASIC || cpu_dout == ROMSWAP_NCC ||
+                     cpu_dout == ROMSWAP_NCCEDIT || cpu_dout == ROMSWAP_LOGO)
                 ext_rom_active <= 0;
         end
 
@@ -1203,6 +1212,7 @@ module top (
     wire [18:0] xmc_addr_raw = {xmc_win_high[2:0], xmc_win_mid, xmc_offset};
     wire [18:0] xmc_addr = xmc_addr_raw & (XRAM_SIZE - 1);
     wire xmc_win_enabled = xmc_regs[XMC_WINCTL_REG][xmc_page];
+    wire [15:0] mmio_read_addr = cpu_addr;
 
     // =========================================================================
     // Memory read mux — registered (Arlet 6502 expects DI one cycle after AB)
@@ -1296,7 +1306,8 @@ module top (
         if (cpu_we && cpu_addr == REG_ROMSWAP) begin
             if (cpu_dout == ROMSWAP_EXT)
                 ext_rom_active <= 1;
-            else if (cpu_dout == ROMSWAP_BASIC)
+            else if (cpu_dout == ROMSWAP_BASIC || cpu_dout == ROMSWAP_NCC ||
+                     cpu_dout == ROMSWAP_NCCEDIT || cpu_dout == ROMSWAP_LOGO)
                 ext_rom_active <= 0;
         end
 
@@ -1428,9 +1439,8 @@ module top (
     wire [7:0]  blt_vgc_rdata = bm_vgc_rdata;
     wire [7:0]  dma_vgc_rdata = bm_vgc_rdata;
 
-    wire [15:0] blt_bus_addr  = dbg_poke_blt ? dbg_poke_addr :
-                                dbg_peek_blt ? dbg_peek_addr :
-                                               cpu_addr;
+    wire [15:0] blt_bus_addr  = dbg_poke_blt ? dbg_poke_addr : cpu_addr;
+    wire [15:0] blt_bus_raddr = dbg_peek_blt ? dbg_peek_addr : mmio_read_addr;
     wire [7:0]  blt_bus_wdata = dbg_poke_blt ? dbg_poke_data : cpu_dout;
     wire        blt_bus_we    = dbg_poke_blt ? 1'b1 : (cpu_we & cpu_active);
     wire        blt_bus_re    = dbg_peek_blt ? 1'b1 : 1'b0;
@@ -1439,6 +1449,7 @@ module top (
         .clk        (clk),
         .rst        (custom_rst),
         .cpu_addr   (blt_bus_addr),
+        .cpu_raddr  (blt_bus_raddr),
         .cpu_wdata  (blt_bus_wdata),
         .cpu_we     (blt_bus_we),
         .cpu_rdata  (blt_cpu_rdata),
@@ -1491,9 +1502,8 @@ module top (
         .video_write_safe(vgc_video_blit_safe)
     );
 
-    wire [15:0] math_bus_addr  = dbg_poke_math ? dbg_poke_addr :
-                                 dbg_peek_math ? dbg_peek_addr :
-                                                 cpu_addr;
+    wire [15:0] math_bus_addr  = dbg_poke_math ? dbg_poke_addr : cpu_addr;
+    wire [15:0] math_bus_raddr = dbg_peek_math ? dbg_peek_addr : mmio_read_addr;
     wire [7:0]  math_bus_wdata = dbg_poke_math ? dbg_poke_data : cpu_dout;
     wire        math_bus_we    = dbg_poke_math ? 1'b1 : (cpu_we & cpu_active);
     wire        math_bus_re    = (!dbg_peek_math && !dbg_poke_math && !cpu_we && cpu_active);
@@ -1502,6 +1512,7 @@ module top (
         .clk       (clk),
         .rst       (custom_rst),
         .cpu_addr  (math_bus_addr),
+        .cpu_raddr (math_bus_raddr),
         .cpu_wdata (math_bus_wdata),
         .cpu_we    (math_bus_we),
         .cpu_re    (math_bus_re),
@@ -1768,6 +1779,7 @@ module top (
         .video_rst      (rst),
         .cpu_ce         (cpu_active),
         .cpu_addr       (cpu_addr),
+        .cpu_raddr      (mmio_read_addr),
         .cpu_wdata      (cpu_dout),
         .cpu_rdata      (vgc_cpu_rdata),
         .cpu_we         (cpu_we),

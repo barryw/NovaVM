@@ -79,7 +79,7 @@ module test_vgc_blitter_scroll;
     vgc vgc_inst (
         .clk(clk), .rst(rst), .video_rst(rst),
         .cpu_ce(vgc_cpu_ce),
-        .cpu_addr(vgc_cpu_addr), .cpu_wdata(vgc_cpu_wdata),
+        .cpu_addr(vgc_cpu_addr), .cpu_raddr(vgc_cpu_addr), .cpu_wdata(vgc_cpu_wdata),
         .cpu_rdata(vgc_cpu_rdata), .cpu_we(vgc_cpu_we), .cpu_re(vgc_cpu_re),
         .key_valid(key_valid), .key_data(key_data), .key_ready(),
         .blt_space(blt_vgc_space), .blt_addr(blt_vgc_addr),
@@ -101,7 +101,7 @@ module test_vgc_blitter_scroll;
 
     blitter blt_inst (
         .clk(clk), .rst(rst),
-        .cpu_addr(blt_cpu_addr), .cpu_wdata(blt_cpu_wdata),
+        .cpu_addr(blt_cpu_addr), .cpu_raddr(blt_cpu_addr), .cpu_wdata(blt_cpu_wdata),
         .cpu_we(blt_cpu_we), .cpu_rdata(blt_cpu_rdata), .cpu_re(blt_cpu_re),
         .rdy_out(blt_rdy),
         .ram_addr(blt_ram_addr), .ram_rdata(blt_ram_rdata),

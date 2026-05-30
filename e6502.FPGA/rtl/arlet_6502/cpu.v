@@ -1275,6 +1275,8 @@ always @(posedge clk)
         casex( IR )
                 8'b100x_x1x0,   // STX, STY
                 8'b011x_0100,   // STZ zp / zp,X
+                8'b1001_1100,   // STZ abs
+                8'b1001_1110,   // STZ abs,X
                 8'b1001_0010,   // STA (zp)
                 8'b100x_xx01:   // STA
                                 store <= 1;

@@ -1424,30 +1424,63 @@ ext_cmd_table:
       .word str_ext_fd
       .byte EXT_CMD_FD
       .byte 1                    ; arity: 1 (distance)
+      .word str_ext_forward
+      .byte EXT_CMD_FD
+      .byte 1                    ; FORWARD alias
       .word str_ext_bk
       .byte EXT_CMD_BK
       .byte 1                    ; arity: 1 (distance)
+      .word str_ext_back
+      .byte EXT_CMD_BK
+      .byte 1                    ; BACK alias
+      .word str_ext_backward
+      .byte EXT_CMD_BK
+      .byte 1                    ; BACKWARD alias
       .word str_ext_rt
       .byte EXT_CMD_RT
       .byte 1                    ; arity: 1 (degrees)
+      .word str_ext_right
+      .byte EXT_CMD_RT
+      .byte 1                    ; RIGHT alias
       .word str_ext_lt
       .byte EXT_CMD_LT
       .byte 1                    ; arity: 1 (degrees)
+      .word str_ext_left
+      .byte EXT_CMD_LT
+      .byte 1                    ; LEFT alias
       .word str_ext_cs
       .byte EXT_CMD_CS
       .byte 0                    ; arity: 0
+      .word str_ext_clearscreen
+      .byte EXT_CMD_CS
+      .byte 0                    ; CLEARSCREEN alias
+      .word str_ext_draw
+      .byte EXT_CMD_CS
+      .byte 0                    ; DRAW = CS alias
       .word str_ext_pu
       .byte EXT_CMD_PU
       .byte 0
+      .word str_ext_penup
+      .byte EXT_CMD_PU
+      .byte 0                    ; PENUP alias
       .word str_ext_pd
       .byte EXT_CMD_PD
       .byte 0
+      .word str_ext_pendown
+      .byte EXT_CMD_PD
+      .byte 0                    ; PENDOWN alias
       .word str_ext_st
       .byte EXT_CMD_ST
       .byte 0
+      .word str_ext_showturtle
+      .byte EXT_CMD_ST
+      .byte 0                    ; SHOWTURTLE alias
       .word str_ext_ht
       .byte EXT_CMD_HT
       .byte 0
+      .word str_ext_hideturtle
+      .byte EXT_CMD_HT
+      .byte 0                    ; HIDETURTLE alias
       .word str_ext_home
       .byte EXT_CMD_HOME
       .byte 0
@@ -1474,6 +1507,9 @@ ext_cmd_table:
       .word str_ext_setxy
       .byte EXT_CMD_SETXY
       .byte 2                    ; arity: 2 (x, y)
+      .word str_ext_setpos
+      .byte EXT_CMD_SETPOS
+      .byte 1                    ; arity: 1 ([x y])
       .word str_ext_setx
       .byte EXT_CMD_SETX
       .byte 1                    ; arity: 1 (x)
@@ -1506,9 +1542,15 @@ ext_cmd_table:
       .word str_ext_setpc
       .byte EXT_CMD_SETPC
       .byte 1                    ; arity: 1 (color)
+      .word str_ext_setpencolor
+      .byte EXT_CMD_SETPC
+      .byte 1                    ; SETPENCOLOR alias
       .word str_ext_setbg
       .byte EXT_CMD_SETBG
       .byte 1
+      .word str_ext_setbackground
+      .byte EXT_CMD_SETBG
+      .byte 1                    ; SETBACKGROUND alias
       ; --- TOWARDS reporter ---
       .word str_ext_towards
       .byte EXT_CMD_TOWARDS
@@ -1532,9 +1574,15 @@ ext_cmd_table:
       .word str_ext_rect
       .byte EXT_CMD_RECT
       .byte 4                    ; arity: 4 (x1, y1, x2, y2)
+      .word str_ext_rectangle
+      .byte EXT_CMD_RECT
+      .byte 4                    ; RECTANGLE alias
       .word str_ext_fill
       .byte EXT_CMD_FILLRECT
       .byte 4                    ; arity: 4 (x1, y1, x2, y2)
+      .word str_ext_fillrect
+      .byte EXT_CMD_FILLRECT
+      .byte 4                    ; FILLRECT alias
       .word str_ext_paint
       .byte EXT_CMD_PAINT
       .byte 2                    ; arity: 2 (x, y)
@@ -1580,22 +1628,44 @@ str_ext_test_name:
       .byte 8, "EXT.TEST"
 str_ext_fd:
       .byte 2, "FD"
+str_ext_forward:
+      .byte 7, "FORWARD"
 str_ext_bk:
       .byte 2, "BK"
+str_ext_back:
+      .byte 4, "BACK"
+str_ext_backward:
+      .byte 8, "BACKWARD"
 str_ext_rt:
       .byte 2, "RT"
+str_ext_right:
+      .byte 5, "RIGHT"
 str_ext_lt:
       .byte 2, "LT"
+str_ext_left:
+      .byte 4, "LEFT"
 str_ext_cs:
       .byte 2, "CS"
+str_ext_clearscreen:
+      .byte 11, "CLEARSCREEN"
+str_ext_draw:
+      .byte 4, "DRAW"
 str_ext_pu:
       .byte 2, "PU"
+str_ext_penup:
+      .byte 5, "PENUP"
 str_ext_pd:
       .byte 2, "PD"
+str_ext_pendown:
+      .byte 7, "PENDOWN"
 str_ext_st:
       .byte 2, "ST"
+str_ext_showturtle:
+      .byte 10, "SHOWTURTLE"
 str_ext_ht:
       .byte 2, "HT"
+str_ext_hideturtle:
+      .byte 10, "HIDETURTLE"
 str_ext_home:
       .byte 4, "HOME"
 str_ext_textscreen:
@@ -1612,6 +1682,8 @@ str_ext_fs:
       .byte 2, "FS"
 str_ext_setxy:
       .byte 5, "SETXY"
+str_ext_setpos:
+      .byte 6, "SETPOS"
 str_ext_setx:
       .byte 4, "SETX"
 str_ext_sety:
@@ -1632,8 +1704,12 @@ str_ext_shownp:
       .byte 6, "SHOWN?"
 str_ext_setpc:
       .byte 5, "SETPC"
+str_ext_setpencolor:
+      .byte 11, "SETPENCOLOR"
 str_ext_setbg:
       .byte 5, "SETBG"
+str_ext_setbackground:
+      .byte 13, "SETBACKGROUND"
 str_ext_towards:
       .byte 7, "TOWARDS"
 str_ext_setcolor:
@@ -1648,8 +1724,12 @@ str_ext_circle:
       .byte 6, "CIRCLE"
 str_ext_rect:
       .byte 4, "RECT"
+str_ext_rectangle:
+      .byte 9, "RECTANGLE"
 str_ext_fill:
       .byte 4, "FILL"
+str_ext_fillrect:
+      .byte 8, "FILLRECT"
 str_ext_paint:
       .byte 5, "PAINT"
 str_ext_sprite:

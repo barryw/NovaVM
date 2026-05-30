@@ -10,6 +10,17 @@ namespace e6502UnitTests;
 [TestClass]
 public class NovaLogoTests
 {
+    private const ushort LogoHeapPtr = 0x0030;
+    private const ushort LogoHeapEnd = 0x9C00;
+    private const int LogoGcHeaderBytes = 2;
+    private const ushort TurtleStateBase = 0x9F00;
+    private const ushort TurtleXLo = TurtleStateBase + 1;
+    private const ushort TurtleXHi = TurtleStateBase + 2;
+    private const ushort TurtleYLo = TurtleStateBase + 4;
+    private const ushort TurtleYHi = TurtleStateBase + 5;
+    private const ushort TurtleHeadingLo = TurtleStateBase + 6;
+    private const ushort TurtleHeadingHi = TurtleStateBase + 7;
+
     [TestMethod]
     public void BootShowsBannerAndPrompt()
     {
@@ -20,8 +31,17 @@ public class NovaLogoTests
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         string screen = SnapshotScreen(bus.Vgc);
-        Assert.IsTrue(screen.Contains("NOVALOGO", StringComparison.Ordinal),
-            $"Expected NOVALOGO banner on screen.\n{screen}");
+        Assert.IsTrue(screen.Contains("Nova LOGO v1.0", StringComparison.Ordinal),
+            $"Expected Nova LOGO banner on screen.\n{screen}");
+        Assert.IsTrue(screen.Contains("BYTES FREE", StringComparison.Ordinal),
+            $"Expected dynamic free-memory line on screen.\n{screen}");
+        Assert.IsFalse(screen.Contains("-"),
+            $"Free-memory banner should print as an unsigned value.\n{screen}");
+        int heapPtr = bus.ReadRam(LogoHeapPtr) | (bus.ReadRam(LogoHeapPtr + 1) << 8);
+        int expectedFreeBytes = LogoHeapEnd - heapPtr - LogoGcHeaderBytes;
+        int displayedFreeBytes = ExtractBytesFree(screen);
+        Assert.AreEqual(expectedFreeBytes, displayedFreeBytes,
+            $"Free-memory banner should reflect the live heap pointer, not a hard-coded value. heap_ptr=${heapPtr:X4}\n{screen}");
         Assert.IsTrue(screen.Contains("?", StringComparison.Ordinal),
             $"Expected ? prompt on screen.\n{screen}");
     }
@@ -1129,6 +1149,39 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void WorkspaceLongAliasesPrintProcedures()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO ALIASP");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "PRINT 123");
+        RunSteps(cpu, bus, 1_000_000);
+        QueueLine(editor, "END");
+        RunSteps(cpu, bus, 2_000_000);
+
+        QueueLine(editor, "PRINTOUT \"ALIASP");
+        RunSteps(cpu, bus, 4_000_000);
+        QueueLine(editor, "PRINTTITLES");
+        RunSteps(cpu, bus, 3_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"Workspace long aliases should not fall through to the unknown-word path.\n{screen}");
+        Assert.IsTrue(screen.Contains("TO ALIASP", StringComparison.Ordinal),
+            $"Expected PRINTOUT to print the ALIASP definition.\n{screen}");
+        Assert.IsTrue(screen.Contains("PRINT 123", StringComparison.Ordinal),
+            $"Expected PRINTOUT to include the procedure body.\n{screen}");
+        Assert.IsTrue(screen.Contains("ALIASP", StringComparison.Ordinal),
+            $"Expected PRINTTITLES to list ALIASP.\n{screen}");
+    }
+
+    [TestMethod]
     public void EraseProcedure()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
@@ -1335,6 +1388,94 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void DrawAliasEntersVisibleSplitPrompt()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "DRAW");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("I DON'T KNOW HOW TO DRAW", StringComparison.Ordinal),
+            $"DRAW should be an alias for CS, not an unknown word.\n{screen}");
+        Assert.AreEqual(40, bus.Vgc.GetCursorY(),
+            "DRAW should move the prompt cursor into the visible split-screen text band.");
+        Assert.AreEqual((byte)'?', bus.Vgc.GetScreenChar(0, 40),
+            $"Expected prompt at start of visible split text band.\n{screen}");
+
+        int turtlePixels = 0;
+        for (int y = 72; y < 88; y++)
+        {
+            for (int x = 152; x < 168; x++)
+            {
+                if (bus.Vgc.GetGfxPixelColor(x, y) != 0)
+                    turtlePixels++;
+            }
+        }
+
+        Assert.IsTrue(turtlePixels is >= 20 and <= 80,
+            $"DRAW should render the small NDK virtual-sprite turtle at the center, not a corrupted large shape. Nonzero pixels: {turtlePixels}");
+        Assert.IsFalse(bus.Vgc.GetSpriteState(15).enabled,
+            "Logo turtle rendering should use the NDK virtual-sprite path instead of consuming hardware sprite slot 15.");
+    }
+
+    [TestMethod]
+    public void SplitScreenKeepsPromptVisible()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "SS");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.AreEqual(40, bus.Vgc.GetCursorY(),
+            "SS should move the prompt cursor into the visible split-screen text band.");
+        Assert.AreEqual((byte)'?', bus.Vgc.GetScreenChar(0, 40),
+            $"Expected prompt at start of visible split text band.\n{screen}");
+    }
+
+    [TestMethod]
+    public void CursorHidesWhileCommandRunsAndReturnsAtPrompt()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+        Assert.IsTrue(bus.Vgc.IsCursorEnabled, "Logo prompt should show the cursor while waiting for input.");
+
+        QueueLine(editor, "WAIT 20");
+
+        bool queueDrained = false;
+        bool sawCursorOff = false;
+        for (int i = 0; i < 20_000_000; i++)
+        {
+            int cycles = cpu.ClocksForNext();
+            cpu.ExecuteNext();
+            bus.AdvanceCycles(cycles);
+
+            queueDrained |= !editor.HasQueuedInput;
+            if (queueDrained && !bus.Vgc.IsCursorEnabled)
+                sawCursorOff = true;
+            if (queueDrained && sawCursorOff && bus.Vgc.IsCursorEnabled)
+                return;
+        }
+
+        Assert.Fail($"Timed out waiting for Logo cursor off/on command cycle. Cursor={bus.Vgc.IsCursorEnabled} Queued={editor.HasQueuedInput}\n{SnapshotScreen(bus.Vgc)}");
+    }
+
+    [TestMethod]
     public void TurtleDrawsSquare()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
@@ -1346,7 +1487,7 @@ public class NovaLogoTests
 
         QueueLine(editor, "CS");
         RunSteps(cpu, bus, 5_000_000);
-        QueueLine(editor, "REPEAT 4 [FD 40 RT 90]");
+        QueueLine(editor, "REPEAT 4 [FD 50 RT 90]");
         RunSteps(cpu, bus, 10_000_000);
         QueueLine(editor, "PRINT 777");
         RunSteps(cpu, bus, 3_000_000);
@@ -1356,6 +1497,222 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "777") found = true;
         Assert.IsTrue(found, $"Expected '777' after drawing a square.\n{screen}");
+    }
+
+    [TestMethod]
+    public void TurtleCardinalForwardUsesFullDistance()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        QueueLine(editor, "PU");
+        QueueLine(editor, "FD 20");
+        QueueLine(editor, "PRINT 908");
+        RunUntilScreenContains(cpu, bus, "908", 20_000_000);
+        RunSteps(cpu, bus, 2_000_000);
+
+        Assert.AreEqual(160, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
+            "Heading 0 FD should not drift horizontally.");
+        Assert.AreEqual(60, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
+            "Heading 0 FD 20 should move the full 20 pixels north from the center.");
+        Assert.AreEqual(0, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
+            "FD should not change the turtle heading.");
+    }
+
+    [TestMethod]
+    public void TurtleForwardAfterTurnUsesCurrentHeadingAndPosition()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        QueueLine(editor, "PU");
+        QueueLine(editor, "FD 20");
+        QueueLine(editor, "PD");
+        QueueLine(editor, "RT 45");
+        QueueLine(editor, "FD 20");
+        QueueLine(editor, "PRINT 909");
+        RunUntilScreenContains(cpu, bus, "909", 20_000_000);
+        RunSteps(cpu, bus, 2_000_000);
+
+        int x = ReadTurtleWord(bus, TurtleXLo, TurtleXHi);
+        int y = ReadTurtleWord(bus, TurtleYLo, TurtleYHi);
+        int heading = ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi);
+
+        Assert.AreEqual(45, heading, "RT 45 should leave turtle heading at 45 degrees.");
+        Assert.IsTrue(x is >= 172 and <= 175,
+            $"Second FD should advance eastward from the current turtle position after RT 45. X={x}");
+        Assert.IsTrue(y is >= 44 and <= 47,
+            $"Second FD should advance northward on the 45-degree heading from the post-FD position. Y={y}");
+        Assert.IsTrue(CountNonzeroPixels(bus, 161, 53, 167, 60) >= 4,
+            "Pen-down FD after RT 45 should draw the diagonal segment from the current turtle position.");
+        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(160, 80),
+            "The isolated pen-down move should not redraw from the original center position.");
+    }
+
+    [TestMethod]
+    public void TurtleRightTurnsAreRelativeAndCardinalMovesDoNotDrift()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        QueueLine(editor, "PU");
+        QueueLine(editor, "FD 50");
+        RunSteps(cpu, bus, 8_000_000);
+        Assert.AreEqual(0, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
+            "FD must not mutate turtle heading before any turn.");
+        Assert.AreEqual(160, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
+            "Initial FD 50 should move north with no x drift.");
+        Assert.AreEqual(30, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
+            "Initial FD 50 should move north by exactly 50 pixels.");
+        QueueLine(editor, "RT 90");
+        RunSteps(cpu, bus, 8_000_000);
+        Assert.AreEqual(90, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
+            "First RT 90 should add 90 degrees to the current heading.");
+        QueueLine(editor, "FD 50");
+        RunSteps(cpu, bus, 8_000_000);
+        Assert.AreEqual(210, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
+            "FD 50 after RT 90 should move east by exactly 50 pixels.");
+        Assert.AreEqual(30, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
+            "FD 50 after RT 90 should not drift vertically.");
+        Assert.AreEqual(90, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
+            "FD after RT 90 must not mutate turtle heading.");
+        QueueLine(editor, "RT 90");
+        RunSteps(cpu, bus, 8_000_000);
+        Assert.AreEqual(180, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
+            "Second RT 90 should be relative to the east-facing heading.");
+        QueueLine(editor, "FD 50");
+        QueueLine(editor, "PRINT 913");
+        RunUntilScreenContains(cpu, bus, "913", 30_000_000);
+        RunSteps(cpu, bus, 2_000_000);
+
+        int x = ReadTurtleWord(bus, TurtleXLo, TurtleXHi);
+        int y = ReadTurtleWord(bus, TurtleYLo, TurtleYHi);
+        int heading = ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi);
+        string state = $"x={x}, y={y}, heading={heading}";
+
+        Assert.AreEqual(210, x,
+            $"After FD 50 RT 90 FD 50 RT 90 FD 50, X should stay on the exact east leg. {state}");
+        Assert.AreEqual(80, y,
+            $"The second RT 90 is relative to the current east-facing heading and should move south. {state}");
+        Assert.AreEqual(180, heading,
+            $"Two RT 90 commands should leave the turtle facing 180 degrees, not reset to an absolute 90. {state}");
+    }
+
+    [TestMethod]
+    public void TurtleRightTurnAddsToCurrentHeading()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        QueueLine(editor, "SETH 90");
+        QueueLine(editor, "RT 90");
+        QueueLine(editor, "PRINT 914");
+        RunUntilScreenContains(cpu, bus, "914", 30_000_000);
+        RunSteps(cpu, bus, 2_000_000);
+
+        Assert.AreEqual(180, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
+            "RT 90 from heading 90 should face 180 degrees.");
+    }
+
+    [TestMethod]
+    public void LongTurtleCommandAliasesUseSameDispatchAsShortForms()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CLEARSCREEN");
+        QueueLine(editor, "PENUP");
+        QueueLine(editor, "FORWARD 20");
+        QueueLine(editor, "PENDOWN");
+        QueueLine(editor, "RIGHT 45");
+        QueueLine(editor, "FORWARD 20");
+        QueueLine(editor, "PRINT 910");
+        RunUntilScreenContains(cpu, bus, "910", 20_000_000);
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "910") found = true;
+
+        Assert.IsTrue(found, $"Expected '910' after long-form turtle commands.\n{screen}");
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"Long-form turtle command aliases should not fall through to the unknown-word path.\n{screen}");
+
+        int x = ReadTurtleWord(bus, TurtleXLo, TurtleXHi);
+        int y = ReadTurtleWord(bus, TurtleYLo, TurtleYHi);
+        int heading = ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi);
+
+        Assert.AreEqual(45, heading, "RIGHT should update the same heading state as RT.");
+        Assert.IsTrue(x is >= 172 and <= 175,
+            $"FORWARD after RIGHT should advance eastward from the current turtle position. X={x}");
+        Assert.IsTrue(y is >= 44 and <= 47,
+            $"FORWARD after RIGHT should advance northward on the 45-degree heading. Y={y}");
+        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(160, 80),
+            "Long-form FORWARD should not redraw from the original center position.");
+    }
+
+    [TestMethod]
+    public void LongAliasesCoverVisibilityPenAndGraphicsNames()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CLEARSCREEN");
+        QueueLine(editor, "HIDETURTLE");
+        QueueLine(editor, "SHOWTURTLE");
+        QueueLine(editor, "LEFT 90");
+        QueueLine(editor, "BACK 5");
+        QueueLine(editor, "BACKWARD 5");
+        QueueLine(editor, "SETPENCOLOR 1");
+        QueueLine(editor, "SETBACKGROUND 0");
+        QueueLine(editor, "SETCOLOR 1");
+        QueueLine(editor, "RECTANGLE 10 10 20 20");
+        QueueLine(editor, "FILLRECT 30 30 35 35");
+        QueueLine(editor, "PRINT 911");
+        RunUntilScreenContains(cpu, bus, "911", 25_000_000);
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool found = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "911") found = true;
+
+        Assert.IsTrue(found, $"Expected '911' after secondary long-form aliases.\n{screen}");
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"Long-form aliases should resolve to existing commands, not unknown words.\n{screen}");
+        Assert.IsTrue(CountNonzeroPixels(bus, 10, 10, 20, 20) > 0,
+            "RECTANGLE should draw through the existing RECT command path.");
+        Assert.IsTrue(CountNonzeroPixels(bus, 30, 30, 35, 35) > 0,
+            "FILLRECT should draw through the existing FILL command path.");
     }
 
     [TestMethod]
@@ -1413,6 +1770,32 @@ public class NovaLogoTests
         }
         Assert.IsTrue(has100, $"Expected '100' from XCOR.\n{screen}");
         Assert.IsTrue(has50, $"Expected '50' from YCOR.\n{screen}");
+    }
+
+    [TestMethod]
+    public void SetPosAcceptsLogoPositionList()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        QueueLine(editor, "PU");
+        QueueLine(editor, "SETPOS [100 50]");
+        QueueLine(editor, "PRINT 912");
+        RunUntilScreenContains(cpu, bus, "912", 20_000_000);
+        RunSteps(cpu, bus, 2_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"SETPOS should be a real turtle primitive, not an unknown word.\n{screen}");
+        Assert.AreEqual(100, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
+            "SETPOS [x y] should move the turtle to the list's X coordinate.");
+        Assert.AreEqual(50, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
+            "SETPOS [x y] should move the turtle to the list's Y coordinate.");
     }
 
     [TestMethod]
@@ -1652,5 +2035,40 @@ public class NovaLogoTests
             sb.Append('\n');
         }
         return sb.ToString();
+    }
+
+    private static int ReadTurtleWord(CompositeBusDevice bus, ushort loAddress, ushort hiAddress) =>
+        bus.ReadRam(loAddress) | (bus.ReadRam(hiAddress) << 8);
+
+    private static int CountNonzeroPixels(CompositeBusDevice bus, int left, int top, int right, int bottom)
+    {
+        int count = 0;
+        for (int y = top; y <= bottom; y++)
+        {
+            for (int x = left; x <= right; x++)
+            {
+                if (bus.Vgc.GetGfxPixelColor(x, y) != 0)
+                    count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static int ExtractBytesFree(string screen)
+    {
+        const string marker = " BYTES FREE";
+        int markerIndex = screen.IndexOf(marker, StringComparison.Ordinal);
+        Assert.IsTrue(markerIndex > 0, $"Expected BYTES FREE banner line.\n{screen}");
+
+        int firstDigit = markerIndex - 1;
+        while (firstDigit >= 0 && char.IsDigit(screen[firstDigit]))
+            firstDigit--;
+        firstDigit++;
+
+        Assert.IsTrue(firstDigit < markerIndex, $"Expected numeric byte count before BYTES FREE.\n{screen}");
+        string digits = screen[firstDigit..markerIndex];
+        Assert.IsTrue(int.TryParse(digits, out int value), $"Invalid BYTES FREE value '{digits}'.\n{screen}");
+        return value;
     }
 }

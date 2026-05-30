@@ -97,7 +97,7 @@ module test_blitter;
 
     blitter dut (
         .clk(clk), .rst(rst),
-        .cpu_addr(cpu_addr), .cpu_wdata(cpu_wdata),
+        .cpu_addr(cpu_addr), .cpu_raddr(cpu_addr), .cpu_wdata(cpu_wdata),
         .cpu_we(cpu_we), .cpu_rdata(blt_cpu_rdata), .cpu_re(cpu_re),
         .rdy_out(blt_rdy),
         .ram_addr(blt_ram_addr), .ram_rdata(blt_ram_rdata),
@@ -360,6 +360,58 @@ module test_blitter;
         check("dst[2] = 2 (copied)", sim_ram[16'h5102] == 8'd2);
         check("dst[3] = 9 (skipped)", sim_ram[16'h5103] == 8'd9);
         check("dst[4] = 3 (copied)", sim_ram[16'h5104] == 8'd3);
+
+        // ----- Test 6b: Color-key copy — RAM to VGC gfx -----
+        $display("Test: Color-key copy RAM to VGC gfx");
+        // This is the NovaLogo turtle draw path: rotated sprite bytes live in
+        // CPU RAM, transparent pixels are zero, and the blitter must preserve
+        // existing graphics pixels wherever the source equals the key.
+        sim_ram[16'h5200] = 8'h01;
+        sim_ram[16'h5201] = 8'h00;
+        sim_ram[16'h5202] = 8'h05;
+        sim_ram[16'h5203] = 8'h00;
+        sim_ram[16'h5204] = 8'h02;
+        for (int i = 600; i < 605; i++)
+            sim_gfx[i] = 4'h9;
+
+        setup_copy(0, 16'h5200, 5, 3, 600, 320, 5, 1);
+        blt_reg(19, 8'h02);     // Mode = color-key (not fill)
+        blt_reg(21, 8'h00);     // ColorKey = 0
+        blt_start();
+        wait_blt_done();
+
+        check("gfx colorkey status ok", dut.regs[1] == 8'h02);
+        check("gfx colorkey count = 3", {dut.regs[24], dut.regs[23], dut.regs[22]} == 24'd3);
+        check("gfx[600] = 1 (copied)", sim_gfx[600] == 4'h1);
+        check("gfx[601] = 9 (skipped)", sim_gfx[601] == 4'h9);
+        check("gfx[602] = 5 (copied)", sim_gfx[602] == 4'h5);
+        check("gfx[603] = 9 (skipped)", sim_gfx[603] == 4'h9);
+        check("gfx[604] = 2 (copied)", sim_gfx[604] == 4'h2);
+
+        // ----- Test 6c: VGC gfx save/restore through CPU RAM -----
+        $display("Test: VGC gfx save/restore via RAM");
+        for (int i = 0; i < 8; i++) begin
+            sim_gfx[960 + i] = i[3:0];
+            sim_ram[16'h5300 + i] = 8'hEE;
+        end
+
+        setup_copy(3, 960, 320, 0, 16'h5300, 8, 8, 1);
+        blt_start();
+        wait_blt_done();
+        check("gfx save status ok", dut.regs[1] == 8'h02);
+        check("saved gfx[960]", sim_ram[16'h5300] == 8'h00);
+        check("saved gfx[963]", sim_ram[16'h5303] == 8'h03);
+        check("saved gfx[967]", sim_ram[16'h5307] == 8'h07);
+
+        for (int i = 0; i < 8; i++)
+            sim_gfx[960 + i] = 4'h0;
+        setup_copy(0, 16'h5300, 8, 3, 960, 320, 8, 1);
+        blt_start();
+        wait_blt_done();
+        check("gfx restore status ok", dut.regs[1] == 8'h02);
+        check("restored gfx[960]", sim_gfx[960] == 4'h0);
+        check("restored gfx[963]", sim_gfx[963] == 4'h3);
+        check("restored gfx[967]", sim_gfx[967] == 4'h7);
 
         // ----- Test 7: RDY stall during blit -----
         $display("Test: RDY stall");

@@ -50,11 +50,13 @@ public partial class MainWindow : Window
         int targetCpuHz = RuntimeOptions.GetIntFromEnvironment("NOVA_CPU_HZ", VgcConstants.DefaultCpuHz);
         bool turboMode = RuntimeOptions.GetFlagFromEnvironment("NOVA_TURBO");
         bool timingLog = RuntimeOptions.GetFlagFromEnvironment("NOVA_TIMING_LOG");
+        var bootRom = ParseBootRom(Environment.GetEnvironmentVariable("NOVA_BOOT_ROM"));
 
         _bus = new CompositeBusDevice(
             enableSound: true,
             cpuHz: targetCpuHz,
-            frameRateHz: VgcConstants.FrameRateHz);
+            frameRateHz: VgcConstants.FrameRateHz,
+            bootRom: bootRom);
         _cpu = new Cpu(_bus);
         _cpu.Boot();
         _bus.RomSwapRequested += (_, _) => _cpu.Boot();
@@ -276,6 +278,16 @@ public partial class MainWindow : Window
             _canvas.Focus();
             if (OperatingSystem.IsMacOS())
                 SetMacAspectRatio();
+        };
+    }
+
+    private static CompositeBusDevice.ActiveRom ParseBootRom(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "logo" or "novalogo" => CompositeBusDevice.ActiveRom.Logo,
+            "ncc" => CompositeBusDevice.ActiveRom.Ncc,
+            _ => CompositeBusDevice.ActiveRom.Basic
         };
     }
 

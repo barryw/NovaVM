@@ -259,6 +259,15 @@ module test_vgc_text;
         check_eq("post-FF: scroll_offset=0", dut.scroll_offset, 0);
     endtask
 
+    task automatic test_txtcls_stalls_cpu_until_clear_done();
+        $display("");
+        $display("Test: FF (0x0C) holds VGC RDY low until text clear completes");
+        bus_write(REG_CHAROUT_A, 8'h0C);
+        check("RDY low while CMD_TXTCLS is active", !vgc_rdy && dut.cmd_busy);
+        wait_vgc_ready();
+        check("RDY high after CMD_TXTCLS completes", vgc_rdy && !dut.cmd_busy);
+    endtask
+
     // T6b: push scroll_offset past its wrap point. The visible scroll now waits
     // for vblank, so do not burn 50 full frames just to reach the wrap point.
     // Seed the internal offset to ROWS-1, trigger one real scroll, and verify
@@ -386,6 +395,7 @@ module test_vgc_text;
         test_scroll_wraparound();
         test_regcharout_control_chars();
         test_txtcls_full_coverage();
+        test_txtcls_stalls_cpu_until_clear_done();
 
         summary();
         $finish;

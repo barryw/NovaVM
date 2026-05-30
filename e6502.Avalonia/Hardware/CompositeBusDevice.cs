@@ -246,7 +246,35 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _wts.Dispose();
     }
 
-    public void ResetCustomChips()
+    public bool TrySelectPrimaryRom(ActiveRom rom, bool notifyRomChange = true)
+    {
+        ActiveRom previous = CurrentRom;
+
+        switch (rom)
+        {
+            case ActiveRom.Basic:
+                Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
+                CurrentRom = ActiveRom.Basic;
+                break;
+            case ActiveRom.Ncc:
+                Array.Copy(_nccRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
+                CurrentRom = ActiveRom.Ncc;
+                break;
+            case ActiveRom.Logo when _logoRom != null:
+                Array.Copy(_logoRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
+                CurrentRom = ActiveRom.Logo;
+                break;
+            default:
+                return false;
+        }
+
+        if (notifyRomChange && previous != CurrentRom)
+            RomSwapRequested?.Invoke(this, EventArgs.Empty);
+
+        return true;
+    }
+
+    public void ResetCustomChips(ActiveRom bootRom = ActiveRom.Basic, bool notifyRomChange = true)
     {
         _vgc.Reset();
         _timer.Reset();
@@ -272,16 +300,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         CurrentProgramName = null;
         CurrentProgramHelp = null;
 
-        if (CurrentRom != ActiveRom.Basic)
-        {
-            Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
-            CurrentRom = ActiveRom.Basic;
-            RomSwapRequested?.Invoke(this, EventArgs.Empty);
-        }
-        else
-        {
-            Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
-        }
+        if (!TrySelectPrimaryRom(bootRom, notifyRomChange))
+            TrySelectPrimaryRom(ActiveRom.Basic, notifyRomChange);
 
         InitVectorTable();
     }

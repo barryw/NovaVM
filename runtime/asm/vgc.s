@@ -99,11 +99,16 @@ vgc_vsync:
 ; @label VGC.CLS
 ; @kind routine
 ; @symbol vgc_cls
-; @summary Clear the text screen through the VGC character output register.
+; @summary Clear the text screen through the VGC character output register and wait for completion.
 vgc_cls:
+.ifdef VGC_CLS_EXT
+      LDA   #EXT_CMD_CLS
+      JMP   EXT_vec
+.else
       LDA   #$0C
       STA   VGC_CHAROUT
-      RTS
+      JMP   vgc_wait_cmd
+.endif
 
 ; @label VGC.SET_FG
 ; @kind routine

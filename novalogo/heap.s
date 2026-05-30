@@ -1,8 +1,8 @@
 ; heap.s — bump allocator with GC headers for NovaLogo
-; Heap range: $0400 to $9FFF (~39KB)
+; Heap range: $0400 to HEAP_END-1.
 
 HEAP_START = $0400
-HEAP_END   = $A000          ; one past last usable byte
+HEAP_END   = $9C00          ; one past last usable byte; $9C00-$9FFF are NDK/extension BSS
 
 ; =====================================================================
 ; ZEROPAGE segment — heap and general-purpose pointer variables
@@ -127,4 +127,3 @@ heap_alloc:
 
       CLC
       RTS
-

@@ -67,7 +67,7 @@ HDMI  = $(RTL)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/serializer.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/hdmi.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_blitter_scroll test_blitter test_blitter_xram_backpressure test_dma test_math_copro test_wts_chip test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_wai_stp test_hdmi_audio test_hdmi_start_offset test_sid_hdmi_audio test_audio_pcm_fifo test_audio_led_meter test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_nic test_fio_top test_nic_top test_rom_load test_debug_uart test_debug_spi_slave test_usb_hid_keyboard test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_sid_cpu_audio_top test_wts_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_charin_read_timing test_vgc_blitter_scroll test_blitter test_blitter_xram_backpressure test_blitter_cmd_single_pulse_top test_vgc_cmd_readback_hazard_top test_dma test_math_copro test_wts_chip test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_dormann_65c02 test_cpu_stz test_cpu_memory_write_opcodes test_cpu_wai_stp test_hdmi_audio test_hdmi_start_offset test_sid_hdmi_audio test_audio_pcm_fifo test_audio_led_meter test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_nic test_fio_top test_nic_top test_rom_load test_debug_uart test_debug_spi_slave test_usb_hid_keyboard test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_romswap_values_top test_sid_cpu_audio_top test_wts_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_novalogo_draw_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_por_determinism test_sdram_loopback test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -99,6 +99,9 @@ test_vgc_sprites: test_vgc_sprites.sv vgc_tb.svh $(VGC)
 test_vgc_regs: test_vgc_regs.sv vgc_tb.svh $(VGC)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_regs.sv && $(RUN) test/$(BD)/$@/$@
 
+test_vgc_charin_read_timing: test_vgc_charin_read_timing.sv $(VGC)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_charin_read_timing.sv && $(RUN) test/$(BD)/$@/$@
+
 test_vgc_blitter_scroll: test_vgc_blitter_scroll.sv $(VGC) $(RTL)/blitter.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) $(RTL)/blitter.sv test_vgc_blitter_scroll.sv && $(RUN) test/$(BD)/$@/$@
 
@@ -120,6 +123,12 @@ test_blitter: test_blitter.sv $(RTL)/blitter.sv
 test_blitter_xram_backpressure: test_blitter_xram_backpressure.sv $(RTL)/blitter.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/blitter.sv $< && $(RUN) test/$(BD)/$@/$@
 
+test_blitter_cmd_single_pulse_top: test_blitter_cmd_single_pulse_top.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
+test_vgc_cmd_readback_hazard_top: test_vgc_cmd_readback_hazard_top.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
 test_dma: test_dma.sv $(RTL)/dma.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/dma.sv $< && $(RUN) test/$(BD)/$@/$@
 
@@ -139,6 +148,12 @@ test_cpu_dormann_65c02: test_cpu_dormann.sv $(CPU)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSIM --top-module test_cpu_dormann --Mdir $(BD)/$@ -o $@ $(CPU) test_cpu_dormann.sv && $(RUN) test/$(BD)/$@/$@ +NAME=65c02_extended +BIN=../e6502UnitTests/Resources/65C02_extended_opcodes_test.bin +LOAD=0 +START=0400 +PASS=24A8 +MAX_CYCLES=500000000 $(CPU_DORMANN_ARGS)
 
 test_cpu_wai_stp: test_cpu_wai_stp.sv $(CPU)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSIM --top-module $@ --Mdir $(BD)/$@ -o $@ $(CPU) $< && $(RUN) test/$(BD)/$@/$@
+
+test_cpu_stz: test_cpu_stz.sv $(CPU)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSIM --top-module $@ --Mdir $(BD)/$@ -o $@ $(CPU) $< && $(RUN) test/$(BD)/$@/$@
+
+test_cpu_memory_write_opcodes: test_cpu_memory_write_opcodes.sv $(CPU)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSIM --top-module $@ --Mdir $(BD)/$@ -o $@ $(CPU) $< && $(RUN) test/$(BD)/$@/$@
 
 test_hdmi_audio: test_hdmi_audio.sv $(HDMI)
@@ -298,6 +313,11 @@ test_key_inject: test_key_inject.sv $(ROM_LOAD_RTL)
 test_rom_over_sid: test_rom_over_sid.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
+# Top-level ROM bank-switch regression. Proves ROMSWAP_EXTENSION selects the
+# extension bank and every runtime value returns to the primary runtime bank.
+test_romswap_values_top: test_romswap_values_top.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
 # Top-level SID audio regression. Runs real CPU writes into both SID chips
 # and verifies signed audio output changes.
 test_sid_cpu_audio_top: test_sid_cpu_audio_top.sv $(ROM_LOAD_RTL) $(RTL)/sid_hdmi_audio.sv
@@ -321,6 +341,9 @@ test_xmc_read_no_write_top: test_xmc_read_no_write_top.sv $(ROM_LOAD_RTL)
 # Top-level MMIO bus-cycle regression. Runs real CPU indirect/indexed/RMW
 # writes into FIO, VGC, XMC, DMA, and blitter registers.
 test_mmio_bus_cycles_top: test_mmio_bus_cycles_top.sv $(ROM_LOAD_RTL)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
+
+test_novalogo_draw_top: test_novalogo_draw_top.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
 # Regression for VGC $A008 frame counter. Before the fix $A008 was mapped

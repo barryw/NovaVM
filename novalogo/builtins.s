@@ -2755,9 +2755,17 @@ builtin_table:
       .word do_po
       .byte 0
 
+      .word str_printout_name
+      .word do_po
+      .byte 0                    ; PRINTOUT = PO alias
+
       .word str_pots_name
       .word do_pots
       .byte 0
+
+      .word str_printtitles_name
+      .word do_pots
+      .byte 0                    ; PRINTTITLES = POTS alias
 
       .word str_erase_name
       .word do_erase

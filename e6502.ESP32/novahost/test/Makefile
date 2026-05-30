@@ -3,7 +3,7 @@
 
 CXX      ?= clang++
 CXXFLAGS  = -std=c++17 -Wall -Wextra -Wno-unused-parameter -O0 -g -I..
-TARGETS   = test_ndi test_midi_engine test_sid_vm
+TARGETS   = test_ndi test_midi_engine test_sid_vm test_boot_config_parser
 
 .PHONY: all test clean
 
@@ -18,10 +18,14 @@ test_midi_engine: test_midi_engine.cpp ../midi_engine.cpp ../midi_engine.h
 test_sid_vm: test_sid_vm.cpp ../sid_vm.cpp ../sid_vm.h
 	$(CXX) $(CXXFLAGS) -o $@ test_sid_vm.cpp ../sid_vm.cpp
 
+test_boot_config_parser: test_boot_config_parser.cpp ../boot_config_parser.cpp ../boot_config_parser.h
+	$(CXX) $(CXXFLAGS) -o $@ test_boot_config_parser.cpp ../boot_config_parser.cpp
+
 test: $(TARGETS)
 	./test_ndi
 	./test_midi_engine
 	./test_sid_vm
+	./test_boot_config_parser
 	python3 test_wifi_contract.py
 
 clean:

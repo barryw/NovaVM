@@ -415,7 +415,7 @@ def main() -> int:
             except Exception as exc:  # noqa: BLE001 - older firmware may not expose this.
                 snapshot["debug"]["breakpoints"] = {"ok": False, "error": str(exc)}
             try:
-                snapshot["debug"]["trace"] = client.command("dbg_trace", count=64)
+                snapshot["debug"]["trace"] = client.trace(64, hex_mode=True)
             except Exception as exc:  # noqa: BLE001 - older firmware may not expose this.
                 snapshot["debug"]["trace"] = {"ok": False, "error": str(exc)}
             snapshot["analysis"] = analyze_snapshot(snapshot)

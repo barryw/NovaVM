@@ -62,4 +62,27 @@ FIO_ARG_NAMEPTR_L = NVR4H
 ; @summary High byte of filename pointer for FIO.COPY_NAME.
 FIO_ARG_NAMEPTR_H = NVR5L
 
+; Public helper routines.
+.global fio_issue
+.global fio_check
+.global fio_exec
+.global fio_copy_name
+.global fio_clear_error
+.global fio_set_io_error
+.global fio_save
+.global fio_load
+.global fio_dir_open
+.global fio_dir_read
+.global fio_delete
+.global fio_gsave
+.global fio_gload
+.global fio_cd
+.global fio_mkdir
+.global fio_rmdir
+.global fio_pwd
+.global fio_load_runtime
+.global fio_rng
+.global fio_run
+.global fio_prepare_xram_transfer
+
 .endif

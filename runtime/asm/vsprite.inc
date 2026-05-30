@@ -396,10 +396,14 @@ VSPRITE_DESC_SIZE        = $18
 
 ; Public helper routines.
 .global vsprite_blit
+.global vsprite_blit_start
 .global vsprite_fill
 .global vsprite_gfx_addr
 .global vsprite_gfx_blit
+.global vsprite_gfx_blit_start
 .global vsprite_gfx_rotate_blit
+.global vsprite_gfx_rotate_blit_keyed
+.global vsprite_gfx_rotate_blit_nowait
 .global vsprite_gfx_fill
 .global vsprite_gfx_save_bg
 .global vsprite_gfx_restore_bg
