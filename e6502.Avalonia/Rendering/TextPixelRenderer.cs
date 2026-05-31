@@ -24,7 +24,12 @@ internal static class TextPixelRenderer
         int srcPy = Wrap400(py + (scrollY << 1));
 
         int col = srcPx / BitmapFont.GlyphWidth;
-        int row = srcPy / BitmapFont.GlyphHeight;
+        int displayRow = srcPy / BitmapFont.GlyphHeight;
+
+        // Ring scroll: the display row maps to a physical text row offset by the
+        // screen-base register, so scrolling is a single register write and the
+        // glyph fetch follows the rotated plane.
+        int row = vgc.PhysicalTextRow(displayRow);
 
         byte ch = vgc.GetScreenChar(col, row);
         byte colorAttr = vgc.GetScreenColor(col, row);
@@ -33,7 +38,7 @@ internal static class TextPixelRenderer
         byte fgColor = (byte)(colorAttr & 0x0F);
         byte cellBgColor = (byte)((colorAttr >> 4) & 0x0F);
 
-        bool isCursor = cursorEnabled && col == cursorX && row == cursorY;
+        bool isCursor = cursorEnabled && col == cursorX && displayRow == cursorY;
         if (isCursor)
             (fgColor, cellBgColor) = (cellBgColor, fgColor);
 

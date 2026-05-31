@@ -747,6 +747,7 @@ public static class VgcConstants
     public const int RegScrollCtl      = 0xA0EA;   // bit0=SCROLLX high, bit1=gfx scroll, bit2=text scroll
     public const int RegColStHi        = 0xA0EB;   // sprite-sprite collision high byte (sprites 8-15, write clears)
     public const int RegColBgHi        = 0xA0EC;   // sprite-background collision high byte (sprites 8-15, write clears)
+    public const int RegTextTopRow     = 0xA0ED;   // first physical text row shown at the top of the display (ring scroll, 0-49)
 
     public const byte ScrollCtlXHigh   = 0x01;
     public const byte ScrollCtlGfx     = 0x02;
@@ -762,6 +763,20 @@ public static class VgcConstants
     public const byte VramPlaneSprite  = 0x04;
     public const byte VramPlaneTextAttr = 0x07;
     public const byte VramCtrlAutoInc  = 0x01;
+
+    // -------------------------------------------------------------------------
+    // Direct screen window ($A200-$B1A0) — banked, plain-STA access to the
+    // text planes. The 4000-byte window maps cell-for-cell onto whichever plane
+    // the plane-select register names, so a program writes the screen with an
+    // ordinary STA instead of driving the VRAM port. One register switches which
+    // plane (char/color/attr) the window currently exposes.
+    // -------------------------------------------------------------------------
+    public const int ScreenWinBase     = 0xA200;            // cell 0 of the selected plane
+    public const int ScreenWinEnd      = 0xB19F;            // ScreenWinBase + 4000 - 1
+    public const int ScreenWinPlaneSel = 0xB1A0;            // R/W: which plane the window exposes
+    public const byte ScreenWinPlaneChar  = 0x00;           // default
+    public const byte ScreenWinPlaneColor = 0x01;
+    public const byte ScreenWinPlaneAttr  = 0x02;
 
     public const byte TextFlagReverse         = 0x01;
     public const byte TextFlagReverseExplicit = 0x02;

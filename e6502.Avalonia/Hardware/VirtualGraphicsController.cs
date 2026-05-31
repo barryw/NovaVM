@@ -93,6 +93,7 @@ public class VirtualGraphicsController : IBusDevice
     private byte _vramReadLatch;
     private byte _displayDim;
     private byte _textFlags;
+    private byte _textTopRow;   // ring-scroll base: first physical text row shown at display row 0
     private byte _textReverseAttr;
     private byte _gfxTransparentColor;
     private byte _paletteMode;
@@ -144,6 +145,7 @@ public class VirtualGraphicsController : IBusDevice
         _vramCtrl = VgcConstants.VramCtrlAutoInc;
         _vramReadLatch = 0;
         _displayDim = 15;
+        _textTopRow = 0;
         _gfxTransparentColor = 0;
         _paletteMode = VgcConstants.PaletteModeC64;
         _scrollCtl = VgcConstants.ScrollCtlDefault;
@@ -212,7 +214,7 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.RegTextFlags || address == VgcConstants.RegTextReverseAttr ||
             address == VgcConstants.RegGfxTransparentColor || address == VgcConstants.RegPaletteMode ||
             address == VgcConstants.RegScrollCtl || address == VgcConstants.RegColStHi ||
-            address == VgcConstants.RegColBgHi)
+            address == VgcConstants.RegColBgHi || address == VgcConstants.RegTextTopRow)
             return true;
 
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
@@ -258,6 +260,9 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.RegColBgHi)
             return CollisionHigh(_collisionSpriteBackground);
+
+        if (address == VgcConstants.RegTextTopRow)
+            return _textTopRow;
 
         if (address >= VgcConstants.VgcIrqBase && address <= VgcConstants.VgcIrqEnd)
             return ReadIrqRegister(address);
@@ -365,6 +370,14 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.RegColBgHi)
         {
             _collisionSpriteBackground &= 0x00FF;
+            return;
+        }
+
+        if (address == VgcConstants.RegTextTopRow)
+        {
+            // Ring scroll: keep the base within one screen of physical rows so
+            // display row R always maps to a valid physical row.
+            _textTopRow = (byte)(data % VgcConstants.ScreenRows);
             return;
         }
 
@@ -570,6 +583,16 @@ public class VirtualGraphicsController : IBusDevice
 
     public byte GetScrollY() =>
         _regs[VgcConstants.RegScrollY - VgcConstants.VgcBase];
+
+    // Ring-scroll base: the physical text row displayed at the top of the screen.
+    // Display row R shows physical row (TextTopRow + R) mod ScreenRows.
+    public int GetTextTopRow() => _textTopRow;
+
+    // Canonical display-row -> physical-plane-row mapping for the ring scroll.
+    // The renderer fetches glyphs through this so scrolling is a single register
+    // write with no plane copies.
+    public int PhysicalTextRow(int displayRow) =>
+        (displayRow + _textTopRow) % VgcConstants.ScreenRows;
 
     public byte GetScrollCtl() =>
         (byte)(_scrollCtl & 0x07);

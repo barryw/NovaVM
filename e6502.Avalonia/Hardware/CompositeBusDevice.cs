@@ -42,6 +42,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private byte _boardInputIrqStatus;
     private byte _boardButtonChanges;
     private byte _boardSwitchChanges;
+    private byte _screenWinPlane;   // direct screen window: 0=char, 1=color, 2=attr
 
     public ActiveRom CurrentRom { get; private set; } = ActiveRom.Basic;
     public event EventHandler? RomSwapRequested;
@@ -362,6 +363,26 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _boardInputIrqStatus |= VgcConstants.BoardInputIrqSwitches;
     }
 
+    // Map the direct screen window's current plane-select to a VGC memory space.
+    private byte ScreenWindowSpace() => _screenWinPlane switch
+    {
+        VgcConstants.ScreenWinPlaneColor => VgcConstants.MemSpaceColor,
+        VgcConstants.ScreenWinPlaneAttr  => VgcConstants.MemSpaceTextAttr,
+        _ => VgcConstants.MemSpaceScreen,
+    };
+
+    private byte ReadScreenWindow(ushort address)
+    {
+        int offset = address - VgcConstants.ScreenWinBase;
+        return _vgc.TryReadMemorySpace(ScreenWindowSpace(), offset, out byte value) ? value : (byte)0;
+    }
+
+    private void WriteScreenWindow(ushort address, byte data)
+    {
+        int offset = address - VgcConstants.ScreenWinBase;
+        _vgc.TryWriteMemorySpace(ScreenWindowSpace(), offset, data);
+    }
+
     private byte ReadBoardInput(ushort address)
     {
         return address switch
@@ -418,6 +439,10 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             return ReadBoardInput(address);
         if (address >= VgcConstants.UsbHidDiagBase && address <= VgcConstants.UsbHidDiagEnd)
             return 0;
+        if (address >= VgcConstants.ScreenWinBase && address <= VgcConstants.ScreenWinEnd)
+            return ReadScreenWindow(address);
+        if (address == VgcConstants.ScreenWinPlaneSel)
+            return _screenWinPlane;
         if (_timer.OwnsAddress(address)) return _timer.Read(address);
         if (_nic.OwnsAddress(address)) return _nic.Read(address);
         if (_dma.OwnsAddress(address)) return _dma.Read(address);
@@ -459,6 +484,16 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         }
         if (address >= VgcConstants.UsbHidDiagBase && address <= VgcConstants.UsbHidDiagEnd)
             return;
+        if (address >= VgcConstants.ScreenWinBase && address <= VgcConstants.ScreenWinEnd)
+        {
+            WriteScreenWindow(address, data);
+            return;
+        }
+        if (address == VgcConstants.ScreenWinPlaneSel)
+        {
+            _screenWinPlane = data;
+            return;
+        }
         if (_timer.OwnsAddress(address)) { _timer.Write(address, data); return; }
         if (_nic.OwnsAddress(address)) { _nic.Write(address, data); return; }
         if (_dma.OwnsAddress(address)) { _dma.Write(address, data); return; }

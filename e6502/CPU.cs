@@ -1162,10 +1162,22 @@ namespace KDS.e6502
             }
         }
 
+        // Pure stores (STA/STX/STY/STZ) write a register or zero into memory and
+        // never read the destination on real 6502 hardware. The cycle-prefetch in
+        // ClocksForNext otherwise reads the operand for every instruction; for a
+        // store that read is both spurious and harmful on read-sensitive I/O
+        // (e.g. the VGC VRAM data port, which auto-increments its pointer on every
+        // read). None of the store opcodes carry a page-boundary penalty, so
+        // skipping the read leaves crossBoundary false and all cycle counts intact.
+        private static bool WritesWithoutReading(OpCodeRecord op) =>
+            op.Instruction is "STA" or "STX" or "STY" or "STZ";
+
         private int GetOperand(AddressModes mode, out bool crossBoundary)
         {
             int oper = 0;
             crossBoundary = false;
+            if (WritesWithoutReading(_currentOp))
+                return oper;   // address comes from SaveOperand; no destination read
             switch (mode)
             {
                 // Accumulator mode uses the value in the accumulator

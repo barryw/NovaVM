@@ -28,6 +28,112 @@ public class AvaloniaCompositeBusTests
         Assert.AreEqual(0x00, bus.Read(0x0200));
     }
 
+    // -------------------------------------------------------------------------
+    // Direct screen window — banked plain-STA access to the text planes
+    // -------------------------------------------------------------------------
+
+    private static int CellOffset(int col, int row) => row * VgcConstants.ScreenCols + col;
+
+    [TestMethod]
+    public void ScreenWindow_CharPlane_PlainStoreLandsOnScreen()
+    {
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.ScreenWinPlaneSel, VgcConstants.ScreenWinPlaneChar);
+        int off = CellOffset(3, 2);
+        bus.Write((ushort)(VgcConstants.ScreenWinBase + off), (byte)'Q');
+        Assert.AreEqual((byte)'Q', bus.Vgc.GetScreenChar(3, 2), "Window write must reach the char plane.");
+        Assert.AreEqual((byte)'Q', bus.Read((ushort)(VgcConstants.ScreenWinBase + off)), "Window read must mirror the cell.");
+    }
+
+    [TestMethod]
+    public void ScreenWindow_ColorPlane_SelectableViaPlaneRegister()
+    {
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.ScreenWinPlaneSel, VgcConstants.ScreenWinPlaneColor);
+        Assert.AreEqual(VgcConstants.ScreenWinPlaneColor, bus.Read((ushort)VgcConstants.ScreenWinPlaneSel),
+            "Plane-select register reads back.");
+        int off = CellOffset(5, 4);
+        bus.Write((ushort)(VgcConstants.ScreenWinBase + off), 0x2A);
+        Assert.AreEqual(0x2A, bus.Vgc.GetScreenColor(5, 4), "Window write must reach the color plane when selected.");
+    }
+
+    [TestMethod]
+    public void ScreenWindow_PlaneSelectIsolatesPlanes()
+    {
+        var bus = MakeBus();
+        int off = CellOffset(0, 0);
+        bus.Write((ushort)VgcConstants.ScreenWinPlaneSel, VgcConstants.ScreenWinPlaneChar);
+        bus.Write((ushort)(VgcConstants.ScreenWinBase + off), (byte)'Z');
+        bus.Write((ushort)VgcConstants.ScreenWinPlaneSel, VgcConstants.ScreenWinPlaneColor);
+        bus.Write((ushort)(VgcConstants.ScreenWinBase + off), 0x17);
+        // Char plane keeps 'Z'; color plane holds 0x17 — the two are independent.
+        Assert.AreEqual((byte)'Z', bus.Vgc.GetScreenChar(0, 0));
+        Assert.AreEqual(0x17, bus.Vgc.GetScreenColor(0, 0));
+        // The window currently exposes color, so a read returns the color cell.
+        Assert.AreEqual(0x17, bus.Read((ushort)(VgcConstants.ScreenWinBase + off)));
+    }
+
+    [TestMethod]
+    public void ScreenWindow_LastCellMapsToCell3999()
+    {
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.ScreenWinPlaneSel, VgcConstants.ScreenWinPlaneChar);
+        bus.Write((ushort)VgcConstants.ScreenWinEnd, (byte)'*');
+        Assert.AreEqual((byte)'*', bus.Vgc.GetScreenChar(VgcConstants.ScreenCols - 1, VgcConstants.ScreenRows - 1),
+            "ScreenWinEnd must address the last screen cell (col 79, row 49).");
+    }
+
+    // -------------------------------------------------------------------------
+    // Screen-base register — zero-copy ring scroll
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public void TextTopRow_ReadsBackAndWrapsToScreenRows()
+    {
+        var bus = MakeBus();
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.RegTextTopRow), "Default base is row 0.");
+        bus.Write((ushort)VgcConstants.RegTextTopRow, 7);
+        Assert.AreEqual(7, bus.Read((ushort)VgcConstants.RegTextTopRow));
+        Assert.AreEqual(7, bus.Vgc.GetTextTopRow());
+        // Values beyond the screen height wrap into 0..49.
+        bus.Write((ushort)VgcConstants.RegTextTopRow, (byte)(VgcConstants.ScreenRows + 3));
+        Assert.AreEqual(3, bus.Read((ushort)VgcConstants.RegTextTopRow), "Base wraps mod ScreenRows.");
+    }
+
+    [TestMethod]
+    public void PhysicalTextRow_MapsDisplayRowsThroughTheBaseWithWrap()
+    {
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.RegTextTopRow, 0);
+        Assert.AreEqual(0, bus.Vgc.PhysicalTextRow(0));
+        Assert.AreEqual(49, bus.Vgc.PhysicalTextRow(49));
+
+        bus.Write((ushort)VgcConstants.RegTextTopRow, 5);
+        Assert.AreEqual(5, bus.Vgc.PhysicalTextRow(0), "Display row 0 shows physical row = base.");
+        // Bottom display row wraps around the ring.
+        Assert.AreEqual(4, bus.Vgc.PhysicalTextRow(49), "(49 + 5) mod 50 = 4.");
+    }
+
+    [TestMethod]
+    public void TextTopRow_ScrollIsAZeroCopyRebase()
+    {
+        // Paint two distinct rows into the char plane via the direct window, then
+        // "scroll" by writing the base register only. The same plane cells now
+        // appear at shifted display rows — no copies were made.
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.ScreenWinPlaneSel, VgcConstants.ScreenWinPlaneChar);
+        bus.Write((ushort)(VgcConstants.ScreenWinBase + CellOffset(0, 0)), (byte)'T'); // physical row 0
+        bus.Write((ushort)(VgcConstants.ScreenWinBase + CellOffset(0, 1)), (byte)'U'); // physical row 1
+
+        // Before scrolling, display row 0 = physical row 0 = 'T'.
+        Assert.AreEqual((byte)'T', bus.Vgc.GetScreenChar(0, bus.Vgc.PhysicalTextRow(0)));
+        // Scroll down one line: a single register write, zero plane copies.
+        bus.Write((ushort)VgcConstants.RegTextTopRow, 1);
+        // Now display row 0 shows physical row 1 = 'U'; display row 49 wraps to row 0 = 'T'.
+        Assert.AreEqual((byte)'U', bus.Vgc.GetScreenChar(0, bus.Vgc.PhysicalTextRow(0)));
+        Assert.AreEqual((byte)'T', bus.Vgc.GetScreenChar(0, bus.Vgc.PhysicalTextRow(49)));
+    }
+
     [TestMethod]
     public void BoardInputRegisters_AreReadOnlyLogicalState()
     {
