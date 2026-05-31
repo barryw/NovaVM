@@ -421,6 +421,33 @@ VGC_PLANE_TEXTATTR = $07
 VGC_VRAM_AUTOINC  = $01
 .endif
 
+; Screen-base register: first physical text row shown at the top of the display
+; (ring scroll, 0-49). Scroll = one write, zero plane copies.
+.ifndef VGC_TEXT_TOPROW
+VGC_TEXT_TOPROW   = $A0ED
+.endif
+
+; Direct screen window: $A200-$B19F maps 4000 cells of the plane named by the
+; plane-select register, so a program writes the screen with a plain STA.
+.ifndef VGC_SCREENWIN
+VGC_SCREENWIN     = $A200
+.endif
+.ifndef VGC_SCREENWIN_END
+VGC_SCREENWIN_END = $B19F
+.endif
+.ifndef VGC_SCREENWIN_PLANE
+VGC_SCREENWIN_PLANE = $B1A0
+.endif
+.ifndef VGC_SCREENWIN_CHAR
+VGC_SCREENWIN_CHAR  = $00
+.endif
+.ifndef VGC_SCREENWIN_COLOR
+VGC_SCREENWIN_COLOR = $01
+.endif
+.ifndef VGC_SCREENWIN_ATTR
+VGC_SCREENWIN_ATTR  = $02
+.endif
+
 .ifndef VTXT_REV
 VTXT_REV          = $01
 .endif

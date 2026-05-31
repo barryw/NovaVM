@@ -125,6 +125,13 @@ module vgc (
     localparam SCROLL_CTL_ADDR = 16'hA0EA;
     localparam COLLST_HI_ADDR = 16'hA0EB;
     localparam COLLBG_HI_ADDR = 16'hA0EC;
+    localparam TEXT_TOP_ROW_ADDR = 16'hA0ED;   // ring-scroll base: first physical text row shown
+    // Direct screen window: $A200-$B19F maps 4000 cells of the plane named by
+    // the plane-select register ($B1A0, 0=char/1=color/2=attr), so the CPU
+    // writes the screen with a plain STA instead of driving the VRAM port.
+    localparam SCREENWIN_BASE  = 16'hA200;
+    localparam SCREENWIN_END   = 16'hB19F;
+    localparam SCREENWIN_PLANE = 16'hB1A0;
 
     localparam SCROLL_CTL_XHI  = 8'h01;
     localparam SCROLL_CTL_GFX  = 8'h02;
@@ -249,6 +256,19 @@ module vgc (
     logic [8:0] pre_gfx_x;
     logic [7:0] pre_gfx_y;
     logic [5:0] scroll_offset;
+    // Software ring-scroll base ($A0ED). The render fetch shows physical row
+    // (text_row + scroll_offset + text_top_row) mod ROWS. We fold the two ring
+    // bases into a single registered offset (combined_text_scroll) so the
+    // combinational real_row -> char-RAM-address path in vgc_timing is unchanged
+    // and stays timing-closed. Command-side writes (screen_addr) keep using the
+    // raw scroll_offset, matching the emulator where top-row affects display only.
+    logic [5:0] text_top_row;
+    logic [5:0] combined_text_scroll;
+    wire  [6:0] cts_sum = {1'b0, scroll_offset} + {1'b0, text_top_row};
+    // Direct screen window plane select ($B1A0) and its VGC memory-space id.
+    logic [1:0] screen_win_plane;
+    wire  [2:0] screen_win_space = (screen_win_plane == 2'd1) ? SPACE_COLOR :
+                                   (screen_win_plane == 2'd2) ? SPACE_TEXTATTR : SPACE_CHAR;
     logic [8:0] scroll_x_full;
     logic [8:0] scroll_x_fetch;
     logic [7:0] scroll_y_fetch;
@@ -281,9 +301,21 @@ module vgc (
         .scroll_y(scroll_y_fetch),
         .scroll_gfx_enable(scroll_gfx_enable),
         .scroll_text_enable(scroll_text_enable),
-        .scroll_offset(scroll_offset),
+        .scroll_offset(combined_text_scroll),
         .pre_gfx_x(pre_gfx_x), .pre_gfx_y(pre_gfx_y)
     );
+
+    // Registered combine of the two ring bases, mod ROWS. Both operands are
+    // already bounded to 0..ROWS-1, so a single conditional subtract suffices
+    // (same shape as real_row in vgc_timing). Registering it keeps the extra
+    // adder off the per-pixel render path.
+    always_ff @(posedge clk) begin
+        if (vgc_module_rst)
+            combined_text_scroll <= 6'd0;
+        else
+            combined_text_scroll <= (cts_sum >= 7'(ROWS)) ? 6'(cts_sum - 7'(ROWS))
+                                                          : cts_sum[5:0];
+    end
 
     wire vblank_start = (h_count == 10'd0 && v_count == V_ACTIVE);
     wire frame_start  = (h_count == 10'd0 && v_count == 10'd0);
@@ -1009,6 +1041,10 @@ module vgc (
     wire gfx_trans_sel = (cpu_raddr == GFX_TRANS_ADDR);
     wire palette_mode_sel = (cpu_raddr == PALETTE_MODE_ADDR);
     wire scroll_ctl_sel = (cpu_raddr == SCROLL_CTL_ADDR);
+    wire text_top_row_sel = (cpu_raddr == TEXT_TOP_ROW_ADDR);
+    wire screen_win_sel   = (cpu_raddr >= SCREENWIN_BASE && cpu_raddr <= SCREENWIN_END);
+    wire screen_plane_sel = (cpu_raddr == SCREENWIN_PLANE);
+    wire [11:0] screen_win_off = 12'(cpu_raddr - SCREENWIN_BASE);
     wire collision_hi_sel = (cpu_raddr == COLLST_HI_ADDR || cpu_raddr == COLLBG_HI_ADDR);
     wire [4:0]  reg_offset   = cpu_raddr[4:0];
     wire [3:0]  irq_offset   = cpu_raddr[3:0];
@@ -1039,6 +1075,10 @@ module vgc (
     wire gfx_trans_sel_w = (r_cpu_addr_w == GFX_TRANS_ADDR);
     wire palette_mode_sel_w = (r_cpu_addr_w == PALETTE_MODE_ADDR);
     wire scroll_ctl_sel_w = (r_cpu_addr_w == SCROLL_CTL_ADDR);
+    wire text_top_row_sel_w = (r_cpu_addr_w == TEXT_TOP_ROW_ADDR);
+    wire screen_win_sel_w   = (r_cpu_addr_w >= SCREENWIN_BASE && r_cpu_addr_w <= SCREENWIN_END);
+    wire screen_plane_sel_w = (r_cpu_addr_w == SCREENWIN_PLANE);
+    wire [11:0] screen_win_off_w = 12'(r_cpu_addr_w - SCREENWIN_BASE);
     wire collision_hi_sel_w = (r_cpu_addr_w == COLLST_HI_ADDR || r_cpu_addr_w == COLLBG_HI_ADDR);
     wire fio_name_sel_w  = (r_cpu_addr_w >= FIO_NAME && r_cpu_addr_w <= 16'hB9EF);
     wire fio_len_sel_w   = (r_cpu_addr_w == FIO_NAME_LEN);
@@ -1090,6 +1130,10 @@ module vgc (
     endfunction
 
     wire vram_data_read = read_active && vram_reg_sel && vram_reg_off == VR_DATA;
+    // A direct-window read reuses the VRAM read latch pipeline: same plane BRAM,
+    // same 2-stage capture, but the space/addr come from the window decode and a
+    // single CPU read returns the byte (no VDC-style two-read handshake).
+    wire screen_win_read = read_active && screen_win_sel;
     wire vram_char_read = vram_port_read_active && vram_port_read_space == SPACE_CHAR   && vram_port_read_addr < TEXT_SIZE;
     wire vram_color_read= vram_port_read_active && vram_port_read_space == SPACE_COLOR  && vram_port_read_addr < TEXT_SIZE;
     wire vram_gfx_read  = vram_port_read_active && vram_port_read_space == SPACE_GFX    && vram_port_read_addr < GFX_SIZE;
@@ -1110,10 +1154,13 @@ module vgc (
             vram_port_read_space <= SPACE_CHAR;
             vram_port_read_addr <= 16'd0;
         end else begin
-            vram_port_read_active <= vram_data_read;
+            vram_port_read_active <= vram_data_read || screen_win_read;
             if (vram_data_read) begin
                 vram_port_read_space <= vram_plane;
                 vram_port_read_addr <= vram_addr;
+            end else if (screen_win_read) begin
+                vram_port_read_space <= screen_win_space;
+                vram_port_read_addr <= {4'b0, screen_win_off};
             end
 
             vram_cpu_read_pending <= vram_port_read_active;
@@ -1188,6 +1235,9 @@ module vgc (
         else if (dim_reg_sel) cpu_rdata = {4'b0, display_dim};
         else if (palette_mode_sel) cpu_rdata = {7'b0, palette_mode};
         else if (scroll_ctl_sel) cpu_rdata = {5'b0, scroll_ctl[2:0]};
+        else if (text_top_row_sel) cpu_rdata = {2'b0, text_top_row};
+        else if (screen_win_sel) cpu_rdata = vram_cpu_read_latch;
+        else if (screen_plane_sel) cpu_rdata = {6'b0, screen_win_plane};
         else if (text_reg_sel) begin
             case (cpu_raddr)
                 TEXT_FLAGS_ADDR:   cpu_rdata = text_flags;
@@ -1225,6 +1275,7 @@ module vgc (
     wire dbg_gfx_trans_sel = (dbg_addr == GFX_TRANS_ADDR);
     wire dbg_palette_mode_sel = (dbg_addr == PALETTE_MODE_ADDR);
     wire dbg_scroll_ctl_sel = (dbg_addr == SCROLL_CTL_ADDR);
+    wire dbg_text_top_row_sel = (dbg_addr == TEXT_TOP_ROW_ADDR);
     wire dbg_collision_hi_sel = (dbg_addr == COLLST_HI_ADDR || dbg_addr == COLLBG_HI_ADDR);
     wire dbg_write_vgc_sel  = dbg_we && (dbg_waddr >= VGC_BASE && dbg_waddr <= VGC_REGS_END);
     wire dbg_write_irq_sel  = dbg_we && (dbg_waddr >= VGC_IRQ_BASE && dbg_waddr <= VGC_IRQ_END);
@@ -1235,6 +1286,7 @@ module vgc (
     wire dbg_write_gfx_trans_sel = dbg_we && (dbg_waddr == GFX_TRANS_ADDR);
     wire dbg_write_palette_mode_sel = dbg_we && (dbg_waddr == PALETTE_MODE_ADDR);
     wire dbg_write_scroll_ctl_sel = dbg_we && (dbg_waddr == SCROLL_CTL_ADDR);
+    wire dbg_write_text_top_row_sel = dbg_we && (dbg_waddr == TEXT_TOP_ROW_ADDR);
     wire dbg_write_collision_hi_sel = dbg_we && (dbg_waddr == COLLST_HI_ADDR || dbg_waddr == COLLBG_HI_ADDR);
     wire [4:0] dbg_reg_offset_w = dbg_waddr[4:0];
     wire [2:0] dbg_vram_reg_off_w = dbg_waddr[2:0];
@@ -1296,6 +1348,7 @@ module vgc (
         else if (dbg_dim_sel) dbg_rdata = {4'b0, display_dim};
         else if (dbg_palette_mode_sel) dbg_rdata = {7'b0, palette_mode};
         else if (dbg_scroll_ctl_sel) dbg_rdata = {5'b0, scroll_ctl[2:0]};
+        else if (dbg_text_top_row_sel) dbg_rdata = {2'b0, text_top_row};
         else if (dbg_collision_hi_sel) begin
             case (dbg_addr)
                 COLLST_HI_ADDR: dbg_rdata = collision_ss[15:8];
@@ -1343,6 +1396,8 @@ module vgc (
             vram_plane <= SPACE_CHAR; vram_addr <= 16'd0; vram_ctrl <= 8'h01;
             text_flags <= 8'h00; text_reverse_attr <= 8'hF0;
             scroll_offset <= 0; scroll_pending <= 0; scroll_clearing <= 0; scroll_col <= 0;
+            text_top_row <= 0;
+            screen_win_plane <= 0;
             scroll_x <= 0; scroll_y <= 0;
             cmd_busy <= 0;
             key_fifo_rd <= 0;
@@ -2120,6 +2175,42 @@ module vgc (
                     scroll_x_fetch <= normalize_scroll_x(r_cpu_wdata_w[0], scroll_x);
                 end
 
+                if (text_top_row_sel_w) begin
+                    // Clamp into 0..ROWS-1 with one conditional subtract (6-bit
+                    // input, single step suffices) so combined_text_scroll stays
+                    // single-subtract-correct. Matches the emulator for 0..63.
+                    if (r_cpu_wdata_w[5:0] >= 6'(ROWS))
+                        text_top_row <= r_cpu_wdata_w[5:0] - 6'(ROWS);
+                    else
+                        text_top_row <= r_cpu_wdata_w[5:0];
+                end
+
+                if (screen_plane_sel_w)
+                    screen_win_plane <= r_cpu_wdata_w[1:0];
+
+                // Direct-window write: route the plain STA into the selected plane
+                // RAM through the same cmd_*_we injection the VRAM port uses.
+                if (screen_win_sel_w) begin
+                    case (screen_win_space)
+                        SPACE_CHAR: begin
+                            cmd_char_addr <= screen_win_off_w;
+                            cmd_char_din  <= r_cpu_wdata_w;
+                            cmd_char_we   <= 1;
+                        end
+                        SPACE_COLOR: begin
+                            cmd_color_addr <= screen_win_off_w;
+                            cmd_color_din  <= r_cpu_wdata_w;
+                            cmd_color_we   <= 1;
+                        end
+                        SPACE_TEXTATTR: begin
+                            cmd_attr_addr <= screen_win_off_w;
+                            cmd_attr_din  <= r_cpu_wdata_w;
+                            cmd_attr_we   <= 1;
+                        end
+                        default: ;
+                    endcase
+                end
+
                 if (collision_hi_sel_w) begin
                     case (r_cpu_addr_w)
                         COLLST_HI_ADDR: collision_ss[15:8] <= 8'h00;
@@ -2273,6 +2364,13 @@ module vgc (
             if (dbg_write_scroll_ctl_sel) begin
                 scroll_ctl <= {5'b0, dbg_wdata[2:0]};
                 scroll_x_fetch <= normalize_scroll_x(dbg_wdata[0], scroll_x);
+            end
+
+            if (dbg_write_text_top_row_sel) begin
+                if (dbg_wdata[5:0] >= 6'(ROWS))
+                    text_top_row <= dbg_wdata[5:0] - 6'(ROWS);
+                else
+                    text_top_row <= dbg_wdata[5:0];
             end
 
             if (dbg_write_collision_hi_sel) begin

@@ -571,8 +571,10 @@ module top (
     wire usb_hid_sel = (mem_addr >= USB_HID_BASE && mem_addr <= USB_HID_END);
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
-                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0EC) ||
-                        (mem_addr >= 16'hA0F0 && mem_addr <= 16'hA0FF);
+                        (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0ED) ||
+                        (mem_addr >= 16'hA0F0 && mem_addr <= 16'hA0FF) ||
+                        // Direct screen window + plane-select — carve from RAM, route to VGC.
+                        (mem_addr >= 16'hA200 && mem_addr <= 16'hB1A0);
 
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
@@ -861,7 +863,7 @@ module top (
     wire       dbg_poke_vgc = dbg_poke_en &&
                               (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                                ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0EC)) ||
+                               ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0ED)) ||
                                ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
     wire       dbg_poke_blt = dbg_poke_en &&
                               (((dbg_poke_addr >= 16'hBA83) &&
@@ -1116,7 +1118,7 @@ module top (
     wire dbg_poke_vgc = dbg_poke_en &&
                         (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                          ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                         ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0EC)) ||
+                         ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0ED)) ||
                          ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
     wire dbg_poke_blt = dbg_poke_en &&
                         (((dbg_poke_addr >= 16'hBA83) &&
@@ -1229,8 +1231,10 @@ module top (
     wire usb_hid_sel = (cpu_addr >= USB_HID_BASE && cpu_addr <= USB_HID_END);
     wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
                         (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
-                        (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0EC) ||
-                        (cpu_addr >= 16'hA0F0 && cpu_addr <= 16'hA0FF);
+                        (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0ED) ||
+                        (cpu_addr >= 16'hA0F0 && cpu_addr <= 16'hA0FF) ||
+                        // Direct screen window + plane-select — carve from RAM, route to VGC.
+                        (cpu_addr >= 16'hA200 && cpu_addr <= 16'hB1A0);
 
     always_ff @(posedge clk) begin
         if (xmc_win_sel && xmc_win_enabled)
