@@ -14,7 +14,7 @@ const int ScratchTable = 0x1820;
 const int PackedText = 0x1900;
 const int StaticMemory = 0x1A00;
 
-string outputPath = ParseOutput(args);
+(string outputPath, string? soundPakPath) = ParseOutput(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
 
 var story = new byte[StorySize];
@@ -36,9 +36,18 @@ WriteBE16(story, 0x1C, Checksum(story));
 File.WriteAllBytes(outputPath, story);
 Console.WriteLine($"Wrote {outputPath} ({story.Length} bytes, code {codeBytes.Length} bytes)");
 
-static string ParseOutput(string[] args)
+if (soundPakPath is not null)
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(soundPakPath)) ?? ".");
+    byte[] pak = BuildSyntheticSoundPak();
+    File.WriteAllBytes(soundPakPath, pak);
+    Console.WriteLine($"Wrote {soundPakPath} ({pak.Length} bytes, synthetic SOUND.PAK)");
+}
+
+static (string Output, string? SoundPak) ParseOutput(string[] args)
 {
     string output = "build/z5-spec.z5";
+    string? soundPak = null;
     for (int i = 0; i < args.Length; i++)
     {
         string? value = i + 1 < args.Length ? args[i + 1] : null;
@@ -46,6 +55,10 @@ static string ParseOutput(string[] args)
         {
             case "--output" when value is not null:
                 output = value;
+                i++;
+                break;
+            case "--sound-pak" when value is not null:
+                soundPak = value;
                 i++;
                 break;
             case "-h" or "--help":
@@ -60,13 +73,39 @@ static string ParseOutput(string[] args)
         }
     }
 
-    return output;
+    return (output, soundPak);
 }
 
 static void PrintUsage()
 {
     Console.Error.WriteLine("Nova.NovaZ.Z5SpecStory");
     Console.Error.WriteLine("  --output <story.z5>");
+    Console.Error.WriteLine("  --sound-pak <sound.pak>   write a tiny synthetic SOUND.PAK (sample 3)");
+}
+
+// A minimal SOUND.PAK exercising the FIO_CMD_ZSOUND data path and the
+// cycle-driven completion that fires the V5 finish routine. One sound, number
+// 3, a short triangle ramp so it finishes well within the read_char timer
+// window. Format: "NZSP" ver(1) count(1); index[count]: number(1) rate(2 LE)
+// offset(4 LE) len(4 LE); then concatenated signed 8-bit mono PCM.
+static byte[] BuildSyntheticSoundPak()
+{
+    const int number = 3;
+    const int rate = 8000;
+    const int pcmLen = 64;            // 64 / 8000 s ~= 8 ms ~= 96k cycles @ 12 MHz
+    var pcm = new byte[pcmLen];
+    for (int i = 0; i < pcmLen; i++)
+        pcm[i] = (byte)(sbyte)((i * 4) - 128);
+
+    var pak = new List<byte> { (byte)'N', (byte)'Z', (byte)'S', (byte)'P', 1, 1 };
+    void U16(int v) { pak.Add((byte)(v & 0xFF)); pak.Add((byte)((v >> 8) & 0xFF)); }
+    void U32(int v) { pak.Add((byte)(v & 0xFF)); pak.Add((byte)((v >> 8) & 0xFF)); pak.Add((byte)((v >> 16) & 0xFF)); pak.Add((byte)((v >> 24) & 0xFF)); }
+    pak.Add(number);
+    U16(rate);
+    U32(0);                           // pcm offset (relative to end of index)
+    U32(pcmLen);
+    pak.AddRange(pcm);
+    return [.. pak];
 }
 
 static void WriteHeader(byte[] story)
@@ -392,6 +431,21 @@ static void EmitSpecProgram(ZCode z)
     z.VarOp(11, Operand.Small(0));
     z.VarOp(13, Operand.Large(unchecked((short)-2)));
 
+    // --- sound_effect (V5 sampled sound with a finish routine) ---
+    // Start sample 3 with a finish routine, then wait in read_char with a short
+    // timer that aborts so the test can never hang. The host plays the tiny
+    // SOUND.PAK sample to completion within a few thousand CPU cycles, so the
+    // finish routine fires during the wait and sets G(0x15)=7; the timer then
+    // cancels read_char. (With sound_effect a no-op the flag stays 0 and the
+    // "z5 sound ok" banner below is never printed -- a clean RED before #11.)
+    z.Store(0x15, 0);                                        // finish flag = 0
+    z.SoundEffect(number: 3, effect: 2, volume: 8, "sound_finish_routine");
+    z.Store(0x13, 0);                                        // timer counter = 0
+    z.ReadCharTimed(0x14, time: 2, "sound_timer_routine");   // aborts, result 0
+    z.AssertVarEquals(0x15, 7, "sound-finish-fired");
+    z.Print("z5 sound ok");
+    z.NewLine();
+
     z.Print("z5 spec ok");
     z.NewLine();
 
@@ -449,6 +503,23 @@ static void EmitSpecProgram(ZCode z)
     z.Print("callvn2 ok");
     z.NewLine();
     z.ZeroOp(0);
+
+    // Sound finish routine: records that it ran. Return value ignored for sound.
+    z.Align(4);
+    z.Label("sound_finish_routine");
+    z.Byte(0);
+    z.Store(0x15, 7);
+    z.ZeroOp(1);                                     // rfalse
+
+    // read_char timer routine: abort input on the third tick so the test ends.
+    z.Align(4);
+    z.Label("sound_timer_routine");
+    z.Byte(0);
+    z.OneOp(5, Operand.Small(0x13));                 // inc G(0x13)
+    z.TwoOpBranch(1, Operand.Var(0x13), Operand.Small(3), "sound_timer_abort");
+    z.ZeroOp(1);                                     // rfalse: continue input
+    z.Label("sound_timer_abort");
+    z.ZeroOp(0);                                     // rtrue: cancel input
 
     z.Label("after_routines");
     z.Label("prompt");
@@ -600,6 +671,34 @@ sealed class ZCode
     public void VarOpStore(int op, byte store, params Operand[] operands)
     {
         VarOp(op, operands);
+        Emit(store);
+    }
+
+    // store variable, value (2OP:13).
+    public void Store(byte variable, int value) =>
+        TwoOp(13, Operand.Small(variable), Operand.Large(value));
+
+    // sound_effect number effect volume routine (VAR:21). The routine is a
+    // packed address resolved at link time, like a call target.
+    public void SoundEffect(int number, int effect, int volume, string routineLabel)
+    {
+        Emit(0xE0 | 21);
+        Emit(TypeByte([Operand.Small(number), Operand.Small(effect), Operand.Large(volume), Operand.Large(0)]));
+        Emit(number);
+        Emit(effect);
+        EmitWord(volume);
+        EmitPackedAddressPatch(routineLabel);
+    }
+
+    // read_char 1 time routine -> (result) (VAR:22). The routine is a packed
+    // address; it fires every `time` tenths and may abort input by returning true.
+    public void ReadCharTimed(byte store, int time, string routineLabel)
+    {
+        Emit(0xE0 | 22);
+        Emit(TypeByte([Operand.Small(1), Operand.Small(time), Operand.Large(0)]));
+        Emit(1);
+        Emit(time);
+        EmitPackedAddressPatch(routineLabel);
         Emit(store);
     }
 

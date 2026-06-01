@@ -1093,6 +1093,12 @@ Current file: extension.s
 000000r 2               .ifndef FIO_CMD_SFLOAD
 000000r 2               FIO_CMD_SFLOAD    = $15
 000000r 2               .endif
+000000r 2               .ifndef FIO_CMD_ZSOUND
+000000r 2               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+000000r 2               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+000000r 2               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+000000r 2               FIO_CMD_ZSOUND    = $16
+000000r 2               .endif
 000000r 2               .ifndef FIO_CMD_XLOAD
 000000r 2               FIO_CMD_XLOAD     = $18
 000000r 2               .endif
@@ -1907,6 +1913,11 @@ Current file: extension.s
 000000r 2               .endif
 000000r 2               .ifndef DMA_CNTH
 000000r 2               DMA_CNTH          = $BA75
+000000r 2               .endif
+000000r 2               .ifndef ZSOUND_STATUS
+000000r 2               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+000000r 2               ; last read (clears on read); bit1 = a sound is currently playing.
+000000r 2               ZSOUND_STATUS     = $BA76
 000000r 2               .endif
 000000r 2               
 000000r 2               .ifndef DMA_CMD
@@ -3563,6 +3574,12 @@ Current file: extension.s
 000000r 3               .ifndef FIO_CMD_SFLOAD
 000000r 3               FIO_CMD_SFLOAD    = $15
 000000r 3               .endif
+000000r 3               .ifndef FIO_CMD_ZSOUND
+000000r 3               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+000000r 3               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+000000r 3               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+000000r 3               FIO_CMD_ZSOUND    = $16
+000000r 3               .endif
 000000r 3               .ifndef FIO_CMD_XLOAD
 000000r 3               FIO_CMD_XLOAD     = $18
 000000r 3               .endif
@@ -4377,6 +4394,11 @@ Current file: extension.s
 000000r 3               .endif
 000000r 3               .ifndef DMA_CNTH
 000000r 3               DMA_CNTH          = $BA75
+000000r 3               .endif
+000000r 3               .ifndef ZSOUND_STATUS
+000000r 3               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+000000r 3               ; last read (clears on read); bit1 = a sound is currently playing.
+000000r 3               ZSOUND_STATUS     = $BA76
 000000r 3               .endif
 000000r 3               
 000000r 3               .ifndef DMA_CMD
@@ -6030,6 +6052,12 @@ Current file: extension.s
 000000r 4               .ifndef FIO_CMD_SFLOAD
 000000r 4               FIO_CMD_SFLOAD    = $15
 000000r 4               .endif
+000000r 4               .ifndef FIO_CMD_ZSOUND
+000000r 4               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+000000r 4               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+000000r 4               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+000000r 4               FIO_CMD_ZSOUND    = $16
+000000r 4               .endif
 000000r 4               .ifndef FIO_CMD_XLOAD
 000000r 4               FIO_CMD_XLOAD     = $18
 000000r 4               .endif
@@ -6844,6 +6872,11 @@ Current file: extension.s
 000000r 4               .endif
 000000r 4               .ifndef DMA_CNTH
 000000r 4               DMA_CNTH          = $BA75
+000000r 4               .endif
+000000r 4               .ifndef ZSOUND_STATUS
+000000r 4               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+000000r 4               ; last read (clears on read); bit1 = a sound is currently playing.
+000000r 4               ZSOUND_STATUS     = $BA76
 000000r 4               .endif
 000000r 4               
 000000r 4               .ifndef DMA_CMD
@@ -8349,6 +8382,12 @@ Current file: extension.s
 000000r 3               .ifndef FIO_CMD_SFLOAD
 000000r 3               FIO_CMD_SFLOAD    = $15
 000000r 3               .endif
+000000r 3               .ifndef FIO_CMD_ZSOUND
+000000r 3               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+000000r 3               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+000000r 3               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+000000r 3               FIO_CMD_ZSOUND    = $16
+000000r 3               .endif
 000000r 3               .ifndef FIO_CMD_XLOAD
 000000r 3               FIO_CMD_XLOAD     = $18
 000000r 3               .endif
@@ -9163,6 +9202,11 @@ Current file: extension.s
 000000r 3               .endif
 000000r 3               .ifndef DMA_CNTH
 000000r 3               DMA_CNTH          = $BA75
+000000r 3               .endif
+000000r 3               .ifndef ZSOUND_STATUS
+000000r 3               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+000000r 3               ; last read (clears on read); bit1 = a sound is currently playing.
+000000r 3               ZSOUND_STATUS     = $BA76
 000000r 3               .endif
 000000r 3               
 000000r 3               .ifndef DMA_CMD
@@ -11090,6 +11134,12 @@ Current file: extension.s
 000000r 5               .ifndef FIO_CMD_SFLOAD
 000000r 5               FIO_CMD_SFLOAD    = $15
 000000r 5               .endif
+000000r 5               .ifndef FIO_CMD_ZSOUND
+000000r 5               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+000000r 5               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+000000r 5               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+000000r 5               FIO_CMD_ZSOUND    = $16
+000000r 5               .endif
 000000r 5               .ifndef FIO_CMD_XLOAD
 000000r 5               FIO_CMD_XLOAD     = $18
 000000r 5               .endif
@@ -11904,6 +11954,11 @@ Current file: extension.s
 000000r 5               .endif
 000000r 5               .ifndef DMA_CNTH
 000000r 5               DMA_CNTH          = $BA75
+000000r 5               .endif
+000000r 5               .ifndef ZSOUND_STATUS
+000000r 5               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+000000r 5               ; last read (clears on read); bit1 = a sound is currently playing.
+000000r 5               ZSOUND_STATUS     = $BA76
 000000r 5               .endif
 000000r 5               
 000000r 5               .ifndef DMA_CMD

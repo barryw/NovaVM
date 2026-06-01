@@ -493,6 +493,7 @@ constexpr uint16_t SID_CFG_ADDR          = 0xD440;
 
 constexpr uint16_t WTS_VOICE_BASE        = 0xA140;
 constexpr uint16_t WTS_VOICE_STRIDE      = 8;
+constexpr uint8_t  ZSOUND_VOICE          = 0;   // WTS voice used for Z-machine SFX
 constexpr uint16_t WTS_MASTER_VOLUME     = 0xA182;
 constexpr uint16_t WTS_SOUNDFONT_STATUS  = 0xA183;
 constexpr uint16_t WTS_INSTRUMENT_COUNT  = 0xA184;
@@ -747,6 +748,7 @@ void FioDispatcher::handle_event() {
         case CMD_MIDPLAY:  handle_midplay();  break;
         case CMD_MIDSTOP:  handle_midstop();  break;
         case CMD_SFLOAD:   handle_sfload();   break;
+        case CMD_ZSOUND:   handle_zsound();   break;
         case CMD_CD:       handle_cd();       break;
         case CMD_MKDIR:    handle_mkdir();    break;
         case CMD_RMDIR:    handle_rmdir();    break;
@@ -1176,6 +1178,7 @@ void FioDispatcher::publish_soundfont_metadata(const char* label) {
 void FioDispatcher::clear_wts_bank_state() {
     _wts_bank_loaded = false;
     _wts_samples_resident = false;
+    _zsound_bank_ready = false;
     _wts_bank_name[0] = 0;
     _wts_sample_bytes = 0;
     _wts_sample_frame_bytes = 1;
@@ -3457,6 +3460,101 @@ void FioDispatcher::handle_sfload() {
     set_music_loading(false);
     logLn("[fio] SFLOAD %s failed\n", name);
     respond_err(ERR_NOT_FOUND);
+}
+
+// ---------------------------------------------------------------------------
+// ZSOUND — Z-machine sampled sound (sound_effect number >= 3)
+//
+// The packer emits the game's Blorb samples as ZSOUND.NSF, a WTS soundfont
+// with one region per sound number whose key range and RootKey both equal the
+// number. We load it like any soundfont, then trigger note==number, which the
+// WTS chip plays one-shot at the region's native rate (no transpose, since
+// note==RootKey). This reuses the proven soundfont/WTS path end to end; the
+// FPGA WTS chip is the synthesizer and the audio output.
+// ---------------------------------------------------------------------------
+bool FioDispatcher::ensure_zsound_bank_loaded() {
+    if (_zsound_bank_ready && _wts_bank_loaded)
+        return true;
+
+    set_music_loading(true);
+    bool ok = load_wts_bank_by_name("ZSOUND.NSF");
+    if (ok) {
+        configure_wts_for_midi();   // master/voice volume + pan so it's audible
+        // configure_wts_for_midi spreads the 8 voices across the stereo field,
+        // leaving voice 0 (our SFX voice) hard left. Z-sounds are mono one-shots,
+        // so center the SFX voice to play equally in both speakers.
+        _bridge.poke(WTS_VOICE_BASE + ZSOUND_VOICE * WTS_VOICE_STRIDE + 4, 128);
+    }
+    set_music_loading(false);
+
+    _zsound_bank_ready = ok;
+    if (!ok)
+        logLn("[fio] ZSOUND: failed to load ZSOUND.NSF");
+    return ok;
+}
+
+void FioDispatcher::invalidate_zsound_bank() {
+    // Force a reload from the currently-mounted disk on the next sound_effect.
+    _zsound_bank_ready = false;
+}
+
+void FioDispatcher::handle_zsound() {
+    uint8_t number = _bank[OFF_SRC_LO];   // sound_effect number
+    uint8_t effect = _bank[OFF_SRC_HI];   // 1=prepare, 2=start, 3=stop
+    uint8_t level  = _bank[OFF_END_LO];   // volume 1..8, or 255 = loudest
+
+    if (!_bridge.supportsWtsEventStream()) {
+        logLn("[fio] ZSOUND: bitstream lacks WTS event stream");
+        respond_err(ERR_IO);
+        return;
+    }
+
+    if (effect == 3) {                    // stop: silence the WTS voices
+        _bridge.poke(WTS_COMMAND, WTS_CMD_EVENT_RESET);
+        respond_ok();
+        return;
+    }
+
+    if (!ensure_zsound_bank_loaded()) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    if (effect == 1) {                    // prepare: bank now resident, no play
+        respond_ok();
+        return;
+    }
+
+    uint8_t velocity = (level == 0 || level >= 255)
+        ? 127
+        : (uint8_t)(level > 7 ? 127 : level * 16);
+
+    // 10-byte song event: frame(le32)=0, kind, voice, channel, note, vel, prog.
+    uint8_t song_event[10] = {0};
+    song_event[4] = NMS_EVENT_NOTE_ON;
+    song_event[5] = ZSOUND_VOICE;
+    song_event[6] = 0;          // channel 0 -> bank 0
+    song_event[7] = number;     // note == region key/RootKey -> native rate
+    song_event[8] = velocity;
+    song_event[9] = 0;          // program 0 (the ZSOUND instrument)
+
+    uint8_t events[NMS_WTS_NOTE_ON_RECORDS * MIDI_WTS_EVENT_BYTES];
+    uint16_t out_bytes = 0;
+    if (!build_music_wts_event(song_event, events, out_bytes)) {
+        logLn("[fio] ZSOUND %u: %s", (unsigned)number, _midi_last_error);
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    // RESET zeroes the FPGA WTS frame counter; queue the one-shot at frame 0;
+    // START fires it. The region is non-looping, so the voice ends on its own.
+    bool ok = _bridge.poke(WTS_COMMAND, WTS_CMD_EVENT_RESET);
+    ok = _bridge.writeWtsEvents(events, out_bytes) && ok;
+    ok = _bridge.poke(WTS_COMMAND, WTS_CMD_EVENT_START) && ok;
+    if (ok)
+        respond_ok();
+    else
+        respond_err(ERR_IO);
 }
 
 // ---------------------------------------------------------------------------

@@ -10,8 +10,8 @@ if (args.Length < 1)
     return 1;
 }
 
-// Remote verbs talk to NovaHost's HTTP file server. Accept --remote either
-// before or after the command so the current `nova` CLI shape is natural.
+// Remote verbs talk to NovaHost's TCP management service. Accept --remote
+// either before or after the command so the current `nova` CLI shape is natural.
 string? remoteHost = ExtractRemoteHost(ref args, null);
 if (args.Length < 1) { PrintUsage(); return 1; }
 
@@ -57,8 +57,7 @@ return verb switch
 };
 
 // ===========================================================================
-// Remote SD operations — talks to NovaHost's HTTP file server (port 80).
-// Default endpoint base is http://<host>/sd/.
+// Remote SD operations — talks to NovaHost's TCP management service.
 // ===========================================================================
 
 static int DoWebServer(string[] args, string? host)
@@ -104,6 +103,78 @@ static void PrintWebServerUsage()
     Console.Error.WriteLine("  nova webserver --remote <host> [--port 8080] [--bind 127.0.0.1] [--no-open]");
 }
 
+static int RunManagement(string host, string operation,
+                         Func<NovaHostManagementClient, CancellationToken, Task<int>> action,
+                         TimeSpan? timeout = null)
+{
+    using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromMinutes(30));
+    using var management = new NovaHostManagementClient(host);
+    try
+    {
+        return action(management, cts.Token).GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"{operation}: {ex.Message}");
+        return 1;
+    }
+}
+
+static void PrintJson(JsonNode? node)
+{
+    Console.WriteLine((node ?? new JsonObject()).ToJsonString(
+        new JsonSerializerOptions { WriteIndented = true }));
+}
+
+static IProgress<long>? CreateProgressReporter(string operation, long total)
+{
+    if (total < 1024 * 1024)
+        return null;
+
+    long lastMs = 0;
+    return new InlineProgress<long>(done =>
+    {
+        bool finished = done >= total;
+        long now = Environment.TickCount64;
+        if (!finished && now - lastMs < 500)
+            return;
+        lastMs = now;
+        WriteTransferProgress(operation, done, total, finished);
+    });
+}
+
+static IProgress<NovaTransferProgress> CreateTransferProgressReporter(string operation)
+{
+    long lastMs = 0;
+    return new InlineProgress<NovaTransferProgress>(progress =>
+    {
+        if (progress.Total > 0 && progress.Total < 1024 * 1024)
+            return;
+        bool finished = progress.Total > 0 && progress.Done >= progress.Total;
+        long now = Environment.TickCount64;
+        if (!finished && now - lastMs < 500)
+            return;
+        lastMs = now;
+        WriteTransferProgress(operation, progress.Done, progress.Total, finished);
+    });
+}
+
+static void WriteTransferProgress(string operation, long done, long total,
+                                  bool finished)
+{
+    if (total > 0)
+    {
+        long percent = Math.Clamp(done * 100 / total, 0, 100);
+        Console.Error.Write($"\r{operation} {percent,3}% {done}/{total} bytes");
+    }
+    else
+    {
+        Console.Error.Write($"\r{operation} {done} bytes");
+    }
+    if (finished)
+        Console.Error.WriteLine();
+}
+
 static int DoDevice(string[] args, string? host)
 {
     host = ExtractRemoteHost(ref args, host);
@@ -129,30 +200,11 @@ static int DoDeviceStatus(string? host)
         return 1;
     }
 
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-    try
+    return RunManagement(host, "device status", async (management, token) =>
     {
-        foreach (string endpoint in new[] { "health", "sd-status" })
-        {
-            string url = $"http://{host}/{endpoint}";
-            var resp = http.GetAsync(url).GetAwaiter().GetResult();
-            if (!resp.IsSuccessStatusCode)
-            {
-                Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-                return 1;
-            }
-
-            string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            Console.WriteLine($"{endpoint}: {body}");
-        }
-
+        PrintJson(await management.GetStatusAsync(token));
         return 0;
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"device status: {ex.Message}");
-        return 1;
-    }
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int DoDeviceReboot(string? host)
@@ -163,7 +215,12 @@ static int DoDeviceReboot(string? host)
         return 1;
     }
 
-    return HttpPost(host, "/reboot", null, "device reboot");
+    return RunManagement(host, "device reboot", async (management, token) =>
+    {
+        await management.HostRebootAsync(token);
+        Console.WriteLine("NovaHost reboot accepted.");
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int UnknownDeviceCommand(string command)
@@ -206,24 +263,27 @@ static int DoDriveList(string? host)
         return 1;
     }
 
-    string? body = HttpGetBody(host, "/drives", "drive list");
-    if (body is null)
-        return 1;
-
-    Console.WriteLine($"Drive slots on {host}:");
-    Console.WriteLine();
-    Console.WriteLine("  Slot  Mounted  Current path                         Configured path");
-    Console.WriteLine("  ----  -------  -----------------------------------  -----------------------------------");
-    foreach (var entry in ParseJsonArray(body))
+    return RunManagement(host, "drive list", async (management, token) =>
     {
-        string slot = entry.GetValueOrDefault("slot") ?? "?";
-        bool mounted = (entry.GetValueOrDefault("mounted") ?? "false") == "true";
-        string current = entry.GetValueOrDefault("currentPath") ?? "";
-        string configured = entry.GetValueOrDefault("configuredPath") ?? "";
-        Console.WriteLine($"  {slot,-4}  {(mounted ? "yes" : "no"),-7}  {TruncateForTable(current, 35),-35}  {TruncateForTable(configured, 35),-35}");
-    }
+        JsonObject status = await management.GetStatusAsync(token);
+        JsonArray drives = status["drives"] as JsonArray ?? new JsonArray();
 
-    return 0;
+        Console.WriteLine($"Drive slots on {host}:");
+        Console.WriteLine();
+        Console.WriteLine("  Slot  Mounted  Current path                         Configured path");
+        Console.WriteLine("  ----  -------  -----------------------------------  -----------------------------------");
+        foreach (JsonNode? node in drives)
+        {
+            JsonObject? entry = node as JsonObject;
+            string slot = entry?["slot"]?.GetValue<string>() ?? "?";
+            bool mounted = entry?["mounted"]?.GetValue<bool>() == true;
+            string current = entry?["currentPath"]?.GetValue<string>() ?? "";
+            string configured = entry?["configuredPath"]?.GetValue<string>() ?? "";
+            Console.WriteLine($"  {slot,-4}  {(mounted ? "yes" : "no"),-7}  {TruncateForTable(current, 35),-35}  {TruncateForTable(configured, 35),-35}");
+        }
+
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int DoDriveMount(string[] args, string? host)
@@ -251,11 +311,12 @@ static int DoDriveMount(string[] args, string? host)
         return 1;
     }
 
-    string body = "{\"path\":" + JsonString(path) + "}";
-    int rc = HttpPost(host, $"/drives/{slot}/mount", body, "drive mount", printResponse: false);
-    if (rc == 0)
+    return RunManagement(host, "drive mount", async (management, token) =>
+    {
+        await management.MountDriveAsync(slot, path, token);
         Console.WriteLine($"Mounted {slot} -> {path}");
-    return rc;
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int DoDriveUnmount(string[] args, string? host)
@@ -274,10 +335,12 @@ static int DoDriveUnmount(string[] args, string? host)
         return 1;
     }
 
-    int rc = HttpPost(host, $"/drives/{slot}/unmount", null, "drive unmount", printResponse: false);
-    if (rc == 0)
+    return RunManagement(host, "drive unmount", async (management, token) =>
+    {
+        await management.UnmountDriveAsync(slot, token);
         Console.WriteLine($"Unmounted {slot}");
-    return rc;
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int UnknownDriveCommand(string command)
@@ -325,7 +388,11 @@ static int DoWifiStatus(string? host)
         return 1;
     }
 
-    return HttpGet(host, "/wifi", "wifi status");
+    return RunManagement(host, "wifi status", async (management, token) =>
+    {
+        PrintJson(await management.WifiStatusAsync(token));
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int DoWifiScan(string? host)
@@ -336,7 +403,11 @@ static int DoWifiScan(string? host)
         return 1;
     }
 
-    return HttpGet(host, "/wifi/scan", "wifi scan");
+    return RunManagement(host, "wifi scan", async (management, token) =>
+    {
+        PrintJson(await management.WifiScanAsync(token));
+        return 0;
+    }, TimeSpan.FromSeconds(45));
 }
 
 static int DoWifiAction(string action, string? host)
@@ -347,7 +418,12 @@ static int DoWifiAction(string action, string? host)
         return 1;
     }
 
-    return HttpPost(host, $"/wifi/{action.ToLowerInvariant()}", null, $"wifi {action}");
+    return RunManagement(host, $"wifi {action}", async (management, token) =>
+    {
+        JsonObject response = await management.WifiActionAsync(action.ToLowerInvariant(), token);
+        PrintJson(response);
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int DoWifiSet(string[] args, string? host)
@@ -392,22 +468,30 @@ static int DoWifiSet(string[] args, string? host)
     if ((staticIp is not null || gateway is not null || subnet is not null || dns is not null) && !dhcp)
         useStatic = true;
 
-    var body = new StringBuilder();
-    body.Append('{');
-    bool first = true;
-    AppendJsonProperty(body, ref first, "ssid", ssid);
-    AppendJsonProperty(body, ref first, "password", password);
+    var settings = new Dictionary<string, object?>();
+    if (ssid is not null)
+        settings["ssid"] = ssid;
+    if (password is not null)
+        settings["password"] = password;
     if (dhcp)
-        AppendJsonBoolProperty(body, ref first, "dhcp", true);
+        settings["dhcp"] = true;
     else if (useStatic)
-        AppendJsonBoolProperty(body, ref first, "useStatic", true);
-    AppendJsonProperty(body, ref first, "staticIp", staticIp);
-    AppendJsonProperty(body, ref first, "gateway", gateway);
-    AppendJsonProperty(body, ref first, "subnet", subnet);
-    AppendJsonProperty(body, ref first, "dns", dns);
-    body.Append('}');
+        settings["useStatic"] = true;
+    if (staticIp is not null)
+        settings["staticIp"] = staticIp;
+    if (gateway is not null)
+        settings["gateway"] = gateway;
+    if (subnet is not null)
+        settings["subnet"] = subnet;
+    if (dns is not null)
+        settings["dns"] = dns;
 
-    return HttpPut(host, "/wifi", body.ToString(), "wifi set");
+    return RunManagement(host, "wifi set", async (management, token) =>
+    {
+        await management.WifiConfigAsync(settings, token);
+        Console.WriteLine("WiFi config saved.");
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int UnknownWifiCommand(string command)
@@ -452,7 +536,12 @@ static int DoAudioStatus(string? host)
         return 1;
     }
 
-    return HttpGet(host, "/audio-status", "audio status");
+    return RunManagement(host, "audio status", async (management, token) =>
+    {
+        JsonObject status = await management.GetStatusAsync(token);
+        PrintJson(status["audio"]);
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int DoAudioStop(string? host)
@@ -463,7 +552,12 @@ static int DoAudioStop(string? host)
         return 1;
     }
 
-    return HttpPost(host, "/audio-stop", null, "audio stop");
+    return RunManagement(host, "audio stop", async (management, token) =>
+    {
+        await management.AudioStopAsync(token);
+        Console.WriteLine("Audio stopped.");
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int UnknownAudioCommand(string command)
@@ -1083,20 +1177,39 @@ static int DoRemoteVmReset(string host, List<string> args, bool allowError,
     string? text = TakeOptionValue(args, "--text");
     _ = TakeFlag(args, "--no-wait");
     if (!string.IsNullOrWhiteSpace(text))
-        throw new ArgumentException("remote vm reset is REST-only; run 'nova vm wait' after reset if you need to wait for screen text");
+        throw new ArgumentException("remote vm reset does not wait for screen text; run 'nova vm wait' after reset if needed");
     if (args.Count > 0)
         throw new ArgumentException($"Unexpected vm reset argument: {args[0]}");
 
-    JsonNode response = SendHostPostJson(host, "/vm-reset", null);
-    bool ok = response["ok"]?.GetValue<bool>() == true;
-    if (!allowError && !ok)
+    JsonObject response;
+    try
     {
-        Console.Error.WriteLine(response["error"]?.ToString() ?? response.ToJsonString());
-        return 1;
+        using var management = new NovaHostManagementClient(host);
+        JsonObject data = management.VmResetAsync(CancellationToken.None)
+            .GetAwaiter().GetResult();
+        response = new JsonObject { ["ok"] = true };
+        foreach ((string key, JsonNode? value) in data)
+        {
+            if (value is not null)
+                response[key] = value.DeepClone();
+        }
+    }
+    catch (Exception ex)
+    {
+        response = new JsonObject
+        {
+            ["ok"] = false,
+            ["error"] = ex.Message
+        };
+        if (!allowError)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
     }
 
     PrintVmResponse("reset", response, json, pretty);
-    return ok || allowError ? 0 : 1;
+    return response["ok"]?.GetValue<bool>() == true || allowError ? 0 : 1;
 }
 
 static JsonObject BuildVmWaitRequest(List<string> args)
@@ -1239,44 +1352,6 @@ static JsonNode SendVmRequest(string host, int port, JsonObject request)
         ?? throw new IOException("invalid JSON response from VM debug server");
 }
 
-static JsonNode SendHostPostJson(string host, string endpoint, string? jsonBody)
-{
-    string url = HostUrl(host, endpoint);
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-    using HttpContent content = jsonBody is null
-        ? new ByteArrayContent(Array.Empty<byte>())
-        : new StringContent(jsonBody, Encoding.UTF8, "application/json");
-
-    var resp = http.PostAsync(url, content).GetAwaiter().GetResult();
-    string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-    if (!resp.IsSuccessStatusCode)
-    {
-        return new JsonObject
-        {
-            ["ok"] = false,
-            ["status"] = (int)resp.StatusCode,
-            ["error"] = string.IsNullOrWhiteSpace(body) ? resp.ReasonPhrase : body
-        };
-    }
-
-    if (string.IsNullOrWhiteSpace(body))
-        return new JsonObject { ["ok"] = true };
-
-    try
-    {
-        return JsonNode.Parse(body)
-            ?? new JsonObject { ["ok"] = true };
-    }
-    catch (JsonException)
-    {
-        return new JsonObject
-        {
-            ["ok"] = true,
-            ["body"] = body
-        };
-    }
-}
-
 static void PrintVmResponse(string command, JsonNode response, bool json, bool pretty)
 {
     if (json)
@@ -1323,11 +1398,11 @@ static void PrintVmUsage()
     Console.Error.WriteLine();
     Console.Error.WriteLine("Defaults:");
     Console.Error.WriteLine("  no --remote: 127.0.0.1:6502 (Avalonia)");
-    Console.Error.WriteLine("  with --remote: reset uses HTTP; debug commands use <host>:6503");
+    Console.Error.WriteLine("  with --remote: reset uses management TCP; debug commands use <host>:6503");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Commands:");
     Console.Error.WriteLine("  cold-start [--runtime basic|logo|ncc] [--text <text>] [--no-wait]");
-    Console.Error.WriteLine("  reset [--text <text>] [--no-wait]  (remote reset is REST-only)");
+    Console.Error.WriteLine("  reset [--text <text>] [--no-wait]");
     Console.Error.WriteLine("  wait [text] [--timeout-ms <ms>]");
     Console.Error.WriteLine("  screen [--json]");
     Console.Error.WriteLine("  line <row>");
@@ -1680,21 +1755,20 @@ static int DoRuntime(string[] args, string? host)
 
 static JsonNode? ReadBootConfig(string host)
 {
-    string url = $"http://{host}/sd/config/boot.json";
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    using var management = new NovaHostManagementClient(host);
     try
     {
-        var resp = http.GetAsync(url).GetAwaiter().GetResult();
-        if (resp.IsSuccessStatusCode)
-        {
-            string json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            if (!string.IsNullOrWhiteSpace(json))
-                return JsonNode.Parse(json);
-        }
+        string json = management.ReadTextFileAsync("/config/boot.json",
+            CancellationToken.None).GetAwaiter().GetResult();
+        if (!string.IsNullOrWhiteSpace(json))
+            return JsonNode.Parse(json);
     }
-    catch { }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"boot config read: {ex.Message}");
+    }
 
-    Console.Error.WriteLine("No boot config found — creating default.");
+    Console.Error.WriteLine("No boot config found - creating default.");
     return CreateDefaultBootConfig();
 }
 
@@ -1720,18 +1794,14 @@ static JsonNode CreateDefaultBootConfig()
 
 static bool WriteBootConfig(string host, JsonNode config)
 {
-    string url = $"http://{host}/sd/config/boot.json";
     string json = config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    byte[] bytes = Encoding.UTF8.GetBytes(json + "\n");
+    using var management = new NovaHostManagementClient(host);
     try
     {
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode)
-        {
-            Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return false;
-        }
+        using var input = new MemoryStream(bytes);
+        management.WriteFileAsync("/config/boot.json", input, bytes.Length,
+            null, CancellationToken.None).GetAwaiter().GetResult();
         return true;
     }
     catch (Exception ex)
@@ -1961,27 +2031,7 @@ static int DoRuntimeDeploy(string[] args, string? host)
 
 static int UploadRomFile(string host, string localPath, string remoteSdPath)
 {
-    string url = SdUrl(host, remoteSdPath);
-    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-    try
-    {
-        byte[] data = File.ReadAllBytes(localPath);
-        using var content = new ByteArrayContent(data);
-        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode)
-        {
-            Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return 1;
-        }
-        Console.WriteLine($"PUT {localPath} -> {url} ({data.Length} bytes) OK");
-        return 0;
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"upload {localPath}: {ex.Message}");
-        return 1;
-    }
+    return PutFile(localPath, remoteSdPath, host);
 }
 
 static int UnknownRuntimeCommand(string command)
@@ -2010,35 +2060,26 @@ static int DoLs(string[] args, string? host)
     }
     string subdir = (args.Length > 0) ? NormalizeSdRelativePath(args[0]) : "";
     if (subdir.Length > 0 && !subdir.EndsWith('/')) subdir += "/";
-    string url = SdUrl(host, subdir);
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-    try {
-        var resp = http.GetAsync(url).GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode) {
-            Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return 1;
-        }
-        string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        // Body is a JSON array of {name,size,dir}. Print a simple table
-        // without pulling in System.Text.Json — naive split is fine for
-        // the simple shape NovaHost emits.
+
+    return RunManagement(host, "ls", async (management, token) =>
+    {
+        JsonArray rows = await management.ListDirectoryAsync(subdir, token);
         Console.WriteLine($"Listing of /sd/{subdir} on {host}:");
         Console.WriteLine();
         Console.WriteLine("  Name                              Size      Type");
         Console.WriteLine("  --------------------------------  --------  ----");
-        foreach (var entry in ParseJsonArray(body)) {
-            string name = entry.GetValueOrDefault("name") ?? "?";
-            string size = entry.GetValueOrDefault("size") ?? "0";
-            bool isDir = (entry.GetValueOrDefault("dir") ?? "false") == "true";
-            string sizeStr = isDir ? "<DIR>" : size;
+        foreach (JsonNode? node in rows)
+        {
+            JsonObject? entry = node as JsonObject;
+            string name = entry?["name"]?.GetValue<string>() ?? "?";
+            long size = entry?["size"]?.GetValue<long>() ?? 0;
+            bool isDir = entry?["dir"]?.GetValue<bool>() == true;
+            string sizeStr = isDir ? "<DIR>" : size.ToString();
             string typeStr = isDir ? "DIR" : "FILE";
             Console.WriteLine($"  {name,-32}  {sizeStr,8}  {typeStr}");
         }
         return 0;
-    } catch (Exception ex) {
-        Console.Error.WriteLine($"ls: {ex.Message}");
-        return 1;
-    }
+    }, TimeSpan.FromSeconds(30));
 }
 
 static int DoPut(string[] args, string? host)
@@ -2093,26 +2134,16 @@ static int PutFile(string local, string remote, string? host)
         return 1;
     }
 
-    string url = SdUrl(host, remote);
-    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
-    try {
+    return RunManagement(host, "put", async (management, token) =>
+    {
         using Stream stream = uploadBytes is not null
             ? new MemoryStream(uploadBytes)
             : new FileStream(local, FileMode.Open, FileAccess.Read);
-        var content = new StreamContent(stream);
-        // Mark the upload as opaque bytes so NovaHost stores the body exactly.
-        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode) {
-            Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return 1;
-        }
-        Console.WriteLine($"PUT {displayLocal} → {url} ({uploadLength} bytes) OK");
+        await management.WriteFileAsync(remote, stream, uploadLength,
+            CreateProgressReporter("PUT", uploadLength), token);
+        Console.WriteLine($"PUT {displayLocal} -> /sd/{NormalizeSdRelativePath(remote)} ({uploadLength} bytes) OK");
         return 0;
-    } catch (Exception ex) {
-        Console.Error.WriteLine($"put: {ex.Message}");
-        return 1;
-    }
+    });
 }
 
 static int DoGet(string[] args, string? host)
@@ -2123,24 +2154,15 @@ static int DoGet(string[] args, string? host)
     }
     string remote = NormalizeSdRelativePath(args[0]);
     string local  = (args.Length > 1) ? args[1] : Path.GetFileName(remote);
-    string url = SdUrl(host, remote);
-    using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
-    try {
-        using var resp = http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
-                              .GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode) {
-            Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return 1;
-        }
-        using var src = resp.Content.ReadAsStream();
-        using var fs  = new FileStream(local, FileMode.Create, FileAccess.Write);
-        src.CopyTo(fs);
-        Console.WriteLine($"GET {url} → {local} ({fs.Length} bytes) OK");
+
+    return RunManagement(host, "get", async (management, token) =>
+    {
+        using var fs = new FileStream(local, FileMode.Create, FileAccess.Write);
+        long size = await management.DownloadFileAsync(remote, fs,
+            CreateTransferProgressReporter("GET"), token);
+        Console.WriteLine($"GET /sd/{remote} -> {local} ({size} bytes) OK");
         return 0;
-    } catch (Exception ex) {
-        Console.Error.WriteLine($"get: {ex.Message}");
-        return 1;
-    }
+    });
 }
 
 static int DoRm(string[] args, string? host)
@@ -2150,116 +2172,13 @@ static int DoRm(string[] args, string? host)
         return 1;
     }
     string remote = NormalizeSdRelativePath(args[0]);
-    string url = SdUrl(host, remote);
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-    try {
-        var resp = http.DeleteAsync(url).GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode) {
-            Console.Error.WriteLine($"DELETE {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return 1;
-        }
-        Console.WriteLine($"DELETE {url} OK");
+
+    return RunManagement(host, "rm", async (management, token) =>
+    {
+        await management.DeletePathAsync(remote, token);
+        Console.WriteLine($"DELETE /sd/{remote} OK");
         return 0;
-    } catch (Exception ex) {
-        Console.Error.WriteLine($"rm: {ex.Message}");
-        return 1;
-    }
-}
-
-static int HttpGet(string host, string endpoint, string operation)
-{
-    string? body = HttpGetBody(host, endpoint, operation);
-    if (body is null)
-        return 1;
-
-    Console.WriteLine(body);
-    return 0;
-}
-
-static string? HttpGetBody(string host, string endpoint, string operation)
-{
-    string url = HostUrl(host, endpoint);
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-    try
-    {
-        var resp = http.GetAsync(url).GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode)
-        {
-            Console.Error.WriteLine($"GET {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return null;
-        }
-
-        return resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"{operation}: {ex.Message}");
-        return null;
-    }
-}
-
-static int HttpPost(string host, string endpoint, string? jsonBody, string operation, bool printResponse = true)
-{
-    string url = HostUrl(host, endpoint);
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-    try
-    {
-        using HttpContent content = jsonBody is null
-            ? new ByteArrayContent(Array.Empty<byte>())
-            : new StringContent(jsonBody, Encoding.UTF8, "application/json");
-        var resp = http.PostAsync(url, content).GetAwaiter().GetResult();
-        string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode)
-        {
-            Console.Error.WriteLine($"POST {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            if (!string.IsNullOrWhiteSpace(body))
-                Console.Error.WriteLine(body);
-            return 1;
-        }
-
-        if (printResponse && !string.IsNullOrWhiteSpace(body))
-            Console.WriteLine(body);
-        return 0;
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"{operation}: {ex.Message}");
-        return 1;
-    }
-}
-
-static int HttpPut(string host, string endpoint, string jsonBody, string operation)
-{
-    string url = HostUrl(host, endpoint);
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-    try
-    {
-        using var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-        var resp = http.PutAsync(url, content).GetAwaiter().GetResult();
-        string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        if (!resp.IsSuccessStatusCode)
-        {
-            Console.Error.WriteLine($"PUT {url}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            if (!string.IsNullOrWhiteSpace(body))
-                Console.Error.WriteLine(body);
-            return 1;
-        }
-
-        if (!string.IsNullOrWhiteSpace(body))
-            Console.WriteLine(body);
-        return 0;
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"{operation}: {ex.Message}");
-        return 1;
-    }
-}
-
-static string HostUrl(string host, string endpoint)
-{
-    string normalized = endpoint.StartsWith('/') ? endpoint[1..] : endpoint;
-    return $"http://{host}/{normalized}";
+    }, TimeSpan.FromSeconds(30));
 }
 
 static string TruncateForTable(string value, int max)
@@ -2269,35 +2188,6 @@ static string TruncateForTable(string value, int max)
     if (max <= 1)
         return value[..max];
     return value[..(max - 1)] + "…";
-}
-
-static void AppendJsonProperty(StringBuilder body, ref bool first, string name, string? value)
-{
-    if (value is null)
-        return;
-    AppendJsonSeparator(body, ref first);
-    body.Append(JsonString(name));
-    body.Append(':');
-    body.Append(JsonString(value));
-}
-
-static void AppendJsonBoolProperty(StringBuilder body, ref bool first, string name, bool value)
-{
-    AppendJsonSeparator(body, ref first);
-    body.Append(JsonString(name));
-    body.Append(':');
-    body.Append(value ? "true" : "false");
-}
-
-static void AppendJsonSeparator(StringBuilder body, ref bool first)
-{
-    if (first)
-    {
-        first = false;
-        return;
-    }
-
-    body.Append(',');
 }
 
 static string JsonString(string value)
@@ -2339,49 +2229,6 @@ static string JsonString(string value)
     }
     sb.Append('"');
     return sb.ToString();
-}
-
-// Tiny ad-hoc JSON parser for the array-of-flat-objects we get from
-// NovaHost's listing endpoint. Avoids adding a System.Text.Json dep.
-static IEnumerable<Dictionary<string, string>> ParseJsonArray(string json)
-{
-    int i = 0;
-    while (i < json.Length && json[i] != '[') i++;
-    i++;
-    while (i < json.Length) {
-        while (i < json.Length && (json[i] == ',' || char.IsWhiteSpace(json[i]))) i++;
-        if (i >= json.Length || json[i] == ']') yield break;
-        if (json[i] != '{') yield break;
-        i++;
-        var dict = new Dictionary<string, string>();
-        while (i < json.Length && json[i] != '}') {
-            // skip whitespace, comma
-            while (i < json.Length && (json[i] == ',' || char.IsWhiteSpace(json[i]))) i++;
-            if (json[i] != '"') break;
-            i++;
-            int keyStart = i;
-            while (i < json.Length && json[i] != '"') i++;
-            string key = json.Substring(keyStart, i - keyStart);
-            i++; // closing quote
-            while (i < json.Length && (json[i] == ':' || char.IsWhiteSpace(json[i]))) i++;
-            string val;
-            if (json[i] == '"') {
-                i++;
-                int vs = i;
-                while (i < json.Length && json[i] != '"') i++;
-                val = json.Substring(vs, i - vs);
-                i++;
-            } else {
-                int vs = i;
-                while (i < json.Length && json[i] != ',' && json[i] != '}'
-                       && !char.IsWhiteSpace(json[i])) i++;
-                val = json.Substring(vs, i - vs);
-            }
-            dict[key] = val;
-        }
-        if (i < json.Length && json[i] == '}') i++;
-        yield return dict;
-    }
 }
 
 static string? ExtractRemoteHost(ref string[] args, string? fallback)
@@ -2462,15 +2309,6 @@ static string NormalizeSdRelativePath(string path)
         normalized = normalized[1..];
 
     return string.Join("/", normalized.Split('/', StringSplitOptions.RemoveEmptyEntries));
-}
-
-static string SdUrl(string host, string remotePath)
-{
-    string normalized = NormalizeSdRelativePath(remotePath);
-    string escaped = normalized.Length == 0
-        ? ""
-        : string.Join("/", normalized.Split('/').Select(Uri.EscapeDataString));
-    return $"http://{host}/sd/{escaped}";
 }
 
 static string JoinRemotePath(string directory, string filename)
@@ -3688,5 +3526,20 @@ sealed class KeyboardInputReader : IDisposable
     {
         _disposed = true;
         _queue.CompleteAdding();
+    }
+}
+
+sealed class InlineProgress<T> : IProgress<T>
+{
+    private readonly Action<T> _handler;
+
+    public InlineProgress(Action<T> handler)
+    {
+        _handler = handler;
+    }
+
+    public void Report(T value)
+    {
+        _handler(value);
     }
 }

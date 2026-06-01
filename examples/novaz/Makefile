@@ -9,14 +9,18 @@ PACKER := tools/Nova.NovaZ.Packer/Nova.NovaZ.Packer.csproj
 SMOKE := tools/Nova.NovaZ.Smoke/Nova.NovaZ.Smoke.csproj
 Z3_SPEC := tools/Nova.NovaZ.Z3SpecStory/Nova.NovaZ.Z3SpecStory.csproj
 Z4_STYLE := tools/Nova.NovaZ.Z4StyleStory/Nova.NovaZ.Z4StyleStory.csproj
+Z4_SPEC := tools/Nova.NovaZ.Z4SpecStory/Nova.NovaZ.Z4SpecStory.csproj
 Z5_SPEC := tools/Nova.NovaZ.Z5SpecStory/Nova.NovaZ.Z5SpecStory.csproj
+JUKEBOX := tools/Nova.NovaZ.Jukebox/Nova.NovaZ.Jukebox.csproj
 SMOKE_DLL := tools/Nova.NovaZ.Smoke/bin/Release/net10.0/Nova.NovaZ.Smoke.dll
 PACKER_SRC := $(PACKER) tools/Nova.NovaZ.Packer/Program.cs
 SMOKE_SRC := $(SMOKE) tools/Nova.NovaZ.Smoke/Program.cs
 SMOKE_HOST_SRC := ../../e6502.Avalonia/Hardware/FileIoController.cs ../../e6502.Avalonia/Hardware/VgcConstants.cs
 Z3_SPEC_SRC := $(Z3_SPEC) tools/Nova.NovaZ.Z3SpecStory/Program.cs
 Z4_STYLE_SRC := $(Z4_STYLE) tools/Nova.NovaZ.Z4StyleStory/Program.cs
+Z4_SPEC_SRC := $(Z4_SPEC) tools/Nova.NovaZ.Z4SpecStory/Program.cs
 Z5_SPEC_SRC := $(Z5_SPEC) tools/Nova.NovaZ.Z5SpecStory/Program.cs
+JUKEBOX_SRC := $(JUKEBOX) tools/Nova.NovaZ.Jukebox/Program.cs
 SMOKE_BUILD_ARGS ?= --no-restore /nr:false
 SMOKE_ARGS ?=
 PROJECT_SMOKE_ARGS ?= --generic-boot
@@ -26,7 +30,10 @@ Z3_SPEC_STORY := $(BUILD_DIR)/z3-spec.z3
 Z3_SPEC_IMAGE := $(DIST_DIR)/z3-spec/fd0.ndi
 Z4_STYLE_STORY := $(BUILD_DIR)/z4-styles.z4
 Z4_STYLE_IMAGE := $(DIST_DIR)/z4-styles/fd0.ndi
+Z4_SPEC_STORY := $(BUILD_DIR)/z4-spec.z4
+Z4_SPEC_IMAGE := $(DIST_DIR)/z4-spec/fd0.ndi
 Z5_SPEC_STORY := $(BUILD_DIR)/z5-spec.z5
+Z5_SPEC_SOUND := $(BUILD_DIR)/z5-spec-sound.pak
 Z5_SPEC_IMAGE := $(DIST_DIR)/z5-spec/fd0.ndi
 PROJECT ?=
 STORY_NAME ?= story.bin
@@ -43,6 +50,13 @@ BORDER_ZONE_STORY ?= $(INFOCOM_ROOT)/Border Zone/Borderzo.z5
 BEYOND_ZORK_STORY ?= $(INFOCOM_ROOT)/Beyond Zork - The Coconut of Quendor/BeyondZo.z5
 SHERLOCK_STORY ?= $(INFOCOM_ROOT)/Sherlock - The Riddle of the Crown Jewels/Sherlock.z5
 ZTUU_STORY ?= $(INFOCOM_ROOT)/Zork_ The Undiscovered Underground/ZTUU.Z5
+LURKING_STORY ?= $(INFOCOM_ROOT)/The Lurking Horror/Lurking.z3
+
+# Sampled-sound Blorb archives (IF Archive: infocom/media/sound/, also shipped
+# alongside the story files here). Override if yours live elsewhere; download
+# missing ones with `curl -A Mozilla`.
+LURKING_SOUNDS ?= $(INFOCOM_ROOT)/The Lurking Horror/Lurking.blb
+SHERLOCK_SOUNDS ?= $(INFOCOM_ROOT)/Sherlock - The Riddle of the Crown Jewels/Sherlock.blb
 
 ifneq ($(strip $(PROJECT)),)
 PROJECT_DIR := projects/$(PROJECT)
@@ -52,6 +66,7 @@ IMAGE ?= $(PROJECT_IMAGE)
 LABEL ?= $(PROJECT_LABEL)
 SIZE_KB ?= $(PROJECT_SIZE_KB)
 STORY ?= $(PROJECT_STORY)
+SOUNDS ?= $(PROJECT_SOUNDS)
 PROJECT_SMOKE ?= $(PROJECT_DIR)/smoke.txt
 PROJECT_LONGPLAY ?= $(PROJECT_DIR)/longplay.txt
 else
@@ -63,6 +78,9 @@ endif
 PACK_ARGS := --output "$(IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "$(LABEL)" --size-kb "$(SIZE_KB)" --story-name "$(STORY_NAME)"
 ifneq ($(strip $(STORY)),)
 PACK_ARGS += --story "$(STORY)"
+endif
+ifneq ($(strip $(SOUNDS)),)
+PACK_ARGS += --sounds "$(SOUNDS)"
 endif
 
 all: $(AUTOBOOT) $(RUNTIME)
@@ -101,8 +119,11 @@ $(Z3_SPEC_STORY): $(Z3_SPEC_SRC) | $(BUILD_DIR)
 $(Z4_STYLE_STORY): $(Z4_STYLE_SRC) | $(BUILD_DIR)
 	$(DOTNET) run --project $(Z4_STYLE) -- --output "$@"
 
+$(Z4_SPEC_STORY): $(Z4_SPEC_SRC) | $(BUILD_DIR)
+	$(DOTNET) run --project $(Z4_SPEC) -- --output "$@"
+
 $(Z5_SPEC_STORY): $(Z5_SPEC_SRC) | $(BUILD_DIR)
-	$(DOTNET) run --project $(Z5_SPEC) -- --output "$@"
+	$(DOTNET) run --project $(Z5_SPEC) -- --output "$@" --sound-pak "$(Z5_SPEC_SOUND)"
 
 test-z3-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z3_SPEC_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z3_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z3SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z3_SPEC_STORY)"
@@ -110,11 +131,37 @@ test-z3-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z3_SPEC_STORY) $(SMOKE_DLL)
 
 test-z4-styles: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z4_STYLE_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z4_STYLE_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z4STYLE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z4_STYLE_STORY)"
-	$(DOTNET) $(SMOKE_DLL) "$(Z4_STYLE_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "style fixture done" --expect-text-color "normal text uses color 12=>0C" --expect-text-color "bold text uses white=>0F" --expect-text-color "bold phrase survives reset=>0F" --expect-text-color "reverse text uses color c0=>C0" --expect-text-color "bold reverse uses color f0=>F0" --expect-text-color "italic request is ignored=>0C" --expect-text-color "fixed request is ignored=>0C"
+	$(DOTNET) $(SMOKE_DLL) "$(Z4_STYLE_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "style fixture done" --expect-text-color "normal text uses color 12=>0C" --expect-text-color "bold text uses white=>0F" --expect-text-color "bold phrase survives reset=>0F" --expect-text-color "reverse text uses color c0=>C0" --expect-text-color "bold reverse uses color f0=>F0" --expect-text-color "italic request is ignored=>0C" --expect-text-color "fixed request is ignored=>0C" --expect-text-color "stacked styles use color f0=>F0"
+
+test-z4-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z4_SPEC_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z4_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z4SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z4_SPEC_STORY)"
+	$(DOTNET) $(SMOKE_DLL) "$(Z4_SPEC_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "z4 caps ok" --expect-screen "z4 timed ok" --expect-screen "z4 spec ok"
 
 test-z5-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z5_SPEC_STORY) $(SMOKE_DLL)
-	$(DOTNET) run --project $(PACKER) -- --output "$(Z5_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z5SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z5_SPEC_STORY)"
-	$(DOTNET) $(SMOKE_DLL) "$(Z5_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z5 spec ok" "take silver,key=>z5 input ok"
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z5_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z5SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z5_SPEC_STORY)" --asset "$(Z5_SPEC_SOUND):SOUND.PAK"
+	$(DOTNET) $(SMOKE_DLL) "$(Z5_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z5 sound ok" --expect-screen "z5 spec ok" "take silver,key=>z5 input ok"
+
+# --- Sound jukebox (mount-and-run "Infocom sound museum" showcase images) ----
+LURKING_SOUND_NUMS  := 3,4,6,7,8,9,10,11,12,13,15,16,17,18
+SHERLOCK_SOUND_NUMS := 3,4,5,6,7,8,9,10,11,12,13,14,15,16,17
+
+# Headless jukebox check: boots, plays sound #3, then RETURN advances through
+# the list and wraps. No external .blb needed (unknown numbers play silently),
+# so this is CI-safe; it proves the jukebox loop and the sound_effect trigger.
+JUKEBOX_TEST_STORY := $(BUILD_DIR)/jukebox-test.z3
+JUKEBOX_TEST_IMAGE := $(DIST_DIR)/jukebox-test/fd0.ndi
+test-jukebox: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(JUKEBOX_SRC) $(SMOKE_DLL)
+	$(DOTNET) run --project $(JUKEBOX) -- --output "$(JUKEBOX_TEST_STORY)" --title "Test Jukebox" --numbers "3,4,5"
+	$(DOTNET) run --project $(PACKER) -- --output "$(JUKEBOX_TEST_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "JUKETEST" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(JUKEBOX_TEST_STORY)"
+	$(DOTNET) $(SMOKE_DLL) "$(JUKEBOX_TEST_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "Sound #3" "go=>Sound #4" "go=>Sound #5" "go=>Sound #3"
+
+jukebox-lurking: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(JUKEBOX_SRC)
+	$(DOTNET) run --project $(JUKEBOX) -- --output "$(BUILD_DIR)/jukebox-lurking.z3" --title "Lurking Horror Sounds" --numbers "$(LURKING_SOUND_NUMS)"
+	$(DOTNET) run --project $(PACKER) -- --output "$(DIST_DIR)/jukebox-lurking/fd0.ndi" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "LURKJUKE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(BUILD_DIR)/jukebox-lurking.z3" --sounds "$(LURKING_SOUNDS)"
+
+jukebox-sherlock: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(JUKEBOX_SRC)
+	$(DOTNET) run --project $(JUKEBOX) -- --output "$(BUILD_DIR)/jukebox-sherlock.z3" --title "Sherlock Sounds" --numbers "$(SHERLOCK_SOUND_NUMS)"
+	$(DOTNET) run --project $(PACKER) -- --output "$(DIST_DIR)/jukebox-sherlock/fd0.ndi" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "SHERJUKE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(BUILD_DIR)/jukebox-sherlock.z3" --sounds "$(SHERLOCK_SOUNDS)"
 
 test-project: $(IMAGE) $(SMOKE_DLL)
 	@if [ -z "$(PROJECT)" ]; then echo "PROJECT is required, e.g. PROJECT=zork-iii" >&2; exit 2; fi
@@ -178,4 +225,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z5-spec test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+.PHONY: all ndi smoke test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE

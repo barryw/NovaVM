@@ -636,7 +636,16 @@
       "Bash(NOVA_BOOT_ROM=logo dotnet run *)",
       "Bash(./e6502.Nova/bin/Release/net10.0/osx-arm64/native/nova --help)",
       "Bash(sed -n '536,568p' novalogo/extension.s)",
-      "Bash(sed -n '1400,1450p' e6502UnitTests/NovaLogoTests.cs)"
+      "Bash(sed -n '1400,1450p' e6502UnitTests/NovaLogoTests.cs)",
+      "Bash(NOVAZ_SMOKE_TRACE_CURSOR=1 make test-project PROJECT=zork-i 'STORY=/Volumes/Software/Emulation/Infocom/Zork 1 - The Great Underground Empire/Zork1.z3')",
+      "Bash(NOVAZ_SMOKE_TRACE_INJECT=1 make test-project PROJECT=zork-i 'STORY=__TRACKED_VAR__/Zork 1 - The Great Underground Empire/Zork1.z3')",
+      "Bash(NOVAZ_SMOKE_MAX_STEPS=6000000 make test-z4-spec)",
+      "WebFetch(domain:ifarchive.org)",
+      "WebFetch(domain:www.wyrmis.com)",
+      "Bash(sed -n '/^static class ZString/,/^}/p' tools/Nova.NovaZ.Z3SpecStory/Program.cs)",
+      "Bash(sed -n '769,820p' tools/Nova.NovaZ.Z3SpecStory/Program.cs)",
+      "Bash(NOVA_STORAGE_ROOT=/tmp/nova-jukebox dotnet run --project e6502.Avalonia)",
+      "Bash(afinfo /tmp/sher3.aiff)"
     ]
   },
   "enableAllProjectMcpServers": true,

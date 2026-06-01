@@ -36,6 +36,7 @@ List<SmokeCommand> commands = LoadCommands(args, bootOnly, screenOnly);
 JsonNode? manifest = TryReadManifest(imagePath);
 int? rawInputModeAddress = TryReadRuntimeSymbol("nz_raw_input_mode");
 int? readKeyLoopAddress = TryReadRuntimeSymbol("zvm_read_key_loop");
+int? readTimedLoopAddress = TryReadRuntimeSymbol("zvm_read_timed_poll");
 string storageRoot = Path.Combine(Path.GetTempPath(), $"nova-novaz-smoke-{Guid.NewGuid():N}");
 CompositeBusDevice? bus = null;
 Cpu? cpu = null;
@@ -79,7 +80,7 @@ try
         return 0;
     }
 
-    string screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress);
+    string screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
     RunForSteps(cpu, bus, 200_000);
     screen = SnapshotScreen(bus.Vgc);
 
@@ -100,7 +101,7 @@ try
         RequireTimeStatusLine(screen);
     foreach (string expected in expectedScreens)
         RequireContains(screen, expected);
-    RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress);
+    RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
 
     string bootScreen = screen;
 
@@ -111,7 +112,7 @@ try
             Console.WriteLine("> .reboot");
             cpu.Boot();
             RunForSteps(cpu, bus, 500_000);
-            screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress);
+            screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
             RunForSteps(cpu, bus, 200_000);
             screen = SnapshotScreen(bus.Vgc);
             if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
@@ -121,7 +122,7 @@ try
                 RequireStatusLine(screen, cpu, bus);
             if (expectTimeStatus)
                 RequireTimeStatusLine(screen);
-            RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress);
+            RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
             continue;
         }
         if (command.Mode == SmokeInputMode.Wait)
@@ -155,7 +156,7 @@ try
 
         if (command.WaitForPrompt)
         {
-            screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress);
+            screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
         }
         else
         {
@@ -174,7 +175,7 @@ try
                 RequireStatusLine(screen, cpu, bus);
             if (expectTimeStatus)
                 RequireTimeStatusLine(screen);
-            RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress);
+            RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
         }
         if (Environment.GetEnvironmentVariable("NOVAZ_SMOKE_DUMP_PARSE") == "1")
             Console.Error.WriteLine($"{FormatZvmState(cpu, bus)} {FormatParserState(bus)}");
@@ -546,6 +547,7 @@ static string RunUntilScreenMatches(
     ref int morePrompts)
 {
     const int snapshotMask = 0x3FFF;
+    string? lastMatchSnapshot = null;
     for (int i = 0; i < maxSteps; i++)
     {
         YieldHostHardware(i);
@@ -565,9 +567,12 @@ static string RunUntilScreenMatches(
             morePrompts++;
             editor.QueueInput(0x0D);
             RunForSteps(cpu, bus, 8_000);
+            lastMatchSnapshot = null;
             continue;
         }
-        if (HandleStartupPrompt(screen, cpu, bus, editor))
+        bool screenStable = screen == lastMatchSnapshot;
+        lastMatchSnapshot = screen;
+        if (HandleStartupPrompt(screen, cpu, bus, editor, screenStable))
             continue;
 
         bool hasExpectedScreens = expectedScreens.All(expected => ContainsNormalized(screen, expected));
@@ -607,7 +612,8 @@ static string RunUntilReadyPrompt(
     int maxSteps,
     ref int morePrompts,
     int? rawInputModeAddress,
-    int? readKeyLoopAddress)
+    int? readKeyLoopAddress,
+    int? readTimedLoopAddress)
 {
     const int snapshotMask = 0x3FFF;
     var trace = new Queue<string>();
@@ -616,12 +622,31 @@ static string RunUntilReadyPrompt(
     string? lastTopRow = null;
     int traceXram = ReadEnvHex("NOVAZ_SMOKE_TRACE_XRAM", -1);
     string? lastXram = null;
+    bool traceCursor = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_CURSOR") == "1";
+    var cursorTrace = new Queue<string>();
+    int lastCx = -1, lastCy = -1;
+    string? lastReadySnapshot = null;
 
     for (int i = 0; i < maxSteps; i++)
     {
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+
+        if (traceCursor)
+        {
+            int cx = bus.Vgc.GetCursorX();
+            int cy = bus.Vgc.GetCursorY();
+            if (cx != lastCx || cy != lastCy)
+            {
+                lastCx = cx;
+                lastCy = cy;
+                int zpc = ReadWord(bus, 0x008E, 0x008D);
+                cursorTrace.Enqueue($"({cx},{cy})@pc${cpu.Pc:X4}|zpc${zpc:X4}|op${bus.Read(0x008F):X2}");
+                while (cursorTrace.Count > 60)
+                    cursorTrace.Dequeue();
+            }
+        }
 
         int opcodePc = ReadWord(bus, 0x008E, 0x008D);
         if (opcodePc != lastOpcodePc)
@@ -661,19 +686,36 @@ static string RunUntilReadyPrompt(
             morePrompts++;
             editor.QueueInput(0x0D);
             RunForSteps(cpu, bus, 8_000);
+            lastReadySnapshot = null;
             continue;
         }
-        if (HandleStartupPrompt(screen, cpu, bus, editor))
+        bool screenStable = screen == lastReadySnapshot;
+        lastReadySnapshot = screen;
+        if (HandleStartupPrompt(screen, cpu, bus, editor, screenStable))
             continue;
-        if (IsReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress))
+        if (IsReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress))
+            return screen;
+        // The PC is only sampled every 0x4000 steps. The untimed read spin is
+        // two instructions (a divisor of the stride) so it is always sampled at
+        // its head, but the interrupt-poll loop (timed input and/or sampled
+        // sound) is many instructions long and may be sampled mid-body -- which
+        // is fatal if its length happens to be a power of two. When the screen
+        // already shows a settled input prompt, micro-step a bounded amount to
+        // see if the CPU is simply spinning in a read loop, independent of where
+        // in that loop the stride landed.
+        if (SettledAtReadLoop(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress))
             return screen;
     }
 
     string finalScreen = SnapshotScreen(bus.Vgc);
-    if (IsReadyPrompt(cpu, bus, finalScreen, rawInputModeAddress, readKeyLoopAddress))
+    if (IsReadyPrompt(cpu, bus, finalScreen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress))
+        return finalScreen;
+    if (SettledAtReadLoop(cpu, bus, finalScreen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress))
         return finalScreen;
 
     string recent = string.Join(" ", trace);
+    if (traceCursor)
+        Console.Error.WriteLine($"cursor-trace: {string.Join(" ", cursorTrace)}");
     throw new TimeoutException(
         $"Timed out waiting for input prompt. {FormatZvmState(cpu, bus)} recent={recent} " +
         $"{FormatPromptDiagnostics(bus.Vgc, finalScreen)}\n{finalScreen}");
@@ -830,7 +872,7 @@ static void SendRaw(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string
     }
 }
 
-static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, ScreenEditor editor)
+static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, bool screenStable)
 {
     if (screen.Contains("Hit any key", StringComparison.OrdinalIgnoreCase) ||
         screen.Contains("Press any key", StringComparison.OrdinalIgnoreCase))
@@ -875,6 +917,23 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
     if (screen.Contains("beyond Science", StringComparison.OrdinalIgnoreCase) ||
         screen.Contains("ZORK is a registered trademark", StringComparison.OrdinalIgnoreCase))
     {
+        // These banner/credits strings appear both on press-a-key title screens
+        // (e.g. Beyond Zork, which parks waiting for a keystroke) AND as permanent
+        // copyright text on the main play screen (e.g. Zork I/II, where the game
+        // is already at its live ">" command prompt). Injecting a space into a
+        // live READ feeds stray characters into the command and walks the cursor.
+        // Screen text and the raw-input flag alone cannot tell a transient
+        // mid-boot pause apart from a real title gate, so confirm by waiting: a
+        // title gate does not advance on its own, whereas boot/compute does. Only
+        // inject if the game is not in line input (raw input mode) and the screen
+        // stays identical after running forward.
+        int? rawModeAddr = TryReadRuntimeSymbol("nz_raw_input_mode");
+        bool inLineRead = rawModeAddr is int addr && bus.Read((ushort)addr) != 0;
+        if (inLineRead || !screenStable)
+            return false;
+        RunForSteps(cpu, bus, 1_000_000);
+        if (SnapshotScreen(bus.Vgc) != screen)
+            return true;   // advanced on its own — not a keypress gate
         editor.QueueInput(0x20);
         RunForSteps(cpu, bus, 500_000);
         return true;
@@ -1066,9 +1125,10 @@ static void RequireReadyPrompt(
     CompositeBusDevice bus,
     string screen,
     int? rawInputModeAddress,
-    int? readKeyLoopAddress)
+    int? readKeyLoopAddress,
+    int? readTimedLoopAddress)
 {
-    if (!IsReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress))
+    if (!IsReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress))
     {
         throw new InvalidOperationException(
             $"Expected visible cursor or active read loop on a bare Zork prompt; got {bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()} pc=${cpu.Pc:X4} opcode=${bus.Read(0x008F):X2}. " +
@@ -1081,19 +1141,66 @@ static bool IsReadyPrompt(
     CompositeBusDevice bus,
     string screen,
     int? rawInputModeAddress,
-    int? readKeyLoopAddress)
+    int? readKeyLoopAddress,
+    int? readTimedLoopAddress)
 {
     string[] lines = screen.Split('\n');
     VirtualGraphicsController vgc = bus.Vgc;
     if (rawInputModeAddress is int address && readKeyLoopAddress is int keyLoopAddress)
     {
-        bool inReadLoop = cpu.Pc == keyLoopAddress || cpu.Pc == keyLoopAddress + 3;
-        return inReadLoop &&
+        // The interpreter waits for line input in one of two loops: the untimed
+        // tight spin (zvm_read_key_loop) or, for V4+ timed input / sampled
+        // sound, the interrupt poll (zvm_read_timed_poll). Both are valid
+        // "ready for input" states.
+        return IsAtReadLoop(cpu, keyLoopAddress, readTimedLoopAddress) &&
             bus.Read((ushort)address) != 0 &&
             HasCursorBarePrompt(vgc, lines);
     }
 
     return HasCursorBarePrompt(vgc, lines);
+}
+
+static bool IsAtReadLoop(Cpu cpu, int keyLoopAddress, int? readTimedLoopAddress)
+{
+    // Either of the read loop's first two instructions (the input-port load or
+    // the branch back) is "at the loop".
+    if (cpu.Pc == keyLoopAddress || cpu.Pc == keyLoopAddress + 3)
+        return true;
+    return readTimedLoopAddress is int timedLoop &&
+        (cpu.Pc == timedLoop || cpu.Pc == timedLoop + 3);
+}
+
+// Fallback for the interrupt-poll loop, whose length may defeat the fixed PC
+// sampling stride. If the screen is already a settled bare input prompt with
+// raw input armed, micro-step a bounded amount: if the CPU passes through the
+// read-loop head it is genuinely waiting for input. Leaves the CPU parked at
+// the loop head when it returns true so later re-validation also succeeds.
+static bool SettledAtReadLoop(
+    Cpu cpu,
+    CompositeBusDevice bus,
+    string screen,
+    int? rawInputModeAddress,
+    int? readKeyLoopAddress,
+    int? readTimedLoopAddress)
+{
+    if (rawInputModeAddress is not int address || readKeyLoopAddress is not int keyLoopAddress)
+        return false;
+    if (bus.Read((ushort)address) == 0)
+        return false;
+    if (!HasCursorBarePrompt(bus.Vgc, screen.Split('\n')))
+        return false;
+
+    // One full interrupt-poll iteration (including the timer/sound service
+    // subroutines) is well under 256 instructions.
+    for (int s = 0; s < 256; s++)
+    {
+        if (IsAtReadLoop(cpu, keyLoopAddress, readTimedLoopAddress))
+            return true;
+        int cycles = cpu.ClocksForNext();
+        cpu.ExecuteNext();
+        bus.AdvanceCycles(cycles);
+    }
+    return IsAtReadLoop(cpu, keyLoopAddress, readTimedLoopAddress);
 }
 
 static bool HasCursorBarePrompt(VirtualGraphicsController vgc, string[] lines)

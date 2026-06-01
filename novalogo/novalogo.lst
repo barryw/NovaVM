@@ -1089,6 +1089,12 @@ Current file: novalogo.s
 000000r 2               .ifndef FIO_CMD_SFLOAD
 000000r 2               FIO_CMD_SFLOAD    = $15
 000000r 2               .endif
+000000r 2               .ifndef FIO_CMD_ZSOUND
+000000r 2               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+000000r 2               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+000000r 2               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+000000r 2               FIO_CMD_ZSOUND    = $16
+000000r 2               .endif
 000000r 2               .ifndef FIO_CMD_XLOAD
 000000r 2               FIO_CMD_XLOAD     = $18
 000000r 2               .endif
@@ -1903,6 +1909,11 @@ Current file: novalogo.s
 000000r 2               .endif
 000000r 2               .ifndef DMA_CNTH
 000000r 2               DMA_CNTH          = $BA75
+000000r 2               .endif
+000000r 2               .ifndef ZSOUND_STATUS
+000000r 2               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+000000r 2               ; last read (clears on read); bit1 = a sound is currently playing.
+000000r 2               ZSOUND_STATUS     = $BA76
 000000r 2               .endif
 000000r 2               
 000000r 2               .ifndef DMA_CMD

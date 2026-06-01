@@ -29,6 +29,7 @@ public sealed partial class FileIoController
     private readonly Action<byte[]>? _loadRuntimeRom;
     private readonly string _saveDir;
     private readonly DeviceManager? _deviceManager;
+    private readonly ZSoundController? _zsound;
     private List<FileInfo>? _dirFiles;
     private List<StorageDirEntry>? _dirEntries;
     private IStorageDevice? _dirDevice;
@@ -54,7 +55,8 @@ public sealed partial class FileIoController
         Func<int>? xramCapacity = null,
         Action? xramRefreshStats = null,
         Action<byte[]>? loadRuntimeRom = null,
-        Func<uint>? rngProvider = null)
+        Func<uint>? rngProvider = null,
+        ZSoundController? zsound = null)
     {
         _busRead = busRead;
         _busWrite = busWrite;
@@ -72,6 +74,7 @@ public sealed partial class FileIoController
         _wts = wts;
         _vgc = vgc;
         _loadRuntimeRom = loadRuntimeRom;
+        _zsound = zsound;
         _deviceManager = deviceManager;
         _saveDir = saveDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -179,6 +182,9 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdSound:
                 DoSound();
+                break;
+            case VgcConstants.FioCmdZSound:
+                DoZSound();
                 break;
             case VgcConstants.FioCmdVolume:
                 DoVolume();
@@ -1378,6 +1384,39 @@ public sealed partial class FileIoController
         int instId   = _regs[VgcConstants.FioEndL - VgcConstants.FioBase];
         _musicEngine.PlaySound(note, duration, instId);
         SetOk();
+    }
+
+    // Z-machine sampled sound. number in FioSrcL, effect (2=start,3=stop) in
+    // FioSrcH, volume level in FioEndL, repeats (255=loop) in FioEndH.
+    private void DoZSound()
+    {
+        if (_zsound is null) { SetError(VgcConstants.FioErrIo); return; }
+        int number  = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        int effect  = _regs[VgcConstants.FioSrcH - VgcConstants.FioBase];
+        int level   = _regs[VgcConstants.FioEndL - VgcConstants.FioBase];
+        int repeats = _regs[VgcConstants.FioEndH - VgcConstants.FioBase];
+
+        if (effect == 3) { _zsound.Stop(); SetOk(); return; }
+
+        if (!_zsound.PackLoaded)
+            TryLoadSoundPack();
+
+        float gain = (level <= 0 || level >= 255) ? 1f : Math.Clamp(level / 8f, 0f, 1f);
+        bool loop = repeats == 255;
+        _zsound.Play(number, gain, loop);
+        SetOk();
+    }
+
+    private void TryLoadSoundPack()
+    {
+        if (_deviceManager is null) return;
+        try
+        {
+            var (device, _) = _deviceManager.ResolveFilename("SOUND.PAK");
+            if (device.IsMounted && device.FileExists("SOUND", ".PAK"))
+                _zsound!.LoadPack(device.Load("SOUND", ".PAK"));
+        }
+        catch { /* no sound pack on this disk; sampled sounds stay silent */ }
     }
 
     private void DoVolume()

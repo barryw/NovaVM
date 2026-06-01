@@ -252,6 +252,14 @@ zstory_configure_flags1:
         STZ zstory_addr_h
         JMP zstory_write8
 @v4_plus:
+        ; Advertise interpreter capabilities in Flags1 (header byte $01):
+        ; bit 7 timed input, bit 4 fixed-pitch font, bit 2 boldface. Italic
+        ; (bit 3) stays clear because the VGC text layer has no italic glyphs.
+        LDA #ZHEADER_FLAGS1
+        LDX #%10010100
+        JSR zstory_write_header_byte_value
+        BNE @done
+
         LDA #$20                ; screen height in lines
         LDX #50
         JSR zstory_write_header_byte_value

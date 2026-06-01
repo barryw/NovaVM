@@ -20,12 +20,24 @@ Override connection details with `--host`, `--port`, `--http-port`, or the
 
 `cold-start` matches a real cold boot through the debug control plane: NovaHost
 reloads the default ROMs from SD, then releases the VM so mounted media can
-autoboot. `vm-reset` is an HTTP management call to `POST /vm-reset`; it only
-resets the currently loaded runtime.
+autoboot. `vm-reset` is an HTTP management call to `POST /vm-reset` for the
+standalone CLI path; it only resets the currently loaded runtime.
 
 The Nova CLI webserver is the browser control center. It runs on the workstation
-and talks to NovaHost through the same REST endpoints, so heavier work can stay
-in .NET instead of ESP32 firmware.
+and talks to NovaHost through a long-lived TCP management connection on port
+6504. Browser requests stay local HTTP/REST, while board traffic uses the
+framed `NVH1` protocol with CBOR payloads and chunked raw upload data.
+
+Runtime packages uploaded through the webserver can be `.zip`, `.nvr`, or
+`.nrp` files. For two-ROM runtimes, include `nova-runtime.json`:
+
+```json
+{"name":"novalogo","rom":"novalogo.bin","extensionRom":"novalogo_ext.bin"}
+```
+
+If there is no manifest, one-ROM packages are accepted, and two-ROM packages
+are accepted only when the extension ROM filename contains `ext` or
+`extension`.
 
 # Drive Mounts
 

@@ -46,6 +46,10 @@ public:
     void poll_pending();
     void pump_audio();
     void stop_audio();
+    // Drop the cached Z-sound soundfont so the next sound_effect reloads
+    // ZSOUND.NSF from the currently-mounted disk. Call on VM cold boot / disk
+    // change — otherwise a new game keeps playing the previous game's samples.
+    void invalidate_zsound_bank();
     bool audio_active();
     bool storage_busy();
     void release_idle_wts_sample_cache();
@@ -106,6 +110,7 @@ private:
     static constexpr uint8_t CMD_MIDPLAY  = 0x13;
     static constexpr uint8_t CMD_MIDSTOP  = 0x14;
     static constexpr uint8_t CMD_SFLOAD   = 0x15;
+    static constexpr uint8_t CMD_ZSOUND   = 0x16;
     static constexpr uint8_t CMD_XLOAD    = 0x18;
     static constexpr uint8_t CMD_XSAVE    = 0x19;
     static constexpr uint8_t CMD_CD       = 0x20;
@@ -210,6 +215,13 @@ private:
     void handle_midplay();
     void handle_midstop();
     void handle_sfload();
+    // Z-machine sampled sound (sound_effect number >= 3). Plays the requested
+    // sample as a one-shot WTS note, piggybacking on the soundfont/WTS path:
+    // the packer emits the Blorb samples as ZSOUND.NSF, which we load like any
+    // soundfont, then trigger note==number (region RootKey==number => native
+    // rate). FIO_SRCL=number, FIO_SRCH=effect (2=start,3=stop), FIO_ENDL=level.
+    void handle_zsound();
+    bool ensure_zsound_bank_loaded();
     void handle_unsupported_sd_command(const char* name);
 
     // MIDI playback is NovaHost-driven: MIDPLAY returns after scheduling the
@@ -425,6 +437,7 @@ private:
     uint32_t _wts_sample_capacity = 0;
     bool _wts_bank_loaded = false;
     bool _wts_samples_resident = false;
+    bool _zsound_bank_ready = false;   // ZSOUND.NSF loaded for sound_effect
     char _wts_bank_name[96] = {};
     uint32_t _wts_sample_bytes = 0;
     uint8_t _wts_sample_frame_bytes = 1;

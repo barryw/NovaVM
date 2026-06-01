@@ -25,6 +25,7 @@
 #include "fio_dispatcher.h"
 #include "nic_dispatcher.h"
 #include "sd_http_server.h"
+#include "management_server.h"
 #include "nova_wifi.h"
 #include "boot_config_parser.h"
 // Boot ROMs and bulky assets live on the SD card. The FPGA bitstream still
@@ -132,7 +133,8 @@ DeviceManager   deviceManager;
 FioDispatcher   fioDispatcher(fpgaBridge, deviceManager);
 FioEventReader  fioEventReader;
 NicDispatcher   nicDispatcher(fpgaBridge);
-SdHttpServer    sdHttpServer(deviceManager, novaWifi);
+SdHttpServer    sdHttpServer;
+ManagementServer managementServer(deviceManager, novaWifi);
 
 // SD mount diagnostic — captured at boot, exposed via /sd-status JSON.
 String g_sd_diag = "(boot in progress)";
@@ -230,35 +232,57 @@ bool novaFpgaBridgeAvailable() {
     return !g_fpga_bridge_owned_by_boot;
 }
 
+bool showBootSplash();
+bool loadRomsToFPGA();
+void publishHostStatusToFpga(bool force);
+void setHostStatusMask(uint8_t set_mask, uint8_t clear_mask, bool publish);
+
 bool novaVmReset() {
     if (!novaFpgaBridgeAvailable())
         return false;
 
-    if (!fpgaBridge.lockSharedBus())
-        return false;
+    logLn("VM cold boot requested via management");
+    fioDispatcher.stop_audio();
+    // A cold boot may be a different disk/game; drop the cached Z-sound
+    // soundfont so sound_effect reloads ZSOUND.NSF from the mounted disk.
+    fioDispatcher.invalidate_zsound_bank();
 
-    bool fullReset = fpgaBridge.systemResetHold();
-    bool held = fullReset || fpgaBridge.resetHold();
-    if (!held) {
-        fpgaBridge.unlockSharedBus();
+    if (g_sd_mounted) {
+        int boot_slot = deviceManager.select_boot_slot();
+        deviceManager.set_default_slot(boot_slot);
+        const char* boot_prefix = DeviceManager::prefix_for_slot(boot_slot);
+        logLn("VM cold boot default device=%s",
+              boot_prefix ? boot_prefix : "?");
+    }
+
+    g_fpga_bridge_owned_by_boot = true;
+    setHostStatusMask(0, HOST_STATUS_BOOT_READY | HOST_STATUS_BOOT_DEGRADED,
+                      false);
+
+    bool splash_ok = false;
+    if (g_sd_mounted) {
+        g_boot_phase = BOOT_PHASE_SPLASH;
+        splash_ok = showBootSplash();
+    } else {
+        logLn("VM cold boot splash skipped: SD is not mounted");
+    }
+
+    g_boot_phase = BOOT_PHASE_ROM_LOAD;
+    bool rom_ok = loadRomsToFPGA();
+    g_boot_phase = rom_ok ? BOOT_PHASE_READY : BOOT_PHASE_DEGRADED;
+    g_fpga_bridge_owned_by_boot = false;
+    setHostStatusMask(rom_ok ? HOST_STATUS_BOOT_READY : HOST_STATUS_BOOT_DEGRADED,
+                      rom_ok ? HOST_STATUS_BOOT_DEGRADED : HOST_STATUS_BOOT_READY,
+                      false);
+    publishHostStatusToFpga(true);
+
+    if (!rom_ok) {
+        logLn("VM cold boot failed: splash=%s romsLoaded=false",
+              splash_ok ? "true" : "false");
         return false;
     }
 
-    delay(10);
-    bool released = fullReset
-        ? fpgaBridge.systemResetRelease()
-        : fpgaBridge.resetRelease();
-    bool resumed = fpgaBridge.resume();
-    fpgaBridge.unlockSharedBus();
-
-    if (!released || !resumed) {
-        logLn("VM reset failed: released=%s resumed=%s",
-              released ? "true" : "false",
-              resumed ? "true" : "false");
-        return false;
-    }
-
-    logLn("VM reset requested via HTTP");
+    logLn("VM cold boot complete: splash=%s", splash_ok ? "true" : "false");
     return true;
 }
 
@@ -428,6 +452,9 @@ void startNetworkServicesIfNeeded() {
 
     sdHttpServer.begin();
     logLn("HTTP server ready: http://%s/",
+          WiFi.localIP().toString().c_str());
+    managementServer.begin();
+    logLn("Management server ready: %s:6504",
           WiFi.localIP().toString().c_str());
 
     g_network_services_started = true;
@@ -1658,6 +1685,7 @@ void serviceHttpControlPlane() {
         ArduinoOTA.handle();
 #endif
         handleLogClients();
+        managementServer.loop();
         if (novaFpgaBridgeAvailable()) {
             sdHttpServer.loop();
         }

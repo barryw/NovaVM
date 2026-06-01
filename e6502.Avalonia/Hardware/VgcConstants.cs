@@ -94,6 +94,7 @@ public static class VgcConstants
     public const byte FioCmdMidPlay    = 0x13;
     public const byte FioCmdMidStop    = 0x14;
     public const byte FioCmdSfLoad     = 0x15;
+    public const byte FioCmdZSound     = 0x16;     // play/stop a Z-machine sampled sound
     public const byte FioCmdXLoad      = 0x18;     // disk -> XRAM
     public const byte FioCmdXSave      = 0x19;     // XRAM -> disk
 
@@ -323,6 +324,10 @@ public static class VgcConstants
     public const int DmaCountL         = 0xBA73;  // bytes moved low
     public const int DmaCountM         = 0xBA74;  // bytes moved mid
     public const int DmaCountH         = 0xBA75;  // bytes moved high
+
+    // Z-machine sampled-sound status (read): bit0 = a non-looping sound just
+    // finished (clears on read), bit1 = a sound is currently playing.
+    public const int ZSoundStatus      = 0xBA76;
 
     public const byte DmaCmdStart      = 0x01;
 

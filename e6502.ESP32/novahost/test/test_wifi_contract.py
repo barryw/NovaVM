@@ -5,8 +5,8 @@ These tests intentionally avoid Arduino or RF dependencies. They verify the
 public management contract that has to remain stable across refactors:
 
 - USB serial bootstrap commands exist.
-- REST endpoints are routed.
-- GET /wifi redacts the password and exposes only passwordSet.
+- Management TCP endpoints are routed.
+- Management status redacts the password and exposes only passwordSet.
 - Host-status bits drive the FPGA WiFi LED as:
   off = unconfigured, flashing = configured but disconnected, solid = connected.
 - Runtime-replacing autoboots can load a 16K ROM from a floppy image before HD.
@@ -51,67 +51,88 @@ def test_serial_commands() -> None:
     check("serial parser handles quoted args", "bool inQuote = false" in src)
 
 
-def test_rest_routes() -> None:
+def test_management_routes() -> None:
     src = read("e6502.ESP32/novahost/sd_http_server.cpp")
     header = read("e6502.ESP32/novahost/sd_http_server.h")
     debug = read("e6502.ESP32/novahost/debug_server.cpp")
+    mgmt = read("e6502.ESP32/novahost/management_server.cpp")
+    mgmt_header = read("e6502.ESP32/novahost/management_server.h")
     novahost = read("e6502.ESP32/novahost/novahost.ino")
     nova_cli = read("e6502.Nova/Program.cs")
     nova_web = read("e6502.Nova/NovaWebServer.cs")
-
-    for route in [
-        'GET    /wifi',
-        'GET    /wifi/scan',
-        'PUT    /wifi',
-        'POST   /wifi/connect|disconnect|reconnect|forget',
-        'POST   /vm-reset     -> reset the FPGA-hosted VM without rebooting NovaHost',
-    ]:
-        check(f"REST route documented: {route}", route in header)
+    nova_mgmt = read("e6502.Nova/NovaHostManagementClient.cs")
 
     checks = {
-        "GET /wifi dispatch": 'strcmp(method, "GET") == 0 && strcmp(url, "/wifi") == 0',
-        "GET /wifi/scan dispatch": 'strcmp(method, "GET") == 0 && strcmp(url, "/wifi/scan") == 0',
-        "PUT /wifi dispatch": 'strcmp(method, "PUT") == 0 && strcmp(url, "/wifi") == 0',
-        "POST /wifi action dispatch": 'strcmp(method, "POST") == 0 && strncmp(url, "/wifi/", 6) == 0',
+        "HTTP documents only the health endpoint": 'GET /health -> NovaHost liveness' in header
+        and "everything else" not in header,
+        "HTTP non-health requests are just not found": 'send_error(client, 404, "not found")' in src
+        and "use management tcp" not in src
+        and 'case 410: return "Gone"' not in src,
         "GET /health exposes host-status flags": '\\"hostStatusHex\\"',
         "GET /health exposes HTTP task status": '\\"http\\":{\\"taskRunning\\"',
         "firmware no longer serves embedded control panel": 'strcmp(url, "/") == 0 || strcmp(url, "/control") == 0' not in src
         and "send_control_panel" not in src
         and "control_panel_page" not in src
         and "embedded NovaHost control panel" not in header,
-        "POST /vm-reset dispatch": 'strcmp(method, "POST") == 0 && strcmp(url, "/vm-reset") == 0',
-        "POST /vm-reset calls bridge helper": "novaVmReset()" in src,
+        "old embedded REST handlers are deleted": "handle_wifi" not in src
+        and "handle_drives" not in src
+        and "handle_get" not in src
+        and "handle_put" not in src
+        and "handle_delete" not in src
+        and "handle_status" not in src
+        and "handle_reboot" not in src
+        and "handle_vm_reset" not in src
+        and "path_after_sd" not in src
+        and "parse_drive_action" not in src
+        and "read_body_to_file" not in src
+        and "read_body_to_string" not in src
+        and "write_json_string" not in src,
+        "management VM reset calls cold boot helper": "handle_vm_reset" in mgmt
+        and "novaVmReset()" in mgmt,
         "debug TCP no longer exposes VM reset": '"vm_reset"' not in debug
         and "cmdVmReset" not in debug,
-        "VM reset holds and releases FPGA reset": "bool novaVmReset()" in novahost
-        and "fpgaBridge.systemResetHold()" in novahost
-        and "fpgaBridge.resetHold()" in novahost
-        and "fpgaBridge.systemResetRelease()" in novahost
-        and "fpgaBridge.resetRelease()" in novahost
-        and "fpgaBridge.resume()" in novahost,
+        "VM reset performs a cold splash boot": "bool novaVmReset()" in novahost
+        and "VM cold boot requested via management" in novahost
+        and "showBootSplash()" in novahost.split("bool novaVmReset()", 1)[1].split("uint8_t novaHostStatusFlags", 1)[0]
+        and "loadRomsToFPGA()" in novahost.split("bool novaVmReset()", 1)[1].split("uint8_t novaHostStatusFlags", 1)[0]
+        and "BOOT_PHASE_SPLASH" in novahost.split("bool novaVmReset()", 1)[1].split("uint8_t novaHostStatusFlags", 1)[0]
+        and "BOOT_PHASE_ROM_LOAD" in novahost.split("bool novaVmReset()", 1)[1].split("uint8_t novaHostStatusFlags", 1)[0],
         "HTTP request line timeout is bounded": "REQUEST_LINE_TIMEOUT_MS",
         "HTTP header line timeout is bounded": "HEADER_LINE_TIMEOUT_MS",
-        "connect action": 'strcmp(action, "connect") == 0',
-        "disconnect action": 'strcmp(action, "disconnect") == 0',
-        "reconnect action": 'strcmp(action, "reconnect") == 0',
-        "forget action": 'strcmp(action, "forget") == 0',
-        "storage busy is reported as resource locked": 'send_error(client, 423, "storage busy")',
-        "HTTP has Locked reason phrase": 'case 423: return "Locked"',
-        "drive mount persistence preserves existing slots": 'doc["mounts"].as<JsonObject>()' in src
-        and 'if (mounts.isNull())' in src
-        and 'mounts = doc["mounts"].to<JsonObject>()' in src,
-        "HTTP PUT retries partial SD writes": "write_file_all(file, buf, got" in src
-        and "sd write stalled" in src
-        and "client read failed" in src
-        and "verifySdFileSize(path, expected" in src
-        and "CHECKPOINT_BYTES" in src
-        and 'SD.open(path, "r+b")' in src
-        and "file.seek(offset)" in src
-        and "checkpoint replay" in src
-        and "bytes_written" in src,
-        "SD HTTP mutations pause shared FPGA SPI traffic": "StorageMutationGuard" in src
-        and "novaBeginStorageMutation()" in src
+        "management connect action": 'action == "connect"' in mgmt,
+        "management disconnect action": 'action == "disconnect"' in mgmt,
+        "management reconnect action": 'action == "reconnect"' in mgmt,
+        "management forget action": 'action == "forget"' in mgmt,
+        "management drive mount persistence preserves existing slots": 'doc["mounts"].as<JsonObject>()' in mgmt
+        and 'if (mounts.isNull())' in mgmt
+        and 'mounts = doc["mounts"].to<JsonObject>()' in mgmt,
+        "management uploads pause shared FPGA SPI traffic": "novaBeginStorageMutation()" in mgmt
+        and "novaEndStorageMutation()" in mgmt
         and "lockSharedBus()" in novahost,
+        "management TCP server listens on 6504": "uint16_t port = 6504" in mgmt_header
+        and "ManagementServer managementServer" in novahost
+        and "managementServer.begin()" in novahost
+        and "managementServer.loop()" in novahost,
+        "management protocol uses NVH1 framed CBOR": 'memcmp(header, "NVH1", 4)' in mgmt
+        and "PROTOCOL_VERSION = 1" in mgmt_header
+        and "CborWriter" in mgmt
+        and "CborReader" in mgmt
+        and "MAX_RAW_BYTES = 16384" in mgmt_header,
+        "management protocol covers control center parity": "CMD_GET_STATUS" in mgmt_header
+        and "CMD_LIST_DIRECTORY" in mgmt_header
+        and "CMD_READ_FILE_CHUNK" in mgmt_header
+        and "CMD_WRITE_FILE_BEGIN" in mgmt_header
+        and "CMD_MOUNT_DRIVE" in mgmt_header
+        and "CMD_SET_RUNTIME_CONFIG" in mgmt_header
+        and "CMD_VM_RESET" in mgmt_header
+        and "CMD_HOST_REBOOT" in mgmt_header
+        and "CMD_WIFI_SCAN" in mgmt_header
+        and "CMD_WIFI_CONFIG" in mgmt_header
+        and "CMD_WIFI_ACTION" in mgmt_header,
+        "management uploads use shared storage lock": "novaBeginStorageMutation()" in mgmt
+        and "novaEndStorageMutation()" in mgmt
+        and "handle_write_chunk" in mgmt
+        and "handle_write_commit" in mgmt,
     }
     for name, needle in checks.items():
         check(name, needle if isinstance(needle, bool) else needle in src)
@@ -121,22 +142,41 @@ def test_rest_routes() -> None:
           and "--no-open" in nova_cli
           and "server.Start();" in nova_web
           and "TryOpenBrowser(server.Url)" in nova_web)
-    check("local webserver proxies expected device endpoints",
+    check("local webserver uses management TCP for expected device actions",
           '"/api/status"' in nova_web
           and '"/api/inventory"' in nova_web
-          and '"/health"' in nova_web
-          and '"/sd-status"' in nova_web
-          and '"/wifi"' in nova_web
-          and '"/audio-status"' in nova_web
-          and '"/drives"' in nova_web
-          and '"/sd/config/boot.json"' in nova_web
+          and "NovaHostManagementClient" in nova_web
+          and "GetStatusAsync" in nova_web
+          and "ListDirectoryAsync" in nova_web
+          and "WriteFileAsync" in nova_web
+          and "MountDriveAsync" in nova_web
+          and "RuntimeSetAsync" in nova_web
+          and '"/api/runtime/package"' in nova_web
+          and "ZipArchive" in nova_web
           and '"/api/vm-reset"' in nova_web
           and '"/api/reboot"' in nova_web
-          and '"/api/sd"' in nova_web)
+          and '"/api/sd"' in nova_web
+          and '"/events"' in nova_web)
+    check("nova management client uses matching frame and CBOR primitives",
+          '"NVH1"' in nova_mgmt
+          and "HeaderBytes = 24" in nova_mgmt
+          and "DefaultPort = 6504" in nova_mgmt
+          and "CborLite" in nova_mgmt
+          and "WriteFileChunk" in nova_mgmt
+          and "ReadFileChunk" in nova_mgmt
+          and "WifiConfig" in nova_mgmt)
+    check("standalone nova CLI uses management TCP for remote control",
+          "NovaHostManagementClient" in nova_cli
+          and "RunManagement" in nova_cli
+          and "HttpClient" not in nova_cli
+          and "HttpGet" not in nova_cli
+          and "HttpPost" not in nova_cli
+          and "HttpPut" not in nova_cli)
     check("local webserver exposes disk/runtime/library controls",
           'id="slotGrid"' in nova_web
           and 'id="diskList"' in nova_web
           and 'id="runtimeSelect"' in nova_web
+          and 'id="runtimePackage"' in nova_web
           and 'id="deployRuntimeBtn"' in nova_web
           and 'id="libraryList"' in nova_web
           and 'Host reboot to apply' in nova_web)
@@ -144,14 +184,11 @@ def test_rest_routes() -> None:
           "RESPONSE_WRITE_TIMEOUT_MS" in header
           and "availableForWrite()" in src
           and "client.write(data + off, chunk)" in src
-          and "write_all(client, buf, got)" in src)
-    send_file = src.split("void SdHttpServer::send_file", 1)[1]
-    send_file = send_file.split("void SdHttpServer::send_json", 1)[0]
-    check("SD HTTP file downloads send exactly Content-Length bytes",
-          "size_t remaining = file.size();" in send_file
-          and "while (remaining > 0)" in send_file
-          and "remaining -= got;" in send_file
-          and "while (file.available())" not in send_file)
+          and "send_json" in src)
+    check("management file downloads are chunked",
+          "handle_read_file_chunk" in mgmt
+          and "CMD_READ_FILE_CHUNK" in mgmt_header
+          and "DownloadFileAsync" in nova_mgmt)
     check("HTTP handlers avoid unbounded client print helpers",
           "client.print(" not in src
           and "client.printf(" not in src
@@ -159,13 +196,13 @@ def test_rest_routes() -> None:
 
 
 def test_password_redaction() -> None:
-    src = read("e6502.ESP32/novahost/sd_http_server.cpp")
-    status_body = src.split("void SdHttpServer::handle_wifi_status", 1)[1]
-    status_body = status_body.split("void SdHttpServer::handle_wifi_scan", 1)[0]
+    mgmt = read("e6502.ESP32/novahost/management_server.cpp")
+    status_body = mgmt.split('w.text("wifi");', 1)[1]
+    status_body = status_body.split("char audio", 1)[0]
 
-    check("GET /wifi exposes passwordSet", '\\"passwordSet\\"' in status_body)
-    check("GET /wifi does not emit password field", '\\"password\\"' not in status_body)
-    check("PUT /wifi accepts password updates", 'doc["password"]' in src)
+    check("management status exposes passwordSet", '"passwordSet"' in status_body)
+    check("management status does not emit password field", '"password");' not in status_body)
+    check("management config accepts password updates", 'key == "password"' in mgmt)
 
 
 def test_host_status_led_contract() -> None:
@@ -532,6 +569,22 @@ def test_nic_command_sequence_contract() -> None:
         check(name, ok)
 
 
+def test_large_ndi_bam_contract() -> None:
+    ndi_image = read("e6502.ESP32/novahost/ndi_image.cpp")
+
+    checks = {
+        "ESP NDI mount avoids duplicate large BAM allocation": "bam payload malloc failed" not in ndi_image
+        and "uint8_t* payload" not in ndi_image
+        and "_stream->read(_bam_bits, _bam_byte_count)" in ndi_image,
+        "ESP NDI metadata flush streams BAM sectors": "uint8_t sector[SECTOR_SIZE]" in ndi_image
+        and "while (written < bam_bytes_padded)" in ndi_image
+        and "_stream->write(sector, SECTOR_SIZE)" in ndi_image
+        and "ndi_malloc(bam_bytes_padded)" not in ndi_image,
+    }
+    for name, ok in checks.items():
+        check(name, ok)
+
+
 def test_runtime_autoboot_contract() -> None:
     nova_inc = read("runtime/asm/nova.inc")
     basic = read("ehbasic/basic.asm")
@@ -548,7 +601,7 @@ def test_runtime_autoboot_contract() -> None:
     esp_dm_h = read("e6502.ESP32/novahost/device_manager.h")
     esp_dm = read("e6502.ESP32/novahost/device_manager.cpp")
     novahost = read("e6502.ESP32/novahost/novahost.ino")
-    sd_http = read("e6502.ESP32/novahost/sd_http_server.cpp")
+    mgmt = read("e6502.ESP32/novahost/management_server.cpp")
     boot_json = read("e6502.ESP32/novahost/assets/config/boot.json")
     novahost_make = read("e6502.ESP32/novahost/Makefile")
     flash_stack = read("tools/flash-ulx3s-stack.sh")
@@ -668,11 +721,17 @@ def test_runtime_autoboot_contract() -> None:
         "NovaHost does not blindly mount root disk images": "auto_mount_fds();" not in novahost
         and "auto_mount_hds();" not in novahost
         and "set_default_slot(boot_slot)" in novahost,
-        "REST drive changes persist logical slot pointers": "persistDriveMountConfig" in sd_http
-        and "loadDriveMountConfig" in sd_http
-        and 'mounts[prefix] = sd_path ? sd_path : ""' in sd_http
-        and '"/%s.ndi"' not in sd_http
-        and "configuredPath" in sd_http,
+        "management drive changes persist logical slot pointers": "persist_drive_mount_config" in mgmt
+        and "load_drive_mount_config" in mgmt
+        and 'mounts[prefix] = sd_path ? sd_path : ""' in mgmt
+        and '"/%s.ndi"' not in mgmt
+        and "configuredPath" in mgmt,
+        "management drive changes refresh boot default": "int boot_slot = _dm.select_boot_slot()" in mgmt
+        and "_dm.set_default_slot(boot_slot)" in mgmt
+        and '"bootDefault"' in mgmt,
+        "VM reset reselects boot default before ROM release": "VM cold boot default device=%s" in novahost
+        and "deviceManager.select_boot_slot()" in novahost.split("bool novaVmReset()", 1)[1].split("g_fpga_bridge_owned_by_boot = true", 1)[0]
+        and "deviceManager.set_default_slot(boot_slot)" in novahost.split("bool novaVmReset()", 1)[1].split("g_fpga_bridge_owned_by_boot = true", 1)[0],
         "debug text injection normalizes LF to BASIC Enter": "void DebugServer::cmdTypeText" in debug
         and "ch == '\\n'" in debug
         and "ch = '\\r'" in debug,
@@ -744,13 +803,14 @@ def test_boot_splash_handoff_contract() -> None:
 def main() -> int:
     tests = [
         ("serial commands", test_serial_commands),
-        ("REST routes", test_rest_routes),
+        ("management routes", test_management_routes),
         ("password redaction", test_password_redaction),
         ("host-status LED contract", test_host_status_led_contract),
         ("FPGA SPI bridge contract", test_fpga_spi_bridge_contract),
         ("FIO clear-error contract", test_fio_clear_error_contract),
         ("FIO SD dispatch contract", test_fio_sd_dispatch_contract),
         ("NIC command sequence contract", test_nic_command_sequence_contract),
+        ("large NDI BAM contract", test_large_ndi_bam_contract),
         ("runtime autoboot contract", test_runtime_autoboot_contract),
         ("boot splash handoff contract", test_boot_splash_handoff_contract),
     ]

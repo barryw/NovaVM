@@ -14,6 +14,28 @@
 .ifndef NOVA_NOVAZ_ZVM_IMPLEMENTATION_INCLUDED
 NOVA_NOVAZ_ZVM_IMPLEMENTATION_INCLUDED = 1
 
+; Nova Timer Controller, used as the time base for V4+ timed keyboard input.
+; Polled (not IRQ-driven): TimerStatus bit 0 is set once per programmed period
+; and cleared on read. The period is counted in 100-cycle ticks.
+.ifndef TimerCtrl
+TimerCtrl   = $BA40     ; bit 0 = enable
+TimerStatus = $BA41     ; read: bit 0 = period elapsed (clears on read)
+TimerDivL   = $BA42     ; period divisor low (ticks)
+TimerDivH   = $BA43     ; period divisor high
+.endif
+
+; 0.1 s at the 12 MHz Nova CPU clock = 1,200,000 cycles = 12,000 ticks ($2EE0).
+ZVM_TENTH_DIV_LO = $E0
+ZVM_TENTH_DIV_HI = $2E
+
+; sound_effect bleeps (number 1 = high, 2 = low) are short one-shots played
+; through the existing FIO_CMD_SOUND path (MIDI note / duration-in-frames /
+; instrument slot). Sampled sounds (number >= 3) go through FIO_CMD_ZSOUND.
+NZ_BLEEP_HI_NOTE = 84          ; C6
+NZ_BLEEP_LO_NOTE = 60          ; C4
+NZ_BLEEP_DURATION = 10         ; ~1/6 s at 60 Hz
+NZ_BLEEP_INSTR    = 0          ; default SID instrument slot
+
 ZVM_SAVE_HEADER_SIZE       = $40
 ZVM_SAVE_PREFIX_SIZE       = $08
 ZVM_SAVE_FORMAT_VERSION    = $02
@@ -126,6 +148,18 @@ zvm_math_count:       .res 1
 zvm_rng_lo:           .res 1
 zvm_rng_hi:           .res 1
 zvm_text_buffering:   .res 1
+zvm_text_style:       .res 1
+zvm_timed_active:     .res 1
+zvm_timed_limit:      .res 1
+zvm_timed_count:      .res 1
+zvm_timed_routine_lo: .res 1
+zvm_timed_routine_hi: .res 1
+zvm_timed_abort:      .res 1
+zvm_timed_depth:      .res 1
+zvm_sound_active:     .res 1   ; nonzero when a sampled sound with a V5 finish
+                                ; routine is in flight and must be polled in read
+zvm_sound_routine_lo: .res 1   ; packed address of the finish routine (0 = none)
+zvm_sound_routine_hi: .res 1
 zvm_window_current:   .res 1
 zvm_split_lines:      .res 1
 zvm_lower_x:          .res 1
@@ -216,6 +250,7 @@ zvm_save_scratch_base_h: .res 1
 .export zvm_verify_sum_lo
 .export zvm_verify_sum_hi
 .export zvm_read_key_loop
+.export zvm_read_timed_poll
 
 zvm_run_until_read:
         STZ zvm_stop_reason
@@ -231,6 +266,12 @@ zvm_run_until_read:
         STZ zvm_upper_y
         LDA #$01
         STA zvm_text_buffering
+        STZ zvm_text_style
+        STZ zvm_timed_active
+        STZ zvm_timed_abort
+        STZ zvm_sound_active
+        STZ zvm_sound_routine_lo
+        STZ zvm_sound_routine_hi
         LDA #$4D
         STA zvm_rng_lo
         LDA #$21
@@ -2444,38 +2485,54 @@ zvm_read:
         LDA zvm_operand_hi + 1
         STA zvm_parse_hi
 
+        LDX #$02                ; read operands: [text, parse, time, routine]
+        JSR nz_timed_arm
+
         STZ zvm_input_len
         JSR nz_cursor_on
         JSR zvm_read_text_max
+        ; Dispatch once on interrupt-driven vs untimed. These use full labels
+        ; (not cheap locals) so control flow can cross the exported
+        ; zvm_read_key_loop label, which ca65 treats as a cheap-local scope
+        ; boundary. The poll loop is entered when a timer OR a sampled sound
+        ; with a finish routine is armed.
+        JSR nz_read_irq_pending
+        BNE zvm_read_timed_poll
 zvm_read_key_loop:
-@key_loop:
+        ; Untimed idle spin. Kept to exactly two instructions so the smoke
+        ; harness, which samples the PC at a fixed power-of-two interval, always
+        ; observes the read loop here (it matches this address or this+3).
         LDA VGC_CHARIN
-        BEQ @key_loop
+        BEQ zvm_read_key_loop
+zvm_read_have_key:
         CMP #$0A
-        BEQ @done
+        BEQ zvm_read_done
         CMP #$0D
-        BEQ @done
+        BEQ zvm_read_done
         CMP #$08
-        BEQ @backspace
+        BEQ zvm_read_backspace
         CMP #$7F
-        BEQ @backspace
+        BEQ zvm_read_backspace
         CMP #$20
-        BCC @key_loop
+        BCC zvm_read_recheck
         CMP #$7F
-        BCS @key_loop
+        BCS zvm_read_recheck
         LDX zvm_input_len
         CPX zvm_input_max
-        BCS @key_loop
+        BCS zvm_read_recheck
         JSR zvm_to_lower
         PHA
         JSR print_char
         PLA
         JSR zvm_store_input_char
         INC zvm_input_len
-        BRA @key_loop
-@backspace:
+zvm_read_recheck:
+        JSR nz_read_irq_pending
+        BNE zvm_read_timed_poll
+        BRA zvm_read_key_loop
+zvm_read_backspace:
         LDA zvm_input_len
-        BEQ @key_loop
+        BEQ zvm_read_recheck
         DEC zvm_input_len
         LDA #$08
         JSR print_char
@@ -2483,9 +2540,25 @@ zvm_read_key_loop:
         JSR print_char
         LDA #$08
         JSR print_char
-        BRA @key_loop
-@done:
+        BRA zvm_read_recheck
+zvm_read_timed_poll:
+        LDA VGC_CHARIN
+        BNE zvm_read_have_key
+        LDA zvm_timed_active
+        BEQ @poll_sound
+        JSR nz_timed_tick
+        LDA zvm_timed_abort
+        BNE zvm_read_timed_done
+@poll_sound:
+        JSR nz_sound_poll
+        BRA zvm_read_timed_poll
+zvm_read_timed_done:
+        STZ zvm_read_terminator     ; interrupt routine cancelled input
+        BRA zvm_read_finish
+zvm_read_done:
         STA zvm_read_terminator
+zvm_read_finish:
+        JSR nz_timed_disable
         JSR nz_cursor_off
         LDA #$00
         JSR zvm_store_input_terminator
@@ -2495,18 +2568,18 @@ zvm_read_key_loop:
         STZ nz_auto_wrap
         LDA zvm_parse_lo
         ORA zvm_parse_hi
-        BEQ @return
+        BEQ zvm_read_no_token
         JSR zvm_tokenize_input
-@return:
+zvm_read_no_token:
         LDA zstory_version
         CMP #$05
-        BCC @no_result
+        BCC zvm_read_no_result
         LDA zvm_read_terminator
         STA zvm_value_lo
         STZ zvm_value_hi
         LDA zvm_store_var
         JMP zvm_set_var
-@no_result:
+zvm_read_no_result:
         RTS
 
 zvm_read_text_max:
@@ -3360,7 +3433,17 @@ zvm_clear_upper_window:
 
 zvm_set_text_style:
         JSR nz_screen_flush_word
+        ; Styles are cumulative: style 0 resets, any other value adds its bits.
+        ; Only roman/reverse (bit0) and bold (bit1) change the colour cell;
+        ; italic (bit2) and fixed (bit3) accumulate but the VGC ignores them.
         LDA zvm_operand_lo
+        BNE @accumulate
+        STZ zvm_text_style
+        BRA @apply
+@accumulate:
+        ORA zvm_text_style
+        STA zvm_text_style
+@apply:
         AND #$03
         TAX
         LDA zvm_style_color_table,X
@@ -3470,7 +3553,110 @@ zvm_output_stream:
 zvm_input_stream:
         RTS
 
+; sound_effect number effect volume routine   (VAR:21)
+;   operand[0] = number   (1 = high bleep, 2 = low bleep, >= 3 = sampled)
+;   operand[1] = effect   (1 = prepare, 2 = start, 3 = stop, 4 = finish-with)
+;   operand[2] = volume   (low byte = level 1..8/255, high byte = repeats)
+;   operand[3] = routine  (V5+ packed address, called when the sound finishes)
 zvm_sound_effect:
+        LDA zvm_operand_lo              ; number (low byte)
+        BNE @go
+        RTS                             ; number 0 -> nothing to do
+@go:
+        CMP #$03
+        BCS zvm_snd_sampled             ; number >= 3 -> sampled sound
+        ; --- bleep (number 1 or 2) ---
+        JSR nz_snd_effect_a             ; A = effect (defaults to 2 = start)
+        CMP #$03
+        BEQ @bleep_ret                  ; "stop" a one-shot bleep -> no-op
+        LDA zvm_operand_lo
+        CMP #$01
+        BEQ @bleep_hi
+        LDA #NZ_BLEEP_LO_NOTE
+        BRA @bleep_play
+@bleep_hi:
+        LDA #NZ_BLEEP_HI_NOTE
+@bleep_play:
+        STA FIO_SRCL                    ; MIDI note
+        LDA #NZ_BLEEP_DURATION
+        STA FIO_SRCH                    ; duration in frames
+        LDA #NZ_BLEEP_INSTR
+        STA FIO_ENDL                    ; instrument slot
+        LDA #FIO_CMD_SOUND
+        STA FIO_CMD
+@bleep_ret:
+        RTS
+
+zvm_snd_sampled:
+        JSR nz_snd_effect_a             ; A = effect
+        CMP #$03
+        BEQ @stop
+        CMP #$01
+        BEQ @ret                        ; prepare: host lazy-loads on start
+        ; effect 2 (start) or 4 (finish-with)
+        LDA zvm_operand_lo              ; number
+        STA FIO_SRCL
+        LDA #$02
+        STA FIO_SRCH                    ; effect = start
+        ; volume level (operand[2] low byte, default 255 = loudest)
+        LDX zvm_operand_count
+        CPX #$03
+        BCC @level_default
+        LDA zvm_operand_lo + 2
+        BRA @level_set
+@level_default:
+        LDA #$FF
+@level_set:
+        STA FIO_ENDL
+        ; repeats (operand[2] high byte, default 0 = play once)
+        LDX zvm_operand_count
+        CPX #$03
+        BCC @repeats_default
+        LDA zvm_operand_hi + 2
+        BRA @repeats_set
+@repeats_default:
+        LDA #$00
+@repeats_set:
+        STA FIO_ENDH
+        LDA #FIO_CMD_ZSOUND
+        STA FIO_CMD
+        ; --- register the V5 finish routine (operand[3]) ---
+        STZ zvm_sound_active
+        STZ zvm_sound_routine_lo
+        STZ zvm_sound_routine_hi
+        LDX zvm_operand_count
+        CPX #$04
+        BCC @ret                        ; no routine operand supplied
+        LDA zvm_operand_lo + 3
+        STA zvm_sound_routine_lo
+        LDA zvm_operand_hi + 3
+        STA zvm_sound_routine_hi
+        ORA zvm_sound_routine_lo
+        BEQ @ret                        ; routine 0 -> no callback
+        LDA #$01
+        STA zvm_sound_active
+@ret:
+        RTS
+@stop:
+        LDA zvm_operand_lo              ; number
+        STA FIO_SRCL
+        LDA #$03
+        STA FIO_SRCH                    ; effect = stop
+        LDA #FIO_CMD_ZSOUND
+        STA FIO_CMD
+        STZ zvm_sound_active
+        RTS
+
+; Return the sound effect operand in A, defaulting to 2 (start) when the opcode
+; was called with only a number.
+nz_snd_effect_a:
+        LDX zvm_operand_count
+        CPX #$02
+        BCC @default
+        LDA zvm_operand_lo + 1
+        RTS
+@default:
+        LDA #$02
         RTS
 
 zvm_set_font:
@@ -3484,14 +3670,180 @@ zvm_set_font:
         JMP zvm_store_a_lo_zero_hi
 
 zvm_read_char:
+        LDX #$01                ; read_char operands: [1, time, routine]
+        JSR nz_timed_arm
         JSR nz_cursor_on
 @wait:
-        LDA VGC_CHARIN
-        BEQ @wait
+        JSR nz_input_poll
+        CMP #$00
+        BNE @got
+        LDA zvm_timed_abort
+        BNE @abort
+        BRA @wait
+@got:
         PHA
+        JSR nz_timed_disable
         JSR nz_cursor_off
         PLA
         JMP zvm_store_a_lo_zero_hi
+@abort:
+        JSR nz_timed_disable
+        JSR nz_cursor_off
+        LDA #$00                ; timed routine cancelled input
+        JMP zvm_store_a_lo_zero_hi
+
+; --- Timed keyboard input support (V4+) -----------------------------------
+;
+; nz_timed_arm: X = operand index of the `time` value (routine follows at X+1).
+; Arms the timer for a 0.1 s period and records the interrupt routine when both
+; a nonzero time and a nonzero routine address are supplied; otherwise input is
+; untimed.
+nz_timed_arm:
+        STZ zvm_timed_active
+        STZ zvm_timed_abort
+        TXA
+        CLC
+        ADC #$02                ; operands needed = time index + 2
+        CMP zvm_operand_count
+        BEQ @have
+        BCS @none               ; fewer operands than required
+@have:
+        LDA zvm_operand_lo,X    ; time (tenths)
+        STA zvm_timed_limit
+        ORA zvm_operand_hi,X
+        BEQ @none               ; time 0 -> untimed
+        INX
+        LDA zvm_operand_lo,X    ; routine (packed address)
+        STA zvm_timed_routine_lo
+        LDA zvm_operand_hi,X
+        STA zvm_timed_routine_hi
+        ORA zvm_timed_routine_lo
+        BEQ @none               ; routine 0 -> untimed
+        ; arm the timer for one tenth of a second
+        STZ TimerCtrl           ; disable + reset counter
+        LDA #ZVM_TENTH_DIV_LO
+        STA TimerDivL
+        LDA #ZVM_TENTH_DIV_HI
+        STA TimerDivH
+        LDA #$01
+        STA TimerCtrl           ; enable
+        LDA TimerStatus         ; clear any stale elapsed flag
+        STZ zvm_timed_count
+        LDA #$01
+        STA zvm_timed_active
+@none:
+        RTS
+
+nz_timed_disable:
+        STZ zvm_timed_active
+        STZ TimerCtrl           ; disable + reset
+        RTS
+
+; Poll for input. Returns A = key (nonzero) when one is ready, else A = 0.
+; In timed mode it advances the timer and fires the interrupt routine when the
+; programmed number of tenths elapses, setting zvm_timed_abort if the routine
+; returns true.
+nz_input_poll:
+        LDA VGC_CHARIN
+        BNE @done
+        LDA zvm_timed_active
+        BEQ @sound
+        JSR nz_timed_tick
+@sound:
+        JSR nz_sound_poll
+        LDA #$00
+@done:
+        RTS
+
+; Advance the timer and fire the interrupt routine when `time` tenths elapse.
+; Assumes timed mode is active. Caller inspects zvm_timed_abort afterwards.
+nz_timed_tick:
+        LDA TimerStatus
+        AND #$01
+        BEQ @ret                ; period not elapsed yet
+        INC zvm_timed_count
+        LDA zvm_timed_count
+        CMP zvm_timed_limit
+        BCC @ret                ; fewer than `time` tenths so far
+        STZ zvm_timed_count
+        JMP nz_fire_timed_routine
+@ret:
+        RTS
+
+; Call the timed interrupt routine to completion and record an abort if it
+; returns true. The interrupt routine is ordinary Z-code and may print or move
+; the cursor; the call/return machinery preserves the interpreter PC.
+nz_fire_timed_routine:
+        LDA zvm_timed_routine_lo
+        LDX zvm_timed_routine_hi
+        JSR nz_call_z_routine
+        LDA zvm_value_lo
+        ORA zvm_value_hi
+        BEQ @done               ; routine returned false (or could not run)
+        LDA #$01
+        STA zvm_timed_abort     ; true return cancels input
+@done:
+        RTS
+
+; nz_sound_poll: while a sampled sound with a V5 finish routine is in flight,
+; check the host completion flag (ZSOUND_STATUS bit 0, which clears on read) and
+; fire the routine exactly once when the sound finishes. A sound finishing does
+; not abort the in-progress input.
+nz_sound_poll:
+        LDA zvm_sound_active
+        BEQ @ret
+        LDA ZSOUND_STATUS       ; read clears the finished bit
+        AND #$01
+        BEQ @ret                ; sound has not finished yet
+        STZ zvm_sound_active    ; one-shot: fire the finish routine once
+        LDA zvm_sound_routine_lo
+        LDX zvm_sound_routine_hi
+        JSR nz_call_z_routine   ; return value is ignored for sound
+@ret:
+        RTS
+
+; nz_read_irq_pending: returns A != 0 when read must use the interrupt-poll
+; loop rather than the pure idle spin -- i.e. when a timer or a sampled sound
+; with a finish routine is armed. Keeping this off the untimed path lets the
+; idle spin stay exactly two instructions for the smoke's PC sampler.
+nz_read_irq_pending:
+        LDA zvm_timed_active
+        BNE @yes
+        LDA zvm_sound_active
+@yes:
+        RTS
+
+; nz_call_z_routine: A = packed routine address low byte, X = high byte. Calls
+; the routine with no arguments, runs it to completion, and leaves its return
+; value in zvm_value_lo/hi (zero if the call could not run). Preserves the
+; in-progress read's store var; the call/return machinery preserves the
+; interpreter PC so input can resume afterwards.
+nz_call_z_routine:
+        STA zvm_operand_lo
+        STX zvm_operand_hi
+        STZ zvm_value_lo
+        STZ zvm_value_hi
+        LDA zvm_store_var       ; preserve the in-progress read's store var
+        PHA
+        LDA #$01
+        STA zvm_operand_count   ; routine only, no arguments
+        LDA #$FF
+        STA zvm_store_var       ; discard result; read it from zvm_value_*
+        LDA zvm_frame_count
+        STA zvm_timed_depth
+        JSR zvm_call_common
+@run:
+        LDA zvm_stop_reason
+        BNE @done
+        LDA zvm_frame_count
+        CMP zvm_timed_depth
+        BEQ @done
+        JSR zvm_step
+        BRA @run
+@done:
+        PLA
+        STA zvm_store_var
+        RTS
 
 zvm_erase_window:
         JSR nz_screen_flush_word

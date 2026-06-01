@@ -13,6 +13,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly SidChip _sid;
     private readonly SidChip _sid2;
     private readonly FileIoController _fio;
+    private readonly ZSoundController _zsound;
     private readonly VirtualExpansionMemoryController _xmc;
     private readonly VirtualTimerController _timer = new();
     private readonly VirtualNetworkController _nic;
@@ -131,6 +132,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _xmc = new VirtualExpansionMemoryController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data);
+        _zsound = new ZSoundController(enableSound);
         _fio = new FileIoController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data,
@@ -148,7 +150,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             xramWrite: (addr, value) => _xmc.TryWriteLinear(addr, value),
             xramCapacity: () => _xmc.CapacityBytes,
             xramRefreshStats: () => _xmc.RefreshStatsRegisters(),
-            loadRuntimeRom: LoadPrimaryRuntimeRom);
+            loadRuntimeRom: LoadPrimaryRuntimeRom,
+            zsound: _zsound);
         _fio.ProgramLoaded += name => LoadProgramHelp(name);
         _fio.ProgramSaved += (name, _) => LoadProgramHelp(name);
         _vgc.SetBusMemory(_ram);
@@ -289,6 +292,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _midiPlayback.Reset();
         _sidPlayer.Reset();
         _musicEngine.Reset();
+        _zsound.Reset();
         _wts.Reset();
         _sid.Reset();
         _sid2.Reset();
@@ -418,6 +422,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     public byte Read(ushort address)
     {
+        if (address == VgcConstants.ZSoundStatus)
+            return _zsound.ReadStatus();
         if (address == VgcConstants.MusicStatus)
             return ReadMusicStatus();
         if (address >= VgcConstants.MusicNote1 && address <= VgcConstants.MusicNote14)
@@ -614,6 +620,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _timer.AdvanceCycles(cycles);
         _dma.AdvanceCycles(cycles);
         _blitter.AdvanceCycles(cycles);
+        _zsound.AdvanceCycles(cycles);
 
         _frameNumeratorAccumulator += (long)cycles * _frameRateHz;
         while (_frameNumeratorAccumulator >= _cpuHz)

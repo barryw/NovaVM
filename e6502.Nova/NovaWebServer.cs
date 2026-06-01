@@ -1,8 +1,12 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.IO.Compression;
 using System.Net;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using e6502.Storage;
 
 static class NovaWebServer
 {
@@ -66,9 +70,9 @@ sealed class LocalNovaWebServer
     };
 
     private readonly HttpListener _listener = new();
-    private readonly HttpClient _statusHttp = new() { Timeout = TimeSpan.FromSeconds(4) };
-    private readonly HttpClient _commandHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
-    private readonly HttpClient _uploadHttp = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private readonly NovaHostManagementClient _management;
+    private readonly ConcurrentDictionary<Guid, WebSocket> _eventClients = new();
+    private readonly ConcurrentDictionary<string, DiskBootInfo> _diskBootInfoCache = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _statusGate = new(1, 1);
     private readonly SemaphoreSlim _inventoryGate = new(1, 1);
     private readonly string _prefix;
@@ -79,6 +83,8 @@ sealed class LocalNovaWebServer
     private bool _started;
     private static readonly TimeSpan StatusFreshFor = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan InventoryFreshFor = TimeSpan.FromSeconds(30);
+    private const int RemoteMetadataChunkBytes = 16 * 1024;
+    private const int MaxNdiDirectoryBytes = 128 * 1024;
 
     public LocalNovaWebServer(string boardHost, string bind, int port)
     {
@@ -87,6 +93,7 @@ sealed class LocalNovaWebServer
             ? boardHost.TrimEnd('/')
             : $"http://{boardHost.TrimEnd('/')}";
         BoardBase = normalizedHost;
+        _management = new NovaHostManagementClient(normalizedHost);
 
         string listenerHost = string.IsNullOrWhiteSpace(bind) ? "127.0.0.1" : bind;
         _prefix = $"http://{listenerHost}:{port}/";
@@ -137,10 +144,23 @@ sealed class LocalNovaWebServer
 
     private async Task HandleAsync(HttpListenerContext context, CancellationToken token)
     {
+        bool closeResponse = true;
         try
         {
             string method = context.Request.HttpMethod.ToUpperInvariant();
             string path = context.Request.Url?.AbsolutePath ?? "/";
+
+            if (method == "GET" && path == "/events")
+            {
+                if (!context.Request.IsWebSocketRequest)
+                {
+                    await SendErrorAsync(context.Response, 400, "websocket required", token);
+                    return;
+                }
+                closeResponse = false;
+                await HandleEventsAsync(context, token);
+                return;
+            }
 
             if (method == "GET" && path == "/")
             {
@@ -168,7 +188,7 @@ sealed class LocalNovaWebServer
                     await SendErrorAsync(context.Response, 400, "path is required", token);
                     return;
                 }
-                await ProxyUploadAsync(context, SdUrl(sdPath), token);
+                await ProxyUploadAsync(context, EnsureAbsolutePath(sdPath), token);
                 return;
             }
 
@@ -180,7 +200,11 @@ sealed class LocalNovaWebServer
                     await SendErrorAsync(context.Response, 400, "path is required", token);
                     return;
                 }
-                await ProxyBoardAsync(context, HttpMethod.Delete, SdUrl(sdPath), null, token);
+                await SendOkAsync(context.Response,
+                    await _management.DeletePathAsync(EnsureAbsolutePath(sdPath), token),
+                    token);
+                InvalidateStatusCache();
+                InvalidateInventoryCache();
                 return;
             }
 
@@ -190,27 +214,43 @@ sealed class LocalNovaWebServer
                 string[] parts = suffix.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length == 2 && IsDriveSlot(parts[0]) && parts[1] is "mount" or "unmount")
                 {
-                    byte[] body = await ReadBodyAsync(context.Request, token);
-                    await ProxyBoardAsync(context, HttpMethod.Post, $"/drives/{parts[0]}/{parts[1]}", body, token);
+                    if (parts[1] == "mount")
+                    {
+                        JsonObject payload = await ReadJsonObjectAsync(context.Request, token);
+                        string? mountPath = payload["path"]?.GetValue<string>();
+                        await SendOkAsync(context.Response,
+                            await _management.MountDriveAsync(parts[0], mountPath, token),
+                            token);
+                    }
+                    else
+                    {
+                        await SendOkAsync(context.Response,
+                            await _management.UnmountDriveAsync(parts[0], token),
+                            token);
+                    }
+                    InvalidateStatusCache();
                     return;
                 }
             }
 
             if (method == "POST" && path == "/api/vm-reset")
             {
-                await ProxyBoardAsync(context, HttpMethod.Post, "/vm-reset", Array.Empty<byte>(), token);
+                await SendOkAsync(context.Response, await _management.VmResetAsync(token), token);
+                InvalidateStatusCache();
                 return;
             }
 
             if (method == "POST" && path == "/api/reboot")
             {
-                await ProxyBoardAsync(context, HttpMethod.Post, "/reboot", Array.Empty<byte>(), token);
+                await SendOkAsync(context.Response, await _management.HostRebootAsync(token), token);
+                InvalidateStatusCache();
                 return;
             }
 
             if (method == "POST" && path == "/api/audio-stop")
             {
-                await ProxyBoardAsync(context, HttpMethod.Post, "/audio-stop", Array.Empty<byte>(), token);
+                await SendOkAsync(context.Response, await _management.AudioStopAsync(token), token);
+                InvalidateStatusCache();
                 return;
             }
 
@@ -223,6 +263,12 @@ sealed class LocalNovaWebServer
             if (method == "POST" && path == "/api/runtime/add")
             {
                 await RuntimeAddAsync(context, token);
+                return;
+            }
+
+            if (method == "PUT" && path == "/api/runtime/package")
+            {
+                await RuntimePackageAsync(context, token);
                 return;
             }
 
@@ -240,23 +286,33 @@ sealed class LocalNovaWebServer
         }
         finally
         {
-            context.Response.Close();
+            if (closeResponse)
+                context.Response.Close();
         }
     }
 
     private async Task<JsonObject> BuildStatusAsync(CancellationToken token)
     {
-        var root = new JsonObject
+        try
         {
-            ["target"] = BoardBase,
-            ["health"] = await GetBoardJsonAsync("/health", token),
-            ["sdStatus"] = await GetBoardJsonAsync("/sd-status", token),
-            ["wifi"] = await GetBoardJsonAsync("/wifi", token),
-            ["audio"] = await GetBoardJsonAsync("/audio-status", token),
-            ["drives"] = await GetBoardJsonAsync("/drives", token),
-            ["bootConfig"] = await GetBoardJsonAsync("/sd/config/boot.json", token)
-        };
-        return root;
+            JsonObject root = await _management.GetStatusAsync(token);
+            root["target"] = $"{BoardBase} via tcp+cbor";
+            return root;
+        }
+        catch (Exception ex)
+        {
+            return new JsonObject
+            {
+                ["target"] = $"{BoardBase} via tcp+cbor",
+                ["management"] = _management.ConnectionState,
+                ["health"] = ErrorObject(ex.Message),
+                ["sdStatus"] = ErrorObject(ex.Message),
+                ["wifi"] = ErrorObject(ex.Message),
+                ["audio"] = ErrorObject(ex.Message),
+                ["drives"] = new JsonArray(),
+                ["bootConfig"] = ErrorObject(ex.Message)
+            };
+        }
     }
 
     private async Task<JsonObject> BuildInventoryAsync(CancellationToken token)
@@ -354,9 +410,107 @@ sealed class LocalNovaWebServer
     private async Task<JsonArray> BuildDiskListAsync(CancellationToken token)
     {
         var disks = new JsonArray();
-        await AddFilesAsync(disks, "Floppy", "disks/floppy", ".ndi", token);
-        await AddFilesAsync(disks, "Hard", "disks/hard", ".ndi", token);
+        await AddDiskFilesAsync(disks, "Floppy", "disks/floppy", token);
+        await AddDiskFilesAsync(disks, "Hard", "disks/hard", token);
         return disks;
+    }
+
+    private async Task AddDiskFilesAsync(JsonArray files, string group, string dir,
+                                         CancellationToken token)
+    {
+        JsonArray rows = await _management.ListDirectoryAsync(EnsureAbsolutePath(dir), token);
+
+        foreach (JsonNode? row in rows)
+        {
+            if (row?["dir"]?.GetValue<bool>() == true)
+                continue;
+            string name = row?["name"]?.GetValue<string>() ?? "";
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            if (!name.EndsWith(".ndi", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            long size = row?["size"]?.GetValue<long>() ?? 0;
+            string path = "/" + CleanRelativePath($"{dir}/{name}");
+            string bootCacheKey = path + "\n" + size;
+            if (!_diskBootInfoCache.TryGetValue(bootCacheKey, out DiskBootInfo? boot))
+            {
+                boot = await ReadNdiBootInfoAsync(path, size, token);
+                if (boot.Status != "unknown")
+                    _diskBootInfoCache[bootCacheKey] = boot;
+            }
+            JsonNode item = new JsonObject
+            {
+                ["group"] = group,
+                ["name"] = name,
+                ["size"] = size,
+                ["path"] = path,
+                ["bootable"] = boot.Status == "bootable",
+                ["bootStatus"] = boot.Status,
+                ["bootFile"] = boot.FileName,
+                ["bootError"] = boot.Error
+            };
+            files.Add(item);
+        }
+    }
+
+    private async Task<DiskBootInfo> ReadNdiBootInfoAsync(string path, long size,
+                                                          CancellationToken token)
+    {
+        try
+        {
+            if (size < NdiHeader.Size)
+                return DiskBootInfo.Unknown("NDI image is too small");
+
+            byte[] headerBytes = await ReadRemoteRangeAsync(path, 0, NdiHeader.Size, token);
+            NdiHeader header = NdiHeader.FromBytes(headerBytes);
+
+            long directoryOffset = checked((long)header.DirectoryStartSector * header.SectorSize);
+            int directoryBytes = checked((int)(header.DirectorySectorCount * header.SectorSize));
+            if (directoryBytes <= 0 || directoryBytes > MaxNdiDirectoryBytes)
+                return DiskBootInfo.Unknown("NDI directory is outside supported bounds");
+            if (directoryOffset < 0 || directoryOffset > uint.MaxValue)
+                return DiskBootInfo.Unknown("NDI directory offset is too large");
+
+            byte[] directoryBytesRaw = await ReadRemoteRangeAsync(path, (uint)directoryOffset,
+                directoryBytes, token);
+            NdiDirectory directory = NdiDirectory.FromBytes(directoryBytesRaw,
+                checked((int)header.DirectorySectorCount));
+
+            foreach (string file in new[] { "AUTOBOOT.bas", "AUTOBOOT.bin" })
+            {
+                NdiDirEntry? entry = directory.ListEntries(0xFFFF).FirstOrDefault(e =>
+                    !e.IsDirectory &&
+                    string.Equals(e.Filename, file, StringComparison.OrdinalIgnoreCase));
+                if (entry is not null)
+                    return DiskBootInfo.Bootable(entry.Filename);
+            }
+
+            return DiskBootInfo.NotBootable();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or OverflowException or
+            NovaHostCommandException or EndOfStreamException)
+        {
+            return DiskBootInfo.Unknown(ex.Message);
+        }
+    }
+
+    private async Task<byte[]> ReadRemoteRangeAsync(string path, uint offset, int length,
+                                                    CancellationToken token)
+    {
+        byte[] result = new byte[length];
+        int written = 0;
+        while (written < length)
+        {
+            uint chunkOffset = checked(offset + (uint)written);
+            uint want = (uint)Math.Min(RemoteMetadataChunkBytes, length - written);
+            NovaFileChunk chunk = await _management.ReadFileChunkAsync(path, chunkOffset, want, token);
+            if (chunk.Data.Length == 0)
+                throw new EndOfStreamException("remote file ended before NDI metadata was complete");
+            chunk.Data.AsSpan().CopyTo(result.AsSpan(written));
+            written += chunk.Data.Length;
+        }
+        return result;
     }
 
     private async Task<JsonObject> BuildLibraryAsync(CancellationToken token)
@@ -380,9 +534,7 @@ sealed class LocalNovaWebServer
 
     private async Task AddFilesAsync(JsonArray files, string group, string dir, string? extension, CancellationToken token)
     {
-        JsonNode? node = await GetBoardJsonAsync($"/sd/{CleanRelativePath(dir)}/", token);
-        if (node is not JsonArray rows)
-            return;
+        JsonArray rows = await _management.ListDirectoryAsync(EnsureAbsolutePath(dir), token);
 
         foreach (JsonNode? row in rows)
         {
@@ -423,12 +575,16 @@ sealed class LocalNovaWebServer
             return;
         }
 
-        JsonObject? existingVm = config["vm"] as JsonObject;
-        JsonObject vm = existingVm ?? new JsonObject();
-        vm["defaultRuntime"] = name;
-        if (existingVm is null)
-            config["vm"] = vm;
-        await WriteBootConfigAsync(config, token);
+        JsonObject entry = languages[name]?.AsObject() ?? new JsonObject();
+        string rom = entry["rom"]?.GetValue<string>() ?? "";
+        string? extensionRom = entry["extensionRom"]?.GetValue<string>();
+        if (rom.Length == 0)
+        {
+            await SendErrorAsync(context.Response, 400, "runtime has no rom configured", token);
+            return;
+        }
+
+        await _management.RuntimeAddAsync(name, rom, extensionRom, makeActive: true, token);
         InvalidateStatusCache();
         await SendJsonAsync(context.Response, new JsonObject { ["ok"] = true, ["activeRuntime"] = name }, token);
     }
@@ -446,26 +602,9 @@ sealed class LocalNovaWebServer
             return;
         }
 
-        JsonObject config = await ReadBootConfigAsync(token);
-        JsonObject? existingLanguages = config["languages"] as JsonObject;
-        JsonObject languages = existingLanguages ?? new JsonObject();
-        var entry = new JsonObject { ["rom"] = EnsureAbsolutePath(rom) };
-        if (!string.IsNullOrWhiteSpace(extensionRom))
-            entry["extensionRom"] = EnsureAbsolutePath(extensionRom);
-        languages[name] = entry;
-        if (existingLanguages is null)
-            config["languages"] = languages;
-
-        if (makeActive)
-        {
-            JsonObject? existingVm = config["vm"] as JsonObject;
-            JsonObject vm = existingVm ?? new JsonObject();
-            vm["defaultRuntime"] = name;
-            if (existingVm is null)
-                config["vm"] = vm;
-        }
-
-        await WriteBootConfigAsync(config, token);
+        await _management.RuntimeAddAsync(name, EnsureAbsolutePath(rom),
+            string.IsNullOrWhiteSpace(extensionRom) ? null : EnsureAbsolutePath(extensionRom),
+            makeActive, token);
         InvalidateStatusCache();
         await SendJsonAsync(context.Response, new JsonObject { ["ok"] = true, ["runtime"] = name }, token);
     }
@@ -488,20 +627,59 @@ sealed class LocalNovaWebServer
             return;
         }
 
-        JsonObject? languages = config["languages"] as JsonObject;
-        languages?.Remove(name);
-        await WriteBootConfigAsync(config, token);
+        await _management.RuntimeRemoveAsync(name, token);
         InvalidateStatusCache();
         await SendJsonAsync(context.Response, new JsonObject { ["ok"] = true, ["removedRuntime"] = name }, token);
     }
 
+    private async Task RuntimePackageAsync(HttpListenerContext context, CancellationToken token)
+    {
+        string fileName = Query(context.Request, "filename") ?? "runtime.zip";
+        string? nameOverride = Query(context.Request, "name");
+        bool makeActive = string.Equals(Query(context.Request, "makeActive"), "true",
+            StringComparison.OrdinalIgnoreCase);
+
+        byte[] packageBytes = await ReadBodyAsync(context.Request, token);
+        RuntimePackage package = ReadRuntimePackage(fileName, packageBytes, nameOverride);
+        string runtimeDir = "/roms/runtimes/" + SafeRemoteName(package.Name);
+        string romPath = runtimeDir + "/" + SafeRemoteName(package.Rom.FileName);
+        string? extensionPath = package.ExtensionRom is null
+            ? null
+            : runtimeDir + "/" + SafeRemoteName(package.ExtensionRom.FileName);
+
+        await UploadBytesAsync(romPath, package.Rom.Bytes, token);
+        if (package.ExtensionRom is not null && extensionPath is not null)
+            await UploadBytesAsync(extensionPath, package.ExtensionRom.Bytes, token);
+
+        await _management.RuntimeAddAsync(package.Name, romPath, extensionPath, makeActive, token);
+        InvalidateStatusCache();
+        InvalidateInventoryCache();
+        await SendJsonAsync(context.Response, new JsonObject
+        {
+            ["ok"] = true,
+            ["runtime"] = package.Name,
+            ["rom"] = romPath,
+            ["extensionRom"] = extensionPath,
+            ["active"] = makeActive
+        }, token);
+    }
+
     private async Task<JsonObject> ReadBootConfigAsync(CancellationToken token)
     {
-        JsonNode? config = await GetBoardJsonAsync("/sd/config/boot.json", token);
-        if (config is JsonObject obj && obj["error"] is null)
-            return obj.DeepClone().AsObject();
+        try
+        {
+            string text = await _management.ReadTextFileAsync("/config/boot.json", token);
+            if (JsonNode.Parse(text) is JsonObject obj)
+                return MergeBootConfigDefaults(obj);
+        }
+        catch
+        {
+        }
 
-        return JsonNode.Parse("""
+        return MergeBootConfigDefaults(null);
+    }
+
+    private static JsonObject DefaultBootConfig() => JsonNode.Parse("""
         {
           "vm": {
             "defaultRuntime": "novabasic"
@@ -517,79 +695,87 @@ sealed class LocalNovaWebServer
           "network": {}
         }
         """)!.AsObject();
-    }
 
-    private async Task WriteBootConfigAsync(JsonObject config, CancellationToken token)
+    private static JsonObject MergeBootConfigDefaults(JsonObject? config)
     {
-        string json = config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using HttpResponseMessage response = await _commandHttp.PutAsync(BoardUrl("/sd/config/boot.json"), content, token);
-        string body = await response.Content.ReadAsStringAsync(token);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(body)
-                ? $"boot config write failed: {(int)response.StatusCode} {response.ReasonPhrase}"
-                : body);
-    }
+        JsonObject merged = DefaultBootConfig();
+        if (config is null)
+            return merged;
 
-    private async Task<JsonNode?> GetBoardJsonAsync(string path, CancellationToken token)
-    {
-        try
+        if (config["mounts"] is JsonObject mounts)
+            merged["mounts"] = mounts.DeepClone();
+        if (config["network"] is JsonObject network)
+            merged["network"] = network.DeepClone();
+
+        JsonObject mergedLanguages = merged["languages"]!.AsObject();
+        if (config["languages"] is JsonObject languages)
         {
-            using HttpResponseMessage response = await _statusHttp.GetAsync(BoardUrl(path), token);
-            string body = await response.Content.ReadAsStringAsync(token);
-            if (!response.IsSuccessStatusCode)
-                return ErrorNode($"GET {path}: {(int)response.StatusCode} {response.ReasonPhrase}");
-            if (string.IsNullOrWhiteSpace(body))
-                return new JsonObject();
-            return JsonNode.Parse(body);
+            foreach ((string name, JsonNode? entry) in languages)
+            {
+                if (entry is not null)
+                    mergedLanguages[name] = entry.DeepClone();
+            }
         }
-        catch (Exception ex)
+
+        JsonObject mergedVm = merged["vm"]!.AsObject();
+        if (config["vm"] is JsonObject vm)
         {
-            return ErrorNode(ex.Message);
+            foreach ((string key, JsonNode? value) in vm)
+            {
+                if (value is not null)
+                    mergedVm[key] = value.DeepClone();
+            }
         }
+
+        string active = mergedVm["defaultRuntime"]?.GetValue<string>() ?? "";
+        if (active.Length == 0 || !mergedLanguages.ContainsKey(active))
+            mergedVm["defaultRuntime"] = mergedLanguages.ContainsKey("novabasic")
+                ? "novabasic"
+                : mergedLanguages.First().Key;
+        return merged;
     }
 
     private async Task ProxyUploadAsync(HttpListenerContext context, string boardPath, CancellationToken token)
     {
-        using var content = new StreamContent(context.Request.InputStream);
-        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        using HttpResponseMessage response = await _uploadHttp.PutAsync(BoardUrl(boardPath), content, token);
-        if (response.IsSuccessStatusCode)
+        long length = context.Request.ContentLength64;
+        await BroadcastEventAsync("upload", new JsonObject
         {
-            InvalidateStatusCache();
-            InvalidateInventoryCache();
-        }
-        await SendBoardResponseAsync(context.Response, response, token);
+            ["path"] = boardPath,
+            ["state"] = "started",
+            ["size"] = length
+        }, token);
+        var progress = new Progress<long>(written =>
+        {
+            _ = BroadcastEventAsync("upload", new JsonObject
+            {
+                ["path"] = boardPath,
+                ["state"] = "progress",
+                ["written"] = written,
+                ["size"] = length
+            }, CancellationToken.None);
+        });
+        await _management.WriteFileAsync(boardPath, context.Request.InputStream,
+            length, progress, token);
+        InvalidateStatusCache();
+        InvalidateInventoryCache();
+        await BroadcastEventAsync("upload", new JsonObject
+        {
+            ["path"] = boardPath,
+            ["state"] = "complete",
+            ["size"] = length
+        }, token);
+        await SendJsonAsync(context.Response, new JsonObject
+        {
+            ["ok"] = true,
+            ["path"] = boardPath,
+            ["size"] = length
+        }, token);
     }
 
-    private async Task ProxyBoardAsync(HttpListenerContext context, HttpMethod method, string boardPath,
-                                       byte[]? body, CancellationToken token)
+    private async Task UploadBytesAsync(string path, byte[] bytes, CancellationToken token)
     {
-        using var request = new HttpRequestMessage(method, BoardUrl(boardPath));
-        if (body is not null)
-        {
-            request.Content = new ByteArrayContent(body);
-            if (body.Length > 0)
-                request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-        }
-
-        using HttpResponseMessage response = await _commandHttp.SendAsync(request, token);
-        if (response.IsSuccessStatusCode)
-        {
-            InvalidateStatusCache();
-            if (method == HttpMethod.Delete || boardPath.StartsWith("/sd/", StringComparison.Ordinal))
-                InvalidateInventoryCache();
-        }
-        await SendBoardResponseAsync(context.Response, response, token);
-    }
-
-    private static async Task SendBoardResponseAsync(HttpListenerResponse target, HttpResponseMessage source,
-                                                     CancellationToken token)
-    {
-        string text = await source.Content.ReadAsStringAsync(token);
-        target.StatusCode = (int)source.StatusCode;
-        target.ContentType = source.Content.Headers.ContentType?.ToString() ?? "application/json";
-        await WriteTextAsync(target, text, token);
+        using var stream = new MemoryStream(bytes);
+        await _management.WriteFileAsync(path, stream, bytes.Length, null, token);
     }
 
     private static async Task<JsonObject> ReadJsonObjectAsync(HttpListenerRequest request, CancellationToken token)
@@ -615,6 +801,109 @@ sealed class LocalNovaWebServer
     private void InvalidateInventoryCache()
     {
         _inventoryCacheAt = DateTimeOffset.MinValue;
+        _diskBootInfoCache.Clear();
+    }
+
+    private sealed record DiskBootInfo(string Status, string FileName, string Error)
+    {
+        public static DiskBootInfo Bootable(string fileName) =>
+            new("bootable", fileName, "");
+
+        public static DiskBootInfo NotBootable() =>
+            new("not-bootable", "", "");
+
+        public static DiskBootInfo Unknown(string error) =>
+            new("unknown", "", error);
+    }
+
+    private async Task HandleEventsAsync(HttpListenerContext context, CancellationToken token)
+    {
+        if (!context.Request.IsWebSocketRequest)
+        {
+            await SendErrorAsync(context.Response, 400, "websocket required", token);
+            return;
+        }
+
+        HttpListenerWebSocketContext wsContext = await context.AcceptWebSocketAsync(null);
+        WebSocket socket = wsContext.WebSocket;
+        Guid id = Guid.NewGuid();
+        _eventClients[id] = socket;
+        await SendSocketEventAsync(socket, "connected", new JsonObject
+        {
+            ["target"] = BoardBase,
+            ["management"] = _management.ConnectionState
+        }, token);
+
+        byte[] buffer = new byte[256];
+        try
+        {
+            while (!token.IsCancellationRequested &&
+                   socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            {
+                WebSocketReceiveResult result = await socket.ReceiveAsync(buffer, token);
+                if (result.MessageType == WebSocketMessageType.Close)
+                    break;
+            }
+        }
+        catch
+        {
+        }
+        finally
+        {
+            _eventClients.TryRemove(id, out _);
+            try
+            {
+                if (socket.State == WebSocketState.Open)
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
+            }
+            catch
+            {
+            }
+            socket.Dispose();
+        }
+    }
+
+    private async Task BroadcastEventAsync(string type, JsonObject data, CancellationToken token)
+    {
+        foreach ((Guid id, WebSocket socket) in _eventClients)
+        {
+            if (socket.State != WebSocketState.Open)
+            {
+                _eventClients.TryRemove(id, out _);
+                continue;
+            }
+            try
+            {
+                await SendSocketEventAsync(socket, type, data.DeepClone().AsObject(), token);
+            }
+            catch
+            {
+                _eventClients.TryRemove(id, out _);
+            }
+        }
+    }
+
+    private static async Task SendSocketEventAsync(WebSocket socket, string type,
+                                                   JsonObject data,
+                                                   CancellationToken token)
+    {
+        var payload = new JsonObject
+        {
+            ["type"] = type,
+            ["at"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            ["data"] = data
+        };
+        byte[] bytes = Encoding.UTF8.GetBytes(payload.ToJsonString(JsonOptions));
+        await socket.SendAsync(bytes, WebSocketMessageType.Text, true, token);
+    }
+
+    private static async Task SendOkAsync(HttpListenerResponse response,
+                                          JsonObject data,
+                                          CancellationToken token)
+    {
+        JsonObject body = data.DeepClone().AsObject();
+        body["ok"] = true;
+        await SendJsonAsync(response, body, token);
     }
 
     private static async Task SendHtmlAsync(HttpListenerResponse response, string html, CancellationToken token)
@@ -647,14 +936,6 @@ sealed class LocalNovaWebServer
         await response.OutputStream.WriteAsync(bytes, token);
     }
 
-    private string BoardUrl(string path)
-    {
-        string normalized = path.StartsWith('/') ? path : "/" + path;
-        return BoardBase + normalized;
-    }
-
-    private static string SdUrl(string path) => "/sd/" + CleanRelativePath(path);
-
     private static string CleanRelativePath(string path)
     {
         string value = path.Trim().Replace('\\', '/');
@@ -669,7 +950,142 @@ sealed class LocalNovaWebServer
         return "/" + clean;
     }
 
-    private static JsonObject ErrorNode(string message) => new()
+    private static string SafeRemoteName(string name)
+    {
+        string value = Path.GetFileName(name.Trim());
+        if (value.Length == 0)
+            value = "runtime";
+        var sb = new StringBuilder(value.Length);
+        foreach (char ch in value)
+            sb.Append(char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-' ? ch : '_');
+        return sb.ToString();
+    }
+
+    private static RuntimePackage ReadRuntimePackage(string fileName, byte[] data,
+                                                     string? nameOverride)
+    {
+        string lower = fileName.ToLowerInvariant();
+        if (!lower.EndsWith(".zip", StringComparison.Ordinal) &&
+            !lower.EndsWith(".nvr", StringComparison.Ordinal) &&
+            !lower.EndsWith(".nrp", StringComparison.Ordinal))
+        {
+            if (!IsRomFile(fileName))
+                throw new InvalidOperationException("runtime package must be a .zip/.nvr or a ROM file");
+            string name = CleanRuntimeName(nameOverride, Path.GetFileNameWithoutExtension(fileName));
+            return new RuntimePackage(name, new RuntimePackageFile(fileName, data), null);
+        }
+
+        using var ms = new MemoryStream(data);
+        using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
+        JsonObject? manifest = ReadRuntimeManifest(zip);
+        List<RuntimePackageFile> roms = ReadRuntimePackageRoms(zip);
+        if (roms.Count == 0)
+            throw new InvalidOperationException("runtime package contains no .bin/.rom files");
+
+        string packageBase = Path.GetFileNameWithoutExtension(fileName);
+        string nameFromManifest = manifest?["name"]?.GetValue<string>() ?? "";
+        string runtimeName = CleanRuntimeName(nameOverride, nameFromManifest.Length > 0 ? nameFromManifest : packageBase);
+
+        RuntimePackageFile rom;
+        RuntimePackageFile? extensionRom = null;
+        string manifestRom = manifest?["rom"]?.GetValue<string>() ?? "";
+        string manifestExt = manifest?["extensionRom"]?.GetValue<string>() ??
+            manifest?["extension"]?.GetValue<string>() ?? "";
+        if (manifestRom.Length > 0)
+        {
+            rom = FindPackageFile(roms, manifestRom);
+            if (manifestExt.Length > 0)
+                extensionRom = FindPackageFile(roms, manifestExt);
+        }
+        else
+        {
+            (rom, extensionRom) = InferPackageRoms(roms);
+        }
+
+        return new RuntimePackage(runtimeName, rom, extensionRom);
+    }
+
+    private static JsonObject? ReadRuntimeManifest(ZipArchive zip)
+    {
+        foreach (string manifestName in new[] { "nova-runtime.json", "runtime.json", "package.json" })
+        {
+            ZipArchiveEntry? entry = zip.Entries.FirstOrDefault(e =>
+                string.Equals(Path.GetFileName(e.FullName), manifestName, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+                continue;
+            using Stream stream = entry.Open();
+            return JsonNode.Parse(stream) as JsonObject;
+        }
+        return null;
+    }
+
+    private static List<RuntimePackageFile> ReadRuntimePackageRoms(ZipArchive zip)
+    {
+        var roms = new List<RuntimePackageFile>();
+        foreach (ZipArchiveEntry entry in zip.Entries)
+        {
+            if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
+                continue;
+            if (!IsRomFile(entry.Name))
+                continue;
+            using Stream stream = entry.Open();
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            roms.Add(new RuntimePackageFile(entry.Name, ms.ToArray()));
+        }
+        return roms;
+    }
+
+    private static RuntimePackageFile FindPackageFile(List<RuntimePackageFile> files, string requested)
+    {
+        RuntimePackageFile? file = files.FirstOrDefault(f =>
+            string.Equals(f.FileName, requested, StringComparison.OrdinalIgnoreCase)) ??
+            files.FirstOrDefault(f =>
+                string.Equals(Path.GetFileName(f.FileName), Path.GetFileName(requested),
+                    StringComparison.OrdinalIgnoreCase));
+        return file ?? throw new InvalidOperationException($"runtime package manifest references missing ROM: {requested}");
+    }
+
+    private static (RuntimePackageFile Rom, RuntimePackageFile? ExtensionRom) InferPackageRoms(List<RuntimePackageFile> roms)
+    {
+        if (roms.Count == 1)
+            return (roms[0], null);
+        if (roms.Count != 2)
+            throw new InvalidOperationException("runtime package needs nova-runtime.json when it contains more than two ROMs");
+
+        RuntimePackageFile? extension = roms.FirstOrDefault(r => LooksLikeExtensionRom(r.FileName));
+        if (extension is null)
+            throw new InvalidOperationException("two-ROM runtime packages need nova-runtime.json or an extension ROM filename containing 'ext' or 'extension'");
+        RuntimePackageFile primary = roms.First(r => !ReferenceEquals(r, extension));
+        return (primary, extension);
+    }
+
+    private static bool IsRomFile(string fileName)
+    {
+        string ext = Path.GetExtension(fileName);
+        return ext.Equals(".bin", StringComparison.OrdinalIgnoreCase) ||
+            ext.Equals(".rom", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeExtensionRom(string fileName)
+    {
+        string lower = Path.GetFileNameWithoutExtension(fileName).ToLowerInvariant();
+        return lower.Contains("extension", StringComparison.Ordinal) ||
+            lower.Contains("_ext", StringComparison.Ordinal) ||
+            lower.EndsWith("ext", StringComparison.Ordinal);
+    }
+
+    private static string CleanRuntimeName(string? preferred, string fallback)
+    {
+        string raw = string.IsNullOrWhiteSpace(preferred) ? fallback : preferred.Trim();
+        var sb = new StringBuilder(raw.Length);
+        foreach (char ch in raw.ToLowerInvariant())
+            sb.Append(char.IsLetterOrDigit(ch) || ch is '_' or '-' ? ch : '_');
+        string value = sb.ToString().Trim('_');
+        return value.Length == 0 ? "runtime" : value;
+    }
+
+    private static JsonObject ErrorObject(string message) => new()
     {
         ["ok"] = false,
         ["error"] = message
@@ -680,6 +1096,11 @@ sealed class LocalNovaWebServer
 
     private static string? Query(HttpListenerRequest request, string name) =>
         request.QueryString[name];
+
+    private sealed record RuntimePackage(string Name, RuntimePackageFile Rom,
+                                         RuntimePackageFile? ExtensionRom);
+
+    private sealed record RuntimePackageFile(string FileName, byte[] Bytes);
 
     private const string IndexHtml = """
 <!doctype html>
@@ -833,6 +1254,17 @@ h1{font-size:19px;letter-spacing:0;margin:0}
   align-items:center;
   margin-bottom:8px;
 }
+.disk-panel .panel-body{
+  display:grid;
+  gap:10px;
+}
+.disk-panel .upload,.disk-panel .mount-existing{margin-bottom:0}
+.scroll-list{
+  max-height:clamp(168px,26vh,260px);
+  overflow:auto;
+  padding-right:4px;
+  border-top:1px solid var(--line);
+}
 .row{
   display:grid;
   grid-template-columns:1fr auto;
@@ -842,6 +1274,35 @@ h1{font-size:19px;letter-spacing:0;margin:0}
   border-bottom:1px solid var(--line);
 }
 .row:last-child{border-bottom:0}
+.disk-list .row{
+  grid-template-columns:minmax(0,1fr) auto;
+  min-height:44px;
+  padding:7px 0;
+}
+.disk-list .row>div:first-child{min-width:0}
+.disk-title{display:flex;align-items:center;gap:7px;min-width:0}
+.disk-list .name,.disk-list .meta{
+  display:block;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.disk-title .name{min-width:0}
+.boot-chip{
+  flex:0 0 auto;
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:2px 7px;
+  font-size:11px;
+  line-height:1.35;
+  color:var(--dim);
+  background:rgba(14,18,14,.7);
+}
+.boot-chip.bootable{color:#061009;background:var(--ok);border-color:transparent}
+.boot-chip.unknown{color:var(--amber);border-color:rgba(223,189,98,.35)}
+.disk-list .row-actions{flex-wrap:nowrap}
+.disk-list .row-actions button{min-height:30px;padding:5px 8px}
 .name{
   color:var(--ink);
   background:transparent;
@@ -903,7 +1364,7 @@ h1{font-size:19px;letter-spacing:0;margin:0}
     </section>
 
     <div class="side">
-      <section class="panel">
+      <section class="panel disk-panel">
         <div class="panel-head">
           <h2>Disk Images</h2>
           <span class="meta" id="diskCount">...</span>
@@ -928,7 +1389,7 @@ h1{font-size:19px;letter-spacing:0;margin:0}
               <option value="hd1">HD1</option>
             </select>
           </div>
-          <div id="diskList"></div>
+          <div class="scroll-list disk-list" id="diskList"></div>
           <div class="toast" id="toast"></div>
         </div>
       </section>
@@ -944,11 +1405,10 @@ h1{font-size:19px;letter-spacing:0;margin:0}
             <button class="primary" id="setRuntimeBtn">Set Active</button>
           </div>
           <div class="runtime-deploy">
-            <input id="runtimeName" placeholder="runtime name">
+            <input class="wide" type="file" id="runtimePackage" accept=".zip,.nvr,.nrp,.bin,.rom">
+            <input id="runtimeName" placeholder="runtime name override">
             <label class="check"><input type="checkbox" id="runtimeMakeActive"> Make active</label>
-            <input class="wide" type="file" id="runtimeRom" accept=".bin,.rom">
-            <input class="wide" type="file" id="runtimeExt" accept=".bin,.rom">
-            <button class="primary wide" id="deployRuntimeBtn">Deploy Runtime</button>
+            <button class="primary wide" id="deployRuntimeBtn">Install Runtime Package</button>
           </div>
           <div id="runtimeList"></div>
         </div>
@@ -1021,6 +1481,22 @@ async function api(path, opts){
   return body;
 }
 
+function connectEvents(){
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/events`);
+  ws.onmessage = ev => {
+    try{
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "upload" && msg.data){
+        const d = msg.data;
+        if (d.state === "progress" && d.size > 0) toast(`Uploading ${Math.floor((d.written / d.size) * 100)}%`);
+        if (d.state === "complete") toast("Upload complete");
+      }
+    }catch{}
+  };
+  ws.onclose = () => setTimeout(connectEvents, 2000);
+}
+
 async function uploadTo(path, file){
   await api("/api/sd?path=" + encodeURIComponent(path), {method:"PUT", body:file});
 }
@@ -1048,8 +1524,16 @@ function renderStatus(){
   }
   lamp("stSd", !bad(sd) && sd.mounted ? "ok" : "bad", !bad(sd) && sd.mounted ? (sd.cardType || "mounted") : "missing");
   lamp("stWifi", !bad(wifi) && wifi.connected ? "ok" : (!bad(wifi) && wifi.configured ? "warn" : "bad"), !bad(wifi) && wifi.connected ? (wifi.localIp || "connected") : (!bad(wifi) && wifi.configured ? "configured" : "not set"));
-  const active = !bad(audio) && !!(audio.playing || audio.active || audio.kind && audio.kind !== "none");
-  lamp("stAudio", active ? "ok" : "", active ? (audio.kind || "playing") : "idle");
+  const midiActive = !bad(audio) && audio.midiPlaying === true;
+  const sidActive = !bad(audio) && audio.sidPlaying === true;
+  const legacyActive = !bad(audio) && !!(audio.playing || audio.active || audio.kind && audio.kind !== "none");
+  const active = midiActive || sidActive || legacyActive;
+  const audioLabel = midiActive
+    ? "MIDI"
+    : sidActive
+      ? "SID"
+      : (audio.kind && audio.kind !== "none" ? audio.kind : "playing");
+  lamp("stAudio", active ? "ok" : "", active ? audioLabel : "idle");
 }
 
 function selectDisk(path){
@@ -1096,9 +1580,17 @@ function renderDisks(){
   for (const d of rows){
     const row = document.createElement("div");
     row.className = "row";
+    const bootState = d.bootStatus || (d.bootable ? "bootable" : "not-bootable");
+    const bootLabel = bootState === "bootable" ? "boot" : (bootState === "unknown" ? "?" : "data");
+    const bootTitle = bootState === "bootable"
+      ? "Bootable: " + (d.bootFile || "AUTOBOOT")
+      : (bootState === "unknown" ? "Boot check failed: " + (d.bootError || "unknown") : "No root AUTOBOOT.bas or AUTOBOOT.bin");
     row.innerHTML = `
       <div>
-        <button class="name ${selected === d.path ? "selected" : ""}" data-select="${esc(d.path)}">${esc(d.name)}</button>
+        <div class="disk-title">
+          <button class="name ${selected === d.path ? "selected" : ""}" data-select="${esc(d.path)}">${esc(d.name)}</button>
+          <span class="boot-chip ${esc(bootState)}" title="${esc(bootTitle)}">${esc(bootLabel)}</span>
+        </div>
         <div class="meta">${esc(d.group)} / ${fmtBytes(d.size)}</div>
       </div>
       <div class="row-actions">
@@ -1218,26 +1710,14 @@ async function setRuntime(){
 }
 
 async function deployRuntime(){
+  const file = $("runtimePackage").files[0];
   const name = $("runtimeName").value.trim();
-  const rom = $("runtimeRom").files[0];
-  const ext = $("runtimeExt").files[0];
-  if (!name) return toast("Runtime name required.", true);
-  if (!rom) return toast("ROM file required.", true);
-  const romPath = "/roms/" + safeName(rom.name);
-  let extPath = "";
-  toast("Uploading " + rom.name + "...");
-  await uploadTo(romPath, rom);
-  if (ext){
-    extPath = "/roms/" + safeName(ext.name);
-    toast("Uploading " + ext.name + "...");
-    await uploadTo(extPath, ext);
-  }
-  await api("/api/runtime/add", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name,rom:romPath,extensionRom:extPath || null,makeActive:$("runtimeMakeActive").checked})
-  });
-  toast("Runtime deployed: " + name);
+  if (!file) return toast("Choose a runtime package.", true);
+  const params = new URLSearchParams({filename:file.name,makeActive:$("runtimeMakeActive").checked ? "true" : "false"});
+  if (name) params.set("name", name);
+  toast("Installing " + file.name + "...");
+  const result = await api("/api/runtime/package?" + params.toString(), {method:"PUT", body:file});
+  toast("Runtime installed: " + result.runtime + ". Host reboot to apply.");
   await refresh(true);
 }
 
@@ -1301,6 +1781,7 @@ $("deployRuntimeBtn").addEventListener("click", () => deployRuntime().catch(e =>
 $("libraryUploadBtn").addEventListener("click", () => uploadLibrary().catch(e => toast(e.message, true)));
 $("libraryKind").addEventListener("change", renderLibrary);
 refresh(true).catch(e => toast(e.message, true));
+connectEvents();
 setInterval(() => refresh(false).catch(() => {}), 15000);
 </script>
 </body>

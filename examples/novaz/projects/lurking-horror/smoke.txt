@@ -1,0 +1,4 @@
+# The Lurking Horror (V3) boot, room, and movement smoke.
+look=>Terminal Room&&computer terminals
+s=>Second Floor&&elevator
+n=>Terminal Room&&whiz-bang pc

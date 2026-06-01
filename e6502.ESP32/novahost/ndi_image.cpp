@@ -233,37 +233,29 @@ bool NdiImage::read_bam() {
     _bam_byte_count      = (_data_sector_count + 7) >> 3;
 
     int payload_size     = bam_sectors * SECTOR_SIZE;
-    uint8_t* payload     = (uint8_t*)ndi_malloc(payload_size);
-    if (!payload) {
+    if (_bam_byte_count > payload_size) {
         snprintf(_last_error, sizeof(_last_error),
-                 "bam payload malloc failed %d", payload_size);
+                 "bam too small %d for %d", payload_size, _bam_byte_count);
         return false;
-    }
-
-    if (!_stream->seek(SECTOR_SIZE)) {
-        strcpy(_last_error, "bam seek failed");
-        ndi_free(payload);
-        return false;
-    }
-    int got = _stream->read(payload, payload_size);
-    if (got != payload_size) {
-        snprintf(_last_error, sizeof(_last_error),
-                 "bam read failed got %d want %d", got, payload_size);
-        ndi_free(payload); return false;
     }
 
     _bam_bits = (uint8_t*)ndi_malloc(_bam_byte_count);
     if (!_bam_bits) {
         snprintf(_last_error, sizeof(_last_error),
                  "bam bits malloc failed %d", _bam_byte_count);
-        ndi_free(payload);
         return false;
     }
-    int copy_n = (payload_size < _bam_byte_count) ? payload_size : _bam_byte_count;
-    memcpy(_bam_bits, payload, copy_n);
-    if (copy_n < _bam_byte_count)
-        memset(_bam_bits + copy_n, 0, _bam_byte_count - copy_n);
-    ndi_free(payload);
+
+    if (!_stream->seek(SECTOR_SIZE)) {
+        strcpy(_last_error, "bam seek failed");
+        return false;
+    }
+    int got = _stream->read(_bam_bits, _bam_byte_count);
+    if (got != _bam_byte_count) {
+        snprintf(_last_error, sizeof(_last_error),
+                 "bam read failed got %d want %d", got, _bam_byte_count);
+        return false;
+    }
 
     // Recount free sectors from the bits — header value can drift if the
     // image was modified externally.
@@ -330,17 +322,22 @@ bool NdiImage::flush_metadata() {
     // ----- BAM (padded to sector boundary) -----
     int bam_sectors = (int)(_header.directory_start_sector - 1);
     int bam_bytes_padded = bam_sectors * SECTOR_SIZE;
-    uint8_t* padded = (uint8_t*)ndi_malloc(bam_bytes_padded);
-    if (!padded) return false;
-    memset(padded, 0, bam_bytes_padded);
-    int copy_n = (_bam_byte_count < bam_bytes_padded) ? _bam_byte_count
-                                                       : bam_bytes_padded;
-    memcpy(padded, _bam_bits, copy_n);
-    if (!_stream->seek(SECTOR_SIZE)) { ndi_free(padded); return false; }
-    if (_stream->write(padded, bam_bytes_padded) != bam_bytes_padded) {
-        ndi_free(padded); return false;
+    if (!_stream->seek(SECTOR_SIZE)) return false;
+    uint8_t sector[SECTOR_SIZE];
+    int written = 0;
+    while (written < bam_bytes_padded) {
+        memset(sector, 0, sizeof(sector));
+        if (written < _bam_byte_count) {
+            int copy_n = _bam_byte_count - written;
+            if (copy_n > SECTOR_SIZE)
+                copy_n = SECTOR_SIZE;
+            memcpy(sector, _bam_bits + written, copy_n);
+        }
+        if (_stream->write(sector, SECTOR_SIZE) != SECTOR_SIZE) {
+            return false;
+        }
+        written += SECTOR_SIZE;
     }
-    ndi_free(padded);
 
     if (!flush_directory_cache())
         return false;

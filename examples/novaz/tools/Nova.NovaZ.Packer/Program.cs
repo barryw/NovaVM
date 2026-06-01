@@ -79,6 +79,24 @@ foreach (var asset in options.Assets)
     Console.WriteLine($"Imported {asset.Name} ({data.Length} bytes)");
 }
 
+if (options.SoundsPath is not null)
+{
+    var pack = BlorbSounds.BuildPack(options.SoundsPath);
+    image.WriteFile("SOUND.PAK", NdiFileType.Bin, 0xFFFF, pack);
+    Console.WriteLine($"Imported SOUND.PAK ({pack.Length} bytes, {BlorbSounds.Summary(pack)})");
+
+    // Hardware path: the same samples as a WTS soundfont NovaHost plays via the
+    // FPGA WTS chip (Avalonia uses SOUND.PAK; the FPGA has no PCM mixer of its own).
+    var sf = BlorbSounds.BuildSoundfont(options.SoundsPath);
+    image.WriteFile("ZSOUND.NSF", NdiFileType.Bin, 0xFFFF, sf);
+    Console.WriteLine($"Imported ZSOUND.NSF ({sf.Length} bytes, {BlorbSounds.SoundfontSummary(sf)})");
+    if (options.SoundfontOutPath is not null)
+    {
+        File.WriteAllBytes(options.SoundfontOutPath, sf);
+        Console.WriteLine($"Wrote {options.SoundfontOutPath} ({sf.Length} bytes)");
+    }
+}
+
 Console.WriteLine($"Wrote {options.OutputPath}");
 return 0;
 
@@ -93,7 +111,9 @@ internal sealed record Options(
     string StoryName,
     string Label,
     int SizeKb,
-    IReadOnlyList<AssetOption> Assets)
+    IReadOnlyList<AssetOption> Assets,
+    string? SoundsPath,
+    string? SoundfontOutPath)
 {
     public static Options? Parse(string[] args)
     {
@@ -106,6 +126,8 @@ internal sealed record Options(
         string label = "NOVAZ";
         int sizeKb = 1440;
         var assets = new List<AssetOption>();
+        string? sounds = null;
+        string? soundfontOut = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -154,6 +176,14 @@ internal sealed record Options(
                     assets.Add(asset);
                     i++;
                     break;
+                case "--sounds" when value is not null:
+                    sounds = value;
+                    i++;
+                    break;
+                case "--soundfont-out" when value is not null:
+                    soundfontOut = value;
+                    i++;
+                    break;
                 case "-h" or "--help":
                     return null;
                 default:
@@ -175,7 +205,13 @@ internal sealed record Options(
         if (sizeKb <= 0)
             return null;
 
-        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb, assets);
+        if (sounds is not null && !File.Exists(sounds))
+        {
+            Console.Error.WriteLine($"Sounds file not found: {sounds}");
+            return null;
+        }
+
+        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb, assets, sounds, soundfontOut);
     }
 
     private static bool TryParseAsset(string value, out AssetOption asset)

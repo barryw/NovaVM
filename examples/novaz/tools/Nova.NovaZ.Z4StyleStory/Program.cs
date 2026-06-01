@@ -94,11 +94,20 @@ static void EmitStyleProgram(ZCode z)
     z.SetTextStyle(3);
     z.Print("bold reverse uses color f0");
     z.NewLine();
+    z.SetTextStyle(0);
     z.SetTextStyle(4);
     z.Print("italic request is ignored");
     z.NewLine();
+    z.SetTextStyle(0);
     z.SetTextStyle(8);
     z.Print("fixed request is ignored");
+    z.NewLine();
+    // Styles are cumulative until style 0 resets them: bold then reverse,
+    // applied in separate calls, must combine to bold-reverse (color f0).
+    z.SetTextStyle(0);
+    z.SetTextStyle(2);
+    z.SetTextStyle(1);
+    z.Print("stacked styles use color f0");
     z.NewLine();
     z.SetTextStyle(0);
     z.Print("style fixture done");

@@ -1081,6 +1081,12 @@ FIO_CMD_MIDSTOP   = $14
 .ifndef FIO_CMD_SFLOAD
 FIO_CMD_SFLOAD    = $15
 .endif
+.ifndef FIO_CMD_ZSOUND
+; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+FIO_CMD_ZSOUND    = $16
+.endif
 .ifndef FIO_CMD_XLOAD
 FIO_CMD_XLOAD     = $18
 .endif
@@ -1895,6 +1901,11 @@ DMA_CNTM          = $BA74
 .endif
 .ifndef DMA_CNTH
 DMA_CNTH          = $BA75
+.endif
+.ifndef ZSOUND_STATUS
+; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+; last read (clears on read); bit1 = a sound is currently playing.
+ZSOUND_STATUS     = $BA76
 .endif
 
 .ifndef DMA_CMD

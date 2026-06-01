@@ -1155,6 +1155,12 @@ Current file: min_mon.asm
 000000r 3               .ifndef FIO_CMD_SFLOAD
 000000r 3               FIO_CMD_SFLOAD    = $15
 000000r 3               .endif
+000000r 3               .ifndef FIO_CMD_ZSOUND
+000000r 3               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+000000r 3               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+000000r 3               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+000000r 3               FIO_CMD_ZSOUND    = $16
+000000r 3               .endif
 000000r 3               .ifndef FIO_CMD_XLOAD
 000000r 3               FIO_CMD_XLOAD     = $18
 000000r 3               .endif
@@ -1969,6 +1975,11 @@ Current file: min_mon.asm
 000000r 3               .endif
 000000r 3               .ifndef DMA_CNTH
 000000r 3               DMA_CNTH          = $BA75
+000000r 3               .endif
+000000r 3               .ifndef ZSOUND_STATUS
+000000r 3               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+000000r 3               ; last read (clears on read); bit1 = a sound is currently playing.
+000000r 3               ZSOUND_STATUS     = $BA76
 000000r 3               .endif
 000000r 3               
 000000r 3               .ifndef DMA_CMD
@@ -12578,6 +12589,12 @@ Current file: min_mon.asm
 00E999  5               .ifndef FIO_CMD_SFLOAD
 00E999  5               FIO_CMD_SFLOAD    = $15
 00E999  5               .endif
+00E999  5               .ifndef FIO_CMD_ZSOUND
+00E999  5               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+00E999  5               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+00E999  5               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+00E999  5               FIO_CMD_ZSOUND    = $16
+00E999  5               .endif
 00E999  5               .ifndef FIO_CMD_XLOAD
 00E999  5               FIO_CMD_XLOAD     = $18
 00E999  5               .endif
@@ -13392,6 +13409,11 @@ Current file: min_mon.asm
 00E999  5               .endif
 00E999  5               .ifndef DMA_CNTH
 00E999  5               DMA_CNTH          = $BA75
+00E999  5               .endif
+00E999  5               .ifndef ZSOUND_STATUS
+00E999  5               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+00E999  5               ; last read (clears on read); bit1 = a sound is currently playing.
+00E999  5               ZSOUND_STATUS     = $BA76
 00E999  5               .endif
 00E999  5               
 00E999  5               .ifndef DMA_CMD
@@ -16227,6 +16249,12 @@ Current file: min_mon.asm
 00EE3C  6               .ifndef FIO_CMD_SFLOAD
 00EE3C  6               FIO_CMD_SFLOAD    = $15
 00EE3C  6               .endif
+00EE3C  6               .ifndef FIO_CMD_ZSOUND
+00EE3C  6               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+00EE3C  6               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+00EE3C  6               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+00EE3C  6               FIO_CMD_ZSOUND    = $16
+00EE3C  6               .endif
 00EE3C  6               .ifndef FIO_CMD_XLOAD
 00EE3C  6               FIO_CMD_XLOAD     = $18
 00EE3C  6               .endif
@@ -17041,6 +17069,11 @@ Current file: min_mon.asm
 00EE3C  6               .endif
 00EE3C  6               .ifndef DMA_CNTH
 00EE3C  6               DMA_CNTH          = $BA75
+00EE3C  6               .endif
+00EE3C  6               .ifndef ZSOUND_STATUS
+00EE3C  6               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+00EE3C  6               ; last read (clears on read); bit1 = a sound is currently playing.
+00EE3C  6               ZSOUND_STATUS     = $BA76
 00EE3C  6               .endif
 00EE3C  6               
 00EE3C  6               .ifndef DMA_CMD
@@ -20139,6 +20172,12 @@ Current file: min_mon.asm
 00F0E9  5               .ifndef FIO_CMD_SFLOAD
 00F0E9  5               FIO_CMD_SFLOAD    = $15
 00F0E9  5               .endif
+00F0E9  5               .ifndef FIO_CMD_ZSOUND
+00F0E9  5               ; Play/stop a Z-machine sampled sound. FIO_SRCL = sound number, FIO_SRCH =
+00F0E9  5               ; effect (2 = start, 3 = stop), FIO_ENDL = volume level (1..8, 255 = loudest),
+00F0E9  5               ; FIO_ENDH = repeats (255 = loop). Completion is reported via ZSOUND_STATUS.
+00F0E9  5               FIO_CMD_ZSOUND    = $16
+00F0E9  5               .endif
 00F0E9  5               .ifndef FIO_CMD_XLOAD
 00F0E9  5               FIO_CMD_XLOAD     = $18
 00F0E9  5               .endif
@@ -20953,6 +20992,11 @@ Current file: min_mon.asm
 00F0E9  5               .endif
 00F0E9  5               .ifndef DMA_CNTH
 00F0E9  5               DMA_CNTH          = $BA75
+00F0E9  5               .endif
+00F0E9  5               .ifndef ZSOUND_STATUS
+00F0E9  5               ; Z-machine sampled-sound status. bit0 = a non-looping sound finished since the
+00F0E9  5               ; last read (clears on read); bit1 = a sound is currently playing.
+00F0E9  5               ZSOUND_STATUS     = $BA76
 00F0E9  5               .endif
 00F0E9  5               
 00F0E9  5               .ifndef DMA_CMD
