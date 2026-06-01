@@ -3659,13 +3659,20 @@ zvm_snd_sampled:
 ; loads this image's soundfont (SOUND.PAK on Avalonia, ZSOUND.NSF into the WTS
 ; bank on hardware) before the game ever calls sound_effect. Soundless images
 ; just get ERR_NOT_FOUND/ERR_IO back, which we ignore.
+;
+; This MUST go through fio_exec (which clears FIO_STATUS, issues the command,
+; and spins until the host signals completion). A bare fire-and-forget store to
+; FIO_CMD leaves the slow ZSOUND command in flight on hardware; the story's very
+; first init-time FIO call (e.g. @random via FIO_CMD_RNG) then races it, reads a
+; garbage result, computes a bad routine address, and CALLs into data -> an
+; "UNSUPPORTED Z-OPCODE" crash before any text is drawn. Avalonia's FIO is
+; synchronous so it never raced, which is why this was hardware-only.
 nz_sound_preload:
         STZ FIO_SRCL                    ; number 0 (unused for prepare)
         LDA #$01
         STA FIO_SRCH                    ; effect = prepare
         LDA #FIO_CMD_ZSOUND
-        STA FIO_CMD
-        RTS
+        JMP fio_exec                    ; issue AND wait for completion; A ignored
 
 ; Return the sound effect operand in A, defaulting to 2 (start) when the opcode
 ; was called with only a number.
