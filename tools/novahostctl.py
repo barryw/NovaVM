@@ -162,9 +162,9 @@ def build_parser() -> argparse.ArgumentParser:
     cold.add_argument("--no-wait", action="store_true", help="do not wait for Ready")
     cold.add_argument("--text", help="screen text to wait for instead of Ready")
 
-    vm_reset = sub.add_parser("vm-reset", help="reset the currently loaded runtime without reloading ROMs")
-    vm_reset.add_argument("--no-wait", action="store_true", help="do not wait for Ready")
-    vm_reset.add_argument("--text", help="screen text to wait for instead of Ready")
+    vm_reset = sub.add_parser("vm-reset", help="POST /vm-reset without reloading ROMs")
+    vm_reset.add_argument("--no-wait", action="store_true", help=argparse.SUPPRESS)
+    vm_reset.add_argument("--text", help=argparse.SUPPRESS)
 
     wait = sub.add_parser("wait-ready", help="wait for screen text")
     wait.add_argument("--text", default="Ready")
@@ -260,7 +260,9 @@ def dispatch(args: argparse.Namespace) -> int:
         elif args.cmd == "cold-start":
             print_json(client.cold_start(wait_ready=not args.no_wait, text=args.text), args.pretty)
         elif args.cmd == "vm-reset":
-            print_json(client.vm_reset(wait_ready=not args.no_wait, text=args.text), args.pretty)
+            if args.text:
+                raise NovaHostError("vm-reset is REST-only; run wait-ready separately if needed")
+            print_json(client.vm_reset(), args.pretty)
         elif args.cmd == "wait-ready":
             print_json(client.wait_ready(text=args.text, timeout_ms=args.timeout_ms), args.pretty)
         elif args.cmd == "reload-rom":

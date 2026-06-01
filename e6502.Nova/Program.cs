@@ -52,6 +52,7 @@ return verb switch
     "music"      => DoMusic(args[1..], remoteHost),
     "asset"      => DoAsset(args[1..], remoteHost),
     "runtime"    => DoRuntime(args[1..], remoteHost),
+    "webserver" or "web" => DoWebServer(args[1..], remoteHost),
     _            => UnknownVerb(verb),
 };
 
@@ -59,6 +60,49 @@ return verb switch
 // Remote SD operations — talks to NovaHost's HTTP file server (port 80).
 // Default endpoint base is http://<host>/sd/.
 // ===========================================================================
+
+static int DoWebServer(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    var rest = args.ToList();
+    bool help = rest.Count > 0 && rest[0].Equals("help", StringComparison.OrdinalIgnoreCase);
+    help |= TakeFlag(rest, "--help", "-h");
+    string? portOpt = TakeOptionValue(rest, "--port", "-p");
+    string bind = TakeOptionValue(rest, "--bind") ?? "127.0.0.1";
+    _ = TakeFlag(rest, "--open");
+    bool open = !TakeFlag(rest, "--no-open");
+
+    if (help)
+    {
+        PrintWebServerUsage();
+        return 0;
+    }
+
+    if (rest.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected webserver argument: {rest[0]}");
+        PrintWebServerUsage();
+        return 1;
+    }
+
+    int port = 8080;
+    if (portOpt is not null && (!int.TryParse(portOpt, out port) || port is < 1 or > 65535))
+    {
+        Console.Error.WriteLine($"Invalid webserver port: {portOpt}");
+        return 1;
+    }
+
+    string boardHost = host
+        ?? Environment.GetEnvironmentVariable("NOVAHOST")
+        ?? "192.168.1.65";
+    return NovaWebServer.Run(boardHost, bind, port, open);
+}
+
+static void PrintWebServerUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova webserver --remote <host> [--port 8080] [--bind 127.0.0.1] [--no-open]");
+}
 
 static int DoDevice(string[] args, string? host)
 {
@@ -937,6 +981,9 @@ static int DoVm(string[] args, string? host)
 
     try
     {
+        if (host is not null && (command is "reset" or "vm-reset"))
+            return DoRemoteVmReset(host, rest, allowError, json, pretty);
+
         JsonObject request = command switch
         {
             "raw" => BuildVmRawRequest(rest),
@@ -1028,6 +1075,28 @@ static JsonObject BuildVmResetRequest(List<string> args)
     if (!string.IsNullOrWhiteSpace(text))
         req["text"] = text;
     return req;
+}
+
+static int DoRemoteVmReset(string host, List<string> args, bool allowError,
+                           bool json, bool pretty)
+{
+    string? text = TakeOptionValue(args, "--text");
+    _ = TakeFlag(args, "--no-wait");
+    if (!string.IsNullOrWhiteSpace(text))
+        throw new ArgumentException("remote vm reset is REST-only; run 'nova vm wait' after reset if you need to wait for screen text");
+    if (args.Count > 0)
+        throw new ArgumentException($"Unexpected vm reset argument: {args[0]}");
+
+    JsonNode response = SendHostPostJson(host, "/vm-reset", null);
+    bool ok = response["ok"]?.GetValue<bool>() == true;
+    if (!allowError && !ok)
+    {
+        Console.Error.WriteLine(response["error"]?.ToString() ?? response.ToJsonString());
+        return 1;
+    }
+
+    PrintVmResponse("reset", response, json, pretty);
+    return ok || allowError ? 0 : 1;
 }
 
 static JsonObject BuildVmWaitRequest(List<string> args)
@@ -1170,6 +1239,44 @@ static JsonNode SendVmRequest(string host, int port, JsonObject request)
         ?? throw new IOException("invalid JSON response from VM debug server");
 }
 
+static JsonNode SendHostPostJson(string host, string endpoint, string? jsonBody)
+{
+    string url = HostUrl(host, endpoint);
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    using HttpContent content = jsonBody is null
+        ? new ByteArrayContent(Array.Empty<byte>())
+        : new StringContent(jsonBody, Encoding.UTF8, "application/json");
+
+    var resp = http.PostAsync(url, content).GetAwaiter().GetResult();
+    string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+    if (!resp.IsSuccessStatusCode)
+    {
+        return new JsonObject
+        {
+            ["ok"] = false,
+            ["status"] = (int)resp.StatusCode,
+            ["error"] = string.IsNullOrWhiteSpace(body) ? resp.ReasonPhrase : body
+        };
+    }
+
+    if (string.IsNullOrWhiteSpace(body))
+        return new JsonObject { ["ok"] = true };
+
+    try
+    {
+        return JsonNode.Parse(body)
+            ?? new JsonObject { ["ok"] = true };
+    }
+    catch (JsonException)
+    {
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["body"] = body
+        };
+    }
+}
+
 static void PrintVmResponse(string command, JsonNode response, bool json, bool pretty)
 {
     if (json)
@@ -1216,11 +1323,11 @@ static void PrintVmUsage()
     Console.Error.WriteLine();
     Console.Error.WriteLine("Defaults:");
     Console.Error.WriteLine("  no --remote: 127.0.0.1:6502 (Avalonia)");
-    Console.Error.WriteLine("  with --remote: <host>:6503 (NovaHost hardware debug)");
+    Console.Error.WriteLine("  with --remote: reset uses HTTP; debug commands use <host>:6503");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Commands:");
     Console.Error.WriteLine("  cold-start [--runtime basic|logo|ncc] [--text <text>] [--no-wait]");
-    Console.Error.WriteLine("  reset [--text <text>] [--no-wait]");
+    Console.Error.WriteLine("  reset [--text <text>] [--no-wait]  (remote reset is REST-only)");
     Console.Error.WriteLine("  wait [text] [--timeout-ms <ms>]");
     Console.Error.WriteLine("  screen [--json]");
     Console.Error.WriteLine("  line <row>");
@@ -3447,6 +3554,7 @@ static void PrintUsage()
     Console.Error.WriteLine("  music list|upload|download|delete ... --remote <host>");
     Console.Error.WriteLine("  asset list|upload|download|delete ... --remote <host> --type <boot|fonts|sid|...>");
     Console.Error.WriteLine("  runtime list|status|set|add|remove|deploy ... --remote <host>");
+    Console.Error.WriteLine("  webserver --remote <host> [--port 8080] [--no-open]");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Raw SD commands, kept for compatibility:");
     Console.Error.WriteLine("  --remote <host> ls [path]");

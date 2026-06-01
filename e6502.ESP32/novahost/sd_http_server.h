@@ -12,6 +12,7 @@
 //   POST   /drives/<slot>/unmount -> unmount slot and clear its persisted path
 //   GET    /sd-status    -> SD diagnostic JSON
 //   POST   /audio-stop   -> stop NovaHost-driven audio playback
+//   POST   /vm-reset     -> reset the FPGA-hosted VM without rebooting NovaHost
 //   POST   /reboot       -> reboot NovaHost after responding
 //   GET    /sd/          -> JSON listing
 //   GET    /sd/<path>    -> file body, or listing if path is a directory
@@ -88,6 +89,7 @@ private:
                     uint32_t content_len);
     void handle_delete(WiFiClient& client, const char* path);
     void handle_status(WiFiClient& client);
+    void handle_vm_reset(WiFiClient& client);
     void handle_reboot(WiFiClient& client);
 
     void send_listing(WiFiClient& client, const char* path);

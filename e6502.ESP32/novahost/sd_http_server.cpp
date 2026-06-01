@@ -8,6 +8,7 @@ extern String g_sd_diag;
 extern bool g_sd_mounted;
 extern const char* novaBootPhaseName();
 extern bool novaFpgaBridgeAvailable();
+extern bool novaVmReset();
 extern uint8_t novaHostStatusFlags();
 extern bool novaHttpTaskRunning();
 extern bool novaHttpTaskLoopSeen();
@@ -170,6 +171,7 @@ void SdHttpServer::begin() {
     Serial.println("[sdhttp]   GET    /drives  -> drive mount status");
     Serial.println("[sdhttp]   POST   /drives/slot/mount|unmount");
     Serial.println("[sdhttp]   GET    /sd-status -> SD/boot diagnostic JSON");
+    Serial.println("[sdhttp]   POST   /vm-reset -> reset FPGA VM");
     Serial.println("[sdhttp]   GET    /sd/       -> list root");
     Serial.println("[sdhttp]   GET    /sd/path   -> fetch file");
     Serial.println("[sdhttp]   PUT    /sd/path   -> upload whole file");
@@ -271,6 +273,10 @@ void SdHttpServer::handle_client(WiFiClient& client) {
     if (strcmp(method, "POST") == 0 && strcmp(url, "/audio-stop") == 0) {
         novaAudioStop();
         send_json(client, 200, "{\"ok\":true,\"audioStopped\":true}");
+        return;
+    }
+    if (strcmp(method, "POST") == 0 && strcmp(url, "/vm-reset") == 0) {
+        handle_vm_reset(client);
         return;
     }
     if (strcmp(method, "POST") == 0 && strcmp(url, "/reboot") == 0) {
@@ -1163,6 +1169,14 @@ void SdHttpServer::handle_reboot(WiFiClient& client) {
     send_json(client, 200, "{\"ok\":true,\"rebooting\":true}");
     delay(100);
     ESP.restart();
+}
+
+void SdHttpServer::handle_vm_reset(WiFiClient& client) {
+    if (!novaVmReset()) {
+        send_error(client, 409, "vm reset unavailable");
+        return;
+    }
+    send_json(client, 200, "{\"ok\":true,\"vmReset\":true}");
 }
 
 void SdHttpServer::send_listing(WiFiClient& client, const char* path) {

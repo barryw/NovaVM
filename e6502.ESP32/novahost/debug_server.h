@@ -67,7 +67,6 @@ private:
     void cmdDbgBreakList();
     void cmdDbgTrace(const String& json);
     void cmdColdStart(const String& json);
-    void cmdVmReset(const String& json);
     void cmdWaitReady(const String& json);
     void cmdWatch(const String& json);
     void cmdRunCycles(const String& json);

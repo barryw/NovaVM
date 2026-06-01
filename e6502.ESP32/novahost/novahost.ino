@@ -230,6 +230,38 @@ bool novaFpgaBridgeAvailable() {
     return !g_fpga_bridge_owned_by_boot;
 }
 
+bool novaVmReset() {
+    if (!novaFpgaBridgeAvailable())
+        return false;
+
+    if (!fpgaBridge.lockSharedBus())
+        return false;
+
+    bool fullReset = fpgaBridge.systemResetHold();
+    bool held = fullReset || fpgaBridge.resetHold();
+    if (!held) {
+        fpgaBridge.unlockSharedBus();
+        return false;
+    }
+
+    delay(10);
+    bool released = fullReset
+        ? fpgaBridge.systemResetRelease()
+        : fpgaBridge.resetRelease();
+    bool resumed = fpgaBridge.resume();
+    fpgaBridge.unlockSharedBus();
+
+    if (!released || !resumed) {
+        logLn("VM reset failed: released=%s resumed=%s",
+              released ? "true" : "false",
+              resumed ? "true" : "false");
+        return false;
+    }
+
+    logLn("VM reset requested via HTTP");
+    return true;
+}
+
 uint8_t novaHostStatusFlags() {
     return (uint8_t)g_host_status_flags;
 }

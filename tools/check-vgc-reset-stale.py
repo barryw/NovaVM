@@ -68,7 +68,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_DEBUG_PORT)
     parser.add_argument("--timeout", type=float, default=60.0)
-    parser.add_argument("--settle", type=float, default=0.5, help="seconds to wait after vm_reset")
+    parser.add_argument("--settle", type=float, default=0.5, help="seconds to wait after POST /vm-reset")
     return parser.parse_args()
 
 
@@ -86,7 +86,7 @@ def main() -> int:
             fill_plane(client, plane)
             print(f"  dirtied {plane.name}")
 
-        print("Issuing vm_reset...")
+        print("Issuing POST /vm-reset...")
         client.vm_reset(wait_ready=False)
         time.sleep(args.settle)
 

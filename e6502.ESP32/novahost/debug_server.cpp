@@ -174,7 +174,6 @@ void DebugServer::handleCommand(const String& json) {
     else if (cmd == "dbg_break_list")  cmdDbgBreakList();
     else if (cmd == "dbg_trace")       cmdDbgTrace(json);
     else if (cmd == "cold_start")  cmdColdStart(json);
-    else if (cmd == "vm_reset")    cmdVmReset(json);
     else if (cmd == "wait_ready")  cmdWaitReady(json);
     else if (cmd == "watch")       cmdWatch(json);
     else if (cmd == "run_cycles")  cmdRunCycles(json);
@@ -867,50 +866,6 @@ void DebugServer::cmdColdStart(const String& json) {
     char buf[128];
     snprintf(buf, sizeof(buf),
              "Cold start timed out waiting for %.64s", waitText.c_str());
-    respondError(buf);
-}
-
-void DebugServer::cmdVmReset(const String& json) {
-    // Reset the currently-loaded runtime without reloading the default ROM
-    // bank. Use this for runtime-specific smoke tests; use cold_start for a
-    // real cold boot.
-    bool fullReset = _bridge.systemResetHold();
-    if (!fullReset)
-        _bridge.resetHold();
-    delay(10);
-    if (fullReset)
-        _bridge.systemResetRelease();
-    else
-        _bridge.resetRelease();
-
-    // Resume if paused/stopped under the debug bridge.
-    _bridge.resume();
-    _paused = false;
-
-    if (extractInt(json, "wait_ready", 1) == 0) {
-        respondOk();
-        return;
-    }
-
-    String waitText = extractString(json, "text");
-    if (waitText.length() == 0)
-        waitText = "Ready";
-    unsigned long deadline = millis() + 10000;
-    while (millis() < deadline) {
-        if (readScreen()) {
-            bool found = findTextOnScreen(waitText.c_str()) >= 0;
-            releaseScreenBuffer();
-            if (found) {
-                respondOk();
-                return;
-            }
-        }
-        delay(50);
-    }
-
-    char buf[128];
-    snprintf(buf, sizeof(buf),
-             "VM reset timed out waiting for %.64s", waitText.c_str());
     respondError(buf);
 }
 

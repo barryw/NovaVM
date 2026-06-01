@@ -109,6 +109,24 @@ class NovaHostClient:
         except json.JSONDecodeError as exc:
             raise NovaHostError(f"invalid JSON from {path}: {text}") from exc
 
+    def http_post_json(self, path: str, payload: dict[str, Any] | None = None,
+                       timeout: float | None = None) -> dict[str, Any]:
+        url = self._http_url(path)
+        data = b"" if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        headers = {"Content-Type": "application/json"} if payload is not None else {}
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout or self.timeout) as resp:
+                text = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as exc:
+            text = exc.read().decode("utf-8", errors="replace")
+            detail = text.strip() or exc.reason
+            raise NovaHostError(f"POST {path}: HTTP {exc.code} {detail}") from exc
+        try:
+            return json.loads(text) if text.strip() else {"ok": True}
+        except json.JSONDecodeError as exc:
+            raise NovaHostError(f"invalid JSON from {path}: {text}") from exc
+
     def try_http_get_json(self, path: str, timeout: float | None = None) -> dict[str, Any]:
         url = self._http_url(path)
         try:
@@ -169,11 +187,10 @@ class NovaHostClient:
             kwargs["text"] = text
         return self.command("cold_start", require_ok=True, **kwargs)
 
-    def vm_reset(self, wait_ready: bool = True, text: str | None = None) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {"wait_ready": 1 if wait_ready else 0}
-        if text:
-            kwargs["text"] = text
-        return self.command("vm_reset", require_ok=True, **kwargs)
+    def vm_reset(self, wait_ready: bool = False, text: str | None = None) -> dict[str, Any]:
+        if wait_ready or text:
+            raise NovaHostError("vm_reset is REST-only; call wait_ready separately if needed")
+        return self.http_post_json("/vm-reset")
 
     def reload_rom(self) -> dict[str, Any]:
         return self.command("reload_rom", require_ok=True)

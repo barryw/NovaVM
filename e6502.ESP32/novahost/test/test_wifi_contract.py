@@ -54,13 +54,17 @@ def test_serial_commands() -> None:
 def test_rest_routes() -> None:
     src = read("e6502.ESP32/novahost/sd_http_server.cpp")
     header = read("e6502.ESP32/novahost/sd_http_server.h")
+    debug = read("e6502.ESP32/novahost/debug_server.cpp")
     novahost = read("e6502.ESP32/novahost/novahost.ino")
+    nova_cli = read("e6502.Nova/Program.cs")
+    nova_web = read("e6502.Nova/NovaWebServer.cs")
 
     for route in [
         'GET    /wifi',
         'GET    /wifi/scan',
         'PUT    /wifi',
         'POST   /wifi/connect|disconnect|reconnect|forget',
+        'POST   /vm-reset     -> reset the FPGA-hosted VM without rebooting NovaHost',
     ]:
         check(f"REST route documented: {route}", route in header)
 
@@ -71,6 +75,20 @@ def test_rest_routes() -> None:
         "POST /wifi action dispatch": 'strcmp(method, "POST") == 0 && strncmp(url, "/wifi/", 6) == 0',
         "GET /health exposes host-status flags": '\\"hostStatusHex\\"',
         "GET /health exposes HTTP task status": '\\"http\\":{\\"taskRunning\\"',
+        "firmware no longer serves embedded control panel": 'strcmp(url, "/") == 0 || strcmp(url, "/control") == 0' not in src
+        and "send_control_panel" not in src
+        and "control_panel_page" not in src
+        and "embedded NovaHost control panel" not in header,
+        "POST /vm-reset dispatch": 'strcmp(method, "POST") == 0 && strcmp(url, "/vm-reset") == 0',
+        "POST /vm-reset calls bridge helper": "novaVmReset()" in src,
+        "debug TCP no longer exposes VM reset": '"vm_reset"' not in debug
+        and "cmdVmReset" not in debug,
+        "VM reset holds and releases FPGA reset": "bool novaVmReset()" in novahost
+        and "fpgaBridge.systemResetHold()" in novahost
+        and "fpgaBridge.resetHold()" in novahost
+        and "fpgaBridge.systemResetRelease()" in novahost
+        and "fpgaBridge.resetRelease()" in novahost
+        and "fpgaBridge.resume()" in novahost,
         "HTTP request line timeout is bounded": "REQUEST_LINE_TIMEOUT_MS",
         "HTTP header line timeout is bounded": "HEADER_LINE_TIMEOUT_MS",
         "connect action": 'strcmp(action, "connect") == 0',
@@ -97,6 +115,31 @@ def test_rest_routes() -> None:
     }
     for name, needle in checks.items():
         check(name, needle if isinstance(needle, bool) else needle in src)
+    check("Nova CLI owns the browser control center",
+          '"webserver" or "web" => DoWebServer' in nova_cli
+          and "NovaWebServer.Run" in nova_cli
+          and "--no-open" in nova_cli
+          and "server.Start();" in nova_web
+          and "TryOpenBrowser(server.Url)" in nova_web)
+    check("local webserver proxies expected device endpoints",
+          '"/api/status"' in nova_web
+          and '"/api/inventory"' in nova_web
+          and '"/health"' in nova_web
+          and '"/sd-status"' in nova_web
+          and '"/wifi"' in nova_web
+          and '"/audio-status"' in nova_web
+          and '"/drives"' in nova_web
+          and '"/sd/config/boot.json"' in nova_web
+          and '"/api/vm-reset"' in nova_web
+          and '"/api/reboot"' in nova_web
+          and '"/api/sd"' in nova_web)
+    check("local webserver exposes disk/runtime/library controls",
+          'id="slotGrid"' in nova_web
+          and 'id="diskList"' in nova_web
+          and 'id="runtimeSelect"' in nova_web
+          and 'id="deployRuntimeBtn"' in nova_web
+          and 'id="libraryList"' in nova_web
+          and 'Host reboot to apply' in nova_web)
     check("HTTP response writes are bounded",
           "RESPONSE_WRITE_TIMEOUT_MS" in header
           and "availableForWrite()" in src

@@ -12,14 +12,20 @@ tools/novahostctl.py basic 'PRINT "HELLO"'
 tools/novahostctl.py mute-sid
 tools/novahostctl.py cold-start
 tools/novahostctl.py vm-reset
+e6502.Nova/bin/Release/net10.0/osx-arm64/nova webserver --remote 192.168.1.65
 ```
 
 Override connection details with `--host`, `--port`, `--http-port`, or the
 `NOVAHOST`, `NOVAHOST_PORT`, and `HTTP_PORT` environment variables.
 
-`cold-start` matches a real cold boot: NovaHost reloads the default ROMs from
-SD, then releases the VM so mounted media can autoboot. `vm-reset` only resets
-the currently loaded runtime.
+`cold-start` matches a real cold boot through the debug control plane: NovaHost
+reloads the default ROMs from SD, then releases the VM so mounted media can
+autoboot. `vm-reset` is an HTTP management call to `POST /vm-reset`; it only
+resets the currently loaded runtime.
+
+The Nova CLI webserver is the browser control center. It runs on the workstation
+and talks to NovaHost through the same REST endpoints, so heavier work can stay
+in .NET instead of ESP32 firmware.
 
 # Drive Mounts
 
