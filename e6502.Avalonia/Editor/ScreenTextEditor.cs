@@ -165,7 +165,7 @@ public abstract class ScreenTextEditor
         _cursorCol = Math.Clamp(col, 0, _lines[_cursorLine].Length);
     }
 
-    internal void ClearModified() => _modified = false;
+    internal void ClearModified() => SetModified(false);
     internal void ToggleInsertMode() => _insertMode = !_insertMode;
 
     internal void LoadLines(string[] lines)
@@ -183,7 +183,7 @@ public abstract class ScreenTextEditor
         _cursorCol = 0;
         _scrollY = 0;
         _scrollX = 0;
-        _modified = false;
+        SetModified(false);
         OnLinesReset();
     }
 
@@ -295,7 +295,35 @@ public abstract class ScreenTextEditor
 
     protected void RedrawTitleBar()
     {
-        DrawBoxTop(TitleRow, GetTitle());
+        DrawBoxTop(TitleRow, FormatTitleForModifiedState(GetTitle()));
+    }
+
+    private string FormatTitleForModifiedState(string title)
+    {
+        if (!_modified)
+            return title;
+
+        if (string.IsNullOrEmpty(title))
+            return "*";
+
+        int insertAt = title.Length;
+        while (insertAt > 0 && char.IsWhiteSpace(title[insertAt - 1]))
+            insertAt--;
+
+        if (insertAt > 0 && title[insertAt - 1] == '*')
+            return title;
+
+        return title[..insertAt] + "*" + title[insertAt..];
+    }
+
+    private void SetModified(bool modified)
+    {
+        if (_modified == modified)
+            return;
+
+        _modified = modified;
+        if (IsActive)
+            RedrawTitleBar();
     }
 
     protected void RedrawCode()
@@ -553,7 +581,7 @@ public abstract class ScreenTextEditor
             _cursorCol++;
         }
 
-        _modified = true;
+        SetModified(true);
         RedrawCode();
         RedrawStatusBar();
     }
@@ -572,7 +600,7 @@ public abstract class ScreenTextEditor
 
         _cursorLine++;
         _cursorCol = 0;
-        _modified = true;
+        SetModified(true);
         EnsureVisible();
         RedrawCode();
         RedrawStatusBar();
@@ -594,7 +622,7 @@ public abstract class ScreenTextEditor
             {
                 _lines[_cursorLine] = line.Remove(_cursorCol - 1, 1);
                 _cursorCol--;
-                _modified = true;
+                SetModified(true);
                 RedrawCode();
             }
         }
@@ -608,7 +636,7 @@ public abstract class ScreenTextEditor
             _cursorCol = _lines[_cursorLine].Length;
             _lines[_cursorLine] += current;
             OnLineRemoved(removedLine);
-            _modified = true;
+            SetModified(true);
             EnsureVisible();
             RedrawCode();
         }
@@ -627,7 +655,7 @@ public abstract class ScreenTextEditor
         if (_cursorCol < line.Length)
         {
             _lines[_cursorLine] = line.Remove(_cursorCol, 1);
-            _modified = true;
+            SetModified(true);
             RedrawCode();
         }
         else if (_cursorLine < _lines.Count - 1)
@@ -636,7 +664,7 @@ public abstract class ScreenTextEditor
             _lines[_cursorLine] += _lines[_cursorLine + 1];
             _lines.RemoveAt(_cursorLine + 1);
             OnLineRemoved(_cursorLine + 1);
-            _modified = true;
+            SetModified(true);
             RedrawCode();
         }
     }
@@ -647,7 +675,7 @@ public abstract class ScreenTextEditor
         {
             _lines[0] = "";
             _cursorCol = 0;
-            _modified = true;
+            SetModified(true);
             RedrawCode();
             RedrawStatusBar();
             return;
@@ -659,7 +687,7 @@ public abstract class ScreenTextEditor
         if (_cursorLine >= _lines.Count)
             _cursorLine = _lines.Count - 1;
         _cursorCol = Math.Min(_cursorCol, _lines[_cursorLine].Length);
-        _modified = true;
+        SetModified(true);
         EnsureVisible();
         RedrawCode();
         RedrawStatusBar();
@@ -672,7 +700,7 @@ public abstract class ScreenTextEditor
         _lines.Insert(_cursorLine + 1, text);
         OnLineInserted(_cursorLine + 1);
         _cursorLine++;
-        _modified = true;
+        SetModified(true);
         EnsureVisible();
         RedrawCode();
         RedrawStatusBar();
@@ -787,7 +815,7 @@ public abstract class ScreenTextEditor
         _cursorLine = startLine;
         _cursorCol = startCol;
         _selActive = false;
-        _modified = true;
+        SetModified(true);
     }
 
     internal void CopySelection()
@@ -834,7 +862,7 @@ public abstract class ScreenTextEditor
             OnLineInserted(_cursorLine + 1);
             _cursorLine++;
             _cursorCol = 0;
-            _modified = true;
+            SetModified(true);
             EnsureVisible();
             RedrawCode();
             RedrawStatusBar();
@@ -867,7 +895,7 @@ public abstract class ScreenTextEditor
             _cursorCol = pasteLines[^1].Length;
         }
 
-        _modified = true;
+        SetModified(true);
         EnsureVisible();
         RedrawCode();
         RedrawStatusBar();
@@ -1198,7 +1226,7 @@ public abstract class ScreenTextEditor
             byte[] data = device.Load(filename, ext);
             DeserializeOnLoad(data, filename);
             _currentFilename = filename;
-            _modified = false;
+            SetModified(false);
             Mode = EditorMode.Edit;
             Redraw();
             ShowMessage($"Loaded: {filename}{ext}");
@@ -1247,7 +1275,7 @@ public abstract class ScreenTextEditor
             string ext = GetFileExtension();
             byte[] data = SerializeForSave(_currentFilename);
             device.Save(_currentFilename, data, ext);
-            _modified = false;
+            SetModified(false);
             RedrawStatusBar();
             ShowMessage($"Saved: {_currentFilename}{ext}");
         }

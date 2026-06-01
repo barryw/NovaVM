@@ -151,7 +151,6 @@ editbuf_run:
       JSR   editbuf_adjust_scroll
 
       JSR   editui_draw_shell
-      JSR   editbuf_draw_body_box
       JSR   editbuf_render
 
 @loop:
@@ -259,33 +258,16 @@ editbuf_dispatch_key:
       RTS
 
 ; ---------------------------------------------------------------------
-; editbuf_draw_body_box — draw the framed editor body region.
-; ---------------------------------------------------------------------
-editbuf_draw_body_box:
-      LDA   #EDITBUF_BODY_BOXX
-      STA   EDITUI_BOXX
-      LDA   #EDITBUF_BODY_BOXY
-      STA   EDITUI_BOXY
-      LDA   #EDITBUF_BODY_BOXW
-      STA   EDITUI_BOXW
-      LDA   #EDITBUF_BODY_BOXH
-      STA   EDITUI_BOXH
-      LDA   #EDITUI_BOX_SINGLE
-      STA   EDITUI_BOX_STYLE
-      STZ   EDITUI_BOX_TITLEL
-      STZ   EDITUI_BOX_TITLEH
-      JMP   editui_draw_box
-
-; ---------------------------------------------------------------------
-; editbuf_apply_status — point EDITUI status at host string (or default).
+; editbuf_apply_status — point EDITUI status at host string, or default to the
+; key-hint help text (the status bar is where help now lives).
 ; ---------------------------------------------------------------------
 editbuf_apply_status:
       LDA   EDITBUF_STATUSL
       ORA   EDITBUF_STATUSH
       BNE   @host
-      LDA   #<editbuf_status_default
+      LDA   #<editbuf_help_text
       STA   EDITUI_STATUSL
-      LDA   #>editbuf_status_default
+      LDA   #>editbuf_help_text
       STA   EDITUI_STATUSH
       RTS
 @host:
@@ -1462,12 +1444,11 @@ editbuf_render:
 ; [EB_PAINTSTART .. VIEW_COLS) from the document. EB_VISLINE = offset of this
 ; line's first byte; on exit it points to the next line's first byte.
 ;
-; Cells are written through the VGC VRAM port one plane at a time: the row's
-; base plane offset is computed ONCE (no per-cell multiply, no per-cell cursor
-; sync the way vtext_put_char does), then each pass walks the run setting the
-; address explicitly per cell. Auto-increment is deliberately NOT used: the
-; CPU model prefetches store operands, so a STA to the data port is preceded by
-; a read of it — with auto-increment that read would double-advance the pointer.
+; Cells are written through the VGC direct screen window one plane at a time:
+; the row's base cell offset is computed ONCE (no per-cell multiply, no per-cell
+; cursor sync the way vtext_put_char does), the plane is selected via $B1A0, and
+; each pass walks a plain (zp),Y store pointer through the window ($A200+off) —
+; one store per cell instead of the VRAM port's address+data handshake.
 editbuf_render_row:
       ; Determine line length (chars before \n or buffer end), and fill colors.
       JSR   editbuf_measure_line   ; EB_LINELEN set; HL colors filled
@@ -1501,8 +1482,8 @@ editbuf_render_row:
       INC   EB_CELLH
 :
       ; ---- char plane ----
-      LDA   #VTEXT_PLANE_CHAR
-      JSR   editbuf_vram_begin     ; select plane, point run addr at EB_CELL
+      LDA   #VGC_SCREENWIN_CHAR
+      JSR   editbuf_win_begin      ; select window plane, point run ptr at EB_CELL
       LDA   EB_PAINTSTART
       STA   EB_COL
 @charloop:
@@ -1536,14 +1517,14 @@ editbuf_render_row:
 @charblank:
       LDA   #' '
 @charput:
-      JSR   editbuf_vram_put       ; write A to the run cell, advance run addr
+      JSR   editbuf_win_put        ; store A at the window cell, advance run ptr
       INC   EB_COL
       BRA   @charloop
 
       ; ---- color plane ----
 @colorpass:
-      LDA   #VTEXT_PLANE_COLOR
-      JSR   editbuf_vram_begin
+      LDA   #VGC_SCREENWIN_COLOR
+      JSR   editbuf_win_begin
       LDA   EB_PAINTSTART
       STA   EB_COL
 @colorloop:
@@ -1575,14 +1556,14 @@ editbuf_render_row:
 @colorblank:
       LDA   #EDITBUF_COLOR_TEXT
 @colorput:
-      JSR   editbuf_vram_put
+      JSR   editbuf_win_put
       INC   EB_COL
       BRA   @colorloop
 
       ; ---- attribute plane (always 0 in the body) ----
 @attrpass:
-      LDA   #VTEXT_PLANE_TEXTATTR
-      JSR   editbuf_vram_begin
+      LDA   #VGC_SCREENWIN_ATTR
+      JSR   editbuf_win_begin
       LDA   EB_PAINTSTART
       STA   EB_COL
 @attrloop:
@@ -1590,7 +1571,7 @@ editbuf_render_row:
       CMP   #EDITBUF_VIEW_COLS
       BCS   @done
       LDA   #0
-      JSR   editbuf_vram_put
+      JSR   editbuf_win_put
       INC   EB_COL
       BRA   @attrloop
 @done:
@@ -1598,28 +1579,25 @@ editbuf_render_row:
       JSR   editbuf_advance_to_next_line
       RTS
 
-; editbuf_vram_begin — select plane A on the VRAM port (auto-increment OFF) and
-; seed the run pointer EB_RUN at the row base EB_CELL. editbuf_vram_put then
-; writes one cell and advances the run pointer.
-editbuf_vram_begin:
-      STA   VGC_VRAM_PLANE
-      STZ   VGC_VRAM_CTRL          ; explicit per-cell addressing, no auto-inc
+; editbuf_win_begin — select window plane A ($B1A0: 0=char/1=color/2=attr) and
+; seed the zero-page run pointer EB_RUN at the window address of the row's first
+; painted cell (VGC_SCREENWIN + EB_CELL). editbuf_win_put then writes one cell.
+editbuf_win_begin:
+      STA   VGC_SCREENWIN_PLANE
       LDA   EB_CELLL
+      CLC
+      ADC   #<VGC_SCREENWIN
       STA   EB_RUNL
       LDA   EB_CELLH
+      ADC   #>VGC_SCREENWIN
       STA   EB_RUNH
       RTS
 
-; editbuf_vram_put — write A to the cell at EB_RUN through the VRAM port, then
-; advance EB_RUN by one. (Preserves A is not required by callers.)
-editbuf_vram_put:
-      PHA
-      LDA   EB_RUNL
-      STA   VGC_VRAM_ADDRL
-      LDA   EB_RUNH
-      STA   VGC_VRAM_ADDRH
-      PLA
-      STA   VGC_VRAM_DATA
+; editbuf_win_put — store A at the window cell EB_RUN points to (a plain store,
+; no port handshake), then advance EB_RUN by one. A is preserved.
+editbuf_win_put:
+      LDY   #0
+      STA   (EB_RUNL),Y
       INC   EB_RUNL
       BNE   :+
       INC   EB_RUNH
@@ -1753,7 +1731,7 @@ editbuf_mark_dirty:
       BNE   @done
       LDA   #1
       STA   EDITUI_DIRTY
-      JSR   editui_draw_title_band
+      JSR   editui_refresh_dirty
 @done:
       RTS
 
@@ -1765,7 +1743,7 @@ editbuf_do_save:
       CMP   #EDITBUF_SAVE_OK
       BNE   @notok
       STZ   EDITUI_DIRTY
-      JSR   editui_draw_title_band
+      JSR   editui_refresh_dirty
 @notok:
       JSR   editbuf_apply_status
       JSR   editui_draw_status
@@ -1815,7 +1793,6 @@ editbuf_do_quit:
 ; editbuf_redraw_all — full repaint after a dialog (chrome + body + cursor).
 editbuf_redraw_all:
       JSR   editui_draw_shell
-      JSR   editbuf_draw_body_box
       JMP   editbuf_render
 
 ; =====================================================================

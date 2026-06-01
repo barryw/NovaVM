@@ -1,6 +1,7 @@
 using System;
 using Avalonia.Input;
 using e6502.Avalonia.Editor;
+using e6502.Avalonia.Hardware;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -262,6 +263,37 @@ public class ScreenTextEditorTests
     }
 
     [TestMethod]
+    public void DirtyMarker_RenderedByBaseTitleBar()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var editor = new TestEditor(bus);
+
+        editor.Activate();
+
+        Assert.IsFalse(ScreenRow(bus, 0).Contains("TEST*", StringComparison.Ordinal));
+
+        editor.InsertChar('A');
+
+        Assert.IsTrue(ScreenRow(bus, 0).Contains("TEST*", StringComparison.Ordinal),
+            "The shared editor title bar should show '*' as soon as the workspace is dirty.");
+    }
+
+    [TestMethod]
+    public void DirtyMarker_ClearsWhenModifiedClears()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var editor = new TestEditor(bus);
+
+        editor.Activate();
+        editor.InsertChar('A');
+
+        editor.ClearModified();
+
+        Assert.IsFalse(ScreenRow(bus, 0).Contains("TEST*", StringComparison.Ordinal),
+            "The shared editor title bar should remove '*' when the workspace is clean.");
+    }
+
+    [TestMethod]
     public void LoadLines_SetsBuffer()
     {
         _ed.LoadLines(new[] { "ONE", "TWO", "THREE" });
@@ -270,6 +302,14 @@ public class ScreenTextEditorTests
         Assert.AreEqual(0, _ed.CursorLine);
         Assert.AreEqual(0, _ed.CursorCol);
         Assert.IsFalse(_ed.Modified);
+    }
+
+    private static string ScreenRow(IBusDevice bus, int row)
+    {
+        char[] chars = new char[80];
+        for (int col = 0; col < chars.Length; col++)
+            chars[col] = (char)bus.ReadVramByte(VgcConstants.VramPlaneChar, row * VgcConstants.ScreenCols + col);
+        return new string(chars);
     }
 
     [TestMethod]

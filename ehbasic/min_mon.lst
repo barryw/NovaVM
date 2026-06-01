@@ -495,6 +495,33 @@ Current file: min_mon.asm
 000000r 3               VGC_VRAM_AUTOINC  = $01
 000000r 3               .endif
 000000r 3               
+000000r 3               ; Screen-base register: first physical text row shown at the top of the display
+000000r 3               ; (ring scroll, 0-49). Scroll = one write, zero plane copies.
+000000r 3               .ifndef VGC_TEXT_TOPROW
+000000r 3               VGC_TEXT_TOPROW   = $A0ED
+000000r 3               .endif
+000000r 3               
+000000r 3               ; Direct screen window: $A200-$B19F maps 4000 cells of the plane named by the
+000000r 3               ; plane-select register, so a program writes the screen with a plain STA.
+000000r 3               .ifndef VGC_SCREENWIN
+000000r 3               VGC_SCREENWIN     = $A200
+000000r 3               .endif
+000000r 3               .ifndef VGC_SCREENWIN_END
+000000r 3               VGC_SCREENWIN_END = $B19F
+000000r 3               .endif
+000000r 3               .ifndef VGC_SCREENWIN_PLANE
+000000r 3               VGC_SCREENWIN_PLANE = $B1A0
+000000r 3               .endif
+000000r 3               .ifndef VGC_SCREENWIN_CHAR
+000000r 3               VGC_SCREENWIN_CHAR  = $00
+000000r 3               .endif
+000000r 3               .ifndef VGC_SCREENWIN_COLOR
+000000r 3               VGC_SCREENWIN_COLOR = $01
+000000r 3               .endif
+000000r 3               .ifndef VGC_SCREENWIN_ATTR
+000000r 3               VGC_SCREENWIN_ATTR  = $02
+000000r 3               .endif
+000000r 3               
 000000r 3               .ifndef VTXT_REV
 000000r 3               VTXT_REV          = $01
 000000r 3               .endif
@@ -11891,6 +11918,33 @@ Current file: min_mon.asm
 00E999  5               VGC_VRAM_AUTOINC  = $01
 00E999  5               .endif
 00E999  5               
+00E999  5               ; Screen-base register: first physical text row shown at the top of the display
+00E999  5               ; (ring scroll, 0-49). Scroll = one write, zero plane copies.
+00E999  5               .ifndef VGC_TEXT_TOPROW
+00E999  5               VGC_TEXT_TOPROW   = $A0ED
+00E999  5               .endif
+00E999  5               
+00E999  5               ; Direct screen window: $A200-$B19F maps 4000 cells of the plane named by the
+00E999  5               ; plane-select register, so a program writes the screen with a plain STA.
+00E999  5               .ifndef VGC_SCREENWIN
+00E999  5               VGC_SCREENWIN     = $A200
+00E999  5               .endif
+00E999  5               .ifndef VGC_SCREENWIN_END
+00E999  5               VGC_SCREENWIN_END = $B19F
+00E999  5               .endif
+00E999  5               .ifndef VGC_SCREENWIN_PLANE
+00E999  5               VGC_SCREENWIN_PLANE = $B1A0
+00E999  5               .endif
+00E999  5               .ifndef VGC_SCREENWIN_CHAR
+00E999  5               VGC_SCREENWIN_CHAR  = $00
+00E999  5               .endif
+00E999  5               .ifndef VGC_SCREENWIN_COLOR
+00E999  5               VGC_SCREENWIN_COLOR = $01
+00E999  5               .endif
+00E999  5               .ifndef VGC_SCREENWIN_ATTR
+00E999  5               VGC_SCREENWIN_ATTR  = $02
+00E999  5               .endif
+00E999  5               
 00E999  5               .ifndef VTXT_REV
 00E999  5               VTXT_REV          = $01
 00E999  5               .endif
@@ -15511,6 +15565,33 @@ Current file: min_mon.asm
 00EE3C  6               .endif
 00EE3C  6               .ifndef VGC_VRAM_AUTOINC
 00EE3C  6               VGC_VRAM_AUTOINC  = $01
+00EE3C  6               .endif
+00EE3C  6               
+00EE3C  6               ; Screen-base register: first physical text row shown at the top of the display
+00EE3C  6               ; (ring scroll, 0-49). Scroll = one write, zero plane copies.
+00EE3C  6               .ifndef VGC_TEXT_TOPROW
+00EE3C  6               VGC_TEXT_TOPROW   = $A0ED
+00EE3C  6               .endif
+00EE3C  6               
+00EE3C  6               ; Direct screen window: $A200-$B19F maps 4000 cells of the plane named by the
+00EE3C  6               ; plane-select register, so a program writes the screen with a plain STA.
+00EE3C  6               .ifndef VGC_SCREENWIN
+00EE3C  6               VGC_SCREENWIN     = $A200
+00EE3C  6               .endif
+00EE3C  6               .ifndef VGC_SCREENWIN_END
+00EE3C  6               VGC_SCREENWIN_END = $B19F
+00EE3C  6               .endif
+00EE3C  6               .ifndef VGC_SCREENWIN_PLANE
+00EE3C  6               VGC_SCREENWIN_PLANE = $B1A0
+00EE3C  6               .endif
+00EE3C  6               .ifndef VGC_SCREENWIN_CHAR
+00EE3C  6               VGC_SCREENWIN_CHAR  = $00
+00EE3C  6               .endif
+00EE3C  6               .ifndef VGC_SCREENWIN_COLOR
+00EE3C  6               VGC_SCREENWIN_COLOR = $01
+00EE3C  6               .endif
+00EE3C  6               .ifndef VGC_SCREENWIN_ATTR
+00EE3C  6               VGC_SCREENWIN_ATTR  = $02
 00EE3C  6               .endif
 00EE3C  6               
 00EE3C  6               .ifndef VTXT_REV
@@ -19396,6 +19477,33 @@ Current file: min_mon.asm
 00F0E9  5               .endif
 00F0E9  5               .ifndef VGC_VRAM_AUTOINC
 00F0E9  5               VGC_VRAM_AUTOINC  = $01
+00F0E9  5               .endif
+00F0E9  5               
+00F0E9  5               ; Screen-base register: first physical text row shown at the top of the display
+00F0E9  5               ; (ring scroll, 0-49). Scroll = one write, zero plane copies.
+00F0E9  5               .ifndef VGC_TEXT_TOPROW
+00F0E9  5               VGC_TEXT_TOPROW   = $A0ED
+00F0E9  5               .endif
+00F0E9  5               
+00F0E9  5               ; Direct screen window: $A200-$B19F maps 4000 cells of the plane named by the
+00F0E9  5               ; plane-select register, so a program writes the screen with a plain STA.
+00F0E9  5               .ifndef VGC_SCREENWIN
+00F0E9  5               VGC_SCREENWIN     = $A200
+00F0E9  5               .endif
+00F0E9  5               .ifndef VGC_SCREENWIN_END
+00F0E9  5               VGC_SCREENWIN_END = $B19F
+00F0E9  5               .endif
+00F0E9  5               .ifndef VGC_SCREENWIN_PLANE
+00F0E9  5               VGC_SCREENWIN_PLANE = $B1A0
+00F0E9  5               .endif
+00F0E9  5               .ifndef VGC_SCREENWIN_CHAR
+00F0E9  5               VGC_SCREENWIN_CHAR  = $00
+00F0E9  5               .endif
+00F0E9  5               .ifndef VGC_SCREENWIN_COLOR
+00F0E9  5               VGC_SCREENWIN_COLOR = $01
+00F0E9  5               .endif
+00F0E9  5               .ifndef VGC_SCREENWIN_ATTR
+00F0E9  5               VGC_SCREENWIN_ATTR  = $02
 00F0E9  5               .endif
 00F0E9  5               
 00F0E9  5               .ifndef VTXT_REV

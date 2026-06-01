@@ -15,22 +15,27 @@ EDITUI_ERR = $01
 EDITUI_SCREEN_COLS = VTEXT_SCREEN_COLS
 EDITUI_SCREEN_ROWS = VTEXT_SCREEN_ROWS
 
+; Black background with light-grey bars. bg = high nibble, fg = low nibble.
+; Palette mode 0: 0=black, 1=white, 2=red, 12=grey-med, 15=grey-light.
 EDITUI_PALETTE_MODE     = $00
-EDITUI_COLOR_BG         = $06
-EDITUI_COLOR_FG         = $0F
-EDITUI_COLOR_SHELL      = $6F
-EDITUI_COLOR_TITLE      = $67
-EDITUI_COLOR_MENU       = $F0
-EDITUI_COLOR_MENU_HOT   = $F2
-EDITUI_COLOR_FRAME      = $6F
-EDITUI_COLOR_DIM        = $6C
-EDITUI_COLOR_MENU_SEL   = $6F
-EDITUI_COLOR_MENU_SEL_HOT = $67
-EDITUI_COLOR_STATUS     = $F0
-EDITUI_COLOR_STATUS_HOT = $F6
-EDITUI_COLOR_PANEL      = $6F
+EDITUI_COLOR_BG         = $00      ; black
+EDITUI_COLOR_FG         = $01      ; white
+EDITUI_COLOR_SHELL      = $0F      ; editor background (black bg)
+EDITUI_COLOR_TITLE      = $01      ; title text: white on black
+EDITUI_COLOR_MENU       = $F0      ; light-grey menu bar, black text
+EDITUI_COLOR_MENU_HOT   = $F2      ; light-grey bar, red hotkey
+EDITUI_COLOR_FRAME      = $0F      ; grey frame lines on black
+EDITUI_COLOR_DIM        = $0C      ; grey-med dim text on black
+EDITUI_COLOR_MENU_SEL   = $1F      ; selected dropdown item: white bg
+EDITUI_COLOR_MENU_SEL_HOT = $12    ; selected item hotkey
+EDITUI_COLOR_STATUS     = $F0      ; light-grey status bar
+EDITUI_COLOR_STATUS_HOT = $F6      ; status bar accent
+EDITUI_COLOR_PANEL      = $0F      ; dialog panel: black bg
 
 EDITUI_STATUS_ROW = EDITUI_SCREEN_ROWS - 1
+; Dirty marker ('*') cell on the menu bar (right side). The title is drawn just
+; to its left; toggling the marker is a single-cell write.
+EDITUI_DIRTY_COL  = EDITUI_SCREEN_COLS - 2
 
 EDITUI_BOX_SINGLE = $00
 EDITUI_BOX_DOUBLE = $01
@@ -71,9 +76,17 @@ EDITUI_KEY_CTRL_N    = $0E
 EDITUI_KEY_CTRL_O    = $0F
 EDITUI_KEY_CTRL_Q    = $11
 EDITUI_KEY_CTRL_S    = $13
+EDITUI_KEY_CTRL_V    = $16
 EDITUI_KEY_CTRL_W    = $17
 EDITUI_KEY_CTRL_X    = $18
 EDITUI_KEY_CTRL_Z    = $1A
+
+; Editing navigation keys (defined by Nova; the host keyboard maps physical
+; Home/End/PgUp/PgDn to these bytes).
+EDITUI_KEY_HOME      = $02
+EDITUI_KEY_END       = $05
+EDITUI_KEY_PGUP      = $10
+EDITUI_KEY_PGDN      = $12
 
 EDITUI_CMD_NONE      = $00
 EDITUI_CMD_NEW       = $01
@@ -102,6 +115,7 @@ EDITUI_MENU_ITEM_SIZE  = 4
 .global EDITUI_HELPH
 .global EDITUI_STATUSL
 .global EDITUI_STATUSH
+.global EDITUI_DIRTY
 .global EDITUI_BOXX
 .global EDITUI_BOXY
 .global EDITUI_BOXW
@@ -118,17 +132,28 @@ EDITUI_MENU_ITEM_SIZE  = 4
 .global EDITUI_MENU_CMD
 .global EDITUI_MENU_SELECTED
 
+; Save-under region rectangle (generic overlay save/restore for dialogs).
+.global EDITUI_MENU_SAVE_X
+.global EDITUI_MENU_SAVE_Y
+.global EDITUI_MENU_SAVE_W
+.global EDITUI_MENU_SAVE_H
+
 .global editui_init
 .global editui_full_region
 .global editui_clear_screen
 .global editui_shutdown
 .global editui_draw_shell
+.global editui_draw_title_band
+.global editui_refresh_dirty
 .global editui_draw_status
 .global editui_draw_box
 .global editui_select_box_body
 .global editui_print_ptr
 .global editui_print_marked
 .global editui_menu_open_hotkey
+.global editui_set_menus
+.global editui_save_under
+.global editui_restore_under
 
 .global editui_default_menus
 

@@ -263,7 +263,9 @@ prog: ehbasic $(BUILDDIR)/$(PROJ).bit
 	openFPGALoader --board ulx3s $(BUILDDIR)/$(PROJ).bit
 
 prog_flash: ehbasic $(BUILDDIR)/$(PROJ).bit
-	openFPGALoader --board ulx3s -f $(BUILDDIR)/$(PROJ).bit
+	# --verify is REQUIRED: bare -f does NOT read back, and a silently truncated
+	# write leaves the ECP5 with a CRC-failing bitstream (board boots dark).
+	openFPGALoader --board ulx3s -f --verify $(BUILDDIR)/$(PROJ).bit
 
 # Fast: build + flash to SRAM in one command
 fast: ehbasic bitstream

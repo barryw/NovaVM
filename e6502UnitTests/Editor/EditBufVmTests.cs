@@ -30,6 +30,8 @@ public class EditBufVmTests
     private const ushort TestSaveLenL = 0x0304;
     private const ushort TestIndent = 0x0306;
     private const ushort TestHlMark = 0x0307;
+    private const ushort TestSeedLenL = 0x0308;   // nonzero => harness uses test-injected buffer
+    private const ushort TestSeedLenH = 0x0309;
 
     private const byte CtrlA = 0x01, CtrlC = 0x03, CtrlQ = 0x11, CtrlS = 0x13, CtrlV = 0x16, CtrlX = 0x18;
     private const byte KeyRight = 0x1D, KeyDown = 0x1F, KeyHome = 0x02, KeyBackspace = 0x08, KeyEnter = 0x0D;
@@ -38,15 +40,18 @@ public class EditBufVmTests
     private const byte SaveOk = 0x00, SaveError = 0x02;
 
     // Body view origin (EDITBUF_VIEW_LEFT / EDITBUF_VIEW_TOP).
-    private const int ViewLeft = 2, ViewTop = 7;
-    private const int TitleRow = 3;
+    // New layout: row 0 = menu bar, rows 1..48 = body (80 cols), row 49 = status bar.
+    private const int ViewLeft = 0, ViewTop = 1;
+    private const int MenuRow = 0;
+    private const int DirtyCol = VgcConstants.ScreenCols - 2;   // '*' marker cell on the menu bar (78)
 
     // Cycles allowed for the editor to consume queued keys and fully re-render.
     private const int Settle = 2_500_000;
 
     private sealed record Harness(CompositeBusDevice Bus, Cpu Cpu, ScreenEditor Editor);
 
-    private static Harness Boot(byte saveRet = SaveOk, byte indent = 0, byte hlMark = 0x1F)
+    private static Harness Boot(byte saveRet = SaveOk, byte indent = 0, byte hlMark = 0x1F,
+                               byte[]? seedText = null)
     {
         var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         LoadApp(bus);
@@ -55,6 +60,13 @@ public class EditBufVmTests
         bus.WriteRam(TestHlMark, hlMark);
         bus.WriteRam(TestDone, 0x00);
         bus.WriteRam(TestSaveCnt, 0x00);
+        if (seedText != null)
+        {
+            for (int i = 0; i < seedText.Length; i++)
+                bus.WriteRam((ushort)(TextBuf + i), seedText[i]);
+            bus.WriteRam(TestSeedLenL, (byte)(seedText.Length & 0xFF));
+            bus.WriteRam(TestSeedLenH, (byte)(seedText.Length >> 8));
+        }
         var cpu = new Cpu(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
@@ -140,8 +152,26 @@ public class EditBufVmTests
     private static bool ScreenContains(Harness h, string marker) =>
         Snapshot(h).Contains(marker, StringComparison.Ordinal);
 
-    private static bool TitleDirty(Harness h) =>
-        Row(h, TitleRow).Contains("SQUARE*", StringComparison.Ordinal);
+    // Box-drawing glyphs used by the (now-removed) frame/title band: single
+    // ($B3,$C0,$C4,$D9,$DA,$BF) and double ($BA,$BB,$BC,$C8,$C9,$CD) lines.
+    private static readonly byte[] FrameChars =
+        { 0xB3, 0xC0, 0xC4, 0xD9, 0xDA, 0xBF, 0xBA, 0xBB, 0xBC, 0xC8, 0xC9, 0xCD };
+
+    private static bool HasFrameChars(Harness h)
+    {
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+            for (int col = 0; col < VgcConstants.ScreenCols; col++)
+            {
+                byte ch = h.Bus.Vgc.GetScreenChar(col, row);
+                if (Array.IndexOf(FrameChars, ch) >= 0)
+                    return true;
+            }
+        return false;
+    }
+
+    // Dirty marker is a single '*' cell on the menu bar (right side), shown only
+    // when the buffer is dirty.
+    private static bool TitleDirty(Harness h) => ChAt(h, DirtyCol, MenuRow) == '*';
 
     // -----------------------------------------------------------------
 
@@ -149,13 +179,22 @@ public class EditBufVmTests
     public void InitialRenderShowsTitleAndBuffer()
     {
         var h = Boot();
-        Assert.IsTrue(Row(h, TitleRow).Contains("SQUARE", StringComparison.Ordinal),
-            $"Title 'SQUARE' should be centered in the title band.\n{Snapshot(h)}");
-        Assert.IsTrue(ScreenContains(h, "File"), "Menu bar should render.");
+        // Title and menu share the menu bar (row 0); no separate title band.
+        Assert.IsTrue(Row(h, MenuRow).Contains("SQUARE", StringComparison.Ordinal),
+            $"Title 'SQUARE' should appear on the menu bar (row 0).\n{Snapshot(h)}");
+        Assert.IsTrue(Row(h, MenuRow).Contains("File", StringComparison.Ordinal),
+            $"Menu bar should render File/Edit/Help.\n{Snapshot(h)}");
+        // Body now starts at row 1, col 0 (no frame, no title band in between).
         Assert.AreEqual('A', ChAt(h, ViewLeft, ViewTop), Snapshot(h));
         Assert.AreEqual('B', ChAt(h, ViewLeft + 1, ViewTop), Snapshot(h));
         Assert.AreEqual('C', ChAt(h, ViewLeft, ViewTop + 1), Snapshot(h));
         Assert.AreEqual('D', ChAt(h, ViewLeft + 1, ViewTop + 1), Snapshot(h));
+        // No box-drawing frame characters anywhere (the middle chrome is gone).
+        Assert.IsFalse(HasFrameChars(h),
+            $"Editor must have no frame/box characters.\n{Snapshot(h)}");
+        // Help hints now live on the status bar (bottom row).
+        Assert.IsTrue(Row(h, VgcConstants.ScreenRows - 1).Contains("Save", StringComparison.Ordinal),
+            $"Status bar should show the key-hint help text.\n{Snapshot(h)}");
         Assert.IsFalse(TitleDirty(h), "Freshly loaded buffer must not show the dirty marker.");
     }
 
@@ -352,5 +391,39 @@ public class EditBufVmTests
         Assert.AreEqual('B', ChAt(h, ViewLeft + 1, ViewTop), Snapshot(h));
         Assert.AreEqual('C', ChAt(h, ViewLeft + 2, ViewTop), Snapshot(h));
         Assert.AreEqual('D', ChAt(h, ViewLeft + 3, ViewTop), Snapshot(h));
+    }
+
+    // "00\n01\n...\n(count-1)" — every line is its own two-digit index.
+    private static byte[] BuildNumberedLines(int count)
+    {
+        var bytes = new System.Collections.Generic.List<byte>();
+        for (int i = 0; i < count; i++)
+        {
+            if (i > 0) bytes.Add(0x0A);
+            bytes.Add((byte)('0' + (i / 10)));
+            bytes.Add((byte)('0' + (i % 10)));
+        }
+        return bytes.ToArray();
+    }
+
+    private static string TwoChars(Harness h, int row) => $"{ChAt(h, 0, row)}{ChAt(h, 1, row)}";
+
+    [TestMethod]
+    public void ScrollingTallBufferRendersCorrectRowsViaWindow()
+    {
+        // 60 numbered lines "00".."59". The body shows 48 rows, so reaching the
+        // last line must scroll. Exercises the direct-window cell-offset math
+        // across the FULL body (row 47 -> window offset 48*80=3840+) and the
+        // repaint-on-scroll path — the existing tests never scroll.
+        var h = Boot(seedText: BuildNumberedLines(60));
+        // Top of buffer: first body row shows line 0; last body row shows line 47.
+        Assert.AreEqual("00", TwoChars(h, ViewTop), $"top body row = line 0\n{Snapshot(h)}");
+        Assert.AreEqual("47", TwoChars(h, ViewTop + 47), $"bottom body row = line 47\n{Snapshot(h)}");
+        // Move the cursor to the last line; the view scrolls so line 59 lands on
+        // the bottom body row and line 12 (= 59-47) on the top body row.
+        for (int i = 0; i < 59; i++) h.Editor.QueueInput(KeyDown);
+        Step(h, 12_000_000);
+        Assert.AreEqual("59", TwoChars(h, ViewTop + 47), $"after scroll: bottom = line 59\n{Snapshot(h)}");
+        Assert.AreEqual("12", TwoChars(h, ViewTop), $"after scroll: top = line 12\n{Snapshot(h)}");
     }
 }

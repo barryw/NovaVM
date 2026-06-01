@@ -10,8 +10,10 @@ namespace e6502UnitTests;
 [TestClass]
 public class NovaLogoTests
 {
+    private const byte CtrlQ = 0x11;
+    private const byte CtrlS = 0x13;
     private const ushort LogoHeapPtr = 0x0030;
-    private const ushort LogoHeapEnd = 0x9C00;
+    private const ushort LogoHeapEnd = 0x9800;
     private const int LogoGcHeaderBytes = 2;
     private const ushort TurtleStateBase = 0x9F00;
     private const ushort TurtleXLo = TurtleStateBase + 1;
@@ -115,6 +117,34 @@ public class NovaLogoTests
             $"Got spurious NOT ENOUGH INPUTS.\n{screen}");
         Assert.IsTrue(screen.Contains("42", StringComparison.Ordinal),
             $"Expected '42' from PRINT 42.\n{screen}");
+    }
+
+    [TestMethod]
+    public void PrintLargeNumbersParseCorrectly()
+    {
+        // Regression: tok_parse_number's *10 dropped the carry out of the low
+        // byte whenever an intermediate accumulator had bit 7 set, so e.g.
+        // 4242 parsed as 3986 (-256). Assert the OUTPUT line (not the echoed
+        // command) equals the literal exactly.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // All within Logo's signed 16-bit range; each has an intermediate *10
+        // accumulator with bit 7 set (424, 130, 200, 3000), which tripped the bug.
+        foreach (string literal in new[] { "4242", "1300", "2000", "30000" })
+        {
+            QueueLine(editor, "PRINT " + literal);
+            RunSteps(cpu, bus, 2_000_000);
+            string screen = SnapshotScreen(bus.Vgc);
+            bool found = false;
+            foreach (string line in screen.Split('\n'))
+                if (line.Trim() == literal) { found = true; break; }
+            Assert.IsTrue(found, $"Expected an output line equal to '{literal}' from PRINT {literal}.\n{screen}");
+        }
     }
 
     [TestMethod]
@@ -379,13 +409,8 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        // Define a no-param procedure
-        QueueLine(editor, "TO HI");
-        RunSteps(cpu, bus, 2_000_000);
-        QueueLine(editor, "PRINT 99");
-        RunSteps(cpu, bus, 2_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO HI", "PRINT 99");
+        RunSteps(cpu, bus, 5_000_000);
 
         string screenAfterDef = SnapshotScreen(bus.Vgc);
         Assert.IsTrue(screenAfterDef.Contains("DEFINED", StringComparison.Ordinal),
@@ -407,6 +432,90 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void ProcedureEditorSaveQuitReturnsToGraphicsWithoutClearingDrawing()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        byte modeBefore = bus.Vgc.GetMode();
+        int turtlePixelsBefore = CountNonzeroPixels(bus, 152, 72, 168, 88);
+
+        QueueProcedureDefinition(cpu, bus, editor, "TO FART", "PRINT 4242");
+        RunSteps(cpu, bus, 8_000_000);
+
+        Assert.AreEqual(modeBefore, bus.Vgc.GetMode(),
+            "Exiting the procedure editor should restore the display mode that was active before TO.");
+        Assert.IsTrue(CountNonzeroPixels(bus, 152, 72, 168, 88) >= turtlePixelsBefore,
+            "Exiting the procedure editor should not clear the graphics plane or erase the turtle.");
+
+        QueueLine(editor, "FART");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("4242", StringComparison.Ordinal),
+            $"Expected saved FART procedure to run after Ctrl-S/Ctrl-Q editor flow.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ProcedureEditorCtrlQWithoutSaveAbandonsDefinition()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO ABANDON");
+        QueueLine(editor, "PRINT 5151");
+        editor.QueueInput(CtrlQ);    // dirty: opens the 3-choice exit dialog
+        editor.QueueInput(0x0D);     // ENTER selects "Exit Anyway" (default), abandons
+
+        QueueLine(editor, "ABANDON");
+        RunUntilScreenContains(cpu, bus, "I DON'T KNOW HOW TO ABANDON", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("I DON'T KNOW HOW TO ABANDON", StringComparison.Ordinal),
+            $"Ctrl-Q + Exit Anyway should abandon the pending procedure definition.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ProcedureEditorShowsDirtyMarkerUntilSaved()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO DIRTY");
+        QueueLine(editor, "PRINT 1");
+        // Editing the body makes the editor dirty. The dirty marker is the only
+        // '*' on screen (the TO/END scaffold + "PRINT 1" contain none). Waiting
+        // for the typed line to render also proves the cursor-on-body-line path.
+        RunUntilScreenContains(cpu, bus, "PRINT 1", 30_000_000);
+        string dirtyScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(dirtyScreen.Contains("*", StringComparison.Ordinal),
+            $"Editing should set the dirty marker.\n{dirtyScreen}");
+
+        editor.QueueInput(CtrlS);
+        // Ctrl-S clears the dirty marker (the only '*' disappears).
+        RunUntil(cpu, bus, 30_000_000,
+            () => !SnapshotScreen(bus.Vgc).Contains("*", StringComparison.Ordinal),
+            "Ctrl-S to clear the dirty marker");
+
+        editor.QueueInput(CtrlQ);
+        RunSteps(cpu, bus, 5_000_000);
+    }
+
+    [TestMethod]
     public void DefineAndCallProcedure()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
@@ -416,13 +525,8 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        // Define procedure
-        QueueLine(editor, "TO SQUARE :SIZE");
-        RunSteps(cpu, bus, 2_000_000);
-        QueueLine(editor, "PRINT :SIZE");
-        RunSteps(cpu, bus, 2_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO SQUARE :SIZE", "PRINT :SIZE");
+        RunSteps(cpu, bus, 5_000_000);
 
         string screenAfterDef = SnapshotScreen(bus.Vgc);
         Assert.IsTrue(screenAfterDef.Contains("DEFINED", StringComparison.Ordinal),
@@ -453,12 +557,8 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        QueueLine(editor, "TO ADD2 :A :B");
-        RunSteps(cpu, bus, 2_000_000);
-        QueueLine(editor, "PRINT :A + :B");
-        RunSteps(cpu, bus, 2_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO ADD2 :A :B", "PRINT :A + :B");
+        RunSteps(cpu, bus, 5_000_000);
 
         QueueLine(editor, "ADD2 10 20");
         RunSteps(cpu, bus, 3_000_000);
@@ -484,14 +584,8 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        QueueLine(editor, "TO HALF :N");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "IF :N < 2 [STOP]");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "PRINT :N");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO HALF :N", "IF :N < 2 [STOP]", "PRINT :N");
+        RunSteps(cpu, bus, 5_000_000);
 
         QueueLine(editor, "HALF 1");
         RunSteps(cpu, bus, 3_000_000);
@@ -523,12 +617,8 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        QueueLine(editor, "TO DOUBLE :N");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "OUTPUT :N * 2");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO DOUBLE :N", "OUTPUT :N * 2");
+        RunSteps(cpu, bus, 5_000_000);
 
         QueueLine(editor, "PRINT DOUBLE 5");
         RunSteps(cpu, bus, 4_000_000);
@@ -553,17 +643,11 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        // Define recursive countdown
-        QueueLine(editor, "TO COUNTDOWN :N");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "IF :N = 0 [STOP]");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "PRINT :N");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "COUNTDOWN :N - 1");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO COUNTDOWN :N",
+            "IF :N = 0 [STOP]",
+            "PRINT :N",
+            "COUNTDOWN :N - 1");
+        RunSteps(cpu, bus, 6_000_000);
 
         // Call it
         QueueLine(editor, "COUNTDOWN 5");
@@ -597,14 +681,10 @@ public class NovaLogoTests
 
         // Define recursive factorial (simplified: just multiply down)
         // FACT 1 = 1, FACT N = N * FACT N-1
-        QueueLine(editor, "TO FACT :N");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "IF :N = 1 [OUTPUT 1]");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "OUTPUT :N * FACT :N - 1");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO FACT :N",
+            "IF :N = 1 [OUTPUT 1]",
+            "OUTPUT :N * FACT :N - 1");
+        RunSteps(cpu, bus, 6_000_000);
 
         QueueLine(editor, "PRINT FACT 5");
         RunSteps(cpu, bus, 15_000_000);
@@ -943,16 +1023,8 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        QueueLine(editor, "TO BOOM");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "PRINT 111");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "THROW \"DONE");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "PRINT 222");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO BOOM", "PRINT 111", "THROW \"DONE", "PRINT 222");
+        RunSteps(cpu, bus, 5_000_000);
 
         QueueLine(editor, "CATCH \"DONE [BOOM]");
         RunSteps(cpu, bus, 5_000_000);
@@ -1129,14 +1201,10 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        QueueLine(editor, "TO FOO");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
-        QueueLine(editor, "TO BAR");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO FOO");
+        RunSteps(cpu, bus, 4_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO BAR");
+        RunSteps(cpu, bus, 4_000_000);
 
         QueueLine(editor, "POTS");
         RunSteps(cpu, bus, 3_000_000);
@@ -1158,12 +1226,8 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        QueueLine(editor, "TO ALIASP");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "PRINT 123");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO ALIASP", "PRINT 123");
+        RunSteps(cpu, bus, 5_000_000);
 
         QueueLine(editor, "PRINTOUT \"ALIASP");
         RunSteps(cpu, bus, 4_000_000);
@@ -1191,12 +1255,8 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        QueueLine(editor, "TO ZAP");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "PRINT 1");
-        RunSteps(cpu, bus, 1_000_000);
-        QueueLine(editor, "END");
-        RunSteps(cpu, bus, 2_000_000);
+        QueueProcedureDefinition(cpu, bus, editor, "TO ZAP", "PRINT 1");
+        RunSteps(cpu, bus, 5_000_000);
 
         QueueLine(editor, "ERASE \"ZAP");
         RunSteps(cpu, bus, 3_000_000);
@@ -1385,6 +1445,113 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "888") found = true;
         Assert.IsTrue(found, $"Expected '888' after CS + FD 50.\n{screen}");
+    }
+
+    [TestMethod]
+    public void SmallForwardStepsAccumulateSubPixelInsteadOfOctagon()
+    {
+        // REPEAT 360 [FD 1 RT 1] should draw a circle. If each FD rounds its move
+        // to whole pixels, FD 1 collapses to 8 directions (dx,dy in {-1,0,1}) and
+        // the "circle" becomes an octagon. Discriminator: ten FD 1 steps at heading
+        // 30deg accumulate ~5px east (sin30=0.5); the octagon bug rounds each step
+        // to (1,-1) -> ~10px east.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "CS");                 // turtle to center (160,80), heading 0
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "RT 30");              // heading 30deg
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "REPEAT 10 [FD 1]");
+        RunSteps(cpu, bus, 8_000_000);
+
+        int x = bus.ReadRam(0x9F01);             // TURTLE_X_LO ($9F00 base + 1)
+        int dxEast = x - 160;                    // center X = 160
+        // Fixed: ten FD 1 at ~30deg accumulate ~5px east. Octagon bug snaps each
+        // step's dx to 0 (round(0.49)=0) -> pure north -> dxEast=0.
+        Assert.IsTrue(dxEast is >= 3 and <= 7,
+            $"Ten FD 1 steps at 30deg should accumulate ~5px east (sub-pixel), not snap " +
+            $"to an octant. dxEast={dxEast} (x={x}).");
+    }
+
+    [TestMethod]
+    public void DrawingCommandWithoutClearScreenAutoEntersSplit()
+    {
+        // A drawing command issued in text mode (no CS/DRAW first) should auto-
+        // switch to split screen so the drawing is actually visible. The split
+        // moves the Logo prompt into the bottom text band (row SPLIT_TEXT_ROW=40).
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "FD 50");              // no CS first
+        RunSteps(cpu, bus, 5_000_000);
+
+        Assert.IsTrue(bus.Vgc.GetCursorY() >= 40,
+            $"FD in text mode should auto-switch to split screen (prompt drops to the " +
+            $"split text band, row>=40). cursorY={bus.Vgc.GetCursorY()}\n{SnapshotScreen(bus.Vgc)}");
+    }
+
+    [TestMethod]
+    public void CommandAfterRepeatOnSameLineExecutes()
+    {
+        // "REPEAT n [..] CMD" must run CMD after the loop. The bug: do_repeat
+        // restored the outer body_resume before using it, so eval_cur resumed at
+        // the wrong token and trailing commands (e.g. ST after a circle) never ran.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "REPEAT 1 [FD 1] RT 90");   // trailing RT must run
+        RunSteps(cpu, bus, 5_000_000);
+        int heading = bus.ReadRam(0x9F07) * 256 + bus.ReadRam(0x9F06);  // TURTLE_HEADING
+        Assert.AreEqual(90, heading,
+            $"Command after REPEAT on the same line must execute (heading should be 90). heading={heading}");
+    }
+
+    [TestMethod]
+    public void ColdStartZerosTurtleGraphicsState()
+    {
+        // The turtle graphics-mode flag (TURTLE_GFX_VISIBLE=$9F11) and inited flag
+        // ($9F0C) live in pinned RAM. On HW that RAM is stale across soft-reboot;
+        // a stale flag=1 makes drawing commands believe graphics mode is already
+        // active, so they never switch and everything draws to the invisible gfx
+        // plane. Cold start must zero this state for deterministic behavior.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        bus.WriteRam(0x9F11, 0xAA);     // stale TURTLE_GFX_VISIBLE
+        bus.WriteRam(0x9F0C, 0xAA);     // stale TURTLE_INITED
+        cpu.Boot();
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);   // runs cold_start
+        Assert.AreEqual(0, bus.ReadRam(0x9F11), "cold start must zero TURTLE_GFX_VISIBLE.");
+        Assert.AreEqual(0, bus.ReadRam(0x9F0C), "cold start must zero TURTLE_INITED.");
+    }
+
+    [TestMethod]
+    public void HideTurtleInTextModeAutoEntersSplit()
+    {
+        // HT is a turtle command too — it should auto-switch to split like FD.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+        QueueLine(editor, "HT");
+        RunSteps(cpu, bus, 5_000_000);
+        Assert.IsTrue(bus.Vgc.GetCursorY() >= 40,
+            $"HT in text mode should auto-switch to split screen. cursorY={bus.Vgc.GetCursorY()}");
     }
 
     [TestMethod]
@@ -1990,6 +2157,24 @@ public class NovaLogoTests
         foreach (char ch in line)
             editor.QueueInput((byte)ch);
         editor.QueueInput(0x0D);
+    }
+
+    // Drive the shared EDITUI procedure editor: type the TO line at the prompt
+    // (which opens the editor), type the body lines into the editor, then
+    // Ctrl-S (save) and Ctrl-Q (exit). The editor re-renders on every key, so
+    // block until the "<name> DEFINED" confirmation rather than guessing a
+    // fixed cycle budget.
+    private static void QueueProcedureDefinition(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string header, params string[] bodyLines)
+    {
+        QueueLine(editor, header);
+        foreach (string bodyLine in bodyLines)
+            QueueLine(editor, bodyLine);
+        editor.QueueInput(CtrlS);
+        editor.QueueInput(CtrlQ);
+        // Wait for "<NAME> DEFINED" specifically so back-to-back defines in one
+        // test don't match a previous procedure's stale confirmation.
+        string name = header.Split(' ', StringSplitOptions.RemoveEmptyEntries)[1];
+        RunUntilScreenContains(cpu, bus, name + " DEFINED", 60_000_000);
     }
 
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)

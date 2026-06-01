@@ -19,6 +19,8 @@ TEST_SAVELENL  = $0304          ; buffer length captured by SAVE hook
 TEST_SAVELENH  = $0305
 TEST_INDENT    = $0306          ; spaces the INDENT hook returns (test sets)
 TEST_HLMARK    = $0307          ; sentinel color the HILITE hook stamps (test sets)
+TEST_SEEDLENL  = $0308          ; injected-buffer length lo (0 => use built-in seed)
+TEST_SEEDLENH  = $0309          ; injected-buffer length hi
 TEXT_CAP       = 2048
 
 .segment "HEADER"
@@ -32,15 +34,29 @@ start:
       LDX   #$FF
       TXS                       ; standalone entry: set up our own stack
 
-      ; Seed TEXT_BUF with the initial source and set EDITBUF_LEN.
+      ; Seed the editable buffer + EDITBUF_LEN. If the host test injected its own
+      ; buffer (TEST_SEEDLEN nonzero), use it as-is; else copy the built-in source.
+      LDA   TEST_SEEDLENL
+      ORA   TEST_SEEDLENH
+      BNE   @injected
       LDX   #0
 @seed:
       CPX   #init_text_len
-      BCS   @seeded
+      BCS   @builtin_len
       LDA   init_text,X
       STA   TEXT_BUF,X
       INX
       BRA   @seed
+@builtin_len:
+      LDA   #init_text_len
+      STA   EDITBUF_LENL
+      STZ   EDITBUF_LENH
+      BRA   @seeded
+@injected:
+      LDA   TEST_SEEDLENL
+      STA   EDITBUF_LENL
+      LDA   TEST_SEEDLENH
+      STA   EDITBUF_LENH
 @seeded:
 
       ; --- editbuf config ---
@@ -52,9 +68,6 @@ start:
       STA   EDITBUF_CAPL
       LDA   #>TEXT_CAP
       STA   EDITBUF_CAPH
-      LDA   #init_text_len
-      STA   EDITBUF_LENL
-      STZ   EDITBUF_LENH
       LDA   #<title_str
       STA   EDITBUF_TITLEL
       LDA   #>title_str

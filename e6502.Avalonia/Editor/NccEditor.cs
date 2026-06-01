@@ -60,8 +60,7 @@ public sealed class NccEditor : ScreenTextEditor
     protected override string GetTitle()
     {
         string name = string.IsNullOrEmpty(CurrentFilename) ? "untitled" : CurrentFilename;
-        string mod = Modified ? " [modified]" : "";
-        return $" Nova C Compiler v1.0 - {name}{mod} ";
+        return $" Nova C Compiler v1.0 - {name} ";
     }
 
     protected override string GetStatusExtra() => Mode switch

@@ -91,6 +91,17 @@ EXT_CMD_WAIT     = $48          ; WAIT n — wait N frames
 EXT_CMD_WAITVBL  = $49          ; WAITVBL — wait for next VBL
 EXT_CMD_TIMER    = $4A          ; TIMER — return frame counter
 
+; --- Editor command ---
+; EXT_CMD_EDIT — open the shared EDITUI/EDITBUF editor on a RAM text buffer.
+;   In:  ARG0 = buffer ptr (lo/hi)   ARG1 = current length (lo/hi)
+;        ARG2 = capacity (lo/hi)     ARG3 = NUL-terminated title ptr (lo/hi)
+;        ARG2_FRAC:ARG3_FRAC = initial cursor byte offset (lo:hi) — the unused
+;        fractional bytes of the cap/title pointer args carry the cursor.
+;   Out: RESULT_LO = editbuf exit reason (EDITBUF_EXIT_*)
+;        RESULT_HI = nonzero if the user requested a save (Ctrl-S / "Save First")
+;        ARG1 (lo/hi) = final buffer length
+EXT_CMD_EDIT     = $4B          ; EDIT — run the shared text editor
+
 ; --- Value types (match eval_type in eval.s) ---
 .ifndef VAL_NUMBER
 VAL_NUMBER      = $00

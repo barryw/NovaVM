@@ -42,6 +42,7 @@ SPRITE_FLAGS = 5
 SPRITE_ENABLE = 0x80
 
 VGC_GFX_SPACE = 3
+VGC_MODE = 0xA000
 GFX_WIDTH = 320
 SPLIT_GFX_ROWS = 160
 
@@ -496,6 +497,37 @@ def run_setpos_smoke(client: NovaHostClient, timeout: float) -> tuple[int, int]:
     )
 
 
+def run_procedure_editor_smoke(client: NovaHostClient, timeout: float) -> tuple[int, int, int]:
+    run_logo_line_until(
+        client,
+        "CLEARSCREEN",
+        timeout,
+        "CLEARSCREEN to reset before TO editor smoke",
+        lambda: turtle_word(read_turtle_state(client), TURTLE_X_LO, TURTLE_X_HI) == 160
+        and turtle_word(read_turtle_state(client), TURTLE_Y_LO, TURTLE_Y_HI) == 80,
+    )
+
+    mode_before = client.peek(VGC_MODE)
+    turtle_pixels_before = count_gfx_nonzero(client, 152, 72, 16, 16)
+    client.type_text("TO HPROC\rPRINT 6060\r\x13\x11")
+    wait_screen_contains(client, "HPROC DEFINED", timeout)
+    wait_logo_ready(client, timeout)
+
+    mode_after = client.peek(VGC_MODE)
+    if mode_after != mode_before:
+        raise RuntimeError(f"TO editor did not restore VGC mode: before=${mode_before:02X} after=${mode_after:02X}")
+
+    turtle_pixels_after = count_gfx_nonzero(client, 152, 72, 16, 16)
+    if turtle_pixels_after < turtle_pixels_before:
+        raise RuntimeError(
+            f"TO editor cleared graphics/turtle pixels: before={turtle_pixels_before} after={turtle_pixels_after}"
+        )
+
+    type_logo_line(client, "HPROC", timeout)
+    wait_screen_contains(client, "6060", timeout)
+    return mode_after, turtle_pixels_before, turtle_pixels_after
+
+
 def decode_trace(response: dict[str, Any]) -> list[dict[str, Any]]:
     hex_text = str(response.get("hex", ""))
     if not hex_text:
@@ -646,6 +678,7 @@ def run_smoke(args: argparse.Namespace) -> None:
         cardinal_x, cardinal_y, cardinal_heading = run_cardinal_relative_turn_smoke(client, args.timeout)
         square_x, square_y, square_heading, square_top, square_right = run_repeat_square_smoke(client, args.timeout)
         setpos_x, setpos_y = run_setpos_smoke(client, args.timeout)
+        editor_mode, editor_pixels_before, editor_pixels_after = run_procedure_editor_smoke(client, args.timeout)
 
         breakpoint_pc = None
         if args.target == "hardware" and not args.skip_debug_breakpoint:
@@ -659,7 +692,8 @@ def run_smoke(args: argparse.Namespace) -> None:
             f"long_fd=x{long_x},y{long_y},h{long_heading},diag{long_diagonal_pixels},old{long_old_center_pixels}; "
             f"cardinal=x{cardinal_x},y{cardinal_y},h{cardinal_heading}; "
             f"square=x{square_x},y{square_y},h{square_heading},top{square_top},right{square_right}; "
-            f"setpos=x{setpos_x},y{setpos_y}"
+            f"setpos=x{setpos_x},y{setpos_y}; "
+            f"editor=mode${editor_mode:02X},pixels{editor_pixels_before}->{editor_pixels_after}"
         )
         if breakpoint_pc is not None:
             msg += f" breakpoint=${breakpoint_pc:04X}"

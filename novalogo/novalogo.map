@@ -1,9 +1,9 @@
 Modules list:
 -------------
 novalogo.o:
-    CODE              Offs=000000  Size=0032CC  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=003431  Align=00001  Fill=0000
     RODATA            Offs=000000  Size=000AA0  Align=00001  Fill=0000
-    BSS               Offs=000000  Size=0009D8  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000A02  Align=00001  Fill=0000
     ZEROPAGE          Offs=000000  Size=00004E  Align=00001  Fill=0000
     MONITOR           Offs=000000  Size=000009  Align=00001  Fill=0000
     VECTORS           Offs=000000  Size=000006  Align=00001  Fill=0000
@@ -14,9 +14,9 @@ Segment list:
 Name                   Start     End    Size  Align
 ----------------------------------------------------
 ZEROPAGE              000030  00007D  00004E  00001
-BSS                   000280  000C57  0009D8  00001
-CODE                  00C000  00F2CB  0032CC  00001
-RODATA                00F2CC  00FD6B  000AA0  00001
+BSS                   000280  000C81  000A02  00001
+CODE                  00C000  00F430  003431  00001
+RODATA                00F431  00FED0  000AA0  00001
 MONITOR               00FFD7  00FFDF  000009  00001
 VECTORS               00FFFA  00FFFF  000006  00001
 

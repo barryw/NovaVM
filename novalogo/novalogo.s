@@ -41,6 +41,16 @@ cold_start:
       DEX
       BPL   @copy_tramp
 
+      ; Zero NovaLogo turtle/graphics state ($9F00..$9F1F) so each session starts
+      ; in a known mode. The extension pins its turtle state here (extension.s
+      ; TURTLE_STATE_BASE=$9F00); RAM is stale across soft-reboot on HW, and a
+      ; stale graphics-mode/inited flag breaks auto-switch and re-init.
+      LDX   #$1F
+@zero_turtle:
+      STZ   $9F00,X
+      DEX
+      BPL   @zero_turtle
+
       JSR   heap_init
       JSR   var_init
       JSR   proc_init

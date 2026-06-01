@@ -1,0 +1,222 @@
+Modules list:
+-------------
+editbuf_test.o:
+    CODE              Offs=000000  Size=000091  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=00000C  Align=00001  Fill=0000
+    HEADER            Offs=000000  Size=000002  Align=00001  Fill=0000
+editui.o:
+    CODE              Offs=000091  Size=000E1D  Align=00001  Fill=0000
+    RODATA            Offs=00000C  Size=00008C  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000F4C  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=00000B  Align=00001  Fill=0000
+editbuf.o:
+    CODE              Offs=000EAE  Size=000B62  Align=00001  Fill=0000
+    RODATA            Offs=000098  Size=00009F  Align=00001  Fill=0000
+    BSS               Offs=000F4C  Size=00017E  Align=00001  Fill=0000
+    ZEROPAGE          Offs=00000B  Size=00000C  Align=00001  Fill=0000
+
+
+Segment list:
+-------------
+Name                   Start     End    Size  Align
+----------------------------------------------------
+HEADER                000000  000001  000002  00001
+ZEROPAGE              000040  000056  000017  00001
+BSS                   001000  0020C9  0010CA  00001
+CODE                  007200  008C0F  001A10  00001
+RODATA                008C10  008D46  000137  00001
+
+
+Exports list by name:
+---------------------
+EDITBUF_BUFH              001F4D RLA    EDITBUF_BUFL              001F4C RLA    
+EDITBUF_CAPH              001F4F RLA    EDITBUF_CAPL              001F4E RLA    
+EDITBUF_HILITE_VECH       001F5B RLA    EDITBUF_HILITE_VECL       001F5A RLA    
+EDITBUF_HL_COLORS         001F78 RLA    EDITBUF_HL_LEN            001F77 RLA    
+EDITBUF_INDENT_VECH       001F59 RLA    EDITBUF_INDENT_VECL       001F58 RLA    
+EDITBUF_LENH              001F51 RLA    EDITBUF_LENL              001F50 RLA    
+EDITBUF_SAVE_VECH         001F57 RLA    EDITBUF_SAVE_VECL         001F56 RLA    
+EDITBUF_STATUSH           001F55 RLA    EDITBUF_STATUSL           001F54 RLA    
+EDITBUF_TITLEH            001F53 RLA    EDITBUF_TITLEL            001F52 RLA    
+EDITUI_BOXH               00101B RLA    EDITUI_BOXW               00101A RLA    
+EDITUI_BOXX               001018 RLA    EDITUI_BOXY               001019 RLA    
+EDITUI_BOX_STYLE          00101E RLA    EDITUI_BOX_TITLEH         00101D RLA    
+EDITUI_BOX_TITLEL         00101C RLA    EDITUI_DIRTY              001017 RLA    
+EDITUI_HELPH              001014 RLA    EDITUI_HELPL              001013 RLA    
+EDITUI_MENU_SAVE_H        001042 RLA    EDITUI_MENU_SAVE_W        001041 RLA    
+EDITUI_MENU_SAVE_X        00103F RLA    EDITUI_MENU_SAVE_Y        001040 RLA    
+EDITUI_PRINTH             001022 RLA    EDITUI_PRINTL             001021 RLA    
+EDITUI_PRINTX             00101F RLA    EDITUI_PRINTY             001020 RLA    
+EDITUI_STATUSH            001016 RLA    EDITUI_STATUSL            001015 RLA    
+EDITUI_TITLEH             00100E RLA    EDITUI_TITLEL             00100D RLA    
+VTEXT_ATTR                001007 RLA    VTEXT_CHAR                001008 RLA    
+VTEXT_COLOR               001006 RLA    VTEXT_CURX                001004 RLA    
+VTEXT_CURY                001005 RLA    editbuf_reset_state       0080AE RLA    
+editbuf_run               0080CA RLA    editui_draw_box           0079F8 RLA    
+editui_draw_shell         007864 RLA    editui_draw_status        00799C RLA    
+editui_draw_title_band    00790A RLA    editui_full_region        00773B RLA    
+editui_init               007705 RLA    editui_print_ptr          0077A4 RLA    
+editui_restore_under      007E83 RLA    editui_save_under         007E2D RLA    
+editui_select_box_body    007B77 RLA    vtext_clear_region        00756C RLA    
+vtext_put_char            00748B RLA    vtext_set_cursor          0073DC RLA    
+
+
+
+Exports list by value:
+----------------------
+VTEXT_CURX                001004 RLA    VTEXT_CURY                001005 RLA    
+VTEXT_COLOR               001006 RLA    VTEXT_ATTR                001007 RLA    
+VTEXT_CHAR                001008 RLA    EDITUI_TITLEL             00100D RLA    
+EDITUI_TITLEH             00100E RLA    EDITUI_HELPL              001013 RLA    
+EDITUI_HELPH              001014 RLA    EDITUI_STATUSL            001015 RLA    
+EDITUI_STATUSH            001016 RLA    EDITUI_DIRTY              001017 RLA    
+EDITUI_BOXX               001018 RLA    EDITUI_BOXY               001019 RLA    
+EDITUI_BOXW               00101A RLA    EDITUI_BOXH               00101B RLA    
+EDITUI_BOX_TITLEL         00101C RLA    EDITUI_BOX_TITLEH         00101D RLA    
+EDITUI_BOX_STYLE          00101E RLA    EDITUI_PRINTX             00101F RLA    
+EDITUI_PRINTY             001020 RLA    EDITUI_PRINTL             001021 RLA    
+EDITUI_PRINTH             001022 RLA    EDITUI_MENU_SAVE_X        00103F RLA    
+EDITUI_MENU_SAVE_Y        001040 RLA    EDITUI_MENU_SAVE_W        001041 RLA    
+EDITUI_MENU_SAVE_H        001042 RLA    EDITBUF_BUFL              001F4C RLA    
+EDITBUF_BUFH              001F4D RLA    EDITBUF_CAPL              001F4E RLA    
+EDITBUF_CAPH              001F4F RLA    EDITBUF_LENL              001F50 RLA    
+EDITBUF_LENH              001F51 RLA    EDITBUF_TITLEL            001F52 RLA    
+EDITBUF_TITLEH            001F53 RLA    EDITBUF_STATUSL           001F54 RLA    
+EDITBUF_STATUSH           001F55 RLA    EDITBUF_SAVE_VECL         001F56 RLA    
+EDITBUF_SAVE_VECH         001F57 RLA    EDITBUF_INDENT_VECL       001F58 RLA    
+EDITBUF_INDENT_VECH       001F59 RLA    EDITBUF_HILITE_VECL       001F5A RLA    
+EDITBUF_HILITE_VECH       001F5B RLA    EDITBUF_HL_LEN            001F77 RLA    
+EDITBUF_HL_COLORS         001F78 RLA    vtext_set_cursor          0073DC RLA    
+vtext_put_char            00748B RLA    vtext_clear_region        00756C RLA    
+editui_init               007705 RLA    editui_full_region        00773B RLA    
+editui_print_ptr          0077A4 RLA    editui_draw_shell         007864 RLA    
+editui_draw_title_band    00790A RLA    editui_draw_status        00799C RLA    
+editui_draw_box           0079F8 RLA    editui_select_box_body    007B77 RLA    
+editui_save_under         007E2D RLA    editui_restore_under      007E83 RLA    
+editbuf_reset_state       0080AE RLA    editbuf_run               0080CA RLA    
+
+
+
+Imports list:
+-------------
+EDITBUF_BUFH (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:91
+EDITBUF_BUFL (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:90
+EDITBUF_CAPH (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:93
+EDITBUF_CAPL (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:92
+EDITBUF_HILITE_VECH (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:105
+EDITBUF_HILITE_VECL (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:104
+EDITBUF_HL_COLORS (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:115
+EDITBUF_HL_LEN (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:114
+EDITBUF_INDENT_VECH (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:103
+EDITBUF_INDENT_VECL (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:102
+EDITBUF_LENH (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:95
+EDITBUF_LENL (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:94
+EDITBUF_SAVE_VECH (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:101
+EDITBUF_SAVE_VECL (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:100
+EDITBUF_STATUSH (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:99
+EDITBUF_STATUSL (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:98
+EDITBUF_TITLEH (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:97
+EDITBUF_TITLEL (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:96
+EDITUI_BOXH (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:117
+EDITUI_BOXW (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:116
+EDITUI_BOXX (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:114
+EDITUI_BOXY (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:115
+EDITUI_BOX_STYLE (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:120
+EDITUI_BOX_TITLEH (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:119
+EDITUI_BOX_TITLEL (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:118
+EDITUI_DIRTY (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:113
+EDITUI_HELPH (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:110
+EDITUI_HELPL (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:109
+EDITUI_MENU_SAVE_H (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:134
+EDITUI_MENU_SAVE_W (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:133
+EDITUI_MENU_SAVE_X (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:131
+EDITUI_MENU_SAVE_Y (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:132
+EDITUI_PRINTH (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:122
+EDITUI_PRINTL (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:121
+EDITUI_PRINTX (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:123
+EDITUI_PRINTY (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:124
+EDITUI_STATUSH (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:112
+EDITUI_STATUSL (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:111
+EDITUI_TITLEH (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:104
+EDITUI_TITLEL (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:103
+VTEXT_ATTR (editui.o):
+    editbuf.o                 ../../../runtime/asm/vtext.inc:51
+VTEXT_CHAR (editui.o):
+    editbuf.o                 ../../../runtime/asm/vtext.inc:52
+VTEXT_COLOR (editui.o):
+    editbuf.o                 ../../../runtime/asm/vtext.inc:50
+VTEXT_CURX (editui.o):
+    editbuf.o                 ../../../runtime/asm/vtext.inc:48
+VTEXT_CURY (editui.o):
+    editbuf.o                 ../../../runtime/asm/vtext.inc:49
+editbuf_reset_state (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:119
+editbuf_run (editbuf.o):
+    editbuf_test.o            ../../../runtime/asm/editbuf.inc:118
+editui_draw_box (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:143
+editui_draw_shell (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:140
+editui_draw_status (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:142
+editui_draw_title_band (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:141
+editui_full_region (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:137
+editui_init (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:136
+editui_print_ptr (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:145
+editui_restore_under (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:149
+editui_save_under (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:148
+editui_select_box_body (editui.o):
+    editbuf.o                 ../../../runtime/asm/editui.inc:144
+vtext_clear_region (editui.o):
+    editbuf.o                 ../../../runtime/asm/vtext.inc:86
+vtext_put_char (editui.o):
+    editbuf.o                 ../../../runtime/asm/vtext.inc:81
+vtext_set_cursor (editui.o):
+    editbuf.o                 ../../../runtime/asm/vtext.inc:78
+

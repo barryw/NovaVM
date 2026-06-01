@@ -46,7 +46,7 @@ public sealed class BasicEditor : ScreenTextEditor
 
     // ── ScreenTextEditor abstract overrides ───────────────────────────────────
 
-    protected override string GetTitle()    => Modified ? "NOVA EDIT [*]" : "NOVA EDIT";
+    protected override string GetTitle()    => "NOVA EDIT";
     protected override string GetHelpText() => "F5:Run  Esc:Exit  ^F:Find  ^G:Goto  ^S:Save  F3:Open";
     protected override ISyntaxHighlighter GetHighlighter() => _highlighter;
     protected override int GetGutterWidth() => 6;  // 5 digits + 1 space

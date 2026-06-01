@@ -35,10 +35,17 @@ proc_rec_off:     .res 1        ; offset into record during invoke
 ; =====================================================================
       .segment "BSS"
 
-proc_body_buf:    .res 2048     ; temporary buffer for body during TO/END
+proc_body_buf:    .res 2048     ; editor text buffer: "TO ..\n<body>\nEND\n"
 proc_name_buf:    .res 32       ; procedure name: length-prefixed
 proc_param_buf:   .res 128      ; packed: count, [len,chars]... each param
 proc_param_end:   .res 1        ; write offset into proc_param_buf
+proc_editor_title:.res 36       ; "TO <name>" + NUL, passed to the shared editor
+proc_body_src_lo: .res 1        ; pointer to the body text proc_build_record copies
+proc_body_src_hi: .res 1
+proc_edit_cur_lo: .res 1        ; initial editor cursor offset (start of body line)
+proc_edit_cur_hi: .res 1
+proc_scan_off_lo: .res 1        ; 16-bit scan offset for body extraction
+proc_scan_off_hi: .res 1
 
 ; Save area for eval state during procedure invocation
 save_eval_cur_lo: .res 1
@@ -178,64 +185,14 @@ proc_collect:
       STZ   proc_body_len_lo
       STZ   proc_body_len_hi
 
-      ; Read body lines until END
-@read_body_line:
-      JSR   print_cont_prompt
-      JSR   read_line
-
-      ; Check if line is just "END"
-      JSR   check_end_line
+      ; Open the shared EDITUI editor on an empty body buffer. Carry set means
+      ; the user asked to save (Ctrl-S / "Save First") before exiting.
+      JSR   proc_open_editor
       BCS   @body_done
-
-      ; Append input_buf chars to proc_body_buf, then $0A
-      LDX   #0
-@copy_body_ch:
-      CPX   z:buf_idx
-      BCS   @append_nl
-
-      ; Compute dest address: proc_body_buf + body_len
-      PHX
-      CLC
-      LDA   proc_body_len_lo
-      ADC   #<proc_body_buf
-      STA   proc_ptr_lo
-      LDA   proc_body_len_hi
-      ADC   #>proc_body_buf
-      STA   proc_ptr_hi
-      PLX
-
-      LDA   input_buf,X
-      LDY   #0
-      STA   (proc_ptr_lo),Y
-
-      INC   proc_body_len_lo
-      BNE   :+
-      INC   proc_body_len_hi
-:     INX
-      BRA   @copy_body_ch
-
-@append_nl:
-      ; Add $0A separator
-      CLC
-      LDA   proc_body_len_lo
-      ADC   #<proc_body_buf
-      STA   proc_ptr_lo
-      LDA   proc_body_len_hi
-      ADC   #>proc_body_buf
-      STA   proc_ptr_hi
-      LDA   #$0A
-      LDY   #0
-      STA   (proc_ptr_lo),Y
-      INC   proc_body_len_lo
-      BNE   :+
-      INC   proc_body_len_hi
-:     BRA   @read_body_line
-
-@body_done:
-      ; Build the heap record
-      JSR   proc_build_record
+      RTS
 
       ; Print "NAME DEFINED\n"
+@body_done:
       LDX   proc_name_len
       LDY   #0
 @print_name:
@@ -271,39 +228,284 @@ proc_collect:
       RTS
 
 ; ---------------------------------------------------------------------
-; check_end_line — check if input_buf == "END" (case-insensitive)
-;   Returns: carry set = yes, carry clear = no
+; proc_open_editor — run the shared EDITUI editor on an empty body buffer.
+;   Builds the editor title "TO <name>", hands the buffer/cap/title to the
+;   extension's EXT_CMD_EDIT, then on return builds the procedure record from
+;   the edited body when the user asked to save.
+;   Inputs:  proc_name_buf / proc_name_len, proc_param_buf (already parsed)
+;   Returns: carry set = saved (record built), carry clear = abandoned
 ; ---------------------------------------------------------------------
-check_end_line:
-      LDA   z:buf_idx
-      CMP   #3
-      BNE   @no
-      LDA   input_buf
-      AND   #$DF
-      CMP   #'E'
-      BNE   @no
-      LDA   input_buf+1
-      AND   #$DF
-      CMP   #'N'
-      BNE   @no
-      LDA   input_buf+2
-      AND   #$DF
-      CMP   #'D'
-      BNE   @no
+proc_open_editor:
+      ; --- build the scaffold "TO <name> :params\n  \nEND\n" in proc_body_buf.
+      ; Y is the 8-bit write index (the scaffold is always < 256 bytes: name<=31,
+      ; params<=127, plus a dozen structure bytes).
+      LDY   #0
+      LDA   #'T'
+      STA   proc_body_buf,Y
+      INY
+      LDA   #'O'
+      STA   proc_body_buf,Y
+      INY
+      LDA   #' '
+      STA   proc_body_buf,Y
+      INY
+      LDX   #0                     ; name source index
+@nm:
+      CPX   proc_name_len
+      BCS   @nm_done
+      LDA   proc_name_buf+1,X
+      STA   proc_body_buf,Y
+      INY
+      INX
+      BRA   @nm
+@nm_done:
+      ; params: " :" + chars, walking proc_param_buf[1..proc_param_end)
+      LDX   #1
+@pp:
+      CPX   proc_param_end
+      BCS   @pp_done
+      LDA   #' '
+      STA   proc_body_buf,Y
+      INY
+      LDA   #':'
+      STA   proc_body_buf,Y
+      INY
+      LDA   proc_param_buf,X       ; this param's char count
+      STA   proc_rec_off
+      INX
+@ppc:
+      LDA   proc_rec_off
+      BEQ   @pp
+      LDA   proc_param_buf,X
+      STA   proc_body_buf,Y
+      INY
+      INX
+      DEC   proc_rec_off
+      BRA   @ppc
+@pp_done:
+      ; Y = line-1 length. The body line is line 1's '\n' + 2 indent spaces,
+      ; so the cursor lands at offset (line1 + 3).
+      TYA
+      CLC
+      ADC   #3
+      STA   proc_edit_cur_lo
+      LDA   #0
+      ADC   #0
+      STA   proc_edit_cur_hi
+      ; append "\n  \nEND\n"
+      LDA   #$0A
+      STA   proc_body_buf,Y
+      INY
+      LDA   #' '
+      STA   proc_body_buf,Y
+      INY
+      STA   proc_body_buf,Y
+      INY
+      LDA   #$0A
+      STA   proc_body_buf,Y
+      INY
+      LDA   #'E'
+      STA   proc_body_buf,Y
+      INY
+      LDA   #'N'
+      STA   proc_body_buf,Y
+      INY
+      LDA   #'D'
+      STA   proc_body_buf,Y
+      INY
+      LDA   #$0A
+      STA   proc_body_buf,Y
+      INY
+      STY   proc_body_len_lo
+      STZ   proc_body_len_hi
+
+      ; --- title "TO <name>" + NUL for the editor's title band ---
+      LDA   #'T'
+      STA   proc_editor_title+0
+      LDA   #'O'
+      STA   proc_editor_title+1
+      LDA   #' '
+      STA   proc_editor_title+2
+      LDX   #0
+      LDY   #3
+@tt:
+      CPX   proc_name_len
+      BCS   @tt_done
+      LDA   proc_name_buf+1,X
+      STA   proc_editor_title,Y
+      INX
+      INY
+      BRA   @tt
+@tt_done:
+      LDA   #0
+      STA   proc_editor_title,Y
+
+      ; --- mailbox: ARG0=buf ARG1=len ARG2=cap ARG3=title; cursor in FRAC bytes
+      LDA   #<proc_body_buf
+      STA   EXT_ARG0_LO
+      LDA   #>proc_body_buf
+      STA   EXT_ARG0_HI
+      LDA   proc_body_len_lo
+      STA   EXT_ARG1_LO
+      LDA   proc_body_len_hi
+      STA   EXT_ARG1_HI
+      LDA   #<2048
+      STA   EXT_ARG2_LO
+      LDA   #>2048
+      STA   EXT_ARG2_HI
+      LDA   #<proc_editor_title
+      STA   EXT_ARG3_LO
+      LDA   #>proc_editor_title
+      STA   EXT_ARG3_HI
+      LDA   proc_edit_cur_lo
+      STA   EXT_ARG2_FRAC          ; initial cursor offset (see ext_iface.inc)
+      LDA   proc_edit_cur_hi
+      STA   EXT_ARG3_FRAC
+
+      LDA   #EXT_CMD_EDIT
+      STA   EXT_CMD
+      JSR   EXT_TRAMPOLINE         ; swap to ext ROM, run editor, swap back
+
+      ; editor returns the final buffer length in ARG1
+      LDA   EXT_ARG1_LO
+      STA   proc_body_len_lo
+      LDA   EXT_ARG1_HI
+      STA   proc_body_len_hi
+
+      LDA   EXT_RESULT_HI
+      BEQ   @abandoned
+      ; Strip line 1 + the END line -> proc_body_src/proc_body_len = body only.
+      JSR   proc_extract_body
+      JSR   proc_build_record
       SEC
       RTS
-@no:
+@abandoned:
       CLC
       RTS
 
 ; ---------------------------------------------------------------------
-; print_cont_prompt — print "> "
+; proc_extract_body — narrow proc_body_buf/proc_body_len down to just the body:
+;   everything after the first '\n' (line 1) up to (not including) the line that
+;   reads "END". Sets proc_body_src_lo/hi + proc_body_len_lo/hi.
 ; ---------------------------------------------------------------------
-print_cont_prompt:
-      LDA   #'>'
-      STA   VGC_CHAROUT
-      LDA   #' '
-      STA   VGC_CHAROUT
+proc_extract_body:
+      LDA   #<proc_body_buf
+      STA   proc_ptr_lo
+      LDA   #>proc_body_buf
+      STA   proc_ptr_hi
+      STZ   proc_scan_off_lo
+      STZ   proc_scan_off_hi
+@find_nl:
+      JSR   proc_scan_at_end
+      BCS   @whole                ; no newline -> whole buffer is the body
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      JSR   proc_scan_advance
+      CMP   #$0A
+      BNE   @find_nl
+      ; body starts here
+      LDA   proc_ptr_lo
+      STA   proc_body_src_lo
+      LDA   proc_ptr_hi
+      STA   proc_body_src_hi
+      LDA   proc_scan_off_lo
+      STA   num_tmp_lo            ; body-start offset
+      LDA   proc_scan_off_hi
+      STA   num_tmp_hi
+@line:
+      JSR   proc_scan_at_end
+      BCS   @body_end             ; ran off the end -> body = rest
+      JSR   proc_line_is_end
+      BCS   @body_end             ; this line is "END" -> stop
+@skip:
+      JSR   proc_scan_at_end
+      BCS   @body_end
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      JSR   proc_scan_advance
+      CMP   #$0A
+      BNE   @skip
+      BRA   @line
+@body_end:
+      SEC
+      LDA   proc_scan_off_lo
+      SBC   num_tmp_lo
+      STA   proc_body_len_lo
+      LDA   proc_scan_off_hi
+      SBC   num_tmp_hi
+      STA   proc_body_len_hi
+      RTS
+@whole:
+      LDA   #<proc_body_buf
+      STA   proc_body_src_lo
+      LDA   #>proc_body_buf
+      STA   proc_body_src_hi
+      RTS
+
+; carry set if proc_scan_off >= proc_body_len
+proc_scan_at_end:
+      LDA   proc_scan_off_lo
+      CMP   proc_body_len_lo
+      LDA   proc_scan_off_hi
+      SBC   proc_body_len_hi
+      RTS
+
+; advance the scan pointer + offset by one byte
+proc_scan_advance:
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     INC   proc_scan_off_lo
+      BNE   :+
+      INC   proc_scan_off_hi
+:     RTS
+
+; proc_line_is_end — carry set if the line at proc_ptr is exactly "END" followed
+; by '\n' or end-of-buffer. Needs room for 3 chars (off+3 <= len). Non-destructive.
+proc_line_is_end:
+      ; proc_entry = proc_scan_off + 3
+      CLC
+      LDA   proc_scan_off_lo
+      ADC   #3
+      STA   proc_entry_lo
+      LDA   proc_scan_off_hi
+      ADC   #0
+      STA   proc_entry_hi
+      ; need off+3 <= len, i.e. NOT (off+3 > len) == NOT (len < off+3)
+      LDA   proc_body_len_lo
+      CMP   proc_entry_lo
+      LDA   proc_body_len_hi
+      SBC   proc_entry_hi
+      BCC   @no                   ; len < off+3 -> not enough room
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      CMP   #'E'
+      BNE   @no
+      INY
+      LDA   (proc_ptr_lo),Y
+      CMP   #'N'
+      BNE   @no
+      INY
+      LDA   (proc_ptr_lo),Y
+      CMP   #'D'
+      BNE   @no
+      ; 4th byte: '\n', or off+3 == len (END at buffer end)
+      LDA   proc_entry_lo
+      CMP   proc_body_len_lo
+      BNE   @check_nl
+      LDA   proc_entry_hi
+      CMP   proc_body_len_hi
+      BEQ   @yes                  ; off+3 == len
+@check_nl:
+      INY
+      LDA   (proc_ptr_lo),Y
+      CMP   #$0A
+      BNE   @no
+@yes:
+      SEC
+      RTS
+@no:
+      CLC
       RTS
 
 ; ---------------------------------------------------------------------
@@ -528,14 +730,14 @@ proc_build_record:
 :     LDA   proc_body_len_hi
       STA   (ptr_lo),Y
 
-      ; Copy body text
+      ; Copy body text (proc_body_src points at the body region of the buffer)
       LDA   proc_body_len_lo
       ORA   proc_body_len_hi
       BEQ   @bld_body_done
 
-      LDA   #<proc_body_buf
+      LDA   proc_body_src_lo
       STA   proc_ptr_lo
-      LDA   #>proc_body_buf
+      LDA   proc_body_src_hi
       STA   proc_ptr_hi
       ; 16-bit counter
       LDA   proc_body_len_lo

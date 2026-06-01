@@ -602,6 +602,7 @@ RegPaletteMode                = $A0E9
 RegScrollCtl                  = $A0EA
 RegColStHi                    = $A0EB
 RegColBgHi                    = $A0EC
+RegTextTopRow                 = $A0ED
 ScrollCtlXHigh                = $01
 ScrollCtlGfx                  = $02
 ScrollCtlText                 = $04
@@ -613,6 +614,14 @@ VramPlaneGfx                  = $03
 VramPlaneSprite               = $04
 VramPlaneTextAttr             = $07
 VramCtrlAutoInc               = $01
+
+; --- Direct screen window ($A200-$B1A0) — banked, plain-STA access to the ---
+ScreenWinBase                 = $A200
+ScreenWinEnd                  = $B19F
+ScreenWinPlaneSel             = $B1A0
+ScreenWinPlaneChar            = $00
+ScreenWinPlaneColor           = $01
+ScreenWinPlaneAttr            = $02
 TextFlagReverse               = $01
 TextFlagReverseExplicit       = $02
 TextFlagFlash                 = $04

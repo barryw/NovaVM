@@ -8,9 +8,10 @@ DEMO_DIR     := apps/demo
 ROTATE_DIR   := apps/vsprite_rotate
 TURTLE_DIR   := apps/turtle
 EDITUI_SHELL_DIR := apps/editui_shell
+EDITBUF_TEST_DIR := apps/editbuf_test
 VGC_WAIT_OBJ := $(KEYBOARD_DIR)/vgc_wait.o
 
-all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell
+all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test
 
 keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
@@ -99,6 +100,20 @@ $(EDITUI_SHELL_DIR)/editui.o: $(NOVA_ASM)/editui.s $(NOVA_ASM)/editui.inc $(NOVA
 install-editui-shell: editui-shell
 	cp $(EDITUI_SHELL_DIR)/editui_shell.bin ~/e6502-programs/editui_shell.bin
 
+editbuf-test: $(EDITBUF_TEST_DIR)/editbuf_test.bin
+
+$(EDITBUF_TEST_DIR)/editbuf_test.bin: $(EDITBUF_TEST_DIR)/editbuf_test.o $(EDITBUF_TEST_DIR)/editui.o $(EDITBUF_TEST_DIR)/editbuf.o $(EDITBUF_TEST_DIR)/editbuf_test.cfg
+	ld65 -C $(EDITBUF_TEST_DIR)/editbuf_test.cfg -o $@ $(EDITBUF_TEST_DIR)/editbuf_test.o $(EDITBUF_TEST_DIR)/editui.o $(EDITBUF_TEST_DIR)/editbuf.o
+
+$(EDITBUF_TEST_DIR)/editbuf_test.o: $(EDITBUF_TEST_DIR)/editbuf_test.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/editui.inc $(NOVA_ASM)/editbuf.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $< -o $@
+
+$(EDITBUF_TEST_DIR)/editui.o: $(NOVA_ASM)/editui.s $(NOVA_ASM)/editui.inc $(NOVA_ASM)/vtext.s $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/blitter.s $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/nova.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $(NOVA_ASM)/editui.s -o $@
+
+$(EDITBUF_TEST_DIR)/editbuf.o: $(NOVA_ASM)/editbuf.s $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editui.inc $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/nova.inc
+	ca65 --cpu 65c02 -I $(NOVA_ASM) $(NOVA_ASM)/editbuf.s -o $@
+
 clean:
 	$(RM) $(KEYBOARD_DIR)/keyboard.o $(KEYBOARD_DIR)/keyboard.bin
 	$(RM) $(KEYBOARD_DIR)/kbdtest.o $(KEYBOARD_DIR)/kbdtest.bin
@@ -113,4 +128,4 @@ clean:
 	$(RM) $(EDITUI_SHELL_DIR)/editui_shell.o $(EDITUI_SHELL_DIR)/editui_shell.bin
 	$(RM) $(EDITUI_SHELL_DIR)/editui.o
 
-.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell clean
+.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test clean

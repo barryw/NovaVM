@@ -230,6 +230,40 @@ module test_novalogo_draw_top;
         prompt_count = count;
     endfunction
 
+    function automatic bit screen_contains_text(input string needle);
+        screen_contains_text = 0;
+        if (needle.len() == 0)
+            return 1;
+        for (int row = 0; row < ROWS; row++) begin
+            for (int col = 0; col <= COLS - needle.len(); col++) begin
+                bit matched;
+                matched = 1;
+                for (int i = 0; i < needle.len(); i++) begin
+                    if (text_at(row, col + i) != needle.getc(i))
+                        matched = 0;
+                end
+                if (matched)
+                    screen_contains_text = 1;
+            end
+        end
+    endfunction
+
+    task automatic type_proc_definition(input string name, input string body);
+        string header;
+        header = {"TO ", name};
+        for (int i = 0; i < header.len(); i++)
+            inject_key(header.getc(i));
+        inject_key(8'h0D);
+        repeat(1500000) @(posedge clk);
+        for (int i = 0; i < body.len(); i++)
+            inject_key(body.getc(i));
+        inject_key(8'h0D);
+        inject_key(8'h13);       // Ctrl-S saves
+        repeat(1000000) @(posedge clk);
+        inject_key(8'h11);       // Ctrl-Q exits
+        wait_for_command_prompt("TO editor", 12000000);
+    endtask
+
     task automatic wait_for_prompt(input int max_cycles);
         int cycles;
         cycles = 0;
@@ -304,6 +338,10 @@ module test_novalogo_draw_top;
         int old_center_pixels;
         int square_top_pixels;
         int square_right_pixels;
+        int editor_mode_before;
+        int editor_mode_after;
+        int editor_pixels_before;
+        int editor_pixels_after;
 
         $display("=== NovaLogo DRAW top-level regression ===");
 
@@ -505,6 +543,22 @@ module test_novalogo_draw_top;
         $display("SETPOS turtle state: x=%0d y=%0d", turn_x, turn_y);
         check("SETPOS [100 50] moves turtle to x=100", turn_x == 100);
         check("SETPOS [100 50] moves turtle to y=50", turn_y == 50);
+
+        type_line("CLEARSCREEN");
+        wait_for_draw_idle(8000000);
+        editor_mode_before = dut.vgc_inst.mode;
+        editor_pixels_before = count_gfx_nonzero(152, 72, 16, 16);
+        type_proc_definition("VPROC", "PRINT 6060");
+        editor_mode_after = dut.vgc_inst.mode;
+        editor_pixels_after = count_gfx_nonzero(152, 72, 16, 16);
+        check("TO editor restores display mode after Ctrl-S/Ctrl-Q",
+              editor_mode_after == editor_mode_before);
+        check("TO editor does not clear the graphics turtle",
+              editor_pixels_after >= editor_pixels_before);
+        type_line("VPROC");
+        wait_for_draw_idle(8000000);
+        check("TO editor saved procedure runs after exit",
+              screen_contains_text("6060"));
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

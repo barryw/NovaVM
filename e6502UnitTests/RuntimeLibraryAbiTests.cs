@@ -202,6 +202,65 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void EditUiExposesSharedDirtyWorkspaceIndicator()
+    {
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "editui.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "editui.s"));
+        string docs = File.ReadAllText(RepoPath("docs", "assembly", "editui.md"));
+
+        StringAssert.Contains(inc, ".global EDITUI_DIRTY");
+        StringAssert.Contains(impl, "EDITUI_DIRTY:");
+        StringAssert.Contains(impl, "STZ   EDITUI_DIRTY");
+        StringAssert.Contains(impl, "LDA   EDITUI_DIRTY");
+        StringAssert.Contains(docs, "EDITUI_DIRTY");
+    }
+
+    [TestMethod]
+    public void EditUiExposesGeneralizedSaveUnderForDialogs()
+    {
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "editui.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "editui.s"));
+
+        // The menu save/restore-under mechanism is generalized into reusable
+        // rect-based entry points so dialogs can overlay without clearing.
+        StringAssert.Contains(inc, ".global editui_save_under");
+        StringAssert.Contains(inc, ".global editui_restore_under");
+        StringAssert.Contains(inc, ".global EDITUI_MENU_SAVE_X");
+        StringAssert.Contains(impl, "editui_save_under:");
+        StringAssert.Contains(impl, "editui_restore_under:");
+    }
+
+    [TestMethod]
+    public void EditBufExposesSharedEditingEngine()
+    {
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "editbuf.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "editbuf.s"));
+
+        // Public entry points.
+        StringAssert.Contains(inc, ".global editbuf_run");
+        StringAssert.Contains(inc, ".global editbuf_dialog3");
+        StringAssert.Contains(impl, "editbuf_run:");
+        StringAssert.Contains(impl, "editbuf_dialog3:");
+
+        // Language-specific behavior arrives only through host hook vectors.
+        StringAssert.Contains(inc, ".global EDITBUF_SAVE_VECL");
+        StringAssert.Contains(inc, ".global EDITBUF_INDENT_VECL");
+        StringAssert.Contains(inc, ".global EDITBUF_HILITE_VECL");
+        StringAssert.Contains(impl, "JMP   (EDITBUF_SAVE_VECL)");
+        StringAssert.Contains(impl, "JMP   (EDITBUF_INDENT_VECL)");
+        StringAssert.Contains(impl, "JMP   (EDITBUF_HILITE_VECL)");
+
+        // Each hook defaults to a no-op so the editor stands alone.
+        StringAssert.Contains(impl, "editbuf_default_save:");
+        StringAssert.Contains(impl, "editbuf_default_indent:");
+        StringAssert.Contains(impl, "editbuf_default_hilite:");
+
+        // Caller-owned buffer + dirty state are shared, not Logo-specific.
+        StringAssert.Contains(inc, ".global EDITBUF_BUFL");
+        StringAssert.Contains(inc, ".global EDITBUF_LENL");
+    }
+
+    [TestMethod]
     public void NovaChessNetworkAdapterConstantsMatchServerChessAdapter()
     {
         string inc = File.ReadAllText(RepoPath("examples", "novachess", "src", "nchess_net.inc"));

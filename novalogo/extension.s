@@ -12,6 +12,7 @@ NOVALOGO_TURTLE_STATE_EXTERNAL = 1
       .include "copper.inc"
       .include "copper_split.inc"
       .include "vsprite.inc"
+      .include "editbuf.inc"
 
 ; --- Turtle virtual-sprite configuration ---
 TURTLE_SPR_SIZE   = 16
@@ -28,6 +29,13 @@ MODE_TEXT_ONLY    = 0
 COL_WHITE         = 1
 COL_RED           = 2
 COL_GREEN         = 5
+
+; Editor display colors. The shared editor no longer dictates the global
+; background/border/foreground — this runtime owns them. Change these to
+; restyle the NovaLogo editor. (Palette mode 0: 0=black, 1=white, 15=grey-light.)
+EDITOR_BGCOL      = $00        ; black background
+EDITOR_BORDER     = $00        ; black border
+EDITOR_FGCOL      = $01        ; white text (cursor is an inverted cell -> white)
 
 ; --- Base-ROM list cell format, used by SETPOS [x y] ---
 CONS_CAR_TYPE     = 1
@@ -51,49 +59,38 @@ dy_lo             = NVR5L
 dy_hi             = NVR5H
 sin_val           = NVR6L
 cos_val           = NVR6H
+dx_frac           = NVR7L
+dy_frac           = NVR7H
 
-      .segment "BSS"
-
-turtle_source_shape:
-      .res TURTLE_SPR_SIZE * TURTLE_SPR_SIZE
-turtle_rotated_shape:
-      .res TURTLE_SPR_SIZE * TURTLE_SPR_SIZE
-turtle_saved_bg:
-      .res TURTLE_SPR_SIZE * TURTLE_SPR_SIZE
-TURTLE_X_FRAC:
-      .res 1
-TURTLE_X_LO:
-      .res 1
-TURTLE_X_HI:
-      .res 1
-TURTLE_Y_FRAC:
-      .res 1
-TURTLE_Y_LO:
-      .res 1
-TURTLE_Y_HI:
-      .res 1
-TURTLE_HEADING_LO:
-      .res 1
-TURTLE_HEADING_HI:
-      .res 1
-TURTLE_PEN:
-      .res 1
-TURTLE_SHOWN:
-      .res 1
-TURTLE_COLOR:
-      .res 1
-TURTLE_SPRITE:
-      .res 1
-TURTLE_INITED:
-      .res 1
-turtle_bg_x_lo:
-      .res 1
-turtle_bg_x_hi:
-      .res 1
-turtle_bg_y:
-      .res 1
-turtle_bg_saved:
-      .res 1
+; Turtle work buffers + persistent state are PINNED at fixed RAM addresses
+; ($9C00-$9F10) so the struct base stays at $9F00 (tests/SV/smoke read it there)
+; no matter how much editor BSS the extension links. The editor's own BSS lives
+; below, in $9800-$9BFF (see extension.cfg + heap.s HEAP_END). These addresses
+; are byte-for-byte identical to the previous linker-placed layout, so turtle
+; behavior is unchanged.
+TURTLE_BUF_BASE      = $9C00
+turtle_source_shape  = TURTLE_BUF_BASE + 0 * (TURTLE_SPR_SIZE * TURTLE_SPR_SIZE)
+turtle_rotated_shape = TURTLE_BUF_BASE + 1 * (TURTLE_SPR_SIZE * TURTLE_SPR_SIZE)
+turtle_saved_bg      = TURTLE_BUF_BASE + 2 * (TURTLE_SPR_SIZE * TURTLE_SPR_SIZE)
+TURTLE_STATE_BASE    = TURTLE_BUF_BASE + 3 * (TURTLE_SPR_SIZE * TURTLE_SPR_SIZE)  ; $9F00
+TURTLE_X_FRAC        = TURTLE_STATE_BASE + 0
+TURTLE_X_LO          = TURTLE_STATE_BASE + 1
+TURTLE_X_HI          = TURTLE_STATE_BASE + 2
+TURTLE_Y_FRAC        = TURTLE_STATE_BASE + 3
+TURTLE_Y_LO          = TURTLE_STATE_BASE + 4
+TURTLE_Y_HI          = TURTLE_STATE_BASE + 5
+TURTLE_HEADING_LO    = TURTLE_STATE_BASE + 6
+TURTLE_HEADING_HI    = TURTLE_STATE_BASE + 7
+TURTLE_PEN           = TURTLE_STATE_BASE + 8
+TURTLE_SHOWN         = TURTLE_STATE_BASE + 9
+TURTLE_COLOR         = TURTLE_STATE_BASE + 10
+TURTLE_SPRITE        = TURTLE_STATE_BASE + 11
+TURTLE_INITED        = TURTLE_STATE_BASE + 12
+turtle_bg_x_lo       = TURTLE_STATE_BASE + 13
+turtle_bg_x_hi       = TURTLE_STATE_BASE + 14
+turtle_bg_y          = TURTLE_STATE_BASE + 15
+turtle_bg_saved      = TURTLE_STATE_BASE + 16
+TURTLE_GFX_VISIBLE   = TURTLE_STATE_BASE + 17  ; 1 = split/full graphics active (0 at boot)
 
       .segment "CODE"
 
@@ -188,6 +185,7 @@ ext_dispatch:
       .word ext_wait-1          ; cmd $48: WAIT
       .word ext_waitvbl-1       ; cmd $49: WAITVBL
       .word ext_timer-1         ; cmd $4A: TIMER
+      .word ext_edit-1          ; cmd $4B: EDIT (shared editor)
 
 ; =====================================================================
 ; ext_unsupported — unknown command, just return
@@ -237,17 +235,32 @@ ext_cs:
       ; Show centered virtual sprite
       JSR   draw_turtle_sprite
 
+      LDA   #1
+      STA   TURTLE_GFX_VISIBLE
+      RTS
+
+; =====================================================================
+; ensure_gfx_mode — make a turtle/drawing command work without an explicit
+; CS/DRAW: initialize the turtle if needed, and if the display is still in full
+; text mode, auto-switch to split screen so the drawing is visible.
+; =====================================================================
+ensure_gfx_mode:
+      LDA   TURTLE_INITED
+      BNE   @check_mode
+      JSR   turtle_init
+@check_mode:
+      LDA   TURTLE_GFX_VISIBLE
+      BNE   @done
+      JSR   ext_ss              ; switch to split screen (sets TURTLE_GFX_VISIBLE)
+      JSR   draw_turtle_sprite  ; show the turtle in the freshly-entered gfx area
+@done:
       RTS
 
 ; =====================================================================
 ; ext_fd — move forward by distance
 ; =====================================================================
 ext_fd:
-      ; Ensure turtle is initialized
-      LDA   TURTLE_INITED
-      BNE   @go
-      JSR   turtle_init
-@go:
+      JSR   ensure_gfx_mode
       ; Save old integer position for line drawing
       LDA   TURTLE_X_LO
       STA   old_x_lo
@@ -281,7 +294,12 @@ ext_fd:
       STA   MATH_MUL16_A_HI
       ; Sign-extend sin to 16-bit
       LDA   sin_val
+      CMP   #127             ; +1.0 is 127/128; use 128 so cardinal moves stay exact
+      BNE   :+
+      LDA   #128
+:
       STA   MATH_MUL16_B_LO
+      LDA   sin_val
       ORA   #$7F
       BMI   @sin_neg
       LDA   #$00
@@ -291,24 +309,16 @@ ext_fd:
 @sin_ext:
       STA   MATH_MUL16_B_HI    ; triggers multiply
 
-      ; dx = round(result / 128). The math coprocessor exposes 1.7 signed
-      ; sin/cos, so +1.0 is 127/128; rounding keeps cardinal moves exact.
-      CLC
+      ; dx in 16.8 position units = (distance*sin/128) * 256 = result << 1.
+      ; Keep the sub-pixel fraction (don't round to whole pixels) so small steps
+      ; like FD 1 accumulate instead of snapping to 8 directions (octagon).
       LDA   MATH_RES0
-      ADC   #64
-      STA   tmp2
+      ASL                       ; result << 1 across frac:lo:hi
+      STA   dx_frac
       LDA   MATH_RES1
-      ADC   #0
-      STA   tmp3
-      LDA   MATH_RES2
-      ADC   #0
-      STA   tmp1
-      LDA   tmp2
-      ASL                       ; bit 7 → carry
-      LDA   tmp3
       ROL
       STA   dx_lo
-      LDA   tmp1
+      LDA   MATH_RES2
       ROL
       STA   dx_hi
 
@@ -320,7 +330,12 @@ ext_fd:
       STA   MATH_MUL16_A_HI
       ; Sign-extend cos to 16-bit
       LDA   cos_val
+      CMP   #127             ; +1.0 is 127/128; use 128 so cardinal moves stay exact
+      BNE   :+
+      LDA   #128
+:
       STA   MATH_MUL16_B_LO
+      LDA   cos_val
       ORA   #$7F
       BMI   @cos_neg
       LDA   #$00
@@ -330,28 +345,22 @@ ext_fd:
 @cos_ext:
       STA   MATH_MUL16_B_HI    ; triggers multiply
 
-      ; raw_dy = round(result / 128)
-      CLC
+      ; raw_dy in 16.8 position units = result << 1 (frac:lo:hi)
       LDA   MATH_RES0
-      ADC   #64
-      STA   tmp2
-      LDA   MATH_RES1
-      ADC   #0
-      STA   tmp3
-      LDA   MATH_RES2
-      ADC   #0
-      STA   tmp1
-      LDA   tmp2
       ASL
-      LDA   tmp3
+      STA   tmp1                ; raw_dy frac
+      LDA   MATH_RES1
       ROL
       STA   tmp2                ; raw_dy lo
-      LDA   tmp1
+      LDA   MATH_RES2
       ROL
       STA   tmp3                ; raw_dy hi
 
-      ; dy = -raw_dy (negate 16-bit)
+      ; dy = -raw_dy (negate 24-bit)
       SEC
+      LDA   #0
+      SBC   tmp1
+      STA   dy_frac
       LDA   #0
       SBC   tmp2
       STA   dy_lo
@@ -359,9 +368,11 @@ ext_fd:
       SBC   tmp3
       STA   dy_hi
 
-      ; Add dx to turtle X (24-bit: hi:lo:frac)
-      ; dx is integer pixels, add to lo:hi (frac stays)
+      ; Add dx to turtle X (24-bit fixed: frac:lo:hi) — sub-pixel accumulates
       CLC
+      LDA   TURTLE_X_FRAC
+      ADC   dx_frac
+      STA   TURTLE_X_FRAC
       LDA   TURTLE_X_LO
       ADC   dx_lo
       STA   TURTLE_X_LO
@@ -369,8 +380,11 @@ ext_fd:
       ADC   dx_hi
       STA   TURTLE_X_HI
 
-      ; Add dy to turtle Y
+      ; Add dy to turtle Y (24-bit fixed: frac:lo:hi)
       CLC
+      LDA   TURTLE_Y_FRAC
+      ADC   dy_frac
+      STA   TURTLE_Y_FRAC
       LDA   TURTLE_Y_LO
       ADC   dy_lo
       STA   TURTLE_Y_LO
@@ -409,6 +423,7 @@ ext_bk:
 ; ext_rt — turn right by degrees
 ; =====================================================================
 ext_rt:
+      JSR   ensure_gfx_mode
       ; heading = (heading + degrees) mod 360
       CLC
       LDA   TURTLE_HEADING_LO
@@ -429,6 +444,7 @@ ext_rt:
 ; ext_lt — turn left by degrees
 ; =====================================================================
 ext_lt:
+      JSR   ensure_gfx_mode
       ; heading = (heading - degrees) mod 360
       ; If result negative, add 360
       SEC
@@ -464,6 +480,7 @@ ext_lt:
 ; ext_pu — pen up
 ; =====================================================================
 ext_pu:
+      JSR   ensure_gfx_mode
       LDA   #$01
       STA   TURTLE_PEN
       RTS
@@ -472,6 +489,7 @@ ext_pu:
 ; ext_pd — pen down
 ; =====================================================================
 ext_pd:
+      JSR   ensure_gfx_mode
       STZ   TURTLE_PEN
       RTS
 
@@ -479,6 +497,7 @@ ext_pd:
 ; ext_st — show turtle sprite
 ; =====================================================================
 ext_st:
+      JSR   ensure_gfx_mode
       LDA   #$01
       STA   TURTLE_SHOWN
       JMP   draw_turtle_sprite
@@ -487,6 +506,7 @@ ext_st:
 ; ext_ht — hide turtle sprite
 ; =====================================================================
 ext_ht:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       STZ   TURTLE_SHOWN
       RTS
@@ -495,6 +515,7 @@ ext_ht:
 ; ext_home — move to center, heading 0 (draw line if pen down)
 ; =====================================================================
 ext_home:
+      JSR   ensure_gfx_mode
       ; Ensure initialized
       LDA   TURTLE_INITED
       BNE   @go
@@ -831,6 +852,7 @@ ext_ts:
       JSR   vgc_wait_cmd
       JSR   copper_off
       STZ   VGC_MODE
+      STZ   TURTLE_GFX_VISIBLE
       RTS
 
 ; =====================================================================
@@ -839,6 +861,8 @@ ext_ts:
 ext_ss:
       JSR   setup_copper
       JSR   prepare_split_text
+      LDA   #1
+      STA   TURTLE_GFX_VISIBLE
       RTS
 
 ; =====================================================================
@@ -852,6 +876,8 @@ ext_fs:
       ; Set mode to graphics + sprites
       LDA   #MODE_GFX_SPRITES
       STA   VGC_MODE
+      LDA   #1
+      STA   TURTLE_GFX_VISIBLE
       RTS
 
 ; =====================================================================
@@ -875,10 +901,171 @@ prepare_split_text:
       RTS
 
 ; =====================================================================
+; ext_edit — run the shared EDITUI/EDITBUF editor on a RAM text buffer.
+;   The base ROM passes a buffer ptr/len/cap and a title in the mailbox
+;   (see EXT_CMD_EDIT in ext_iface.inc). We snapshot the VGC display state,
+;   switch to full-screen text (the editor owns the whole screen), run the
+;   modal editor, then restore the display EXACTLY — graphics/turtle are
+;   never cleared. A nonzero RESULT_HI means the user asked to save.
+; =====================================================================
+ext_edit:
+      ; --- snapshot the display registers editui_init will clobber ---
+      LDA   VGC_MODE
+      STA   ee_saved_mode
+      LDA   VGC_PALETTE
+      STA   ee_saved_palette
+      LDA   VGC_BGCOL
+      STA   ee_saved_bgcol
+      LDA   VGC_BORDER
+      STA   ee_saved_border
+      LDA   VGC_FGCOL
+      STA   ee_saved_fgcol
+      LDA   VGC_CURSX
+      STA   ee_saved_cursx
+      LDA   VGC_CURSY
+      STA   ee_saved_cursy
+      LDA   VGC_CURSEN
+      STA   ee_saved_cursen
+
+      ; --- the editor owns the whole screen: copper off, full text window ---
+      JSR   copper_off
+      STZ   TEXTWIN_LEFT
+      STZ   TEXTWIN_TOP
+      LDA   #80
+      STA   TEXTWIN_WIDTH
+      LDA   #25
+      STA   TEXTWIN_HEIGHT
+
+      ; --- runtime-chosen editor colors (the engine no longer sets these) ---
+      LDA   #EDITOR_BGCOL
+      STA   VGC_BGCOL
+      LDA   #EDITOR_BORDER
+      STA   VGC_BORDER
+      LDA   #EDITOR_FGCOL
+      STA   VGC_FGCOL
+
+      ; --- editbuf config from the mailbox ---
+      LDA   EXT_ARG0_LO
+      STA   EDITBUF_BUFL
+      LDA   EXT_ARG0_HI
+      STA   EDITBUF_BUFH
+      LDA   EXT_ARG2_LO
+      STA   EDITBUF_CAPL
+      LDA   EXT_ARG2_HI
+      STA   EDITBUF_CAPH
+      LDA   EXT_ARG1_LO
+      STA   EDITBUF_LENL
+      LDA   EXT_ARG1_HI
+      STA   EDITBUF_LENH
+      LDA   EXT_ARG3_LO
+      STA   EDITBUF_TITLEL
+      LDA   EXT_ARG3_HI
+      STA   EDITBUF_TITLEH
+      STZ   EDITBUF_STATUSL
+      STZ   EDITBUF_STATUSH
+
+      ; --- install hooks explicitly (BSS is not zeroed between sessions) ---
+      LDA   #<ext_edit_save_hook
+      STA   EDITBUF_SAVE_VECL
+      LDA   #>ext_edit_save_hook
+      STA   EDITBUF_SAVE_VECH
+      STZ   EDITBUF_INDENT_VECL    ; 0 => editbuf installs its no-op default
+      STZ   EDITBUF_INDENT_VECH
+      STZ   EDITBUF_HILITE_VECL
+      STZ   EDITBUF_HILITE_VECH
+      STZ   EDITBUF_MENU_VECL      ; keep EDITUI's default menus for now
+      STZ   EDITBUF_MENU_VECH
+
+      ; --- run the modal editor ---
+      STZ   ee_saved_flag
+      JSR   editbuf_reset_state
+      ; Place the cursor where the host asked (start of the body line), instead
+      ; of the default offset 0. Cursor offset rides in the ARG FRAC bytes.
+      LDA   EXT_ARG2_FRAC
+      STA   EDITBUF_CURL
+      LDA   EXT_ARG3_FRAC
+      STA   EDITBUF_CURH
+      JSR   editbuf_run            ; A = exit reason
+
+      ; --- publish results to the mailbox ---
+      STA   EXT_RESULT_LO          ; editbuf exit reason
+      LDA   ee_saved_flag
+      STA   EXT_RESULT_HI          ; nonzero => save requested
+      LDA   EDITBUF_LENL
+      STA   EXT_ARG1_LO            ; final length back to the host
+      LDA   EDITBUF_LENH
+      STA   EXT_ARG1_HI
+
+      ; --- restore the display exactly (never clear graphics) ---
+      ; Restore the host's palette + colors FIRST: the form-feed clear below
+      ; fills color RAM with the *current* text color, so the host's colors
+      ; must be back in place before we clear, or the editor's panel color
+      ; leaks into the restored text area.
+      LDA   ee_saved_palette
+      STA   VGC_PALETTE
+      LDA   ee_saved_bgcol
+      STA   VGC_BGCOL
+      LDA   ee_saved_border
+      STA   VGC_BORDER
+      LDA   ee_saved_fgcol
+      STA   VGC_FGCOL
+
+      LDA   TURTLE_INITED
+      BEQ   @text_restore
+      ; turtle/graphics were active: rebuild the copper split + text window
+      ; (prepare_split_text issues the form-feed clear with the host colors)
+      JSR   setup_copper
+      JSR   prepare_split_text
+      BRA   @restore_regs
+@text_restore:
+      ; plain text session: full text window, clear the editor chrome
+      STZ   TEXTWIN_LEFT
+      STZ   TEXTWIN_TOP
+      LDA   #80
+      STA   TEXTWIN_WIDTH
+      LDA   #25
+      STA   TEXTWIN_HEIGHT
+      LDA   #$0C                   ; form feed: clear text plane only
+      STA   VGC_CHAROUT
+@restore_regs:
+      LDA   ee_saved_mode
+      STA   VGC_MODE
+      LDA   ee_saved_cursx
+      STA   VGC_CURSX
+      LDA   ee_saved_cursy
+      STA   VGC_CURSY
+      LDA   ee_saved_cursen
+      STA   VGC_CURSEN
+      RTS
+
+; ext_edit_save_hook — SAVE hook while the editor runs. For now it just records
+; that the user asked to save and reports success; the base ROM builds the
+; procedure record from the final buffer when the editor exits. (Cross-bank
+; live validation is the next increment.)
+ext_edit_save_hook:
+      LDA   #1
+      STA   ee_saved_flag
+      LDA   #EDITBUF_SAVE_OK
+      RTS
+
+      .segment "BSS"
+ee_saved_mode:    .res 1
+ee_saved_palette: .res 1
+ee_saved_bgcol:   .res 1
+ee_saved_border:  .res 1
+ee_saved_fgcol:   .res 1
+ee_saved_cursx:   .res 1
+ee_saved_cursy:   .res 1
+ee_saved_cursen:  .res 1
+ee_saved_flag:    .res 1          ; nonzero once the SAVE hook fires
+      .segment "CODE"
+
+; =====================================================================
 ; ext_setxy — move to (x, y). Draw line if pen down.
 ;   ARG0 = x, ARG1 = y
 ; =====================================================================
 ext_setxy:
+      JSR   ensure_gfx_mode
       ; Ensure turtle is initialized
       LDA   TURTLE_INITED
       BNE   @go
@@ -920,6 +1107,7 @@ ext_setxy:
 ;   ARG0 = [x y]
 ; =====================================================================
 ext_setpos:
+      JSR   ensure_gfx_mode
       LDA   EXT_ARG0_TYPE
       CMP   #VAL_LIST
       BNE   @done
@@ -980,6 +1168,7 @@ ext_setpos:
 ;   ARG0 = x
 ; =====================================================================
 ext_setx:
+      JSR   ensure_gfx_mode
       LDA   TURTLE_INITED
       BNE   @go
       JSR   turtle_init
@@ -1015,6 +1204,7 @@ ext_setx:
 ;   ARG0 = y
 ; =====================================================================
 ext_sety:
+      JSR   ensure_gfx_mode
       LDA   TURTLE_INITED
       BNE   @go
       JSR   turtle_init
@@ -1050,6 +1240,7 @@ ext_sety:
 ;   ARG0 = degrees
 ; =====================================================================
 ext_seth:
+      JSR   ensure_gfx_mode
       LDA   EXT_ARG0_LO
       STA   TURTLE_HEADING_LO
       LDA   EXT_ARG0_HI
@@ -1145,6 +1336,7 @@ ext_shownp:
 ;   ARG0 = color
 ; =====================================================================
 ext_setpc:
+      JSR   ensure_gfx_mode
       LDA   EXT_ARG0_LO
       STA   TURTLE_COLOR
       RTS
@@ -1154,6 +1346,7 @@ ext_setpc:
 ;   ARG0 = color
 ; =====================================================================
 ext_setbg:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       LDA   EXT_ARG0_LO
       STA   VGC_BGCOL
@@ -1217,6 +1410,7 @@ ext_towards:
 ;   ARG0 = color (palette index 0-15)
 ; =====================================================================
 ext_setcolor:
+      JSR   ensure_gfx_mode
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1229,6 +1423,7 @@ ext_setcolor:
 ;   ARG0 = x, ARG1 = y
 ; =====================================================================
 ext_plot:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
@@ -1249,6 +1444,7 @@ ext_plot:
 ;   ARG0 = x, ARG1 = y
 ; =====================================================================
 ext_unplot:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
@@ -1269,6 +1465,7 @@ ext_unplot:
 ;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
 ; =====================================================================
 ext_line:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
@@ -1297,6 +1494,7 @@ ext_line:
 ;   ARG0 = x, ARG1 = y, ARG2 = r
 ; =====================================================================
 ext_circle:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
@@ -1323,6 +1521,7 @@ ext_circle:
 ;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
 ; =====================================================================
 ext_rect:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
@@ -1351,6 +1550,7 @@ ext_rect:
 ;   ARG0 = x1, ARG1 = y1, ARG2 = x2, ARG3 = y2
 ; =====================================================================
 ext_fillrect:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
@@ -1379,6 +1579,7 @@ ext_fillrect:
 ;   ARG0 = x, ARG1 = y
 ; =====================================================================
 ext_paint:
+      JSR   ensure_gfx_mode
       JSR   erase_turtle_sprite
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
@@ -1399,6 +1600,7 @@ ext_paint:
 ;   ARG0 = slot, ARG1 = x (16-bit), ARG2 = y (16-bit)
 ; =====================================================================
 ext_sprite:
+      JSR   ensure_gfx_mode
       ; SPRPOS: P0=slot, P1=x_lo, P2=x_hi, P3=y_lo, P4=y_hi
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
@@ -1426,6 +1628,7 @@ ext_sprite:
 ;   ARG0 = slot, ARG1 = x, ARG2 = y
 ; =====================================================================
 ext_spritepos:
+      JSR   ensure_gfx_mode
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1446,6 +1649,7 @@ ext_spritepos:
 ;   ARG0 = slot
 ; =====================================================================
 ext_spriteon:
+      JSR   ensure_gfx_mode
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1458,6 +1662,7 @@ ext_spriteon:
 ;   ARG0 = slot
 ; =====================================================================
 ext_spriteoff:
+      JSR   ensure_gfx_mode
       JSR   wait_vgc
       LDA   EXT_ARG0_LO
       STA   VGC_P0
@@ -1619,6 +1824,8 @@ wait_frames:
       .segment "RODATA"
 
 ; 16x16 turtle arrow shape pointing UP (north), matching the NDK turtle demo.
+; Single-color triangle (apex = heading). Orientation is shown by a 2-row-thick
+; solid base bar (rows 13-14); the slanted sides are one pixel wide.
 turtle_shape_data:
 .repeat 16, yy
   .repeat 16, xx
@@ -1626,28 +1833,17 @@ turtle_shape_data:
       .byte 0
     .elseif yy > 14
       .byte 0
-    .elseif yy = 14
-      .if xx >= 1 && xx <= 5
-        .byte COL_RED
-      .elseif xx >= 10 && xx <= 14
-        .byte COL_GREEN
-      .elseif xx >= 1 && xx <= 14
+    .elseif yy >= 13
+      ; bottom two rows: filled base bar spanning the triangle width
+      .if xx >= (8 - ((((yy - 1) * 7) + 6) / 13)) && xx <= (8 + ((((yy - 1) * 6) + 6) / 13))
         .byte COL_WHITE
       .else
         .byte 0
       .endif
     .elseif xx = (8 - ((((yy - 1) * 7) + 6) / 13))
-      .if yy >= 9
-        .byte COL_RED
-      .else
-        .byte COL_WHITE
-      .endif
+      .byte COL_WHITE
     .elseif xx = (8 + ((((yy - 1) * 6) + 6) / 13))
-      .if yy >= 9
-        .byte COL_GREEN
-      .else
-        .byte COL_WHITE
-      .endif
+      .byte COL_WHITE
     .else
       .byte 0
     .endif
@@ -1658,3 +1854,7 @@ turtle_shape_data:
       .include "copper.s"
       .include "copper_split.s"
       .include "vsprite.s"
+      ; Shared text editor (pulls vtext.s; blitter.s already present via vsprite,
+      ; all include-guarded). Its BSS lands in $9800-$9BFF, ZP in $A3+.
+      .include "editui.s"
+      .include "editbuf.s"

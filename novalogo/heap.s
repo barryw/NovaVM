@@ -2,7 +2,8 @@
 ; Heap range: $0400 to HEAP_END-1.
 
 HEAP_START = $0400
-HEAP_END   = $9C00          ; one past last usable byte; $9C00-$9FFF are NDK/extension BSS
+HEAP_END   = $9800          ; one past last usable byte. $9800-$9BFF = editor BSS
+                            ; (extension), $9C00-$9F10 = pinned turtle work+state.
 
 ; =====================================================================
 ; ZEROPAGE segment — heap and general-purpose pointer variables

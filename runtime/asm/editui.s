@@ -10,6 +10,14 @@ EDITUI_MENU_SAVE_MAX_W = EDITUI_SCREEN_COLS
 EDITUI_MENU_SAVE_MAX_H = 16
 EDITUI_MENU_SAVE_BYTES = EDITUI_MENU_SAVE_MAX_W * EDITUI_MENU_SAVE_MAX_H
 
+; Overlay save-under staging lives in XRAM (the editor stays RAM-light). Flat
+; 24-bit base $05_4000 (XRAM transient staging region, free when no Z-machine /
+; NVG job is running). Three planes of EDITUI_MENU_SAVE_BYTES each.
+EDITUI_XRAM_SAVE_H = $05
+.ifndef EDITUI_XRAM_SAVE_BASE
+EDITUI_XRAM_SAVE_BASE = $4000          ; low 16 bits of $05_4000
+.endif
+
       .segment "BSS"
 
 EDITUI_TITLEL:      .res 1
@@ -22,6 +30,7 @@ EDITUI_HELPL:       .res 1
 EDITUI_HELPH:       .res 1
 EDITUI_STATUSL:     .res 1
 EDITUI_STATUSH:     .res 1
+EDITUI_DIRTY:       .res 1
 EDITUI_BOXX:        .res 1
 EDITUI_BOXY:        .res 1
 EDITUI_BOXW:        .res 1
@@ -65,8 +74,6 @@ EDITUI_MENU_SAVE_X: .res 1
 EDITUI_MENU_SAVE_Y: .res 1
 EDITUI_MENU_SAVE_W: .res 1
 EDITUI_MENU_SAVE_H: .res 1
-EDITUI_MENU_BUF_L: .res 1
-EDITUI_MENU_BUF_H: .res 1
 EDITUI_SAVE_BOXX:   .res 1
 EDITUI_SAVE_BOXY:   .res 1
 EDITUI_SAVE_BOXW:   .res 1
@@ -74,9 +81,9 @@ EDITUI_SAVE_BOXH:   .res 1
 EDITUI_SAVE_TITL:   .res 1
 EDITUI_SAVE_TITH:   .res 1
 EDITUI_SAVE_STYLE:  .res 1
-EDITUI_MENU_SAVE_CHAR: .res EDITUI_MENU_SAVE_BYTES
-EDITUI_MENU_SAVE_COLOR: .res EDITUI_MENU_SAVE_BYTES
-EDITUI_MENU_SAVE_ATTR: .res EDITUI_MENU_SAVE_BYTES
+; The overlay save-under planes are staged in XRAM (not CPU BSS) so the editor
+; is RAM-light and reusable in any runtime. Each plane occupies
+; EDITUI_MENU_SAVE_BYTES at EDITUI_XRAM_SAVE + index*EDITUI_MENU_SAVE_BYTES.
 
       .segment "ZEROPAGE"
 
@@ -101,6 +108,10 @@ EDITUI_MENU_ITEMH:  .res 1
       .export editui_print_marked
       .export editui_menu_open_hotkey
       .export editui_default_menus
+      .export editui_draw_title_band
+      .export editui_refresh_dirty
+      .export editui_save_under
+      .export editui_restore_under
 
 editui_ok:
       LDA   #EDITUI_OK
@@ -109,23 +120,32 @@ editui_ok:
 editui_init:
       LDA   #$00
       STA   VGC_MODE
+      ; The editor paints every cell via per-cell color RAM, so it does NOT
+      ; dictate the global background/border/foreground — the host runtime owns
+      ; those (and is responsible for restoring them on exit). We only set the
+      ; palette mode the editor's color constants are authored against.
       LDA   #EDITUI_PALETTE_MODE
       STA   VGC_PALETTE
-      LDA   #EDITUI_COLOR_BG
-      STA   VGC_BGCOL
-      STA   VGC_BORDER
-      LDA   #EDITUI_COLOR_FG
-      STA   VGC_FGCOL
       STZ   VGC_CURSEN
       STZ   EDITUI_BOX_STYLE
       STZ   EDITUI_MENUL
       STZ   EDITUI_MENUH
+      STZ   EDITUI_DIRTY
       STZ   EDITUI_MENU_SAVE_VALID
       LDA   #<editui_default_menus
       STA   EDITUI_MENUSL
       LDA   #>editui_default_menus
       STA   EDITUI_MENUSH
       JMP   editui_ok
+
+; editui_set_menus — A = menu-table ptr low byte, Y = high byte. Point the menu
+; bar at a host-supplied table. Editor-owned menu-management entry point so a
+; runtime can install a tailored ("dumb") menu instead of the File/Edit/Help
+; default. Pass A=Y=0 to fall back to editui_default_menus.
+editui_set_menus:
+      STA   EDITUI_MENUSL
+      STY   EDITUI_MENUSH
+      RTS
 
 editui_full_region:
       STZ   VTEXT_LEFT
@@ -276,7 +296,6 @@ editui_print_at_2:
 editui_draw_shell:
       JSR   editui_clear_screen
       JSR   editui_draw_menu
-      JSR   editui_draw_title_band
       JMP   editui_draw_status
 
 editui_draw_menu:
@@ -287,11 +306,12 @@ editui_draw_menu:
       LDA   EDITUI_MENUSL
       ORA   EDITUI_MENUSH
       BEQ   @legacy
-      JMP   editui_draw_menu_table
+      JSR   editui_draw_menu_table
+      BRA   @title
 @legacy:
       LDA   EDITUI_MENUL
       ORA   EDITUI_MENUH
-      BEQ   @done
+      BEQ   @title
       LDA   EDITUI_MENUL
       STA   EDITUI_PRINTL
       LDA   EDITUI_MENUH
@@ -304,8 +324,49 @@ editui_draw_menu:
       LDA   #EDITUI_COLOR_MENU_HOT
       STA   EDITUI_HOT_COLOR
       JSR   editui_print_marked
-@done:
-      RTS
+@title:
+      JMP   editui_draw_menu_title
+
+; editui_draw_menu_title — draw the title right-aligned on the menu bar, just
+; left of the dirty-marker cell, then refresh the marker.
+editui_draw_menu_title:
+      LDA   EDITUI_TITLEL
+      ORA   EDITUI_TITLEH
+      BEQ   editui_refresh_dirty        ; no title: still stamp the marker cell
+      LDA   EDITUI_TITLEL
+      STA   EDITUI_PRINTL
+      LDA   EDITUI_TITLEH
+      STA   EDITUI_PRINTH
+      JSR   editui_strlen               ; A / EDITUI_LEN = title length
+      LDA   #EDITUI_DIRTY_COL-1         ; one space gap before the marker
+      SEC
+      SBC   EDITUI_LEN
+      STA   EDITUI_PRINTX
+      STZ   EDITUI_PRINTY
+      LDA   #EDITUI_COLOR_MENU
+      STA   VTEXT_COLOR
+      JSR   editui_print_ptr
+      ; fall through to stamp the dirty marker
+
+; editui_refresh_dirty — stamp '*' (dirty) or ' ' (clean) at the menu-bar marker
+; cell. Cheap single-cell update; safe to call on every dirty-state change.
+editui_refresh_dirty:
+      JSR   editui_full_region
+      LDA   #EDITUI_DIRTY_COL
+      STA   VTEXT_CURX
+      STZ   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #EDITUI_COLOR_MENU
+      STA   VTEXT_COLOR
+      LDA   EDITUI_DIRTY
+      BEQ   @clean
+      LDA   #'*'
+      BRA   @put
+@clean:
+      LDA   #' '
+@put:
+      STA   VTEXT_CHAR
+      JMP   vtext_put_char
 
 editui_draw_menu_table:
       LDA   EDITUI_MENUSL
@@ -354,7 +415,8 @@ editui_draw_title_band:
       BNE   @draw
       LDA   EDITUI_HELPL
       ORA   EDITUI_HELPH
-      BEQ   @done
+      BNE   @draw
+      RTS
 @draw:
       JSR   editui_push_box_state
       LDA   #1
@@ -383,6 +445,19 @@ editui_draw_title_band:
       LDA   #EDITUI_COLOR_TITLE
       STA   VTEXT_COLOR
       JSR   editui_center_ptr
+      ; Always stamp the marker cell (just past the title) so clearing the
+      ; dirty flag erases a previously drawn '*'.
+      LDA   #EDITUI_COLOR_TITLE
+      STA   VTEXT_COLOR
+      LDA   EDITUI_DIRTY
+      BEQ   @clean_mark
+      LDA   #'*'
+      BRA   @put_mark
+@clean_mark:
+      LDA   #' '
+@put_mark:
+      STA   VTEXT_CHAR
+      JSR   vtext_put_char
 
 @help:
       LDA   EDITUI_HELPL
@@ -939,47 +1014,46 @@ editui_menu_draw_dropdown:
       RTS
 
 editui_menu_save_under:
-      STZ   EDITUI_MENU_SAVE_VALID
+      ; Derive the save rectangle from the active dropdown, then capture it
+      ; through the generic save-under path.
       LDA   EDITUI_MENU_WIDTH
-      BEQ   @done
-      CMP   #EDITUI_MENU_SAVE_MAX_W + 1
-      BCS   @done
       STA   EDITUI_MENU_SAVE_W
       LDA   EDITUI_MENU_ITEM_COUNT
       CLC
       ADC   #2
-      BEQ   @done
-      CMP   #EDITUI_MENU_SAVE_MAX_H + 1
-      BCS   @done
       STA   EDITUI_MENU_SAVE_H
       LDA   EDITUI_MENU_X
       STA   EDITUI_MENU_SAVE_X
       LDA   #1
       STA   EDITUI_MENU_SAVE_Y
+      ; fall through
+
+; editui_save_under — capture the three text planes under the rectangle in
+; EDITUI_MENU_SAVE_X/Y/W/H into the save buffers; sets EDITUI_MENU_SAVE_VALID.
+; Reusable by dialogs and any overlapping overlay, not just menus.
+editui_save_under:
+      STZ   EDITUI_MENU_SAVE_VALID
+      LDA   EDITUI_MENU_SAVE_W
+      BEQ   @done
+      CMP   #EDITUI_MENU_SAVE_MAX_W + 1
+      BCS   @done
+      LDA   EDITUI_MENU_SAVE_H
+      BEQ   @done
+      CMP   #EDITUI_MENU_SAVE_MAX_H + 1
+      BCS   @done
       JSR   editui_menu_select_saved_region
       BNE   @done
       JSR   vtext_calc_region_addr
 
-      LDA   #<EDITUI_MENU_SAVE_CHAR
-      STA   EDITUI_MENU_BUF_L
-      LDA   #>EDITUI_MENU_SAVE_CHAR
-      STA   EDITUI_MENU_BUF_H
+      LDX   #0
       LDA   #BLT_SPACE_VGC_CHAR
       JSR   editui_menu_save_plane
       BNE   @done
-
-      LDA   #<EDITUI_MENU_SAVE_COLOR
-      STA   EDITUI_MENU_BUF_L
-      LDA   #>EDITUI_MENU_SAVE_COLOR
-      STA   EDITUI_MENU_BUF_H
+      LDX   #1
       LDA   #BLT_SPACE_VGC_COLOR
       JSR   editui_menu_save_plane
       BNE   @done
-
-      LDA   #<EDITUI_MENU_SAVE_ATTR
-      STA   EDITUI_MENU_BUF_L
-      LDA   #>EDITUI_MENU_SAVE_ATTR
-      STA   EDITUI_MENU_BUF_H
+      LDX   #2
       LDA   #BLT_SPACE_VGC_TEXTATTR
       JSR   editui_menu_save_plane
       BNE   @done
@@ -989,6 +1063,7 @@ editui_menu_save_under:
 @done:
       RTS
 
+editui_restore_under:
 editui_menu_restore_under:
       LDA   EDITUI_MENU_SAVE_VALID
       BEQ   @done
@@ -996,26 +1071,15 @@ editui_menu_restore_under:
       BNE   @clear
       JSR   vtext_calc_region_addr
 
-      LDA   #<EDITUI_MENU_SAVE_CHAR
-      STA   EDITUI_MENU_BUF_L
-      LDA   #>EDITUI_MENU_SAVE_CHAR
-      STA   EDITUI_MENU_BUF_H
+      LDX   #0
       LDA   #BLT_SPACE_VGC_CHAR
       JSR   editui_menu_restore_plane
       BNE   @clear
-
-      LDA   #<EDITUI_MENU_SAVE_COLOR
-      STA   EDITUI_MENU_BUF_L
-      LDA   #>EDITUI_MENU_SAVE_COLOR
-      STA   EDITUI_MENU_BUF_H
+      LDX   #1
       LDA   #BLT_SPACE_VGC_COLOR
       JSR   editui_menu_restore_plane
       BNE   @clear
-
-      LDA   #<EDITUI_MENU_SAVE_ATTR
-      STA   EDITUI_MENU_BUF_L
-      LDA   #>EDITUI_MENU_SAVE_ATTR
-      STA   EDITUI_MENU_BUF_H
+      LDX   #2
       LDA   #BLT_SPACE_VGC_TEXTATTR
       JSR   editui_menu_restore_plane
 @clear:
@@ -1036,20 +1100,23 @@ editui_menu_select_saved_region:
       STZ   VTEXT_CURY
       JMP   vtext_validate_region
 
+; editui_menu_save_plane — A = VGC plane space, X = plane index (0/1/2).
+; Blits the W x H rect from the VGC plane to XRAM staging (packed, stride W).
 editui_menu_save_plane:
       STA   BLT_SRCSPACE
-      LDA   #BLT_SPACE_CPU
+      LDA   #BLT_SPACE_XRAM
       STA   BLT_DSTSPACE
       LDA   VTEXT_ADDRL
       STA   BLT_SRCL
       LDA   VTEXT_ADDRH
       STA   BLT_SRCM
       STZ   BLT_SRCH
-      LDA   EDITUI_MENU_BUF_L
+      LDA   editui_xram_plane_l,X
       STA   BLT_DSTL
-      LDA   EDITUI_MENU_BUF_H
+      LDA   editui_xram_plane_m,X
       STA   BLT_DSTM
-      STZ   BLT_DSTH
+      LDA   #EDITUI_XRAM_SAVE_H
+      STA   BLT_DSTH
       LDA   EDITUI_MENU_SAVE_W
       STA   BLT_WIDTHL
       STZ   BLT_WIDTHH
@@ -1065,15 +1132,17 @@ editui_menu_save_plane:
       STZ   BLT_DSTSTRH
       JMP   blitter_start_copy
 
+; editui_menu_restore_plane — A = VGC plane space, X = plane index (0/1/2).
 editui_menu_restore_plane:
       STA   BLT_DSTSPACE
-      LDA   #BLT_SPACE_CPU
+      LDA   #BLT_SPACE_XRAM
       STA   BLT_SRCSPACE
-      LDA   EDITUI_MENU_BUF_L
+      LDA   editui_xram_plane_l,X
       STA   BLT_SRCL
-      LDA   EDITUI_MENU_BUF_H
+      LDA   editui_xram_plane_m,X
       STA   BLT_SRCM
-      STZ   BLT_SRCH
+      LDA   #EDITUI_XRAM_SAVE_H
+      STA   BLT_SRCH
       LDA   VTEXT_ADDRL
       STA   BLT_DSTL
       LDA   VTEXT_ADDRH
@@ -1236,6 +1305,18 @@ editui_putc:
       JMP   vtext_put_char
 
       .segment "RODATA"
+
+; Low/high bytes of the XRAM save-under address for each plane index (0/1/2),
+; = EDITUI_XRAM_SAVE_BASE + index * EDITUI_MENU_SAVE_BYTES (full address is
+; EDITUI_XRAM_SAVE_H : m : l).
+editui_xram_plane_l:
+      .byte <(EDITUI_XRAM_SAVE_BASE + 0 * EDITUI_MENU_SAVE_BYTES)
+      .byte <(EDITUI_XRAM_SAVE_BASE + 1 * EDITUI_MENU_SAVE_BYTES)
+      .byte <(EDITUI_XRAM_SAVE_BASE + 2 * EDITUI_MENU_SAVE_BYTES)
+editui_xram_plane_m:
+      .byte >(EDITUI_XRAM_SAVE_BASE + 0 * EDITUI_MENU_SAVE_BYTES)
+      .byte >(EDITUI_XRAM_SAVE_BASE + 1 * EDITUI_MENU_SAVE_BYTES)
+      .byte >(EDITUI_XRAM_SAVE_BASE + 2 * EDITUI_MENU_SAVE_BYTES)
 
 editui_default_menus:
       .byte 3

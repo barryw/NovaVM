@@ -421,14 +421,15 @@ do_repeat:
       BRA   @loop
 
 @loop_done:
-      ; --- Restore outer state and resume after ] ---
-      JSR   repeat_restore_state
-
-      ; Set eval_cur past the ] to resume
+      ; Resume past THIS REPEAT's ] BEFORE restoring outer state — restore pops
+      ; body_resume back to the enclosing REPEAT's value, so reading it after the
+      ; restore would resume at the wrong token (trailing commands never run).
       LDA   body_resume_lo
       STA   eval_cur_lo
       LDA   body_resume_hi
       STA   eval_cur_hi
+      ; --- Restore outer state ---
+      JSR   repeat_restore_state
       JMP   eval_continue
 
 @err_bracket_pop:

@@ -452,16 +452,25 @@ tok_parse_number:
       ASL   num_tmp_lo
       ROL   num_tmp_hi           ; tmp = val * 8
 
-      ; val*10 = val*8 + val*2. We need val*2 again.
+      ; val*10 = val*8 + val*2. Recompute val*2 into num_val first, with a
+      ; proper 16-bit shift (ASL low, ROL high) so the carry out of the low
+      ; byte reaches the high byte — then add val*8. (The previous version
+      ; fused the shift and add and CLC'd away that carry, dropping 256 from
+      ; any value whose low byte had bit 7 set, e.g. 4242 -> 3986.)
       LDA   num_val_lo
       ASL
-      CLC
-      ADC   num_tmp_lo
       STA   num_val_lo
       LDA   num_val_hi
       ROL
+      STA   num_val_hi           ; num_val = val * 2
+
+      CLC
+      LDA   num_val_lo
+      ADC   num_tmp_lo
+      STA   num_val_lo
+      LDA   num_val_hi
       ADC   num_tmp_hi
-      STA   num_val_hi           ; num_val = val*10
+      STA   num_val_hi           ; num_val = val*2 + val*8 = val*10
 
       ; Add digit
       PLA

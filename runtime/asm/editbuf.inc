@@ -26,22 +26,15 @@ EDITBUF_INC_INCLUDED = 1
 .include "editui.inc"
 
 ; ---------------------------------------------------------------------
-; Editor body geometry (text area inside the framed panel).
-; Screen is NOVA_SCREEN_COLS x NOVA_SCREEN_ROWS. Layout:
-;   row 0       : menu bar
-;   rows 2..5   : title band (title + dirty marker + help)
-;   rows 6..N-2 : framed editor body
-;   row N-1     : status bar
+; Editor body geometry. Minimal full-screen layout (no frame, no title band):
+;   row 0          : menu bar (File/Edit/Help + title + dirty marker)
+;   rows 1..N-2    : editable body, full 80 columns
+;   row N-1        : status bar (help / status message)
 ; ---------------------------------------------------------------------
-EDITBUF_BODY_BOXX   = 1
-EDITBUF_BODY_BOXY   = 6
-EDITBUF_BODY_BOXW   = EDITUI_SCREEN_COLS - 2          ; 78
-EDITBUF_BODY_BOXH   = EDITUI_SCREEN_ROWS - EDITBUF_BODY_BOXY - 1  ; up to status row
-; Interior (one cell of border on each side):
-EDITBUF_VIEW_LEFT   = EDITBUF_BODY_BOXX + 1           ; first text column
-EDITBUF_VIEW_TOP    = EDITBUF_BODY_BOXY + 1           ; first text row
-EDITBUF_VIEW_COLS   = EDITBUF_BODY_BOXW - 2           ; 76 visible columns
-EDITBUF_VIEW_ROWS   = EDITBUF_BODY_BOXH - 2           ; visible text rows
+EDITBUF_VIEW_LEFT   = 0                               ; first text column
+EDITBUF_VIEW_TOP    = 1                               ; first text row (below menu bar)
+EDITBUF_VIEW_COLS   = EDITUI_SCREEN_COLS              ; 80 visible columns
+EDITBUF_VIEW_ROWS   = EDITUI_SCREEN_ROWS - 2          ; 48 (menu bar + status bar reserved)
 
 ; Clipboard capacity (bytes). Lives in editbuf BSS.
 EDITBUF_CLIP_CAP    = 256

@@ -145,6 +145,17 @@ public class EmulatorCanvas : Control
             }
         }
 
+        // Ctrl/Meta + letter the font keymap didn't claim -> ASCII control code
+        // (Ctrl-S=Save 0x13, Ctrl-Q=Quit 0x11, ...). Without this it falls through
+        // to OnTextInput and inserts the literal letter.
+        if (ControlKeyMap.TryMap(e.Key, e.KeyModifiers, out byte ctrlCode))
+        {
+            _editor.QueueInput(ctrlCode);
+            e.Handled = true;
+            base.OnKeyDown(e);
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Left:
