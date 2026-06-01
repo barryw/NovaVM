@@ -3592,7 +3592,7 @@ zvm_snd_sampled:
         CMP #$03
         BEQ @stop
         CMP #$01
-        BEQ @ret                        ; prepare: host lazy-loads on start
+        BEQ @prepare                    ; prepare: load the sound bank now
         ; effect 2 (start) or 4 (finish-with)
         LDA zvm_operand_lo              ; number
         STA FIO_SRCL
@@ -3645,6 +3645,26 @@ zvm_snd_sampled:
         LDA #FIO_CMD_ZSOUND
         STA FIO_CMD
         STZ zvm_sound_active
+        RTS
+@prepare:
+        LDA zvm_operand_lo              ; number (host ignores it for prepare)
+        STA FIO_SRCL
+        LDA #$01
+        STA FIO_SRCH                    ; effect = prepare (load the bank)
+        LDA #FIO_CMD_ZSOUND
+        STA FIO_CMD
+        RTS
+
+; nz_sound_preload: issue a sampled-sound "prepare" at story start so the host
+; loads this image's soundfont (SOUND.PAK on Avalonia, ZSOUND.NSF into the WTS
+; bank on hardware) before the game ever calls sound_effect. Soundless images
+; just get ERR_NOT_FOUND/ERR_IO back, which we ignore.
+nz_sound_preload:
+        STZ FIO_SRCL                    ; number 0 (unused for prepare)
+        LDA #$01
+        STA FIO_SRCH                    ; effect = prepare
+        LDA #FIO_CMD_ZSOUND
+        STA FIO_CMD
         RTS
 
 ; Return the sound effect operand in A, defaulting to 2 (start) when the opcode

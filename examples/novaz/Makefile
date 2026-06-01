@@ -163,6 +163,12 @@ jukebox-sherlock: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(JUKEBOX_SRC)
 	$(DOTNET) run --project $(JUKEBOX) -- --output "$(BUILD_DIR)/jukebox-sherlock.z3" --title "Sherlock Sounds" --numbers "$(SHERLOCK_SOUND_NUMS)"
 	$(DOTNET) run --project $(PACKER) -- --output "$(DIST_DIR)/jukebox-sherlock/fd0.ndi" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "SHERJUKE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(BUILD_DIR)/jukebox-sherlock.z3" --sounds "$(SHERLOCK_SOUNDS)"
 
+# Build the full clearly-named Infocom collection (one .ndi per game) into
+# dist/collection/, auto-discovering supported games under $(INFOCOM_ROOT),
+# bundling sound where present, and smoke-testing each image.
+collection:
+	INFOCOM_ROOT="$(INFOCOM_ROOT)" tools/build-infocom-collection.py $(COLLECTION_ARGS)
+
 test-project: $(IMAGE) $(SMOKE_DLL)
 	@if [ -z "$(PROJECT)" ]; then echo "PROJECT is required, e.g. PROJECT=zork-iii" >&2; exit 2; fi
 	@if [ ! -f "$(PROJECT_SMOKE)" ]; then echo "project smoke script not found: $(PROJECT_SMOKE)" >&2; exit 2; fi
@@ -225,4 +231,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE

@@ -101,6 +101,7 @@ reset:
         BRA halt
 
 @header_ok:
+        JSR nz_sound_preload
         JSR init_game_screen
         JSR zvm_run_until_read
         BRA halt

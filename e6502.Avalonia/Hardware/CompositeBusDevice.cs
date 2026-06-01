@@ -56,6 +56,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public VirtualNetworkController Nic => _nic;
     public VirtualDmaController Dma => _dma;
     public VirtualBlitterController Blitter => _blitter;
+    public ZSoundController ZSound => _zsound;
     public MathCoprocessor MathCoprocessor => _math;
     public CompilerController Compiler => _compiler;
     public SidPlayer SidPlayer => _sidPlayer;

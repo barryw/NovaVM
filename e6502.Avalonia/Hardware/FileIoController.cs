@@ -1401,6 +1401,10 @@ public sealed partial class FileIoController
         if (!_zsound.PackLoaded)
             TryLoadSoundPack();
 
+        // effect 1 = prepare: load the bank now, but do not play. Matches the
+        // NovaHost path so the soundfont is resident before the first start.
+        if (effect == 1) { SetOk(); return; }
+
         float gain = (level <= 0 || level >= 255) ? 1f : Math.Clamp(level / 8f, 0f, 1f);
         bool loop = repeats == 255;
         _zsound.Play(number, gain, loop);

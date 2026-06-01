@@ -28,6 +28,7 @@ bool expectMore = args.Skip(1).Contains("--expect-more", StringComparer.Ordinal)
 bool expectTimeStatus = args.Skip(1).Contains("--expect-time-status", StringComparer.Ordinal);
 bool skipManifestCheck = args.Skip(1).Contains("--skip-manifest-check", StringComparer.Ordinal);
 bool noStatusLine = args.Skip(1).Contains("--no-status-line", StringComparer.Ordinal);
+bool expectSoundfont = args.Skip(1).Contains("--expect-soundfont", StringComparer.Ordinal);
 List<string> expectedScreens = LoadExpectedScreens(args);
 List<string> screenInputs = LoadScreenInputs(args);
 List<ExpectedTextColor> expectedTextColors = LoadExpectedTextColors(args);
@@ -74,6 +75,8 @@ try
             RequireGfxColor(bus.Vgc, screenOnlySnapshot, expected);
         if (expectMore && morePrompts == 0)
             throw new InvalidOperationException($"Expected at least one [ MORE ] prompt.\n{screenOnlySnapshot}");
+        if (expectSoundfont)
+            RequireSoundfontLoaded(bus, screenOnlySnapshot);
 
         Console.WriteLine($"NovaZ screen smoke passed. morePrompts={morePrompts}");
         Console.WriteLine(screenOnlySnapshot);
@@ -102,6 +105,8 @@ try
     foreach (string expected in expectedScreens)
         RequireContains(screen, expected);
     RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
+    if (expectSoundfont)
+        RequireSoundfontLoaded(bus, screen);
 
     string bootScreen = screen;
 
@@ -305,6 +310,7 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
             case "--expect-time-status":
             case "--skip-manifest-check":
             case "--no-status-line":
+            case "--expect-soundfont":
                 break;
             case "--expect-screen":
                 if (i + 1 >= args.Length)
@@ -946,6 +952,24 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
         return true;
     }
 
+    if ((screen.Contains("RETURN", StringComparison.OrdinalIgnoreCase) ||
+         screen.Contains("ENTER", StringComparison.OrdinalIgnoreCase)) &&
+        (screen.Contains("to begin", StringComparison.OrdinalIgnoreCase) ||
+         screen.Contains("to start", StringComparison.OrdinalIgnoreCase) ||
+         screen.Contains("to continue", StringComparison.OrdinalIgnoreCase)))
+    {
+        // Many titles park on an intro screen before the first ">" prompt, e.g.
+        // "Hit the RETURN/ENTER key to begin!" (Leather Goddesses) or
+        // "[Press RETURN or ENTER to begin.]" (Plundered Hearts). These are
+        // single-key reads (raw input mode), so press unconditionally like the
+        // "Press any key" gate above; the "to begin/start/continue" phrasing
+        // cannot appear on a live command prompt, so there is no live read to
+        // corrupt.
+        editor.QueueInput(0x0D);
+        RunForSteps(cpu, bus, 500_000);
+        return true;
+    }
+
     return false;
 }
 
@@ -999,6 +1023,16 @@ static void RequireContains(string screen, string expected, string? command = nu
         string context = command is null ? "screen" : $"output after '{command}'";
         throw new InvalidOperationException($"Expected {context} to contain '{expected}'.\n{screen}");
     }
+}
+
+static void RequireSoundfontLoaded(CompositeBusDevice bus, string screen)
+{
+    if (!bus.ZSound.PackLoaded)
+        throw new InvalidOperationException(
+            "Expected the story's soundfont (SOUND.PAK) to be loaded after boot, " +
+            "but ZSound.PackLoaded is false. The image may not bundle sounds, or the " +
+            $"runtime did not issue the boot preload.\n{screen}");
+    Console.WriteLine("soundfont loaded (SOUND.PAK resident at boot)");
 }
 
 static void RequireTextColor(VirtualGraphicsController vgc, string screen, ExpectedTextColor expected)
