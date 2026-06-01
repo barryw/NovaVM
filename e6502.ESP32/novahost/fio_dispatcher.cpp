@@ -494,6 +494,12 @@ constexpr uint16_t SID_CFG_ADDR          = 0xD440;
 constexpr uint16_t WTS_VOICE_BASE        = 0xA140;
 constexpr uint16_t WTS_VOICE_STRIDE      = 8;
 constexpr uint8_t  ZSOUND_VOICE          = 0;   // WTS voice used for Z-machine SFX
+// $BA76 ZSOUND_STATUS: plain 6502 RAM on the FPGA (not a device range), so the
+// ESP pokes it and the 6502 reads it. bit0 = a non-looping sound finished. This
+// mirrors Avalonia's ZSoundController status so the Z-machine V5 finish routine
+// (which polls $BA76 in the read loops) fires on hardware too.
+constexpr uint16_t ZSOUND_STATUS_ADDR    = 0xBA76;
+constexpr uint8_t  ZSOUND_STATUS_FINISHED = 0x01;
 constexpr uint16_t WTS_MASTER_VOLUME     = 0xA182;
 constexpr uint16_t WTS_SOUNDFONT_STATUS  = 0xA183;
 constexpr uint16_t WTS_INSTRUMENT_COUNT  = 0xA184;
@@ -771,6 +777,14 @@ void FioDispatcher::handle_event() {
 void FioDispatcher::poll_pending() {
     if (_handling) {
         return;
+    }
+
+    // Raise the Z-sound "finished" flag once the one-shot's duration elapses,
+    // so the runtime's $BA76 poll fires the V5 finish routine on hardware.
+    if (_zsound_finish_pending &&
+        (int32_t)(millis() - _zsound_finish_due_ms) >= 0) {
+        _zsound_finish_pending = false;
+        _bridge.poke(ZSOUND_STATUS_ADDR, ZSOUND_STATUS_FINISHED);
     }
 
     uint8_t pending = 0;
@@ -3496,6 +3510,7 @@ bool FioDispatcher::ensure_zsound_bank_loaded() {
 void FioDispatcher::invalidate_zsound_bank() {
     // Force a reload from the currently-mounted disk on the next sound_effect.
     _zsound_bank_ready = false;
+    _zsound_finish_pending = false;
 }
 
 void FioDispatcher::handle_zsound() {
@@ -3511,6 +3526,9 @@ void FioDispatcher::handle_zsound() {
 
     if (effect == 3) {                    // stop: silence the WTS voices
         _bridge.poke(WTS_COMMAND, WTS_CMD_EVENT_RESET);
+        // An explicit stop is not a "finished" event (matches Avalonia).
+        _zsound_finish_pending = false;
+        _bridge.poke(ZSOUND_STATUS_ADDR, 0);
         respond_ok();
         return;
     }
@@ -3546,15 +3564,34 @@ void FioDispatcher::handle_zsound() {
         return;
     }
 
+    // V5 finish callback: the sample's natural duration is length/rate. Clear
+    // the finished flag now so the runtime doesn't fire on a stale bit, then
+    // schedule poll_pending to raise $BA76 bit0 when that duration elapses.
+    uint32_t dur_ms = 0;
+    for (size_t i = 0; i < _wts_regions.size(); i++) {
+        const WtsBankRegion& r = _wts_regions[i];
+        if (number >= r.key_lo && number <= r.key_hi && r.sample_rate > 0) {
+            dur_ms = (uint32_t)(((uint64_t)r.sample_length * 1000ULL) / r.sample_rate);
+            break;
+        }
+    }
+    _zsound_finish_pending = false;
+    _bridge.poke(ZSOUND_STATUS_ADDR, 0);
+
     // RESET zeroes the FPGA WTS frame counter; queue the one-shot at frame 0;
     // START fires it. The region is non-looping, so the voice ends on its own.
     bool ok = _bridge.poke(WTS_COMMAND, WTS_CMD_EVENT_RESET);
     ok = _bridge.writeWtsEvents(events, out_bytes) && ok;
     ok = _bridge.poke(WTS_COMMAND, WTS_CMD_EVENT_START) && ok;
-    if (ok)
+    if (ok) {
+        if (dur_ms > 0) {
+            _zsound_finish_due_ms = millis() + dur_ms;
+            _zsound_finish_pending = true;
+        }
         respond_ok();
-    else
+    } else {
         respond_err(ERR_IO);
+    }
 }
 
 // ---------------------------------------------------------------------------

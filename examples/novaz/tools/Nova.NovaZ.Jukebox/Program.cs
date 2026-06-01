@@ -17,7 +17,7 @@ const int ParseBuffer = 0x0EF0;
 const int NumbersTable = 0x0F20;
 const int StaticMemory = 0x1000;
 
-(string outputPath, int[] numbers, string title) = ParseArgs(args);
+(string outputPath, int[] numbers, string title, bool callback) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
 
 var story = new byte[StorySize];
@@ -33,7 +33,7 @@ for (int i = 0; i < numbers.Length; i++)
     story[NumbersTable + i] = (byte)numbers[i];
 
 var code = new ZCode(InitialPc);
-EmitJukebox(code, numbers.Length);
+EmitJukebox(code, numbers.Length, callback);
 byte[] codeBytes = code.ToArray();
 if (InitialPc + codeBytes.Length >= ObjectTable)
     throw new InvalidOperationException($"Jukebox program overlaps data tables: {codeBytes.Length} bytes.");
@@ -43,16 +43,20 @@ WriteBE16(story, 0x1C, Checksum(story));
 File.WriteAllBytes(outputPath, story);
 Console.WriteLine($"Wrote {outputPath} ({story.Length} bytes, {numbers.Length} sounds: {string.Join(",", numbers)})");
 
-static (string Output, int[] Numbers, string Title) ParseArgs(string[] args)
+static (string Output, int[] Numbers, string Title, bool Callback) ParseArgs(string[] args)
 {
     string output = "build/jukebox.z3";
     int[] numbers = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
     string title = "Sound Jukebox";
+    bool callback = false;
     for (int i = 0; i < args.Length; i++)
     {
         string? value = i + 1 < args.Length ? args[i + 1] : null;
         switch (args[i])
         {
+            case "--callback":
+                callback = true;
+                break;
             case "--output" when value is not null:
                 output = value;
                 i++;
@@ -78,7 +82,7 @@ static (string Output, int[] Numbers, string Title) ParseArgs(string[] args)
         }
     }
 
-    return (output, numbers, title);
+    return (output, numbers, title, callback);
 }
 
 static void PrintUsage()
@@ -89,7 +93,7 @@ static void PrintUsage()
     Console.Error.WriteLine("  --title <text>          status-line / banner title");
 }
 
-static void EmitJukebox(ZCode z, int count)
+static void EmitJukebox(ZCode z, int count, bool callback)
 {
     z.Print("Nova Infocom Sound Jukebox");
     z.NewLine();
@@ -103,7 +107,10 @@ static void EmitJukebox(ZCode z, int count)
     z.Print("Sound #");
     z.VarOp(6, Operand.Var(0x11));                                 // print_num num
     z.NewLine();
-    z.VarOp(21, Operand.Var(0x11), Operand.Small(2), Operand.Small(8)); // sound_effect num, start, vol 8
+    if (callback)
+        z.SoundEffectWithRoutine(0x11, 2, 8, "snd_done"); // + finish routine
+    else
+        z.VarOp(21, Operand.Var(0x11), Operand.Small(2), Operand.Small(8)); // sound_effect num, start, vol 8
     z.Print(">");                                                 // bare prompt so the wait is detectable
     z.VarOp(4, Operand.Large(TextBuffer), Operand.Large(ParseBuffer)); // sread (wait for RETURN; ignored)
     z.OneOp(5, Operand.Small(0x10));                              // inc index
@@ -112,6 +119,20 @@ static void EmitJukebox(ZCode z, int count)
     z.Label("reset");
     z.Store(0x10, 0);
     z.Jump("loop");
+
+    if (callback)
+    {
+        // Sound-finished interrupt routine (V5 semantics; our runtime registers
+        // it from the 4th sound_effect operand regardless of Z-version). The
+        // read loop fires it when $BA76 bit0 is raised, printing visibly.
+        z.AlignWord();
+        z.Label("snd_done");
+        z.Byte(0);                  // 0 locals
+        z.NewLine();
+        z.Print("   *** sound finished (callback) ***");
+        z.NewLine();
+        z.Ret();                    // rfalse
+    }
 }
 
 static void WriteHeader(byte[] story, string title)
@@ -200,6 +221,7 @@ sealed class ZCode
     private readonly Dictionary<string, int> _labels = new(StringComparer.Ordinal);
     private readonly List<BranchPatch> _branchPatches = [];
     private readonly List<JumpPatch> _jumpPatches = [];
+    private readonly List<JumpPatch> _packedAddressPatches = [];
     private int Pc => _origin + _bytes.Count;
 
     public ZCode(int origin) => _origin = origin;
@@ -263,8 +285,39 @@ sealed class ZCode
         _jumpPatches.Add(new JumpPatch(patchOffset, label));
     }
 
+    public void AlignWord()
+    {
+        if ((Pc & 1) != 0) Emit(0xB4);  // nop pad so a V3 routine is word-aligned
+    }
+
+    public void Ret() => Emit(0xB1);    // rfalse
+
+    public void Byte(int value) => Emit(value);
+
+    // sound_effect number effect volume routine (VAR:21). number is a variable;
+    // routine is a V3-packed (addr/2) address resolved at link time.
+    public void SoundEffectWithRoutine(byte numberVar, int effect, int volume, string routineLabel)
+    {
+        Emit(0xE0 | 21);
+        Emit(TypeByte([Operand.Var(numberVar), Operand.Small(effect), Operand.Small(volume), Operand.Large(0)]));
+        Emit(numberVar);
+        Emit(effect);
+        Emit(volume);
+        int patchOffset = _bytes.Count;
+        EmitWord(0);
+        _packedAddressPatches.Add(new JumpPatch(patchOffset, routineLabel));
+    }
+
     public byte[] ToArray()
     {
+        foreach (var patch in _packedAddressPatches)
+        {
+            int target = ResolveLabel(patch.Label);
+            if ((target & 1) != 0)
+                throw new InvalidOperationException($"Routine not word-aligned: {patch.Label} at ${target:X4}");
+            WriteWordAt(patch.Offset, target / 2);  // V3 packed address = addr/2
+        }
+
         foreach (var patch in _jumpPatches)
         {
             int after = _origin + patch.Offset + 2;

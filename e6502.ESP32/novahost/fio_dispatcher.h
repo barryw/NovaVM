@@ -438,6 +438,8 @@ private:
     bool _wts_bank_loaded = false;
     bool _wts_samples_resident = false;
     bool _zsound_bank_ready = false;   // ZSOUND.NSF loaded for sound_effect
+    bool _zsound_finish_pending = false;  // a one-shot is timing out toward its V5 callback
+    uint32_t _zsound_finish_due_ms = 0;   // millis() at which to raise $BA76 bit0
     char _wts_bank_name[96] = {};
     uint32_t _wts_sample_bytes = 0;
     uint8_t _wts_sample_frame_bytes = 1;
