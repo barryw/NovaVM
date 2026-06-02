@@ -46,6 +46,7 @@ proc_edit_cur_lo: .res 1        ; initial editor cursor offset (start of body li
 proc_edit_cur_hi: .res 1
 proc_scan_off_lo: .res 1        ; 16-bit scan offset for body extraction
 proc_scan_off_hi: .res 1
+proc_brk_depth:   .res 1        ; bracket/paren nesting depth while accumulating a statement
 
 ; Save area for eval state during procedure invocation
 save_eval_cur_lo: .res 1
@@ -1076,28 +1077,41 @@ proc_invoke:
       JMP   @exec_done
 @have_body:
 
-      ; Reset heap for this line's tokens (reuse token heap each line)
+      ; Reset heap for this statement's tokens (reuse token heap each statement)
       LDA   save_heap_ptr_lo
       STA   heap_ptr
       LDA   save_heap_ptr_hi
       STA   heap_ptr+1
 
-      ; Copy characters from body to input_buf until $0A or end
+      ; Accumulate physical lines into one logical statement: keep copying lines
+      ; into input_buf until bracket/paren depth returns to 0, so a [ ... ] or
+      ; ( ... ) that spans several lines is pieced together before we tokenize.
       LDX   #0                    ; input_buf index
+      STZ   proc_brk_depth
 @line_ch:
       LDA   proc_body_len_lo
       ORA   proc_body_len_hi
-      BEQ   @line_end             ; no more body text
+      BEQ   @line_eol             ; no more body text -> end of last line
 
       LDY   #0
       LDA   (proc_ptr_lo),Y      ; read body char
       CMP   #$0A
       BEQ   @line_nl
+      CMP   #';'                 ; comment -> skip rest of physical line
+      BEQ   @line_comment
 
-      ; Store in input_buf
+      ; Store char in input_buf, tracking bracket/paren nesting depth.
       STA   input_buf,X
       INX
-
+      CMP   #'['
+      BEQ   @brk_inc
+      CMP   #'('
+      BEQ   @brk_inc
+      CMP   #']'
+      BEQ   @brk_dec
+      CMP   #')'
+      BEQ   @brk_dec
+@brk_done:
       ; Advance body pointer
       INC   proc_ptr_lo
       BNE   :+
@@ -1108,7 +1122,41 @@ proc_invoke:
       DEC   proc_body_len_hi
 @ln_dec_lo:
       DEC   proc_body_len_lo
+      ; Guard against input_buf overflow (~120 chars per statement).
+      CPX   #120
+      BCS   @line_eol
       BRA   @line_ch
+
+@brk_inc:
+      INC   proc_brk_depth
+      BRA   @brk_done
+@brk_dec:
+      LDA   proc_brk_depth
+      BEQ   @brk_done             ; floor at 0
+      DEC   proc_brk_depth
+      BRA   @brk_done
+
+@line_comment:
+      ; ';' begins a comment: advance past the rest of this physical line
+      ; without copying, so comment text (and any brackets in it) is ignored.
+      LDA   proc_body_len_lo
+      ORA   proc_body_len_hi
+      BEQ   @line_eol             ; comment runs to end of body
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      PHA                         ; remember if this was the newline
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     LDA   proc_body_len_lo
+      BNE   @cmt_dec
+      DEC   proc_body_len_hi
+@cmt_dec:
+      DEC   proc_body_len_lo
+      PLA
+      CMP   #$0A
+      BNE   @line_comment         ; keep skipping comment chars
+      BRA   @line_eol             ; consumed the newline -> end of physical line
 
 @line_nl:
       ; Skip the $0A
@@ -1120,6 +1168,23 @@ proc_invoke:
       DEC   proc_body_len_hi
 @ln2_dec_lo:
       DEC   proc_body_len_lo
+      ; fall through to end-of-physical-line decision
+
+@line_eol:
+      ; End of a physical line. If brackets/parens are still open AND there is
+      ; more body to read AND room in the buffer, append a separating space and
+      ; keep accumulating; otherwise the statement is complete.
+      LDA   proc_brk_depth
+      BEQ   @line_end             ; balanced -> execute
+      LDA   proc_body_len_lo
+      ORA   proc_body_len_hi
+      BEQ   @line_end             ; no more lines -> execute (eval will report)
+      CPX   #120
+      BCS   @line_end             ; buffer full -> execute
+      LDA   #' '                  ; join lines with whitespace
+      STA   input_buf,X
+      INX
+      JMP   @line_ch
 
 @line_end:
       ; Null-terminate input_buf

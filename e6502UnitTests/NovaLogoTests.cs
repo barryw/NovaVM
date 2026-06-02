@@ -2152,6 +2152,104 @@ public class NovaLogoTests
         Assert.IsTrue(found, $"Expected '777' after sprite reposition.\n{screen}");
     }
 
+    [TestMethod]
+    public void MultiLineRepeatBodyInProcedureExecutes()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // A procedure whose REPEAT body spans multiple physical lines — the '['
+        // opens on one line and the ']' closes on a later line. The interpreter
+        // must piece these lines into a single logical statement.
+        QueueProcedureDefinition(cpu, bus, editor, "TO TRIO",
+            "REPEAT 3 [",
+            "  PRINT 7",
+            "]");
+        RunSteps(cpu, bus, 5_000_000);
+
+        QueueLine(editor, "TRIO");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("REPEAT NEEDS", StringComparison.Ordinal),
+            $"Multi-line REPEAT body should not raise 'REPEAT NEEDS [ BODY ]'.\n{screen}");
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "7") count++;
+        Assert.IsTrue(count >= 3,
+            $"Expected three '7' lines from a multi-line REPEAT 3 body, got {count}.\n{screen}");
+    }
+
+    [TestMethod]
+    public void CommentsAndBlankLinesInProcedureAreIgnored()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // A full-line comment, a blank line, and an inline ';' comment after the
+        // open bracket. None of the comment words (DRAW is a real command!) may
+        // be treated as code, and the loop must still run three times.
+        QueueProcedureDefinition(cpu, bus, editor, "TO NOTES",
+            "; draw three sevens",
+            "",
+            "REPEAT 3 [   ; loop body",
+            "  PRINT 7",
+            "]");
+        RunSteps(cpu, bus, 5_000_000);
+
+        QueueLine(editor, "NOTES");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("I DON'T KNOW HOW TO", StringComparison.Ordinal),
+            $"Comment text must not be evaluated as commands.\n{screen}");
+        Assert.IsFalse(screen.Contains("REPEAT NEEDS", StringComparison.Ordinal),
+            $"Inline comment after '[' must not break the multi-line body.\n{screen}");
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "7") count++;
+        Assert.IsTrue(count >= 3,
+            $"Expected three '7' lines despite comments/blank lines, got {count}.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ReplContinuesUntilBracketsBalance()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Type a statement whose '[' opens on the first line and ']' closes two
+        // lines later, directly at the '?' prompt. The REPL must keep reading
+        // until the brackets balance, then run it as one statement.
+        QueueLine(editor, "REPEAT 3 [");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "PRINT 7");
+        RunSteps(cpu, bus, 2_000_000);
+        QueueLine(editor, "]");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("REPEAT NEEDS", StringComparison.Ordinal),
+            $"Unbalanced first line at the prompt must not error.\n{screen}");
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "7") count++;
+        Assert.IsTrue(count >= 3,
+            $"Expected three '7' lines from a continued REPL statement, got {count}.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

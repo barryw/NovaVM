@@ -137,6 +137,26 @@ read_line:
       ; --- handle CR ($0D) ---
       CMP   #$0D
       BNE   @not_cr
+      ; End of a typed line. If brackets/parens are still open, keep reading so
+      ; a multi-line statement can be entered right at the prompt.
+      JSR   line_bracket_depth
+      BEQ   @cr_finish
+      LDX   buf_idx
+      CPX   #120
+      BCS   @cr_finish         ; buffer nearly full — stop accumulating
+      LDA   #$0A               ; newline separator (tokenizer treats it as space)
+      STA   input_buf,X
+      INC   buf_idx
+      LDA   #$0D
+      STA   VGC_CHAROUT
+      LDA   #$0A
+      STA   VGC_CHAROUT
+      LDA   #'~'               ; continuation prompt
+      STA   VGC_CHAROUT
+      LDA   #' '
+      STA   VGC_CHAROUT
+      JMP   @poll
+@cr_finish:
       LDX   buf_idx
       STZ   input_buf,X        ; null-terminate
       LDA   #$0D
@@ -173,6 +193,51 @@ read_line:
       LDA   #$08
       STA   VGC_CHAROUT        ; move cursor left and erase
       BRA   @poll
+
+; ---------------------------------------------------------------------
+; line_bracket_depth — net count of unclosed '[' and '(' in input_buf[0..buf_idx),
+;   ignoring text inside ';' comments. Returns depth in A (Z set if balanced).
+;   Clobbers: A, X, Y.
+; ---------------------------------------------------------------------
+line_bracket_depth:
+      LDX   #0                 ; scan index
+      LDY   #0                 ; depth
+@bd_loop:
+      CPX   buf_idx
+      BCS   @bd_done
+      LDA   input_buf,X
+      CMP   #';'
+      BEQ   @bd_comment
+      CMP   #'['
+      BEQ   @bd_inc
+      CMP   #'('
+      BEQ   @bd_inc
+      CMP   #']'
+      BEQ   @bd_dec
+      CMP   #')'
+      BEQ   @bd_dec
+@bd_next:
+      INX
+      BRA   @bd_loop
+@bd_inc:
+      INY
+      BRA   @bd_next
+@bd_dec:
+      CPY   #0
+      BEQ   @bd_next           ; floor at 0
+      DEY
+      BRA   @bd_next
+@bd_comment:
+      INX                      ; skip ';' and everything up to a newline
+      CPX   buf_idx
+      BCS   @bd_done
+      LDA   input_buf,X
+      CMP   #$0A
+      BNE   @bd_comment
+      BRA   @bd_next           ; resume scanning after the newline
+@bd_done:
+      TYA                      ; depth -> A, sets Z if zero
+      RTS
 
 ; ---------------------------------------------------------------------
 ; print_prompt — prints "? " to the screen

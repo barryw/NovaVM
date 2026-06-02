@@ -52,10 +52,24 @@ tok_scan_next:
       CMP   #$20                 ; space
       BEQ   @ws_next
       CMP   #$09                 ; tab
-      BNE   @ws_done
+      BEQ   @ws_next
+      CMP   #$0A                 ; newline
+      BEQ   @ws_next
+      CMP   #$0D                 ; carriage return
+      BEQ   @ws_next
+      CMP   #';'                 ; comment -> skip to end of line
+      BEQ   @ws_comment
+      BRA   @ws_done
 @ws_next:
       INX
       BRA   @skip_ws
+@ws_comment:
+      INX
+      LDA   input_buf,X
+      BEQ   @ws_done             ; null terminator -> end of input (A=0)
+      CMP   #$0A
+      BNE   @ws_comment
+      BRA   @ws_next             ; skip the newline, keep scanning
 @ws_done:
       STX   tok_src
 
