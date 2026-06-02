@@ -188,17 +188,40 @@ band** (`$07FA00+`) — it can't allocate its own bootstrap — and even that is
 
 ---
 
-## 5. Shared library ABI (reuse + extend)
+## 5. Shared library ABI (LOCKED — reuse + extend)
 
-The existing `EXT_CMD` mailbox is already a runtime-agnostic library call interface:
-ZP mailbox (`EXT_ARG0..3`, `EXT_CMD`, `EXT_RESULT`) + 14-byte RAM trampoline at
-`$0270` that swaps the bank, `JSR $C000`, swaps back. The extension:
+The existing `EXT_CMD` mailbox is already a runtime-agnostic library call interface
+(`ext_iface.inc`): a flat ZP block `$80–$91` — `EXT_CMD` (1-byte command id),
+`EXT_ARGC`, three typed args (TYPE/HI/LO/FRAC each), a typed RESULT — plus the
+14-byte RAM trampoline at `$0270` that swaps bank 1 in, `JSR $C000`, swaps back.
+Today **one** extension owns the whole flat id space (`$01–$4B`), dispatched by a
+`cmd*2` jump table at `$C000`.
 
-- Dispatch becomes *(module-id, fn-id)*. The loader ensures module M is resident
-  (page-on-miss from XRAM), then the trampoline calls the module's jump table at
-  `$C000 + table[F]`.
-- The foundation tracks the **currently resident module-id** to decide whether a
-  page-in is needed.
+**Decision: keep the flat command id; add a resident command→module map.** No
+explicit (module-id, fn-id). Every existing `EXT_CMD_*` value is unchanged and no
+call site moves.
+
+- **`map[EXT_CMD] → module-id`**: a small resident table in the foundation says
+  which coarse module owns each id range.
+- **`lib_call`** replaces the bare trampoline call:
+  ```
+  lib_call:                          ; EXT_CMD + args already set
+    module = map[EXT_CMD]
+    if resident_module != module:
+        base = xdir_lookup(module)   ; XRAM shelf addr from the directory (by name)
+        page_dma(base -> bank1)
+        resident_module = module
+    JSR EXT_TRAMPOLINE               ; swap bank1, JSR $C000, swap back
+  ```
+  Same module as the previous call → no page-in → identical cost to today.
+- **Module binary layout** (ORG `$C000`): header (magic, module-id, version,
+  fn-count) + jump table + code. After a page-in the loader validates the header
+  (right module / compatible version) before the first call. Each module's `$C000`
+  dispatcher is today's `cmd*2` table over its own id range.
+
+Backward-compatible; the only new runtime cost is a map lookup + page-on-miss.
+A reserved `EXT_MODULE` byte is **not** added now (flat space + coarse modules ≪ 256
+commands); revisit only if a 2D space is ever needed.
 
 ---
 
@@ -221,8 +244,9 @@ ZP mailbox (`EXT_ARG0..3`, `EXT_CMD`, `EXT_RESULT`) + 14-byte RAM trampoline at
 
 ## 7. Open sections (to detail next)
 
-- **Module ABI bytes:** exact jump-table format, mailbox layout carrying
-  (module-id, fn-id, args), return/error convention, versioning.
+- **Module header bytes:** exact magic/version/fn-count field widths and the
+  jump-table entry format (the dispatch *model* is locked in §5; only the byte
+  layout remains).
 - **Page-DMA RTL:** trigger registers, busy/done semantics, interaction with the
   existing DMA controller, and the measured 16K cycle cost.
 - **Loader protocol:** resident-module bookkeeping, page-on-miss, what happens on a
