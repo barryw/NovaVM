@@ -136,12 +136,34 @@ lives in the `sdram_clk` domain (no per-byte CDC) and **owns the SDRAM for the p
 also makes a page-in **atomic** (resolves the "call during in-flight page" race —
 no queue needed). Refresh is honored between rows.
 
-**Discipline (this is the one block touching timing-sensitive `sdram.v`):**
+**Scope: this is the GENERAL XRAM bulk path, not a one-off page engine.** The
+streaming read (+ write-burst) lives once in `xram_sdram.sv` + `sdram.v` as a
+*"burst N words from addr"* request mode, and every run-mover reaches it through the
+existing port-A / `bm_xram_*` arbitration. Beneficiaries (all move contiguous runs):
+
+| Consumer | XRAM use | Benefit |
+|---|---|---|
+| DMA (`dma.sv` `$BA63`) | bulk XRAM↔{CPU,VGC} | read+write runs |
+| Blitter (`blitter.sv` `$BA83`) | 2D rect *rows* (tiles/sprites, STASH/FETCH) | prime case — each row is a run |
+| XMC bulk (`xram_copy_*`/`fill`, `STASH`/`FETCH`) | CPU↔XRAM runs | read+write |
+| Library page-in (new) | XRAM→`ext_rom` 16K | client #1 |
+| NovaHost boot (port B `pokeSdramStream`) | SD→XRAM block writes | write-burst speeds boot |
+
+Untouched: CPU single-byte `xram_read8/write8` (no run to amortize — already fine);
+video/pixel fetch (doesn't use XRAM — timing-critical lives in BRAM).
+
+Consumer-side cost: each run-mover's FSM changes from *per-byte fire/wait* to
+*issue-burst / consume-stream*. They already carry the run length (`DMA LEN`, blitter
+`WIDTH`/stride, XMC copy len), so it's a natural fit — but it does mean touching
+`dma.sv`, `blitter.sv`, and the XMC copy path, plus the SDRAM core.
+
+**Discipline (the SDRAM core is the timing-sensitive block):**
 1. **Prior-art first** ([prefer-prior-art]): evaluate a burst/streaming SDRAM
    controller (emard ULX3S refs, MiSTer) vs. extending `sdram.v`'s port A with a
    page-mode path, before hand-rolling an FSM.
 2. **Verilator-first** ([verilator-first-for-fpga]): cycle-accurate bench proving the
-   stream + refresh + the ~80 µs figure before any 17-min synth.
+   stream + refresh + the ~80 µs figure before any 17-min synth. Harness already
+   exists (`test_xram_sdram.sv`, `test_sdram_loopback.sv`).
 3. Respect the existing `clkref` ratio / refresh timing history ([sdram-clkref-16-1],
    [dont-ship-timing-failing-bitstream]).
 
@@ -272,10 +294,13 @@ commands); revisit only if a 2D space is ever needed.
 
 ## 7. Open sections (to detail next)
 
-- **Streaming SDRAM read engine (the long-pole):** prior-art recon (emard/MiSTer
-  burst controller vs. extending `sdram.v` port A page-mode), the streaming FSM,
-  refresh interleave, `ext_rom` write mux + `SPACE_EXTROM`, and a Verilator bench
-  confirming the ~80 µs. (Approach locked in §3.3; the RTL design is open.)
+- **General XRAM streaming primitive (the long-pole):** the burst read + write-burst
+  in `sdram.v`/`xram_sdram.sv`, refresh interleave, and the consumer-side FSM updates
+  to *issue-burst / consume-stream* — `dma.sv`, `blitter.sv`, the XMC `xram_copy_*`
+  path — plus `ext_rom` write mux + `SPACE_EXTROM` for the page-in. Prior-art recon
+  (emard/MiSTer vs. extend `sdram.v` port A); Verilator bench (harness exists)
+  confirming the ~80 µs and per-consumer throughput. (Scope/approach locked §3.3; RTL
+  design open.)
 - **Module header bytes:** exact magic/version/fn-count field widths and the
   jump-table entry format (dispatch model locked in §5; only byte layout remains).
 - **Boot staging:** module manifest on SD, sizes, the XRAM shelf layout, and how the
