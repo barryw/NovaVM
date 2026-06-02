@@ -110,12 +110,40 @@ Two intertwined systems:
   (`SD.begin(..., 4000000)`).
 - **SD → XRAM, 16K ≈ 32 ms** today (SD-read bound). Bumping SD SPI 4→20 MHz → ≈ 8 ms.
   This is a **boot** cost (stage the shelf once), not a per-page cost.
-- **Runtime cold page = XRAM → bank-1 page-DMA**, entirely on-FPGA. **Estimated
-  ~1–3 ms** for 16K (SDRAM burst-read → BRAM write). *This block does not exist
-  yet — the exact cycle count is the one number to confirm (Verilator or hardware).*
+- **Runtime cold page = XRAM → bank-1**, entirely on-FPGA. See §3.3.
 
-The only genuinely new silicon: wire a DMA channel to feed the existing `ext_rom`
-write port from XRAM, CPU-triggered.
+### 3.3 The page-in path (LOCKED: page-mode streaming engine)
+
+**Destination wiring (small):** paging is a new DMA *destination space*, not a new
+engine. `dma.sv` (`$BA63`: `CMD`/`STATUS`/`SRC*`/`DST*`/`LEN*`) already copies
+XRAM→{CPU,VGC} with busy/done and a CPU stall (`rdy_out`); it just lacks an
+`ext_rom` destination. Add `SPACE_EXTROM` and mux the DMA write into the `ext_rom`
+port that boot's `dbg_rom_we`/`erom_we` already drives. "Page module M" = an
+ordinary DMA command `SRC=XRAM@base, DST=EXTROM, LEN=16384`.
+
+**Why the read path needs work:** `sdram.v` (MiST, MT48LC16M16, clk ≤128 MHz) is
+hardwired `BURST_LENGTH=3'b000` (single word), `NO_WRITE_BURST=1`, and
+time-multiplexes two *random-access* ports by `clkref` — full ACTIVATE→READ→precharge
+per word, wrapped by a 3-stage CDC each way (`xram_sdram.sv`). Byte-at-a-time that is
+**~4–6 ms / 16K** — *not* acceptable.
+
+**Decision: build a page-mode streaming read engine (~80 µs).** Open a row once
+(512 words = 1KB on this part), stream its columns at ~1 word/clk (CAS-pipelined),
+write straight into `ext_rom` BRAM (1 word → 2 byte-writes). 16K = 16 rows ≈
+`16 × (512 + ~7)` ≈ 8,300 `sdram_clk` ≈ **65–85 µs @ 100–128 MHz** (~60×). The engine
+lives in the `sdram_clk` domain (no per-byte CDC) and **owns the SDRAM for the page**
+— legitimate because the CPU is already stalled (`rdy_out`) for the whole copy, which
+also makes a page-in **atomic** (resolves the "call during in-flight page" race —
+no queue needed). Refresh is honored between rows.
+
+**Discipline (this is the one block touching timing-sensitive `sdram.v`):**
+1. **Prior-art first** ([prefer-prior-art]): evaluate a burst/streaming SDRAM
+   controller (emard ULX3S refs, MiSTer) vs. extending `sdram.v`'s port A with a
+   page-mode path, before hand-rolling an FSM.
+2. **Verilator-first** ([verilator-first-for-fpga]): cycle-accurate bench proving the
+   stream + refresh + the ~80 µs figure before any 17-min synth.
+3. Respect the existing `clkref` ratio / refresh timing history ([sdram-clkref-16-1],
+   [dont-ship-timing-failing-bitstream]).
 
 ---
 
@@ -244,23 +272,27 @@ commands); revisit only if a 2D space is ever needed.
 
 ## 7. Open sections (to detail next)
 
+- **Streaming SDRAM read engine (the long-pole):** prior-art recon (emard/MiSTer
+  burst controller vs. extending `sdram.v` port A page-mode), the streaming FSM,
+  refresh interleave, `ext_rom` write mux + `SPACE_EXTROM`, and a Verilator bench
+  confirming the ~80 µs. (Approach locked in §3.3; the RTL design is open.)
 - **Module header bytes:** exact magic/version/fn-count field widths and the
-  jump-table entry format (the dispatch *model* is locked in §5; only the byte
-  layout remains).
-- **Page-DMA RTL:** trigger registers, busy/done semantics, interaction with the
-  existing DMA controller, and the measured 16K cycle cost.
-- **Loader protocol:** resident-module bookkeeping, page-on-miss, what happens on a
-  call during an in-flight page (stall vs. queue).
+  jump-table entry format (dispatch model locked in §5; only byte layout remains).
 - **Boot staging:** module manifest on SD, sizes, the XRAM shelf layout, and how the
   loader learns each module's XRAM base (directory lookup by name).
 - **Deferred:** re-entrant callback ABI (paged code calling back into the
   foundation) for non-leaf libraries.
 
+*Resolved:* the loader's "call during an in-flight page" race — the DMA holds the
+CPU stalled for the whole copy, so a page-in is atomic (§3.3). No queue.
+
 ---
 
 ## 8. Risks / notes
 
-- Page-DMA cost is the one estimated (not measured) number; phase 2 measures it.
+- The streaming engine touches `sdram.v` (timing-sensitive, careful clkref/refresh
+  history). It is the highest-risk block: prior-art first, Verilator-first, measure
+  the ~80 µs before synth (§3.3). Until measured, ~80 µs is an estimate.
 - Coarse-module granularity assumes usage locality; if real programs interleave
   subsystems tightly, revisit sub-slots in bank 1 (deferred; measure first).
 - Directory is 32 entries / 24-char names — generous now, expandable (more directory
