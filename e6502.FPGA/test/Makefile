@@ -67,7 +67,7 @@ HDMI  = $(RTL)/thirdparty/hdl-util-hdmi/audio_clock_regeneration_packet.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/serializer.sv \
         $(RTL)/thirdparty/hdl-util-hdmi/hdmi.sv
 
-TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_charin_read_timing test_vgc_blitter_scroll test_blitter test_blitter_xram_backpressure test_blitter_cmd_single_pulse_top test_vgc_cmd_readback_hazard_top test_dma test_math_copro test_wts_chip test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_dormann_65c02 test_cpu_stz test_cpu_memory_write_opcodes test_cpu_wai_stp test_hdmi_audio test_hdmi_start_offset test_sid_hdmi_audio test_audio_pcm_fifo test_audio_led_meter test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_nic test_fio_top test_nic_top test_rom_load test_debug_uart test_debug_spi_slave test_usb_hid_keyboard test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_romswap_values_top test_sid_cpu_audio_top test_wts_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_novalogo_draw_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_top_row test_vgc_screen_window test_vgc_por_determinism test_sdram_loopback test_xram_sdram
+TESTS = test_copper test_copper_lists test_gtext test_vgc_text test_vgc_gfx test_vgc_sprites test_vgc_regs test_vgc_charin_read_timing test_vgc_blitter_scroll test_blitter test_blitter_xram_backpressure test_blitter_cmd_single_pulse_top test_vgc_cmd_readback_hazard_top test_dma test_math_copro test_wts_chip test_cpu_dormann_6502 test_cpu_dormann_interrupt test_cpu_dormann_65c02 test_cpu_stz test_cpu_memory_write_opcodes test_cpu_wai_stp test_hdmi_audio test_hdmi_start_offset test_sid_hdmi_audio test_audio_pcm_fifo test_audio_led_meter test_sid test_sid_per_reg_readback test_sid_adsr test_sid_waveforms test_sid_pulse test_sid_sync test_sid_ringmod test_sid_combined test_sid_curve test_sid_filter test_sid_pervoice_vol test_sid_model test_fio test_nic test_fio_top test_nic_top test_rom_load test_debug_uart test_debug_spi_slave test_usb_hid_keyboard test_debug_bridge test_debug_bridge_rx_fifo test_debug_sdram_port_b_cdc test_novaz_xram_roundtrip test_custom_reset_top test_debug_peek test_key_inject test_rom_over_sid test_romswap_values_top test_sid_cpu_audio_top test_wts_top test_xmc_window_decode_top test_mmio_bus_cycles_top test_novalogo_draw_top test_vgc_frame_counter test_vgc_scroll_wrap test_vgc_top_row test_vgc_screen_window test_vgc_por_determinism test_sdram_loopback test_sdram_model_selfcheck test_sdram_model_selfcheck_fatal test_xram_sdram
 
 .PHONY: all clean $(TESTS) run
 
@@ -371,6 +371,24 @@ test_vgc_scroll_wrap: test_vgc_scroll_wrap.sv $(RTL)/vgc_timing.sv
 # First exit gate for Phase 2.5 Step 1.
 test_sdram_loopback: test_sdram_loopback.sv $(RTL)/sdram/sdram.v
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/sdram/sdram.v $< && $(RUN) test/$(BD)/$@/$@
+
+# Page-mode MT48LC16M16 behavioral model self-check — self-contained, NO RTL deps
+# (pokes sdram_model.svh directly). The model is an include file, so the test source
+# and the .svh are the only inputs.
+#
+# LEGAL path: ACTIVATE -> tRCD -> READ -> CAS returns the stored word + byte lanes.
+test_sdram_model_selfcheck: test_sdram_model_selfcheck.sv sdram_model.svh
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ test_sdram_model_selfcheck.sv && $(RUN) test/$(BD)/$@/$@
+#
+# ILLEGAL path: ACTIVATE -> READ before tRCD must $fatal. The model's $fatal exits
+# non-zero, so we INVERT the exit code: a trap (non-zero) is PASS, a clean finish
+# (zero) is FAIL. Built in its own Mdir; reuses the same source with +EXPECT_FATAL.
+test_sdram_model_selfcheck_fatal: test_sdram_model_selfcheck.sv sdram_model.svh
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module test_sdram_model_selfcheck --Mdir $(BD)/$@ -o $@ test_sdram_model_selfcheck.sv && \
+	  ( $(RUN) test/$(BD)/$@/$@ +EXPECT_FATAL=1 ; \
+	    rc=$$? ; \
+	    if [ $$rc -ne 0 ]; then echo "  PASS illegal path trapped (\$$fatal, exit $$rc)" ; \
+	    else echo "  FAIL illegal path did NOT trap (exit 0)" ; exit 1 ; fi )
 
 # xram_sdram wrapper — pixel-clock handshake around sdram.v port A.
 # First exit gate for Phase 2.5 Step 2 (XRAM BRAM stub → SDRAM).
