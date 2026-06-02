@@ -157,6 +157,23 @@ Consumer-side cost: each run-mover's FSM changes from *per-byte fire/wait* to
 `WIDTH`/stride, XMC copy len), so it's a natural fit — but it does mean touching
 `dma.sv`, `blitter.sv`, and the XMC copy path, plus the SDRAM core.
 
+**Streaming FSM design (research confirmed — `sdram.v` read in full):** the existing
+controller runs an 8-state `q` cycle resynced to `clkref`: `ACTIVE`@q1 →
+`READ`/`WRITE`@q3 (+tRCD=2) → capture@q6 (+CAS=3), **single access with auto-precharge
+(A10=1)**, two ports time-shared by clkref phase (16:1). Streaming adds a **separate
+mode** that, on a burst request (port A), *suspends* the port-mux q-cycle and runs:
+`ACTIVATE row` → **back-to-back `READ`s to consecutive columns with A10=0** (no
+precharge), capturing **1 word/clk** after the CAS-3 fill → `PRECHARGE` at row end →
+`AUTO_REFRESH` when the 7.8 µs timer is due (between rows; a row is 5.2 µs < 7.8 µs so
+at most one refresh per 1–2 rows). Confirmed cost: **~83 µs / 16K @ 100 MHz.** Single-
+word random access (CPU bytes) keeps the existing path untouched; the wrapper picks
+streaming only when a run is long enough to amortize the row-open.
+
+Request interface (wrapper): burst addr + length + a per-word `valid` strobe stream in
+the `sdram_clk` domain (no per-byte CDC). Latent `sdram.v` primitives already present:
+`BURST_LENGTH`/`ACCESS_TYPE` params, `CMD_BURST_TERMINATE`, `CMD_PRECHARGE`,
+`CMD_AUTO_REFRESH` — page-mode is an FSM addition, not new command decode.
+
 **Discipline (the SDRAM core is the timing-sensitive block):**
 1. **Prior-art first** ([prefer-prior-art]): evaluate a burst/streaming SDRAM
    controller (emard ULX3S refs, MiSTer) vs. extending `sdram.v`'s port A with a
