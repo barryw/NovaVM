@@ -75,14 +75,259 @@ localparam NO_WRITE_BURST = 1'b1;   // 0= write burst enabled, 1=only single acc
 
 localparam MODE = { 3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_LENGTH};
 
-// STUB (Task 4 replaces): no streaming yet.
-reg streaming;
+// ---------------------------------------------------------------------
+// ----------------- page-mode streaming read FSM ----------------------
+// ---------------------------------------------------------------------
+//
+// Burst-reads `stream_words` 16-bit words starting at byte address
+// `stream_addr`, replicating the single-access run_addr decode exactly:
+//   row  = a[21:9]   col = {a[24],a[8:1]}   bank = a[23:22]
+// For the 512KB region this exposes only 512 bytes (256 words) per row, so
+// the FSM re-opens a row every 256 words. Reads use A10=0 (page mode, row
+// stays open); the row is closed by an explicit PRECHARGE and an
+// unconditional AUTO_REFRESH is issued once per row boundary.
+//
+// While `streaming` is high the controller's normal run_cmd path is forced
+// to CMD_INHIBIT and sd_cmd/sd_addr/sd_ba/sd_dqm are driven from this FSM's
+// registered command/address (see the muxes near sd_cmd/sd_addr below). The
+// free-running `q` counter keeps spinning; only the *outputs* are overridden.
+//
+// All writes to streaming/stream_* live in THIS single clocked block.
+
+// command-constant aliases (the CMD_* localparams are declared further down;
+// localparams are module-scoped so referencing them here is legal)
+localparam [3:0] STR_CMD_INHIBIT      = 4'b1111;
+localparam [3:0] STR_CMD_NOP          = 4'b0111;
+localparam [3:0] STR_CMD_ACTIVE       = 4'b0011;
+localparam [3:0] STR_CMD_READ         = 4'b0101;
+localparam [3:0] STR_CMD_PRECHARGE    = 4'b0010;
+localparam [3:0] STR_CMD_AUTO_REFRESH = 4'b0001;
+
+// timing parameters in clk cycles (dedicated to the stream FSM; NOT `q`)
+localparam [3:0] STR_TRCD = 4'd2;   // ACTIVE -> READ
+localparam [3:0] STR_TRP  = 4'd2;   // PRECHARGE -> ACTIVE
+localparam [3:0] STR_TRC  = 4'd7;   // ACTIVE -> ACTIVE (full row cycle)
+localparam [3:0] STR_TRAS = 4'd5;   // ACTIVE -> PRECHARGE (row-active minimum)
+localparam [3:0] STR_CAS  = 4'd3;   // READ -> data on bus
+
+// FSM states
+localparam [2:0] S_IDLE      = 3'd0;
+localparam [2:0] S_PRE_ALL   = 3'd1;   // PRECHARGE all banks (clean entry)
+localparam [2:0] S_ACTIVATE  = 3'd2;   // ACTIVE(bank,row)
+localparam [2:0] S_READ      = 3'd3;   // issue READ(col,A10=0), 1/clk
+localparam [2:0] S_DRAIN     = 3'd4;   // wait for CAS pipe to flush
+localparam [2:0] S_PRECHARGE = 3'd5;   // PRECHARGE(bank) at row end
+localparam [2:0] S_REFRESH   = 3'd6;   // AUTO_REFRESH (1/row, unconditional)
+localparam [2:0] S_DONE      = 3'd7;   // 1-clk done pulse
+
+reg        streaming;
+reg [2:0]  str_state;
+reg [3:0]  str_dly;         // generic inter-command delay countdown
+reg [3:0]  str_rc;          // tRC countdown from ACTIVE (gates next ACTIVE)
+reg [3:0]  str_ras;         // tRAS countdown from ACTIVE (gates PRECHARGE)
+reg [24:0] cur_addr;        // running byte address
+reg [12:0] words_left;      // words still to read across the whole burst
+reg [8:0]  row_words;       // words already issued in the current row (<=256)
+reg [1:0]  open_bank;       // bank of the row currently activated (for PRECHARGE)
+
+// registered command/address presented to the chip while streaming
+reg [3:0]  str_cmd;
+reg [12:0] str_addr;
+reg [1:0]  str_ba;
+reg [1:0]  str_dqm;
+
+// CAS read pipeline tracking. We register the command, so the chip decodes our
+// READ on the edge AFTER the FSM drives STR_CMD_READ (E+1). The model presents
+// data on sd_data_in CAS(=3) cycles after it decodes the READ (so it has loaded
+// sd_data_in by E+1+3 = E+4) and sd_data_in is then stably sampleable on the
+// FOLLOWING edge E+5. Net: a READ driven on FSM edge E is captured on edge E+5.
+// We mark rd_inflight[0] on edge E and shift up one stage per clk, firing the
+// capture when the marker reaches rd_inflight[4] (5 edges after the READ).
+reg [4:0]  rd_inflight;     // 5-deep in-flight READ tracker (E .. E+5 capture)
+
+// row-boundary helpers, derived from the CURRENT cur_addr
+wire [8:0] cur_col  = {cur_addr[24], cur_addr[8:1]};  // 9-bit column
+wire [1:0] cur_bank = cur_addr[23:22];
+wire [12:0] cur_row = cur_addr[21:9];
+// words remaining in this physical 512-byte (256-word) row window
+wire        row_full = (row_words == 9'd255);          // 256th word being issued
+wire        last_word = (words_left == 13'd1);          // issuing the final word
+
 always @(posedge clk) begin
-	streaming    <= 1'b0;
 	stream_valid <= 1'b0;
-	stream_busy  <= 1'b0;
 	stream_done  <= 1'b0;
-	stream_dout  <= 16'd0;
+
+	// advance the in-flight shift register every clk
+	rd_inflight <= {rd_inflight[3:0], 1'b0};
+
+	// emit a word when its READ reaches the end of the capture pipeline
+	// (5 edges after the READ was driven; sd_data_in then holds the word).
+	if (rd_inflight[4]) begin
+		stream_dout  <= sd_data_in;
+		stream_valid <= 1'b1;
+	end
+
+	if (init) begin
+		streaming   <= 1'b0;
+		str_state   <= S_IDLE;
+		stream_busy <= 1'b0;
+		str_cmd     <= STR_CMD_INHIBIT;
+		str_addr    <= 13'd0;
+		str_ba      <= 2'd0;
+		str_dqm     <= 2'b00;
+		str_dly     <= 4'd0;
+		str_rc      <= 4'd0;
+		cur_addr    <= 25'd0;
+		words_left  <= 13'd0;
+		row_words   <= 9'd0;
+		open_bank   <= 2'd0;
+		rd_inflight <= 5'd0;
+		str_ras     <= 4'd0;
+	end else begin
+		// tRC / tRAS countdowns run continuously once armed at ACTIVE.
+		if (str_rc  != 0) str_rc  <= str_rc  - 4'd1;
+		if (str_ras != 0) str_ras <= str_ras - 4'd1;
+
+		case (str_state)
+
+		S_IDLE: begin
+			str_cmd <= STR_CMD_INHIBIT;
+			// latch a request only when the controller is out of reset
+			if (stream_req && (reset == 0) && (stream_words != 0)) begin
+				streaming   <= 1'b1;
+				stream_busy <= 1'b1;
+				cur_addr    <= stream_addr;
+				words_left  <= stream_words;
+				row_words   <= 9'd0;
+				rd_inflight <= 5'd0;
+				str_state   <= S_PRE_ALL;
+				str_dly     <= 4'd0;
+			end
+		end
+
+		// PRECHARGE all banks (A10=1) for a guaranteed-clean entry, then tRP.
+		S_PRE_ALL: begin
+			if (str_dly == 0) begin
+				str_cmd  <= STR_CMD_PRECHARGE;
+				str_addr <= 13'b0010000000000;  // A10=1 -> all banks
+				str_ba   <= 2'd0;
+				str_dqm  <= 2'b00;
+				str_dly  <= STR_TRP;            // wait tRP before ACTIVATE
+			end else begin
+				str_cmd <= STR_CMD_NOP;
+				str_dly <= str_dly - 4'd1;
+				if (str_dly == 4'd1)
+					str_state <= S_ACTIVATE;
+			end
+		end
+
+		// ACTIVE(bank,row), then tRCD before the first READ.
+		S_ACTIVATE: begin
+			if (str_dly == 0) begin
+				// honour tRC across the intervening PRECHARGE/REFRESH: do not
+				// re-ACTIVATE until the ACTIVE-to-ACTIVE window has elapsed.
+				if (str_rc == 0) begin
+					str_cmd   <= STR_CMD_ACTIVE;
+					str_addr  <= cur_row;
+					str_ba    <= cur_bank;
+					open_bank <= cur_bank;      // remember for the row-end PRECHARGE
+					str_dqm   <= 2'b00;
+					str_rc    <= STR_TRC;       // arm next-ACTIVE guard
+					str_ras   <= STR_TRAS;      // arm PRECHARGE guard
+					str_dly   <= STR_TRCD;      // wait tRCD before READ
+				end else begin
+					str_cmd <= STR_CMD_NOP;
+				end
+			end else begin
+				str_cmd <= STR_CMD_NOP;
+				str_dly <= str_dly - 4'd1;
+				if (str_dly == 4'd1) begin
+					str_state <= S_READ;
+					row_words <= 9'd0;
+				end
+			end
+		end
+
+		// Issue one READ per clk (A10=0, page mode). col from cur_addr.
+		// Advance cur_addr by 2 bytes/word, count words; stop at row end or
+		// when the whole burst is exhausted.
+		S_READ: begin
+			str_cmd  <= STR_CMD_READ;
+			// 13-bit address: [12:11]=0, [10]=A10=0 (page mode, no auto-pre),
+			// [9]=0, [8:0]=column = {a[24],a[8:1]} = cur_col.
+			str_addr <= {2'b00, 1'b0, 1'b0, cur_col};
+			str_ba   <= cur_bank;
+			str_dqm  <= 2'b00;
+			// mark this READ into the CAS pipeline (OR into the freshly shifted
+			// stage 0; the shift above already cleared bit 0 this cycle)
+			rd_inflight[0] <= 1'b1;
+
+			cur_addr   <= cur_addr + 25'd2;
+			words_left <= words_left - 13'd1;
+			row_words  <= row_words + 9'd1;
+
+			if (last_word || row_full) begin
+				// stop issuing; let the capture pipeline drain before PRECHARGE
+				str_state <= S_DRAIN;
+			end
+		end
+
+		// Hold (NOP) until every issued READ's data has landed (rd_inflight
+		// empties; note rd_inflight[3] of the LAST read fires one more cycle)
+		// AND tRAS since ACTIVE has elapsed. Only then PRECHARGE the bank.
+		S_DRAIN: begin
+			str_cmd <= STR_CMD_NOP;
+			if ((rd_inflight == 5'd0) && (str_ras == 4'd0))
+				str_state <= S_PRECHARGE;
+		end
+
+		// PRECHARGE the open bank (A10=0), then tRP.
+		S_PRECHARGE: begin
+			if (str_dly == 0) begin
+				str_cmd  <= STR_CMD_PRECHARGE;
+				str_addr <= 13'd0;       // A10=0 -> single-bank precharge
+				str_ba   <= open_bank;   // bank of the row that was activated
+				str_dqm  <= 2'b00;
+				str_dly  <= STR_TRP;
+			end else begin
+				str_cmd <= STR_CMD_NOP;
+				str_dly <= str_dly - 4'd1;
+				if (str_dly == 4'd1)
+					str_state <= S_REFRESH;
+			end
+		end
+
+		// AUTO_REFRESH once per row boundary, unconditional (all banks idle).
+		S_REFRESH: begin
+			if (str_dly == 0) begin
+				str_cmd  <= STR_CMD_AUTO_REFRESH;
+				str_addr <= 13'd0;
+				str_ba   <= 2'd0;
+				str_dqm  <= 2'b00;
+				str_dly  <= STR_TRP;     // brief settle before next ACTIVE attempt
+			end else begin
+				str_cmd <= STR_CMD_NOP;
+				str_dly <= str_dly - 4'd1;
+				if (str_dly == 4'd1) begin
+					if (words_left == 0)
+						str_state <= S_DONE;
+					else
+						str_state <= S_ACTIVATE;  // next row (tRC guard applies)
+				end
+			end
+		end
+
+		S_DONE: begin
+			str_cmd     <= STR_CMD_INHIBIT;
+			streaming   <= 1'b0;
+			stream_busy <= 1'b0;
+			stream_done <= 1'b1;
+			str_state   <= S_IDLE;
+		end
+
+		default: str_state <= S_IDLE;
+		endcase
+	end
 end
 
 
@@ -226,7 +471,13 @@ wire [3:0] run_cmd =
 	(!(req_we_r || req_oe_r) && (q == STATE_CMD_START))?CMD_AUTO_REFRESH:
 	CMD_INHIBIT;
 
-assign sd_cmd = (reset != 0)?reset_cmd:run_cmd;
+// While streaming, the normal run_cmd path is forced to INHIBIT and the
+// command comes from the stream FSM's registered command. reset always wins
+// (streaming is only ever set while reset==0, so the streaming branch only
+// applies during normal run).
+assign sd_cmd = (reset != 0) ? reset_cmd :
+                streaming     ? str_cmd   :
+                                run_cmd;
 
 wire [12:0] reset_addr = (reset == 5'd13)?13'b0010000000000:MODE;
 
@@ -235,12 +486,16 @@ wire [12:0] run_addr =
 
 assign sd_data_out = we_out?{ cycle_din, cycle_din }:16'b0;
 //register SDRAM output signals
-assign sd_addr = (reset != 0)?reset_addr:run_addr;
+assign sd_addr = (reset != 0) ? reset_addr :
+                 streaming     ? str_addr   :
+                                 run_addr;
 
-assign sd_ba = (reset != 0)?2'b00:
-	(q == STATE_CMD_START)?req_addr_r[23:22]:cycle_addr[23:22];
+assign sd_ba = (reset != 0) ? 2'b00 :
+               streaming     ? str_ba :
+               (q == STATE_CMD_START) ? req_addr_r[23:22] : cycle_addr[23:22];
 
-assign sd_dqm = we_out?{ cycle_addr[0], ~cycle_addr[0] }:2'b00;
+assign sd_dqm = streaming ? str_dqm :
+                we_out     ? { cycle_addr[0], ~cycle_addr[0] } : 2'b00;
 
 // drive control signals according to current command
 assign sd_cs  = sd_cmd[3];
