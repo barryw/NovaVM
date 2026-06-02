@@ -21,6 +21,10 @@ module test_sdram_model_selfcheck;
     logic clk = 0;
     always #5 clk = ~clk;  // 100 MHz — timing params are in these cycles
 
+    // CAS latency under test — must match sdram_model.svh's CAS / sdram.v's
+    // CAS_LATENCY=3. Used by the cycle-precise read-data-timing assertion.
+    localparam int unsigned CAS_SELF = 3;
+
     // ----- command encoding (mirror of sdram.v / sdram_model.svh) -----
     localparam logic [3:0] CMD_NOP       = 4'b0111;
     localparam logic [3:0] CMD_ACTIVE    = 4'b0011;
@@ -140,13 +144,41 @@ module test_sdram_model_selfcheck;
             issue(CMD_WRITE, {2'b00, 1'b0, 9'd7}, 2'b00, 2'b10, 16'h00EF);
             nop_cycles(2);
 
-            // READ col 7, A10=0 (page-mode). Data appears CAS=3 cycles later.
-            issue(CMD_READ, {2'b00, 1'b0, 9'd7}, 2'b00, 2'b00, 16'h0000);
-            // After issue() the READ was on a clk edge; sd_data_in updates CAS cycles
-            // after that edge. Wait generously then sample.
-            nop_cycles(5);
+            // READ col 7, A10=0 (page-mode). CYCLE-PRECISELY verify CAS latency:
+            //   * one cycle early (negedge after posedge N+CAS-1): sd_data_in must
+            //     NOT yet hold the word
+            //   * exactly CAS cycles later (negedge after posedge N+CAS): sd_data_in
+            //     must hold 0xBEEF
+            // where N is the posedge at which the model samples the READ. Sampling
+            // on the negedge AFTER each posedge lets the model's non-blocking
+            // sd_data_in update settle first. This is the assertion the old
+            // nop_cycles(5) sample could not make: it passed for a 3- OR 4-cycle
+            // latency alike. The full latency-vs-silicon proof is in
+            // test_sdram_model_vs_ctrl; this just stops a regression from hiding.
+            //
+            // Drive READ held from one negedge to the next (issue() style) so the
+            // command is stable across the whole posedge and the model reliably
+            // samples it there — that posedge is edge N. Resetting cmd immediately
+            // after the posedge would race the model's clocked sampling.
+            @(negedge clk);
+            cmd         = CMD_READ;
+            sd_addr     = {2'b00, 1'b0, 9'd7};
+            sd_ba       = 2'b00;
+            sd_dqm      = 2'b00;
+            sd_data_out = 16'h0000;
+            @(posedge clk);               // edge N — model samples the READ here
+            @(negedge clk);               // release READ -> NOP (held across N)
+            cmd     = CMD_NOP;
+            sd_addr = 13'd0;
+            // We are now at the negedge after posedge N (i.e. N+0). Advance to the
+            // negedge after posedge N+CAS-1: data must NOT be presented yet.
+            repeat (CAS_SELF - 1) @(negedge clk);
+            check("data NOT yet presented one cycle before CAS (N+CAS-1)",
+                  sd_data_in != 16'hBEEF);
+            // Advance one more cycle to the negedge after posedge N+CAS: valid now.
+            @(negedge clk);
             got = sd_data_in;
-            check("legal ACTIVATE->tRCD->READ->CAS returns stored word 0xBEEF",
+            check("data presented EXACTLY CAS cycles after READ (N+CAS) == 0xBEEF",
                   got == 16'hBEEF);
             check("high lane (even byte) == 0xBE", got[15:8] == 8'hBE);
             check("low lane  (odd  byte) == 0xEF", got[7:0]  == 8'hEF);

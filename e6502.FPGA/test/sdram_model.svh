@@ -2,9 +2,12 @@
 // Include into a testbench; instantiate `sdram_model chip(...)` wired to the sd_* pins.
 // Storage is 16-bit words keyed by {bank,row,col}; honours DQM byte masks on write.
 // Timing params in sdram_clk cycles @100MHz: tRCD=2, CAS=3, tRP=2, tRAS=5, tRC=7.
-// NOTE: returns correct DATA for page-mode (A10=0) reads; the controller owns exact
-// timing — but this model *checks* the controller obeys tRCD/CAS/tRP/tRAS/tRC and
-// $fatal's otherwise, which is the whole point of the bench.
+// NOTE: returns correct DATA exactly CAS cycles after a READ; the controller owns
+// exact timing — but this model *checks* the controller obeys tRCD/CAS/tRP/tRAS/tRC
+// and $fatal's otherwise, which is the whole point of the bench. Both addressing
+// styles are modelled: A10=0 page-mode (row stays open, explicit PRECHARGE closes
+// it) and A10=1 auto-precharge (the bank's row auto-closes after the access). The
+// current sdram.v controller uses auto-precharge; a future page-mode FSM uses A10=0.
 //
 // Command encoding decoded from {cs,ras,cas,we} (matches sdram.v ~line 112):
 //   NOP=4'b0111 ACTIVE=4'b0011 READ=4'b0101 WRITE=4'b0100
@@ -42,7 +45,8 @@ module sdram_model (
     // ----- timing parameters (sdram_clk cycles) -----
     localparam int unsigned tRCD = 2;  // ACTIVE -> READ/WRITE
     localparam int unsigned CAS  = 3;  // READ -> data on bus
-    localparam int unsigned tRP  = 2;  // PRECHARGE -> re-ACTIVATE (and -> AUTO_REFRESH)
+    localparam int unsigned tRP  = 2;  // PRECHARGE -> re-ACTIVATE (enforced on ACTIVE only;
+                                       // AUTO_REFRESH only checks all-banks-idle, not tRP/tRFC)
     localparam int unsigned tRAS = 5;  // ACTIVE -> PRECHARGE (row-active minimum)
     localparam int unsigned tRC  = 7;  // ACTIVE -> ACTIVE (full row cycle, incl. refresh)
 
@@ -60,30 +64,47 @@ module sdram_model (
     wire [3:0] cmd = {sd_cs, sd_ras, sd_cas, sd_we};
 
     // ----- sparse storage, keyed by 24-bit word address a[24:1] -----
-    logic [15:0] mem [bit [24:0]];
+    // a is a 25-bit byte address [24:0]; the word key is a[24:1] = 24 bits.
+    logic [15:0] mem [bit [23:0]];
 
     // ----- per-bank state -----
     logic [12:0] open_row    [0:3];   // currently-open row per bank
     logic        row_active  [0:3];   // bank has an open row
     // free-running cycle clock for timing checks
     longint unsigned cyc;
-    longint unsigned t_activate  [0:3];  // cycle stamp of last ACTIVE per bank
-    longint unsigned t_precharge [0:3];  // cycle stamp of last PRECHARGE per bank
+    // Per-bank event time stamps with explicit "valid" companions. A bare
+    // "!= 0" sentinel cannot distinguish "no event yet" from "event at cyc 0",
+    // so an event stamped at cyc 0 would silently disable the next tRP/tRC
+    // check. The *_v flags make "never happened" unambiguous.
+    longint unsigned t_activate    [0:3];  // cycle stamp of last ACTIVE per bank
+    bit              t_activate_v   [0:3];  // valid: an ACTIVE has occurred
+    longint unsigned t_precharge   [0:3];  // cycle stamp of last PRECHARGE per bank
+    bit              t_precharge_v  [0:3];  // valid: a PRECHARGE has occurred
 
-    // ----- CAS read pipeline: data appears CAS cycles after READ accepted -----
-    // depth CAS+1 so a value latched at READ surfaces exactly CAS cycles later.
-    logic [15:0] rd_pipe  [0:CAS];
-    logic        rd_valid [0:CAS];
+    // ----- CAS read pipeline: data appears exactly CAS cycles after READ -----
+    // A READ accepted at posedge N drives rd_pipe[0]; the word shifts up one
+    // stage per cycle and sd_data_in (the chip's output register) is loaded
+    // from the last shift stage, so the controller sees valid data on the
+    // edge it samples (q==STATE_CMD_READ, 3 cycles after the READ at q=3).
+    // Depth is CAS (indices 0..CAS-1): two shift stages plus the sd_data_in
+    // output register == CAS_LATENCY=3. This mirrors the read pipeline in the
+    // proven-correct test_sdram_loopback model (rd_pipe[0:3] feeding chip_out_r
+    // from rd_pipe[2] gated by rd_valid[2]); here sd_data_in *is* that output
+    // register, so it is fed from rd_pipe[CAS-1] gated by rd_valid[CAS-1].
+    logic [15:0] rd_pipe  [0:CAS-1];
+    logic        rd_valid [0:CAS-1];
 
     initial begin
         cyc = 0;
         for (int b = 0; b < 4; b++) begin
             row_active[b]  = 1'b0;
             open_row[b]    = 13'd0;
-            t_activate[b]  = 0;
-            t_precharge[b] = 0;
+            t_activate[b]      = 0;
+            t_activate_v[b]    = 1'b0;
+            t_precharge[b]     = 0;
+            t_precharge_v[b]   = 1'b0;
         end
-        for (int i = 0; i <= CAS; i++) begin
+        for (int i = 0; i < CAS; i++) begin
             rd_pipe[i]  = 16'h0000;
             rd_valid[i] = 1'b0;
         end
@@ -91,20 +112,20 @@ module sdram_model (
     end
 
     // word key from an open bank/row + presented column
-    function automatic bit [24:0] word_key(input logic [1:0] ba,
+    function automatic bit [23:0] word_key(input logic [1:0] ba,
                                             input logic [12:0] row,
                                             input logic [8:0] col);
         // Reconstruct the 24-bit word address a[24:1]:
         //   a[23:22]=bank, a[21:9]=row, a[8:1]=col[7:0], a[24]=col[8].
-        // Pack as {a[24], a[23:22], a[21:9], a[8:1]} into a 25-bit key (LSB a[1..]).
-        word_key = {col[8], ba, row, col[7:0]};
+        // Pack as {a[24], a[23:22], a[21:9], a[8:1]} into a 24-bit key.
+        word_key = {col[8], ba, row, col[7:0]};  // 1 + 2 + 13 + 8 = 24 bits
     endfunction
 
     always @(posedge clk) begin
         cyc <= cyc + 1;
 
         // ---- advance the CAS read pipeline ----
-        for (int i = CAS; i >= 1; i--) begin
+        for (int i = CAS-1; i >= 1; i--) begin
             rd_pipe[i]  <= rd_pipe[i-1];
             rd_valid[i] <= rd_valid[i-1];
         end
@@ -112,8 +133,11 @@ module sdram_model (
         rd_valid[0] <= 1'b0;
 
         // ---- present read data exactly CAS cycles after the READ ----
-        if (rd_valid[CAS])
-            sd_data_in <= rd_pipe[CAS];
+        // sd_data_in is the chip's output register; loading it from the last
+        // shift stage (rd_pipe[CAS-1]) adds the final cycle, giving a total of
+        // CAS cycles from READ to data-on-bus.
+        if (rd_valid[CAS-1])
+            sd_data_in <= rd_pipe[CAS-1];
 
         // ---- command decode ----
         case (cmd)
@@ -126,19 +150,20 @@ module sdram_model (
                            sd_ba, cyc);
                     $fatal(1, "ACTIVE without prior PRECHARGE");
                 end
-                if (t_precharge[sd_ba] != 0 && (cyc - t_precharge[sd_ba]) < tRP) begin
+                if (t_precharge_v[sd_ba] && (cyc - t_precharge[sd_ba]) < tRP) begin
                     $error("[sdram_model] ACTIVE too soon after PRECHARGE on bank %0d: %0d < tRP=%0d @cyc %0d",
                            sd_ba, (cyc - t_precharge[sd_ba]), tRP, cyc);
                     $fatal(1, "tRP violation (ACTIVE after PRECHARGE)");
                 end
-                if (t_activate[sd_ba] != 0 && (cyc - t_activate[sd_ba]) < tRC) begin
+                if (t_activate_v[sd_ba] && (cyc - t_activate[sd_ba]) < tRC) begin
                     $error("[sdram_model] ACTIVE too soon after ACTIVE on bank %0d: %0d < tRC=%0d @cyc %0d",
                            sd_ba, (cyc - t_activate[sd_ba]), tRC, cyc);
                     $fatal(1, "tRC violation (ACTIVE-to-ACTIVE)");
                 end
-                open_row[sd_ba]   <= sd_addr;
-                row_active[sd_ba] <= 1'b1;
-                t_activate[sd_ba] <= cyc;
+                open_row[sd_ba]     <= sd_addr;
+                row_active[sd_ba]   <= 1'b1;
+                t_activate[sd_ba]   <= cyc;
+                t_activate_v[sd_ba] <= 1'b1;
             end
 
             CMD_READ: begin
@@ -153,21 +178,26 @@ module sdram_model (
                            sd_ba, (cyc - t_activate[sd_ba]), tRCD, cyc);
                     $fatal(1, "tRCD violation (READ after ACTIVE)");
                 end
-                // page-mode: A10 (sd_addr[10]) must be 0 (no auto-precharge) for our burst.
-                // Auto-precharge reads are allowed by the chip but the page-mode engine
-                // must not use them; flag it so a stray A10=1 is caught.
-                if (sd_addr[10]) begin
-                    $error("[sdram_model] page-mode READ with A10=1 (auto-precharge) on bank %0d @cyc %0d",
-                           sd_ba, cyc);
-                    $fatal(1, "A10=1 on page-mode READ");
-                end
+                // A10 (sd_addr[10]) selects auto-precharge. The chip supports both:
+                //   A10=0 — page-mode: row stays open for further column accesses
+                //           (the row is closed later by an explicit PRECHARGE).
+                //   A10=1 — auto-precharge: the addressed bank's row is precharged
+                //           automatically after this access. The current sdram.v
+                //           controller uses this; a future page-mode FSM uses A10=0.
+                // Model both faithfully so the same oracle validates either path.
                 // look up the stored word (default 0 if never written) and launch it
                 // down the CAS pipeline.
                 begin
-                    bit [24:0] k;
+                    bit [23:0] k;
                     k = word_key(sd_ba, open_row[sd_ba], sd_addr[8:0]);
                     rd_pipe[0]  <= mem.exists(k) ? mem[k] : 16'h0000;
                     rd_valid[0] <= 1'b1;
+                end
+                if (sd_addr[10]) begin
+                    // auto-precharge: close the bank's row after the access.
+                    row_active[sd_ba]    <= 1'b0;
+                    t_precharge[sd_ba]   <= cyc;
+                    t_precharge_v[sd_ba] <= 1'b1;
                 end
             end
 
@@ -183,7 +213,7 @@ module sdram_model (
                     $fatal(1, "tRCD violation (WRITE after ACTIVE)");
                 end
                 begin
-                    bit [24:0]   k;
+                    bit [23:0]   k;
                     logic [15:0] cur;
                     k   = word_key(sd_ba, open_row[sd_ba], sd_addr[8:0]);
                     cur = mem.exists(k) ? mem[k] : 16'h0000;
@@ -192,11 +222,21 @@ module sdram_model (
                     if (!sd_dqm[0]) cur[7:0]  = sd_data_out[7:0];
                     mem[k] = cur;
                 end
+                // A10=1 auto-precharge (see READ): close the bank's row after the
+                // write. A10=0 keeps the row open for page-mode column writes.
+                if (sd_addr[10]) begin
+                    row_active[sd_ba]    <= 1'b0;
+                    t_precharge[sd_ba]   <= cyc;
+                    t_precharge_v[sd_ba] <= 1'b1;
+                end
             end
 
             CMD_PRECHARGE: begin
                 // A10 high = precharge all banks; A10 low = precharge sd_ba only.
                 // PRECHARGE legal only after tRAS since the bank's ACTIVATE.
+                // NOTE: t_activate / t_activate_v are intentionally NOT cleared
+                // here. tRC is ACTIVE-to-ACTIVE and must still be enforced across
+                // an intervening PRECHARGE, so the last-ACTIVE stamp must survive.
                 if (sd_addr[10]) begin
                     for (int b = 0; b < 4; b++) begin
                         if (row_active[b]) begin
@@ -205,8 +245,9 @@ module sdram_model (
                                        b, (cyc - t_activate[b]), tRAS, cyc);
                                 $fatal(1, "tRAS violation (PRECHARGE-ALL)");
                             end
-                            row_active[b]  <= 1'b0;
-                            t_precharge[b] <= cyc;
+                            row_active[b]    <= 1'b0;
+                            t_precharge[b]   <= cyc;
+                            t_precharge_v[b] <= 1'b1;
                         end
                     end
                 end else begin
@@ -216,8 +257,9 @@ module sdram_model (
                                    sd_ba, (cyc - t_activate[sd_ba]), tRAS, cyc);
                             $fatal(1, "tRAS violation (PRECHARGE)");
                         end
-                        row_active[sd_ba]  <= 1'b0;
-                        t_precharge[sd_ba] <= cyc;
+                        row_active[sd_ba]    <= 1'b0;
+                        t_precharge[sd_ba]   <= cyc;
+                        t_precharge_v[sd_ba] <= 1'b1;
                     end
                 end
             end
