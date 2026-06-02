@@ -243,13 +243,8 @@ line_bracket_depth:
 ; print_prompt — prints "? " to the screen
 ; ---------------------------------------------------------------------
 print_prompt:
-      LDX   #0
-@lp:  LDA   str_prompt,X
-      BEQ   @done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @lp
-@done:
+      JSR   print_inl
+      .byte "? ", 0
       LDA   #$01
       STA   VGC_CURSEN
       RTS
@@ -258,15 +253,9 @@ print_prompt:
 ; print_banner — prints title and current available heap bytes
 ; ---------------------------------------------------------------------
 print_banner:
-      LDX   #0
-@title:
-      LDA   str_banner_title,X
-      BEQ   @free
-      STA   VGC_CHAROUT
-      INX
-      BNE   @title
+      JSR   print_inl
+      .byte "Nova LOGO v1.0", $0D, $0A, 0
 
-@free:
       SEC
       LDA   #<HEAP_END
       SBC   heap_ptr
@@ -284,30 +273,14 @@ print_banner:
       STZ   eval_val_frac
       JSR   print_uint16
 
-      LDX   #0
-@suffix:
-      LDA   str_bytes_free,X
-      BEQ   @done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @suffix
-@done:
+      JSR   print_inl
+      .byte " BYTES FREE", $0D, $0A, $0D, $0A, 0
       RTS
 
 ; =====================================================================
 ; RODATA segment — string constants
 ; =====================================================================
       .segment "RODATA"
-
-str_banner_title:
-      .byte "Nova LOGO v1.0", $0D, $0A
-      .byte 0
-str_bytes_free:
-      .byte " BYTES FREE", $0D, $0A, $0D, $0A
-      .byte 0
-
-str_prompt:
-      .byte "? ", 0
 
 ; Extension ROM trampoline — copied to RAM at $0270 during cold_start.
 ; Swaps to extension ROM, calls entry, swaps back to Logo ROM.

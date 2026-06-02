@@ -205,26 +205,14 @@ proc_collect:
       DEX
       BRA   @print_name
 @print_def:
-      LDX   #0
-@pd_lp:
-      LDA   str_defined,X
-      BEQ   @pd_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @pd_lp
-@pd_done:
+      JSR   print_inl
+      .byte " DEFINED", 0
       JSR   eval_newline
       RTS
 
 @err_noname:
-      LDX   #0
-@en_lp:
-      LDA   str_to_needs_name,X
-      BEQ   @en_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @en_lp
-@en_done:
+      JSR   print_inl
+      .byte "TO NEEDS A NAME", 0
       JSR   eval_newline
       RTS
 
@@ -1931,12 +1919,6 @@ do_apply:
 ; RODATA — procedure strings
 ; =====================================================================
       .segment "RODATA"
-
-str_defined:
-      .byte " DEFINED", 0
-
-str_to_needs_name:
-      .byte "TO NEEDS A NAME", 0
 
 str_po_err:
       .byte "NOT ENOUGH INPUTS TO PO", 0

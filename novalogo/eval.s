@@ -636,14 +636,8 @@ eval_expr:
       INY
       DEX
       BNE   @vr_name
-      LDX   #0
-@vr_msg:
-      LDA   str_no_value,X
-      BEQ   @vr_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @vr_msg
-@vr_done:
+      JSR   print_inl
+      .byte " HAS NO VALUE", 0
       JSR   eval_newline
       JSR   try_throw_error
       JSR   eval_advance
@@ -664,6 +658,37 @@ eval_newline:
       LDA   #$0A
       STA   VGC_CHAROUT
       RTS
+
+; ---------------------------------------------------------------------
+; print_inl — print the null-terminated string that immediately follows the
+;   JSR in the instruction stream, then resume execution after the 0.
+;   Usage:  JSR print_inl
+;           .byte "TEXT", 0
+;   Clobbers: A, Y, ptr_lo, ptr_hi.
+; ---------------------------------------------------------------------
+print_inl:
+      PLA
+      STA   ptr_lo
+      PLA
+      STA   ptr_hi          ; ptr = (return addr)-1 = (inline string addr)-1
+      LDY   #0
+@pi_lp:
+      INY
+      LDA   (ptr_lo),Y
+      BEQ   @pi_done
+      STA   VGC_CHAROUT
+      BRA   @pi_lp
+@pi_done:
+      TYA
+      CLC
+      ADC   ptr_lo
+      STA   ptr_lo          ; ptr_lo = low(ptr+Y)
+      LDA   ptr_hi
+      ADC   #0              ; A = high(ptr+Y)
+      PHA                   ; push high of (ptr+Y)
+      LDA   ptr_lo
+      PHA                   ; push low
+      RTS                   ; RTS jumps to (ptr+Y)+1 = byte after the 0
 
 ; ---------------------------------------------------------------------
 ; eval_check_infix — if next token is TOK_INFIX, evaluate binary op
@@ -1763,14 +1788,8 @@ str_idk:
 str_notenough:
       .byte "NOT ENOUGH INPUTS", 0
 
-str_no_value:
-      .byte " HAS NO VALUE", 0
-
 str_error_tag:
       .byte 5, "ERROR"
-
-str_catch_notag:
-      .byte "CAN'T FIND CATCH TAG ", 0
 
 ; Powers of 10 table (16-bit): 10000, 1000, 100, 10, 1
 pow10_lo:

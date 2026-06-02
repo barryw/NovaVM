@@ -234,14 +234,8 @@ do_make:
       PLA
 @err:
       ; Print error
-      LDX   #0
-@ep:
-      LDA   str_make_err,X
-      BEQ   @ep_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @ep
-@ep_done:
+      JSR   print_inl
+      .byte "NOT ENOUGH INPUTS TO MAKE", 0
       JSR   eval_newline
       JMP   eval_continue
 
@@ -436,26 +430,14 @@ do_repeat:
       ; Restore stack before printing error
       JSR   repeat_restore_state
       ; Fall through to error message
-      LDX   #0
-@eb_lp:
-      LDA   str_repeat_bracket,X
-      BEQ   @eb_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @eb_lp
-@eb_done:
+      JSR   print_inl
+      .byte "REPEAT NEEDS [ BODY ]", 0
       JSR   eval_newline
       JMP   eval_continue
 
 @err_args:
-      LDX   #0
-@ea_lp:
-      LDA   str_repeat_err,X
-      BEQ   @ea_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @ea_lp
-@ea_done:
+      JSR   print_inl
+      .byte "NOT ENOUGH INPUTS TO REPEAT", 0
       JSR   eval_newline
       JMP   eval_continue
 
@@ -492,29 +474,6 @@ repeat_restore_state:
       PHA
       LDA   handler_lo
       PHA
-      RTS
-
-; ---------------------------------------------------------------------
-; print_byte_hex — print A as 2 hex digits
-; ---------------------------------------------------------------------
-print_byte_hex:
-      PHA
-      LSR
-      LSR
-      LSR
-      LSR
-      JSR   @nibble
-      PLA
-      AND   #$0F
-      JSR   @nibble
-      RTS
-@nibble:
-      CMP   #$0A
-      BCC   @digit
-      ADC   #$06               ; carry is set, so adds 7
-@digit:
-      ADC   #'0'
-      STA   VGC_CHAROUT
       RTS
 
 ; ---------------------------------------------------------------------
@@ -1037,13 +996,8 @@ do_throw:
 
 @no_catch:
       ; Print "CAN'T FIND CATCH TAG " + the tag
-      LDX   #0
-@nc_lp:
-      LDA   str_catch_notag,X
-      BEQ   @nc_word
-      STA   VGC_CHAROUT
-      INX
-      BNE   @nc_lp
+      JSR   print_inl
+      .byte "CAN'T FIND CATCH TAG ", 0
 @nc_word:
       ; Print the tag word
       LDA   eval_val_lo
@@ -1328,14 +1282,8 @@ for_err_ctrl_pop2:
       PLA
       PLA
 for_err_ctrl:
-      LDX   #0
-@ec_lp:
-      LDA   str_for_err,X
-      BEQ   @ec_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @ec_lp
-@ec_done:
+      JSR   print_inl
+      .byte "FOR NEEDS [VAR START END]", 0
       JSR   eval_newline
       JMP   eval_continue
 
@@ -1348,14 +1296,8 @@ for_err_bracket_pop7:
       PLA
       PLA
       PLA
-      LDX   #0
-@eb_lp:
-      LDA   str_for_bracket,X
-      BEQ   @eb_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @eb_lp
-@eb_done:
+      JSR   print_inl
+      .byte "FOR NEEDS [BODY]", 0
       JSR   eval_newline
       JMP   eval_continue
 
@@ -1608,14 +1550,8 @@ wu_err_bracket:
       STA   body_start_lo
       PLA                           ; discard mode
 
-      LDX   #0
-@wu_eb_lp:
-      LDA   str_while_bracket,X
-      BEQ   @wu_eb_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @wu_eb_lp
-@wu_eb_done:
+      JSR   print_inl
+      .byte "WHILE/UNTIL NEEDS [COND] [BODY]", 0
       JSR   eval_newline
       JMP   eval_continue
 
@@ -2438,24 +2374,6 @@ str_char_err:
 
 str_ascii_err:
       .byte "NOT ENOUGH INPUTS TO ASCII", 0
-
-str_for_err:
-      .byte "FOR NEEDS [VAR START END]", 0
-
-str_for_bracket:
-      .byte "FOR NEEDS [BODY]", 0
-
-str_while_bracket:
-      .byte "WHILE/UNTIL NEEDS [COND] [BODY]", 0
-
-str_make_err:
-      .byte "NOT ENOUGH INPUTS TO MAKE", 0
-
-str_repeat_err:
-      .byte "NOT ENOUGH INPUTS TO REPEAT", 0
-
-str_repeat_bracket:
-      .byte "REPEAT NEEDS [ BODY ]", 0
 
 str_if_err:
       .byte "NOT ENOUGH INPUTS TO IF", 0
