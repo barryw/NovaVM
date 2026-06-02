@@ -86,7 +86,9 @@ module test_xram_sdram;
         .addrA(sdram_addr_a), .weA(sdram_we_a), .dinA(sdram_din_a),
         .oeA(sdram_oe_a), .doutA(sdram_dout_a), .doneA(sdram_done_a),
         // Port B idle
-        .addrB(25'd0), .weB(1'b0), .dinB(8'd0), .oeB(1'b0), .doutB(), .doneB()
+        .addrB(25'd0), .weB(1'b0), .dinB(8'd0), .oeB(1'b0), .doutB(), .doneB(),
+        // Stream port idle (stub)
+        .stream_req(1'b0), .stream_addr(25'd0), .stream_words(13'd0)
     );
 
     // -----------------------------------------------------------------

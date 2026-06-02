@@ -1139,7 +1139,9 @@ module fpga_top (
         // Port B — debug bridge has priority over the SID filter curve reader.
         .addrB(mux_sdram_addrB), .weB(mux_sdram_weB),
         .dinB(mux_sdram_dinB),   .oeB(mux_sdram_oeB),
-        .doutB(core_sdram_doutB), .doneB(core_sdram_doneB)
+        .doutB(core_sdram_doutB), .doneB(core_sdram_doneB),
+        // Stream port idle (Task 2 stub — FSM lands in Task 4)
+        .stream_req(1'b0), .stream_addr(25'd0), .stream_words(13'd0)
     );
 
     // =========================================================================

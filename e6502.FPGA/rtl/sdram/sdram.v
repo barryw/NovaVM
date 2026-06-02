@@ -52,7 +52,17 @@ module sdram
 	input      [7:0] dinB,       // data input from chipset/cpu
 	input            oeB,        // ppu requests data
 	output reg [7:0] doutB,      // data output to ppu
-	output reg       doneB       // one clk pulse when port B transfer completed
+	output reg       doneB,      // one clk pulse when port B transfer completed
+
+	// Page-mode burst read port (sdram_clk domain). Mutually exclusive with
+	// ports A/B via the `streaming` flag.
+	input            stream_req,    // pulse to start a burst
+	input     [24:0] stream_addr,   // start BYTE address
+	input     [12:0] stream_words,  // # 16-bit words to read
+	output reg[15:0] stream_dout,
+	output reg       stream_valid,  // 1-clk strobe per word
+	output reg       stream_busy,
+	output reg       stream_done    // 1-clk pulse at completion
 );
 
 // no burst configured
@@ -63,7 +73,17 @@ localparam CAS_LATENCY    = 3'd3;   // 2/3 allowed
 localparam OP_MODE        = 2'b00;  // only 00 (standard operation) allowed
 localparam NO_WRITE_BURST = 1'b1;   // 0= write burst enabled, 1=only single access write
 
-localparam MODE = { 3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_LENGTH}; 
+localparam MODE = { 3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_LENGTH};
+
+// STUB (Task 4 replaces): no streaming yet.
+reg streaming;
+always @(posedge clk) begin
+	streaming    <= 1'b0;
+	stream_valid <= 1'b0;
+	stream_busy  <= 1'b0;
+	stream_done  <= 1'b0;
+	stream_dout  <= 16'd0;
+end
 
 
 // ---------------------------------------------------------------------
