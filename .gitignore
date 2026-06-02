@@ -293,3 +293,15 @@ NovaDraw/*.app/
 examples/novaz/build/
 examples/novaz/dist/
 examples/novaz/projects/*/STORY.BIN
+
+# Copyrighted Infocom material must never be committed. The NovaZ collection
+# images live under examples/novaz/dist/ (ignored above); these rules block the
+# raw story files and game disk images repo-wide, wherever they land.
+examples/novaz/dist/collection/
+*.z3
+*.z4
+*.z5
+*.z6
+*.z7
+*.z8
+*.blb
