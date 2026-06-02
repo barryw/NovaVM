@@ -2250,6 +2250,112 @@ public class NovaLogoTests
             $"Expected three '7' lines from a continued REPL statement, got {count}.\n{screen}");
     }
 
+    [TestMethod]
+    public void EditReopensExistingProcedureAndRoundTripsBody()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueProcedureDefinition(cpu, bus, editor, "TO GREET", "PRINT 11");
+        RunUntilScreenContains(cpu, bus, "GREET DEFINED", 60_000_000);
+
+        // EDIT must reopen GREET in the editor PRE-FILLED with its existing body.
+        // We immediately save+quit without changing anything: if EDIT opened an
+        // empty editor (like a fresh TO), the save would wipe GREET's body and
+        // the later call would print nothing.
+        QueueLine(editor, "EDIT GREET");
+        RunSteps(cpu, bus, 5_000_000);
+        editor.QueueInput(CtrlS);
+        editor.QueueInput(CtrlQ);
+        RunSteps(cpu, bus, 5_000_000);
+
+        string afterEdit = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(afterEdit.Contains("I DON'T KNOW HOW TO", StringComparison.Ordinal),
+            $"EDIT must be a recognized command.\n{afterEdit}");
+
+        QueueLine(editor, "GREET");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "11") count++;
+        Assert.IsTrue(count >= 1,
+            $"GREET should still print 11 after EDIT round-trip (body must survive).\n{screen}");
+    }
+
+    [TestMethod]
+    public void EditInsertsLineIntoExistingProcedure()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueProcedureDefinition(cpu, bus, editor, "TO GREET", "PRINT 11");
+        RunUntilScreenContains(cpu, bus, "GREET DEFINED", 60_000_000);
+
+        // EDIT reopens GREET with the cursor at the start of the body. Typing a
+        // new line inserts it before the existing "PRINT 11", proving the body
+        // was pre-filled AND that edits take effect.
+        QueueLine(editor, "EDIT GREET");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 22");
+        editor.QueueInput(CtrlS);
+        editor.QueueInput(CtrlQ);
+        RunUntilScreenContains(cpu, bus, "GREET DEFINED", 60_000_000);
+
+        QueueLine(editor, "GREET");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        bool has22 = false, has11 = false;
+        foreach (string line in screen.Split('\n'))
+        {
+            if (line.Trim() == "22") has22 = true;
+            if (line.Trim() == "11") has11 = true;
+        }
+        Assert.IsTrue(has22, $"Edited-in 'PRINT 22' should run.\n{screen}");
+        Assert.IsTrue(has11, $"Original 'PRINT 11' should survive the edit.\n{screen}");
+    }
+
+    [TestMethod]
+    public void EditCreatesProcedureWhenMissing()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // EDIT on a procedure that does not exist yet opens a fresh editor to
+        // define it (UCBLogo behaviour) instead of erroring.
+        QueueLine(editor, "EDIT NEWGUY");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 55");
+        editor.QueueInput(CtrlS);
+        editor.QueueInput(CtrlQ);
+        RunUntilScreenContains(cpu, bus, "NEWGUY DEFINED", 60_000_000);
+
+        QueueLine(editor, "NEWGUY");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("I DON'T KNOW HOW TO", StringComparison.Ordinal),
+            $"EDIT of a missing procedure should create it, not error.\n{screen}");
+        int count = 0;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "55") count++;
+        Assert.IsTrue(count >= 1, $"Created NEWGUY should print 55.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)

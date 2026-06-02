@@ -47,6 +47,7 @@ proc_edit_cur_hi: .res 1
 proc_scan_off_lo: .res 1        ; 16-bit scan offset for body extraction
 proc_scan_off_hi: .res 1
 proc_brk_depth:   .res 1        ; bracket/paren nesting depth while accumulating a statement
+proc_tmp:         .res 1        ; scratch byte (EDIT record→buffer copy)
 
 ; Save area for eval state during procedure invocation
 save_eval_cur_lo: .res 1
@@ -194,20 +195,7 @@ proc_collect:
 
       ; Print "NAME DEFINED\n"
 @body_done:
-      LDX   proc_name_len
-      LDY   #0
-@print_name:
-      CPX   #0
-      BEQ   @print_def
-      LDA   proc_name_buf+1,Y
-      STA   VGC_CHAROUT
-      INY
-      DEX
-      BRA   @print_name
-@print_def:
-      JSR   print_inl
-      .byte " DEFINED", 0
-      JSR   eval_newline
+      JSR   proc_print_defined
       RTS
 
 @err_noname:
@@ -217,17 +205,32 @@ proc_collect:
       RTS
 
 ; ---------------------------------------------------------------------
-; proc_open_editor — run the shared EDITUI editor on an empty body buffer.
-;   Builds the editor title "TO <name>", hands the buffer/cap/title to the
-;   extension's EXT_CMD_EDIT, then on return builds the procedure record from
-;   the edited body when the user asked to save.
-;   Inputs:  proc_name_buf / proc_name_len, proc_param_buf (already parsed)
-;   Returns: carry set = saved (record built), carry clear = abandoned
+; proc_print_defined — print "<name> DEFINED\n" (name from proc_name_buf).
 ; ---------------------------------------------------------------------
-proc_open_editor:
-      ; --- build the scaffold "TO <name> :params\n  \nEND\n" in proc_body_buf.
-      ; Y is the 8-bit write index (the scaffold is always < 256 bytes: name<=31,
-      ; params<=127, plus a dozen structure bytes).
+proc_print_defined:
+      LDX   proc_name_len
+      LDY   #0
+@pn:
+      CPX   #0
+      BEQ   @pd
+      LDA   proc_name_buf+1,Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BRA   @pn
+@pd:
+      JSR   print_inl
+      .byte " DEFINED", 0
+      JSR   eval_newline
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_build_header — write the "TO <name> :params" first line into
+;   proc_body_buf (no trailing newline). Built with 8-bit Y since the header
+;   is always < 256 bytes (name<=31, params<=127). Returns Y = header length.
+;   Inputs: proc_name_buf/proc_name_len, proc_param_buf/proc_param_end.
+; ---------------------------------------------------------------------
+proc_build_header:
       LDY   #0
       LDA   #'T'
       STA   proc_body_buf,Y
@@ -272,6 +275,11 @@ proc_open_editor:
       DEC   proc_rec_off
       BRA   @ppc
 @pp_done:
+      RTS
+
+proc_open_editor:
+      ; build "TO <name> :params" header, then append an empty body "  ".
+      JSR   proc_build_header
       ; Y = line-1 length. The body line is line 1's '\n' + 2 indent spaces,
       ; so the cursor lands at offset (line1 + 3).
       TYA
@@ -308,6 +316,13 @@ proc_open_editor:
       STY   proc_body_len_lo
       STZ   proc_body_len_hi
 
+; ---------------------------------------------------------------------
+; proc_edit_run — shared tail: build the editor title, hand proc_body_buf
+;   (with proc_body_len + proc_edit_cur already set) to the EDITUI editor, and
+;   on save extract the body + (re)build the procedure record.
+;   Returns: carry set = saved, carry clear = abandoned.
+; ---------------------------------------------------------------------
+proc_edit_run:
       ; --- title "TO <name>" + NUL for the editor's title band ---
       LDA   #'T'
       STA   proc_editor_title+0
@@ -371,6 +386,182 @@ proc_open_editor:
 @abandoned:
       CLC
       RTS
+
+; ---------------------------------------------------------------------
+; proc_buf_put — append A to proc_body_buf at ptr2, advancing ptr2 and the
+;   16-bit proc_body_len counter. Preserves A; clobbers Y.
+; ---------------------------------------------------------------------
+proc_buf_put:
+      LDY   #0
+      STA   (ptr2_lo),Y
+      INC   ptr2_lo
+      BNE   :+
+      INC   ptr2_hi
+:     INC   proc_body_len_lo
+      BNE   :+
+      INC   proc_body_len_hi
+:     RTS
+
+; ---------------------------------------------------------------------
+; proc_record_to_buffers — unpack the procedure record at proc_entry into the
+;   collect buffers so it can be edited and rebuilt:
+;     proc_name_buf/proc_name_len, proc_param_buf/proc_param_cnt/proc_param_end,
+;     and proc_body_src/proc_body_len = the record's body text (ptr + length).
+;   The name+param region is < 256 bytes so 8-bit Y indexing is safe there.
+; ---------------------------------------------------------------------
+proc_record_to_buffers:
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      ; --- name (record +2 = len, +3.. = chars) ---
+      LDY   #2
+      LDA   (ptr_lo),Y
+      STA   proc_name_buf
+      STA   proc_name_len
+      INY                         ; Y=3 -> first name char
+      LDX   #0
+@rb_nm:
+      CPX   proc_name_len
+      BCS   @rb_nm_done
+      LDA   (ptr_lo),Y
+      STA   proc_name_buf+1,X
+      INY
+      INX
+      BRA   @rb_nm
+@rb_nm_done:
+      ; --- param_count then packed params ---
+      LDA   (ptr_lo),Y           ; param_count
+      STA   proc_param_cnt
+      STA   proc_param_buf        ; [0] = count
+      STA   proc_tmp              ; remaining params
+      INY                         ; Y -> first param len
+      LDX   #1                    ; dest index into proc_param_buf
+@rb_param:
+      LDA   proc_tmp
+      BEQ   @rb_params_done
+      DEC   proc_tmp
+      LDA   (ptr_lo),Y           ; param name length
+      STA   proc_param_buf,X
+      STA   proc_rec_off          ; char counter
+      INY
+      INX
+@rb_pchars:
+      LDA   proc_rec_off
+      BEQ   @rb_param
+      DEC   proc_rec_off
+      LDA   (ptr_lo),Y
+      STA   proc_param_buf,X
+      INY
+      INX
+      BRA   @rb_pchars
+@rb_params_done:
+      STX   proc_param_end
+      ; Y -> body_len_lo within the record. Compute absolute pointer.
+      TYA
+      CLC
+      ADC   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      ADC   #0
+      STA   ptr_hi               ; ptr -> body_len_lo
+      LDY   #0
+      LDA   (ptr_lo),Y
+      STA   proc_body_len_lo     ; record body length
+      INY
+      LDA   (ptr_lo),Y
+      STA   proc_body_len_hi
+      CLC                         ; body src = ptr + 2
+      LDA   ptr_lo
+      ADC   #2
+      STA   proc_body_src_lo
+      LDA   ptr_hi
+      ADC   #0
+      STA   proc_body_src_hi
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_edit_reconstruct — build the full editable text "TO <name> :params\n
+;   <body>END\n" into proc_body_buf from the collect buffers + the record body
+;   (proc_body_src/proc_body_len set by proc_record_to_buffers). Sets
+;   proc_body_len = total buffer length and proc_edit_cur = start of the body.
+; ---------------------------------------------------------------------
+proc_edit_reconstruct:
+      ; Save the record body src/len before proc_body_len is repurposed.
+      LDA   proc_body_src_lo
+      STA   proc_ptr_lo
+      LDA   proc_body_src_hi
+      STA   proc_ptr_hi
+      LDA   proc_body_len_lo
+      STA   num_tmp_lo
+      LDA   proc_body_len_hi
+      STA   num_tmp_hi
+      ; Header "TO name params" (8-bit), then a newline.
+      JSR   proc_build_header     ; Y = header length
+      LDA   #$0A
+      STA   proc_body_buf,Y
+      INY                         ; Y = body-line start offset
+      STY   proc_edit_cur_lo
+      STZ   proc_edit_cur_hi
+      STY   proc_body_len_lo
+      STZ   proc_body_len_hi
+      ; dest pointer ptr2 = proc_body_buf + Y
+      TYA
+      CLC
+      ADC   #<proc_body_buf
+      STA   ptr2_lo
+      LDA   #>proc_body_buf
+      ADC   #0
+      STA   ptr2_hi
+      ; copy the record body (num_tmp bytes from proc_ptr)
+@rc_body:
+      LDA   num_tmp_lo
+      ORA   num_tmp_hi
+      BEQ   @rc_body_done
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      JSR   proc_buf_put
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     LDA   num_tmp_lo
+      BNE   @rc_dec
+      DEC   num_tmp_hi
+@rc_dec:
+      DEC   num_tmp_lo
+      BRA   @rc_body
+@rc_body_done:
+      ; append "END" + newline
+      LDA   #'E'
+      JSR   proc_buf_put
+      LDA   #'N'
+      JSR   proc_buf_put
+      LDA   #'D'
+      JSR   proc_buf_put
+      LDA   #$0A
+      JSR   proc_buf_put
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_edit — handle "EDIT <name>" / "ED <name>". eval_cur is at the name
+;   token. If the procedure exists, reopen it in the editor pre-filled with its
+;   current definition; otherwise fall back to the TO collector (create it).
+; ---------------------------------------------------------------------
+proc_edit:
+      LDA   eval_cur_lo
+      ORA   eval_cur_hi
+      BEQ   @to_collect
+      JSR   proc_lookup
+      BCS   @to_collect          ; unknown -> create via the TO collector
+      JSR   proc_record_to_buffers
+      JSR   proc_edit_reconstruct
+      JSR   proc_edit_run
+      BCC   @done                ; abandoned
+      JSR   proc_print_defined
+@done:
+      RTS
+@to_collect:
+      JMP   proc_collect
 
 ; ---------------------------------------------------------------------
 ; proc_extract_body — narrow proc_body_buf/proc_body_len down to just the body:

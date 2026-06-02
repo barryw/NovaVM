@@ -674,25 +674,11 @@ do_if:
 @err_bracket:
       LDX   #<str_if_bracket
       LDY   #>str_if_bracket
-      BRA   if_print_err
+      JMP   list_print_err
 @err:
       LDX   #<str_if_err
       LDY   #>str_if_err
-      ; fall through
-
-if_print_err:
-      STX   ptr_lo
-      STY   ptr_hi
-      LDY   #0
-@lp:
-      LDA   (ptr_lo),Y
-      BEQ   @done
-      STA   VGC_CHAROUT
-      INY
-      BNE   @lp
-@done:
-      JSR   eval_newline
-      JMP   eval_continue
+      JMP   list_print_err
 
 ; ---------------------------------------------------------------------
 ; do_ifelse — IFELSE condition [true-body] [false-body]
@@ -724,25 +710,11 @@ do_ifelse:
 @err_bracket:
       LDX   #<str_ifelse_bracket
       LDY   #>str_ifelse_bracket
-      BRA   ifelse_print_err
+      JMP   list_print_err
 @err:
       LDX   #<str_ifelse_err
       LDY   #>str_ifelse_err
-      ; fall through
-
-ifelse_print_err:
-      STX   ptr_lo
-      STY   ptr_hi
-      LDY   #0
-@lp:
-      LDA   (ptr_lo),Y
-      BEQ   @done
-      STA   VGC_CHAROUT
-      INY
-      BNE   @lp
-@done:
-      JSR   eval_newline
-      JMP   eval_continue
+      JMP   list_print_err
 
 ; ---------------------------------------------------------------------
 ; do_stop — STOP: exit current procedure immediately (no return value)
@@ -908,26 +880,12 @@ do_catch:
       ; Print bracket error
       LDX   #<str_catch_bracket
       LDY   #>str_catch_bracket
-      BRA   catch_print_err
+      JMP   list_print_err
 
 @err_tag:
       LDX   #<str_catch_err
       LDY   #>str_catch_err
-      ; fall through
-
-catch_print_err:
-      STX   ptr_lo
-      STY   ptr_hi
-      LDY   #0
-@lp:
-      LDA   (ptr_lo),Y
-      BEQ   @done
-      STA   VGC_CHAROUT
-      INY
-      BNE   @lp
-@done:
-      JSR   eval_newline
-      JMP   eval_continue
+      JMP   list_print_err
 
 ; ---------------------------------------------------------------------
 ; do_throw — THROW "tag: unwind to matching CATCH
@@ -1022,7 +980,7 @@ do_throw:
 @err_tag:
       LDX   #<str_throw_err
       LDY   #>str_throw_err
-      JMP   catch_print_err
+      JMP   list_print_err
 
 ; ---------------------------------------------------------------------
 ; do_repcount — REPCOUNT: reporter returning current 1-based repeat index
