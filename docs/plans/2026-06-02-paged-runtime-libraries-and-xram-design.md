@@ -1,7 +1,9 @@
 # Paged Runtime Libraries + Authoritative XRAM — Design
 
 **Date:** 2026-06-02
-**Status:** Foundational decisions LOCKED (via brainstorm). Detail sections OPEN.
+**Status:** Foundational decisions LOCKED. Streaming-engine detail LOCKED (§3.3, brainstorm
+2026-06-02). Remaining OPEN: module header bytes, boot staging, Regime-2 FIFO/write-burst,
+callback ABI.
 **Scope:** Cross-runtime architecture for BASIC / Logo / Pascal / Forth (and future
 language runtimes). Does not change machine-owning runtimes (NovaZ) except to make
 their XRAM use *visible*.
@@ -112,77 +114,124 @@ Two intertwined systems:
   This is a **boot** cost (stage the shelf once), not a per-page cost.
 - **Runtime cold page = XRAM → bank-1**, entirely on-FPGA. See §3.3.
 
-### 3.3 The page-in path (LOCKED: page-mode streaming engine)
+### 3.3 The page-in path + the general XRAM streaming engine (LOCKED)
 
-**Destination wiring (small):** paging is a new DMA *destination space*, not a new
-engine. `dma.sv` (`$BA63`: `CMD`/`STATUS`/`SRC*`/`DST*`/`LEN*`) already copies
-XRAM→{CPU,VGC} with busy/done and a CPU stall (`rdy_out`); it just lacks an
-`ext_rom` destination. Add `SPACE_EXTROM` and mux the DMA write into the `ext_rom`
-port that boot's `dbg_rom_we`/`erom_we` already drives. "Page module M" = an
-ordinary DMA command `SRC=XRAM@base, DST=EXTROM, LEN=16384`.
+Detailed via brainstorm 2026-06-02, grounded in a full read of `sdram.v`,
+`xram_sdram.sv`, `dma.sv`, `blitter.sv`, `dpram.sv`, the real clock setup
+(`fpga_top.sv`: `clk_sdram`=100 MHz, `clkref`=6.25 MHz, **16:1**), and prior-art recon.
 
-**Why the read path needs work:** `sdram.v` (MiST, MT48LC16M16, clk ≤128 MHz) is
-hardwired `BURST_LENGTH=3'b000` (single word), `NO_WRITE_BURST=1`, and
-time-multiplexes two *random-access* ports by `clkref` — full ACTIVATE→READ→precharge
-per word, wrapped by a 3-stage CDC each way (`xram_sdram.sv`). Byte-at-a-time that is
-**~4–6 ms / 16K** — *not* acceptable.
+**Prior-art recon — the implementation vehicle (LOCKED).** The entire retro-FPGA SDRAM
+family — MiSTer (`SNES`/`Gameboy`/`TurboGrafx` `sdram.sv`), emard's ULX3S ports
+(`ulx3s-misc/examples/sdram/*`), pnru — is **burst-length-1 with auto-precharge per
+word**; they get throughput from *time-multiplexing ports*, not page-mode streaming. So
+"adopt a MiSTer burst core" is a non-option — that core does not exist. LiteDRAM is
+ruled out (ECP5 PHY is DDR3-only, Migen-heavy). The one genuine full-page donor is
+**OpenCores `sdr_ctrl`** (proper ACTIVATE→READA→BURST_STOP→PRECHARGE→AUTO_REFRESH
+sequencing, plain Verilog, no vendor primitives, ships an SDRAM model + TB).
+**Decision: EXTEND our MiST `sdram.v` with a new page-mode read branch; borrow only
+`sdr_ctrl`'s command-sequencing + row-boundary/refresh-interleave *pattern*; keep our
+own proven 16:1 clkref phasing and ECP5 read-capture FF.** Every "swap the core" path
+re-solves timing we already closed *and delivers zero burst gain*. (License: borrow the
+pattern, not the file; our `sdram.v` is already GPLv3 so even direct borrowing is
+compatible.)
 
-**Decision: build a page-mode streaming read engine (~80 µs).** Open a row once
-(512 words = 1KB on this part), stream its columns at ~1 word/clk (CAS-pipelined),
-write straight into `ext_rom` BRAM (1 word → 2 byte-writes). 16K = 16 rows ≈
-`16 × (512 + ~7)` ≈ 8,300 `sdram_clk` ≈ **65–85 µs @ 100–128 MHz** (~60×). The engine
-lives in the `sdram_clk` domain (no per-byte CDC) and **owns the SDRAM for the page**
-— legitimate because the CPU is already stalled (`rdy_out`) for the whole copy, which
-also makes a page-in **atomic** (resolves the "call during in-flight page" race —
-no queue needed). Refresh is honored between rows.
+**Why the engine is foundational, not premature (LOCKED).** The justification is **bulk
+XRAM bandwidth**, not page-in latency. Arcade games — the product target — blit
+tiles+sprites from XRAM every frame. At today's ~400 ns/byte XRAM rate, a 16.6 ms frame
+moves only **~41 KB**; one 320×240 4bpp screen is **38.4 KB**. So today you can move
+*roughly one screenful per frame and nothing else* — the real ceiling on the whole
+arcade-game promise. The streaming engine lifts that frame budget from ~41 KB toward
+megabytes. It is the bandwidth foundation for both games (Regime 2) and shared paged
+libraries (Regime 1) — **not** premature optimization. A per-byte page-in stub (Tier 0
+below) would be a throwaway, deleted the moment Regime 2 forces the engine.
 
-**Scope: this is the GENERAL XRAM bulk path, not a one-off page engine.** The
-streaming read (+ write-burst) lives once in `xram_sdram.sv` + `sdram.v` as a
-*"burst N words from addr"* request mode, and every run-mover reaches it through the
-existing port-A / `bm_xram_*` arbitration. Beneficiaries (all move contiguous runs):
+**Two regimes — build order (LOCKED).** The 60× win splits by clock domain:
+- **Regime 1 — in-domain (page-in: XRAM→`ext_rom` BRAM).** Both ends reachable in
+  `sdram_clk`; **no CDC on the data path**. Simplest consumer. Built first as the *proof*.
+- **Regime 2 — cross-domain (DMA→VGC/CPU, blitter STASH/FETCH, XMC).** Destinations live
+  in the pixel-clock domain → need an async rate-matching FIFO. This is where the *game*
+  bandwidth payoff lands — a **committed next phase** ("fast everywhere"), not a vague
+  maybe. FIFO depth + the symmetric write-burst engine are designed against measured
+  blitter/DMA workloads.
 
-| Consumer | XRAM use | Benefit |
-|---|---|---|
-| DMA (`dma.sv` `$BA63`) | bulk XRAM↔{CPU,VGC} | read+write runs |
-| Blitter (`blitter.sv` `$BA83`) | 2D rect *rows* (tiles/sprites, STASH/FETCH) | prime case — each row is a run |
-| XMC bulk (`xram_copy_*`/`fill`, `STASH`/`FETCH`) | CPU↔XRAM runs | read+write |
-| Library page-in (new) | XRAM→`ext_rom` 16K | client #1 |
-| NovaHost boot (port B `pokeSdramStream`) | SD→XRAM block writes | write-burst speeds boot |
+The **engine itself is built general** ("burst N words from addr") from day one so
+Regime 2 plugs straight in; only the Regime-2 *consumer wiring* + FIFO are sequenced
+after the page-in proof.
 
-Untouched: CPU single-byte `xram_read8/write8` (no run to amortize — already fine);
-video/pixel fetch (doesn't use XRAM — timing-critical lives in BRAM).
+**The page-mode read FSM (LOCKED).** `run_addr` (sdram.v:213) fixes the decode every
+access uses: `row=a[21:9]`, `col={a[24],a[8:1]}`, `bank=a[23:22]`. For our 512 KB region
+(`a[18:0]`, so `a[24:22]=0`): bank 0, `col[8]=0` → columns 0–255 only, **row boundary
+every 512 bytes**. So **16 KB = 32 row-opens, not 16** (the "512 words / 1 KB row" is the
+*physical* row; this address map only exposes 512 B/row). The streaming read **must
+replicate this exact decode** or it reads bytes the writer never stored. Timing is
+unaffected — per-row overhead (~7 clk) ≪ 256 reads. A `streaming` flag forces
+`run_cmd→INHIBIT` and overrides `sd_cmd/sd_addr/sd_ba/sd_dqm`; the free-running `q` mux
+spins harmlessly. Sequence:
 
-Consumer-side cost: each run-mover's FSM changes from *per-byte fire/wait* to
-*issue-burst / consume-stream*. They already carry the run length (`DMA LEN`, blitter
-`WIDTH`/stride, XMC copy len), so it's a natural fit — but it does mean touching
-`dma.sv`, `blitter.sv`, and the XMC copy path, plus the SDRAM core.
+```
+STREAM_PRECHARGE_ALL  PRECHARGE all (A10=1), tRP        ; guarantee clean entry
+STREAM_ACTIVATE       ACTIVATE(bank,row), tRCD(2)
+STREAM_READ           READ(col, A10=0), col++, 1/clk × (≤256, row-bounded)
+STREAM_CAPTURE        (CAS-3 pipelined) emit dout + valid, 1 word/clk
+STREAM_PRECHARGE      PRECHARGE(bank) at row end, tRP
+STREAM_REFRESH        AUTO_REFRESH once per row boundary (unconditional), tRC
+                      → next row, or STREAM_DONE when stream_words exhausted
+```
 
-**Streaming FSM design (research confirmed — `sdram.v` read in full):** the existing
-controller runs an 8-state `q` cycle resynced to `clkref`: `ACTIVE`@q1 →
-`READ`/`WRITE`@q3 (+tRCD=2) → capture@q6 (+CAS=3), **single access with auto-precharge
-(A10=1)**, two ports time-shared by clkref phase (16:1). Streaming adds a **separate
-mode** that, on a burst request (port A), *suspends* the port-mux q-cycle and runs:
-`ACTIVATE row` → **back-to-back `READ`s to consecutive columns with A10=0** (no
-precharge), capturing **1 word/clk** after the CAS-3 fill → `PRECHARGE` at row end →
-`AUTO_REFRESH` when the 7.8 µs timer is due (between rows; a row is 5.2 µs < 7.8 µs so
-at most one refresh per 1–2 rows). Confirmed cost: **~83 µs / 16K @ 100 MHz.** Single-
-word random access (CPU bytes) keeps the existing path untouched; the wrapper picks
-streaming only when a run is long enough to amortize the row-open.
+Refresh: **one AUTO_REFRESH per row boundary, unconditional** — 32 over a 16 K burst =
+one per ~2.6 µs (obligation 7.8 µs); over-refresh is always safe and far simpler than a
+due-timer. Port B (debug) holds its request and is serviced after the burst — sub-ms of
+blocking is harmless for a non-realtime bridge. Atomicity: the CPU is stalled (`rdy_out`)
+for the whole copy, so no single-access request races a burst — page-in is atomic, no
+queue.
 
-Request interface (wrapper): burst addr + length + a per-word `valid` strobe stream in
-the `sdram_clk` domain (no per-byte CDC). Latent `sdram.v` primitives already present:
-`BURST_LENGTH`/`ACCESS_TYPE` params, `CMD_BURST_TERMINATE`, `CMD_PRECHARGE`,
-`CMD_AUTO_REFRESH` — page-mode is an FSM addition, not new command decode.
+**Stream port — general interface (`sdram_clk` domain):**
+```
+input         stream_req         output [15:0] stream_dout
+input  [24:0] stream_addr        output        stream_valid   ; 1-clk strobe / word
+input  [12:0] stream_words       output        stream_busy, stream_done
+```
+This is the *read* primitive; the symmetric **write-burst** (STASH, faster boot) is the
+same shape, built alongside Regime 2.
 
-**Discipline (the SDRAM core is the timing-sensitive block):**
-1. **Prior-art first** ([prefer-prior-art]): evaluate a burst/streaming SDRAM
-   controller (emard ULX3S refs, MiSTer) vs. extending `sdram.v`'s port A with a
-   page-mode path, before hand-rolling an FSM.
-2. **Verilator-first** ([verilator-first-for-fpga]): cycle-accurate bench proving the
-   stream + refresh + the ~80 µs figure before any 17-min synth. Harness already
-   exists (`test_xram_sdram.sv`, `test_sdram_loopback.sv`).
-3. Respect the existing `clkref` ratio / refresh timing history ([sdram-clkref-16-1],
-   [dont-ship-timing-failing-bitstream]).
+**The page-in consumer — D2, dedicated engine (LOCKED).** Reusing `dma.sv` +
+`SPACE_EXTROM` would drag `dma.sv`'s *pixel-clock* domain into the path → a Regime-2 FIFO
+in Phase 2, defeating the in-domain win. Instead a **small dedicated `page_dma` in
+`sdram_clk`** consumes `stream_valid`/`stream_dout` and writes straight into `ext_rom`
+BRAM; only the trigger + done handshake crosses to the CPU domain. **Byte order:**
+single-access decode is `a[0]?data[7:0]:data[15:8]`, so write `ext_rom[2k]=dout[15:8]`,
+`ext_rom[2k+1]=dout[7:0]` or the paged ROM byte-swaps. The `ext_rom` write port is muxed
+boot-bridge (`dbg_rom_we`) vs `page_dma` — they never overlap.
+
+**Throughput tiers — honest (`dpram` is single-clock 8-bit; `ext_rom` write currently
+@ pixel clk, so the 8-bit *write* is the gate, not the SDRAM read):**
+
+| Tier | What it takes | 16 K page-in | New SDRAM RTL |
+|---|---|---|---|
+| 0 | existing per-byte path + `SPACE_EXTROM` | ~4–6 ms | none — **rejected (throwaway)** |
+| 1 | stream read + `ext_rom` write @ pixel clk | ~0.65 ms | engine + small FIFO — **page-in proof** |
+| 2 | stream read + `ext_rom` write @ `sdram_clk` (dual-clock dpram) | ~0.16 ms | + dual-clock BRAM — later, if ever |
+| 3 | stream read + 16-bit sdram write | ~0.084 ms | + aspect trick (risky) — not pursued |
+
+Page-in uses **Tier 1** for the proof: validates engine→consumer end-to-end without the
+dual-clock/16-bit BRAM-aspect risk, and 0.65 ms for a *rare* switch is imperceptible
+forever. The doc's earlier "~84 µs" was Tier 3 — not the target. (The engine's *read*
+still runs full-speed; Regime 2's bandwidth is bounded by its FIFO/consumer, to be
+measured.)
+
+**Discipline — Verilator-first, before any 17-min synth** ([rtl-discipline]: 99.99% sure
+first):
+1. Drive the new branch against a **proper MT48LC16M16 behavioral model honoring
+   tRCD/CAS/tRP/tRC** (from `sdr_ctrl`/MiSTer/emard TBs) — not a hand-waved model, or the
+   cycle counts are fiction. Verilator can't see synth cell mapping ([verilator-blind])
+   but proves sequencing, refresh, data correctness, cycle count.
+2. Test cases: (a) single-access write a pattern → stream-read back → **byte-exact +
+   byte order**; (b) multi-row burst (2 KB = 4 rows) → assert PRECHARGE/ACTIVATE/REFRESH
+   at each boundary; (c) 16 KB stream → **measured cycle count** replaces the 84 µs guess;
+   (d) AUTO_REFRESH ≥ once / 7.8 µs across the burst; (e) port-B request mid-stream
+   defers, then completes.
+3. Bench passes *and* cycle count confirmed → only then synth. Respect the existing
+   `clkref` ratio / refresh history ([sdram-clkref-16-1], [dont-ship-timing-failing-bitstream]).
 
 ---
 
@@ -297,27 +346,37 @@ commands); revisit only if a 2D space is ever needed.
 1. **XRAM authority foundation:** add reserve-at-address alloc; grow pool to 512KB;
    make metadata a reserved entry; migrate fixed regions to reserved entries; expose
    a runtime-neutral allocator API. (Pure XRAM/firmware/asm; no new RTL.)
-2. **Page-DMA silicon:** XRAM → bank-1 (`ext_rom`) DMA with trigger/busy/done
-   registers; Verilator + hardware measurement of the real cold-page cost.
+2. **Streaming SDRAM engine + page-in proof (the long-pole):** page-mode read branch
+   in `sdram.v` (EXTEND, borrow `sdr_ctrl` sequencing pattern — §3.3); general
+   `stream_*` port; dedicated `sdram_clk` `page_dma` consumer writing `ext_rom`
+   (**Tier 1**, ~0.65 ms); `ext_rom` write mux (boot bridge vs `page_dma`).
+   **Gate: Verilator bench + measured cycle count before any synth.** Then HW
+   measurement of the real page cost.
 3. **Loader/dispatch stub + module format:** the `$C000` jump table, the
-   (module-id, fn-id) mailbox dispatch, resident-module tracking, page-on-miss.
+   command→module map (§5), resident-module tracking, page-on-miss.
 4. **First module + proof:** move NovaLogo's existing extension graphics into a
    paged `GRAPHICS` module; stage it in XRAM at boot; call it from Logo through the
    loader. End-to-end validation of the whole pipeline on the smallest slice.
 5. **Generalize:** SOUND/SYSTEM modules; wire BASIC to the same modules; per-language
    surfaces.
+6. **Regime 2 — bulk XRAM bandwidth ("fast everywhere"):** async rate-matching FIFO +
+   the symmetric **write-burst** engine; wire blitter (tile/sprite rows, STASH/FETCH),
+   DMA, and the XMC copy path to the streaming engine; FIFO depth designed against
+   *measured* per-frame workloads. The arcade-game bandwidth payoff. Depends only on
+   the Phase-2 engine (independent of 3–5).
 
 ---
 
 ## 7. Open sections (to detail next)
 
-- **General XRAM streaming primitive (the long-pole):** the burst read + write-burst
-  in `sdram.v`/`xram_sdram.sv`, refresh interleave, and the consumer-side FSM updates
-  to *issue-burst / consume-stream* — `dma.sv`, `blitter.sv`, the XMC `xram_copy_*`
-  path — plus `ext_rom` write mux + `SPACE_EXTROM` for the page-in. Prior-art recon
-  (emard/MiSTer vs. extend `sdram.v` port A); Verilator bench (harness exists)
-  confirming the ~80 µs and per-consumer throughput. (Scope/approach locked §3.3; RTL
-  design open.)
+- **General XRAM streaming primitive (the long-pole):** approach, FSM, stream-port
+  interface, page-in consumer (D2), throughput tiers, and the Verilator gate are now
+  **LOCKED in §3.3** (extend `sdram.v` + borrow `sdr_ctrl` pattern; engine built
+  general, page-in is the Tier-1 in-domain proof). *Still open:* (a) the **Regime-2
+  async rate-matching FIFO** depth + the symmetric **write-burst** engine — both
+  designed against *measured* blitter/DMA per-frame workloads (Phase 6); (b) the
+  **Tier-2 dual-clock `dpram`** for `ext_rom` (only if page-in latency ever matters —
+  it shouldn't). RTL not yet written; Verilator bench is the first artifact.
 - **Module header bytes:** exact magic/version/fn-count field widths and the
   jump-table entry format (dispatch model locked in §5; only byte layout remains).
 - **Boot staging:** module manifest on SD, sizes, the XRAM shelf layout, and how the
