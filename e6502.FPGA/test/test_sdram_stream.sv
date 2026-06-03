@@ -165,6 +165,32 @@ module test_sdram_stream;
     end
 
     // -----------------------------------------------------------------
+    // Stream cycle-count measurement (case (d)).
+    // A free-running counter on clk (== sdram_clk in this bench). cyc_arm
+    // starts the count on the stream_req edge and cyc_run gates it; the count
+    // stops on stream_done. cyc_count then holds the exact number of sdram_clk
+    // cycles from stream_req to stream_done — the MEASURED burst latency that
+    // replaces the design-doc "~84 us @ 100 MHz" estimate.
+    // -----------------------------------------------------------------
+    logic cyc_arm = 1'b0;   // 1 once we want to measure this burst
+    logic cyc_run = 1'b0;   // 1 while counting (req..done window)
+    int   cyc_count = 0;
+
+    always @(posedge clk) begin
+        if (cyc_arm) begin
+            if (stream_req) begin
+                // burst kicked off: start a fresh count from this edge
+                cyc_run   <= 1'b1;
+                cyc_count <= 0;
+            end else if (cyc_run) begin
+                cyc_count <= cyc_count + 1;
+                if (stream_done)
+                    cyc_run <= 1'b0;   // freeze count at stream_done
+            end
+        end
+    end
+
+    // -----------------------------------------------------------------
     // Pass/fail bookkeeping
     // -----------------------------------------------------------------
     int pass_count = 0;
@@ -212,13 +238,29 @@ module test_sdram_stream;
         end
     endtask
 
+    // Same unique-per-word pattern, but seeded directly into the model via the
+    // test-only poke_word backdoor (zero clk cycles). Used by case (d) so the
+    // 16 KB / 8192-word burst doesn't pay ~460k clk for the (already-proven)
+    // single-access write path. The stored word matches the run-time decode:
+    //   HIGH lane [15:8] = even byte 2i = i[7:0]
+    //   LOW  lane [7:0]  = odd  byte 2i+1 = i[15:8]
+    //   => word(i) == {i[7:0], i[15:8]}  (same value verify_unique expects)
+    // i ranges 0..8191 (13-bit); {i[7:0], i[15:8]} packs all 13 bits, so every
+    // word is distinct over 0..8191 — non-aliasing, a wrong-row read is caught.
+    task automatic preload_unique_pattern(input int n_words);
+        int i;
+        for (i = 0; i < n_words; i++)
+            chip.poke_word(25'(2*i), {i[7:0], i[15:8]});
+    endtask
+
     // -----------------------------------------------------------------
     // Stream capture — pulse stream_req for one clk, then collect each
     // stream_valid word into got[]. A watchdog bounds the wait so a broken
     // engine FAILS deterministically rather than hanging --timing forever.
     // -----------------------------------------------------------------
-    localparam int MAX_WORDS = 1024;          // capture buffer cap
+    localparam int MAX_WORDS = 8192;          // capture buffer cap (case (d) 16 KB burst)
     localparam int WATCHDOG  = 60000;         // generous sdram_clk-cycle bound
+                                              // (>> ~8700-cycle 8192-word burst)
 
     logic [15:0] got [0:MAX_WORDS-1];
     int          got_count;
@@ -370,6 +412,42 @@ module test_sdram_stream;
         check("(c) >=3 AUTO_REFRESH (one per row boundary)", cnt_refresh  >= 3);
         check("(c) exactly 4 AUTO_REFRESH (one per row)",    cnt_refresh  == 4);
         check("(c) exactly 1024 READ",                       cnt_read     == 1024);
+
+        // =============================================================
+        // CASE (d): 16 KB / 8192-word CYCLE-COUNT MEASUREMENT.
+        // stream_addr=0 (512-aligned), 8192 words = 16 KB = 32 physical
+        // 256-word (512-byte) rows. This case MEASURES the real
+        // stream_req -> stream_done latency in sdram_clk cycles, replacing
+        // the design-doc "~84 us @ 100 MHz" estimate with the recorded
+        // number. The window 7000 < cycles < 11000 is generous around the
+        // ~8400-8700 expected (32 rows x ~270 cyc/row).
+        //
+        // Pattern is preloaded via the model backdoor (poke_word) — the
+        // write path is already proven byte-exact in cases (a)/(b)/(c), and
+        // single-access writing 8192 words is ~460k clk. Byte-exactness of
+        // all 8192 captured words is still fully checked below.
+        //
+        // The sdram_model oracle $fatal's on any illegal command/timing, so
+        // a clean run also proves the 32-row burst is a legal sequence.
+        // =============================================================
+        $display("");
+        $display("Preloading 8192-word unique pattern (words 0..8191) via model backdoor...");
+        preload_unique_pattern(8192);
+        $display("Streaming 8192 words from byte addr 0 (16 KB, 32 physical rows)...");
+
+        // Arm the cycle counter; run_stream pulses stream_req inside.
+        cyc_arm = 1'b1;
+        run_stream(25'd0, 8192);
+        cyc_arm = 1'b0;
+
+        $display("measured stream cycles: %0d", cyc_count);
+        $display("  (= %.2f us @ 100 MHz)", cyc_count / 100.0);
+
+        check("(d) stream_done asserted within watchdog", done_seen);
+        check("(d) captured exactly 8192 words", got_count == 8192);
+        verify_unique("(d) 16 KB 8192 words byte-exact", 0, 8192);
+        check("(d) measured cycles in window (7000 < n < 11000)",
+              (cyc_count > 7000) && (cyc_count < 11000));
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

@@ -121,6 +121,19 @@ module sdram_model (
         word_key = {col[8], ba, row, col[7:0]};  // 1 + 2 + 13 + 8 = 24 bits
     endfunction
 
+    // ----- TEST-ONLY backdoor: directly seed a stored 16-bit word -----
+    // Writes the model's storage at the word containing byte address `byte_addr`,
+    // bypassing the command/timing pipeline entirely. This is a sim convenience
+    // for preloading large patterns fast; it does NOT touch command-decode or
+    // timing logic above. The word key is derived from the byte address exactly
+    // as the run-time decode does: bank=a[23:22], row=a[21:9], col={a[24],a[8:1]}.
+    // `data[15:8]` is the HIGH lane (even byte a[0]=0), `data[7:0]` the LOW lane.
+    task automatic poke_word(input logic [24:0] byte_addr, input logic [15:0] data);
+        bit [23:0] k;
+        k = word_key(byte_addr[23:22], byte_addr[21:9], {byte_addr[24], byte_addr[8:1]});
+        mem[k] = data;
+    endtask
+
     always @(posedge clk) begin
         cyc <= cyc + 1;
 
