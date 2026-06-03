@@ -553,6 +553,8 @@ module top (
         .cpu_rdata    (pgd_cpu_rdata),
         .rdy_out      (pgd_rdy),
         .sdram_clk    (sdram_clk),
+        // sdram_clk-domain reset synchronizer (sim branch passes custom_rst
+        // directly — see the `ifndef SYNTHESIS instantiation for that asymmetry).
         .sdram_rst    (erom_rst_sd),
         .pgd_active   (pgd_active),
         .pgd_erom_we  (pgd_erom_we),
@@ -1256,10 +1258,14 @@ module top (
         .rst          (custom_rst),
         .cpu_addr     (cpu_addr),
         .cpu_wdata    (cpu_dout),
-        .cpu_we       (cpu_we),
+        .cpu_we       (cpu_we & cpu_active),   // parity with synth branch (cpu_active==1'b1 here)
         .cpu_rdata    (pgd_cpu_rdata),
         .rdy_out      (pgd_rdy),
         .sdram_clk    (sdram_clk),
+        // Deliberate asymmetry: synth passes erom_rst_sd (an sdram_clk-domain
+        // reset synchronizer that lives only in the `ifdef SYNTHESIS` branch).
+        // No SDRAM/synchronizer exists in this sim branch, so custom_rst is used
+        // directly; behavioral tests never trigger a page-in, so it is inert.
         .sdram_rst    (custom_rst),
         .pgd_active   (pgd_active),
         .pgd_erom_we  (pgd_erom_we),

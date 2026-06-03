@@ -113,7 +113,10 @@ module test_debug_peek;
         .dbg_cpu_irq(dbg_cpu_irq),
         .dbg_cpu_nmi(dbg_cpu_nmi),
         .dbg_cpu_waiting(dbg_cpu_waiting),
-        .dbg_cpu_stopped(dbg_cpu_stopped)
+        .dbg_cpu_stopped(dbg_cpu_stopped),
+        // No page-in here; tie off stream inputs (outputs left unconnected).
+        .sdram_stream_req(), .sdram_stream_addr(), .sdram_stream_words(), .sdram_stream_ready(),
+        .sdram_stream_dout(16'h0000), .sdram_stream_valid(1'b0), .sdram_stream_busy(1'b0), .sdram_stream_done(1'b0)
     );
 
     int pass_count = 0;

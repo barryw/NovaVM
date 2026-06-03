@@ -14,10 +14,10 @@
 //     $BA7B PGD_WORDSL  # of 16-bit words to copy (<=8192 for a 16 KB module)
 //     $BA7C PGD_WORDSH
 //
-//   CDC: pixel -> sdram   start pulse (toggle + 2-FF sync + edge detect) plus
+//   CDC: pixel -> sdram   start pulse (toggle + 3-FF sync + edge detect) plus
 //                         the src_base/words payload (held stable while busy,
 //                         so the sdram side samples a quiescent value).
-//        sdram -> pixel   page_dma `done` (toggle + 2-FF sync + edge detect)
+//        sdram -> pixel   page_dma `done` (toggle + 3-FF sync + edge detect)
 //                         and `pgd_active` (level, 2-FF sync) for STATUS/rdy.
 //
 //   SDRAM DOMAIN (instantiated here): the unchanged `page_dma` core, whose
