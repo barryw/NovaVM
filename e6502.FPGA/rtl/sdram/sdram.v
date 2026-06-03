@@ -144,6 +144,8 @@ reg [1:0]  str_dqm;
 // FOLLOWING edge E+5. Net: a READ driven on FSM edge E is captured on edge E+5.
 // We mark rd_inflight[0] on edge E and shift up one stage per clk, firing the
 // capture when the marker reaches rd_inflight[4] (5 edges after the READ).
+// NOTE: page_dma.READY_MARGIN must be >= this depth + 1; if you widen
+// rd_inflight, bump it (else the skid FIFO can overflow on stream_ready deassert).
 reg [4:0]  rd_inflight;     // 5-deep in-flight READ tracker (E .. E+5 capture)
 
 // row-boundary helpers, derived from the CURRENT cur_addr

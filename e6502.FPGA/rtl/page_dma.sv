@@ -26,7 +26,8 @@
 // whole trailing burst without dropping a word.
 //
 // SKID BUFFER: a small SYNCHRONOUS FIFO (sdram_clk, same domain as both the
-// stream and the byte-writer — NOT a CDC FIFO). Depth 16 (FF array). It captures
+// stream and the byte-writer — NOT a CDC FIFO). Depth 16, explicit FF array
+// (ram_style=registers, deterministic POR reset — see fifo_mem). It captures
 // every stream_valid word; the byte-writer pops it at 2 clk/word.
 //   stream_ready = (free slots >= READY_MARGIN). With DEPTH=16 and
 //   READY_MARGIN=8, ready drops once fewer than 8 slots remain free, leaving 8
@@ -78,16 +79,22 @@ module page_dma (
 
     // ===================================================================
     // Synchronous skid buffer (sdram_clk) — depth 16, 16-bit words.
-    // FF array (small, same-domain, deterministic reset). Captures every
-    // stream_valid word; byte-writer pops at 2 clk/word.
+    // Explicit FF array (ram_style=registers), deterministic POR reset — small,
+    // same-domain. Captures every stream_valid word; byte-writer pops at 2
+    // clk/word. NOTE: without the ram_style attribute, synth_ecp5 maps this
+    // small dual-port memory to TRELLIS_DPR16X4 distributed LUT-RAM (which has
+    // no deterministic reset). Forcing registers keeps the stated intent.
     // ===================================================================
     localparam integer FIFO_AW    = 4;            // 16 entries
     localparam integer FIFO_DEPTH = (1 << FIFO_AW);
     // Drop stream_ready when fewer than READY_MARGIN free slots remain. 8 free
     // slots cover the worst-case ~6 in-flight READs (5-deep CAS pipe + 1-clk
     // ready registration latency) plus margin, so a deassert never overflows.
+    // NOTE: READY_MARGIN must be >= sdram.v rd_inflight depth (5) + 1; if you
+    // widen rd_inflight, bump this.
     localparam integer READY_MARGIN = 8;
 
+    (* ram_style = "registers" *)
     reg [15:0] fifo_mem [0:FIFO_DEPTH-1];
     reg [FIFO_AW-1:0] fifo_wr;
     reg [FIFO_AW-1:0] fifo_rd;

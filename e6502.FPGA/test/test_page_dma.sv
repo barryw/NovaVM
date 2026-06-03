@@ -198,6 +198,19 @@ module test_page_dma;
     );
 
     // -----------------------------------------------------------------
+    // Skid-buffer margin monitor (hierarchical ref into the page_dma instance).
+    // Proves the no-drop margin is a TESTED invariant: the FIFO must stay below
+    // full (no word dropped) AND must actually be exercised near peak (so a
+    // light load that never stresses the margin would fail the >=10 assert).
+    // -----------------------------------------------------------------
+    int   fifo_peak  = 0;   // high-water mark of pgd.fifo_cnt
+    logic ever_full  = 1'b0;
+    always @(posedge clk) begin
+        if (pgd.fifo_cnt > fifo_peak) fifo_peak <= pgd.fifo_cnt;
+        if (pgd.fifo_cnt == pgd.FIFO_DEPTH[pgd.FIFO_AW:0]) ever_full <= 1'b1;
+    end
+
+    // -----------------------------------------------------------------
     // Pass/fail bookkeeping
     // -----------------------------------------------------------------
     int pass_count = 0;
@@ -373,6 +386,13 @@ module test_page_dma;
         // Verify all 16384 bytes byte-exact + correct order.
         $display("Reading back 16384 bytes from ext_rom stand-in...");
         verify_ext_rom("16 KB ext_rom byte-exact + byte order", 8192);
+
+        // Skid-buffer margin invariant: the FIFO must never have hit full (no
+        // word dropped) AND must have been driven near peak during the dense
+        // in-row run — otherwise the back-pressure margin was never exercised.
+        $display("Skid FIFO peak occupancy: %0d / %0d", fifo_peak, pgd.FIFO_DEPTH);
+        check("skid FIFO never full (no word dropped)", !ever_full);
+        check("skid buffer exercised near peak (>=10)", fifo_peak >= 10);
 
         // -----------------------------------------------------------------
         // words==0 latent-hazard guard. A zero-word `start` must NOT wedge
