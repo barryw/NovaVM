@@ -127,6 +127,41 @@ module test_sdram_stream;
     );
 
     // -----------------------------------------------------------------
+    // SDRAM command counters (case (c) command-sequence proof).
+    //
+    // Decode the command pins {sd_cs,sd_ras,sd_cas,sd_we} on every clk
+    // posedge while a burst is in flight (stream_busy high). Encodings match
+    // sdram.v STR_CMD_* (~line 99) and the model decode (sdram_model.svh ~64):
+    //   ACTIVE=4'b0011  READ=4'b0101  PRECHARGE=4'b0010  AUTO_REFRESH=4'b0001
+    // PRECHARGE is further split by A10 = sd_addr[10]:
+    //   A10=1 -> precharge-ALL (the S_PRE_ALL clean-entry command)
+    //   A10=0 -> single-bank precharge (the per-row S_PRECHARGE command)
+    // count_en gates counting to the burst-of-interest only.
+    // -----------------------------------------------------------------
+    wire [3:0] cmd_pins = {sd_cs, sd_ras, sd_cas, sd_we};
+    logic count_en = 1'b0;
+    int cnt_active   = 0;
+    int cnt_read     = 0;
+    int cnt_pre_all  = 0;   // PRECHARGE with A10=1
+    int cnt_pre_bank = 0;   // PRECHARGE with A10=0
+    int cnt_refresh  = 0;
+
+    always @(posedge clk) begin
+        if (count_en) begin
+            case (cmd_pins)
+                4'b0011: cnt_active  <= cnt_active  + 1;   // ACTIVE
+                4'b0101: cnt_read    <= cnt_read    + 1;   // READ
+                4'b0001: cnt_refresh <= cnt_refresh + 1;   // AUTO_REFRESH
+                4'b0010: begin                             // PRECHARGE
+                    if (sd_addr[10]) cnt_pre_all  <= cnt_pre_all  + 1;
+                    else             cnt_pre_bank <= cnt_pre_bank + 1;
+                end
+                default: ; // NOP / INHIBIT / etc — ignore
+            endcase
+        end
+    end
+
+    // -----------------------------------------------------------------
     // Pass/fail bookkeeping
     // -----------------------------------------------------------------
     int pass_count = 0;
@@ -281,6 +316,57 @@ module test_sdram_stream;
         check("(b) stream_done asserted within watchdog", done_seen);
         check("(b) captured exactly 600 words", got_count == 600);
         verify_unique("(b) unaligned multi-row 600 words byte-exact", 50, 600);
+
+        // =============================================================
+        // CASE (c): ALIGNED 4-ROW BURST + COMMAND-SEQUENCE PROOF.
+        // stream_addr=0 (512-aligned), 1024 words = 4 physical 256-word
+        // (512-byte) rows. This case proves the FSM issues the CORRECT
+        // SDRAM command sequence at every row boundary, not just correct
+        // data. We decode the command pins on each clk edge during the
+        // burst and assert exact counts.
+        //
+        // FSM trace (sdram.v, this exact start/length):
+        //   S_PRE_ALL  -> 1x PRECHARGE-ALL  (A10=1, clean entry)
+        //   per row (x4):
+        //     S_ACTIVATE  -> 1x ACTIVE
+        //     S_READ      -> 256x READ (stops at row_full cur_addr[8:1]==0xFF)
+        //     S_PRECHARGE -> 1x PRECHARGE  (A10=0, single bank)
+        //     S_REFRESH   -> 1x AUTO_REFRESH (one per row boundary)
+        // Expected totals over the burst:
+        //   ACTIVE=4, READ=1024, single-bank PRECHARGE=4, AUTO_REFRESH=4,
+        //   plus the one entry PRECHARGE-ALL (A10=1). The pins therefore
+        //   show 5 PRECHARGE commands total (1 all + 4 per-row); the A10
+        //   split lets us account for the entry PRECHARGE-ALL exactly.
+        // The sdram_model oracle $fatal's on any illegal sequence, so a
+        // clean run with these counts also proves the sequence is legal.
+        // =============================================================
+        $display("");
+        $display("Writing 1024-word unique pattern (words 0..1023) via port A...");
+        write_unique_pattern(1024);
+        $display("Streaming 1024 words from byte addr 0 (ALIGNED, 4 physical rows)...");
+
+        // Zero counters and arm decode just before the burst.
+        cnt_active = 0; cnt_read = 0; cnt_pre_all = 0; cnt_pre_bank = 0; cnt_refresh = 0;
+        @(posedge clk);
+        count_en = 1'b1;
+        run_stream(25'd0, 1024);
+        @(posedge clk);
+        count_en = 1'b0;
+
+        $display("  measured: ACTIVE=%0d READ=%0d PRECHARGE-ALL=%0d PRECHARGE-bank=%0d AUTO_REFRESH=%0d",
+                 cnt_active, cnt_read, cnt_pre_all, cnt_pre_bank, cnt_refresh);
+
+        check("(c) stream_done asserted within watchdog", done_seen);
+        check("(c) captured exactly 1024 words", got_count == 1024);
+        verify_unique("(c) aligned 4-row 1024 words byte-exact", 0, 1024);
+
+        // Command-sequence assertions (the NEW value of this case).
+        check("(c) exactly 4 ACTIVATE (one per row)",        cnt_active   == 4);
+        check("(c) exactly 4 single-bank PRECHARGE (A10=0)", cnt_pre_bank == 4);
+        check("(c) exactly 1 PRECHARGE-ALL entry (A10=1)",   cnt_pre_all  == 1);
+        check("(c) >=3 AUTO_REFRESH (one per row boundary)", cnt_refresh  >= 3);
+        check("(c) exactly 4 AUTO_REFRESH (one per row)",    cnt_refresh  == 4);
+        check("(c) exactly 1024 READ",                       cnt_read     == 1024);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);
