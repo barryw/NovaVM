@@ -120,6 +120,7 @@ module test_page_dma;
         .stream_req  (stream_req),
         .stream_addr (stream_addr),
         .stream_words(stream_words),
+        .stream_ready(1'b1),   // Task-10 page_dma writes 1 word/clk, keeps up at full rate; Task 11c drives this from page_dma for pacing
         .stream_dout (stream_dout),
         .stream_valid(stream_valid),
         .stream_busy (stream_busy),
