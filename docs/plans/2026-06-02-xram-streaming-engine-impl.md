@@ -404,7 +404,10 @@ dual-clock dpram variant (port A clk = `sdram_clk`, port B clk = pixel `clk`) an
 
 **Task 11c — `page_dma` direct sdram-clk write + pacing.** Rework `page_dma` to write
 `ext_rom` directly (`pgd_erom_we/addr[13:0]/data[7:0]`, 2 byte-writes/word at `sdram_clk`)
-and drive `stream_ready` (deassert between the two byte-writes so the stream self-paces).
+and self-pace via `stream_ready`. (Impl note: a strict per-byte toggle fights the 5-deep
+CAS pipeline, so `page_dma` uses a small **synchronous** skid buffer (depth 16, `sdram_clk`,
+`ram_style=registers` — no CDC) with `stream_ready = (fifo_cnt <= DEPTH-MARGIN)`; MARGIN=8 ≥
+the ~6 in-flight words (5-deep CAS pipe + 1-clk ready registration) so no word is dropped.)
 Update `test_page_dma.sv` to the 8-bit byte-write interface. Byte-exact 16 KB.
 
 **Task 11d — CPU MMIO trigger + CDC + `rdy_out` + e2e.** Registers at `$BA76`+ (verify
