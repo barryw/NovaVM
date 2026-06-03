@@ -90,6 +90,9 @@ module test_vgc_cmd_readback_hazard_top;
         .sdram_doutA(8'h00), .sdram_doneA(1'b0),
         .sdram_addrB(), .sdram_dinB(), .sdram_weB(), .sdram_oeB(),
         .sdram_doutB(8'h00),
+        // SDRAM stream port — page-in engine unused here; tie inputs off.
+        .sdram_stream_req(), .sdram_stream_addr(), .sdram_stream_words(), .sdram_stream_ready(),
+        .sdram_stream_dout(16'h0000), .sdram_stream_valid(1'b0), .sdram_stream_busy(1'b0), .sdram_stream_done(1'b0),
         .fio_event(), .nic_event()
     );
 

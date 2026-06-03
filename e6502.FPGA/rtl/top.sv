@@ -123,6 +123,19 @@ module top (
     output logic        sdram_oeB,
     input  logic [7:0]  sdram_doutB,
 
+    // SDRAM page-mode STREAM port — driven by the Tier-2 page-in engine
+    // (page_in_ctrl/page_dma, Task 11d). fpga_top routes these to sdram.v's
+    // stream port; mutually exclusive with port A/B via sdram.v's `streaming`
+    // flag, and the CPU is stalled during the page-in so port A is quiescent.
+    output logic        sdram_stream_req,
+    output logic [24:0] sdram_stream_addr,
+    output logic [13:0] sdram_stream_words,
+    output logic        sdram_stream_ready,
+    input  logic [15:0] sdram_stream_dout,
+    input  logic        sdram_stream_valid,
+    input  logic        sdram_stream_busy,
+    input  logic        sdram_stream_done,
+
     // Host-service events pulse one clock when the CPU writes a non-zero
     // command byte. fpga_top.sv routes these to the debug bridge, which emits
     // async events to NovaHost.
@@ -518,13 +531,42 @@ module top (
     // ext_rom port-A write-source mux (now entirely in the sdram_clk domain):
     // page_dma (pgd_*) vs the sdram_clk-synchronized boot write. Both feed
     // port A on sdram_clk. The two sources never overlap; pgd_active selects.
-    // pgd_* are tied off here (Task 11c/11d drive them); with pgd_active=0 the
-    // muxes reduce to the boot-bridge path, so behaviour is the boot-only path
-    // exactly as before — just now landing via the sdram_clk write port.
-    wire        pgd_active    = 1'b0;
-    wire        pgd_erom_we   = 1'b0;
-    wire [13:0] pgd_erom_addr = 14'd0;
-    wire [7:0]  pgd_erom_data = 8'd0;
+    //
+    // Task 11d: pgd_* are now driven by page_in_ctrl — the pixel-domain MMIO
+    // front-end ($BA76-$BA7C) that triggers the sdram_clk-domain page_dma copy
+    // engine and streams a 16 KB library module from XRAM/SDRAM (the stream
+    // port) into bank-1 ext_rom. The CPU is stalled (pgd_rdy) for the whole
+    // copy, so this write mux and the boot path never collide.
+    wire        pgd_active;
+    wire        pgd_erom_we;
+    wire [13:0] pgd_erom_addr;
+    wire [7:0]  pgd_erom_data;
+    wire [7:0]  pgd_cpu_rdata;
+    wire        pgd_rdy;
+
+    page_in_ctrl page_in_ctrl_inst (
+        .clk          (clk),
+        .rst          (custom_rst),
+        .cpu_addr     (cpu_addr),
+        .cpu_wdata    (cpu_dout),
+        .cpu_we       (cpu_we & cpu_active),
+        .cpu_rdata    (pgd_cpu_rdata),
+        .rdy_out      (pgd_rdy),
+        .sdram_clk    (sdram_clk),
+        .sdram_rst    (erom_rst_sd),
+        .pgd_active   (pgd_active),
+        .pgd_erom_we  (pgd_erom_we),
+        .pgd_erom_addr(pgd_erom_addr),
+        .pgd_erom_data(pgd_erom_data),
+        .stream_req   (sdram_stream_req),
+        .stream_addr  (sdram_stream_addr),
+        .stream_words (sdram_stream_words),
+        .stream_ready (sdram_stream_ready),
+        .stream_dout  (sdram_stream_dout),
+        .stream_valid (sdram_stream_valid),
+        .stream_busy  (sdram_stream_busy),
+        .stream_done  (sdram_stream_done)
+    );
 
     wire        erom_we_muxed   = pgd_active ? pgd_erom_we   : erom_boot_we_sd;
     wire [13:0] erom_addr_muxed = pgd_active ? pgd_erom_addr : erom_boot_addr_sd;
@@ -634,6 +676,7 @@ module top (
     wire music_reg_sel = (mem_addr >= MUSIC_REG_BASE && mem_addr <= MUSIC_REG_END);
     wire [$clog2(MUSIC_REG_COUNT)-1:0] music_reg_off = mem_addr - MUSIC_REG_BASE;
     wire dma_reg_sel = (mem_addr >= 16'hBA63 && mem_addr <= 16'hBA75);
+    wire pgd_reg_sel = (mem_addr >= 16'hBA76 && mem_addr <= 16'hBA7C);
     wire blt_reg_sel = (mem_addr >= 16'hBA83 && mem_addr <= 16'hBA9B) ||
                        (mem_addr == 16'hBAA2);
     wire math_reg_sel = (mem_addr >= MATH_BASE && mem_addr <= MATH_END);
@@ -651,7 +694,7 @@ module top (
 
     // Register the decode signals for next-cycle mux
     logic r_xmc_win_sel, r_xmc_win_enabled, r_xmc_reg_sel;
-    logic r_dma_reg_sel, r_blt_reg_sel, r_math_reg_sel;
+    logic r_dma_reg_sel, r_pgd_reg_sel, r_blt_reg_sel, r_math_reg_sel;
     logic r_music_reg_sel;
     logic r_cpu_in_rom, r_ext_rom_active;
     logic r_vgc_read_sel;
@@ -670,6 +713,7 @@ module top (
         r_xmc_reg_sel     <= xmc_reg_sel;
         r_music_reg_sel   <= music_reg_sel;
         r_dma_reg_sel     <= dma_reg_sel;
+        r_pgd_reg_sel     <= pgd_reg_sel;
         r_blt_reg_sel     <= blt_reg_sel;
         r_math_reg_sel    <= math_reg_sel;
         r_cpu_in_rom      <= cpu_in_rom;
@@ -820,6 +864,13 @@ module top (
     always_ff @(posedge clk)
         if (cpu_ce)
             r_dma_cpu_rdata <= dma_cpu_rdata;
+
+    // Registered page-in STATUS/SRC/WORDS read. Same cpu_ce-gated capture as
+    // DMA — the page-in front-end is not on the timing-critical LOGO path.
+    logic [7:0] r_pgd_cpu_rdata;
+    always_ff @(posedge clk)
+        if (cpu_ce)
+            r_pgd_cpu_rdata <= pgd_cpu_rdata;
 
     logic [7:0] r_math_cpu_rdata;
     always_ff @(posedge clk)
@@ -987,11 +1038,13 @@ module top (
 
     // Bus-master register reads share one slot in the cpu_din mux chain so
     // DMA doesn't add a LUT level to the already-long ram_a_dout path.
-    // DMA ($BA63-$BA75) and blitter ($BA83-$BA9B plus $BAA2) disjoint, so the sub-mux
-    // is a simple 2:1 that resolves in parallel with the main chain.
-    wire        r_bm_reg_sel   = r_dma_reg_sel | r_blt_reg_sel;
-    wire [7:0]  r_bm_cpu_rdata = r_dma_reg_sel ? r_dma_cpu_rdata
-                                               : r_blt_cpu_rdata;
+    // DMA ($BA63-$BA75), page-in front-end ($BA76-$BA7C), and blitter
+    // ($BA83-$BA9B plus $BAA2) are disjoint, so the sub-mux is a small priority
+    // chain that resolves in parallel with the main chain.
+    wire        r_bm_reg_sel   = r_dma_reg_sel | r_pgd_reg_sel | r_blt_reg_sel;
+    wire [7:0]  r_bm_cpu_rdata = r_dma_reg_sel ? r_dma_cpu_rdata :
+                                 r_pgd_reg_sel ? r_pgd_cpu_rdata :
+                                                 r_blt_cpu_rdata;
 
     // CPU read data mux — two-level grouped design to keep the critical
     // path short. The previous 10-branch priority chain put ram_a_dout
@@ -1076,7 +1129,7 @@ module top (
         end else if (cpu_we && cpu_active && cpu_addr < ROM_BASE &&
                      !xmc_win_sel && !xmc_reg_sel && !vgc_read_sel &&
                      !nic_reg_sel && !wts_reg_sel && !fio_reg_sel &&
-                     !music_reg_sel && !dma_reg_sel && !blt_reg_sel &&
+                     !music_reg_sel && !dma_reg_sel && !pgd_reg_sel && !blt_reg_sel &&
                      !board_input_sel && !usb_hid_sel && !math_reg_sel) begin
             // CPU write to RAM
             ram_a_we = 1'b1;
@@ -1184,6 +1237,43 @@ module top (
     logic [7:0] basic_rom [0:16383];
     logic [7:0] ext_rom [0:16383];
     logic       ext_rom_active;
+
+    // Task 11d (behavioral parity): the page-in front-end + page_dma core also
+    // live in this sim branch so the common cpu_rdy chain and cpu_din mux have
+    // pgd_rdy / pgd_cpu_rdata. The sdram stream port is exposed identically to
+    // the synth branch; behavioral (non-DSYNTHESIS) tests never trigger a
+    // page-in, so pgd_active stays low and ext_rom keeps its boot/load image.
+    // The -DSYNTHESIS path is the one that the e2e test exercises end-to-end.
+    wire        pgd_active;
+    wire        pgd_erom_we;
+    wire [13:0] pgd_erom_addr;
+    wire [7:0]  pgd_erom_data;
+    wire [7:0]  pgd_cpu_rdata;
+    wire        pgd_rdy;
+
+    page_in_ctrl page_in_ctrl_inst (
+        .clk          (clk),
+        .rst          (custom_rst),
+        .cpu_addr     (cpu_addr),
+        .cpu_wdata    (cpu_dout),
+        .cpu_we       (cpu_we),
+        .cpu_rdata    (pgd_cpu_rdata),
+        .rdy_out      (pgd_rdy),
+        .sdram_clk    (sdram_clk),
+        .sdram_rst    (custom_rst),
+        .pgd_active   (pgd_active),
+        .pgd_erom_we  (pgd_erom_we),
+        .pgd_erom_addr(pgd_erom_addr),
+        .pgd_erom_data(pgd_erom_data),
+        .stream_req   (sdram_stream_req),
+        .stream_addr  (sdram_stream_addr),
+        .stream_words (sdram_stream_words),
+        .stream_ready (sdram_stream_ready),
+        .stream_dout  (sdram_stream_dout),
+        .stream_valid (sdram_stream_valid),
+        .stream_busy  (sdram_stream_busy),
+        .stream_done  (sdram_stream_done)
+    );
 
     localparam XRAM_SIZE = 524288;
     logic [7:0] xram [0:XRAM_SIZE-1];
@@ -1296,6 +1386,7 @@ module top (
     wire music_reg_sel = (cpu_addr >= MUSIC_REG_BASE && cpu_addr <= MUSIC_REG_END);
     wire [$clog2(MUSIC_REG_COUNT)-1:0] music_reg_off = cpu_addr - MUSIC_REG_BASE;
     wire dma_reg_sel = (cpu_addr >= 16'hBA63 && cpu_addr <= 16'hBA75);
+    wire pgd_reg_sel = (cpu_addr >= 16'hBA76 && cpu_addr <= 16'hBA7C);
     wire blt_reg_sel = (cpu_addr >= 16'hBA83 && cpu_addr <= 16'hBA9B) ||
                        (cpu_addr == 16'hBAA2);
     wire math_reg_sel = (cpu_addr >= MATH_BASE && cpu_addr <= MATH_END);
@@ -1320,6 +1411,8 @@ module top (
             cpu_din <= music_regs[music_reg_off];
         else if (dma_reg_sel)
             cpu_din <= dma_cpu_rdata;
+        else if (pgd_reg_sel)
+            cpu_din <= pgd_cpu_rdata;
         else if (blt_reg_sel)
             cpu_din <= blt_cpu_rdata;
         else if (math_reg_sel)
@@ -1361,7 +1454,7 @@ module top (
                     xmc_regs[xmc_reg_off] <= cpu_dout;
             end else if (cpu_addr < ROM_BASE && !vgc_read_sel && !math_reg_sel &&
                          !wts_reg_sel && !board_input_sel && !usb_hid_sel &&
-                         !music_reg_sel)
+                         !music_reg_sel && !pgd_reg_sel)
                 ram[cpu_addr] <= cpu_dout;
         end
 
@@ -1371,8 +1464,14 @@ module top (
         if (bm_xram_we)
             xram[bm_xram_addr] <= bm_xram_wdata;
 
-        // Debug ROM-load writes (mirrors the SYNTHESIS dpram port A path)
-        if (dbg_rom_we) begin
+        // Debug ROM-load writes (mirrors the SYNTHESIS dpram port A path).
+        // BREADCRUMB (Task 11d): the synth branch muxes pgd_erom_* vs the boot
+        // write into the dpram_dc port A. Mirror that here — when a page-in is
+        // active, page_dma's byte-writes own ext_rom; otherwise the boot stream
+        // does. The two never overlap (the CPU is stalled during a page-in).
+        if (pgd_active && pgd_erom_we)
+            ext_rom[pgd_erom_addr] <= pgd_erom_data;
+        else if (dbg_rom_we) begin
             if (dbg_rom_idx == 1'b0)
                 basic_rom[dbg_rom_addr] <= dbg_rom_data;
             else
@@ -1818,7 +1917,7 @@ module top (
     wire vgc_irq;
     wire cpu_irq = ~irq_n | vgc_irq | nic_irq | board_input_irq;
     wire cpu_nmi = ~nmi_n;
-    wire cpu_rdy = blt_rdy & dma_rdy & math_rdy & nic_rdy & vgc_rdy & ~dbg_pause & cpu_active;
+    wire cpu_rdy = blt_rdy & dma_rdy & pgd_rdy & math_rdy & nic_rdy & vgc_rdy & ~dbg_pause & cpu_active;
 
     cpu cpu_inst (
         .clk    (clk),

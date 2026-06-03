@@ -872,6 +872,16 @@ module fpga_top (
         .sdram_oeB  (core_sdram_oeB),
         .sdram_doutB(core_sdram_doutB),
 
+        // SDRAM page-mode STREAM port — Tier-2 page-in engine (Task 11d).
+        .sdram_stream_req  (core_stream_req),
+        .sdram_stream_addr (core_stream_addr),
+        .sdram_stream_words(core_stream_words),
+        .sdram_stream_ready(core_stream_ready),
+        .sdram_stream_dout (core_stream_dout),
+        .sdram_stream_valid(core_stream_valid),
+        .sdram_stream_busy (core_stream_busy),
+        .sdram_stream_done (core_stream_done),
+
         .fio_event  (core_fio_event),
         .nic_event  (core_nic_event)
     );
@@ -891,6 +901,16 @@ module fpga_top (
     wire        core_sdram_oeB;
     wire [7:0]  core_sdram_doutB;
     wire        core_sdram_doneB;
+
+    // SDRAM stream-port wires from core (Tier-2 page-in engine)
+    wire        core_stream_req;
+    wire [24:0] core_stream_addr;
+    wire [13:0] core_stream_words;
+    wire        core_stream_ready;
+    wire [15:0] core_stream_dout;
+    wire        core_stream_valid;
+    wire        core_stream_busy;
+    wire        core_stream_done;
 
     wire        dbg_sdram_b_we;
     wire        dbg_sdram_b_oe;
@@ -1140,9 +1160,15 @@ module fpga_top (
         .addrB(mux_sdram_addrB), .weB(mux_sdram_weB),
         .dinB(mux_sdram_dinB),   .oeB(mux_sdram_oeB),
         .doutB(core_sdram_doutB), .doneB(core_sdram_doneB),
-        // Stream port idle (Task 2 stub — FSM lands in Task 4)
-        .stream_req(1'b0), .stream_addr(25'd0), .stream_words(14'd0),
-        .stream_ready(1'b1)
+        // Stream port — Tier-2 page-in engine (page_in_ctrl/page_dma, Task 11d)
+        .stream_req  (core_stream_req),
+        .stream_addr (core_stream_addr),
+        .stream_words(core_stream_words),
+        .stream_ready(core_stream_ready),
+        .stream_dout (core_stream_dout),
+        .stream_valid(core_stream_valid),
+        .stream_busy (core_stream_busy),
+        .stream_done (core_stream_done)
 
     );
 

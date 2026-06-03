@@ -74,7 +74,7 @@ ehbasic:
 RTL_VGC = $(DPRAM) $(RTLDIR)/vgc.sv $(RTLDIR)/vgc_timing.sv $(RTLDIR)/vgc_text.sv \
           $(RTLDIR)/vgc_gfx.sv $(RTLDIR)/artist.sv $(RTLDIR)/vgc_sprites.sv \
           $(RTLDIR)/vgc_copper.sv $(RTLDIR)/blitter.sv \
-          $(RTLDIR)/dma.sv $(RTLDIR)/fio.sv \
+          $(RTLDIR)/dma.sv $(RTLDIR)/page_in_ctrl.sv $(RTLDIR)/page_dma.sv $(RTLDIR)/fio.sv \
           $(RTLDIR)/thirdparty/sfifo.v
 RTL_BRIDGE = $(RTLDIR)/debug_byte_fifo.sv \
              $(RTLDIR)/debug_async_byte_fifo.sv \
