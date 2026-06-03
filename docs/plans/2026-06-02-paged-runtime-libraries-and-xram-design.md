@@ -227,7 +227,9 @@ first):
    but proves sequencing, refresh, data correctness, cycle count.
 2. Test cases: (a) single-access write a pattern → stream-read back → **byte-exact +
    byte order**; (b) multi-row burst (2 KB = 4 rows) → assert PRECHARGE/ACTIVATE/REFRESH
-   at each boundary; (c) 16 KB stream → **measured cycle count** replaces the 84 µs guess;
+   at each boundary; (c) 16 KB stream → **measured cycle count** replaces the 84 µs guess
+   (Verilator-measured: **8676 `sdram_clk` cycles = 86.76 µs @ 100 MHz** — the read-stream
+   throughput; the engine reads at the predicted rate, confirming §3.3's ~84 µs estimate);
    (d) AUTO_REFRESH ≥ once / 7.8 µs across the burst; (e) port-B request mid-stream
    defers, then completes.
 3. Bench passes *and* cycle count confirmed → only then synth. Respect the existing
