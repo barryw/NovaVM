@@ -182,6 +182,14 @@ module test_rom_load;
         8'h4C, 8'h0A, 8'hC0
     };
 
+    // Distinct bytes for the ext_rom (idx=1) back-to-back CDC coverage. Each
+    // byte differs so a one-position skew or a dropped byte 0 is unambiguous.
+    localparam int EXT_LEN = 8;
+    byte unsigned ext_prog [EXT_LEN] = '{
+        8'h11, 8'h22, 8'h33, 8'h44,
+        8'h55, 8'h66, 8'h77, 8'h88
+    };
+
     initial begin
         $display("=== ROM load end-to-end test ===");
 
@@ -228,6 +236,37 @@ module test_rom_load;
                   dut.basic_rom_inst.mem[14'h3FFC], 8'h00);
         check_eq8("basic_rom[0x3FFD] reset hi",
                   dut.basic_rom_inst.mem[14'h3FFD], 8'hC0);
+
+        // -------------------------------------------------------------------
+        // ext_rom (idx=1) CDC coverage — the gate this test was missing.
+        //
+        // ext_rom port A lives in the sdram_clk domain (dpram_dc, Task 11b);
+        // the boot-bridge writes arrive in the pixel domain and must cross
+        // into sdram_clk. NovaHost / test_novalogo_draw_top stream the whole
+        // 16 KB as BACK-TO-BACK writes (we high every other cycle, addr/data
+        // advancing each write). A CDC that samples addr/data LIVE when a
+        // synchronized we-pulse fires (2+ sdram_clk cycles late) captures a
+        // SKEWED payload and permanently loses byte 0 (addr 0, the very first
+        // write). Verify a back-to-back ext_rom load lands coherently,
+        // INCLUDING address 0.
+        $display("Loading %0d bytes into ext_rom @ idx=1, BACK-TO-BACK", EXT_LEN);
+        for (int i = 0; i < EXT_LEN; i++)
+            rom_write(1'b1, 14'(i), ext_prog[i]);
+        // Drain the CDC: at sdram_clk=clk the synchronizer + FIFO take a few
+        // cycles to retire the last write.
+        repeat(16) @(posedge clk);
+
+        // Byte 0 is the canary — the live-sample CDC loses it entirely.
+        check_eq8("ext_rom[0x0000] after back-to-back load (BYTE 0)",
+                  dut.ext_rom_inst.mem[14'h0000], ext_prog[0]);
+        check_eq8("ext_rom[0x0001] after back-to-back load",
+                  dut.ext_rom_inst.mem[14'h0001], ext_prog[1]);
+        check_eq8("ext_rom[0x0002] after back-to-back load",
+                  dut.ext_rom_inst.mem[14'h0002], ext_prog[2]);
+        check_eq8("ext_rom[0x0003] after back-to-back load",
+                  dut.ext_rom_inst.mem[14'h0003], ext_prog[3]);
+        check_eq8("ext_rom[0x0007] after back-to-back load (last)",
+                  dut.ext_rom_inst.mem[14'h0007], ext_prog[7]);
 
         // Release CPU reset → CPU fetches the (now populated) reset vector.
         // Then release pause so clock-enable advances.

@@ -468,13 +468,19 @@ module top (
     // --- Boot-bridge ROM-load CDC: pixel clk -> sdram_clk -------------------
     // debug_bridge runs on the pixel clk, so dbg_rom_we/idx/addr/data arrive in
     // the pixel domain. ext_rom port A is now on sdram_clk, so the boot writes
-    // must cross domains. The boot stream is slow (one byte per many cycles at
-    // 115200/SPI), so dbg_rom_addr/data are quasi-static while dbg_rom_we is
-    // asserted. We synchronize the *level* of the extension-ROM write-enable
-    // into sdram_clk with a 2-FF synchronizer + rising-edge detect to emit a
-    // single 1-sdram_clk write pulse, sampling addr/data alongside (they are
-    // stable). Same 2-FF (* async_reg *) idiom as debug_sdram_port_b_cdc.sv.
-    wire        erom_we_pix = dbg_rom_we && (dbg_rom_idx == 1'b1);
+    // must cross domains. NovaHost and the tests stream the whole 16 KB image
+    // as BACK-TO-BACK writes (dbg_rom_we high every other cycle, addr/data
+    // advancing each write). A level-synchronizer + edge-detect that samples
+    // addr/data LIVE when the synchronized we-pulse fires is WRONG for that
+    // traffic: the pulse lands 2+ sdram_clk cycles after the real edge, so the
+    // captured payload is skewed and byte 0 (addr 0, the very first write) is
+    // lost. Instead push each write's {addr,data} into a small dual-clock FIFO
+    // on the pixel clk (capturing the payload COHERENTLY with the we edge) and
+    // pop it on sdram_clk to drive the port-A write. The sink (sdram_clk) drains
+    // far faster than the source (pixel clk) fills, so a shallow FIFO suffices
+    // even for back-to-back source writes. Adapts the tested Gray-code async
+    // FIFO from debug_async_byte_fifo.sv (see rom_load_cdc_fifo.sv).
+    wire erom_push = dbg_rom_we && (dbg_rom_idx == 1'b1);
 
     // Reset synchronizer into sdram_clk (custom_rst is a pixel-clk signal).
     (* async_reg = "true" *) reg [1:0] erom_rst_sync_sd = 2'b11;
@@ -483,35 +489,31 @@ module top (
     end
     wire erom_rst_sd = erom_rst_sync_sd[1];
 
-    // 2-FF level synchronizer for the write-enable + edge detect.
-    (* async_reg = "true" *) reg [1:0] erom_we_sync_sd;
-    reg                                erom_we_seen_sd;   // prev synced level
-    reg                                erom_boot_we_sd;   // 1-cycle write pulse
-    reg [13:0]                         erom_boot_addr_sd; // sampled @ rising edge
-    reg [7:0]                          erom_boot_data_sd;
-    always @(posedge sdram_clk) begin
-        if (erom_rst_sd) begin
-            erom_we_sync_sd   <= 2'b00;
-            erom_we_seen_sd   <= 1'b0;
-            erom_boot_we_sd   <= 1'b0;
-            erom_boot_addr_sd <= 14'd0;
-            erom_boot_data_sd <= 8'd0;
-        end else begin
-            erom_we_sync_sd <= {erom_we_sync_sd[0], erom_we_pix};
-            erom_we_seen_sd <= erom_we_sync_sd[1];
-            // Rising edge of the synchronized write-enable -> one write pulse.
-            // addr/data are stable in the pixel domain while we is high, and
-            // their bits have had >=2 sdram_clk edges of settle time, so they
-            // are safe to sample here.
-            if (erom_we_sync_sd[1] && !erom_we_seen_sd) begin
-                erom_boot_we_sd   <= 1'b1;
-                erom_boot_addr_sd <= dbg_rom_addr;
-                erom_boot_data_sd <= dbg_rom_data;
-            end else begin
-                erom_boot_we_sd   <= 1'b0;
-            end
-        end
-    end
+    // Pixel-domain write payload: {addr[13:0], data[7:0]} carried as one word
+    // so addr/data stay inseparable across the CDC.
+    wire [21:0] erom_fifo_wr_data = {dbg_rom_addr, dbg_rom_data};
+    wire        erom_fifo_rd_valid;
+    wire [21:0] erom_fifo_rd_data;
+
+    rom_load_cdc_fifo #(.WIDTH(22), .ADDR_WIDTH(3)) erom_load_cdc (
+        .wr_clk   (clk),
+        .wr_rst   (custom_rst),
+        .wr_data  (erom_fifo_wr_data),
+        .wr_valid (erom_push),
+        .wr_ready (),                 // boot stream is host-throttled; never fills
+        .rd_clk   (sdram_clk),
+        .rd_rst   (erom_rst_sd),
+        .rd_data  (erom_fifo_rd_data),
+        .rd_valid (erom_fifo_rd_valid),
+        .rd_ready (1'b1),             // always drain into the ext_rom write port
+        .overflow (),
+        .underflow ()
+    );
+
+    // sdram_clk side: each FIFO pop is one coherent ext_rom port-A write.
+    wire        erom_boot_we_sd   = erom_fifo_rd_valid;
+    wire [13:0] erom_boot_addr_sd = erom_fifo_rd_data[21:8];
+    wire [7:0]  erom_boot_data_sd = erom_fifo_rd_data[7:0];
 
     // ext_rom port-A write-source mux (now entirely in the sdram_clk domain):
     // page_dma (pgd_*) vs the sdram_clk-synchronized boot write. Both feed

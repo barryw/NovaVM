@@ -290,7 +290,7 @@ test_novaz_xram_roundtrip: test_novaz_xram_roundtrip.sv $(RTL)/debug_bridge.sv $
 
 # End-to-end test: instantiates full top.sv (CPU + VGC + SID + blitter + RAM/ROM),
 # streams a tiny 6502 program into basic_rom via dbg_rom_we, verifies execution.
-ROM_LOAD_RTL = $(VGC) $(RTL)/dpram_dc.sv $(SID) $(WTS) $(RTL)/blitter.sv $(RTL)/dma.sv $(RTL)/math_copro.sv $(RTL)/fio.sv $(RTL)/nic.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv $(RTL)/sdram/sdram.v $(RTL)/sdram/xram_sdram.sv
+ROM_LOAD_RTL = $(VGC) $(RTL)/dpram_dc.sv $(RTL)/rom_load_cdc_fifo.sv $(SID) $(WTS) $(RTL)/blitter.sv $(RTL)/dma.sv $(RTL)/math_copro.sv $(RTL)/fio.sv $(RTL)/nic.sv $(RTL)/arlet_6502/cpu.v $(RTL)/arlet_6502/ALU.v $(RTL)/top.sv $(RTL)/sdram/sdram.v $(RTL)/sdram/xram_sdram.sv
 test_rom_load: test_rom_load.sv $(ROM_LOAD_RTL)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
