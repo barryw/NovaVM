@@ -191,6 +191,69 @@ module test_sdram_stream;
     end
 
     // -----------------------------------------------------------------
+    // Refresh-obligation monitor (case (e)).
+    //
+    // The page-mode FSM issues one UNCONDITIONAL AUTO_REFRESH per physical
+    // 512-byte row boundary (sdram.v S_REFRESH, ~line 307). The JEDEC tREF
+    // obligation is 64 ms / 8192 rows = 7.8 us/row = 780 sdram_clk cycles
+    // @ 100 MHz. This monitor proves the obligation is met across the WHOLE
+    // 8192-word/32-row burst: no AUTO_REFRESH gap is dangerously long.
+    //
+    // It watches the command pins for AUTO_REFRESH (4'b0001 == STR_CMD_AUTO_
+    // REFRESH) and records, in sdram_clk cycles:
+    //   - rf_gap_max : max gap between consecutive in-burst refreshes
+    //   - rf_first   : cycles from stream_req to the FIRST refresh
+    //   - rf_last_to_done : cycles from the LAST refresh to stream_done
+    //   - rf_count   : number of in-burst refreshes seen
+    // rf_en (armed by the test around the burst) AND stream_busy gate it to
+    // in-burst commands only — identical discipline to the count_en/stream_
+    // busy command counter above, so the idle single-access AUTO_REFRESH
+    // (sdram.v ~line 483, issued when NOT streaming) cannot leak in.
+    //
+    // rf_clk is a free-running sdram_clk index used to timestamp each event;
+    // rf_last_idx holds the timestamp of the previous refresh so the gap is
+    // a simple subtract. rf_req_idx is stamped on stream_req, rf_done_idx on
+    // stream_done, giving the req->first and last->done tail gaps.
+    // -----------------------------------------------------------------
+    logic        rf_en      = 1'b0;
+    int          rf_clk     = 0;     // free-running sdram_clk index
+    int          rf_count   = 0;     // in-burst AUTO_REFRESH count
+    int          rf_last_idx = 0;    // timestamp of previous refresh
+    int          rf_gap_max = 0;     // max consecutive-refresh gap
+    int          rf_req_idx = 0;     // timestamp of stream_req
+    int          rf_done_idx = 0;    // timestamp of stream_done
+    int          rf_first    = 0;    // req -> first refresh gap
+    logic        rf_first_seen = 1'b0;
+
+    always @(posedge clk) begin
+        rf_clk <= rf_clk + 1;
+        if (rf_en) begin
+            // Stamp the request edge so the req->first tail can be measured.
+            if (stream_req) begin
+                rf_req_idx    <= rf_clk;
+                rf_last_idx   <= rf_clk;   // gap baseline starts at req
+                rf_first_seen <= 1'b0;
+            end
+            // Count + gap only for AUTO_REFRESH issued while the stream FSM
+            // owns the bus (mirrors the count_en && stream_busy discipline).
+            if (stream_busy && (cmd_pins == 4'b0001)) begin
+                int gap;
+                gap = rf_clk - rf_last_idx;
+                if (gap > rf_gap_max) rf_gap_max <= gap;
+                rf_last_idx <= rf_clk;
+                rf_count    <= rf_count + 1;
+                if (!rf_first_seen) begin
+                    rf_first      <= rf_clk - rf_req_idx;
+                    rf_first_seen <= 1'b1;
+                end
+            end
+            // Stamp completion to measure the last-refresh -> done tail.
+            if (stream_done)
+                rf_done_idx <= rf_clk;
+        end
+    end
+
+    // -----------------------------------------------------------------
     // Pass/fail bookkeeping
     // -----------------------------------------------------------------
     int pass_count = 0;
@@ -448,6 +511,54 @@ module test_sdram_stream;
         verify_unique("(d) 16 KB 8192 words byte-exact", 0, 8192);
         check("(d) measured cycles in window (7000 < n < 11000)",
               (cyc_count > 7000) && (cyc_count < 11000));
+
+        // =============================================================
+        // CASE (e): 16 KB / 8192-word REFRESH-OBLIGATION proof.
+        // stream_addr=0 (512-aligned), 8192 words = 16 KB = 32 physical
+        // rows. The page-mode FSM issues one unconditional AUTO_REFRESH per
+        // row boundary; this case proves the JEDEC tREF obligation is met
+        // across the WHOLE burst: NO gap between consecutive refreshes (nor
+        // the req->first and last->done tails) exceeds 780 sdram_clk cycles
+        // (= 7.8 us/row @ 100 MHz). Per-row unconditional refresh gives
+        // ~one per ~270 cycles, well inside the 780-cycle bound.
+        //
+        // Pattern stays preloaded from case (d) (same words 0..8191), so no
+        // re-write is needed. The sdram_model oracle $fatal's on any illegal
+        // sequence, so a clean run also proves the 32-row burst is legal.
+        // =============================================================
+        $display("");
+        $display("Streaming 8192 words from byte addr 0 (16 KB) for REFRESH-GAP proof...");
+
+        // Reset + arm the refresh monitor just before the burst.
+        rf_count = 0; rf_gap_max = 0; rf_first = 0;
+        rf_first_seen = 1'b0;
+        @(posedge clk);
+        rf_en = 1'b1;
+        run_stream(25'd0, 8192);
+        @(posedge clk);
+        rf_en = 1'b0;
+
+        begin
+            int rf_last_to_done;
+            rf_last_to_done = rf_done_idx - rf_last_idx;
+            $display("  refreshes=%0d  max consecutive gap=%0d cyc  req->first=%0d cyc  last->done=%0d cyc",
+                     rf_count, rf_gap_max, rf_first, rf_last_to_done);
+            $display("  (bound = 780 sdram_clk cycles = 7.8 us @ 100 MHz)");
+
+            check("(e) stream_done asserted within watchdog", done_seen);
+            check("(e) captured exactly 8192 words", got_count == 8192);
+            verify_unique("(e) 16 KB 8192 words byte-exact", 0, 8192);
+            // 32 physical rows -> >=31 in-burst boundary refreshes; at least
+            // one per row boundary must be present for the gap proof to mean
+            // anything.
+            check("(e) >= 31 in-burst AUTO_REFRESH (one per row)", rf_count >= 31);
+            // THE OBLIGATION: no consecutive-refresh gap exceeds 780 cycles.
+            check("(e) max consecutive refresh gap <= 780 cyc",  rf_gap_max <= 780);
+            // No unguarded head: first refresh within 780 of stream_req.
+            check("(e) req -> first refresh <= 780 cyc",         rf_first <= 780);
+            // No unguarded tail: last refresh within 780 of stream_done.
+            check("(e) last refresh -> done <= 780 cyc",         rf_last_to_done <= 780);
+        end
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);
