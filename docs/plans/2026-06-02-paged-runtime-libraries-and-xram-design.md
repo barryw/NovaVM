@@ -213,11 +213,23 @@ boot-bridge (`dbg_rom_we`) vs `page_dma` — they never overlap.
 | 2 | stream read + `ext_rom` write @ `sdram_clk` (dual-clock dpram) | ~0.16 ms | + dual-clock BRAM — later, if ever |
 | 3 | stream read + 16-bit sdram write | ~0.084 ms | + aspect trick (risky) — not pursued |
 
-Page-in uses **Tier 1** for the proof: validates engine→consumer end-to-end without the
-dual-clock/16-bit BRAM-aspect risk, and 0.65 ms for a *rare* switch is imperceptible
-forever. The doc's earlier "~84 µs" was Tier 3 — not the target. (The engine's *read*
-still runs full-speed; Regime 2's bandwidth is bounded by its FIFO/consumer, to be
-measured.)
+**REVISED during implementation (2026-06-02) → Tier 2 + engine back-pressure.** The
+original "Tier 1 = small FIFO" plan was a mis-call: the engine streams **1 word/clk
+free-running** (no back-pressure within a row) while an 8-bit `ext_rom` write is **2
+clk/word**, so even a single 16 K burst backlogs ~7 K words (~14 KB) into a "small" FIFO
+— Tier 1 actually needs *chunked* streaming, which is *more* complex than the dual-clock
+alternative. **Chosen path:** Tier 2 — a **dual-clock `ext_rom`** (write port @
+`sdram_clk`, CPU read port @ pixel clk; ECP5 DP16KD natively supports independent port
+clocks — the BRAM risk flagged earlier was the *16-bit aspect* of Tier 3, not dual-clock)
++ **stream back-pressure**: a new `stream_ready` input on `sdram.v`'s page-mode FSM holds
+READ issuance (NOP, row stays open) when low, so `page_dma` *self-paces* the
+free-running stream to its 2-byte-per-word write. Result: **no FIFO, no chunking, no
+buffer** — `page_dma` writes `ext_rom` directly in `sdram_clk`, only the trigger/done
+handshake (and the slow boot-bridge ROM-load writes) cross clock domains. ~0.16 ms.
+Page-in is rare so the speed delta is moot; this is the *lower-risk, simpler* design, and
+`stream_ready` is reusable by Regime 2. (The doc's earlier "~84 µs" was the read-stream
+throughput, since confirmed at **8676 cyc = 86.76 µs @ 100 MHz**; Tier-3 16-bit write is
+not pursued.)
 
 **Discipline — Verilator-first, before any 17-min synth** ([rtl-discipline]: 99.99% sure
 first):

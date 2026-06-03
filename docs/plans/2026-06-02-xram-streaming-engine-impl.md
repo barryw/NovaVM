@@ -383,31 +383,41 @@ git commit -m "feat(page_dma): sdram_clk consumer streams XRAM -> ext_rom (byte-
 
 ---
 
-## Task 11: CPU trigger registers + CDC + `rdy_out` stall
+## Task 11 (REVISED → Tier 2 + engine back-pressure): split into 11a–11d
 
-**Files:**
-- Modify: `e6502.FPGA/rtl/page_dma.sv` (add CPU-domain register block + async FIFO to pixel
-  clock for the real `ext_rom` write + `rdy_out`)
-- Modify: `e6502.FPGA/rtl/top.sv` (instantiate `page_dma`, wire MMIO + `pgd_active` + the
-  `ext_rom` write mux from Task 9 + AND `pgd_rdy` into CPU RDY)
+Decided during implementation (see §3.3 "REVISED"): the page-in data path is **Tier 2**
+(dual-clock `ext_rom`, direct sdram-clk write) with **engine back-pressure** (`stream_ready`)
+instead of the original Tier-1 FIFO. No FIFO/chunking/buffer. Split for one-change-at-a-time:
 
-**Step 1: Define registers** at `$BA76`+ (verify unclaimed first):
-`PGD_CMD ($BA76, write 1=start)`, `PGD_STATUS ($BA77: busy/done/err)`,
-`PGD_SRCL/M/H ($BA78–7A, 24-bit XRAM byte base)`, `PGD_WORDSL/H ($BA7B–7C, default 8192)`.
-CPU writes are pixel-domain; CDC `start` (toggle) into `sdram_clk`; CDC `done` back. While
-busy, drive `rdy_out=0` (CPU stalled → page-in atomic, no race).
+**Task 11a — `stream_ready` back-pressure on the engine.** Add a `stream_ready` input to
+`sdram.v`'s page-mode FSM: in `S_READ`, issue a READ only when `stream_ready` (else NOP, row
+held open, column counter stalled); the CAS pipeline drains normally. Add a bench case to
+`test_sdram_stream.sv` that deasserts `stream_ready` for N cycles mid-row and asserts
+byte-exact output + the model never `$fatal`s (row-open-during-pause is legal). Regression:
+cases a–f still green. `sdram.v` + test only.
 
-**Step 2: Write failing top-level test** `test_page_in_top.sv` (deps: `ROM_LOAD_RTL` +
-`page_dma.sv`, like `test_rom_load`): preload a 16 KB pattern into XRAM (via the existing
-port-B poke path the rom_load/novaz tests use), then CPU writes `PGD_SRC*`/`PGD_WORDS*` and
-`PGD_CMD=1`; after the stall releases, CPU reads `$C000`+ (with `ext_rom_active=1`) and
-asserts the bytes match the pattern. RED before wiring.
+**Task 11b — dual-clock `ext_rom` + boot-bridge CDC + mux to sdram_clk.** Create a
+dual-clock dpram variant (port A clk = `sdram_clk`, port B clk = pixel `clk`) and use it for
+`ext_rom_inst`. The boot-bridge writes (`dbg_rom_*`, slow) are CDC'd / synchronized into
+`sdram_clk`. Move the Task-9 write mux (bridge vs `page_dma`) into `sdram_clk`. Regression:
+`test_rom_load` (boot ROM-load) still passes with `pgd_active=0`.
 
-**Step 3: Implement** the register block + FIFO + `top.sv` wiring; run:
-```bash
-make -C test test_page_in_top
-```
-Expected: PASS.
+**Task 11c — `page_dma` direct sdram-clk write + pacing.** Rework `page_dma` to write
+`ext_rom` directly (`pgd_erom_we/addr[13:0]/data[7:0]`, 2 byte-writes/word at `sdram_clk`)
+and drive `stream_ready` (deassert between the two byte-writes so the stream self-paces).
+Update `test_page_dma.sv` to the 8-bit byte-write interface. Byte-exact 16 KB.
+
+**Task 11d — CPU MMIO trigger + CDC + `rdy_out` + e2e.** Registers at `$BA76`+ (verify
+unclaimed): `PGD_CMD ($BA76, w1=start)`, `PGD_STATUS ($BA77 busy/done/err)`, `PGD_SRCL/M/H
+($BA78–7A)`, `PGD_WORDSL/H ($BA7B–7C, default 8192)`. CPU writes pixel-domain; CDC `start`
+toggle → `sdram_clk`, `done` back. While busy, `rdy_out=0` (atomic page-in). **N1:** gate
+port-A/B requests on `stream_busy` so an armed access can't straddle the streaming-enter
+edge. **Dual-path:** the `top.sv` mux is in the `SYNTHESIS` branch — ensure
+`test_page_in_top.sv` builds with `-DSYNTHESIS` (or mirror the write in the behavioral
+branch + breadcrumb at ~`top.sv:1319`). E2E test `test_page_in_top.sv` (deps `ROM_LOAD_RTL`
++ `page_dma.sv`): preload 16 KB into XRAM (port-B poke path), CPU writes `PGD_*` + `CMD=1`,
+after the stall releases CPU reads `$C000`+ (`ext_rom_active=1`) and asserts bytes match. RED
+before wiring → GREEN. Then regression sweep.
 
 **Step 4: Regression sweep** (engine + consumers + boot intact):
 ```bash
