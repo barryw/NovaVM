@@ -21,9 +21,15 @@
 // is the word index k = 0..(words-1); the real ext_rom byte addresses are
 // 2k / 2k+1.
 //
-// The ext_rom write port is muxed in top.sv (boot bridge dbg_rom_* vs page_dma
-// pgd_*); pgd_active selects page_dma. They never overlap (a page-in only runs
-// at a runtime switch, with the boot bridge idle).
+// CURRENT REALITY (this Task): page_dma is sdram_clk-ONLY and emits word-wide
+// writes — 16-bit erom_data at word-index erom_addr. There is NO CDC FIFO and
+// NO pixel-domain byte drain in this module yet. The async sdram_clk->pixel
+// FIFO and the pixel-domain 8-bit byte drain (the pgd_erom_* path) are added in
+// Task 11. In top.sv the ext_rom write port is muxed (boot bridge dbg_rom_* vs
+// page_dma pgd_*) with pgd_active as the select, but as of this Task the pgd_*
+// wires there are placeholder tie-offs (pgd_active=0); Task 11 connects the
+// real page_dma outputs through the FIFO. A page-in and the boot bridge never
+// overlap (a page-in only runs at a runtime switch, with the boot bridge idle).
 
 module page_dma (
     input  wire        clk,            // sdram_clk
@@ -38,7 +44,8 @@ module page_dma (
     output reg  [13:0] stream_words,
     input  wire [15:0] stream_dout,
     input  wire        stream_valid,
-    input  wire        stream_busy,
+    input  wire        stream_busy,    // observed-only / reserved: the FSM keys off
+                                       // stream_done, not busy. Kept for Task 11.
     input  wire        stream_done,
 
     // ext_rom write port (dpram port A). Word-wide pair per stream word; see
@@ -79,11 +86,23 @@ module page_dma (
             S_IDLE: begin
                 pgd_active <= 1'b0;
                 if (start) begin
-                    stream_addr  <= src_base;
-                    stream_words <= words;
-                    word_idx     <= 14'd0;
-                    pgd_active   <= 1'b1;   // owns ext_rom from the request on
-                    state        <= S_REQ;
+                    // words==0 must NOT issue a stream request: sdram.v's
+                    // S_IDLE requires stream_words!=0 and would ignore it, so
+                    // stream_done would never fire and the FSM would wedge in
+                    // S_RUN with pgd_active stuck high forever (permanent CPU
+                    // stall once rdy_out ties to pgd_active). Treat it as an
+                    // immediate completion: pulse `done`, never raise
+                    // pgd_active, never assert stream_req, stay idle.
+                    if (words == 14'd0) begin
+                        done <= 1'b1;
+                        // pgd_active already defaulted low above; stay in S_IDLE.
+                    end else begin
+                        stream_addr  <= src_base;
+                        stream_words <= words;
+                        word_idx     <= 14'd0;
+                        pgd_active   <= 1'b1;   // owns ext_rom from the request on
+                        state        <= S_REQ;
+                    end
                 end
             end
 

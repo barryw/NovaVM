@@ -230,6 +230,14 @@ module test_page_dma;
     int   active_high_cycles;          // count of cycles pgd_active was high
     int   done_pulse_count;            // # of `done` pulses (must be exactly 1)
 
+    // words==0 hazard-guard bookkeeping (separate so a wedge can't corrupt the
+    // main-run counters). A tight bound — a non-wedging machine completes in a
+    // couple cycles; a wedged one trips the bound with done never seen.
+    localparam int ZW_BOUND = 16;      // generous for an immediate completion
+    logic zw_done_seen;
+    int   zw_done_pulse_count;
+    logic zw_active_low_after;
+
     task automatic run_page_dma(input logic [24:0] base, input int n_words);
         int i;
         done_seen          = 1'b0;
@@ -257,6 +265,43 @@ module test_page_dma;
             @(posedge clk);
             if (done) done_pulse_count++;
         end
+    endtask
+
+    // -----------------------------------------------------------------
+    // words==0 trigger with a TIGHT watchdog. A correct machine completes
+    // immediately (done within a couple cycles, pgd_active never stuck). A
+    // wedged machine never sees `done` and leaves pgd_active high -> the
+    // bound trips with zw_done_seen=0 and zw_active_low_after=0.
+    // -----------------------------------------------------------------
+    task automatic run_zero_word_page_dma(input logic [24:0] base);
+        int i;
+        zw_done_seen        = 1'b0;
+        zw_done_pulse_count = 0;
+        zw_active_low_after = 1'b0;
+
+        @(posedge clk);
+        src_base <= base;
+        words    <= 14'd0;
+        start    <= 1'b1;
+        // Deassert `start` and begin observing on the SAME edge the FSM first
+        // samples `start`. An immediate-completion `done` pulses on this very
+        // edge, so the observation window must open here (a separate
+        // start-deassert edge before the loop would skip past the 1-clk pulse).
+        for (i = 0; (i < ZW_BOUND) && !zw_done_seen; i++) begin
+            @(posedge clk);
+            start <= 1'b0;
+            if (done) begin
+                zw_done_pulse_count++;
+                zw_done_seen = 1'b1;
+            end
+        end
+        // Settle, then confirm the FSM returned to idle: pgd_active low and
+        // `done` is a single 1-clk pulse (no level stuck high).
+        repeat (8) begin
+            @(posedge clk);
+            if (done) zw_done_pulse_count++;
+        end
+        zw_active_low_after = !pgd_active;
     endtask
 
     // -----------------------------------------------------------------
@@ -317,6 +362,22 @@ module test_page_dma;
         // Verify all 16384 bytes byte-exact + correct order.
         $display("Reading back 16384 bytes from ext_rom stand-in...");
         verify_ext_rom("16 KB ext_rom byte-exact + byte order", 8192);
+
+        // -----------------------------------------------------------------
+        // words==0 latent-hazard guard. A zero-word `start` must NOT wedge
+        // the FSM. sdram.v's S_IDLE requires stream_words!=0, so it ignores
+        // stream_req for a zero-word request and never asserts stream_done.
+        // If page_dma issued the request anyway it would sit in S_RUN with
+        // pgd_active high forever (permanent CPU stall once Task 11 ties
+        // rdy_out to pgd_active). The contract: treat words==0 as immediate
+        // completion -- `done` pulses within a couple cycles, pgd_active is
+        // never raised (or returns low promptly), and the FSM is back in idle.
+        // -----------------------------------------------------------------
+        $display("Triggering page_dma with words=0 (must not wedge)...");
+        run_zero_word_page_dma(25'd0);
+        check("words==0: done pulsed within tight bound",   zw_done_seen);
+        check("words==0: done was a single 1-clk pulse",    zw_done_pulse_count == 1);
+        check("words==0: pgd_active never stuck high",       zw_active_low_after);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

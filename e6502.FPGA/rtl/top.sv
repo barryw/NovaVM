@@ -462,13 +462,17 @@ module top (
 
     // ext_rom port-A write-source mux: boot bridge (dbg_rom_*) vs page_dma
     // (pgd_*). Both write sources are pixel-clock domain (dpram is single-clock
-    // and ext_rom_inst.clk is the pixel clk); page_dma drives pgd_* from the
-    // pixel side of its internal sdram_clk->pixel CDC FIFO (Task 10/11). The two
-    // sources never overlap. pgd_active selects between them.
+    // and ext_rom_inst.clk is the pixel clk). The page_dma module as it exists
+    // today is sdram_clk-only and emits WORD-wide writes (16-bit erom_data at a
+    // word index); it has no pixel-domain byte drain yet. The async
+    // sdram_clk->pixel CDC FIFO and the pixel-domain 8-bit pgd_erom_* byte drain
+    // that feed the mux below are added in Task 11. The two sources never
+    // overlap; pgd_active selects between them.
     // NOTE: these four pgd_* assignments are placeholder tie-offs; Task 11
-    // replaces them with the real page_dma outputs. With pgd_active=0 the muxes
-    // below reduce exactly to the original dbg_rom_*/erom_we boot-bridge path,
-    // so behaviour is byte-for-byte identical.
+    // replaces them with the real (FIFO-drained, byte-wide) page_dma outputs.
+    // With pgd_active=0 the muxes below reduce exactly to the original
+    // dbg_rom_*/erom_we boot-bridge path, so behaviour is byte-for-byte
+    // identical.
     wire        pgd_active   = 1'b0;
     wire        pgd_erom_we  = 1'b0;
     wire [13:0] pgd_erom_addr = 14'd0;
