@@ -456,35 +456,84 @@ module top (
     );
 
     // Extension ROM: 16KB. Bitstream initialized, runtime-overwritable.
+    //
+    // Task 11b: ext_rom is now a DUAL-CLOCK BRAM (dpram_dc). Port A (write) is
+    // clocked by sdram_clk so the Tier-2 page-in engine (page_dma, Task 11c —
+    // an sdram_clk-domain module) can write it directly with no data-path CDC.
+    // Port B (CPU read) stays on the pixel clk. The ECP5 DP16KD natively
+    // supports independent per-port clocks, so this is one block RAM.
     logic [13:0] erom_b_addr;
     logic [7:0]  erom_b_dout;
-    wire         erom_we = dbg_rom_we && (dbg_rom_idx == 1'b1);
 
-    // ext_rom port-A write-source mux: boot bridge (dbg_rom_*) vs page_dma
-    // (pgd_*). Both write sources are pixel-clock domain (dpram is single-clock
-    // and ext_rom_inst.clk is the pixel clk). The page_dma module as it exists
-    // today is sdram_clk-only and emits WORD-wide writes (16-bit erom_data at a
-    // word index); it has no pixel-domain byte drain yet. The async
-    // sdram_clk->pixel CDC FIFO and the pixel-domain 8-bit pgd_erom_* byte drain
-    // that feed the mux below are added in Task 11. The two sources never
-    // overlap; pgd_active selects between them.
-    // NOTE: these four pgd_* assignments are placeholder tie-offs; Task 11
-    // replaces them with the real (FIFO-drained, byte-wide) page_dma outputs.
-    // With pgd_active=0 the muxes below reduce exactly to the original
-    // dbg_rom_*/erom_we boot-bridge path, so behaviour is byte-for-byte
-    // identical.
-    wire        pgd_active   = 1'b0;
-    wire        pgd_erom_we  = 1'b0;
+    // --- Boot-bridge ROM-load CDC: pixel clk -> sdram_clk -------------------
+    // debug_bridge runs on the pixel clk, so dbg_rom_we/idx/addr/data arrive in
+    // the pixel domain. ext_rom port A is now on sdram_clk, so the boot writes
+    // must cross domains. The boot stream is slow (one byte per many cycles at
+    // 115200/SPI), so dbg_rom_addr/data are quasi-static while dbg_rom_we is
+    // asserted. We synchronize the *level* of the extension-ROM write-enable
+    // into sdram_clk with a 2-FF synchronizer + rising-edge detect to emit a
+    // single 1-sdram_clk write pulse, sampling addr/data alongside (they are
+    // stable). Same 2-FF (* async_reg *) idiom as debug_sdram_port_b_cdc.sv.
+    wire        erom_we_pix = dbg_rom_we && (dbg_rom_idx == 1'b1);
+
+    // Reset synchronizer into sdram_clk (custom_rst is a pixel-clk signal).
+    (* async_reg = "true" *) reg [1:0] erom_rst_sync_sd = 2'b11;
+    always @(posedge sdram_clk) begin
+        erom_rst_sync_sd <= {erom_rst_sync_sd[0], custom_rst};
+    end
+    wire erom_rst_sd = erom_rst_sync_sd[1];
+
+    // 2-FF level synchronizer for the write-enable + edge detect.
+    (* async_reg = "true" *) reg [1:0] erom_we_sync_sd;
+    reg                                erom_we_seen_sd;   // prev synced level
+    reg                                erom_boot_we_sd;   // 1-cycle write pulse
+    reg [13:0]                         erom_boot_addr_sd; // sampled @ rising edge
+    reg [7:0]                          erom_boot_data_sd;
+    always @(posedge sdram_clk) begin
+        if (erom_rst_sd) begin
+            erom_we_sync_sd   <= 2'b00;
+            erom_we_seen_sd   <= 1'b0;
+            erom_boot_we_sd   <= 1'b0;
+            erom_boot_addr_sd <= 14'd0;
+            erom_boot_data_sd <= 8'd0;
+        end else begin
+            erom_we_sync_sd <= {erom_we_sync_sd[0], erom_we_pix};
+            erom_we_seen_sd <= erom_we_sync_sd[1];
+            // Rising edge of the synchronized write-enable -> one write pulse.
+            // addr/data are stable in the pixel domain while we is high, and
+            // their bits have had >=2 sdram_clk edges of settle time, so they
+            // are safe to sample here.
+            if (erom_we_sync_sd[1] && !erom_we_seen_sd) begin
+                erom_boot_we_sd   <= 1'b1;
+                erom_boot_addr_sd <= dbg_rom_addr;
+                erom_boot_data_sd <= dbg_rom_data;
+            end else begin
+                erom_boot_we_sd   <= 1'b0;
+            end
+        end
+    end
+
+    // ext_rom port-A write-source mux (now entirely in the sdram_clk domain):
+    // page_dma (pgd_*) vs the sdram_clk-synchronized boot write. Both feed
+    // port A on sdram_clk. The two sources never overlap; pgd_active selects.
+    // pgd_* are tied off here (Task 11c/11d drive them); with pgd_active=0 the
+    // muxes reduce to the boot-bridge path, so behaviour is the boot-only path
+    // exactly as before — just now landing via the sdram_clk write port.
+    wire        pgd_active    = 1'b0;
+    wire        pgd_erom_we   = 1'b0;
     wire [13:0] pgd_erom_addr = 14'd0;
     wire [7:0]  pgd_erom_data = 8'd0;
 
-    wire        erom_we_muxed   = pgd_active ? pgd_erom_we   : erom_we;
-    wire [13:0] erom_addr_muxed = pgd_active ? pgd_erom_addr : dbg_rom_addr;
-    wire [7:0]  erom_data_muxed = pgd_active ? pgd_erom_data : dbg_rom_data;
+    wire        erom_we_muxed   = pgd_active ? pgd_erom_we   : erom_boot_we_sd;
+    wire [13:0] erom_addr_muxed = pgd_active ? pgd_erom_addr : erom_boot_addr_sd;
+    wire [7:0]  erom_data_muxed = pgd_active ? pgd_erom_data : erom_boot_data_sd;
 
-    dpram #(.WIDTH(8), .DEPTH(16384), .INIT_FILE("rom/extension.hex")) ext_rom_inst (
-        .clk(clk),
+    dpram_dc #(.WIDTH(8), .DEPTH(16384), .INIT_FILE("rom/extension.hex")) ext_rom_inst (
+        // Port A: write side on sdram_clk
+        .clk_a(sdram_clk),
         .addr_a(erom_addr_muxed), .din_a(erom_data_muxed), .we_a(erom_we_muxed), .dout_a(),
+        // Port B: CPU read side on pixel clk
+        .clk_b(clk),
         .addr_b(erom_b_addr), .dout_b(erom_b_dout)
     );
 

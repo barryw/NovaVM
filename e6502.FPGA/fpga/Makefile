@@ -96,7 +96,7 @@ USB_HID_DEPS = $(USB_HID_ROM_HEX)
 else
 USB_HID_DEPS =
 endif
-RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv \
+RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/dpram_dc.sv $(RTLDIR)/ecp5pll.sv $(RTLDIR)/debug_bridge.sv \
            $(RTLDIR)/sid_hdmi_audio.sv $(RTLDIR)/audio_pcm_fifo.sv \
            $(RTLDIR)/audio_led_meter.sv \
            $(RTLDIR)/wts_chip.sv \

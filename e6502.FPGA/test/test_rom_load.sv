@@ -107,7 +107,21 @@ module test_rom_load;
         .dbg_cpu_irq(dbg_cpu_irq),
         .dbg_cpu_nmi(dbg_cpu_nmi),
         .dbg_cpu_waiting(dbg_cpu_waiting),
-        .dbg_cpu_stopped(dbg_cpu_stopped)
+        .dbg_cpu_stopped(dbg_cpu_stopped),
+        // SDRAM port A — ext_rom's write port (Task 11b) is now clocked by
+        // sdram_clk and the boot-bridge ROM writes cross from the pixel clk
+        // into sdram_clk via a 2-FF synchronizer. The CDC needs a real
+        // sdram_clk edge or the boot writes never land. In sim we tie
+        // sdram_clk to the pixel clk (same idiom as test_romswap_values_top);
+        // a same-clock 2-FF sync just adds a couple cycles of latency, which
+        // is harmless for the slow boot stream. The rest of port A/B is
+        // tied off (XRAM/SID-curve paths are not exercised here).
+        .sdram_clk(clk),
+        .sdram_addrA(), .sdram_dinA(), .sdram_weA(), .sdram_oeA(),
+        .sdram_doutA(8'h00), .sdram_doneA(1'b0),
+        .sdram_addrB(), .sdram_dinB(), .sdram_weB(), .sdram_oeB(),
+        .sdram_doutB(8'h00),
+        .fio_event(), .nic_event()
     );
 
     // -----------------------------------------------------------------------
