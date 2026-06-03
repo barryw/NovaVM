@@ -136,7 +136,10 @@ module test_sdram_stream;
     // PRECHARGE is further split by A10 = sd_addr[10]:
     //   A10=1 -> precharge-ALL (the S_PRE_ALL clean-entry command)
     //   A10=0 -> single-bank precharge (the per-row S_PRECHARGE command)
-    // count_en gates counting to the burst-of-interest only.
+    // count_en && stream_busy gates counting to the burst-of-interest only:
+    // stream_busy ensures only commands issued while the stream FSM owns the
+    // bus are tallied, so a stray idle AUTO_REFRESH at the count_en arm/disarm
+    // edges cannot leak in and break the exact counts.
     // -----------------------------------------------------------------
     wire [3:0] cmd_pins = {sd_cs, sd_ras, sd_cas, sd_we};
     logic count_en = 1'b0;
@@ -147,7 +150,7 @@ module test_sdram_stream;
     int cnt_refresh  = 0;
 
     always @(posedge clk) begin
-        if (count_en) begin
+        if (count_en && stream_busy) begin
             case (cmd_pins)
                 4'b0011: cnt_active  <= cnt_active  + 1;   // ACTIVE
                 4'b0101: cnt_read    <= cnt_read    + 1;   // READ
