@@ -83,7 +83,9 @@ module test_sdram_model_vs_ctrl;
         .addrA(addrA), .weA(weA), .dinA(dinA), .oeA(oeA), .doutA(doutA), .doneA(doneA),
         .addrB(addrB), .weB(weB), .dinB(dinB), .oeB(oeB), .doutB(doutB), .doneB(doneB),
         // Stream port idle (stub)
-        .stream_req(1'b0), .stream_addr(25'd0), .stream_words(14'd0)
+        .stream_req(1'b0), .stream_addr(25'd0), .stream_words(14'd0),
+        .stream_ready(1'b1)
+
     );
 
     // The timing oracle under test. Its sd_data_in is the controller-input

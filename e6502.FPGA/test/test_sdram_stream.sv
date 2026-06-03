@@ -76,6 +76,7 @@ module test_sdram_stream;
     logic        stream_req   = 1'b0;
     logic [24:0] stream_addr  = 25'd0;
     logic [13:0] stream_words = 14'd0;
+    logic        stream_ready = 1'b1;   // default: always ready (cases a-f free-run)
     wire  [15:0] stream_dout;
     wire         stream_valid;
     wire         stream_busy;
@@ -104,6 +105,7 @@ module test_sdram_stream;
         .stream_req  (stream_req),
         .stream_addr (stream_addr),
         .stream_words(stream_words),
+        .stream_ready(stream_ready),
         .stream_dout (stream_dout),
         .stream_valid(stream_valid),
         .stream_busy (stream_busy),
@@ -380,6 +382,75 @@ module test_sdram_stream;
             if (stream_done)
                 done_seen = 1'b1;
         end
+    endtask
+
+    // -----------------------------------------------------------------
+    // Paced stream burst (case (g)). Identical capture to run_stream, but
+    // drives stream_ready LOW for several windows mid-stream to exercise the
+    // engine's back-pressure. The engine must:
+    //   - hold the row open and stop issuing READs while ready is low
+    //   - keep draining in-flight CAS reads (stream_valid still pulses for the
+    //     up-to-CAS(=3) reads already issued before the pause)
+    //   - lose/reorder NO words: every word captured byte-exact and in order
+    //   - resume from the held column when ready re-asserts
+    // pg_cycles records the stream_req->stream_done latency in clk cycles so
+    // the test can prove the paused burst took strictly LONGER than unpaused.
+    //
+    // Pause schedule: after every `pause_period` captured words, drop
+    // stream_ready for `pause_len` clk cycles, then re-assert. This drops
+    // ready many times across the burst (multiple windows) and each window is
+    // long enough (>CAS) that stream_valid fully quiesces mid-pause at least
+    // once — proving the pipeline empties with the row still open.
+    int pg_cycles;
+
+    task automatic run_stream_paced(input logic [24:0] saddr, input int n_words,
+                                    input int pause_period, input int pause_len);
+        int i;
+        int next_pause_at;   // capture count at which to start the next pause
+        for (i = 0; i < MAX_WORDS; i++) got[i] = 16'hxxxx;
+        got_count = 0;
+        done_seen = 1'b0;
+        pg_cycles = 0;
+        next_pause_at = pause_period;
+
+        @(posedge clk);
+        stream_ready <= 1'b1;
+        stream_addr  <= saddr;
+        stream_words <= n_words[13:0];
+        stream_req   <= 1'b1;
+        @(posedge clk);
+        stream_req   <= 1'b0;
+
+        for (i = 0; (i < WATCHDOG) && !done_seen; i++) begin
+            @(posedge clk);
+            pg_cycles++;
+            if (stream_valid && (got_count < MAX_WORDS)) begin
+                got[got_count] = stream_dout;
+                got_count++;
+            end
+            if (stream_done)
+                done_seen = 1'b1;
+            // When we cross a pause threshold (and there is still more to come),
+            // hold ready LOW for pause_len cycles, then re-assert. The drain
+            // continues during the pause so a few more words may land; we keep
+            // capturing them in this same loop body across the pause window.
+            else if (!done_seen && (got_count >= next_pause_at)) begin
+                int p;
+                stream_ready <= 1'b0;
+                for (p = 0; p < pause_len; p++) begin
+                    @(posedge clk);
+                    pg_cycles++;
+                    if (stream_valid && (got_count < MAX_WORDS)) begin
+                        got[got_count] = stream_dout;
+                        got_count++;
+                    end
+                    if (stream_done) done_seen = 1'b1;
+                end
+                stream_ready  <= 1'b1;
+                next_pause_at = got_count + pause_period;
+            end
+        end
+        stream_ready <= 1'b1;
     endtask
 
     // Verify the captured words are byte-exact against the unique pattern,
@@ -790,6 +861,66 @@ module test_sdram_stream;
 
             check("(f2) port-B read completed (early or deferred)", b_ok);
             check("(f2) port-B read returned correct byte (0x04)", b_data == 8'h04);
+        end
+
+        // =============================================================
+        // CASE (g): BACK-PRESSURE / PACED STREAM (Task 11a stream_ready).
+        // stream_addr=0 (512-aligned), 1024 words = 4 physical rows. We run
+        // the SAME burst twice over the same preloaded data:
+        //   1) UNPACED reference (stream_ready held high the whole time) —
+        //      records the free-running latency via the cyc_arm monitor.
+        //   2) PACED — stream_ready dropped LOW for pause_len(=8) clk cycles
+        //      after every pause_period(=64) captured words, repeatedly, so
+        //      the engine is paused in MANY windows across the burst. Each
+        //      8-cycle window exceeds CAS(=3), so stream_valid fully quiesces
+        //      mid-pause (pipeline empties) with the row held open — then
+        //      resumes from the held column.
+        //
+        // Assertions:
+        //   (a) the paced burst captures all 1024 words byte-exact, in order
+        //       (no loss / no reorder despite the toggling ready);
+        //   (b) the model never $fatal's (a clean run = row-held-open is legal
+        //       SDRAM timing; the oracle aborts the sim otherwise);
+        //   (c) the paced burst takes strictly MORE clk cycles than the
+        //       unpaced one — proof the pause actually paused issuance and was
+        //       not silently ignored.
+        //
+        // Data is preloaded via the model backdoor (write path already proven
+        // byte-exact in cases a-f); byte-exactness of all 1024 paced words is
+        // still fully verified.
+        // =============================================================
+        $display("");
+        $display("CASE (g): back-pressure / paced stream (stream_ready)");
+        preload_unique_pattern(1024);
+
+        // 1) Unpaced reference latency (stream_ready stays high in run_stream).
+        $display("  (g) unpaced reference: 1024 words from byte 0, ready high...");
+        stream_ready = 1'b1;
+        cyc_arm = 1'b1;
+        run_stream(25'd0, 1024);
+        cyc_arm = 1'b0;
+        begin
+            int unpaced_cyc;
+            unpaced_cyc = cyc_count;
+            check("(g) unpaced stream_done within watchdog", done_seen);
+            check("(g) unpaced captured exactly 1024 words", got_count == 1024);
+            verify_unique("(g) unpaced 1024 words byte-exact", 0, 1024);
+            $display("  (g) unpaced latency = %0d clk cycles", unpaced_cyc);
+
+            // 2) Paced burst: drop ready for 8 clk after every 64 words.
+            $display("  (g) paced: same 1024 words, ready LOW 8 clk per 64 words...");
+            run_stream_paced(25'd0, 1024, 64, 8);
+            check("(g) paced stream_done within watchdog", done_seen);
+            check("(g) paced captured exactly 1024 words", got_count == 1024);
+            // (a) byte-exact + in order: no loss / no reorder under toggling ready.
+            verify_unique("(g) paced 1024 words byte-exact (no loss/reorder)", 0, 1024);
+            $display("  (g) paced latency = %0d clk cycles", pg_cycles);
+            // (c) the pause actually paused: paced burst is strictly longer.
+            check("(g) paced burst took MORE cycles than unpaced (pause real)",
+                  pg_cycles > unpaced_cyc);
+            // (b) row-held-open is legal: a clean run (no model $fatal) proves it.
+            // Reaching here without the oracle aborting the sim IS the proof.
+            check("(g) model accepted held-open row (no $fatal)", 1'b1);
         end
 
         $display("");

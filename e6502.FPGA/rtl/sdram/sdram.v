@@ -59,6 +59,7 @@ module sdram
 	input            stream_req,    // pulse to start a burst
 	input     [24:0] stream_addr,   // start BYTE address
 	input     [13:0] stream_words,  // # 16-bit words to read (max 16384 = 16K page)
+	input            stream_ready,  // consumer back-pressure: hold READ issuance when low
 	output reg[15:0] stream_dout,
 	output reg       stream_valid,  // 1-clk strobe per word
 	output reg       stream_busy,
@@ -257,24 +258,40 @@ always @(posedge clk) begin
 		// Issue one READ per clk (A10=0, page mode). col from cur_addr.
 		// Advance cur_addr by 2 bytes/word, count words; stop at row end or
 		// when the whole burst is exhausted.
+		//
+		// Consumer back-pressure: only ISSUE a READ when stream_ready is high.
+		// When low, hold the row OPEN and present a NOP — do NOT mark the CAS
+		// pipeline, do NOT advance cur_addr/words_left/row_words, and do NOT
+		// leave S_READ. The CAS drain at the top of this block keeps shifting
+		// rd_inflight and pulsing stream_valid, so up to CAS(=3) reads already
+		// in flight still surface byte-exact and in order; a sustained pause
+		// quiesces stream_valid once the pipeline empties (row still open).
+		// str_ras/str_rc keep counting down continuously, so a held-open row
+		// still satisfies tRAS for the eventual PRECHARGE. When stream_ready
+		// re-asserts, issuance resumes from the held column (cur_col unchanged).
 		S_READ: begin
-			str_cmd  <= STR_CMD_READ;
-			// 13-bit address: [12:11]=0, [10]=A10=0 (page mode, no auto-pre),
-			// [9]=0, [8:0]=column = {a[24],a[8:1]} = cur_col.
-			str_addr <= {2'b00, 1'b0, 1'b0, cur_col};
-			str_ba   <= cur_bank;
-			str_dqm  <= 2'b00;
-			// mark this READ into the CAS pipeline (OR into the freshly shifted
-			// stage 0; the shift above already cleared bit 0 this cycle)
-			rd_inflight[0] <= 1'b1;
+			if (stream_ready) begin
+				str_cmd  <= STR_CMD_READ;
+				// 13-bit address: [12:11]=0, [10]=A10=0 (page mode, no auto-pre),
+				// [9]=0, [8:0]=column = {a[24],a[8:1]} = cur_col.
+				str_addr <= {2'b00, 1'b0, 1'b0, cur_col};
+				str_ba   <= cur_bank;
+				str_dqm  <= 2'b00;
+				// mark this READ into the CAS pipeline (OR into the freshly shifted
+				// stage 0; the shift above already cleared bit 0 this cycle)
+				rd_inflight[0] <= 1'b1;
 
-			cur_addr   <= cur_addr + 25'd2;
-			words_left <= words_left - 14'd1;
-			row_words  <= row_words + 9'd1;
+				cur_addr   <= cur_addr + 25'd2;
+				words_left <= words_left - 14'd1;
+				row_words  <= row_words + 9'd1;
 
-			if (last_word || row_full) begin
-				// stop issuing; let the capture pipeline drain before PRECHARGE
-				str_state <= S_DRAIN;
+				if (last_word || row_full) begin
+					// stop issuing; let the capture pipeline drain before PRECHARGE
+					str_state <= S_DRAIN;
+				end
+			end else begin
+				// paused: hold the row open, issue NOP, freeze the column counter.
+				str_cmd <= STR_CMD_NOP;
 			end
 		end
 
