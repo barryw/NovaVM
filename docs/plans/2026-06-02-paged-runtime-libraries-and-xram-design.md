@@ -189,7 +189,7 @@ queue.
 ```
 input         stream_req         output [15:0] stream_dout
 input  [24:0] stream_addr        output        stream_valid   ; 1-clk strobe / word
-input  [12:0] stream_words       output        stream_busy, stream_done
+input  [13:0] stream_words       output        stream_busy, stream_done   ; 14-bit: 16K page-in = 8192 words
 ```
 This is the *read* primitive; the symmetric **write-burst** (STASH, faster boot) is the
 same shape, built alongside Regime 2.

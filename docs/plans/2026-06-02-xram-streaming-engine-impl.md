@@ -118,7 +118,7 @@ Add the general stream port so the bench compiles. Stub only — `streaming` alw
 	// ports A/B via the `streaming` flag.
 	input            stream_req,    // pulse to start a burst
 	input     [24:0] stream_addr,   // start BYTE address
-	input     [12:0] stream_words,  // # 16-bit words to read
+	input     [13:0] stream_words,  // # 16-bit words to read (14-bit: 16K page-in = 8192 words)
 	output reg[15:0] stream_dout,
 	output reg       stream_valid,  // 1-clk strobe per word
 	output reg       stream_busy,
