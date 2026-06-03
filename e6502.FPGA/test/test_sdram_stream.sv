@@ -254,6 +254,32 @@ module test_sdram_stream;
     end
 
     // -----------------------------------------------------------------
+    // Port-B deferral monitor (case (f)).
+    //
+    // The page-mode FSM defers ports A/B while `streaming`: cycle_we/cycle_oe
+    // ARMING is gated with !streaming (sdram.v ~line 450), so a port request
+    // asserted while the stream owns the bus must NOT arm — and therefore the
+    // doneB/doutB capture (q==STATE_CMD_READ, ~line 455) must NOT fire — until
+    // streaming drops. Finding N1 flagged that the capture itself is not
+    // !streaming-gated; this monitor is the watchdog that would catch an
+    // already-armed access straddling the streaming-enter edge and firing
+    // doneB mid-burst.
+    //
+    // db_watch arms the monitor around the case-(f) burst. While armed AND
+    // stream_busy is high, ANY doneB pulse latches db_fired_mid_burst sticky.
+    // The test asserts that flag stays 0 across the WHOLE burst (a continuous
+    // per-cycle check, not a single sample), so a spurious mid-burst doneB at
+    // any cycle is caught. Sampled on the same clk the DUT updates doneB.
+    // -----------------------------------------------------------------
+    logic db_watch            = 1'b0;
+    logic db_fired_mid_burst  = 1'b0;
+
+    always @(posedge clk) begin
+        if (db_watch && stream_busy && doneB)
+            db_fired_mid_burst <= 1'b1;
+    end
+
+    // -----------------------------------------------------------------
     // Pass/fail bookkeeping
     // -----------------------------------------------------------------
     int pass_count = 0;
@@ -558,6 +584,212 @@ module test_sdram_stream;
             check("(e) req -> first refresh <= 780 cyc",         rf_first <= 780);
             // No unguarded tail: last refresh within 780 of stream_done.
             check("(e) last refresh -> done <= 780 cyc",         rf_last_to_done <= 780);
+        end
+
+        // =============================================================
+        // CASE (f): PORT-B DEFERS DURING STREAM (finding-N1 hazard probe).
+        //
+        // The `streaming` flag must defer ports A/B for the whole burst:
+        // cycle_oe arming is gated with !streaming (sdram.v ~line 451), so a
+        // port-B read asserted while the stream FSM owns the bus must NOT
+        // complete (no doneB pulse) until streaming drops — then it returns
+        // the correct byte. N1's residual concern is that the doutB/doneB
+        // CAPTURE is not itself !streaming-gated, so an already-armed access
+        // straddling the streaming-enter edge could in theory fire mid-burst.
+        //
+        // Two scenarios:
+        //  (f1) Port-B request asserted strictly DURING the burst (after
+        //       stream_busy is already high). With the arming gate it must NOT
+        //       arm/complete until streaming drops. db_watch monitors doneB
+        //       continuously and latches db_fired_mid_burst if it EVER pulses
+        //       while stream_busy is high. After stream_done the held port-B
+        //       request must complete and return the correct byte.
+        //  (f2) Port-B request asserted just BEFORE stream_req so it may
+        //       straddle the streaming-enter edge: it must either complete
+        //       cleanly before the burst takes over OR be deferred — and must
+        //       never return corrupt data nor a spurious doneB mid-burst.
+        //
+        // A short row-aligned burst (256 words from word 0) is reused so the
+        // stream's own data can still be checked byte-exact afterwards (the
+        // port-B request must not corrupt the burst).
+        // =============================================================
+        $display("");
+        $display("CASE (f): port-B defers during stream");
+
+        // Known byte for port B to read back: word 7 even byte (byte addr 14)
+        // is, by the unique pattern, word(7) HIGH lane = 7[7:0] = 8'h07.
+        // Re-seed the 256-word pattern (case (e) left words 0..8191 preloaded
+        // via the backdoor; words 0..255 already match, but make it explicit).
+        preload_unique_pattern(256);
+
+        // ----- scenario (f1): assert port B strictly DURING the burst -----
+        begin
+            logic [7:0] b_data;
+            logic       b_ok;
+            int         i;
+            int         got_f;
+            logic       done_f;
+            logic       b_asserted;
+            logic       saw_busy;
+
+            for (i = 0; i < MAX_WORDS; i++) got[i] = 16'hxxxx;
+            got_f      = 0;
+            done_f     = 1'b0;
+            b_asserted = 1'b0;
+            saw_busy   = 1'b0;
+
+            db_fired_mid_burst = 1'b0;
+            @(posedge clk);
+            db_watch = 1'b1;
+
+            // Kick the burst.
+            stream_addr  <= 25'd0;
+            stream_words <= 14'd256;
+            stream_req   <= 1'b1;
+            @(posedge clk);
+            stream_req   <= 1'b0;
+
+            // Single unified loop: capture EVERY stream word from the first
+            // strobe, and — once we are firmly mid-burst (stream_busy high for
+            // 40 cycles) — assert the held port-B read request. Capturing from
+            // the start guarantees no early stream_valid words are missed.
+            for (i = 0; (i < WATCHDOG) && !done_f; i++) begin
+                @(posedge clk);
+                if (stream_busy) saw_busy = 1'b1;
+                // Assert port B once we are firmly mid-burst (after the FSM
+                // owns the bus and >=20 words have streamed), so it lands
+                // strictly DURING the burst.
+                if (saw_busy && !b_asserted && (got_f >= 20)) begin
+                    addrB      <= 25'd14;   // word 7, even byte -> 8'h07
+                    oeB        <= 1'b1;
+                    weB        <= 1'b0;
+                    b_asserted = 1'b1;
+                end
+                if (stream_valid && (got_f < MAX_WORDS)) begin
+                    got[got_f] = stream_dout;
+                    got_f++;
+                end
+                if (stream_done) done_f = 1'b1;
+            end
+
+            check("(f1) port B asserted mid-burst", b_asserted);
+            check("(f1) stream_done asserted within watchdog", done_f);
+            check("(f1) captured exactly 256 words", got_f == 256);
+            // THE DEFERRAL OBLIGATION: doneB never pulsed during the burst.
+            check("(f1) doneB did NOT fire while stream_busy high (N1 deferral)",
+                  db_fired_mid_burst == 1'b0);
+            // The held port-B request must NOT have corrupted the stream.
+            got_count = got_f;
+            verify_unique("(f1) stream data byte-exact (port B did not corrupt)",
+                          0, 256);
+
+            // Streaming has dropped; the still-held port-B request must now
+            // complete and return the correct byte. db_watch stays armed so a
+            // doneB here (legitimately, post-burst) does not falsely flag.
+            db_watch = 1'b0;
+            b_ok   = 1'b0;
+            b_data = 8'hxx;
+            for (i = 0; (i < 200) && !b_ok; i++) begin
+                @(posedge clk);
+                if (doneB) begin
+                    b_data = doutB;
+                    b_ok   = 1'b1;
+                end
+            end
+            oeB <= 1'b0;
+            repeat (4) @(posedge clk);
+
+            check("(f1) port-B read completed AFTER stream_done", b_ok);
+            check("(f1) port-B read returned correct byte (0x07)", b_data == 8'h07);
+        end
+
+        // ----- scenario (f2): assert port B just BEFORE stream_req -----
+        // The request may straddle the streaming-enter edge. Outcome is
+        // allowed to be EITHER (completes cleanly pre-burst, OR deferred), but
+        // in NO case may doneB fire mid-burst nor doutB be corrupt. We watch
+        // for a mid-burst doneB across the whole burst (db_watch), then ensure
+        // the port-B read ultimately returns the correct byte.
+        begin
+            logic [7:0] b_data;
+            logic       b_ok_early;
+            logic       b_ok;
+            int         i;
+            int         got_f;
+            logic       done_f;
+
+            for (i = 0; i < MAX_WORDS; i++) got[i] = 16'hxxxx;
+            got_f  = 0;
+            done_f = 1'b0;
+
+            db_fired_mid_burst = 1'b0;
+            b_ok_early = 1'b0;
+            b_data     = 8'hxx;
+
+            // Assert the port-B read just before the stream request so it may
+            // straddle the streaming-enter edge. addrB=8 -> word 4, even byte,
+            // expect word(4) HIGH lane = 4[7:0] = 8'h04.
+            @(posedge clk);
+            addrB <= 25'd8;
+            oeB   <= 1'b1;
+            weB   <= 1'b0;
+
+            // Arm the mid-burst doneB watch, then kick the stream one clk later
+            // (the straddle window).
+            db_watch = 1'b1;
+            @(posedge clk);
+            // If port B happened to complete in this straddle cycle, capture it
+            // (this is the legitimate "completed cleanly before burst" path;
+            // it is BEFORE stream_busy so db_watch will not flag it).
+            if (doneB && !b_ok_early) begin
+                b_data     = doutB;
+                b_ok_early = 1'b1;
+            end
+            stream_addr  <= 25'd0;
+            stream_words <= 14'd256;
+            stream_req   <= 1'b1;
+            @(posedge clk);
+            stream_req   <= 1'b0;
+
+            // Run the burst, holding port B asserted, capturing words and
+            // watching for an early (pre-busy) doneB completion.
+            for (i = 0; (i < WATCHDOG) && !done_f; i++) begin
+                @(posedge clk);
+                if (!stream_busy && doneB && !b_ok_early) begin
+                    b_data     = doutB;
+                    b_ok_early = 1'b1;
+                end
+                if (stream_valid && (got_f < MAX_WORDS)) begin
+                    got[got_f] = stream_dout;
+                    got_f++;
+                end
+                if (stream_done) done_f = 1'b1;
+            end
+
+            check("(f2) stream_done asserted within watchdog", done_f);
+            check("(f2) captured exactly 256 words", got_f == 256);
+            check("(f2) doneB did NOT fire while stream_busy high (straddle safe)",
+                  db_fired_mid_burst == 1'b0);
+            got_count = got_f;
+            verify_unique("(f2) stream data byte-exact (straddle did not corrupt)",
+                          0, 256);
+
+            // Whether or not it completed early, the port-B read must yield the
+            // correct byte. If it deferred, it completes now that streaming has
+            // dropped; the request is still held.
+            db_watch = 1'b0;
+            b_ok = b_ok_early;
+            for (i = 0; (i < 200) && !b_ok; i++) begin
+                @(posedge clk);
+                if (doneB) begin
+                    b_data = doutB;
+                    b_ok   = 1'b1;
+                end
+            end
+            oeB <= 1'b0;
+            repeat (4) @(posedge clk);
+
+            check("(f2) port-B read completed (early or deferred)", b_ok);
+            check("(f2) port-B read returned correct byte (0x04)", b_data == 8'h04);
         end
 
         $display("");
