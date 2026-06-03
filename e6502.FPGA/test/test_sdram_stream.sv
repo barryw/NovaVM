@@ -579,8 +579,9 @@ module test_sdram_stream;
         // 256-word (512-byte) rows. This case MEASURES the real
         // stream_req -> stream_done latency in sdram_clk cycles, replacing
         // the design-doc "~84 us @ 100 MHz" estimate with the recorded
-        // number. The window 7000 < cycles < 11000 is generous around the
-        // ~8400-8700 expected (32 rows x ~270 cyc/row).
+        // number. Reads are paced 1 word / 2 clk (sdram.v str_pace) to isolate
+        // each DQ read on real silicon, so the burst is ~2x the old back-to-back
+        // count: ~8192*2 + per-row PRECHARGE/REFRESH(tRFC)/ACTIVATE overhead ~= 17k.
         //
         // Pattern is preloaded via the model backdoor (poke_word) — the
         // write path is already proven byte-exact in cases (a)/(b)/(c), and
@@ -606,8 +607,8 @@ module test_sdram_stream;
         check("(d) stream_done asserted within watchdog", done_seen);
         check("(d) captured exactly 8192 words", got_count == 8192);
         verify_unique("(d) 16 KB 8192 words byte-exact", 0, 8192);
-        check("(d) measured cycles in window (7000 < n < 11000)",
-              (cyc_count > 7000) && (cyc_count < 11000));
+        check("(d) measured cycles in window (15000 < n < 21000)",
+              (cyc_count > 15000) && (cyc_count < 21000));
 
         // =============================================================
         // CASE (e): 16 KB / 8192-word REFRESH-OBLIGATION proof.

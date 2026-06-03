@@ -49,6 +49,7 @@ module sdram_model (
                                        // AUTO_REFRESH only checks all-banks-idle, not tRP/tRFC)
     localparam int unsigned tRAS = 5;  // ACTIVE -> PRECHARGE (row-active minimum)
     localparam int unsigned tRC  = 7;  // ACTIVE -> ACTIVE (full row cycle, incl. refresh)
+    localparam int unsigned tRFC = 7;  // AUTO_REFRESH -> next ACTIVE (refresh cycle, ~66ns@100MHz)
 
     // ----- command encoding -----
     localparam logic [3:0] CMD_INHIBIT         = 4'b1111;
@@ -80,6 +81,10 @@ module sdram_model (
     bit              t_activate_v   [0:3];  // valid: an ACTIVE has occurred
     longint unsigned t_precharge   [0:3];  // cycle stamp of last PRECHARGE per bank
     bit              t_precharge_v  [0:3];  // valid: a PRECHARGE has occurred
+    // AUTO_REFRESH is chip-wide (all banks): one stamp + valid flag. A following
+    // ACTIVATE on any bank must wait tRFC after the refresh completes.
+    longint unsigned t_refresh;             // cycle stamp of last AUTO_REFRESH
+    bit              t_refresh_v;            // valid: an AUTO_REFRESH has occurred
 
     // ----- CAS read pipeline: data appears exactly CAS cycles after READ -----
     // A READ accepted at posedge N drives rd_pipe[0]; the word shifts up one
@@ -104,6 +109,8 @@ module sdram_model (
             t_precharge[b]     = 0;
             t_precharge_v[b]   = 1'b0;
         end
+        t_refresh   = 0;
+        t_refresh_v = 1'b0;
         for (int i = 0; i < CAS; i++) begin
             rd_pipe[i]  = 16'h0000;
             rd_valid[i] = 1'b0;
@@ -172,6 +179,14 @@ module sdram_model (
                     $error("[sdram_model] ACTIVE too soon after ACTIVE on bank %0d: %0d < tRC=%0d @cyc %0d",
                            sd_ba, (cyc - t_activate[sd_ba]), tRC, cyc);
                     $fatal(1, "tRC violation (ACTIVE-to-ACTIVE)");
+                end
+                // AUTO_REFRESH is a full chip-wide row cycle: no ACTIVE on ANY bank
+                // until tRFC after the refresh, or the refresh is interrupted and
+                // the just-refreshed rows read back garbage.
+                if (t_refresh_v && (cyc - t_refresh) < tRFC) begin
+                    $error("[sdram_model] ACTIVE too soon after AUTO_REFRESH on bank %0d: %0d < tRFC=%0d @cyc %0d",
+                           sd_ba, (cyc - t_refresh), tRFC, cyc);
+                    $fatal(1, "tRFC violation (ACTIVE after AUTO_REFRESH)");
                 end
                 open_row[sd_ba]     <= sd_addr;
                 row_active[sd_ba]   <= 1'b1;
@@ -286,6 +301,8 @@ module sdram_model (
                         $fatal(1, "AUTO_REFRESH with an open row");
                     end
                 end
+                t_refresh   <= cyc;     // a following ACTIVE must wait tRFC
+                t_refresh_v <= 1'b1;
             end
 
             default: ; // NOP / INHIBIT / LOAD_MODE / BURST_TERMINATE — no model action

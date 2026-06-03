@@ -387,12 +387,15 @@ module test_page_dma;
         $display("Reading back 16384 bytes from ext_rom stand-in...");
         verify_ext_rom("16 KB ext_rom byte-exact + byte order", 8192);
 
-        // Skid-buffer margin invariant: the FIFO must never have hit full (no
-        // word dropped) AND must have been driven near peak during the dense
-        // in-row run — otherwise the back-pressure margin was never exercised.
+        // Skid-buffer invariant. sdram.v now PACES reads to 1 word / 2 clk
+        // (str_pace) — matching page_dma's 2 clk/word drain — to isolate each DQ
+        // read on real silicon. So the buffer no longer fills (the back-pressure
+        // margin is intentionally not stressed); the hard invariant is just that
+        // it never overflows / drops a word.
         $display("Skid FIFO peak occupancy: %0d / %0d", fifo_peak, pgd.FIFO_DEPTH);
         check("skid FIFO never full (no word dropped)", !ever_full);
-        check("skid buffer exercised near peak (>=10)", fifo_peak >= 10);
+        check("skid buffer bounded under paced reads (peak < DEPTH)",
+              fifo_peak < pgd.FIFO_DEPTH[pgd.FIFO_AW:0]);
 
         // -----------------------------------------------------------------
         // words==0 latent-hazard guard. A zero-word `start` must NOT wedge

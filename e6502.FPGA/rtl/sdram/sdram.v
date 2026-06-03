@@ -110,19 +110,24 @@ localparam [3:0] STR_TRP  = 4'd2;   // PRECHARGE -> ACTIVE
 localparam [3:0] STR_TRC  = 4'd7;   // ACTIVE -> ACTIVE (full row cycle)
 localparam [3:0] STR_TRAS = 4'd5;   // ACTIVE -> PRECHARGE (row-active minimum)
 localparam [3:0] STR_CAS  = 4'd3;   // READ -> data on bus
+localparam [3:0] STR_TRFC = 4'd9;   // AUTO_REFRESH -> next ACTIVE (refresh cycle,
+                                    // ~66ns@100MHz=7cy; 9 gives HW margin). MUST be
+                                    // honoured after AUTO_REFRESH or the just-refreshed
+                                    // rows read back garbage (HW: rows 1..31 = 0xAA).
 
 // FSM states
-localparam [2:0] S_IDLE      = 3'd0;
-localparam [2:0] S_PRE_ALL   = 3'd1;   // PRECHARGE all banks (clean entry)
-localparam [2:0] S_ACTIVATE  = 3'd2;   // ACTIVE(bank,row)
-localparam [2:0] S_READ      = 3'd3;   // issue READ(col,A10=0), 1/clk
-localparam [2:0] S_DRAIN     = 3'd4;   // wait for CAS pipe to flush
-localparam [2:0] S_PRECHARGE = 3'd5;   // PRECHARGE(bank) at row end
-localparam [2:0] S_REFRESH   = 3'd6;   // AUTO_REFRESH (1/row, unconditional)
-localparam [2:0] S_DONE      = 3'd7;   // 1-clk done pulse
+localparam [3:0] S_IDLE      = 4'd0;
+localparam [3:0] S_PRE_ALL   = 4'd1;   // PRECHARGE all banks (clean entry)
+localparam [3:0] S_ACTIVATE  = 4'd2;   // ACTIVE(bank,row)
+localparam [3:0] S_READ      = 4'd3;   // issue READ(col,A10=0), 1/clk
+localparam [3:0] S_DRAIN     = 4'd4;   // wait for CAS pipe to flush
+localparam [3:0] S_PRECHARGE = 4'd5;   // PRECHARGE(bank) at row end
+localparam [3:0] S_REFRESH   = 4'd6;   // AUTO_REFRESH (1/row, unconditional)
+localparam [3:0] S_DONE      = 4'd7;   // 1-clk done pulse
+localparam [3:0] S_ENTER     = 4'd8;   // tRFC NOP wait before the first command
 
 reg        streaming;
-reg [2:0]  str_state;
+reg [3:0]  str_state;
 reg [3:0]  str_dly;         // generic inter-command delay countdown
 reg [3:0]  str_rc;          // tRC countdown from ACTIVE (gates next ACTIVE)
 reg [3:0]  str_ras;         // tRAS countdown from ACTIVE (gates PRECHARGE)
@@ -147,6 +152,12 @@ reg [1:0]  str_dqm;
 // NOTE: page_dma.READY_MARGIN must be >= this depth + 1; if you widen
 // rd_inflight, bump it (else the skid FIFO can overflow on stream_ready deassert).
 reg [4:0]  rd_inflight;     // 5-deep in-flight READ tracker (E .. E+5 capture)
+// Read pacing: issue a READ then a NOP gap (1 word / 2 clk). Back-to-back 1/clk
+// reads are mis-captured on real silicon (the DQ data eye drifts cycle-to-cycle;
+// the fixed-offset capture grabs an adjacent word). Isolating each read — exactly
+// what the proven single-access path does — fixes it. page_dma drains at 2 clk/word
+// so this costs ~no throughput. 0 = issue this clk, 1 = gap (NOP) this clk.
+reg        str_pace;
 
 // row-boundary helpers, derived from the CURRENT cur_addr
 wire [8:0] cur_col  = {cur_addr[24], cur_addr[8:1]};  // 9-bit column
@@ -191,6 +202,7 @@ always @(posedge clk) begin
 		open_bank   <= 2'd0;
 		rd_inflight <= 5'd0;
 		str_ras     <= 4'd0;
+		str_pace    <= 1'b0;
 		stream_dout <= 16'd0;   // determinism: explicit reg init
 	end else begin
 		// tRC / tRAS countdowns run continuously once armed at ACTIVE.
@@ -209,9 +221,21 @@ always @(posedge clk) begin
 				words_left  <= stream_words;
 				row_words   <= 9'd0;
 				rd_inflight <= 5'd0;
-				str_state   <= S_PRE_ALL;
-				str_dly     <= 4'd0;
+				str_state   <= S_ENTER;
+				str_dly     <= STR_TRFC;
 			end
+		end
+
+		// Wait tRFC before issuing ANY command. The single-access path issues
+		// opportunistic AUTO_REFRESHes whenever no port request is pending, and one
+		// may have landed the cycle before stream_req. The chip is busy for tRFC
+		// after a refresh; a PRECHARGE/ACTIVE inside that window corrupts the
+		// just-refreshed rows (HW symptom: row 0 garbled, +word shift). streaming=1
+		// is already set, so no further refresh can sneak in during this wait.
+		S_ENTER: begin
+			str_cmd <= STR_CMD_NOP;
+			if (str_dly == 0) str_state <= S_PRE_ALL;
+			else              str_dly   <= str_dly - 4'd1;
 		end
 
 		// PRECHARGE all banks (A10=1) for a guaranteed-clean entry, then tRP.
@@ -253,6 +277,7 @@ always @(posedge clk) begin
 				if (str_dly == 4'd1) begin
 					str_state <= S_READ;
 					row_words <= 9'd0;
+					str_pace  <= 1'b0;   // first read of the row issues immediately
 				end
 			end
 		end
@@ -272,7 +297,11 @@ always @(posedge clk) begin
 		// still satisfies tRAS for the eventual PRECHARGE. When stream_ready
 		// re-asserts, issuance resumes from the held column (cur_col unchanged).
 		S_READ: begin
-			if (stream_ready) begin
+			// Paced: issue a READ only on a non-gap cycle while ready; otherwise
+			// NOP. str_pace toggles 0->1 after each READ so reads land 1 per 2 clk,
+			// isolating each read's DQ data (see str_pace decl). The row stays open
+			// through the NOP gap (tRAS/tRC keep counting).
+			if (stream_ready && !str_pace) begin
 				str_cmd  <= STR_CMD_READ;
 				// 13-bit address: [12:11]=0, [10]=A10=0 (page mode, no auto-pre),
 				// [9]=0, [8:0]=column = {a[24],a[8:1]} = cur_col.
@@ -286,14 +315,17 @@ always @(posedge clk) begin
 				cur_addr   <= cur_addr + 25'd2;
 				words_left <= words_left - 14'd1;
 				row_words  <= row_words + 9'd1;
+				str_pace   <= 1'b1;          // next clk = gap (NOP)
 
 				if (last_word || row_full) begin
 					// stop issuing; let the capture pipeline drain before PRECHARGE
 					str_state <= S_DRAIN;
 				end
 			end else begin
-				// paused: hold the row open, issue NOP, freeze the column counter.
-				str_cmd <= STR_CMD_NOP;
+				// gap cycle, or paused (stream_ready low): NOP, hold the row open,
+				// freeze the column counter, and re-arm to issue next clk.
+				str_cmd  <= STR_CMD_NOP;
+				str_pace <= 1'b0;
 			end
 		end
 
@@ -329,7 +361,7 @@ always @(posedge clk) begin
 				str_addr <= 13'd0;
 				str_ba   <= 2'd0;
 				str_dqm  <= 2'b00;
-				str_dly  <= STR_TRP;     // brief settle before next ACTIVE attempt
+				str_dly  <= STR_TRFC;    // tRFC: refresh must complete before re-ACTIVATE
 			end else begin
 				str_cmd <= STR_CMD_NOP;
 				str_dly <= str_dly - 4'd1;
