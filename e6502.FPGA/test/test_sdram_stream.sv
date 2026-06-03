@@ -650,9 +650,9 @@ module test_sdram_stream;
             stream_req   <= 1'b0;
 
             // Single unified loop: capture EVERY stream word from the first
-            // strobe, and — once we are firmly mid-burst (stream_busy high for
-            // 40 cycles) — assert the held port-B read request. Capturing from
-            // the start guarantees no early stream_valid words are missed.
+            // strobe, and — once we are firmly mid-burst (stream_busy high and
+            // >=20 words streamed) — assert the held port-B read request. Capturing
+            // from the start guarantees no early stream_valid words are missed.
             for (i = 0; (i < WATCHDOG) && !done_f; i++) begin
                 @(posedge clk);
                 if (stream_busy) saw_busy = 1'b1;
