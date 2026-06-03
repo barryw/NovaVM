@@ -11,27 +11,26 @@
 //
 // The sdram.v stream emits ONE 16-bit word per clk while a row is open
 // (S_READ issues 256 back-to-back READs -> stream_valid pulses on 256
-// consecutive clocks). There is NO back-pressure on the stream. The real
-// `ext_rom` is an 8-bit byte-addressed dpram (one write/clk), so a single
-// 8-bit write port physically cannot absorb 2 bytes/word at 1 word/clk during
-// the dense in-row run. That 16-bit -> 8-bit serialization is exactly what
-// Task 11's async FIFO + slower pixel-domain drain formalizes.
+// consecutive clocks). The real `ext_rom` is an 8-bit byte-addressed dpram
+// (one write/clk), so a single 8-bit write port physically cannot absorb 2
+// bytes/word at 1 word/clk during the dense in-row run. page_dma resolves this
+// by SELF-PACING the stream via `stream_ready` (Task 11a) and buffering the
+// 1->0.5 word/clk rate step in a small SYNCHRONOUS skid buffer (both the stream
+// and page_dma are in sdram_clk — no CDC). The byte-writer then emits the two
+// 8-bit ext_rom writes per word (2 clk/word) to the REAL pgd_erom_* port.
 //
-// For THIS single-clock unit test we model the ext_rom stand-in as a 16-bit-
-// wide dpram: page_dma writes one 16-bit word per stream_valid at WORD address
-// k, packing {even_byte, odd_byte} = {stream_dout[15:8], stream_dout[7:0]}.
-// This matches the stream rate exactly (1 write/clk, no fictional back-
-// pressure) and carries the byte order explicitly. The readback below
-// decomposes each stored 16-bit word into the real 8-bit ext_rom byte image:
-//   ext_rom[2k]   = stored_word[15:8]  (even byte, from stream_dout[15:8])
-//   ext_rom[2k+1] = stored_word[7:0]   (odd  byte, from stream_dout[7:0])
-// so the byte-order assertion is on the real per-byte ext_rom image, not the
-// packed word. page_dma's erom_addr is the WORD index k (0..8191), faithful to
-// a 16384-byte / 8192-word ext_rom; Task 11 splits each word into the two
-// 8-bit pixel-domain writes via the FIFO.
+// This test models the ext_rom stand-in as the REAL 8-bit / 16384-deep dpram:
+// page_dma writes BYTE address pgd_erom_addr=2k with the even byte
+// (stream_dout[15:8]) then 2k+1 with the odd byte (stream_dout[7:0]). The
+// readback below asserts the per-byte image directly:
+//   ext_rom[2k]   = stream_dout[15:8]  (even byte, HIGH lane)
+//   ext_rom[2k+1] = stream_dout[7:0]   (odd  byte, LOW  lane)
+//
+// page_dma's stream_ready output is wired to sdram.stream_ready, so this test
+// exercises the real pacing (the in-flight CAS pipeline + the skid buffer).
 //
 // ---------------------------------------------------------------------------
-// Pattern (UNIQUE per word so a wrong-row read is caught, mirrors
+// Pattern (UNIQUE per word so a dropped/wrong-row word is caught, mirrors
 // test_sdram_stream case (d)):
 //   mem[byte 2i]   = i[7:0]   -> HIGH lane [15:8]   (even byte)
 //   mem[byte 2i+1] = i[15:8]  -> LOW  lane [7:0]    (odd  byte)
@@ -93,6 +92,7 @@ module test_page_dma;
     wire         stream_req;
     wire [24:0]  stream_addr;
     wire [13:0]  stream_words;
+    wire         stream_ready;   // page_dma -> sdram self-pacing
     wire  [15:0] stream_dout;
     wire         stream_valid;
     wire         stream_busy;
@@ -120,7 +120,7 @@ module test_page_dma;
         .stream_req  (stream_req),
         .stream_addr (stream_addr),
         .stream_words(stream_words),
-        .stream_ready(1'b1),   // Task-10 page_dma writes 1 word/clk, keeps up at full rate; Task 11c drives this from page_dma for pacing
+        .stream_ready(stream_ready),   // Task 11c: driven by page_dma for self-pacing
         .stream_dout (stream_dout),
         .stream_valid(stream_valid),
         .stream_busy (stream_busy),
@@ -143,52 +143,55 @@ module test_page_dma;
     // -----------------------------------------------------------------
     // page_dma DUT + the ext_rom stand-in dpram.
     //
-    // page_dma drives the stream port and emits one 16-bit word per
-    // stream_valid (erom_we) at WORD address erom_addr=k carrying
-    // erom_data={even,odd}={dout[15:8],dout[7:0]}. The stand-in dpram is
-    // 16-bit-wide / 8192-deep (one word per ext_rom byte-pair).
+    // page_dma drives the stream port, self-paces via stream_ready, and emits
+    // TWO 8-bit byte-writes per stream word to the REAL ext_rom port:
+    //   pgd_erom_addr=2k, pgd_erom_data=dout[15:8] (even, HIGH lane), then
+    //   pgd_erom_addr=2k+1, pgd_erom_data=dout[7:0] (odd, LOW lane).
+    // The stand-in dpram is 8-bit-wide / 16384-deep (the real ext_rom byte
+    // image).
     // -----------------------------------------------------------------
     logic        start = 1'b0;
     logic [24:0] src_base = 25'd0;
     logic [13:0] words = 14'd0;
 
-    wire         erom_we;
-    wire [13:0]  erom_addr;   // WORD index k (0..8191)
-    wire [15:0]  erom_data;   // {even byte, odd byte}
+    wire         pgd_erom_we;
+    wire [13:0]  pgd_erom_addr;   // BYTE address (0..16383)
+    wire [7:0]   pgd_erom_data;   // byte lane
     wire         pgd_active;
     wire         done;
 
     page_dma pgd (
-        .clk         (clk),
-        .rst         (init),
-        .start       (start),
-        .src_base    (src_base),
-        .words       (words),
-        .stream_req  (stream_req),
-        .stream_addr (stream_addr),
-        .stream_words(stream_words),
-        .stream_dout (stream_dout),
-        .stream_valid(stream_valid),
-        .stream_busy (stream_busy),
-        .stream_done (stream_done),
-        .erom_we     (erom_we),
-        .erom_addr   (erom_addr),
-        .erom_data   (erom_data),
-        .pgd_active  (pgd_active),
-        .done        (done)
+        .clk          (clk),
+        .rst          (init),
+        .start        (start),
+        .src_base     (src_base),
+        .words        (words),
+        .stream_req   (stream_req),
+        .stream_addr  (stream_addr),
+        .stream_words (stream_words),
+        .stream_ready (stream_ready),
+        .stream_dout  (stream_dout),
+        .stream_valid (stream_valid),
+        .stream_busy  (stream_busy),
+        .stream_done  (stream_done),
+        .pgd_erom_we  (pgd_erom_we),
+        .pgd_erom_addr(pgd_erom_addr),
+        .pgd_erom_data(pgd_erom_data),
+        .pgd_active   (pgd_active),
+        .done         (done)
     );
 
-    // ext_rom stand-in: 16-bit-wide, 8192-deep dpram (models the 16384-byte
-    // ext_rom as 8192 byte-pairs). Port A written by page_dma, port B read
-    // back by the test (1-cycle registered latency).
-    logic [12:0] erom_rd_addr = 13'd0;   // WORD read address
-    wire  [15:0] erom_rd_data;
+    // ext_rom stand-in: REAL 8-bit-wide, 16384-deep dpram. Port A written by
+    // page_dma (byte address + byte lane), port B read back by the test
+    // (1-cycle registered latency).
+    logic [13:0] erom_rd_addr = 14'd0;   // BYTE read address
+    wire  [7:0]  erom_rd_data;
 
-    dpram #(.WIDTH(16), .DEPTH(8192)) erom (
+    dpram #(.WIDTH(8), .DEPTH(16384)) erom (
         .clk    (clk),
-        .addr_a (erom_addr[12:0]),
-        .din_a  (erom_data),
-        .we_a   (erom_we),
+        .addr_a (pgd_erom_addr),
+        .din_a  (pgd_erom_data),
+        .we_a   (pgd_erom_we),
         .dout_a (),
         .addr_b (erom_rd_addr),
         .dout_b (erom_rd_data)
@@ -306,29 +309,36 @@ module test_page_dma;
     endtask
 
     // -----------------------------------------------------------------
-    // Read back all 16384 bytes from the ext_rom stand-in (port B, 1-cycle
-    // latency) and verify byte-exact + correct byte order against the unique
-    // pattern. The dpram is 16-bit-wide indexed by WORD; decompose each word.
-    //   ext_rom[2k]   = word[15:8] == k[7:0]    (even byte)
-    //   ext_rom[2k+1] = word[7:0]  == k[15:8]   (odd  byte)
+    // Read back all 16384 bytes from the REAL 8-bit ext_rom stand-in (port B,
+    // 1-cycle latency) and verify byte-exact + correct byte order against the
+    // unique pattern. Two byte reads per word.
+    //   ext_rom[2k]   == k[7:0]    (even byte, HIGH lane)
+    //   ext_rom[2k+1] == k[15:8]   (odd  byte, LOW  lane)
     // -----------------------------------------------------------------
     task automatic verify_ext_rom(input string name, input int n_words);
         int k, mism;
-        logic [15:0] w;
-        logic [7:0]  exp_even, exp_odd;
+        logic [7:0] even_b, odd_b;
+        logic [7:0] exp_even, exp_odd;
         mism = 0;
         for (k = 0; k < n_words; k++) begin
-            // Drive the word read address; dpram registers dout_b one clk later.
-            @(posedge clk);
-            erom_rd_addr <= k[12:0];
-            @(posedge clk);   // dout_b now reflects mem[k]
-            w        = erom_rd_data;
             exp_even = k[7:0];     // ext_rom[2k]
             exp_odd  = k[15:8];    // ext_rom[2k+1]
-            if (w[15:8] !== exp_even || w[7:0] !== exp_odd) begin
+
+            // even byte at 2k (dpram registers dout_b one clk after addr)
+            @(posedge clk);
+            erom_rd_addr <= 14'(2*k);
+            @(posedge clk);
+            even_b = erom_rd_data;
+
+            // odd byte at 2k+1
+            erom_rd_addr <= 14'(2*k+1);
+            @(posedge clk);
+            odd_b = erom_rd_data;
+
+            if (even_b !== exp_even || odd_b !== exp_odd) begin
                 if (mism < 6)
                     $display("  word %0d: ext_rom[%0d]=%02h (exp %02h) ext_rom[%0d]=%02h (exp %02h)",
-                             k, 2*k, w[15:8], exp_even, 2*k+1, w[7:0], exp_odd);
+                             k, 2*k, even_b, exp_even, 2*k+1, odd_b, exp_odd);
                 mism++;
             end
         end

@@ -1,35 +1,54 @@
 // page_dma.sv — page-in consumer (Regime 1, in-domain), §3.3 "D2" engine.
 //
-// Runs in the sdram_clk domain. On `start`, kicks the sdram.v page-mode stream
-// port (stream_req/stream_addr/stream_words) and, for every stream word that
-// comes back (stream_valid, 1 word/clk, free-running, no back-pressure), writes
-// the word's two bytes into bank-1 `ext_rom` BRAM.
+// Runs ENTIRELY in the sdram_clk domain. On `start`, kicks the sdram.v
+// page-mode stream port (stream_req/stream_addr/stream_words) and, for every
+// stream word that comes back (stream_valid), serializes it into the two 8-bit
+// bytes of the real bank-1 `ext_rom` write port (pgd_erom_*).
 //
 // BYTE ORDER (load-bearing — matches the single-access dout decode
 // a[0]?data[7:0]:data[15:8], so the paged ROM is NOT byte-swapped):
 //   even byte = stream_dout[15:8] -> ext_rom[2k]
 //   odd  byte = stream_dout[7:0]  -> ext_rom[2k+1]
 //
-// WORD -> 2-BYTE RATE.  The stream gives one 16-bit word per clk with no
-// back-pressure; the real `ext_rom` is 8-bit (one byte/clk), so the 16->8-bit
-// serialization cannot happen on a single 8-bit port at this rate. Task 11's
-// async FIFO + slower pixel-domain drain formalizes that split. THIS module
-// therefore presents the byte-pair as a single 16-bit write per stream word
-// (erom_we, erom_addr = WORD index k, erom_data = {even, odd}); the Task-11
-// FIFO/pixel-drain (or, in this unit test, a 16-bit-wide ext_rom stand-in)
-// consumes one word/clk and serializes the two 8-bit ext_rom writes. erom_addr
-// is the word index k = 0..(words-1); the real ext_rom byte addresses are
-// 2k / 2k+1.
+// ---------------------------------------------------------------------------
+// RATE-MATCH (the crux). The stream is 1 word/clk, free-running WITHIN a row,
+// but the real `ext_rom` write port is 8-bit (one byte/clk). Serializing a word
+// into two byte-writes is 2 clk/word, so page_dma cannot consume in lockstep
+// with a 1 word/clk producer. It self-paces with `stream_ready` (added to
+// sdram.v in Task 11a): drive it low when the skid buffer is filling, high when
+// it can accept more.
 //
-// CURRENT REALITY (this Task): page_dma is sdram_clk-ONLY and emits word-wide
-// writes — 16-bit erom_data at word-index erom_addr. There is NO CDC FIFO and
-// NO pixel-domain byte drain in this module yet. The async sdram_clk->pixel
-// FIFO and the pixel-domain 8-bit byte drain (the pgd_erom_* path) are added in
-// Task 11. In top.sv the ext_rom write port is muxed (boot bridge dbg_rom_* vs
-// page_dma pgd_*) with pgd_active as the select, but as of this Task the pgd_*
-// wires there are placeholder tie-offs (pgd_active=0); Task 11 connects the
-// real page_dma outputs through the FIFO. A page-in and the boot bridge never
-// overlap (a page-in only runs at a runtime switch, with the boot bridge idle).
+// IN-FLIGHT REALITY: deasserting `stream_ready` stops NEW READ issuance, but the
+// sdram CAS+capture pipeline (rd_inflight is 5 deep) plus the 1-cycle
+// registration latency of stream_ready means up to ~6 in-flight READs still
+// surface `stream_valid` over the following clocks AFTER ready goes low. So the
+// skid buffer must reserve enough free slots, when ready drops, to swallow that
+// whole trailing burst without dropping a word.
+//
+// SKID BUFFER: a small SYNCHRONOUS FIFO (sdram_clk, same domain as both the
+// stream and the byte-writer — NOT a CDC FIFO). Depth 16 (FF array). It captures
+// every stream_valid word; the byte-writer pops it at 2 clk/word.
+//   stream_ready = (free slots >= READY_MARGIN). With DEPTH=16 and
+//   READY_MARGIN=8, ready drops once fewer than 8 slots remain free, leaving 8
+//   free slots to absorb the worst-case ~6 trailing in-flight words + margin.
+//   => can never overflow / never drop a word.
+//
+// THROUGHPUT: drain-bound ~= 2 clk/word * 8192 ~= 16384 clk ~= 164 us at
+// ~100 MHz sdram_clk (Tier 2). The buffer just smooths the 1->0.5 word/clk rate
+// step; it is small and entirely in one clock domain (no CDC).
+//
+// DONE: pulses for one clk only when stream_done has been observed AND the skid
+// buffer is empty AND the byte-writer has finished the last word (no half-
+// written word pending). pgd_active stays high for the whole copy and drops the
+// cycle done pulses.
+//
+// words==0 GUARD: sdram.v's S_IDLE requires stream_words!=0, so a zero-word
+// request would never produce stream_done and would wedge the FSM with
+// pgd_active stuck high. Treat words==0 as immediate completion: pulse done,
+// never raise pgd_active, never assert stream_req, stay idle.
+//
+// PORT NAMES match top.sv's ext_rom write mux (Task 9/11b): pgd_erom_we,
+// pgd_erom_addr[13:0] (BYTE address), pgd_erom_data[7:0], pgd_active.
 
 module page_dma (
     input  wire        clk,            // sdram_clk
@@ -42,66 +61,151 @@ module page_dma (
     output reg         stream_req,
     output reg  [24:0] stream_addr,
     output reg  [13:0] stream_words,
+    output reg         stream_ready,   // self-pacing back-pressure to sdram.v
     input  wire [15:0] stream_dout,
     input  wire        stream_valid,
-    input  wire        stream_busy,    // observed-only / reserved: the FSM keys off
-                                       // stream_done, not busy. Kept for Task 11.
+    input  wire        stream_busy,    // observed-only / reserved
     input  wire        stream_done,
 
-    // ext_rom write port (dpram port A). Word-wide pair per stream word; see
-    // header for the 16->8-bit serialization deferred to Task 11.
-    output reg         erom_we,
-    output reg  [13:0] erom_addr,      // WORD index k (0..words-1)
-    output reg  [15:0] erom_data,      // {even byte [15:8], odd byte [7:0]}
+    // ext_rom write port (dpram port A) — REAL 8-bit byte interface.
+    output reg         pgd_erom_we,
+    output reg  [13:0] pgd_erom_addr,  // BYTE address (2k even / 2k+1 odd)
+    output reg  [7:0]  pgd_erom_data,  // byte lane (even=[15:8], odd=[7:0])
 
     output reg         pgd_active,     // high for the whole copy
     output reg         done            // 1-clk pulse at completion
 );
 
-    // ----- FSM states -----
+    // ===================================================================
+    // Synchronous skid buffer (sdram_clk) — depth 16, 16-bit words.
+    // FF array (small, same-domain, deterministic reset). Captures every
+    // stream_valid word; byte-writer pops at 2 clk/word.
+    // ===================================================================
+    localparam integer FIFO_AW    = 4;            // 16 entries
+    localparam integer FIFO_DEPTH = (1 << FIFO_AW);
+    // Drop stream_ready when fewer than READY_MARGIN free slots remain. 8 free
+    // slots cover the worst-case ~6 in-flight READs (5-deep CAS pipe + 1-clk
+    // ready registration latency) plus margin, so a deassert never overflows.
+    localparam integer READY_MARGIN = 8;
+
+    reg [15:0] fifo_mem [0:FIFO_DEPTH-1];
+    reg [FIFO_AW-1:0] fifo_wr;
+    reg [FIFO_AW-1:0] fifo_rd;
+    reg [FIFO_AW:0]   fifo_cnt;        // 0..FIFO_DEPTH (one extra bit)
+
+    wire fifo_empty = (fifo_cnt == 0);
+    wire fifo_full  = (fifo_cnt == FIFO_DEPTH[FIFO_AW:0]);
+    // free slots = DEPTH - cnt; ready when free >= READY_MARGIN, i.e.
+    // cnt <= DEPTH - READY_MARGIN.
+    wire fifo_can_accept = (fifo_cnt <= (FIFO_DEPTH - READY_MARGIN));
+
+    // ----- byte-writer (drains FIFO at 2 clk/word) -----
+    // phase 0: write even byte (high lane) to BYTE addr 2k
+    // phase 1: write odd  byte (low  lane) to BYTE addr 2k+1, then pop
+    reg        bw_busy;        // a word is mid-serialization
+    reg        bw_phase;       // 0 = even byte, 1 = odd byte
+    reg [13:0] bw_byte_idx;    // running BYTE address (2k / 2k+1)
+    reg [15:0] bw_word;        // the word being serialized
+
+    // pop happens when we begin serializing a fresh word (read head consumed)
+    wire bw_start_word = (!bw_busy) && (!fifo_empty);
+    wire fifo_pop      = bw_start_word;
+    wire fifo_push     = stream_valid && !fifo_full;  // (full never reached by design)
+
+    // ----- main FSM -----
     localparam [1:0] S_IDLE = 2'd0;   // wait for start
     localparam [1:0] S_REQ  = 2'd1;   // assert stream_req for one clk
-    localparam [1:0] S_RUN  = 2'd2;   // capture stream words -> ext_rom writes
-
+    localparam [1:0] S_RUN  = 2'd2;   // stream -> FIFO -> byte-writer
     reg [1:0]  state;
-    reg [13:0] word_idx;   // index of the next stream word to store
+    reg        stream_done_seen;      // latched: the producer has finished
 
     always @(posedge clk) begin
         // default single-clk strobes
-        stream_req <= 1'b0;
-        erom_we    <= 1'b0;
-        done       <= 1'b0;
+        stream_req  <= 1'b0;
+        pgd_erom_we <= 1'b0;
+        done        <= 1'b0;
 
         if (rst) begin
-            state        <= S_IDLE;
-            word_idx     <= 14'd0;
-            stream_addr  <= 25'd0;
-            stream_words <= 14'd0;
-            erom_addr    <= 14'd0;
-            erom_data    <= 16'd0;
-            pgd_active   <= 1'b0;
+            state            <= S_IDLE;
+            stream_addr      <= 25'd0;
+            stream_words     <= 14'd0;
+            stream_ready     <= 1'b0;
+            pgd_erom_addr    <= 14'd0;
+            pgd_erom_data    <= 8'd0;
+            pgd_active       <= 1'b0;
+            stream_done_seen <= 1'b0;
+            fifo_wr          <= {FIFO_AW{1'b0}};
+            fifo_rd          <= {FIFO_AW{1'b0}};
+            fifo_cnt         <= {(FIFO_AW+1){1'b0}};
+            bw_busy          <= 1'b0;
+            bw_phase         <= 1'b0;
+            bw_byte_idx      <= 14'd0;
+            bw_word          <= 16'd0;
         end else begin
+            // ---------------------------------------------------------
+            // FIFO push (every stream_valid word) + pop (byte-writer start).
+            // Both can happen on the same clk; net count adjust below.
+            // ---------------------------------------------------------
+            if (fifo_push) begin
+                fifo_mem[fifo_wr] <= stream_dout;
+                fifo_wr           <= fifo_wr + 1'b1;
+            end
+            if (fifo_pop) begin
+                fifo_rd <= fifo_rd + 1'b1;
+            end
+            case ({fifo_push, fifo_pop})
+                2'b10: fifo_cnt <= fifo_cnt + 1'b1;
+                2'b01: fifo_cnt <= fifo_cnt - 1'b1;
+                default: ; // both or neither -> unchanged
+            endcase
+
+            // ---------------------------------------------------------
+            // Byte-writer: serialize one popped word into two 8-bit writes.
+            // ---------------------------------------------------------
+            if (bw_start_word) begin
+                // load the word being popped this clk; emit its EVEN byte now.
+                bw_busy       <= 1'b1;
+                bw_phase      <= 1'b1;                 // next clk -> odd byte
+                bw_word       <= fifo_mem[fifo_rd];
+                pgd_erom_we   <= 1'b1;
+                pgd_erom_addr <= bw_byte_idx;          // 2k
+                pgd_erom_data <= fifo_mem[fifo_rd][15:8]; // even = high lane
+                bw_byte_idx   <= bw_byte_idx + 14'd1;  // -> 2k+1
+            end else if (bw_busy && bw_phase) begin
+                // odd byte
+                bw_busy       <= 1'b0;
+                bw_phase      <= 1'b0;
+                pgd_erom_we   <= 1'b1;
+                pgd_erom_addr <= bw_byte_idx;          // 2k+1
+                pgd_erom_data <= bw_word[7:0];         // odd = low lane
+                bw_byte_idx   <= bw_byte_idx + 14'd1;  // -> next word's 2k
+            end
+
+            // ---------------------------------------------------------
+            // Main FSM
+            // ---------------------------------------------------------
             case (state)
 
             S_IDLE: begin
-                pgd_active <= 1'b0;
+                pgd_active   <= 1'b0;
+                stream_ready <= 1'b0;
                 if (start) begin
-                    // words==0 must NOT issue a stream request: sdram.v's
-                    // S_IDLE requires stream_words!=0 and would ignore it, so
-                    // stream_done would never fire and the FSM would wedge in
-                    // S_RUN with pgd_active stuck high forever (permanent CPU
-                    // stall once rdy_out ties to pgd_active). Treat it as an
-                    // immediate completion: pulse `done`, never raise
-                    // pgd_active, never assert stream_req, stay idle.
                     if (words == 14'd0) begin
+                        // immediate completion — never touch the stream/erom.
                         done <= 1'b1;
-                        // pgd_active already defaulted low above; stay in S_IDLE.
                     end else begin
-                        stream_addr  <= src_base;
-                        stream_words <= words;
-                        word_idx     <= 14'd0;
-                        pgd_active   <= 1'b1;   // owns ext_rom from the request on
-                        state        <= S_REQ;
+                        stream_addr      <= src_base;
+                        stream_words     <= words;
+                        stream_done_seen <= 1'b0;
+                        bw_byte_idx      <= 14'd0;
+                        fifo_wr          <= {FIFO_AW{1'b0}};
+                        fifo_rd          <= {FIFO_AW{1'b0}};
+                        fifo_cnt         <= {(FIFO_AW+1){1'b0}};
+                        bw_busy          <= 1'b0;
+                        bw_phase         <= 1'b0;
+                        pgd_active       <= 1'b1;   // owns ext_rom from the request on
+                        stream_ready     <= 1'b1;   // ready to accept words
+                        state            <= S_REQ;
                     end
                 end
             end
@@ -112,20 +216,21 @@ module page_dma (
                 state      <= S_RUN;
             end
 
-            // For every stream word, write the byte-pair into ext_rom at the
-            // running word index. The stream is 1 word/clk, free-running; one
-            // 16-bit word write per valid keeps up exactly. stream_done ends it.
             S_RUN: begin
-                if (stream_valid) begin
-                    erom_we   <= 1'b1;
-                    erom_addr <= word_idx;
-                    // even byte -> high lane, odd byte -> low lane (byte order)
-                    erom_data <= {stream_dout[15:8], stream_dout[7:0]};
-                    word_idx  <= word_idx + 14'd1;
-                end
-                if (stream_done) begin
+                // Self-pace: accept words only while the FIFO has headroom for
+                // the trailing in-flight burst.
+                stream_ready <= fifo_can_accept;
+
+                if (stream_done) stream_done_seen <= 1'b1;
+
+                // Completion: producer finished AND the buffer is fully drained
+                // AND no half-written word is pending. fifo_pop here means a word
+                // is being started THIS clk (so not yet drained); guard against it.
+                if ((stream_done_seen || stream_done) &&
+                    fifo_empty && !bw_busy && !fifo_pop) begin
                     done       <= 1'b1;
                     pgd_active <= 1'b0;
+                    stream_ready <= 1'b0;
                     state      <= S_IDLE;
                 end
             end
