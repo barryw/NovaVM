@@ -58,7 +58,7 @@ module sdram
 	// ports A/B via the `streaming` flag.
 	input            stream_req,    // pulse to start a burst
 	input     [24:0] stream_addr,   // start BYTE address
-	input     [12:0] stream_words,  // # 16-bit words to read
+	input     [13:0] stream_words,  // # 16-bit words to read (max 16384 = 16K page)
 	output reg[15:0] stream_dout,
 	output reg       stream_valid,  // 1-clk strobe per word
 	output reg       stream_busy,
@@ -126,7 +126,7 @@ reg [3:0]  str_dly;         // generic inter-command delay countdown
 reg [3:0]  str_rc;          // tRC countdown from ACTIVE (gates next ACTIVE)
 reg [3:0]  str_ras;         // tRAS countdown from ACTIVE (gates PRECHARGE)
 reg [24:0] cur_addr;        // running byte address
-reg [12:0] words_left;      // words still to read across the whole burst
+reg [13:0] words_left;      // words still to read across the whole burst (max 16384)
 reg [8:0]  row_words;       // words already issued in the current row (<=256)
 reg [1:0]  open_bank;       // bank of the row currently activated (for PRECHARGE)
 
@@ -149,9 +149,14 @@ reg [4:0]  rd_inflight;     // 5-deep in-flight READ tracker (E .. E+5 capture)
 wire [8:0] cur_col  = {cur_addr[24], cur_addr[8:1]};  // 9-bit column
 wire [1:0] cur_bank = cur_addr[23:22];
 wire [12:0] cur_row = cur_addr[21:9];
-// words remaining in this physical 512-byte (256-word) row window
-wire        row_full = (row_words == 9'd255);          // 256th word being issued
-wire        last_word = (words_left == 13'd1);          // issuing the final word
+// Close the row on the PHYSICAL 512-byte (256-column) boundary, i.e. when the
+// word being issued sits in the last column of the row (cur_addr[8:1]==8'hFF).
+// Keying on the read COUNT (row_words==255) only coincides with the physical
+// boundary when the burst starts row-aligned; an unaligned start would keep
+// the now-wrong row open and read another row's data. The next ACTIVATE then
+// uses the already-advanced cur_addr (its new row[21:9]).
+wire        row_full = (cur_addr[8:1] == 8'hFF);        // last column of phys row
+wire        last_word = (words_left == 14'd1);          // issuing the final word
 
 always @(posedge clk) begin
 	stream_valid <= 1'b0;
@@ -178,11 +183,12 @@ always @(posedge clk) begin
 		str_dly     <= 4'd0;
 		str_rc      <= 4'd0;
 		cur_addr    <= 25'd0;
-		words_left  <= 13'd0;
+		words_left  <= 14'd0;
 		row_words   <= 9'd0;
 		open_bank   <= 2'd0;
 		rd_inflight <= 5'd0;
 		str_ras     <= 4'd0;
+		stream_dout <= 16'd0;   // determinism: explicit reg init
 	end else begin
 		// tRC / tRAS countdowns run continuously once armed at ACTIVE.
 		if (str_rc  != 0) str_rc  <= str_rc  - 4'd1;
@@ -263,7 +269,7 @@ always @(posedge clk) begin
 			rd_inflight[0] <= 1'b1;
 
 			cur_addr   <= cur_addr + 25'd2;
-			words_left <= words_left - 13'd1;
+			words_left <= words_left - 14'd1;
 			row_words  <= row_words + 9'd1;
 
 			if (last_word || row_full) begin
@@ -273,7 +279,7 @@ always @(posedge clk) begin
 		end
 
 		// Hold (NOP) until every issued READ's data has landed (rd_inflight
-		// empties; note rd_inflight[3] of the LAST read fires one more cycle)
+		// empties; note rd_inflight[4] of the LAST read fires one more cycle)
 		// AND tRAS since ACTIVE has elapsed. Only then PRECHARGE the bank.
 		S_DRAIN: begin
 			str_cmd <= STR_CMD_NOP;
@@ -421,7 +427,10 @@ reg [24:0] cycle_addr;
 reg  [7:0] cycle_din;
 
 wire [7:0] dout = cycle_addr[0]?sd_data_in[7:0]:sd_data_in[15:8];
-assign     we_out = (q == STATE_CMD_CONT) && cycle_we;
+// Structurally gate the DQ-bus drive off during a stream burst: a port write
+// latched before the burst must not drive write data against the chip's read
+// data while the stream FSM owns the bus.
+assign     we_out = (q == STATE_CMD_CONT) && cycle_we && !streaming;
 
 always @(posedge clk) begin
 	doneA <= 1'b0;
@@ -435,8 +444,11 @@ always @(posedge clk) begin
 	end else begin
 		if(q == STATE_CMD_START) begin
 			cycle_port_a <= req_port_a_r;
-			cycle_we     <= req_we_r;
-			cycle_oe     <= !req_we_r && req_oe_r;
+			// Do not arm a port write/read while the stream FSM owns the bus —
+			// a pending port request must wait until streaming clears. addr/din
+			// still latch harmlessly; only the action bits are suppressed.
+			cycle_we     <= req_we_r       && !streaming;
+			cycle_oe     <= !req_we_r && req_oe_r && !streaming;
 			cycle_addr   <= req_addr_r;
 			cycle_din    <= req_din_r;
 		end

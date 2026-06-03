@@ -1141,7 +1141,7 @@ module fpga_top (
         .dinB(mux_sdram_dinB),   .oeB(mux_sdram_oeB),
         .doutB(core_sdram_doutB), .doneB(core_sdram_doneB),
         // Stream port idle (Task 2 stub — FSM lands in Task 4)
-        .stream_req(1'b0), .stream_addr(25'd0), .stream_words(13'd0)
+        .stream_req(1'b0), .stream_addr(25'd0), .stream_words(14'd0)
     );
 
     // =========================================================================
