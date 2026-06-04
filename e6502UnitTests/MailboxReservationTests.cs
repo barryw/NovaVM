@@ -8,10 +8,11 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace e6502UnitTests;
 
 /// <summary>
-/// Proves the canonical paged-library mailbox region $0300-$031F (libabi.inc
-/// LIB_MBOX) stays clear in NovaBASIC. The mailbox must be FREE in every
-/// runtime; NovaBASIC carves it out by starting user storage (Ram_base) at
-/// $0320 instead of $0300.
+/// Proves the canonical paged-library reserved band $0300-$041F stays clear in
+/// NovaBASIC. The band = the $0300-$031F mailbox (libabi.inc LIB_MBOX) plus the
+/// $0320-$041F resident loader band (256 B for libcall.s). Both must be FREE in
+/// every runtime; NovaBASIC carves it out by starting user storage (Ram_base)
+/// at $0420 instead of $0300.
 ///
 /// Approach (sentinel-survives, the strongest faithful proof against the real
 /// EhBASIC ROM running on the Avalonia CompositeBusDevice): boot BASIC, paint a
@@ -32,7 +33,9 @@ namespace e6502UnitTests;
 public class MailboxReservationTests
 {
     private const ushort MailboxStart = 0x0300;
-    private const ushort MailboxEnd = 0x0320; // exclusive (LIB_MBOX_END)
+    // Reserved band = $0300-$031F mailbox (LIB_MBOX) + $0320-$041F resident
+    // loader band (libcall.s). Exclusive end = $0420.
+    private const ushort MailboxEnd = 0x0420;
     private const byte Sentinel = 0x5A;
 
     [TestMethod]
@@ -46,7 +49,7 @@ public class MailboxReservationTests
 
         RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
-        // Paint the mailbox sentinel AFTER BASIC has cold-started (cold start
+        // Paint the band sentinel AFTER BASIC has cold-started (cold start
         // clears low RAM), so any later corruption is BASIC's doing.
         for (ushort a = MailboxStart; a < MailboxEnd; a++)
             bus.WriteRam(a, Sentinel);
@@ -66,17 +69,17 @@ public class MailboxReservationTests
         RunUntil(cpu, bus, 200_000_000, () => !editor.HasQueuedInput);
         RunSteps(cpu, bus, 5_000_000); // let the last RUN/LIST settle
 
-        // Start-of-variables pointer must be at or above the mailbox top.
+        // Start-of-variables pointer must be at or above the band top.
         ushort svar = (ushort)(bus.ReadRam(0x7B) | (bus.ReadRam(0x7C) << 8));
         Assert.IsTrue(svar >= MailboxEnd,
-            $"Start-of-variables (Svarl/Svarh) = ${svar:X4}; must be >= $0320 so " +
-            $"the $0300-$031F mailbox sits below user storage.");
+            $"Start-of-variables (Svarl/Svarh) = ${svar:X4}; must be >= $0420 so " +
+            $"the $0300-$041F reserved band sits below user storage.");
 
-        // The sentinel must survive byte-for-byte.
+        // The sentinel must survive byte-for-byte across the whole band.
         for (ushort a = MailboxStart; a < MailboxEnd; a++)
             Assert.AreEqual(Sentinel, bus.ReadRam(a),
-                $"BASIC clobbered mailbox byte ${a:X4} (expected $5A, got " +
-                $"${bus.ReadRam(a):X2}). Ram_base must be $0320 so $0300-$031F stays clear.");
+                $"BASIC clobbered reserved band byte ${a:X4} (expected $5A, got " +
+                $"${bus.ReadRam(a):X2}). Ram_base must be $0420 so $0300-$041F stays clear.");
     }
 
     private static void QueueLine(ScreenEditor editor, string line)

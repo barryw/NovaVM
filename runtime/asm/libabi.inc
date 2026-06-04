@@ -32,6 +32,14 @@ LIB_RESIDENT     = LIB_MBOX+24    ; $0318  currently-mapped module id ($00=none)
 LIB_SCRATCH      = LIB_MBOX+25    ; $0319-$031F  7 bytes loader/module scratch
 LIB_MBOX_END     = LIB_MBOX+32    ; $0320 (exclusive)
 
+; --- Resident loader band (fixed low-RAM, carved $0320-$041F in every runtime) ---
+; lib_call (libcall.s, not PIC) lives here. One canonical libcall.bin built at
+; ORG $0320 (runtime/asm/libcall_resident.cfg); each runtime reserves the band
+; and POKEs/JSRs it. 256 B leaves headroom over the 157 B loader. The $9C00
+; build (tests/asm/libcall_blob.cfg) is isolated harness scaffolding, not this.
+LIB_LOADER_BAND     = LIB_MBOX_END    ; $0320  resident loader entry (== lib_call)
+LIB_LOADER_BAND_END = $0420           ; (exclusive)
+
 ; --- Module-private ZP pointer for (zp),Y BYTES deref (cross-runtime free) ---
 LIB_ZP           = $14            ; $14-$17 reserved for module pointer pairs
 
