@@ -977,6 +977,21 @@ proc_lookup:
       BCS   @found
 
       ; Follow next pointer
+      JSR   proc_next
+      BRA   @walk
+
+@found:
+      CLC
+      RTS
+@not_found:
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_next — advance proc_entry_lo/hi to the next record it links to.
+;   In/out: proc_entry_lo/hi.  Clobbers: A, X, Y, ptr_lo/hi.
+; ---------------------------------------------------------------------
+proc_next:
       LDA   proc_entry_lo
       STA   ptr_lo
       LDA   proc_entry_hi
@@ -988,13 +1003,6 @@ proc_lookup:
       LDA   (ptr_lo),Y
       STA   proc_entry_hi
       STX   proc_entry_lo
-      BRA   @walk
-
-@found:
-      CLC
-      RTS
-@not_found:
-      SEC
       RTS
 
 ; ---------------------------------------------------------------------
@@ -1585,17 +1593,7 @@ proc_find_by_name:
       PLX
 @next:
       ; Follow next pointer
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      LDY   #0
-      LDA   (ptr_lo),Y
-      TAX
-      INY
-      LDA   (ptr_lo),Y
-      STA   proc_entry_hi
-      STX   proc_entry_lo
+      JSR   proc_next
       BRA   @walk
 
 @not_found:
@@ -1638,17 +1636,7 @@ do_pots:
       STA   VGC_CHAROUT
 
       ; Follow next
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      LDY   #0
-      LDA   (ptr_lo),Y
-      TAX
-      INY
-      LDA   (ptr_lo),Y
-      STA   proc_entry_hi
-      STX   proc_entry_lo
+      JSR   proc_next
       BRA   @walk
 
 @done:
@@ -1925,58 +1913,30 @@ do_erase:
       LDA   proc_entry_hi
       STA   proc_ptr_hi
       ; current = current->next
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      LDY   #0
-      LDA   (ptr_lo),Y
-      TAX
-      INY
-      LDA   (ptr_lo),Y
-      STA   proc_entry_hi
-      STX   proc_entry_lo
+      JSR   proc_next
       BRA   @walk
 
 @erase_match:
-      ; Unlink: *prev = current->next
-      ; Read current->next
+      ; Unlink: prev->next = current->next  (read current->next once)
       LDA   proc_entry_lo
       STA   ptr_lo
       LDA   proc_entry_hi
       STA   ptr_hi
       LDY   #0
-      LDA   (ptr_lo),Y             ; next_lo
+      LDA   (ptr_lo),Y             ; next_lo -> X
       TAX
       INY
-      LDA   (ptr_lo),Y             ; next_hi
-
-      ; Write to prev
-      LDY   #0
-      LDA   proc_ptr_lo
+      LDA   (ptr_lo),Y             ; next_hi -> stack
+      PHA
+      LDA   proc_ptr_lo            ; ptr = prev
       STA   ptr_lo
       LDA   proc_ptr_hi
       STA   ptr_hi
+      LDY   #0
       TXA
       STA   (ptr_lo),Y             ; prev->next_lo = next_lo
       INY
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      LDY   #1
-      LDA   (ptr_lo),Y             ; re-read next_hi
-      LDY   #1
-      LDA   proc_ptr_lo
-      STA   ptr_lo
-      LDA   proc_ptr_hi
-      STA   ptr_hi
-      LDA   proc_entry_lo
-      STA   ptr2_lo
-      LDA   proc_entry_hi
-      STA   ptr2_hi
-      LDY   #1
-      LDA   (ptr2_lo),Y            ; next_hi
+      PLA
       STA   (ptr_lo),Y             ; prev->next_hi = next_hi
 
       JMP   eval_continue

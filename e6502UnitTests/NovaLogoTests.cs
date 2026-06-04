@@ -1269,6 +1269,40 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void EraseMiddleProcedureKeepsNeighbors()
+    {
+        // Exercises do_erase's unlink (prev->next = current->next) for a node
+        // that has both a predecessor and a successor.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueProcedureDefinition(cpu, bus, editor, "TO AAA", "PRINT 111");
+        QueueProcedureDefinition(cpu, bus, editor, "TO BBB", "PRINT 222");
+        QueueProcedureDefinition(cpu, bus, editor, "TO CCC", "PRINT 333");
+
+        QueueLine(editor, "ERASE \"BBB");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "AAA");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "CCC");
+        RunSteps(cpu, bus, 3_000_000);
+        QueueLine(editor, "BBB");
+        RunUntilScreenContains(cpu, bus, "I DON'T KNOW HOW TO BBB", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("111", StringComparison.Ordinal),
+            $"AAA should still run after erasing BBB.\n{screen}");
+        Assert.IsTrue(screen.Contains("333", StringComparison.Ordinal),
+            $"CCC should still run after erasing BBB.\n{screen}");
+        Assert.IsTrue(screen.Contains("I DON'T KNOW HOW TO BBB", StringComparison.Ordinal),
+            $"BBB should be gone after ERASE.\n{screen}");
+    }
+
+    [TestMethod]
     public void ExtensionCommandWorks()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
