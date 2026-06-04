@@ -90,6 +90,15 @@ namespace e6502UnitTests
                           VS_OFF_XL = 38, VS_OFF_XH = 39, VS_OFF_Y = 40,
                           VS_OFF_SCENE_ADDRL = 41, VS_OFF_SCENE_ADDRH = 42, VS_OFF_SCENE_COUNT = 43;
         private const byte LERR_VSPRITE_FAIL = 0x84;
+        // Msprite/meta-sprite-domain fn-ids ($80-$8B), batch 4b.8.
+        private const byte   GFN_MS_SPAWN = 0x80, GFN_MS_DESTROY = 0x81,
+                             GFN_MS_SHOW = 0x82, GFN_MS_HIDE = 0x83,
+                             GFN_MS_POS = 0x84, GFN_MS_FRAME = 0x85,
+                             GFN_MS_ANIM = 0x86, GFN_MS_PRIORITY = 0x87,
+                             GFN_MS_TRANSCOLOR = 0x88, GFN_MS_TICK = 0x89,
+                             GFN_MS_COMMIT = 0x8A, GFN_MS_COMMIT_ONE = 0x8B;
+        private const byte LERR_MSPRITE_FAIL = 0x85;
+        private const byte MSPRITE_INVALID_HANDLE = 0xFF;
         // VGC sprite attribute field offsets (nova.inc VGC_SPR_*_OFF).
         private const byte   SPR_FLAGS_OFF = 0x05;
         private const byte   SPR_FLAG_ENABLE = 0x80, SPR_FLAG_XFLIP = 0x01, SPR_FLAG_YFLIP = 0x02;
@@ -1810,6 +1819,357 @@ namespace e6502UnitTests
             Assert.AreEqual(Sentinel, cpu.Pc, "vsprite-range gap must still RTS to the sentinel");
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
                 "id $72 (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
+        }
+
+        // =====================================================================
+        // Msprite / meta-sprite domain ($80-$8B), batch 4b.8. A meta-sprite OBJECT
+        // owns a range of hardware sprites; SPAWN reads a caller-owned visual
+        // descriptor (via the MSPRITE_DESC pointer) and returns an object HANDLE;
+        // per-object ops mutate the object's state; COMMIT writes the owned $A040+
+        // sprite attribute registers, observable via the real VGC sprite state.
+        // The module's MSPRITE_* BSS object table persists across RunFn calls
+        // (same bus), assumed zeroed at cold boot. No engine op issues a VGC
+        // command, so all ops complete synchronously (RunFn, no pump needed).
+        // =====================================================================
+
+        // CPU-RAM scratch for descriptors, clear of the mailbox ($0300-$031F), the
+        // module BSS ($0320-$03EF) and the stack.
+        private const ushort MS_DESC = 0x0700;   // visual descriptor
+        private const ushort MS_ANIM = 0x0780;   // animation descriptor
+
+        // Write a 1-part visual descriptor at `addr`: partCount=1, flags=0, then
+        // one part record {dx, dy, shapeBase, partFlags}. msprite reads partCount
+        // from byte 0 and the parts from byte 2 onward (MSPRITE_VIS_PART* layout).
+        private static void WriteDesc(CompositeBusDevice bus, ushort addr,
+            byte dx = 0, byte dy = 0, byte shapeBase = 0, byte partFlags = 0)
+        {
+            bus.WriteRam(addr, 1);                 // part count
+            bus.WriteRam((ushort)(addr + 1), 0);   // descriptor flags
+            bus.WriteRam((ushort)(addr + 2), dx);
+            bus.WriteRam((ushort)(addr + 3), dy);
+            bus.WriteRam((ushort)(addr + 4), shapeBase);
+            bus.WriteRam((ushort)(addr + 5), partFlags);
+        }
+
+        // Point ARG0 at a BYTES(descriptor): ptr16 low word (len ignored by spawn).
+        private static void SetDescArg(CompositeBusDevice bus, ushort addr) =>
+            SetArg(bus, ARG0, addr & 0xFFFF);
+
+        // Spawn an object from the descriptor at MS_DESC; return its handle.
+        private static byte SpawnDefault(CompositeBusDevice bus, byte dx = 0, byte dy = 0,
+            byte shapeBase = 0)
+        {
+            WriteDesc(bus, MS_DESC, dx, dy, shapeBase);
+            SetDescArg(bus, MS_DESC);
+            RunFn(bus, GFN_MS_SPAWN);
+            return (byte)GetResult(bus);
+        }
+
+        // Drive dispatch for `fn` allowing a non-OK STATUS (for failure-path tests);
+        // returns nothing, leaves STATUS/RESULT for the caller to assert.
+        private static void RunFnRaw(CompositeBusDevice bus, byte fn)
+        {
+            bus.WriteRam(FN_ID, fn);
+            bus.WriteRam(STATUS, 0x7F);   // poison: neither OK ($00) nor the fail code
+
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            bus.WriteRam(0x01FF, (byte)((Sentinel - 1) >> 8));
+            bus.WriteRam(0x01FE, (byte)((Sentinel - 1) & 0xFF));
+            var s = cpu.GetState();
+            cpu.RestoreState(new CpuState(s.A, s.X, s.Y, 0xFD, 0xC000,
+                                          s.Nf, s.Vf, s.Df, true, s.Zf, s.Cf));
+            for (int guard = 0; guard < 2_000_000 && cpu.Pc != Sentinel; guard++)
+                cpu.ExecuteNext();
+            Assert.AreEqual(Sentinel, cpu.Pc, $"fn ${fn:X2} dispatch did not RTS to the sentinel");
+        }
+
+        // --- $80 MS_SPAWN: a valid descriptor yields a valid handle + STATUS=OK. ---
+        [TestMethod]
+        public void Axis2_MsSpawn_ReturnsValidHandle()
+        {
+            using var bus = MakeAxis2Bus();
+
+            WriteDesc(bus, MS_DESC);
+            SetDescArg(bus, MS_DESC);
+            RunFn(bus, GFN_MS_SPAWN);   // RunFn asserts STATUS=OK
+
+            // First spawn from a cold object table -> handle 0.
+            Assert.AreEqual(0u, GetResult(bus), "first MS_SPAWN must return object handle 0");
+        }
+
+        // --- $80 MS_SPAWN: a NULL descriptor pointer fails ($FF + LERR_MSPRITE_FAIL). ---
+        [TestMethod]
+        public void Axis2_MsSpawn_NullDescriptor_FailsWithInvalidHandle()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 0);   // ptr16 = $0000 -> msprite_spawn rejects it
+            RunFnRaw(bus, GFN_MS_SPAWN);
+
+            Assert.AreEqual(MSPRITE_INVALID_HANDLE, (byte)GetResult(bus),
+                "MS_SPAWN with a null descriptor must report the invalid handle $FF");
+            Assert.AreEqual(LERR_MSPRITE_FAIL, bus.ReadRam(STATUS),
+                "a failed MS_SPAWN must map to LERR_MSPRITE_FAIL");
+        }
+
+        // --- $80 MS_SPAWN: spawning beyond MSPRITE_MAX_OBJECTS (8) fails. ---
+        [TestMethod]
+        public void Axis2_MsSpawn_BeyondCapacity_Fails()
+        {
+            using var bus = MakeAxis2Bus();
+
+            WriteDesc(bus, MS_DESC);   // 1 part each -> 8 objects use sprites 0-7
+            SetDescArg(bus, MS_DESC);
+
+            // 8 successful spawns (object slots 0-7).
+            for (int i = 0; i < 8; i++)
+            {
+                RunFn(bus, GFN_MS_SPAWN);
+                Assert.AreEqual((uint)i, GetResult(bus), $"spawn {i} must return handle {i}");
+            }
+
+            // 9th spawn: no free object slot -> $FF + fail.
+            RunFnRaw(bus, GFN_MS_SPAWN);
+            Assert.AreEqual(MSPRITE_INVALID_HANDLE, (byte)GetResult(bus),
+                "the 9th MS_SPAWN must fail (only 8 object slots)");
+            Assert.AreEqual(LERR_MSPRITE_FAIL, bus.ReadRam(STATUS),
+                "spawn-beyond-capacity must map to LERR_MSPRITE_FAIL");
+        }
+
+        // --- $84 MS_POS + $8A MS_COMMIT: position lands in the owned hw sprite. ---
+        [TestMethod]
+        public void Axis2_MsPosThenCommit_WritesHwSpritePositionAndEnable()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte h = SpawnDefault(bus);
+            Assert.AreEqual(0, h, "spawn handle");
+
+            // MS_POS handle=0, x=120, y=80.
+            SetArg(bus, ARG0, h);
+            SetArg(bus, ARG1, 120);
+            SetArg(bus, ARG2, 80);
+            RunFn(bus, GFN_MS_POS);
+
+            // Commit writes the owned hw sprite (index 0) registers.
+            RunFn(bus, GFN_MS_COMMIT);
+
+            var st = bus.Vgc.GetSpriteState(0);
+            Assert.AreEqual(120, st.x, "MS_COMMIT must write the object X to hw sprite 0");
+            Assert.AreEqual(80, st.y, "MS_COMMIT must write the object Y to hw sprite 0");
+            Assert.IsTrue(st.enabled, "a committed visible object must enable its hw sprite");
+            Assert.AreEqual(2, st.priority, "default priority is FRONT (2)");
+        }
+
+        // --- $84 MS_POS: a part dx/dy offset is added to the object position. ---
+        [TestMethod]
+        public void Axis2_MsCommit_AddsPartOffsetToPosition()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Part offset dx=+5, dy=+3.
+            byte h = SpawnDefault(bus, dx: 5, dy: 3);
+
+            SetArg(bus, ARG0, h);
+            SetArg(bus, ARG1, 50);
+            SetArg(bus, ARG2, 40);
+            RunFn(bus, GFN_MS_POS);
+            RunFn(bus, GFN_MS_COMMIT);
+
+            var st = bus.Vgc.GetSpriteState(0);
+            Assert.AreEqual(55, st.x, "hw sprite X = object X (50) + part dx (5)");
+            Assert.AreEqual(43, st.y, "hw sprite Y = object Y (40) + part dy (3)");
+        }
+
+        // --- $85 MS_FRAME + commit: the hw sprite shape index = shapeBase + frame. ---
+        [TestMethod]
+        public void Axis2_MsFrameThenCommit_SelectsShapeSlot()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte h = SpawnDefault(bus, shapeBase: 10);
+
+            SetArg(bus, ARG0, h);
+            SetArg(bus, ARG1, 4);   // frame 4
+            RunFn(bus, GFN_MS_FRAME);
+            RunFn(bus, GFN_MS_COMMIT);
+
+            Assert.AreEqual(14, bus.Vgc.GetSpriteShapeIndex(0),
+                "committed shape index = shapeBase (10) + frame (4)");
+        }
+
+        // --- $87 MS_PRIORITY + commit: the shared priority reaches the hw sprite. ---
+        [TestMethod]
+        public void Axis2_MsPriorityThenCommit_SetsHwSpritePriority()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte h = SpawnDefault(bus);
+
+            SetArg(bus, ARG0, h);
+            SetArg(bus, ARG1, 0);   // priority 0 = behind
+            RunFn(bus, GFN_MS_PRIORITY);
+            RunFn(bus, GFN_MS_COMMIT);
+
+            Assert.AreEqual(0, bus.Vgc.GetSpriteState(0).priority,
+                "MS_PRIORITY 0 must reach the committed hw sprite");
+        }
+
+        // --- $83 MS_HIDE: hiding disables the owned hw sprite immediately. ---
+        [TestMethod]
+        public void Axis2_MsHide_DisablesHwSprite()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte h = SpawnDefault(bus);
+            SetArg(bus, ARG0, h);
+            RunFn(bus, GFN_MS_COMMIT);
+            Assert.IsTrue(bus.Vgc.GetSpriteState(0).enabled, "object must be enabled after commit");
+
+            SetArg(bus, ARG0, h);
+            RunFn(bus, GFN_MS_HIDE);
+            Assert.IsFalse(bus.Vgc.GetSpriteState(0).enabled,
+                "MS_HIDE must immediately disable the owned hw sprite");
+        }
+
+        // --- $82 MS_SHOW after hide + commit: re-enables the owned hw sprite. ---
+        [TestMethod]
+        public void Axis2_MsShowAfterHide_ReEnablesOnCommit()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte h = SpawnDefault(bus);
+            SetArg(bus, ARG0, h); RunFn(bus, GFN_MS_HIDE);
+            Assert.IsFalse(bus.Vgc.GetSpriteState(0).enabled, "hidden");
+
+            SetArg(bus, ARG0, h); RunFn(bus, GFN_MS_SHOW);
+            RunFn(bus, GFN_MS_COMMIT);
+            Assert.IsTrue(bus.Vgc.GetSpriteState(0).enabled,
+                "MS_SHOW + commit must re-enable the hw sprite");
+        }
+
+        // --- $81 MS_DESTROY: frees the object + disables/releases its hw sprites. ---
+        [TestMethod]
+        public void Axis2_MsDestroy_FreesObjectAndDisablesHwSprite()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte h = SpawnDefault(bus);
+            SetArg(bus, ARG0, h); RunFn(bus, GFN_MS_COMMIT);
+            Assert.IsTrue(bus.Vgc.GetSpriteState(0).enabled, "spawned + committed");
+
+            SetArg(bus, ARG0, h);
+            RunFn(bus, GFN_MS_DESTROY);
+            Assert.IsFalse(bus.Vgc.GetSpriteState(0).enabled,
+                "MS_DESTROY must disable the owned hw sprite");
+
+            // The freed slot must be reusable: a fresh spawn returns handle 0 again
+            // and re-acquires hw sprite 0.
+            byte h2 = SpawnDefault(bus);
+            Assert.AreEqual(0, h2, "a freed object slot must be reused by the next spawn");
+        }
+
+        // --- $89 MS_TICK + $86 MS_ANIM: tick advances the animation frame. ---
+        // Anim descriptor: frameCount, ticksPerFrame, flags, reserved (MSPRITE_ANIM_*).
+        // With ticksPerFrame=1 and a 4-frame loop, one tick advances frame 0 -> 1,
+        // so the committed shape index moves from shapeBase to shapeBase+1.
+        [TestMethod]
+        public void Axis2_MsTick_AdvancesAnimationFrame()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte h = SpawnDefault(bus, shapeBase: 20);
+
+            // Animation descriptor at MS_ANIM: 4 frames, 1 tick/frame, loop.
+            bus.WriteRam(MS_ANIM + 0, 4);          // frame count
+            bus.WriteRam(MS_ANIM + 1, 1);          // ticks per frame
+            bus.WriteRam(MS_ANIM + 2, 0x01);       // flags = LOOP
+            bus.WriteRam(MS_ANIM + 3, 0);          // reserved
+
+            // Attach the anim (ARG1 = BYTES anim ptr low word).
+            SetArg(bus, ARG0, h);
+            SetArg(bus, ARG1, MS_ANIM & 0xFFFF);
+            RunFn(bus, GFN_MS_ANIM);
+
+            // Commit at frame 0 -> shape 20.
+            RunFn(bus, GFN_MS_COMMIT);
+            Assert.AreEqual(20, bus.Vgc.GetSpriteShapeIndex(0), "frame 0 -> shapeBase 20");
+
+            // One tick -> frame 1 -> shape 21.
+            RunFn(bus, GFN_MS_TICK);
+            RunFn(bus, GFN_MS_COMMIT);
+            Assert.AreEqual(21, bus.Vgc.GetSpriteShapeIndex(0),
+                "MS_TICK must advance the frame so the committed shape is shapeBase+1");
+        }
+
+        // --- $8B MS_COMMIT_ONE: writes one object even when not dirty. ---
+        [TestMethod]
+        public void Axis2_MsCommitOne_WritesSingleObject()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte h = SpawnDefault(bus);
+            SetArg(bus, ARG0, h);
+            SetArg(bus, ARG1, 33);
+            SetArg(bus, ARG2, 44);
+            RunFn(bus, GFN_MS_POS);
+
+            SetArg(bus, ARG0, h);
+            RunFn(bus, GFN_MS_COMMIT_ONE);
+
+            var st = bus.Vgc.GetSpriteState(0);
+            Assert.AreEqual(33, st.x, "MS_COMMIT_ONE must write the object X to hw sprite 0");
+            Assert.AreEqual(44, st.y, "MS_COMMIT_ONE must write the object Y to hw sprite 0");
+        }
+
+        // --- Per-object op on a bad handle -> LERR_MSPRITE_FAIL. ---
+        [TestMethod]
+        public void Axis2_MsOp_BadHandle_FailsCleanly()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // No spawn -> handle 0 is inactive; MS_SHOW must reject it.
+            SetArg(bus, ARG0, 0);
+            RunFnRaw(bus, GFN_MS_SHOW);
+            Assert.AreEqual(LERR_MSPRITE_FAIL, bus.ReadRam(STATUS),
+                "an op on an inactive/bad handle must map to LERR_MSPRITE_FAIL");
+        }
+
+        // --- Loader-axis smoke: an msprite fn-id routes through the real lib_call. ---
+        // MS_TICK is engine-wide with no peripheral dependency, so on the
+        // LibLoaderBus (no VGC) it still returns OK on dispatch (cold BSS -> no
+        // active objects -> the tick loop is a no-op).
+        [TestMethod]
+        public void Axis1_MsTick_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_MS_TICK);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS), "MS_TICK must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
+        }
+
+        // --- Dispatch density: a gap id in the msprite range ($72) and an id above
+        // the table ($A0) both return LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_MspriteRangeGaps_ReturnNoFn()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // $72: a gap below the msprite range ($72-$7F all gfn_unimpl).
+            bus.WriteRam(FN_ID, 0x72);
+            bus.WriteRam(STATUS, 0x00);
+            RunFnRaw(bus, 0x72);
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $72 (gap in the dense table) must report LERR_NO_FN");
+
+            // $A0: first id past GFX_FN_COUNT-1 ($8B) -> bounds check.
+            bus.WriteRam(STATUS, 0x00);
+            RunFnRaw(bus, 0xA0);
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $A0 (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
         }
 
         private static string RepoPath(params string[] parts)

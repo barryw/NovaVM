@@ -352,9 +352,56 @@ GFN_VS_SCENE_COMMIT_ATOMIC = $71 ; (cfg incl scene+work) -> vsprite_scene_commit
 ;             $72-$7F reserved
 
 ; =====================================================================
-; $80-$9F  msprite  (driver: msprite.s)
+; $80-$9F  msprite / meta-sprite  (driver: runtime/asm/msprite.s — batch 4b.8)
 ;   spawn/destroy/show/hide/pos/frame/anim/priority/transcolor/tick/commit
-; (constants filled in batch 4b.8)
+;
+; A meta-sprite OBJECT owns a contiguous range of hardware sprites and is moved/
+; animated as one unit. The driver keeps all object state in a module-owned BSS
+; table (MSPRITE_OBJ_* arrays, MSPRITE_HW_OWNER); commit writes the owned hardware
+; sprite attribute registers ($A040+) for every dirty visible object, so the
+; effect is observable via the real VGC sprite state. NOTE: the driver assumes a
+; ZEROED object table (no explicit init fn is in §2 scope); every runtime that
+; uses msprite starts from a cold BSS band, which satisfies that.
+;
+; Arg-register conventions, VERIFIED against runtime/asm/msprite.inc + msprite.s
+; (@in/@out/@requires):
+;
+;   SPAWN reads a VISUAL DESCRIPTOR via the MSPRITE_DESC_L/H pointer cell. The
+;   descriptor is a caller-owned record: byte0 = part count (1..MSPRITE_MAX_PARTS),
+;   byte1 = flags, then `part count` part records of 4 bytes (dx, dy, shape-base,
+;   flags). ARG0 is a BYTES arg whose ptr16 (low word) is written straight into
+;   MSPRITE_DESC_L/H (the descriptor stays resident in caller RAM; the len word is
+;   ignored — the driver reads part-count from the descriptor itself). SPAWN
+;   returns the new object handle in A ($FF on failure) plus a code in
+;   MSPRITE_RESULT. The wrapper publishes the handle to LIB_RESULT byte 0 and maps
+;   the failure to LIB_STATUS (handle $FF -> LERR_MSPRITE_FAIL, else LERR_OK).
+;
+;   Per-object ops take the object HANDLE in ARG0 -> A. Extra inputs:
+;     POS:   x(s16)=ARG1 -> NVR0L/NVR0H, y=ARG2 -> Y register.
+;     FRAME: frame#=ARG1 -> X register.
+;     ANIM:  anim descriptor ptr16 = ARG1 BYTES low word -> MSPRITE_ANIM_L/H.
+;     PRIORITY / TRANSCOLOR: value=ARG1 -> X register.
+;     DESTROY/SHOW/HIDE/COMMIT_ONE: handle only.
+;   Each returns a result code in A; the wrapper maps A!=OK -> LERR_MSPRITE_FAIL.
+;
+;   TICK and COMMIT are engine-wide (no args); both return A=0 (always OK).
+;
+LERR_MSPRITE_FAIL = $85   ; msprite driver returned a non-OK result / $FF handle
+
+GFN_MS_SPAWN       = $80  ; (BYTES desc:ARG0) -> MSPRITE_DESC_L/H; msprite_spawn
+                          ;   RESULT = object handle (A); $FF -> LERR_MSPRITE_FAIL
+GFN_MS_DESTROY     = $81  ; (handle:ARG0)            -> A; msprite_destroy
+GFN_MS_SHOW        = $82  ; (handle:ARG0)            -> A; msprite_show
+GFN_MS_HIDE        = $83  ; (handle:ARG0)            -> A; msprite_hide
+GFN_MS_POS         = $84  ; (handle:ARG0, x:ARG1 s16, y:ARG2) -> A, NVR0L/H, Y; msprite_set_pos
+GFN_MS_FRAME       = $85  ; (handle:ARG0, frame:ARG1) -> A, X; msprite_set_frame
+GFN_MS_ANIM        = $86  ; (handle:ARG0, BYTES anim:ARG1) -> A, MSPRITE_ANIM_L/H; msprite_set_anim
+GFN_MS_PRIORITY    = $87  ; (handle:ARG0, pri:ARG1)  -> A, X; msprite_set_priority
+GFN_MS_TRANSCOLOR  = $88  ; (handle:ARG0, color:ARG1) -> A, X; msprite_set_transcolor
+GFN_MS_TICK        = $89  ; ()                       -> msprite_tick (advance anim timers)
+GFN_MS_COMMIT      = $8A  ; ()                       -> msprite_commit (write all dirty -> hw)
+GFN_MS_COMMIT_ONE  = $8B  ; (handle:ARG0)            -> A; msprite_commit_one
+;             $8C-$9F reserved
 
 ; =====================================================================
 ; $A0-$AF  image / mem  (drivers: nvg.s + vgc mem)

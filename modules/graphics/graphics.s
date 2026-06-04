@@ -14,17 +14,20 @@
                                        ; (guarded; re-included by vgc.s below)
       .include "vsprite.inc"           ; VSPRITE_* BSS symbols + helper .globals
                                        ; (guarded; vsprite.s body included below)
+      .include "msprite.inc"           ; MSPRITE_* BSS symbols + helper .globals
+                                       ; (guarded; msprite.s body included below;
+                                       ; pulls sprite.inc, dedup'd)
 
 ; Highest implemented fn-id + 1. Grows per domain batch. The draw domain $00-$09
 ; is live; the text/mode domain $10-$1B is live (batch 4b.3); the hw-sprite domain
 ; $20-$3B is live (batch 4b.4); the copper domain $40-$49 is live (batch 4b.5);
 ; the blit/dma domain $50-$5B is live (batch 4b.6); the vsprite domain $60-$71 is
-; live (batch 4b.7).
+; live (batch 4b.7); the msprite/meta-sprite domain $80-$8B is live (batch 4b.8).
 ; The jtable is dense from $00..GFX_FN_COUNT-1: implemented ids point at their
 ; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F, $4A-$4F,
-; $5C-$5F) points at gfn_unimpl so it resolves to LERR_NO_FN. ids >= GFX_FN_COUNT
-; ($72+) resolve to LERR_NO_FN via the dispatch bounds-check.
-GFX_FN_COUNT = $72
+; $5C-$5F, $72-$7F) points at gfn_unimpl so it resolves to LERR_NO_FN. ids >=
+; GFX_FN_COUNT ($8C+) resolve to LERR_NO_FN via the dispatch bounds-check.
+GFX_FN_COUNT = $8C
 
 ; GTEXT copies its BYTES string into the VGC FIO_NAME buffer ($B9B0-$B9EF, 64
 ; bytes). Mirror fio.inc's FIO_NAME_LIMIT here (fio.inc isn't pulled into the
@@ -35,15 +38,34 @@ GFX_FIO_NAME_LIMIT = $3F
       lib_module_header MODULE_ID_GRAPHICS, LIB_ABI_VERSION, GFX_FN_COUNT
 
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
+;
+; The jtable index is fn*2. With fn-ids now reaching $8B the index exceeds 255
+; ($8B*2 = $116), so an 8-bit `asl; tax` would wrap and dispatch the wrong slot
+; (this is why batches up to $71 worked but $80+ did not). Compute a full 16-bit
+; table pointer in the module ZP window (LIB_ZP, free before any wrapper runs)
+; and read the target via (zp),Y. Y walks 0/1 for the lo/hi target bytes.
 dispatch:
       lda     LIB_FN_ID
       cmp     #GFX_FN_COUNT
       bcs     @bad
-      asl
-      tax
-      lda     gfx_jtable+1,x
+      ; ptr = gfx_jtable + fn*2  (16-bit: fn*2 can carry past 255)
+      asl                              ; A = (fn*2) low byte, C = (fn*2) bit 8
+      sta     LIB_ZP
+      lda     #0
+      rol                              ; A = (fn*2) high byte (the shifted-out carry)
+      sta     LIB_ZP+1
+      clc
+      lda     LIB_ZP
+      adc     #<gfx_jtable
+      sta     LIB_ZP
+      lda     LIB_ZP+1
+      adc     #>gfx_jtable
+      sta     LIB_ZP+1
+      ldy     #1                       ; target hi byte
+      lda     (LIB_ZP),y
       pha
-      lda     gfx_jtable,x
+      ldy     #0                       ; target lo byte
+      lda     (LIB_ZP),y
       pha
       rts
 @bad:
@@ -166,7 +188,33 @@ gfx_jtable:
       .word   gfn_vs_scene_commit-1     ; $6F VS_SCENE_COMMIT
       .word   gfn_vs_scene_draw-1       ; $70 VS_SCENE_DRAW
       .word   gfn_vs_scene_commit_atomic-1 ; $71 VS_SCENE_COMMIT_ATOMIC
-      ; $72.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
+      .word   gfn_unimpl-1             ; $72 gap -> LERR_NO_FN
+      .word   gfn_unimpl-1             ; $73 gap
+      .word   gfn_unimpl-1             ; $74 gap
+      .word   gfn_unimpl-1             ; $75 gap
+      .word   gfn_unimpl-1             ; $76 gap
+      .word   gfn_unimpl-1             ; $77 gap
+      .word   gfn_unimpl-1             ; $78 gap
+      .word   gfn_unimpl-1             ; $79 gap
+      .word   gfn_unimpl-1             ; $7A gap
+      .word   gfn_unimpl-1             ; $7B gap
+      .word   gfn_unimpl-1             ; $7C gap
+      .word   gfn_unimpl-1             ; $7D gap
+      .word   gfn_unimpl-1             ; $7E gap
+      .word   gfn_unimpl-1             ; $7F gap
+      .word   gfn_ms_spawn-1           ; $80 MS_SPAWN
+      .word   gfn_ms_destroy-1         ; $81 MS_DESTROY
+      .word   gfn_ms_show-1            ; $82 MS_SHOW
+      .word   gfn_ms_hide-1            ; $83 MS_HIDE
+      .word   gfn_ms_pos-1             ; $84 MS_POS
+      .word   gfn_ms_frame-1           ; $85 MS_FRAME
+      .word   gfn_ms_anim-1            ; $86 MS_ANIM
+      .word   gfn_ms_priority-1        ; $87 MS_PRIORITY
+      .word   gfn_ms_transcolor-1      ; $88 MS_TRANSCOLOR
+      .word   gfn_ms_tick-1            ; $89 MS_TICK
+      .word   gfn_ms_commit-1          ; $8A MS_COMMIT
+      .word   gfn_ms_commit_one-1      ; $8B MS_COMMIT_ONE
+      ; $8C.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
 
 ; Any reachable-but-unimplemented fn-id: report LERR_NO_FN.
 gfn_unimpl:
@@ -1101,6 +1149,151 @@ gfn_vs_scene_commit_atomic:
       lda     #VSPRITE_RESULT_OK
       jmp     finish_vs
 
+; =====================================================================
+; $80-$8B  msprite / meta-sprite domain (batch 4b.8). Driver: msprite.s
+; (included below; it pulls sprite.s, dedup'd by the .ifndef guard).
+;
+; A meta-sprite object owns a range of hardware sprites; commit writes the owned
+; $A040+ attribute registers, so the effect is observable on the real VGC. State
+; lives in the module-owned MSPRITE_* BSS table, persistent across lib_calls and
+; assumed zeroed at cold boot (no init fn in §2 scope).
+;
+; Result mapping. SPAWN returns A = object handle ($FF on failure); the wrapper
+; publishes A to LIB_RESULT byte 0 and maps $FF -> LERR_MSPRITE_FAIL, else OK
+; (finish_ms_spawn). Per-object ops return A = MSPRITE_RESULT_* code (0 = OK); the
+; wrapper publishes A to LIB_RESULT and maps A!=0 -> LERR_MSPRITE_FAIL
+; (finish_ms). tick/commit always return A=0 -> OK (finish_ms too).
+;
+; None of these issue a VGC *command* (commit is a sequence of direct register
+; stores, completing synchronously), so the wrappers need no command wait.
+
+; finish_ms_spawn — A = object handle. Publish to LIB_RESULT byte 0 (bytes 1-3
+; zeroed); $FF -> LERR_MSPRITE_FAIL, any valid handle -> LERR_OK.
+finish_ms_spawn:
+      sta     LIB_RESULT               ; raw handle -> RESULT byte 0
+      ldx     #0
+      stx     LIB_RESULT+1
+      stx     LIB_RESULT+2
+      stx     LIB_RESULT+3
+      cmp     #MSPRITE_INVALID_HANDLE
+      beq     @fail
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_MSPRITE_FAIL
+      sta     LIB_STATUS
+      rts
+
+; finish_ms — A = driver result code (0 = OK). Publish to LIB_RESULT byte 0
+; (bytes 1-3 zeroed); A!=0 -> LERR_MSPRITE_FAIL, A==0 -> LERR_OK.
+finish_ms:
+      sta     LIB_RESULT               ; raw result code -> RESULT byte 0
+      ldx     #0
+      stx     LIB_RESULT+1
+      stx     LIB_RESULT+2
+      stx     LIB_RESULT+3
+      cmp     #MSPRITE_RESULT_OK
+      bne     @fail
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_MSPRITE_FAIL
+      sta     LIB_STATUS
+      rts
+
+; --- $80 MS_SPAWN: allocate hw sprites for a visual descriptor -> object handle ---
+; ARG0 = BYTES(ptr16 low word = descriptor address; len word ignored). The ptr16
+; goes straight into MSPRITE_DESC_L/H; the descriptor stays resident in caller RAM
+; (msprite_spawn reads its part count + part records via the pointer).
+gfn_ms_spawn:
+      lda     LIB_ARG0                 ; descriptor ptr low
+      sta     MSPRITE_DESC_L
+      lda     LIB_ARG0+1               ; descriptor ptr high
+      sta     MSPRITE_DESC_H
+      jsr     msprite_spawn
+      jmp     finish_ms_spawn
+
+; --- $81 MS_DESTROY: destroy object, free its hw sprites ---  handle:ARG0 -> A.
+gfn_ms_destroy:
+      lda     LIB_ARG0
+      jsr     msprite_destroy
+      jmp     finish_ms
+
+; --- $82 MS_SHOW: mark object visible + dirty ---  handle:ARG0 -> A.
+gfn_ms_show:
+      lda     LIB_ARG0
+      jsr     msprite_show
+      jmp     finish_ms
+
+; --- $83 MS_HIDE: hide object, disable its hw sprites now ---  handle:ARG0 -> A.
+gfn_ms_hide:
+      lda     LIB_ARG0
+      jsr     msprite_hide
+      jmp     finish_ms
+
+; --- $84 MS_POS: set object position ---
+; handle:ARG0 -> A, x(s16):ARG1 -> NVR0L/NVR0H, y:ARG2 -> Y. msprite_set_pos
+; consumes Y before selecting the handle, so load A last.
+gfn_ms_pos:
+      lda     LIB_ARG1                 ; x low  -> NVR0L
+      sta     NVR0L
+      lda     LIB_ARG1+1               ; x high -> NVR0H
+      sta     NVR0H
+      ldy     LIB_ARG2                 ; y      -> Y
+      lda     LIB_ARG0                 ; handle -> A
+      jsr     msprite_set_pos
+      jmp     finish_ms
+
+; --- $85 MS_FRAME: set object animation frame ---  handle:ARG0 -> A, frame:ARG1 -> X.
+gfn_ms_frame:
+      ldx     LIB_ARG1                 ; frame -> X
+      lda     LIB_ARG0                 ; handle -> A
+      jsr     msprite_set_frame
+      jmp     finish_ms
+
+; --- $86 MS_ANIM: attach an animation descriptor ---
+; handle:ARG0 -> A, anim descriptor ptr16 = ARG1 BYTES low word -> MSPRITE_ANIM_L/H.
+gfn_ms_anim:
+      lda     LIB_ARG1                 ; anim ptr low  -> MSPRITE_ANIM_L
+      sta     MSPRITE_ANIM_L
+      lda     LIB_ARG1+1               ; anim ptr high -> MSPRITE_ANIM_H
+      sta     MSPRITE_ANIM_H
+      lda     LIB_ARG0                 ; handle -> A
+      jsr     msprite_set_anim
+      jmp     finish_ms
+
+; --- $87 MS_PRIORITY: set shared sprite priority ---  handle:ARG0 -> A, pri:ARG1 -> X.
+gfn_ms_priority:
+      ldx     LIB_ARG1                 ; priority -> X
+      lda     LIB_ARG0                 ; handle -> A
+      jsr     msprite_set_priority
+      jmp     finish_ms
+
+; --- $88 MS_TRANSCOLOR: set shared transparent colour ---  handle:ARG0 -> A, color:ARG1 -> X.
+gfn_ms_transcolor:
+      ldx     LIB_ARG1                 ; transcolor -> X
+      lda     LIB_ARG0                 ; handle -> A
+      jsr     msprite_set_transcolor
+      jmp     finish_ms
+
+; --- $89 MS_TICK: advance every active object's animation timer ---  ().
+gfn_ms_tick:
+      jsr     msprite_tick
+      jmp     finish_ms
+
+; --- $8A MS_COMMIT: write all dirty visible objects to hw sprite registers ---  ().
+gfn_ms_commit:
+      jsr     msprite_commit
+      jmp     finish_ms
+
+; --- $8B MS_COMMIT_ONE: write one visible object to hw, even if not dirty ---  handle:ARG0 -> A.
+gfn_ms_commit_one:
+      lda     LIB_ARG0
+      jsr     msprite_commit_one
+      jmp     finish_ms
+
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
 ; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.
 ; sprite.s provides the hw-sprite command/register/collision driver entries.
@@ -1120,6 +1313,11 @@ gfn_vs_scene_commit_atomic:
 ; pulled above; dedup'd by the .ifndef guard) and declares the VSPRITE_* state
 ; in the module-owned BSS/ZEROPAGE bands (see graphics.cfg).
       .include "vsprite.s"
+; msprite.s provides the meta-sprite spawn/destroy/show/hide/pos/frame/anim/
+; priority/transcolor/tick/commit driver entries (batch 4b.8). It .includes
+; sprite.s (already pulled above; dedup'd by the .ifndef guard) and declares the
+; MSPRITE_* object table in the module-owned BSS + ZEROPAGE bands (see graphics.cfg).
+      .include "msprite.s"
 
       .segment "VECTORS"             ; $FFFA — don't-care under SEI; fills the 16KB image
       .word   MOD_ENTRY, MOD_ENTRY, MOD_ENTRY
