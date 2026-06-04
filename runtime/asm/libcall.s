@@ -76,6 +76,16 @@ lcv_ver:   lda #LERR_BAD_VER
 
 ; modtab_lookup — A = module id in; program PGD_SRC*/PGD_WORDS*; C=1 if unknown.
 ; 3b: single TEST module at shelf slot 0. Phase 1/B replaces with directory lookup.
+;
+; XRAM library shelf (option A, fixed): SHELF_BASE=$060000, slot i = +i*$4000 (16KB).
+; The compile-time map below IS the contract — NovaHost's boot manifest MUST stage each
+; module to the same slot base (single source of truth). See docs/help/guides/library-shelf.md.
+;   id  $7F TEST     -> slot 0  $060000   (3b proof; real modules will reclaim slot 0)
+;   id  $01 GRAPHICS -> slot 0  $060000   (Phase 4)   ] add a cmp/bne row per module,
+;   id  $02 SOUND    -> slot 1  $064000   (Phase 5)   ] or a table walk, when these land.
+;   id  $03 SYSTEM   -> slot 2  $068000   (Phase 5)   ]
+; Phase 1/System-B replaces this with an XRAM-directory lookup by name (modtab filled at
+; boot); lib_call is unchanged — modtab is the abstraction that hides constants-vs-directory.
 modtab_lookup:
       cmp     #MODULE_ID_TEST
       bne     mt_unknown
