@@ -232,10 +232,9 @@ do_make:
       PLA
 @err:
       ; Print error
-      JSR   print_inl
-      .byte "NOT ENOUGH INPUTS TO MAKE", 0
-      JSR   eval_newline
-      JMP   eval_continue
+      LDX   #<str_make_name
+      LDY   #>str_make_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_repeat — REPEAT count [body]
@@ -434,10 +433,9 @@ do_repeat:
       JMP   eval_continue
 
 @err_args:
-      JSR   print_inl
-      .byte "NOT ENOUGH INPUTS TO REPEAT", 0
-      JSR   eval_newline
-      JMP   eval_continue
+      LDX   #<str_repeat_name
+      LDY   #>str_repeat_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; repeat_restore_state — pop 7 saved bytes from stack to ZP
@@ -674,9 +672,9 @@ do_if:
       LDY   #>str_if_bracket
       JMP   list_print_err
 @err:
-      LDX   #<str_if_err
-      LDY   #>str_if_err
-      JMP   list_print_err
+      LDX   #<str_if_name
+      LDY   #>str_if_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_ifelse — IFELSE condition [true-body] [false-body]
@@ -710,9 +708,9 @@ do_ifelse:
       LDY   #>str_ifelse_bracket
       JMP   list_print_err
 @err:
-      LDX   #<str_ifelse_err
-      LDY   #>str_ifelse_err
-      JMP   list_print_err
+      LDX   #<str_ifelse_name
+      LDY   #>str_ifelse_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_stop — STOP: exit current procedure immediately (no return value)
@@ -881,9 +879,9 @@ do_catch:
       JMP   list_print_err
 
 @err_tag:
-      LDX   #<str_catch_err
-      LDY   #>str_catch_err
-      JMP   list_print_err
+      LDX   #<str_catch_name
+      LDY   #>str_catch_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_throw — THROW "tag: unwind to matching CATCH
@@ -976,9 +974,9 @@ do_throw:
       JMP   eval_continue
 
 @err_tag:
-      LDX   #<str_throw_err
-      LDY   #>str_throw_err
-      JMP   list_print_err
+      LDX   #<str_throw_name
+      LDY   #>str_throw_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_repcount — REPCOUNT: reporter returning current 1-based repeat index
@@ -1911,9 +1909,9 @@ do_char:
       LDA   eval_val_lo
       JMP   alloc_one_char_word
 @err:
-      LDX   #<str_char_err
-      LDY   #>str_char_err
-      JMP   list_print_err
+      LDX   #<str_char_name
+      LDY   #>str_char_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_ascii — ASCII word: return ASCII code of first character
@@ -1944,9 +1942,9 @@ do_ascii:
 @err_type:
 @err_empty:
 @err:
-      LDX   #<str_ascii_err
-      LDY   #>str_ascii_err
-      JMP   list_print_err
+      LDX   #<str_ascii_name
+      LDY   #>str_ascii_name
+      JMP   err_nei
 
 ; =====================================================================
 ; Math functions and type predicates
@@ -2325,32 +2323,20 @@ do_listp:
 str_oom:
       .byte "OUT OF MEMORY", 0
 
-str_char_err:
-      .byte "NOT ENOUGH INPUTS TO CHAR", 0
 
-str_ascii_err:
-      .byte "NOT ENOUGH INPUTS TO ASCII", 0
 
-str_if_err:
-      .byte "NOT ENOUGH INPUTS TO IF", 0
 
 str_if_bracket:
       .byte "IF NEEDS [ BODY ]", 0
 
-str_ifelse_err:
-      .byte "NOT ENOUGH INPUTS TO IFELSE", 0
 
 str_ifelse_bracket:
       .byte "IFELSE NEEDS [ BODY ]", 0
 
-str_catch_err:
-      .byte "NOT ENOUGH INPUTS TO CATCH", 0
 
 str_catch_bracket:
       .byte "CATCH NEEDS TAG [BODY]", 0
 
-str_throw_err:
-      .byte "NOT ENOUGH INPUTS TO THROW", 0
 
 ; Name strings: length-prefixed
 str_print_name:
