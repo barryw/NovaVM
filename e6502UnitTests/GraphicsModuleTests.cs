@@ -64,6 +64,32 @@ namespace e6502UnitTests
                              GFN_BLIT_STATUS = 0x56, GFN_BLIT_ERR = 0x57,
                              GFN_BLIT_COUNT = 0x58, GFN_DMA_STATUS = 0x59,
                              GFN_DMA_ERR = 0x5A, GFN_DMA_COUNT = 0x5B;
+        // Vsprite-domain fn-ids ($60-$71), batch 4b.7.
+        private const byte   GFN_VS_BLIT = 0x60, GFN_VS_BLIT_START = 0x61,
+                             GFN_VS_FILL = 0x62, GFN_VS_USE_ORIGINAL = 0x63,
+                             GFN_VS_USE_ROTATED = 0x64, GFN_VS_ROTATE = 0x65,
+                             GFN_VS_GFX_BLIT = 0x66, GFN_VS_GFX_BLIT_START = 0x67,
+                             GFN_VS_GFX_FILL = 0x68, GFN_VS_GFX_SAVE_BG = 0x69,
+                             GFN_VS_GFX_RESTORE_BG = 0x6A, GFN_VS_GFX_ROTATE_BLIT = 0x6B,
+                             GFN_VS_GFX_ROTATE_BLIT_KEYED = 0x6C, GFN_VS_GFX_ROTATE_BLIT_NOWAIT = 0x6D,
+                             GFN_VS_SCENE_BEGIN = 0x6E, GFN_VS_SCENE_COMMIT = 0x6F,
+                             GFN_VS_SCENE_DRAW = 0x70, GFN_VS_SCENE_COMMIT_ATOMIC = 0x71;
+        // vsprite config-struct field offsets (runtime/asm/libgraphics.inc GFX_VS_OFF_*).
+        private const int VS_OFF_SRCSPACE = 0, VS_OFF_DSTSPACE = 1,
+                          VS_OFF_SRCADDRL = 2, VS_OFF_SRCADDRM = 3, VS_OFF_SRCADDRH = 4,
+                          VS_OFF_DSTADDRL = 5, VS_OFF_DSTADDRM = 6, VS_OFF_DSTADDRH = 7,
+                          VS_OFF_WIDTHL = 8, VS_OFF_WIDTHH = 9, VS_OFF_HEIGHTL = 10, VS_OFF_HEIGHTH = 11,
+                          VS_OFF_SRCSTRL = 12, VS_OFF_SRCSTRH = 13, VS_OFF_DSTSTRL = 14, VS_OFF_DSTSTRH = 15,
+                          VS_OFF_BGSPACE = 16, VS_OFF_BGADDRL = 17, VS_OFF_BGADDRM = 18, VS_OFF_BGADDRH = 19,
+                          VS_OFF_BGSTRL = 20, VS_OFF_BGSTRH = 21, VS_OFF_COLORKEY = 22,
+                          VS_OFF_ORIGSPACE = 23, VS_OFF_ORIGADDRL = 24, VS_OFF_ORIGADDRM = 25, VS_OFF_ORIGADDRH = 26,
+                          VS_OFF_ORIGSTRL = 27, VS_OFF_ORIGSTRH = 28,
+                          VS_OFF_ROTSPACE = 29, VS_OFF_ROTADDRL = 30, VS_OFF_ROTADDRM = 31, VS_OFF_ROTADDRH = 32,
+                          VS_OFF_ROTSTRL = 33, VS_OFF_ROTSTRH = 34, VS_OFF_ROTANGLE = 35,
+                          VS_OFF_FILLVALUE = 36, VS_OFF_FLAGS = 37,
+                          VS_OFF_XL = 38, VS_OFF_XH = 39, VS_OFF_Y = 40,
+                          VS_OFF_SCENE_ADDRL = 41, VS_OFF_SCENE_ADDRH = 42, VS_OFF_SCENE_COUNT = 43;
+        private const byte LERR_VSPRITE_FAIL = 0x84;
         // VGC sprite attribute field offsets (nova.inc VGC_SPR_*_OFF).
         private const byte   SPR_FLAGS_OFF = 0x05;
         private const byte   SPR_FLAG_ENABLE = 0x80, SPR_FLAG_XFLIP = 0x01, SPR_FLAG_YFLIP = 0x02;
@@ -1426,6 +1452,364 @@ namespace e6502UnitTests
             Assert.AreEqual(Sentinel, cpu.Pc, "blit/dma-range gap must still RTS to the sentinel");
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
                 "id $5C (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
+        }
+
+        // =====================================================================
+        // Vsprite domain ($60-$71), batch 4b.7. Every op takes ONE BYTES arg
+        // (ARG0): a caller struct in CPU RAM laid out byte-for-byte as the
+        // VSPRITE_* BSS config block (offsets VS_OFF_*). The wrapper copies it
+        // into the module's BSS via (LIB_ZP),Y then runs the driver. Axis 2
+        // drives the real blitter through the VGC gfx-plane memory API. The
+        // single-sprite blit/fill/save-restore/rotate ops self-wait inside the
+        // blitter (RunFn); only the two frame-pacing rotate variants poll
+        // VGC_FRAME and need a pumped bus (RunFnPumped).
+        // =====================================================================
+
+        // Layout of a CPU-RAM scratch arena for vsprite tests, all clear of the
+        // mailbox ($0300-$031F), the module BSS ($0320-$035B) and the stack.
+        private const ushort VS_CFG    = 0x0700;   // config struct
+        private const ushort VS_SRC    = 0x0600;   // source rectangle
+        private const ushort VS_ORIG   = 0x0600;   // immutable rotate source
+        private const ushort VS_ROT    = 0x0680;   // rotated output buffer
+        private const ushort VS_BG     = 0x0800;   // saved-background buffer
+
+        // Point ARG0 at a config struct of `len` bytes at `addr` (BYTES arg:
+        // ptr16 low word, len16 high word).
+        private static void SetCfgArg(CompositeBusDevice bus, ushort addr, int len) =>
+            SetArg(bus, ARG0, (addr & 0xFFFF) | (len << 16));
+
+        private static void Cfg(CompositeBusDevice bus, int off, byte value) =>
+            bus.WriteRam((ushort)(VS_CFG + off), value);
+
+        // Common single-sprite config: src space/addr/stride, w/h, x/y, flags.
+        private static void WriteSpriteCfg(CompositeBusDevice bus, byte srcSpace,
+            ushort srcAddr, int w, int h, int x, int y, byte colorKey = 0, byte flags = 0)
+        {
+            Cfg(bus, VS_OFF_SRCSPACE, srcSpace);
+            Cfg(bus, VS_OFF_SRCADDRL, (byte)(srcAddr & 0xFF));
+            Cfg(bus, VS_OFF_SRCADDRM, (byte)((srcAddr >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_SRCADDRH, 0);
+            Cfg(bus, VS_OFF_WIDTHL,  (byte)(w & 0xFF));
+            Cfg(bus, VS_OFF_WIDTHH,  (byte)((w >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_HEIGHTL, (byte)(h & 0xFF));
+            Cfg(bus, VS_OFF_HEIGHTH, (byte)((h >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_SRCSTRL, (byte)(w & 0xFF));    // tightly packed
+            Cfg(bus, VS_OFF_SRCSTRH, (byte)((w >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_XL, (byte)(x & 0xFF));
+            Cfg(bus, VS_OFF_XH, (byte)((x >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_Y,  (byte)y);
+            Cfg(bus, VS_OFF_COLORKEY, colorKey);
+            Cfg(bus, VS_OFF_FLAGS, flags);
+        }
+
+        // --- $66 VS_GFX_BLIT: copy a CPU-RAM rectangle to the gfx plane at X/Y. ---
+        [TestMethod]
+        public void Axis2_VsGfxBlit_CopiesRectToGfxPlane()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // 4x4 source of colour 0x05 in CPU RAM.
+            const int w = 4, h = 4, x = 20, y = 30;
+            for (int i = 0; i < w * h; i++) bus.WriteRam((ushort)(VS_SRC + i), 0x05);
+
+            WriteSpriteCfg(bus, 0 /*CPU*/, VS_SRC, w, h, x, y);
+            SetCfgArg(bus, VS_CFG, 41);
+            RunFn(bus, GFN_VS_GFX_BLIT);
+
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    Assert.AreEqual(5, GfxPixel(bus, x + col, y + row),
+                        $"VS_GFX_BLIT must set gfx pixel ({x + col},{y + row}) to the source colour");
+            Assert.AreEqual(0, GfxPixel(bus, x + w, y), "VS_GFX_BLIT must not write past the rect width");
+            Assert.AreEqual(0, GfxPixel(bus, x, y + h), "VS_GFX_BLIT must not write past the rect height");
+        }
+
+        // --- $62 VS_FILL: fill a destination rectangle in gfx space with a value. ---
+        [TestMethod]
+        public void Axis2_VsFill_FillsDestinationRectangle()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const int w = 5, h = 3, x = 60, y = 70;
+            int dstBase = y * VgcConstants.GfxWidth + x;
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w + 1; col++)
+                    SetGfxByte(bus, (y + row) * VgcConstants.GfxWidth + x + col, 0x11);
+
+            // Direct VS_FILL: caller sets DST space/addr/stride + w/h + fill value.
+            Cfg(bus, VS_OFF_DSTSPACE, DMA_SPACE_GFX);
+            Cfg(bus, VS_OFF_DSTADDRL, (byte)(dstBase & 0xFF));
+            Cfg(bus, VS_OFF_DSTADDRM, (byte)((dstBase >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_DSTADDRH, (byte)((dstBase >> 16) & 0xFF));
+            Cfg(bus, VS_OFF_WIDTHL, w); Cfg(bus, VS_OFF_WIDTHH, 0);
+            Cfg(bus, VS_OFF_HEIGHTL, h); Cfg(bus, VS_OFF_HEIGHTH, 0);
+            Cfg(bus, VS_OFF_DSTSTRL, (byte)(VgcConstants.GfxWidth & 0xFF));
+            Cfg(bus, VS_OFF_DSTSTRH, (byte)((VgcConstants.GfxWidth >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_FILLVALUE, 0x09);
+            SetCfgArg(bus, VS_CFG, 41);
+            RunFn(bus, GFN_VS_FILL);
+
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    Assert.AreEqual(9, GfxPixel(bus, x + col, y + row),
+                        $"VS_FILL must fill gfx pixel ({x + col},{y + row})");
+            Assert.AreEqual(0x11, GfxPixel(bus, x + w, y), "VS_FILL must not write past the rect width");
+        }
+
+        // --- $69/$6A VS_GFX_SAVE_BG then RESTORE_BG: a region round-trips. ---
+        [TestMethod]
+        public void Axis2_VsGfxSaveThenRestoreBg_RestoresOriginalRegion()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const int w = 4, h = 4, x = 100, y = 50;
+            // Paint a distinct gfx region (colour = 6) to be saved.
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    SetGfxByte(bus, (y + row) * VgcConstants.GfxWidth + x + col, 0x06);
+
+            // Config: X/Y/W/H + a CPU-RAM background buffer (BGSPACE=CPU, stride=w).
+            Cfg(bus, VS_OFF_WIDTHL, w); Cfg(bus, VS_OFF_HEIGHTL, h);
+            Cfg(bus, VS_OFF_XL, (byte)(x & 0xFF)); Cfg(bus, VS_OFF_XH, (byte)((x >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_Y, (byte)y);
+            Cfg(bus, VS_OFF_BGSPACE, 0 /*CPU*/);
+            Cfg(bus, VS_OFF_BGADDRL, (byte)(VS_BG & 0xFF));
+            Cfg(bus, VS_OFF_BGADDRM, (byte)((VS_BG >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_BGADDRH, 0);
+            Cfg(bus, VS_OFF_BGSTRL, w); Cfg(bus, VS_OFF_BGSTRH, 0);
+            SetCfgArg(bus, VS_CFG, 41);
+
+            RunFn(bus, GFN_VS_GFX_SAVE_BG);
+            // The CPU-RAM background buffer must now hold the saved region.
+            for (int i = 0; i < w * h; i++)
+                Assert.AreEqual(0x06, bus.ReadRam((ushort)(VS_BG + i)),
+                    $"VS_GFX_SAVE_BG must copy gfx byte {i} into the background buffer");
+
+            // Clobber the gfx region (colour 0x0F).
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    SetGfxByte(bus, (y + row) * VgcConstants.GfxWidth + x + col, 0x0F);
+
+            RunFn(bus, GFN_VS_GFX_RESTORE_BG);
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    Assert.AreEqual(6, GfxPixel(bus, x + col, y + row),
+                        $"VS_GFX_RESTORE_BG must restore gfx pixel ({x + col},{y + row})");
+        }
+
+        // --- $65 VS_ROTATE + $66 VS_GFX_BLIT: a 90deg rotate moves a marker pixel. ---
+        // The blitter rotates ORIG->ROT (and vsprite_rotate repoints SRC*->ROT*),
+        // so a following VS_GFX_BLIT lands the rotated copy on the gfx plane. With
+        // angle 64 (=90deg) on a 4x4, the source top-right marker (3,0) maps to the
+        // rotated bottom-right (3,3) — verified against the blitter rotation maths.
+        [TestMethod]
+        public void Axis2_VsRotateThenGfxBlit_RotatesMarkerNinetyDegrees()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const int w = 4, h = 4, x = 40, y = 80;
+            // ORIG: fill 0x05, marker 0x0C at source (col=3,row=0).
+            for (int i = 0; i < w * h; i++) bus.WriteRam((ushort)(VS_ORIG + i), 0x05);
+            bus.WriteRam((ushort)(VS_ORIG + 0 * w + 3), 0x0C);   // src (3,0)
+
+            // Config: ORIG* (immutable source), ROT* (output buffer), W/H, angle,
+            // X/Y for the follow-up gfx blit. ORIG and ROT are well-separated CPU
+            // buffers so the rotate's same-space overlap guard does not trip.
+            Cfg(bus, VS_OFF_WIDTHL, w); Cfg(bus, VS_OFF_HEIGHTL, h);
+            Cfg(bus, VS_OFF_ORIGSPACE, 0 /*CPU*/);
+            Cfg(bus, VS_OFF_ORIGADDRL, (byte)(VS_ORIG & 0xFF));
+            Cfg(bus, VS_OFF_ORIGADDRM, (byte)((VS_ORIG >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_ORIGADDRH, 0);
+            Cfg(bus, VS_OFF_ORIGSTRL, w); Cfg(bus, VS_OFF_ORIGSTRH, 0);
+            Cfg(bus, VS_OFF_ROTSPACE, 0 /*CPU*/);
+            Cfg(bus, VS_OFF_ROTADDRL, (byte)(VS_ROT & 0xFF));
+            Cfg(bus, VS_OFF_ROTADDRM, (byte)((VS_ROT >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_ROTADDRH, 0);
+            Cfg(bus, VS_OFF_ROTSTRL, w); Cfg(bus, VS_OFF_ROTSTRH, 0);
+            Cfg(bus, VS_OFF_ROTANGLE, 64);            // 90 degrees
+            // SRC* := ROT buffer so the follow-up VS_GFX_BLIT reads the rotated
+            // output. Each wrapper re-copies the whole cfg block before running,
+            // so the SRC fields must be set in the struct (the BSS SRC* repoint
+            // that vsprite_rotate does internally is overwritten by the next copy).
+            Cfg(bus, VS_OFF_SRCSPACE, 0 /*CPU*/);
+            Cfg(bus, VS_OFF_SRCADDRL, (byte)(VS_ROT & 0xFF));
+            Cfg(bus, VS_OFF_SRCADDRM, (byte)((VS_ROT >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_SRCADDRH, 0);
+            Cfg(bus, VS_OFF_SRCSTRL, w); Cfg(bus, VS_OFF_SRCSTRH, 0);
+            Cfg(bus, VS_OFF_XL, (byte)x); Cfg(bus, VS_OFF_XH, 0);
+            Cfg(bus, VS_OFF_Y, (byte)y);
+            SetCfgArg(bus, VS_CFG, 41);
+
+            // Rotate ORIG->ROT (self-waits; vsprite_rotate repoints SRC*->ROT*).
+            RunFn(bus, GFN_VS_ROTATE);
+            // The rotated buffer must carry the marker at its bottom-right (3,3).
+            Assert.AreEqual(0x0C, bus.ReadRam((ushort)(VS_ROT + 3 * w + 3)),
+                "VS_ROTATE must move the (3,0) marker to the rotated (3,3) cell");
+            Assert.AreEqual(0x05, bus.ReadRam((ushort)(VS_ROT + 0 * w + 3)),
+                "the rotated (3,0) cell must no longer hold the marker (rotation, not identity)");
+
+            // Blit the rotated copy to the gfx plane at X/Y (cfg SRC* = ROT*).
+            RunFn(bus, GFN_VS_GFX_BLIT);
+
+            Assert.AreEqual(0x0C, GfxPixel(bus, x + 3, y + 3),
+                "rotated marker must land at gfx (x+3,y+3)");
+            Assert.AreEqual(0x05, GfxPixel(bus, x + 3, y + 0),
+                "the rotated sprite's (3,0) gfx cell must be the background colour, not the marker");
+        }
+
+        // --- $6D VS_GFX_ROTATE_BLIT_NOWAIT: rotate + start blit without frame wait. ---
+        [TestMethod]
+        public void Axis2_VsGfxRotateBlitNowait_DrawsRotatedSpriteToGfx()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const int w = 4, h = 4, x = 10, y = 10;
+            for (int i = 0; i < w * h; i++) bus.WriteRam((ushort)(VS_ORIG + i), 0x07);
+
+            Cfg(bus, VS_OFF_WIDTHL, w); Cfg(bus, VS_OFF_HEIGHTL, h);
+            Cfg(bus, VS_OFF_ORIGSPACE, 0); Cfg(bus, VS_OFF_ORIGADDRL, (byte)(VS_ORIG & 0xFF));
+            Cfg(bus, VS_OFF_ORIGADDRM, (byte)((VS_ORIG >> 8) & 0xFF)); Cfg(bus, VS_OFF_ORIGADDRH, 0);
+            Cfg(bus, VS_OFF_ORIGSTRL, w); Cfg(bus, VS_OFF_ORIGSTRH, 0);
+            Cfg(bus, VS_OFF_ROTSPACE, 0); Cfg(bus, VS_OFF_ROTADDRL, (byte)(VS_ROT & 0xFF));
+            Cfg(bus, VS_OFF_ROTADDRM, (byte)((VS_ROT >> 8) & 0xFF)); Cfg(bus, VS_OFF_ROTADDRH, 0);
+            Cfg(bus, VS_OFF_ROTSTRL, w); Cfg(bus, VS_OFF_ROTSTRH, 0);
+            Cfg(bus, VS_OFF_ROTANGLE, 0);   // identity rotate -> a solid square stays solid
+            Cfg(bus, VS_OFF_XL, (byte)x); Cfg(bus, VS_OFF_XH, 0); Cfg(bus, VS_OFF_Y, (byte)y);
+            SetCfgArg(bus, VS_CFG, 41);
+            RunFn(bus, GFN_VS_GFX_ROTATE_BLIT_NOWAIT);   // blitter completes synchronously
+
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    Assert.AreEqual(7, GfxPixel(bus, x + col, y + row),
+                        $"VS_GFX_ROTATE_BLIT_NOWAIT must draw rotated pixel ({x + col},{y + row})");
+        }
+
+        // --- $6B VS_GFX_ROTATE_BLIT: rotate + WAIT a frame + blit (needs a pumped bus). ---
+        [TestMethod]
+        public void Axis2_VsGfxRotateBlit_FramePaced_DrawsRotatedSprite()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const int w = 4, h = 4, x = 200, y = 120;
+            for (int i = 0; i < w * h; i++) bus.WriteRam((ushort)(VS_ORIG + i), 0x0A);
+
+            Cfg(bus, VS_OFF_WIDTHL, w); Cfg(bus, VS_OFF_HEIGHTL, h);
+            Cfg(bus, VS_OFF_ORIGSPACE, 0); Cfg(bus, VS_OFF_ORIGADDRL, (byte)(VS_ORIG & 0xFF));
+            Cfg(bus, VS_OFF_ORIGADDRM, (byte)((VS_ORIG >> 8) & 0xFF)); Cfg(bus, VS_OFF_ORIGADDRH, 0);
+            Cfg(bus, VS_OFF_ORIGSTRL, w); Cfg(bus, VS_OFF_ORIGSTRH, 0);
+            Cfg(bus, VS_OFF_ROTSPACE, 0); Cfg(bus, VS_OFF_ROTADDRL, (byte)(VS_ROT & 0xFF));
+            Cfg(bus, VS_OFF_ROTADDRM, (byte)((VS_ROT >> 8) & 0xFF)); Cfg(bus, VS_OFF_ROTADDRH, 0);
+            Cfg(bus, VS_OFF_ROTSTRL, w); Cfg(bus, VS_OFF_ROTSTRH, 0);
+            Cfg(bus, VS_OFF_ROTANGLE, 0);
+            Cfg(bus, VS_OFF_XL, (byte)x); Cfg(bus, VS_OFF_XH, 0); Cfg(bus, VS_OFF_Y, (byte)y);
+            SetCfgArg(bus, VS_CFG, 41);
+            // The frame-pacing variant spins on VGC_FRAME; the pumped runner advances
+            // the frame counter so vsprite_wait_frame exits.
+            RunFnPumped(bus, GFN_VS_GFX_ROTATE_BLIT);
+
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    Assert.AreEqual(0x0A, GfxPixel(bus, x + col, y + row),
+                        $"VS_GFX_ROTATE_BLIT must draw rotated pixel ({x + col},{y + row})");
+        }
+
+        // --- $6F VS_SCENE_COMMIT: a two-sprite scene draws both in z-order. ---
+        // Exercises the descriptor-list ABI: the config struct carries the scene
+        // table pointer/count; each descriptor (VSPRITE_DESC_*, 24 bytes) is a
+        // caller-owned record. SCENE_COMMIT saves each background then draws every
+        // VISIBLE descriptor in list order.
+        [TestMethod]
+        public void Axis2_VsSceneCommit_DrawsVisibleDescriptorsInOrder()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const ushort sceneTable = 0x0A00;   // 2 descriptors * 24 bytes
+            const ushort srcA = 0x0B00, srcB = 0x0B40, bgA = 0x0C00, bgB = 0x0C40;
+            const int w = 4, h = 4;
+            // Two 4x4 sources: A colour 3 at (10,10), B colour 8 at (30,40).
+            for (int i = 0; i < w * h; i++) { bus.WriteRam((ushort)(srcA + i), 0x03); bus.WriteRam((ushort)(srcB + i), 0x08); }
+
+            void Desc(ushort baseAddr, int x, int y, ushort src, ushort bg)
+            {
+                // VSPRITE_DESC_* offsets (vsprite.inc): FLAGS 0, XL 1, XH 2, Y 3,
+                // WIDTHL 7, WIDTHH 8, HEIGHTL 9, HEIGHTH 10, SRCSPACE 11,
+                // SRCADDRL 12..H 14, SRCSTRL 15/H 16, BGSPACE 17, BGADDRL 18..H 20,
+                // BGSTRL 21/H 22, COLORKEY 23.
+                bus.WriteRam((ushort)(baseAddr + 0), 0x80);                 // FLAGS = VISIBLE
+                bus.WriteRam((ushort)(baseAddr + 1), (byte)(x & 0xFF));
+                bus.WriteRam((ushort)(baseAddr + 2), (byte)((x >> 8) & 0xFF));
+                bus.WriteRam((ushort)(baseAddr + 3), (byte)y);
+                bus.WriteRam((ushort)(baseAddr + 7), w); bus.WriteRam((ushort)(baseAddr + 8), 0);
+                bus.WriteRam((ushort)(baseAddr + 9), h); bus.WriteRam((ushort)(baseAddr + 10), 0);
+                bus.WriteRam((ushort)(baseAddr + 11), 0 /*CPU*/);
+                bus.WriteRam((ushort)(baseAddr + 12), (byte)(src & 0xFF));
+                bus.WriteRam((ushort)(baseAddr + 13), (byte)((src >> 8) & 0xFF));
+                bus.WriteRam((ushort)(baseAddr + 14), 0);
+                bus.WriteRam((ushort)(baseAddr + 15), w); bus.WriteRam((ushort)(baseAddr + 16), 0);
+                bus.WriteRam((ushort)(baseAddr + 17), 0 /*CPU*/);
+                bus.WriteRam((ushort)(baseAddr + 18), (byte)(bg & 0xFF));
+                bus.WriteRam((ushort)(baseAddr + 19), (byte)((bg >> 8) & 0xFF));
+                bus.WriteRam((ushort)(baseAddr + 20), 0);
+                bus.WriteRam((ushort)(baseAddr + 21), w); bus.WriteRam((ushort)(baseAddr + 22), 0);
+                bus.WriteRam((ushort)(baseAddr + 23), 0);
+            }
+            Desc(sceneTable, 10, 10, srcA, bgA);
+            Desc((ushort)(sceneTable + 24), 30, 40, srcB, bgB);
+
+            // Config: scene table ptr/count at offsets 41-43.
+            Cfg(bus, VS_OFF_SCENE_ADDRL, (byte)(sceneTable & 0xFF));
+            Cfg(bus, VS_OFF_SCENE_ADDRH, (byte)((sceneTable >> 8) & 0xFF));
+            Cfg(bus, VS_OFF_SCENE_COUNT, 2);
+            SetCfgArg(bus, VS_CFG, 44);   // include the scene fields
+            RunFn(bus, GFN_VS_SCENE_COMMIT);
+
+            // Both sprites must be drawn at their positions.
+            Assert.AreEqual(3, GfxPixel(bus, 10, 10), "scene sprite A must draw at (10,10)");
+            Assert.AreEqual(3, GfxPixel(bus, 13, 13), "scene sprite A far corner must draw");
+            Assert.AreEqual(8, GfxPixel(bus, 30, 40), "scene sprite B must draw at (30,40)");
+            Assert.AreEqual(8, GfxPixel(bus, 33, 43), "scene sprite B far corner must draw");
+        }
+
+        // --- Loader-axis smoke: a vsprite fn-id routes through the real lib_call. ---
+        // VS_USE_ORIGINAL is a pure register-move (no peripheral), so on the
+        // LibLoaderBus (no VGC/blitter) it still returns OK on dispatch.
+        [TestMethod]
+        public void Axis1_VsUseOriginal_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            // ARG0 = BYTES(ptr=0x0700, len=0) — a zero-length cfg copy is a no-op,
+            // and the driver entry just moves ORIG*->SRC* in dead RAM.
+            bus.PokeRam(ARG0, 0x00); bus.PokeRam((ushort)(ARG0 + 1), 0x07);   // ptr16 = $0700
+            bus.PokeRam((ushort)(ARG0 + 2), 0x00); bus.PokeRam((ushort)(ARG0 + 3), 0x00);  // len16 = 0
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_VS_USE_ORIGINAL);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS), "VS_USE_ORIGINAL must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
+        }
+
+        // --- Dispatch density: a gap id past the vsprite range ($72) returns LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_VspriteRangeGap_ReturnsNoFn()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.WriteRam(FN_ID, 0x72);   // first id past GFX_FN_COUNT-1 ($71)
+            bus.WriteRam(STATUS, 0x00);  // poison opposite to expected non-OK
+
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            bus.WriteRam(0x01FF, (byte)((Sentinel - 1) >> 8));
+            bus.WriteRam(0x01FE, (byte)((Sentinel - 1) & 0xFF));
+            var s = cpu.GetState();
+            cpu.RestoreState(new CpuState(s.A, s.X, s.Y, 0xFD, 0xC000,
+                                          s.Nf, s.Vf, s.Df, true, s.Zf, s.Cf));
+            for (int guard = 0; guard < 2_000_000 && cpu.Pc != Sentinel; guard++)
+                cpu.ExecuteNext();
+            Assert.AreEqual(Sentinel, cpu.Pc, "vsprite-range gap must still RTS to the sentinel");
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $72 (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
         }
 
         private static string RepoPath(params string[] parts)

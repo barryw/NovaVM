@@ -11,7 +11,8 @@ graphics.o: graphics.s \
             $(NOVA_ASM)/copper.inc $(NOVA_ASM)/copper.s \
             $(NOVA_ASM)/copper_split.inc $(NOVA_ASM)/copper_split.s \
             $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s \
-            $(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s
+            $(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s \
+            $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/vsprite.s
 	$(CA65) graphics.s -o graphics.o
 
 graphics.bin: graphics.o graphics.cfg

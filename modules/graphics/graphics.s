@@ -12,16 +12,19 @@
       .include "libgraphics.inc"
       .include "vgc.inc"               ; nova.inc -> NVR0L/NVR0H ZP scratch + VGC_* regs
                                        ; (guarded; re-included by vgc.s below)
+      .include "vsprite.inc"           ; VSPRITE_* BSS symbols + helper .globals
+                                       ; (guarded; vsprite.s body included below)
 
 ; Highest implemented fn-id + 1. Grows per domain batch. The draw domain $00-$09
 ; is live; the text/mode domain $10-$1B is live (batch 4b.3); the hw-sprite domain
 ; $20-$3B is live (batch 4b.4); the copper domain $40-$49 is live (batch 4b.5);
-; the blit/dma domain $50-$5B is live (batch 4b.6).
+; the blit/dma domain $50-$5B is live (batch 4b.6); the vsprite domain $60-$71 is
+; live (batch 4b.7).
 ; The jtable is dense from $00..GFX_FN_COUNT-1: implemented ids point at their
 ; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F, $4A-$4F,
 ; $5C-$5F) points at gfn_unimpl so it resolves to LERR_NO_FN. ids >= GFX_FN_COUNT
-; ($5C+) resolve to LERR_NO_FN via the dispatch bounds-check.
-GFX_FN_COUNT = $5C
+; ($72+) resolve to LERR_NO_FN via the dispatch bounds-check.
+GFX_FN_COUNT = $72
 
 ; GTEXT copies its BYTES string into the VGC FIO_NAME buffer ($B9B0-$B9EF, 64
 ; bytes). Mirror fio.inc's FIO_NAME_LIMIT here (fio.inc isn't pulled into the
@@ -141,7 +144,29 @@ gfx_jtable:
       .word   gfn_dma_status-1         ; $59 DMA_STATUS  (reporter)
       .word   gfn_dma_err-1            ; $5A DMA_ERR     (reporter)
       .word   gfn_dma_count-1          ; $5B DMA_COUNT   (reporter)
-      ; $5C.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
+      .word   gfn_unimpl-1              ; $5C gap
+      .word   gfn_unimpl-1              ; $5D gap
+      .word   gfn_unimpl-1              ; $5E gap
+      .word   gfn_unimpl-1              ; $5F gap
+      .word   gfn_vs_blit-1             ; $60 VS_BLIT
+      .word   gfn_vs_blit_start-1       ; $61 VS_BLIT_START
+      .word   gfn_vs_fill-1             ; $62 VS_FILL
+      .word   gfn_vs_use_original-1     ; $63 VS_USE_ORIGINAL
+      .word   gfn_vs_use_rotated-1      ; $64 VS_USE_ROTATED
+      .word   gfn_vs_rotate-1           ; $65 VS_ROTATE
+      .word   gfn_vs_gfx_blit-1         ; $66 VS_GFX_BLIT
+      .word   gfn_vs_gfx_blit_start-1   ; $67 VS_GFX_BLIT_START
+      .word   gfn_vs_gfx_fill-1         ; $68 VS_GFX_FILL
+      .word   gfn_vs_gfx_save_bg-1      ; $69 VS_GFX_SAVE_BG
+      .word   gfn_vs_gfx_restore_bg-1   ; $6A VS_GFX_RESTORE_BG
+      .word   gfn_vs_gfx_rotate_blit-1  ; $6B VS_GFX_ROTATE_BLIT
+      .word   gfn_vs_gfx_rotate_blit_keyed-1  ; $6C VS_GFX_ROTATE_BLIT_KEYED
+      .word   gfn_vs_gfx_rotate_blit_nowait-1 ; $6D VS_GFX_ROTATE_BLIT_NOWAIT
+      .word   gfn_vs_scene_begin-1      ; $6E VS_SCENE_BEGIN
+      .word   gfn_vs_scene_commit-1     ; $6F VS_SCENE_COMMIT
+      .word   gfn_vs_scene_draw-1       ; $70 VS_SCENE_DRAW
+      .word   gfn_vs_scene_commit_atomic-1 ; $71 VS_SCENE_COMMIT_ATOMIC
+      ; $72.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
 
 ; Any reachable-but-unimplemented fn-id: report LERR_NO_FN.
 gfn_unimpl:
@@ -897,6 +922,185 @@ gfn_dma_count:
       ldx     DMA_CNTH
       jmp     finish_result_store24
 
+; =====================================================================
+; $60-$71  vsprite domain (batch 4b.7). Driver: vsprite.s (included below;
+; it pulls blitter.s, dedup'd by the .ifndef guard).
+;
+; Every op shares ONE marshalling shape (see libgraphics.inc): ARG0 is a BYTES
+; arg (ptr16 low word, len16 high word) pointing at a caller struct laid out
+; byte-for-byte as the VSPRITE_* BSS config block. vs_load_cfg copies up to
+; GFX_VS_CFG_MAX bytes from that struct into the BSS block via (LIB_ZP),Y (RAM
+; scratch only — the module runs from write-protected ROM), then the wrapper
+; JSRs the driver entry and falls into finish_vs.
+;
+; finish_vs maps the driver's A=0/1 result: A -> LIB_RESULT byte 0 (bytes 1-3
+; zeroed) AND A!=0 -> LIB_STATUS=LERR_VSPRITE_FAIL, A==0 -> LERR_OK. None of
+; these wrappers wait on the VGC command bus: the blitter self-waits inside the
+; driver (blitter_wait), and the two frame-pacing rotate variants poll VGC_FRAME
+; inside the driver. So the wrapper has nothing extra to wait on.
+
+; vs_load_cfg — copy the caller's config struct (ARG0 BYTES) into the VSPRITE_*
+; BSS block. ARG0 low word = ptr16 -> LIB_ZP; ARG0 high word low byte = len,
+; clamped to GFX_VS_CFG_MAX. Walks (LIB_ZP),Y -> VSPRITE_SRCSPACE,Y. Y is the
+; shared src/dest index (the struct and the BSS block share the same field
+; order, so a single Y indexes both). Loop counter lives in LIB_SCRATCH.
+GFX_VS_CFGCNT = LIB_SCRATCH+1        ; remaining config bytes to copy (distinct
+                                     ; from GFX_WORDCNT at LIB_SCRATCH+0)
+vs_load_cfg:
+      lda     LIB_ARG0                 ; struct ptr16 -> LIB_ZP
+      sta     LIB_ZP
+      lda     LIB_ARG0+1
+      sta     LIB_ZP+1
+      lda     LIB_ARG0+2               ; len low byte; clamp to GFX_VS_CFG_MAX
+      cmp     #GFX_VS_CFG_MAX+1
+      bcc     @lenok
+      lda     #GFX_VS_CFG_MAX
+@lenok:
+      sta     GFX_VS_CFGCNT
+      beq     @done                    ; len 0 -> nothing to copy
+      ldy     #0
+@loop:
+      lda     (LIB_ZP),y
+      sta     VSPRITE_SRCSPACE,y       ; BSS block base; Y indexes both struct + block
+      iny
+      cpy     GFX_VS_CFGCNT
+      bne     @loop
+@done:
+      rts
+
+; finish_vs — driver result in A: publish to LIB_RESULT byte 0, map !=0 to a
+; vsprite-fail status, ==0 to OK.
+finish_vs:
+      sta     LIB_RESULT               ; raw driver A -> RESULT byte 0
+      ldx     #0
+      stx     LIB_RESULT+1
+      stx     LIB_RESULT+2
+      stx     LIB_RESULT+3
+      cmp     #VSPRITE_RESULT_OK
+      bne     @fail
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_VSPRITE_FAIL
+      sta     LIB_STATUS
+      rts
+
+; --- $60 VS_BLIT: rectangular copy with the configured src/dst (self-waits). ---
+gfn_vs_blit:
+      jsr     vs_load_cfg
+      jsr     vsprite_blit
+      jmp     finish_vs
+
+; --- $61 VS_BLIT_START: issue the configured blit without waiting. ---
+gfn_vs_blit_start:
+      jsr     vs_load_cfg
+      jsr     vsprite_blit_start
+      jmp     finish_vs
+
+; --- $62 VS_FILL: fill the configured destination rectangle (self-waits). ---
+gfn_vs_fill:
+      jsr     vs_load_cfg
+      jsr     vsprite_fill
+      jmp     finish_vs
+
+; --- $63 VS_USE_ORIGINAL: point SRC* at the immutable ORIG* shape. ---
+gfn_vs_use_original:
+      jsr     vs_load_cfg
+      jsr     vsprite_use_original
+      jmp     finish_vs
+
+; --- $64 VS_USE_ROTATED: point SRC* at the ROT* output buffer. ---
+gfn_vs_use_rotated:
+      jsr     vs_load_cfg
+      jsr     vsprite_use_rotated
+      jmp     finish_vs
+
+; --- $65 VS_ROTATE: rotate ORIG->ROT by ROTANGLE; repoints SRC*->ROT* (self-waits). ---
+gfn_vs_rotate:
+      jsr     vs_load_cfg
+      jsr     vsprite_rotate
+      jmp     finish_vs
+
+; --- $66 VS_GFX_BLIT: copy the virtual sprite to the gfx plane at X/Y (self-waits). ---
+gfn_vs_gfx_blit:
+      jsr     vs_load_cfg
+      jsr     vsprite_gfx_blit
+      jmp     finish_vs
+
+; --- $67 VS_GFX_BLIT_START: start the gfx-plane blit without waiting. ---
+gfn_vs_gfx_blit_start:
+      jsr     vs_load_cfg
+      jsr     vsprite_gfx_blit_start
+      jmp     finish_vs
+
+; --- $68 VS_GFX_FILL: fill a gfx-plane rectangle at X/Y (self-waits). ---
+gfn_vs_gfx_fill:
+      jsr     vs_load_cfg
+      jsr     vsprite_gfx_fill
+      jmp     finish_vs
+
+; --- $69 VS_GFX_SAVE_BG: save the gfx rect under X/Y into BG* (self-waits). ---
+gfn_vs_gfx_save_bg:
+      jsr     vs_load_cfg
+      jsr     vsprite_gfx_save_bg
+      jmp     finish_vs
+
+; --- $6A VS_GFX_RESTORE_BG: restore BG* back into the gfx plane at X/Y (self-waits). ---
+gfn_vs_gfx_restore_bg:
+      jsr     vs_load_cfg
+      jsr     vsprite_gfx_restore_bg
+      jmp     finish_vs
+
+; --- $6B VS_GFX_ROTATE_BLIT: rotate offscreen, wait a frame, blit (PUMPED). ---
+gfn_vs_gfx_rotate_blit:
+      jsr     vs_load_cfg
+      jsr     vsprite_gfx_rotate_blit
+      jmp     finish_vs
+
+; --- $6C VS_GFX_ROTATE_BLIT_KEYED: rotate, wait a frame, color-keyed blit (PUMPED). ---
+gfn_vs_gfx_rotate_blit_keyed:
+      jsr     vs_load_cfg
+      jsr     vsprite_gfx_rotate_blit_keyed
+      jmp     finish_vs
+
+; --- $6D VS_GFX_ROTATE_BLIT_NOWAIT: rotate then start the blit, no frame wait. ---
+gfn_vs_gfx_rotate_blit_nowait:
+      jsr     vs_load_cfg
+      jsr     vsprite_gfx_rotate_blit_nowait
+      jmp     finish_vs
+
+; --- $6E VS_SCENE_BEGIN: restore every saved old background in the scene list. ---
+; vsprite_scene_begin has no A return (void); finish_vs treats A as the result,
+; so we force A=OK before the tail. The scene-table ptr lives in the cfg struct
+; (SCENE_ADDRL/H/COUNT at offsets 41-43).
+gfn_vs_scene_begin:
+      jsr     vs_load_cfg
+      jsr     vsprite_scene_begin
+      lda     #VSPRITE_RESULT_OK
+      jmp     finish_vs
+
+; --- $6F VS_SCENE_COMMIT: save all backgrounds, then draw all visible descriptors. ---
+gfn_vs_scene_commit:
+      jsr     vs_load_cfg
+      jsr     vsprite_scene_commit
+      lda     #VSPRITE_RESULT_OK
+      jmp     finish_vs
+
+; --- $70 VS_SCENE_DRAW: draw all visible descriptors (no background save). ---
+gfn_vs_scene_draw:
+      jsr     vs_load_cfg
+      jsr     vsprite_scene_draw
+      lda     #VSPRITE_RESULT_OK
+      jmp     finish_vs
+
+; --- $71 VS_SCENE_COMMIT_ATOMIC: compose into a work buffer, commit one blit. ---
+gfn_vs_scene_commit_atomic:
+      jsr     vs_load_cfg
+      jsr     vsprite_scene_commit_atomic
+      lda     #VSPRITE_RESULT_OK
+      jmp     finish_vs
+
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
 ; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.
 ; sprite.s provides the hw-sprite command/register/collision driver entries.
@@ -911,6 +1115,11 @@ gfn_dma_count:
       .include "copper_split.s"
       .include "blitter.s"
       .include "dma.s"
+; vsprite.s provides the virtual-sprite blit/fill/rotate/save-restore-bg/gfx_*
+; + scene-compositor driver entries (batch 4b.7). It .includes blitter.s (already
+; pulled above; dedup'd by the .ifndef guard) and declares the VSPRITE_* state
+; in the module-owned BSS/ZEROPAGE bands (see graphics.cfg).
+      .include "vsprite.s"
 
       .segment "VECTORS"             ; $FFFA — don't-care under SEI; fills the 16KB image
       .word   MOD_ENTRY, MOD_ENTRY, MOD_ENTRY
