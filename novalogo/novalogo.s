@@ -3,6 +3,7 @@
 
       .include "nova.inc"
       .include "libabi.inc"
+      .include "libgraphics.inc"   ; GFN_* ids for lib_call(GRAPHICS) routing (self-guards + re-includes libabi.inc)
       .include "ext_iface.inc"
       .include "heap.s"
       .include "tokens.s"

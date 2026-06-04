@@ -1504,6 +1504,16 @@ ensure_ext_resident:
 @done:
       RTS
 
+; --- Logo-foundation adapter sentinel (4c.1-3) ---
+; A pseudo-module-id used in ext_cmd_table for Logo commands that do NOT 1:1-map
+; to a single GFN. ext_invoke recognizes it and runs a local adapter routine that
+; issues one-or-more real lib_call(GRAPHICS) sequences. $FE is distinct from real
+; module ids ($01-$7F), from MODULE_ID_NONE ($00) and from LIB_RESIDENT_HOSTEXT
+; ($FF). EXT_CMD holds the adapter index for these entries.
+MODULE_ID_GFXADAPTER = $FE
+GADAPT_SPRITE        = $00        ; SPRITE n x y  -> GFN_SPR_POS then GFN_SPR_ENABLE
+GADAPT_SPRCOLLP      = $01        ; SPRITECOLLISION? n -> GFN_SPR_COLL_MASK, test bit n
+
 ; ext_invoke — dispatch the looked-up extension command and leave its
 ;   result in eval_type/eval_val_hi/eval_val_lo/eval_val_frac, then RTS.
 ;
@@ -1511,19 +1521,18 @@ ensure_ext_resident:
 ;          EXT_CMD = fn_id, ext_mod_id = module_id.
 ;
 ;   Branches on ext_mod_id:
-;     MODULE_ID_NONE -> legacy RAM trampoline (JSR EXT_TRAMPOLINE).
-;     non-zero       -> canonical paged-library lib_call mailbox.
+;     MODULE_ID_NONE       -> legacy RAM trampoline (JSR EXT_TRAMPOLINE).
+;     MODULE_ID_GFXADAPTER -> Logo-foundation adapter (multi-call composite).
+;     other non-zero       -> canonical paged-library lib_call mailbox.
 ;
-;   NOTE: as of task 4c.1-2 every ext_cmd_table entry is MODULE_ID_NONE,
-;   so the lib_call branch is dead-but-correct here; it is first executed
-;   and verified end-to-end once 4c.1-3 flips the graphics entries to
-;   MODULE_ID_GRAPHICS.
+;   The arg cells are converted to LIB_ARGn FIRST (so both the single-lib_call
+;   path and the adapters share the same converted cells), then we branch.
 ;
 ;   Clobbers: A, X, Y. May JMP err_idk_word on a lib error (no return).
 ; ---------------------------------------------------------------------
 ext_invoke:
       LDA   ext_mod_id
-      BNE   @lib_call             ; non-zero module id -> paged-library path
+      BNE   @convert_args         ; non-zero module id -> paged-library / adapter path
 
 ; --- Legacy path: RAM trampoline to extension ROM ---
       JSR   ensure_ext_resident   ; re-page host ext into bank 1 if a module clobbered it
@@ -1538,14 +1547,24 @@ ext_invoke:
       STA   eval_val_frac
       RTS
 
-; --- lib_call path: drive the canonical mailbox at $0300 ---
-@lib_call:
+; --- lib_call / adapter path: convert args, then branch on module id ---
+@convert_args:
       ; Convert EXT_ARGn (Logo 16.8: TYPE/HI/LO/FRAC) -> LIB_ARGn (32-bit LE).
       ; The GRAPHICS module reads each cell's low word as a signed s16, so map
       ; HI:LO into the cell low word, sign-extend into the high word, and DROP
-      ; the fractional byte. Convert only n < EXT_ARGC cells.
+      ; the fractional byte.
       ;   LIB_ARGn+0 = EXT_ARGn_LO   LIB_ARGn+1 = EXT_ARGn_HI
       ;   LIB_ARGn+2 = LIB_ARGn+3 = $FF if EXT_ARGn_HI bit7 set else $00
+      ;
+      ; FIRST zero all 16 LIB_ARG bytes so any cell n >= EXT_ARGC reads as 0.
+      ; This is what makes CIRCLE (arity 3) leave ARG3(ry)=0 -> ry=rx (a circle),
+      ; and is harmless for every other command.
+      LDX   #15
+@zero_args:
+      STZ   LIB_ARG0,X
+      DEX
+      BPL   @zero_args
+
       LDX   EXT_ARGC
       ; arg 0
       CPX   #1
@@ -1589,6 +1608,13 @@ ext_invoke:
       STA   LIB_ARG3+3
 
 @args_done:
+      ; Branch: adapter (multi-call composite) vs. plain single lib_call.
+      LDA   ext_mod_id
+      CMP   #MODULE_ID_GFXADAPTER
+      BEQ   @adapter
+
+; --- plain single lib_call: drive the canonical mailbox at $0300 ---
+@lib_call:
       ; Populate module/function selectors and call the resident loader.
       LDA   ext_mod_id
       STA   LIB_MOD_ID
@@ -1596,7 +1622,7 @@ ext_invoke:
       STA   LIB_FN_ID
       JSR   LIB_LOADER_BAND       ; == JSR $0320 (resident lib_call)
 
-      ; A non-zero status aborts the line (unreachable until 4c.1-3).
+      ; A non-zero status aborts the line.
       LDA   LIB_STATUS
       BNE   @lib_err
 
@@ -1613,6 +1639,16 @@ ext_invoke:
 @lib_err:
       JMP   err_idk_word
 
+; --- adapter dispatch: EXT_CMD holds the adapter index ---
+@adapter:
+      LDA   EXT_CMD
+      CMP   #GADAPT_SPRITE
+      BEQ   logo_adapt_sprite
+      CMP   #GADAPT_SPRCOLLP
+      BEQ   logo_adapt_sprcollp
+      ; Unknown adapter index — treat as unknown word.
+      JMP   err_idk_word
+
 ; @sign_of_a — sign-extend the s8 high byte in A to a full byte:
 ;   returns A = $FF if A bit7 was set, else A = $00. Preserves X/Y.
 @sign_of_a:
@@ -1623,6 +1659,86 @@ ext_invoke:
 @sign_zero:
       LDA   #$00
       RTS
+
+; ---------------------------------------------------------------------
+; logo_adapt_sprite — SPRITE n x y: position the sprite then enable it.
+;   Args (n,x,y) are already in LIB_ARG0/1/2. GFN_SPR_POS reads ARG0/1/2 and
+;   GFN_SPR_ENABLE reads ARG0, so the SAME converted cells serve both calls.
+;   Command (no value): leaves eval_type=VAL_NUMBER, eval_val=0.
+;   Clobbers A, X, Y. May JMP err_idk_word on a lib error (no return).
+; ---------------------------------------------------------------------
+logo_adapt_sprite:
+      LDA   #MODULE_ID_GRAPHICS
+      STA   LIB_MOD_ID
+      LDA   #GFN_SPR_POS
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @adapt_err
+      ; re-arm selectors (LIB_MOD_ID may be clobbered across the call) and enable
+      LDA   #MODULE_ID_GRAPHICS
+      STA   LIB_MOD_ID
+      LDA   #GFN_SPR_ENABLE
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @adapt_err
+      STZ   eval_val_lo
+      STZ   eval_val_hi
+      STZ   eval_val_frac
+      LDA   #VAL_NUMBER
+      STA   eval_type
+      RTS
+@adapt_err:
+      JMP   err_idk_word
+
+; ---------------------------------------------------------------------
+; logo_adapt_sprcollp — SPRITECOLLISION? n: report whether sprite n collided.
+;   lib_call GFN_SPR_COLL_MASK -> LIB_RESULT low word = 16-bit collision mask
+;   (byte0 = sprites 0-7, byte1 = sprites 8-15). Test bit n (n = EXT_ARG0_LO,
+;   the converted ARG0 low byte) and set eval_val = 0/1 bool.
+;   Reporter: leaves eval_type=VAL_NUMBER, eval_val = the bool.
+;   Clobbers A, X, Y. May JMP err_idk_word on a lib error (no return).
+; ---------------------------------------------------------------------
+logo_adapt_sprcollp:
+      LDA   #MODULE_ID_GRAPHICS
+      STA   LIB_MOD_ID
+      LDA   #GFN_SPR_COLL_MASK
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @adapt_err
+      ; Select the mask byte holding sprite n, and the bit index within it.
+      LDA   EXT_ARG0_LO           ; sprite index n
+      CMP   #8
+      BCS   @hi_byte
+      ; sprites 0-7: low byte of mask = LIB_RESULT+0
+      TAX
+      LDA   LIB_RESULT+0
+      BRA   @test_bit
+@hi_byte:
+      ; sprites 8-15: high byte of mask = LIB_RESULT+1, bit index n-8
+      SEC
+      SBC   #8
+      TAX
+      LDA   LIB_RESULT+1
+@test_bit:
+      CPX   #0
+      BEQ   @check
+@shift:
+      LSR
+      DEX
+      BNE   @shift
+@check:
+      AND   #$01
+      STA   eval_val_lo
+      STZ   eval_val_hi
+      STZ   eval_val_frac
+      LDA   #VAL_NUMBER
+      STA   eval_type
+      RTS
+@adapt_err:
+      JMP   err_idk_word
 
       .segment "RODATA"
 
@@ -1812,68 +1928,68 @@ ext_cmd_table:
       .byte MODULE_ID_NONE
       .byte EXT_CMD_TOWARDS
       .byte 2                    ; arity: 2 (x, y)
-      ; --- VGC graphics commands ---
+      ; --- VGC graphics commands (4c.1-3: routed through lib_call(GRAPHICS)) ---
       .word str_ext_setcolor
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_SETCOLOR
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_GCOLOR
       .byte 1                    ; arity: 1 (color)
       .word str_ext_plot
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_PLOT
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_PLOT
       .byte 2                    ; arity: 2 (x, y)
       .word str_ext_unplot
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_UNPLOT
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_UNPLOT
       .byte 2                    ; arity: 2 (x, y)
       .word str_ext_line
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_LINE
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_LINE
       .byte 4                    ; arity: 4 (x1, y1, x2, y2)
       .word str_ext_circle
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_CIRCLE
-      .byte 3                    ; arity: 3 (x, y, r)
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_CIRCLE
+      .byte 3                    ; arity: 3 (x, y, r) — ARG3(ry)=0 -> ry=rx (zero-unused-cells)
       .word str_ext_rect
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_RECT
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_RECT
       .byte 4                    ; arity: 4 (x1, y1, x2, y2)
       .word str_ext_rectangle
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_RECT
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_RECT
       .byte 4                    ; RECTANGLE alias
       .word str_ext_fill
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_FILLRECT
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_FILL
       .byte 4                    ; arity: 4 (x1, y1, x2, y2)
       .word str_ext_fillrect
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_FILLRECT
-      .byte 4                    ; FILLRECT alias
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_FILL
+      .byte 4                    ; FILLRECT alias -> GFN_FILL
       .word str_ext_paint
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_PAINT
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_PAINT
       .byte 2                    ; arity: 2 (x, y)
-      ; --- Sprite commands ---
+      ; --- Sprite commands (4c.1-3: routed through lib_call(GRAPHICS)) ---
       .word str_ext_sprite
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_SPRITE
-      .byte 3                    ; arity: 3 (n, x, y)
+      .byte MODULE_ID_GFXADAPTER
+      .byte GADAPT_SPRITE
+      .byte 3                    ; arity: 3 (n, x, y) — POS then ENABLE adapter
       .word str_ext_spritepos
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_SPRITEPOS
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_SPR_POS
       .byte 3                    ; arity: 3 (n, x, y)
       .word str_ext_spriteon
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_SPRITEON
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_SPR_ENABLE
       .byte 1                    ; arity: 1 (n)
       .word str_ext_spriteoff
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_SPRITEOFF
+      .byte MODULE_ID_GRAPHICS
+      .byte GFN_SPR_DISABLE
       .byte 1                    ; arity: 1 (n)
       .word str_ext_sprcollp
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_SPRCOLLP
-      .byte 1                    ; arity: 1 (n) — reporter
+      .byte MODULE_ID_GFXADAPTER
+      .byte GADAPT_SPRCOLLP
+      .byte 1                    ; arity: 1 (n) — reporter, COLL_MASK + bit-test adapter
       ; --- Sound commands ---
       .word str_ext_tone
       .byte MODULE_ID_NONE
