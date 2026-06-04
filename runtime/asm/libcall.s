@@ -1,6 +1,7 @@
 ; libcall.s — resident paged-library loader. ORG via cfg (RAM blob for tests).
 ; Caller fills LIB_MOD_ID/LIB_FN_ID/args, then JSR lib_call.
 ; LIB_HOME_BANK must hold the caller's REG_ROMSWAP value (set at boot).
+; On return: LIB_STATUS (0=ok), LIB_RESULT set by module. A/X/Y clobbered.
       .include "libabi.inc"
       .include "nova.inc"                 ; REG_ROMSWAP, ROMSWAP_EXTENSION
 
@@ -29,11 +30,12 @@ lc_done:
       rts
 lc_bad_module:
       lda     #LERR_BAD_MODULE
-      sta     LIB_STATUS
+      sta     LIB_STATUS                  ; EXT never mapped — no bank restore needed
       rts
 
 ; lc_validate — bank1 mapped, check header; cache LIB_RESIDENT or set error.
-; C=0 ok, C=1 fail (LIB_STATUS set, home bank restored).
+; C=0: header ok, HOME restored, LIB_RESIDENT cached.
+; C=1: bad header, HOME restored, LIB_STATUS set.
 lc_validate:
       php
       sei
@@ -58,6 +60,8 @@ lc_validate:
       plp
       clc
       rts
+; BIT-abs ($2C) skip chain: relies on each LERR_* being a 2-byte `LDA #imm`
+; ($80/$81/$82 sequential), so $2C swallows the following LDA and falls to sta.
 lcv_magic: lda #LERR_BAD_MAGIC
       .byte $2C                            ; BIT abs — skip next LDA #imm
 lcv_mod:   lda #LERR_BAD_MODULE

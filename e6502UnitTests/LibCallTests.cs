@@ -29,7 +29,7 @@ namespace e6502UnitTests
                              HOME_BANK = 0x0317, RESIDENT = 0x0318;
         private const ushort LibCallEntry = 0x9C00;   // blob load address == first emitted byte
         private const int    ShelfBase = 0x060000;    // XRAM shelf slot 0
-        private const byte   RsBasic = 0x02, RsExt = 0x04;
+        private const byte   RsBasic = 0x02;
         private const ushort Sentinel = 0xFFF9;       // lib_call RTS returns here; loop stops
 
         private static (LibLoaderBus bus, ushort entry) Setup()
@@ -135,6 +135,20 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void BadVersion_SetsStatus()
+        {
+            var (bus, entry) = Setup();
+            var bad = (byte[])File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")).Clone();
+            bad[6] = 0x02;                        // MOD_VERSION ($C006) claims ABI v2; loader expects v1
+            bus.LoadXram(ShelfBase, bad);
+
+            CallLib(bus, entry, 0x7F, fn: 0, arg0: 9);
+
+            Assert.AreEqual(0x82, bus.PeekRam(STATUS), "LERR_BAD_VER");   // $82, not $83
+            Assert.AreEqual(RsBasic, bus.CurrentBank, "home bank must be restored");
+        }
+
+        [TestMethod]
         public void BadFnId_SetsStatus()
         {
             var (bus, entry) = Setup();
@@ -142,6 +156,7 @@ namespace e6502UnitTests
             CallLib(bus, entry, 0x7F, fn: 9, arg0: 0);   // only fns 0,1 exist
 
             Assert.AreEqual(0x83, bus.PeekRam(STATUS), "LERR_NO_FN (module's own bad_fn)");
+            Assert.AreEqual(RsBasic, bus.CurrentBank, "home bank must be restored");
         }
 
         [TestMethod]
@@ -153,6 +168,7 @@ namespace e6502UnitTests
 
             Assert.AreEqual(0x81, bus.PeekRam(STATUS), "LERR_BAD_MODULE");
             Assert.AreEqual(0, bus.PageInCount, "unknown module must not page in");
+            Assert.AreEqual(RsBasic, bus.CurrentBank, "home bank never changed");   // EXT never mapped
         }
 
         private static void Write32(LibLoaderBus bus, ushort addr, int v)
