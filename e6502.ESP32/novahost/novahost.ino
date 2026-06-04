@@ -829,6 +829,71 @@ bool streamSdramAsset(uint32_t base_addr, const char* label,
     return true;
 }
 
+// Stage paged-library modules from SD into XRAM (SDRAM) at boot. Each entry in
+// the boot.json "libraries" array names a 16 KB module image and the XRAM byte
+// address (shelf slot base) it must land on so the runtime's lib_call loader can
+// page it into the bank-1 ROM window on demand.
+//
+// GRACEFUL DEGRADATION: this is best-effort. Missing config, parse failure, a
+// missing/short file, or a stream error are all logged and skipped — the caller
+// MUST continue to the reset-release regardless (an old bitstream + new firmware
+// must never wedge the CPU). One bad entry does not skip the rest.
+//
+// Mirrors mountConfiguredDrives() for the ArduinoJson read and reuses
+// streamSdramAsset() (single-path) for the SD->SDRAM stream.
+int stageConfiguredLibraries() {
+    File cfg = SD.open("/config/boot.json", FILE_READ);
+    if (!cfg) {
+        logLn("no boot libraries to stage: /config/boot.json missing");
+        return 0;
+    }
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, cfg);
+    cfg.close();
+    if (err) {
+        logLn("WARN: boot libraries parse failed: %s; none staged", err.c_str());
+        return 0;
+    }
+
+    JsonArray libs = doc["libraries"].as<JsonArray>();
+    if (libs.isNull() || libs.size() == 0) {
+        logLn("no boot libraries to stage");
+        return 0;
+    }
+
+    int staged = 0;
+    for (JsonObject lib : libs) {
+        const char* name = lib["name"] | "";
+        const char* path = lib["path"] | "";
+        // id is part of the design contract (must match modtab_lookup) but is
+        // only meaningful to the runtime/loader; the firmware just stages bytes.
+        int       id   = lib["id"]   | -1;
+        uint32_t  base = lib["base"] | 0UL;
+        uint32_t  size = lib["size"] | 0UL;
+
+        if (path[0] == '\0' || size == 0) {
+            logLn("WARN: boot library entry '%s' has no path/size; skipped",
+                  name[0] ? name : "?");
+            continue;
+        }
+
+        if (!streamSdramAsset(base, name[0] ? name : path, &path, 1,
+                              (size_t)size)) {
+            logLn("WARN: boot library '%s' (%s) not staged; continuing",
+                  name[0] ? name : "?", path);
+            continue;
+        }
+
+        logLn("Boot library staged: %s id=%d (%u bytes @ XRAM $%06X)",
+              name[0] ? name : path, id, (unsigned)size, (unsigned)base);
+        staged++;
+    }
+
+    logLn("Boot libraries staged: %d", staged);
+    return staged;
+}
+
 bool holdFpgaResetForBoot(const char* label) {
     for (int attempt = 0; attempt < 20; attempt++) {
         fpgaBridge.drain();
@@ -1455,6 +1520,12 @@ bool loadRomsToFPGA() {
             logLn("SID curve streamed (%u bytes @ SDRAM $%06X)",
                   (unsigned)SID_CURVE_ROM_LEN, (unsigned)SID_CURVE_BASE);
         }
+
+        // Stage paged-library modules (optional; WARN-and-continue like the SID
+        // curve). Done under the same CPU-only reset hold so bridge-owned SDRAM
+        // writes are still available. Never early-returns: the loader is
+        // best-effort and must not block the reset-release below.
+        stageConfiguredLibraries();
 
         // ROM/SDRAM streaming happens under CPU-only reset so bridge-owned
         // SDRAM writes remain available. Right before releasing the CPU, pulse

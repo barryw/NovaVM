@@ -43,6 +43,9 @@
     "fd0": "",
     "hd0": ""
   },
+  "libraries": [
+    { "name": "testmod", "id": 127, "path": "/lib/testmod.mod", "base": 393216, "size": 16384 }
+  ],
   "network": {
     "gameServer": {
       "host": "192.168.1.93",
