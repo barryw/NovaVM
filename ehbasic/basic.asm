@@ -613,7 +613,7 @@ Ibuffs            = VEC_SV+$67
                               ; start of input buffer after IRQ/NMI/ext code
 Ibuffe            = Ibuffs+$7F; end of input buffer, max length must stay < $80
 
-Ram_base          = $0420     ; start of user RAM ($0300-$031F = cross-runtime library mailbox, libabi.inc LIB_MBOX; $0320-$041F = resident library loader band, libcall.s)
+Ram_base          = $0900     ; start of user RAM ($0300-$031F = cross-runtime library mailbox, libabi.inc LIB_MBOX; $0320-$041F = resident library loader band, libcall.s; $0420-$08FF = cross-runtime module-BSS band, libabi.inc MODULE_BSS_BAND)
 Ram_top           = $A000     ; end of contiguous BASIC RAM+1 (before MMIO window)
 
 Stack_floor       = 16        ; bytes left free on stack for background interrupts

@@ -2948,7 +2948,7 @@ Current file: min_mon.asm
 000000r 2                                             ; start of input buffer after IRQ/NMI/ext code
 000000r 2               Ibuffe            = Ibuffs+$7F; end of input buffer, max length must stay < $80
 000000r 2               
-000000r 2               Ram_base          = $0300     ; start of user RAM (set as needed, should be page aligned)
+000000r 2               Ram_base          = $0900     ; start of user RAM ($0300-$031F = cross-runtime library mailbox, libabi.inc LIB_MBOX; $0320-$041F = resident library loader band, libcall.s; $0420-$08FF = cross-runtime module-BSS band, libabi.inc MODULE_BSS_BAND)
 000000r 2               Ram_top           = $A000     ; end of contiguous BASIC RAM+1 (before MMIO window)
 000000r 2               
 000000r 2               Stack_floor       = 16        ; bytes left free on stack for background interrupts
@@ -3015,7 +3015,7 @@ Current file: min_mon.asm
 00C042  2  A0 00              LDY   #$00              ; clear Y for indirect indexed writes
 00C044  2  A9 00              LDA   #<Ram_base        ; always start from configured RAM base
 00C046  2  85 11              STA   Itempl
-00C048  2  A9 03              LDA   #>Ram_base
+00C048  2  A9 09              LDA   #>Ram_base
 00C04A  2  85 12              STA   Itemph
 00C04C  2                                             ; detect RAM limit by probing for writeable memory
 00C04C  2               LAB_2D93
@@ -3065,7 +3065,7 @@ Current file: min_mon.asm
 00C076  2  84 82              STY   Sstorh            ; set bottom of string space high byte
 00C078  2               
 00C078  2  A0 00              LDY   #<Ram_base        ; set start addr low byte
-00C07A  2  A2 03              LDX   #>Ram_base        ; set start addr high byte
+00C07A  2  A2 09              LDX   #>Ram_base        ; set start addr high byte
 00C07C  2  84 79              STY   Smeml             ; save start of mem low byte
 00C07E  2  86 7A              STX   Smemh             ; save start of mem high byte
 00C080  2               
@@ -22619,7 +22619,7 @@ Current file: min_mon.asm
 00F720  2  00                 .byte $00               ; clear terminal position
 00F721  2  00                 .byte $00               ; default terminal width byte
 00F722  2  F2                 .byte $F2               ; default limit for TAB = 14
-00F723  2  00 03              .word Ram_base          ; start of user RAM
+00F723  2  00 09              .word Ram_base          ; start of user RAM
 00F725  2               EndTab
 00F725  2               
 00F725  2               LAB_SMSG

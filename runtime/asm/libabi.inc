@@ -40,6 +40,15 @@ LIB_MBOX_END     = LIB_MBOX+32    ; $0320 (exclusive)
 LIB_LOADER_BAND     = LIB_MBOX_END    ; $0320  resident loader entry (== lib_call)
 LIB_LOADER_BAND_END = $0420           ; (exclusive)
 
+; --- Module-BSS band (fixed low-RAM, carved $0420-$08FF in every runtime) ---
+; Cross-runtime working storage for a paged-in module (e.g. GRAPHICS MODBSS:
+; vsprite/msprite state 320 B + 3x256 B turtle-render buffers added in 4c.2-2).
+; Sits between the loader band and runtime user RAM (Logo BSS / EhBASIC Ram_base,
+; both moved to $0900). Single source of truth for the band; modules/graphics/
+; graphics.cfg MODBSS places the GRAPHICS module's state here. 1248 B.
+MODULE_BSS_BAND     = LIB_LOADER_BAND_END  ; $0420  module-private low-RAM working store
+MODULE_BSS_BAND_END = $0900                ; (exclusive)
+
 ; --- Module-private ZP pointer for (zp),Y BYTES deref (cross-runtime free) ---
 LIB_ZP           = $14            ; $14-$17 reserved for module pointer pairs
 

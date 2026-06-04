@@ -2372,6 +2372,15 @@ Current file: novalogo.s
 000000r 2               LIB_LOADER_BAND     = LIB_MBOX_END    ; $0320  resident loader entry (== lib_call)
 000000r 2               LIB_LOADER_BAND_END = $0420           ; (exclusive)
 000000r 2               
+000000r 2               ; --- Module-BSS band (fixed low-RAM, carved $0420-$08FF in every runtime) ---
+000000r 2               ; Cross-runtime working storage for a paged-in module (e.g. GRAPHICS MODBSS:
+000000r 2               ; vsprite/msprite state 320 B + 3x256 B turtle-render buffers added in 4c.2-2).
+000000r 2               ; Sits between the loader band and runtime user RAM (Logo BSS / EhBASIC Ram_base,
+000000r 2               ; both moved to $0900). Single source of truth for the band; modules/graphics/
+000000r 2               ; graphics.cfg MODBSS places the GRAPHICS module's state here. 1248 B.
+000000r 2               MODULE_BSS_BAND     = LIB_LOADER_BAND_END  ; $0420  module-private low-RAM working store
+000000r 2               MODULE_BSS_BAND_END = $0900                ; (exclusive)
+000000r 2               
 000000r 2               ; --- Module-private ZP pointer for (zp),Y BYTES deref (cross-runtime free) ---
 000000r 2               LIB_ZP           = $14            ; $14-$17 reserved for module pointer pairs
 000000r 2               
@@ -2493,6 +2502,15 @@ Current file: novalogo.s
 000000r 3               ; build (tests/asm/libcall_blob.cfg) is isolated harness scaffolding, not this.
 000000r 3               LIB_LOADER_BAND     = LIB_MBOX_END    ; $0320  resident loader entry (== lib_call)
 000000r 3               LIB_LOADER_BAND_END = $0420           ; (exclusive)
+000000r 3               
+000000r 3               ; --- Module-BSS band (fixed low-RAM, carved $0420-$08FF in every runtime) ---
+000000r 3               ; Cross-runtime working storage for a paged-in module (e.g. GRAPHICS MODBSS:
+000000r 3               ; vsprite/msprite state 320 B + 3x256 B turtle-render buffers added in 4c.2-2).
+000000r 3               ; Sits between the loader band and runtime user RAM (Logo BSS / EhBASIC Ram_base,
+000000r 3               ; both moved to $0900). Single source of truth for the band; modules/graphics/
+000000r 3               ; graphics.cfg MODBSS places the GRAPHICS module's state here. 1248 B.
+000000r 3               MODULE_BSS_BAND     = LIB_LOADER_BAND_END  ; $0420  module-private low-RAM working store
+000000r 3               MODULE_BSS_BAND_END = $0900                ; (exclusive)
 000000r 3               
 000000r 3               ; --- Module-private ZP pointer for (zp),Y BYTES deref (cross-runtime free) ---
 000000r 3               LIB_ZP           = $14            ; $14-$17 reserved for module pointer pairs
@@ -3238,11 +3256,14 @@ Current file: novalogo.s
 000000r 2               
 000000r 1                     .include "heap.s"
 000000r 2               ; heap.s — bump allocator with GC headers for NovaLogo
-000000r 2               ; Heap range: $0500 to HEAP_END-1.
+000000r 2               ; Heap range: $09E0 to HEAP_END-1.
 000000r 2               ; $0300-$031F = cross-runtime library mailbox (libabi.inc LIB_MBOX);
-000000r 2               ; $0320-$041F = resident library loader band (libcall.s). Both reserved.
+000000r 2               ; $0320-$041F = resident library loader band (libcall.s);
+000000r 2               ; $0420-$08FF = cross-runtime module-BSS band (libabi.inc MODULE_BSS_BAND).
+000000r 2               ; All three reserved. HEAP_START sits inside the BSS region ($0900+) by design
+000000r 2               ; (proven-safe BSS<->heap overlap); the carve uniformly shifted both by +$04E0.
 000000r 2               
-000000r 2               HEAP_START = $0500
+000000r 2               HEAP_START = $09E0
 000000r 2               HEAP_END   = $9800          ; one past last usable byte. $9800-$9BFF = editor BSS
 000000r 2                                           ; (extension), $9C00-$9F10 = pinned turtle work+state.
 000000r 2               
@@ -3274,9 +3295,9 @@ Current file: novalogo.s
 000000r 2               ;   Clobbers: A
 000000r 2               ; ---------------------------------------------------------------------
 000000r 2               heap_init:
-000000r 2  A9 00              LDA   #<HEAP_START
+000000r 2  A9 E0              LDA   #<HEAP_START
 000002r 2  85 rr              STA   heap_ptr
-000004r 2  A9 05              LDA   #>HEAP_START
+000004r 2  A9 09              LDA   #>HEAP_START
 000006r 2  85 rr              STA   heap_ptr+1
 000008r 2  60                 RTS
 000009r 2               
@@ -14017,9 +14038,9 @@ Current file: novalogo.s
 0032A8r 2               ; ---------------------------------------------------------------------
 0032A8r 2               gc_collect:
 0032A8r 2                     ; Phase 1: Clear all mark bits by walking the heap linearly
-0032A8r 2  A9 00              LDA   #<HEAP_START
+0032A8r 2  A9 E0              LDA   #<HEAP_START
 0032AAr 2  85 rr              STA   gc_ptr_lo
-0032ACr 2  A9 05              LDA   #>HEAP_START
+0032ACr 2  A9 09              LDA   #>HEAP_START
 0032AEr 2  85 rr              STA   gc_ptr_hi
 0032B0r 2               
 0032B0r 2               @clear_loop:
@@ -14094,14 +14115,14 @@ Current file: novalogo.s
 003302r 2                     ;
 003302r 2                     ; Walk the heap forward; track the highest end-address
 003302r 2                     ; of any marked allocation.
-003302r 2  A9 00              LDA   #<HEAP_START
+003302r 2  A9 E0              LDA   #<HEAP_START
 003304r 2  85 rr              STA   gc_ptr_lo
-003306r 2  A9 05              LDA   #>HEAP_START
+003306r 2  A9 09              LDA   #>HEAP_START
 003308r 2  85 rr              STA   gc_ptr_hi
 00330Ar 2                     ; gc_tmp = highest marked end (start at HEAP_START = nothing marked)
-00330Ar 2  A9 00              LDA   #<HEAP_START
+00330Ar 2  A9 E0              LDA   #<HEAP_START
 00330Cr 2  85 rr              STA   gc_tmp_lo
-00330Er 2  A9 05              LDA   #>HEAP_START
+00330Er 2  A9 09              LDA   #>HEAP_START
 003310r 2  85 rr              STA   gc_tmp_hi
 003312r 2               
 003312r 2               @sweep_loop:
@@ -14193,11 +14214,11 @@ Current file: novalogo.s
 00337Dr 2  85 rr              STA   ptr_hi
 00337Fr 2               
 00337Fr 2                     ; Range check: must be >= HEAP_START
-00337Fr 2  C9 05              CMP   #>HEAP_START
+00337Fr 2  C9 09              CMP   #>HEAP_START
 003381r 2  90 10              BCC   @done
 003383r 2  D0 06              BNE   @in_range
 003385r 2  A5 rr              LDA   ptr_lo
-003387r 2  C9 00              CMP   #<HEAP_START
+003387r 2  C9 E0              CMP   #<HEAP_START
 003389r 2  90 08              BCC   @done
 00338Br 2               @in_range:
 00338Br 2               
