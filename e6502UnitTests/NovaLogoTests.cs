@@ -2356,6 +2356,240 @@ public class NovaLogoTests
         Assert.IsTrue(count >= 1, $"Created NEWGUY should print 55.\n{screen}");
     }
 
+    // =====================================================================
+    // Error-message characterization tests (Task 4a).
+    //
+    // These lock the EXACT text of every Logo error-message family as the
+    // CURRENT shipped ROM emits it, byte-for-byte. A later refactor replaces
+    // ~26 whole error strings with runtime composition (shared fragments +
+    // the command's existing name string); these tests are the safety net
+    // proving the composed output is byte-identical. Each asserts the exact
+    // string (trailing spaces included) via StringComparison.Ordinal.
+    //
+    // Verbatim sources: novalogo/lists.s (str_*_err / _type / _empty /
+    // _range), novalogo/eval.s (str_idk, " HAS NO VALUE").
+    // =====================================================================
+
+    [TestMethod]
+    public void NotEnoughInputs_ExactText()
+    {
+        // do_first (lists.s) evaluates its own argument; with no argument
+        // eval_expr reports carry-set and FIRST hits @err_args → str_first_err.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT FIRST");
+        RunUntilScreenContains(cpu, bus, "NOT ENOUGH INPUTS TO FIRST", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("NOT ENOUGH INPUTS TO FIRST", StringComparison.Ordinal),
+            $"Expected exact NEI text 'NOT ENOUGH INPUTS TO FIRST'.\n{screen}");
+    }
+
+    [TestMethod]
+    public void NotEnoughInputsQuestionMark_ExactText()
+    {
+        // EMPTY? with no argument → str_emptyp_err, which includes the '?'
+        // in the command name. Locks the question-mark variant.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT EMPTY?");
+        RunUntilScreenContains(cpu, bus, "NOT ENOUGH INPUTS TO EMPTY?", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("NOT ENOUGH INPUTS TO EMPTY?", StringComparison.Ordinal),
+            $"Expected exact NEI text 'NOT ENOUGH INPUTS TO EMPTY?'.\n{screen}");
+    }
+
+    [TestMethod]
+    public void DoesntLikeTrailingSpace_ExactText()
+    {
+        // FIRST of a non-list (5) → @err_type → str_first_type. The literal
+        // is "FIRST DOESN'T LIKE " WITH A TRAILING SPACE (the offending value
+        // is printed after it). The assertion MUST include that trailing space.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT FIRST 5");
+        RunUntilScreenContains(cpu, bus, "FIRST DOESN'T LIKE ", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("FIRST DOESN'T LIKE ", StringComparison.Ordinal),
+            $"Expected exact 'FIRST DOESN'T LIKE ' INCLUDING the trailing space.\n{screen}");
+    }
+
+    [TestMethod]
+    public void DoesntLikeEmptyList_ExactText()
+    {
+        // FIRST of the empty list → @err_empty → str_first_empty.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT FIRST []");
+        RunUntilScreenContains(cpu, bus, "FIRST DOESN'T LIKE [] AS INPUT", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("FIRST DOESN'T LIKE [] AS INPUT", StringComparison.Ordinal),
+            $"Expected exact 'FIRST DOESN'T LIKE [] AS INPUT'.\n{screen}");
+    }
+
+    [TestMethod]
+    public void NeedsAList_ExactText()
+    {
+        // ITEM's second argument must be a list; a number (5) → @err_type_pop2
+        // → str_item_type.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT ITEM 1 5");
+        RunUntilScreenContains(cpu, bus, "ITEM NEEDS A LIST", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("ITEM NEEDS A LIST", StringComparison.Ordinal),
+            $"Expected exact 'ITEM NEEDS A LIST'.\n{screen}");
+    }
+
+    [TestMethod]
+    public void IndexOutOfRange_ExactText()
+    {
+        // ITEM index 9 into a 2-element list walks off the end → @err_range
+        // → str_item_range.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT ITEM 9 [A B]");
+        RunUntilScreenContains(cpu, bus, "ITEM INDEX OUT OF RANGE", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("ITEM INDEX OUT OF RANGE", StringComparison.Ordinal),
+            $"Expected exact 'ITEM INDEX OUT OF RANGE'.\n{screen}");
+    }
+
+    [TestMethod]
+    public void WordType_ExactText()
+    {
+        // WORD of a list argument → @err_type → str_word_type. Unlike the
+        // FIRST family this string is self-contained (no trailing value).
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT WORD [A] [B]");
+        RunUntilScreenContains(cpu, bus, "WORD DOESN'T LIKE THIS INPUT", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("WORD DOESN'T LIKE THIS INPUT", StringComparison.Ordinal),
+            $"Expected exact 'WORD DOESN'T LIKE THIS INPUT'.\n{screen}");
+    }
+
+    [TestMethod]
+    public void IDontKnowHowTo_ExactText()
+    {
+        // An undefined word → @truly_unknown → str_idk ("I DON'T KNOW HOW TO ")
+        // followed by the word itself.
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "XYZZY");
+        RunUntilScreenContains(cpu, bus, "I DON'T KNOW HOW TO XYZZY", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("I DON'T KNOW HOW TO XYZZY", StringComparison.Ordinal),
+            $"Expected exact 'I DON'T KNOW HOW TO XYZZY'.\n{screen}");
+    }
+
+    [TestMethod]
+    public void HasNoValue_ExactText()
+    {
+        // Referencing an unset variable :FOO → eval.s @varref var_get fails →
+        // prints the name char-by-char then the literal " HAS NO VALUE" (note
+        // the leading space in the literal). Discovered verbatim text:
+        // "FOO HAS NO VALUE".
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "PRINT :FOO");
+        RunUntilScreenContains(cpu, bus, "FOO HAS NO VALUE", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("FOO HAS NO VALUE", StringComparison.Ordinal),
+            $"Expected exact 'FOO HAS NO VALUE'.\n{screen}");
+    }
+
+    [TestMethod]
+    public void CatchInterceptsError_ExactText()
+    {
+        // CATCH "ERROR semantics, as implemented (eval.s try_throw_error /
+        // builtins.s do_catch): when an error fires inside the body, the catch
+        // unwinds the stack and resumes PAST the body, so the error does NOT
+        // abort the program — a subsequent statement still runs. We characterize
+        // that no-abort behavior here. (This mirrors the existing
+        // CatchPreventsErrorAbort test but pins the error to an explicit
+        // I-DON'T-KNOW error and asserts the exact follow-on output.)
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // XYZZY is undefined → "I DON'T KNOW HOW TO XYZZY" error. Wrapped in
+        // CATCH "ERROR, the error is swallowed (no abort), so the following
+        // PRINT 31415 on the next line still runs.
+        QueueLine(editor, "CATCH \"ERROR [XYZZY]");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "PRINT 31415");
+        RunSteps(cpu, bus, 5_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        // The error text printed (the ROM emits it before CATCH unwinds)...
+        Assert.IsTrue(screen.Contains("I DON'T KNOW HOW TO XYZZY", StringComparison.Ordinal),
+            $"ROM prints the error text before CATCH unwinds.\n{screen}");
+        // ...but CATCH "ERROR swallowed the abort, so the trailing PRINT ran on
+        // its own output line (distinct from the echoed '? PRINT 31415').
+        bool foundValue = false;
+        foreach (string line in screen.Split('\n'))
+            if (line.Trim() == "31415") foundValue = true;
+        Assert.IsTrue(foundValue,
+            $"CATCH \"ERROR should swallow the error so the following PRINT 31415 still runs.\n{screen}");
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)
