@@ -8,15 +8,17 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace e6502UnitTests;
 
 /// <summary>
-/// Proves the canonical paged-library reserved band $0300-$041F stays clear in
+/// Proves the canonical paged-library reserved band $0300-$08FF stays clear in
 /// NovaLogo — the Logo sibling of <see cref="MailboxReservationTests"/> for
-/// NovaBASIC. The band = the $0300-$031F mailbox (libabi.inc LIB_MBOX) plus the
-/// $0320-$041F resident loader band (256 B for libcall.s). Both must be FREE in
+/// NovaBASIC. The band = the $0300-$031F mailbox (libabi.inc LIB_MBOX), the
+/// $0320-$041F resident loader band (256 B for libcall.s), and the $0420-$08FF
+/// cross-runtime module-BSS band (1248 B, libabi.inc MODULE_BSS_BAND, carved by
+/// 4c.2-1 for paged-module low-RAM working storage). All three must be FREE in
 /// every runtime.
 ///
 /// NovaLogo carves the hole in novalogo.cfg by moving the BSS region START up
-/// to $0420 (keeping its END fixed at $8000) and pushing HEAP_START to $0500,
-/// a uniform +$0100 shift that preserves the proven-safe BSS↔heap overlap.
+/// to $0900 (keeping its END fixed at $8000) and pushing HEAP_START to $09E0,
+/// a uniform +$04E0 shift that preserves the proven-safe BSS↔heap overlap.
 /// Before that carve, the very first BSS object — proc_body_buf (2048 bytes in
 /// procedures.s) — straddles the band, so any procedure definition writes
 /// through it.
@@ -42,8 +44,9 @@ public class NovaLogoMailboxReservationTests
 {
     private const ushort MailboxStart = 0x0300;
     // Reserved band = $0300-$031F mailbox (LIB_MBOX) + $0320-$041F resident
-    // loader band (libcall.s). Exclusive end = $0420.
-    private const ushort MailboxEnd = 0x0420;
+    // loader band (libcall.s) + $0420-$08FF cross-runtime module-BSS band
+    // (libabi.inc MODULE_BSS_BAND). Exclusive end = $0900.
+    private const ushort MailboxEnd = 0x0900;
     private const byte Sentinel = 0x5A;
     // $0318 = LIB_RESIDENT (libabi.inc LIB_MBOX+24): a runtime-managed mailbox cell,
     // NOT scratch. cold_start seeds it $FF and ensure_ext_resident (4c.0c) rewrites it
@@ -107,8 +110,8 @@ public class NovaLogoMailboxReservationTests
             if (a == LibResident) continue;
             Assert.AreEqual(Sentinel, bus.ReadRam(a),
                 $"NovaLogo clobbered reserved band byte ${a:X4} (expected $5A, got " +
-                $"${bus.ReadRam(a):X2}). BSS must start at $0420 (HEAP_START=$0500) so " +
-                $"$0300-$041F stays clear.");
+                $"${bus.ReadRam(a):X2}). BSS must start at $0900 (HEAP_START=$09E0) so " +
+                $"$0300-$08FF stays clear.");
         }
     }
 

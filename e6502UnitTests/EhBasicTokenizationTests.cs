@@ -81,13 +81,14 @@ public class EhBasicTokenizationTests
     public void AvaloniaRomColdStartClearsBasicProgramRam()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
-        // User RAM (Ram_base) now starts at $0420. The $0300-$041F band is
+        // User RAM (Ram_base) now starts at $0900. The $0300-$08FF band is
         // reserved cross-runtime and BASIC must not touch it: $0300-$031F is the
-        // library mailbox (libabi.inc LIB_MBOX) and $0320-$041F is the resident
-        // library loader band (libcall.s). Program/variable storage begins at
-        // $0420.
-        int[] zeroedProgramAddresses = [0x0420, 0x0421, 0x0422, 0x0500, 0x2000, 0x7FFF];
-        int[] mailboxAddresses = [0x0300, 0x0301, 0x0302, 0x031F, 0x0320, 0x0321, 0x041E, 0x041F];
+        // library mailbox (libabi.inc LIB_MBOX), $0320-$041F is the resident
+        // library loader band (libcall.s), and $0420-$08FF is the cross-runtime
+        // module-BSS band (libabi.inc MODULE_BSS_BAND, carved by 4c.2-1).
+        // Program/variable storage begins at $0900.
+        int[] zeroedProgramAddresses = [0x0900, 0x0901, 0x0902, 0x2000, 0x7FFF];
+        int[] mailboxAddresses = [0x0300, 0x0301, 0x0302, 0x031F, 0x0320, 0x0321, 0x0420, 0x0500, 0x08FE, 0x08FF];
         int[] topOfRamAddresses = [0x9FFE, 0x9FFF];
         int[] sampleAddresses = [.. zeroedProgramAddresses, .. mailboxAddresses, .. topOfRamAddresses];
         foreach (int address in sampleAddresses)
@@ -107,7 +108,7 @@ public class EhBasicTokenizationTests
         foreach (int address in mailboxAddresses)
         {
             Assert.AreEqual(0xA5, bus.ReadRam((ushort)address),
-                $"Cold start must leave the reserved library band ($0300-$041F) at ${address:X4} untouched.");
+                $"Cold start must leave the reserved library band ($0300-$08FF) at ${address:X4} untouched.");
         }
 
         foreach (int address in topOfRamAddresses)
@@ -118,8 +119,8 @@ public class EhBasicTokenizationTests
 
         ushort programStart = (ushort)(bus.Read(VgcConstants.ZpSmeml) | (bus.Read(VgcConstants.ZpSmemh) << 8));
         ushort variablesStart = (ushort)(bus.Read(VgcConstants.ZpSvarl) | (bus.Read(VgcConstants.ZpSvarh) << 8));
-        Assert.AreEqual(0x0421, programStart, "Cold start should reset BASIC program start to Ram_base+1 ($0420+1).");
-        Assert.AreEqual(0x0423, variablesStart, "Cold start should leave BASIC with an empty program.");
+        Assert.AreEqual(0x0901, programStart, "Cold start should reset BASIC program start to Ram_base+1 ($0900+1).");
+        Assert.AreEqual(0x0903, variablesStart, "Cold start should leave BASIC with an empty program.");
     }
 
     [TestMethod]

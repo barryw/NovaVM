@@ -8,11 +8,13 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace e6502UnitTests;
 
 /// <summary>
-/// Proves the canonical paged-library reserved band $0300-$041F stays clear in
-/// NovaBASIC. The band = the $0300-$031F mailbox (libabi.inc LIB_MBOX) plus the
-/// $0320-$041F resident loader band (256 B for libcall.s). Both must be FREE in
-/// every runtime; NovaBASIC carves it out by starting user storage (Ram_base)
-/// at $0420 instead of $0300.
+/// Proves the canonical paged-library reserved band $0300-$08FF stays clear in
+/// NovaBASIC. The band = the $0300-$031F mailbox (libabi.inc LIB_MBOX), the
+/// $0320-$041F resident loader band (256 B for libcall.s), and the $0420-$08FF
+/// cross-runtime module-BSS band (1248 B, libabi.inc MODULE_BSS_BAND, carved by
+/// 4c.2-1 for paged-module low-RAM working storage). All three must be FREE in
+/// every runtime; NovaBASIC carves them out by starting user storage (Ram_base)
+/// at $0900 instead of $0300.
 ///
 /// Approach (sentinel-survives, the strongest faithful proof against the real
 /// EhBASIC ROM running on the Avalonia CompositeBusDevice): boot BASIC, paint a
@@ -34,8 +36,9 @@ public class MailboxReservationTests
 {
     private const ushort MailboxStart = 0x0300;
     // Reserved band = $0300-$031F mailbox (LIB_MBOX) + $0320-$041F resident
-    // loader band (libcall.s). Exclusive end = $0420.
-    private const ushort MailboxEnd = 0x0420;
+    // loader band (libcall.s) + $0420-$08FF cross-runtime module-BSS band
+    // (libabi.inc MODULE_BSS_BAND). Exclusive end = $0900.
+    private const ushort MailboxEnd = 0x0900;
     private const byte Sentinel = 0x5A;
 
     [TestMethod]
@@ -72,14 +75,14 @@ public class MailboxReservationTests
         // Start-of-variables pointer must be at or above the band top.
         ushort svar = (ushort)(bus.ReadRam(0x7B) | (bus.ReadRam(0x7C) << 8));
         Assert.IsTrue(svar >= MailboxEnd,
-            $"Start-of-variables (Svarl/Svarh) = ${svar:X4}; must be >= $0420 so " +
-            $"the $0300-$041F reserved band sits below user storage.");
+            $"Start-of-variables (Svarl/Svarh) = ${svar:X4}; must be >= $0900 so " +
+            $"the $0300-$08FF reserved band sits below user storage.");
 
         // The sentinel must survive byte-for-byte across the whole band.
         for (ushort a = MailboxStart; a < MailboxEnd; a++)
             Assert.AreEqual(Sentinel, bus.ReadRam(a),
                 $"BASIC clobbered reserved band byte ${a:X4} (expected $5A, got " +
-                $"${bus.ReadRam(a):X2}). Ram_base must be $0420 so $0300-$041F stays clear.");
+                $"${bus.ReadRam(a):X2}). Ram_base must be $0900 so $0300-$08FF stays clear.");
     }
 
     private static void QueueLine(ScreenEditor editor, string line)

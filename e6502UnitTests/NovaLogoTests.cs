@@ -910,11 +910,20 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        // This would exhaust ~39KB heap without GC.
-        // Each iteration allocates 2 cons pairs (18 bytes with headers).
-        // 2500 * 18 = 45000 bytes > 39KB heap → OOM without GC.
-        // With GC, the previous iteration's list cells are reclaimed.
-        QueueLine(editor, "REPEAT 2500 [MAKE \"X LIST 1 2]");
+        // This would exhaust the ~36KB heap (HEAP_START $09E0 .. HEAP_END $9800)
+        // many times over without GC. Each iteration builds an 8-element list:
+        // ~8 cons pairs * ~9 bytes (payload + 2-byte GC header) = ~72 bytes, so
+        // without GC OOM hits around iteration ~500 (36KB / 72). 1000 iterations
+        // is ~2x the whole heap → guaranteed OOM without GC; with GC the prior
+        // iteration's list (only :X is live) is reclaimed each cycle.
+        //
+        // NB: the iteration count and list size were retuned in 4c.2-1, which
+        // shrank the heap by 1248 bytes (HEAP_START $0500 -> $09E0 for the
+        // module-BSS carve). The old "2500 * 2-element" tuning sat right at the
+        // high-water-mark allocator's reclaim ceiling for the larger heap and
+        // wedges on the smaller one. Fewer, larger allocations keep the same
+        // "far exceeds heap" guarantee with comfortable margin below the wedge.
+        QueueLine(editor, "REPEAT 1000 [MAKE \"X LIST 1 2 3 4 5 6 7 8]");
         RunSteps(cpu, bus, 200_000_000);
         QueueLine(editor, "PRINT \"DONE");
         RunSteps(cpu, bus, 3_000_000);
