@@ -81,9 +81,13 @@ public class EhBasicTokenizationTests
     public void AvaloniaRomColdStartClearsBasicProgramRam()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
-        int[] zeroedProgramAddresses = [0x0300, 0x0301, 0x0302, 0x0400, 0x2000, 0x7FFF];
+        // User RAM (Ram_base) now starts at $0320: $0300-$031F is the reserved
+        // cross-runtime library mailbox (libabi.inc LIB_MBOX) and BASIC must not
+        // touch it. Program/variable storage begins at $0320.
+        int[] zeroedProgramAddresses = [0x0320, 0x0321, 0x0322, 0x0400, 0x2000, 0x7FFF];
+        int[] mailboxAddresses = [0x0300, 0x0301, 0x0302, 0x031F];
         int[] topOfRamAddresses = [0x9FFE, 0x9FFF];
-        int[] sampleAddresses = [.. zeroedProgramAddresses, .. topOfRamAddresses];
+        int[] sampleAddresses = [.. zeroedProgramAddresses, .. mailboxAddresses, .. topOfRamAddresses];
         foreach (int address in sampleAddresses)
             bus.WriteRam((ushort)address, 0xA5);
 
@@ -98,6 +102,12 @@ public class EhBasicTokenizationTests
                 $"Cold start should clear stale BASIC program RAM at ${address:X4}.");
         }
 
+        foreach (int address in mailboxAddresses)
+        {
+            Assert.AreEqual(0xA5, bus.ReadRam((ushort)address),
+                $"Cold start must leave the reserved library mailbox at ${address:X4} untouched.");
+        }
+
         foreach (int address in topOfRamAddresses)
         {
             Assert.AreNotEqual(0xA5, bus.ReadRam((ushort)address),
@@ -106,8 +116,8 @@ public class EhBasicTokenizationTests
 
         ushort programStart = (ushort)(bus.Read(VgcConstants.ZpSmeml) | (bus.Read(VgcConstants.ZpSmemh) << 8));
         ushort variablesStart = (ushort)(bus.Read(VgcConstants.ZpSvarl) | (bus.Read(VgcConstants.ZpSvarh) << 8));
-        Assert.AreEqual(0x0301, programStart, "Cold start should reset BASIC program start.");
-        Assert.AreEqual(0x0303, variablesStart, "Cold start should leave BASIC with an empty program.");
+        Assert.AreEqual(0x0321, programStart, "Cold start should reset BASIC program start to Ram_base+1 ($0320+1).");
+        Assert.AreEqual(0x0323, variablesStart, "Cold start should leave BASIC with an empty program.");
     }
 
     [TestMethod]
