@@ -1815,9 +1815,9 @@ do_po:
       JMP   eval_continue
 
 @err:
-      LDX   #<str_po_err
-      LDY   #>str_po_err
-      JMP   list_print_err
+      LDX   #<str_po_name
+      LDY   #>str_po_name
+      JMP   err_nei
 @err_notfound:
       LDX   #<str_idk
       LDY   #>str_idk
@@ -1986,9 +1986,9 @@ do_erase:
       LDY   #>str_idk
       JMP   list_print_err
 @err:
-      LDX   #<str_erase_err
-      LDY   #>str_erase_err
-      JMP   list_print_err
+      LDX   #<str_erase_name
+      LDY   #>str_erase_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_apply — APPLY "proc [args]: call procedure with args from list
@@ -2102,23 +2102,17 @@ do_apply:
       JMP   eval_continue
 
 @err:
-      LDX   #<str_apply_err
-      LDY   #>str_apply_err
-      JMP   list_print_err
+      LDX   #<str_apply_name
+      LDY   #>str_apply_name
+      JMP   err_nei
 
 ; =====================================================================
 ; RODATA — procedure strings
 ; =====================================================================
       .segment "RODATA"
 
-str_po_err:
-      .byte "NOT ENOUGH INPUTS TO PO", 0
 
-str_erase_err:
-      .byte "NOT ENOUGH INPUTS TO ERASE", 0
 
-str_apply_err:
-      .byte "NOT ENOUGH INPUTS TO APPLY", 0
 
 ; Builtin name strings for workspace commands
 str_po_name:
