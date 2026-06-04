@@ -63,6 +63,10 @@
       <Link>Resources\petscii_lower.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="..\e6502.Avalonia\Resources\libcall.bin">
+      <Link>Resources\libcall.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

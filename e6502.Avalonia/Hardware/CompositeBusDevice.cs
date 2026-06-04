@@ -37,6 +37,19 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private byte[]? _extRom;
     private readonly byte[]? _logoRom;
     private readonly byte[]? _logoExtRom;
+
+    // Paged-library loader state (Stage 4c.0b) — faithful to the FPGA's single bank-1
+    // ext_rom BRAM + page_in_ctrl ($BA76-$BA7C) + resident lib_call at $0320.
+    // _extBank holds whatever currently lives in bank 1: the active runtime's static
+    // extension at primary-select, or a paged-in module after a PGD page-in. RomSwapExtension
+    // maps _extBank into $C000 (so behaviour is identical to the static ext until a page-in).
+    private readonly byte[] _extBank = new byte[VgcConstants.RomSize];
+    private bool _extBankValid;                       // true once a static ext or module is in _extBank
+    private readonly byte[]? _libcallResident;       // Resources/libcall.bin (ORG $0320)
+    private int _pgdSrc;                              // PGD source XRAM linear addr
+    private int _pgdWords;                            // PGD word count
+    internal int PageInCount { get; private set; }    // PGD page-ins since last reset (tests)
+    private const int LibCallBand = 0x0320;            // resident loader entry (libabi.inc LIB_LOADER_BAND)
     private byte _boardButtonState;
     private byte _boardSwitchState;
     private byte _boardInputIrqEnable;
@@ -219,6 +232,15 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             Array.Copy(logoExtData, _logoExtRom, Math.Min(logoExtData.Length, 16384));
         }
 
+        // Load the resident paged-library loader (lib_call, ORG $0320) if available.
+        string libcallPath = Path.Combine(AppContext.BaseDirectory, "Resources", "libcall.bin");
+        if (File.Exists(libcallPath))
+        {
+            byte[] libcallData = File.ReadAllBytes(libcallPath);
+            _libcallResident = new byte[libcallData.Length];
+            Array.Copy(libcallData, _libcallResident, libcallData.Length);
+        }
+
         // Override boot ROM if requested.
         if (bootRom == ActiveRom.Logo && _logoRom != null)
         {
@@ -226,7 +248,43 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             CurrentRom = ActiveRom.Logo;
         }
 
+        // Bank-1 overlay starts as the active primary runtime's static extension, and
+        // the resident loader is POKEd into the reserved $0320 band.
+        LoadExtBankStatic(CurrentRom);
+        PokeResidentLoader();
+
         InitVectorTable();
+    }
+
+    // Mirror the active runtime's static extension ROM into the bank-1 overlay image.
+    // Called at every primary-runtime select; a later PGD page-in overwrites _extBank
+    // with the paged module. NCC has no extension — leave _extBank untouched for it.
+    private void LoadExtBankStatic(ActiveRom primary)
+    {
+        byte[]? ext = primary switch
+        {
+            ActiveRom.Logo  => _logoExtRom,
+            ActiveRom.Basic => _extRom,
+            _ => null,                      // Ncc / Extension: no static ext to load
+        };
+        if (ext != null)
+        {
+            Array.Copy(ext, 0, _extBank, 0, VgcConstants.RomSize);
+            _extBankValid = true;
+        }
+        else
+        {
+            _extBankValid = false;          // NCC: no overlay -> RomSwapExtension stays a no-op
+        }
+    }
+
+    // POKE the resident lib_call loader into its reserved low-RAM band ($0320). Safe:
+    // the $0320-$041F band is carved cross-runtime (Stage 4c.0a).
+    private void PokeResidentLoader()
+    {
+        if (_libcallResident != null)
+            Array.Copy(_libcallResident, 0, _ram, LibCallBand,
+                       Math.Min(_libcallResident.Length, 0x0420 - LibCallBand));
     }
 
     /// <summary>Write directly to backing RAM, bypassing ROM protection and hardware routing.</summary>
@@ -243,6 +301,21 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         ArgumentNullException.ThrowIfNull(rom);
         _extRom = new byte[16384];
         Array.Copy(rom, _extRom, Math.Min(rom.Length, 16384));
+        // Refresh the bank-1 overlay so a subsequent RomSwapExtension maps these bytes
+        // when BASIC is the active primary (Axis-2 GraphicsModuleTests path).
+        if (CurrentRom == ActiveRom.Basic)
+            LoadExtBankStatic(ActiveRom.Basic);
+    }
+
+    /// <summary>
+    /// Test hook: stage bytes into the linear XRAM shelf (e.g. a paged-library module .bin
+    /// at SHELF_BASE=$060000), so the PGD page-in front-end can page them into bank 1.
+    /// </summary>
+    internal void LoadXram(int at, byte[] data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        for (int i = 0; i < data.Length; i++)
+            _xmc.TryWriteLinear(at + i, data[i]);
     }
 
     private void LoadPrimaryRuntimeRom(byte[] data)
@@ -285,6 +358,10 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 return false;
         }
 
+        // Selecting a primary runtime resets the bank-1 overlay to that runtime's static
+        // extension (a paged-in module is dropped when the runtime changes).
+        LoadExtBankStatic(CurrentRom);
+
         if (notifyRomChange && previous != CurrentRom)
             RomSwapRequested?.Invoke(this, EventArgs.Empty);
 
@@ -318,8 +395,15 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         CurrentProgramName = null;
         CurrentProgramHelp = null;
 
-        if (!TrySelectPrimaryRom(bootRom, notifyRomChange))
+        // Reset the paged-library loader state: no module resident, no page-ins yet.
+        PageInCount = 0;
+        _pgdSrc = 0;
+        _pgdWords = 0;
+
+        if (!TrySelectPrimaryRom(bootRom, notifyRomChange))   // also reloads _extBank to the static ext
             TrySelectPrimaryRom(ActiveRom.Basic, notifyRomChange);
+
+        PokeResidentLoader();   // restore the resident lib_call into $0320 after reset
 
         InitVectorTable();
     }
@@ -473,6 +557,17 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             return _wts.ReadRegister(address);
         if (_compiler.OwnsAddress(address)) return _compiler.Read(address);
         if (_vgc.OwnsAddress(address)) return _vgc.Read(address);
+        // Paged-library page-in front-end ($BA77-$BA7C). $BA76 reads stay with ZSound
+        // status above (the loader never reads PGD_CMD). Synchronous model: STATUS = DONE.
+        switch (address)
+        {
+            case VgcConstants.PgdStatus: return VgcConstants.PgdStatusDone;
+            case VgcConstants.PgdSrcL:   return (byte)(_pgdSrc & 0xFF);
+            case VgcConstants.PgdSrcM:   return (byte)((_pgdSrc >> 8) & 0xFF);
+            case VgcConstants.PgdSrcH:   return (byte)((_pgdSrc >> 16) & 0xFF);
+            case VgcConstants.PgdWordsL: return (byte)(_pgdWords & 0xFF);
+            case VgcConstants.PgdWordsH: return (byte)((_pgdWords >> 8) & 0xFF);
+        }
         return _ram[address];
     }
 
@@ -561,6 +656,10 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 var prev = CurrentRom;
                 Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, 16384);
                 CurrentRom = ActiveRom.Basic;
+                // NOTE: do NOT reload _extBank here. On HW the romswap register only changes the
+                // $C000 MUX source; the bank-1 ext_rom BRAM persists. A home-bank restore after a
+                // lib_call trampoline MUST keep the paged-in module so the next call HITs. The
+                // static ext is reloaded only on a genuine primary-runtime select (TrySelectPrimaryRom).
                 // Extension ROM swaps are transient (trampoline calls) — no CPU reboot.
                 // Only fire event when returning from NCC ROM.
                 if (prev == ActiveRom.Ncc)
@@ -568,12 +667,13 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             }
             else if (data == VgcConstants.RomSwapExtension && CurrentRom != ActiveRom.Extension)
             {
-                // Use Logo's extension ROM when Logo was the active primary,
-                // otherwise fall back to BASIC's extension ROM.
-                var ext = (CurrentRom == ActiveRom.Logo ? _logoExtRom : _extRom);
-                if (ext != null)
+                // Map the bank-1 overlay image at $C000. _extBank holds the active runtime's
+                // static extension until a PGD page-in replaces it with a paged module — so this
+                // is identical to the old _logoExtRom/_extRom copy when no page-in has happened.
+                // _extBankValid is false only for NCC (no extension) — preserves the old no-op.
+                if (_extBankValid)
                 {
-                    Array.Copy(ext, 0, _ram, VgcConstants.RomBase, 16384);
+                    Array.Copy(_extBank, 0, _ram, VgcConstants.RomBase, 16384);
                     CurrentRom = ActiveRom.Extension;
                 }
                 // No event — extension swaps are transient, managed by RAM trampoline.
@@ -582,6 +682,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             {
                 Array.Copy(_logoRom, 0, _ram, VgcConstants.RomBase, 16384);
                 CurrentRom = ActiveRom.Logo;
+                // NOTE: do NOT reload _extBank here (see RomSwapBasic) — the paged-in module in the
+                // bank-1 overlay must survive the home-bank restore between lib_call invocations.
             }
             else if (data == VgcConstants.RomSwapNccEdit)
             {
@@ -620,10 +722,36 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _sid2.Write((ushort)(VgcConstants.Sid2Base + (address - VgcConstants.Sid2MirrorBase)), data);
             return;
         }
+        // Paged-library page-in front-end ($BA76-$BA7C). Unowned by any controller; intercept
+        // before the RAM fallback. WRITE $BA76 = PGD_CMD (ZSound never writes here; READ $BA76
+        // stays ZSound status). Mirrors the FPGA page_in_ctrl.sv + libabi.inc contract.
+        switch (address)
+        {
+            case VgcConstants.PgdSrcL:   _pgdSrc = (_pgdSrc & ~0x0000FF) | data; return;
+            case VgcConstants.PgdSrcM:   _pgdSrc = (_pgdSrc & ~0x00FF00) | (data << 8); return;
+            case VgcConstants.PgdSrcH:   _pgdSrc = (_pgdSrc & ~0xFF0000) | (data << 16); return;
+            case VgcConstants.PgdWordsL: _pgdWords = (_pgdWords & ~0x00FF) | data; return;
+            case VgcConstants.PgdWordsH: _pgdWords = (_pgdWords & ~0xFF00) | (data << 8); return;
+            case VgcConstants.PgdCmd:
+                if ((data & VgcConstants.PgdStart) != 0) DoPageIn();
+                return;
+        }
         // ROM write protection: drop writes to $C000-$FFF9.
         // Hardware vectors $FFFA-$FFFF pass through (RSID players install own IRQ).
         if (address >= VgcConstants.RomBase && address < 0xFFFA) return;
         _ram[address] = data;
+    }
+
+    // PGD page-in: copy WORDS words (byte-identity) from XRAM[_pgdSrc] into the bank-1
+    // overlay image. Synchronous (matches LibLoaderBus); the FPGA stalls the CPU instead.
+    private void DoPageIn()
+    {
+        int bytes = _pgdWords * 2;
+        if (bytes > _extBank.Length) bytes = _extBank.Length;
+        for (int i = 0; i < bytes; i++)
+            _extBank[i] = _xmc.TryReadLinear(_pgdSrc + i, out byte b) ? b : (byte)0;
+        _extBankValid = true;
+        PageInCount++;
     }
 
     public void AdvanceCycles(int cycles)

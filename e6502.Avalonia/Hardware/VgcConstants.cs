@@ -325,6 +325,25 @@ public static class VgcConstants
     public const int DmaCountM         = 0xBA74;  // bytes moved mid
     public const int DmaCountH         = 0xBA75;  // bytes moved high
 
+    // -------------------------------------------------------------------------
+    // Paged-library page-in front-end (PGD), $BA76-$BA7C. Mirrors the shipped FPGA
+    // page_in_ctrl.sv + runtime/asm/libabi.inc. On silicon this band belongs to PGD;
+    // here it shares $BA76 with the emulator-only ZSound status by DIRECTION:
+    //   READ  $BA76 = ZSound status (loader never reads PGD_CMD)
+    //   WRITE $BA76 = PGD_CMD       (ZSound never writes $BA76)
+    // PGD_STATUS ($BA77) + SRC/WORDS ($BA78-$BA7C) are otherwise unowned.
+    // -------------------------------------------------------------------------
+    public const int PgdCmd            = 0xBA76;  // write bit0=1 -> start page-in
+    public const int PgdStatus         = 0xBA77;  // read: bit0=busy, bit1=done/ok
+    public const int PgdSrcL           = 0xBA78;  // XRAM source addr low
+    public const int PgdSrcM           = 0xBA79;  // XRAM source addr mid
+    public const int PgdSrcH           = 0xBA7A;  // XRAM source addr high
+    public const int PgdWordsL         = 0xBA7B;  // word count low
+    public const int PgdWordsH         = 0xBA7C;  // word count high
+    public const byte PgdStart         = 0x01;    // write to PgdCmd to begin
+    public const byte PgdStatusBusy    = 0x01;    // PgdStatus bit0
+    public const byte PgdStatusDone    = 0x02;    // PgdStatus bit1 (done/ok)
+
     // Z-machine sampled-sound status (read): bit0 = a non-looping sound just
     // finished (clears on read), bit1 = a sound is currently playing.
     public const int ZSoundStatus      = 0xBA76;

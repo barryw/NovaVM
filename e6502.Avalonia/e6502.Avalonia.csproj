@@ -92,6 +92,7 @@
         <Copy SourceFiles="Resources/extension.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/extension.bin')" />
         <Copy SourceFiles="Resources/novalogo.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo.bin')" />
         <Copy SourceFiles="Resources/novalogo_ext.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo_ext.bin')" />
+        <Copy SourceFiles="Resources/libcall.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/libcall.bin')" />
     </Target>
 
     <ItemGroup>
@@ -121,6 +122,9 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\novalogo_ext.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\libcall.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>
