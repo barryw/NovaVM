@@ -44,7 +44,7 @@
     "hd0": ""
   },
   "libraries": [
-    { "name": "testmod", "id": 127, "path": "/lib/testmod.mod", "base": 393216, "size": 16384 }
+    { "name": "graphics", "id": 1, "path": "/lib/graphics.mod", "base": 393216, "size": 16384 }
   ],
   "network": {
     "gameServer": {
