@@ -18,7 +18,7 @@ This drives that hardware through the production code path:
        - point the BASIC USR vector (JMP $0A) at $9F80,
        - resume, settle.
      The driver sets the mailbox itself, so $0300+ need NOT be protected.
-  3. TRIGGER  "?USR(0)" in immediate mode — runs the driver via the USR vector.
+  3. TRIGGER  "A=USR(0)" — runs the driver via the USR vector (assigned form is robust).
      The driver fills the mailbox FRESH (MOD_ID=$7F, FN=ECHO, ARG0=$DEADBEEF),
      JSRs lib_call ($9C00) which pages the module in, validates its header,
      flips ROMSWAP to bank 1, dispatches FN 0 (ECHO copies ARG0->RESULT), then
@@ -31,7 +31,7 @@ This drives that hardware through the production code path:
 
 Protected-RAM / no-flash design: nothing is flashed and no ROM is rebuilt. The
 loader, driver, and result stash all live in RAM above the BASIC memory cap, so
-a normal interactive BASIC session can run "?USR(0)" without clobbering them,
+a normal interactive BASIC session can run "A=USR(0)" without clobbering them,
 and the 6-byte outcome survives until the host reads it back.
 
 The 6502 logic is unit-proven (MSTest) and Verilator-proven (23/23, same RTL);
@@ -184,8 +184,10 @@ def main() -> int:
         print("installing loader + driver stub + USR vector ...")
         install(client, loader, driver)
 
-        print("triggering ?USR(0) (driver -> lib_call -> ECHO) ...")
-        basic_line(client, "?USR(0)")
+        print("triggering A=USR(0) (driver -> lib_call -> ECHO) ...")
+        basic_line(client, "A=USR(0)")  # assigned form: invokes USR reliably (the bare
+        # ?USR(0) immediate line can arrive mangled; the variable A lands in protected
+        # var space and the driver already stashed the outcome to $9FE0 before assignment)
 
         stash = client.peek_block(STASH_ADDR, STASH_LEN)
 
