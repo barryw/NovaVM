@@ -10,10 +10,38 @@
 
 ---
 
+## Decisions locked (2026-06-04 replan)
+
+This plan was re-baselined after recon showed the committed version under-scoped the runtime↔loader
+bridge. **4c is the first time ANY runtime calls a module** — 4b proved the GRAPHICS module in
+isolation (standalone POKEd driver + HW smoke), but no runtime invokes `lib_call` yet (ehbasic has
+zero `lib_call`/`PGD_*`/GRAPHICS refs; the emulator's `CompositeBusDevice` implements no page-in).
+
+- **D1 — Shared canonical loader band.** `lib_call` (`libcall.s`, 157 B, not PIC) is runtime-agnostic
+  by design (only touches the `$0300` mailbox + `REG_ROMSWAP` + PGD MMIO; each runtime sets
+  `LIB_HOME_BANK` at boot). Reserve the resident loader at **one fixed low-RAM address in EVERY
+  runtime**, exactly like the `$0300` mailbox carve. One `libcall.bin`, POKEd once, `JSR`'d by all.
+  Fixes the `$9C00`/Logo-turtle collision (Logo pins `$9C00-$9F10`).
+- **D2 — Re-page the runtime's own extension on demand.** `ROMSWAP_EXTENSION ($04)` selects the ONE
+  `$C000` overlay bank, shared by a runtime's own extension (`novalogo_ext.bin` = editor + turtle +
+  graphics drivers) AND any paged module. A `lib_call(GRAPHICS)` page-in physically overwrites bank
+  `$04`. So as long as anything stays in `novalogo_ext`, the legacy `EXT_TRAMPOLINE` path must
+  **ensure its extension is resident (re-page via PGD if `LIB_RESIDENT` ≠ logo-ext) before
+  romswap+call.** This is required the moment graphics routes through a module while turtle/editor do not.
+- **D3 — Add the paged-loader path to `CompositeBusDevice`.** The emulator (every `~NovaLogo` test +
+  the GUI) must model PGD page-in + XRAM shelf + resident `lib_call`, or routing graphics through
+  `lib_call` BREAKS the existing green "graphics primitives" harness test. Makes the emulator faithful
+  to HW and is reusable for BASIC + every future module.
+- **D4 — (trajectory, NOT built in 4c) editor becomes a module.** Per user: "editor will also need
+  to be a module — or live in the system module" (`MODULE_ID_SYSTEM=$03`). D2's re-page-on-demand IS
+  the same PGD+`LIB_RESIDENT` machinery editor-as-module uses, so D2 is the bridge, not throwaway.
+
+---
+
 ## Recon carried forward (so the executor needn't re-derive)
 
 - **GRAPHICS module = DONE + silicon-proven** (Stage 4b, commits dc33115..ccefa90). Contract: `runtime/asm/libgraphics.inc` — `MODULE_ID_GRAPHICS=$01`, `GFN_*` ids: draw `$00-$09`, text/mode `$10-$1B`, hw-sprite `$20-$3B`, copper `$40-$49`, blit/dma `$50-$5B`, vsprite `$60-$71`, msprite `$80-$8B`, image/mem `$A0-$A9`, anim `$C0-$C7`, tween `$D0-$DA`. Turtle-render `$B0-$BF` is RESERVED (this plan lands it).
-- **lib_call ABI** (`runtime/asm/libabi.inc`): write `LIB_MOD_ID=$0300`, `LIB_FN_ID=$0301`, `LIB_ARG0..3=$0303/$0307/$030B/$030F` (32-bit LE), `JSR lib_call` ($9C00 resident loader; or the runtime's resident copy), read `LIB_RESULT=$0313` + `LIB_STATUS=$0302`. The loader's `modtab_lookup` already resolves GRAPHICS→XRAM slot 0. graphics.mod is staged on the board's SD + in boot.json.
+- **lib_call ABI** (`runtime/asm/libabi.inc`): write `LIB_MOD_ID=$0300`, `LIB_FN_ID=$0301`, `LIB_ARG0..3=$0303/$0307/$030B/$030F` (32-bit LE), `JSR lib_call` (→ the **shared canonical loader band**, D1; today only at `$9C00` for BASIC, which collides with Logo's turtle), read `LIB_RESULT=$0313` + `LIB_STATUS=$0302`. The loader's `modtab_lookup` already resolves GRAPHICS→XRAM slot 0. `graphics.mod` staged in boot.json (`base 393216=$060000`, slot 0). **`lib_call` must run from RAM** — it maps bank 1 over `$C000-$FFFF` (line 23-25 of libcall.s), restoring `LIB_HOME_BANK` before `RTS`. **Emulator gap:** `CompositeBusDevice` implements NONE of this (page-in/shelf/resident loader) — only the test-only `LibLoaderBus` does. Closing this is 4c.0b (D3).
 - **§5 marshalling path (eval.s, current):** `ext_cmd_table` entries = `{name_ptr(2), EXT_CMD_xxx(1), arity(1)}`. THREE call sites (~lines 151, 300, 463) do `JSR lookup_ext_cmd` (→ A=arity, EXT_CMD set) `→ JSR ext_eval_args` (writes EXT_ARGn, 16.8 fixed) `→ JSR EXT_TRAMPOLINE` `→` read `EXT_RESULT_TYPE/HI/LO/FRAC`. `lookup_ext_cmd` body at eval.s:1321.
 - **Turtle (resident target):** currently `ext_fd` etc. in `novalogo/extension.s`; move-math uses MATH copro sincos/mul + 24-bit sub-pixel accumulate into turtle state at `$9F00`. Rendering subs in extension.s: `draw_turtle_sprite`, `erase_turtle_sprite`, `draw_line`, `ensure_gfx_mode` (+ `turtle_init`); icon buffers at `TURTLE_BUF_BASE`, bg-save buffer, `turtle_bg_x/y`. Turtle state $9F00 is shared RAM (bank-independent).
 - **Logo memory map (CRITICAL for the band):** `HEAP_START=$0400`, `HEAP_END=$9800` (cons heap $0400-$97FF); `$9800-$9BFF` editor BSS; `$9C00-$9F10` pinned turtle work+state; mailbox `$0300-$031F`; BSS segment (novalogo.cfg) `$0320-$0D23` (incl. `proc_body_buf` .res 2048). **The BSS segment overlaps the heap at `$0400` — an invariant NOT yet understood. Resolve before relocating anything (task 4c.2-0).**
@@ -21,7 +49,37 @@
 
 ---
 
-## Stage 4c.1 — Marshalling rewrite + wire non-BSS graphics commands (NO band needed)
+## Stage 4c.0 — Runtime↔loader bridge (FOUNDATION — must precede 4c.1-3)
+
+The missing layer 4b deferred. Without it, no runtime can call any module, and routing Logo graphics
+through `lib_call` breaks existing green emulator tests. Build + prove on Logo first; extend
+cross-runtime for consistency.
+
+**4c.0a: Shared canonical loader band (D1).** Decide the fixed low-RAM address for the resident
+`lib_call` (157 B), free in BASIC/Logo/NCC maps — natural home is contiguous with the `$0300` mailbox
+(e.g. mailbox `$0300-$031F`, then a small reserved region for the loader, sized with headroom).
+Build `libcall.bin` at that canonical ORG (`tests/asm/libcall_blob.cfg` → a runtime cfg). Reserve it
+in Logo (`novalogo.cfg`) and BASIC (`Ram_base`, basic.asm:616 — currently `$0320`); NCC
+(`NccRomBuilder`) follows. Extend sentinel tests (`NovaLogoMailboxReservationTests`,
+`MailboxReservationTests`) to cover the loader band. Gate: all runtimes build; sentinel tests green.
+
+**4c.0b: Page-in path in `CompositeBusDevice` (D3).** Implement PGD MMIO (`$BA76-$BA7C`), the XRAM
+shelf (`$060000`+), and the resident-`lib_call` POKE so a runtime can `lib_call` a module on the
+emulator exactly as on HW: `PGD_CMD` DMAs the shelf slot into the `$04` ext-bank backing store, then
+`ROMSWAP_EXTENSION` maps it. Stage `graphics.bin` into the shelf. **Test:** port an Axis-1-style
+GRAPHICS call onto `CompositeBusDevice` (page-in once → dispatch OK → `LIB_RESIDENT` cached → home
+bank restored), proving the emulator path matches `LibLoaderBus` + HW.
+
+**4c.0c: Re-page-on-demand for the runtime's own extension (D2).** Stage `novalogo_ext.bin` in the
+XRAM shelf as a re-pageable image; the legacy `EXT_TRAMPOLINE` path first ensures it is the resident
+`$04` image (re-page via PGD when `LIB_RESIDENT` ≠ logo-ext) before the romswap+call. Model the same
+on `CompositeBusDevice`. **Test:** a Logo session interleaving a module call and a legacy ext command
+(e.g. `PLOT … FD …`) — the legacy command must still execute the real `novalogo_ext` handler, not
+clobbered module bytes. This is the seam that later becomes editor-as-module (D4).
+
+---
+
+## Stage 4c.1 — Marshalling rewrite + wire non-BSS graphics commands (needs 4c.0)
 
 Direct graphics commands (PLOT/LINE/CIRCLE/RECT/FILL/PAINT/SETPC→GCOLOR/SETBG→COLOR-bg + the sprite commands) use GFN ids that never touch the module BSS band, so this stage needs no carve.
 
@@ -39,7 +97,7 @@ Direct graphics commands (PLOT/LINE/CIRCLE/RECT/FILL/PAINT/SETPC→GCOLOR/SETBG�
 
 **4c.2-0 (investigation, FIRST):** Resolve Logo's `$0400` heap / `$0320-$0D23` BSS overlap. Read the actual placement of `proc_body_buf` + how the heap and static buffers coexist (they apparently overlap — understand why before moving anything). Output: a definitive Logo low-RAM map. Without this, do NOT relocate BSS/heap.
 
-**4c.2-1: carve the module-BSS band.** Reserve a band after the mailbox sized to the module need (`$0320-$0450`, 305 B + headroom → e.g. `$0320-$04FF`). Move Logo's BSS start AND `HEAP_START` above it; move EhBASIC `Ram_base` (basic.asm:616) above it for cross-runtime consistency (the mailbox is reserved in both — same philosophy). Extend BOTH sentinel tests (`NovaLogoMailboxReservationTests`, `MailboxReservationTests`) to cover the band. Gate: full `~NovaLogo` + BASIC suites green; `module MODBSS ⊆ reserved band`.
+**4c.2-1: carve the module-BSS band.** The cross-runtime low-RAM carve mechanism + `Ram_base`/BSS/`HEAP_START` move is already established by **4c.0a** (loader band). This task EXTENDS that reserved region with the module-BSS sub-band sized to the vsprite/msprite need (`305 B + headroom`), so the contiguous reserved layout becomes mailbox `$0300-$031F` → loader band → module-BSS band. Extend the same sentinel tests. Gate: full `~NovaLogo` + BASIC suites green; `module MODBSS ⊆ reserved band`.
 
 **4c.2-2: turtle-render fns in GRAPHICS ($B0-$BF).** Port `draw_turtle_sprite`/`erase_turtle_sprite`/`draw_line`/`ensure_gfx_mode` (novalogo/extension.s) into the GRAPHICS module as `GFN_TURTLE_*` wrappers over vsprite (rotate-blit icon) + vgc (line/mode). Decide the interface: turtle position/heading/icon passed via the mailbox/BYTES; persistent icon buffers live in the module BSS band. Add to libgraphics.inc + graphics.s + GraphicsModuleTests (assert the rotated-icon pixels). This is the seam — co-design the resident-vs-passed split here.
 
@@ -55,10 +113,11 @@ Direct graphics commands (PLOT/LINE/CIRCLE/RECT/FILL/PAINT/SETPC→GCOLOR/SETBG�
 - Whether BASIC's `Ram_base` moves now (consistency) or at BASIC-migration (design §6 "Later").
 
 ## Done criteria
+0. **Runtime↔loader bridge live (4c.0):** shared canonical loader band reserved cross-runtime; `CompositeBusDevice` models PGD page-in + XRAM shelf + resident `lib_call`; a runtime can `lib_call(GRAPHICS)` on the emulator; the runtime's own extension survives a module call via re-page-on-demand. Emulator path matches `LibLoaderBus` + HW.
 1. Logo graphics commands run through `lib_call(GRAPHICS)`, not the private extension. `~NovaLogo` + `~GraphicsModule` green throughout.
 2. Turtle resident in bank 0; rendering via GRAPHICS `$B0-$BF`; turtle programs work on HW.
-3. Module-BSS band reserved cross-runtime; sentinel tests cover it.
-4. novalogo_ext.bin reduced (graphics drivers removed; editor + residue only).
+3. Loader + module-BSS bands reserved cross-runtime; sentinel tests cover them.
+4. novalogo_ext.bin reduced (graphics drivers removed; editor + residue only) — editor-as-module (D4) is a FOLLOW-ON phase, not 4c.
 
 ## Resume pointer
 Memory: [[project_phase4b_graphics_module_2026_06_04]] (4b done), [[project_phase4_graphics_design_2026_06_04]] (parent design §3 turtle-resident, §5 marshalling). Parent design doc: `docs/plans/2026-06-04-graphics-module-and-bank0-slim-design.md`.
