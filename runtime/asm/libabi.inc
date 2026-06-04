@@ -2,6 +2,9 @@
 ; Included by every runtime foundation, every module, and the loader.
 ; Design: docs/plans/2026-06-03-paged-library-loader-3b-design.md
 
+.ifndef LIBABI_INC_INCLUDED
+LIBABI_INC_INCLUDED = 1
+
 ; --- Page-in (PGD) MMIO — shipped RTL ---
 PGD_CMD          = $BA76
 PGD_STATUS       = $BA77
@@ -67,3 +70,5 @@ SHELF_BASE_L     = $00
 SHELF_BASE_M     = $00
 SHELF_BASE_H     = $06            ; $060000
 SHELF_SLOT_WORDS = $2000          ; 8192 words = 16KB per slot
+
+.endif ; LIBABI_INC_INCLUDED
