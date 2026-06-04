@@ -87,8 +87,12 @@ lcv_ver:   lda #LERR_BAD_VER
 ; Phase 1/System-B replaces this with an XRAM-directory lookup by name (modtab filled at
 ; boot); lib_call is unchanged — modtab is the abstraction that hides constants-vs-directory.
 modtab_lookup:
-      cmp     #MODULE_ID_TEST
+      cmp     #MODULE_ID_TEST          ; $7F TEST     -> slot 0 $060000
+      beq     mt_slot0
+      cmp     #MODULE_ID_GRAPHICS      ; $01 GRAPHICS -> slot 0 $060000 (shares the slot)
+      beq     mt_slot0
       bne     mt_unknown
+mt_slot0:
       lda     #SHELF_BASE_L
       sta     PGD_SRCL
       lda     #SHELF_BASE_M

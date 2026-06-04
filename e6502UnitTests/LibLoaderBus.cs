@@ -27,6 +27,7 @@ namespace e6502UnitTests
         private const ushort REG_ROMSWAP = 0xA03F;
         private const byte    RS_EXT      = 0x04;
         private const byte    PGD_DONE    = 0x02;
+        private const ushort  VGC_CMD = 0xA010;                  // command/busy register
         private const ushort  PGD_CMD = 0xBA76, PGD_STATUS = 0xBA77,
                               PGD_SRCL = 0xBA78, PGD_SRCM = 0xBA79, PGD_SRCH = 0xBA7A,
                               PGD_WORDSL = 0xBA7B, PGD_WORDSH = 0xBA7C;
@@ -34,6 +35,7 @@ namespace e6502UnitTests
         public byte Read(ushort a)
         {
             if (a == PGD_STATUS) return PGD_DONE;                 // synchronous model: always done/ok
+            if (a == VGC_CMD) return 0;                          // VGC executes synchronously: never busy
             if (a >= 0xC000 && _romswap == RS_EXT) return _ext[a - 0xC000];
             return _ram[a];                                      // incl. $A03F (not readable on HW)
         }

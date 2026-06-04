@@ -34,7 +34,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private double _musicFrameAccum;
     private readonly byte[] _basicRom;
     private readonly byte[] _nccRom;
-    private readonly byte[]? _extRom;
+    private byte[]? _extRom;
     private readonly byte[]? _logoRom;
     private readonly byte[]? _logoExtRom;
     private byte _boardButtonState;
@@ -232,6 +232,18 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     /// <summary>Write directly to backing RAM, bypassing ROM protection and hardware routing.</summary>
     public byte ReadRam(ushort address) => _ram[address];
     public void WriteRam(ushort address, byte data) => _ram[address] = data;
+
+    /// <summary>
+    /// Test hook: replace the BASIC-side extension ROM with an arbitrary 16K image (e.g. a
+    /// paged library module .bin). Subsequent <c>RomSwapExtension</c> maps these bytes at $C000.
+    /// Lets a test JSR a module's dispatch directly without the demand-pager (not modeled here).
+    /// </summary>
+    internal void LoadExtensionRomBytesForTest(byte[] rom)
+    {
+        ArgumentNullException.ThrowIfNull(rom);
+        _extRom = new byte[16384];
+        Array.Copy(rom, _extRom, Math.Min(rom.Length, 16384));
+    }
 
     private void LoadPrimaryRuntimeRom(byte[] data)
     {
