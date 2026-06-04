@@ -8,16 +8,18 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace e6502UnitTests;
 
 /// <summary>
-/// Proves the canonical paged-library mailbox region $0300-$031F (libabi.inc
-/// LIB_MBOX) stays clear in NovaLogo — the Logo sibling of
-/// <see cref="MailboxReservationTests"/> for NovaBASIC. The mailbox must be
-/// FREE in every runtime.
+/// Proves the canonical paged-library reserved band $0300-$041F stays clear in
+/// NovaLogo — the Logo sibling of <see cref="MailboxReservationTests"/> for
+/// NovaBASIC. The band = the $0300-$031F mailbox (libabi.inc LIB_MBOX) plus the
+/// $0320-$041F resident loader band (256 B for libcall.s). Both must be FREE in
+/// every runtime.
 ///
 /// NovaLogo carves the hole in novalogo.cfg by moving the BSS region START up
-/// from $0280 to $0320 (keeping its END fixed at $8000). Before that carve,
-/// the very first BSS object — proc_body_buf (2048 bytes at $0280-$0A7F in
-/// procedures.s) — straddles $0300-$031F, so any procedure definition writes
-/// through the mailbox.
+/// to $0420 (keeping its END fixed at $8000) and pushing HEAP_START to $0500,
+/// a uniform +$0100 shift that preserves the proven-safe BSS↔heap overlap.
+/// Before that carve, the very first BSS object — proc_body_buf (2048 bytes in
+/// procedures.s) — straddles the band, so any procedure definition writes
+/// through it.
 ///
 /// Approach (sentinel-survives, the strongest faithful proof against the real
 /// shipped novalogo.bin running on the Avalonia CompositeBusDevice): cold-start
@@ -39,7 +41,9 @@ namespace e6502UnitTests;
 public class NovaLogoMailboxReservationTests
 {
     private const ushort MailboxStart = 0x0300;
-    private const ushort MailboxEnd = 0x0320; // exclusive (LIB_MBOX_END)
+    // Reserved band = $0300-$031F mailbox (LIB_MBOX) + $0320-$041F resident
+    // loader band (libcall.s). Exclusive end = $0420.
+    private const ushort MailboxEnd = 0x0420;
     private const byte Sentinel = 0x5A;
 
     [TestMethod]
@@ -54,7 +58,7 @@ public class NovaLogoMailboxReservationTests
         // Wait for the Logo prompt ("?") after cold start.
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        // Paint the mailbox sentinel AFTER Logo has cold-started (cold start
+        // Paint the band sentinel AFTER Logo has cold-started (cold start
         // clears low RAM), so any later corruption is the runtime's doing.
         for (ushort a = MailboxStart; a < MailboxEnd; a++)
             bus.WriteRam(a, Sentinel);
@@ -90,11 +94,12 @@ public class NovaLogoMailboxReservationTests
         Assert.IsFalse(screen.Contains("OUT OF MEMORY", StringComparison.OrdinalIgnoreCase),
             $"Logo program exhausted the heap; the test program is broken.\n{screen}");
 
-        // The sentinel must survive byte-for-byte.
+        // The sentinel must survive byte-for-byte across the whole band.
         for (ushort a = MailboxStart; a < MailboxEnd; a++)
             Assert.AreEqual(Sentinel, bus.ReadRam(a),
-                $"NovaLogo clobbered mailbox byte ${a:X4} (expected $5A, got " +
-                $"${bus.ReadRam(a):X2}). BSS must start at $0320 so $0300-$031F stays clear.");
+                $"NovaLogo clobbered reserved band byte ${a:X4} (expected $5A, got " +
+                $"${bus.ReadRam(a):X2}). BSS must start at $0420 (HEAP_START=$0500) so " +
+                $"$0300-$041F stays clear.");
     }
 
     private static void QueueText(ScreenEditor editor, string text)

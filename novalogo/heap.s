@@ -1,7 +1,9 @@
 ; heap.s — bump allocator with GC headers for NovaLogo
-; Heap range: $0400 to HEAP_END-1.
+; Heap range: $0500 to HEAP_END-1.
+; $0300-$031F = cross-runtime library mailbox (libabi.inc LIB_MBOX);
+; $0320-$041F = resident library loader band (libcall.s). Both reserved.
 
-HEAP_START = $0400
+HEAP_START = $0500
 HEAP_END   = $9800          ; one past last usable byte. $9800-$9BFF = editor BSS
                             ; (extension), $9C00-$9F10 = pinned turtle work+state.
 
