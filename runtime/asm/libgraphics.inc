@@ -174,9 +174,56 @@ GFN_COPPER_SET_SPRITE_REG = $49 ; (x:ARG0 s16, y:ARG1, sprIdx|field:ARG2, val:AR
 ;             $4A-$4F reserved
 
 ; =====================================================================
-; $50-$5F  blit / dma  (drivers: blitter.s + dma.s)
-;   blitcopy/blitfill/blit-start/wait/dmacopy/dmafill + status/err/count
-; (constants filled in batch 4b.6)
+; $50-$5F  blit / dma  (drivers: runtime/asm/blitter.s + runtime/asm/dma.s)
+;   blitcopy blitfill blit-start blit-wait dmacopy dmafill
+;   + blit status/err/count + dma status/err/count reporters
+;
+; Arg-register conventions, VERIFIED against runtime/asm/blitter.s+blitter.inc,
+; runtime/asm/dma.s+dma.inc, and the BLT_*/DMA_* register map in nova.inc
+; (mirrored by VirtualBlitterController / VirtualDmaController on the bus).
+;
+; Both controllers are 24-bit-address, length/size-bounded engines over a set of
+; unified memory "spaces" (CPU=0, VGC_CHAR=1, VGC_COLOR=2, VGC_GFX=3,
+; VGC_SPRITE=4, XRAM=5, VGC_TEXTATTR=7 — BLT_SPACE_* alias the DMA_SPACE_*).
+; The drivers load the hardware registers, write *_CMD_REG = *_CMD_START, then
+; spin in *_wait on *_STATUS_REG until it leaves BUSY; they return A=0 on OK,
+; A=1 on error (detail left in *_ERRCODE_REG). The wrappers marshal the ARG
+; cells into the hardware registers, JSR the driver, and set STATUS=OK (the
+; driver already self-waited; the reporters expose the controller's status/
+; errcode/count for callers that want the detail).
+;
+; DMA is a 1-D bulk move: src/dst are flat 24-bit offsets within their space.
+;   ARG0: byte0=srcSpace, byte1=dstSpace, byte2=fillValue (fill only)
+;   ARG1: src offset (24-bit, low 3 bytes; ignored by fill)
+;   ARG2: dst offset (24-bit, low 3 bytes)
+;   ARG3: length    (24-bit, low 3 bytes)
+;
+; BLIT is a 2-D rectangular move. To keep the op within 4 arg cells the wrapper
+; uses a tightly-packed rectangle: srcStride = dstStride = width (no padding
+; between rows). Callers needing arbitrary strides drive the BLT_* registers
+; directly + GFN_BLIT_START / GFN_BLIT_WAIT.
+;   ARG0: byte0=srcSpace, byte1=dstSpace, byte2=fillValue (fill only)
+;   ARG1: src offset (24-bit; ignored by fill)
+;   ARG2: dst offset (24-bit)
+;   ARG3: byte0/1 = width (16-bit), byte2/3 = height (16-bit)
+;
+; Reporters write LIB_RESULT (4-byte LE, high bytes zeroed) then STATUS=OK:
+;   *_STATUS -> the controller status byte (BUSY/OK/ERROR),
+;   *_ERR    -> the controller error byte (0 = none),
+;   *_COUNT  -> 24-bit bytes-moved counter (3 register bytes -> RESULT low 24 bits).
+GFN_BLITCOPY    = $50  ; (ARG0=spaces+fill, ARG1=src, ARG2=dst, ARG3=w|h) -> blitter_copy
+GFN_BLITFILL    = $51  ; (ARG0=dstSpace+fill, ARG2=dst, ARG3=w|h)         -> blitter_fill
+GFN_BLIT_START  = $52  ; () issue BLT_CMD_START on pre-loaded regs + wait  -> blitter_start_copy
+GFN_BLIT_WAIT   = $53  ; () poll BLT_STATUS to completion                  -> blitter_wait
+GFN_DMACOPY     = $54  ; (ARG0=spaces+fill, ARG1=src, ARG2=dst, ARG3=len) -> dma_copy
+GFN_DMAFILL     = $55  ; (ARG0=dstSpace+fill, ARG2=dst, ARG3=len)         -> dma_fill
+GFN_BLIT_STATUS = $56  ; () reporter -> RESULT = BLT_STATUS_REG byte
+GFN_BLIT_ERR    = $57  ; () reporter -> RESULT = BLT_ERRCODE_REG byte
+GFN_BLIT_COUNT  = $58  ; () reporter -> RESULT = 24-bit BLT bytes-written
+GFN_DMA_STATUS  = $59  ; () reporter -> RESULT = DMA_STATUS_REG byte
+GFN_DMA_ERR     = $5A  ; () reporter -> RESULT = DMA_ERRCODE_REG byte
+GFN_DMA_COUNT   = $5B  ; () reporter -> RESULT = 24-bit DMA bytes-moved
+;             $5C-$5F reserved
 
 ; =====================================================================
 ; $60-$7F  vsprite  (driver: vsprite.s)

@@ -15,12 +15,13 @@
 
 ; Highest implemented fn-id + 1. Grows per domain batch. The draw domain $00-$09
 ; is live; the text/mode domain $10-$1B is live (batch 4b.3); the hw-sprite domain
-; $20-$3B is live (batch 4b.4); the copper domain $40-$49 is live (batch 4b.5).
+; $20-$3B is live (batch 4b.4); the copper domain $40-$49 is live (batch 4b.5);
+; the blit/dma domain $50-$5B is live (batch 4b.6).
 ; The jtable is dense from $00..GFX_FN_COUNT-1: implemented ids point at their
-; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F) points
-; at gfn_unimpl so it resolves to LERR_NO_FN. ids >= GFX_FN_COUNT ($4A+) resolve
-; to LERR_NO_FN via the dispatch bounds-check.
-GFX_FN_COUNT = $4A
+; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F, $4A-$4F,
+; $5C-$5F) points at gfn_unimpl so it resolves to LERR_NO_FN. ids >= GFX_FN_COUNT
+; ($5C+) resolve to LERR_NO_FN via the dispatch bounds-check.
+GFX_FN_COUNT = $5C
 
 ; GTEXT copies its BYTES string into the VGC FIO_NAME buffer ($B9B0-$B9EF, 64
 ; bytes). Mirror fio.inc's FIO_NAME_LIMIT here (fio.inc isn't pulled into the
@@ -122,7 +123,25 @@ gfx_jtable:
       .word   gfn_copper_split-1       ; $47 COPPER_SPLIT
       .word   gfn_copper_set_reg-1     ; $48 COPPER_SET_REG
       .word   gfn_copper_set_sprite_reg-1 ; $49 COPPER_SET_SPRITE_REG
-      ; $4A.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
+      .word   gfn_unimpl-1             ; $4A gap
+      .word   gfn_unimpl-1             ; $4B gap
+      .word   gfn_unimpl-1             ; $4C gap
+      .word   gfn_unimpl-1             ; $4D gap
+      .word   gfn_unimpl-1             ; $4E gap
+      .word   gfn_unimpl-1             ; $4F gap
+      .word   gfn_blitcopy-1           ; $50 BLITCOPY
+      .word   gfn_blitfill-1           ; $51 BLITFILL
+      .word   gfn_blit_start-1         ; $52 BLIT_START
+      .word   gfn_blit_wait-1          ; $53 BLIT_WAIT
+      .word   gfn_dmacopy-1            ; $54 DMACOPY
+      .word   gfn_dmafill-1            ; $55 DMAFILL
+      .word   gfn_blit_status-1        ; $56 BLIT_STATUS (reporter)
+      .word   gfn_blit_err-1           ; $57 BLIT_ERR    (reporter)
+      .word   gfn_blit_count-1         ; $58 BLIT_COUNT  (reporter)
+      .word   gfn_dma_status-1         ; $59 DMA_STATUS  (reporter)
+      .word   gfn_dma_err-1            ; $5A DMA_ERR     (reporter)
+      .word   gfn_dma_count-1          ; $5B DMA_COUNT   (reporter)
+      ; $5C.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
 
 ; Any reachable-but-unimplemented fn-id: report LERR_NO_FN.
 gfn_unimpl:
@@ -694,15 +713,204 @@ gfn_copper_set_sprite_reg:
       jsr     copper_add
       jmp     finish_ok
 
+; =====================================================================
+; $50-$5B  blit / dma domain (batch 4b.6). Drivers: blitter.s + dma.s.
+;
+; Each move op marshals the ARG cells into the BLT_*/DMA_* hardware registers
+; (memory-mapped at $BA83.. / $BA63.., NOT code space — RAM-side stores), then
+; JSRs the driver entry, which issues the *_CMD_START and self-waits on the
+; controller status register. The wrapper then sets STATUS=OK (finish_ok_nowait):
+; the driver's A=0/1 ok/error return is exposed separately via the status/err
+; reporters, matching the established "wrapper always OK on dispatch; reporters
+; carry the detail" pattern. Reporters read the controller registers into
+; LIB_RESULT.  See libgraphics.inc for the full arg-cell -> register contract.
+;
+; Arg byte layout (LE 32-bit cells; only the documented bytes are read):
+;   ARG0: byte0 = srcSpace, byte1 = dstSpace, byte2 = fillValue
+;   ARG1: src offset (bytes 0..2 = 24-bit)
+;   ARG2: dst offset (bytes 0..2 = 24-bit)
+;   ARG3: copy/fill MOVE -> 24-bit length; BLIT -> width(b0/b1)|height(b2/b3)
+; =====================================================================
+
+; --- $50 BLITCOPY: 2-D rectangular copy, tightly packed (stride = width). ---
+gfn_blitcopy:
+      lda     LIB_ARG0                 ; srcSpace
+      sta     BLT_SRCSPACE
+      lda     LIB_ARG0+1               ; dstSpace
+      sta     BLT_DSTSPACE
+      lda     LIB_ARG1                 ; src offset (24-bit)
+      sta     BLT_SRCL
+      lda     LIB_ARG1+1
+      sta     BLT_SRCM
+      lda     LIB_ARG1+2
+      sta     BLT_SRCH
+      lda     LIB_ARG2                 ; dst offset (24-bit)
+      sta     BLT_DSTL
+      lda     LIB_ARG2+1
+      sta     BLT_DSTM
+      lda     LIB_ARG2+2
+      sta     BLT_DSTH
+      lda     LIB_ARG3                 ; width (16-bit) -> WIDTH + both strides
+      sta     BLT_WIDTHL
+      sta     BLT_SRCSTRL
+      sta     BLT_DSTSTRL
+      lda     LIB_ARG3+1
+      sta     BLT_WIDTHH
+      sta     BLT_SRCSTRH
+      sta     BLT_DSTSTRH
+      lda     LIB_ARG3+2               ; height (16-bit)
+      sta     BLT_HEIGHTL
+      lda     LIB_ARG3+3
+      sta     BLT_HEIGHTH
+      jsr     blitter_copy             ; STZ MODE/CKEY; CMD_START; wait
+      jmp     finish_ok_nowait
+
+; --- $51 BLITFILL: fill a tightly-packed rectangle with ARG0.byte2. ---
+; blitter_fill zeros the src regs + CKEY itself; we set dst/geometry + fill value.
+gfn_blitfill:
+      lda     LIB_ARG0+1               ; dstSpace
+      sta     BLT_DSTSPACE
+      lda     LIB_ARG0+2               ; fill value
+      sta     BLT_FILLVALUE
+      lda     LIB_ARG2                 ; dst offset (24-bit)
+      sta     BLT_DSTL
+      lda     LIB_ARG2+1
+      sta     BLT_DSTM
+      lda     LIB_ARG2+2
+      sta     BLT_DSTH
+      lda     LIB_ARG3                 ; width (16-bit) -> WIDTH + dst stride
+      sta     BLT_WIDTHL
+      sta     BLT_DSTSTRL
+      lda     LIB_ARG3+1
+      sta     BLT_WIDTHH
+      sta     BLT_DSTSTRH
+      lda     LIB_ARG3+2               ; height (16-bit)
+      sta     BLT_HEIGHTL
+      lda     LIB_ARG3+3
+      sta     BLT_HEIGHTH
+      jsr     blitter_fill
+      jmp     finish_ok_nowait
+
+; --- $52 BLIT_START: issue a copy on caller-preloaded BLT_* registers + wait. ---
+gfn_blit_start:
+      jsr     blitter_start_copy
+      jmp     finish_ok_nowait
+
+; --- $53 BLIT_WAIT: poll BLT_STATUS to completion (caller-issued op). ---
+gfn_blit_wait:
+      jsr     blitter_wait
+      jmp     finish_ok_nowait
+
+; --- $54 DMACOPY: 1-D bulk copy. ---
+gfn_dmacopy:
+      lda     LIB_ARG0                 ; srcSpace
+      sta     DMA_SRCSPACE
+      lda     LIB_ARG0+1               ; dstSpace
+      sta     DMA_DSTSPACE
+      lda     LIB_ARG1                 ; src offset (24-bit)
+      sta     DMA_SRCL
+      lda     LIB_ARG1+1
+      sta     DMA_SRCM
+      lda     LIB_ARG1+2
+      sta     DMA_SRCH
+      lda     LIB_ARG2                 ; dst offset (24-bit)
+      sta     DMA_DSTL
+      lda     LIB_ARG2+1
+      sta     DMA_DSTM
+      lda     LIB_ARG2+2
+      sta     DMA_DSTH
+      lda     LIB_ARG3                 ; length (24-bit)
+      sta     DMA_LENL
+      lda     LIB_ARG3+1
+      sta     DMA_LENM
+      lda     LIB_ARG3+2
+      sta     DMA_LENH
+      jsr     dma_copy                 ; STZ MODE; CMD_START; wait
+      jmp     finish_ok_nowait
+
+; --- $55 DMAFILL: fill DMA range with ARG0.byte2. ---
+; dma_fill zeros the src regs itself; we set dst/length/space + fill value.
+gfn_dmafill:
+      lda     LIB_ARG0+1               ; dstSpace
+      sta     DMA_DSTSPACE
+      lda     LIB_ARG0+2               ; fill value
+      sta     DMA_FILLVALUE
+      lda     LIB_ARG2                 ; dst offset (24-bit)
+      sta     DMA_DSTL
+      lda     LIB_ARG2+1
+      sta     DMA_DSTM
+      lda     LIB_ARG2+2
+      sta     DMA_DSTH
+      lda     LIB_ARG3                 ; length (24-bit)
+      sta     DMA_LENL
+      lda     LIB_ARG3+1
+      sta     DMA_LENM
+      lda     LIB_ARG3+2
+      sta     DMA_LENH
+      jsr     dma_fill
+      jmp     finish_ok_nowait
+
+; --- reporters: copy a controller register into LIB_RESULT, then STATUS=OK. ---
+; finish_result24 — copy 3 consecutive register bytes at (ABS,X) base into the
+;   low 24 bits of LIB_RESULT (top byte zeroed). X holds the per-fn base low byte
+;   via an absolute,Y-free path: callers JSR with the count-low address in NVR0
+;   pointer would need ZP; the count regs are fixed addresses, so each reporter
+;   loads them directly and falls into finish_result_store24.
+; finish_result_store24 — A=byte0(low), Y=byte1(mid), X=byte2(high) -> LIB_RESULT.
+finish_result_store24:
+      sta     LIB_RESULT
+      sty     LIB_RESULT+1
+      stx     LIB_RESULT+2
+      lda     #0
+      sta     LIB_RESULT+3
+      jmp     finish_ok_nowait
+
+; --- $56 BLIT_STATUS / $57 BLIT_ERR: single controller byte -> RESULT. ---
+gfn_blit_status:
+      lda     BLT_STATUS_REG
+      jmp     finish_result8
+
+gfn_blit_err:
+      lda     BLT_ERRCODE_REG
+      jmp     finish_result8
+
+; --- $58 BLIT_COUNT: 24-bit bytes-written counter -> RESULT low 24 bits. ---
+gfn_blit_count:
+      lda     BLT_CNTL
+      ldy     BLT_CNTM
+      ldx     BLT_CNTH
+      jmp     finish_result_store24
+
+; --- $59 DMA_STATUS / $5A DMA_ERR: single controller byte -> RESULT. ---
+gfn_dma_status:
+      lda     DMA_STATUS_REG
+      jmp     finish_result8
+
+gfn_dma_err:
+      lda     DMA_ERRCODE_REG
+      jmp     finish_result8
+
+; --- $5B DMA_COUNT: 24-bit bytes-moved counter -> RESULT low 24 bits. ---
+gfn_dma_count:
+      lda     DMA_CNTL
+      ldy     DMA_CNTM
+      ldx     DMA_CNTH
+      jmp     finish_result_store24
+
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
 ; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.
 ; sprite.s provides the hw-sprite command/register/collision driver entries.
 ; copper.s adds the copper command/list/add/register-prep entries; copper_split.s
 ; adds copper_split_mode (it pulls vgc.s + copper.s, all dedup'd by .ifndef guards).
+; blitter.s + dma.s provide the $BA-range move-engine entries (batch 4b.6); their
+; .inc helpers pull nova.inc for the BLT_*/DMA_* register addresses, dedup'd by
+; the same .ifndef guards.
       .include "vgc.s"
       .include "sprite.s"
       .include "copper.s"
       .include "copper_split.s"
+      .include "blitter.s"
+      .include "dma.s"
 
       .segment "VECTORS"             ; $FFFA — don't-care under SEI; fills the 16KB image
       .word   MOD_ENTRY, MOD_ENTRY, MOD_ENTRY

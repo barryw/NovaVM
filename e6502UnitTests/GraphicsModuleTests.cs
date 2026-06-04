@@ -57,6 +57,13 @@ namespace e6502UnitTests
                              GFN_COPPER_OFF = 0x44, GFN_COPPER_USE = 0x45,
                              GFN_COPPER_END = 0x46, GFN_COPPER_SPLIT = 0x47,
                              GFN_COPPER_SET_REG = 0x48, GFN_COPPER_SET_SPRITE_REG = 0x49;
+        // Blit/DMA-domain fn-ids ($50-$5B), batch 4b.6.
+        private const byte   GFN_BLITCOPY = 0x50, GFN_BLITFILL = 0x51,
+                             GFN_BLIT_START = 0x52, GFN_BLIT_WAIT = 0x53,
+                             GFN_DMACOPY = 0x54, GFN_DMAFILL = 0x55,
+                             GFN_BLIT_STATUS = 0x56, GFN_BLIT_ERR = 0x57,
+                             GFN_BLIT_COUNT = 0x58, GFN_DMA_STATUS = 0x59,
+                             GFN_DMA_ERR = 0x5A, GFN_DMA_COUNT = 0x5B;
         // VGC sprite attribute field offsets (nova.inc VGC_SPR_*_OFF).
         private const byte   SPR_FLAGS_OFF = 0x05;
         private const byte   SPR_FLAG_ENABLE = 0x80, SPR_FLAG_XFLIP = 0x01, SPR_FLAG_YFLIP = 0x02;
@@ -180,6 +187,31 @@ namespace e6502UnitTests
 
             for (int guard = 0; guard < 2_000_000 && cpu.Pc != Sentinel; guard++)
                 cpu.ExecuteNext();
+            Assert.AreEqual(Sentinel, cpu.Pc, $"fn ${fn:X2} dispatch did not RTS back to the sentinel");
+            Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS), $"fn ${fn:X2} must set LIB_STATUS = OK");
+        }
+
+        // Like RunFn, but pumps bus.AdvanceCycles each CPU step. The blitter completes
+        // synchronously on the BLT_CMD write, but the DMA controller only advances when
+        // CompositeBusDevice.AdvanceCycles is called — so dma_wait's status spin needs
+        // the bus pumped to ever leave BUSY (mirrors AvaloniaDmaTests.RunUntilDmaNotBusy).
+        private static void RunFnPumped(CompositeBusDevice bus, byte fn)
+        {
+            bus.WriteRam(FN_ID, fn);
+            bus.WriteRam(STATUS, 0xFF);   // poison so a real OK write is observable
+
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            bus.WriteRam(0x01FF, (byte)((Sentinel - 1) >> 8));
+            bus.WriteRam(0x01FE, (byte)((Sentinel - 1) & 0xFF));
+            var s = cpu.GetState();
+            cpu.RestoreState(new CpuState(s.A, s.X, s.Y, 0xFD, 0xC000,
+                                          s.Nf, s.Vf, s.Df, true /*I*/, s.Zf, s.Cf));
+
+            for (int guard = 0; guard < 2_000_000 && cpu.Pc != Sentinel; guard++)
+            {
+                cpu.ExecuteNext();
+                bus.AdvanceCycles(16);   // pump the DMA/blitter engines per step
+            }
             Assert.AreEqual(Sentinel, cpu.Pc, $"fn ${fn:X2} dispatch did not RTS back to the sentinel");
             Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS), $"fn ${fn:X2} must set LIB_STATUS = OK");
         }
@@ -1181,6 +1213,219 @@ namespace e6502UnitTests
             Assert.AreEqual(Sentinel, cpu.Pc, "copper-range gap must still RTS to the sentinel");
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
                 "id $3C is a gap in the dense table -> gfn_unimpl -> LERR_NO_FN");
+        }
+
+        // =====================================================================
+        // Blit/DMA domain ($50-$5B), batch 4b.6. The blitter completes synchronously
+        // on the BLT_CMD write; the DMA controller advances only when the bus is
+        // pumped (RunFnPumped). Both move bytes between unified memory spaces; the
+        // gfx-plane effect is asserted via the real VGC memory API. The status/err/
+        // count reporters surface the controller registers into LIB_RESULT.
+        //
+        // ARG layout (see runtime/asm/libgraphics.inc):
+        //   ARG0 byte0=srcSpace, byte1=dstSpace, byte2=fillValue
+        //   ARG1 = src offset (24-bit), ARG2 = dst offset (24-bit)
+        //   ARG3 = MOVE: 24-bit length; BLIT: width(b0/b1)|height(b2/b3)
+        // =====================================================================
+
+        private const byte DMA_SPACE_GFX = 0x03;   // DmaSpaceVgcGfx / BltSpaceVgcGfx
+
+        // Flat gfx-space byte accessors (offset = y*GfxWidth + x for 2-D content).
+        private static byte GfxByte(CompositeBusDevice bus, int offset)
+        {
+            Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, offset, out byte v),
+                $"failed to read gfx byte {offset}");
+            return v;
+        }
+
+        private static void SetGfxByte(CompositeBusDevice bus, int offset, byte value) =>
+            Assert.IsTrue(bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, offset, value),
+                $"failed to write gfx byte {offset}");
+
+        // --- $54 DMACOPY: a contiguous run copies within the gfx space. ---
+        [TestMethod]
+        public void Axis2_DmaCopy_MovesBytesWithinGfxSpace()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Seed a 16-byte source pattern at gfx offset 0; clear the dest at 0x1000.
+            const int src = 0, dst = 0x1000, len = 16;
+            for (int i = 0; i < len; i++) SetGfxByte(bus, src + i, (byte)(0xA0 + i));
+            for (int i = 0; i < len; i++) SetGfxByte(bus, dst + i, 0x00);
+
+            SetArg(bus, ARG0, DMA_SPACE_GFX | (DMA_SPACE_GFX << 8));   // src+dst space = gfx
+            SetArg(bus, ARG1, src);
+            SetArg(bus, ARG2, dst);
+            SetArg(bus, ARG3, len);
+            RunFnPumped(bus, GFN_DMACOPY);
+
+            for (int i = 0; i < len; i++)
+                Assert.AreEqual((byte)(0xA0 + i), GfxByte(bus, dst + i),
+                    $"DMACOPY must move source byte {i} to the destination");
+            Assert.AreEqual(0x00, GfxByte(bus, dst + len), "DMACOPY must not write past the length");
+        }
+
+        // --- $55 DMAFILL: a run is filled with the requested value. ---
+        [TestMethod]
+        public void Axis2_DmaFill_FillsRunWithValue()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const int dst = 0x2000, len = 32;
+            for (int i = 0; i < len + 1; i++) SetGfxByte(bus, dst + i, 0x11);
+
+            // dstSpace=gfx (byte1), fillValue=0x5E (byte2).
+            SetArg(bus, ARG0, (DMA_SPACE_GFX << 8) | (0x5E << 16));
+            SetArg(bus, ARG2, dst);
+            SetArg(bus, ARG3, len);
+            RunFnPumped(bus, GFN_DMAFILL);
+
+            for (int i = 0; i < len; i++)
+                Assert.AreEqual(0x5E, GfxByte(bus, dst + i), $"DMAFILL must fill byte {i} with 0x5E");
+            Assert.AreEqual(0x11, GfxByte(bus, dst + len), "DMAFILL must not write past the length");
+        }
+
+        // --- $50 BLITCOPY: a 2-D rectangle copies within the gfx space. ---
+        [TestMethod]
+        public void Axis2_BlitCopy_MovesRectangleWithinGfxSpace()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // 4x3 rectangle: source rows at gfx (0,0); dest rows at gfx (0,100).
+            // Tightly packed (stride=width), so the source rect occupies offsets
+            // 0..11 and the dest rect 100*GfxWidth..+11.
+            const int w = 4, h = 3;
+            int dst = 100 * VgcConstants.GfxWidth;
+            for (int i = 0; i < w * h; i++) SetGfxByte(bus, i, (byte)(0x20 + i));
+            for (int i = 0; i < w * h; i++) SetGfxByte(bus, dst + i, 0x00);
+
+            SetArg(bus, ARG0, DMA_SPACE_GFX | (DMA_SPACE_GFX << 8));
+            SetArg(bus, ARG1, 0);                       // src offset
+            SetArg(bus, ARG2, dst);                     // dst offset
+            SetArg(bus, ARG3, w | (h << 16));           // width|height
+            RunFn(bus, GFN_BLITCOPY);                   // blitter completes synchronously
+
+            for (int i = 0; i < w * h; i++)
+                Assert.AreEqual((byte)(0x20 + i), GfxByte(bus, dst + i),
+                    $"BLITCOPY must move rect byte {i}");
+
+            // BLIT_COUNT reporter must report w*h bytes written.
+            RunFn(bus, GFN_BLIT_COUNT);
+            Assert.AreEqual((uint)(w * h), GetResult(bus), "BLIT_COUNT must report bytes written");
+        }
+
+        // --- $51 BLITFILL: a 2-D rectangle is filled with the requested value. ---
+        [TestMethod]
+        public void Axis2_BlitFill_FillsRectangleWithValue()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const int w = 5, h = 4;
+            int dst = 50 * VgcConstants.GfxWidth;
+            for (int i = 0; i < w * h + 1; i++) SetGfxByte(bus, dst + i, 0x22);
+
+            // dstSpace=gfx (byte1), fillValue=0x7C (byte2).
+            SetArg(bus, ARG0, (DMA_SPACE_GFX << 8) | (0x7C << 16));
+            SetArg(bus, ARG2, dst);
+            SetArg(bus, ARG3, w | (h << 16));
+            RunFn(bus, GFN_BLITFILL);
+
+            for (int i = 0; i < w * h; i++)
+                Assert.AreEqual(0x7C, GfxByte(bus, dst + i), $"BLITFILL must fill rect byte {i}");
+            Assert.AreEqual(0x22, GfxByte(bus, dst + w * h), "BLITFILL must not write past the rect");
+        }
+
+        // --- $56/$57 BLIT_STATUS + BLIT_ERR: reporters after a clean blit. ---
+        [TestMethod]
+        public void Axis2_BlitStatusAndErr_ReportDoneAndNoError()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Run a small blit so the controller lands in OK/no-error.
+            const int w = 2, h = 2;
+            for (int i = 0; i < w * h; i++) SetGfxByte(bus, i, (byte)(0x30 + i));
+            SetArg(bus, ARG0, DMA_SPACE_GFX | (DMA_SPACE_GFX << 8));
+            SetArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, 0x800);
+            SetArg(bus, ARG3, w | (h << 16));
+            RunFn(bus, GFN_BLITCOPY);
+
+            RunFn(bus, GFN_BLIT_STATUS);
+            Assert.AreEqual((uint)VgcConstants.BltStatusOk, GetResult(bus),
+                "BLIT_STATUS must report OK after a clean blit");
+
+            RunFn(bus, GFN_BLIT_ERR);
+            Assert.AreEqual((uint)VgcConstants.BltErrNone, GetResult(bus),
+                "BLIT_ERR must report no-error after a clean blit");
+        }
+
+        // --- $59/$5A/$5B DMA_STATUS + DMA_ERR + DMA_COUNT: reporters after a clean DMA. ---
+        [TestMethod]
+        public void Axis2_DmaStatusErrCount_ReportDoneNoErrorAndCount()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const int len = 24;
+            for (int i = 0; i < len; i++) SetGfxByte(bus, i, (byte)(0x40 + i));
+            SetArg(bus, ARG0, DMA_SPACE_GFX | (DMA_SPACE_GFX << 8));
+            SetArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, 0x3000);
+            SetArg(bus, ARG3, len);
+            RunFnPumped(bus, GFN_DMACOPY);
+
+            // Reporters are pure register reads (no engine advance needed) -> RunFn.
+            RunFn(bus, GFN_DMA_STATUS);
+            Assert.AreEqual((uint)VgcConstants.DmaStatusOk, GetResult(bus),
+                "DMA_STATUS must report OK after a clean copy");
+
+            RunFn(bus, GFN_DMA_ERR);
+            Assert.AreEqual((uint)VgcConstants.DmaErrNone, GetResult(bus),
+                "DMA_ERR must report no-error after a clean copy");
+
+            RunFn(bus, GFN_DMA_COUNT);
+            Assert.AreEqual((uint)len, GetResult(bus), "DMA_COUNT must report bytes moved");
+        }
+
+        // --- Loader-axis smoke: a blit fn-id routes through the real lib_call. ---
+        // BLITCOPY is used (not a DMA op) because LibLoaderBus has no peripherals:
+        // BLT/DMA status reads return dead RAM (0=idle), so blitter_wait/dma_wait
+        // exit immediately (no hang) and the wrapper still reports OK on dispatch.
+        [TestMethod]
+        public void Axis1_BlitCopy_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            // ARG cells land in dead RAM on the loader bus; we only assert routing.
+            bus.PokeRam(ARG0, DMA_SPACE_GFX); bus.PokeRam((ushort)(ARG0 + 1), DMA_SPACE_GFX);
+            bus.PokeRam(ARG3, 1); bus.PokeRam((ushort)(ARG3 + 2), 1);   // width=1, height=1
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_BLITCOPY);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS), "BLITCOPY must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
+        }
+
+        // --- Dispatch density: a gap id above the blit/dma range ($5C) returns LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_BlitDmaRangeGap_ReturnsNoFn()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.WriteRam(FN_ID, 0x5C);   // first id past GFX_FN_COUNT-1 ($5B)
+            bus.WriteRam(STATUS, 0x00);  // poison opposite to expected non-OK
+
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            bus.WriteRam(0x01FF, (byte)((Sentinel - 1) >> 8));
+            bus.WriteRam(0x01FE, (byte)((Sentinel - 1) & 0xFF));
+            var s = cpu.GetState();
+            cpu.RestoreState(new CpuState(s.A, s.X, s.Y, 0xFD, 0xC000,
+                                          s.Nf, s.Vf, s.Df, true, s.Zf, s.Cf));
+            for (int guard = 0; guard < 2_000_000 && cpu.Pc != Sentinel; guard++)
+                cpu.ExecuteNext();
+            Assert.AreEqual(Sentinel, cpu.Pc, "blit/dma-range gap must still RTS to the sentinel");
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $5C (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
         }
 
         private static string RepoPath(params string[] parts)
