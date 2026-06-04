@@ -119,24 +119,30 @@ lookup_builtin:
 ;   Entry: eval_val/eval_type already set with the argument
 ;   Must JMP to eval_continue when done
 ; ---------------------------------------------------------------------
+; do_print / do_type share one body. PRINT appends a newline; TYPE does not.
+; The newline flag is carried on the stack across the (balanced) print calls.
 do_print:
+      LDA   #$FF                 ; PRINT: append trailing newline
+      BRA   pt_common
+do_type:
+      LDA   #$00                 ; TYPE: no trailing newline
+pt_common:
+      PHA                        ; save newline flag
       LDA   eval_type
       CMP   #VAL_LIST
-      BEQ   @list
+      BEQ   pt_list
       CMP   #VAL_WORD
-      BEQ   @word
+      BEQ   pt_word
 
       ; Print number
       JSR   print_number
-      JSR   eval_newline
-      JMP   eval_continue
+      BRA   pt_done
 
-@list:
+pt_list:
       JSR   print_list
-      JSR   eval_newline
-      JMP   eval_continue
+      BRA   pt_done
 
-@word:
+pt_word:
       ; Print quoted word — eval_val_lo/hi points at length+chars
       LDA   eval_val_lo
       STA   ptr_lo
@@ -146,50 +152,23 @@ do_print:
       LDA   (ptr_lo),Y         ; length
       TAX
       INY
-@wch:
+pt_wch:
       LDA   (ptr_lo),Y
       STA   VGC_CHAROUT
       INY
       DEX
-      BNE   @wch
+      BNE   pt_wch
+
+pt_done:
+      PLA                        ; restore newline flag
+      BEQ   pt_no_nl
       JSR   eval_newline
+pt_no_nl:
       JMP   eval_continue
 
 ; ---------------------------------------------------------------------
 ; do_type — TYPE <expr>: like PRINT but no newline
 ; ---------------------------------------------------------------------
-do_type:
-      LDA   eval_type
-      CMP   #VAL_LIST
-      BEQ   @list
-      CMP   #VAL_WORD
-      BEQ   @word
-
-      ; Print number (no newline)
-      JSR   print_number
-      JMP   eval_continue
-
-@list:
-      JSR   print_list
-      JMP   eval_continue
-
-@word:
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
-      LDY   #0
-      LDA   (ptr_lo),Y
-      TAX
-      INY
-@wch:
-      LDA   (ptr_lo),Y
-      STA   VGC_CHAROUT
-      INY
-      DEX
-      BNE   @wch
-      JMP   eval_continue
-
 ; ---------------------------------------------------------------------
 ; do_make — MAKE "name value: store a variable
 ;   Arity 0 — we do our own argument evaluation
