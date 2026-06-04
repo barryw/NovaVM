@@ -107,6 +107,29 @@ namespace e6502UnitTests
                              GFN_NVGLOAD_NAMED = 0xA8, GFN_NVGLOAD_NAMED_AT = 0xA9;
         private const byte LERR_FILE_FAIL = 0x86;
         private const byte LERR_IMAGE_FAIL = 0x87;
+        // Anim-domain fn-ids ($C0-$C7), batch 4b.11.
+        private const byte   GFN_ANIM_INIT = 0xC0, GFN_ANIM_START = 0xC1,
+                             GFN_ANIM_STOP = 0xC2, GFN_ANIM_TICK = 0xC3,
+                             GFN_ANIM_TICK_ONE = 0xC4, GFN_ANIM_SET_FRAME = 0xC5,
+                             GFN_ANIM_LOAD_XRAM = 0xC6, GFN_ANIM_LOAD_DISK = 0xC7;
+        private const byte LERR_ANIM_FAIL = 0x88;
+        private const byte ANIM_INVALID_HANDLE = 0xFF;
+        private const byte ANIM_TARGET_SPRITE = 0x00;
+        // Anim descriptor field offsets (runtime/asm/anim.inc ANIM_DESC_*).
+        private const int    ANIM_DESC_FRAME_COUNT = 0, ANIM_DESC_TICKS = 1,
+                             ANIM_DESC_FLAGS = 2, ANIM_DESC_FIRST = 3,
+                             ANIM_DESC_STRIDE = 4, ANIM_DESC_RESERVED = 5;
+        private const byte   ANIM_DESC_LOOP = 0x01;
+        // Tween-domain fn-ids ($D0-$DA), batch 4b.11.
+        private const byte   GFN_TWEEN_BEGIN = 0xD0, GFN_TWEEN_EVAL = 0xD1,
+                             GFN_TWEEN_EVAL_LINEAR = 0xD2, GFN_TWEEN_EVAL_EASE_IN = 0xD3,
+                             GFN_TWEEN_EVAL_EASE_OUT = 0xD4, GFN_TWEEN_EVAL_EASE_IN_OUT = 0xD5,
+                             GFN_TWEEN_STEP = 0xD6, GFN_TWEEN_STEP_LINEAR = 0xD7,
+                             GFN_TWEEN_STEP_EASE_IN = 0xD8, GFN_TWEEN_STEP_EASE_OUT = 0xD9,
+                             GFN_TWEEN_STEP_EASE_IN_OUT = 0xDA;
+        // Tween easing modes (runtime/asm/tween.inc TWEEN_MODE_*).
+        private const byte   TWEEN_MODE_LINEAR = 0, TWEEN_MODE_EASE_IN = 1,
+                             TWEEN_MODE_EASE_OUT = 2, TWEEN_MODE_EASE_IN_OUT = 3;
         // VGC sprite attribute field offsets (nova.inc VGC_SPR_*_OFF).
         private const byte   SPR_FLAGS_OFF = 0x05;
         private const byte   SPR_FLAG_ENABLE = 0x80, SPR_FLAG_XFLIP = 0x01, SPR_FLAG_YFLIP = 0x02;
@@ -2487,6 +2510,303 @@ namespace e6502UnitTests
             RunFnRaw(bus, 0xAA);          // first id past GFX_FN_COUNT-1 ($A9)
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
                 "id $AA (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
+        }
+
+        // =====================================================================
+        // Tween domain ($D0-$DA), batch 4b.11. Pure 16-bit easing math — no
+        // hardware. Every op marshals start/end/duration/mode/frame from the ARG
+        // cells (ARG0=start s16, ARG1=end s16, ARG2.b0=duration, ARG2.b1=mode,
+        // ARG3.b0=frame) and packs the readbacks into LIB_RESULT:
+        //   byte0=VALUEL, byte1=VALUEH, byte2=DONE, byte3=PROGRESS.
+        // These are cleanly unit-testable: the interpolation is deterministic, so
+        // we assert exact values (verified against runtime/asm/tween.s).
+        // =====================================================================
+
+        // Decode the packed tween result. byte0/1 = 16-bit value, byte2 = done,
+        // byte3 = progress.
+        private static (ushort value, byte done, byte progress) TweenResult(CompositeBusDevice bus)
+        {
+            uint r = GetResult(bus);
+            return ((ushort)(r & 0xFFFF), (byte)((r >> 16) & 0xFF), (byte)((r >> 24) & 0xFF));
+        }
+
+        // Set the five tween inputs in the standard ARG layout.
+        private static void SetTweenArgs(CompositeBusDevice bus, int start, int end,
+                                         byte duration, byte frame, byte mode = 0)
+        {
+            SetArg(bus, ARG0, start);
+            SetArg(bus, ARG1, end);
+            SetArg(bus, ARG2, duration | (mode << 8));
+            SetArg(bus, ARG3, frame);
+        }
+
+        // --- $D2 TWEEN_EVAL_LINEAR: the midpoint frame interpolates halfway. ---
+        // start=0, end=200, duration=10, frame=5 -> progress=floor(5*255/10)=127,
+        // value=(0x80 + 200*127)>>8 = 99 (8.8 rounded). Verified against tween.s.
+        [TestMethod]
+        public void Axis2_TweenEvalLinear_MidpointInterpolates()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetTweenArgs(bus, start: 0, end: 200, duration: 10, frame: 5);
+            RunFn(bus, GFN_TWEEN_EVAL_LINEAR);
+
+            var (value, done, progress) = TweenResult(bus);
+            Assert.AreEqual(99, value, "linear midpoint of 0->200 at frame 5/10 must be 99");
+            Assert.AreEqual(127, progress, "progress at frame 5/10 must be floor(5*255/10)=127");
+            Assert.AreEqual(0, done, "frame 5 of 10 is not the end -> DONE must be 0");
+        }
+
+        // --- $D2 TWEEN_EVAL_LINEAR: frame == duration snaps exactly to END + done. ---
+        [TestMethod]
+        public void Axis2_TweenEvalLinear_AtDuration_SnapsToEndAndSetsDone()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetTweenArgs(bus, start: 0, end: 200, duration: 10, frame: 10);
+            RunFn(bus, GFN_TWEEN_EVAL_LINEAR);
+
+            var (value, done, progress) = TweenResult(bus);
+            Assert.AreEqual(200, value, "at frame == duration the value must snap to END (200)");
+            Assert.AreNotEqual(0, done, "at frame == duration DONE must be non-zero");
+            Assert.AreEqual(255, progress, "the snap sets PROGRESS to $FF (255)");
+        }
+
+        // --- $D0 TWEEN_BEGIN: resets to START with DONE clear (frame 0). ---
+        [TestMethod]
+        public void Axis2_TweenBegin_PublishesStartValue()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // start=500, end=1000, duration=8.
+            SetTweenArgs(bus, start: 500, end: 1000, duration: 8, frame: 0);
+            RunFn(bus, GFN_TWEEN_BEGIN);
+
+            var (value, done, _) = TweenResult(bus);
+            Assert.AreEqual(500, value, "TWEEN_BEGIN must publish the START value (500)");
+            Assert.AreEqual(0, done, "TWEEN_BEGIN must clear DONE");
+        }
+
+        // --- $D6 TWEEN_STEP: advances the frame by one before evaluating. ---
+        // Loading frame=4 then stepping evaluates at frame 5 -> same as the eval
+        // midpoint (value 99). Proves the step path increments TWEEN_FRAME.
+        [TestMethod]
+        public void Axis2_TweenStep_AdvancesFrameBeforeEval()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetTweenArgs(bus, start: 0, end: 200, duration: 10, frame: 4,
+                         mode: TWEEN_MODE_LINEAR);
+            RunFn(bus, GFN_TWEEN_STEP);
+
+            var (value, done, progress) = TweenResult(bus);
+            Assert.AreEqual(99, value, "STEP from frame 4 evaluates at frame 5 -> value 99");
+            Assert.AreEqual(127, progress, "STEP must evaluate progress at the advanced frame (5/10)");
+            Assert.AreEqual(0, done, "frame 5 of 10 is not done");
+        }
+
+        // --- $D3/$D4 ease-in vs ease-out: the curves differ from linear + each other. ---
+        // At the same progress (127), ease-in (slow start) lags linear and
+        // ease-out (slow end) leads it. eased value computed from TWEEN_EASE.
+        [TestMethod]
+        public void Axis2_TweenEaseInVsEaseOut_DifferFromLinear()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Linear reference at frame 5/10 of 0->200 = 99.
+            SetTweenArgs(bus, 0, 200, 10, 5);
+            RunFn(bus, GFN_TWEEN_EVAL_LINEAR);
+            int lin = TweenResult(bus).value;
+
+            SetTweenArgs(bus, 0, 200, 10, 5);
+            RunFn(bus, GFN_TWEEN_EVAL_EASE_IN);
+            int easeIn = TweenResult(bus).value;
+
+            SetTweenArgs(bus, 0, 200, 10, 5);
+            RunFn(bus, GFN_TWEEN_EVAL_EASE_OUT);
+            int easeOut = TweenResult(bus).value;
+
+            Assert.IsTrue(easeIn < lin,
+                $"ease-in (slow start) must lag linear at the midpoint ({easeIn} < {lin})");
+            Assert.IsTrue(easeOut > lin,
+                $"ease-out (slow end) must lead linear at the midpoint ({easeOut} > {lin})");
+        }
+
+        // --- Loader-axis smoke: a tween fn-id routes through the real lib_call. ---
+        // Tween is pure math with no peripheral dependency, so it returns OK on
+        // dispatch through the loader.
+        [TestMethod]
+        public void Axis1_TweenEvalLinear_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            bus.PokeRam(ARG0, 0);  bus.PokeRam((ushort)(ARG0 + 1), 0);    // start 0
+            bus.PokeRam(ARG1, 200); bus.PokeRam((ushort)(ARG1 + 1), 0);   // end 200
+            bus.PokeRam(ARG2, 10);                                        // duration
+            bus.PokeRam(ARG3, 5);                                         // frame
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_TWEEN_EVAL_LINEAR);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS),
+                "TWEEN_EVAL_LINEAR must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
+            // The result also round-trips through the loader (RESULT low word = 99).
+            Assert.AreEqual(99, bus.PeekRam(RESULT) | (bus.PeekRam((ushort)(RESULT + 1)) << 8),
+                "TWEEN result low word must come back through the loader as 99");
+        }
+
+        // =====================================================================
+        // Anim domain ($C0-$C7), batch 4b.11. Track-based sprite animation. The
+        // wrapper marshals the descriptor ptr/target/type into the ANIM_* cells;
+        // the effect (sprite shape-slot change) is observable on the real VGC
+        // after START + TICK, because anim_apply_selected calls sprite_set_shape.
+        // =====================================================================
+
+        private const ushort ANIM_DESC = 0x0600;   // caller-resident anim descriptor
+
+        // Write a linear anim descriptor at ANIM_DESC: frameCount, ticksPerFrame,
+        // flags, firstShape, stride (resolved shape = first + frame*stride).
+        private static void WriteAnimDesc(CompositeBusDevice bus, byte frameCount,
+                                          byte ticks, byte flags, byte first, byte stride)
+        {
+            bus.WriteRam((ushort)(ANIM_DESC + ANIM_DESC_FRAME_COUNT), frameCount);
+            bus.WriteRam((ushort)(ANIM_DESC + ANIM_DESC_TICKS), ticks);
+            bus.WriteRam((ushort)(ANIM_DESC + ANIM_DESC_FLAGS), flags);
+            bus.WriteRam((ushort)(ANIM_DESC + ANIM_DESC_FIRST), first);
+            bus.WriteRam((ushort)(ANIM_DESC + ANIM_DESC_STRIDE), stride);
+            bus.WriteRam((ushort)(ANIM_DESC + ANIM_DESC_RESERVED), 0);
+        }
+
+        // --- $C1 ANIM_START: attaching a descriptor to a sprite sets the frame-0 shape. ---
+        [TestMethod]
+        public void Axis2_AnimStart_SetsFirstShapeOnTargetSprite()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // 4-frame loop, 1 tick/frame, linear shapes from slot 20, stride 1.
+            WriteAnimDesc(bus, frameCount: 4, ticks: 1, flags: ANIM_DESC_LOOP,
+                          first: 20, stride: 1);
+
+            SetArg(bus, ARG0, ANIM_DESC & 0xFFFF);   // BYTES descriptor ptr
+            SetArg(bus, ARG1, 0);                    // target sprite 0
+            SetArg(bus, ARG2, ANIM_TARGET_SPRITE);   // target type
+            RunFn(bus, GFN_ANIM_START);
+
+            Assert.AreEqual(0u, GetResult(bus), "first ANIM_START must return track handle 0");
+            Assert.AreEqual(20, bus.Vgc.GetSpriteShapeIndex(0),
+                "ANIM_START must apply frame 0 -> firstShape (20) to the target sprite");
+        }
+
+        // --- $C3 ANIM_TICK: one tick advances the frame so the applied shape steps. ---
+        [TestMethod]
+        public void Axis2_AnimTick_AdvancesShapeOnTargetSprite()
+        {
+            using var bus = MakeAxis2Bus();
+
+            WriteAnimDesc(bus, frameCount: 4, ticks: 1, flags: ANIM_DESC_LOOP,
+                          first: 20, stride: 1);
+            SetArg(bus, ARG0, ANIM_DESC & 0xFFFF);
+            SetArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, ANIM_TARGET_SPRITE);
+            RunFn(bus, GFN_ANIM_START);
+            Assert.AreEqual(20, bus.Vgc.GetSpriteShapeIndex(0), "setup: frame 0 -> shape 20");
+
+            // One engine-wide tick: frame 0 -> 1 (1 tick/frame), shape -> 21.
+            RunFn(bus, GFN_ANIM_TICK);
+            Assert.AreEqual(21, bus.Vgc.GetSpriteShapeIndex(0),
+                "ANIM_TICK must advance frame 0 -> 1 so the applied shape becomes firstShape+stride");
+        }
+
+        // --- $C5 ANIM_SET_FRAME: jumping to a frame applies that frame's shape. ---
+        [TestMethod]
+        public void Axis2_AnimSetFrame_AppliesRequestedFrameShape()
+        {
+            using var bus = MakeAxis2Bus();
+
+            WriteAnimDesc(bus, frameCount: 4, ticks: 1, flags: ANIM_DESC_LOOP,
+                          first: 20, stride: 1);
+            SetArg(bus, ARG0, ANIM_DESC & 0xFFFF);
+            SetArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, ANIM_TARGET_SPRITE);
+            RunFn(bus, GFN_ANIM_START);   // handle 0
+
+            // Jump track 0 to frame 3 -> shape 20 + 3*1 = 23.
+            SetArg(bus, ARG0, 0);
+            SetArg(bus, ARG1, 3);
+            RunFn(bus, GFN_ANIM_SET_FRAME);
+            Assert.AreEqual(23, bus.Vgc.GetSpriteShapeIndex(0),
+                "ANIM_SET_FRAME to frame 3 must apply firstShape + 3*stride (23)");
+        }
+
+        // --- $C1 ANIM_START with a zero-frame (invalid) descriptor -> LERR_ANIM_FAIL. ---
+        [TestMethod]
+        public void Axis2_AnimStart_BadDescriptor_FailsCleanly()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // frameCount 0 is rejected by anim_start (@bad_desc -> $FF handle).
+            WriteAnimDesc(bus, frameCount: 0, ticks: 1, flags: 0, first: 0, stride: 1);
+            SetArg(bus, ARG0, ANIM_DESC & 0xFFFF);
+            SetArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, ANIM_TARGET_SPRITE);
+            RunFnRaw(bus, GFN_ANIM_START);
+
+            Assert.AreEqual(ANIM_INVALID_HANDLE, (byte)GetResult(bus),
+                "a zero-frame descriptor must return the invalid handle ($FF)");
+            Assert.AreEqual(LERR_ANIM_FAIL, bus.ReadRam(STATUS),
+                "a failed ANIM_START must map to LERR_ANIM_FAIL");
+        }
+
+        // --- $C2 ANIM_STOP on an unattached handle -> LERR_ANIM_FAIL (bad handle). ---
+        [TestMethod]
+        public void Axis2_AnimStop_BadHandle_FailsCleanly()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 0);   // no track started -> handle 0 is inactive
+            RunFnRaw(bus, GFN_ANIM_STOP);
+            Assert.AreEqual(LERR_ANIM_FAIL, bus.ReadRam(STATUS),
+                "ANIM_STOP on an inactive handle must map to LERR_ANIM_FAIL");
+        }
+
+        // --- Loader-axis smoke: an anim fn-id routes through the real lib_call. ---
+        // ANIM_INIT clears the track table with no peripheral dependency, so it
+        // returns OK on dispatch through the loader.
+        [TestMethod]
+        public void Axis1_AnimInit_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_ANIM_INIT);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS), "ANIM_INIT must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
+        }
+
+        // --- Dispatch density: a deferred turtle-render id ($B0) returns LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_TurtleRenderRangeGap_ReturnsNoFn()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.WriteRam(STATUS, 0x00);   // poison opposite to expected non-OK
+            RunFnRaw(bus, 0xB0);          // $B0-$BF are reserved for Phase 4c
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $B0 (deferred turtle-render gap) must report LERR_NO_FN");
+        }
+
+        // --- Dispatch bounds: an id at/above GFX_FN_COUNT ($DB) returns LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_AboveTweenRange_ReturnsNoFn()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.WriteRam(STATUS, 0x00);
+            RunFnRaw(bus, 0xDB);          // first id past the last tween fn ($DA)
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $DB (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
         }
 
         private static string RepoPath(params string[] parts)

@@ -21,19 +21,27 @@
                                        ; fio.inc (FIO_GSPACE/GADDRL/H/GLENL/H,
                                        ; FIO_NAME/NAMELEN, FIO_RESULT_OK) + nova.inc
                                        ; (all guarded; nvg.s + fio.s bodies below)
+      .include "anim.inc"              ; ANIM_* BSS symbols + ANIM_RESULT_*/
+                                       ; ANIM_INVALID_HANDLE + helper .globals;
+                                       ; pulls dma/msprite/pager/xram.inc (guarded;
+                                       ; anim.s body included below)
+      .include "tween.inc"             ; TWEEN_* BSS symbols + TWEEN_MODE_* consts
+                                       ; + helper .globals (guarded; tween.s below)
 
 ; Highest implemented fn-id + 1. Grows per domain batch. The draw domain $00-$09
 ; is live; the text/mode domain $10-$1B is live (batch 4b.3); the hw-sprite domain
 ; $20-$3B is live (batch 4b.4); the copper domain $40-$49 is live (batch 4b.5);
 ; the blit/dma domain $50-$5B is live (batch 4b.6); the vsprite domain $60-$71 is
 ; live (batch 4b.7); the msprite/meta-sprite domain $80-$8B is live (batch 4b.8);
-; the image/mem domain $A0-$A9 is live (batch 4b.9).
+; the image/mem domain $A0-$A9 is live (batch 4b.9); the anim domain $C0-$C7 and
+; the tween domain $D0-$DA are live (batch 4b.11). The $B0-$BF turtle-render range
+; is DEFERRED (co-designed with Phase 4c), so $AA-$BF stay gaps.
 ; The jtable is dense from $00..GFX_FN_COUNT-1: implemented ids point at their
 ; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F, $4A-$4F,
-; $5C-$5F, $72-$7F, $8C-$9F, $AA-$AF) points at gfn_unimpl so it resolves to
-; LERR_NO_FN. ids >= GFX_FN_COUNT ($AA+) resolve to LERR_NO_FN via the dispatch
-; bounds-check.
-GFX_FN_COUNT = $AA
+; $5C-$5F, $72-$7F, $8C-$9F, $AA-$BF, $C8-$CF, $DB) points at gfn_unimpl so it
+; resolves to LERR_NO_FN. ids >= GFX_FN_COUNT ($DB+) resolve to LERR_NO_FN via the
+; dispatch bounds-check.
+GFX_FN_COUNT = $DB
 
 ; GTEXT copies its BYTES string into the VGC FIO_NAME buffer ($B9B0-$B9EF, 64
 ; bytes). Mirror fio.inc's FIO_NAME_LIMIT here (fio.inc isn't pulled into the
@@ -250,7 +258,56 @@ gfx_jtable:
       .word   gfn_nvgload_at-1         ; $A7 NVGLOAD_AT
       .word   gfn_nvgload_named-1      ; $A8 NVGLOAD_NAMED
       .word   gfn_nvgload_named_at-1   ; $A9 NVGLOAD_NAMED_AT
-      ; $AA.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
+      .word   gfn_unimpl-1             ; $AA gap -> LERR_NO_FN
+      .word   gfn_unimpl-1             ; $AB gap
+      .word   gfn_unimpl-1             ; $AC gap
+      .word   gfn_unimpl-1             ; $AD gap
+      .word   gfn_unimpl-1             ; $AE gap
+      .word   gfn_unimpl-1             ; $AF gap
+      .word   gfn_unimpl-1             ; $B0 turtle-render (DEFERRED to Phase 4c)
+      .word   gfn_unimpl-1             ; $B1 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $B2 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $B3 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $B4 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $B5 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $B6 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $B7 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $B8 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $B9 turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $BA turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $BB turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $BC turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $BD turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $BE turtle-render (DEFERRED)
+      .word   gfn_unimpl-1             ; $BF turtle-render (DEFERRED)
+      .word   gfn_anim_init-1          ; $C0 ANIM_INIT
+      .word   gfn_anim_start-1         ; $C1 ANIM_START
+      .word   gfn_anim_stop-1          ; $C2 ANIM_STOP
+      .word   gfn_anim_tick-1          ; $C3 ANIM_TICK
+      .word   gfn_anim_tick_one-1      ; $C4 ANIM_TICK_ONE
+      .word   gfn_anim_set_frame-1     ; $C5 ANIM_SET_FRAME
+      .word   gfn_anim_load_xram-1     ; $C6 ANIM_LOAD_XRAM
+      .word   gfn_anim_load_disk-1     ; $C7 ANIM_LOAD_DISK
+      .word   gfn_unimpl-1             ; $C8 gap
+      .word   gfn_unimpl-1             ; $C9 gap
+      .word   gfn_unimpl-1             ; $CA gap
+      .word   gfn_unimpl-1             ; $CB gap
+      .word   gfn_unimpl-1             ; $CC gap
+      .word   gfn_unimpl-1             ; $CD gap
+      .word   gfn_unimpl-1             ; $CE gap
+      .word   gfn_unimpl-1             ; $CF gap
+      .word   gfn_tween_begin-1            ; $D0 TWEEN_BEGIN
+      .word   gfn_tween_eval-1             ; $D1 TWEEN_EVAL
+      .word   gfn_tween_eval_linear-1      ; $D2 TWEEN_EVAL_LINEAR
+      .word   gfn_tween_eval_ease_in-1     ; $D3 TWEEN_EVAL_EASE_IN
+      .word   gfn_tween_eval_ease_out-1    ; $D4 TWEEN_EVAL_EASE_OUT
+      .word   gfn_tween_eval_ease_in_out-1 ; $D5 TWEEN_EVAL_EASE_IN_OUT
+      .word   gfn_tween_step-1             ; $D6 TWEEN_STEP
+      .word   gfn_tween_step_linear-1      ; $D7 TWEEN_STEP_LINEAR
+      .word   gfn_tween_step_ease_in-1     ; $D8 TWEEN_STEP_EASE_IN
+      .word   gfn_tween_step_ease_out-1    ; $D9 TWEEN_STEP_EASE_OUT
+      .word   gfn_tween_step_ease_in_out-1 ; $DA TWEEN_STEP_EASE_IN_OUT
+      ; $DB.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
 
 ; Any reachable-but-unimplemented fn-id: report LERR_NO_FN.
 gfn_unimpl:
@@ -1562,6 +1619,250 @@ gfn_nvgload_named_at:
       jsr     nvg_load_named_at
       jmp     finish_image
 
+; =====================================================================
+; $C0-$C7  anim domain (batch 4b.11). Driver: anim.s (included below; it pulls
+; dma.s/fio.s/pager.s/msprite.s, all dedup'd by the .ifndef guards). State lives
+; in the module-owned ANIM_* BSS block (track table + descriptor/target/shape-
+; load pseudo-registers), persistent across lib_calls and assumed zeroed at cold
+; boot — exactly as msprite (no init fn is required, though ANIM_INIT is exposed).
+;
+; Result mapping (see libgraphics.inc): START returns A = track handle ($FF on
+; failure) -> finish_anim_start (publish + map $FF -> LERR_ANIM_FAIL). Every other
+; op returns A = result code (0 = OK) -> finish_anim (publish + map A!=0 ->
+; LERR_ANIM_FAIL). None issue a VGC command on the wrapper's behalf (the shape
+; loaders self-wait inside the driver), so no wrapper-side command wait.
+
+; finish_anim_start — A = track handle. Publish to LIB_RESULT byte 0 (bytes 1-3
+; zeroed); $FF -> LERR_ANIM_FAIL, any valid handle -> LERR_OK.
+finish_anim_start:
+      sta     LIB_RESULT               ; raw handle -> RESULT byte 0
+      ldx     #0
+      stx     LIB_RESULT+1
+      stx     LIB_RESULT+2
+      stx     LIB_RESULT+3
+      cmp     #ANIM_INVALID_HANDLE
+      beq     @fail
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_ANIM_FAIL
+      sta     LIB_STATUS
+      rts
+
+; finish_anim — A = driver result code (0 = OK). Publish to LIB_RESULT byte 0
+; (bytes 1-3 zeroed); A!=0 -> LERR_ANIM_FAIL, A==0 -> LERR_OK.
+finish_anim:
+      sta     LIB_RESULT               ; raw result code -> RESULT byte 0
+      ldx     #0
+      stx     LIB_RESULT+1
+      stx     LIB_RESULT+2
+      stx     LIB_RESULT+3
+      cmp     #ANIM_RESULT_OK
+      bne     @fail
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_ANIM_FAIL
+      sta     LIB_STATUS
+      rts
+
+; --- $C0 ANIM_INIT: clear the track table ---  (). anim_init returns A=0.
+gfn_anim_init:
+      jsr     anim_init
+      jmp     finish_anim
+
+; --- $C1 ANIM_START: attach a descriptor to a target -> track handle ---
+; BYTES desc:ARG0 ptr16 -> ANIM_DESC_L/H; target:ARG1 -> ANIM_TARGET;
+; type:ARG2 -> ANIM_TARGET_TYPE. The descriptor stays resident in caller RAM.
+gfn_anim_start:
+      lda     LIB_ARG0                 ; descriptor ptr low
+      sta     ANIM_DESC_L
+      lda     LIB_ARG0+1               ; descriptor ptr high
+      sta     ANIM_DESC_H
+      lda     LIB_ARG1                 ; target (sprite index / msprite handle)
+      sta     ANIM_TARGET
+      lda     LIB_ARG2                 ; target type (0 sprite / 1 msprite)
+      sta     ANIM_TARGET_TYPE
+      jsr     anim_start
+      jmp     finish_anim_start
+
+; --- $C2 ANIM_STOP: stop+release one track ---  handle:ARG0 -> A.
+gfn_anim_stop:
+      lda     LIB_ARG0
+      jsr     anim_stop
+      jmp     finish_anim
+
+; --- $C3 ANIM_TICK: advance every running track ---  (). anim_tick returns A=0.
+gfn_anim_tick:
+      jsr     anim_tick
+      jmp     finish_anim
+
+; --- $C4 ANIM_TICK_ONE: advance one running track ---  handle:ARG0 -> A.
+gfn_anim_tick_one:
+      lda     LIB_ARG0
+      jsr     anim_tick_one
+      jmp     finish_anim
+
+; --- $C5 ANIM_SET_FRAME: set one track to a frame index ---
+; handle:ARG0 -> A, frame:ARG1 -> X. anim_set_frame consumes X before selecting
+; the handle, so load A last.
+gfn_anim_set_frame:
+      ldx     LIB_ARG1                 ; frame -> X
+      lda     LIB_ARG0                 ; handle -> A
+      jsr     anim_set_frame
+      jmp     finish_anim
+
+; --- $C6 ANIM_LOAD_XRAM: DMA shape slots from XRAM into VGC sprite shape RAM ---
+; shape:ARG0 -> ANIM_SHAPE, count:ARG1 -> ANIM_COUNT, xaddr24:ARG2 -> ANIM_XADDRL/M/H.
+gfn_anim_load_xram:
+      lda     LIB_ARG0                 ; dest shape slot
+      sta     ANIM_SHAPE
+      lda     LIB_ARG1                 ; slot count
+      sta     ANIM_COUNT
+      lda     LIB_ARG2                 ; xram src offset (24-bit)
+      sta     ANIM_XADDRL
+      lda     LIB_ARG2+1
+      sta     ANIM_XADDRM
+      lda     LIB_ARG2+2
+      sta     ANIM_XADDRH
+      jsr     anim_load_xram_shapes
+      jmp     finish_anim
+
+; --- $C7 ANIM_LOAD_DISK: stream shape slots from a file slice into shape RAM ---
+; shape:ARG0 -> ANIM_SHAPE, count:ARG1 -> ANIM_COUNT, file24:ARG2 -> ANIM_FILEL/M/H,
+; BYTES name:ARG3 ptr16 -> ANIM_NAMEPTR_L/H + ANIM_NAMELEN (name stays in caller
+; RAM; the driver self-copies it through the pager).
+gfn_anim_load_disk:
+      lda     LIB_ARG0                 ; dest shape slot
+      sta     ANIM_SHAPE
+      lda     LIB_ARG1                 ; slot count
+      sta     ANIM_COUNT
+      lda     LIB_ARG2                 ; file src offset (24-bit)
+      sta     ANIM_FILEL
+      lda     LIB_ARG2+1
+      sta     ANIM_FILEM
+      lda     LIB_ARG2+2
+      sta     ANIM_FILEH
+      lda     LIB_ARG3                 ; name ptr low
+      sta     ANIM_NAMEPTR_L
+      lda     LIB_ARG3+1               ; name ptr high
+      sta     ANIM_NAMEPTR_H
+      lda     LIB_ARG3+2               ; name length
+      sta     ANIM_NAMELEN
+      jsr     anim_load_disk_shapes
+      jmp     finish_anim
+
+; =====================================================================
+; $D0-$DA  tween domain (batch 4b.11). Driver: tween.s (included below; pure
+; 16-bit easing math, no hardware, no extra deps). State lives in the module-
+; owned TWEEN_* BSS cells. Every op is reporter-style: marshal the five input
+; cells from the ARG cells, JSR the driver entry, then pack the readbacks into
+; LIB_RESULT and set OK (the math never fails). See libgraphics.inc for the ABI.
+
+; tween_load_args — marshal the five tween input cells from the ARG cells:
+;   ARG0 low word -> TWEEN_STARTL/H, ARG1 low word -> TWEEN_ENDL/H,
+;   ARG2 byte0 -> TWEEN_DURATION, ARG2 byte1 -> TWEEN_MODE,
+;   ARG3 byte0 -> TWEEN_FRAME. RAM scratch only (driver BSS cells).
+tween_load_args:
+      lda     LIB_ARG0                 ; start low
+      sta     TWEEN_STARTL
+      lda     LIB_ARG0+1               ; start high
+      sta     TWEEN_STARTH
+      lda     LIB_ARG1                 ; end low
+      sta     TWEEN_ENDL
+      lda     LIB_ARG1+1               ; end high
+      sta     TWEEN_ENDH
+      lda     LIB_ARG2                 ; duration
+      sta     TWEEN_DURATION
+      lda     LIB_ARG2+1               ; mode (don't-care for fixed-curve variants)
+      sta     TWEEN_MODE
+      lda     LIB_ARG3                 ; frame
+      sta     TWEEN_FRAME
+      rts
+
+; finish_tween — pack the tween readbacks into LIB_RESULT (4-byte LE) then OK:
+;   byte0 = TWEEN_VALUEL, byte1 = TWEEN_VALUEH, byte2 = TWEEN_DONE,
+;   byte3 = TWEEN_PROGRESS. (TWEEN_EASE stays available via a direct cell peek.)
+finish_tween:
+      lda     TWEEN_VALUEL
+      sta     LIB_RESULT
+      lda     TWEEN_VALUEH
+      sta     LIB_RESULT+1
+      lda     TWEEN_DONE
+      sta     LIB_RESULT+2
+      lda     TWEEN_PROGRESS
+      sta     LIB_RESULT+3
+      jmp     finish_ok_nowait
+
+; --- $D0 TWEEN_BEGIN: reset frame/done, set VALUE := START ---
+; tween_begin reads START/END/DURATION; we load all five inputs uniformly.
+gfn_tween_begin:
+      jsr     tween_load_args
+      jsr     tween_begin
+      jmp     finish_tween
+
+; --- $D1 TWEEN_EVAL: evaluate the current frame using TWEEN_MODE ---
+gfn_tween_eval:
+      jsr     tween_load_args
+      jsr     tween_eval
+      jmp     finish_tween
+
+; --- $D2 TWEEN_EVAL_LINEAR ---
+gfn_tween_eval_linear:
+      jsr     tween_load_args
+      jsr     tween_eval_linear
+      jmp     finish_tween
+
+; --- $D3 TWEEN_EVAL_EASE_IN ---
+gfn_tween_eval_ease_in:
+      jsr     tween_load_args
+      jsr     tween_eval_ease_in
+      jmp     finish_tween
+
+; --- $D4 TWEEN_EVAL_EASE_OUT ---
+gfn_tween_eval_ease_out:
+      jsr     tween_load_args
+      jsr     tween_eval_ease_out
+      jmp     finish_tween
+
+; --- $D5 TWEEN_EVAL_EASE_IN_OUT ---
+gfn_tween_eval_ease_in_out:
+      jsr     tween_load_args
+      jsr     tween_eval_ease_in_out
+      jmp     finish_tween
+
+; --- $D6 TWEEN_STEP: advance one frame then evaluate using TWEEN_MODE ---
+gfn_tween_step:
+      jsr     tween_load_args
+      jsr     tween_step
+      jmp     finish_tween
+
+; --- $D7 TWEEN_STEP_LINEAR ---
+gfn_tween_step_linear:
+      jsr     tween_load_args
+      jsr     tween_step_linear
+      jmp     finish_tween
+
+; --- $D8 TWEEN_STEP_EASE_IN ---
+gfn_tween_step_ease_in:
+      jsr     tween_load_args
+      jsr     tween_step_ease_in
+      jmp     finish_tween
+
+; --- $D9 TWEEN_STEP_EASE_OUT ---
+gfn_tween_step_ease_out:
+      jsr     tween_load_args
+      jsr     tween_step_ease_out
+      jmp     finish_tween
+
+; --- $DA TWEEN_STEP_EASE_IN_OUT ---
+gfn_tween_step_ease_in_out:
+      jsr     tween_load_args
+      jsr     tween_step_ease_in_out
+      jmp     finish_tween
+
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
 ; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.
 ; sprite.s provides the hw-sprite command/register/collision driver entries.
@@ -1591,6 +1892,15 @@ gfn_nvgload_named_at:
 ; fio.s pulls nova.inc for the FIO_*/VGC_* register addresses, all dedup'd by the
 ; same .ifndef guards.
       .include "nvg.s"
+; anim.s provides the track-based sprite-animation driver entries (batch 4b.11);
+; it pulls dma.s + fio.s + pager.s + msprite.s, all already co-assembled above and
+; dedup'd by the .ifndef guards (pager.s is the one new body — CODE only, ZP via
+; NVR* aliases). anim declares the ANIM_* track table + pseudo-registers in the
+; module-owned BSS band (see graphics.cfg).
+      .include "anim.s"
+; tween.s provides the pure-math 16-bit easing driver entries (batch 4b.11). No
+; hardware, no extra deps; it declares the TWEEN_* state cells in the module BSS.
+      .include "tween.s"
 
       .segment "VECTORS"             ; $FFFA — don't-care under SEI; fills the 16KB image
       .word   MOD_ENTRY, MOD_ENTRY, MOD_ENTRY

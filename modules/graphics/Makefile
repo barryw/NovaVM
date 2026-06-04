@@ -15,7 +15,10 @@ graphics.o: graphics.s \
             $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/vsprite.s \
             $(NOVA_ASM)/msprite.inc $(NOVA_ASM)/msprite.s \
             $(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s \
-            $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s
+            $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s \
+            $(NOVA_ASM)/anim.inc $(NOVA_ASM)/anim.s \
+            $(NOVA_ASM)/tween.inc $(NOVA_ASM)/tween.s \
+            $(NOVA_ASM)/pager.inc $(NOVA_ASM)/pager.s
 	$(CA65) graphics.s -o graphics.o
 
 graphics.bin: graphics.o graphics.cfg

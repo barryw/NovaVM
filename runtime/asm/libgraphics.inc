@@ -469,8 +469,99 @@ GFN_NVGLOAD_NAMED_AT = $A9  ; (BYTES name:ARG0, dest:ARG1)       -> nvg_load_nam
 ; (constants filled in batch 4b.10)
 
 ; =====================================================================
-; $C0-$CF  anim  (driver: anim.s)   — superset extension beyond design §2
-; $D0-$DF  tween (driver: tween.s)  — superset extension beyond design §2
-; (constants filled in batch 4b.11)
+; $C0-$CF  anim  (driver: runtime/asm/anim.s — batch 4b.11) — superset
+; extension beyond design §2.
+;   init/start/stop/tick/tick_one/set_frame/load_xram_shapes/load_disk_shapes
+;
+; Track-based sprite animation. The driver keeps an 8-track table + a set of
+; descriptor/target/shape-load pseudo-registers in its module-owned BSS block
+; (ANIM_DESC_L/H, ANIM_TARGET, ANIM_TARGET_TYPE, ANIM_SHAPE, ANIM_COUNT,
+; ANIM_XADDR*, ANIM_FILE*, ANIM_NAME*). The wrappers marshal the ARG cells into
+; those BSS cells, JSR the driver entry, then map the result. anim pulls dma/fio/
+; pager/msprite — all already co-assembled by earlier batches (dedup'd by the
+; .ifndef guards), pager.s is the one new dependency (CODE only, ZP via NVR*
+; aliases). The descriptor for ANIM.START stays RESIDENT in caller RAM: ARG0 is a
+; BYTES arg whose ptr16 (low word) is written straight into ANIM_DESC_L/H.
+;
+; Arg-register conventions, VERIFIED against runtime/asm/anim.inc + anim.s
+; (@in/@out/@requires):
+;
+;   START reads ANIM_DESC_L/H + ANIM_TARGET + ANIM_TARGET_TYPE and returns the
+;   new track handle in A ($FF on failure). The wrapper publishes the handle to
+;   LIB_RESULT byte 0 and maps $FF -> LERR_ANIM_FAIL, else LERR_OK
+;   (finish_anim_start).
+;
+;   Per-track ops take the track HANDLE in A and return a result code in A
+;   (0 = OK); the wrapper publishes A to LIB_RESULT byte 0 and maps A!=0 ->
+;   LERR_ANIM_FAIL (finish_anim). SET_FRAME additionally takes the frame in X.
+;
+;   INIT/TICK always return A=0 -> OK (finish_anim too).
+;
+;   LOAD_XRAM_SHAPES / LOAD_DISK_SHAPES read the shape-load pseudo-registers and
+;   return A=0/1; finish_anim maps A!=0 -> LERR_ANIM_FAIL.
+;
+; None of the anim ops issue a VGC *command* on the wrapper's behalf (the shape
+; loaders drive DMA/pager which self-wait inside the driver), so the wrappers
+; need no command wait.
+LERR_ANIM_FAIL = $88   ; anim driver returned a non-OK result / $FF handle
+
+; Layouts (ARGn low word unless noted; BYTES args pack ptr16 low / len16 high):
+GFN_ANIM_INIT        = $C0  ; ()                                  -> anim_init (A=0)
+GFN_ANIM_START       = $C1  ; (BYTES desc:ARG0, target:ARG1, type:ARG2)
+                            ;   -> ANIM_DESC_L/H, ANIM_TARGET, ANIM_TARGET_TYPE; anim_start
+                            ;   RESULT byte 0 = track handle (A); $FF -> LERR_ANIM_FAIL
+GFN_ANIM_STOP        = $C2  ; (handle:ARG0)                       -> A; anim_stop
+GFN_ANIM_TICK        = $C3  ; ()                                  -> anim_tick (A=0)
+GFN_ANIM_TICK_ONE    = $C4  ; (handle:ARG0)                       -> A; anim_tick_one
+GFN_ANIM_SET_FRAME   = $C5  ; (handle:ARG0, frame:ARG1)           -> A, X; anim_set_frame
+GFN_ANIM_LOAD_XRAM   = $C6  ; (shape:ARG0, count:ARG1, xaddr24:ARG2)
+                            ;   -> ANIM_SHAPE, ANIM_COUNT, ANIM_XADDRL/M/H; anim_load_xram_shapes
+GFN_ANIM_LOAD_DISK   = $C7  ; (shape:ARG0, count:ARG1, file24:ARG2, BYTES name:ARG3)
+                            ;   -> ANIM_SHAPE, ANIM_COUNT, ANIM_FILEL/M/H,
+                            ;      ANIM_NAMEPTR_L/H + ANIM_NAMELEN; anim_load_disk_shapes
+;             $C8-$CF reserved
+
+; =====================================================================
+; $D0-$DF  tween (driver: runtime/asm/tween.s — batch 4b.11) — superset
+; extension beyond design §2.
+;   begin / eval{,_linear,_ease_in,_ease_out,_ease_in_out} /
+;          step{,_linear,_ease_in,_ease_out,_ease_in_out}
+;
+; Pure 16-bit easing math; no hardware. All state lives in the driver's
+; module-owned TWEEN_* BSS cells: software writes START/END/DURATION/FRAME/MODE,
+; evaluates, then reads VALUEL/H, DONE, PROGRESS, EASE. This is the register-
+; shaped ABI documented in tween.inc.
+;
+; MARSHALLING (uniform across every tween op, VERIFIED against tween.s
+; @requires): the wrapper loads the five input cells from the ARG cells before
+; the driver runs:
+;   ARG0 low word  -> TWEEN_STARTL/H   (start value, s16)
+;   ARG1 low word  -> TWEEN_ENDL/H     (end value, s16)
+;   ARG2 byte0     -> TWEEN_DURATION   (frames; 0 snaps to end)
+;   ARG2 byte1     -> TWEEN_MODE       (0 linear / 1 in / 2 out / 3 in-out)
+;   ARG3 byte0     -> TWEEN_FRAME      (current frame; step ops increment it)
+; The fixed-curve eval/step variants force TWEEN_MODE themselves, so ARG2 byte1
+; is a don't-care for those — but loading it uniformly is harmless.
+;
+; RESULT (reporter, VERIFIED against tween.s @out): after the driver runs the
+; wrapper packs the readbacks into LIB_RESULT (4-byte LE):
+;   byte 0 = TWEEN_VALUEL, byte 1 = TWEEN_VALUEH  (the 16-bit computed value),
+;   byte 2 = TWEEN_DONE    (non-zero at end),
+;   byte 3 = TWEEN_PROGRESS (normalized 0..255).
+; STATUS is always LERR_OK (the math never fails). TWEEN_EASE remains readable
+; via a direct cell peek for callers that need it; the 4-byte result carries the
+; three fields the contract calls for.
+GFN_TWEEN_BEGIN            = $D0  ; (start:ARG0, end:ARG1, duration:ARG2) -> tween_begin
+GFN_TWEEN_EVAL             = $D1  ; (start,end,dur,mode:ARG0..2, frame:ARG3) -> tween_eval
+GFN_TWEEN_EVAL_LINEAR      = $D2  ; (start,end,dur:ARG0..2, frame:ARG3) -> tween_eval_linear
+GFN_TWEEN_EVAL_EASE_IN     = $D3  ; (start,end,dur:ARG0..2, frame:ARG3) -> tween_eval_ease_in
+GFN_TWEEN_EVAL_EASE_OUT    = $D4  ; (start,end,dur:ARG0..2, frame:ARG3) -> tween_eval_ease_out
+GFN_TWEEN_EVAL_EASE_IN_OUT = $D5  ; (start,end,dur:ARG0..2, frame:ARG3) -> tween_eval_ease_in_out
+GFN_TWEEN_STEP             = $D6  ; (start,end,dur,mode:ARG0..2, frame:ARG3) -> tween_step
+GFN_TWEEN_STEP_LINEAR      = $D7  ; (start,end,dur:ARG0..2, frame:ARG3) -> tween_step_linear
+GFN_TWEEN_STEP_EASE_IN     = $D8  ; (start,end,dur:ARG0..2, frame:ARG3) -> tween_step_ease_in
+GFN_TWEEN_STEP_EASE_OUT    = $D9  ; (start,end,dur:ARG0..2, frame:ARG3) -> tween_step_ease_out
+GFN_TWEEN_STEP_EASE_IN_OUT = $DA  ; (start,end,dur:ARG0..2, frame:ARG3) -> tween_step_ease_in_out
+;             $DB-$DF reserved
 
 .endif
