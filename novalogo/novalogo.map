@@ -14,7 +14,7 @@ Segment list:
 Name                   Start     End    Size  Align
 ----------------------------------------------------
 ZEROPAGE              000030  00007D  00004E  00001
-BSS                   000280  000C83  000A04  00001
+BSS                   000320  000D23  000A04  00001
 CODE                  00C000  00F627  003628  00001
 RODATA                00F628  00FFC7  0009A0  00001
 MONITOR               00FFD7  00FFDF  000009  00001
