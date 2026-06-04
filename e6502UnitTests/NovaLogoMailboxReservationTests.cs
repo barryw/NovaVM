@@ -45,6 +45,12 @@ public class NovaLogoMailboxReservationTests
     // loader band (libcall.s). Exclusive end = $0420.
     private const ushort MailboxEnd = 0x0420;
     private const byte Sentinel = 0x5A;
+    // $0318 = LIB_RESIDENT (libabi.inc LIB_MBOX+24): a runtime-managed mailbox cell,
+    // NOT scratch. cold_start seeds it $FF and ensure_ext_resident (4c.0c) rewrites it
+    // when re-paging the host ext (e.g. the TO-editor path below). That deliberate
+    // mailbox write is the loader contract, not a BSS/heap overlap, so it is excluded
+    // from the sentinel sweep. Every other band byte must still survive byte-for-byte.
+    private const ushort LibResident = 0x0318;
 
     [TestMethod]
     public void Logo_DoesNotClobber_MailboxRegion()
@@ -94,12 +100,16 @@ public class NovaLogoMailboxReservationTests
         Assert.IsFalse(screen.Contains("OUT OF MEMORY", StringComparison.OrdinalIgnoreCase),
             $"Logo program exhausted the heap; the test program is broken.\n{screen}");
 
-        // The sentinel must survive byte-for-byte across the whole band.
+        // The sentinel must survive byte-for-byte across the whole band, except for
+        // LIB_RESIDENT ($0318) which the loader/ensure_ext_resident legitimately manages.
         for (ushort a = MailboxStart; a < MailboxEnd; a++)
+        {
+            if (a == LibResident) continue;
             Assert.AreEqual(Sentinel, bus.ReadRam(a),
                 $"NovaLogo clobbered reserved band byte ${a:X4} (expected $5A, got " +
                 $"${bus.ReadRam(a):X2}). BSS must start at $0420 (HEAP_START=$0500) so " +
                 $"$0300-$041F stays clear.");
+        }
     }
 
     private static void QueueText(ScreenEditor editor, string text)

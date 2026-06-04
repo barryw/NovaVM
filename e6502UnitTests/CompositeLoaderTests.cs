@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Text;
 using e6502.Avalonia.Hardware;
+using e6502.Avalonia.Input;
 using e6502.Avalonia.Rendering;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -133,6 +135,109 @@ namespace e6502UnitTests
                 "PLOT routed through the full loader must set the real VGC gfx pixel to GCOLOR 7");
             Assert.AreEqual(0, GfxPixel(bus, 51, 60), "PLOT must not touch the neighbour pixel");
             Assert.AreEqual(1, bus.PageInCount, "only one page-in across GCOLOR+PLOT (resident after the first)");
+        }
+
+        // Turtle state lives at $9F00 (extension.s TURTLE_STATE_BASE); offsets match
+        // NovaLogoHarnessTests (X lo/hi = +1/+2, Y lo/hi = +4/+5).
+        private const ushort TurtleStateBase = 0x9F00;
+        private const ushort TurtleXLo = TurtleStateBase + 1, TurtleXHi = TurtleStateBase + 2;
+        private const ushort TurtleYLo = TurtleStateBase + 4, TurtleYHi = TurtleStateBase + 5;
+
+        // ---------------------------------------------------------------------
+        // 4c.0c: the legacy ext path must survive a module page-in clobbering bank 1.
+        //
+        // Faithful coexistence sequence on the REAL CompositeBusDevice:
+        //   1. Boot Logo to the prompt -> cold_start seeds LIB_RESIDENT=$FF, stages
+        //      novalogo_ext in XRAM at $07C000, _extBank = novalogo_ext.
+        //   2. Clobber bank 1 with the GRAPHICS module via a routed PGD page-in (no CPU),
+        //      and poke LIB_RESIDENT=GRAPHICS to mimic the loader's cached state.
+        //   3. Run a legacy turtle command (SETXY) through the normal Logo input path.
+        //      ext_invoke's legacy branch -> ensure_ext_resident (RESIDENT != $FF ->
+        //      re-page novalogo_ext, PageInCount++, RESIDENT -> $FF) -> EXT_TRAMPOLINE
+        //      -> the REAL novalogo_ext SETXY handler.
+        //   4. Assert turtle X==100, Y==50 (would be garbage if SETXY ran module bytes),
+        //      RESIDENT==$FF, and PageInCount increased (the re-page happened).
+        // ---------------------------------------------------------------------
+        [TestMethod]
+        public void LegacyExtCommand_AfterModuleClobbersBank1_RepagesHostExtAndRuns()
+        {
+            using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            cpu.Boot();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            // 1. Run to the Logo prompt — cold_start has run.
+            RunUntilScreenContains(cpu, bus, "?", 10_000_000, "boot to prompt");
+            Assert.AreEqual(0xFF, bus.ReadRam(RESIDENT),
+                "cold_start must seed LIB_RESIDENT=$FF (host ext resident in bank 1)");
+
+            // 2. Clobber bank 1 with the GRAPHICS module via a routed PGD page-in (no CPU).
+            bus.LoadXram(ShelfBase, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")));
+            bus.Write(0xBA78, 0x00);                 // PGD_SRCL  ] $060000 (shelf slot 0)
+            bus.Write(0xBA79, 0x00);                 // PGD_SRCM  ]
+            bus.Write(0xBA7A, 0x06);                 // PGD_SRCH  ]
+            bus.Write(0xBA7B, 0x00);                 // PGD_WORDSL ] $2000 words = 16KB
+            bus.Write(0xBA7C, 0x20);                 // PGD_WORDSH ]
+            bus.Write(0xBA76, 0x01);                 // PGD_CMD = START -> DMA graphics -> bank 1
+            Assert.AreEqual(1, bus.PageInCount, "the forced clobber must page in exactly once");
+            bus.WriteRam(RESIDENT, MODULE_ID_GRAPHICS); // mimic the loader's cached state
+            int pageInsBeforeLegacy = bus.PageInCount;
+
+            // 3. Run a legacy turtle command through the normal Logo path, then PRINT a
+            //    unique marker so we can detect the line fully evaluated and returned.
+            foreach (char ch in "SETXY 100 50\rPRINT \"DONE4C0C\r")
+                editor.QueueInput((byte)ch);
+            RunUntilScreenContains(cpu, bus, "DONE4C0C", 80_000_000, "SETXY after clobber");
+            // settle so the line fully evaluates and returns to the prompt
+            for (int i = 0; i < 1_000_000; i++)
+            {
+                int cycles = cpu.ClocksForNext();
+                cpu.ExecuteNext();
+                bus.AdvanceCycles(cycles);
+            }
+
+            string screen = SnapshotScreen(bus.Vgc);
+            Assert.IsFalse(screen.Contains("I DON'T KNOW HOW TO", StringComparison.Ordinal),
+                $"SETXY must not fall through to the unknown-word path after re-page.\n{screen}");
+
+            // 4. The real novalogo_ext SETXY handler ran -> turtle is at (100,50).
+            Assert.AreEqual(100, bus.ReadRam(TurtleXLo) | (bus.ReadRam(TurtleXHi) << 8),
+                "SETXY 100 50 must set turtle X=100 via the re-paged host ext handler");
+            Assert.AreEqual(50, bus.ReadRam(TurtleYLo) | (bus.ReadRam(TurtleYHi) << 8),
+                "SETXY 100 50 must set turtle Y=50 via the re-paged host ext handler");
+            Assert.AreEqual(0xFF, bus.ReadRam(RESIDENT),
+                "ensure_ext_resident must mark the host ext resident (LIB_RESIDENT=$FF) after re-page");
+            Assert.IsTrue(bus.PageInCount > pageInsBeforeLegacy,
+                "the legacy path must re-page the host ext (PageInCount must increase)");
+        }
+
+        private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps, string what)
+        {
+            for (int i = 0; i < maxSteps; i++)
+            {
+                int cycles = cpu.ClocksForNext();
+                cpu.ExecuteNext();
+                bus.AdvanceCycles(cycles);
+                if ((i & 0x3FF) == 0 && SnapshotScreen(bus.Vgc).Contains(marker, StringComparison.Ordinal))
+                    return;
+            }
+            Assert.Fail($"timed out waiting for '{marker}' ({what}).\n{SnapshotScreen(bus.Vgc)}");
+        }
+
+        private static string SnapshotScreen(VirtualGraphicsController vgc)
+        {
+            var sb = new StringBuilder();
+            for (int row = 0; row < VgcConstants.ScreenRows; row++)
+            {
+                for (int col = 0; col < VgcConstants.ScreenCols; col++)
+                {
+                    byte ch = vgc.GetScreenChar(col, row);
+                    sb.Append(ch >= 0x20 && ch <= 0x7E ? (char)ch : ' ');
+                }
+                sb.Append('\n');
+            }
+            return sb.ToString();
         }
 
         private static string RepoPath(params string[] parts)
