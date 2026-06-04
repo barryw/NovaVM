@@ -690,6 +690,105 @@ print_inl:
       PHA                   ; push low
       RTS                   ; RTS jumps to (ptr+Y)+1 = byte after the 0
 
+; =====================================================================
+; Message composer (4a) — no error string is stored whole. Every error
+; message is composed at print time from shared fragments + the command's
+; existing length-prefixed *_name string. Family helpers fall through into
+; list_print_err's shared newline+continue tail (err_nl_continue).
+; =====================================================================
+
+; print_cstr_xy — print a null-terminated string.
+;   In: X/Y = lo/hi pointer.  Clobbers: A, Y, ptr_lo/hi.
+print_cstr_xy:
+      STX   ptr_lo
+      STY   ptr_hi
+      LDY   #0
+@pc_lp:
+      LDA   (ptr_lo),Y
+      BEQ   @pc_done
+      STA   VGC_CHAROUT
+      INY
+      BNE   @pc_lp
+@pc_done:
+      RTS
+
+; print_name_xy — print a length-prefixed name ( .byte len,"TEXT" ).
+;   In: X/Y = lo/hi pointer.  Clobbers: A, X, Y, ptr_lo/hi.
+print_name_xy:
+      STX   ptr_lo
+      STY   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y      ; length
+      BEQ   @pn_done
+      TAX
+@pn_lp:
+      INY
+      LDA   (ptr_lo),Y
+      STA   VGC_CHAROUT
+      DEX
+      BNE   @pn_lp
+@pn_done:
+      RTS
+
+; --- family error helpers: enter with X/Y = command's *_name string ptr ---
+
+; "NOT ENOUGH INPUTS TO <name>"  (reuses str_notenough so "NOT ENOUGH INPUTS"
+; is never stored twice)
+err_nei:
+      STX   num_tmp_lo            ; save name ptr across the fragment prints
+      STY   num_tmp_hi
+      LDX   #<str_notenough
+      LDY   #>str_notenough
+      JSR   print_cstr_xy         ; "NOT ENOUGH INPUTS"
+      LDX   #<frag_to
+      LDY   #>frag_to
+      JSR   print_cstr_xy         ; " TO "
+      LDX   num_tmp_lo
+      LDY   num_tmp_hi
+      JSR   print_name_xy         ; the command name
+      JMP   err_nl_continue       ; newline + abandon line
+
+; "<name> DOESN'T LIKE "  (note: trailing space, no value — matches the ROM)
+err_doesnt_like:
+      JSR   print_name_xy
+      LDX   #<frag_dl
+      LDY   #>frag_dl
+      JMP   list_print_err
+
+; "<name> NEEDS A LIST"
+err_needs_list:
+      JSR   print_name_xy
+      LDX   #<frag_needs_list
+      LDY   #>frag_needs_list
+      JMP   list_print_err
+
+; "<name> INDEX OUT OF RANGE"
+err_index_range:
+      JSR   print_name_xy
+      LDX   #<frag_index_range
+      LDY   #>frag_index_range
+      JMP   list_print_err
+
+; "<name> DOESN'T LIKE [] AS INPUT"
+err_dl_empty:
+      JSR   print_name_xy
+      LDX   #<frag_dl
+      LDY   #>frag_dl
+      JSR   print_cstr_xy         ; " DOESN'T LIKE "
+      LDX   #<frag_as_input
+      LDY   #>frag_as_input
+      JMP   list_print_err        ; "[] AS INPUT" + newline + continue
+
+; "<name> DOESN'T LIKE THIS INPUT"
+err_dl_this:
+      JSR   print_name_xy
+      LDX   #<frag_dl
+      LDY   #>frag_dl
+      JSR   print_cstr_xy         ; " DOESN'T LIKE "
+      LDX   #<frag_this_input
+      LDY   #>frag_this_input
+      JMP   list_print_err        ; "THIS INPUT" + newline + continue
+
 ; ---------------------------------------------------------------------
 ; eval_check_infix — if next token is TOK_INFIX, evaluate binary op
 ;   Entry: eval_val holds the left operand (primary value)
@@ -1787,6 +1886,21 @@ str_idk:
 
 str_notenough:
       .byte "NOT ENOUGH INPUTS", 0
+
+; Shared error-message fragments (4a composer). Each stored exactly once;
+; composed with a command's existing *_name string by the err_* helpers.
+frag_to:
+      .byte " TO ", 0
+frag_dl:
+      .byte " DOESN'T LIKE ", 0
+frag_as_input:
+      .byte "[] AS INPUT", 0
+frag_this_input:
+      .byte "THIS INPUT", 0
+frag_needs_list:
+      .byte " NEEDS A LIST", 0
+frag_index_range:
+      .byte " INDEX OUT OF RANGE", 0
 
 str_error_tag:
       .byte 5, "ERROR"

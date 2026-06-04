@@ -438,17 +438,17 @@ do_first:
       JMP   eval_continue
 
 @err_args:
-      LDX   #<str_first_err
-      LDY   #>str_first_err
-      JMP   list_print_err
+      LDX   #<str_first_name
+      LDY   #>str_first_name
+      JMP   err_nei
 @err_type:
-      LDX   #<str_first_type
-      LDY   #>str_first_type
-      JMP   list_print_err
+      LDX   #<str_first_name
+      LDY   #>str_first_name
+      JMP   err_doesnt_like
 @err_empty:
-      LDX   #<str_first_empty
-      LDY   #>str_first_empty
-      JMP   list_print_err
+      LDX   #<str_first_name
+      LDY   #>str_first_name
+      JMP   err_dl_empty
 
 ; ---------------------------------------------------------------------
 ; do_butfirst / do_bf — BUTFIRST list: return all but first element
@@ -483,17 +483,17 @@ do_butfirst:
       JMP   eval_continue
 
 @err_args:
-      LDX   #<str_bf_err
-      LDY   #>str_bf_err
-      JMP   list_print_err
+      LDX   #<str_butfirst_name
+      LDY   #>str_butfirst_name
+      JMP   err_nei
 @err_type:
-      LDX   #<str_bf_type
-      LDY   #>str_bf_type
-      JMP   list_print_err
+      LDX   #<str_butfirst_name
+      LDY   #>str_butfirst_name
+      JMP   err_doesnt_like
 @err_empty:
-      LDX   #<str_bf_empty
-      LDY   #>str_bf_empty
-      JMP   list_print_err
+      LDX   #<str_butfirst_name
+      LDY   #>str_butfirst_name
+      JMP   err_dl_empty
 
 ; ---------------------------------------------------------------------
 ; do_count — COUNT list: return the number of elements
@@ -548,13 +548,13 @@ do_count:
       JMP   eval_continue
 
 @err_args:
-      LDX   #<str_count_err
-      LDY   #>str_count_err
-      JMP   list_print_err
+      LDX   #<str_count_name
+      LDY   #>str_count_name
+      JMP   err_nei
 @err_type:
-      LDX   #<str_count_type
-      LDY   #>str_count_type
-      JMP   list_print_err
+      LDX   #<str_count_name
+      LDY   #>str_count_name
+      JMP   err_doesnt_like
 
 ; ---------------------------------------------------------------------
 ; do_emptyp — EMPTY? value: return 1 if empty list, else 0
@@ -563,9 +563,9 @@ do_count:
 do_emptyp:
       JSR   eval_expr
       BCC   :+
-      LDX   #<str_emptyp_err
-      LDY   #>str_emptyp_err
-      JMP   list_print_err
+      LDX   #<str_emptyp_name
+      LDY   #>str_emptyp_name
+      JMP   err_nei
 :
       ; Check for empty list (type=list and pointer=$0000)
       LDA   eval_type
@@ -650,17 +650,17 @@ do_last:
       JMP   eval_continue
 
 @err_args:
-      LDX   #<str_last_err
-      LDY   #>str_last_err
-      JMP   list_print_err
+      LDX   #<str_last_name
+      LDY   #>str_last_name
+      JMP   err_nei
 @err_type:
-      LDX   #<str_last_type
-      LDY   #>str_last_type
-      JMP   list_print_err
+      LDX   #<str_last_name
+      LDY   #>str_last_name
+      JMP   err_doesnt_like
 @err_empty:
-      LDX   #<str_last_empty
-      LDY   #>str_last_empty
-      JMP   list_print_err
+      LDX   #<str_last_name
+      LDY   #>str_last_name
+      JMP   err_dl_empty
 
 ; ---------------------------------------------------------------------
 ; do_butlast — BUTLAST list: all but the last element
@@ -813,17 +813,17 @@ do_butlast:
       JMP   eval_continue
 
 @err_args:
-      LDX   #<str_bl_err
-      LDY   #>str_bl_err
-      JMP   list_print_err
+      LDX   #<str_butlast_name
+      LDY   #>str_butlast_name
+      JMP   err_nei
 @err_type:
-      LDX   #<str_bl_type
-      LDY   #>str_bl_type
-      JMP   list_print_err
+      LDX   #<str_butlast_name
+      LDY   #>str_butlast_name
+      JMP   err_doesnt_like
 @err_empty:
-      LDX   #<str_bl_empty
-      LDY   #>str_bl_empty
-      JMP   list_print_err
+      LDX   #<str_butlast_name
+      LDY   #>str_butlast_name
+      JMP   err_dl_empty
 
 ; ---------------------------------------------------------------------
 ; do_item — ITEM index list: return the Nth element (1-based)
@@ -920,17 +920,17 @@ do_item:
 @err_type_pop2:
       PLA
       PLA
-      LDX   #<str_item_type
-      LDY   #>str_item_type
-      JMP   list_print_err
+      LDX   #<str_item_name
+      LDY   #>str_item_name
+      JMP   err_needs_list
 @err_args:
-      LDX   #<str_item_err
-      LDY   #>str_item_err
-      JMP   list_print_err
+      LDX   #<str_item_name
+      LDY   #>str_item_name
+      JMP   err_nei
 @err_range:
-      LDX   #<str_item_range
-      LDY   #>str_item_range
-      JMP   list_print_err
+      LDX   #<str_item_name
+      LDY   #>str_item_name
+      JMP   err_index_range
 
 ; ---------------------------------------------------------------------
 ; do_memberp — MEMBER? value list: return 1 if value in list, else 0
@@ -1056,17 +1056,17 @@ do_memberp:
       JMP   eval_continue
 
 @err:
-      LDX   #<str_memberp_err
-      LDY   #>str_memberp_err
-      JMP   list_print_err
+      LDX   #<str_memberp_name
+      LDY   #>str_memberp_name
+      JMP   err_nei
 @err_type_pop4:
       PLA
       PLA
       PLA
       PLA
-      LDX   #<str_memberp_type
-      LDY   #>str_memberp_type
-      JMP   list_print_err
+      LDX   #<str_memberp_name
+      LDY   #>str_memberp_name
+      JMP   err_needs_list
 
 ; ---------------------------------------------------------------------
 ; do_show — SHOW value: like PRINT, adds brackets for lists
@@ -1075,9 +1075,9 @@ do_memberp:
 do_show:
       JSR   eval_expr
       BCC   :+
-      LDX   #<str_show_err
-      LDY   #>str_show_err
-      JMP   list_print_err
+      LDX   #<str_show_name
+      LDY   #>str_show_name
+      JMP   err_nei
 :
       LDA   eval_type
       CMP   #VAL_LIST
@@ -1121,16 +1121,8 @@ do_show:
 ;   JMPs to eval_continue
 ; ---------------------------------------------------------------------
 list_print_err:
-      STX   ptr_lo
-      STY   ptr_hi
-      LDY   #0
-@lp:
-      LDA   (ptr_lo),Y
-      BEQ   @done
-      STA   VGC_CHAROUT
-      INY
-      BNE   @lp
-@done:
+      JSR   print_cstr_xy        ; print the cstring at X/Y
+err_nl_continue:                 ; shared tail: newline + abandon line (no throw)
       JSR   eval_newline
       JMP   eval_continue
 
@@ -1233,9 +1225,9 @@ do_fput:
       PLA
       PLA
 @err:
-      LDX   #<str_fput_err
-      LDY   #>str_fput_err
-      JMP   list_print_err
+      LDX   #<str_fput_name
+      LDY   #>str_fput_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_lput — LPUT value list: append value to end of list
@@ -1408,9 +1400,9 @@ do_lput:
       PLA
       PLA
 @err:
-      LDX   #<str_lput_err
-      LDY   #>str_lput_err
-      JMP   list_print_err
+      LDX   #<str_lput_name
+      LDY   #>str_lput_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_list — LIST val1 val2: create a two-element list
@@ -1560,9 +1552,9 @@ do_list:
       PLA
       PLA
 @err:
-      LDX   #<str_list_err
-      LDY   #>str_list_err
-      JMP   list_print_err
+      LDX   #<str_list_name
+      LDY   #>str_list_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_sentence — SENTENCE val1 val2: concatenate two values as flat list
@@ -1776,9 +1768,9 @@ do_sentence:
       PLA
       PLA
 @err:
-      LDX   #<str_sentence_err
-      LDY   #>str_sentence_err
-      JMP   list_print_err
+      LDX   #<str_sentence_name
+      LDY   #>str_sentence_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_word — WORD val1 val2: concatenate two words into one
@@ -1920,14 +1912,14 @@ do_word:
       PLA
       PLA
 @err_type:
-      LDX   #<str_word_type
-      LDY   #>str_word_type
-      JMP   list_print_err
+      LDX   #<str_word_name
+      LDY   #>str_word_name
+      JMP   err_dl_this
 @err_oom:
 @err:
-      LDX   #<str_word_err
-      LDY   #>str_word_err
-      JMP   list_print_err
+      LDX   #<str_word_name
+      LDY   #>str_word_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; do_run — RUN list: evaluate a list as Logo code
@@ -2003,13 +1995,13 @@ do_run:
       JMP   eval_continue
 
 @err_type:
-      LDX   #<str_run_type
-      LDY   #>str_run_type
-      JMP   list_print_err
+      LDX   #<str_run_name
+      LDY   #>str_run_name
+      JMP   err_needs_list
 @err:
-      LDX   #<str_run_err
-      LDY   #>str_run_err
-      JMP   list_print_err
+      LDX   #<str_run_name
+      LDY   #>str_run_name
+      JMP   err_nei
 
 ; ---------------------------------------------------------------------
 ; render_list_to_buf — render list elements into input_buf as text
@@ -2346,73 +2338,15 @@ render_number_to_buf:
 ; =====================================================================
       .segment "RODATA"
 
-str_first_err:
-      .byte "NOT ENOUGH INPUTS TO FIRST", 0
-str_first_type:
-      .byte "FIRST DOESN'T LIKE ", 0
-str_first_empty:
-      .byte "FIRST DOESN'T LIKE [] AS INPUT", 0
 
-str_bf_err:
-      .byte "NOT ENOUGH INPUTS TO BUTFIRST", 0
-str_bf_type:
-      .byte "BUTFIRST DOESN'T LIKE ", 0
-str_bf_empty:
-      .byte "BUTFIRST DOESN'T LIKE [] AS INPUT", 0
 
-str_count_err:
-      .byte "NOT ENOUGH INPUTS TO COUNT", 0
-str_count_type:
-      .byte "COUNT DOESN'T LIKE ", 0
 
-str_emptyp_err:
-      .byte "NOT ENOUGH INPUTS TO EMPTY?", 0
 
-str_last_err:
-      .byte "NOT ENOUGH INPUTS TO LAST", 0
-str_last_type:
-      .byte "LAST DOESN'T LIKE ", 0
-str_last_empty:
-      .byte "LAST DOESN'T LIKE [] AS INPUT", 0
 
-str_bl_err:
-      .byte "NOT ENOUGH INPUTS TO BUTLAST", 0
-str_bl_type:
-      .byte "BUTLAST DOESN'T LIKE ", 0
-str_bl_empty:
-      .byte "BUTLAST DOESN'T LIKE [] AS INPUT", 0
 
-str_item_err:
-      .byte "NOT ENOUGH INPUTS TO ITEM", 0
-str_item_type:
-      .byte "ITEM NEEDS A LIST", 0
-str_item_range:
-      .byte "ITEM INDEX OUT OF RANGE", 0
 
-str_memberp_err:
-      .byte "NOT ENOUGH INPUTS TO MEMBER?", 0
-str_memberp_type:
-      .byte "MEMBER? NEEDS A LIST", 0
 
-str_show_err:
-      .byte "NOT ENOUGH INPUTS TO SHOW", 0
 
-str_fput_err:
-      .byte "NOT ENOUGH INPUTS TO FPUT", 0
-str_lput_err:
-      .byte "NOT ENOUGH INPUTS TO LPUT", 0
-str_list_err:
-      .byte "NOT ENOUGH INPUTS TO LIST", 0
-str_sentence_err:
-      .byte "NOT ENOUGH INPUTS TO SENTENCE", 0
-str_word_err:
-      .byte "NOT ENOUGH INPUTS TO WORD", 0
-str_word_type:
-      .byte "WORD DOESN'T LIKE THIS INPUT", 0
-str_run_err:
-      .byte "NOT ENOUGH INPUTS TO RUN", 0
-str_run_type:
-      .byte "RUN NEEDS A LIST", 0
 
 ; Builtin name strings for list operations
 str_first_name:
