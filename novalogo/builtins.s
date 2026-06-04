@@ -91,10 +91,8 @@ lookup_builtin:
       INY
       LDA   (ptr2_lo),Y        ; handler high
       STA   ptr2_hi
-      STX   ptr2_lo             ; ptr2 = handler address
-      LDY   #4
-      LDA   (ptr2_lo),Y        ; — wrong, we already overwrote ptr2
-      ; Fix: re-read arity from table using num_tmp as base
+      STX   ptr2_lo             ; ptr2 = handler address (return value)
+      ; Read arity from the table (num_tmp = entry base)
       LDA   num_tmp_lo
       STA   ptr_lo
       LDA   num_tmp_hi
