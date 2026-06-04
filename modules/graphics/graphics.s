@@ -15,11 +15,12 @@
 
 ; Highest implemented fn-id + 1. Grows per domain batch. The draw domain $00-$09
 ; is live; the text/mode domain $10-$1B is live (batch 4b.3); the hw-sprite domain
-; $20-$3B is live (batch 4b.4). The jtable is dense from $00..GFX_FN_COUNT-1:
-; implemented ids point at their wrapper, every gap id ($0A-$0F, $19 CLSWIN,
-; $1C-$1F, $2E-$2F) points at gfn_unimpl so it resolves to LERR_NO_FN. ids
-; >= GFX_FN_COUNT ($3C+) resolve to LERR_NO_FN via the dispatch bounds-check.
-GFX_FN_COUNT = $3C
+; $20-$3B is live (batch 4b.4); the copper domain $40-$49 is live (batch 4b.5).
+; The jtable is dense from $00..GFX_FN_COUNT-1: implemented ids point at their
+; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F) points
+; at gfn_unimpl so it resolves to LERR_NO_FN. ids >= GFX_FN_COUNT ($4A+) resolve
+; to LERR_NO_FN via the dispatch bounds-check.
+GFX_FN_COUNT = $4A
 
 ; GTEXT copies its BYTES string into the VGC FIO_NAME buffer ($B9B0-$B9EF, 64
 ; bytes). Mirror fio.inc's FIO_NAME_LIMIT here (fio.inc isn't pulled into the
@@ -107,7 +108,21 @@ gfx_jtable:
       .word   gfn_spr_bg_readclear-1   ; $39 SPRBGREADCLEAR (reporter)
       .word   gfn_spr_bg_irqon-1       ; $3A SPRBGIRQON
       .word   gfn_spr_bg_irqoff-1      ; $3B SPRBGIRQOFF
-      ; $3C.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
+      .word   gfn_unimpl-1             ; $3C gap
+      .word   gfn_unimpl-1             ; $3D gap
+      .word   gfn_unimpl-1             ; $3E gap
+      .word   gfn_unimpl-1             ; $3F gap
+      .word   gfn_copper_list-1        ; $40 COPPER_LIST
+      .word   gfn_copper_add-1         ; $41 COPPER_ADD
+      .word   gfn_copper_clear-1       ; $42 COPPER_CLEAR
+      .word   gfn_copper_on-1          ; $43 COPPER_ON
+      .word   gfn_copper_off-1         ; $44 COPPER_OFF
+      .word   gfn_copper_use-1         ; $45 COPPER_USE
+      .word   gfn_copper_end-1         ; $46 COPPER_END
+      .word   gfn_copper_split-1       ; $47 COPPER_SPLIT
+      .word   gfn_copper_set_reg-1     ; $48 COPPER_SET_REG
+      .word   gfn_copper_set_sprite_reg-1 ; $49 COPPER_SET_SPRITE_REG
+      ; $4A.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
 
 ; Any reachable-but-unimplemented fn-id: report LERR_NO_FN.
 gfn_unimpl:
@@ -564,11 +579,130 @@ gfn_spr_bg_irqoff:
       jsr     sprite_background_irq_disable
       jmp     finish_ok_nowait
 
+; =====================================================================
+; $40-$49  copper domain (batch 4b.5). Drivers: copper.s + copper_split.s.
+;
+; The copper edits/plays raster display lists. Every command-issuing entry goes
+; through copper_command -> STA VGC_CMD; the wrapper waits via vgc_wait_cmd and
+; sets STATUS=OK (finish_ok). copper_add reads P0/P1=x, P2=y, P3/P4=register
+; specifier, P5=value. List-select ops (list/use) read P0. set_reg/set_sprite_reg
+; expose the COMPLETE add-a-register-write op: prep P3/P4 via the matching
+; register helper, load x/y/value, then issue copper_add (see libgraphics.inc).
+; =====================================================================
+
+; --- $40 COPPER_LIST: select the list that ADD/CLEAR edit ---  idx:ARG0->P0.
+gfn_copper_list:
+      lda     LIB_ARG0
+      sta     VGC_P0
+      jsr     copper_list
+      jmp     finish_ok
+
+; --- $41 COPPER_ADD: add a register-write event to the target list ---
+; x(s16):ARG0->P0/P1, y:ARG1->P2, reg(16):ARG2->P3/P4, value:ARG3->P5.
+gfn_copper_add:
+      lda     LIB_ARG0                 ; x low  -> P0
+      sta     VGC_P0
+      lda     LIB_ARG0+1               ; x high -> P1
+      sta     VGC_P1
+      lda     LIB_ARG1                 ; y      -> P2
+      sta     VGC_P2
+      lda     LIB_ARG2                 ; reg low  -> P3
+      sta     VGC_P3
+      lda     LIB_ARG2+1               ; reg high -> P4
+      sta     VGC_P4
+      lda     LIB_ARG3                 ; value  -> P5
+      sta     VGC_P5
+      jsr     copper_add
+      jmp     finish_ok
+
+; --- $42 COPPER_CLEAR: empty the target list ---  ().
+gfn_copper_clear:
+      jsr     copper_clear
+      jmp     finish_ok
+
+; --- $43 COPPER_ON: enable copper execution ---  ().
+gfn_copper_on:
+      jsr     copper_on
+      jmp     finish_ok
+
+; --- $44 COPPER_OFF: disable copper execution ---  ().
+gfn_copper_off:
+      jsr     copper_off
+      jmp     finish_ok
+
+; --- $45 COPPER_USE: make a list active at the next vblank ---  idx:ARG0->P0.
+gfn_copper_use:
+      lda     LIB_ARG0
+      sta     VGC_P0
+      jsr     copper_use
+      jmp     finish_ok
+
+; --- $46 COPPER_END: finish the current list (target := active) ---  ().
+gfn_copper_end:
+      jsr     copper_list_end
+      jmp     finish_ok
+
+; --- $47 COPPER_SPLIT: one list, two VGC_MODE rules at a scanline split ---
+; idx:ARG0->P0, splitY:ARG1->P1, mode0:ARG2->P2, mode1:ARG3->P3.
+; copper_split_mode runs the full off/list/clear/add/add/use/on sequence,
+; waiting internally between commands; it leaves the copper enabled.
+gfn_copper_split:
+      lda     LIB_ARG0
+      sta     VGC_P0
+      lda     LIB_ARG1
+      sta     VGC_P1
+      lda     LIB_ARG2
+      sta     VGC_P2
+      lda     LIB_ARG3
+      sta     VGC_P3
+      jsr     copper_split_mode
+      jmp     finish_ok
+
+; --- $48 COPPER_SET_REG: add a copper write to a direct VGC register ---
+; x(s16):ARG0->P0/P1, y:ARG1->P2, regIndex:ARG2->A (copper_set_reg_index sets
+; P3/P4), value:ARG3->P5; then copper_add. Observable CopperEvent.
+gfn_copper_set_reg:
+      lda     LIB_ARG0                 ; x low  -> P0
+      sta     VGC_P0
+      lda     LIB_ARG0+1               ; x high -> P1
+      sta     VGC_P1
+      lda     LIB_ARG1                 ; y      -> P2
+      sta     VGC_P2
+      lda     LIB_ARG3                 ; value  -> P5
+      sta     VGC_P5
+      lda     LIB_ARG2                 ; register index -> A
+      jsr     copper_set_reg_index     ; -> P3/P4
+      jsr     copper_add
+      jmp     finish_ok
+
+; --- $49 COPPER_SET_SPRITE_REG: add a copper write to a sprite attribute reg ---
+; x(s16):ARG0->P0/P1, y:ARG1->P2, sprIdx:ARG2 low->X, field:ARG2 byte1->A
+; (copper_set_sprite_reg sets P3/P4 = absolute sprite reg addr), value:ARG3->P5;
+; then copper_add. Observable CopperEvent.
+gfn_copper_set_sprite_reg:
+      lda     LIB_ARG0                 ; x low  -> P0
+      sta     VGC_P0
+      lda     LIB_ARG0+1               ; x high -> P1
+      sta     VGC_P1
+      lda     LIB_ARG1                 ; y      -> P2
+      sta     VGC_P2
+      lda     LIB_ARG3                 ; value  -> P5
+      sta     VGC_P5
+      ldx     LIB_ARG2                 ; sprite index -> X
+      lda     LIB_ARG2+1               ; field offset -> A
+      jsr     copper_set_sprite_reg    ; -> P3/P4
+      jsr     copper_add
+      jmp     finish_ok
+
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
 ; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.
 ; sprite.s provides the hw-sprite command/register/collision driver entries.
+; copper.s adds the copper command/list/add/register-prep entries; copper_split.s
+; adds copper_split_mode (it pulls vgc.s + copper.s, all dedup'd by .ifndef guards).
       .include "vgc.s"
       .include "sprite.s"
+      .include "copper.s"
+      .include "copper_split.s"
 
       .segment "VECTORS"             ; $FFFA — don't-care under SEI; fills the 16KB image
       .word   MOD_ENTRY, MOD_ENTRY, MOD_ENTRY

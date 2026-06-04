@@ -132,7 +132,46 @@ GFN_SPR_BG_IRQOFF      = $3B  ; () disable sprite-bg collision IRQ; sprite_backg
 ; =====================================================================
 ; $40-$4F  copper  (drivers: copper.s + copper_split.s)
 ;   list/add/clear/on/off/use/end/split/set_reg/set_sprite_reg
-; (constants filled in batch 4b.5)
+;
+; Arg-register conventions, VERIFIED against runtime/asm/copper.s,
+; copper.inc, copper_split.s, copper_split.inc and the VGC
+; ExecuteCopperCommand mapping (VirtualGraphicsController.cs).
+;
+; The copper is a raster co-processor: it edits up to 128 display "lists" of
+; (scanline-position, VGC-register, value) write events, then plays them back
+; against the active list every frame. The driver entries issue VCMD_COPPER*
+; via copper_command (STA VGC_CMD); the wrapper waits via vgc_wait_cmd and sets
+; STATUS=OK. copper_add reads its inputs from VGC_P0..P5:
+;   P0/P1 = x (column, 0..GfxWidth-1), P2 = y (scanline, 0..GfxHeight-1),
+;   P3/P4 = register specifier, P5 = value. Position = y*GfxWidth + x.
+;
+; set_reg / set_sprite_reg: copper.s exposes copper_set_reg_index (A=reg index
+; -> P3/P4) and copper_set_sprite_reg (X=sprite index, A=field offset -> P3/P4)
+; as register-prep helpers — neither issues a command on its own, exactly as
+; copper_split_mode composes copper_set_reg_index + copper_add internally. The
+; standalone helpers leave no observable bus effect, so GFN_COPPER_SET_REG /
+; GFN_COPPER_SET_SPRITE_REG expose the COMPLETE add-a-register-write op: load
+; x/y/value into P0/P1/P2/P5, prep the register specifier into P3/P4 via the
+; matching helper, then issue copper_add. The result is an observable
+; CopperEvent on the active list.
+;
+; Layouts (ARGn low word unless noted):
+GFN_COPPER_LIST       = $40  ; (idx:ARG0)                         -> P0; copper_list (VCMD_COPPERLIST)
+GFN_COPPER_ADD        = $41  ; (x:ARG0 s16, y:ARG1, reg:ARG2, val:ARG3) -> P0/P1,P2,P3/P4,P5; copper_add
+GFN_COPPER_CLEAR      = $42  ; ()                                 -> copper_clear (VCMD_COPPERCLR)
+GFN_COPPER_ON         = $43  ; ()                                 -> copper_on   (VCMD_COPPERENA)
+GFN_COPPER_OFF        = $44  ; ()                                 -> copper_off  (VCMD_COPPERDIS)
+GFN_COPPER_USE        = $45  ; (idx:ARG0)                         -> P0; copper_use (VCMD_COPPERUSE)
+GFN_COPPER_END        = $46  ; ()                                 -> copper_list_end (VCMD_COPPEREND)
+GFN_COPPER_SPLIT      = $47  ; (idx:ARG0, splitY:ARG1, mode0:ARG2, mode1:ARG3) -> P0..P3; copper_split_mode
+GFN_COPPER_SET_REG    = $48  ; (x:ARG0 s16, y:ARG1, regIndex:ARG2, val:ARG3)
+                             ;   -> P0/P1=x, P2=y, copper_set_reg_index(A=regIndex)->P3/P4,
+                             ;      P5=val, copper_add. Observable CopperEvent.
+GFN_COPPER_SET_SPRITE_REG = $49 ; (x:ARG0 s16, y:ARG1, sprIdx|field:ARG2, val:ARG3)
+                             ;   ARG2 low byte = sprite index, byte 1 = VGC_SPR_*_OFF field.
+                             ;   -> P0/P1=x, P2=y, copper_set_sprite_reg(X=sprIdx,A=field)->P3/P4,
+                             ;      P5=val, copper_add. Observable CopperEvent.
+;             $4A-$4F reserved
 
 ; =====================================================================
 ; $50-$5F  blit / dma  (drivers: blitter.s + dma.s)

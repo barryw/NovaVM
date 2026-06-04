@@ -51,6 +51,12 @@ namespace e6502UnitTests
                              GFN_SPR_BG_STATUS = 0x36, GFN_SPR_BG_MASK = 0x37,
                              GFN_SPR_BG_CLEAR = 0x38, GFN_SPR_BG_READCLEAR = 0x39,
                              GFN_SPR_BG_IRQON = 0x3A, GFN_SPR_BG_IRQOFF = 0x3B;
+        // Copper-domain fn-ids ($40-$49), batch 4b.5.
+        private const byte   GFN_COPPER_LIST = 0x40, GFN_COPPER_ADD = 0x41,
+                             GFN_COPPER_CLEAR = 0x42, GFN_COPPER_ON = 0x43,
+                             GFN_COPPER_OFF = 0x44, GFN_COPPER_USE = 0x45,
+                             GFN_COPPER_END = 0x46, GFN_COPPER_SPLIT = 0x47,
+                             GFN_COPPER_SET_REG = 0x48, GFN_COPPER_SET_SPRITE_REG = 0x49;
         // VGC sprite attribute field offsets (nova.inc VGC_SPR_*_OFF).
         private const byte   SPR_FLAGS_OFF = 0x05;
         private const byte   SPR_FLAG_ENABLE = 0x80, SPR_FLAG_XFLIP = 0x01, SPR_FLAG_YFLIP = 0x02;
@@ -961,6 +967,220 @@ namespace e6502UnitTests
             Assert.AreEqual(Sentinel, cpu.Pc, "sprite-range gap must still RTS to the sentinel");
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
                 "id $2E is a gap in the dense table -> gfn_unimpl -> LERR_NO_FN");
+        }
+
+        // =====================================================================
+        // Copper domain ($40-$49), batch 4b.5. Axis 2 drives the module wrappers
+        // and asserts the real VGC copper state: enable flag (IsCopperEnabled),
+        // the compiled display list (GetCopperProgram, committed at a vblank via
+        // IncrementFrameCounter), and the active-list swap. One Axis-1 loader
+        // smoke proves dispatch routing for the range; one gap-id test confirms
+        // the dense-table bounds behaviour.
+        // =====================================================================
+
+        // VGC core register index (offset from VgcBase) for the copper register specifier.
+        private const byte   COPPER_REG_MODE  = 0x00;   // RegMode  - VgcBase
+        private const byte   COPPER_REG_BGCOL = 0x01;   // RegBgCol - VgcBase
+
+        // --- $43/$44 COPPER_ON then COPPER_OFF: the enable flag toggles. ---
+        [TestMethod]
+        public void Axis2_CopperOnThenOff_TogglesEnableFlag()
+        {
+            using var bus = MakeAxis2Bus();
+
+            RunFn(bus, GFN_COPPER_ON);
+            Assert.IsTrue(bus.Vgc.IsCopperEnabled, "COPPER_ON must enable copper execution");
+
+            RunFn(bus, GFN_COPPER_OFF);
+            Assert.IsFalse(bus.Vgc.IsCopperEnabled, "COPPER_OFF must disable copper execution");
+        }
+
+        // --- $41 COPPER_ADD: a register-write event lands on the active list. ---
+        [TestMethod]
+        public void Axis2_CopperAdd_AddsEventToActiveList()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // ADD: at column 40, scanline 10, write RegMode (index 0) = 2.
+            SetArg(bus, ARG0, 40);                 // x
+            SetArg(bus, ARG1, 10);                 // y
+            SetArg(bus, ARG2, COPPER_REG_MODE);    // register specifier (direct index)
+            SetArg(bus, ARG3, 2);                  // value
+            RunFn(bus, GFN_COPPER_ADD);
+
+            // The program compiles at the next vblank; default target/active = list 0.
+            bus.Vgc.IncrementFrameCounter();
+            var program = bus.Vgc.GetCopperProgram();
+            Assert.AreEqual(1, program.Length, "COPPER_ADD must add one event to the default list");
+            Assert.AreEqual((ushort)(10 * VgcConstants.GfxWidth + 40), program[0].Position,
+                "event position must be y*GfxWidth + x");
+            Assert.AreEqual(COPPER_REG_MODE, program[0].RegisterIndex, "event register index must be RegMode");
+            Assert.AreEqual(2, program[0].Value, "event value must be the ARG3 value");
+        }
+
+        // --- $42 COPPER_CLEAR: empties the target list. ---
+        [TestMethod]
+        public void Axis2_CopperClear_EmptiesList()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 20);
+            SetArg(bus, ARG1, 50);
+            SetArg(bus, ARG2, COPPER_REG_BGCOL);
+            SetArg(bus, ARG3, 4);
+            RunFn(bus, GFN_COPPER_ADD);
+            bus.Vgc.IncrementFrameCounter();
+            Assert.AreEqual(1, bus.Vgc.GetCopperProgram().Length, "setup ADD should have produced one event");
+
+            RunFn(bus, GFN_COPPER_CLEAR);
+            bus.Vgc.IncrementFrameCounter();
+            Assert.AreEqual(0, bus.Vgc.GetCopperProgram().Length, "COPPER_CLEAR must empty the list");
+        }
+
+        // --- $40/$45 COPPER_LIST + COPPER_USE: edit list 1, then make it active. ---
+        [TestMethod]
+        public void Axis2_CopperListThenUse_SwapsActiveListAtVblank()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Target list 1 for subsequent edits.
+            SetArg(bus, ARG0, 1);
+            RunFn(bus, GFN_COPPER_LIST);
+
+            // Add an event to list 1.
+            SetArg(bus, ARG0, 10);
+            SetArg(bus, ARG1, 5);
+            SetArg(bus, ARG2, COPPER_REG_BGCOL);
+            SetArg(bus, ARG3, 7);
+            RunFn(bus, GFN_COPPER_ADD);
+
+            // USE list 1 (becomes active at next vblank).
+            SetArg(bus, ARG0, 1);
+            RunFn(bus, GFN_COPPER_USE);
+
+            // Before vblank, active is still the (empty) list 0.
+            Assert.AreEqual(0, bus.Vgc.GetCopperProgram().Length, "active list 0 is empty before the swap");
+
+            bus.Vgc.IncrementFrameCounter();
+            var program = bus.Vgc.GetCopperProgram();
+            Assert.AreEqual(1, program.Length, "COPPER_USE must swap the active list to list 1 at vblank");
+            Assert.AreEqual(7, program[0].Value, "the active list-1 event value must be visible");
+        }
+
+        // --- $48 COPPER_SET_REG: composed add-a-register-write to a VGC core reg. ---
+        [TestMethod]
+        public void Axis2_CopperSetReg_AddsRegisterWriteEvent()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // At (0,30) write RegBgCol (index 1) = 9.
+            SetArg(bus, ARG0, 0);                  // x
+            SetArg(bus, ARG1, 30);                 // y
+            SetArg(bus, ARG2, COPPER_REG_BGCOL);   // register index
+            SetArg(bus, ARG3, 9);                  // value
+            RunFn(bus, GFN_COPPER_SET_REG);
+
+            bus.Vgc.IncrementFrameCounter();
+            var program = bus.Vgc.GetCopperProgram();
+            Assert.AreEqual(1, program.Length, "COPPER_SET_REG must add one register-write event");
+            Assert.AreEqual((ushort)(30 * VgcConstants.GfxWidth + 0), program[0].Position, "event position");
+            Assert.AreEqual(COPPER_REG_BGCOL, program[0].RegisterIndex, "event must target RegBgCol");
+            Assert.AreEqual(9, program[0].Value, "event value must be ARG3");
+        }
+
+        // --- $49 COPPER_SET_SPRITE_REG: composed add-a-write to a sprite attr reg. ---
+        [TestMethod]
+        public void Axis2_CopperSetSpriteReg_AddsSpriteRegisterWriteEvent()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // At (0,60) write sprite 2's FLAGS field (offset 5) = 0x80 (enable).
+            // Absolute reg = VGC_SPR_BASE + 2*8 + 5 = $A055 -> RegisterIndex 0x55.
+            const byte sprIdx = 2, field = SPR_FLAGS_OFF;
+            SetArg(bus, ARG0, 0);                          // x
+            SetArg(bus, ARG1, 60);                         // y
+            SetArg(bus, ARG2, sprIdx | (field << 8));      // ARG2 low=index, byte1=field
+            SetArg(bus, ARG3, SPR_FLAG_ENABLE);            // value
+            RunFn(bus, GFN_COPPER_SET_SPRITE_REG);
+
+            bus.Vgc.IncrementFrameCounter();
+            var program = bus.Vgc.GetCopperProgram();
+            Assert.AreEqual(1, program.Length, "COPPER_SET_SPRITE_REG must add one sprite-register-write event");
+            byte expectedRegIndex = (byte)((VgcConstants.SpriteRegBase + sprIdx * VgcConstants.SpriteRegStride
+                                            + field) - VgcConstants.VgcBase);
+            Assert.AreEqual(expectedRegIndex, program[0].RegisterIndex,
+                "event must target sprite 2 FLAGS register (offset $55)");
+            Assert.AreEqual(SPR_FLAG_ENABLE, program[0].Value, "event value must be the enable bit");
+        }
+
+        // --- $47 COPPER_SPLIT: builds a two-mode raster split and enables copper. ---
+        [TestMethod]
+        public void Axis2_CopperSplit_BuildsTwoModeListAndEnables()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Split at scanline 100: mode 1 above, mode 2 below.
+            SetArg(bus, ARG0, 0);    // list index
+            SetArg(bus, ARG1, 100);  // split Y
+            SetArg(bus, ARG2, 1);    // mode 0 (scanline 0..99)
+            SetArg(bus, ARG3, 2);    // mode 1 (scanline 100+)
+            RunFn(bus, GFN_COPPER_SPLIT);
+
+            Assert.IsTrue(bus.Vgc.IsCopperEnabled, "COPPER_SPLIT must leave the copper enabled");
+
+            bus.Vgc.IncrementFrameCounter();
+            var program = bus.Vgc.GetCopperProgram();
+            Assert.AreEqual(2, program.Length, "COPPER_SPLIT must build two VGC_MODE events");
+            // Sorted by position: scanline 0 first (mode0), then scanline 100 (mode1).
+            Assert.AreEqual(COPPER_REG_MODE, program[0].RegisterIndex, "first event writes RegMode");
+            Assert.AreEqual(1, program[0].Value, "first event sets mode 0 at the top of the frame");
+            Assert.AreEqual(COPPER_REG_MODE, program[1].RegisterIndex, "second event writes RegMode");
+            Assert.AreEqual(2, program[1].Value, "second event sets mode 1 below the split");
+            Assert.AreEqual((ushort)(100 * VgcConstants.GfxWidth), program[1].Position,
+                "second event fires at the split scanline");
+        }
+
+        // --- $46 COPPER_END: routes + reports OK (target reset has no readable effect). ---
+        [TestMethod]
+        public void Axis2_CopperEnd_StatusOk()
+        {
+            using var bus = MakeAxis2Bus();
+            RunFn(bus, GFN_COPPER_END);   // RunFn asserts STATUS = OK
+        }
+
+        // --- Loader-axis smoke: a copper fn-id routes through the real lib_call. ---
+        [TestMethod]
+        public void Axis1_CopperOn_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_COPPER_ON);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS), "COPPER_ON must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
+        }
+
+        // --- Dispatch density: a gap id below the copper range ($3C) returns LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_CopperRangeGap_ReturnsNoFn()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.WriteRam(FN_ID, 0x3C);   // gap between the sprite range ($3B) and copper ($40)
+            bus.WriteRam(STATUS, 0x00);  // poison opposite to expected non-OK
+
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            bus.WriteRam(0x01FF, (byte)((Sentinel - 1) >> 8));
+            bus.WriteRam(0x01FE, (byte)((Sentinel - 1) & 0xFF));
+            var s = cpu.GetState();
+            cpu.RestoreState(new CpuState(s.A, s.X, s.Y, 0xFD, 0xC000,
+                                          s.Nf, s.Vf, s.Df, true, s.Zf, s.Cf));
+            for (int guard = 0; guard < 2_000_000 && cpu.Pc != Sentinel; guard++)
+                cpu.ExecuteNext();
+            Assert.AreEqual(Sentinel, cpu.Pc, "copper-range gap must still RTS to the sentinel");
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $3C is a gap in the dense table -> gfn_unimpl -> LERR_NO_FN");
         }
 
         private static string RepoPath(params string[] parts)
