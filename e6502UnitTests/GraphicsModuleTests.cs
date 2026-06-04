@@ -39,6 +39,21 @@ namespace e6502UnitTests
                              GFN_REVERSE = 0x13, GFN_REVERSEOFF = 0x14, GFN_FLASH = 0x15,
                              GFN_FLASHOFF = 0x16, GFN_LOCATE = 0x17, GFN_CLS = 0x18,
                              GFN_CLSWIN = 0x19, GFN_DISPLAYON = 0x1A, GFN_DISPLAYOFF = 0x1B;
+        // Hardware-sprite-domain fn-ids ($20-$3B), batch 4b.4.
+        private const byte   GFN_SPR_DEFINE = 0x20, GFN_SPR_ROW = 0x21, GFN_SPR_CLEAR = 0x22,
+                             GFN_SPR_COPY = 0x23, GFN_SPR_POS = 0x24, GFN_SPR_ENABLE = 0x25,
+                             GFN_SPR_DISABLE = 0x26, GFN_SPR_FLIP = 0x27, GFN_SPR_PRIORITY = 0x28,
+                             GFN_SPR_SHAPE = 0x29, GFN_SPR_SETREG = 0x2A, GFN_SPR_SETREG16 = 0x2B,
+                             GFN_SPR_GETX = 0x2C, GFN_SPR_GETY = 0x2D,
+                             GFN_SPR_COLL_STATUS = 0x30, GFN_SPR_COLL_MASK = 0x31,
+                             GFN_SPR_COLL_CLEAR = 0x32, GFN_SPR_COLL_READCLEAR = 0x33,
+                             GFN_SPR_COLL_IRQON = 0x34, GFN_SPR_COLL_IRQOFF = 0x35,
+                             GFN_SPR_BG_STATUS = 0x36, GFN_SPR_BG_MASK = 0x37,
+                             GFN_SPR_BG_CLEAR = 0x38, GFN_SPR_BG_READCLEAR = 0x39,
+                             GFN_SPR_BG_IRQON = 0x3A, GFN_SPR_BG_IRQOFF = 0x3B;
+        // VGC sprite attribute field offsets (nova.inc VGC_SPR_*_OFF).
+        private const byte   SPR_FLAGS_OFF = 0x05;
+        private const byte   SPR_FLAG_ENABLE = 0x80, SPR_FLAG_XFLIP = 0x01, SPR_FLAG_YFLIP = 0x02;
         // VGC register addresses (runtime/asm/nova.inc / VgcConstants).
         private const ushort VGC_BGCOL = 0xA001, VGC_FGCOL = 0xA002, VGC_CURSX = 0xA003,
                              VGC_CURSY = 0xA004, VGC_FONT = 0xA007, VGC_MODE = 0xA000,
@@ -135,6 +150,13 @@ namespace e6502UnitTests
             bus.WriteRam((ushort)(cell + 2), (byte)((value >> 16) & 0xFF));
             bus.WriteRam((ushort)(cell + 3), (byte)((value >> 24) & 0xFF));
         }
+
+        // Read the 32-bit LE LIB_RESULT cell (reporter-style fns).
+        private static uint GetResult(CompositeBusDevice bus) =>
+            (uint)(bus.ReadRam(RESULT)
+                 | (bus.ReadRam((ushort)(RESULT + 1)) << 8)
+                 | (bus.ReadRam((ushort)(RESULT + 2)) << 16)
+                 | (bus.ReadRam((ushort)(RESULT + 3)) << 24));
 
         // Drive the module dispatch directly for fn-id `fn`; assert it RTSes and
         // returns LIB_STATUS = OK.
@@ -595,6 +617,350 @@ namespace e6502UnitTests
             Assert.AreEqual(Sentinel, cpu.Pc, "dispatch must RTS even for an unknown id");
             Assert.AreEqual(0x83 /*LERR_NO_FN*/, bus.ReadRam(STATUS),
                 "id $0A (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
+        }
+
+        // =====================================================================
+        // Hardware-sprite domain ($20-$3B), batch 4b.4. Axis 2 drives the module
+        // wrappers and asserts the real VGC sprite engine state (position, enable,
+        // flip, priority, shape) + reporter fns (getx/gety + collision) via
+        // LIB_RESULT. One Axis-1 loader smoke proves dispatch routing for the range.
+        // =====================================================================
+
+        // --- $24 SPRPOS: position lands in the VGC sprite X/Y state. ---
+        [TestMethod]
+        public void Axis2_SprPos_SetsSpritePosition()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 3);     // sprite index
+            SetArg(bus, ARG1, 120);   // x (s16)
+            SetArg(bus, ARG2, 80);    // y (byte)
+            RunFn(bus, GFN_SPR_POS);
+
+            var st = bus.Vgc.GetSpriteState(3);
+            Assert.AreEqual(120, st.x, "SPRPOS must set sprite 3 X to 120");
+            Assert.AreEqual(80,  st.y, "SPRPOS must set sprite 3 Y to 80");
+        }
+
+        // --- $24 SPRPOS: a NEGATIVE x round-trips through the signed-16 X register. ---
+        [TestMethod]
+        public void Axis2_SprPos_NegativeX_RoundTripsAsSigned16()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 5);      // sprite index
+            SetArg(bus, ARG1, -100);   // x = -100 -> low word 0xFF9C
+            SetArg(bus, ARG2, 10);     // y
+            RunFn(bus, GFN_SPR_POS);
+
+            // Sprite X is a full 16-bit register; -100 stored as 0xFF9C (65436).
+            var st = bus.Vgc.GetSpriteState(5);
+            Assert.AreEqual(0xFF9C, st.x, "SPRPOS must store the signed-16 X bit-pattern (-100 -> 0xFF9C)");
+            Assert.AreEqual(-100, (short)st.x, "stored X reinterpreted as signed-16 must equal -100");
+
+            // SPRGETX reporter must read the same 16-bit pattern back into LIB_RESULT.
+            SetArg(bus, ARG0, 5);
+            RunFn(bus, GFN_SPR_GETX);
+            Assert.AreEqual(0xFF9Cu, GetResult(bus), "SPRGETX must report the signed-16 X pattern");
+            Assert.AreEqual(-100, (short)(ushort)GetResult(bus), "SPRGETX result as signed-16 must equal -100");
+        }
+
+        // --- $25/$26 SPRENABLE then SPRDISABLE: the enable flag toggles. ---
+        [TestMethod]
+        public void Axis2_SprEnableThenDisable_TogglesEnableFlag()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 2);
+            RunFn(bus, GFN_SPR_ENABLE);
+            Assert.IsTrue(bus.Vgc.GetSpriteState(2).enabled, "SPRENABLE must enable sprite 2");
+
+            SetArg(bus, ARG0, 2);
+            RunFn(bus, GFN_SPR_DISABLE);
+            Assert.IsFalse(bus.Vgc.GetSpriteState(2).enabled, "SPRDISABLE must disable sprite 2");
+        }
+
+        // --- $27 SPRFLIP: the X/Y flip flag bits land in the sprite flags. ---
+        [TestMethod]
+        public void Axis2_SprFlip_SetsFlipFlags()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 4);
+            SetArg(bus, ARG1, SPR_FLAG_XFLIP | SPR_FLAG_YFLIP);   // both flips
+            RunFn(bus, GFN_SPR_FLIP);
+
+            Assert.AreEqual(SPR_FLAG_XFLIP | SPR_FLAG_YFLIP, bus.Vgc.GetSpriteState(4).flags,
+                "SPRFLIP must set both flip bits on sprite 4");
+        }
+
+        // --- $28 SPRPRIORITY: the priority value lands (clamped 0-2 by the VGC). ---
+        [TestMethod]
+        public void Axis2_SprPriority_SetsPriority()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 1);
+            SetArg(bus, ARG1, 2);    // priority 2 = in front
+            RunFn(bus, GFN_SPR_PRIORITY);
+
+            Assert.AreEqual(2, bus.Vgc.GetSpriteState(1).priority, "SPRPRIORITY must set sprite 1 priority to 2");
+        }
+
+        // --- $29 SPRSHAPE: the shape-slot index register takes the value. ---
+        [TestMethod]
+        public void Axis2_SprShape_SetsShapeSlotIndex()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 6);    // sprite index
+            SetArg(bus, ARG1, 9);    // shape slot
+            RunFn(bus, GFN_SPR_SHAPE);
+
+            Assert.AreEqual(9, bus.Vgc.GetSpriteShapeIndex(6), "SPRSHAPE must set sprite 6 shape-slot index to 9");
+        }
+
+        // --- $2A SPRSETREG: writing the FLAGS field via setreg8 enables + flips. ---
+        [TestMethod]
+        public void Axis2_SprSetReg_WritesFlagsField()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Field 5 = FLAGS; value enable|xflip.
+            SetArg(bus, ARG0, 7);                              // sprite index
+            SetArg(bus, ARG1, SPR_FLAGS_OFF);                  // field offset
+            SetArg(bus, ARG2, SPR_FLAG_ENABLE | SPR_FLAG_XFLIP);
+            RunFn(bus, GFN_SPR_SETREG);
+
+            var st = bus.Vgc.GetSpriteState(7);
+            Assert.IsTrue(st.enabled, "SPRSETREG of FLAGS with the enable bit must enable sprite 7");
+            Assert.AreEqual(SPR_FLAG_XFLIP, st.flags, "SPRSETREG of FLAGS must set the X-flip bit on sprite 7");
+        }
+
+        // --- $20 SPRDEFINE: one shape pixel takes the requested colour nibble. ---
+        [TestMethod]
+        public void Axis2_SprDefine_SetsShapePixel()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Define pixel (x=2,y=3) of sprite 0's shape to colour 0xD.
+            SetArg(bus, ARG0, 0);    // sprite index
+            SetArg(bus, ARG1, 2);    // x (0-15)
+            SetArg(bus, ARG2, 3);    // y (0-15)
+            SetArg(bus, ARG3, 0xD);  // colour
+            RunFn(bus, GFN_SPR_DEFINE);
+
+            // Shape byte for (x=2,y=3): row 3, byte x/2 = 1; even x -> high nibble.
+            var shape = bus.Vgc.GetSpriteShape(0);
+            int byteIdx = 3 * 8 /*bytes per row*/ + 2 / 2;
+            Assert.AreEqual(0xD, (shape[byteIdx] >> 4) & 0x0F,
+                "SPRDEFINE must set the high nibble of the (2,3) shape byte to colour 0xD");
+        }
+
+        // --- $21 SPRROW: a full 16px row (8 packed bytes) lands in the shape. ---
+        [TestMethod]
+        public void Axis2_SprRow_WritesEightShapeBytes()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 8);    // sprite index
+            SetArg(bus, ARG1, 1);    // row 1
+            // 8 shape bytes packed across ARG2 (lo 4) + ARG3 (hi 4), LE.
+            // ARG2 = 0x44332211 -> bytes 0x11,0x22,0x33,0x44; ARG3 = 0x88776655.
+            SetArg(bus, ARG2, unchecked((int)0x44332211));
+            SetArg(bus, ARG3, unchecked((int)0x88776655));
+            RunFn(bus, GFN_SPR_ROW);
+
+            var shape = bus.Vgc.GetSpriteShape(8);
+            int baseIdx = 1 * 8;
+            byte[] expected = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 };
+            for (int i = 0; i < 8; i++)
+                Assert.AreEqual(expected[i], shape[baseIdx + i], $"SPRROW byte {i} mismatch");
+        }
+
+        // --- $23 SPRCOPY: shape data copies from src slot to dst slot. ---
+        [TestMethod]
+        public void Axis2_SprCopy_CopiesShapeData()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Paint a row into sprite 0, then copy 0 -> 1; assert sprite 1 matches.
+            SetArg(bus, ARG0, 0);
+            SetArg(bus, ARG1, 0);    // row 0
+            SetArg(bus, ARG2, unchecked((int)0xDEADBEEF));
+            SetArg(bus, ARG3, unchecked((int)0xCAFEBABE));
+            RunFn(bus, GFN_SPR_ROW);
+
+            SetArg(bus, ARG0, 0);    // src
+            SetArg(bus, ARG1, 1);    // dst
+            RunFn(bus, GFN_SPR_COPY);
+
+            var src = bus.Vgc.GetSpriteShape(0);
+            var dst = bus.Vgc.GetSpriteShape(1);
+            for (int i = 0; i < 8; i++)
+                Assert.AreEqual(src[i], dst[i], $"SPRCOPY byte {i} must match the source slot");
+        }
+
+        // --- $22 SPRCLEAR: previously-painted shape data is zeroed. ---
+        [TestMethod]
+        public void Axis2_SprClear_ZeroesShapeData()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 2);
+            SetArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, unchecked((int)0xFFFFFFFF));
+            SetArg(bus, ARG3, unchecked((int)0xFFFFFFFF));
+            RunFn(bus, GFN_SPR_ROW);
+            Assert.AreNotEqual(0, bus.Vgc.GetSpriteShape(2)[0], "setup SPRROW should have painted sprite 2");
+
+            SetArg(bus, ARG0, 2);
+            RunFn(bus, GFN_SPR_CLEAR);
+
+            var shape = bus.Vgc.GetSpriteShape(2);
+            for (int i = 0; i < VgcConstants.SpriteShapeSize; i++)
+                Assert.AreEqual(0, shape[i], $"SPRCLEAR must zero shape byte {i}");
+        }
+
+        // --- $2C SPRGETX / $2D SPRGETY: reporters round-trip a position. ---
+        [TestMethod]
+        public void Axis2_SprGetXY_ReportsPosition()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Seed sprite 10 via the real VGC API, then GET its coords through the module.
+            bus.Vgc.SetSpritePosition(10, 0x0123, 0x45);
+
+            SetArg(bus, ARG0, 10);
+            RunFn(bus, GFN_SPR_GETX);
+            Assert.AreEqual(0x0123u, GetResult(bus), "SPRGETX must report the 16-bit X into LIB_RESULT");
+
+            SetArg(bus, ARG0, 10);
+            RunFn(bus, GFN_SPR_GETY);
+            Assert.AreEqual(0x45u, GetResult(bus), "SPRGETY must report the Y byte into LIB_RESULT");
+        }
+
+        // --- $30/$31 sprite-sprite collision status + mask reporters. ---
+        [TestMethod]
+        public void Axis2_SprCollStatusAndMask_ReportRegisters()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Renderer-side: sprites {1,3} and {9} collided -> mask 0x020A.
+            bus.Vgc.SetCollisionRegisters(spriteToSprite: 0x020A, spriteToBg: 0x0000);
+
+            RunFn(bus, GFN_SPR_COLL_STATUS);
+            Assert.AreEqual(0x0Au, GetResult(bus), "SPRCOLLSTATUS must report the low byte (sprites 0-7)");
+
+            RunFn(bus, GFN_SPR_COLL_MASK);
+            Assert.AreEqual(0x020Au, GetResult(bus), "SPRCOLLMASK must report the full 16-bit collision mask");
+        }
+
+        // --- $33 SPRCOLLREADCLEAR: reports the mask, then clears it. ---
+        [TestMethod]
+        public void Axis2_SprCollReadClear_ReportsThenClears()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.Vgc.SetCollisionRegisters(spriteToSprite: 0x8001, spriteToBg: 0x0000);
+
+            RunFn(bus, GFN_SPR_COLL_READCLEAR);
+            Assert.AreEqual(0x8001u, GetResult(bus), "SPRCOLLREADCLEAR must report the mask before clearing");
+
+            // After read-clear the mask must read back as zero.
+            RunFn(bus, GFN_SPR_COLL_MASK);
+            Assert.AreEqual(0x0000u, GetResult(bus), "SPRCOLLREADCLEAR must have cleared the collision mask");
+        }
+
+        // --- $32 SPRCOLLCLEAR: clears a standing collision mask. ---
+        [TestMethod]
+        public void Axis2_SprCollClear_ClearsMask()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.Vgc.SetCollisionRegisters(spriteToSprite: 0x1234, spriteToBg: 0x0000);
+            RunFn(bus, GFN_SPR_COLL_CLEAR);
+
+            RunFn(bus, GFN_SPR_COLL_MASK);
+            Assert.AreEqual(0x0000u, GetResult(bus), "SPRCOLLCLEAR must clear the sprite-sprite collision mask");
+        }
+
+        // --- $36/$37 sprite-background collision status + mask reporters. ---
+        [TestMethod]
+        public void Axis2_SprBgStatusAndMask_ReportRegisters()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.Vgc.SetCollisionRegisters(spriteToSprite: 0x0000, spriteToBg: 0x0140);
+
+            RunFn(bus, GFN_SPR_BG_STATUS);
+            Assert.AreEqual(0x40u, GetResult(bus), "SPRBGSTATUS must report the bg-collision low byte");
+
+            RunFn(bus, GFN_SPR_BG_MASK);
+            Assert.AreEqual(0x0140u, GetResult(bus), "SPRBGMASK must report the full 16-bit bg-collision mask");
+        }
+
+        // --- $39 SPRBGREADCLEAR: reports the bg mask then clears it. ---
+        [TestMethod]
+        public void Axis2_SprBgReadClear_ReportsThenClears()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.Vgc.SetCollisionRegisters(spriteToSprite: 0x0000, spriteToBg: 0x00C3);
+
+            RunFn(bus, GFN_SPR_BG_READCLEAR);
+            Assert.AreEqual(0x00C3u, GetResult(bus), "SPRBGREADCLEAR must report the bg mask before clearing");
+
+            RunFn(bus, GFN_SPR_BG_MASK);
+            Assert.AreEqual(0x0000u, GetResult(bus), "SPRBGREADCLEAR must clear the bg-collision mask");
+        }
+
+        // --- $35/$3B IRQ-disable ops just route + report OK (no IRQ side effect to assert). ---
+        [TestMethod]
+        public void Axis2_SprCollIrqDisable_StatusOk()
+        {
+            using var bus = MakeAxis2Bus();
+            RunFn(bus, GFN_SPR_COLL_IRQOFF);   // RunFn asserts STATUS = OK
+            RunFn(bus, GFN_SPR_BG_IRQOFF);
+        }
+
+        // --- Loader-axis smoke: a new sprite fn-id routes through the real lib_call. ---
+        [TestMethod]
+        public void Axis1_SprPos_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            bus.PokeRam(ARG0, 3); bus.PokeRam((ushort)(ARG0 + 1), 0);   // sprite index
+            bus.PokeRam(ARG1, 50); bus.PokeRam((ushort)(ARG1 + 1), 0);  // x
+            bus.PokeRam(ARG2, 60); bus.PokeRam((ushort)(ARG2 + 1), 0);  // y
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_SPR_POS);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS), "SPRPOS must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
+        }
+
+        // --- Dispatch density: a gap id inside the sprite range ($2E) returns LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_SpriteRangeGap_ReturnsNoFn()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.WriteRam(FN_ID, 0x2E);   // gap between SPRGETY ($2D) and the collision block ($30)
+            bus.WriteRam(STATUS, 0x00);  // poison opposite to expected non-OK
+
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            bus.WriteRam(0x01FF, (byte)((Sentinel - 1) >> 8));
+            bus.WriteRam(0x01FE, (byte)((Sentinel - 1) & 0xFF));
+            var s = cpu.GetState();
+            cpu.RestoreState(new CpuState(s.A, s.X, s.Y, 0xFD, 0xC000,
+                                          s.Nf, s.Vf, s.Df, true, s.Zf, s.Cf));
+            for (int guard = 0; guard < 2_000_000 && cpu.Pc != Sentinel; guard++)
+                cpu.ExecuteNext();
+            Assert.AreEqual(Sentinel, cpu.Pc, "sprite-range gap must still RTS to the sentinel");
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $2E is a gap in the dense table -> gfn_unimpl -> LERR_NO_FN");
         }
 
         private static string RepoPath(params string[] parts)

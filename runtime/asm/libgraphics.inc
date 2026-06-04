@@ -78,10 +78,56 @@ GFN_DISPLAYOFF = $1B   ; ()                               -> vgc_display_off (VG
 ;             $1C-$1F reserved
 
 ; =====================================================================
-; $20-$3F  hw-sprite  (driver: sprite.s)
+; $20-$3F  hw-sprite  (driver: runtime/asm/sprite.s)
 ;   define/row/clear/copy/pos/enable/disable/flip/priority/shape/setreg/
 ;   getx/gety + collision API (status/mask/clear/read-clear/irq)
-; (constants filled in batch 4b.4)
+;
+; Arg-register conventions, VERIFIED against runtime/asm/sprite.s and the VGC
+; ExecuteSpriteCommand mapping (VirtualGraphicsController.cs): VGC_P<n> is the
+; command register $A011+n; the sprite engine reads P0=sprite-index for every
+; command. Sprite X is a full 16-bit (signed) value (low byte VGC_SPR_XL, high
+; byte VGC_SPR_XH); sprite Y is a single unsigned byte (VGC_SPR_YL; the YH field
+; is reserved/no-op). So only X carries the s16 contract for sprites.
+;
+; Command-issuing ops (define/row/clear/copy/pos/enable/disable/flip/priority)
+; go through sprite_command -> STA VGC_CMD; the wrapper waits via vgc_wait_cmd
+; (busy bit reads 0 in the emulator -> no-op wait) and sets STATUS=OK.
+; Register-store ops (shape/setreg) write the $A040 sprite attribute block
+; directly -> no command, no wait. Reporter ops (getx/gety + every collision
+; read) copy the driver's A/Y return into LIB_RESULT (4-byte LE, high bytes
+; zeroed) then STATUS=OK.
+;
+; Layouts (ARGn low word unless noted; index is 0-15):
+GFN_SPR_DEFINE   = $20  ; (idx:ARG0, x:ARG1 0-15, y:ARG2 0-15, color:ARG3) -> P0/P1/P2/P3; VCMD_SPRDEF
+GFN_SPR_ROW      = $21  ; (idx:ARG0, row:ARG1, bytes0_3:ARG2, bytes4_7:ARG3) -> P0/P1, P2..P9; sprite_row
+GFN_SPR_CLEAR    = $22  ; (idx:ARG0)                       -> P0; sprite_clear
+GFN_SPR_COPY     = $23  ; (src:ARG0, dst:ARG1)             -> P0/P1; sprite_copy
+GFN_SPR_POS      = $24  ; (idx:ARG0, x:ARG1 s16, y:ARG2)   -> P0, P1/P2(=x), P3(=y); sprite_pos
+GFN_SPR_ENABLE   = $25  ; (idx:ARG0)                       -> P0; sprite_enable
+GFN_SPR_DISABLE  = $26  ; (idx:ARG0)                       -> P0; sprite_disable
+GFN_SPR_FLIP     = $27  ; (idx:ARG0, flags:ARG1)           -> P0/P1; sprite_flip
+GFN_SPR_PRIORITY = $28  ; (idx:ARG0, pri:ARG1)             -> P0/P1; sprite_priority
+GFN_SPR_SHAPE    = $29  ; (idx:ARG0, shape:ARG1)           -> X/A; sprite_set_shape (reg store)
+GFN_SPR_SETREG   = $2A  ; (idx:ARG0, field:ARG1, val:ARG2) -> X/Y/A; sprite_set_reg8 (reg store)
+GFN_SPR_SETREG16 = $2B  ; (idx:ARG0, field:ARG1, val16:ARG2) -> X/Y/NVR0L,NVR0H; sprite_set_reg16
+GFN_SPR_GETX     = $2C  ; (idx:ARG0) reporter -> RESULT = 16-bit X (A=hi,Y=lo); sprite_get_x
+GFN_SPR_GETY     = $2D  ; (idx:ARG0) reporter -> RESULT = Y byte (in Y); sprite_get_y
+;             $2E-$2F reserved
+; --- sprite-sprite collision API ($30-$35) ---
+GFN_SPR_COLL_STATUS    = $30  ; () reporter -> RESULT = VGC_COLLST low byte (A); sprite_collision_status
+GFN_SPR_COLL_MASK      = $31  ; () reporter -> RESULT = 16-bit mask (A=hi,Y=lo); sprite_collision_mask
+GFN_SPR_COLL_CLEAR     = $32  ; () clear mask + ack IRQ; sprite_collision_clear
+GFN_SPR_COLL_READCLEAR = $33  ; () reporter -> RESULT = 16-bit mask, then clear; sprite_collision_read_clear
+GFN_SPR_COLL_IRQON     = $34  ; () enable sprite-sprite collision IRQ (+CLI); sprite_collision_irq_enable
+GFN_SPR_COLL_IRQOFF    = $35  ; () disable sprite-sprite collision IRQ; sprite_collision_irq_disable
+; --- sprite-background collision API ($36-$3B) ---
+GFN_SPR_BG_STATUS      = $36  ; () reporter -> RESULT = VGC_COLLBG low byte (A); sprite_background_collision_status
+GFN_SPR_BG_MASK        = $37  ; () reporter -> RESULT = 16-bit mask (A=hi,Y=lo); sprite_background_collision_mask
+GFN_SPR_BG_CLEAR       = $38  ; () clear bg mask + ack IRQ; sprite_background_clear
+GFN_SPR_BG_READCLEAR   = $39  ; () reporter -> RESULT = 16-bit mask, then clear; sprite_background_read_clear
+GFN_SPR_BG_IRQON       = $3A  ; () enable sprite-bg collision IRQ (+CLI); sprite_background_irq_enable
+GFN_SPR_BG_IRQOFF      = $3B  ; () disable sprite-bg collision IRQ; sprite_background_irq_disable
+;             $3C-$3F reserved
 
 ; =====================================================================
 ; $40-$4F  copper  (drivers: copper.s + copper_split.s)
