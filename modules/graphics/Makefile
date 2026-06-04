@@ -13,7 +13,9 @@ graphics.o: graphics.s \
             $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s \
             $(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s \
             $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/vsprite.s \
-            $(NOVA_ASM)/msprite.inc $(NOVA_ASM)/msprite.s
+            $(NOVA_ASM)/msprite.inc $(NOVA_ASM)/msprite.s \
+            $(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s \
+            $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s
 	$(CA65) graphics.s -o graphics.o
 
 graphics.bin: graphics.o graphics.cfg

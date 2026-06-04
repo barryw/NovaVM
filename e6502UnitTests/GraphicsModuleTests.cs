@@ -99,6 +99,14 @@ namespace e6502UnitTests
                              GFN_MS_COMMIT = 0x8A, GFN_MS_COMMIT_ONE = 0x8B;
         private const byte LERR_MSPRITE_FAIL = 0x85;
         private const byte MSPRITE_INVALID_HANDLE = 0xFF;
+        // Image/mem-domain fn-ids ($A0-$A9), batch 4b.9.
+        private const byte   GFN_MEMREAD = 0xA0, GFN_MEMWRITE = 0xA1,
+                             GFN_VPEEK = 0xA2, GFN_VPOKE = 0xA3,
+                             GFN_GSAVE = 0xA4, GFN_GLOAD = 0xA5,
+                             GFN_NVGLOAD = 0xA6, GFN_NVGLOAD_AT = 0xA7,
+                             GFN_NVGLOAD_NAMED = 0xA8, GFN_NVGLOAD_NAMED_AT = 0xA9;
+        private const byte LERR_FILE_FAIL = 0x86;
+        private const byte LERR_IMAGE_FAIL = 0x87;
         // VGC sprite attribute field offsets (nova.inc VGC_SPR_*_OFF).
         private const byte   SPR_FLAGS_OFF = 0x05;
         private const byte   SPR_FLAG_ENABLE = 0x80, SPR_FLAG_XFLIP = 0x01, SPR_FLAG_YFLIP = 0x02;
@@ -2151,8 +2159,10 @@ namespace e6502UnitTests
                 "GRAPHICS module must be resident after the page-in");
         }
 
-        // --- Dispatch density: a gap id in the msprite range ($72) and an id above
-        // the table ($A0) both return LERR_NO_FN. ---
+        // --- Dispatch density: a gap id below the msprite range ($72) and a gap
+        // above it ($8C, between MS_COMMIT_ONE $8B and the image/mem range $A0)
+        // both return LERR_NO_FN. ($A0 is now MEMREAD; the image/mem domain's own
+        // bounds-check is exercised by Axis2_ImageMemRangeGap_ReturnsNoFn.) ---
         [TestMethod]
         public void Axis2_MspriteRangeGaps_ReturnNoFn()
         {
@@ -2165,11 +2175,318 @@ namespace e6502UnitTests
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
                 "id $72 (gap in the dense table) must report LERR_NO_FN");
 
-            // $A0: first id past GFX_FN_COUNT-1 ($8B) -> bounds check.
+            // $8C: a gap between the msprite range ($8B) and image/mem ($A0).
             bus.WriteRam(STATUS, 0x00);
-            RunFnRaw(bus, 0xA0);
+            RunFnRaw(bus, 0x8C);
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
-                "id $A0 (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
+                "id $8C (gap in the dense table) must report LERR_NO_FN");
+        }
+
+        // =====================================================================
+        // Image/mem domain ($A0-$A9), batch 4b.9. Drivers: vgc.s byte mem-I/O
+        // (MEMREAD/MEMWRITE/VPEEK/VPOKE), fio.s GSAVE/GLOAD, nvg.s NVGload x4.
+        //
+        // MEMWRITE/MEMREAD/VPOKE/VPEEK are proven end-to-end against the real VGC
+        // memory spaces (Axis 2). GSAVE/GLOAD and NVGLOAD are proven end-to-end
+        // through the real FileIoController, which is wired into the test bus with
+        // the VGC read/write/length accessors and a hermetic per-assembly save
+        // directory (AssemblySetup sets NOVA_STORAGE_ROOT; HD0 is always mounted).
+        // =====================================================================
+
+        // The HD0 host directory the FileIoController saves into (NOVA_STORAGE_ROOT
+        // is set by AssemblySetup to a unique per-run temp dir).
+        private static string Hd0Dir()
+        {
+            string? root = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+            Assert.IsNotNull(root, "AssemblySetup must set NOVA_STORAGE_ROOT");
+            string dir = Path.Combine(root!, "hd0");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+
+        // --- $A1 MEMWRITE then $A0 MEMREAD: round-trip a byte through a VGC space. ---
+        [TestMethod]
+        public void Axis2_MemWriteThenMemRead_RoundTripsAByte()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Write 0x5A to gfx space at offset 0x1234.
+            SetArg(bus, ARG0, VgcConstants.MemSpaceGfx);   // space
+            SetArg(bus, ARG1, 0x1234);                     // address (16-bit)
+            SetArg(bus, ARG2, 0x5A);                       // value
+            RunFn(bus, GFN_MEMWRITE);
+
+            // The real VGC gfx plane must hold the byte.
+            Assert.AreEqual(0x5A, GfxByte(bus, 0x1234), "MEMWRITE must land the byte in the gfx plane");
+
+            // MEMREAD must report it back into LIB_RESULT.
+            SetArg(bus, ARG0, VgcConstants.MemSpaceGfx);
+            SetArg(bus, ARG1, 0x1234);
+            RunFn(bus, GFN_MEMREAD);
+            Assert.AreEqual(0x5Au, GetResult(bus), "MEMREAD must report the byte written at the same address");
+
+            // A neighbouring byte must be untouched (autoinc off -> single byte).
+            Assert.AreEqual(0x00, GfxByte(bus, 0x1235), "MEMWRITE must not touch the neighbouring byte");
+        }
+
+        // --- MEMWRITE/MEMREAD on a DIFFERENT space (color RAM) -> space arg honored. ---
+        [TestMethod]
+        public void Axis2_MemWriteRead_HonorsTheSpaceArgument()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Write 0x0C to color space at offset 200; read it back.
+            SetArg(bus, ARG0, VgcConstants.MemSpaceColor);
+            SetArg(bus, ARG1, 200);
+            SetArg(bus, ARG2, 0x0C);
+            RunFn(bus, GFN_MEMWRITE);
+
+            Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceColor, 200, out byte v),
+                "color-space read must succeed");
+            Assert.AreEqual(0x0C, v, "MEMWRITE must write the color space when ARG0 = MemSpaceColor");
+
+            // The same offset in the gfx space must be untouched (proves the space arg routes).
+            Assert.AreEqual(0x00, GfxByte(bus, 200), "MEMWRITE to color space must not touch the gfx space");
+
+            SetArg(bus, ARG0, VgcConstants.MemSpaceColor);
+            SetArg(bus, ARG1, 200);
+            RunFn(bus, GFN_MEMREAD);
+            Assert.AreEqual(0x0Cu, GetResult(bus), "MEMREAD must report the color-space byte");
+        }
+
+        // --- $A3 VPOKE then $A2 VPEEK: round-trip a gfx-plane byte (fixed space). ---
+        [TestMethod]
+        public void Axis2_VPokeThenVPeek_RoundTripsAGfxByte()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // VPOKE offset 500 = 0x0E (a visible color index in the gfx plane).
+            SetArg(bus, ARG0, 500);    // gfx offset
+            SetArg(bus, ARG1, 0x0E);   // value
+            RunFn(bus, GFN_VPOKE);
+
+            // The gfx pixel/byte at that offset must have changed.
+            Assert.AreEqual(0x0E, GfxByte(bus, 500), "VPOKE must set the gfx byte at the offset");
+            Assert.AreEqual(0x00, GfxByte(bus, 501), "VPOKE must not touch the neighbouring gfx byte");
+
+            // VPEEK must read it back into LIB_RESULT.
+            SetArg(bus, ARG0, 500);
+            RunFn(bus, GFN_VPEEK);
+            Assert.AreEqual(0x0Eu, GetResult(bus), "VPEEK must report the gfx byte VPOKE wrote");
+        }
+
+        // --- $A4 GSAVE then $A5 GLOAD: save a gfx region, clobber it, reload it. ---
+        [TestMethod]
+        public void Axis2_GSaveThenGLoad_RoundTripsAGfxRegion()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Seed a 32-byte region in the gfx plane at offset 0.
+            const int addr = 0, len = 32;
+            for (int i = 0; i < len; i++) SetGfxByte(bus, addr + i, (byte)(0x10 + i));
+
+            // Stage the filename "GMEMTEST" in CPU RAM; ARG3 = ptr16 | len16<<16.
+            const ushort nameAddr = 0x0500;
+            byte[] name = System.Text.Encoding.ASCII.GetBytes("GMEMTEST");
+            for (int i = 0; i < name.Length; i++) bus.WriteRam((ushort)(nameAddr + i), name[i]);
+
+            // GSAVE space=gfx, addr=0, len=32, name BYTES.
+            SetArg(bus, ARG0, VgcConstants.MemSpaceGfx);
+            SetArg(bus, ARG1, addr);
+            SetArg(bus, ARG2, len);
+            SetArg(bus, ARG3, nameAddr | (name.Length << 16));
+            RunFn(bus, GFN_GSAVE);   // RunFn asserts STATUS = OK
+            Assert.AreEqual(0u, GetResult(bus), "GSAVE must report driver result 0 (OK)");
+
+            // The .gfx file must exist on HD0.
+            Assert.IsTrue(File.Exists(Path.Combine(Hd0Dir(), "GMEMTEST.gfx")),
+                "GSAVE must write the .gfx file to the host save directory");
+
+            // Clobber the gfx region.
+            for (int i = 0; i < len; i++) SetGfxByte(bus, addr + i, 0xFF);
+
+            // GLOAD the same region back.
+            SetArg(bus, ARG0, VgcConstants.MemSpaceGfx);
+            SetArg(bus, ARG1, addr);
+            SetArg(bus, ARG2, len);
+            SetArg(bus, ARG3, nameAddr | (name.Length << 16));
+            RunFn(bus, GFN_GLOAD);
+            Assert.AreEqual(0u, GetResult(bus), "GLOAD must report driver result 0 (OK)");
+
+            for (int i = 0; i < len; i++)
+                Assert.AreEqual((byte)(0x10 + i), GfxByte(bus, addr + i),
+                    $"GLOAD must restore gfx byte {i} from the saved file");
+        }
+
+        // --- $A5 GLOAD of a missing file -> A=1 -> LERR_FILE_FAIL. ---
+        [TestMethod]
+        public void Axis2_GLoad_MissingFile_ReportsFileFail()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const ushort nameAddr = 0x0500;
+            byte[] name = System.Text.Encoding.ASCII.GetBytes("NOSUCHGFX");
+            for (int i = 0; i < name.Length; i++) bus.WriteRam((ushort)(nameAddr + i), name[i]);
+
+            SetArg(bus, ARG0, VgcConstants.MemSpaceGfx);
+            SetArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, 16);
+            SetArg(bus, ARG3, nameAddr | (name.Length << 16));
+            RunFnRaw(bus, GFN_GLOAD);
+
+            Assert.AreEqual(1u, GetResult(bus), "GLOAD of a missing file must report driver result 1");
+            Assert.AreEqual(LERR_FILE_FAIL, bus.ReadRam(STATUS),
+                "a failed GLOAD must map to LERR_FILE_FAIL");
+        }
+
+        // --- $A6 NVGLOAD: decode a real NVG1 fixture into the gfx plane at offset 0. ---
+        [TestMethod]
+        public void Axis2_NvgLoad_DecodesFixtureIntoGfxPlane()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Build a minimal NVG1 file: 4x2 image, one span covering all 8 pixels.
+            // Header: "NVG1", width(2 LE), height(2 LE), spanCount(4 LE).
+            // Span: addr16 (image-space, LE), len8, then len bytes.
+            byte[] pixels = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+            var nvg = new System.Collections.Generic.List<byte>
+            {
+                (byte)'N', (byte)'V', (byte)'G', (byte)'1',
+                4, 0,   // width = 4
+                2, 0,   // height = 2
+                1, 0, 0, 0,   // spanCount = 1
+                0, 0,   // span addr = image offset 0
+                (byte)pixels.Length,   // span len = 8
+            };
+            nvg.AddRange(pixels);
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGFIX.nvg"), nvg.ToArray());
+
+            // Stage filename "NVGFIX"; NVGLOAD reads FIO_NAME via the BYTES arg.
+            const ushort nameAddr = 0x0500;
+            byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGFIX");
+            for (int i = 0; i < name.Length; i++) bus.WriteRam((ushort)(nameAddr + i), name[i]);
+
+            SetArg(bus, ARG0, nameAddr | (name.Length << 16));
+            RunFn(bus, GFN_NVGLOAD);   // RunFn asserts STATUS = OK
+            Assert.AreEqual(0u, GetResult(bus), "NVGLOAD must report driver result 0 (OK)");
+
+            // Row 0 lands at gfx offsets 0..3; row 1 at 320..323 (linear 320-wide rows).
+            for (int x = 0; x < 4; x++)
+                Assert.AreEqual(pixels[x], GfxByte(bus, x), $"NVGLOAD row 0 pixel {x}");
+            for (int x = 0; x < 4; x++)
+                Assert.AreEqual(pixels[4 + x], GfxByte(bus, VgcConstants.GfxWidth + x),
+                    $"NVGLOAD row 1 pixel {x}");
+        }
+
+        // --- $A7 NVGLOAD_AT: decode the fixture at a non-zero destination offset. ---
+        [TestMethod]
+        public void Axis2_NvgLoadAt_DecodesFixtureAtDestOffset()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte[] pixels = { 0x0A, 0x0B, 0x0C, 0x0D };
+            var nvg = new System.Collections.Generic.List<byte>
+            {
+                (byte)'N', (byte)'V', (byte)'G', (byte)'1',
+                4, 0,   // width = 4
+                1, 0,   // height = 1
+                1, 0, 0, 0,   // spanCount = 1
+                0, 0,   // span addr = 0
+                (byte)pixels.Length,
+            };
+            nvg.AddRange(pixels);
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGAT.nvg"), nvg.ToArray());
+
+            const ushort nameAddr = 0x0500;
+            byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGAT");
+            for (int i = 0; i < name.Length; i++) bus.WriteRam((ushort)(nameAddr + i), name[i]);
+
+            // dest = row 5 (linear offset 5*320). baseX=0, baseY=5.
+            int dest = 5 * VgcConstants.GfxWidth;
+            SetArg(bus, ARG0, nameAddr | (name.Length << 16));
+            SetArg(bus, ARG1, dest);
+            RunFn(bus, GFN_NVGLOAD_AT);
+            Assert.AreEqual(0u, GetResult(bus), "NVGLOAD_AT must report driver result 0 (OK)");
+
+            for (int x = 0; x < 4; x++)
+                Assert.AreEqual(pixels[x], GfxByte(bus, dest + x), $"NVGLOAD_AT pixel {x} at dest offset");
+        }
+
+        // --- $A8 NVGLOAD_NAMED: the named-arg path decodes the same fixture. ---
+        [TestMethod]
+        public void Axis2_NvgLoadNamed_DecodesViaNamedArgPath()
+        {
+            using var bus = MakeAxis2Bus();
+
+            byte[] pixels = { 0x09, 0x08, 0x07, 0x06 };
+            var nvg = new System.Collections.Generic.List<byte>
+            {
+                (byte)'N', (byte)'V', (byte)'G', (byte)'1',
+                4, 0, 1, 0, 1, 0, 0, 0, 0, 0, (byte)pixels.Length,
+            };
+            nvg.AddRange(pixels);
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGNAMED.nvg"), nvg.ToArray());
+
+            const ushort nameAddr = 0x0500;
+            byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGNAMED");
+            for (int i = 0; i < name.Length; i++) bus.WriteRam((ushort)(nameAddr + i), name[i]);
+
+            SetArg(bus, ARG0, nameAddr | (name.Length << 16));
+            RunFn(bus, GFN_NVGLOAD_NAMED);
+            Assert.AreEqual(0u, GetResult(bus), "NVGLOAD_NAMED must report driver result 0 (OK)");
+
+            for (int x = 0; x < 4; x++)
+                Assert.AreEqual(pixels[x], GfxByte(bus, x), $"NVGLOAD_NAMED pixel {x}");
+        }
+
+        // --- $A6 NVGLOAD of a missing file -> A=1 -> LERR_IMAGE_FAIL. ---
+        [TestMethod]
+        public void Axis2_NvgLoad_MissingFile_ReportsImageFail()
+        {
+            using var bus = MakeAxis2Bus();
+
+            const ushort nameAddr = 0x0500;
+            byte[] name = System.Text.Encoding.ASCII.GetBytes("NOSUCHNVG");
+            for (int i = 0; i < name.Length; i++) bus.WriteRam((ushort)(nameAddr + i), name[i]);
+
+            SetArg(bus, ARG0, nameAddr | (name.Length << 16));
+            RunFnRaw(bus, GFN_NVGLOAD);
+
+            Assert.AreEqual(1u, GetResult(bus), "NVGLOAD of a missing file must report driver result 1");
+            Assert.AreEqual(LERR_IMAGE_FAIL, bus.ReadRam(STATUS),
+                "a failed NVGLOAD must map to LERR_IMAGE_FAIL");
+        }
+
+        // --- Loader-axis smoke: an image/mem fn-id routes through the real lib_call. ---
+        // MEMWRITE is used (a VGC mem op): on LibLoaderBus the VGC command write
+        // lands in dead RAM and vgc_wait_cmd reads a 0 busy bit, so the wrapper
+        // returns OK on dispatch without a peripheral.
+        [TestMethod]
+        public void Axis1_MemWrite_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            bus.PokeRam(ARG0, VgcConstants.MemSpaceGfx);
+            bus.PokeRam(ARG1, 0x00); bus.PokeRam((ushort)(ARG1 + 1), 0x10);   // addr $1000
+            bus.PokeRam(ARG2, 0x42);                                          // value
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_MEMWRITE);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS), "MEMWRITE must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
+        }
+
+        // --- Dispatch density: a gap id above the image/mem range ($AA) returns LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_ImageMemRangeGap_ReturnsNoFn()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.WriteRam(STATUS, 0x00);   // poison opposite to expected non-OK
+            RunFnRaw(bus, 0xAA);          // first id past GFX_FN_COUNT-1 ($A9)
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "id $AA (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
         }
 
         private static string RepoPath(params string[] parts)

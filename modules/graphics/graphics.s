@@ -17,17 +17,23 @@
       .include "msprite.inc"           ; MSPRITE_* BSS symbols + helper .globals
                                        ; (guarded; msprite.s body included below;
                                        ; pulls sprite.inc, dedup'd)
+      .include "nvg.inc"               ; NVG_ADDRL/H + NVG_NAMEPTR/NAMELEN; pulls
+                                       ; fio.inc (FIO_GSPACE/GADDRL/H/GLENL/H,
+                                       ; FIO_NAME/NAMELEN, FIO_RESULT_OK) + nova.inc
+                                       ; (all guarded; nvg.s + fio.s bodies below)
 
 ; Highest implemented fn-id + 1. Grows per domain batch. The draw domain $00-$09
 ; is live; the text/mode domain $10-$1B is live (batch 4b.3); the hw-sprite domain
 ; $20-$3B is live (batch 4b.4); the copper domain $40-$49 is live (batch 4b.5);
 ; the blit/dma domain $50-$5B is live (batch 4b.6); the vsprite domain $60-$71 is
-; live (batch 4b.7); the msprite/meta-sprite domain $80-$8B is live (batch 4b.8).
+; live (batch 4b.7); the msprite/meta-sprite domain $80-$8B is live (batch 4b.8);
+; the image/mem domain $A0-$A9 is live (batch 4b.9).
 ; The jtable is dense from $00..GFX_FN_COUNT-1: implemented ids point at their
 ; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F, $4A-$4F,
-; $5C-$5F, $72-$7F) points at gfn_unimpl so it resolves to LERR_NO_FN. ids >=
-; GFX_FN_COUNT ($8C+) resolve to LERR_NO_FN via the dispatch bounds-check.
-GFX_FN_COUNT = $8C
+; $5C-$5F, $72-$7F, $8C-$9F, $AA-$AF) points at gfn_unimpl so it resolves to
+; LERR_NO_FN. ids >= GFX_FN_COUNT ($AA+) resolve to LERR_NO_FN via the dispatch
+; bounds-check.
+GFX_FN_COUNT = $AA
 
 ; GTEXT copies its BYTES string into the VGC FIO_NAME buffer ($B9B0-$B9EF, 64
 ; bytes). Mirror fio.inc's FIO_NAME_LIMIT here (fio.inc isn't pulled into the
@@ -214,7 +220,37 @@ gfx_jtable:
       .word   gfn_ms_tick-1            ; $89 MS_TICK
       .word   gfn_ms_commit-1          ; $8A MS_COMMIT
       .word   gfn_ms_commit_one-1      ; $8B MS_COMMIT_ONE
-      ; $8C.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
+      .word   gfn_unimpl-1             ; $8C gap -> LERR_NO_FN
+      .word   gfn_unimpl-1             ; $8D gap
+      .word   gfn_unimpl-1             ; $8E gap
+      .word   gfn_unimpl-1             ; $8F gap
+      .word   gfn_unimpl-1             ; $90 gap
+      .word   gfn_unimpl-1             ; $91 gap
+      .word   gfn_unimpl-1             ; $92 gap
+      .word   gfn_unimpl-1             ; $93 gap
+      .word   gfn_unimpl-1             ; $94 gap
+      .word   gfn_unimpl-1             ; $95 gap
+      .word   gfn_unimpl-1             ; $96 gap
+      .word   gfn_unimpl-1             ; $97 gap
+      .word   gfn_unimpl-1             ; $98 gap
+      .word   gfn_unimpl-1             ; $99 gap
+      .word   gfn_unimpl-1             ; $9A gap
+      .word   gfn_unimpl-1             ; $9B gap
+      .word   gfn_unimpl-1             ; $9C gap
+      .word   gfn_unimpl-1             ; $9D gap
+      .word   gfn_unimpl-1             ; $9E gap
+      .word   gfn_unimpl-1             ; $9F gap
+      .word   gfn_memread-1            ; $A0 MEMREAD  (reporter)
+      .word   gfn_memwrite-1           ; $A1 MEMWRITE
+      .word   gfn_vpeek-1              ; $A2 VPEEK    (reporter)
+      .word   gfn_vpoke-1              ; $A3 VPOKE
+      .word   gfn_gsave-1              ; $A4 GSAVE
+      .word   gfn_gload-1              ; $A5 GLOAD
+      .word   gfn_nvgload-1            ; $A6 NVGLOAD
+      .word   gfn_nvgload_at-1         ; $A7 NVGLOAD_AT
+      .word   gfn_nvgload_named-1      ; $A8 NVGLOAD_NAMED
+      .word   gfn_nvgload_named_at-1   ; $A9 NVGLOAD_NAMED_AT
+      ; $AA.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
 
 ; Any reachable-but-unimplemented fn-id: report LERR_NO_FN.
 gfn_unimpl:
@@ -1294,6 +1330,238 @@ gfn_ms_commit_one:
       jsr     msprite_commit_one
       jmp     finish_ms
 
+; =====================================================================
+; $A0-$A9  image / mem domain (batch 4b.9). Drivers: vgc.s mem-I/O,
+; fio.s GSAVE/GLOAD, nvg.s (all included below; dedup'd by .ifndef guards).
+;
+; THREE shapes (see libgraphics.inc for the full ABI):
+;   - VGC byte I/O: VGC_P0 = space, VGC_P1/P2 = 16-bit addr, VGC_P3 = value
+;     (write in / read OUT), VGC_P4 = autoinc (we clear it -> one byte). The
+;     drivers self-wait via vgc_wait_cmd, so MEMWRITE/VPOKE end finish_ok_nowait;
+;     MEMREAD/VPEEK publish VGC_P3 to LIB_RESULT (finish_result8).
+;   - File GSAVE/GLOAD: marshal the BYTES filename into FIO_NAME/FIO_NAMELEN
+;     (as GTEXT does), load FIO_GSPACE/GADDRL/H/GLENL/H, JSR fio_gsave/fio_gload.
+;     A=0/1 -> finish_file (publish + map to LERR_FILE_FAIL).
+;   - NVG load: marshal the filename, set the dest offset for the _AT variants,
+;     JSR the nvg_load* driver. A=0/1 -> finish_image (LERR_IMAGE_FAIL).
+
+; gfx_copy_name — copy a BYTES filename into FIO_NAME with FIO_NAMELEN set.
+; Source pointer must already be in LIB_ZP (the module-private (zp),Y pointer)
+; and the length in A. Clamps len to the FIO name buffer (GFX_FIO_NAME_LIMIT),
+; mirroring the GTEXT marshal / fio_copy_name. RAM scratch only (LIB_ZP + X/Y).
+gfx_copy_name:
+      cmp     #GFX_FIO_NAME_LIMIT+1
+      bcc     @lenok
+      lda     #GFX_FIO_NAME_LIMIT
+@lenok:
+      sta     FIO_NAMELEN
+      cmp     #0
+      beq     @done                    ; empty name -> nothing to copy
+      tax                              ; X = byte count
+      ldy     #0
+@loop:
+      lda     (LIB_ZP),y
+      sta     FIO_NAME,y
+      iny
+      dex
+      bne     @loop
+@done:
+      rts
+
+; finish_file — fio_gsave/gload result in A: publish to LIB_RESULT byte 0
+; (bytes 1-3 zeroed); A!=0 -> LERR_FILE_FAIL, A==0 -> LERR_OK.
+finish_file:
+      sta     LIB_RESULT
+      ldx     #0
+      stx     LIB_RESULT+1
+      stx     LIB_RESULT+2
+      stx     LIB_RESULT+3
+      cmp     #FIO_RESULT_OK
+      bne     @fail
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_FILE_FAIL
+      sta     LIB_STATUS
+      rts
+
+; finish_image — nvg_load* result in A: publish to LIB_RESULT byte 0
+; (bytes 1-3 zeroed); A!=0 -> LERR_IMAGE_FAIL, A==0 -> LERR_OK.
+finish_image:
+      sta     LIB_RESULT
+      ldx     #0
+      stx     LIB_RESULT+1
+      stx     LIB_RESULT+2
+      stx     LIB_RESULT+3
+      cmp     #FIO_RESULT_OK
+      bne     @fail
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_IMAGE_FAIL
+      sta     LIB_STATUS
+      rts
+
+; gfx_mem_prep — load space:A -> VGC_P0, addr16 from (LIB_ZP cell) ... no — the
+; address comes from the ARG cells directly. Helper loads VGC_P1/P2 = 16-bit
+; address from the ARG cell whose low/high bytes are in A (low) and X (high), and
+; clears VGC_P4 (autoinc off). Space must already be in VGC_P0.
+gfx_mem_addr:
+      sta     VGC_P1                   ; addr low
+      stx     VGC_P2                   ; addr high
+      stz     VGC_P4                   ; autoinc off -> single byte
+      rts
+
+; --- $A0 MEMREAD: read one byte from a VGC space (reporter) ---
+; space:ARG0 -> P0, addr:ARG1 -> P1/P2; vgc_mem_read returns the byte in P3.
+gfn_memread:
+      lda     LIB_ARG0                 ; space -> P0
+      sta     VGC_P0
+      lda     LIB_ARG1                 ; addr low
+      ldx     LIB_ARG1+1               ; addr high
+      jsr     gfx_mem_addr
+      jsr     vgc_mem_read
+      lda     VGC_P3                   ; read byte
+      jmp     finish_result8
+
+; --- $A1 MEMWRITE: write one byte to a VGC space ---
+; space:ARG0 -> P0, addr:ARG1 -> P1/P2, value:ARG2 -> P3; vgc_mem_write self-waits.
+gfn_memwrite:
+      lda     LIB_ARG0                 ; space -> P0
+      sta     VGC_P0
+      lda     LIB_ARG1                 ; addr low
+      ldx     LIB_ARG1+1               ; addr high
+      jsr     gfx_mem_addr
+      lda     LIB_ARG2                 ; value -> P3
+      sta     VGC_P3
+      jsr     vgc_mem_write
+      jmp     finish_ok_nowait
+
+; --- $A2 VPEEK: read one byte from the gfx plane (reporter) ---
+; offset:ARG0 -> P1/P2, space fixed to gfx; vgc_mem_read returns the byte in P3.
+gfn_vpeek:
+      lda     #GFX_MEMSPACE_GFX        ; space = gfx -> P0
+      sta     VGC_P0
+      lda     LIB_ARG0                 ; offset low
+      ldx     LIB_ARG0+1               ; offset high
+      jsr     gfx_mem_addr
+      jsr     vgc_mem_read
+      lda     VGC_P3
+      jmp     finish_result8
+
+; --- $A3 VPOKE: write one byte to the gfx plane ---
+; offset:ARG0 -> P1/P2, value:ARG1 -> P3, space fixed to gfx.
+gfn_vpoke:
+      lda     #GFX_MEMSPACE_GFX        ; space = gfx -> P0
+      sta     VGC_P0
+      lda     LIB_ARG0                 ; offset low
+      ldx     LIB_ARG0+1               ; offset high
+      jsr     gfx_mem_addr
+      lda     LIB_ARG1                 ; value -> P3
+      sta     VGC_P3
+      jsr     vgc_mem_write
+      jmp     finish_ok_nowait
+
+; gfx_load_gregs — load the FIO graphics registers from the GSAVE/GLOAD args:
+; space:ARG0 -> FIO_GSPACE, addr:ARG1 -> FIO_GADDRL/H, len:ARG2 -> FIO_GLENL/H.
+gfx_load_gregs:
+      lda     LIB_ARG0
+      sta     FIO_GSPACE
+      lda     LIB_ARG1                 ; addr low
+      sta     FIO_GADDRL
+      lda     LIB_ARG1+1               ; addr high
+      sta     FIO_GADDRH
+      lda     LIB_ARG2                 ; len low
+      sta     FIO_GLENL
+      lda     LIB_ARG2+1               ; len high
+      sta     FIO_GLENH
+      rts
+
+; gfx_name_from_arg3 — marshal the ARG3 BYTES filename into FIO_NAME/FIO_NAMELEN.
+; ARG3 low word = ptr16 -> LIB_ZP; ARG3 high word low byte = len (clamped).
+gfx_name_from_arg3:
+      lda     LIB_ARG3                 ; name ptr16 -> LIB_ZP
+      sta     LIB_ZP
+      lda     LIB_ARG3+1
+      sta     LIB_ZP+1
+      lda     LIB_ARG3+2               ; len
+      jmp     gfx_copy_name            ; -> FIO_NAME/FIO_NAMELEN
+
+; --- $A4 GSAVE: save a VGC memory space region to a .gfx file ---
+; space:ARG0, addr:ARG1, len:ARG2, BYTES name:ARG3 -> fio_gsave.
+gfn_gsave:
+      jsr     gfx_load_gregs
+      jsr     gfx_name_from_arg3
+      jsr     fio_gsave
+      jmp     finish_file
+
+; --- $A5 GLOAD: load a .gfx file into a VGC memory space region ---
+; space:ARG0, addr:ARG1, len:ARG2, BYTES name:ARG3 -> fio_gload.
+gfn_gload:
+      jsr     gfx_load_gregs
+      jsr     gfx_name_from_arg3
+      jsr     fio_gload
+      jmp     finish_file
+
+; gfx_name_from_arg0 — marshal the ARG0 BYTES filename into FIO_NAME/FIO_NAMELEN.
+gfx_name_from_arg0:
+      lda     LIB_ARG0                 ; name ptr16 -> LIB_ZP
+      sta     LIB_ZP
+      lda     LIB_ARG0+1
+      sta     LIB_ZP+1
+      lda     LIB_ARG0+2               ; len
+      jmp     gfx_copy_name
+
+; gfx_argptr_to_zp — copy a CPU pointer (ARG0 low word) into the FIO named-arg
+; ZP cells (NVG_NAMEPTR_L/H) and set NVG_NAMELEN from ARG0 high word low byte.
+; Used by the NVG _NAMED variants which self-copy the name via fio_copy_name.
+gfx_nvg_named_args:
+      lda     LIB_ARG0                 ; ptr low
+      sta     NVG_NAMEPTR_L
+      lda     LIB_ARG0+1               ; ptr high
+      sta     NVG_NAMEPTR_H
+      lda     LIB_ARG0+2               ; len
+      sta     NVG_NAMELEN
+      rts
+
+; --- $A6 NVGLOAD: clear gfx + decode the named NVG file at offset 0 ---
+; BYTES name:ARG0 -> FIO_NAME/FIO_NAMELEN; nvg_load.
+gfn_nvgload:
+      jsr     gfx_name_from_arg0
+      jsr     nvg_load
+      jmp     finish_image
+
+; --- $A7 NVGLOAD_AT: clear gfx + decode at dest offset NVG_ADDRL/H ---
+; BYTES name:ARG0 -> FIO_NAME/FIO_NAMELEN, dest:ARG1 -> NVG_ADDRL/H; nvg_load_at.
+gfn_nvgload_at:
+      jsr     gfx_name_from_arg0
+      lda     LIB_ARG1                 ; dest low
+      sta     NVG_ADDRL
+      lda     LIB_ARG1+1               ; dest high
+      sta     NVG_ADDRH
+      jsr     nvg_load_at
+      jmp     finish_image
+
+; --- $A8 NVGLOAD_NAMED: named-arg path (driver self-copies the filename) ---
+; BYTES name:ARG0 -> NVG_NAMEPTR_L/H + NVG_NAMELEN; nvg_load_named.
+gfn_nvgload_named:
+      jsr     gfx_nvg_named_args
+      jsr     nvg_load_named
+      jmp     finish_image
+
+; --- $A9 NVGLOAD_NAMED_AT: named-arg path + dest offset ---
+; BYTES name:ARG0 -> NVG_NAMEPTR_L/H + NVG_NAMELEN, dest:ARG1 -> NVG_ADDRL/H.
+gfn_nvgload_named_at:
+      jsr     gfx_nvg_named_args
+      lda     LIB_ARG1                 ; dest low
+      sta     NVG_ADDRL
+      lda     LIB_ARG1+1               ; dest high
+      sta     NVG_ADDRH
+      jsr     nvg_load_named_at
+      jmp     finish_image
+
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
 ; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.
 ; sprite.s provides the hw-sprite command/register/collision driver entries.
@@ -1318,6 +1586,11 @@ gfn_ms_commit_one:
 ; sprite.s (already pulled above; dedup'd by the .ifndef guard) and declares the
 ; MSPRITE_* object table in the module-owned BSS + ZEROPAGE bands (see graphics.cfg).
       .include "msprite.s"
+; nvg.s provides the NVG image-load driver entries (batch 4b.9); it pulls fio.s
+; (with FIO_EMIT_ALL_RUNTIME so fio_gsave/fio_gload are emitted for GSAVE/GLOAD).
+; fio.s pulls nova.inc for the FIO_*/VGC_* register addresses, all dedup'd by the
+; same .ifndef guards.
+      .include "nvg.s"
 
       .segment "VECTORS"             ; $FFFA — don't-care under SEI; fills the 16KB image
       .word   MOD_ENTRY, MOD_ENTRY, MOD_ENTRY

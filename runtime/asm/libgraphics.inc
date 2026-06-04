@@ -404,9 +404,64 @@ GFN_MS_COMMIT_ONE  = $8B  ; (handle:ARG0)            -> A; msprite_commit_one
 ;             $8C-$9F reserved
 
 ; =====================================================================
-; $A0-$AF  image / mem  (drivers: nvg.s + vgc mem)
-;   GSAVE/GLOAD/NVGload x4/MEMREAD/MEMWRITE/VPOKE/VPEEK
-; (constants filled in batch 4b.9)
+; $A0-$AF  image / mem  (drivers: vgc.s mem-I/O + fio.s GSAVE/GLOAD + nvg.s)
+;   MEMREAD MEMWRITE VPEEK VPOKE GSAVE GLOAD NVGload x4   (batch 4b.9)
+;
+; THREE driver families, three marshalling shapes, all VERIFIED against the
+; sources:
+;
+;  1. VGC byte memory I/O (vgc.s vgc_mem_read / vgc_mem_write). Both issue a
+;     VCMD_MEMREAD/MEMWRITE through VGC_CMD and self-wait via vgc_wait_cmd. The
+;     ExecuteMemoryCommand register map (VirtualGraphicsController.cs) is:
+;       VGC_P0 = space (a VGC_PLANE_* id), VGC_P1/P2 = 16-bit address,
+;       VGC_P3 = value (write input / read OUTPUT), VGC_P4 = autoinc flags
+;       (bit0). The wrapper clears VGC_P4 so each op touches exactly one byte.
+;     MEMREAD/VPEEK are reporters: after the command, VGC_P3 holds the byte ->
+;     LIB_RESULT (4-byte LE, high bytes zeroed) + STATUS=OK.
+;     VPEEK/VPOKE are the gfx-plane forms: identical to MEMREAD/MEMWRITE with
+;     the space fixed to VGC_PLANE_GFX, so ARG0 carries the gfx offset directly
+;     (no space arg).
+;
+;  2. File save/load of a VGC memory space to/from a .gfx file (fio.s
+;     fio_gsave / fio_gload -> FIO_CMD_GSAVE/GLOAD via fio_exec; self-waits on
+;     FIO_STATUS, returns A=0 OK / A=1 error). The FileIoController DoGSave/
+;     DoGLoad read FIO_GSPACE = space, FIO_GADDRL/H = 16-bit address, FIO_GLENL/H
+;     = 16-bit length, and FIO_NAME/FIO_NAMELEN = filename. The wrapper marshals
+;     the BYTES filename into FIO_NAME/FIO_NAMELEN exactly as GTEXT does, loads
+;     the three graphics registers, and JSRs the driver. Result A!=0 ->
+;     LERR_FILE_FAIL, A==0 -> OK; A is also published to LIB_RESULT byte 0.
+;
+;  3. NVG image load into the gfx plane (nvg.s nvg_load / nvg_load_at /
+;     nvg_load_named / nvg_load_named_at). nvg_load(_at) read the filename from
+;     FIO_NAME/FIO_NAMELEN; the _named variants read it from the FIO_ARG_NAME*
+;     ZP cells and self-copy. All four clear the gfx plane then decode the file
+;     via FIO_CMD_NVGLOAD (host-side NVG1 decoder) and return A=0/1. The _AT
+;     variants take a destination offset in NVG_ADDRL/H (= FIO_GADDRL/H). Every
+;     NVGload wrapper takes ARG0 = BYTES filename; the _AT/_NAMED_AT variants
+;     additionally take a 16-bit dest offset in ARG1. Result A!=0 ->
+;     LERR_IMAGE_FAIL, A==0 -> OK; A is also published to LIB_RESULT byte 0.
+;
+;     NVGload HARDWARE effect is host-decoder + real-file dependent (no NVG1
+;     fixture is decodable in the unit-test harness), so these are proven on the
+;     loader axis (dispatch + register marshalling + A=error mapping for the
+;     missing-file path) only. MEMREAD/MEMWRITE/VPEEK/VPOKE and GSAVE/GLOAD are
+;     proven end-to-end against the real VGC/FileIoController on Axis 2.
+GFX_MEMSPACE_GFX = $03      ; VGC_PLANE_GFX — VPEEK/VPOKE fixed space
+LERR_FILE_FAIL   = $86      ; fio_gsave/gload returned A=1 (FIO error / bad geometry)
+LERR_IMAGE_FAIL  = $87      ; nvg_load* returned A=1 (host decode / missing file)
+
+; Layouts (ARGn low word unless noted; BYTES args pack ptr16 low / len16 high):
+GFN_MEMREAD          = $A0  ; (space:ARG0, addr:ARG1) reporter -> RESULT = byte; vgc_mem_read
+GFN_MEMWRITE         = $A1  ; (space:ARG0, addr:ARG1, value:ARG2) -> vgc_mem_write
+GFN_VPEEK            = $A2  ; (offset:ARG0) reporter -> RESULT = gfx byte; vgc_mem_read (space=gfx)
+GFN_VPOKE            = $A3  ; (offset:ARG0, value:ARG1) -> vgc_mem_write (space=gfx)
+GFN_GSAVE            = $A4  ; (space:ARG0, addr:ARG1, len:ARG2, BYTES name:ARG3) -> fio_gsave
+GFN_GLOAD            = $A5  ; (space:ARG0, addr:ARG1, len:ARG2, BYTES name:ARG3) -> fio_gload
+GFN_NVGLOAD          = $A6  ; (BYTES name:ARG0)                  -> nvg_load (offset 0)
+GFN_NVGLOAD_AT       = $A7  ; (BYTES name:ARG0, dest:ARG1)       -> nvg_load_at
+GFN_NVGLOAD_NAMED    = $A8  ; (BYTES name:ARG0)                  -> nvg_load_named (named-arg path)
+GFN_NVGLOAD_NAMED_AT = $A9  ; (BYTES name:ARG0, dest:ARG1)       -> nvg_load_named_at
+;             $AA-$AF reserved
 
 ; =====================================================================
 ; $B0-$BF  turtle-render  (the rendering ops the resident turtle calls in 4c)
