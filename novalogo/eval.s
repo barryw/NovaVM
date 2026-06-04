@@ -160,17 +160,9 @@ eval_loop:
       ; Evaluate arguments and copy to ext_arg slots
       JSR   ext_eval_args
       BCS   @ext_arg_err
-      ; Call extension via RAM trampoline
-      JSR   EXT_TRAMPOLINE
-      ; Copy result back to eval_val
-      LDA   EXT_RESULT_TYPE
-      STA   eval_type
-      LDA   EXT_RESULT_HI
-      STA   eval_val_hi
-      LDA   EXT_RESULT_LO
-      STA   eval_val_lo
-      LDA   EXT_RESULT_FRAC
-      STA   eval_val_frac
+      ; Dispatch: legacy trampoline or paged-library lib_call (branches on
+      ; ext_mod_id). Result left in eval_val.
+      JSR   ext_invoke
       JMP   eval_continue
 
 @ext_arg_err:
@@ -306,15 +298,9 @@ eval_body:
       PLX
       JSR   ext_eval_args
       BCS   @body_ext_err
-      JSR   EXT_TRAMPOLINE
-      LDA   EXT_RESULT_TYPE
-      STA   eval_type
-      LDA   EXT_RESULT_HI
-      STA   eval_val_hi
-      LDA   EXT_RESULT_LO
-      STA   eval_val_lo
-      LDA   EXT_RESULT_FRAC
-      STA   eval_val_frac
+      ; Dispatch: legacy trampoline or paged-library lib_call (branches on
+      ; ext_mod_id). Result left in eval_val.
+      JSR   ext_invoke
       JMP   eval_continue
 
 @body_ext_err:
@@ -470,16 +456,9 @@ eval_expr:
       PLX
       JSR   ext_eval_args
       BCS   @word_really_unknown
-      JSR   EXT_TRAMPOLINE
-      ; Copy result back to eval_val
-      LDA   EXT_RESULT_TYPE
-      STA   eval_type
-      LDA   EXT_RESULT_HI
-      STA   eval_val_hi
-      LDA   EXT_RESULT_LO
-      STA   eval_val_lo
-      LDA   EXT_RESULT_FRAC
-      STA   eval_val_frac
+      ; Dispatch: legacy trampoline or paged-library lib_call (branches on
+      ; ext_mod_id). Result left in eval_val.
+      JSR   ext_invoke
       CLC
       JMP   eval_check_infix
 
@@ -1490,6 +1469,126 @@ ext_eval_args:
       RTS
 @err:
       SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; ext_invoke — dispatch the looked-up extension command and leave its
+;   result in eval_type/eval_val_hi/eval_val_lo/eval_val_frac, then RTS.
+;
+;   Entry: args already evaluated (EXT_ARG0..3 + EXT_ARGC populated),
+;          EXT_CMD = fn_id, ext_mod_id = module_id.
+;
+;   Branches on ext_mod_id:
+;     MODULE_ID_NONE -> legacy RAM trampoline (JSR EXT_TRAMPOLINE).
+;     non-zero       -> canonical paged-library lib_call mailbox.
+;
+;   NOTE: as of task 4c.1-2 every ext_cmd_table entry is MODULE_ID_NONE,
+;   so the lib_call branch is dead-but-correct here; it is first executed
+;   and verified end-to-end once 4c.1-3 flips the graphics entries to
+;   MODULE_ID_GRAPHICS.
+;
+;   Clobbers: A, X, Y. May JMP err_idk_word on a lib error (no return).
+; ---------------------------------------------------------------------
+ext_invoke:
+      LDA   ext_mod_id
+      BNE   @lib_call             ; non-zero module id -> paged-library path
+
+; --- Legacy path: RAM trampoline to extension ROM ---
+      JSR   EXT_TRAMPOLINE
+      LDA   EXT_RESULT_TYPE
+      STA   eval_type
+      LDA   EXT_RESULT_HI
+      STA   eval_val_hi
+      LDA   EXT_RESULT_LO
+      STA   eval_val_lo
+      LDA   EXT_RESULT_FRAC
+      STA   eval_val_frac
+      RTS
+
+; --- lib_call path: drive the canonical mailbox at $0300 ---
+@lib_call:
+      ; Convert EXT_ARGn (Logo 16.8: TYPE/HI/LO/FRAC) -> LIB_ARGn (32-bit LE).
+      ; The GRAPHICS module reads each cell's low word as a signed s16, so map
+      ; HI:LO into the cell low word, sign-extend into the high word, and DROP
+      ; the fractional byte. Convert only n < EXT_ARGC cells.
+      ;   LIB_ARGn+0 = EXT_ARGn_LO   LIB_ARGn+1 = EXT_ARGn_HI
+      ;   LIB_ARGn+2 = LIB_ARGn+3 = $FF if EXT_ARGn_HI bit7 set else $00
+      LDX   EXT_ARGC
+      ; arg 0
+      CPX   #1
+      BCC   @args_done
+      LDA   EXT_ARG0_LO
+      STA   LIB_ARG0+0
+      LDA   EXT_ARG0_HI
+      STA   LIB_ARG0+1            ; STA does not alter A; A still = HI byte
+      JSR   @sign_of_a            ; A = $FF if HI bit7 set, else $00
+      STA   LIB_ARG0+2
+      STA   LIB_ARG0+3
+      ; arg 1
+      CPX   #2
+      BCC   @args_done
+      LDA   EXT_ARG1_LO
+      STA   LIB_ARG1+0
+      LDA   EXT_ARG1_HI
+      STA   LIB_ARG1+1
+      JSR   @sign_of_a
+      STA   LIB_ARG1+2
+      STA   LIB_ARG1+3
+      ; arg 2
+      CPX   #3
+      BCC   @args_done
+      LDA   EXT_ARG2_LO
+      STA   LIB_ARG2+0
+      LDA   EXT_ARG2_HI
+      STA   LIB_ARG2+1
+      JSR   @sign_of_a
+      STA   LIB_ARG2+2
+      STA   LIB_ARG2+3
+      ; arg 3
+      CPX   #4
+      BCC   @args_done
+      LDA   EXT_ARG3_LO
+      STA   LIB_ARG3+0
+      LDA   EXT_ARG3_HI
+      STA   LIB_ARG3+1
+      JSR   @sign_of_a
+      STA   LIB_ARG3+2
+      STA   LIB_ARG3+3
+
+@args_done:
+      ; Populate module/function selectors and call the resident loader.
+      LDA   ext_mod_id
+      STA   LIB_MOD_ID
+      LDA   EXT_CMD
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND       ; == JSR $0320 (resident lib_call)
+
+      ; A non-zero status aborts the line (unreachable until 4c.1-3).
+      LDA   LIB_STATUS
+      BNE   @lib_err
+
+      ; Copy LIB_RESULT low word into eval_val as a Logo integer.
+      LDA   LIB_RESULT+0
+      STA   eval_val_lo
+      LDA   LIB_RESULT+1
+      STA   eval_val_hi
+      STZ   eval_val_frac
+      LDA   #VAL_NUMBER
+      STA   eval_type
+      RTS
+
+@lib_err:
+      JMP   err_idk_word
+
+; @sign_of_a — sign-extend the s8 high byte in A to a full byte:
+;   returns A = $FF if A bit7 was set, else A = $00. Preserves X/Y.
+@sign_of_a:
+      AND   #$80                  ; isolate bit7
+      BEQ   @sign_zero
+      LDA   #$FF
+      RTS
+@sign_zero:
+      LDA   #$00
       RTS
 
       .segment "RODATA"

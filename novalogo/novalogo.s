@@ -42,6 +42,11 @@ cold_start:
       DEX
       BPL   @copy_tramp
 
+      ; Tell the resident paged-library loader which ROM bank to restore after
+      ; a module call returns (lib_call swaps back to LIB_HOME_BANK).
+      LDA   #ROMSWAP_LOGO
+      STA   LIB_HOME_BANK
+
       ; Zero NovaLogo turtle/graphics state ($9F00..$9F1F) so each session starts
       ; in a known mode. The extension pins its turtle state here (extension.s
       ; TURTLE_STATE_BASE=$9F00); RAM is stale across soft-reboot on HW, and a
