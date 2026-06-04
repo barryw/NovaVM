@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
@@ -1352,6 +1353,7 @@ public class NovaLogoTests
         cpu.Boot();
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
+        StageGraphicsModule(bus);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CS");
@@ -1370,6 +1372,8 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "555") found = true;
         Assert.IsTrue(found, $"Expected '555' after drawing commands.\n{screen}");
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"Drawing commands must resolve through lib_call(GRAPHICS), not the unknown-word path.\n{screen}");
     }
 
     [TestMethod]
@@ -1380,6 +1384,7 @@ public class NovaLogoTests
         cpu.Boot();
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
+        StageGraphicsModule(bus);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CS");
@@ -1396,6 +1401,8 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "444") found = true;
         Assert.IsTrue(found, $"Expected '444' after CIRCLE + RECT.\n{screen}");
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"CIRCLE/RECT must resolve through lib_call(GRAPHICS), not the unknown-word path.\n{screen}");
     }
 
     [TestMethod]
@@ -1406,6 +1413,7 @@ public class NovaLogoTests
         cpu.Boot();
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
+        StageGraphicsModule(bus);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CS");
@@ -1426,6 +1434,8 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "333") found = true;
         Assert.IsTrue(found, $"Expected '333' after FILL + PAINT.\n{screen}");
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"FILL/PAINT must resolve through lib_call(GRAPHICS), not the unknown-word path.\n{screen}");
     }
 
     [TestMethod]
@@ -1436,6 +1446,7 @@ public class NovaLogoTests
         cpu.Boot();
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
+        StageGraphicsModule(bus);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CS");
@@ -1454,6 +1465,8 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "222") found = true;
         Assert.IsTrue(found, $"Expected '222' after PLOT + UNPLOT.\n{screen}");
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"PLOT/UNPLOT must resolve through lib_call(GRAPHICS), not the unknown-word path.\n{screen}");
     }
 
     [TestMethod]
@@ -1885,6 +1898,7 @@ public class NovaLogoTests
         cpu.Boot();
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
+        StageGraphicsModule(bus);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CLEARSCREEN");
@@ -2031,6 +2045,7 @@ public class NovaLogoTests
         cpu.Boot();
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
+        StageGraphicsModule(bus);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CS");
@@ -2047,6 +2062,8 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "333") found = true;
         Assert.IsTrue(found, $"Expected '333' after sprite commands.\n{screen}");
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"SPRITE/SPRITEOFF must resolve through lib_call(GRAPHICS), not the unknown-word path.\n{screen}");
     }
 
     [TestMethod]
@@ -2166,6 +2183,7 @@ public class NovaLogoTests
         cpu.Boot();
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
+        StageGraphicsModule(bus);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CS");
@@ -2184,6 +2202,12 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "777") found = true;
         Assert.IsTrue(found, $"Expected '777' after sprite reposition.\n{screen}");
+        Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
+            $"SPRITE/SPRITEPOS/SPRITEON must resolve through lib_call(GRAPHICS), not the unknown-word path.\n{screen}");
+        var sprite = bus.Vgc.GetSpriteState(0);
+        Assert.AreEqual(100, sprite.x, "SPRITEPOS should set sprite X via lib_call(GFN_SPR_POS).");
+        Assert.AreEqual(75, sprite.y, "SPRITEPOS should set sprite Y via lib_call(GFN_SPR_POS).");
+        Assert.IsTrue(sprite.enabled, "SPRITEON should enable the sprite via lib_call(GFN_SPR_ENABLE).");
     }
 
     [TestMethod]
@@ -2622,6 +2646,30 @@ public class NovaLogoTests
             if (line.Trim() == "31415") foundValue = true;
         Assert.IsTrue(foundValue,
             $"CATCH \"ERROR should swallow the error so the following PRINT 31415 still runs.\n{screen}");
+    }
+
+    // XRAM shelf slot 0 — matches libabi.inc SHELF_BASE ($060000). Graphics and
+    // sprite commands route through lib_call(GRAPHICS) (4c.1-3), which pages the
+    // GRAPHICS module in from this shelf; tests that exercise those commands must
+    // stage graphics.bin here or the command MISSES and aborts the line.
+    private const int GraphicsShelfBase = 0x060000;
+
+    private static void StageGraphicsModule(CompositeBusDevice bus) =>
+        bus.LoadXram(GraphicsShelfBase,
+            File.ReadAllBytes(Path.Combine(FindRepoRoot(), "modules", "graphics", "graphics.bin")));
+
+    private static string FindRepoRoot()
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir, "novalogo", "builtins.s")))
+                return dir;
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+
+        Assert.Fail("Could not locate repository root containing novalogo/builtins.s.");
+        return "";
     }
 
     private static void QueueLine(ScreenEditor editor, string line)

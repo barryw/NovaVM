@@ -368,11 +368,19 @@ public class NovaLogoHarnessTests
             });
     }
 
+    // XRAM shelf slot 0 — matches libabi.inc SHELF_BASE ($060000). The graphics
+    // commands now route through lib_call(GRAPHICS), which pages the module in from
+    // this shelf, so every harness bus must have graphics.bin staged here or a
+    // graphics/sprite command would MISS (module not in shelf) and abort the line.
+    private const int GraphicsShelfBase = 0x060000;
+
     private static void RunHarnessCase(LogoHarnessCase testCase)
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        bus.LoadXram(GraphicsShelfBase,
+            File.ReadAllBytes(Path.Combine(FindRepoRoot(), "modules", "graphics", "graphics.bin")));
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000, testCase.Name);
