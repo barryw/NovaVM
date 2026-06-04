@@ -2,6 +2,7 @@
 ; Task 1.4: line input buffer with backspace handling
 
       .include "nova.inc"
+      .include "libabi.inc"
       .include "ext_iface.inc"
       .include "heap.s"
       .include "tokens.s"

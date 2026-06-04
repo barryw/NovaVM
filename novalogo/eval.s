@@ -20,6 +20,7 @@ handler_hi:     .res 1
 eval_in_body:   .res 1    ; $00 = normal eval_loop, $01 = in body
 proc_stopped:   .res 1    ; $00 = running, $01 = STOP, $02 = OUTPUT
 eval_reporter:  .res 1    ; $00 = normal, $01 = reporter mode (return from eval_continue)
+ext_mod_id:     .res 1    ; looked-up ext_cmd_table module_id (MODULE_ID_NONE=legacy path)
 
 ; --- Catch frame for CATCH/THROW error handling ---
 catch_active:   .res 1    ; $00 = no catch, $01 = catch active
@@ -1381,14 +1382,17 @@ lookup_ext_cmd:
       DEX
       BNE   @cmp_loop
 
-      ; Match found — read cmd_id and arity
-      ; Table entry: name_ptr(2) + cmd_id(1) + arity(1)
+      ; Match found — read module_id, fn_id and arity
+      ; Table entry: name_ptr(2) + module_id(1) + fn_id(1) + arity(1)
       LDA   num_tmp_lo
       STA   ptr_lo
       LDA   num_tmp_hi
       STA   ptr_hi
       LDY   #2
-      LDA   (ptr_lo),Y         ; cmd_id
+      LDA   (ptr_lo),Y         ; module_id
+      STA   ext_mod_id
+      INY
+      LDA   (ptr_lo),Y         ; fn_id (legacy EXT_CMD value)
       STA   EXT_CMD
       INY
       LDA   (ptr_lo),Y         ; arity
@@ -1397,10 +1401,10 @@ lookup_ext_cmd:
 
 @next:
       STZ   tok_sign
-      ; Advance to next entry: +4 bytes (2 name + 1 cmd_id + 1 arity)
+      ; Advance to next entry: +5 bytes (2 name + 1 module_id + 1 fn_id + 1 arity)
       CLC
       LDA   num_tmp_lo
-      ADC   #4
+      ADC   #5
       STA   num_tmp_lo
       BCC   :+
       INC   num_tmp_hi
@@ -1490,211 +1494,278 @@ ext_eval_args:
 
       .segment "RODATA"
 
-; Extension command table: name_ptr(2) + cmd_id(1) + arity(1)
+; Extension command table: name_ptr(2) + module_id(1) + fn_id(1) + arity(1)
+; module_id is MODULE_ID_NONE for every entry (legacy RAM-trampoline path);
+; 4c.1-2 will set it per-command to route through the paged-library lib_call.
 ; Terminated by $0000 sentinel.
 ext_cmd_table:
       .word str_ext_test_name
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_TEST
       .byte 1                    ; arity: 1 argument
       .word str_ext_fd
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_FD
       .byte 1                    ; arity: 1 (distance)
       .word str_ext_forward
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_FD
       .byte 1                    ; FORWARD alias
       .word str_ext_bk
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_BK
       .byte 1                    ; arity: 1 (distance)
       .word str_ext_back
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_BK
       .byte 1                    ; BACK alias
       .word str_ext_backward
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_BK
       .byte 1                    ; BACKWARD alias
       .word str_ext_rt
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_RT
       .byte 1                    ; arity: 1 (degrees)
       .word str_ext_right
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_RT
       .byte 1                    ; RIGHT alias
       .word str_ext_lt
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_LT
       .byte 1                    ; arity: 1 (degrees)
       .word str_ext_left
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_LT
       .byte 1                    ; LEFT alias
       .word str_ext_cs
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_CS
       .byte 0                    ; arity: 0
       .word str_ext_clearscreen
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_CS
       .byte 0                    ; CLEARSCREEN alias
       .word str_ext_draw
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_CS
       .byte 0                    ; DRAW = CS alias
       .word str_ext_pu
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_PU
       .byte 0
       .word str_ext_penup
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_PU
       .byte 0                    ; PENUP alias
       .word str_ext_pd
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_PD
       .byte 0
       .word str_ext_pendown
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_PD
       .byte 0                    ; PENDOWN alias
       .word str_ext_st
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_ST
       .byte 0
       .word str_ext_showturtle
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_ST
       .byte 0                    ; SHOWTURTLE alias
       .word str_ext_ht
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_HT
       .byte 0
       .word str_ext_hideturtle
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_HT
       .byte 0                    ; HIDETURTLE alias
       .word str_ext_home
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_HOME
       .byte 0
       ; --- Screen modes ---
       .word str_ext_textscreen
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_TS
       .byte 0
       .word str_ext_ts
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_TS
       .byte 0
       .word str_ext_splitscreen
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SS
       .byte 0
       .word str_ext_ss
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SS
       .byte 0
       .word str_ext_fullscreen
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_FS
       .byte 0
       .word str_ext_fs
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_FS
       .byte 0
       ; --- Turtle position ---
       .word str_ext_setxy
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETXY
       .byte 2                    ; arity: 2 (x, y)
       .word str_ext_setpos
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETPOS
       .byte 1                    ; arity: 1 ([x y])
       .word str_ext_setx
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETX
       .byte 1                    ; arity: 1 (x)
       .word str_ext_sety
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETY
       .byte 1                    ; arity: 1 (y)
       .word str_ext_setheading
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETH
       .byte 1                    ; arity: 1 (degrees)
       .word str_ext_seth
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETH
       .byte 1                    ; SETH alias
       ; --- Turtle query reporters ---
       .word str_ext_xcor
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_XCOR
       .byte 0                    ; arity: 0 (reporter)
       .word str_ext_ycor
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_YCOR
       .byte 0
       .word str_ext_heading
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_HEADING
       .byte 0
       .word str_ext_pendownp
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_PENDOWNP
       .byte 0
       .word str_ext_shownp
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SHOWNP
       .byte 0
       ; --- Pen commands ---
       .word str_ext_setpc
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETPC
       .byte 1                    ; arity: 1 (color)
       .word str_ext_setpencolor
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETPC
       .byte 1                    ; SETPENCOLOR alias
       .word str_ext_setbg
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETBG
       .byte 1
       .word str_ext_setbackground
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETBG
       .byte 1                    ; SETBACKGROUND alias
       ; --- TOWARDS reporter ---
       .word str_ext_towards
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_TOWARDS
       .byte 2                    ; arity: 2 (x, y)
       ; --- VGC graphics commands ---
       .word str_ext_setcolor
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SETCOLOR
       .byte 1                    ; arity: 1 (color)
       .word str_ext_plot
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_PLOT
       .byte 2                    ; arity: 2 (x, y)
       .word str_ext_unplot
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_UNPLOT
       .byte 2                    ; arity: 2 (x, y)
       .word str_ext_line
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_LINE
       .byte 4                    ; arity: 4 (x1, y1, x2, y2)
       .word str_ext_circle
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_CIRCLE
       .byte 3                    ; arity: 3 (x, y, r)
       .word str_ext_rect
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_RECT
       .byte 4                    ; arity: 4 (x1, y1, x2, y2)
       .word str_ext_rectangle
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_RECT
       .byte 4                    ; RECTANGLE alias
       .word str_ext_fill
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_FILLRECT
       .byte 4                    ; arity: 4 (x1, y1, x2, y2)
       .word str_ext_fillrect
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_FILLRECT
       .byte 4                    ; FILLRECT alias
       .word str_ext_paint
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_PAINT
       .byte 2                    ; arity: 2 (x, y)
       ; --- Sprite commands ---
       .word str_ext_sprite
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SPRITE
       .byte 3                    ; arity: 3 (n, x, y)
       .word str_ext_spritepos
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SPRITEPOS
       .byte 3                    ; arity: 3 (n, x, y)
       .word str_ext_spriteon
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SPRITEON
       .byte 1                    ; arity: 1 (n)
       .word str_ext_spriteoff
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SPRITEOFF
       .byte 1                    ; arity: 1 (n)
       .word str_ext_sprcollp
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_SPRCOLLP
       .byte 1                    ; arity: 1 (n) — reporter
       ; --- Sound commands ---
       .word str_ext_tone
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_TONE
       .byte 2                    ; arity: 2 (freq, dur)
       .word str_ext_noise
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_NOISE
       .byte 1                    ; arity: 1 (dur)
       .word str_ext_volume
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_VOLUME
       .byte 1                    ; arity: 1 (vol)
       ; --- Timing commands ---
       .word str_ext_wait
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_WAIT
       .byte 1                    ; arity: 1 (n)
       .word str_ext_waitvbl
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_WAITVBL
       .byte 0                    ; arity: 0
       .word str_ext_timer
+      .byte MODULE_ID_NONE
       .byte EXT_CMD_TIMER
       .byte 0                    ; arity: 0 — reporter
       .word $0000               ; end sentinel
