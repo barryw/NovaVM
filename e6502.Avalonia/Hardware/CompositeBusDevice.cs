@@ -271,12 +271,23 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         {
             Array.Copy(ext, 0, _extBank, 0, VgcConstants.RomSize);
             _extBankValid = true;
+            // 4c.0c: also stage the active runtime's static ext into XRAM at $07C000
+            // (libabi.inc HOST_EXT_XRAM_*) so the 6502's ensure_ext_resident can re-page
+            // it back into bank 1 after a lib_call(MODULE) page-in clobbers the bank. This
+            // is the re-page source; the 6502 has no other way to restore the host ext.
+            // Called from ctor / TrySelectPrimaryRom / ResetCustomChips, so it survives resets.
+            for (int i = 0; i < VgcConstants.RomSize; i++)
+                _xmc.TryWriteLinear(HostExtXramBase + i, ext[i]);
         }
         else
         {
             _extBankValid = false;          // NCC: no overlay -> RomSwapExtension stays a no-op
         }
     }
+
+    // XRAM address where the active runtime's extension is staged for ensure_ext_resident
+    // re-page (matches libabi.inc HOST_EXT_XRAM_L/M/H = $07C000).
+    private const int HostExtXramBase = 0x07C000;
 
     // POKE the resident lib_call loader into its reserved low-RAM band ($0320). Safe:
     // the $0320-$041F band is carved cross-runtime (Stage 4c.0a).
