@@ -136,17 +136,7 @@ eval_loop:
       PLA
       PLA
       ; Print error and abort line
-      LDX   #0
-@ae_lp:
-      LDA   str_notenough,X
-      BEQ   @ae_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @ae_lp
-@ae_done:
-      JSR   eval_newline
-      JSR   try_throw_error
-      RTS
+      JMP   err_notenough_throw
 
 @unknown:
       ; Try user-defined procedures before erroring
@@ -183,46 +173,11 @@ eval_loop:
       JMP   eval_continue
 
 @ext_arg_err:
-      LDX   #0
-@eae_lp:
-      LDA   str_notenough,X
-      BEQ   @eae_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @eae_lp
-@eae_done:
-      JSR   eval_newline
-      JSR   try_throw_error
-      RTS
+      JMP   err_notenough_throw
 
 @truly_unknown:
       ; Print "I don't know how to " + the word
-      LDX   #0
-@unk_lp:
-      LDA   str_idk,X
-      BEQ   @unk_word
-      STA   VGC_CHAROUT
-      INX
-      BNE   @unk_lp
-@unk_word:
-      ; Print the word from the token payload
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
-      LDY   #TOK_PAYLOAD        ; length byte
-      LDA   (ptr_lo),Y
-      TAX                       ; X = length
-      LDY   #TOK_PAYLOAD+1      ; first char
-@unk_ch:
-      LDA   (ptr_lo),Y
-      STA   VGC_CHAROUT
-      INY
-      DEX
-      BNE   @unk_ch
-      JSR   eval_newline
-      JSR   try_throw_error
-      RTS
+      JMP   err_idk_word
 
 @done:
       RTS
@@ -328,17 +283,7 @@ eval_body:
       PLX
       PLA
       PLA
-      LDX   #0
-@ae_lp:
-      LDA   str_notenough,X
-      BEQ   @ae_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @ae_lp
-@ae_done:
-      JSR   eval_newline
-      JSR   try_throw_error
-      ; fall through to @done — abort body on error
+      JMP   err_notenough_throw
 
 @done:
       RTS
@@ -372,45 +317,11 @@ eval_body:
       JMP   eval_continue
 
 @body_ext_err:
-      LDX   #0
-@bee_lp:
-      LDA   str_notenough,X
-      BEQ   @bee_done
-      STA   VGC_CHAROUT
-      INX
-      BNE   @bee_lp
-@bee_done:
-      JSR   eval_newline
-      JSR   try_throw_error
-      RTS
+      JMP   err_notenough_throw
 
 @truly_unknown:
       ; Print "I don't know how to " + the word (inside body)
-      LDX   #0
-@unk_lp:
-      LDA   str_idk,X
-      BEQ   @unk_word
-      STA   VGC_CHAROUT
-      INX
-      BNE   @unk_lp
-@unk_word:
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
-      LDY   #TOK_PAYLOAD
-      LDA   (ptr_lo),Y
-      TAX
-      LDY   #TOK_PAYLOAD+1
-@unk_ch:
-      LDA   (ptr_lo),Y
-      STA   VGC_CHAROUT
-      INY
-      DEX
-      BNE   @unk_ch
-      JSR   eval_newline
-      JSR   try_throw_error
-      RTS
+      JMP   err_idk_word
 
 ; ---------------------------------------------------------------------
 ; eval_advance — advance eval_cur to the next token in the list
@@ -788,6 +699,46 @@ err_dl_this:
       LDX   #<frag_this_input
       LDY   #>frag_this_input
       JMP   list_print_err        ; "THIS INPUT" + newline + continue
+
+; --- throw-tailed error helpers (arg/unknown paths inside eval_loop/eval_body;
+;     these are catchable, so they end in try_throw_error, NOT eval_continue) ---
+
+; "NOT ENOUGH INPUTS" (generic, no command name) + throw-tail
+err_notenough_throw:
+      LDX   #<str_notenough
+      LDY   #>str_notenough
+      JSR   print_cstr_xy
+      JMP   err_throw
+
+; "I DON'T KNOW HOW TO " + the current token's word + throw-tail
+err_idk_word:
+      LDX   #<str_idk
+      LDY   #>str_idk
+      JSR   print_cstr_xy
+      JSR   print_token_word
+err_throw:                        ; <- fall-through from err_idk_word
+      JSR   eval_newline
+      JSR   try_throw_error
+      RTS
+
+; print_token_word — print the length-prefixed word in the current token
+;   (eval_cur + TOK_PAYLOAD).  Clobbers A, X, Y, ptr_lo/hi.
+print_token_word:
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      LDY   #TOK_PAYLOAD          ; length byte
+      LDA   (ptr_lo),Y
+      TAX
+      LDY   #TOK_PAYLOAD+1        ; first char
+@ptw_lp:
+      LDA   (ptr_lo),Y
+      STA   VGC_CHAROUT
+      INY
+      DEX
+      BNE   @ptw_lp
+      RTS
 
 ; ---------------------------------------------------------------------
 ; eval_check_infix — if next token is TOK_INFIX, evaluate binary op
