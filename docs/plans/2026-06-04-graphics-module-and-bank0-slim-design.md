@@ -1,7 +1,7 @@
 # GRAPHICS Module (superset) + Logo Bank-0 Slim — Design
 
 **Date:** 2026-06-04
-**Status:** LOCKED via brainstorm 2026-06-04. Ready for `writing-plans` → staged execution (start 4a).
+**Status:** LOCKED via brainstorm 2026-06-04. **Stage 4a DONE 2026-06-04 (1071 B reclaimed, see §6).** Next: 4b (build GRAPHICS module).
 **Parent:** `docs/plans/2026-06-03-paged-library-loader-3b-design.md` (the loader ABI, shipped + HW-proven).
 This is rollout **Phase 4** ("first paged module + proof") generalized: build GRAPHICS as the canonical
 graphics library, then SOUND, then SYSTEM (Phase 5).
@@ -128,8 +128,17 @@ orchestrate `lib_call(GRAPHICS,…)`.
 
 ## 6. Staged plan
 
-- **4a — Slim bank 0 (~1.4 KB).** Pure refactor (§4). Independently testable: full NovaLogo suite green +
-  `novalogo.bin` shrinks. No new module, no ABI change. **Start here.**
+- **4a — Slim bank 0 (~1.4 KB). ✅ DONE 2026-06-04 — reclaimed 1071 B (free 15 → 1086).**
+  Plan: `docs/plans/2026-06-04-stage-4a-slim-bank0.md`. The win was NOT §4's per-item estimates (the
+  "indexed error-printer table" was a wash) but a **message-composition engine**: no error string stored
+  whole — every message composed at print time from shared fragments + the command's existing
+  length-prefixed `*_name` string (RODATA −908 B). Plus PRINT/TYPE fall-through merge and `proc_next`/
+  `do_erase` dedup (CODE −163 B). Full NovaLogo suite green (102 tests, incl. 10 new exact-text
+  characterization tests locking every error family + a middle-erase test). Commits dc33115..ce0190e.
+  **Deferred to 4c:** the 1-arg-reporter arity flip (~110 B) — not a clean drop-in (diverges on the
+  error path, needs per-reporter characterization, hot-path risk). Revisit only if the measured turtle
+  needs the headroom. The name-compare-loop unification was assessed and rejected (3 loops differ in
+  source/offset/exit; costs more than it saves on the hot path).
 - **4b — Build GRAPHICS module.** `libgraphics.inc` contract (§2) + the module (`ORG $C000`, NDK driver
   bodies + fn-id dispatch + thin leaf wrappers). Stage at boot (`boot.json` `libraries` entry, base
   `$060000` slot 0; reuse the proven page-in + the `nova put`/boot-staging path from Phase 3 §T9).
@@ -154,7 +163,12 @@ orchestrate `lib_call(GRAPHICS,…)`.
   keep the cons-cell offsets in a shared header so module + foundation agree.
 - **Per-fn test coverage** for the ~52 NDK-only ops with no language caller: direct fn-id unit tests
   asserting the hardware-register effect (representative coverage; not all 110 enumerated in 4b).
-- **Verify resident-turtle final size** against the reclaimed budget once 4a lands (1.2 KB is an estimate).
+- **Verify resident-turtle final size** against the reclaimed budget. **4a has landed: 1086 B now free
+  in bank 0** (was 15). The resident turtle is estimated ~1.2 KB (~1228 B) — i.e. ~140 B over the
+  current headroom if the estimate holds. **4c gating step:** measure the actual resident-turtle
+  footprint first. If it exceeds 1086 B, close the gap via the deferred 1-arg-reporter arity flip
+  (~110 B, see 4a plan Task 5) and/or further composition (the `"X NEEDS [ BODY ]"` / FOR/WHILE inline
+  messages in builtins.s are not yet composed). The turtle estimate is soft and may come in under 1086.
 
 ---
 
