@@ -34,6 +34,17 @@ namespace e6502UnitTests
                              GFN_UNPLOT = 0x03, GFN_LINE = 0x04, GFN_CIRCLE = 0x05,
                              GFN_RECT = 0x06, GFN_FILL = 0x07, GFN_PAINT = 0x08,
                              GFN_GTEXT = 0x09;
+        // Text/mode-domain fn-ids ($10-$1B), batch 4b.3.
+        private const byte   GFN_COLOR = 0x10, GFN_FONT = 0x11, GFN_MODE = 0x12,
+                             GFN_REVERSE = 0x13, GFN_REVERSEOFF = 0x14, GFN_FLASH = 0x15,
+                             GFN_FLASHOFF = 0x16, GFN_LOCATE = 0x17, GFN_CLS = 0x18,
+                             GFN_CLSWIN = 0x19, GFN_DISPLAYON = 0x1A, GFN_DISPLAYOFF = 0x1B;
+        // VGC register addresses (runtime/asm/nova.inc / VgcConstants).
+        private const ushort VGC_BGCOL = 0xA001, VGC_FGCOL = 0xA002, VGC_CURSX = 0xA003,
+                             VGC_CURSY = 0xA004, VGC_FONT = 0xA007, VGC_MODE = 0xA000,
+                             VGC_BORDER = 0xA00D, VGC_DIMMER = 0xA0E5, VGC_TXTFLAGS = 0xA0E6;
+        private const byte   VTXT_REV = 0x01, VTXT_FLASH = 0x04;
+        private const byte   LERR_NO_FN = 0x83;
         private const byte   LERR_OK = 0x00;
         private const ushort LibCallEntry = 0x9C00;   // libcall.bin blob load address
         private const int    ShelfBase = 0x060000;    // XRAM shelf slot 0 (shared with TEST)
@@ -383,6 +394,167 @@ namespace e6502UnitTests
             Assert.AreEqual(12, GfxPixel(bus, 30, 40), "glyph top-left pixel must be set");
             Assert.AreEqual(12, GfxPixel(bus, 37, 47), "glyph bottom-right pixel must be set");
             Assert.AreEqual(0, GfxPixel(bus, 38, 40), "pixel past the 8px-wide glyph must stay clear");
+        }
+
+        // =====================================================================
+        // Text/mode domain ($10-$1B), batch 4b.3. These ops set VGC registers
+        // (no gfx-plane effect), observed by reading the register back on the bus.
+        // =====================================================================
+
+        // --- $10 COLOR(fg,bg,border): the three colour registers take the values. ---
+        [TestMethod]
+        public void Axis2_Color_SetsFgBgBorderRegisters()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 7);    // fg
+            SetArg(bus, ARG1, 3);    // bg
+            SetArg(bus, ARG2, 11);   // border
+            RunFn(bus, GFN_COLOR);
+
+            Assert.AreEqual(7,  bus.Read(VGC_FGCOL),  "COLOR must set foreground from ARG0");
+            Assert.AreEqual(3,  bus.Read(VGC_BGCOL),  "COLOR must set background from ARG1");
+            Assert.AreEqual(11, bus.Read(VGC_BORDER), "COLOR must set border from ARG2");
+        }
+
+        // --- $11 FONT(slot): the font-slot register takes the value (masked to 0-7). ---
+        [TestMethod]
+        public void Axis2_Font_SetsFontRegister()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 5);
+            RunFn(bus, GFN_FONT);
+
+            Assert.AreEqual(5, bus.Read(VGC_FONT) & 0x07, "FONT must select font slot 5");
+        }
+
+        // --- $12 MODE(mode): the mode register takes the value. ---
+        [TestMethod]
+        public void Axis2_Mode_SetsModeRegister()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 2);   // mode 2 = text over gfx
+            RunFn(bus, GFN_MODE);
+
+            Assert.AreEqual(2, bus.Read(VGC_MODE), "MODE must set the active VGC mode");
+        }
+
+        // --- $17 LOCATE(col,row): cursor X/Y registers take the values. ---
+        [TestMethod]
+        public void Axis2_Locate_SetsCursorPosition()
+        {
+            using var bus = MakeAxis2Bus();
+
+            SetArg(bus, ARG0, 17);   // col (0-79)
+            SetArg(bus, ARG1, 9);    // row (0-49)
+            RunFn(bus, GFN_LOCATE);
+
+            Assert.AreEqual(17, bus.Read(VGC_CURSX), "LOCATE must set cursor column from ARG0");
+            Assert.AreEqual(9,  bus.Read(VGC_CURSY), "LOCATE must set cursor row from ARG1");
+        }
+
+        // --- $1B / $1A DISPLAYOFF then DISPLAYON: dimmer register $00 then $0F. ---
+        [TestMethod]
+        public void Axis2_DisplayOffThenOn_TogglesDimmerRegister()
+        {
+            using var bus = MakeAxis2Bus();
+
+            RunFn(bus, GFN_DISPLAYOFF);
+            Assert.AreEqual(0x00, bus.Read(VGC_DIMMER), "DISPLAYOFF must blank the dimmer to $00");
+
+            RunFn(bus, GFN_DISPLAYON);
+            Assert.AreEqual(0x0F, bus.Read(VGC_DIMMER), "DISPLAYON must restore the dimmer to $0F");
+        }
+
+        // --- $18 CLS: the text plane is cleared to spaces. ---
+        [TestMethod]
+        public void Axis2_Cls_ClearsTextPlaneToSpaces()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Dirty a few text cells via the real VGC char-plane memory API.
+            int Cell(int col, int row) => row * VgcConstants.ScreenCols + col;
+            Assert.IsTrue(bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceScreen, Cell(0, 0),  (byte)'X'), "setup write");
+            Assert.IsTrue(bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceScreen, Cell(40, 12), (byte)'Y'), "setup write");
+            Assert.IsTrue(bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceScreen, Cell(79, 24), (byte)'Z'), "setup write");
+            Assert.AreEqual((byte)'X', bus.Vgc.GetScreenChar(0, 0), "setup char must take");
+
+            RunFn(bus, GFN_CLS);
+
+            Assert.AreEqual(0x20, bus.Vgc.GetScreenChar(0, 0),   "CLS must clear (0,0) to a space");
+            Assert.AreEqual(0x20, bus.Vgc.GetScreenChar(40, 12), "CLS must clear (40,12) to a space");
+            Assert.AreEqual(0x20, bus.Vgc.GetScreenChar(79, 24), "CLS must clear (79,24) to a space");
+        }
+
+        // --- $13/$14 REVERSE then REVERSEOFF: VGC_TXTFLAGS reverse bit set then cleared. ---
+        [TestMethod]
+        public void Axis2_ReverseThenOff_TogglesTextFlagReverseBit()
+        {
+            using var bus = MakeAxis2Bus();
+
+            RunFn(bus, GFN_REVERSE);
+            Assert.AreEqual(VTXT_REV, bus.Read(VGC_TXTFLAGS) & VTXT_REV,
+                "REVERSE must set the reverse bit in VGC_TXTFLAGS");
+
+            RunFn(bus, GFN_REVERSEOFF);
+            Assert.AreEqual(0, bus.Read(VGC_TXTFLAGS) & VTXT_REV,
+                "REVERSEOFF must clear the reverse bit in VGC_TXTFLAGS");
+        }
+
+        // --- $15/$16 FLASH then FLASHOFF: VGC_TXTFLAGS flash bit set then cleared. ---
+        [TestMethod]
+        public void Axis2_FlashThenOff_TogglesTextFlagFlashBit()
+        {
+            using var bus = MakeAxis2Bus();
+
+            RunFn(bus, GFN_FLASH);
+            Assert.AreEqual(VTXT_FLASH, bus.Read(VGC_TXTFLAGS) & VTXT_FLASH,
+                "FLASH must set the flash bit in VGC_TXTFLAGS");
+
+            RunFn(bus, GFN_FLASHOFF);
+            Assert.AreEqual(0, bus.Read(VGC_TXTFLAGS) & VTXT_FLASH,
+                "FLASHOFF must clear the flash bit in VGC_TXTFLAGS");
+        }
+
+        // --- $19 CLSWIN: no vgc driver entry yet -> stubbed to LERR_NO_FN. ---
+        [TestMethod]
+        public void Axis2_Clswin_ReturnsNoFn_StubbedUntilDriverExists()
+        {
+            using var bus = MakeAxis2Bus();
+
+            bus.WriteRam(FN_ID, GFN_CLSWIN);
+            bus.WriteRam(STATUS, 0x00);   // poison opposite to the expected non-OK
+
+            var cpu = new Cpu(bus, E6502Type.Cmos);
+            bus.WriteRam(0x01FF, (byte)((Sentinel - 1) >> 8));
+            bus.WriteRam(0x01FE, (byte)((Sentinel - 1) & 0xFF));
+            var s = cpu.GetState();
+            cpu.RestoreState(new CpuState(s.A, s.X, s.Y, 0xFD, 0xC000,
+                                          s.Nf, s.Vf, s.Df, true, s.Zf, s.Cf));
+            for (int guard = 0; guard < 2_000_000 && cpu.Pc != Sentinel; guard++)
+                cpu.ExecuteNext();
+            Assert.AreEqual(Sentinel, cpu.Pc, "CLSWIN stub must still RTS to the sentinel");
+            Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
+                "CLSWIN ($19) is a gap in the dense table -> gfn_unimpl -> LERR_NO_FN");
+        }
+
+        // --- Loader-axis smoke: a new text/mode fn-id routes through lib_call. ---
+        [TestMethod]
+        public void Axis1_Color_RoutesThroughLoader_StatusOk()
+        {
+            var (bus, entry) = SetupLoader();
+
+            bus.PokeRam(ARG0, 7); bus.PokeRam((ushort)(ARG0 + 1), 0);   // fg
+            bus.PokeRam(ARG1, 3); bus.PokeRam((ushort)(ARG1 + 1), 0);   // bg
+            bus.PokeRam(ARG2, 1); bus.PokeRam((ushort)(ARG2 + 1), 0);   // border
+
+            CallLib(bus, entry, MODULE_ID_GRAPHICS, GFN_COLOR);
+
+            Assert.AreEqual(LERR_OK, bus.PeekRam(STATUS), "COLOR must report OK through the loader");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.PeekRam(RESIDENT),
+                "GRAPHICS module must be resident after the page-in");
         }
 
         // --- Loader-axis smoke: new fn-ids route through the real lib_call loader. ---

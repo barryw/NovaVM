@@ -12,9 +12,11 @@
       .include "libgraphics.inc"
 
 ; Highest implemented fn-id + 1. Grows per domain batch. The draw domain $00-$09
-; is live; ids $0A-$0F sit above GFX_FN_COUNT and resolve to LERR_NO_FN via the
-; dispatch bounds-check (the jtable is dense only up to GFX_FN_COUNT-1).
-GFX_FN_COUNT = $0A
+; is live; the text/mode domain $10-$1B is live (batch 4b.3). The jtable is dense
+; from $00..GFX_FN_COUNT-1: implemented ids point at their wrapper, every gap id
+; ($0A-$0F, $19 CLSWIN, $1C-$1F) points at gfn_unimpl so it resolves to LERR_NO_FN.
+; ids >= GFX_FN_COUNT resolve to LERR_NO_FN via the dispatch bounds-check.
+GFX_FN_COUNT = $1C
 
 ; GTEXT copies its BYTES string into the VGC FIO_NAME buffer ($B9B0-$B9EF, 64
 ; bytes). Mirror fio.inc's FIO_NAME_LIMIT here (fio.inc isn't pulled into the
@@ -52,7 +54,25 @@ gfx_jtable:
       .word   gfn_fill-1               ; $07 FILL
       .word   gfn_paint-1              ; $08 PAINT
       .word   gfn_gtext-1              ; $09 GTEXT
-      ; $0A.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
+      .word   gfn_unimpl-1             ; $0A gap -> LERR_NO_FN
+      .word   gfn_unimpl-1             ; $0B gap
+      .word   gfn_unimpl-1             ; $0C gap
+      .word   gfn_unimpl-1             ; $0D gap
+      .word   gfn_unimpl-1             ; $0E gap
+      .word   gfn_unimpl-1             ; $0F gap
+      .word   gfn_color-1              ; $10 COLOR
+      .word   gfn_font-1               ; $11 FONT
+      .word   gfn_mode-1               ; $12 MODE
+      .word   gfn_reverse-1            ; $13 REVERSE
+      .word   gfn_reverseoff-1         ; $14 REVERSEOFF
+      .word   gfn_flash-1              ; $15 FLASH
+      .word   gfn_flashoff-1           ; $16 FLASHOFF
+      .word   gfn_locate-1             ; $17 LOCATE
+      .word   gfn_cls-1                ; $18 CLS
+      .word   gfn_unimpl-1             ; $19 CLSWIN -> LERR_NO_FN (no vgc driver entry)
+      .word   gfn_displayon-1          ; $1A DISPLAYON
+      .word   gfn_displayoff-1         ; $1B DISPLAYOFF
+      ; $1C.. grow here per domain; ids >= GFX_FN_COUNT -> LERR_NO_FN (bounds check)
 
 ; Any reachable-but-unimplemented fn-id: report LERR_NO_FN.
 gfn_unimpl:
@@ -88,8 +108,15 @@ copy_args_to_p:
       rts
 
 ; finish_ok — common tail: wait for the VGC command to complete, then STATUS=OK.
+; For ops that issue a VCMD_* via vgc_cmd (the draw primitives).
 finish_ok:
       jsr     vgc_wait_cmd
+      ; fall through to finish_ok_nowait
+
+; finish_ok_nowait — STATUS=OK with no command wait. For pure register-store ops
+; (set_fg/bg/border, set_font/mode, locate, reverse/flash, display_on/off) that
+; never issue a VGC command, so there is no busy bit to poll.
+finish_ok_nowait:
       lda     #LERR_OK
       sta     LIB_STATUS
       rts
@@ -197,6 +224,81 @@ gfn_gtext:
 @copied:
       jsr     vgc_gtext
       jmp     finish_ok
+
+; =====================================================================
+; $10-$1F  text / mode domain (batch 4b.3). All register-store ops (no VGC
+; command), so each tail is finish_ok_nowait — except CLS, which issues a
+; char-out command and waits inside vgc_cls before we set OK.
+; =====================================================================
+
+; --- $10 COLOR: set text fg/bg/border ---  fg=ARG0, bg=ARG1, border=ARG2.
+; Each driver entry takes the colour byte in X (STX VGC_FGCOL/BGCOL/BORDER).
+gfn_color:
+      ldx     LIB_ARG0
+      jsr     vgc_set_fg
+      ldx     LIB_ARG1
+      jsr     vgc_set_bg
+      ldx     LIB_ARG2
+      jsr     vgc_set_border
+      jmp     finish_ok_nowait
+
+; --- $11 FONT: select text font slot ---  slot=ARG0 -> X; vgc_set_font.
+gfn_font:
+      ldx     LIB_ARG0
+      jsr     vgc_set_font
+      jmp     finish_ok_nowait
+
+; --- $12 MODE: set graphics/text mode ---  mode=ARG0 -> X; vgc_set_mode.
+gfn_mode:
+      ldx     LIB_ARG0
+      jsr     vgc_set_mode
+      jmp     finish_ok_nowait
+
+; --- $13 REVERSE: enable reverse text using current fg/bg ---
+gfn_reverse:
+      jsr     vgc_reverse_default
+      jmp     finish_ok_nowait
+
+; --- $14 REVERSEOFF: disable reverse text ---
+gfn_reverseoff:
+      jsr     vgc_reverse_off
+      jmp     finish_ok_nowait
+
+; --- $15 FLASH: enable flashing text ---
+gfn_flash:
+      jsr     vgc_flash_on
+      jmp     finish_ok_nowait
+
+; --- $16 FLASHOFF: disable flashing text ---
+gfn_flashoff:
+      jsr     vgc_flash_off
+      jmp     finish_ok_nowait
+
+; --- $17 LOCATE: set text cursor (col,row) ---  col=ARG0 -> VGC_P0, row=ARG1 -> VGC_P1.
+; vgc_locate copies VGC_P0 -> VGC_CURSX and VGC_P1 -> VGC_CURSY.
+gfn_locate:
+      lda     LIB_ARG0
+      sta     VGC_P0
+      lda     LIB_ARG1
+      sta     VGC_P1
+      jsr     vgc_locate
+      jmp     finish_ok_nowait
+
+; --- $18 CLS: clear the text screen ---  vgc_cls issues the $0C form-feed via
+; VGC_CHAROUT and waits internally; we just set OK afterwards (no extra wait).
+gfn_cls:
+      jsr     vgc_cls
+      jmp     finish_ok_nowait
+
+; --- $1A DISPLAYON: restore full brightness ---  VGC_DIMMER = $0F.
+gfn_displayon:
+      jsr     vgc_display_on
+      jmp     finish_ok_nowait
+
+; --- $1B DISPLAYOFF: blank output, keep timing ---  VGC_DIMMER = $00.
+gfn_displayoff:
+      jsr     vgc_display_off
+      jmp     finish_ok_nowait
 
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
 ; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.

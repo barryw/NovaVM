@@ -42,12 +42,40 @@ GFN_GTEXT     = $09   ; (x:ARG0, y:ARG1, BYTES str:ARG2)    -> VGC_P0..P5 + FIO_
 ;             $0A-$0F reserved
 
 ; =====================================================================
-; $10-$1F  text / mode  (driver: vgc.s text-side + vtext.s)
+; $10-$1F  text / mode  (driver: vgc.s text-side)
 ;   COLOR(fg,bg,border) FONT MODE REVERSE/off FLASH/off LOCATE CLS CLSWIN
 ;   DISPLAYon/off  -> vgc_set_fg/bg/border, vgc_set_font, vgc_set_mode,
-;   vgc_reverse_*, vgc_flash_on/off, vgc_locate, vgc_cls, vgc_display_on/off
-;   (vtext region/cursor/puts land here too)
-; (constants filled in batch 4b.3)
+;   vgc_reverse_default/off, vgc_flash_on/off, vgc_locate, vgc_cls,
+;   vgc_display_on/off.
+;
+; Arg-register conventions, verified against runtime/asm/vgc.s:
+;   - vgc_set_fg/bg/border take X (STX VGC_FGCOL/BGCOL/BORDER) — pure register
+;     stores, no VGC command issued, no wait needed.
+;   - vgc_set_font / vgc_set_mode take X (STX VGC_FONT / VGC_MODE) — register
+;     stores, no wait.
+;   - vgc_locate reads VGC_P0 (col) -> VGC_CURSX and VGC_P1 (row) -> VGC_CURSY,
+;     so the wrapper loads ARG0->VGC_P0, ARG1->VGC_P1 — register stores, no wait.
+;   - vgc_reverse_default/off, vgc_flash_on/off mutate VGC_TXTFLAGS only — no wait.
+;   - vgc_display_on/off store $0F/$00 to VGC_DIMMER — register store, no wait.
+;   - vgc_cls issues a char-out ($0C form-feed) command and waits internally.
+;
+; NOTE: vtext.s (region/cursor/puts, 16 ops) does NOT fit alongside these in
+; $10-$1F; it gets its own fn-id range in a later batch. CLSWIN has no driver
+; entry in vgc.s, so GFN_CLSWIN is reserved here and stubbed to gfn_unimpl
+; (-> LERR_NO_FN) until a window-clear driver routine exists.
+GFN_COLOR      = $10   ; (fg:ARG0, bg:ARG1, border:ARG2) -> vgc_set_fg/bg/border (X each)
+GFN_FONT       = $11   ; (slot:ARG0)                      -> X; vgc_set_font
+GFN_MODE       = $12   ; (mode:ARG0)                      -> X; vgc_set_mode
+GFN_REVERSE    = $13   ; ()  reverse-on                   -> vgc_reverse_default
+GFN_REVERSEOFF = $14   ; ()                               -> vgc_reverse_off
+GFN_FLASH      = $15   ; ()                               -> vgc_flash_on
+GFN_FLASHOFF   = $16   ; ()                               -> vgc_flash_off
+GFN_LOCATE     = $17   ; (col:ARG0, row:ARG1)             -> VGC_P0/P1; vgc_locate
+GFN_CLS        = $18   ; ()                               -> vgc_cls (issues cmd, waits)
+GFN_CLSWIN     = $19   ; ()  clear active window          -> STUB (no vgc entry) -> gfn_unimpl
+GFN_DISPLAYON  = $1A   ; ()                               -> vgc_display_on  (VGC_DIMMER=$0F)
+GFN_DISPLAYOFF = $1B   ; ()                               -> vgc_display_off (VGC_DIMMER=$00)
+;             $1C-$1F reserved
 
 ; =====================================================================
 ; $20-$3F  hw-sprite  (driver: sprite.s)
